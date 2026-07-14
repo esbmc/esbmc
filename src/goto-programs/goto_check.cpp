@@ -34,7 +34,8 @@ public:
         options.get_bool_option("unsigned-overflow-check")),
       enable_ub_shift_check(options.get_bool_option("ub-shift-check")),
       enable_nan_check(options.get_bool_option("nan-check")),
-      enable_is_instance_check(options.get_bool_option("is-instance-check"))
+      enable_is_instance_check(options.get_bool_option("is-instance-check")),
+      enable_clz_zero_check(options.get_bool_option("clz-zero-check"))
   {
   }
 
@@ -84,6 +85,8 @@ protected:
 
   /** check for the buffer overflow in scanf/fscanf */
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
+  /** check __builtin_clz* is not called with a zero argument (UB) */
+  void clz_zero_check(const expr2tc &code, const locationt &loc);
   /* check for signed/unsigned_bv */
   void input_overflow_check_int(
     const BigInt &width,
@@ -144,6 +147,7 @@ protected:
   bool enable_ub_shift_check;
   bool enable_nan_check;
   bool enable_is_instance_check;
+  bool enable_clz_zero_check;
 };
 
 void goto_checkt::div_by_zero_check(
@@ -435,15 +439,47 @@ void goto_checkt::input_overflow_check(
     if (fmt[pos] == '%' && fmt[pos + 1] != '.')
     {
       pos++;
+
+      // "%%" is a literal percent (no conversion) and "%*..." suppresses
+      // assignment (it reads input but consumes no argument).  Neither maps to
+      // a call argument, so skip it -- pushing a phantom limit here would
+      // misalign limits[] against the argument list and abandon the whole check
+      // ("too few arguments for format specifiers"), silently dropping a real
+      // overflow on a later %s.
+      if (pos < fmt.length() && (fmt[pos] == '%' || fmt[pos] == '*'))
+        continue;
+
       while (std::isdigit(fmt[pos]))
       {
         tmp_str += fmt[pos];
         pos++;
       }
+
+      // After the optional field width, skip C length modifiers (h, l, L, j,
+      // z, t, q) to reach the actual conversion specifier.  Only string
+      // conversions read an unbounded run of bytes into the caller's buffer:
+      // %s, the %[...] scanset, and the XSI/glibc wide-string %S (= %ls).
+      // Numeric, pointer and (wide-)char conversions write a single fixed-size
+      // scalar -- including %c/%lc/%C, which read exactly one (wide) character
+      // -- and so cannot overflow a buffer through a missing field width.  A
+      // width-less non-string conversion is therefore recorded as BOUNDED
+      // rather than INF, so it does not trip the unlimited buffer-overflow rule
+      // below (esbmc/esbmc#1470, scanf "%ld" false alarm).
+      long unsigned int conv_pos = pos;
+      while (conv_pos < fmt.length() &&
+             (fmt[conv_pos] == 'h' || fmt[conv_pos] == 'l' ||
+              fmt[conv_pos] == 'L' || fmt[conv_pos] == 'j' ||
+              fmt[conv_pos] == 'z' || fmt[conv_pos] == 't' ||
+              fmt[conv_pos] == 'q'))
+        conv_pos++;
+      const bool is_string_conv =
+        conv_pos < fmt.length() &&
+        (fmt[conv_pos] == 's' || fmt[conv_pos] == 'S' || fmt[conv_pos] == '[');
+
       if (tmp_str != "")
         limits.push_back(tmp_str);
       else
-        limits.push_back("INF");
+        limits.push_back(is_string_conv ? "INF" : "BOUNDED");
       tmp_str = "";
     }
   }
@@ -497,6 +533,11 @@ void goto_checkt::input_overflow_check(
   {
     if (arg_names.at(i).empty())
       return;
+
+    // A non-string conversion with no field width writes a single scalar; there
+    // is no buffer to overflow, so skip it (see the format-parse loop above).
+    if (limits.at(i) == "BOUNDED")
+      continue;
 
     const symbolt &arg = *ns.lookup(arg_names.at(i));
     const irep_idt type_id = arg.get_type().id();
@@ -553,20 +594,24 @@ void goto_checkt::input_overflow_check(
         // e.g
         // int *arr = (int*) malloc(10 * sizeof(int));
         // scanf("%12d",&arr[0]);  --> overflow
-        const exprt &it = operands[0].op1();
+        // The per-element type T rides on the sizeof(T) operand of the
+        // `count * sizeof(T)` size expression (esbmc/esbmc#5337); peel any
+        // surrounding typecast to reach it.
+        const exprt *sz = &operands[0].op1();
+        while (sz->id() == "typecast" && sz->operands().size() == 1)
+          sz = &sz->op0();
+        if (sz->id() != "sizeof" || sz->operands().empty())
+          return;
+        const typet &elem = sz->op0().type();
 
-        if (
-          it.c_sizeof_type().id() == typet::t_signedbv ||
-          it.c_sizeof_type().id() == typet::t_unsignedbv)
+        if (elem.id() == typet::t_signedbv || elem.id() == typet::t_unsignedbv)
         {
-          width = it.c_sizeof_type().width().as_string();
+          width = elem.width().as_string();
           input_overflow_check_int(
             string2integer(width), string2integer(limits.at(i)), buf_overflow);
         }
 
-        else if (
-          it.c_sizeof_type().id() == typet::t_floatbv ||
-          it.c_sizeof_type().id() == typet::t_fixedbv)
+        else if (elem.id() == typet::t_floatbv || elem.id() == typet::t_fixedbv)
         {
           // TODO
           break;
@@ -1114,6 +1159,17 @@ void goto_checkt::check_rec(
     return;
   }
 
+  case expr2t::forall_id:
+  case expr2t::exists_id:
+    // A quantifier binds a fresh logical variable ranging over its whole type;
+    // its body is a pure predicate, not executed code. Runtime safety checks
+    // (bounds, overflow, div-by-zero) over the bound variable are meaningless --
+    // e.g. a[i] inside `forall i . (0 <= i < n) ==> a[i] == 0` is not a real
+    // out-of-bounds access, since i is universally quantified, not a concrete
+    // index. CBMC likewise emits no such checks inside a quantifier body. Skip
+    // the whole node so the array theory (not goto_check) models the body.
+    return;
+
   default:
     break;
   }
@@ -1181,6 +1237,35 @@ void goto_checkt::check(const expr2tc &expr, const locationt &loc)
 {
   guard2tc guard;
   check_rec(expr, guard, loc, false);
+}
+
+void goto_checkt::clz_zero_check(const expr2tc &code, const locationt &loc)
+{
+  const code_function_call2t &call = to_code_function_call2t(code);
+  if (!is_symbol2t(call.function))
+    return;
+
+  // __builtin_clz/clzl/clzll(0) is undefined behaviour (GCC); assert the
+  // argument is non-zero. Matched exactly so the two-argument __builtin_clzg is
+  // not caught.
+  const std::string name = to_symbol2t(call.function).thename.as_string();
+  if (
+    name != "c:@F@__builtin_clz" && name != "c:@F@__builtin_clzl" &&
+    name != "c:@F@__builtin_clzll")
+    return;
+
+  if (call.operands.size() != 1)
+    return;
+
+  const expr2tc &arg = call.operands[0];
+  expr2tc nonzero = notequal2tc(arg, gen_zero(arg->type));
+  guard2tc guard;
+  add_guarded_claim(
+    nonzero,
+    "__builtin_clz of zero is undefined",
+    "undef-behavior",
+    loc,
+    guard);
 }
 
 void goto_checkt::goto_check(goto_programt &goto_program)
@@ -1266,6 +1351,9 @@ void goto_checkt::goto_check(goto_programt &goto_program)
 
       if (enable_overflow_check)
         input_overflow_check(i.code, loc);
+
+      if (enable_clz_zero_check)
+        clz_zero_check(i.code, loc);
     }
     else if (i.is_return())
     {

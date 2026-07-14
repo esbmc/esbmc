@@ -17,6 +17,21 @@ public:
   size_t min_outlen = 0;
   /** Maximum possible output length for the last print() call. */
   size_t max_outlen = 0;
+  /** False when print() could not compute a sound upper bound on the output
+   *  length: a value-dependent conversion (%s, %e/%f/%g) was given a
+   *  non-constant argument, or an expected argument was missing. When false,
+   *  max_outlen is NOT a valid upper bound and callers must treat the return
+   *  value as unbounded (unconstrained nondet). Always true after a run over
+   *  a format whose conversions are all constant-bounded. */
+  bool bounded = true;
+
+  /** True when `operands` are the call's actual arguments, so a non-literal
+   *  %s operand may be used to derive a sound object-size length bound. For
+   *  the v* variants (vprintf/vsprintf/vsnprintf/vasprintf/vfprintf) the
+   *  arguments are hidden behind a va_list and the operand at a %s position is
+   *  the va_list itself, not the string — deriving a size bound from it would
+   *  be unsound, so callers set this false and %s stays unbounded. */
+  bool args_reliable = true;
 
 protected:
   std::string format;

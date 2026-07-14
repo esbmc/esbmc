@@ -82,6 +82,7 @@
 
 #include <optional>
 #include <string>
+#include <unordered_map>
 
 class python_converter;
 class type_handler;
@@ -149,6 +150,14 @@ public:
   exprt get_dict_literal(const nlohmann::json &element);
 
   exprt get_dict_comprehension(const nlohmann::json &element);
+
+  // Build a dict comprehension whose iterable is range(...) with a
+  // non-constant bound by iterating a counter (the range element value)
+  // instead of materialising range into a backing list. See #5222.
+  exprt build_range_dict_comprehension(
+    const nlohmann::json &element,
+    const nlohmann::json &generator,
+    symbolt &dict_sym);
 
   /**
    * @brief Creates and initializes a dictionary from a literal expression.
@@ -459,6 +468,30 @@ public:
    */
   static bool is_value_returning_method(const std::string &method_name);
 
+  /// Return the keys-list or values-list symbol id for dict_sym_id.
+  /// Returns an empty string when the dict was not created via a literal
+  /// (e.g. it is a function parameter).
+  static const std::string &
+  get_internal_list_id(const std::string &dict_sym_id, bool keys)
+  {
+    static const std::string empty;
+    auto &m = keys ? dict_keys_list_id_ : dict_vals_list_id_;
+    auto it = m.find(dict_sym_id);
+    return it != m.end() ? it->second : empty;
+  }
+
+  /// Key under which a literal dict's per-value element types are recorded in
+  /// the shared list_type_map, for detecting a heterogeneous int/float dict at
+  /// the subscript read site. Deliberately distinct from the values-list's own
+  /// symbol id: recording value types under that id would flip the
+  /// .values()/.items() list read onto the generic mixed-list path, which reads
+  /// dict value storage incorrectly (github_3719_4). The "$dict_value_types$"
+  /// prefix cannot collide with a real list symbol id.
+  static std::string dict_value_types_key(const std::string &vals_id)
+  {
+    return "$dict_value_types$" + vals_id;
+  }
+
   /**
    * @brief Handles dict.update() method calls.
    * Implements Python's dict.update(other) semantics:
@@ -483,6 +516,18 @@ public:
    */
   exprt
   handle_dict_copy(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
+   * @brief Handles dict.clear() method calls.
+   *
+   * Empties the dictionary in place by clearing both backing lists (keys and
+   * values). Returns nil; dict.clear() has no return value in Python.
+   * @param dict_expr The dictionary expression to clear
+   * @param call_node The function call AST node
+   * @return nil_exprt (the method returns None).
+   */
+  exprt
+  handle_dict_clear(const exprt &dict_expr, const nlohmann::json &call_node);
 
   /**
    * @brief Handles dict.fromkeys() class method calls.
@@ -572,6 +617,14 @@ private:
 
   /// Counter for generating unique dictionary variable names
   static int dict_counter_;
+
+  /// Maps dict struct symbol id to its internal keys-list symbol id.
+  /// Populated in create_dict_from_literal; queried when lowering
+  /// ESBMC_keys_N = d.keys() to propagate list_type_map entries.
+  static std::unordered_map<std::string, std::string> dict_keys_list_id_;
+
+  /// Maps dict struct symbol id to its internal values-list symbol id.
+  static std::unordered_map<std::string, std::string> dict_vals_list_id_;
 
   /**
    * @brief Extract key type from dict type annotation.

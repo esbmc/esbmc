@@ -1,0 +1,46 @@
+{
+  "title": "SAFE-LD: Formal Verification of IEC 61131-3 Ladder Diagram Programs",
+  "description": "SAFE-LD is a formal verifier for IEC 61131-3 Ladder Diagram programs integrated into ESBMC. This repository includes the tool, 13 industrial benchmarks across 6 domains, 2 real-world CONTROLLINO vendor programs, and the P4a conformance testing package (2000 concrete scan executions, 0 divergences).",
+  "upload_type": "software",
+  "license": "Apache-2.0",
+  "creators": [
+    {
+      "name": "Dantas, Pierre",
+      "affiliation": "University of Manchester",
+      "orcid": ""
+    },
+    {
+      "name": "Cordeiro, Lucas C.",
+      "affiliation": "University of Manchester",
+      "orcid": "0000-0002-6318-1067"
+    }
+  ],
+  "keywords": [
+    "formal verification",
+    "PLC",
+    "Ladder Diagram",
+    "IEC 61131-3",
+    "ESBMC",
+    "model checking",
+    "k-induction",
+    "PLCopen XML",
+    "safety-critical systems",
+    "industrial automation"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/esbmc/esbmc",
+      "relation": "isDerivedFrom",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://github.com/CONTROLLINO-PLC/OpenPLC_examples",
+      "relation": "references",
+      "scheme": "url"
+    }
+  ],
+  "references": [
+    "Lopez-Miguel et al. (2022). PLCverif: Status of a Formal Verification Tool for PLC. arXiv:2203.17253"
+  ],
+  "notes": "Artefact for TACAS 2027 submission. Includes 13 benchmarks, P4a conformance testing (2000 scans, 0 divergences), and comparison with PLCverif."
+}

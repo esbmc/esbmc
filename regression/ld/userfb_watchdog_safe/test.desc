@@ -1,0 +1,4 @@
+CORE
+loop.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps --unwind 11
+^VERIFICATION SUCCESSFUL$

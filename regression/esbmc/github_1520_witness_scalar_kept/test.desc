@@ -1,0 +1,5 @@
+CORE
+main.c
+--witness-output-graphml - -Wno-error=implicit-function-declaration
+^VERIFICATION FAILED$
+key="assumption">x == 5;

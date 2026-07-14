@@ -101,59 +101,6 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Simplify the trace and exclude the assignments whose variables are not "
      "from user-input files"}}},
-#ifdef ENABLE_PYTHON_FRONTEND
-  {"Python frontend",
-   {
-     {"python",
-      boost::program_options::value<std::string>()->value_name("path"),
-      "Python interpreter binary to use (searched in $PATH; default: python)"},
-     {"override-return-annotation",
-      NULL,
-      "Override return annotation with inferred type"},
-     {"strict-types",
-      NULL,
-      "Enforce strict type checking for function arguments during "
-      "verification"},
-     {"nondet-str-length",
-      boost::program_options::value<int>()->default_value(16)->value_name("nr"),
-      "Set maximum length for non-deterministic strings (default is 16)"},
-     {"python-list-compare-depth",
-      boost::program_options::value<int>()->default_value(4)->value_name("nr"),
-      "Set maximum nesting depth for Python list comparison (default is 4)"},
-   }},
-#endif
-#ifdef ENABLE_SOLIDITY_FRONTEND
-  {"Solidity frontend",
-   {{"sol",
-     boost::program_options::value<std::string>()->value_name("path"),
-     "Solidity source file (.sol) — also accepted as a positional argument"},
-    {"solc-bin",
-     boost::program_options::value<std::string>()->value_name("path"),
-     "path to solc binary (default: $SOLC or solc in $PATH)"},
-    {"contract",
-     boost::program_options::value<std::string>()->value_name("cname"),
-     "Set contract name"},
-    {"focus-function",
-     boost::program_options::value<std::string>()->value_name("name"),
-     "Restrict the contract harness to verify only the named public/external "
-     "function. The constructor and state initialization still run (unlike "
-     "--function), but the nondet dispatch loop calls only this function. "
-     "Requires --contract when the source declares more than one contract."},
-    {"no-visibility",
-     NULL,
-     "Force to verify every function, even if it's an unreachable "
-     "internal/private function"},
-    {"unbound", NULL, "Model external function calls as arbitrary behavior"},
-    {"bound",
-     NULL,
-     "Model inter-contract function calls within a bounded system (default)"},
-    {"reentry-check",
-     NULL,
-     "Detect reentrancy behavior during contract execution"},
-    {"negating-property",
-     boost::program_options::value<std::string>()->value_name("fname"),
-     "Convert the assert(cond) to assert(!cond)"}}},
-#endif
   {"Frontend",
    {{"include,I",
      boost::program_options::value<std::vector<std::string>>()->value_name(
@@ -199,11 +146,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-loops", NULL, "Show the loops in the program"},
     {"show-claims", NULL, "Only show claims"},
     {"show-vcc", NULL, "Show the verification conditions"},
-    {"document-subgoals", NULL, "Generate subgoals documentation"},
     {"no-library", NULL, "Disable built-in abstract C library"},
     {"no-string-literal", NULL, "Ignore string literals (replace with NULL)"},
     {"binary", NULL, "Read goto program instead of source code"},
-    {"cprover", NULL, "Add compatibility layer for CPROVER gotos"},
+    {"cprover", NULL, "Deprecated no-op (kept for backward compatibility)"},
+    {"no-cprover-additions",
+     NULL,
+     "Do not auto-link ESBMC additions when reading a CBMC goto-binary"},
     {"dont-care-about-missing-extensions",
      NULL,
      "Don't crash on unsupported extensions"},
@@ -222,7 +171,101 @@ const struct group_opt_templ all_cmd_options[] = {
      "argv string (default 256)."},
     {"gcc-nested-functions",
      NULL,
-     "Enable GCC nested functions extension (source-level lambda lifting)"}}},
+     "Enable GCC nested functions extension (source-level lambda lifting)"},
+    {"sv-comp",
+     NULL,
+     "Enable SV-COMP mode: suppress GCC-acceptable frontend diagnostics "
+     "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
+     "physical line numbers for witnesses, and avoid malloc/free in the "
+     "fopen/fclose models. Set automatically by the SV-COMP wrapper."}}},
+#ifdef ENABLE_PYTHON_FRONTEND
+  {"Python frontend",
+   {
+     {"python",
+      boost::program_options::value<std::string>()->value_name("path"),
+      "Python interpreter binary to use (searched in $PATH; default: python)"},
+     {"override-return-annotation",
+      NULL,
+      "Override return annotation with inferred type"},
+     {"strict-types",
+      NULL,
+      "Enforce strict type checking for function arguments during "
+      "verification"},
+     {"python-no-fold",
+      NULL,
+      "Disable NumPy constant folding in the Python frontend"},
+     {"nondet-str-length",
+      boost::program_options::value<int>()->default_value(16)->value_name("nr"),
+      "Set maximum length for non-deterministic strings (default is 16)"},
+     {"python-list-compare-depth",
+      boost::program_options::value<int>()->default_value(4)->value_name("nr"),
+      "Set maximum nesting depth for Python list comparison (default is 4)"},
+     {"python-irep2-adjust",
+      NULL,
+      "Run the IREP2-native Python adjuster alongside the legacy adjust pass "
+      "(V.4 migration; experimental, default off)"},
+   }},
+#endif
+#ifdef ENABLE_LD_FRONTEND
+  {"LD frontend",
+   {{"ld-props",
+     boost::program_options::value<std::string>()->value_name("file"),
+     "YAML safety-property specification for IEC 61131-3 Ladder Diagram "
+     "(.ld) programs"},
+    {"ld-fault-injection",
+     NULL,
+     "Plant known semantic errors in the Ladder Diagram (negate contact "
+     "polarities, degrade Set/Reset coils to plain output coils) to validate "
+     "that the property checks detect them"},
+    {"ld-sound-mode",
+     NULL,
+     "Translate user function-block ST bodies in sound Boolean/integer mode: "
+     "unsupported constructs (function calls, member access) make the FB body "
+     "fall back to a no-op instead of being over-approximated as "
+     "nondeterministic (no over-approximation, zero false positives)"},
+    {"ld-scan-watchdog",
+     NULL,
+     "Instrument WHILE loops in user function-block bodies with a "
+     "scan-watchdog "
+     "assertion that fails once a loop exceeds --ld-scan-budget iterations, "
+     "modelling a PLC scan overrun (changes the verified model)"},
+    {"ld-scan-budget",
+     boost::program_options::value<int>()->value_name("N"),
+     "Tolerated iterations before the --ld-scan-watchdog assertion fails "
+     "(default 8); keep <= the BMC --unwind so the assertion is reachable"}}},
+#endif
+#ifdef ENABLE_SOLIDITY_FRONTEND
+  {"Solidity frontend",
+   {{"sol",
+     boost::program_options::value<std::string>()->value_name("path"),
+     "Solidity source file (.sol) — also accepted as a positional argument"},
+    {"solc-bin",
+     boost::program_options::value<std::string>()->value_name("path"),
+     "path to solc binary (default: $SOLC or solc in $PATH)"},
+    {"contract",
+     boost::program_options::value<std::string>()->value_name("cname"),
+     "Set contract name"},
+    {"focus-function",
+     boost::program_options::value<std::string>()->value_name("name"),
+     "Restrict the contract harness to verify only the named public/external "
+     "function. The constructor and state initialization still run (unlike "
+     "--function), but the nondet dispatch loop calls only this function. "
+     "Requires --contract when the source declares more than one contract."},
+    {"no-visibility",
+     NULL,
+     "Force to verify every function, even if it's an unreachable "
+     "internal/private function"},
+    {"unbound", NULL, "Model external function calls as arbitrary behavior"},
+    {"bound",
+     NULL,
+     "Model inter-contract function calls within a bounded system (default)"},
+    {"reentry-check",
+     NULL,
+     "Detect reentrancy behavior during contract execution"},
+    {"negating-property",
+     boost::program_options::value<std::string>()->value_name("fname"),
+     "Convert the assert(cond) to assert(!cond)"}}},
+#endif
   {"Architecture",
    {
      {"no-arch", NULL, "Don't set up an architecture"},
@@ -382,9 +425,6 @@ const struct group_opt_templ all_cmd_options[] = {
      "Do not unroll bounded loops at goto level (need to enable "
      "--goto-unwind)"},
     {"slice-assumes", NULL, "Remove unused assume statements"},
-    {"extended-try-analysis",
-     NULL,
-     "Skip backward stack search for C++ throw targets"},
     {"skip-bmc", NULL, "Do not perform bounded model checking"},
     {"no-cache-asserts",
      NULL,
@@ -426,7 +466,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"bidirectional",
      NULL,
      "Search the inductive step counterexample for assignments"},
-    {"unlimited-k-steps", NULL, "Set max number of iteration to UINT_MAX"},
+    {"unlimited-k-steps",
+     NULL,
+     "Remove the upper bound on the number of k-induction steps"},
     {"max-inductive-step",
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "Set max k value for the inductive step"},
@@ -458,6 +500,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Do not merge gotos when restoring paths after a context-switch"},
     {"no-por", NULL, "Do not do partial order reduction"},
+    {"cswitch-skip-readonly-globals",
+     NULL,
+     "Skip context switches on globals that are never written anywhere "
+     "in the program (off by default)"},
     {"all-runs",
      NULL,
      "Check all interleavings, even if a bug was already found"}}},
@@ -478,6 +524,18 @@ const struct group_opt_templ all_cmd_options[] = {
     {"cvc5", NULL, "Use CVC5"},
     {"yices", NULL, "Use Yices"},
     {"bitwuzla", NULL, "Use Bitwuzla (default)"},
+    {"bitwuzllob",
+     NULL,
+     "Use Bitwuzllob (Bitwuzla on the massively parallel Mallob platform) by "
+     "running an external mallob binary in one-shot mono mode"},
+    {"bitwuzllob-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Command running Mallob in mono mode; every %f is replaced by the "
+     "SMT-LIB2 formula file (default: \"mallob -mono=%f -mono-app=SMT\")"},
+    {"bitwuzllob-model-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Local interactive SMT-LIB2 solver used to build the counterexample "
+     "when Bitwuzllob reports satisfiable (e.g. \"z3 -in\")"},
     {"bv", NULL, "Use solver with bit-vector arithmetic"},
     {"ir",
      NULL,
@@ -570,12 +628,18 @@ const struct group_opt_templ all_cmd_options[] = {
      "Enable runtime isinstance assertions for annotated code"},
     {"memory-leak-check", NULL, "Enable memory leak check"},
     {"overflow-check", NULL, "Enable arithmetic over- and underflow check"},
+    {"restrict-check",
+     NULL,
+     "Check C restrict-qualified pointer parameters do not alias"},
     {"unsigned-overflow-check",
      NULL,
      "Enable arithmetic over- and underflow check for unsigned integers"},
     {"ub-shift-check",
      NULL,
      "Enable undefined behavior check on shift operations"},
+    {"clz-zero-check",
+     NULL,
+     "Enable undefined behavior check on __builtin_clz of a zero argument"},
     {"struct-fields-check",
      NULL,
      "Enable over-sized read checks for struct fields"},
@@ -595,6 +659,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"unchecked-return-value-check",
      NULL,
      "Enable check for unchecked return values of fallible calls (CWE-252)"},
+    {"dead-store-check",
+     NULL,
+     "Emit advisory notes for dead stores / assignments never read (CWE-563)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(
@@ -612,8 +679,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "is 128)"},
     {"enable-unreachability-intrinsic",
      NULL,
-     "Enable the functionality of the __ESBMC_unreachable() intrinsic, which "
-     "results in a verification failure when its call is reachable"},
+     "Enable unreach-call style checking: activates __ESBMC_unreachable() and "
+     "treats reach_error()/__VERIFIER_error() as error sentinels"},
     {"conv-assert-to-assume",
      NULL,
      "Convert assertions for bounds and pointer checks into assumptions"},
@@ -687,7 +754,8 @@ const struct group_opt_templ all_cmd_options[] = {
      {"assertion-coverage", NULL, "Show the coverage of assertion statements"},
      {"assertion-coverage-claims",
       NULL,
-      "Enable assertion-coverage and shows all reached claims"},
+      "Enable assertion-coverage and show all claims, "
+      "both reached and unreached"},
      {"condition-coverage",
       NULL,
       "This activates --multi-property, "
@@ -798,6 +866,22 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Interactively choose thread scheduling at interleaving points"},
    }},
+  {"IREP2 migration (esbmc/esbmc#4715)",
+   {{"irep2-bodies",
+     NULL,
+     "Deprecated no-op (accepted for backward compatibility). goto_convert "
+     "always lowers function bodies through the IREP2 round-trip "
+     "(migrate legacy codet → code_*2t → codet) since V.4.4; the legacy "
+     "bypass and the --no-irep2-bodies escape hatch have been removed."},
+    {"irep2-native-body",
+     NULL,
+     "Experimental, default off (W1-loc spike Phase C, esbmc/esbmc#4715). "
+     "Route function bodies to an IREP2-native goto_convert that consumes "
+     "code_*2t directly and inherits the statement location onto value "
+     "operands at consumption, skipping the whole-body legacy round-trip. "
+     "Grown one statement kind at a time; any body containing an unsupported "
+     "construct falls back to the round-trip path, so flag-on is byte-"
+     "identical to flag-off until the native path is complete."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},

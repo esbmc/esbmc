@@ -418,27 +418,22 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
-  /* We successfully constructed the type of this symbol; replace the
-   * symbol with the incomplete type by one with the now-complete type
-   * definition.
-   * Do this by erasing and re-inserting because the order of definitions in the
-   * context matters. This type should be defined after any of the types that it
-   * is composed of.
+  /* We successfully constructed the type of this symbol; complete the
+   * incomplete-type symbol with the now-complete type definition, in place.
+   * The order of definitions in the context matters — this type must be
+   * defined after any of the types it is composed of — so move it to the
+   * back of the insertion order afterwards.
    *
-   * Refresh `sym` here: get_struct_union_class_fields() above can recurse
-   * through field types into other records; any of those recursions may
-   * call erase_symbol() on the symbol table, and although unordered_map
-   * doesn't invalidate references on rehash, it *does* invalidate the
-   * specific element that was erased.  In the cross-record recursion case
-   * the same record can be processed twice, and the second pass's erase
-   * makes the outer `sym` dangling.  A fresh find_symbol() by id avoids
-   * the use-after-free. */
+   * Refresh `sym` by id: get_struct_union_class_fields() above can recurse
+   * through field types into other records, and any of those recursions may
+   * reorder/complete the same record, leaving the outer `sym` stale. A fresh
+   * find_symbol() avoids using a stale pointer. (The symbol table is
+   * node-based, so updating in place and relocating no longer dangles or
+   * copies the symbol.) */
   sym = context.find_symbol(id);
   assert(sym && "symbol disappeared from context during field conversion");
-  symbolt symbol = *sym;
-  context.erase_symbol(symbol.id);
-  symbol.set_type(t);
-  sym = context.move_symbol_to_context(symbol);
+  sym->set_type(t);
+  sym = context.reorder_symbol_to_back(id);
 
   {
     typet t = sym->get_type();
@@ -615,21 +610,37 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
       is_aggregate_type(vd.getType()) &&
       stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
 
+    // An array of a class type with a non-trivial constructor is an aggregate,
+    // but its CXXConstructExpr is not a no-op: every element must be
+    // constructed.  Keep the constructor call so static_lifetime_init (via
+    // clang_cpp_maint::adjust_init) can expand it into per-element calls;
+    // otherwise the element constructors are silently dropped and any side
+    // effect (e.g. a global counter bumped by the ctor) never happens.  See
+    // regression esbmc-cpp/gcc-template-tests/ctor2.
+    if (aggregate_without_init)
+    {
+      const auto &construct_expr =
+        static_cast<const clang::CXXConstructExpr &>(*stmt);
+      const clang::CXXConstructorDecl *ctor = construct_expr.getConstructor();
+      if (ctor && !ctor->isTrivial())
+        aggregate_without_init = false;
+    }
+
     if (vd.isStaticDataMember() && vd.isOutOfLine())
     {
-      // Reorder to respect definition order for static_lifetime_init()
-      // C++ class static members are inserted into ordered_symbols when the
-      // class body is processed (in declaration order), but their out-of-class
-      // definitions appear later in textual order. Both C and C++ require
-      // initialization in definition order
+      // Reorder to respect definition order for static_lifetime_init().
+      // C++ class static members are inserted when the class body is processed
+      // (in declaration order), but their out-of-class definitions appear later
+      // in textual order, and the later definition supplies the complete type
+      // (e.g. an array's real size). Erase the incomplete declaration-order
+      // symbol so move_symbol_to_context below re-adds the complete one at the
+      // end — both replacing its contents and fixing the init order.
       symbolt *s = context.find_symbol(symbol.id);
       if (
         s &&
         vd.getTemplateSpecializationKind() != clang::TSK_ImplicitInstantiation)
-        // In AST, nodes will be generated for the template Instantiation.
-        // We have already initialized it, so skip it
-
-        // Remove the zero initialization symbol and re-arrange the initialization order
+        // In AST, nodes are also generated for the template instantiation,
+        // already initialized — skip those.
         context.erase_symbol(s->id);
     }
 
@@ -758,8 +769,26 @@ bool clang_c_convertert::get_function(
     }
   }
 
-  added_symbol.set_type(type);
-  new_expr.type() = type;
+  // Record the C++ exception specification (noexcept / dynamic throw(...)) as
+  // function-boundary metadata on the type. No-op for C.
+  annotate_exception_specification(fd, type);
+
+  // A bodyless re-declaration must not clobber the type of a function that is
+  // already defined. The definition's argument list carries the parameter
+  // identifiers symex uses to bind call arguments; replacing it with a
+  // prototype's nameless arguments silently breaks parameter passing. This
+  // surfaces when several frontends share one context and each prepends the
+  // same intrinsic prototypes — e.g. c2goto registers both the C and C++
+  // frontends, and clang_cpp re-declares the nameless
+  // __VERIFIER_nondet_memory prototype after the C definition with its named
+  // parameters was already converted (esbmc/esbmc#5298).
+  if (!fd.hasBody() && added_symbol.get_value().is_not_nil())
+    new_expr.type() = added_symbol.get_type();
+  else
+  {
+    added_symbol.set_type(type);
+    new_expr.type() = type;
+  }
 
   // We need: a type, a name, and an optional body.
   // Always call get_function_body so overrides (e.g. the C++ frontend) can
@@ -1580,6 +1609,260 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "_ptrmem";
     break;
 
+    // ARM SVE (Scalable Vector Extension) types.
+    // Mapped to fixed-size ESBMC vector types using the minimum SVE vector
+    // length (128-bit). xN variants multiply the element count by N.
+#define SVE_VEC(elem, n_elems)                                                 \
+  vector_typet(                                                                \
+    elem,                                                                      \
+    constant_exprt(                                                            \
+      integer2binary(n_elems, bv_width(int_type())),                           \
+      integer2string(n_elems),                                                 \
+      int_type()))
+
+  case clang::BuiltinType::SveInt8:
+    new_type = SVE_VEC(signedbv_typet(8), 16);
+    c_type = "__SVInt8_t";
+    break;
+  case clang::BuiltinType::SveInt8x2:
+    new_type = SVE_VEC(signedbv_typet(8), 32);
+    c_type = "__clang_svint8x2_t";
+    break;
+  case clang::BuiltinType::SveInt8x3:
+    new_type = SVE_VEC(signedbv_typet(8), 48);
+    c_type = "__clang_svint8x3_t";
+    break;
+  case clang::BuiltinType::SveInt8x4:
+    new_type = SVE_VEC(signedbv_typet(8), 64);
+    c_type = "__clang_svint8x4_t";
+    break;
+
+  case clang::BuiltinType::SveInt16:
+    new_type = SVE_VEC(signedbv_typet(16), 8);
+    c_type = "__SVInt16_t";
+    break;
+  case clang::BuiltinType::SveInt16x2:
+    new_type = SVE_VEC(signedbv_typet(16), 16);
+    c_type = "__clang_svint16x2_t";
+    break;
+  case clang::BuiltinType::SveInt16x3:
+    new_type = SVE_VEC(signedbv_typet(16), 24);
+    c_type = "__clang_svint16x3_t";
+    break;
+  case clang::BuiltinType::SveInt16x4:
+    new_type = SVE_VEC(signedbv_typet(16), 32);
+    c_type = "__clang_svint16x4_t";
+    break;
+
+  case clang::BuiltinType::SveInt32:
+    new_type = SVE_VEC(signedbv_typet(32), 4);
+    c_type = "__SVInt32_t";
+    break;
+  case clang::BuiltinType::SveInt32x2:
+    new_type = SVE_VEC(signedbv_typet(32), 8);
+    c_type = "__clang_svint32x2_t";
+    break;
+  case clang::BuiltinType::SveInt32x3:
+    new_type = SVE_VEC(signedbv_typet(32), 12);
+    c_type = "__clang_svint32x3_t";
+    break;
+  case clang::BuiltinType::SveInt32x4:
+    new_type = SVE_VEC(signedbv_typet(32), 16);
+    c_type = "__clang_svint32x4_t";
+    break;
+
+  case clang::BuiltinType::SveInt64:
+    new_type = SVE_VEC(signedbv_typet(64), 2);
+    c_type = "__SVInt64_t";
+    break;
+  case clang::BuiltinType::SveInt64x2:
+    new_type = SVE_VEC(signedbv_typet(64), 4);
+    c_type = "__clang_svint64x2_t";
+    break;
+  case clang::BuiltinType::SveInt64x3:
+    new_type = SVE_VEC(signedbv_typet(64), 6);
+    c_type = "__clang_svint64x3_t";
+    break;
+  case clang::BuiltinType::SveInt64x4:
+    new_type = SVE_VEC(signedbv_typet(64), 8);
+    c_type = "__clang_svint64x4_t";
+    break;
+
+  case clang::BuiltinType::SveUint8:
+    new_type = SVE_VEC(unsignedbv_typet(8), 16);
+    c_type = "__SVUint8_t";
+    break;
+  case clang::BuiltinType::SveUint8x2:
+    new_type = SVE_VEC(unsignedbv_typet(8), 32);
+    c_type = "__clang_svuint8x2_t";
+    break;
+  case clang::BuiltinType::SveUint8x3:
+    new_type = SVE_VEC(unsignedbv_typet(8), 48);
+    c_type = "__clang_svuint8x3_t";
+    break;
+  case clang::BuiltinType::SveUint8x4:
+    new_type = SVE_VEC(unsignedbv_typet(8), 64);
+    c_type = "__clang_svuint8x4_t";
+    break;
+#if LLVM_VERSION_MAJOR >= 19
+  case clang::BuiltinType::SveMFloat8:
+    new_type = SVE_VEC(unsignedbv_typet(8), 16);
+    c_type = "__SVMfloat8_t";
+    break;
+  case clang::BuiltinType::SveMFloat8x2:
+    new_type = SVE_VEC(unsignedbv_typet(8), 32);
+    c_type = "__clang_svmfloat8x2_t";
+    break;
+  case clang::BuiltinType::SveMFloat8x3:
+    new_type = SVE_VEC(unsignedbv_typet(8), 48);
+    c_type = "__clang_svmfloat8x3_t";
+    break;
+  case clang::BuiltinType::SveMFloat8x4:
+    new_type = SVE_VEC(unsignedbv_typet(8), 64);
+    c_type = "__clang_svmfloat8x4_t";
+    break;
+#endif
+
+  case clang::BuiltinType::SveUint16:
+    new_type = SVE_VEC(unsignedbv_typet(16), 8);
+    c_type = "__SVUint16_t";
+    break;
+  case clang::BuiltinType::SveUint16x2:
+    new_type = SVE_VEC(unsignedbv_typet(16), 16);
+    c_type = "__clang_svuint16x2_t";
+    break;
+  case clang::BuiltinType::SveUint16x3:
+    new_type = SVE_VEC(unsignedbv_typet(16), 24);
+    c_type = "__clang_svuint16x3_t";
+    break;
+  case clang::BuiltinType::SveUint16x4:
+    new_type = SVE_VEC(unsignedbv_typet(16), 32);
+    c_type = "__clang_svuint16x4_t";
+    break;
+
+  case clang::BuiltinType::SveUint32:
+    new_type = SVE_VEC(unsignedbv_typet(32), 4);
+    c_type = "__SVUint32_t";
+    break;
+  case clang::BuiltinType::SveUint32x2:
+    new_type = SVE_VEC(unsignedbv_typet(32), 8);
+    c_type = "__clang_svuint32x2_t";
+    break;
+  case clang::BuiltinType::SveUint32x3:
+    new_type = SVE_VEC(unsignedbv_typet(32), 12);
+    c_type = "__clang_svuint32x3_t";
+    break;
+  case clang::BuiltinType::SveUint32x4:
+    new_type = SVE_VEC(unsignedbv_typet(32), 16);
+    c_type = "__clang_svuint32x4_t";
+    break;
+
+  case clang::BuiltinType::SveUint64:
+    new_type = SVE_VEC(unsignedbv_typet(64), 2);
+    c_type = "__SVUint64_t";
+    break;
+  case clang::BuiltinType::SveUint64x2:
+    new_type = SVE_VEC(unsignedbv_typet(64), 4);
+    c_type = "__clang_svuint64x2_t";
+    break;
+  case clang::BuiltinType::SveUint64x3:
+    new_type = SVE_VEC(unsignedbv_typet(64), 6);
+    c_type = "__clang_svuint64x3_t";
+    break;
+  case clang::BuiltinType::SveUint64x4:
+    new_type = SVE_VEC(unsignedbv_typet(64), 8);
+    c_type = "__clang_svuint64x4_t";
+    break;
+
+  case clang::BuiltinType::SveFloat16:
+    new_type = SVE_VEC(half_float_type(), 8);
+    c_type = "__SVFloat16_t";
+    break;
+  case clang::BuiltinType::SveFloat16x2:
+    new_type = SVE_VEC(half_float_type(), 16);
+    c_type = "__clang_svfloat16x2_t";
+    break;
+  case clang::BuiltinType::SveFloat16x3:
+    new_type = SVE_VEC(half_float_type(), 24);
+    c_type = "__clang_svfloat16x3_t";
+    break;
+  case clang::BuiltinType::SveFloat16x4:
+    new_type = SVE_VEC(half_float_type(), 32);
+    c_type = "__clang_svfloat16x4_t";
+    break;
+
+  case clang::BuiltinType::SveBFloat16:
+    new_type = SVE_VEC(half_float_type(), 8);
+    c_type = "__SVBfloat16_t";
+    break;
+  case clang::BuiltinType::SveBFloat16x2:
+    new_type = SVE_VEC(half_float_type(), 16);
+    c_type = "__clang_svbfloat16x2_t";
+    break;
+  case clang::BuiltinType::SveBFloat16x3:
+    new_type = SVE_VEC(half_float_type(), 24);
+    c_type = "__clang_svbfloat16x3_t";
+    break;
+  case clang::BuiltinType::SveBFloat16x4:
+    new_type = SVE_VEC(half_float_type(), 32);
+    c_type = "__clang_svbfloat16x4_t";
+    break;
+
+  case clang::BuiltinType::SveFloat32:
+    new_type = SVE_VEC(float_type(), 4);
+    c_type = "__SVFloat32_t";
+    break;
+  case clang::BuiltinType::SveFloat32x2:
+    new_type = SVE_VEC(float_type(), 8);
+    c_type = "__clang_svfloat32x2_t";
+    break;
+  case clang::BuiltinType::SveFloat32x3:
+    new_type = SVE_VEC(float_type(), 12);
+    c_type = "__clang_svfloat32x3_t";
+    break;
+  case clang::BuiltinType::SveFloat32x4:
+    new_type = SVE_VEC(float_type(), 16);
+    c_type = "__clang_svfloat32x4_t";
+    break;
+
+  case clang::BuiltinType::SveFloat64:
+    new_type = SVE_VEC(double_type(), 2);
+    c_type = "__SVFloat64_t";
+    break;
+  case clang::BuiltinType::SveFloat64x2:
+    new_type = SVE_VEC(double_type(), 4);
+    c_type = "__clang_svfloat64x2_t";
+    break;
+  case clang::BuiltinType::SveFloat64x3:
+    new_type = SVE_VEC(double_type(), 6);
+    c_type = "__clang_svfloat64x3_t";
+    break;
+  case clang::BuiltinType::SveFloat64x4:
+    new_type = SVE_VEC(double_type(), 8);
+    c_type = "__clang_svfloat64x4_t";
+    break;
+
+  case clang::BuiltinType::SveBool:
+    new_type = SVE_VEC(bool_type(), 16);
+    c_type = "__SVBool_t";
+    break;
+#if LLVM_VERSION_MAJOR >= 17
+  case clang::BuiltinType::SveBoolx2:
+    new_type = SVE_VEC(bool_type(), 32);
+    c_type = "__clang_svboolx2_t";
+    break;
+  case clang::BuiltinType::SveBoolx4:
+    new_type = SVE_VEC(bool_type(), 64);
+    c_type = "__clang_svboolx4_t";
+    break;
+  case clang::BuiltinType::SveCount:
+    new_type = unsignedbv_typet(64);
+    c_type = "__SVCount_t";
+    break;
+#endif
+
+#undef SVE_VEC
+
   // Unsupported extensions (optional don't care)
   case clang::BuiltinType::BFloat16:
     if (config.options.get_bool_option("dont-care-about-missing-extensions"))
@@ -1588,7 +1871,7 @@ bool clang_c_convertert::get_builtin_type(
       c_type = "_Float16";
       break;
     }
-    // fallthrough
+    [[fallthrough]];
 
   default:
   {
@@ -2024,7 +2307,42 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::UnaryExprOrTypeTraitExpr &unary =
       static_cast<const clang::UnaryExprOrTypeTraitExpr &>(stmt);
 
-    // Use clang to calculate sizeof/alignof
+    if (unary.getKind() == clang::UETT_SizeOf)
+    {
+      // Emit a `sizeof` node carrying the measured type T as the type of its
+      // first operand (a type_exprt), and — when clang can evaluate it — the
+      // authoritative byte-size constant as a second operand. Using clang's
+      // value rather than recomputing it from T keeps flexible-array-members,
+      // bitfields and friends in agreement with the source. VLAs leave the
+      // value operand off; adjust_sizeof fills it in with a namespace. This
+      // replaces the legacy sizeof-type side channel (esbmc/esbmc#5337).
+      typet measured;
+      if (get_type(unary.getTypeOfArgument(), measured))
+        return true;
+
+      if (measured.is_struct() || measured.is_union())
+      {
+        struct_union_typet t = to_struct_union_type(measured);
+        measured = symbol_typet(tag_prefix + t.tag().as_string());
+      }
+
+      exprt sizeof_expr("sizeof", size_type());
+      sizeof_expr.copy_to_operands(type_exprt(measured));
+
+      clang::Expr::EvalResult result;
+      if (unary.EvaluateAsInt(result, *ASTContext))
+        sizeof_expr.copy_to_operands(constant_exprt(
+          integer2binary(
+            result.Val.getInt().getZExtValue(), bv_width(size_type())),
+          integer2string(result.Val.getInt().getZExtValue()),
+          size_type()));
+
+      new_expr = sizeof_expr;
+      break;
+    }
+
+    // alignof / __alignof / _Alignof / vec_step: clang folds these to a
+    // constant; they carry no allocation type, so keep the folded value.
     clang::Expr::EvalResult result;
     if (unary.EvaluateAsInt(result, *ASTContext))
     {
@@ -2036,26 +2354,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
     else
     {
-      assert(unary.getKind() == clang::UETT_SizeOf);
-
-      typet t;
-      if (get_type(unary.getType(), t))
-        return true;
-
-      new_expr = exprt("sizeof", t);
-    }
-
-    typet size_type;
-    if (get_type(unary.getTypeOfArgument(), size_type))
+      log_error(
+        "Unsupported non-constant UnaryExprOrTypeTrait of kind {}",
+        static_cast<int>(unary.getKind()));
       return true;
-
-    if (size_type.is_struct() || size_type.is_union())
-    {
-      struct_union_typet t = to_struct_union_type(size_type);
-      size_type = symbol_typet(tag_prefix + t.tag().as_string());
     }
-
-    new_expr.set("#c_sizeof_type", size_type);
     break;
   }
 
@@ -2272,11 +2575,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     exprt then;
-    if (get_expr(*ternary_if.getTrueExpr(), then))
+    if (get_expr(*ternary_if.getTrueExpr()->IgnoreParens(), then))
       return true;
 
     exprt else_expr;
-    if (get_expr(*ternary_if.getFalseExpr(), else_expr))
+    if (get_expr(*ternary_if.getFalseExpr()->IgnoreParens(), else_expr))
       return true;
 
     typet t;
@@ -2285,6 +2588,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     exprt if_expr("if", t);
     if_expr.copy_to_operands(cond, then, else_expr);
+
+    // Record the column of the ? token on the expression location so that
+    // goto_sideeffects can propagate it to the IF instruction when lowering
+    // this ternary for branching waypoints.
+    clang::PresumedLoc qLoc;
+    get_presumed_location(ternary_if.getQuestionLoc(), qLoc);
+    if (!qLoc.isInvalid())
+      location.set_column(qLoc.getColumn());
 
     new_expr = if_expr;
     break;
@@ -4511,12 +4822,13 @@ void clang_c_convertert::get_presumed_location(
 
   clang::SourceLocation FileLoc = sm->getFileLoc(loc);
   bool use_line_directives = true;
-#if ESBMC_SVCOMP
   /* Do not use #line directives, because the GraphML witness format appearently
    * wants to use the physical line in the pre-processed .i file; at least
    * CPAchecker and UAutomizer do. */
-  use_line_directives = false;
-#endif
+  if (
+    config.options.get_bool_option("sv-comp") &&
+    !config.options.get_bool_option("validate-violation-witness"))
+    use_line_directives = false;
   PLoc = sm->getPresumedLoc(FileLoc, use_line_directives);
 }
 

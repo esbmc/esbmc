@@ -8,26 +8,35 @@
 
 void python_converter::update_symbol(const exprt &expr) const
 {
-  // Don't update if expression has no name
-  // prevents corruption of function symbols
-  if (expr.name().empty())
+  symbolt *sym = nullptr;
+
+  // For symbol_exprt, the full symbol ID (e.g. "py:file@A") is stored in
+  // identifier(), not in name(). Try identifier-based lookup first.
+  if (!expr.identifier().empty())
   {
-    log_debug(
-      "python-frontend",
-      "[update_symbol]: skipping symbol update since expression has no name");
-    return;
+    sym = symbol_table_.find_symbol(expr.identifier());
   }
 
-  // Generate a symbol ID from the expression's name.
-  symbol_id sid = create_symbol_id();
-  sid.set_object(expr.name().c_str());
+  // Fall back to name-based lookup (name() = base name, e.g. "A").
+  // This handles expressions that carry only the base name.
+  if (sym == nullptr && !expr.name().empty())
+  {
+    symbol_id sid = create_symbol_id();
+    sid.set_object(expr.name().c_str());
 
-  // Try to locate the symbol in the symbol table.
-  symbolt *sym = symbol_table_.find_symbol(sid.to_string());
+    // Try scoped ID first (py:file@F@func@var), then global (py:file@var)
+    sym = symbol_table_.find_symbol(sid.to_string());
+    if (sym == nullptr)
+      sym = symbol_table_.find_symbol(sid.global_to_string());
+  }
 
   if (sym == nullptr)
   {
-    // Symbol not found, nothing to update.
+    log_debug(
+      "python-frontend",
+      "[update_symbol]: symbol not found for name='{}' identifier='{}'",
+      expr.name().as_string(),
+      expr.identifier().as_string());
     return;
   }
 
@@ -77,7 +86,7 @@ void python_converter::update_symbol(const exprt &expr) const
           "update_symbol: Failed to convert binary value '{}' to integer for "
           "symbol '{}'. Error: {}",
           binary_value_str,
-          sid.to_string(),
+          sym->id.as_string(),
           e.what());
       }
     }
@@ -90,38 +99,45 @@ symbolt *python_converter::find_function_in_base_classes(
   std::string method_name,
   bool is_ctor) const
 {
-  symbolt *func = nullptr;
-
   // Find class node in the AST
   auto class_node = json_utils::find_class((*ast_json)["body"], class_name);
 
-  if (class_node != nlohmann::json())
+  if (class_node == nlohmann::json())
+    return nullptr;
+
+  // Name of the callee under the current class: for a constructor it is the
+  // class name itself, otherwise the method name. The caller only reaches this
+  // for methods/constructors, so symbol_id always carries the "@C@<class>@F@"
+  // marker; pos and span are loop-invariant.
+  const std::string current_func_name = is_ctor ? class_name : method_name;
+  const std::size_t pos = symbol_id.rfind("@C@" + class_name);
+  const std::size_t span =
+    std::string("@C@" + class_name + "@F@" + current_func_name).length();
+
+  // Search the method in every base class, transitively (walk the MRO).
+  // Python enforces acyclic inheritance, so this recursion terminates.
+  for (const auto &base_class_node : class_node["bases"])
   {
-    std::string current_class = class_name;
-    std::string current_func_name = (is_ctor) ? class_name : method_name;
+    const std::string &base_class = base_class_node["id"].get<std::string>();
+
+    // Under the base class, a constructor is named after that base.
+    const std::string base_func_name = is_ctor ? base_class : method_name;
+
     std::string sym_id = symbol_id;
-    // Search for method in all bases classes
-    for (const auto &base_class_node : class_node["bases"])
-    {
-      const std::string &base_class = base_class_node["id"].get<std::string>();
-      if (is_ctor)
-        method_name = base_class;
+    sym_id.replace(pos, span, "@C@" + base_class + "@F@" + base_func_name);
 
-      std::size_t pos = sym_id.rfind("@C@" + current_class);
+    if (symbolt *func = symbol_table_.find_symbol(sym_id.c_str()))
+      return func;
 
-      sym_id.replace(
-        pos,
-        std::string("@C@" + current_class + "@F@" + current_func_name).length(),
-        std::string("@C@" + base_class + "@F@" + method_name));
-
-      if ((func = symbol_table_.find_symbol(sym_id.c_str())))
-        return func;
-
-      current_class = base_class;
-    }
+    // Not defined directly in this base: descend into its own bases so a
+    // method inherited from a grandparent (or higher) still resolves.
+    if (
+      symbolt *func = find_function_in_base_classes(
+        base_class, sym_id, base_func_name, is_ctor))
+      return func;
   }
 
-  return func;
+  return nullptr;
 }
 
 symbolt *
@@ -158,6 +174,10 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
     {
       // For ImportFrom, only match if the specific name was imported.
       // This prevents "from other import sum" from also hijacking "max".
+      // When the import is aliased (`from m import orig as alias`), the caller
+      // looks up `alias`, but the imported module defines `orig` — so probe the
+      // module with the original name, not the alias.
+      std::string resolved_name = lookup_name;
       if (
         obj["_type"] == "ImportFrom" && obj.contains("names") &&
         !lookup_name.empty())
@@ -176,6 +196,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
             name["asname"].get<std::string>() == lookup_name)
           {
             name_imported = true;
+            resolved_name = n;
             break;
           }
         }
@@ -187,6 +208,16 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
       std::string imported_symbol = std::regex_replace(
         symbol_id, pattern, "py:" + obj["full_path"].get<std::string>() + "@");
 
+      // For an aliased import the trailing component of symbol_id is the alias;
+      // swap it for the original name so the direct lookup targets the real
+      // symbol (e.g. py:<collections>@deque, not py:<collections>@Queue).
+      if (resolved_name != lookup_name && !lookup_name.empty())
+      {
+        const std::size_t at = imported_symbol.rfind('@');
+        if (at != std::string::npos)
+          imported_symbol.replace(at + 1, std::string::npos, resolved_name);
+      }
+
       if (
         symbolt *func_symbol =
           symbol_table_.find_symbol(imported_symbol.c_str()))
@@ -195,13 +226,13 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
       // Imported free functions are often looked up as object symbols in the
       // caller scope (e.g., py:main@replace). Also probe the equivalent
       // function-id form in the imported module (py:module@F@replace).
-      if (!lookup_name.empty())
+      if (!resolved_name.empty())
       {
         ::symbol_id imported_sid = ::symbol_id::from_string(imported_symbol);
         imported_sid.set_class("");
         imported_sid.set_object("");
         imported_sid.set_attribute("");
-        imported_sid.set_function(lookup_name);
+        imported_sid.set_function(resolved_name);
 
         if (
           symbolt *func_symbol =
@@ -209,7 +240,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
           return func_symbol;
 
         imported_sid.set_function("");
-        imported_sid.set_object(lookup_name);
+        imported_sid.set_object(resolved_name);
         if (
           symbolt *obj_symbol =
             symbol_table_.find_symbol(imported_sid.to_string().c_str()))
@@ -350,7 +381,16 @@ symbolt &python_converter::create_tmp_symbol(
   const typet &symbol_type,
   const exprt &symbol_value)
 {
-  locationt location = get_location_from_decl(element);
+  return create_tmp_symbol(
+    get_location_from_decl(element), var_name, symbol_type, symbol_value);
+}
+
+symbolt &python_converter::create_tmp_symbol(
+  const locationt &location,
+  const std::string var_name,
+  const typet &symbol_type,
+  const exprt &symbol_value)
+{
   std::string path = location.file().as_string();
   std::string name_prefix =
     path + ":" + location.get_line().as_string() + var_name;

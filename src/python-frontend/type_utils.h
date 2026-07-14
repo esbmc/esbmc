@@ -114,21 +114,22 @@ public:
   {
     return (
       name == "ESBMC_range_next_" || name == "ESBMC_range_has_next_" ||
-      name == "bit_length" || name == "from_bytes" || name == "to_bytes" ||
-      name == "randint" || name == "random" || name == "all");
+      name == "bit_length" || name == "conjugate" || name == "from_bytes" ||
+      name == "to_bytes" || name == "randint" || name == "random" ||
+      name == "all");
   }
 
   static bool is_python_exceptions(const std::string &name)
   {
     return (
       name == "BaseException" || name == "Exception" || name == "ValueError" ||
-      name == "TypeError" || name == "IndexError" || name == "KeyError" ||
-      name == "ZeroDivisionError" || name == "AssertionError" ||
-      name == "NameError" || name == "OSError" || name == "FileNotFoundError" ||
-      name == "FileExistsError" || name == "PermissionError" ||
-      name == "NotImplementedError" || name == "ImportError" ||
-      name == "ModuleNotFoundError" || name == "RuntimeError" ||
-      name == "StopIteration" || name == "EOFError");
+      name == "TypeError" || name == "AttributeError" || name == "IndexError" ||
+      name == "KeyError" || name == "ZeroDivisionError" ||
+      name == "AssertionError" || name == "NameError" || name == "OSError" ||
+      name == "FileNotFoundError" || name == "FileExistsError" ||
+      name == "PermissionError" || name == "NotImplementedError" ||
+      name == "ImportError" || name == "ModuleNotFoundError" ||
+      name == "RuntimeError" || name == "StopIteration" || name == "EOFError");
   }
 
   static bool is_c_model_func(const std::string &func_name)

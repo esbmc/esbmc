@@ -1587,8 +1587,7 @@ bool solidity_convertert::get_call_expr(
   auto it = expr.find("names");
   if (it != expr.end() && it->is_array() && !it->empty())
   {
-    nlohmann::json clean_expr =
-      reorder_arguments(expr, src_ast_json, callee_expr_json);
+    nlohmann::json clean_expr = reorder_arguments(expr, callee_expr_json);
     if (get_non_library_function_call(decl_ref, clean_expr, call))
       return true;
 
@@ -2137,7 +2136,7 @@ bool solidity_convertert::get_index_access_expr(
 
 bool solidity_convertert::get_index_range_access_expr(
   const nlohmann::json &expr,
-  const nlohmann::json &literal_type,
+  const nlohmann::json & /*literal_type*/,
   exprt &new_expr)
 {
   // IndexRangeAccess: data[start:end] on calldata arrays/bytes
@@ -2163,7 +2162,7 @@ bool solidity_convertert::get_index_range_access_expr(
 
 bool solidity_convertert::get_new_object_expr(
   const nlohmann::json &expr,
-  const nlohmann::json &literal_type,
+  const nlohmann::json & /*literal_type*/,
   exprt &new_expr)
 {
   locationt location;

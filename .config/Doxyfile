@@ -1,0 +1,42 @@
+# Doxygen configuration for the ESBMC API reference.
+#
+# Build locally with `doxygen .doxygen` from the repository root (requires the
+# `doxygen` and `graphviz` packages); the HTML is written to `docs/html`.
+# scripts/gen-docs.sh wraps this: it stamps PROJECT_NUMBER from CMakeLists.txt
+# and can override the output location for the website deploy. Only project-wide
+# defaults live here; unset tags keep their Doxygen defaults, which keeps this
+# file robust across Doxygen versions.
+
+PROJECT_NAME           = "ESBMC"
+PROJECT_BRIEF          = "Efficient SMT-based Context-Bounded Model Checker"
+
+# Sources to document. Doxygen only parses text, so a project configure is not
+# required; missing macros simply leave some conditional code unexpanded.
+INPUT                  = src
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */libs/* */build/*
+
+# Output: docs/html (HTML on by default; LaTeX off; treeview adds the nav
+# sidebar, which is not the default on older Doxygen).
+OUTPUT_DIRECTORY       = docs
+GENERATE_LATEX         = NO
+GENERATE_TREEVIEW      = YES
+
+# Document the whole API surface, not only the comment-tagged entities, so the
+# reference stays useful while markup coverage is still partial.
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+JAVADOC_AUTOBRIEF      = YES
+
+# Inheritance diagrams via Graphviz (CLASS_GRAPH, on by default). The expensive
+# graphs — collaboration and call/caller — are disabled to bound build time on
+# the full source tree.
+HAVE_DOT               = YES
+DOT_IMAGE_FORMAT       = svg
+COLLABORATION_GRAPH    = NO
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+
+# Keep the build quiet; undocumented entities are expected for now.
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO

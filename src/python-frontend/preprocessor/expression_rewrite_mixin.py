@@ -238,6 +238,13 @@ class ExpressionRewriteMixin:
     def visit_Subscript(self, node):
         node = self.generic_visit(node)
 
+        # Only constant-fold subscript *reads* (Load context). A subscript in a
+        # Store/Del context (e.g. `del a[1]`, `a[1] = x`) is an lvalue target;
+        # replacing it with the element's literal value corrupts the statement
+        # (a `del a[1]` would become `del 2`).
+        if not isinstance(getattr(node, "ctx", None), ast.Load):
+            return node
+
         if (isinstance(node.value, ast.Name) and node.value.id in self.list_literal_values):
             list_node = self.list_literal_values[node.value.id]
 
@@ -288,6 +295,10 @@ class ExpressionRewriteMixin:
             if stmts is not None:
                 return stmts
 
+        rewritten_seq_next = self._maybe_rewrite_seq_next_expr(node)
+        if rewritten_seq_next is not None:
+            return rewritten_seq_next
+
         prefix, new_value, _ = self._lower_listcomp_in_expr(node.value)
         node.value = new_value
         dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
@@ -330,13 +341,30 @@ class ExpressionRewriteMixin:
         return comparison
 
     def visit_While(self, node):
+        # Hoist generator initialisation (e.g. `j = 0`) for `var = next(gen)`
+        # loop bodies out of the loop *before* visiting it, so the init runs
+        # once and the generator's state persists across iterations. Without
+        # this the init is inlined inside the loop body and resets every pass,
+        # so `next(gen)` always yields the first value and the loop never makes
+        # progress (wedges into an unbounded loop). Mirrors the range-for path
+        # in _visit_for_inner.
+        gen_pre_stmts = self._hoist_generator_inits(node.body, node)
         node = self.generic_visit(node)
+        # Lower `while ... else: <orelse>` (the else runs when the loop ends
+        # without break) into a did-not-break flag, the same desugaring used for
+        # for-else. Without this the while node keeps its orelse, which the
+        # converter emits as an invalid third operand of the GOTO `while`
+        # ("while takes two operands"). _lower_for_else is a no-op when there is
+        # no orelse and clears node.orelse otherwise.
+        while_else_pre, while_else_post = self._lower_for_else(node)
         prefix, new_test, _ = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
         node.test = self._transform_list_truthiness(node.test, node)
-        if prefix:
-            return prefix + [node]
-        return node
+        result = (prefix or []) + [node]
+        if while_else_pre or while_else_post:
+            result = while_else_pre + result + while_else_post
+        result = gen_pre_stmts + result
+        return result if len(result) > 1 else node
 
     def _simplify_isinstance(self, node):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
@@ -364,17 +392,48 @@ class ExpressionRewriteMixin:
         "_try_transform_list_tuple_eq",
     )
 
+    def _resolve_call_origin(self, node):
+        """Return a deepcopy of ``x``'s tracked Call origin when ``node`` is
+        the Name ``x``, else return ``node`` unchanged. Refuse the inline
+        for items-view origins on non-dict receivers — the downstream
+        cascade only rejects receivers explicitly recorded as non-dict, so
+        an unannotated user class with .items() would otherwise be rewritten
+        into a dict-membership check.
+        """
+        if isinstance(node, ast.Name):
+            origin = self._assignment_call_origins.get(node.id)
+            if origin is None:
+                return node
+            if self._is_items_view_call(origin):
+                recv = self._items_view_receiver_name(origin)
+                if recv is None or not self._is_known_dict_name(recv):
+                    return node
+            return copy.deepcopy(origin)
+        return node
+
     def _apply_assert_eq_rewrites(self, node):
         if not (isinstance(node.test, ast.Compare) and len(node.test.ops) == 1
                 and isinstance(node.test.ops[0], ast.Eq) and len(node.test.comparators) == 1):
             return [], None
         left, right = node.test.left, node.test.comparators[0]
+        left_inlined = self._resolve_call_origin(left)
+        right_inlined = self._resolve_call_origin(right)
+        # Cross-product of raw and origin-substituted sides so transforms
+        # that match Name on one side and Call on the other still fire.
+        candidate_pairs = [(left, right)]
+        if left_inlined is not left:
+            candidate_pairs.append((left_inlined, right))
+        if right_inlined is not right:
+            candidate_pairs.append((left, right_inlined))
+        if left_inlined is not left and right_inlined is not right:
+            candidate_pairs.append((left_inlined, right_inlined))
         for name in self._SYMMETRIC_EQ_TRANSFORMS:
             fn = getattr(self, name)
-            for lhs, rhs in ((left, right), (right, left)):
-                rewritten = fn(lhs, rhs, node)
-                if rewritten is not None:
-                    return [], rewritten
+            for pair_left, pair_right in candidate_pairs:
+                for lhs, rhs in ((pair_left, pair_right), (pair_right, pair_left)):
+                    rewritten = fn(lhs, rhs, node)
+                    if rewritten is not None:
+                        return [], rewritten
         for lhs, rhs in ((left, right), (right, left)):
             prefix, rewritten = self._try_lower_expr_tuple_literal_eq(lhs, rhs, node)
             if rewritten is not None:

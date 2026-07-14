@@ -31,23 +31,136 @@ public:
   {
   }
 
+  // @p from_right selects rsplit() semantics (split at the rightmost @p count
+  // separators) over split() (the leftmost). Defaults to split().
   static exprt build_split_list(
     python_converter &converter,
     const nlohmann::json &call_node,
     const std::string &input,
     const std::string &separator,
-    long long count);
+    long long count,
+    bool from_right = false);
 
   static exprt build_split_list(
     python_converter &converter,
     const nlohmann::json &call_node,
     const exprt &input_expr,
     const std::string &separator,
-    long long count);
+    long long count,
+    bool from_right = false);
 
   exprt get();
 
+  /**
+   * @brief Materialize a fresh list from already-evaluated element values.
+   *
+   * Unlike get(), which converts AST element nodes, this builds the list from
+   * exprt values directly — used to emit the result of a frontend-computed
+   * sort over tuples, where each element is a conditional (ite) selection over
+   * the input elements. Records each element's type in the type map so later
+   * subscripting recovers the element type. The constructor's @c list_value_
+   * node supplies the source location.
+   */
+  exprt build_list_from_exprs(const std::vector<exprt> &elems);
+
+  /**
+   * @brief Build a runtime PyListObject filled with @p fill_value repeated
+   * @p size times. @p size may be a symbolic expression; the resulting while-
+   * loop is bounded by the model checker's --unwind setting. A runtime guard
+   * rejects negative sizes with ValueError before the unsigned cast.
+   * @param size     Expression giving the number of elements (often symbolic).
+   * @param fill_value Element value pushed on each iteration.
+   * @param elem_type  IRep2 type of @p fill_value, recorded in list_type_map.
+   */
+  exprt build_symbolic_fill_list(
+    const exprt &size,
+    const exprt &fill_value,
+    const typet &elem_type);
+
   exprt index(const exprt &array, const nlohmann::json &slice_node);
+
+  /**
+   * @brief Lower boolean-mask indexing `a[mask]` to a runtime loop that
+   * builds a fresh list holding the elements of @p array whose matching
+   * @p mask entry is True (NumPy fancy-indexing semantics). Both operands
+   * must be fixed-size arrays (the numpy array model); a compile-time
+   * length mismatch between @p array and @p mask is rejected explicitly.
+   * @param array  Source 1-D array expression; multi-dimensional sources are
+   *               rejected with TypeError at conversion time.
+   * @param mask   Boolean array expression, same length as @p array.
+   * @param element The Subscript AST node, used for location info.
+   */
+  exprt build_bool_mask_index(
+    const exprt &array,
+    const exprt &mask,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Lower whole-row boolean-mask selection `a[mask]` on a 2-D array.
+   * The runtime-list model used by build_bool_mask_index cannot hold an
+   * array-typed element (confirmed empirically: pushing a row produces a
+   * bit-vector/array sort mismatch at the SMT backend), so this requires
+   * @p mask to resolve to a concrete boolean literal (`np.array([True,
+   * False, ...])`) whose declaring assignment is found via AST lookup —
+   * the selected row count is then known at conversion time and the result
+   * is built as a fixed-size array, mirroring build_column_select. A
+   * symbolic (non-literal) mask is rejected explicitly.
+   * @param array   Source 2-D array expression.
+   * @param mask    Boolean mask array expression (used only for its type/
+   *                length; values are re-read from the AST).
+   * @param element The Subscript AST node, used for location info and to
+   *                recover the mask's variable name.
+   */
+  exprt build_bool_mask_row_select(
+    const exprt &array,
+    const exprt &mask,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Lower 2-D column selection `a[:, j]` to a bounded copy over every
+   * row of a fixed-shape 2-D array, collecting `row[j]` into a fresh 1-D
+   * array. @p array must be a fixed-size array of fixed-size rows (numpy
+   * static-shape model); anything else is rejected with TypeError.
+   * @param array          Source 2-D array expression.
+   * @param col_index_node AST node for the column index (axis 1).
+   * @param element        The Subscript AST node, used for location info.
+   */
+  exprt build_column_select(
+    const exprt &array,
+    const nlohmann::json &col_index_node,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Lower integer-array (fancy) indexing `a[[0, 2]]` to a bounded,
+   * unrolled sequence of element reads: each entry of @p indices must be a
+   * concrete integer literal (or its negation), resolved and bounds-checked
+   * at conversion time. @p array must be a fixed-size 1-D or 2-D array; for
+   * 2-D arrays the selected rows are copied element-by-element. A 3-D+
+   * element type (i.e. @p array itself being 3-D+) is rejected with
+   * TypeError, since a deeper row would require a recursive element-wise
+   * copy this helper does not implement.
+   * @param array   Source fixed-shape (1-D or 2-D) array expression.
+   * @param indices AST nodes for each requested index (elts of the List
+   *                literal used as the subscript).
+   * @param element The Subscript AST node, used for location info.
+   */
+  exprt build_fancy_index(
+    const exprt &array,
+    const std::vector<nlohmann::json> &indices,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Lower a list slice assignment l[lower:upper:step] = value to a
+   * __ESBMC_list_slice_assign model call. The step must be a constant literal
+   * (or absent); the value must evaluate to a list.
+   * @param list_expr  Expression for the target list (value or pointer)
+   * @param slice_node The Slice AST node holding lower/upper/step
+   * @param value_node The AST node of the assigned (right-hand side) value
+   */
+  void handle_slice_assignment(
+    const exprt &list_expr,
+    const nlohmann::json &slice_node,
+    const nlohmann::json &value_node);
 
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
@@ -160,10 +273,18 @@ public:
    * @brief Extract and dereference value from a PyObject* expression
    * @param pyobject_expr Expression representing PyObject* (from list_at or list_pop)
    * @param elem_type The expected element type
+   * @param mixed_numeric When true and elem_type is float, the element may be
+   *        either an int or a float at runtime (a dynamic index into a mixed
+   *        int/float list). The float value is then read by dispatching on the
+   *        stored type_id: float elements come from __ESBMC_float_buf, int
+   *        elements are promoted from their payload to double.
    * @return Dereferenced value expression (for floats: __ESBMC_float_buf[item->float_idx])
    */
-  exprt
-  extract_pyobject_value(const exprt &pyobject_expr, const typet &elem_type);
+  exprt extract_pyobject_value(
+    const exprt &pyobject_expr,
+    const typet &elem_type,
+    bool mixed_numeric = false,
+    bool string_safe = false);
 
   /**
    * @brief Check if all elements in a list have the same type.
@@ -184,6 +305,34 @@ public:
    * Used to detect mixed-numeric lists that need special handling in min/max.
    */
   static bool has_mixed_numeric_types(const std::string &list_id);
+
+  /**
+   * @brief Infer the element type of a list literal AST node, accounting for
+   * the int->float promotion applied at construction.
+   *
+   * A heterogeneous int/float literal is promoted to a homogeneous double list
+   * in python_list::get (promote_ints, #5156), so its values all live in
+   * __ESBMC_float_buf as doubles. A read of such a literal must therefore use a
+   * float element type whatever element the index selects; using the first
+   * element's (int) type misreads the stored double's bits (#5160 regression).
+   *
+   * @return double_type() for a mixed int/float literal, the first element's
+   *         type otherwise, or an empty typet() when no element is available.
+   */
+  typet infer_literal_element_type(const nlohmann::json &list_literal);
+
+  /**
+   * @brief Non-throwing query for an all-numeric list's element type.
+   *
+   * Unlike check_homogeneous_list_types(), this never throws: it returns
+   * double_type() when the list mixes int and float (Python promotes int to
+   * float), the single shared integer type when every element is that same
+   * integer type, and an empty typet() when the list is unknown, empty, or
+   * holds any non-numeric element (or integers of differing widths). Used to
+   * type a dict-comprehension loop variable without relying on exceptions for
+   * control flow.
+   */
+  static typet numeric_element_type(const std::string &list_id);
 
   /**
    * @brief Build an inline min/max computation for a mixed int/float list.
@@ -222,6 +371,17 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Materialise a tuple value into a fresh list, pushing each component
+   * in order. Used by list(tuple) (and any context that converts a tuple to a
+   * list), so the list model sees a real PyListObject* rather than the tuple
+   * struct. @p tuple_expr must have tuple struct type.
+   */
+  static exprt build_list_from_tuple(
+    python_converter &converter,
+    const exprt &tuple_expr,
+    const nlohmann::json &element);
+
+  /**
    * @brief Build a list copy operation
    * @param list The list symbol to copy from
    * @param element The AST node for location information
@@ -231,6 +391,18 @@ public:
   build_copy_list_call(const symbolt &list, const nlohmann::json &element);
 
   /**
+   * @brief Emit a __ESBMC_list_copy_shallow call producing a shallow copy of
+   * src_list (Python copy semantics: scalar elements get independent buffers,
+   * nested containers stay shared). Used by tuple(list), which must snapshot
+   * the source so later list mutations do not show through the tuple.
+   * @param src_list List-typed expression (symbol or list-returning call)
+   * @param element  AST node used for location info and temp naming
+   * @return Symbol expression of the copied list
+   */
+  exprt
+  build_shallow_copy_call(const exprt &src_list, const nlohmann::json &element);
+
+  /**
    * @brief Build a list remove operation (removes first matching element).
    * Raises ValueError (via assertion) if element is not found.
    */
@@ -238,6 +410,45 @@ public:
     const symbolt &list,
     const nlohmann::json &op,
     const exprt &elem);
+
+  /**
+   * @brief Build a list.count(x) call — number of elements equal to x.
+   * Returns a size_t-typed value expression.
+   */
+  exprt build_count_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem);
+
+  /**
+   * @brief Build a list.index(x) call — position of the first element equal to
+   * x. Raises ValueError (via assertion) if x is not found. Returns a
+   * size_t-typed value expression.
+   */
+  exprt build_index_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem);
+
+  /**
+   * @brief Build a list.index(x, start[, end]) call — position of the first
+   * element equal to x within the slice l[start:end]. start/end follow CPython
+   * slice-bound normalization. Raises ValueError (via assertion) if not found.
+   */
+  exprt build_index_range_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem,
+    const exprt &start,
+    const exprt &end);
+
+  /// Shared implementation of build_count_list_call / build_index_list_call;
+  /// @p func_id selects the `c:@F@__ESBMC_list_{count,index}` model.
+  exprt build_count_index_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem,
+    const std::string &func_id);
 
   /**
    * @brief Emit a call to a set membership-mutating C model function.
@@ -315,11 +526,14 @@ public:
 private:
   friend class python_dict_handler;
 
+  // Repeat the elements in `list_elems` `count` times at runtime (`count` may
+  // be any integer expression: a constant, a symbol like `n`, or a compound
+  // like `m + 1`). Each iteration pushes every element in order. Builds a
+  // fresh list so a literal source's element is not reused (avoids off-by-one).
   exprt create_vla(
     const nlohmann::json &element,
-    const symbolt *list,
-    symbolt *size_var,
-    const exprt &list_elem);
+    const exprt &count,
+    const std::vector<exprt> &list_elems);
 
   exprt build_list_at_call(
     const exprt &list,
@@ -336,6 +550,27 @@ private:
 
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
+
+  /**
+   * @brief Resolve an index expression against a compile-time-known axis
+   * length, normalizing negative values and rejecting out-of-range indices.
+   * A literal (constant, or negated constant) index is fully resolved and
+   * bounds-checked at conversion time, producing a precise "IndexError:
+   * index N is out of bounds for axis A with size L" frontend error. A
+   * non-constant (runtime) index is normalized and bounds-checked with an
+   * in-model IndexError raise instead, since the concrete value is unknown
+   * until symbolic execution.
+   * @param idx_node  AST node for the index expression.
+   * @param axis_len  Compile-time length of the axis being indexed.
+   * @param axis      Axis number, used only in the error message.
+   * @param element   AST node used for location info.
+   * @return A size_type expression holding the normalized, in-bounds index.
+   */
+  exprt resolve_fixed_axis_index(
+    const nlohmann::json &idx_node,
+    const BigInt &axis_len,
+    unsigned axis,
+    const nlohmann::json &element);
 
   // Returns (registering if absent) the __python_str_slice symbol:
   //   char* __python_str_slice(const char*, long long, long long, long long)

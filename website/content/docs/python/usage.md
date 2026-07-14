@@ -5,11 +5,10 @@ weight: 2
 
 ## Prerequisites
 
-ESBMC-Python requires Python 3.10 or later and the `ast2json` package:
-
-```bash
-pip install ast2json
-```
+ESBMC-Python requires Python 3.10 or later. `ast2json` is bundled with ESBMC
+(vendored in the source tree since
+[#3790](https://github.com/esbmc/esbmc/pull/3790)), so no extra packages are
+needed.
 
 ## Basic Invocation
 
@@ -33,11 +32,14 @@ esbmc main.py --unwind 10
 | `--incremental-bmc` | Increase the unwind bound incrementally until a bug is found or the bound is reached |
 | `--multi-property` | Continue verification after the first failure, reporting all violated properties |
 | `--strict-types` | Enable strict type checking for function arguments at verification time |
+| `--python-no-fold` | Disable NumPy constant folding in the Python frontend, forcing SMT encoding (useful for differential testing of the folding paths) |
 | `--branch-coverage` | Instrument branch-coverage properties (useful with `--generate-pytest-testcase`) |
 | `--k-path-coverage[=N]` | Instrument k-path coverage with prefix length `N` (see [Coverage](../coverage#k-path-coverage)). Use with `--generate-pytest-testcase` for higher-coverage test discovery. |
 | `--k-path-witness-depth=D` | Cap post-simplification guard depth for k-path witnesses (default 8). |
 | `--k-path-max-goals=M` | Per-function goal cap for k-path coverage (default 10000). |
 | `--generate-pytest-testcase` | Generate pytest test cases from counterexamples (see [Pytest Test Generation](./pytest-testgen)) |
+| `--python <path>` | Python interpreter binary to use (searched in `$PATH`; default `python`). It must be Python 3 — ESBMC errors out on a Python 2 interpreter. |
+| `--function <name>` | Verify a single function instead of the entire file |
 
 ## Writing Verification Harnesses
 

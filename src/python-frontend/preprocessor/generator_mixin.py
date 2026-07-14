@@ -67,18 +67,6 @@ class GeneratorMixin:
                 return [assign] + body_copy
             return self.generic_visit(node)
 
-    @staticmethod
-    def _extract_min_max_key_index(key_lambda):
-        if len(key_lambda.args.args) != 1:
-            return None
-        param_name = key_lambda.args.args[0].arg
-        body = key_lambda.body
-        if not (isinstance(body, ast.Subscript) and isinstance(body.value, ast.Name)
-                and body.value.id == param_name and isinstance(body.slice, ast.Constant)
-                and isinstance(body.slice.value, int) and body.slice.value >= 0):
-            return None
-        return body.slice.value
-
     def _resolve_list_literal_iterable(self, iterable_expr):
         if isinstance(iterable_expr, ast.List):
             return iterable_expr
@@ -103,9 +91,6 @@ class GeneratorMixin:
             [f(i,j) for i in A for j in B]  =>  for i in A: for j in B: tmp.append(f(i,j))
         """
         for generator in node.generators:
-            if len(getattr(generator, "ifs", [])) > 1:
-                raise NotImplementedError(
-                    "Only a single if-condition is supported in list comprehensions")
             if getattr(generator, "is_async", False):
                 raise NotImplementedError("Async list comprehensions are not supported")
 
@@ -138,24 +123,39 @@ class GeneratorMixin:
         loop_body = [append_expr]
         for generator in reversed(node.generators):
             if generator.ifs:
-                cond = self.visit(generator.ifs[0])
-                self.ensure_all_locations(cond, generator.ifs[0])
+                cond = self._combine_comprehension_ifs(generator.ifs)
                 if_stmt = ast.If(test=cond, body=loop_body, orelse=[])
                 self.ensure_all_locations(if_stmt, generator.ifs[0])
                 ast.fix_missing_locations(if_stmt)
                 loop_body = [if_stmt]
+            # A comprehension used directly as the iterable — e.g.
+            # [x for x in [y for y in xs]], which is how list(filter(p, [..]))
+            # desugars — must be materialised into its own temp list first.
+            # Otherwise the inner comprehension is left in the For's iter and
+            # reaches the C++ converter unlowered ("Unsupported expression
+            # ListComp"). The lowered prefix runs just before this loop.
+            gen_iter = generator.iter
+            if isinstance(gen_iter, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
+                iter_prefix, gen_iter, _ = self._lower_listcomp_in_expr(gen_iter)
+            else:
+                iter_prefix = []
+                gen_iter = self.visit(gen_iter)
             for_stmt = ast.For(
                 target=generator.target,
-                iter=self.visit(generator.iter),
+                iter=gen_iter,
                 body=loop_body,
                 orelse=[],
             )
             self.ensure_all_locations(for_stmt, node)
-            loop_body = [for_stmt]
+            loop_body = iter_prefix + [for_stmt]
 
-        transformed_for = self.visit_For(loop_body[0])
+        # loop_body is [<already-lowered iter prefix...>, outermost_for]; only
+        # the For node built above still needs lowering to a while loop.
+        *pre_stmts, outer_for = loop_body
+        transformed_for = self.visit_For(outer_for)
         if not isinstance(transformed_for, list):
             transformed_for = [transformed_for]
+        transformed_for = pre_stmts + transformed_for
 
         for stmt in transformed_for:
             self.ensure_all_locations(stmt, node)
@@ -205,6 +205,10 @@ class GeneratorMixin:
         genexp_node = self._isolate_genexp_targets(genexp_node)
 
         for generator in genexp_node.generators:
+            # Generator-expression lowering (sum/any/all/... over a genexp) has
+            # a separate, currently-incomplete path; keep rejecting multiple
+            # `if` clauses here rather than emit a misleading verdict. List and
+            # set comprehensions (via _lower_listcomp) do support them.
             if len(getattr(generator, "ifs", [])) > 1:
                 raise NotImplementedError(
                     "Only a single if-condition is supported in generator expressions")
@@ -212,6 +216,22 @@ class GeneratorMixin:
                 raise NotImplementedError("Async generator expressions are not supported")
 
         return genexp_node
+
+    def _combine_comprehension_ifs(self, ifs):
+        """Combine a generator's `if` clauses into one condition.
+
+        Python allows several `if` clauses in a single comprehension generator
+        (`[x for x in A if c1 if c2]`), which is equivalent to conjoining them
+        (`if c1 and c2`). Return the visited single condition, or a BoolOp(And)
+        over all of them.
+        """
+        if len(ifs) == 1:
+            cond = self.visit(ifs[0])
+        else:
+            cond = ast.BoolOp(op=ast.And(), values=[self.visit(i) for i in ifs])
+        self.ensure_all_locations(cond, ifs[0])
+        ast.fix_missing_locations(cond)
+        return cond
 
     def _build_reduction_guard(self, tmp_name, source_node, negated):
         guard_expr = self.create_name_node(tmp_name, ast.Load(), source_node)
@@ -489,12 +509,26 @@ class GeneratorMixin:
 
     @staticmethod
     def _is_recursive_call(func_name, body):
-        """Return True if any Call node in body has func.id == func_name."""
-        for node in ast.walk(ast.Module(body=body, type_ignores=[])):
+        """Return True if any Call in *body* references func_name directly.
+
+        Skips nested FunctionDef/AsyncFunctionDef/Lambda bodies: a call to
+        func_name from inside a nested helper belongs to that helper's scope,
+        not the generator's, so it must not be treated as a recursive call
+        (otherwise an unrelated nested helper that happens to reference the
+        outer name triggers a false-positive recursive-generator transform).
+        """
+
+        def walk(node):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                return
             if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                     and node.func.id == func_name):
-                return True
-        return False
+                yield node
+            for child in ast.iter_child_nodes(node):
+                yield from walk(child)
+
+        module = ast.Module(body=body, type_ignores=[])
+        return any(True for _ in walk(module))
 
     def _transform_recursive_generator(self, node):
         """Transform a recursive generator function to accumulate-and-return.
@@ -876,57 +910,47 @@ class GeneratorMixin:
         result_type = self._infer_type_from_value(new_expr)
         return lowerer.statements, new_expr, result_type
 
-    def _lower_sorted_with_key_call(self, call_node):  # pylint: disable=too-many-branches
-        """Lower sorted(iterable, key=lambda x: x[K]) for literal-list iterables."""
+    def _lower_sorted_with_key_call(self, call_node):
+        """Lower ``sorted(iterable, key=...)`` for constant list-literal iterables.
+
+        Supports any constant-foldable ``key=`` (see ``_eval_const_key_value``):
+        identity ``lambda x: x``, unary ``-x``/``+x``, binary arithmetic over the
+        parameter and constants, a constant subscript ``lambda x: x[K]`` over a
+        tuple element, and the ``abs``/``len`` builtins. The key is evaluated at
+        preprocess time on each constant element and the original element nodes
+        are reordered accordingly (a stable sort, matching CPython); the elements
+        themselves are preserved, so their runtime values are unchanged. Returns
+        ``(prefix, expr)`` on success, or None when the iterable or key is not
+        constant-foldable (the caller then leaves ``key=`` unapplied, as before).
+        """
         if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
                 and call_node.func.id == "sorted" and len(call_node.args) == 1):
             return None
 
         key_kw = None
         for kw in call_node.keywords:
-            if kw.arg == "key":
-                if key_kw is not None:
-                    return None
+            if kw.arg == "key" and key_kw is None:
                 key_kw = kw
             else:
                 return None
-
-        if key_kw is None or not isinstance(key_kw.value, ast.Lambda):
+        if key_kw is None:
             return None
 
-        key_lambda = key_kw.value
-        if len(key_lambda.args.args) != 1:
-            return None
-
-        param_name = key_lambda.args.args[0].arg
-        body = key_lambda.body
-        if not (isinstance(body, ast.Subscript) and isinstance(body.value, ast.Name)
-                and body.value.id == param_name and isinstance(body.slice, ast.Constant)
-                and isinstance(body.slice.value, int) and body.slice.value >= 0):
-            return None
-
-        key_index = body.slice.value
-        iterable_expr = call_node.args[0]
-
-        iterable_literal = None
-        if isinstance(iterable_expr, ast.List):
-            iterable_literal = iterable_expr
-        elif isinstance(iterable_expr, ast.Name):
-            iterable_literal = self.list_literal_values.get(iterable_expr.id)
-
+        iterable_literal = self._resolve_list_literal_iterable(call_node.args[0])
         if iterable_literal is None:
             return None
 
-        key_values = []
-        for elt in iterable_literal.elts:
-            if not (isinstance(elt, ast.Tuple) and key_index < len(elt.elts)):
-                return None
-            key_node = elt.elts[key_index]
-            if not isinstance(key_node, ast.Constant):
-                return None
-            key_values.append(key_node.value)
+        key_values = self._eval_const_key_values(key_kw.value, iterable_literal.elts)
+        if key_values is None:
+            return None
 
-        order = sorted(range(len(iterable_literal.elts)), key=lambda i: key_values[i])
+        try:
+            order = sorted(range(len(iterable_literal.elts)), key=lambda i: key_values[i])
+        except TypeError:
+            # Mutually incomparable key values (e.g. mixed str/int) — CPython
+            # raises at runtime; bail to the existing key-drop fallback rather
+            # than crashing the preprocessor.
+            return None
         folded_sorted = ast.List(
             elts=[copy.deepcopy(iterable_literal.elts[i]) for i in order],
             ctx=ast.Load(),
@@ -936,11 +960,15 @@ class GeneratorMixin:
         return [], folded_sorted
 
     def _lower_min_max_with_key_call(self, call_node):  # pylint: disable=too-many-return-statements,too-many-locals,too-many-branches
-        """Lower min/max(iterable, key=lambda x: x[K]) for literal-list iterables.
+        """Lower min/max(iterable, key=...) for literal-list iterables with a
+        constant-foldable key.
 
-        Mirrors _lower_sorted_with_key_call: handles only the narrow pattern of
-        a list literal of tuples plus a one-arg lambda body of the form
-        ``param[K]`` with a constant integer index. Returns (prefix, expr) on
+        Two key forms are supported over a list literal whose relevant values
+        are constants: a one-arg ``lambda x: x[K]`` (constant index) over a
+        list of tuples, and the ``abs``/``len`` builtins over a list of
+        constant scalars/strings. The key is evaluated at preprocess time and
+        the winning *element* (not its key) is returned, breaking ties toward
+        the first occurrence (CPython semantics). Returns (prefix, expr) on
         success, or None when the pattern does not apply (caller falls back to
         the regular dispatch, which today drops the key= keyword).
         """
@@ -949,7 +977,6 @@ class GeneratorMixin:
             return None
 
         key_kw = None
-        default_kw = None
         for kw in call_node.keywords:
             if kw.arg == "key":
                 if key_kw is not None:
@@ -958,51 +985,166 @@ class GeneratorMixin:
             elif kw.arg == "default":
                 # default= is honoured by the typed _default model variants
                 # added in #4360; keep it on the call so the regular dispatch
-                # forwards it.
-                default_kw = kw
+                # forwards it. It only matters for an empty iterable, which we
+                # defer below.
+                pass
             else:
                 return None
 
-        if key_kw is None or not isinstance(key_kw.value, ast.Lambda):
+        if key_kw is None:
             return None
 
-        key_lambda = key_kw.value
-        key_index = self._extract_min_max_key_index(key_lambda)
-        if key_index is None:
-            return None
-        iterable_expr = call_node.args[0]
-        iterable_literal = self._resolve_list_literal_iterable(iterable_expr)
-
-        if iterable_literal is None:
+        iterable_literal = self._resolve_list_literal_iterable(call_node.args[0])
+        if iterable_literal is None or not iterable_literal.elts:
+            # Missing literal / empty iterable — defer to the regular dispatch
+            # so the empty case (default= or ValueError) is handled uniformly.
             return None
 
-        if not iterable_literal.elts:
-            # Empty iterable — defer to the regular dispatch so the empty
-            # case (default= or ValueError) is handled uniformly.
+        key_values = self._eval_const_key_values(key_kw.value, iterable_literal.elts)
+        if key_values is None:
             return None
-
-        key_values = []
-        for elt in iterable_literal.elts:
-            if not (isinstance(elt, ast.Tuple) and key_index < len(elt.elts)):
-                return None
-            key_node = elt.elts[key_index]
-            if not isinstance(key_node, ast.Constant):
-                return None
-            key_values.append(key_node.value)
 
         is_min = call_node.func.id == "min"
         # Pick the index whose key is the minimum / maximum, breaking ties
         # toward the first occurrence (matches CPython semantics).
-        best_idx = self._select_min_max_index(key_values, is_min)
-
-        # Suppress the unused default_kw warning while keeping the variable
-        # available for future extension (e.g. empty iterable + default=).
-        del default_kw
+        try:
+            best_idx = self._select_min_max_index(key_values, is_min)
+        except TypeError:
+            # Mutually incomparable key values — bail to the regular dispatch
+            # rather than crashing the preprocessor.
+            return None
 
         result = copy.deepcopy(iterable_literal.elts[best_idx])
         self.ensure_all_locations(result, call_node)
         ast.fix_missing_locations(result)
         return [], result
+
+    def _eval_const_key_values(self, key_node, elts):
+        """Return the list of constant key values for `key=` applied to each
+        element, or None when the key form or elements are not constant-
+        foldable. See ``_eval_const_key_value`` for the supported key forms."""
+        values = []
+        for elt in elts:
+            value = self._eval_const_key_value(key_node, elt)
+            if value is None:
+                return None
+            values.append(value)
+        return values
+
+    def _eval_const_key_value(self, key_node, element):
+        """Evaluate a constant-foldable ``key=`` argument over one constant list
+        element, returning the key's Python value or None when not foldable.
+
+        ``element`` is the element's AST node (a constant scalar, a unary +/-
+        over one, or a tuple of such constants). ``key_node`` is either a
+        one-parameter ``lambda`` whose body is built from the parameter, numeric
+        constants, unary +/-, binary arithmetic, a constant subscript ``p[K]``,
+        and the ``abs``/``len`` builtins; or the bare ``abs``/``len`` builtin
+        name. None means "leave the key unapplied" (the caller's existing
+        fallback), so a value of None is never treated as a foldable key."""
+        if isinstance(key_node, ast.Lambda):
+            if len(key_node.args.args) != 1:
+                return None
+            return self._eval_key_body(key_node.body, key_node.args.args[0].arg, element)
+        # Matched by name: assumes abs/len are the builtins (ESBMC does not model
+        # user code shadowing them, consistent with the rest of the frontend).
+        if isinstance(key_node, ast.Name) and key_node.id in ("abs", "len"):
+            return self._apply_builtin(key_node.id, self._const_scalar_value(element))
+        return None
+
+    def _eval_key_body(self, node, param, element):
+        """Evaluate a lambda key body for the parameter bound to ``element``."""
+        if isinstance(node, ast.Name):
+            return self._const_scalar_value(element) if node.id == param else None
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.UnaryOp):
+            value = self._eval_key_body(node.operand, param, element)
+            if value is None:
+                return None
+            try:
+                if isinstance(node.op, ast.USub):
+                    return -value
+                if isinstance(node.op, ast.UAdd):
+                    return +value
+            except TypeError:
+                return None
+            return None
+        if isinstance(node, ast.BinOp):
+            left = self._eval_key_body(node.left, param, element)
+            right = self._eval_key_body(node.right, param, element)
+            if left is None or right is None:
+                return None
+            return self._apply_arith(node.op, left, right)
+        index = self._param_subscript_index(node, param)
+        if index is not None:
+            if not (isinstance(element, ast.Tuple) and index < len(element.elts)):
+                return None
+            return self._const_scalar_value(element.elts[index])
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id in ("abs", "len") and len(node.args) == 1 and not node.keywords):
+            return self._apply_builtin(node.func.id,
+                                       self._eval_key_body(node.args[0], param, element))
+        return None
+
+    @staticmethod
+    def _param_subscript_index(node, param):
+        """Return the constant non-negative index of ``param[K]``, or None when
+        ``node`` is not a constant subscript on the lambda parameter ``param``."""
+        if not (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
+                and node.value.id == param):
+            return None
+        if not (isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, int)
+                and node.slice.value >= 0):
+            return None
+        return node.slice.value
+
+    @staticmethod
+    def _apply_builtin(name, value):
+        if value is None:
+            return None
+        try:
+            return abs(value) if name == "abs" else len(value)
+        except TypeError:
+            return None
+
+    @staticmethod
+    def _apply_arith(op, left, right):
+        try:
+            if isinstance(op, ast.Add):
+                return left + right
+            if isinstance(op, ast.Sub):
+                return left - right
+            if isinstance(op, ast.Mult):
+                return left * right
+            if isinstance(op, ast.Mod):
+                return left % right
+            if isinstance(op, ast.FloorDiv):
+                return left // right
+            if isinstance(op, ast.Div):
+                return left / right
+            if isinstance(op, ast.Pow):
+                return left**right
+        except (TypeError, ValueError, ZeroDivisionError):
+            return None
+        return None
+
+    @staticmethod
+    def _const_scalar_value(node):
+        """Return the constant value of a literal `node`, handling unary +/-
+        over a numeric constant (Python parses ``-5`` as UnaryOp(USub, 5)), or
+        None when the node is not a constant literal."""
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.UnaryOp) and isinstance(node.operand, ast.Constant):
+            if isinstance(node.op, ast.USub):
+                try:
+                    return -node.operand.value
+                except TypeError:
+                    return None
+            if isinstance(node.op, ast.UAdd):
+                return node.operand.value
+        return None
 
     def _lower_tuple_sorted_pair_call(self, call_node):  # pylint: disable=too-many-statements,too-many-locals,too-many-branches
         """Lower tuple(sorted([a, b])) to a conditional pair assignment.
@@ -1433,13 +1575,20 @@ class GeneratorMixin:
 
         Returns (None, None) on no match. The wrapper name lets the caller
         apply soundness checks that depend on which wrapper is in use
-        (list/sorted/set differ in ordering semantics).
+        (list/sorted/set differ in ordering semantics). ``sorted(list(...))``
+        folds to ``sorted(...)`` (list() is identity on a view) so the
+        cascade matches both idioms.
         """
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id
                 in wrappers and len(node.args) == 1 and not getattr(node, "keywords", [])):
             return None, None
         wrapper = node.func.id
         arg = node.args[0]
+        if wrapper == "sorted":
+            if (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                    and arg.func.id == "list" and len(arg.args) == 1
+                    and not getattr(arg, "keywords", [])):
+                arg = arg.args[0]
         if isinstance(arg, ast.Name) and arg.id in self.dict_items_vars:
             return self.dict_items_vars[arg.id], wrapper
         dict_expr = self._get_dict_expr_from_items_call(arg)
@@ -1489,17 +1638,22 @@ class GeneratorMixin:
 
         Returns (None, None) on no match. The wrapper name lets the caller
         enforce wrapper-vs-literal-type compatibility (e.g. set wrapper
-        requires a Set literal, list/sorted requires a List literal).
+        requires a Set literal). ``sorted(list(...))`` is peeled to
+        ``sorted(...)`` since list() is identity on a view.
         """
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                and node.func.id in ("list", "sorted", "set")
-                and len(node.args) == 1 and not getattr(node, "keywords", [])):
+                and node.func.id in ("list", "sorted", "set") and len(node.args) == 1
+                and not getattr(node, "keywords", [])):
             return None, None
         wrapper = node.func.id
         inner = node.args[0]
-        if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
-                and inner.func.attr == attr and not inner.args
-                and not getattr(inner, "keywords", [])):
+        if wrapper == "sorted":
+            if (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                    and inner.func.id == "list" and len(inner.args) == 1
+                    and not getattr(inner, "keywords", [])):
+                inner = inner.args[0]
+        if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute) and
+                inner.func.attr == attr and not inner.args and not getattr(inner, "keywords", [])):
             return None, None
         base = inner.func.value
         if isinstance(base, ast.Name):
@@ -1515,7 +1669,7 @@ class GeneratorMixin:
         This avoids tuple struct comparison and uses only proven-working primitives.
         Returns the new AST node, or None if the pattern doesn't match.
         """
-        dict_expr, _ = self._get_items_dict_expr(set_side, ("set",))
+        dict_expr, _ = self._get_items_dict_expr(set_side, ("set", ))
         if dict_expr is None:
             return None
         if not isinstance(literal_side, ast.Set) or not literal_side.elts:
@@ -1698,8 +1852,7 @@ class GeneratorMixin:
         - list wrapper: literal must have at most one pair (ESBMC's dict
           model does not preserve insertion order).
         """
-        dict_expr, wrapper = self._get_items_dict_expr(list_side,
-                                                       ("list", "sorted"))
+        dict_expr, wrapper = self._get_items_dict_expr(list_side, ("list", "sorted"))
         if dict_expr is None:
             return None
         if not isinstance(literal_side, ast.List):
@@ -1711,8 +1864,7 @@ class GeneratorMixin:
             pairs.append((elt.elts[0], elt.elts[1]))
         if pairs and not self._all_constants_distinct([k for k, _ in pairs]):
             return None
-        if wrapper == "sorted" and not self._is_sorted_const_list(
-                literal_side.elts, by="first"):
+        if wrapper == "sorted" and not self._is_sorted_const_list(literal_side.elts, by="first"):
             return None
         if wrapper == "list" and len(pairs) > 1:
             return None
@@ -1732,6 +1884,8 @@ class GeneratorMixin:
             ast.fix_missing_locations(len_eq)
             return len_eq
 
+        # d[k] emits THROW KeyError, use d.get(k) on Name receivers.
+        use_get = isinstance(dict_expr, ast.Name)
         value_checks = [len_eq]
         for k, v in pairs:
             key_in_dict = ast.Compare(
@@ -1739,14 +1893,19 @@ class GeneratorMixin:
                 ops=[ast.In()],
                 comparators=[copy.deepcopy(dict_expr)],
             )
-            subscript = ast.Subscript(
-                value=copy.deepcopy(dict_expr),
-                slice=copy.deepcopy(k),
-                ctx=ast.Load(),
-            )
-            val_eq = ast.Compare(left=subscript,
-                                 ops=[ast.Eq()],
-                                 comparators=[copy.deepcopy(v)])
+            if use_get:
+                value_lookup = ast.Call(
+                    func=ast.Attribute(value=copy.deepcopy(dict_expr), attr="get", ctx=ast.Load()),
+                    args=[copy.deepcopy(k)],
+                    keywords=[],
+                )
+            else:
+                value_lookup = ast.Subscript(
+                    value=copy.deepcopy(dict_expr),
+                    slice=copy.deepcopy(k),
+                    ctx=ast.Load(),
+                )
+            val_eq = ast.Compare(left=value_lookup, ops=[ast.Eq()], comparators=[copy.deepcopy(v)])
             value_checks.append(key_in_dict)
             value_checks.append(val_eq)
 
@@ -1798,7 +1957,15 @@ class GeneratorMixin:
                         comparators=[copy.deepcopy(value_node)],
                     ))
 
-        result = ast.BoolOp(op=ast.And(), values=checks)
+        # An empty literal (``x == []``) yields a single ``len(x) == 0`` check.
+        # A one-value ``BoolOp(And)`` is degenerate AST that lowers to a
+        # malformed single-operand ``and`` expr, so collapse it to the lone
+        # check (mirrors the guards in _lower_assert_eq_literal and
+        # _try_lower_expr_tuple_literal_eq).
+        if len(checks) == 1:
+            result = checks[0]
+        else:
+            result = ast.BoolOp(op=ast.And(), values=checks)
         self.ensure_all_locations(result, source_node)
         ast.fix_missing_locations(result)
         return result

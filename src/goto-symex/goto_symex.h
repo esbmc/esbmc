@@ -8,7 +8,6 @@
 #include <map>
 #include <optional>
 #include <pointer-analysis/dereference.h>
-#include <stack>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/options.h>
@@ -212,6 +211,17 @@ protected:
    *  @param code return statement.
    */
   void symex_return(const expr2tc &code);
+  void
+  symex_witness_function_return(expr2tc ret_val, const irep_idt &call_line);
+  bool symex_witness_function_enter(const irep_idt &call_line);
+  void symex_witness_branching(
+    const expr2tc &old_guard,
+    const expr2tc &new_guard,
+    bool forward,
+    bool &new_guard_true,
+    bool &new_guard_false,
+    const goto_programt::instructiont &instruction);
+  void symex_witness_assert(expr2tc &new_expr, const std::string &msg);
 
   /**
    *  Interpret an OTHER instruction.
@@ -272,6 +282,23 @@ protected:
    *  @param msg Textual message explaining assertion.
    */
   virtual void assertion(const expr2tc &assertion, const std::string &msg);
+
+  /// Lift `var == const` from an assume into the level2 constant
+  /// propagator so subsequent renames of `var` substitute the constant
+  /// directly. Called from symex_assume() after the assumption has been
+  /// recorded into the SSA target, so the constraint itself is preserved
+  /// and the lift only affects future renames.
+  ///
+  /// Peels outer typecasts (the C frontend wraps the equality as
+  /// (bool)(int)(x == k) for __VERIFIER_assume-style intrinsics), matches
+  /// `symbol == const` or `const == symbol`, and writes the constant into
+  /// the level2 entry for the symbol via cur_state->assignment.
+  ///
+  /// Skips IEEE-754 zero constants: +0.0 and -0.0 compare equal under
+  /// IEEE equality but have distinct bit patterns, so propagating either
+  /// would silently fold signbit-sensitive code (1.0/x, copysign, bit
+  /// reinterpretation) and mask real bugs.
+  void propagate_assume_equality(const expr2tc &the_assumption);
 
   /**
    *  Perform an assumption.
@@ -341,6 +368,18 @@ protected:
   void pop_frame();
 
   /**
+   *  Whether `base` is a user-defined Python class instance that follows
+   *  garbage-collected lifetime semantics (issue #4773). Such objects are kept
+   *  alive past their defining frame so references captured into a returned or
+   *  otherwise escaping aggregate stay valid, matching CPython (which heap-
+   *  allocates objects and frees them only when unreachable). Internal Python
+   *  model aggregates (tuples, dicts, and the list/slice/object/type
+   *  operational-model structs) are excluded: they manage their own
+   *  representation and must not have frame teardown skipped.
+   */
+  bool is_python_gc_object(const symbolt *base) const;
+
+  /**
    *  Create assignment for return statement.
    *  Generate an assignment to the return variable from this return statement.
    *  @param assign Assignment expression. Output.
@@ -383,6 +422,22 @@ protected:
    *  @param code Function code to actually call
    */
   virtual void symex_function_call_code(const expr2tc &call);
+
+  /**
+   *  Model a call to a "__ESBMC_uninterpreted_*" or "__CPROVER_uninterpreted_*"
+   *  function as a genuine uninterpreted function: assign the return an
+   *  uninterpreted_func2t application of the (mangled) callee to its renamed
+   *  arguments. Functional congruence (equal arguments imply an equal result)
+   *  is enforced downstream by the SMT backend's native uninterpreted-function
+   *  support, not here. The concrete body, if present, is deliberately ignored
+   *  (CBMC semantics). Returns true when the call was handled here (caller must
+   *  then advance the program counter).
+   *  @param call The function-call code being executed.
+   *  @param identifier The (mangled) callee symbol name.
+   */
+  bool symex_uninterpreted_function(
+    const code_function_call2t &call,
+    const irep_idt &identifier);
 
   /**
    *  Discover whether recursion bound has been exceeded.
@@ -507,6 +562,56 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
+  /**
+   * @brief Intrinsic call for C memchr function call
+   *
+   * This will either invoke our operational model (at string.c)
+   * or build the result pointer directly: it scans the first n bytes of the
+   * object pointed to by buf and returns a pointer to the first byte equal to
+   * the (unsigned char) value ch, or NULL if no such byte is found.
+   *
+   * @param art
+   * @param func_call memchr function call
+   */
+  void intrinsic_memchr(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Models __ESBMC_memcmp(s1, s2, n): for a constant n with both pointers
+   *  resolving to concrete primitive objects, build the lexicographic
+   *  comparison result as a single nested-ite expression over the n byte
+   *  reads (no loop, no unwinding) and assign it to the call's return.
+   *  Falls back to the C __memcmp_impl loop otherwise. */
+  void intrinsic_memcmp(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
+   *  primitive object with a constant offset, validating that an
+   *  @p number_of_bytes read stays in bounds. Returns false (bump to the C
+   *  loop) on any miss. */
+  bool memcmp_resolve_operand(
+    const expr2tc &ptr,
+    unsigned long number_of_bytes,
+    expr2tc &object,
+    uint64_t &offset,
+    uint64_t &avail_bytes);
+
+  /** Models __ESBMC_memmove. Identical optimisation to memcpy (the new value
+   *  is built from the current src/dst bytes before assigning, so overlapping
+   *  regions are correct); only the C fallback differs. */
+  void intrinsic_memmove(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Shared core for intrinsic_memcpy / intrinsic_memmove; @p bump_name is the
+   *  C fallback (__memcpy_impl / __memmove_impl) used when the byte-exact
+   *  optimisation cannot apply. */
+  void intrinsic_memcpy_impl(
+    reachability_treet &art,
+    const code_function_call2t &func_call,
+    const std::string &bump_name);
+
   // Function to call a symname function, in case where were not able to optimize it
   void
   bump_call(const code_function_call2t &func_call, const std::string &symname);
@@ -546,50 +651,6 @@ protected:
   void simplify_python_builtins(expr2tc &expr);
 
   void volatile_check(expr2tc &expr);
-
-  /* Check if thrown_type in Python inherits from catch_type */
-  bool is_python_exception_subtype(
-    const irep_idt &thrown_type,
-    const irep_idt &catch_type);
-
-  /** Walk back up stack frame looking for exception handler. */
-  bool symex_throw();
-
-  /** Core throw dispatch: match throw_code against stack_catch and jump.
-   *  Called by symex_throw() and symex_throw_bad_cast(). */
-  bool symex_throw_dispatch(const expr2tc &throw_code);
-
-  /** Handle dynamic_cast<T&> failure: resolve std::bad_cast from the
-   *  namespace and dispatch the exception through the normal throw path. */
-  bool symex_throw_bad_cast();
-
-  /** Register exception handler on stack. */
-  void symex_catch();
-
-  /** Register throw handler on stack. */
-  void symex_throw_decl();
-
-  /** Update throw target. */
-  void update_throw_target(
-    goto_symex_statet::exceptiont *except [[maybe_unused]],
-    goto_programt::const_targett target,
-    const expr2tc &code,
-    bool is_ellipsis = false);
-
-  /** Check if we can rethrow an exception:
-   *  if we can then update the target.
-   *  if we can't then gives a error.
-   */
-  bool handle_rethrow(
-    const expr2tc &operand,
-    const goto_programt::instructiont &instruction);
-
-  /** Check if we can throw an exception:
-   *  if we can't then gives a error.
-   */
-  int handle_throw_decl(
-    goto_symex_statet::exceptiont *frame,
-    const irep_idt &id);
 
   /**
    *  Finalize the result of a realloc operation.
@@ -905,6 +966,27 @@ protected:
     const bool hidden);
 
   /**
+   *  Perform assignment to an array literal.
+   *
+   *  Mirrors symex_assign_structure for a constant_array lhs: project each
+   *  element out and recurse, so a reconstituted array (e.g. an array-typed
+   *  struct member surfaced by symex_assign_structure) is assigned
+   *  element-wise instead of hitting the unhandled-lhs abort.
+   *
+   *  @param lhs Array literal to assign to
+   *  @param full_lhs The original assignment symbol
+   *  @param rhs Value to assign to the array
+   *  @param guard Guard of the current assignment
+   */
+  void symex_assign_array_structure(
+    const expr2tc &lhs,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
+    expr2tc &full_rhs,
+    guard2tc &guard,
+    const bool hidden);
+
+  /**
    *  Perform assignment to a union.
    *
    *  @param lhs Symbol to assign to
@@ -1108,6 +1190,22 @@ protected:
     const guard2tc &guard);
   /** Symbolic implementation of printf */
   void symex_printf(const expr2tc &lhs, expr2tc &code);
+  /** Recover the variadic arguments hidden behind a va_list operand of a
+   *  v*printf-family call (vprintf/vfprintf/vsprintf/vsnprintf/vasprintf).
+   *  Succeeds only under conservative conditions guaranteeing the mapping is
+   *  exact: the call must sit in the variadic function's own frame, the
+   *  va_list operand must be one of that function's own non-parameter
+   *  locals, and no va_arg may have been consumed in the activation yet. On
+   *  success fills `out` with the activation's L2-renamed va_arg values (in
+   *  declaration order) and returns true; otherwise returns false and the
+   *  caller must keep treating the arguments as unreliable (sound fallback).
+   *  @param call The original (unrenamed) printf side effect.
+   *  @param fmt_idx Index of the format-string operand within `call`.
+   *  @param out Receives the recovered argument expressions on success. */
+  bool recover_va_list_args(
+    const code_printf2t &call,
+    size_t fmt_idx,
+    std::list<expr2tc> &out);
   /** Symbolic implementation of scanf and fscanf */
   void symex_input(const code_function_call2t &expr);
   /** Symbolic implementation of va_arg */
@@ -1115,6 +1213,19 @@ protected:
     const expr2tc &lhs,
     const sideeffect2t &code,
     const guard2tc &guard);
+  /** Resolve a va_list expression to the l1 identity record of the local
+   *  variable backing it; nullopt when it cannot be pinned down to one. */
+  std::optional<renaming::level2t::name_record>
+  va_list_l1_record(const expr2tc &va_list_expr) const;
+  /** Whether the va_list denoted by this expression is known (or assumed)
+   *  to have been initialised by va_start/va_copy. va_lists whose base
+   *  cannot be resolved to a local variable's symbol are conservatively
+   *  assumed started. */
+  bool va_list_is_started(const expr2tc &va_list_expr) const;
+  /** Record the started-by-va_start state of the va_list denoted by this
+   *  expression. No-op if the base cannot be resolved to a local
+   *  variable's symbol. */
+  void va_list_mark_started(const expr2tc &va_list_expr, bool started);
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -1195,32 +1306,18 @@ protected:
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
 
-  /* Exception Handling.
-   * This will stack the try-catch blocks, so we always know which catch
-   * we should jump.
-   */
-  typedef std::stack<goto_symex_statet::exceptiont> stack_catcht;
-
-  /** Stack of try-catch blocks. */
-  stack_catcht stack_catch;
-
-  /** Pointer to last thrown exception. */
-  goto_programt::instructiont *last_throw;
-
-  /** Backing storage for last_throw when the throw originates from the
-   *  __ESBMC_throw_bad_cast intrinsic rather than a real THROW instruction. */
-  goto_programt::instructiont bad_cast_throw;
-
-  /** Map of currently active exception targets, i.e. instructions where an
-   *  exception is going to be merged in in the future. Keys are iterators to
-   *  the instruction catching the object; values are the symbols that the
-   *  thrown piece of data has been assigned to. */
-  std::map<goto_programt::const_targett, expr2tc> thrown_obj_map;
-
-  /** Flag to indicate if we are go into the unexpected flow. */
-  bool inside_unexpected;
-  /** Store the unexpected function end */
-  irep_idt unexpected_end;
+  /** Level-1 identities (base name, activation, thread) of va_list objects
+   *  initialised by va_start, or by va_copy from a started source. Keyed on
+   *  the l1 renaming so the same object is recognised across frames (a
+   *  va_list reached through a pointer dereferences to the owning
+   *  activation's l1 name) and across recursion or loop re-declaration (each
+   *  DECL bumps the l1 number, so a fresh activation needs a fresh va_start).
+   *  Insertion ignores the path guard, over-approximating towards "started",
+   *  so a conditional va_start can never yield a false positive. */
+  std::unordered_set<
+    renaming::level2t::name_record,
+    renaming::level2t::name_rec_hash>
+    va_started;
 
   /** Disable return value optimization */
   bool no_return_value_opt;
@@ -1265,8 +1362,7 @@ protected:
   bool inductive_step;
   /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
   bool validate_witness;
-  /** Pre-interned target waypoint line; empty when no target is present. */
-  irep_idt witness_target_line;
+
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */

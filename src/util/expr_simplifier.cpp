@@ -1648,11 +1648,13 @@ expr2tc index2t::do_simplify() const
       return expr2tc();
 
     const constant_array2t &arr = to_constant_array2t(src);
-    unsigned long the_idx = idx.as_ulong();
-    if (the_idx >= arr.datatype_members.size())
+    // Bound-check on the BigInt (correct at any width) before as_ulong(), so a
+    // wider-than-64-bit index bails out of simplification instead of being
+    // truncated — mirrors the constant_vector path below.
+    if (idx.value >= arr.datatype_members.size())
       return expr2tc();
 
-    return arr.datatype_members[the_idx];
+    return arr.datatype_members[idx.as_ulong()];
   }
 
   if (is_constant_vector2t(src) && is_constant_int2t(idx_e))
@@ -1680,13 +1682,14 @@ expr2tc index2t::do_simplify() const
       return expr2tc();
 
     const constant_string2t &str = to_constant_string2t(src);
-    unsigned long the_idx = idx.as_ulong();
-    if (the_idx >= str.array_size()) // allow reading null term.
+    // BigInt bound-check before as_ulong() (allow reading null term), so a
+    // wider-than-64-bit index bails rather than truncating.
+    if (idx.value >= str.array_size())
       return expr2tc();
 
     // String constants had better be some kind of integer type
     assert(is_bv_type(type));
-    expr2tc c = str.at(the_idx);
+    expr2tc c = str.at(idx.as_ulong());
     assert(c);
     return c;
   }
@@ -2382,8 +2385,12 @@ static expr2tc do_bit_munge_operation(
      * not representable. */
 
     /* Evaluating shifts with the shift amount >= 64 on (u)int64_t is undefined
-     * behavior in C++, we should avoid doing that during simplification. */
-    can_eval &= !is_shift || br < 64;
+     * behavior in C++, we should avoid doing that during simplification. A
+     * negative amount is equally out of range: br is used above to build the
+     * uint64_t operand r, so a signed -1 becomes 2^64-1 and would shift far
+     * past the width. Require 0 <= br < 64 and otherwise leave the shift
+     * symbolic for the solver. */
+    can_eval &= !is_shift || (br >= 0 && br < 64);
     if (can_eval)
     {
       uint64_t res = opfunc(l, r);
@@ -4890,6 +4897,18 @@ expr2tc extract2t::do_simplify() const
   return constant_int2tc(type, BigInt(theval));
 }
 
+expr2tc sizeof2t::do_simplify() const
+{
+  // Unwrap to the eagerly-computed byte size (esbmc/esbmc#5337). `value` already
+  // holds clang's authoritative sizeof (or the VLA byte-size expression), so no
+  // recomputation is needed here. Re-type to this node's own size type if they
+  // differ, so an arithmetic context built around the node (e.g. `n*sizeof(T)`)
+  // never sees a width/sign-mismatched operand once the node folds.
+  if (value->type == type)
+    return value;
+  return typecast2tc(type, value);
+}
+
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
 {
@@ -5761,8 +5780,7 @@ ESBMC_NIL_SIMPLIFY(code_cpp_del_array)
 ESBMC_NIL_SIMPLIFY(code_cpp_delete)
 ESBMC_NIL_SIMPLIFY(code_decl)
 ESBMC_NIL_SIMPLIFY(code_dead)
-ESBMC_NIL_SIMPLIFY(code_cpp_throw_decl)
-ESBMC_NIL_SIMPLIFY(code_cpp_throw_decl_end)
+ESBMC_NIL_SIMPLIFY(new_object)
 ESBMC_NIL_SIMPLIFY(isinstance)
 ESBMC_NIL_SIMPLIFY(hasattr)
 ESBMC_NIL_SIMPLIFY(isnone)

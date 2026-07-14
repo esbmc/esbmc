@@ -1,9 +1,12 @@
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/c_types.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 
 #include <algorithm>
@@ -11,7 +14,9 @@
 #include <functional>
 #include <set>
 
-exprt python_converter::unwrap_optional_if_needed(const exprt &expr)
+exprt python_converter::unwrap_optional_if_needed(
+  const exprt &expr,
+  const nlohmann::json &element)
 {
   if (!expr.type().is_struct())
     return expr;
@@ -21,9 +26,37 @@ exprt python_converter::unwrap_optional_if_needed(const exprt &expr)
 
   if (tag.starts_with("tag-Optional_"))
   {
-    // Extract the value field
-    member_exprt value_field(expr, "value", struct_type.components()[1].type());
-    return value_field;
+    // A member can only be taken of an addressable value. When the optional is
+    // produced by a call used directly in a comparison -- e.g. f(...) == 2 --
+    // the operand is the call itself (a code_function_callt statement, or a
+    // side-effect call expression), and member_exprt(<call>, "value") is
+    // malformed: it aborts during goto migration (member2t requires a
+    // struct/union/complex source). Materialise the call result into a
+    // temporary first, mirroring the already-working assigned path
+    // (r = f(...); r.value == 2). See #4807.
+    exprt base = expr;
+    if (base.is_code() && base.is_function_call())
+      base = to_value_expr(base, name_space());
+
+    if (base.id() == "sideeffect")
+    {
+      symbolt &tmp =
+        create_tmp_symbol(element, "$optional_tmp$", base.type(), exprt());
+      code_declt decl(symbol_expr(tmp));
+      decl.location() = base.location();
+      add_instruction(decl);
+
+      code_assignt assign(symbol_expr(tmp), base);
+      assign.location() = base.location();
+      add_instruction(assign);
+      base = symbol_expr(tmp);
+    }
+
+    // Extract the value field. V.3: IREP2 member access (round-trip).
+    expr2tc b2;
+    migrate_expr(base, b2);
+    return migrate_expr_back(
+      member2tc(migrate_type(struct_type.components()[1].type()), b2, "value"));
   }
 
   return expr;
@@ -35,27 +68,26 @@ exprt python_converter::wrap_in_optional(
 {
   assert(optional_type.is_struct());
   const struct_typet &struct_type = to_struct_type(optional_type);
+  const bool is_none = value.type() == none_type();
 
-  // Create struct expression
-  struct_exprt optional_value(struct_type);
+  // V.3: build the optional value { is_none, value } in IREP2, back-migrating
+  // once. Both members are already-built value exprs (a bool literal and either
+  // the wrapped value or a zero of the field type), so a constant_struct2t over
+  // the migrated operands round-trips exactly through migrate. Re-attach the
+  // full struct type afterwards: migrate_type drops the frontend-only
+  // #python_aggregate_kind="optional" marker that later dispatch reads with no
+  // tag fallback -- mirroring build_shape_tuple_expr / get_tuple_expr.
+  expr2tc value_member;
+  migrate_expr(
+    is_none ? gen_zero(struct_type.components()[1].type()) : value,
+    value_member);
 
-  // Set is_none field based on whether value is None
-  exprt is_none_value;
-  if (value.type() == none_type())
-  {
-    is_none_value = gen_boolean(true);
-    // Set value field to zero for None case
-    optional_value.operands().push_back(is_none_value);
-    optional_value.operands().push_back(
-      gen_zero(struct_type.components()[1].type()));
-  }
-  else
-  {
-    is_none_value = gen_boolean(false);
-    optional_value.operands().push_back(is_none_value);
-    optional_value.operands().push_back(value);
-  }
+  std::vector<expr2tc> members{
+    is_none ? gen_true_expr() : gen_false_expr(), std::move(value_member)};
 
+  exprt optional_value =
+    migrate_expr_back(constant_struct2tc(migrate_type(struct_type), members));
+  optional_value.type() = struct_type;
   return optional_value;
 }
 

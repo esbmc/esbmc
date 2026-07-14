@@ -18,6 +18,11 @@ if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL 
     PATHS ${LLVM_DIR}
     NO_DEFAULT_PATH
   )
+  # Snapshot the version from the LLVM_DIR tree: find_package(Clang) below
+  # transitively re-includes LLVMConfig and overwrites LLVM_VERSION with the
+  # Clang_DIR tree's version, masking a mismatched toolchain.
+  set(_ESBMC_LLVM_DIR_VERSION "${LLVM_VERSION}")
+  set(_ESBMC_LLVM_DIR_VERSION_MAJOR "${LLVM_VERSION_MAJOR}")
 
   find_package(Clang REQUIRED CONFIG
     PATHS ${Clang_DIR}
@@ -25,7 +30,24 @@ if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL 
   )
 else()
   find_package(LLVM REQUIRED CONFIG)
+  set(_ESBMC_LLVM_DIR_VERSION "${LLVM_VERSION}")
+  set(_ESBMC_LLVM_DIR_VERSION_MAJOR "${LLVM_VERSION_MAJOR}")
   find_package(Clang REQUIRED CONFIG)
+endif()
+
+# LLVM_DIR and Clang_DIR must resolve to the same toolchain. Mixing, e.g.,
+# libLLVM-16 with libclang-cpp-18 produces a cryptic link-time
+# "DSO missing from command line" failure late in the build (esbmc #6005).
+# Compare the major version: that is the shared-library soname boundary that
+# actually breaks linking, matching the MIN/MAX checks below.
+if(NOT _ESBMC_LLVM_DIR_VERSION_MAJOR EQUAL LLVM_VERSION_MAJOR)
+  message(FATAL_ERROR
+    "LLVM_DIR and Clang_DIR resolve to different toolchains "
+    "(LLVM ${_ESBMC_LLVM_DIR_VERSION} vs Clang ${LLVM_VERSION}). "
+    "Point both at the same LLVM/Clang install, e.g. "
+    "-DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm "
+    "-DClang_DIR=/usr/lib/llvm-18/lib/cmake/clang, "
+    "and reconfigure in a clean build directory.")
 endif()
 
 if(LLVM_PACKAGE_BUGREPORT STREQUAL https://github.com/CTSRD-CHERI/llvm-project/issues)
@@ -48,13 +70,59 @@ elseif(DEFINED ESBMC_CHERI AND NOT ESBMC_CHERI AND ESBMC_CHERI_CLANG)
   unset(ESBMC_CHERI_CLANG_MORELLO)
 endif()
 
+# Patch stale DIA SDK path embedded by LLVM prebuilt binaries on Windows.
+if(WIN32)
+  find_library(DIAGUIDS_LIB diaguids
+    PATHS
+      "$ENV{VSINSTALLDIR}/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/18/Enterprise/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/18/Professional/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/18/Community/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/2025/Enterprise/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/2025/Professional/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/2025/Community/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/2022/Professional/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/2022/Community/DIA SDK/lib/amd64"
+    NO_DEFAULT_PATH
+  )
+  if(DIAGUIDS_LIB)
+    message(STATUS "DIA SDK found: ${DIAGUIDS_LIB}")
+    foreach(_dia_tgt IN LISTS LLVM_AVAILABLE_LIBS CLANG_EXPORTED_TARGETS)
+      if(NOT TARGET ${_dia_tgt})
+        continue()
+      endif()
+      get_target_property(_dia_iface ${_dia_tgt} INTERFACE_LINK_LIBRARIES)
+      if(NOT _dia_iface)
+        continue()
+      endif()
+      set(_dia_fixed)
+      set(_dia_changed FALSE)
+      foreach(_dia_lib IN LISTS _dia_iface)
+        if("${_dia_lib}" MATCHES "diaguids\\.lib$" AND NOT EXISTS "${_dia_lib}")
+          list(APPEND _dia_fixed "${DIAGUIDS_LIB}")
+          set(_dia_changed TRUE)
+        else()
+          list(APPEND _dia_fixed "${_dia_lib}")
+        endif()
+      endforeach()
+      if(_dia_changed)
+        set_target_properties(${_dia_tgt} PROPERTIES
+          INTERFACE_LINK_LIBRARIES "${_dia_fixed}")
+      endif()
+    endforeach()
+  endif()
+endif()
+
 if(${LLVM_VERSION_MAJOR} GREATER ${MAX_SUPPORTED_LLVM_VERSION_MAJOR})
   message(WARNING "LLVM version ${LLVM_VERSION_MAJOR} is greater than maximum "
                   "supported (${MAX_SUPPORTED_LLVM_VERSION_MAJOR})")
 endif()
 
-if(${LLVM_VERSION_MAJOR} LESS 11)
-  message(FATAL_ERROR "Could not find LLVM/Clang >= 11.0 at all: please specify with -DLLVM_DIR/-DClang_DIR")
+if(${LLVM_VERSION_MAJOR} LESS ${MIN_SUPPORTED_LLVM_VERSION_MAJOR})
+  message(FATAL_ERROR "ESBMC requires LLVM/Clang >= ${MIN_SUPPORTED_LLVM_VERSION_MAJOR} "
+                      "(found ${LLVM_VERSION_MAJOR}): please install a newer toolchain and "
+                      "specify it with -DLLVM_DIR/-DClang_DIR")
 else()
   message(STATUS "LLVM version: ${LLVM_VERSION}")
 endif()

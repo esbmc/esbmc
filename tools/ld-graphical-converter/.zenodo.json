@@ -1,0 +1,46 @@
+{
+  "title": "ESBMC-PLC 2.0: Formal Verification of Graphical PLCopen XML Ladder Diagram Programs Using SMT-Based Model Checking",
+  "description": "Artefact for ESBMC-PLC 2.0 — extends ESBMC-PLC to support graphical PLCopen XML (tc6_0201) programs exported by vendor tools including CONTROLLINO/OpenPLC Editor, Beremiz, and OpenPLC Tutorials.\n\nContains:\n- DFS graph resolver (C++): plcopen_xml_parser.cpp\n- Python prototype: tools/ld-graphical-converter/graphical_to_textual.py\n- 4 graphical LD benchmarks from 2 real vendor tools\n- 25 graphical LD programs validated, all SAFE in under 70ms\n\nRelated artefact (ESBMC-PLC 1.0): https://doi.org/10.5281/zenodo.20680071",
+  "upload_type": "software",
+  "license": "Apache-2.0",
+  "version": "2.0.0",
+  "creators": [
+    {
+      "name": "Dantas, Pierre",
+      "affiliation": "University of Manchester"
+    },
+    {
+      "name": "Cordeiro, Lucas C.",
+      "affiliation": "University of Manchester",
+      "orcid": "0000-0002-6318-1067"
+    }
+  ],
+  "keywords": [
+    "formal verification",
+    "PLC",
+    "Ladder Diagram",
+    "IEC 61131-3",
+    "PLCopen XML",
+    "tc6_0201",
+    "graphical LD",
+    "ESBMC",
+    "model checking",
+    "k-induction",
+    "SMT",
+    "industrial automation",
+    "CONTROLLINO",
+    "Beremiz"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://doi.org/10.5281/zenodo.20680071",
+      "relation": "isNewVersionOf",
+      "scheme": "doi"
+    },
+    {
+      "identifier": "https://github.com/esbmc/esbmc",
+      "relation": "isDerivedFrom",
+      "scheme": "url"
+    }
+  ]
+}

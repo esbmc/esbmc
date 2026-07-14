@@ -188,6 +188,93 @@ class ModuleRewriteMixin:
         """Run the range-alias and range-wrapper rewrites on *module_node*."""
         self._rewrite_range_aliases(module_node, seed=alias_seed)
         self._inline_range_wrappers(module_node, seed=wrapper_seed)
+        self._fold_module_const_range_args(module_node)
+
+    @staticmethod
+    def _int_literal_value(node):
+        """Int value of an integer-literal AST node (or unary +/- of one), else
+        None. Booleans are excluded — ``True``/``False`` are not range sizes."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, int) \
+                and not isinstance(node.value, bool):
+            return node.value
+        if isinstance(node, ast.UnaryOp) and isinstance(node.operand, ast.Constant) \
+                and isinstance(node.operand.value, int) \
+                and not isinstance(node.operand.value, bool):
+            if isinstance(node.op, ast.USub):
+                return -node.operand.value
+            if isinstance(node.op, ast.UAdd):
+                return node.operand.value
+        return None
+
+    def _collect_module_const_ints(self, module_node):
+        """Names bound exactly once, unconditionally at module top level, to an
+        integer literal, and never rebound — genuine module constants.
+
+        ``_rebound_module_names`` already flags names assigned more than once,
+        assigned inside any conditional/loop/``with``, or declared ``global``,
+        so excluding it leaves only names that hold one fixed integer on every
+        path. Comprehension / generator-expression loop targets are a separate
+        local scope that ``_rebound_module_names`` does not see, so they are
+        excluded explicitly: a same-named module constant must never be folded
+        into ``[... range(N) ... for N in ...]``, where ``N`` is the loop
+        variable, not the constant."""
+        rebound = self._rebound_module_names(module_node)
+        # Names bound in a scope/position _rebound_module_names does not track:
+        # comprehension/genexp loop targets (their own local scope) and walrus
+        # (``:=``) targets. A same-named module constant must not be folded into
+        # any of these — the name may hold a different value there.
+        local_binds = set()
+        for node in ast.walk(module_node):
+            if isinstance(node, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+                for gen in node.generators:
+                    local_binds |= self._target_names(gen.target)
+            elif isinstance(node, ast.NamedExpr) and isinstance(node.target, ast.Name):
+                local_binds.add(node.target.id)
+        consts = {}
+        for stmt in module_node.body:
+            if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name)):
+                name = stmt.targets[0].id
+                value = self._int_literal_value(stmt.value)
+                if (value is not None and name not in rebound and name not in local_binds):
+                    consts[name] = value
+        return consts
+
+    def _fold_module_const_range_args(self, module_node):
+        """Replace module-constant ``Name`` args of ``range()`` calls with their
+        integer literals.
+
+        ``list(range(N))`` with a constant ``N`` otherwise takes the *symbolic*
+        range path, which builds a list whose ``size`` is set but whose elements
+        are nondet garbage — reading/slicing/copying it raises a spurious
+        ``dereference failure`` (an unsound false positive). Folding a genuine
+        constant so the *concrete* range path materialises real elements removes
+        the false alarm. ``_iter_module_scope`` skips any nested function/class
+        scope that locally rebinds the name, so a shadowing parameter/local is
+        never folded to the module constant.
+
+        Only ``list(range(...))`` / ``tuple(range(...))`` — the sequence
+        *materialisation* contexts where the false deref occurs — are folded. A
+        ``range()`` used directly as a ``for`` iterable is left untouched: it
+        never materialises elements, and its lowering models a zero ``step`` as
+        a runtime ``step != 0`` assertion that folding to a literal would turn
+        into a preprocess-time error (regression/python/range23_fail)."""
+        consts = self._collect_module_const_ints(module_node)
+        if not consts:
+            return
+        for n in self._iter_module_scope(module_node, set(consts)):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                    and n.func.id in ("list", "tuple") and len(n.args) == 1 and not n.keywords):
+                continue
+            inner = n.args[0]
+            if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                    and inner.func.id == "range" and not inner.keywords):
+                continue
+            for i, arg in enumerate(inner.args):
+                if isinstance(arg, ast.Name) and arg.id in consts:
+                    folded = ast.Constant(value=consts[arg.id])
+                    ast.copy_location(folded, arg)
+                    inner.args[i] = folded
 
     def _rewrite_range_aliases(self, module_node, seed=frozenset()):
         """Rewrite module-scope alias = range (and chains) to canonical range."""
@@ -311,5 +398,106 @@ class ModuleRewriteMixin:
             elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
                 self.variable_annotations[stmt.target.id] = stmt.annotation
 
+        self._scan_dict_literal_bindings_and_calls(node)
+        self.module_class_names, self.instance_var_classes = \
+            self._build_var_class_map(node)
+        self.attr_list_element_classes = self._scan_attr_list_element_classes(node)
+        self.list_var_element_classes = self._scan_list_var_element_classes(node)
         self.module_dunder_all = self._capture_dunder_all(node)
+        self._scan_sequence_iterators(node)
         self.apply_range_rewrites(node, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
+
+    def _scan_dict_literal_bindings_and_calls(self, node):
+        """Collect evidence for parameter-dict element recovery (#5444).
+
+        For each scope (the module body and every function body, independently)
+        records its dict-literal name bindings, then resolves each direct
+        ``name(...)`` call's positional arguments against that scope's bindings
+        (falling back to the module scope for free names). The result maps a
+        function name to its per-call list of argument dict[K, V] shapes, which
+        _recover_param_dict_annotation collapses only when every call agrees —
+        keeping the inference sound and scope-correct (a function-local dict
+        never poisons a same-named module global).
+        """
+        self._dict_param_call_shapes = {}
+        module_binds, module_locals = self._collect_scope_dict_binds(node.body)
+        self._record_scope_calls(node.body, module_binds, module_locals, module_binds)
+        for n in ast.walk(node):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                local_binds, local_names = self._collect_scope_dict_binds(n.body)
+                self._record_scope_calls(n.body, local_binds, local_names, module_binds)
+
+    @staticmethod
+    def _walk_scope(stmts):
+        """Yield AST nodes within ``stmts`` without crossing into a nested
+        function/class/lambda scope (which binds its own names)."""
+        stack = list(stmts)
+        while stack:
+            n = stack.pop()
+            yield n
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                continue
+            stack.extend(ast.iter_child_nodes(n))
+
+    def _collect_scope_dict_binds(self, stmts):
+        """Map names bound to a dict literal in this scope to their dict[K, V]
+        annotation. A name reassigned to a conflicting shape or to a non-dict is
+        poisoned (dropped) so it is never used as recovery evidence. Returns
+        (bindings, all-assigned-names)."""
+        binds = {}
+        poisoned = set()
+        assigned = set()
+        for n in self._walk_scope(stmts):
+            if isinstance(n, ast.Assign):
+                names = [t.id for t in n.targets if isinstance(t, ast.Name)]
+                value = n.value
+            elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
+                names = [n.target.id]
+                value = n.value
+            else:
+                continue
+            ann = (self._build_dict_annotation_from_literal(value)
+                   if isinstance(value, ast.Dict) else None)
+            for name in names:
+                assigned.add(name)
+                if name in poisoned:
+                    continue
+                if ann is None or (name in binds and ast.dump(binds[name]) != ast.dump(ann)):
+                    poisoned.add(name)
+                    binds.pop(name, None)
+                else:
+                    binds[name] = ann
+        return binds, assigned
+
+    def _record_scope_calls(self, stmts, local_binds, local_names, module_binds):
+        """Record the per-call positional dict shapes for every direct call in
+        this scope, resolving Name arguments against the local bindings (or the
+        module bindings for free names)."""
+        for n in self._walk_scope(stmts):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)):
+                continue
+            # A *splat shifts every later argument's runtime position by
+            # len(iterable), unknowable statically -- recording syntactic
+            # indices would let _recover_param_dict_annotation size the
+            # WRONG parameter. Refuse the whole call (None at every index).
+            if any(isinstance(a, ast.Starred) for a in n.args):
+                self._dict_param_call_shapes.setdefault(n.func.id, []).append([None] * len(n.args))
+                continue
+            shapes = []
+            for arg in n.args:
+                if isinstance(arg, ast.Dict):
+                    shapes.append(self._build_dict_annotation_from_literal(arg))
+                elif isinstance(arg, ast.List):
+                    # list-of-tuple-literals: shape evidence for sizing the
+                    # str components of a list[tuple[...]] parameter
+                    # annotation (#5571), same table, same all-sites-agree
+                    # consumers.
+                    shapes.append(self._build_list_annotation_from_literal(arg))
+                elif isinstance(arg, ast.Name):
+                    if arg.id in local_names:
+                        shapes.append(local_binds.get(arg.id))
+                    else:
+                        shapes.append(module_binds.get(arg.id))
+                else:
+                    shapes.append(None)
+            self._dict_param_call_shapes.setdefault(n.func.id, []).append(shapes)

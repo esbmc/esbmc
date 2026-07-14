@@ -27,6 +27,23 @@ guard2tc build_guard(unsigned n, const std::string &prefix = "g")
   return g;
 }
 
+expr2tc expected_guard_expr(const guard2tc &g)
+{
+  if (g.guard_list.empty())
+    return gen_true_expr();
+
+  auto it = g.guard_list.begin();
+  expr2tc res = *it++;
+  while (it != g.guard_list.end())
+    res = and2tc(res, *it++);
+  return res;
+}
+
+void require_guard_invariant(const guard2tc &g)
+{
+  REQUIRE(g.as_expr() == expected_guard_expr(g));
+}
+
 // Build two guards that share `shared` leading conjuncts then diverge.
 // Used to exercise operator|='s set-intersection/difference factoring.
 std::pair<guard2tc, guard2tc>
@@ -132,6 +149,82 @@ TEST_CASE("guard2tc set-op ordering", "[probe]")
   guard2tc subsumed = extended;
   subsumed |= prefix;
   REQUIRE(subsumed.guard_list.size() == 2);
+}
+
+TEST_CASE("guard2tc set ops keep cached base in sync", "[probe]")
+{
+  config.ansi_c.word_size = 32;
+
+  guard2tc base;
+  base.add(sym("a"));
+  base.add(sym("b"));
+
+  guard2tc left = base;
+  left.add(sym("left"));
+  guard2tc right = base;
+  right.add(sym("right"));
+
+  guard2tc disj = left;
+  disj |= right;
+  require_guard_invariant(disj);
+  REQUIRE(disj.as_expr() == expected_guard_expr(disj));
+
+  guard2tc diff = left;
+  diff -= base;
+  require_guard_invariant(diff);
+  REQUIRE(diff.guard_list.size() == 1);
+  REQUIRE(diff.guard_list.front() == sym("left"));
+
+  guard2tc independent_left;
+  independent_left.add(sym("a"));
+  independent_left.add(sym("b"));
+  independent_left.add(sym("left"));
+  guard2tc independent_right;
+  independent_right.add(sym("a"));
+  independent_right.add(sym("b"));
+
+  independent_left |= independent_right;
+  require_guard_invariant(independent_left);
+  REQUIRE(independent_left.guard_list == independent_right.guard_list);
+}
+
+// Regression: with the immer-backed guard_seq, conjunct lists longer than
+// the trie branch factor (32) span interior nodes. Exercise prefix/suffix
+// slicing in -= / |= at that scale to lock in that the slices stay
+// index-consistent with the cached and-chain past the node boundary.
+TEST_CASE("guard2tc set ops across immer interior nodes", "[probe]")
+{
+  config.ansi_c.word_size = 32;
+
+  // g1 = 100 shared conjuncts ("s0..s99") + 40 unique ("a0..a39"); the
+  // shared part is a genuine pointer-prefix (g1 grown by copying base).
+  guard2tc base = build_guard(100, "s");
+  guard2tc g1 = base;
+  for (unsigned i = 0; i < 40; ++i)
+    g1.add(sym("a" + std::to_string(i)));
+
+  // g1 -= base must yield exactly the 40-element suffix, in order.
+  guard2tc diff = g1;
+  diff -= base;
+  REQUIRE(diff.guard_list.size() == 40);
+  for (unsigned i = 0; i < 40; ++i)
+    REQUIRE(diff.guard_list[i] == sym("a" + std::to_string(i)));
+  require_guard_invariant(diff);
+
+  // g1 |= base: base is a prefix of g1, so the union reduces to base.
+  guard2tc disj = g1;
+  disj |= base;
+  REQUIRE(disj.guard_list.size() == 100);
+  require_guard_invariant(disj);
+
+  // Two long guards sharing a 100-prefix then diverging by 40 each: |=
+  // factors the common prefix and ORs the residuals. Result keeps the
+  // 100 shared conjuncts and stays internally consistent.
+  auto [a, b] = build_overlapping(100, 40);
+  guard2tc u = a;
+  u |= b;
+  REQUIRE(u.guard_list.size() >= 100);
+  require_guard_invariant(u);
 }
 
 TEST_CASE("guard2tc microbench: incremental construction", "[bench]")

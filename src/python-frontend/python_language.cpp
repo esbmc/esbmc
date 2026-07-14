@@ -2,6 +2,9 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/global_scope.h>
+#include <python-frontend/python_adjust.h>
+#include <python-frontend/round_to_nearest_guard.h>
+#include <python-frontend/param_annotations.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message.h>
 #include <util/filesystem.h>
@@ -184,6 +187,11 @@ bool python_languaget::parse(const std::string &path)
 
   try
   {
+    // Parse under FE_TONEAREST: nlohmann converts float literals with the
+    // host strtod, and a leftover non-default rounding mode (e.g. gaol's
+    // static init leaves FE_UPWARD on goto-contractor builds) would store a
+    // double one ulp away from CPython's value for the same literal.
+    const round_to_nearest_guard rounding_guard;
     ast = nlohmann::json::parse(ast_json);
   }
   catch (const nlohmann::json::exception &e)
@@ -203,6 +211,12 @@ bool python_languaget::parse(const std::string &path)
 
   try
   {
+    // Retype this module's list parameters from their call sites, before the
+    // annotator derives element types from their annotations (GitHub #5936).
+    // Callees in imported modules are retyped in python_converter::convert(),
+    // where the import graph is available.
+    python_param_annotations::propagate_tuple_list_params({{&ast, &ast, ""}});
+
     // Add type information
     python_annotation<nlohmann::json> ann(ast, global_scope_);
     const std::string function = config.options.get_option("function");
@@ -227,7 +241,21 @@ bool python_languaget::final(contextt &)
 
 bool python_languaget::typecheck(contextt &context, const std::string &)
 {
-  // Load c models
+  // Pin FE_TONEAREST for the whole conversion pass. The converter folds
+  // constants with host floating point (numpy scalar folds, complex-string
+  // strtod, str/format rendering), and those folds must agree bit-for-bit
+  // with the AST float literals, which are parsed under FE_TONEAREST (see
+  // parse() above). A leftover mode like gaol's FE_UPWARD on goto-contractor
+  // builds would otherwise skew only the folded side of a comparison by one
+  // ulp and flip verdicts (regression/numpy/round_decimals,
+  // regression/python/complex_constructor_extended on the DebugOpt CI).
+  const round_to_nearest_guard rounding_guard;
+
+  // Load c models. The C++ handled-stack exception OM (push/pop_handled,
+  // rethrow_current) is deliberately NOT pulled in for Python: it drags the full
+  // C++ std::terminate closure, and Python does not use std::current_exception.
+  // The lowering's inline re-raise fallback (remove_exceptions) covers Python's
+  // bare `raise` without that OM.
   add_cprover_library(context, this);
 
   try
@@ -245,6 +273,33 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   clang_cpp_adjust adjuster(context);
   if (adjuster.adjust())
     return true;
+
+  // V.4 B.2: optionally run the IREP2-native Python adjuster. Default off.
+  //
+  // It runs *after* clang_cpp_adjust for now: reading get_value2() migrates each
+  // legacy value to IREP2, which requires its types to already be resolved —
+  // before clang_cpp_adjust they are still by-name symbol_types and migrating a
+  // constant aggregate trips constant_struct2t's (un-relaxed) assert. Post-adjust
+  // the types are resolved, so the walk is safe; it currently resolves nothing
+  // (clang_cpp_adjust already did) and only writes a symbol back when it changes
+  // the value, so the flag is behaviour-inert.
+  //
+  // B.3 experiment (2026-06-25, negative result, do not retry as-is): moving the
+  // pass *before* clang_cpp_adjust to exercise resolution was prototyped. It
+  // additionally needs member2t/index2t to tolerate a transient pointer source
+  // (the Python frontend stores instances/containers behind a pointer) plus a
+  // pointer auto-deref in resolve_source. With those, migration no longer aborts,
+  // but the whole 20-test fixture then produced *no verdict* under the flag
+  // (symex crash/hang): running the IREP2 adjuster before clang_cpp_adjust while
+  // clang_cpp_adjust still runs afterwards double-resolves the same nodes — the
+  // "two-places-resolve hazard" the V.1k spike flagged. Conclusion: the
+  // before-placement is only viable once it *replaces* clang_cpp_adjust for
+  // Python (B.5), which is a dedicated effort, not a reorder of this call.
+  if (config.options.get_bool_option("python-irep2-adjust"))
+  {
+    python_adjust py_adjuster(context);
+    py_adjuster.adjust();
+  }
 
   return false;
 }

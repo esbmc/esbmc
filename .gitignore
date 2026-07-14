@@ -8,6 +8,7 @@ out
 .vscode
 CMakeSettings.json
 build*
+!building.md
 
 # eclipse
 .cproject
@@ -44,3 +45,6 @@ debian/*.changes
 # macOS debug symbols and compiled test binaries in regression dirs
 *.dSYM/
 regression/**/test
+
+# Generated doxygen API reference (see .config/Doxyfile)
+docs/html/

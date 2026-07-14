@@ -5,7 +5,7 @@ on:
     inputs:
       benchexec_url:
         description: 'URL of the benchexec run to validate'
-        required: true
+        required: false
       esbmc_source:
         type: choice
         description: 'ESBMC binary source'
@@ -64,6 +64,8 @@ on:
           - ReachSafety-Combinations
           - ReachSafety-Hardware
           - ReachSafety-Hardness
+          - ReachSafety-CorrectnessWitnesses
+          - ReachSafety-ViolationWitnesses
           - ConcurrencySafety-Main
           - SoftwareSystems-AWS-C-Common-ReachSafety
           - SoftwareSystems-DeviceDriversLinux64-ReachSafety
@@ -71,6 +73,7 @@ on:
           - SoftwareSystems-Other-ReachSafety
           - SoftwareSystems-uthash-ReachSafety
           - SoftwareSystems-Intel-TDX-Module-ReachSafety
+          - Termination-ViolationWitnesses
           - NoDataRace-Main
           - MemSafety-MemCleanup
           - SoftwareSystems-uthash-MemCleanup
@@ -118,12 +121,14 @@ jobs:
 
       - name: Extract run ID from URL
         id: parse
+        if: ${{ inputs.benchexec_url != '' }}
         run: |
           url="${{ inputs.benchexec_url }}"
           run_id=${url#*/runs/}; run_id=${run_id%%/*}
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
       - name: Download benchexec results
+        if: ${{ inputs.benchexec_url != '' }}
         uses: actions/download-artifact@v8
         with:
           name: esbmc-result
@@ -132,6 +137,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Extract benchexec results
+        if: ${{ inputs.benchexec_url != '' }}
         run: |
           rm -rf ./esbmc-output $HOME/esbmc-output
           unzip -q output.zip
@@ -212,12 +218,14 @@ jobs:
 
       - name: Extract run ID from URL
         id: parse
+        if: ${{ inputs.benchexec_url != '' }}
         run: |
           url="${{ inputs.benchexec_url }}"
           run_id=${url#*/runs/}; run_id=${run_id%%/*}
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
       - name: Download benchexec results
+        if: ${{ inputs.benchexec_url != '' }}
         uses: actions/download-artifact@v8
         with:
           name: esbmc-result
@@ -226,6 +234,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Extract benchexec results
+        if: ${{ inputs.benchexec_url != '' }}
         run: unzip output.zip || true
 
       - name: Download witness results

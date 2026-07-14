@@ -455,15 +455,19 @@ static void offset_simplifier(expr2tc &e)
   simplify(e);
 }
 
-void goto_symext::intrinsic_memcpy(
-
+// Shared core for memcpy and memmove. The optimised path computes the new
+// destination value from the *current* (pre-assignment) bytes of both objects
+// and then assigns it, so overlapping regions are handled correctly — i.e. it
+// already has memmove semantics. memcpy and memmove therefore differ only in
+// the C fallback they bump to (@p bump_name) when the optimisation can't apply.
+void goto_symext::intrinsic_memcpy_impl(
   reachability_treet &art,
-  const code_function_call2t &func_call)
+  const code_function_call2t &func_call,
+  const std::string &bump_name)
 {
-  assert(func_call.operands.size() == 3 && "Wrong memcpy signature");
+  assert(func_call.operands.size() == 3 && "Wrong memcpy/memmove signature");
 
   using namespace std::string_literals;
-  const auto bump_name = "c:@F@__memcpy_impl"s;
 
   if (options.get_bool_option("no-simplify"))
   {
@@ -707,6 +711,410 @@ void goto_symext::intrinsic_memcpy(
   {
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, dst_arg), false, cur_state->guard);
+  }
+}
+
+void goto_symext::intrinsic_memcpy(
+  reachability_treet &art,
+  const code_function_call2t &func_call)
+{
+  intrinsic_memcpy_impl(art, func_call, "c:@F@__memcpy_impl");
+}
+
+void goto_symext::intrinsic_memmove(
+  reachability_treet &art,
+  const code_function_call2t &func_call)
+{
+  // memmove is byte-identical to memcpy in the optimised path (the new value
+  // is built from the current bytes of src/dst before assigning, so overlap is
+  // handled); only the C fallback differs.
+  intrinsic_memcpy_impl(art, func_call, "c:@F@__memmove_impl");
+}
+
+// Resolve @p ptr to a single concrete primitive object with a constant offset.
+// Returns false (caller should bump to the C loop) if the pointer is symbolic,
+// resolves to multiple objects, has a non-constant offset, or the n-byte read
+// would run past the object. On success fills @p object / @p offset.
+bool goto_symext::memcmp_resolve_operand(
+  const expr2tc &ptr,
+  unsigned long number_of_bytes,
+  expr2tc &object,
+  uint64_t &offset,
+  uint64_t &avail_bytes)
+{
+  internal_deref_items.clear();
+  expr2tc deref = dereference2tc(get_empty_type(), ptr);
+  dereference(deref, dereferencet::INTERNAL);
+
+  // Exactly one target object — a single concrete primitive region.
+  if (internal_deref_items.size() != 1)
+    return false;
+
+  dereference_callbackt::internal_item item = internal_deref_items.front();
+  cur_state->rename(item.object);
+  cur_state->rename(item.offset);
+  if (!item.object || !item.offset)
+    return false;
+
+  offset_simplifier(item.offset);
+  if (!is_constant_int2t(item.offset))
+    return false;
+  offset = to_constant_int2t(item.offset).value.to_uint64();
+
+  // Scalars and fixed-size arrays are byte-extractable. Structs/unions have a
+  // non-flat byte layout we don't model here, and code/empty types have no
+  // width — defer those to the C loop. (Dynamically/infinitely sized arrays
+  // throw from type_byte_size below and also fall back.)
+  const type2tc &t = item.object->type;
+  if (
+    is_struct_type(t) || is_union_type(t) || is_code_type(t) ||
+    is_empty_type(t))
+    return false;
+
+  uint64_t type_size;
+  try
+  {
+    type_size = type_byte_size(t).to_uint64();
+  }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+    return false;
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+    return false;
+  }
+
+  if (offset > type_size)
+    return false;
+  // For a constant length, require the read to fit; for a symbolic length the
+  // caller bounds the comparison by avail_bytes instead.
+  if (number_of_bytes != 0 && (type_size - offset) < number_of_bytes)
+    return false;
+
+  object = item.object;
+  avail_bytes = type_size - offset;
+  return true;
+}
+
+void goto_symext::intrinsic_memcmp(
+  reachability_treet &art,
+  const code_function_call2t &func_call)
+{
+  assert(func_call.operands.size() == 3 && "Wrong memcmp signature");
+
+  using namespace std::string_literals;
+  const auto bump_name = "c:@F@__memcmp_impl"s;
+
+  // --no-simplify keeps the literal C loop, matching memcpy/memset.
+  if (options.get_bool_option("no-simplify"))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  const execution_statet &ex_state = art.get_cur_state();
+  if (ex_state.cur_state->guard.is_false())
+    return;
+
+  expr2tc s1_arg = func_call.operands[0];
+  expr2tc s2_arg = func_call.operands[1];
+  expr2tc n_arg = func_call.operands[2];
+
+  expr2tc ret_ref = func_call.ret;
+  if (is_nil_expr(ret_ref))
+    return; // result unused; nothing to model
+
+  // Determine whether n is a known constant. A symbolic n is still handled
+  // below, by bounding the comparison with the (concrete) object widths and
+  // masking each byte position i with the predicate i < n.
+  cur_state->rename(n_arg);
+  if (!n_arg)
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+  simplify(n_arg);
+  const bool n_is_const = is_constant_int2t(n_arg);
+  const unsigned long const_n =
+    n_is_const ? to_constant_int2t(n_arg).as_ulong() : 0;
+
+  // n == 0 (constant): memcmp returns 0 without reading either pointer.
+  if (n_is_const && const_n == 0)
+  {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(
+      code_assign2tc(ret_ref, gen_zero(ret_ref->type)),
+      false,
+      cur_state->guard);
+    return;
+  }
+
+  // Resolve both operands to concrete primitive objects. For a constant n the
+  // resolver also checks the n-byte read is in bounds; for symbolic n it
+  // reports the available byte count, which we use as the static comparison
+  // bound.
+  expr2tc obj1, obj2;
+  uint64_t off1, off2, avail1, avail2;
+  const unsigned long want = n_is_const ? const_n : 0;
+  if (
+    !memcmp_resolve_operand(s1_arg, want, obj1, off1, avail1) ||
+    !memcmp_resolve_operand(s2_arg, want, obj2, off2, avail2))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  // Static byte bound for the unrolled comparison:
+  //   constant n -> exactly n bytes (already checked in bounds);
+  //   symbolic n -> min(avail1, avail2) bytes, with each position guarded by
+  //                 i < n so positions at/after n contribute nothing.
+  const uint64_t avail = std::min(avail1, avail2);
+  const uint64_t nbytes = n_is_const ? const_n : avail;
+
+  // Cap the unrolled width: a very large object would explode the ite chain.
+  // Beyond this, defer to the C loop (which --unwind bounds anyway).
+  static const uint64_t MAX_MEMCMP_UNROLL = 64;
+  if (nbytes > MAX_MEMCMP_UNROLL)
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  // Soundness for symbolic n: the unrolled comparison only examines the first
+  // `avail` bytes (the smaller object's remaining size). If n could exceed
+  // `avail`, the real memcmp would read past an object — an out-of-bounds
+  // access we must not silently drop. Claim n <= avail so that path is
+  // flagged as a dereference failure, exactly as the C loop's reads would be.
+  if (
+    !n_is_const && !options.get_bool_option("no-bounds-check") &&
+    !options.get_bool_option("no-pointer-check"))
+  {
+    expr2tc in_bounds =
+      lessthanequal2tc(n_arg, constant_int2tc(n_arg->type, BigInt(avail)));
+    guard2tc g = ex_state.cur_state->guard;
+    claim(
+      implies2tc(g.as_expr(), in_bounds),
+      "dereference failure: memcmp length exceeds object bounds");
+  }
+
+  // Build the lexicographic result as a nested ite over the byte reads, from
+  // the last byte backwards so the first differing byte dominates:
+  //   res = ite(active[0] && b1[0] != b2[0], (int)b1[0] - (int)b2[0],
+  //         ite(active[1] && ..., ..., 0))
+  // where active[i] is (i < n) for symbolic n, or always-true for constant n.
+  // No loop is emitted, so nothing unwinds.
+  const type2tc byte_t = get_uint_type(8);
+  const type2tc int_t = signedbv_type2tc(config.ansi_c.int_width);
+  const bool be = config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+  const type2tc n_t = n_arg->type;
+
+  expr2tc res = gen_zero(int_t);
+  for (long i = (long)nbytes - 1; i >= 0; --i)
+  {
+    expr2tc b1 =
+      byte_extract2tc(byte_t, obj1, gen_ulong(off1 + (uint64_t)i), be);
+    expr2tc b2 =
+      byte_extract2tc(byte_t, obj2, gen_ulong(off2 + (uint64_t)i), be);
+    expr2tc diff =
+      sub2tc(int_t, typecast2tc(int_t, b1), typecast2tc(int_t, b2));
+    expr2tc differs = notequal2tc(b1, b2);
+    if (!n_is_const)
+    {
+      // byte i is examined only when i < n
+      expr2tc within =
+        lessthan2tc(constant_int2tc(n_t, BigInt((uint64_t)i)), n_arg);
+      // also allow i == n boundary? memcmp compares indices [0, n), so i < n.
+      differs = and2tc(within, differs);
+    }
+    res = if2tc(int_t, differs, diff, res);
+  }
+
+  dereference(ret_ref, dereferencet::READ);
+  symex_assign(code_assign2tc(ret_ref, res), false, cur_state->guard);
+}
+
+/**
+ * @brief Intrinsic for C memchr.
+ *
+ * memchr(const void *buf, int ch, size_t n) scans the first n bytes of the
+ * object pointed to by buf for the first byte equal to (unsigned char)ch and
+ * returns a pointer to it, or NULL if no such byte appears in those n bytes.
+ *
+ * Instead of unwinding the operational-model loop (one branch per byte), we
+ * read the n candidate bytes with byte_extract and fold them into a single
+ * nested-ite pointer expression:
+ *
+ *   res = ite(byte[0] == ch, buf + 0,
+ *         ite(byte[1] == ch, buf + 1,
+ *         ...
+ *         ite(byte[n-1] == ch, buf + (n-1), NULL)))
+ *
+ * Building from the last position outward keeps the *first* match as the
+ * outermost selected arm. ch is symbolic-friendly (the comparison is encoded);
+ * only n must be a known constant. If the object/offset cannot be resolved to
+ * constants we bump to the __memchr_impl loop.
+ */
+void goto_symext::intrinsic_memchr(
+  reachability_treet &art,
+  const code_function_call2t &func_call)
+{
+  assert(func_call.operands.size() == 3 && "Wrong memchr signature");
+
+  using namespace std::string_literals;
+  const auto bump_name = "c:@F@__memchr_impl"s;
+
+  if (options.get_bool_option("no-simplify"))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  const execution_statet &ex_state = art.get_cur_state();
+  if (ex_state.cur_state->guard.is_false())
+    return;
+
+  expr2tc buf_arg = func_call.operands[0];
+  expr2tc ch_arg = func_call.operands[1];
+  expr2tc n_arg = func_call.operands[2];
+
+  cur_state->rename(ch_arg);
+  cur_state->rename(n_arg);
+  if (!ch_arg || !n_arg || is_symbol2t(n_arg))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  simplify(n_arg);
+  if (!is_constant_int2t(n_arg))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  const unsigned long number_of_bytes = to_constant_int2t(n_arg).as_ulong();
+
+  // Resolve the object(s) buf points to.
+  internal_deref_items.clear();
+  expr2tc deref = dereference2tc(get_empty_type(), buf_arg);
+  dereference(deref, dereferencet::INTERNAL);
+
+  if (!internal_deref_items.size())
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  std::list<dereference_callbackt::internal_item> buf_items;
+  buf_items.splice(buf_items.end(), internal_deref_items);
+
+  const bool is_big_endian =
+    (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+
+  expr2tc ret_ref = func_call.ret;
+  if (is_nil_expr(ret_ref))
+    return;
+
+  const type2tc ret_type = ret_ref->type;
+  const expr2tc null_result = symbol2tc(ret_type, "NULL");
+
+  // Byte value to search for: (unsigned char)ch.
+  const expr2tc ch_byte = typecast2tc(get_uint_type(8), ch_arg);
+
+  for (auto &item : buf_items)
+  {
+    guard2tc guard = ex_state.cur_state->guard;
+    guard.add(item.guard);
+
+    expr2tc item_object = item.object;
+    expr2tc item_offset = item.offset;
+    cur_state->rename(item_object);
+    cur_state->rename(item_offset);
+
+    if (!item_object || !item_offset)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    offset_simplifier(item_offset);
+    if (!is_constant_int2t(item_offset))
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    const uint64_t number_of_offset =
+      to_constant_int2t(item_offset).value.to_uint64();
+
+    if (is_code_type(item_object->type))
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    uint64_t type_size;
+    try
+    {
+      type_size = type_byte_size(item_object->type).to_uint64();
+    }
+    catch (const array_type2t::dyn_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+    catch (const array_type2t::inf_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    // Reading the first n bytes must stay within the object.
+    const bool is_out_bounds =
+      (number_of_offset > type_size) ||
+      ((type_size - number_of_offset) < number_of_bytes);
+    if (
+      is_out_bounds && !options.get_bool_option("no-pointer-check") &&
+      !options.get_bool_option("no-bounds-check"))
+    {
+      std::string error_msg = fmt::format(
+        "dereference failure on memchr: reading memory segment of size {} with "
+        "{} bytes",
+        type_size - number_of_offset,
+        number_of_bytes);
+      expr2tc check = implies2tc(item.guard, gen_false_expr());
+      claim(check, error_msg);
+      continue;
+    }
+
+    // Fold the n candidate bytes into a nested-ite pointer, from the last
+    // position outward so the first match wins.
+    expr2tc result = null_result;
+    for (unsigned long k = number_of_bytes; k-- > 0;)
+    {
+      expr2tc byte = byte_extract2tc(
+        get_uint_type(8),
+        item_object,
+        gen_ulong(number_of_offset + k),
+        is_big_endian);
+      expr2tc match = equality2tc(byte, ch_byte);
+      expr2tc hit = add2tc(ret_type, buf_arg, gen_ulong(k));
+      result = if2tc(ret_type, match, hit, result);
+    }
+
+    symex_assign(code_assign2tc(ret_ref, result), false, guard);
+  }
+
+  // C11/C17 7.24.5.1: with n == 0 no bytes are examined, so buf is never
+  // dereferenced and need not be valid. The __memchr_impl model agrees
+  // (its loop is `while (n && ...)`). Only claim non-NULL when n > 0.
+  if (number_of_bytes != 0 && !options.get_bool_option("no-pointer-check"))
+  {
+    expr2tc null_sym = symbol2tc(buf_arg->type, "NULL");
+    expr2tc null_check = not2tc(same_object2tc(buf_arg, null_sym));
+    ex_state.cur_state->guard.guard_expr(null_check);
+    claim(null_check, " dereference failure: NULL pointer on memchr");
   }
 }
 

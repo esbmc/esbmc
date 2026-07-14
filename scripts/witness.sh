@@ -25,6 +25,7 @@ setup () {
     elif [ "$VALIDATOR" = "ESBMC" ]; then
         cp esbmc-src/scripts/competitions/svcomp/witness/esbmc-violation-v2.xml $HOME/esbmc-violation-v2.xml
         cp esbmc-src/scripts/competitions/svcomp/witness/esbmc-correctness-v2.xml $HOME/esbmc-correctness-v2.xml
+        export PYTHONPATH="$(pwd)/esbmc-src/scripts/competitions/svcomp/witness${PYTHONPATH:+:$PYTHONPATH}"
         # ESBMC binary and esbmc-wrapper.py already in $HOME/output-action/ from benchexec.sh
         cd $HOME/output-action
         cp $HOME/esbmc-violation-v2.xml .

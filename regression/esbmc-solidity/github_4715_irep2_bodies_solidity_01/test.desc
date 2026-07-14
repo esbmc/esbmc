@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract AbiDecodeBound --unwind 1 --no-unwinding-assertions --no-standard-checks --irep2-bodies
+^VERIFICATION SUCCESSFUL$

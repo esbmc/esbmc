@@ -6,9 +6,11 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 
@@ -59,19 +61,31 @@ exprt python_converter::make_enum_member_struct_expr(
   const symbolt *str_sym = symbol_table_.find_symbol(str_id);
   assert(str_sym);
 
-  // Build struct_exprt { value: int_sym, name: &str_sym[0] }
-  struct_exprt struct_val(st);
-
-  // value component: the integer value of the enum member
-  struct_val.operands().push_back(symbol_expr(int_sym));
-
-  // name component: char* pointer to the first element of the name string
+  // name component: char* pointer to the first element of the name string,
+  // &str_sym[0]. str_sym is a static char-array symbol, so the index source is
+  // array-typed.
   exprt str_expr = symbol_expr(*str_sym);
   exprt zero_idx = from_integer(0, index_type());
-  exprt name_ptr = address_of_exprt(index_exprt(str_expr, zero_idx));
+  expr2tc se2, zi2;
+  migrate_expr(str_expr, se2);
+  migrate_expr(zero_idx, zi2);
+  expr2tc idx2 = index2tc(migrate_type(str_expr.type().subtype()), se2, zi2);
+  exprt name_ptr = migrate_expr_back(address_of2tc(idx2->type, idx2));
   name_ptr.type() = gen_pointer_type(char_type());
-  struct_val.operands().push_back(name_ptr);
 
+  // V.3: assemble the enum member struct { value, name } in IREP2 and
+  // back-migrate once. Both members are already-built value exprs (the member's
+  // integer value symbol and the char* name pointer), so migrating them
+  // round-trips exactly. Re-attach the struct type afterwards: migrate_type does
+  // not carry the frontend struct's component attributes.
+  expr2tc value_member, name_member;
+  migrate_expr(symbol_expr(int_sym), value_member);
+  migrate_expr(name_ptr, name_member);
+
+  std::vector<expr2tc> members{std::move(value_member), std::move(name_member)};
+  exprt struct_val =
+    migrate_expr_back(constant_struct2tc(migrate_type(st), members));
+  struct_val.type() = st;
   return struct_val;
 }
 
@@ -106,21 +120,25 @@ exprt python_converter::create_member_expression(
 {
   typet clean_type = clean_attribute_type(attr_type);
   exprt source = symbol_exprt(symbol.id, symbol.get_type());
-  if (source.type().is_pointer())
-  {
-    exprt deref("dereference");
-    deref.type() = source.type().subtype();
-    deref.move_to_operands(source);
-    source = std::move(deref);
-  }
+
+  // V.3: build the (optional) pointer dereference and the member access in
+  // IREP2, back-migrated once at the legacy seam. Building dereference2tc
+  // directly is byte-identical to migrating a staged legacy "dereference"
+  // node, and avoids the extra round-trip.
+  expr2tc s2;
+  migrate_expr(source, s2);
   typet source_type = source.type();
+  if (source_type.is_pointer())
+  {
+    source_type = source_type.subtype();
+    s2 = dereference2tc(migrate_type(source_type), s2);
+  }
   if (source_type.id() == "symbol")
     source_type = ns.follow(source_type);
   if (!source_type.is_struct() && !source_type.is_union())
     return gen_zero(clean_type);
 
-  member_exprt member_expr(source, attr_name, clean_type);
-  return member_expr;
+  return migrate_expr_back(member2tc(migrate_type(clean_type), s2, attr_name));
 }
 
 // Register instance attribute in maps
@@ -337,11 +355,55 @@ typet python_converter::infer_attr_type_from_usage(
   if (!unset(t))
     return t;
 
+  // Cross-module inference sources. A class and the code that constructs it can
+  // live in different modules: e.g. `Node` is defined in node.py while the calls
+  // `n2 = Node(2, n1)` are in the importing main.py. The struct type is built
+  // while converting the *defining* module, where the call sites are not the
+  // current module_body. Gather every reachable module body — the entry module
+  // (entry_ast_), every imported module (module_ast_pool_), and the current
+  // module — deduplicated by address, so both the class definition and its
+  // constructor call sites are visible regardless of which module is current.
+  // Without this, an imported class's __init__-parameter attributes stay
+  // any_type() and nested reads inside functions abort ("Cannot resolve nested
+  // attribute"), e.g. quixbugs detect_cycle's `node.successor.successor`.
+  std::vector<const nlohmann::json *> module_bodies;
+  auto add_body = [&](const nlohmann::json &mod) {
+    if (!mod.is_object() || !mod.contains("body") || !mod["body"].is_array())
+      return;
+    const nlohmann::json *b = &mod["body"];
+    for (const auto *seen : module_bodies)
+      if (seen == b)
+        return;
+    module_bodies.push_back(b);
+  };
+  add_body(*ast_json);
+  if (entry_ast_)
+    add_body(*entry_ast_);
+  for (const auto &kv : module_ast_pool_)
+    add_body(kv.second);
+
+  // Locate the class definition across all reachable modules. Accept only an
+  // unambiguous single definition; if two modules define the same class name,
+  // don't guess (return null → attribute falls back to any_type()).
+  auto resolve_class_def = [&]() -> nlohmann::json {
+    nlohmann::json found;
+    for (const auto *b : module_bodies)
+    {
+      nlohmann::json c = json_utils::find_class(*b, class_name);
+      if (c.is_null())
+        continue;
+      if (!found.is_null() && found != c)
+        return nlohmann::json(); // defined in 2+ modules — don't guess
+      found = std::move(c);
+    }
+    return found;
+  };
+
   // Fallback: `self.<attr> = <rhs>` inside the class's own methods. Unify
   // across all methods so that two methods assigning different classes to
   // the same attribute fall back to any_type() rather than returning
   // whichever is encountered first.
-  const auto &cls_node = json_utils::find_class(module_body, class_name);
+  const nlohmann::json cls_node = resolve_class_def();
   if (!cls_node.is_null() && cls_node.contains("body"))
   {
     typet unified;
@@ -432,38 +494,48 @@ typet python_converter::infer_attr_type_from_usage(
           }
         }
       }
-      // 4. Scan module-level constructor calls and unify arg-K's type.
+      // 4. Scan top-level constructor calls across every reachable module and
+      // unify arg-K's type. A call's Name arguments (e.g. `n1` in
+      // `Node(2, n1)`) resolve against the var-map of the module the call lives
+      // in, so rebuild var_to_class per body before scanning it.
       if (param_idx >= 0)
       {
         typet ctor_unified;
-        for (const auto &stmt : module_body)
+        for (const auto *b : module_bodies)
         {
-          auto [t, v] = tgt_val(stmt);
-          if (!v || !v->is_object() || v->value("_type", "") != "Call")
-            continue;
-          const auto &f = (*v)["func"];
-          if (
-            !f.is_object() || f.value("_type", "") != "Name" ||
-            f.value("id", "") != class_name)
-            continue;
-          if (!v->contains("args") || !(*v)["args"].is_array())
-            continue;
-          const auto &call_args = (*v)["args"];
-          if (param_idx >= static_cast<int>(call_args.size()))
-            continue;
-          typet arg_t = infer_rhs(call_args[param_idx]);
-          if (unset(arg_t))
-            continue;
-          if (unset(ctor_unified))
-            ctor_unified = arg_t;
-          else if (ctor_unified != arg_t)
-            return typet();
+          populate_var_map(*b);
+          for (const auto &stmt : *b)
+          {
+            auto [t, v] = tgt_val(stmt);
+            if (!v || !v->is_object() || v->value("_type", "") != "Call")
+              continue;
+            const auto &f = (*v)["func"];
+            if (
+              !f.is_object() || f.value("_type", "") != "Name" ||
+              f.value("id", "") != class_name)
+              continue;
+            if (!v->contains("args") || !(*v)["args"].is_array())
+              continue;
+            const auto &call_args = (*v)["args"];
+            if (param_idx >= static_cast<int>(call_args.size()))
+              continue;
+            typet arg_t = infer_rhs(call_args[param_idx]);
+            if (unset(arg_t))
+              continue;
+            if (unset(ctor_unified))
+              ctor_unified = arg_t;
+            else if (ctor_unified != arg_t)
+              return typet();
+          }
         }
         if (!unset(ctor_unified))
           return ctor_unified;
       }
     }
   }
+  // Note: var_to_class now reflects the last body scanned above. The only
+  // remaining consumer (the function-local fallback) re-populates it per
+  // function, so this leftover state is never observed.
 
   // Fallback: `<local>.<attr> = <rhs>` inside an ordinary top-level function,
   // where `<local>` is a function-local instance of class_name (e.g.
@@ -672,6 +744,22 @@ void python_converter::get_attributes_from_self(
             infer_tuple_struct_from_value(stmt["value"], param_annotations);
         if (type.is_nil() || type.is_empty())
           type = type_handler_.get_typet(annotated_type);
+      }
+      else if (annotated_type == "Any")
+      {
+        // An `Any`-typed attribute carries no static shape, so a later nested
+        // read (`obj.attr.field`) cannot resolve. The per-module annotator
+        // assigns `Any` to a `self.x = <param-defaulting-to-None>` attribute of
+        // an *imported* class (the entry module's annotator would have written
+        // `NoneType` and gone through the usage-inference path below). Recover
+        // the same way: if every construction/assignment of this attribute
+        // across all reachable modules agrees on one class, adopt it; on any
+        // conflict infer_attr_type_from_usage returns unset and we keep Any.
+        typet from_usage =
+          infer_attr_type_from_usage(current_class_name_, attr_name);
+        type = (from_usage.id().as_string().empty() || from_usage.is_nil())
+                 ? type_handler_.get_typet(annotated_type)
+                 : from_usage;
       }
       else
       {

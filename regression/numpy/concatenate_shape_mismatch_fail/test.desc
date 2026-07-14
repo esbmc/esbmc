@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy.concatenate\(\) only supports axis=0

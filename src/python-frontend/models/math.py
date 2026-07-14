@@ -40,6 +40,10 @@ def __ESBMC_atanh(x: float) -> float:
     ...
 
 
+def __ESBMC_trunc(x: float) -> float:
+    ...
+
+
 def __ESBMC_hypot(x: float, y: float) -> float:
     ...
 
@@ -502,7 +506,7 @@ def modf(x: float) -> tuple[float, float]:
     """
     Split x into fractional and integer parts
     """
-    int_part: float = float(int(x))
+    int_part: float = __ESBMC_trunc(x)
     frac_part: float = x - int_part
     return (frac_part, int_part)
 
@@ -622,7 +626,6 @@ def gamma(x: float) -> float:
     Calculate the gamma function of x.
     For positive integers x, this function satisfies gamma(x) = (x - 1)!.
     """
-    pi_const: float = 3.14153
     if x == int(x):
         xi: int = int(x)
         if xi <= 0:
@@ -643,7 +646,7 @@ def gamma(x: float) -> float:
     a: float = _lanczos_sum(z)
 
     t: float = z + 7.0 + 0.5
-    return sqrt(2.0 * pi_const) * pow(t, z + 0.5) * exp(0.0 - t) * a
+    return sqrt(2.0 * pi) * pow(t, z + 0.5) * exp(0.0 - t) * a
 
 
 def ldexp(x: float, i: int) -> float:
@@ -659,7 +662,6 @@ def lgamma(x: float) -> float:
     """
     Calculate the natural logarithm of the absolute value of the gamma function
     """
-    pi_const: float = 3.14153
     if x == int(x):
         xi: int = int(x)
         if xi <= 0:
@@ -678,7 +680,7 @@ def lgamma(x: float) -> float:
     a: float = _lanczos_sum(z)
 
     t: float = z + 7.0 + 0.5
-    return 0.5 * log(2.0 * pi_const) + (z + 0.5) * log(t) - t + log(a)
+    return 0.5 * log(2.0 * pi) + (z + 0.5) * log(t) - t + log(a)
 
 
 def remainder(x: float, y: float) -> float:

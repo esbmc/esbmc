@@ -12,10 +12,6 @@ target_include_directories(filesystem
     )
 target_link_libraries(filesystem PUBLIC ${Boost_LIBRARIES})
 
-add_library(crypto_hash crypto_hash.cpp)
-target_include_directories(crypto_hash PUBLIC ${Boost_INCLUDE_DIRS})
-target_link_libraries(crypto_hash PUBLIC ${Boost_LIBRARIES})
-
 add_library(string_pool string_pool.cpp)
 
 add_library(usr_utils usr_utils.cpp)
@@ -39,6 +35,7 @@ add_library(util_esbmc xml_irep.cpp xml.cpp
         string_constant.cpp c_types.cpp python_types.cpp ieee_float.cpp c_qualifiers.cpp
         c_sizeof.cpp c_link.cpp c_typecast.cpp fix_symbol.cpp
         c_expr2string.cpp cpp_expr2string.cpp type2name.cpp
+        exception_specification.cpp
         message.cpp encoding.cpp expr.cpp irep.cpp type.cpp yaml_parser.cpp
         )
 

@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction --max-inductive-step 3 --force-malloc-success --no-bounds-check
+^VERIFICATION SUCCESSFUL$
+does not support loops that write array elements through a pointer

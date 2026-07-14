@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: max\(\) with multiple non-numeric arguments is not supported

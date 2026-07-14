@@ -1,8 +1,14 @@
 name: Upload Release Asset
 on:
   schedule:
-    #      M H - - D => 06:00 of Monday 
+    #      M H - - D => 06:00 of Monday
   - cron: '0 6 * * 1'
+  push:
+    # Stable releases: tag the commit (e.g. v8.4) and this same pipeline
+    # publishes the canonical esbmc-{linux,windows,macos}.zip assets to that
+    # tag as a draft for a maintainer to review and publish.
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -22,6 +28,21 @@ jobs:
       operating-system: ${{ matrix.os }}
       build-flags: ${{ matrix.flags }}
       testing: false
+      canon-names: true
+
+  build-linux-arm64:
+    name: Homebrew compatibility check (Linux ARM64, LLVM 22)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install LLVM 22
+        run: |
+          wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update
+          sudo apt-get install -y llvm-22 clang-22 libclang-22-dev libclang-cpp22-dev
+      - name: Build ESBMC
+        run: ./scripts/build.sh -b RelWithDebInfo -S OFF -c 22 -e OFF
 
   build-info:
     uses: ./.github/workflows/build-info.yml
@@ -31,27 +52,23 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [build, build-info]
     steps:
+      # The build jobs run with canon-names: true, so each platform already
+      # uploaded its canonical esbmc-<platform>.zip; just fetch and attach them.
       - name: Download Linux Build
         uses: actions/download-artifact@v8
         with:
-          name: 'release-ubuntu-24.04--b RelWithDebInfo -e OFF'
-          path: ./linux-release
-      - name: Create Linux Release file
-        run: zip -r esbmc-linux.zip ./linux-release
+          name: esbmc-linux
+          path: .
       - name: Download Windows Build
         uses: actions/download-artifact@v8
         with:
-          name: release-windows-latest
-          path: ./windows-release
-      - name: Create Windows Release file
-        run: zip -r esbmc-windows.zip ./windows-release
+          name: esbmc-windows
+          path: .
       - name: Download macOS Build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
-          name: 'release-macos-latest--b RelWithDebInfo -e OFF -c 21'
-          path: ./macos-release
-      - name: Create macOS Release file
-        run: zip -r esbmc-macos.zip ./macos-release
+          name: esbmc-macos
+          path: .
       - name: Download Info Manual
         uses: actions/download-artifact@v8
         with:
@@ -62,11 +79,18 @@ jobs:
       - name: Do the release
         uses: softprops/action-gh-release@v3
         with:
-          name: 'ESBMC Weekly Pre-release'
-          body: 'This is an automated weekly pre-release of ESBMC. Please report any bugs to our [Issues](https://github.com/esbmc/esbmc/issues) tracking page.'
-          tag_name: weekly
+          # On a v* tag this is a stable release named after the tag; otherwise
+          # it is the rolling weekly pre-release. Both publish the same canonical
+          # asset names, so the website's releases/latest/download/esbmc-*.zip
+          # links keep resolving across stable releases.
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && format('ESBMC {0}', github.ref_name) || 'ESBMC Weekly Pre-release' }}
+          body: ${{ startsWith(github.ref, 'refs/tags/v') && format('ESBMC {0} stable release.', github.ref_name) || 'This is an automated weekly pre-release of ESBMC. Please report any bugs to our [Issues](https://github.com/esbmc/esbmc/issues) tracking page.' }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'weekly' }}
           target_commitish: ${{ github.sha }}
-          prerelease: true
+          # Stable releases are created as drafts so a maintainer reviews the
+          # notes and assets before publishing; the weekly stays a live pre-release.
+          draft: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
           files: |
             esbmc-linux.zip
             esbmc-windows.zip

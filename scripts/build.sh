@@ -46,12 +46,11 @@ COMPILER_ENV=()
 
 STATIC=""
 COVERAGE=OFF
-CLANG_VERSION=16
-MIN_MACOS_CLANG_VERSION=17
-
-if [[ "$OS" == "Darwin" ]]; then
-  CLANG_VERSION="$MIN_MACOS_CLANG_VERSION"
-fi
+# ESBMC uses Clang-18 APIs (e.g. isExplicitObjectMemberFunction); 18 is the
+# minimum supported toolchain on every platform (mirrors
+# MIN_SUPPORTED_LLVM_VERSION_MAJOR in CMakeLists.txt).
+MIN_CLANG_VERSION=18
+CLANG_VERSION="$MIN_CLANG_VERSION"
 
 GMP_VERSION="6.3.0"
 GMP_TARBALL="gmp-${GMP_VERSION}.tar.xz"
@@ -77,8 +76,8 @@ validate_clang_version() {
     error "invalid clang version '$CLANG_VERSION': expected numeric major version"
   fi
 
-  if [[ "$OS" == "Darwin" ]] && (( CLANG_VERSION < MIN_MACOS_CLANG_VERSION )); then
-    error "macOS requires llvm/clang >= ${MIN_MACOS_CLANG_VERSION}; got $CLANG_VERSION"
+  if (( CLANG_VERSION < MIN_CLANG_VERSION )); then
+    error "ESBMC requires llvm/clang >= ${MIN_CLANG_VERSION}; got $CLANG_VERSION"
   fi
 }
 
@@ -194,6 +193,7 @@ prepare_platform_config() {
           "-DENABLE_GOTO_CONTRACTOR=OFF"
           "-DENABLE_CVC5=Off"
         )
+        BASE_ARGS+=("-DENABLE_BUNDLE_LIBC_32BIT=OFF")
       fi
       ;;
 
@@ -257,6 +257,7 @@ collect_ubuntu_packages() {
     default-jdk
     tar
     xz-utils
+    z3
   )
 
   if [[ "$ARCH" != "aarch64" ]]; then
@@ -413,7 +414,7 @@ install_gmp_linux() {
 
 install_python_deps_linux() {
   log "Installing Python dependencies"
-  python3 -m pip install --user meson ast2json mypy pyparsing toml tomli
+  python3 -m pip install --user --break-system-packages meson mypy pyparsing toml tomli pytest hypothesis
   meson --version
 }
 
@@ -435,9 +436,9 @@ install_python_deps_macos() {
   export PATH="$py312_bin:$HOME/Library/Python/3.12/bin:$PATH"
 
   if [[ -n "${VIRTUAL_ENV:-}" ]]; then
-    pip install meson ast2json mypy pyparsing toml tomli
+    pip install meson mypy pyparsing toml tomli pytest hypothesis
   else
-    "$py312" -m pip install --user --break-system-packages meson ast2json mypy pyparsing toml tomli
+    "$py312" -m pip install --user --break-system-packages meson mypy pyparsing toml tomli pytest hypothesis
   fi
 
   meson --version
@@ -453,11 +454,21 @@ run_fetch() {
 
   case "$OS" in
     Linux)
-      run_with_sudo apt-get update
+      # 'apt-get update' is best-effort: CI runners ship third-party repos
+      # (e.g. packages.microsoft.com azure-cli/prod) that ESBMC never needs but
+      # that intermittently serve a malformed InRelease ("NOSPLIT"), making
+      # apt-get exit 100 and abort the build under 'set -e'. The Ubuntu repos we
+      # actually depend on still refresh; a genuinely missing package fails
+      # loudly at 'apt-get install' below, so continuing here is safe.
+      run_with_sudo apt-get update || log "warning: 'apt-get update' failed; continuing with cached indices"
       fetch_gmp_source
       ;;
     Darwin)
-      brew update
+      # 'brew update' refreshes formula definitions but is best-effort: a
+      # transient tap fetch failure ("Error: Failed to download") must not abort
+      # the build under 'bash -e'. Subsequent 'brew install' resolves formulae
+      # via the Homebrew API regardless, so a stale tap is harmless here.
+      brew update || log "warning: 'brew update' failed; continuing"
       ;;
     *)
       error "unsupported OS '$OS'"
@@ -545,7 +556,7 @@ Options [defaults]:
   -r ON|OFF  enable/disable 'benchbringup' [OFF]
   -d         enable debug output for this script and c2goto
   -S ON|OFF  enable/disable static build [ON for Ubuntu, OFF for macOS]
-  -c VERS    use packaged clang-VERS [16 on Linux, >=17 required on macOS]
+  -c VERS    use packaged clang-VERS [default 18; >=18 required on all platforms]
   -C         build an SV-COMP version [disabled]
   -B ON|OFF  enable/disable esbmc bundled libc [ON]
   -x ON|OFF  enable/disable esbmc cheri [OFF]
@@ -600,7 +611,8 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
       CLANG_VERSION="$OPTARG"
       ;;
     C)
-      BASE_ARGS+=("-DESBMC_SVCOMP=ON")
+      # SV-COMP behaviour is now a runtime flag (--sv-comp, set by the
+      # competition wrapper), so this only selects the competition solver set.
       SOLVER_FLAGS=(
         "-DENABLE_BOOLECTOR=On"
         "-DENABLE_YICES=On"

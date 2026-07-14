@@ -851,16 +851,18 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     if (is_symbol2t(expr))
     {
       const symbolt *sym = ns.lookup(to_symbol2t(expr).thename);
-      assert(sym);
-      const irept &a = sym->get_type().find("alignment");
-      if (a.is_not_nil())
+      if (sym != nullptr)
       {
-        assert(a.is_constant());
-        irep_idt v = static_cast<const exprt &>(a).value();
-        BigInt V = binary2integer(v.as_string(), false);
-        assert(V.is_positive());
-        assert(V <= UINT_MAX);
-        obj.offset_alignment = V.to_uint64();
+        const irept &a = sym->get_type().find("alignment");
+        if (a.is_not_nil())
+        {
+          assert(a.is_constant());
+          irep_idt v = static_cast<const exprt &>(a).value();
+          BigInt V = binary2integer(v.as_string(), false);
+          assert(V.is_positive());
+          assert(V <= UINT_MAX);
+          obj.offset_alignment = V.to_uint64();
+        }
       }
     }
 
@@ -1096,8 +1098,9 @@ void value_sett::assign(
     return;
   }
 
-  // Must have concrete type.
-  assert(!is_symbol_type(lhs));
+  // Symbol (template) types have no concrete memory layout; skip silently.
+  if (is_symbol_type(lhs))
+    return;
   const type2tc &lhs_type = lhs->type;
 
   if (is_struct_type(lhs_type) || is_union_type(lhs_type))
@@ -1139,6 +1142,16 @@ void value_sett::assign(
 
       // ignore methods
       if (is_code_type(subtype))
+        continue;
+
+      // The rhs may carry a member that the lhs type does not have — e.g. a
+      // class-specific vtable-pointer component present in only one of two
+      // structurally-related struct declarations (a subclass/superclass pair,
+      // or the same tag declared across translation units). There is no
+      // storage on the lhs to assign into, so skip it rather than building an
+      // ill-formed member access (which trips a member2t component-lookup
+      // assertion and, in release builds, yields a malformed expression).
+      if (!struct_union_get_component_number(lhs_type, name).has_value())
         continue;
 
       expr2tc lhs_member = member2tc(subtype, lhs, name);

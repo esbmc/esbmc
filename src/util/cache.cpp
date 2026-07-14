@@ -1,7 +1,6 @@
 #include <util/cache.h>
 #include <util/message.h>
 #include <utility>
-#include <util/crypto_hash.h>
 
 void assertion_cache::run_on_assert(symex_target_equationt::SSA_stept &step)
 {

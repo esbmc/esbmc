@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <sstream>
 #include <utility>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <util/message/format.h>
 #include <util/type_byte_size.h>
 
@@ -30,59 +30,73 @@
  *  map a pointer to its integer representation, and back again.
  */
 
-smt_astt smt_convt::convert_ptr_cmp(
+smt_astt smt_solver_baset::convert_ptr_cmp(
   const expr2tc &side1,
   const expr2tc &side2,
   const expr2tc &templ_expr)
 {
   // Special handling for pointer comparisons (both ops are pointers; otherwise
-  // it's obviously broken).
+  // it's obviously broken). Only the relational operators are lowered here;
+  // pointer (in)equality is handled on the equality path of convert_ast, which
+  // compares the full (object, offset) representation directly, so it never
+  // reaches this function.
   assert(is_pointer_type(side1));
   assert(is_pointer_type(side2));
   assert(is_comp_expr(templ_expr));
 
-  /* Compare just the offsets. This is compatible with both C and CHERI-C,
-   * because we already asserted that they point to the same object (unless
-   * --no-pointer-relation-check was specified, in which case the user opted
-   * out of sanity anyway). */
-
-  /* Create a copy of the expression and replace both sides with the respective
-   * typecasted-to-unsigned versions of the offsets. The unsigned comparison is
-   * required because objects could be larger than half the address space, in
-   * which case offsets could flip sign. */
+  /* Compare the (object, offset) pairs lexicographically. Within one object
+   * this is the offset comparison C defines for related pointers, compatible
+   * with both C and CHERI-C. Across objects — reachable only when the
+   * same-object assertion is disabled — it yields an arbitrary but consistent
+   * total order, so the algebraic properties of the operator (e.g.
+   * antisymmetry of <=) still hold; comparing only the offsets would let
+   * p<=q and q<=p be satisfied simultaneously for distinct objects.
+   *
+   * The offsets are typecast to unsigned for the comparison because objects
+   * could be larger than half the address space, in which case offsets could
+   * flip sign. */
   type2tc type = get_uint_type(config.ansi_c.address_width);
   type2tc stype = get_int_type(config.ansi_c.address_width);
+  expr2tc o1 = pointer_object2tc(type, side1);
+  expr2tc o2 = pointer_object2tc(type, side2);
   expr2tc s1 = typecast2tc(type, pointer_offset2tc(stype, side1));
   expr2tc s2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  expr2tc same_obj = equality2tc(o1, o2);
+
+  // Lexicographic step: the object ids decide the order; on a tie the offsets
+  // break it. The object comparison is always strict — equal objects fall
+  // through to the offset comparator, which carries the operator's own
+  // strictness (< vs <=). Encoding this once keeps the four operators
+  // consistent.
+  auto lex = [&](const expr2tc &obj_cmp, const expr2tc &off_cmp) {
+    return or2tc(obj_cmp, and2tc(same_obj, off_cmp));
+  };
+
   expr2tc op;
   switch (templ_expr->expr_id)
   {
-  case expr2t::equality_id:
-    op = equality2tc(s1, s2);
-    break;
-  case expr2t::notequal_id:
-    op = notequal2tc(s1, s2);
-    break;
   case expr2t::lessthan_id:
-    op = lessthan2tc(s1, s2);
+    op = lex(lessthan2tc(o1, o2), lessthan2tc(s1, s2));
     break;
   case expr2t::greaterthan_id:
-    op = greaterthan2tc(s1, s2);
+    op = lex(greaterthan2tc(o1, o2), greaterthan2tc(s1, s2));
     break;
   case expr2t::lessthanequal_id:
-    op = lessthanequal2tc(s1, s2);
+    op = lex(lessthan2tc(o1, o2), lessthanequal2tc(s1, s2));
     break;
   case expr2t::greaterthanequal_id:
-    op = greaterthanequal2tc(s1, s2);
+    op = lex(greaterthan2tc(o1, o2), greaterthanequal2tc(s1, s2));
     break;
   default:
+    // equality/notequal never reach here (see above).
     std::unreachable();
   }
   return convert_ast(op);
 }
 
-smt_astt
-smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
+smt_astt smt_solver_baset::convert_pointer_arith(
+  const expr2tc &expr,
+  const type2tc &type)
 {
   const expr2tc &side1 = *expr->get_sub_expr(0);
   const expr2tc &side2 = *expr->get_sub_expr(1);
@@ -228,7 +242,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
   abort();
 }
 
-void smt_convt::renumber_symbol_address(
+void smt_solver_baset::renumber_symbol_address(
   const expr2tc &guard,
   const expr2tc &addr_symbol,
   const expr2tc &new_size)
@@ -268,7 +282,7 @@ void smt_convt::renumber_symbol_address(
   }
 }
 
-smt_astt smt_convt::convert_identifier_pointer(
+smt_astt smt_solver_baset::convert_identifier_pointer(
   const expr2tc &expr,
   const std::string &symbol,
   const typet *type)
@@ -353,7 +367,7 @@ smt_astt smt_convt::convert_identifier_pointer(
   return a;
 }
 
-smt_astt smt_convt::init_pointer_obj(
+smt_astt smt_solver_baset::init_pointer_obj(
   unsigned int obj_num,
   const expr2tc &size,
   const typet *type)
@@ -443,7 +457,7 @@ smt_astt smt_convt::init_pointer_obj(
   return ptr_val;
 }
 
-void smt_convt::finalize_pointer_chain(unsigned int objnum)
+void smt_solver_baset::finalize_pointer_chain(unsigned int objnum)
 {
   type2tc inttype = ptraddr_type2();
   unsigned int num_ptrs = addr_space_data.back().size();
@@ -512,7 +526,7 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
   }
 }
 
-smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_addr_of(const expr2tc &expr)
 {
   const address_of2t &obj = to_address_of2t(expr);
 
@@ -596,7 +610,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   abort();
 }
 
-void smt_convt::init_addr_space_array()
+void smt_solver_baset::init_addr_space_array()
 {
   addr_space_sym_num.back() = 1;
 
@@ -663,7 +677,9 @@ void smt_convt::init_addr_space_array()
   addr_space_data.back()[1] = 0;
 }
 
-void smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
+void smt_solver_baset::bump_addrspace_array(
+  unsigned int idx,
+  const expr2tc &val)
 {
   expr2tc oldname = symbol2tc(
     addr_space_arr_type,
@@ -679,7 +695,7 @@ void smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
   convert_assign(equality2tc(newname, store));
 }
 
-std::string smt_convt::get_cur_addrspace_ident()
+std::string smt_solver_baset::get_cur_addrspace_ident()
 {
   std::stringstream ss;
   ss << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();

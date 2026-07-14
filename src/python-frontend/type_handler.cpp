@@ -2,6 +2,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/tuple_handler.h>
 #include <python-frontend/python_typechecking.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
@@ -209,6 +210,14 @@ std::string type_handler::get_python_type_name(const typet &t) const
     return "int";
   if ((t.is_array() || t.is_pointer()) && t.subtype() == char_type())
     return "str";
+
+  // Internal model aggregates know their Python kind; without this a tuple
+  // would be named by its struct tag (GitHub #5936).
+  const typet resolved = (t.id() == "symbol") ? converter_.ns.follow(t) : t;
+  const irep_idt kind = python_aggregate_kind(resolved);
+  if (kind == "tuple" || kind == "dict")
+    return kind.as_string();
+
   if (t.id() == "symbol")
   {
     std::string tag = t.get_string("identifier");
@@ -553,6 +562,14 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return build_array(long_long_int_type(), type_size);
   }
 
+  // bytearray — the mutable counterpart of bytes — is not modeled. Reject it
+  // with a clean diagnostic: the unsupported-type fall-through below returns an
+  // empty_typet() that later crashes symex with an uncaught
+  // type2t::symbolic_type_excp (SIGABRT) on item assignment / bytearray(n).
+  if (ast_type == "bytearray")
+    throw std::runtime_error(
+      "bytearray is not supported; use bytes for an immutable byte sequence");
+
   // divmod() — returns tuple of (quotient, remainder)
   // The return type is determined dynamically based on operands
   // Let handle_divmod create the proper type
@@ -573,11 +590,12 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
 
   // str/string: immutable sequences of Unicode characters
   // chr(): returns a 1-character string
+  // bin(): returns string representation of integer in binary
   // hex(): returns string representation of integer in hex
   // oct(): Converts an integer to a lowercase octal string
   if (
     ast_type == "str" || ast_type == "string" || ast_type == "chr" ||
-    ast_type == "hex" || ast_type == "oct")
+    ast_type == "bin" || ast_type == "hex" || ast_type == "oct")
   {
     if (type_size == 1)
     {
@@ -605,18 +623,33 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "tuple")
     return empty_typet();
 
+  // The capitalised typing-module aliases (typing.List/Dict/Set) must resolve
+  // to the same builtin collection types as their lowercase forms. Otherwise a
+  // nested annotation like List[List[float]] types its element as a bogus
+  // "tag-List" struct that no list/dict/set machinery recognises — len(A[0])
+  // then misroutes to strlen() and aborts on a struct/pointer mismatch (#5162;
+  // Dict/Set crash identically). A user may legally shadow these names with
+  // their own class (e.g. a hand-rolled `class List`, #3728), and that class
+  // must win. is_class() is unusable as the guard because it also matches the
+  // typing OM's own class definitions, which are imported in exactly the alias
+  // case we want to rewrite — so scan only the user's own module body.
+  auto typing_alias = [&](const char *alias) {
+    return ast_type == alias &&
+           json_utils::find_class(converter_.ast()["body"], alias).is_null();
+  };
+
   // list/range — range objects are stored as lists in ESBMC's model
-  if (ast_type == "list" || ast_type == "range")
+  if (ast_type == "list" || ast_type == "range" || typing_alias("List"))
     return get_list_type();
 
   // dict — handle dict type annotations
   // For generic "dict" without key/value types, return empty type
   // so the actual type is inferred from the dictionary literal
-  if (ast_type == "dict")
+  if (ast_type == "dict" || typing_alias("Dict"))
     return get_dict_type();
 
   // Reuse list infrastructure for simplicity for now
-  if (ast_type == "set")
+  if (ast_type == "set" || typing_alias("Set"))
     return get_list_type();
 
   // Custom user-defined types / classes
@@ -753,6 +786,23 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
   // Handle nested value object
   if (elem.is_object())
   {
+    // Tuple annotation subscript: Tuple[int, str] / tuple[int, str]. Build the
+    // concrete tuple struct (matching the tag-tuple_* type a tuple literal
+    // produces) so a list element annotated list[Tuple[...]] resolves to real
+    // components. This must precede the wrapper-node unwrap below: a Subscript
+    // node also carries a "value" key (the subscripted name), so the unwrap
+    // would otherwise recurse into the bare "Tuple" name and resolve it to the
+    // opaque 0-member "Tuple" symbol type — which crashes the SMT
+    // cast-to-struct path when a function returns such an element.
+    if (
+      elem["_type"] == "Subscript" && elem.contains("value") &&
+      elem["value"].is_object() && elem["value"].contains("id") &&
+      elem["value"]["id"].is_string() &&
+      (elem["value"]["id"] == "Tuple" || elem["value"]["id"] == "tuple") &&
+      elem.contains("slice"))
+      return converter_.get_tuple_handler().get_tuple_type_from_annotation(
+        elem);
+
     // Recursive delegation for wrapper node
     if (elem.contains("value"))
       return get_typet(elem["value"]);
@@ -956,7 +1006,8 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       list_value["annotation"].contains("value") &&
       list_value["annotation"]["value"].contains("id"))
     {
-      const nlohmann::json &type_ann = list_value["annotation"]["value"]["id"];
+      [[maybe_unused]] const nlohmann::json &type_ann =
+        list_value["annotation"]["value"]["id"];
       assert(type_ann == "list" || type_ann == "List");
       typet t =
         get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
@@ -1333,29 +1384,6 @@ size_t type_handler::get_type_width(const typet &type) const
   return 32;
 }
 
-typet type_handler::get_tuple_type(const nlohmann::json &tuple_node) const
-{
-  struct_typet tuple_type;
-
-  // Handle tuple expressions
-  if (tuple_node.contains("_type") && tuple_node["_type"] == "Tuple")
-  {
-    if (tuple_node.contains("elts"))
-    {
-      const auto &elts = tuple_node["elts"];
-      for (size_t i = 0; i < elts.size(); i++)
-      {
-        typet elem_type = get_typet(elts[i]);
-        std::string comp_name = "element_" + std::to_string(i);
-        struct_typet::componentt comp(comp_name, elem_type);
-        tuple_type.components().push_back(comp);
-      }
-    }
-  }
-
-  return tuple_type;
-}
-
 typet type_handler::build_optional_type(const typet &base_type)
 {
   // Create a struct with two fields:
@@ -1364,6 +1392,7 @@ typet type_handler::build_optional_type(const typet &base_type)
 
   struct_typet optional_type;
   optional_type.tag("tag-Optional_" + base_type.to_string());
+  set_python_aggregate_kind(optional_type, "optional");
 
   // Add is_none field
   struct_typet::componentt is_none_field("is_none", "is_none", bool_type());

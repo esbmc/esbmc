@@ -100,7 +100,7 @@ SCENARIO(
   tuple_iface *tuple_api = nullptr;
   array_iface *array_api = nullptr;
   fp_convt *fp_api = nullptr;
-  std::unique_ptr<smt_convt> solver{
+  std::unique_ptr<smt_solver_baset> solver{
     create_new_z3_solver(options, ns, &tuple_api, &array_api, &fp_api)};
   REQUIRE(solver != nullptr);
 

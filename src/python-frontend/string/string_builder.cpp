@@ -1,6 +1,7 @@
 #include "string_builder.h"
 #include "python_converter.h"
 #include "type_handler.h"
+#include <python-frontend/python_expr_builder.h>
 #include <util/arith_tools.h>
 #include <util/std_code.h>
 #include <util/expr_util.h>
@@ -8,6 +9,8 @@
 #include <optional>
 #include <stdexcept>
 #include <limits>
+
+using namespace python_expr;
 
 string_builder::string_builder(python_converter &conv, string_handler *handler)
   : converter_(conv), str_handler_(handler)
@@ -44,10 +47,16 @@ std::vector<exprt> string_builder::extract_string_chars(
 {
   std::vector<exprt> chars;
 
-  // Handle JSON string constants first
+  // Handle JSON string constants first. Guard on is_string(): a numeric
+  // Constant (e.g. the `1` in `1 + "s"`) reaching here would otherwise throw an
+  // uncaught nlohmann::json type_error and crash the frontend. The binop path
+  // now raises a catchable TypeError before this point (issue #5904); this is a
+  // defensive fallback so any other caller degrades to the expr-based path
+  // below instead of crashing.
   if (
     !json_node.is_null() && json_node.contains("_type") &&
-    json_node["_type"] == "Constant" && json_node.contains("value"))
+    json_node["_type"] == "Constant" && json_node.contains("value") &&
+    json_node["value"].is_string())
   {
     std::string str_value = json_node["value"].get<std::string>();
     chars.reserve(str_value.size());
@@ -397,12 +406,8 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
       repeat_symbol = get_symbol_table().find_symbol(func_symbol_id);
     }
 
-    side_effect_expr_function_callt repeat_call;
-    repeat_call.function() = symbol_expr(*repeat_symbol);
-    repeat_call.arguments().push_back(str_addr);
-    repeat_call.arguments().push_back(count);
-    repeat_call.type() = gen_pointer_type(char_type());
-    return repeat_call;
+    return build_call_expr(
+      *repeat_symbol, gen_pointer_type(char_type()), {str_addr, count});
   };
 
   // Get size (e.g.: "a" * 3)
@@ -553,12 +558,9 @@ exprt string_builder::concatenate_strings_via_c_function(
   }
 
   // Create the function call: __python_str_concat(lhs, rhs)
-  side_effect_expr_function_callt concat_call;
-  concat_call.function() = symbol_expr(*concat_symbol);
-  concat_call.arguments().push_back(lhs_addr);
-  concat_call.arguments().push_back(rhs_addr);
+  exprt concat_call = build_call_expr(
+    *concat_symbol, gen_pointer_type(char_type()), {lhs_addr, rhs_addr});
   concat_call.location() = location;
-  concat_call.type() = gen_pointer_type(char_type());
 
   return concat_call;
 }
@@ -589,14 +591,9 @@ exprt string_builder::build_runtime_str_conversion_call(
 
   exprt arg_expr = arg;
   if (arg_expr.type() != arg_type)
-    arg_expr = typecast_exprt(arg_expr, arg_type);
+    arg_expr = build_typecast(arg_expr, arg_type);
 
-  side_effect_expr_function_callt call;
-  call.function() = symbol_expr(*fn_symbol);
-  call.arguments().push_back(arg_expr);
-  call.type() = gen_pointer_type(char_type());
-
-  return call;
+  return build_call_expr(*fn_symbol, gen_pointer_type(char_type()), {arg_expr});
 }
 
 exprt string_builder::build_runtime_str_join_call(
@@ -630,15 +627,9 @@ exprt string_builder::build_runtime_str_join_call(
   exprt sep_arg = str_handler_->get_array_base_address(separator);
 
   exprt list_arg =
-    list_expr.type().is_pointer() ? list_expr : address_of_exprt(list_expr);
+    list_expr.type().is_pointer() ? list_expr : build_address_of(list_expr);
   if (list_arg.type() != list_ptr)
-    list_arg = typecast_exprt(list_arg, list_ptr);
+    list_arg = build_typecast(list_arg, list_ptr);
 
-  side_effect_expr_function_callt call;
-  call.function() = symbol_expr(*fn_symbol);
-  call.arguments().push_back(sep_arg);
-  call.arguments().push_back(list_arg);
-  call.type() = char_ptr;
-
-  return call;
+  return build_call_expr(*fn_symbol, char_ptr, {sep_arg, list_arg});
 }

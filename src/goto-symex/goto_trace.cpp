@@ -420,7 +420,7 @@ void violation_yaml_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
-        // Only emit assumptions for nondet variables
+        // Only emit waypoints for nondet variables
         if (is_nil_expr(step.rhs) || !find_nondet_in_expr(step.rhs))
           break;
 
@@ -428,10 +428,16 @@ void violation_yaml_goto_trace(
         if (assignment.empty())
           break;
 
+        // Extract just the value part ("lhs == value" → "value") for \result
+        std::string value_str;
+        auto eq_pos = assignment.find(" == ");
+        if (eq_pos != std::string::npos)
+          value_str = assignment.substr(eq_pos + 4);
+
         waypoint wp;
-        wp.type = waypoint::assumption;
+        wp.type = waypoint::function_return;
         wp.file = yml.verified_file;
-        wp.value = assignment;
+        wp.value = "\\result == " + value_str;
         wp.line = get_line_number(
           yml.verified_file,
           std::atoi(step.pc->location.get_line().c_str()),
@@ -543,7 +549,12 @@ void appendInfo(
   {
     if (!dest.empty())
       dest += " ";
-    dest += label + " " + id2string(value);
+    // Append in place rather than `label + " " + id2string(value)`, which
+    // builds two throwaway temporaries per trace label (this scales with
+    // counterexample size).
+    dest += label;
+    dest += ' ';
+    dest += value;
   }
 }
 

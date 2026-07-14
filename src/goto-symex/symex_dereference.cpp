@@ -163,6 +163,28 @@ bool symex_dereference_statet::is_live_variable(const expr2tc &symbol)
     to_symbol2t(sym).rlevel == symbol_renaming_level::level2_global)
     return true;
 
+  // A thread-local global is renamed per-thread to level1/level2 (not
+  // level*_global), yet it has static (whole-thread) lifetime — it is not a
+  // stack local that can expire. Treat any static-lifetime symbol as live;
+  // otherwise the per-thread stack-frame search below (meant for locals) fails
+  // to find it and wrongly reports an expired-pointer dereference.
+  const symbolt *base = goto_symex.ns.lookup(to_symbol2t(sym).thename);
+  if (base && base->static_lifetime)
+    return true;
+
+  // Python objects follow garbage-collected lifetime semantics: an instance
+  // referenced after its defining function returns is still valid at runtime
+  // (CPython heap-allocates objects and frees them only when unreachable).
+  // ESBMC stack-allocates Python aggregates, so a pointer captured into a
+  // returned/escaping aggregate would otherwise be flagged as a false
+  // use-after-free once the defining frame is popped. Treat user-defined
+  // Python class instances as having whole-program (GC) lifetime. Their SSA
+  // value bindings are likewise preserved across frame teardown (see
+  // pop_frame), so reads through the escaped pointer observe the real values.
+  // See issue #4773.
+  if (goto_symex.is_python_gc_object(base))
+    return true;
+
   goto_symex.replace_dynamic_allocation(sym);
   goto_symex.replace_nondet(sym);
   goto_symex.dereference(sym, dereferencet::INTERNAL);

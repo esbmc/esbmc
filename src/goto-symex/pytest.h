@@ -2,12 +2,13 @@
 #define CPROVER_GOTO_SYMEX_PYTEST_H
 
 #include <goto-symex/symex_target_equation.h>
-#include <solvers/smt/smt_conv.h>
 #include <util/namespace.h>
 #include <mutex>
 #include <string>
 #include <vector>
 #include <fstream>
+
+class smt_convt;
 
 /// Generates pytest test-cases for Python programs
 class pytest_generator

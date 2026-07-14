@@ -64,18 +64,44 @@ static void get_string_constant(const exprt &expr, std::string &the_string)
   the_string.append(v.as_string());
 }
 
+// Recover the measured type T from a sizeof(T) node, peeling any surrounding
+// typecast. Returns a nil type if `src` is not (a cast of) a sizeof node
+// (esbmc/esbmc#5337). T rides as the type of the node's first (type_exprt)
+// operand; a second operand may carry the byte-size value.
+static typet sizeof_measured_type(const exprt &src)
+{
+  const exprt *e = &src;
+  while (e->id() == "typecast" && e->operands().size() == 1)
+    e = &e->op0();
+  if (e->id() == "sizeof" && !e->operands().empty())
+    return e->op0().type();
+  return static_cast<const typet &>(get_nil_irep());
+}
+
 static void get_alloc_type_rec(
   const exprt &src,
   typet &type,
   exprt &size,
   bool is_mul = false)
 {
-  const irept &sizeof_type = src.c_sizeof_type();
+  // A (possibly typecast-wrapped) sizeof(T) outside a multiplication sets the
+  // allocated element type T. The typecast is peeled only in service of
+  // reaching the sizeof — a cast around a non-sizeof size operand (e.g. the
+  // (size_t)(-4) of malloc(-4)) is left intact, so its size_t reconciliation
+  // survives into `size`. Inside `n * sizeof(T)` the product is treated as a
+  // raw byte count and the allocated type stays char, matching the historical
+  // behaviour (esbmc/esbmc#5337).
+  if (!is_mul)
+  {
+    typet measured = sizeof_measured_type(src);
+    if (measured.is_not_nil())
+    {
+      type = measured;
+      return;
+    }
+  }
 
-  // If sizeof_type is valid and we are not in a multiplication context
-  if (!sizeof_type.is_nil() && !is_mul)
-    type = static_cast<const typet &>(sizeof_type);
-  else if (src.id() == "*")
+  if (src.id() == "*")
   {
     // Mark as multiplication context and recurse
     for (const auto &operand : src.operands())
@@ -562,6 +588,23 @@ exprt make_va_list(const exprt &expr)
   return expr;
 }
 
+// Keep a va_start/va_copy call in the GOTO program (with no lhs) so symex
+// can track which va_lists have been initialised. run_builtin intercepts
+// the call; no actual function body is ever looked up.
+static void emit_va_marker_call(
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  code_function_callt call;
+  call.location() = function.location();
+  call.function() = function;
+  call.arguments() = arguments;
+  goto_programt::targett t = dest.add_instruction(FUNCTION_CALL);
+  migrate_expr(call, t->code);
+  t->location = function.location();
+}
+
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,
   const exprt &function,
@@ -588,8 +631,17 @@ void goto_convertt::do_function_call_symbol(
   }
 
   // If the symbol is not nil, i.e., the user defined the expected behavior of
-  // the builtin function, we should honor the user function and call it
-  if (symbol->get_value().is_not_nil() && symbol->get_value().has_operands())
+  // the builtin function, we should honor the user function and call it.
+  // Exception: under --enable-unreachability-intrinsic, reach_error and
+  // __VERIFIER_error are treated as error sentinels -- skip any user body and
+  // insert ASSERT false at the call site so the violation location in the
+  // counterexample/witness points to the call site, not inside the body.
+  const bool skip_body =
+    options.get_bool_option("enable-unreachability-intrinsic") &&
+    (symbol->name == "reach_error" || symbol->name == "__VERIFIER_error");
+  if (
+    symbol->get_value().is_not_nil() && symbol->get_value().has_operands() &&
+    !skip_body)
   {
     // insert function call
     code_function_callt function_call;
@@ -604,8 +656,11 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->name.as_string();
 
-  bool is_assume =
-    (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
+  // __builtin_assume(cond) is GCC/Clang's assumption hint; model it as an
+  // assume, like __ESBMC_assume / __VERIFIER_assume. See #4606.
+  bool is_assume = (base_name == "__ESBMC_assume") ||
+                   (base_name == "__VERIFIER_assume") ||
+                   (base_name == "__builtin_assume");
   bool is_assert = (base_name == "assert");
 
   bool is_loop_invariant = (base_name == "__ESBMC_loop_invariant");
@@ -999,17 +1054,26 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-#if ESBMC_SVCOMP
     /* <https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks/-/issues/1296> */
-    if (base_name == "__builtin_unreachable")
+    if (
+      base_name == "__builtin_unreachable" &&
+      config.options.get_bool_option("sv-comp"))
       return;
-#endif
 
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = gen_false_expr();
-    t->location = function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
+    if (!options.get_bool_option("no-assertions"))
+    {
+      goto_programt::targett t = dest.add_instruction(ASSERT);
+      t->guard = gen_false_expr();
+      t->location = function.location();
+      t->location.user_provided(true);
+      t->location.property("assertion");
+      t->location.comment(base_name);
+    }
+    else
+      // Under --no-assertions, trigger the memory-leak-check walker on this
+      // abnormal-termination path (mirrors __assert_fail's handling and what
+      // abort() does in the stdlib operational model).
+      emit_assert_fail_noreturn(function.location(), dest);
 
     if (lhs.is_not_nil())
     {
@@ -1017,8 +1081,6 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    // __VERIFIER_error has abort() semantics, even if no assertions
-    // are being checked
     goto_programt::targett a = dest.add_instruction(ASSUME);
     a->guard = gen_false_expr();
     a->location = function.location();
@@ -1074,7 +1136,9 @@ void goto_convertt::do_function_call_symbol(
   else if (
     base_name == "printf" || base_name == "fprintf" || base_name == "dprintf" ||
     base_name == "sprintf" || base_name == "snprintf" ||
-    base_name == "vfprintf")
+    base_name == "vfprintf" || base_name == "vprintf" ||
+    base_name == "vsprintf" || base_name == "vsnprintf" ||
+    base_name == "asprintf" || base_name == "vasprintf")
   {
     do_printf(lhs, function, arguments, dest, base_name);
   }
@@ -1167,10 +1231,30 @@ void goto_convertt::do_function_call_symbol(
     new_function.add("#location") = function.cmt_location();
     new_function.add("sizeof") = arguments.front();
 
+    // The allocated element type is the T of a `sizeof(T)` size argument,
+    // recovered from the unfolded sizeof node (esbmc/esbmc#5337). When the
+    // argument is not a sizeof (e.g. operator new(n) for a raw byte count),
+    // fall back to a single zero-initialised unsigned integer spanning the
+    // requested bytes: operator new(n) allocates n raw bytes, so a later typed
+    // read sees zero, matching the sizeof-present path.
+    typet sizeof_type = sizeof_measured_type(arguments.front());
+    if (sizeof_type.is_nil())
+    {
+      const unsigned char_width = config.ansi_c.char_width;
+      BigInt nbytes(1);
+      if (arguments.front().is_constant())
+        nbytes = binary2integer(arguments.front().value().as_string(), false);
+      // Fall back to a single byte for a non-constant or pathological size:
+      // 1 byte avoids the crash, and capping the byte count keeps the derived
+      // bitvector width from overflowing unsignedbv_typet's 32-bit width.
+      if (nbytes < 1 || nbytes > BigInt(0xFFFFFFFFu / char_width))
+        nbytes = 1;
+      sizeof_type = unsignedbv_typet(nbytes.to_uint64() * char_width);
+    }
+
     // Set return type, a allocated pointer
     // XXX jmorse, const-qual misery
-    new_function.type() = pointer_typet(
-      static_cast<const typet &>(arguments.front().c_sizeof_type()));
+    new_function.type() = pointer_typet(sizeof_type);
     new_function.type().add("#location") = function.cmt_location();
 
     do_cpp_new(lhs, new_function, dest);
@@ -1191,8 +1275,11 @@ void goto_convertt::do_function_call_symbol(
 
     if (lhs.is_not_nil())
     {
+      // Carry the va_list lvalue as the operand so symex can flag a va_arg
+      // on a va_list that was never initialised by va_start; the argument's
+      // value plays no role in resolving the vararg itself.
       side_effect_exprt rhs("va_arg", lhs.type());
-      rhs.copy_to_operands(gen_zero(lhs.type()));
+      rhs.copy_to_operands(make_va_list(arguments[0]));
       rhs.location() = function.location();
       goto_programt::targett t2 = dest.add_instruction(ASSIGN);
       exprt assign_expr = code_assignt(lhs, rhs);
@@ -1284,6 +1371,8 @@ void goto_convertt::do_function_call_symbol(
       log_error("va_start argument expected to be lvalue");
       abort();
     }
+
+    emit_va_marker_call(function, arguments, dest);
   }
   else if (base_name == "__builtin_va_end")
   {
@@ -1300,8 +1389,13 @@ void goto_convertt::do_function_call_symbol(
   else if (base_name == "__builtin_va_copy")
   {
     // For Clang frontend, goto_symex tracks VA args via va_index in the
-    // call frame; no assignment is needed. Emitting an ASSIGN crashes the
-    // pointer analysis on Linux/Windows where va_list is a struct array.
+    // call frame, so va_arg needs no assignment here. Emitting an ASSIGN
+    // crashes the pointer analysis on Linux/Windows where va_list is a
+    // struct array, so those targets keep the erased form. Where va_list is
+    // a plain pointer, emit the real copy: symex_printf's va_list recovery
+    // must be able to see that the destination now aliases another va_list
+    // (an erased copy would let a foreign va_list masquerade as a fresh
+    // local, defeating the recovery's provenance gate).
     exprt dest_expr = make_va_list(arguments[0]);
 
     if (!is_lvalue(dest_expr))
@@ -1309,6 +1403,19 @@ void goto_convertt::do_function_call_symbol(
       log_error("va_copy argument expected to be lvalue");
       abort();
     }
+
+    if (arguments.size() >= 2 && ns.follow(dest_expr.type()).is_pointer())
+    {
+      exprt src_expr =
+        typecast_exprt(make_va_list(arguments[1]), dest_expr.type());
+      goto_programt::targett t = dest.add_instruction(ASSIGN);
+      exprt assign_expr = code_assignt(dest_expr, src_expr);
+      migrate_expr(assign_expr, t->code);
+      t->location = function.location();
+    }
+
+    if (arguments.size() >= 2)
+      emit_va_marker_call(function, arguments, dest);
   }
   // Nontemporal means "do not cache please" (https://lwn.net/Articles/255364/)
   else if (base_name == "__builtin_nontemporal_load")

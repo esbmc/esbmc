@@ -74,9 +74,6 @@ execution_statet::execution_statet(
         for (const auto &wp : wps)
           state.witness_segs[wp.segment_idx].push_back(wp);
       }
-      waypoint target;
-      if (yaml_parser::get_target_waypoint(witness_path, target))
-        witness_target_line = target.line_id;
     }
   }
 
@@ -270,7 +267,7 @@ void execution_statet::symex_step(reachability_treet &art)
     {
       expr2tc thecode = instruction.code, assign;
       if (make_return_assignment(assign, thecode))
-        goto_symext::symex_assign(assign, true);
+        goto_symext::symex_assign(assign);
       symex_return(thecode);
       analyze_assign(assign);
     }
@@ -716,8 +713,8 @@ void execution_statet::analyze_assign(const expr2tc &code)
 
   std::set<expr2tc> global_reads, global_writes;
   const code_assign2t &assign = to_code_assign2t(code);
-  get_expr_globals(ns, assign.target, global_writes);
-  get_expr_globals(ns, assign.source, global_reads);
+  get_expr_globals(ns, assign.target, global_writes, access_kindt::WRITE);
+  get_expr_globals(ns, assign.source, global_reads, access_kindt::READ);
 
   if (global_reads.size() > 0 || global_writes.size() > 0)
   {
@@ -735,7 +732,7 @@ void execution_statet::analyze_read(const expr2tc &code)
     return;
 
   std::set<expr2tc> global_reads;
-  get_expr_globals(ns, code, global_reads);
+  get_expr_globals(ns, code, global_reads, access_kindt::READ);
 
   if (global_reads.size() > 0)
   {
@@ -754,7 +751,8 @@ void execution_statet::analyze_args(const expr2tc &expr)
 void execution_statet::get_expr_globals(
   const namespacet &ns,
   const expr2tc &expr,
-  std::set<expr2tc> &globals_list)
+  std::set<expr2tc> &globals_list,
+  access_kindt kind)
 {
   if (options.get_bool_option("data-races-check-only"))
     return;
@@ -782,14 +780,6 @@ void execution_statet::get_expr_globals(
     if (!symbol)
       return;
 
-    auto is_internal_name = [](const std::string &n) {
-      return n == "c:@__ESBMC_alloc" || n == "c:@__ESBMC_alloc_size" ||
-             n == "c:@__ESBMC_is_dynamic" ||
-             n == "c:@__ESBMC_blocked_threads_count" ||
-             n.find("c:pthread_lib") != std::string::npos ||
-             n == "c:@__ESBMC_rounding_mode";
-    };
-
     // Resolve pointer parameters/locals BEFORE applying the internal-name
     // filter. The pointer variable itself may live in pthread_lib (e.g. the
     // `mutex` parameter of pthread_mutex_lock) and so match the filter, yet
@@ -797,9 +787,7 @@ void execution_statet::get_expr_globals(
     // dependency.
     expr2tc p = expr;
     bool point_to_global = false;
-    if (
-      symbol->get_type().is_pointer() && symbol->name != "invalid_object" &&
-      !symbol->static_lifetime)
+    if (symbol->get_type().is_pointer() && symbol->name != "invalid_object")
     {
       expr2tc tmp = expr;
       /* Rename it so that it can be dereferenced in current state */
@@ -820,7 +808,7 @@ void execution_statet::get_expr_globals(
           const symbolt *s = ns.lookup(n);
           if (!s)
             continue;
-          if (is_internal_name(n))
+          if (is_esbmc_internal_symbol(n))
             continue;
           point_to_global =
             s->static_lifetime || s->get_type().is_dynamic_set();
@@ -834,7 +822,7 @@ void execution_statet::get_expr_globals(
 
     // Drop the pointer symbol itself if it is an internal pthread_lib name,
     // unless we've resolved it to a user global above.
-    if (is_internal_name(name) && !point_to_global)
+    if (is_esbmc_internal_symbol(name) && !point_to_global)
       return;
 
     // Rename to level1 to avoid shared varible mismatch in mpor.
@@ -854,6 +842,23 @@ void execution_statet::get_expr_globals(
       symbol->static_lifetime || symbol->get_type().is_dynamic_set() ||
       point_to_global || python_global)
     {
+      // Read-only-global filter: a READ of a global that is never written
+      // anywhere in the program cannot participate in a data race, so it
+      // must not trigger a cswitch. WRITE accesses are never filtered —
+      // a write on its own establishes the "may be written" fact for the
+      // other side of any future read/write conflict.
+      if (art1->readonly_global_opt && kind == access_kindt::READ)
+      {
+        expr2tc orig = p;
+        get_active_state().get_original_name(orig);
+        if (is_symbol2t(orig))
+        {
+          const irep_idt &resolved_name = to_symbol2t(orig).thename;
+          if (!art1->may_be_written(resolved_name))
+            return;
+        }
+      }
+
       std::list<unsigned int> threadId_list;
       auto it_find = art1->vars_map.find(p);
 
@@ -911,8 +916,8 @@ void execution_statet::get_expr_globals(
     }
   }
 
-  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e) {
-    get_expr_globals(ns, e, globals_list);
+  expr->foreach_operand([this, &globals_list, &ns, kind](const expr2tc &e) {
+    get_expr_globals(ns, e, globals_list, kind);
   });
 }
 
@@ -1118,36 +1123,29 @@ bool execution_statet::can_execution_continue() const
   return true;
 }
 
-crypto_hash execution_statet::generate_hash() const
+std::size_t execution_statet::generate_hash() const
 {
   auto l2 = std::dynamic_pointer_cast<state_hashing_level2t>(state_level2);
   assert(l2 != nullptr);
 
-  crypto_hash state = l2->generate_l2_state_hash();
-  std::string str = state.to_string();
-
+  // State fingerprint for interleaving dedup: combine the L2 value hash with
+  // each thread's program-counter location. A size_t structural hash (the
+  // same family irep2 uses for hash-consing) replaces the former Boost SHA-1;
+  // a collision only over-prunes interleavings, the same risk class crc()
+  // already carries tool-wide.
+  std::size_t h = l2->generate_l2_state_hash();
   for (const auto &it : threads_state)
-  {
-    goto_programt::const_targett pc = it.source.pc;
-    int id = pc->location_number;
-    std::stringstream s;
-    s << id;
-    str += "!" + s.str();
-  }
-
-  crypto_hash h;
-  h.ingest(str.c_str(), str.size());
-  h.fin();
+    esbmct::hash_combine(h, it.source.pc->location_number);
 
   return h;
 }
 
-crypto_hash execution_statet::update_hash_for_assignment(const expr2tc &rhs)
+std::size_t execution_statet::update_hash_for_assignment(const expr2tc &rhs)
 {
-  crypto_hash h;
-  rhs->hash(h);
-  h.fin();
-  return h;
+  // irep2's cached structural hash (crc) — an atomic size_t on the node,
+  // populated by hash-consing — replaces the former per-assignment SHA-1
+  // walk of the whole RHS tree, which dominated the --state-hashing path.
+  return rhs->crc();
 }
 
 void execution_statet::print_stack_traces(unsigned int indent) const
@@ -1346,38 +1344,35 @@ void execution_statet::state_hashing_level2t::make_assignment(
   const expr2tc &const_value,
   const expr2tc &assigned_value)
 {
-  //  crypto_hash hash;
-
   renaming::level2t::make_assignment(lhs_sym, const_value, assigned_value);
 
   // If there's no body to the assignment, don't hash.
   if (!is_nil_expr(assigned_value))
   {
     // XXX - consider whether to use l1 names instead. Recursion, reentrancy.
-    crypto_hash hash = owner->update_hash_for_assignment(assigned_value);
+    std::size_t hash = owner->update_hash_for_assignment(assigned_value);
     std::string orig_name = to_symbol2t(lhs_sym).thename.as_string();
     current_hashes[orig_name] = hash;
   }
 }
 
-crypto_hash
+std::size_t
 execution_statet::state_hashing_level2t::generate_l2_state_hash() const
 {
-  unsigned int total;
-  size_t hash_sz = sizeof(crypto_hash::hash);
-
-  uint8_t *data = static_cast<uint8_t *>(
-    alloca(current_hashes.size() * hash_sz * sizeof(uint8_t)));
-
-  total = 0;
+  // Combine each (variable, value-hash) pair into one size_t fingerprint.
+  // current_hashes is an ordered map, so iteration order is stable within a
+  // run (the order tracks irep_idt intern indices, so the fingerprint is a
+  // valid intra-run dedup key but is not reproducible across runs — same as
+  // the former SHA-1-over-this-map, so no behavioural change).
+  // Mixing the key as well as the value makes the fingerprint sensitive to
+  // *which* variable holds a value (not just the multiset of value hashes),
+  // which tightens interleaving dedup — fewer false collisions, less
+  // over-pruning.
+  std::size_t h = 0;
   for (const auto &current_hashe : current_hashes)
   {
-    memcpy(&data[total * hash_sz], current_hashe.second.hash, hash_sz);
-    total++;
+    esbmct::hash_combine(h, current_hashe.first);
+    esbmct::hash_combine(h, current_hashe.second);
   }
-
-  crypto_hash c;
-  c.ingest(data, total * hash_sz);
-  c.fin();
-  return c;
+  return h;
 }

@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <functional>
+#include <unordered_set>
 
 static double round_ties_to_even_consteval(const double value)
 {
@@ -69,15 +71,48 @@ bool PyConstValue::is_truthy() const
   case STRING:
     return !string_val.empty();
   case TUPLE:
+  case LIST:
     return !tuple_val.empty();
   }
   return false;
 }
 
+// CPython int/float equality is exact. A double equals a long long only when
+// it is integral and in long long range; comparing after casting the float
+// side stays exact, where casting the int side to double could collide with a
+// neighboring value above 2^53.
+static bool int_equals_double(long long i, double f)
+{
+  if (std::floor(f) != f)
+    return false;
+  if (f < -9223372036854775808.0 || f >= 9223372036854775808.0)
+    return false;
+  return static_cast<long long>(f) == i;
+}
+
 static bool pyconst_equal(const PyConstValue &lhs, const PyConstValue &rhs)
 {
   if (lhs.kind != rhs.kind)
-    return false;
+  {
+    // CPython compares bool/int/float numerically across kinds:
+    // True == 1 == 1.0. Any other kind mix is unequal.
+    const auto is_numeric = [](const PyConstValue &v) {
+      return v.kind == PyConstValue::BOOL || v.kind == PyConstValue::INT ||
+             v.kind == PyConstValue::FLOAT;
+    };
+    if (!is_numeric(lhs) || !is_numeric(rhs))
+      return false;
+
+    const auto as_int = [](const PyConstValue &v) {
+      return v.kind == PyConstValue::BOOL ? (v.bool_val ? 1LL : 0LL)
+                                          : v.int_val;
+    };
+    if (lhs.kind == PyConstValue::FLOAT)
+      return int_equals_double(as_int(rhs), lhs.float_val);
+    if (rhs.kind == PyConstValue::FLOAT)
+      return int_equals_double(as_int(lhs), rhs.float_val);
+    return as_int(lhs) == as_int(rhs);
+  }
 
   switch (lhs.kind)
   {
@@ -92,6 +127,7 @@ static bool pyconst_equal(const PyConstValue &lhs, const PyConstValue &rhs)
   case PyConstValue::STRING:
     return lhs.string_val == rhs.string_val;
   case PyConstValue::TUPLE:
+  case PyConstValue::LIST:
     if (lhs.tuple_val.size() != rhs.tuple_val.size())
       return false;
     for (size_t i = 0; i < lhs.tuple_val.size(); ++i)
@@ -127,29 +163,44 @@ python_consteval::find_function(const std::string &name) const
   return nullptr;
 }
 
-/// Returns true if the JSON array of statements (or nested blocks) contains
-/// Assert or control-flow statements (If/For/While). Used to decline
-/// const-folding for functions whose structure matters for verification,
-/// coverage analysis, or branch/condition checking.
-static bool body_has_verification_relevant_stmts(const nlohmann::json &body)
+/// Generic recursive scan: true if any statement (or nested block) has a
+/// `_type` listed in `kinds`.
+static bool body_has_stmt_kind(
+  const nlohmann::json &body,
+  std::initializer_list<const char *> kinds)
 {
   for (const auto &stmt : body)
   {
     if (!stmt.contains("_type"))
       continue;
     const std::string &t = stmt["_type"];
-    if (
-      t == "Assert" || t == "If" || t == "For" || t == "While" ||
-      t == "FunctionDef")
-      return true;
+    for (const char *k : kinds)
+      if (t == k)
+        return true;
     if (stmt.contains("body") && stmt["body"].is_array())
-      if (body_has_verification_relevant_stmts(stmt["body"]))
+      if (body_has_stmt_kind(stmt["body"], kinds))
         return true;
     if (stmt.contains("orelse") && stmt["orelse"].is_array())
-      if (body_has_verification_relevant_stmts(stmt["orelse"]))
+      if (body_has_stmt_kind(stmt["orelse"], kinds))
         return true;
   }
   return false;
+}
+
+/// Bodies carrying properties that must be verified independently: an Assert
+/// (must reach the solver) or a nested FunctionDef (closures are unmodeled).
+/// Always blocks folding, regardless of control-flow permission.
+static bool body_has_unfoldable_stmts(const nlohmann::json &body)
+{
+  return body_has_stmt_kind(body, {"Assert", "FunctionDef"});
+}
+
+/// Control flow whose branches matter for coverage/branch analysis. Blocks
+/// folding only on the conservative call-site pre-scan path (see
+/// python_consteval::allow_control_flow_).
+static bool body_has_control_flow(const nlohmann::json &body)
+{
+  return body_has_stmt_kind(body, {"If", "For", "While"});
 }
 
 std::optional<PyConstValue> python_consteval::try_eval_call(
@@ -160,11 +211,19 @@ std::optional<PyConstValue> python_consteval::try_eval_call(
   if (!func_node)
     return std::nullopt;
 
-  // Don't fold functions containing asserts or control flow — they must
-  // be preserved for verification, coverage, and branch/condition analysis.
+  // Don't fold functions whose bodies carry independently-verifiable
+  // properties (asserts) or nested function definitions.
   if (
     func_node->contains("body") && (*func_node)["body"].is_array() &&
-    body_has_verification_relevant_stmts((*func_node)["body"]))
+    body_has_unfoldable_stmts((*func_node)["body"]))
+    return std::nullopt;
+
+  // On the conservative pre-scan path, also decline functions with control
+  // flow so their branches remain in the GOTO program for coverage analysis.
+  if (
+    !allow_control_flow_ && func_node->contains("body") &&
+    (*func_node)["body"].is_array() &&
+    body_has_control_flow((*func_node)["body"]))
     return std::nullopt;
 
   if (!func_node->contains("args") || !(*func_node)["args"].contains("args"))
@@ -249,6 +308,344 @@ std::optional<PyConstValue> python_consteval::try_eval_call(
   return PyConstValue::make_none();
 }
 
+// A seeded container is a snapshot; if any element is itself mutable, code
+// like `m = l[0]` hands out a live reference the alias scan below cannot
+// see, so only containers of recursively immutable elements are seedable.
+static bool is_recursively_immutable(const PyConstValue &v)
+{
+  switch (v.kind)
+  {
+  case PyConstValue::NONE:
+  case PyConstValue::BOOL:
+  case PyConstValue::INT:
+  case PyConstValue::FLOAT:
+  case PyConstValue::STRING:
+    return true;
+  case PyConstValue::LIST:
+    return false;
+  case PyConstValue::TUPLE:
+    for (const auto &e : v.tuple_val)
+      if (!is_recursively_immutable(e))
+        return false;
+    return true;
+  }
+  return false;
+}
+
+// Names whose container value could change without any assignment statement:
+// mutated in place through a non-pure method or a subscript store/delete,
+// aliased (bare-name assignment RHS, ternary branch, return value, parameter
+// default), or passed to a callee that may mutate them (issue #5955). The
+// scan walks the whole module, function bodies included, since a top-level
+// call can execute them. Seeding is an optimization, so every doubtful shape
+// poisons: a lost seed only means the fold falls through to the operational
+// model.
+static std::unordered_set<std::string>
+collect_unsafe_container_names(const nlohmann::json &ast)
+{
+  std::unordered_set<std::string> unsafe;
+
+  // Peel subscript/attribute chains so `l[0].append(x)` poisons `l`.
+  auto poison = [&unsafe](const nlohmann::json &node) {
+    const nlohmann::json *base = &node;
+    while (base->is_object() &&
+           (base->value("_type", "") == "Subscript" ||
+            base->value("_type", "") == "Attribute") &&
+           base->contains("value"))
+      base = &(*base)["value"];
+    if (
+      base->is_object() && base->value("_type", "") == "Name" &&
+      base->contains("id"))
+      unsafe.insert((*base)["id"].get<std::string>());
+  };
+
+  // Poison every Name anywhere beneath a node — the fallback for alias
+  // shapes not proven reference-free below.
+  std::function<void(const nlohmann::json &)> poison_all_names =
+    [&](const nlohmann::json &node) {
+      if (node.is_array())
+      {
+        for (const auto &e : node)
+          poison_all_names(e);
+        return;
+      }
+      if (!node.is_object())
+        return;
+      if (node.value("_type", "") == "Name")
+        poison(node);
+      for (const auto &child : node)
+        poison_all_names(child);
+    };
+
+  // Poison every name an expression could hand back a reference through.
+  // Default-deny: any shape not proven reference-free poisons every Name
+  // beneath it — a lost seed only costs a fold, never soundness. The
+  // reference-free shapes rely on the immutable-element seed gate below:
+  // BinOp/Subscript/comprehension results are fresh objects or element
+  // reads, and a seeded container's elements are all unaliasable scalars.
+  // Call results are covered by the walk's Call rule, which poisons any
+  // argument a callee could return an alias of.
+  std::function<void(const nlohmann::json &)> poison_aliases =
+    [&](const nlohmann::json &node) {
+      if (!node.is_object())
+        return;
+      const std::string t = node.value("_type", "");
+      if (t == "Name")
+        poison(node);
+      else if (
+        (t == "Tuple" || t == "List" || t == "Set") && node.contains("elts"))
+        for (const auto &e : node["elts"])
+          poison_aliases(e);
+      else if (t == "IfExp" || t == "BoolOp")
+      {
+        // Both yield one of their operands.
+        if (node.contains("body"))
+          poison_aliases(node["body"]);
+        if (node.contains("orelse"))
+          poison_aliases(node["orelse"]);
+        if (node.contains("values"))
+          for (const auto &v : node["values"])
+            poison_aliases(v);
+      }
+      else if (t == "Starred" && node.contains("value"))
+        poison_aliases(node["value"]);
+      else if (t == "Dict" && node.contains("values"))
+        for (const auto &v : node["values"])
+          poison_aliases(v);
+      else if (
+        t != "Constant" && t != "BinOp" && t != "UnaryOp" && t != "Compare" &&
+        t != "Call" && t != "Subscript" && t != "Attribute" &&
+        t != "JoinedStr" && t != "ListComp" && t != "SetComp" &&
+        t != "DictComp" && t != "GeneratorExp")
+        poison_all_names(node);
+    };
+
+  static const std::unordered_set<std::string> pure_methods = {
+    "count", "index"};
+  static const std::unordered_set<std::string> pure_builtins = {
+    "len", "sorted", "min", "max", "sum", "any", "all", "str", "tuple", "list"};
+
+  std::function<void(const nlohmann::json &)> walk =
+    [&](const nlohmann::json &node) {
+      if (node.is_array())
+      {
+        for (const auto &e : node)
+          walk(e);
+        return;
+      }
+      if (!node.is_object())
+        return;
+
+      const std::string t = node.value("_type", "");
+
+      if (
+        t == "Attribute" && node.contains("value") &&
+        !pure_methods.count(node.value("attr", "")))
+        poison(node["value"]);
+      else if (
+        t == "Subscript" && node.contains("value") && node.contains("ctx") &&
+        (node["ctx"].value("_type", "") == "Store" ||
+         node["ctx"].value("_type", "") == "Del"))
+        poison(node["value"]);
+      else if (t == "Call")
+      {
+        const bool pure_callee =
+          node.contains("func") && node["func"].is_object() &&
+          node["func"].value("_type", "") == "Name" &&
+          pure_builtins.count(node["func"].value("id", ""));
+        // A pure builtin neither mutates nor returns an alias of a bare Name
+        // argument (min(l) yields an element, unaliasable by the immutable-
+        // element seed gate), so those are exempt. A container-literal
+        // argument can smuggle the reference out — min([l]) IS l — so every
+        // other argument shape poisons regardless of the callee. Starred
+        // call arguments cannot reach a fold today: the AST preprocessor
+        // rejects f(*l) with a TypeError before conversion.
+        auto poison_argument = [&](const nlohmann::json &a) {
+          if (pure_callee && a.is_object() && a.value("_type", "") == "Name")
+            return;
+          poison_aliases(a);
+        };
+        if (node.contains("args"))
+          for (const auto &a : node["args"])
+            poison_argument(a);
+        if (node.contains("keywords"))
+          for (const auto &kw : node["keywords"])
+            if (kw.is_object() && kw.contains("value"))
+              poison_argument(kw["value"]);
+      }
+      else if (t == "NamedExpr" && node.contains("value"))
+        // The walrus target aliases the value wherever the expression
+        // appears (if conditions, call arguments, comprehension guards).
+        poison_aliases(node["value"]);
+      else if (
+        (t == "Assign" || t == "AnnAssign" || t == "Return") &&
+        node.contains("value") && !node["value"].is_null())
+        poison_aliases(node["value"]);
+      else if (
+        t == "FunctionDef" && node.contains("args") &&
+        node["args"].is_object() && node["args"].contains("defaults"))
+        for (const auto &d : node["args"]["defaults"])
+          poison_aliases(d);
+
+      for (const auto &child : node)
+        walk(child);
+    };
+
+  walk(ast);
+  return unsafe;
+}
+
+void python_consteval::seed_globals(Env &env)
+{
+  if (!ast_.contains("body") || !ast_["body"].is_array())
+    return;
+
+  // Count every module-scope write to each name (any Assign/AnnAssign/
+  // AugAssign target — including tuple/list/starred unpacking — plus
+  // `except ... as` bindings), walking through module-level compound
+  // statements but not into function or class bodies, which write their own
+  // scope. A name written more than once does not have a single stable
+  // module-scope value, so seeding it with its final value could
+  // mis-evaluate an assert that runs at an earlier program point — only
+  // single-write names are safe to seed.
+  std::unordered_map<std::string, int> write_count;
+  std::function<void(const nlohmann::json &)> count_target =
+    [&](const nlohmann::json &tgt) {
+      if (!tgt.contains("_type"))
+        return;
+      const std::string &tt = tgt["_type"];
+      if (tt == "Name")
+        ++write_count[tgt["id"].get<std::string>()];
+      else if ((tt == "Tuple" || tt == "List") && tgt.contains("elts"))
+        for (const auto &e : tgt["elts"])
+          count_target(e);
+      else if (tt == "Starred" && tgt.contains("value"))
+        count_target(tgt["value"]);
+    };
+  std::function<void(const nlohmann::json &)> count_stmt_writes =
+    [&](const nlohmann::json &stmt) {
+      if (!stmt.contains("_type"))
+        return;
+      const std::string &t = stmt["_type"];
+      if (t == "FunctionDef" || t == "AsyncFunctionDef" || t == "ClassDef")
+        return;
+      if (t == "Assign" && stmt.contains("targets"))
+        for (const auto &tgt : stmt["targets"])
+          count_target(tgt);
+      else if (
+        (t == "AnnAssign" || t == "AugAssign") && stmt.contains("target"))
+        count_target(stmt["target"]);
+      // For-loop targets and `with ... as` bindings need no cases here:
+      // the AST preprocessor rewrites for-loops into while-loops whose
+      // per-iteration `target = arr[i]` assignment the recursion below
+      // counts, and `with` never survives to a fold. Revisit if either
+      // changes.
+      if (stmt.contains("handlers") && stmt["handlers"].is_array())
+        for (const auto &h : stmt["handlers"])
+        {
+          if (h.is_object() && h.contains("name") && h["name"].is_string())
+            ++write_count[h["name"].get<std::string>()];
+          if (h.is_object() && h.contains("body") && h["body"].is_array())
+            for (const auto &sub : h["body"])
+              count_stmt_writes(sub);
+        }
+      for (const char *key : {"body", "orelse", "finalbody"})
+        if (stmt.contains(key) && stmt[key].is_array())
+          for (const auto &sub : stmt[key])
+            count_stmt_writes(sub);
+    };
+  for (const auto &stmt : ast_["body"])
+    count_stmt_writes(stmt);
+
+  // Names any function can rebind via `global` have no stable module-scope
+  // value either; collect them across the whole AST (this scan must descend
+  // into function bodies, unlike the write counter).
+  std::unordered_set<std::string> global_rebound;
+  std::function<void(const nlohmann::json &)> collect_global_decls =
+    [&](const nlohmann::json &node) {
+      if (node.is_array())
+      {
+        for (const auto &e : node)
+          collect_global_decls(e);
+        return;
+      }
+      if (!node.is_object())
+        return;
+      if (node.value("_type", "") == "Global" && node.contains("names"))
+        for (const auto &n : node["names"])
+          if (n.is_string())
+            global_rebound.insert(n.get<std::string>());
+      for (const auto &child : node)
+        collect_global_decls(child);
+    };
+  collect_global_decls(ast_);
+
+  const std::unordered_set<std::string> container_unsafe =
+    collect_unsafe_container_names(ast_);
+
+  auto seed_one =
+    [&](const nlohmann::json &target, const nlohmann::json &value) {
+      if (!target.contains("_type") || target["_type"] != "Name")
+        return;
+      const std::string name = target["id"].get<std::string>();
+      if (write_count[name] != 1 || global_rebound.count(name))
+        return;
+      auto val = eval_expr(value, env);
+      if (!val)
+        return;
+      // A container may change without an assignment statement — through a
+      // mutating method, subscript store, alias, or escape into a callee —
+      // so a seed here would bake in a stale value (issue #5955). Scalars
+      // are immutable, so for them the write counter and the `global` set
+      // above are sufficient.
+      if (val->kind == PyConstValue::LIST || val->kind == PyConstValue::TUPLE)
+      {
+        if (container_unsafe.count(name))
+          return;
+        for (const auto &e : val->tuple_val)
+          if (!is_recursively_immutable(e))
+            return;
+      }
+      env[name] = *val;
+    };
+
+  for (const auto &stmt : ast_["body"])
+  {
+    if (!stmt.contains("_type"))
+      continue;
+    const std::string &t = stmt["_type"];
+
+    if (t == "Assign")
+    {
+      if (
+        !stmt.contains("targets") || stmt["targets"].size() != 1 ||
+        !stmt.contains("value"))
+        continue;
+      seed_one(stmt["targets"][0], stmt["value"]);
+    }
+    else if (t == "AnnAssign")
+    {
+      if (
+        !stmt.contains("target") || !stmt.contains("value") ||
+        stmt["value"].is_null())
+        continue;
+      seed_one(stmt["target"], stmt["value"]);
+    }
+  }
+}
+
+std::optional<PyConstValue>
+python_consteval::try_eval_global_expr(const nlohmann::json &expr)
+{
+  // A whole-assertion fold over fully-constant operands has a single
+  // deterministic path, so control-flow functions may be folded here without
+  // losing branch/condition coverage.
+  allow_control_flow_ = true;
+  Env env;
+  seed_globals(env);
+  return eval_expr(expr, env);
+}
+
 std::optional<python_consteval::StmtResult>
 python_consteval::exec_block(const nlohmann::json &body, Env &env)
 {
@@ -261,6 +658,77 @@ python_consteval::exec_block(const nlohmann::json &body, Env &env)
       return result;
   }
   return StmtResult{StmtResult::NORMAL, {}};
+}
+
+bool python_consteval::bind_target(
+  const nlohmann::json &target,
+  const PyConstValue &value,
+  Env &env)
+{
+  if (!target.contains("_type"))
+    return false;
+
+  const std::string &t = target["_type"];
+
+  if (t == "Name")
+  {
+    if (!target.contains("id"))
+      return false;
+    env[target["id"].get<std::string>()] = value;
+    return true;
+  }
+
+  // Tuple/list unpacking: a, b = <sequence>. Starred targets are unsupported.
+  if (t == "Tuple" || t == "List")
+  {
+    if (value.kind != PyConstValue::TUPLE && value.kind != PyConstValue::LIST)
+      return false;
+    if (!target.contains("elts"))
+      return false;
+    const auto &elts = target["elts"];
+    if (elts.size() != value.tuple_val.size())
+      return false;
+    for (size_t i = 0; i < elts.size(); ++i)
+      if (!bind_target(elts[i], value.tuple_val[i], env))
+        return false;
+    return true;
+  }
+
+  return false;
+}
+
+bool python_consteval::resolve_str_window(
+  const nlohmann::json &args,
+  const Env &env,
+  long long sz,
+  long long &start,
+  long long &end)
+{
+  start = 0;
+  end = sz;
+  if (args.size() >= 2)
+  {
+    auto a = eval_expr(args[1], env);
+    if (!a || a->kind != PyConstValue::INT)
+      return false;
+    start = a->int_val;
+  }
+  if (args.size() >= 3)
+  {
+    auto a = eval_expr(args[2], env);
+    if (!a || a->kind != PyConstValue::INT)
+      return false;
+    end = a->int_val;
+  }
+  if (start < 0)
+    start += sz;
+  if (end < 0)
+    end += sz;
+  start = std::max<long long>(0, std::min(start, sz));
+  end = std::max<long long>(0, std::min(end, sz));
+  if (end < start)
+    end = start;
+  return true;
 }
 
 std::optional<python_consteval::StmtResult>
@@ -297,9 +765,8 @@ python_consteval::exec_stmt(const nlohmann::json &stmt, Env &env)
 
     for (const auto &target : stmt["targets"])
     {
-      if (target["_type"] != "Name")
-        return std::nullopt; // Only support simple variable assignment
-      env[target["id"].get<std::string>()] = *val;
+      if (!bind_target(target, *val, env))
+        return std::nullopt;
     }
     return StmtResult{StmtResult::NORMAL, {}};
   }
@@ -460,6 +927,30 @@ python_consteval::exec_stmt(const nlohmann::json &stmt, Env &env)
   // Expression statement (e.g., standalone function calls)
   if (type == "Expr")
   {
+    // In-place list mutation: <name>.append(<expr>). Handled here (not in
+    // eval_expr) because it writes back into the environment.
+    const auto &value = stmt["value"];
+    if (
+      value.contains("_type") && value["_type"] == "Call" &&
+      value.contains("func") && value["func"].contains("_type") &&
+      value["func"]["_type"] == "Attribute" && value["func"].contains("attr") &&
+      value["func"]["attr"] == "append" && value["func"].contains("value") &&
+      value["func"]["value"].contains("_type") &&
+      value["func"]["value"]["_type"] == "Name" && value.contains("args") &&
+      value["args"].size() == 1)
+    {
+      const std::string &name = value["func"]["value"]["id"].get<std::string>();
+      auto it = env.find(name);
+      if (it != env.end() && it->second.kind == PyConstValue::LIST)
+      {
+        auto arg = eval_expr(value["args"][0], env);
+        if (!arg)
+          return std::nullopt;
+        it->second.tuple_val.push_back(*arg);
+        return StmtResult{StmtResult::NORMAL, {}};
+      }
+    }
+
     auto val = eval_expr(stmt["value"], env);
     if (!val)
       return std::nullopt;
@@ -527,7 +1018,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
     return std::nullopt;
   }
 
-  if (type == "Tuple")
+  if (type == "Tuple" || type == "List")
   {
     std::vector<PyConstValue> values;
     for (const auto &elt : node["elts"])
@@ -537,7 +1028,8 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         return std::nullopt;
       values.push_back(*value);
     }
-    return PyConstValue::make_tuple(values);
+    return type == "List" ? PyConstValue::make_list(values)
+                          : PyConstValue::make_tuple(values);
   }
 
   // Variable lookup
@@ -798,6 +1290,15 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         else
           return std::nullopt;
       }
+      // List/tuple equality (element-wise; kind must match)
+      else if (
+        (left_val->kind == PyConstValue::LIST ||
+         left_val->kind == PyConstValue::TUPLE) &&
+        (cmp_op == "Eq" || cmp_op == "NotEq"))
+      {
+        bool eq = pyconst_equal(*left_val, *right_val);
+        result = (cmp_op == "Eq") ? eq : !eq;
+      }
       else
         return std::nullopt;
 
@@ -905,20 +1406,87 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       node["func"]["attr"] == "index" && node["func"].contains("value"))
     {
       auto recv = eval_expr(node["func"]["value"], env);
+      // Both LIST and TUPLE store their elements in tuple_val; a list literal
+      // receiver folds the same way a tuple one does. Without covering LIST,
+      // `[...].index(x)` fell through to the OM, whose value matching returns
+      // a wrong index for a literal receiver. The optional start/end arguments
+      // (list.index(x, start[, end])) restrict the search to l[start:end] but
+      // return the index in the original sequence.
       if (
-        !recv || recv->kind != PyConstValue::TUPLE || node["args"].size() != 1)
+        !recv ||
+        (recv->kind != PyConstValue::TUPLE &&
+         recv->kind != PyConstValue::LIST) ||
+        node["args"].empty() || node["args"].size() > 3)
         return std::nullopt;
 
       auto needle = eval_expr(node["args"][0], env);
       if (!needle)
         return std::nullopt;
 
-      for (size_t i = 0; i < recv->tuple_val.size(); ++i)
+      const long long n = static_cast<long long>(recv->tuple_val.size());
+      long long start = 0;
+      long long stop = n;
+      if (node["args"].size() >= 2)
       {
-        if (pyconst_equal(recv->tuple_val[i], *needle))
-          return PyConstValue::make_int(static_cast<long long>(i));
+        auto s = eval_expr(node["args"][1], env);
+        if (!s || s->kind != PyConstValue::INT)
+          return std::nullopt;
+        start = s->int_val;
+        if (start < 0)
+          start += n;
+        if (start < 0)
+          start = 0;
+        if (start > n)
+          start = n;
       }
-      return std::nullopt;
+      if (node["args"].size() == 3)
+      {
+        auto e = eval_expr(node["args"][2], env);
+        if (!e || e->kind != PyConstValue::INT)
+          return std::nullopt;
+        stop = e->int_val;
+        if (stop < 0)
+          stop += n;
+        if (stop < 0)
+          stop = 0;
+        if (stop > n)
+          stop = n;
+      }
+
+      for (long long i = start; i < stop; ++i)
+      {
+        if (pyconst_equal(recv->tuple_val[static_cast<size_t>(i)], *needle))
+          return PyConstValue::make_int(i);
+      }
+      return std::nullopt; // not found: let the OM raise ValueError
+    }
+
+    // list/tuple .count(x) on a constant receiver folds at conversion time.
+    // The literal-receiver OM path returns 0 for a present element, so fold
+    // it here. String .count is handled by the string-method block below, so
+    // only act on a LIST/TUPLE receiver and otherwise fall through.
+    if (
+      node["func"]["_type"] == "Attribute" &&
+      node["func"].value("attr", std::string()) == "count" &&
+      node["func"].contains("value"))
+    {
+      auto recv = eval_expr(node["func"]["value"], env);
+      if (
+        recv &&
+        (recv->kind == PyConstValue::TUPLE ||
+         recv->kind == PyConstValue::LIST) &&
+        node["args"].size() == 1)
+      {
+        auto needle = eval_expr(node["args"][0], env);
+        if (needle)
+        {
+          long long c = 0;
+          for (const auto &e : recv->tuple_val)
+            if (pyconst_equal(e, *needle))
+              ++c;
+          return PyConstValue::make_int(c);
+        }
+      }
     }
 
     // String methods on a STRING receiver: fold pure, ASCII-only operations
@@ -986,21 +1554,19 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
             return PyConstValue::make_string(out);
           });
 
+        // title: a letter starts a new word iff the previous character is
+        // uncased (CPython semantics — digits are uncased, so they *end* a
+        // word: "3d movie".title() == "3D Movie", "a1a".title() == "A1A").
         if (m == "title")
           return unary([](const std::string &x) {
             std::string out(x);
-            bool new_word = true;
+            bool prev_cased = false;
             for (char &c : out)
             {
               auto uc = static_cast<unsigned char>(c);
-              if (std::isalpha(uc))
-              {
-                c = static_cast<char>(
-                  new_word ? std::toupper(uc) : std::tolower(uc));
-                new_word = false;
-              }
-              else
-                new_word = !std::isalnum(uc);
+              c = static_cast<char>(
+                prev_cased ? std::tolower(uc) : std::toupper(uc));
+              prev_cased = std::isalpha(uc) != 0;
             }
             return PyConstValue::make_string(out);
           });
@@ -1032,6 +1598,18 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         if (m == "isspace")
           return pred_all(
             [](unsigned char c) { return std::isspace(c) != 0; }, false);
+        // isascii/isprintable return True on the empty string (unlike the
+        // other predicates); isdecimal returns False. Over byte strings the
+        // ASCII range coincides with CPython for isdecimal (the '0'..'9'
+        // digits) and for the printable/ascii classification.
+        if (m == "isascii")
+          return pred_all([](unsigned char c) { return c < 128; }, true);
+        if (m == "isdecimal")
+          return pred_all(
+            [](unsigned char c) { return c >= '0' && c <= '9'; }, false);
+        if (m == "isprintable")
+          return pred_all(
+            [](unsigned char c) { return std::isprint(c) != 0; }, true);
         if (m == "isupper" || m == "islower")
         {
           if (!args_arr.empty())
@@ -1054,6 +1632,38 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
             }
           }
           return PyConstValue::make_bool(seen_cased);
+        }
+
+        // istitle: uppercase letters may only follow uncased characters,
+        // lowercase letters only cased ones, and at least one cased
+        // character must be present (CPython semantics, byte-level ASCII).
+        if (m == "istitle")
+        {
+          if (!args_arr.empty())
+            return std::nullopt;
+          bool cased = false;
+          bool prev_cased = false;
+          for (char c : s)
+          {
+            auto uc = static_cast<unsigned char>(c);
+            if (std::isupper(uc))
+            {
+              if (prev_cased)
+                return PyConstValue::make_bool(false);
+              prev_cased = true;
+              cased = true;
+            }
+            else if (std::islower(uc))
+            {
+              if (!prev_cased)
+                return PyConstValue::make_bool(false);
+              prev_cased = true;
+              cased = true;
+            }
+            else
+              prev_cased = false;
+          }
+          return PyConstValue::make_bool(cased);
         }
 
         if (m == "startswith" || m == "endswith")
@@ -1082,30 +1692,10 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
             return std::nullopt;
           const std::string &needle = sub->string_val;
           long long start = 0;
-          long long end = static_cast<long long>(s.size());
-          if (args_arr.size() >= 2)
-          {
-            auto a = eval_expr(args_arr[1], env);
-            if (!a || a->kind != PyConstValue::INT)
-              return std::nullopt;
-            start = a->int_val;
-          }
-          if (args_arr.size() == 3)
-          {
-            auto a = eval_expr(args_arr[2], env);
-            if (!a || a->kind != PyConstValue::INT)
-              return std::nullopt;
-            end = a->int_val;
-          }
-          auto sz = static_cast<long long>(s.size());
-          if (start < 0)
-            start += sz;
-          if (end < 0)
-            end += sz;
-          start = std::max<long long>(0, std::min(start, sz));
-          end = std::max<long long>(0, std::min(end, sz));
-          if (end < start)
-            end = start;
+          long long end = 0;
+          if (!resolve_str_window(
+                args_arr, env, static_cast<long long>(s.size()), start, end))
+            return std::nullopt;
           long long c = 0;
           if (needle.empty())
             return PyConstValue::make_int(end - start + 1);
@@ -1124,22 +1714,35 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
           return PyConstValue::make_int(c);
         }
 
-        if (m == "find" || m == "rfind" || m == "index")
+        if (m == "find" || m == "rfind" || m == "index" || m == "rindex")
         {
-          if (args_arr.size() != 1)
+          if (args_arr.empty() || args_arr.size() > 3)
             return std::nullopt;
           auto sub = eval_expr(args_arr[0], env);
           if (!sub || sub->kind != PyConstValue::STRING)
             return std::nullopt;
           const std::string &needle = sub->string_val;
-          size_t pos = (m == "rfind") ? s.rfind(needle) : s.find(needle);
+
+          // Optional start/end search window (Python str.find(sub, start, end)).
+          long long start = 0;
+          long long end = 0;
+          if (!resolve_str_window(
+                args_arr, env, static_cast<long long>(s.size()), start, end))
+            return std::nullopt;
+
+          // Search within s[start:end]; matches are reported as indices into
+          // the original string (offset by `start`).
+          const std::string window = s.substr(
+            static_cast<size_t>(start), static_cast<size_t>(end - start));
+          size_t pos = (m == "rfind" || m == "rindex") ? window.rfind(needle)
+                                                       : window.find(needle);
           if (pos == std::string::npos)
           {
-            if (m == "index")
+            if (m == "index" || m == "rindex")
               return std::nullopt; // would raise ValueError — leave to BMC
             return PyConstValue::make_int(-1);
           }
-          return PyConstValue::make_int(static_cast<long long>(pos));
+          return PyConstValue::make_int(start + static_cast<long long>(pos));
         }
 
         if (m == "strip" || m == "lstrip" || m == "rstrip")
@@ -1270,9 +1873,43 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       return PyConstValue::make_float(rounded);
     }
 
-    // Built-in: min(), max() for two int arguments
+    // Built-in: min(), max()
     if (func_name == "min" || func_name == "max")
     {
+      const bool want_min = (func_name == "min");
+
+      // A key=/default= keyword changes the result (min(s, key=...) compares
+      // key(x), not x), which this fold does not apply; defer such calls to the
+      // runtime model rather than fold a wrong value.
+      if (node.contains("keywords") && !node["keywords"].empty())
+        return std::nullopt;
+
+      // Single string argument: min/max over the characters, returning the
+      // extreme character as a one-character string (min("cba") == "a"). Other
+      // single-iterable kinds (lists, tuples) are left to the runtime model.
+      // Fold only over ASCII: a non-ASCII str is multi-byte UTF-8 in
+      // string_val, where a per-byte comparison does not match CPython's
+      // per-code-point ordering, so defer those to the runtime model. Compare
+      // as unsigned char so the ordering is by byte value.
+      if (node["args"].size() == 1)
+      {
+        auto it = eval_expr(node["args"][0], env);
+        if (!it || it->kind != PyConstValue::STRING || it->string_val.empty())
+          return std::nullopt;
+        unsigned char best = static_cast<unsigned char>(it->string_val[0]);
+        for (char c : it->string_val)
+        {
+          const unsigned char uc = static_cast<unsigned char>(c);
+          if (uc >= 0x80)
+            return std::nullopt;
+          if (want_min ? (uc < best) : (uc > best))
+            best = uc;
+        }
+        return PyConstValue::make_string(
+          std::string(1, static_cast<char>(best)));
+      }
+
+      // Two int arguments: min(a, b) / max(a, b).
       if (node["args"].size() != 2)
         return std::nullopt;
       auto a = eval_expr(node["args"][0], env);
@@ -1281,7 +1918,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         !a || !b || a->kind != PyConstValue::INT ||
         b->kind != PyConstValue::INT)
         return std::nullopt;
-      if (func_name == "min")
+      if (want_min)
         return PyConstValue::make_int(std::min(a->int_val, b->int_val));
       return PyConstValue::make_int(std::max(a->int_val, b->int_val));
     }
@@ -1322,6 +1959,18 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       }
       else if (part["_type"] == "FormattedValue")
       {
+        // A format spec or a !r/!a conversion changes the rendered text
+        // ("{x:03d}" pads to "007"; "{s!r}" quotes); folding while
+        // ignoring it would produce a wrong value that can satisfy a
+        // false assertion — decline instead and let the string handler
+        // deal with it. !s (115) renders the same text as the default.
+        if (part.contains("format_spec") && !part["format_spec"].is_null())
+          return std::nullopt;
+        if (
+          part.contains("conversion") && part["conversion"].is_number() &&
+          part["conversion"].get<int>() != -1 &&
+          part["conversion"].get<int>() != 's')
+          return std::nullopt;
         auto val = eval_expr(part["value"], env);
         if (!val)
           return std::nullopt;

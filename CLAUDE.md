@@ -62,7 +62,7 @@ ctest --print-labels
 ctest -R "regression/esbmc/00_big_endian_01" --output-on-failure
 ```
 
-**Important: Python frontend tests require `ast2json`.** ESBMC's Python frontend invokes `python3` from `PATH` to run `parser.py`, which imports `ast2json`. For Python regression tests to pass, either activate the uv venv first (`source .venv/bin/activate`) or ensure `ast2json` is installed in the system Python.
+**Important: the Python frontend needs `python3` on `PATH`.** ESBMC's Python frontend invokes `python3` to run `parser.py`. `ast2json` is vendored in the source tree (`src/python-frontend/libs/ast2json`), so it no longer needs to be installed separately for Python regression tests. (`mypy` is an optional extra for type checking.)
 
 **Important: /tmp disk space.** Each regression test creates an `esbmc-headers-*` temp directory (~7.4MB) in `/tmp`. Running the full suite generates thousands of these (~70GB total). Clean them after test runs: `rm -rf /tmp/esbmc-headers-*`
 
@@ -97,6 +97,14 @@ Before implementing any feature or bug fix, always work on a dedicated branch:
 - Tests MUST NOT use mocks, patches, or any form of test doubles. Integration tests are preferred.
 - After implementation, simplify and clean up the code aggressively — remove unnecessary conditional checks while ensuring correctness.
 - Run ESBMC over your solution to formally check that it works and does not introduce new errors.
+
+## Code Comments
+
+Write few comments — favour self-explanatory code (clear names, small functions) over narration. Keep added comments to a minimum in PRs; excess comments are noise reviewers must wade through.
+
+- **Do not** restate what the code plainly does (`i++; // increment i`), label structure (`// constructor`, `// helpers`), narrate the change or its history (`// added null check`, `// was: foo()`), or echo a function/variable name in prose.
+- **Do** comment only when it adds what the code cannot convey: a non-obvious *why* (rationale, trade-off, workaround with an issue/PR link), a caveat or invariant a caller must respect, a citation to the C/C++ standard or a solver/algorithm detail, or genuinely subtle logic. One line beats a paragraph.
+- Preserve existing meaningful comments and the file's established doc conventions (e.g. Doxygen-style headers where already used). Match the surrounding comment density rather than exceeding it.
 
 ## Post-implementation Pass
 
@@ -196,7 +204,7 @@ Look for the `python_user_main` function to see how Python source maps to GOTO i
 
 **4. Key files for Python frontend debugging:**
 - `src/python-frontend/python_converter.cpp` — Main expression/statement conversion
-- `src/python-frontend/python_list.cpp` — List operations
+- `src/python-frontend/python-list/` — List operations (split by concern: construction, mutation, access, query, string ops, comprehension, set ops, type map, type inference)
 - `src/python-frontend/function_call_expr.cpp` — Method call handling
 - `src/c2goto/library/python/list.c` — C operational model for list operations
 

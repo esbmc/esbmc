@@ -6,7 +6,9 @@
 #include <algorithm>
 
 #include <util/arith_tools.h>
+#include <util/c_types.h>
 #include <util/config.h>
+#include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
 static std::size_t ext_int_representation_bytes(const typet &type)
@@ -336,15 +338,46 @@ static void add_padding(struct_typet &type, const namespacet &ns)
   // We use 'max_alignment'.
   if (max_alignment > 1)
   {
-    // we may need to align it
-    BigInt displacement = offset % max_alignment;
-    if (displacement != 0)
+    // An over-aligned empty struct (e.g. `struct alignas(16) {}`) has no
+    // members, so offset is 0 and the multiple-of-alignment rule below adds
+    // nothing -- leaving a zero-byte layout while sizeof reports `alignment`.
+    // Pad it up to its alignment so byte-wise access (memcmp, aligned storage)
+    // stays in bounds. Plain empty structs have no explicit alignment, so
+    // max_alignment is 0 here and they are left unchanged (their C++ single
+    // byte, if any, is added elsewhere in the frontend).
+    if (offset == 0)
     {
-      BigInt pad_bytes = max_alignment - displacement;
-      std::size_t pad_bits = (pad_bytes * config.ansi_c.char_width).to_uint64();
+      std::size_t pad_bits =
+        (max_alignment * config.ansi_c.char_width).to_uint64();
       pad(components, components.end(), pad_bits);
     }
+    else
+    {
+      // we may need to align it
+      BigInt displacement = offset % max_alignment;
+      if (displacement != 0)
+      {
+        BigInt pad_bytes = max_alignment - displacement;
+        std::size_t pad_bits =
+          (pad_bytes * config.ansi_c.char_width).to_uint64();
+        pad(components, components.end(), pad_bits);
+      }
+    }
   }
+
+  // Record the struct's effective alignment so the solver can constrain the
+  // base address of objects of this type: an object's address is always a
+  // multiple of its type's alignment ([basic.align], C11 6.2.8). Only types
+  // carrying an "alignment" attribute are constrained in smt_memspace, and so
+  // far that attribute was set only for an explicit struct-level `alignas`.
+  // Aggregates that are merely naturally aligned (e.g. through an over-aligned
+  // member) had no attribute, so `(uintptr_t)&obj % alignof(T) == 0` produced
+  // a spurious counterexample. Packed structs are excluded on purpose (their
+  // alignment is not checked, see the `packed-3` regression test).
+  if (
+    max_alignment > 1 && !type.get_bool("packed") &&
+    type.find("alignment").is_nil())
+    type.set("alignment", constant_exprt(max_alignment, size_type()));
 }
 
 static void add_padding(union_typet &type, const namespacet &ns)
@@ -383,6 +416,15 @@ static void add_padding(union_typet &type, const namespacet &ns)
     component.set_is_padding(true);
 
     type.components().push_back(component);
+  }
+
+  // Record the union's effective alignment for base-address constraints, as
+  // for structs above (see the comment there).
+  if (!type.get_bool("packed") && type.find("alignment").is_nil())
+  {
+    const BigInt a = alignment(type, ns);
+    if (a > 1)
+      type.set("alignment", constant_exprt(a, size_type()));
   }
 }
 

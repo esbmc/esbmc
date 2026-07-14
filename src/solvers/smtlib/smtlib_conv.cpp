@@ -14,6 +14,7 @@
 #ifndef _WIN32
 #  include <unistd.h>
 #  include <signal.h>
+#  include <sys/wait.h>
 #endif
 
 // clang-format off
@@ -110,6 +111,7 @@ static const std::array smt_func_name_table = {
 
   "bv2fp_cast",             /* SMT_FUNC_BV2FLOAT, */
   "fp2bv_cast",             /* SMT_FUNC_FLOAT2BV, */
+  "uf_func_id",             /* SMT_FUNC_UF (printed via symname instead) */
 };
 // clang-format on
 
@@ -140,7 +142,7 @@ static std::string unquote(const std::string_view &s)
 }
 #endif
 
-smt_convt *create_new_smtlib_solver(
+smt_solver_baset *create_new_smtlib_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
@@ -198,7 +200,10 @@ smtlib_convt::file_emitter::~file_emitter() noexcept
 }
 
 smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
-  : out_stream(nullptr), in_stream(nullptr), org_sigpipe_handler(nullptr)
+  : out_stream(nullptr),
+    in_stream(nullptr),
+    org_sigpipe_handler(nullptr),
+    solver_proc_pid(-1)
 {
   if (cmd == "")
     return;
@@ -225,8 +230,8 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
     abort();
   }
 
-  pid_t solver_proc_pid = fork();
-  if (solver_proc_pid == 0)
+  pid_t pid = fork();
+  if (pid == 0)
   {
     close(outpipe[1]);
     close(inpipe[0]);
@@ -252,6 +257,7 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
   }
   else
   {
+    solver_proc_pid = pid;
     close(outpipe[0]);
     close(inpipe[1]);
     out_stream = fdopen(outpipe[1], "w");
@@ -339,22 +345,58 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
 
 smtlib_convt::process_emitter::~process_emitter() noexcept
 {
-  if (out_stream)
-    fclose(out_stream);
-  if (in_stream)
-    fclose(in_stream);
+  terminate();
 #ifndef _WIN32
   if (org_sigpipe_handler)
     signal(SIGPIPE, reinterpret_cast<void (*)(int)>(org_sigpipe_handler));
 #endif
 }
 
+void smtlib_convt::process_emitter::terminate() noexcept
+{
+  if (out_stream)
+  {
+    fclose(out_stream);
+    out_stream = nullptr;
+  }
+  if (in_stream)
+  {
+    fclose(in_stream);
+    in_stream = nullptr;
+  }
+#ifndef _WIN32
+  /* Closing the pipes gives the solver EOF on stdin, but a solver mid-solve
+   * on a large formula may not exit promptly; signal it and reap the zombie
+   * so a discarded solve does not linger. */
+  if (solver_proc_pid > 0)
+  {
+    kill(static_cast<pid_t>(solver_proc_pid), SIGKILL);
+    int status;
+    waitpid(static_cast<pid_t>(solver_proc_pid), &status, 0);
+    solver_proc_pid = -1;
+  }
+#endif
+}
+
 smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
-  : smt_convt(_ns, _options),
+  : smtlib_convt(
+      _ns,
+      _options,
+      _options.get_option("smtlib-solver-prog"),
+      _options.get_option("output"))
+{
+}
+
+smtlib_convt::smtlib_convt(
+  const namespacet &_ns,
+  const optionst &_options,
+  const std::string &solver_prog,
+  const std::string &output_path)
+  : smt_solver_baset(_ns, _options),
     array_iface(true, false),
     fp_convt(this),
-    emit_proc(_options.get_option("smtlib-solver-prog")),
-    emit_opt_output(_options.get_option("output"))
+    emit_proc(solver_prog),
+    emit_opt_output(output_path)
 {
   std::string logic =
     options.get_bool_option("int-encoding") ? "QF_AUFLIRA" : "QF_AUFBV";
@@ -395,6 +437,19 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
     log_error("Unexpected sort in smtlib_convt");
     abort();
   }
+}
+
+/* Render an arbitrary identifier as an SMT-LIB quoted symbol (|...|). ESBMC's
+ * mangled names contain characters (':', '@', '$', ...) that are not legal in a
+ * simple symbol, so every symbol is quoted. Per SMT-LIB 2.6 a quoted symbol may
+ * not contain '|' or '\', so escape (in order): / -> //, \ -> /b, | -> /p. */
+static std::string quote_smtlib_symbol(const std::string &name)
+{
+  std::string replaced = name;
+  replaced = std::regex_replace(replaced, std::regex("/"), "//");
+  replaced = std::regex_replace(replaced, std::regex("\\\\"), "/b");
+  replaced = std::regex_replace(replaced, std::regex("\\|"), "/p");
+  return "|" + replaced + "|";
 }
 
 /* TODO: misnomer, it does not emit anything */
@@ -443,22 +498,7 @@ unsigned int smtlib_convt::emit_terminal_ast(
     return 0;
   case SMT_FUNC_SYMBOL:
   {
-    /* from smt-lib 2.6:
-     * A quoted symbol is any sequence of whitespace characters and printable
-     * characters that starts and ends with | and does not contain | or \ */
-
-    /* All symbols to be emitted as quoted symbols (braced within |'s),
-     * therefore replace (in order):
-     *   / -> //
-     *   \ -> /b
-     *   | -> /p
-     */
-    std::string replaced = ast->symname;
-    replaced = std::regex_replace(replaced, std::regex("/"), "//");
-    replaced = std::regex_replace(replaced, std::regex("\\\\"), "/b");
-    replaced = std::regex_replace(replaced, std::regex("\\|"), "/p");
-
-    ss << "|" << replaced << "|";
+    ss << quote_smtlib_symbol(ast->symname);
     output = ss.str();
     return 0;
   }
@@ -474,6 +514,43 @@ unsigned int smtlib_convt::emit_ast(
   std::unordered_map<const smtlib_smt_ast *, std::string> &temp_symbols) const
 {
   unsigned int brace_level = 0;
+
+  // Uninterpreted-function application: printed as its own symname and may have
+  // any arity, so it bypasses the fixed 4-operand generic path below.
+  if (ast->kind == SMT_FUNC_UF)
+  {
+    if (auto it = temp_symbols.find(ast); it != temp_symbols.end())
+    {
+      output = it->second;
+      return 0;
+    }
+
+    std::string tempname = "?x" + std::to_string(temp_symbols.size());
+    temp_symbols.emplace(ast, tempname);
+
+    std::vector<std::string> uf_args(ast->args.size());
+    for (std::size_t i = 0; i < ast->args.size(); i++)
+      brace_level += emit_ast(
+        static_cast<const smtlib_smt_ast *>(ast->args[i]),
+        uf_args[i],
+        temp_symbols);
+
+    // A nullary application is just the declared constant; an n-ary one is
+    // "(name arg0 arg1 ...)".
+    if (ast->args.empty())
+      emit("(let ((%s %s))\n", tempname.c_str(), ast->symname.c_str());
+    else
+    {
+      emit("(let ((%s (%s", tempname.c_str(), ast->symname.c_str());
+      for (const std::string &arg : uf_args)
+        emit(" %s", arg.c_str());
+      emit("%s", ")))\n");
+    }
+
+    output = tempname;
+    return brace_level + 1;
+  }
+
   assert(ast->args.size() <= 4);
   std::string args[4];
 
@@ -577,7 +654,15 @@ void smtlib_smt_ast::dump() const
   ctx_m->emit_proc.out_stream = tmp_proc;
 }
 
-smt_convt::resultt smtlib_convt::dec_solve()
+void smtlib_convt::emit_check_sat()
+{
+  emit("%s", "(check-sat)\n");
+
+  // Flush out command, starting model check
+  flush();
+}
+
+smt_resultt smtlib_convt::dec_solve()
 {
   pre_solve();
 
@@ -586,14 +671,18 @@ smt_convt::resultt smtlib_convt::dec_solve()
   // Emit constraints
   // check-sat
 
-  emit("%s", "(check-sat)\n");
-
-  // Flush out command, starting model check
-  flush();
+  emit_check_sat();
 
   // If we're just outputing to a file, this is where we terminate.
   if (!emit_proc)
-    return smt_convt::P_SMTLIB;
+    return P_SMTLIB;
+
+  return read_check_sat_response();
+}
+
+smt_resultt smtlib_convt::read_check_sat_response()
+{
+  assert(emit_proc);
 
   // And read in the output
   smtlib_send_start_code = 1;
@@ -602,16 +691,16 @@ smt_convt::resultt smtlib_convt::dec_solve()
   // This should generate on sexpr. See what it is.
   if (smtlib_output->token == TOK_KW_SAT)
   {
-    return smt_convt::P_SATISFIABLE;
+    return P_SATISFIABLE;
   }
   if (smtlib_output->token == TOK_KW_UNSAT)
   {
-    return smt_convt::P_UNSATISFIABLE;
+    return P_UNSATISFIABLE;
   }
   else if (smtlib_output->token == TOK_KW_ERROR)
   {
     log_error("SMTLIB solver returned: \"{}\"", smtlib_output->data);
-    return smt_convt::P_ERROR;
+    return P_ERROR;
   }
   else
   {
@@ -715,18 +804,23 @@ static std::string read_all(FILE *in)
 template <typename... Ts>
 void smtlib_convt::emit(const Ts &...ts) const
 {
-  if (emit_proc)
-    emit_proc.emit(ts...);
+  /* Write the formula file first: its writes never fail, and (for the
+   * bitwuzllob backend) it is the mono solver's source of truth. Only then
+   * feed the interactive model-solver pipe, whose write throws
+   * external_process_died if the solver has died — leaving the file complete
+   * so the caller can still recover. */
   if (emit_opt_output)
     emit_opt_output.emit(ts...);
+  if (emit_proc)
+    emit_proc.emit(ts...);
 }
 
 void smtlib_convt::flush() const
 {
-  if (emit_proc)
-    emit_proc.flush();
   if (emit_opt_output)
     emit_opt_output.flush();
+  if (emit_proc)
+    emit_proc.flush();
 }
 
 smtlib_convt::process_emitter::operator bool() const noexcept
@@ -894,6 +988,40 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return a;
 }
 
+smt_astt smtlib_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // Declare the function symbol to the solver once; every application of the
+  // same name then shares it, so the solver enforces functional congruence
+  // natively.
+  // ESBMC's mangled names are not legal SMT-LIB simple symbols, so quote the
+  // name and use the identical quoted form for both the declaration and every
+  // application.
+  std::string qname = quote_smtlib_symbol(name);
+
+  if (declared_ufs.emplace(name, ctx_level).second)
+  {
+    std::string domain;
+    for (smt_astt arg : args)
+    {
+      domain += sort_to_string(arg->sort);
+      domain += ' ';
+    }
+    emit(
+      "(declare-fun %s (%s) %s)\n",
+      qname.c_str(),
+      domain.c_str(),
+      sort_to_string(rangesort).c_str());
+  }
+
+  smtlib_smt_ast *a = new smtlib_smt_ast(this, rangesort, SMT_FUNC_UF);
+  a->symname = qname;
+  a->args = args;
+  return a;
+}
+
 smt_sort *smtlib_convt::mk_struct_sort(const type2tc &type [[maybe_unused]])
 {
   log_error("Attempted to make struct type in smtlib conversion");
@@ -969,13 +1097,20 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 
 int smtliberror(int startsym [[maybe_unused]], const std::string &error)
 {
+  /* Throw rather than abort: an unparseable response means the external solver
+   * gave us nothing usable (typically because it died and the read hit EOF).
+   * A backend that can recover — e.g. bitwuzllob, whose model solver only
+   * builds counterexamples — catches this; otherwise do_bmc() turns it into a
+   * clean P_ERROR. Unwinding out of the generated parser skips its stack
+   * cleanup, so the parser/lexer must not be re-entered after this throw; no
+   * caller does — each abandons the solver on failure. */
   log_error("SMTLIB response parsing: \"{}\"", error);
-  abort();
+  throw smtlib_convt::external_process_died(error);
 }
 
 void smtlib_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
 
   emit("%s", "(push 1)\n");
 }
@@ -1451,7 +1586,12 @@ void smtlib_convt::pop_ctx()
   symbol_tablet::nth_index<1>::type &syms_numindex = symbol_table.get<1>();
   syms_numindex.erase(ctx_level);
 
-  smt_convt::pop_ctx();
+  // (pop 1) removed any function declared at this level, so forget it too; a
+  // later application will then re-emit its (declare-fun ...).
+  std::erase_if(
+    declared_ufs, [this](const auto &kv) { return kv.second >= ctx_level; });
+
+  smt_solver_baset::pop_ctx();
 }
 
 smt_astt

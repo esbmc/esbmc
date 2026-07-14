@@ -5,14 +5,15 @@ endif()
 add_library(gotoprograms goto_convert.cpp goto_function.cpp goto_main.cpp
   goto_sideeffects.cpp goto_program.cpp goto_check.cpp goto_inline.cpp
   remove_no_op.cpp goto_convert_functions.cpp remove_unreachable.cpp
+  exception_typeid.cpp exception_globals.cpp remove_exceptions.cpp
   builtin_functions.cpp show_claims.cpp destructor.cpp set_claims.cpp
-  add_race_assertions.cpp rw_set.cpp goto_binary_reader.cpp static_analysis.cpp
+  add_race_assertions.cpp add_restrict_assertions.cpp rw_set.cpp goto_binary_reader.cpp static_analysis.cpp
   goto_program_serialization.cpp goto_function_serialization.cpp
-  read_bin_goto_object.cpp goto_program_irep.cpp format_strings.cpp
+  read_bin_goto_object.cpp read_cbmc_goto_object.cpp cbmc_adapter.cpp goto_program_irep.cpp format_strings.cpp
   loop_numbers.cpp goto_loops.cpp goto_loop_simplify.cpp write_goto_binary.cpp
   goto_k_induction.cpp goto_termination.cpp loopst.cpp goto_coverage.cpp goto_coverage_rm.cpp k_path_spanning.cpp goto_cfg.cpp goto_loop_invariant.cpp
   goto_atomicity_check.cpp frame_enforcer.cpp contracts/contracts.cpp)
-add_library(gotoalgorithms loop_unroll.cpp mark_decl_as_non_det.cpp assign_params_as_non_det.cpp goto_check_uninit_vars.cpp goto_check_unchecked_return.cpp)
+add_library(gotoalgorithms loop_unroll.cpp mark_decl_as_non_det.cpp assign_params_as_non_det.cpp goto_check_uninit_vars.cpp goto_check_unchecked_return.cpp dead_store_analysis.cpp)
 
 if(ENABLE_GOTO_CONTRACTOR)
     include(SetupIbex)

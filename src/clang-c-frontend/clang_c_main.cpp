@@ -65,8 +65,7 @@ bool clang_c_maint::clang_main()
   // find main symbol
   std::list<irep_idt> matches;
 
-  forall_symbol_base_map (it, context.symbol_base_map, main)
-  {
+  context.foreach_named_symbol_with_base(main, [&](irep_idt id) {
     // if user provided class/contract name
     if (!config.cname.empty() && !config.main.empty())
     {
@@ -80,7 +79,7 @@ bool clang_c_maint::clang_main()
       while (iss >> tgt_cname)
       {
         const std::string fmt = "@" + tgt_cname + "@F@" + main;
-        if (it->second.as_string().find(fmt) != std::string::npos)
+        if (id.as_string().find(fmt) != std::string::npos)
         {
           is_found_sym = true;
           break;
@@ -88,20 +87,21 @@ bool clang_c_maint::clang_main()
       }
       if (is_found_sym)
       {
-        symbolt *s = context.find_symbol(it->second);
+        symbolt *s = context.find_symbol(id);
         if (s != nullptr && s->get_type().is_code())
-          matches.push_back(it->second);
-        break; // prevent ambiguous
+          matches.push_back(id);
+        return false; // first cname match wins; stop scanning
       }
     }
     else
     {
       // look it up
-      symbolt *s = context.find_symbol(it->second);
+      symbolt *s = context.find_symbol(id);
       if (s != nullptr && s->get_type().is_code())
-        matches.push_back(it->second);
+        matches.push_back(id);
     }
-  }
+    return true; // keep scanning
+  });
 
   if (matches.empty())
   {

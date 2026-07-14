@@ -1,13 +1,13 @@
 #ifndef _ESBMC_SOLVERS_YICES_YICES_CONV_H_
 #define _ESBMC_SOLVERS_YICES_YICES_CONV_H_
 
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <yices.h>
 
 class yices_smt_ast : public solver_smt_ast<term_t>
 {
 public:
-  yices_smt_ast(smt_convt *ctx, term_t _t, const smt_sort *_s)
+  yices_smt_ast(smt_solver_baset *ctx, term_t _t, const smt_sort *_s)
     : solver_smt_ast<term_t>(ctx, _t, _s)
   {
     // Detect term errors
@@ -22,12 +22,12 @@ public:
 
   // Provide assign semantics for arrays. While yices will swallow array
   // equalities, it appears to silently not honor them? From observation.
-  void assign(smt_convt *ctx, smt_astt sym) const override;
+  void assign(smt_solver_baset *ctx, smt_astt sym) const override;
 
-  smt_astt project(smt_convt *ctx, unsigned int elem) const override;
+  smt_astt project(smt_solver_baset *ctx, unsigned int elem) const override;
 
   smt_astt update(
-    smt_convt *ctx,
+    smt_solver_baset *ctx,
     smt_astt value,
     unsigned int idx,
     const expr2tc &idx_expr = expr2tc()) const override;
@@ -37,7 +37,7 @@ public:
   std::string symname;
 };
 
-class yices_convt : public smt_convt,
+class yices_convt : public smt_solver_baset,
                     public array_iface,
                     public tuple_iface,
                     public fp_convt
@@ -46,7 +46,7 @@ public:
   yices_convt(const namespacet &ns, const optionst &options);
   ~yices_convt() override;
 
-  resultt dec_solve() override;
+  smt_resultt dec_solve() override;
   const std::string solver_text() override;
 
   void assert_ast(smt_astt a) override;
@@ -110,6 +110,10 @@ public:
   smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override;
   smt_astt mk_smt_bool(bool val) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_astt mk_smt_uninterpreted_function(
+    const std::string &name,
+    const std::vector<smt_astt> &args,
+    smt_sortt rangesort) override;
   smt_astt mk_array_symbol(
     const std::string &name,
     const smt_sort *s,

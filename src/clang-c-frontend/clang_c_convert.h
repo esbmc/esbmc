@@ -131,6 +131,17 @@ protected:
     const code_typet &ftype);
 
   /**
+   *  Annotate a function's type with its C++ exception specification.
+   *  No-op in C (which has no exception specifications); overridden in the
+   *  C++ frontend to record noexcept / dynamic-throw specifications as
+   *  function-boundary metadata on the function type.
+   */
+  virtual void
+  annotate_exception_specification(const clang::FunctionDecl &, typet &)
+  {
+  }
+
+  /**
    *  Parse function parameters
    *  This function simply contains a loop to populate the code argument list
    *  and calls get_function_body to parse each individual parameter.

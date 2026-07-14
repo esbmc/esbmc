@@ -33,3 +33,7 @@
 #if @ESBMC_ENABLE_smtlib@
 #define SMTLIB
 #endif
+
+#if @ESBMC_ENABLE_bitwuzllob@
+#define BITWUZLLOB
+#endif

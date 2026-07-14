@@ -19,6 +19,7 @@
 #define ESBMC_TYPEINFO
 
 #include <cstddef>
+#include <exception> // std::bad_cast / std::bad_typeid derive from std::exception
 
 namespace std
 {
@@ -71,27 +72,27 @@ public:
 };
 
 // Minimal bad_cast / bad_typeid without pulling in <exception>.
-class bad_cast
+class bad_cast : public exception
 {
 public:
   bad_cast() noexcept
   {
   }
-  const char *what() const noexcept
+  virtual const char *what() const noexcept
   {
-    return "bad_cast";
+    return "std::bad_cast";
   }
 };
 
-class bad_typeid
+class bad_typeid : public exception
 {
 public:
   bad_typeid() noexcept
   {
   }
-  const char *what() const noexcept
+  virtual const char *what() const noexcept
   {
-    return "bad_typeid";
+    return "std::bad_typeid";
   }
 };
 

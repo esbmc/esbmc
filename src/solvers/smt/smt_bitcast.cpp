@@ -1,4 +1,4 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <util/type_byte_size.h>
 
 /**
@@ -126,7 +126,7 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
   abort();
 }
 
-smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
 {
   assert(is_bitcast2t(expr));
 
@@ -161,7 +161,17 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
   else if (is_fixedbv_type(to_type))
   {
     if (is_bv_type(from))
+    {
+      // Under integer encoding, fixedbv values are real-encoded while the
+      // source bitvector is an SMT integer. Returning it unchanged would yield
+      // an int-sorted term with a fixedbv expr-type, tripping later real-only
+      // operations (e.g. round_real_to_int -> mk_lt sort mismatch). Fall back
+      // to a value-based typecast, mirroring the value-based fallbacks in the
+      // bv- and floatbv-target branches.
+      if (int_encoding)
+        return convert_ast(typecast2tc(to_type, from));
       return convert_ast(from);
+    }
   }
   else if (is_bv_type(to_type))
   {

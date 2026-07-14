@@ -47,7 +47,7 @@ public:
   smt_astt default_convert_array_of(
     smt_astt init_val,
     unsigned long domain_width,
-    smt_convt *ctx);
+    smt_solver_baset *ctx);
 
   virtual void add_array_constraints_for_solving(){};
 

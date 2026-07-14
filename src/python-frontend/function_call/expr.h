@@ -16,6 +16,8 @@ enum class FunctionType
 };
 
 class symbol_id;
+class code_function_callt;
+class locationt;
 
 class function_call_expr
 {
@@ -117,6 +119,11 @@ private:
   exprt build_constant_from_arg() const;
 
   /*
+   * Folds bytes.fromhex("..") over a constant hex string into a byte array.
+   */
+  exprt handle_bytes_fromhex() const;
+
+  /*
    * Sets the function_type_ attribute based on the call information.
    */
   void get_function_type();
@@ -135,6 +142,30 @@ private:
    * for error messages (e.g. "mylist" or "nested[0]").
    */
   const symbolt *get_object_list_symbol(std::string &display_name) const;
+
+  /**
+   * @brief Resolve the list receiver of a method call to a symbol.
+   *
+   * A named receiver (`a.index(x)`) resolves through get_object_list_symbol. A
+   * list *literal* receiver (`[1, 2, 1].index(x)`) has no named symbol, so it
+   * is converted here and the temporary symbol its construction creates is
+   * returned. Without this the call fell through to the general-call handler,
+   * which folded `index()` to a constant 0 and verified false assertions.
+   *
+   * @param display_name Receiver name for diagnostics, when there is one.
+   * @return The receiver's symbol, or null when it is neither.
+   */
+  const symbolt *resolve_list_receiver_symbol(std::string &display_name) const;
+
+  /**
+   * @brief Fold a wholly literal list.count()/list.index() at conversion time.
+   *
+   * Keeps the result independent of --unwind: the list model searches with a
+   * loop, so a truncated one would silently mis-verify. Returns nothing when
+   * the receiver is not a list literal, when any operand is not itself a
+   * literal, or when index() would raise ValueError.
+   */
+  std::optional<exprt> fold_constant_list_query() const;
   void materialize_list_symbol(const symbolt *sym) const;
 
   /*
@@ -144,6 +175,22 @@ private:
   exprt handle_int_to_str(nlohmann::json &arg) const;
 
   exprt handle_int_to_bytes() const;
+
+  /*
+   * Folds a zero-argument int method on a constant literal receiver
+   * (e.g. (255).bit_length(), (7).bit_count(), (5).conjugate()). A Name or
+   * BinOp receiver already routes through the int operational model; a bare
+   * literal receiver is not classified as an int instance, so fold it here.
+   */
+  exprt handle_int_literal_method() const;
+
+  /*
+   * Folds float.is_integer() on a constant literal receiver
+   * (e.g. (2.0).is_integer()). A Name receiver already routes through the
+   * float operational model; a bare literal is not classified as a float
+   * instance, so fold it here to a Python bool.
+   */
+  exprt handle_float_is_integer_literal() const;
 
   /*
    * Extracts a string representation from a symbol's constant value.
@@ -255,10 +302,24 @@ private:
   exprt handle_ascii() const;
 
   /*
+   * Handles the builtin format(value[, spec]) for a constant value with a bare
+   * presentation-type spec: the integer base specs ('d'/'x'/'X'/'o'/'b') and
+   * the default/empty spec (str(value)). Width/alignment/precision specs and
+   * non-constant values are not folded — they raise a clean error.
+   */
+  exprt handle_format() const;
+
+  /*
    * Handles ord(str) conversions by extracting the Unicode code point
    * (as an integer) from a single-character string expression.
    */
   exprt handle_ord(nlohmann::json &arg) const;
+
+  /*
+   * Rewrites the argument AST node into an integer Constant holding the given
+   * code point and returns the resulting int expression. Helper for handle_ord.
+   */
+  exprt build_ord_constant(nlohmann::json &arg, int code_point) const;
 
   /*
    * Handles abs() function calls by computing the absolute value of the argument.
@@ -329,10 +390,21 @@ private:
   exprt handle_list_extend() const;
   exprt handle_list_clear() const;
   exprt handle_list_pop() const;
+  // deque front-end methods, modelled on the list backing store
+  // (collections.deque is a list in our model): popleft() == pop(0),
+  // appendleft(x) == insert(0, x).
+  exprt handle_list_popleft() const;
+  exprt handle_list_appendleft() const;
   exprt handle_list_copy() const;
   exprt handle_list_remove() const;
   exprt handle_list_sort() const;
   exprt handle_list_reverse() const;
+  exprt handle_list_count() const;
+  exprt handle_list_index() const;
+
+  // numpy ndarray.astype(dtype): runtime element-wise dtype cast.
+  bool is_numpy_astype_call() const;
+  exprt handle_numpy_astype() const;
 
   /*
    * Check if the current function call is to a regular expression module function
@@ -428,8 +500,133 @@ private:
   // Initialize dispatch table
   std::vector<FunctionHandler> get_dispatch_table();
 
+  // --- get_dispatch_table() decomposition helpers ---
+  // The dispatch table pairs a predicate with a handler for each special
+  // function shape. The predicates and handlers below were lifted verbatim out
+  // of the inline lambdas in get_dispatch_table() so that the table itself reads
+  // as a flat list of {predicate, handler, name} entries. Extraction is purely
+  // mechanical: each helper is invoked from the same one-line lambda it
+  // replaced, so the predicates are still evaluated lazily and in the same
+  // order, and each handler still runs only when its predicate matched.
+  // Predicates only read state, so they are const; handlers may append to the
+  // current GOTO block or call non-const helpers, so they are non-const.
+
+  // int.to_bytes() with an int/int-typed/int-literal receiver.
+  bool is_int_to_bytes_call() const;
+  // Zero-arg int methods (bit_length/bit_count/conjugate) on a constant literal
+  // receiver that fits a signed 64-bit value.
+  bool is_int_literal_method_call() const;
+  // float.is_integer() on a constant float-literal receiver.
+  bool is_float_is_integer_literal_call() const;
+  // __iter__ on a builtin iterable (range/list/tuple/str/set/...).
+  bool is_iter_on_builtin_call() const;
+  // x.__str__() with no args on a builtin scalar (int/float/bool/str).
+  bool is_str_on_builtin_scalar_call() const;
+  // x.__str__() on a builtin scalar -> route to str(x).
+  exprt handle_str_on_builtin_scalar();
+  // math.isnan / math.isinf (spelled __ESBMC_isnan / __ESBMC_isinf).
+  exprt handle_isnan_isinf();
+  // cmath.log / cmath.log10.
+  bool is_cmath_log_call() const;
+  exprt handle_cmath_log_dispatch();
+  // cmath inverse functions (asin/atan/asinh/atanh/acos/acosh) fast path.
+  bool is_cmath_inverse_call() const;
+  exprt handle_cmath_inverse_fast_path();
+  // Real-valued math module functions (sin/cos/sqrt/exp/log/etc.).
+  bool is_math_function_dispatch_call() const;
+  exprt handle_math_function_dispatch();
+
   // General function call handler
   exprt handle_general_function_call();
+
+  // --- handle_general_function_call() decomposition helpers ---
+  // Each "try_"/optional-returning helper extracts a self-contained block of
+  // handle_general_function_call(). A returned value is the result the caller
+  // must return immediately; std::nullopt means "no match — fall through",
+  // preserving the original sequential control flow exactly.
+
+  /*
+   * sorted() fast-path: a single-arg sorted() over a concrete int/tuple list is
+   * materialized in the frontend, avoiding the runtime list sort/equality model.
+   * Honours reverse=<constant bool>; returns nullopt for any other shape.
+   */
+  std::optional<exprt> try_fold_sorted();
+  std::optional<exprt> fold_sorted_int_list(
+    const std::string &list_id,
+    size_t map_size,
+    bool fast_path_reverse) const;
+  std::optional<exprt> fold_sorted_constant_tuples(
+    const std::string &list_id,
+    size_t map_size,
+    bool fast_path_reverse) const;
+  std::optional<exprt> fold_sorted_symbolic_tuples(
+    const std::string &list_id,
+    size_t map_size,
+    bool fast_path_reverse);
+
+  /*
+   * Folds the builtin round() on a Name receiver when it is not user-defined or
+   * user-imported. Returns nullopt to leave round() to the typed dispatch.
+   */
+  std::optional<exprt> try_handle_round(bool is_user_imported);
+
+  /*
+   * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the
+   * _float/_str/_default suffix to actual_func_name based on element type, and
+   * may early-return the inline comparison for a mixed int/float min/max list.
+   */
+  std::optional<exprt> apply_builtin_dispatch(
+    std::string &actual_func_name,
+    bool is_user_imported,
+    bool is_numpy_model_call);
+
+  /*
+   * Indirect call through a variable holding a function pointer, e.g.
+   * times3 = make_multiplier(3); times3(4). Returns nullopt when the Name does
+   * not resolve to a non-code variable symbol.
+   */
+  std::optional<exprt> try_indirect_variable_call();
+
+  /*
+   * Resolves the callee when the direct symbol lookup failed: dataclass
+   * __post_init__ forward refs, base-class method resolution for
+   * constructors/instance methods, AttributeError generation, global-scope
+   * forward references, and the undefined-function fallback. On success either
+   * returns the expression to emit, or returns nullopt after binding
+   * func_symbol so the common call-building path continues.
+   */
+  std::optional<exprt> resolve_missing_function_symbol(
+    const symbolt *&func_symbol,
+    const std::string &func_symbol_id,
+    symbolt *obj_symbol,
+    const symbol_id &obj_symbol_id);
+
+  /*
+   * Builds the resolved code_function_callt in three phases, mirroring the
+   * original inline sequence:
+   *  - bind_call_receiver: prepends self/cls for ctor/instance/class methods
+   *    and returns the parameter offset for subsequent positional binding;
+   *  - build_positional_arguments: converts and appends positional args
+   *    (returns early for the __ESBMC_get_object_size/strlen list-size case);
+   *  - finalize_call: forwards keyword args, fills defaults, and adds the
+   *    constructor temp-self, returning the final call (or an early result).
+   */
+  size_t bind_call_receiver(
+    code_function_callt &call,
+    symbolt *obj_symbol,
+    const symbolt *func_symbol,
+    const locationt &location);
+  std::optional<exprt> build_positional_arguments(
+    code_function_callt &call,
+    size_t param_offset,
+    const locationt &location,
+    const symbolt *func_symbol);
+  exprt finalize_call(
+    code_function_callt &call,
+    size_t param_offset,
+    const locationt &location,
+    const symbolt *func_symbol,
+    symbolt *obj_symbol);
 
   const symbolt *cached_find_symbol(const std::string &id) const;
 

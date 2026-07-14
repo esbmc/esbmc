@@ -112,6 +112,13 @@
     </tasks>
 </rundefinition>
 
+<rundefinition name="SV-COMP26_unreach-call_witnesses">
+    <tasks name="ReachSafety-CorrectnessWitnesses">
+      <includesfile>$HOME/sv-benchmarks/c/CorrectnessWitnesses.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+    </tasks>
+</rundefinition>
+
 <rundefinition name="SV-COMP26_no-data-race">
   <requiredfiles>$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</requiredfiles>
   <option name="-w">$HOME/witness-files/${rundefinition_name}/${taskdef_name}/witness.yml</option>

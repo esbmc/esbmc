@@ -34,13 +34,17 @@ def try_match_char_class_range(pattern: str,
                                prefix_only: bool = False) -> int:
     """Match [x-y]+ or [x-y]* patterns.
 
+    Handles the bare single-character class ``[x-y]`` (length 5, no quantifier,
+    matches exactly one character in the range) as well as ``[x-y]+`` and
+    ``[x-y]*`` (length 6).
+
     When ``prefix_only`` is False (default, used by ``fullmatch``), every
     character of ``string`` must lie in [x-y]. When True (used by ``match``),
     only the leading run of in-range characters is required: ``+`` needs at
     least one such character, ``*`` always matches at the start of the
     string. This mirrors CPython's at-the-start semantics for ``re.match``.
     """
-    if pattern_len != 6:
+    if pattern_len != 5 and pattern_len != 6:
         return -1
 
     # Extract pattern characters to avoid constant folding issues
@@ -50,13 +54,26 @@ def try_match_char_class_range(pattern: str,
     if not (ch0 == '[' and ch2 == '-' and ch4 == ']'):
         return -1
 
-    quantifier: str = pattern[5]
-    if quantifier != '+' and quantifier != '*':
-        return -1
-
     start_char: str = pattern[1]
     end_char: str = pattern[3]
     string_len: int = len(string)
+
+    # Bare class ``[x-y]``: match exactly one character in the range. Without a
+    # quantifier the whole match consumes a single character, so ``fullmatch``
+    # additionally requires the string to be that one character.
+    if pattern_len == 5:
+        if string_len == 0:
+            return 0
+        c0_single: str = string[0]
+        if c0_single < start_char or c0_single > end_char:
+            return 0
+        if prefix_only:
+            return 1
+        return 1 if string_len == 1 else 0
+
+    quantifier: str = pattern[5]
+    if quantifier != '+' and quantifier != '*':
+        return -1
 
     if string_len == 0:
         return 1 if quantifier == '*' else 0
@@ -367,6 +384,25 @@ def search(pattern: str, string: str) -> bool:
                 return True
             pos = pos + 1
         return False
+
+    # Bare single-character class "[x-y]": present anywhere in the string when
+    # some character lies in the range. Recognised here so search() does not
+    # fall through to the non-deterministic result for this common pattern.
+    if pattern_len == 5:
+        cc0: str = pattern[0]
+        cc2: str = pattern[2]
+        cc4: str = pattern[4]
+        if cc0 == '[' and cc2 == '-' and cc4 == ']':
+            start_char: str = pattern[1]
+            end_char: str = pattern[3]
+            string_len: int = len(string)
+            p: int = 0
+            while p < string_len:
+                cc: str = string[p]
+                if cc >= start_char and cc <= end_char:
+                    return True
+                p = p + 1
+            return False
 
     # For patterns with metacharacters, use nondeterministic behavior
     has_match: bool = __VERIFIER_nondet_bool()

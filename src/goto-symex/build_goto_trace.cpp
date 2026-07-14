@@ -1,6 +1,7 @@
 #include <cassert>
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/witnesses.h>
+#include <solvers/smt/smt_conv.h>
 
 expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
 {
@@ -54,38 +55,39 @@ expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
-  goto_tracet &goto_trace,
-  const bool &is_compact_trace)
+  goto_tracet &goto_trace)
 {
   unsigned step_nr = 0;
 
-  // The solver model is fixed for the duration of trace construction
-  // (no further solve / context change happens until we return), so
-  // memoise l_get() results. Guard ASTs recur across thousands of SSA
-  // steps and each l_get bottoms out in an O(formula) solver
-  // get_value(); the cache collapses repeated queries to one per
-  // distinct AST.
-  smt_convt::model_cache_scopet model_cache(smt_conv);
-
+  // l_get() memoises against the current model internally (the cache is
+  // cleared on every solve / context change), so the thousands of repeated
+  // guard-AST queries this loop issues collapse to one solver call each
+  // without any explicit scope management here.
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (SSA_step.hidden && is_compact_trace)
+    // Hidden steps are internal SSA bookkeeping (e.g. phi-merge nodes at
+    // control-flow joins). They carry a synthesised value and a source
+    // location borrowed from a branch, so surfacing them in the trace yields
+    // contradictory-looking states (see discussion #5701). They are never a
+    // user-visible source assignment, so drop them regardless of slicing.
+    if (SSA_step.hidden)
       continue;
 
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     goto_trace_stept goto_trace_step;
 
     goto_trace_step.thread_nr = SSA_step.source.thread_nr;
     goto_trace_step.pc = SSA_step.source.pc;
-    goto_trace_step.comment = SSA_step.comment;
+    goto_trace_step.comment = id2string(SSA_step.comment);
     goto_trace_step.original_lhs = SSA_step.original_lhs;
     goto_trace_step.type = SSA_step.type;
     goto_trace_step.step_nr = ++step_nr;
-    goto_trace_step.format_string = SSA_step.format_string;
+    if (SSA_step.output_data)
+      goto_trace_step.format_string = SSA_step.output_data->format_string;
 
-    goto_trace_step.stack_trace = SSA_step.stack_trace;
+    goto_trace_step.stack_trace = SSA_step.stack_trace();
 
     if (SSA_step.is_assignment())
     {
@@ -123,9 +125,9 @@ void build_goto_trace(
       }
     }
 
-    if (SSA_step.is_output())
+    if (SSA_step.is_output() && SSA_step.output_data)
     {
-      for (const auto &arg : SSA_step.converted_output_args)
+      for (const auto &arg : SSA_step.output_data->converted_output_args)
       {
         if (is_constant_expr(arg))
           goto_trace_step.output_args.push_back(arg);
@@ -134,8 +136,10 @@ void build_goto_trace(
       }
     }
 
-    if (SSA_step.is_assert() || SSA_step.is_assume() || SSA_step.is_branching())
-      goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond_ast).is_false();
+    if (SSA_step.is_assert())
+      goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond_expr).is_false();
+    else if (SSA_step.is_assume() || SSA_step.is_branching())
+      goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond).is_false();
 
     goto_trace.steps.push_back(goto_trace_step);
   }
@@ -164,12 +168,13 @@ void build_successful_goto_trace(
       goto_trace_step.lhs = SSA_step.lhs;
       goto_trace_step.rhs = SSA_step.rhs;
       goto_trace_step.pc = SSA_step.source.pc;
-      goto_trace_step.comment = SSA_step.comment;
+      goto_trace_step.comment = id2string(SSA_step.comment);
       goto_trace_step.original_lhs = SSA_step.original_lhs;
       goto_trace_step.type = SSA_step.type;
       goto_trace_step.step_nr = step_nr++;
-      goto_trace_step.format_string = SSA_step.format_string;
-      goto_trace_step.stack_trace = SSA_step.stack_trace;
+      if (SSA_step.output_data)
+        goto_trace_step.format_string = SSA_step.output_data->format_string;
+      goto_trace_step.stack_trace = SSA_step.stack_trace();
     }
   }
 }

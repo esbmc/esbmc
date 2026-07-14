@@ -14,14 +14,11 @@ struct hash<assert_pair>
 {
   auto operator()(const assert_pair &p) const -> size_t
   {
-    const expr2tc &e1 = p.first;
-    const expr2tc &e2 = p.second;
-    crypto_hash h1, h2;
-    e1->hash(h1);
-    h1.fin();
-    e2->hash(h2);
-    h2.fin();
-    return h1.to_size_t() ^ h2.to_size_t();
+    // crc() is irep2's cached structural hash (a size_t). The previous code
+    // built two full SHA-1s only to fold each down to a size_t via
+    // to_size_t() — same width, so crc() is lossless here and skips the
+    // per-byte SHA walk.
+    return p.first->crc() ^ p.second->crc();
   }
 };
 } // namespace std

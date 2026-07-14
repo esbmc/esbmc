@@ -109,10 +109,12 @@ def _is_imported_model(module_name: str) -> bool:
         "decimal",
         "collections",
         "dataclasses",
+        "heapq",
         "typing",
         "time",
         "threading",
         "queue",
+        "torch",
     }
     return module_name in models
 

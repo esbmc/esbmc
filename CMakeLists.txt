@@ -10,13 +10,14 @@ cmake_policy(SET CMP0091 NEW)
 project(ESBMC)
 
 set(ESBMC_VERSION_MAJOR 8)
-set(ESBMC_VERSION_MINOR 3)
+set(ESBMC_VERSION_MINOR 4)
 set(ESBMC_VERSION_PATCH 0)
 set(ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
 # The only default solver available is smtlib
 set(ESBMC_AVAILABLE_SOLVERS "smtlib")
 
+set(MIN_SUPPORTED_LLVM_VERSION_MAJOR 18)
 set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 22)
 
 #################################
@@ -110,6 +111,10 @@ include(SetupLocalLLVM)
 
 include(ExternalDependencies)
 
+include(SetupMimalloc)
+
+include(SetupImmer)
+
 # Optimization
 include(OptimizationCCache)
 include(WError)
@@ -124,6 +129,11 @@ endif()
 
 if(ENABLE_PYTHON_FRONTEND)
     add_definitions(-DENABLE_PYTHON_FRONTEND)
+endif()
+
+option(ENABLE_LD_FRONTEND "Enable SAFE-LD IEC 61131-3 Ladder Diagram front-end" OFF)
+if(ENABLE_LD_FRONTEND)
+    add_definitions(-DENABLE_LD_FRONTEND)
 endif()
 
 if(ENABLE_GOTO_CONTRACTOR)
@@ -148,6 +158,14 @@ if(BUILD_TESTING)
     enable_testing()
     include_directories(src)
     add_subdirectory(unit)
+    if(ENABLE_LD_FRONTEND)
+        add_subdirectory(regression/ld)
+    endif()
+endif()
+# Added after enable_testing() so the ld-verify CLI's own CTest cases register;
+# the binary itself is built whenever the LD front-end is enabled.
+if(ENABLE_LD_FRONTEND)
+  add_subdirectory(tools/ld-verify)
 endif()
 if(ENABLE_REGRESSION)
     add_subdirectory(regression)

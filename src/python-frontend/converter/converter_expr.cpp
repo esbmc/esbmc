@@ -7,6 +7,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_exception_handler.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_list.h>
@@ -17,11 +18,13 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/encoding.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>
@@ -49,8 +52,23 @@ static exprt build_shape_tuple_expr(
   std::vector<typet> element_types(dims.size(), int_type());
   struct_typet tuple_type =
     converter.get_tuple_handler().create_tuple_struct_type(element_types);
-  struct_exprt tuple_expr(tuple_type);
-  tuple_expr.operands() = dims;
+  // V.3: build the tuple value in IREP2, back-migrating once. The operands are
+  // already-built int_type() dimension exprs, so a constant_struct2t over them
+  // round-trips exactly through migrate. Re-attach the full struct type
+  // afterwards: migrate_type drops the frontend-only #python_aggregate_kind
+  // marker that the in/membership dispatch reads (python_aggregate_kind) with no
+  // tag fallback — mirroring tuple_handler::get_tuple_expr.
+  std::vector<expr2tc> members;
+  members.reserve(dims.size());
+  for (const exprt &d : dims)
+  {
+    expr2tc d2;
+    migrate_expr(d, d2);
+    members.push_back(std::move(d2));
+  }
+  exprt tuple_expr =
+    migrate_expr_back(constant_struct2tc(migrate_type(tuple_type), members));
+  tuple_expr.type() = tuple_type;
   return tuple_expr;
 }
 
@@ -78,6 +96,99 @@ static void throw_numpy_multidim_index_error(
   if (!loc.is_nil())
     msg << " at " << loc.get_file() << ":" << loc.get_line();
   throw std::runtime_error(msg.str());
+}
+
+// True for a bare `:` slice, i.e. Slice(lower=None, upper=None, step=None).
+// Used to recognize the two 2-D slicing patterns this frontend supports,
+// `a[:, j]` and `a[i, :]`; any other slice (bounded or stepped) inside a
+// tuple subscript is still rejected by throw_numpy_multidim_index_error.
+static bool is_full_slice_node(const nlohmann::json &node)
+{
+  if (!(node.contains("_type") && node["_type"] == "Slice"))
+    return false;
+  auto is_absent = [&](const char *key) {
+    return !node.contains(key) || node[key].is_null();
+  };
+  return is_absent("lower") && is_absent("upper") && is_absent("step");
+}
+
+static void throw_numpy_too_many_indices_error(
+  python_converter &converter,
+  const nlohmann::json &element,
+  std::size_t num_indices)
+{
+  std::ostringstream msg;
+  msg << "IndexError: too many indices for array: array has fewer "
+         "dimensions than the "
+      << num_indices << " indices given";
+  const locationt loc = converter.get_location_from_decl(element);
+  if (!loc.is_nil())
+    msg << " at " << loc.get_file() << ":" << loc.get_line();
+  throw std::runtime_error(msg.str());
+}
+
+class get_expr_depth_guard
+{
+public:
+  explicit get_expr_depth_guard(python_converter &converter)
+    : converter(converter)
+  {
+    constexpr std::size_t kMaxGetExprDepth = 512;
+    if (++converter.get_expr_depth_ > kMaxGetExprDepth)
+    {
+      --converter.get_expr_depth_;
+      throw std::runtime_error(
+        "TypeError: Python expression nesting exceeded recursion limit of " +
+        std::to_string(kMaxGetExprDepth));
+    }
+  }
+
+  ~get_expr_depth_guard()
+  {
+    --converter.get_expr_depth_;
+  }
+
+private:
+  python_converter &converter;
+};
+
+// True when `method_name` is a method decorated with @property in `class_name`
+// or one of its (transitive) base classes. Reading `obj.prop` then invokes the
+// getter. A same-named non-property method in a derived class shadows a base
+// property (Python MRO), so a match that is not @property stops the search.
+static bool is_property_method(
+  const nlohmann::json &ast_body,
+  const std::string &class_name,
+  const std::string &method_name)
+{
+  const nlohmann::json cls = json_utils::find_class(ast_body, class_name);
+  if (cls.empty() || !cls.contains("body"))
+    return false;
+
+  for (const auto &stmt : cls["body"])
+  {
+    if (
+      stmt.value("_type", std::string()) != "FunctionDef" ||
+      stmt.value("name", std::string()) != method_name)
+      continue;
+    if (stmt.contains("decorator_list"))
+      for (const auto &dec : stmt["decorator_list"])
+        if (
+          dec.value("_type", std::string()) == "Name" &&
+          dec.value("id", std::string()) == "property")
+          return true;
+    return false; // method exists but is not a property: shadows any base
+  }
+
+  if (cls.contains("bases"))
+    for (const auto &base : cls["bases"])
+      if (
+        base.contains("id") &&
+        is_property_method(
+          ast_body, base["id"].template get<std::string>(), method_name))
+        return true;
+
+  return false;
 }
 
 static ExpressionType get_expression_type(const nlohmann::json &element)
@@ -212,8 +323,10 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return from_integer(value.get<long long>(), long_long_int_type());
 
   // Handle boolean literals (True/False)
+  // V.3: build the bool constant in IREP2, back-migrated for the legacy seam.
   if (value.is_boolean())
-    return gen_boolean(value.get<bool>());
+    return migrate_expr_back(
+      value.get<bool>() ? gen_true_expr() : gen_false_expr());
 
   // Handle floating-point literals (float)
   if (value.is_number_float())
@@ -299,11 +412,73 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
 
 exprt python_converter::get_lambda_expr(const nlohmann::json &element)
 {
-  return lambda_handler_->get_lambda_expr(element);
+  // The body is converted here with the lambda's parameters still unbound, so
+  // any division inside it must not emit a ZeroDivisionError guard (which would
+  // fire on the unconstrained divisor); it is checked at the bound call site.
+  bool saved = converting_lambda_body_;
+  converting_lambda_body_ = true;
+  exprt result = lambda_handler_->get_lambda_expr(element);
+  converting_lambda_body_ = saved;
+  return result;
+}
+
+exprt python_converter::get_named_expr(const nlohmann::json &element)
+{
+  // PEP 572 walrus `(target := value)`: assign value to target, then evaluate
+  // to the assigned value. Lower to a plain assignment emitted into the current
+  // block and read the target back, so the existing assignment machinery
+  // (symbol creation, type inference, flow tracking) is reused unchanged.
+  const nlohmann::json &target = element["target"];
+
+  // No block to emit into (e.g. a type-inference pre-pass): evaluate the value
+  // without binding rather than dropping a half-formed declaration.
+  if (!current_block)
+    return get_expr(element["value"]);
+
+  nlohmann::json assign = nlohmann::json::object();
+  assign["_type"] = "Assign";
+  assign["targets"] = nlohmann::json::array({target});
+  assign["value"] = element["value"];
+  copy_location_fields_from_decl(element, assign);
+
+  // get_var_assign mutates converter state (current_lhs, is_converting_rhs,
+  // is_converting_lhs, current_element_type); save/restore so the enclosing
+  // expression conversion is unaffected. flow_class_map_ is intentionally
+  // persistent (flow tracking) and left as get_var_assign updates it.
+  exprt *saved_lhs = current_lhs;
+  bool saved_rhs = is_converting_rhs;
+  bool saved_lhs_flag = is_converting_lhs;
+  typet saved_elem_type = current_element_type;
+  get_var_assign(assign, *current_block);
+  current_lhs = saved_lhs;
+  is_converting_rhs = saved_rhs;
+  is_converting_lhs = saved_lhs_flag;
+  current_element_type = saved_elem_type;
+
+  return get_expr(target);
 }
 
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
+  get_expr_depth_guard depth_guard(*this);
+
+  // Walrus operator `(target := value)` — assign as a side effect, evaluate to
+  // the bound value. Handled before the type switch since NamedExpr is not in
+  // the expression-type map.
+  if (element.is_object() && element.value("_type", "") == "NamedExpr")
+    return get_named_expr(element);
+
+  // A walrus in a ternary branch (`a if c else b`) is evaluated conditionally,
+  // but get_named_expr binds unconditionally. Refuse with a clean diagnostic
+  // here (before type inference) rather than return an unsound verdict. The
+  // ternary test is always evaluated, so a walrus there stays supported.
+  if (
+    element.is_object() && element.value("_type", "") == "IfExp" &&
+    ((element.contains("body") && contains_named_expr(element["body"])) ||
+     (element.contains("orelse") && contains_named_expr(element["orelse"]))))
+    throw std::runtime_error(
+      "Walrus operator ':=' in a conditional expression is not supported");
+
   exprt expr;
 
   ExpressionType type = get_expression_type(element);
@@ -415,15 +590,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             opt_st.has_component("value") && !opt_st.has_component(attr_name))
           {
             const typet &inner_raw = opt_st.get_component("value").type();
-            exprt optional_base = base_expr;
-            if (optional_base.type().is_pointer())
-            {
-              exprt deref("dereference");
-              deref.type() = optional_base.type().subtype();
-              deref.move_to_operands(optional_base);
-              optional_base = std::move(deref);
-            }
-            base_expr = member_exprt(optional_base, "value", inner_raw);
+            // V.3: build the (optional) dereference of the base directly in
+            // IREP2 instead of staging a legacy "dereference" node and
+            // re-migrating it; byte-identical (migrate of the legacy node is
+            // exactly dereference2tc(migrate_type(subtype), migrate(base))).
+            expr2tc ob2;
+            migrate_expr(base_expr, ob2);
+            if (base_expr.type().is_pointer())
+              ob2 =
+                dereference2tc(migrate_type(base_expr.type().subtype()), ob2);
+            base_expr = migrate_expr_back(
+              member2tc(migrate_type(inner_raw), ob2, "value"));
             base_type = inner_raw;
             if (base_type.is_pointer())
               base_type = base_type.subtype();
@@ -478,15 +655,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
               throw std::runtime_error(
                 "__ESBMC_list_size not found for list shape access");
 
-            side_effect_expr_function_callt size_call;
-            size_call.function() = symbol_expr(*size_func);
-            size_call.type() = size_type();
-            if (base_expr.type().is_pointer())
-              size_call.arguments().push_back(base_expr);
-            else
-              size_call.arguments().push_back(address_of_exprt(base_expr));
-
-            exprt list_len = typecast_exprt(size_call, int_type());
+            // (int)__ESBMC_list_size(&base_expr), built in IREP2 (V.3).
+            expr2tc base2;
+            migrate_expr(base_expr, base2);
+            if (!is_pointer_type(base2->type))
+              base2 = address_of2tc(base2->type, base2);
+            expr2tc size_call = side_effect_function_call2tc(
+              migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
+            exprt list_len = migrate_expr_back(
+              typecast2tc(migrate_type(int_type()), size_call));
             return build_shape_tuple_expr(*this, {list_len});
           }
         }
@@ -499,15 +676,20 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             const typet &attr_type =
               struct_type.get_component(attr_name).type();
             typet clean_type = clean_attribute_type(attr_type);
-            exprt member_base = base_expr;
-            if (member_base.type().is_pointer())
-            {
-              exprt deref("dereference");
-              deref.type() = member_base.type().subtype();
-              deref.move_to_operands(member_base);
-              member_base = std::move(deref);
-            }
-            return member_exprt(member_base, attr_name, clean_type);
+            // V.1k step-2 hypothesis: build member2t with the (possibly
+            // symbol-typed) source permitted by the step-1 relaxation, then
+            // back-migrate to the legacy body so the EXISTING adjust + goto
+            // -convert resolves it as today. No converter-side ns.follow.
+            // V.3: the (optional) base dereference is built directly in IREP2
+            // rather than staged as a legacy "dereference" node and re-migrated
+            // (byte-identical to migrate of that node).
+            expr2tc src2;
+            migrate_expr(base_expr, src2);
+            if (base_expr.type().is_pointer())
+              src2 =
+                dereference2tc(migrate_type(base_expr.type().subtype()), src2);
+            return migrate_expr_back(
+              member2tc(migrate_type(clean_type), src2, attr_name));
           }
         }
 
@@ -558,7 +740,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
                 {
                   const typet &vt =
                     clean_attribute_type(st.get_component("value").type());
-                  expr = member_exprt(base_expr, "value", vt);
+                  expr2tc bv2;
+                  migrate_expr(base_expr, bv2);
+                  expr = migrate_expr_back(
+                    member2tc(migrate_type(vt), bv2, "value"));
                   break;
                 }
               }
@@ -590,8 +775,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             bp.empty() ? flow_class_map_.end() : flow_class_map_.find(bp);
           if (it != flow_class_map_.end())
           {
-            exprt cast = typecast_exprt(
-              base_expr, gen_pointer_type(symbol_typet("tag-" + it->second)));
+            // (tag-Cls*)base_expr, built in IREP2 (V.3).
+            const typet cast_t =
+              gen_pointer_type(symbol_typet("tag-" + it->second));
+            expr2tc base2;
+            migrate_expr(base_expr, base2);
+            exprt cast =
+              migrate_expr_back(typecast2tc(migrate_type(cast_t), base2));
+            cast.type() = cast_t; // restore #cpp_type that migrate_type drops
             resolved = resolve_member_on_base(cast, attr_name);
           }
         }
@@ -624,6 +815,25 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
         log_error(
           "Cannot resolve attribute '{}' on subscript result", attr_name);
+        abort();
+      }
+      else if (element["value"]["_type"] == "Call")
+      {
+        // Attribute access on an inline call result, e.g. `C().attr`. Convert
+        // the call to its (materialised) instance and resolve the member on
+        // it, the same way `d[k].attr` is handled above. A named instance
+        // (`c = C(); c.attr`) already works; this covers the unnamed case.
+        exprt base_expr = get_expr(element["value"]);
+        const std::string &attr_name = element["attr"].get<std::string>();
+
+        exprt resolved = resolve_member_on_base(base_expr, attr_name);
+        if (!resolved.is_nil())
+        {
+          expr = resolved;
+          break;
+        }
+
+        log_error("Cannot resolve attribute '{}' on call result", attr_name);
         abort();
       }
       else
@@ -733,6 +943,20 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             expr = symbol_expr(*func_symbol);
             break;
           }
+
+          // A bare class name used as a value, e.g. `register(SomeClass)` or
+          // `create_publisher(topic, Twist)` -- passing the class object itself
+          // as an argument. Python classes are first-class objects, but ESBMC
+          // has no first-class type value, so model it as an opaque nondet
+          // placeholder. Inert uses (storing or forwarding the class) then
+          // convert instead of aborting; constructing through such a forwarded
+          // value is not modelled.
+          if (is_class(var_name, *ast_json))
+          {
+            expr = side_effect_expr_nondett(any_type());
+            expr.location() = get_location_from_decl(element);
+            break;
+          }
         }
         locationt location = get_location_from_decl(element);
         std::ostringstream error_msg;
@@ -827,13 +1051,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             throw std::runtime_error(
               "__ESBMC_list_size not found for list shape access");
 
-          side_effect_expr_function_callt size_call;
-          size_call.function() = symbol_expr(*size_func);
-          size_call.type() = size_type();
-          size_call.arguments().push_back(
-            expr.type().is_pointer() ? expr : address_of_exprt(expr));
-
-          exprt list_len = typecast_exprt(size_call, int_type());
+          // (int)__ESBMC_list_size(&expr), built in IREP2 (V.3).
+          expr2tc base2;
+          migrate_expr(expr, base2);
+          if (!is_pointer_type(base2->type))
+            base2 = address_of2tc(base2->type, base2);
+          expr2tc size_call = side_effect_function_call2tc(
+            migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
+          exprt list_len =
+            migrate_expr_back(typecast2tc(migrate_type(int_type()), size_call));
           expr = build_shape_tuple_expr(*this, {list_len});
           break;
         }
@@ -848,6 +1074,32 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         {
           expr = result;
           break;
+        }
+      }
+
+      // Numeric-tower properties on int/float (attribute access returning a
+      // known constant). A real number is its own real part with a zero
+      // imaginary part; CPython additionally exposes int as the ratio n/1 via
+      // numerator/denominator. float has no numerator/denominator (it is not a
+      // Rational), so those fall through to the AttributeError below.
+      {
+        const typet &num_t = symbol->get_type();
+        const bool is_int = num_t.is_signedbv() || num_t.is_unsignedbv();
+        const bool is_float = num_t.is_floatbv();
+        if (is_int || is_float)
+        {
+          if (attr_name == "real" || (is_int && attr_name == "numerator"))
+            break; // value is unchanged — expr already holds it
+          if (attr_name == "imag")
+          {
+            expr = is_float ? from_double(0.0, num_t) : from_integer(0, num_t);
+            break;
+          }
+          if (is_int && attr_name == "denominator")
+          {
+            expr = from_integer(1, num_t);
+            break;
+          }
         }
       }
 
@@ -886,14 +1138,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             "' on union type: no class with this attribute found");
         }
 
-        // Create a typecast from char* to target_class*
+        // V.3: build the char* -> target_class* cast, the dereference, and
+        // the member access entirely in IREP2, back-migrated once at the
+        // legacy seam. Keeping the typecast and dereference as expr2tc avoids
+        // the back-migrate/re-migrate round-trip the staged legacy form paid.
         typet target_ptr_type =
           gen_pointer_type(target_class_symbol->get_type());
-        exprt casted_expr = typecast_exprt(expr, target_ptr_type);
+        expr2tc expr2;
+        migrate_expr(expr, expr2);
+        expr2tc casted2 = typecast2tc(migrate_type(target_ptr_type), expr2);
 
         // Dereference to get the object
-        exprt deref_expr("dereference", target_class_symbol->get_type());
-        deref_expr.copy_to_operands(casted_expr);
+        expr2tc deref2 = dereference2tc(
+          migrate_type(target_class_symbol->get_type()), casted2);
 
         // Access the member on the object
         const struct_typet &target_struct =
@@ -901,8 +1158,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         const typet &attr_type = target_struct.get_component(attr_name).type();
         typet clean_type = clean_attribute_type(attr_type);
 
-        member_exprt member_expr(deref_expr, attr_name, clean_type);
-        expr = member_expr;
+        expr = migrate_expr_back(
+          member2tc(migrate_type(clean_type), deref2, attr_name));
         break;
       }
 
@@ -954,17 +1211,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           element.contains("value") && element["value"].contains("id")
             ? element["value"]["id"].get<std::string>()
             : std::string();
+        // Raise a catchable Python AttributeError (issue #5904) rather than
+        // aborting the frontend, so it can escape main() (uncaught) or be
+        // suppressed by a matching `except AttributeError`.
         std::ostringstream msg;
-        msg << "AttributeError: '";
-        if (!base_name.empty())
-          msg << base_name;
-        else
-          msg << "object";
-        msg << "' has no attribute '" << attr_name << "'";
-        const locationt loc = get_location_from_decl(element);
-        if (!loc.is_nil())
-          msg << " at " << loc.get_file() << ":" << loc.get_line();
-        throw std::runtime_error(msg.str());
+        msg << "'" << (base_name.empty() ? "object" : base_name)
+            << "' object has no attribute '" << attr_name << "'";
+        expr = get_exception_handler().gen_exception_raise(
+          "AttributeError", msg.str());
+        break;
       }
 
       // Read-modify-set: we may push_back a new component into the class
@@ -989,17 +1244,23 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
         if (!(base_type.is_struct() || base_type.is_union() ||
               points_to_struct))
-          base = typecast_exprt(base, gen_pointer_type(class_type));
-
-        if (base.type().is_pointer())
         {
-          exprt deref("dereference");
-          deref.type() = base.type().subtype();
-          deref.move_to_operands(base);
-          base = std::move(deref);
+          // (class_type*)base, built in IREP2 (V.3).
+          const typet bt = gen_pointer_type(class_type);
+          expr2tc base2;
+          migrate_expr(base, base2);
+          base = migrate_expr_back(typecast2tc(migrate_type(bt), base2));
+          base.type() = bt; // restore #cpp_type that migrate_type drops
         }
 
-        return member_exprt(base, attr_name, clean_type);
+        // V.3: dereference (when base is a pointer) and member access built in
+        // IREP2; exact round-trip of the legacy dereference + member_exprt.
+        expr2tc b2;
+        migrate_expr(base, b2);
+        if (base.type().is_pointer())
+          b2 = dereference2tc(migrate_type(base.type().subtype()), b2);
+        return migrate_expr_back(
+          member2tc(migrate_type(clean_type), b2, attr_name));
       };
 
       if (is_converting_lhs)
@@ -1096,10 +1357,32 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             const typet &attr_type = class_type.get_component(attr_name).type();
             expr = build_member_expr_from_class(attr_type);
           }
+          else if (is_property_method(
+                     (*ast_json)["body"],
+                     extract_class_name_from_tag(obj_type_name),
+                     attr_name))
+          {
+            // Reading a @property: invoke its getter. Rewrite `obj.attr` to a
+            // call `obj.attr()` and convert that, reusing the method-call
+            // machinery (the @property decorator is otherwise ignored, so the
+            // getter is a plain self-method returning the value).
+            nlohmann::json call_node;
+            call_node["_type"] = "Call";
+            call_node["func"] = element;
+            call_node["args"] = nlohmann::json::array();
+            call_node["keywords"] = nlohmann::json::array();
+            copy_location_fields_from_decl(element, call_node);
+            expr = get_expr(call_node);
+          }
           else
           {
-            throw std::runtime_error(
-              "Attribute \"" + attr_name + "\" not found");
+            // Instance of a known class but the attribute genuinely does not
+            // exist: raise a catchable AttributeError (issue #5904) instead of
+            // aborting conversion.
+            expr = get_exception_handler().gen_exception_raise(
+              "AttributeError",
+              "'" + extract_class_name_from_tag(obj_type_name) +
+                "' object has no attribute '" + attr_name + "'");
           }
         }
         else
@@ -1148,8 +1431,38 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       break;
     }
 
+    // An inline list-returning call used directly as a subscript base --
+    // e.g. sorted(words)[0] -- comes back as a code_function_callt statement.
+    // Indexing it builds __ESBMC_list_size over the call statement, whose
+    // operand type is empty, aborting symex ("got empty, expected pointer").
+    // Materialise the call into a temporary first, mirroring the assigned
+    // path (s = sorted(words); s[0]). See #4807.
+    if (current_block)
+      array =
+        materialize_list_function_call(array, element["value"], *current_block);
+
     const nlohmann::json &slice = element["slice"];
     typet array_type = ns.follow(array.type());
+
+    // A fully-constant string slice (e.g. "abcdef"[5:0:-1]) folds at
+    // conversion time. The runtime string-slice path mishandles a negative
+    // step — wrong content and an unconstrained length — whereas consteval's
+    // slice computation matches CPython. Gate on the converted str type (a
+    // bytes literal decodes to the same Constant JSON as str, and its runtime
+    // slice is a separate concern), so only a genuine constant str slice folds
+    // and anything non-constant falls through to the existing runtime path.
+    if (
+      ast_json && slice.is_object() && slice.value("_type", "") == "Slice" &&
+      type_utils::is_string_type(array_type))
+    {
+      python_consteval slice_evaluator(*ast_json);
+      if (auto folded = slice_evaluator.try_eval_global_expr(element))
+        if (folded->kind == PyConstValue::STRING)
+        {
+          expr = string_builder_->build_string_literal(folded->string_val);
+          break;
+        }
+    }
 
     // Unwrap pointer-to-dict so d[key] reaches the dict handler when
     // d is held by pointer (e.g. dict-of-class-value via the symbol table).
@@ -1173,8 +1486,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       typet pointed = ns.follow(array_type.subtype());
       if (pointed.is_struct() && tuple_handler_->is_tuple_type(pointed))
       {
-        array = dereference_exprt(array, pointed);
-        array.type() = pointed;
+        // V.1k keystone (D): deref of the tuple pointer built in IREP2.
+        // build_dereference restores #cpp_type and falls back to legacy for
+        // dyn-array pointees, so it reproduces the legacy node exactly.
+        array = python_expr::build_dereference(array, pointed);
         array_type = pointed;
       }
     }
@@ -1215,40 +1530,185 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     const bool tuple_index_targets_list_model =
       array_is_runtime_list || array_is_builtin_array;
 
-    // Multi-dimensional indexing ``a[i, j]`` for list/array-backed models:
-    // accept the 2D scalar subset by lowering to chained indexing: `a[i][j]`.
-    // Keep rejecting all other tuple index arities for this model.
+    // Multi-dimensional indexing ``a[i, j, k, ...]`` for list/array-backed
+    // models: lower to chained single-axis indexing `a[i][j][k]...`, one
+    // axis at a time. Mixed slice/index tuples (e.g. `a[1:2, 0]`) are not
+    // supported by the chained-list model and are rejected explicitly.
     if (
       tuple_index_targets_list_model && slice.contains("_type") &&
       slice["_type"] == "Tuple")
     {
       if (
         slice.contains("elts") && slice["elts"].is_array() &&
-        slice["elts"].size() == 2)
+        !slice["elts"].empty())
       {
-        const auto &row_idx_raw = slice["elts"][0];
-        const auto &col_idx_raw = slice["elts"][1];
-        const nlohmann::json row_idx = normalize_bool_index_node(row_idx_raw);
-        const nlohmann::json col_idx = normalize_bool_index_node(col_idx_raw);
-        const bool has_slice_dim =
-          (row_idx.contains("_type") && row_idx["_type"] == "Slice") ||
-          (col_idx.contains("_type") && col_idx["_type"] == "Slice");
-        if (has_slice_dim)
-          throw_numpy_multidim_index_error(*this, element);
-
-        python_list list(*this, element);
-        exprt row = list.index(array, row_idx);
-        if (contains_cpp_throw(row))
+        std::vector<nlohmann::json> idx_nodes;
+        idx_nodes.reserve(slice["elts"].size());
+        bool has_slice_dim = false;
+        for (const auto &raw_idx : slice["elts"])
         {
-          expr = row;
-          break;
+          const nlohmann::json idx = normalize_bool_index_node(raw_idx);
+          if (idx.contains("_type") && idx["_type"] == "Slice")
+            has_slice_dim = true;
+          idx_nodes.push_back(idx);
+        }
+        if (has_slice_dim)
+        {
+          // 2-D slicing: a[:, j] (column select) and a[i, :] (row select,
+          // equivalent to chained a[i][:]). Any other slice/index tuple
+          // combination (partial bounds, both dims sliced, 3+ dims, ...)
+          // stays unsupported.
+          if (
+            idx_nodes.size() == 2 && is_full_slice_node(idx_nodes[0]) !=
+                                       is_full_slice_node(idx_nodes[1]))
+          {
+            python_list list(*this, element);
+            if (is_full_slice_node(idx_nodes[0]))
+              expr = list.build_column_select(array, idx_nodes[1], element);
+            else
+            {
+              exprt current = list.index(array, idx_nodes[0]);
+              if (!contains_cpp_throw(current))
+                current = list.index(current, idx_nodes[1]);
+              expr = current;
+            }
+            break;
+          }
+
+          throw_numpy_multidim_index_error(*this, element);
         }
 
-        expr = list.index(row, col_idx);
+        python_list list(*this, element);
+        exprt current = array;
+        for (std::size_t axis = 0; axis < idx_nodes.size(); ++axis)
+        {
+          if (axis > 0)
+          {
+            const typet current_type = ns.follow(current.type());
+            const bool current_is_list_like = current_type.is_array() ||
+                                              current_type.is_pointer() ||
+                                              current_type == list_type;
+            if (!current_is_list_like)
+              throw_numpy_too_many_indices_error(
+                *this, element, idx_nodes.size());
+          }
+
+          current = list.index(current, idx_nodes[axis]);
+          if (contains_cpp_throw(current))
+            break;
+        }
+
+        expr = current;
         break;
       }
 
       throw_numpy_multidim_index_error(*this, element);
+    }
+
+    // Fancy/integer-array indexing ``a[[0, 2]]``: a literal index list
+    // selects elements by position, resolved and bounds-checked at
+    // conversion time (see python_list::build_fancy_index).
+    if (
+      tuple_index_targets_list_model && slice.contains("_type") &&
+      slice["_type"] == "List" && slice.contains("elts") &&
+      slice["elts"].is_array())
+    {
+      std::vector<nlohmann::json> idx_elts(
+        slice["elts"].begin(), slice["elts"].end());
+      python_list list(*this, element);
+      expr = list.build_fancy_index(array, idx_elts, element);
+      break;
+    }
+
+    // Boolean-mask indexing ``a[mask]``: when the index is a bare variable
+    // reference whose static type is a bool array, filter `array` at
+    // runtime to the elements where `mask` is True (NumPy fancy indexing).
+    // Restricted to a simple Name index so the type can be checked without
+    // re-evaluating a side-effecting expression later in this function.
+    if (
+      tuple_index_targets_list_model && slice.contains("_type") &&
+      slice["_type"] == "Name")
+    {
+      exprt mask_candidate = get_expr(slice);
+      if (!contains_cpp_throw(mask_candidate))
+      {
+        const typet mask_type = ns.follow(mask_candidate.type());
+        if (mask_type.is_array())
+        {
+          if (ns.follow(mask_type.subtype()).is_bool())
+          {
+            python_list list(*this, element);
+            expr = list.build_bool_mask_index(array, mask_candidate, element);
+            break;
+          }
+
+          // Fancy/integer-array indexing through a variable (as opposed to
+          // a literal index list, a[[0, 2]]) is not modelled yet; give an
+          // explicit error instead of falling through to the generic
+          // scalar-index path below, whose "not str" message is written
+          // for a different mistake (string indices) and would be
+          // confusing here.
+          std::ostringstream msg;
+          msg << "TypeError: fancy indexing with a non-boolean array is "
+                 "not supported; only boolean-mask indexing (a[mask]) and "
+                 "literal integer-list indexing (a[[i, j, ...]]) are "
+                 "supported for array indices";
+          const locationt loc = get_location_from_decl(element);
+          if (!loc.is_nil())
+            msg << " at " << loc.get_file() << ":" << loc.get_line();
+          throw std::runtime_error(msg.str());
+        }
+
+        // Fancy indexing through a variable holding a concrete literal
+        // list of integers, e.g. `idx = [0, 2]; a[idx]`. `idx` is a plain
+        // Python list (not a numpy int array), so it reaches here as the
+        // list model's struct type rather than an array_typet. Resolve it
+        // the same way build_bool_mask_row_select resolves a mask
+        // variable: read its sole AST declaration and reuse
+        // build_fancy_index, which already handles a literal list at the
+        // subscript site (`a[[0, 2]]`).
+        if (mask_type == type_handler_.get_list_type())
+        {
+          const std::string idx_name = slice["id"].get<std::string>();
+          const locationt loc = get_location_from_decl(element);
+
+          auto reject = [&](const std::string &reason) {
+            std::ostringstream msg;
+            msg << "TypeError: fancy indexing through a variable (a[idx]) "
+                << reason;
+            if (!loc.is_nil())
+              msg << " at " << loc.get_file() << ":" << loc.get_line();
+            throw std::runtime_error(msg.str());
+          };
+
+          // find_var_decl returns the first textual assignment in scope,
+          // not necessarily the one reaching this use site; reject any
+          // reassignment rather than risk resolving a stale index list.
+          if (json_utils::has_multiple_assignments_in_scope(
+                idx_name, current_func_name_, *ast_json))
+            reject(
+              "requires an index variable that is assigned exactly once "
+              "(no reassignment) so its literal value can be resolved "
+              "unambiguously");
+
+          const nlohmann::json idx_decl =
+            json_utils::find_var_decl(idx_name, current_func_name_, *ast_json);
+
+          if (
+            idx_decl.is_null() || !idx_decl.contains("value") ||
+            idx_decl["value"].value("_type", "") != "List" ||
+            !idx_decl["value"].contains("elts"))
+            reject(
+              "requires an index variable whose value is a concrete "
+              "literal list of integers, e.g. idx = [0, 2]");
+
+          std::vector<nlohmann::json> idx_elts(
+            idx_decl["value"]["elts"].begin(), idx_decl["value"]["elts"].end());
+          python_list list(*this, element);
+          expr = list.build_fancy_index(array, idx_elts, element);
+          break;
+        }
+      }
     }
 
     // Handle object subscripting through __getitem__:
@@ -1358,7 +1818,13 @@ static exprt make_slice_struct_expr(
       return side_effect_expr_nondett(field_type);
     exprt value = conv.get_expr(*node);
     if (value.type() != field_type)
-      value = typecast_exprt(value, field_type);
+    {
+      // (field_type)value, built in IREP2 (V.3).
+      expr2tc v2;
+      migrate_expr(value, v2);
+      value = migrate_expr_back(typecast2tc(migrate_type(field_type), v2));
+      value.type() = field_type; // restore #cpp_type that migrate_type drops
+    }
     return value;
   };
 
@@ -1366,28 +1832,41 @@ static exprt make_slice_struct_expr(
     return node && !node->is_null();
   };
 
-  struct_exprt slice_expr(struct_type);
+  // V.3: build the PySliceObject value in IREP2. Each member is built exactly
+  // as the legacy struct_exprt did -- start/stop/step (a value, nondet, or an
+  // IREP2 typecast from lower_int), the has_* flags, and a zero for the
+  // anonymous trailing padding member -- then migrated; the constant_struct2t
+  // over those members back-migrates to the same struct value. Re-attach the
+  // followed struct type afterwards: migrate_type_back does not reproduce the
+  // component #cpp_type attributes / padding layout of the C model struct.
+  std::vector<expr2tc> members;
+  members.reserve(struct_type.components().size());
   for (const auto &component : struct_type.components())
   {
     const std::string name = component.get_name().as_string();
+    exprt member;
     if (name == "start")
-      slice_expr.operands().push_back(lower_int(lower, component.type()));
+      member = lower_int(lower, component.type());
     else if (name == "stop")
-      slice_expr.operands().push_back(lower_int(upper, component.type()));
+      member = lower_int(upper, component.type());
     else if (name == "step")
-      slice_expr.operands().push_back(lower_int(step, component.type()));
+      member = lower_int(step, component.type());
     else if (name == "has_start")
-      slice_expr.operands().push_back(
-        from_integer(present_flag(lower) ? 1 : 0, component.type()));
+      member = from_integer(present_flag(lower) ? 1 : 0, component.type());
     else if (name == "has_stop")
-      slice_expr.operands().push_back(
-        from_integer(present_flag(upper) ? 1 : 0, component.type()));
+      member = from_integer(present_flag(upper) ? 1 : 0, component.type());
     else if (name == "has_step")
-      slice_expr.operands().push_back(
-        from_integer(present_flag(step) ? 1 : 0, component.type()));
+      member = from_integer(present_flag(step) ? 1 : 0, component.type());
     else
-      slice_expr.operands().push_back(gen_zero(component.type()));
+      member = gen_zero(component.type());
+    expr2tc m2;
+    migrate_expr(member, m2);
+    members.push_back(std::move(m2));
   }
+
+  exprt slice_expr =
+    migrate_expr_back(constant_struct2tc(migrate_type(struct_type), members));
+  slice_expr.type() = struct_type;
 
   if (source_node.contains("lineno"))
     slice_expr.location() = conv.get_location_from_decl(source_node);
