@@ -1,8 +1,8 @@
 #ifndef PYTHON_FRONTEND_EXCEPTION_UTILS_H
 #define PYTHON_FRONTEND_EXCEPTION_UTILS_H
 
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <util/location.h>
 #include <util/message.h>
 #include <util/std_expr.h>

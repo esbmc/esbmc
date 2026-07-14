@@ -1,7 +1,7 @@
-#include <python-frontend/tuple_handler.h>
+#include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
-#include <python-frontend/type_handler.h>
+#include <python-frontend/type/type_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/function_call/expr.h>
 #include <util/arith_tools.h>

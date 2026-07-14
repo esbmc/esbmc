@@ -1,7 +1,7 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
-#include <python-frontend/python_class.h>
+#include <python-frontend/class/python_class.h>
 
 class python_converter;
 class codet;

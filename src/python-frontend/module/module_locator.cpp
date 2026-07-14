@@ -1,5 +1,5 @@
 #include <boost/filesystem.hpp>
-#include <module_locator.h>
+#include <python-frontend/module/module_locator.h>
 
 namespace bfs = boost::filesystem;
 
