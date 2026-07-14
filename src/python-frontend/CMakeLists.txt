@@ -27,8 +27,8 @@ add_library(pythonfrontend STATIC
             converter/converter_util.cpp
             param_annotations.cpp
             python_adjust.cpp
-            python_class.cpp
-            python_class_builder.cpp
+            class/python_class.cpp
+            class/python_class_builder.cpp
             python_consteval.cpp
             python-dict/dict_core.cpp
             python-dict/dict_nested.cpp

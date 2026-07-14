@@ -9,7 +9,7 @@
 #include <python-frontend/module/module_locator.h>
 #include <python-frontend/param_annotations.h>
 #include <python-frontend/python_annotation/python_annotation.h>
-#include <python-frontend/python_class_builder.h>
+#include <python-frontend/class/python_class_builder.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/exception/python_exception_handler.h>

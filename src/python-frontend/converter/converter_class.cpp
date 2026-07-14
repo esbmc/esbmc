@@ -1,6 +1,6 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_class_builder.h>
+#include <python-frontend/class/python_class_builder.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
