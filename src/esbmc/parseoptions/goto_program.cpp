@@ -344,7 +344,7 @@ static void link_cbmc_libm_bodies(goto_functionst &goto_functions)
     "truncf",    "trunc",    "truncl",    "roundf", "round", "roundl",
     "copysignf", "copysign", "copysignl", "fminf",  "fmin",  "fminl",
     "fmaxf",     "fmax",     "fmaxl",     "fdimf",  "fdim",  "fdiml",
-    "modff",     "modf",     "modfl"};
+    "modff",     "modf",     "modfl",     "rintf",  "rint",  "rintl"};
 
   for (const char *name : libm)
   {
@@ -383,13 +383,14 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
   // link_cbmc_libm_bodies then bridges the CBMC binary's plain-named bodyless
   // declarations to them. Unlike sqrt/fabs (operators rewritten in cbmc_adapter)
   // these have no ESBMC expression form and must run the C library body.
-  // Referencing memcpy/memmove/memset additionally force-links string.c, whose
-  // bodies pull in __memcpy_impl/__memmove_impl/__memset_impl -- the byte-loop
-  // fallbacks intrinsic_memcpy/memmove/memset bump to when a copy's size or
-  // pointers are symbolic (and, for memmove, when the regions overlap). The
-  // cbmc_adapter retargets CBMC's memcpy/memset/memmove calls straight to the
-  // c:@F@__ESBMC_* intrinsics, but those intrinsics still need the *_impl bodies
-  // present for the bump path, so the boilerplate must link them here.
+  // Referencing memcpy/memmove/memset/memcmp additionally force-links string.c,
+  // whose bodies pull in __memcpy_impl/__memmove_impl/__memset_impl/__memcmp_impl
+  // -- the byte-loop fallbacks intrinsic_memcpy/memmove/memset/memcmp bump to
+  // when a size or pointer is symbolic (and, for memmove, when the regions
+  // overlap). The cbmc_adapter retargets CBMC's memcpy/memset/memmove/memcmp
+  // calls straight to the c:@F@__ESBMC_* intrinsics, but those intrinsics still
+  // need the *_impl bodies present for the bump path, so the boilerplate must
+  // link them here.
   static const char boilerplate[] =
     "/* Auto-generated: bundle all ESBMC additions for CBMC gotos. */\n"
     "#include <math.h>\n"
@@ -404,7 +405,9 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)fmaxf,     (void *)fmax,     (void *)fmaxl,\n"
     "  (void *)fdimf,     (void *)fdim,     (void *)fdiml,\n"
     "  (void *)modff,     (void *)modf,     (void *)modfl,\n"
+    "  (void *)rintf,     (void *)rint,     (void *)rintl,\n"
     "  (void *)memcpy,    (void *)memmove,  (void *)memset,\n"
+    "  (void *)memcmp,\n"
     "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)
