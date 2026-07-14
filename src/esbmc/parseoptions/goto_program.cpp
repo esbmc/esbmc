@@ -343,12 +343,13 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
 {
   static const char *const libc[] = {
-    "ceilf",     "ceil",     "ceill",     "floorf",  "floor",  "floorl",
-    "truncf",    "trunc",    "truncl",    "roundf",  "round",  "roundl",
-    "copysignf", "copysign", "copysignl", "fminf",   "fmin",   "fminl",
-    "fmaxf",     "fmax",     "fmaxl",     "fdimf",   "fdim",   "fdiml",
-    "modff",     "modf",     "modfl",     "strlen",  "strcmp", "strncmp",
-    "strcpy",    "strncpy",  "strcat",    "strncat", "strchr"};
+    "ceilf",     "ceil",     "ceill",     "floorf", "floor",   "floorl",
+    "truncf",    "trunc",    "truncl",    "roundf", "round",   "roundl",
+    "copysignf", "copysign", "copysignl", "fminf",  "fmin",    "fminl",
+    "fmaxf",     "fmax",     "fmaxl",     "fdimf",  "fdim",    "fdiml",
+    "modff",     "modf",     "modfl",     "rintf",  "rint",    "rintl",
+    "strlen",    "strcmp",   "strncmp",   "strcpy", "strncpy", "strcat",
+    "strncat",   "strchr"};
 
   for (const char *name : libc)
   {
@@ -388,13 +389,14 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
   // declarations to them. Unlike sqrt/fabs (operators rewritten in cbmc_adapter)
   // these have no ESBMC expression form and must run the C library body -- that
   // includes the string.h query functions (strlen/strcmp/strncmp), whose bodies
-  // are byte loops. Referencing memcpy/memmove/memset additionally force-links
-  // string.c, whose bodies pull in __memcpy_impl/__memmove_impl/__memset_impl --
-  // the byte-loop fallbacks intrinsic_memcpy/memmove/memset bump to when a copy's
-  // size or pointers are symbolic (and, for memmove, when the regions overlap).
-  // The cbmc_adapter retargets CBMC's memcpy/memset/memmove calls straight to the
-  // c:@F@__ESBMC_* intrinsics, but those intrinsics still need the *_impl bodies
-  // present for the bump path, so the boilerplate must link them here.
+  // are byte loops. Referencing memcpy/memmove/memset/memcmp additionally
+  // force-links string.c, whose bodies pull in
+  // __memcpy_impl/__memmove_impl/__memset_impl/__memcmp_impl -- the byte-loop
+  // fallbacks intrinsic_memcpy/memmove/memset/memcmp bump to when a size or
+  // pointer is symbolic (and, for memmove, when the regions overlap). The
+  // cbmc_adapter retargets CBMC's memcpy/memset/memmove/memcmp calls straight to
+  // the c:@F@__ESBMC_* intrinsics, but those intrinsics still need the *_impl
+  // bodies present for the bump path, so the boilerplate must link them here.
   static const char boilerplate[] =
     "/* Auto-generated: bundle all ESBMC additions for CBMC gotos. */\n"
     "#include <math.h>\n"
@@ -409,7 +411,9 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)fmaxf,     (void *)fmax,     (void *)fmaxl,\n"
     "  (void *)fdimf,     (void *)fdim,     (void *)fdiml,\n"
     "  (void *)modff,     (void *)modf,     (void *)modfl,\n"
+    "  (void *)rintf,     (void *)rint,     (void *)rintl,\n"
     "  (void *)memcpy,    (void *)memmove,  (void *)memset,\n"
+    "  (void *)memcmp,\n"
     "  (void *)strlen,    (void *)strcmp,   (void *)strncmp,\n"
     "  (void *)strcpy,    (void *)strncpy,  (void *)strcat,\n"
     "  (void *)strncat,   (void *)strchr,\n"
