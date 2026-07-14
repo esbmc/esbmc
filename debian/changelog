@@ -1,3 +1,16 @@
+esbmc (8.4.0+dfsg-1) noble; urgency=medium
+
+  * New upstream release 8.4.0.
+  * Add libimmer-dev to Build-Depends: 8.4.0 introduces a mandatory
+    dependency on the header-only immer library
+    (scripts/cmake/SetupImmer.cmake); without it cmake configure fails when
+    DOWNLOAD_DEPENDENCIES is OFF.
+  * Switch debian/control to unversioned llvm-dev/libclang-dev/
+    libclang-cpp-dev/clang, matching the Debian packaging.
+  * Repack upstream tarball as +dfsg (see Files-Excluded in debian/copyright).
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Tue, 14 Jul 2026 09:16:14 +0100
+
 esbmc (8.3.0+dfsg-4) unstable; urgency=medium
 
   * Fix debian/watch: switch to mode=git to bypass GitHub's JavaScript-
