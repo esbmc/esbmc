@@ -884,7 +884,8 @@ as a progress tracker.
 | Milestone | Harness | Location | Technique | Verdict | Status |
 |---|---|---|---|---|---|
 | **M0** | H-A1 refcount conservation, single-free & self-alias UAF-safety (I1) | `unit/irep2/refcount.test.cpp`, `refcount_ops.h`, `refcount.fuzz.cpp` | **Tier B** — Catch2 property tests + a **nondeterministic-input** operation driver, both over the **real** `irep_container<T>`; reads the actual `irep2t::refcount` atomic after copy / move / assign / detach | 5 cases, 91 assertions PASS on `master` @ 4ba1903130; libFuzzer run 2,000,000 execs, no violation | **Done** (PR #6024). Verifies the genuine implementation, not a model, per §2 Tier B. The `run_ops` driver decodes a byte stream (libFuzzer, or fixed-seed in the unit test) into a sequence of container ops and checks refcount conservation after each; the libFuzzer target (`-DENABLE_FUZZER=On`) adds ASan UAF/double-free coverage. Built under the `Sanitizer` build type (ASan) the fixed cases also witness UAF freedom. |
-| **M4** | H-A9 guard shared-prefix walk agrees with the naive scan (I8) | `unit/irep2/guard.test.cpp` | **Tier B** — drives the **real** `guard2tc`: builds guards that share a cached and-chain prefix then diverge, runs the real `operator-=` (calls `common_pointer_prefix_size` unconditionally, `irep2_guard.cpp:342`) and `operator|=` (`:468`), and differentially checks the observable result against a naive set-difference / prefix-factoring reference. Anti-vacuity: injecting an over-reporting bug into `common_pointer_prefix_size` fails 4/5 cases. In asserts-on builds the real code additionally self-checks `walk == scan` (`irep2_guard.cpp:106`). | 5 cases, 713 assertions PASS; dual-verified (differential + injected-bug detection) | **Done** (this PR). Verifies the genuine implementation per the Tier-B mandate — **no** lifted C model. |
+| **M4** | H-A9 guard shared-prefix walk agrees with the naive scan (I8) | `unit/irep2/guard.test.cpp` | **Tier B** — drives the **real** `guard2tc`: builds guards that share a cached and-chain prefix then diverge, runs the real `operator-=` (calls `common_pointer_prefix_size` unconditionally, `irep2_guard.cpp:342`) and `operator|=` (`:468`), and differentially checks the observable result against a naive set-difference / prefix-factoring reference. Anti-vacuity: injecting an over-reporting bug into `common_pointer_prefix_size` fails 4/5 cases. In asserts-on builds the real code additionally self-checks `walk == scan` (`irep2_guard.cpp:106`). | 5 cases, 713 assertions PASS; dual-verified (differential + injected-bug detection) | **Done** (PR #6043). Verifies the genuine implementation per the Tier-B mandate — **no** lifted C model. |
+| **M2** | H-A10 `gen_zero`/`gen_one` recursion & aggregate size loops (P2) | `unit/irep2/gen_value.test.cpp` | **Tier B** — drives the **real** `gen_zero`/`gen_one` (`irep2_utils.cpp`): scalar zeros/ones are structurally correct; `gen_zero` recurses over array/vector/struct/union (element loops over the `constant_int` size) and nested struct-of-array, each compared to a manually-built expected zero; determinism across calls; and both `gen_zero`(unsupported `empty_type`) and `gen_one`(aggregate) hit `abort()`, checked via a POSIX `fork()`/`SIGABRT` death-test (guarded out on Windows). Anti-vacuity: an off-by-one in the array element loop fails the member-count and structural checks. | 4 cases, 23 assertions PASS | **Done** (this PR). |
 
 **Approach note.** H-A1 is realised as a **Tier-B** harness (real classes) rather
 than a Tier-A standalone C model: verifying `irep2`'s *actual* C++ is the goal, and
@@ -913,13 +914,13 @@ nondet input, but reach the real classes differently:
   The oracle uses `abort()`, not `assert()`, so it stays live under `NDEBUG`.
 
 **Methodology (hard rule).** Every harness verifies the **actual irep2 C++**, never
-a hand-written C/standalone model of it — even for ESBMC-liftable kernels. File-local
-internals (e.g. `common_pointer_prefix_size`, anon-namespace) are exercised through
-the public API that calls them and cross-checked differentially against a naive
-reference computed in-test.
+a hand-written model. File-local internals (e.g. `common_pointer_prefix_size`,
+anon-namespace) are exercised through the public API that calls them.
 
-**Next task:** M4 remainder / M5 — H-B4 (guard algebra logical equivalence: `-=`/`|=`
-vs a naive reference, SMT-checked on small terms), then H-A10 (`gen_zero`/`gen_one`
-recursion), then the relational laws H-B1 (ordering/equality), H-B2 (CRC↔cmp), H-B5
-(`with_type`/per-kind sweep). All Tier-B on the real classes.
+**Next task:** the P3 serialisation case (R7) — `tostring`/`pretty` / `type_to_string`
+enum-name exhaustiveness: every expr/type kind has a printable name, guarding the
+`assert(0 && "Unrecognized…")` tails (`irep2_utils.cpp:449-565`); a fork/SIGABRT
+death-test can pin the abort for an out-of-range id if needed. After that, all
+Tier-A/B harnesses are complete — remaining is M6 Tier-C (TSan CI recipe + §13
+hand-proof note) and folding the per-harness verdicts into this doc's §10/§11.
 
