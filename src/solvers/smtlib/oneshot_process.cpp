@@ -101,14 +101,20 @@ smt_resultt run_solver(
 {
   std::string cmd = cmd_template;
 
-  /* Substitute the formula file for every %f, or append it. The path is
-   * single-quoted for the shell; embedded single quotes (possible via
-   * --output) are escaped as '\''. */
+  /* Substitute the formula file for every %f, or append it, quoting the path
+   * for the shell the command runs under. On Windows popen() goes through
+   * cmd.exe, which only recognizes double quotes ('"' is not a legal path
+   * character there); POSIX shells get single quotes, with embedded single
+   * quotes (possible via --output) escaped as '\''. */
+#ifdef _WIN32
+  std::string quoted_path = "\"" + formula_path + "\"";
+#else
   std::string escaped_path = formula_path;
   for (size_t q = escaped_path.find('\''); q != std::string::npos;
        q = escaped_path.find('\'', q + 4))
     escaped_path.replace(q, 1, "'\\''");
   std::string quoted_path = "'" + escaped_path + "'";
+#endif
   size_t pos = cmd.find("%f");
   if (pos == std::string::npos)
     cmd += " " + quoted_path;

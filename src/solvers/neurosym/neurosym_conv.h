@@ -4,8 +4,9 @@
 #include <solvers/smtlib/smtlib_conv.h>
 
 /** Backend for NeuroSym, a neural-guided SMT solver (a GAN proposes candidate
- *  models, with a Z3 fallback preserving soundness and completeness) for the
- *  QF_BV and QF_LIA fragments of SMT-LIB2. NeuroSym is a Python program that
+ *  models, with a Z3 fallback preserving soundness and completeness). NeuroSym
+ *  natively parses only the QF_BV and QF_LIA fragments of SMT-LIB2, and this
+ *  backend drives it as a pure QF_BV solver. NeuroSym is a Python program that
  *  cannot be linked into another application, so this backend reuses the
  *  smtlib backend's SMT-LIB2 serializer to render the formula into a file and
  *  runs NeuroSym on it in one-shot batch mode (--neurosym-prog, "%f" is
