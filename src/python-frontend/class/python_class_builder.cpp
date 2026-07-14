@@ -1,10 +1,10 @@
 #include <python_converter.h>
 #include <symbol_id.h>
 #include <json_utils.h>
-#include <python_class_builder.h>
+#include <python-frontend/class/python_class_builder.h>
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/python_expr_builder.h>
-#include <type_utils.h>
+#include <python-frontend/type/type_utils.h>
 #include <util/std_expr.h>
 #include <util/expr_util.h>
 #include <util/irep.h>

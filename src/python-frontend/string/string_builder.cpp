@@ -1,6 +1,6 @@
 #include "string_builder.h"
 #include "python_converter.h"
-#include "type_handler.h"
+#include <python-frontend/type/type_handler.h>
 #include <python-frontend/python_expr_builder.h>
 #include <util/arith_tools.h>
 #include <util/std_code.h>
