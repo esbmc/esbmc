@@ -1,0 +1,4 @@
+CORE
+main.c
+--neurosym --neurosym-prog always-sat-neurosym.sh --neurosym-model-prog "z3 -in"
+refusing to build a counterexample from a diverging model

@@ -4,7 +4,7 @@
 **Author:** Lucas C. Cordeiro (ESBMC team)
 **Scope:** Add the NeuroSym neural-guided SMT solver (GAN + Z3 fallback, QF_BV / QF_LIA over SMT-LIB2) as a selectable ESBMC backend.
 **Grounding (ESBMC side):** All ESBMC references below were read from the current `master` tree. Key files: `src/solvers/solve.cpp`, `src/solvers/solve.h`, `src/solvers/solver_config.h.in`, `src/solvers/smtlib/smtlib_conv.{h,cpp}`, `src/solvers/bitwuzllob/bitwuzllob_conv.{h,cpp}`, `src/esbmc/options.cpp`, `src/esbmc/parseoptions/{command_line_options,driver}.cpp`, `src/solvers/CMakeLists.txt`.
-**Grounding (NeuroSym side):** The NeuroSym claims in this document — the `python main.py --stdin` invocation, the QF_BV/QF_LIA-only fragment (no arrays, no reals, no quantifiers), the GAN-candidate + Z3-fallback control flow, the fixed-dimension feature encodings (8576 QF_LIA / 10752 QF_BV), and the existing C++ code being a KLEE bridge that shells out to Python — describe the NeuroSym research prototype and are **not yet pinned** to a public reference (NeuroSym is not publicly indexed at the time of writing). Before implementation starts, replace this placeholder with the exact source: **NeuroSym repository:** `<repo URL @ commit hash — TBD>`; **paper:** `<DOI / venue — TBD, if published>`. Until pinned, every NeuroSym-side claim must be re-validated against the actual NeuroSym checkout (the Phase 1 PoC and the §8 open questions do exactly this).
+**Grounding (NeuroSym side):** The NeuroSym claims in this document — the `python main.py --stdin` invocation, the QF_BV/QF_LIA-only fragment (no arrays, no reals, no quantifiers), the GAN-candidate + Z3-fallback control flow, the fixed-dimension feature encodings (8576 QF_LIA / 10752 QF_BV), and the existing C++ code being a KLEE bridge that shells out to Python — describe the NeuroSym research prototype. **NeuroSym repository:** <https://github.com/VishalKumarSwain/NeuroSym> @ `052a926fcbe464a6d3ee17c2a9f49af8c7e3c9cb` (2026-07-14; the `%f` file-arg invocation and verdict format were confirmed against the ESBMC backend by the NeuroSym author on [PR #6058](https://github.com/esbmc/esbmc/pull/6058)); **paper:** `<DOI / venue — TBD, if published>`. Claims not yet exercised by the ESBMC integration (feature encodings, KLEE bridge, QF_LIA path) should still be re-validated against that checkout as the corresponding phases land (the Phase 1 PoC and the §8 open questions do exactly this).
 
 ---
 
@@ -181,9 +181,10 @@ Leaving all three `*_api` = `nullptr` is what pins the whole query to pure QF_BV
 ### 2.5 Parsing responses back
 
 - **SAT/UNSAT/UNKNOWN**: `run_neurosym()` scans NeuroSym's stdout with `parse_verdict_line` → `P_SATISFIABLE` / `P_UNSATISFIABLE` / `P_ERROR`.
-- **Model → counterexample**: two supported paths, in preference order:
+- **Model → counterexample**: three candidate paths, in preference order:
   1. **Side model-solver** (`--neurosym-model-prog "z3 -in"`): inherited `emit_proc` + `read_check_sat_response()` + `get_value()` reconstruct the model via ESBMC's existing s-expr parser (`smtlib.ypp`). Zero new parsing code. This is the Phase-3 default.
   2. **Native NeuroSym `(get-value)`** (Tier C): if NeuroSym is extended to answer `(get-value)` on its `--stdin` channel, point `emit_proc` at NeuroSym itself and drop the side-solver. Deferred pending NeuroSym changes.
+  3. **Parse NeuroSym's batch model output** (future phase): as of NeuroSym `052a926f` its `format_output()` emits sort-correct `(define-fun … (_ BitVec N) #x…)` literals for bit-vector variables (previously everything was printed as `Int`), so the model in the SAT output is now well-typed QF_BV and could be parsed directly — no side-solver, no interactive protocol. Cheaper than 2 but still new parsing code plus a divergence story for models NeuroSym omits; not needed while 1 works.
 
 ### 2.6 Command-line exposure
 
