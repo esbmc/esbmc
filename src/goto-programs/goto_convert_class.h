@@ -144,6 +144,7 @@ protected:
   // conversion
   //
   void convert_block(const codet &code, goto_programt &dest);
+  void convert_controlled(const codet &code, goto_programt &dest);
   void convert_decl(const codet &code, goto_programt &dest);
   void convert_decl_block(const codet &code, goto_programt &dest);
   void convert_expression(const codet &code, goto_programt &dest);
