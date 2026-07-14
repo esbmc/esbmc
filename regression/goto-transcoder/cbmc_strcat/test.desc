@@ -1,0 +1,4 @@
+CORE
+cbmc_strcat.goto
+--binary --unwind 10
+^VERIFICATION SUCCESSFUL$
