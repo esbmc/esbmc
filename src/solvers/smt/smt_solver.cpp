@@ -1117,9 +1117,77 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::nearbyint_id:
   {
     assert(is_floatbv_type(expr));
-    a = fp_api->mk_smt_nearbyint_from_float(
-      convert_ast(to_nearbyint2t(expr).from),
-      convert_rounding_mode(to_nearbyint2t(expr).rounding_mode));
+    if (int_encoding)
+    {
+      const nearbyint2t &ni = to_nearbyint2t(expr);
+      const expr2tc &rm = ni.rounding_mode;
+      smt_astt operand = convert_ast(ni.from);
+
+      smt_astt zero = mk_smt_real("0");
+      smt_astt one = mk_smt_real("1");
+      smt_astt half = mk_smt_real("0.5");
+
+      // floor(x): SMT real2int rounds toward -inf; lift back to Real.
+      smt_astt floor_v = mk_int2real(mk_real2int(operand));
+      // ceil(x): floor+1 unless x is already integral.
+      smt_astt ceil_v =
+        mk_ite(mk_isint(operand), operand, mk_add(floor_v, one));
+      // Fractional part in [0,1) for all real x (also negative).
+      smt_astt frac = mk_sub(operand, floor_v);
+
+      if (smt_fp_rounding_utils::is_round_to_minus_inf(rm))
+      {
+        a = floor_v;
+      }
+      else if (smt_fp_rounding_utils::is_round_to_plus_inf(rm))
+      {
+        a = ceil_v;
+      }
+      else if (smt_fp_rounding_utils::is_round_to_zero(rm))
+      {
+        // Reuse existing RTZ helper; its integer result is lifted to Real.
+        a = mk_int2real(round_real_to_int(operand));
+      }
+      else if (smt_fp_rounding_utils::is_nearest_rounding_mode(rm))
+      {
+        // Round half to even: tie goes to whichever of floor, floor+1 is even.
+        // floor/2 is an integer iff floor is even — works for negative floors too
+        // (e.g. -2/2 = -1: integer = even; -3/2 = -1.5: not integer = odd).
+        smt_astt two = mk_smt_real("2");
+        smt_astt floor_is_even = mk_isint(mk_div(floor_v, two));
+        smt_astt tie_rte = mk_ite(floor_is_even, floor_v, mk_add(floor_v, one));
+        a = mk_ite(
+          mk_lt(frac, half),
+          floor_v,
+          mk_ite(mk_gt(frac, half), mk_add(floor_v, one), tie_rte));
+      }
+      else if (smt_fp_rounding_utils::is_round_to_away(rm))
+      {
+        // At a 0.5 tie, round toward the integer farther from zero:
+        //   x >= 0: ceil is farther  -> use strict-less so tie picks ceil.
+        //   x <  0: floor is farther -> use <=      so tie picks floor.
+        smt_astt away_pos = mk_ite(mk_lt(frac, half), floor_v, ceil_v);
+        smt_astt away_neg = mk_ite(mk_le(frac, half), floor_v, ceil_v);
+        a = mk_ite(mk_le(zero, operand), away_pos, away_neg);
+      }
+      else
+      {
+        // Symbolic or unsupported rounding mode: produce an unconstrained
+        // integer-valued Real (sound but non-deterministically chosen).
+        smt_astt fresh = mk_fresh(mk_real_sort(), "ra_nearbyint::", nullptr);
+        assert_ast(mk_isint(fresh));
+        a = fresh;
+      }
+
+      if (ir_ieee)
+        ir_ieee_api->propagate_nan_pred(a, operand);
+    }
+    else
+    {
+      a = fp_api->mk_smt_nearbyint_from_float(
+        convert_ast(to_nearbyint2t(expr).from),
+        convert_rounding_mode(to_nearbyint2t(expr).rounding_mode));
+    }
     break;
   }
   case expr2t::if_id:
