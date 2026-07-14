@@ -182,8 +182,8 @@ smt_astt smt_solver_baset::convert_byte_extract_bv_mode(
   unsigned int upper, lower;
   if (!data.big_endian)
   {
-    lower = intref.value.to_uint64() * 8;   //i*8
-    upper = lower + out_width - 1;           //i*8 + w - 1
+    lower = intref.value.to_uint64() * 8; //i*8
+    upper = lower + out_width - 1;        //i*8 + w - 1
   }
   else
   {
