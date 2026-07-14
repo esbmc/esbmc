@@ -879,11 +879,69 @@ For Rust, we have a few extra remarks.
 
 Analysis of 1,378 Kani benchmark tests run against ESBMC backend reveals systematic failures across 8 major issue categories. This document organizes failures into actionable umbrella issues with concrete minimal reproducer test cases.
 
-**Statistics:**
+**Statistics (baseline, pre-fix — superseded by the 2026-07-14 reassessment below):**
 - Total Tests: 1,378
 - Crashes (SIGSEGV rc=139): ~1,200 (87%)
 - Aborts (SIGABRT rc=134): ~50 (4%)
 - Successfully Parsed: ~128 (9%)
+
+---
+
+## Reassessment — 2026-07-14 (post UMBRELLA #1 crash-chain fixes)
+
+The four fixes landed for UMBRELLA #1 (recursive-aggregate guard, union operand-wrap,
+zero-sized union member, wide `byte_extract` reinterpret — branch
+`fix/cbmc-adapter-recursive-type-overflow`) resolve a crash root cause that is **shared
+across nearly all umbrellas**, not just transmute. The recursion guard in particular is the
+"fundamental lowering issue" this document suspected: Rust `core`'s pervasively
+self-referential aggregates overflowed the adapter's tag-inlining stack, which is the
+dominant source of the 87 % rc=139 baseline.
+
+**UMBRELLA #1 full sweep — 133 flat `core::intrinsics::verify` transmute harnesses:**
+- **131 / 133 (98.5 %) crash-free** — reach a verdict with no segfault, abort, migrate/
+  adapter error, or SMT sort error (the baseline was "all rc=139").
+- **2 / 133 solver timeouts** (`check_transmute_slice_metadata`,
+  `check_transmute_unchecked_slice_metadata` — fat-pointer / slice-metadata transmutes) at
+  ESBMC `--timeout 90`; both lower to a GOTO program cleanly (~10 s), so this is solver
+  performance, not a crash.
+- All 131 report `VERIFICATION FAILED`; spot-checked against CBMC 6.10.0 these are Kani
+  `reachability_check` coverage markers (verdict + property parity — see the UMBRELLA #1
+  detail), not real assertion violations.
+
+**All eight umbrella minimal reproducers are now crash-free** (each lowers and reaches a
+verdict or a solver timeout — none crash):
+
+| Umbrella | Minimal reproducer | Baseline | Now |
+|----------|--------------------|----------|-----|
+| #1 Transmute       | `check_typed_swap_u8`               | rc=139 | FAILED (CBMC parity) |
+| #2 Arithmetic      | `widening_mul_u8`                   | rc=139 | FAILED |
+| #3 Pointers        | `check_align_offset_u8`             | rc=139 | FAILED |
+| #4 Mem swap        | `check_swap_primitive`              | rc=139 | FAILED |
+| #5 Float→Int       | `checked_f32_to_int_unchecked_i8`   | rc=139 | **SUCCESSFUL** |
+| #6 Collections     | `check_reverse`                     | rc=139 | FAILED |
+| #7 Contracts       | `duration_checked_sub`              | rc=134 | FAILED |
+| #8 Generics        | `struct_mod…transmute_arr_to_tuple` | rc=139 | crash-free (solver timeout) |
+
+**Implication for the plan.** The crash-elimination work that dominated this roadmap
+(umbrellas #1–#6 and #8 all "🔴 BROKEN / rc=139", #7 "rc=134") is, at the reproducer level,
+largely **done** by these four fixes. The `verify-rust-std` / Kani front shifts from *"make
+it not crash"* to three new axes:
+1. **Quantify** — a global sweep of the full ~1,378-test corpus is needed to turn "all eight
+   reproducers crash-free" into a real recovered-count. The per-umbrella impact figures and
+   the 87 % crash statistic predate the fixes.
+2. **Verdict / property parity** — confirm ESBMC matches CBMC per-property, not just at the
+   top-level verdict. ESBMC stops at the first failing property, so `--multi-property` runs
+   are needed for full-set parity.
+3. **Solver performance** — the residual failures are timeouts on the heaviest reinterprets
+   (slice-metadata fat pointers, generic aggregate transmutes), not crashes.
+
+The genuinely-unresolved *non-crash* gaps remain as documented: anonymous-aggregate type
+names (§4.3, `mul_contract.goto`), the contracts subsystem (§4.6), and big-endian /
+`byte_update` op coverage (§4.4).
+
+**Caveat:** umbrellas #2–#8 were validated at the *minimal-reproducer* level only (one
+harness each); UMBRELLA #1 is the sole full sweep (133 harnesses). The global sweep (axis 1)
+is the way to confirm the generalisation across the whole corpus.
 
 ---
 
@@ -956,30 +1014,30 @@ four reinterpret shapes (8-bit memcpy, union type-pun, float bit-reinterpret, in
 verifies SUCCESSFUL on both solvers, with a negative variant (wrong float bit-pattern)
 correctly FAILED to prove the values are genuinely constrained.
 
-**Candidate sweep — the crash chain generalises to the whole transmute family.** Beyond
-the minimal reproducer, seven representative harnesses spanning every reinterpret shape in
-UMBRELLA #1 were run against the four fixes: `transmute_2ways_i8_to_u8` (int↔int),
-`transmute_2ways_f32_to_i32` (float↔int, exercising the wide `byte_extract` path),
-`transmute_unchecked_i8_to_u8` (unchecked variant), `transmute_zero_size` (ZST, exercising
-the zero-sized-member fix), `check_transmute_ptr_address` (pointer-address reinterpret),
-`should_succeed_tuple_to_array` and `should_fail_tuple_to_array` (aggregate ↔ array). **All
-seven are now crash-free** — every one reaches a verdict with no segfault, abort,
-`migrate expr failed`, or unresolved-tag error (previously all rc=139). CBMC 6.10.0
-verdict parity spot-checked on three (`check_typed_swap_u8`, `transmute_2ways_f32_to_i32`,
-`should_succeed_tuple_to_array`): all three are `VERIFICATION FAILED` in **both** tools, and
-in every case CBMC's failures are *exclusively* Kani `reachability_check` markers (3/7120
-and 5/382 respectively — not real assertion violations), so ESBMC's matching FAILED is
-correct parity, including on the `should_succeed` harness which raw-FAILs at the CBMC level
-too.
+**Full sweep — 131/133 crash-free (2026-07-14).** The entire flat `core::intrinsics::verify`
+transmute module — **133 harnesses** (28 `transmute_2ways`, 56 `transmute_unchecked`, the
+`typed_swap`/`transmute_zero_size` cases, and the full `should_succeed`/`should_fail`
+conversion matrix) — was run against the four fixes. **131 (98.5 %) are crash-free**, each
+reaching a `VERIFICATION FAILED` verdict with no segfault, abort, `migrate expr failed`,
+unresolved-tag, or SMT sort error (the baseline was "all rc=139"). The **2** exceptions are
+solver *timeouts* at `--timeout 90` — `check_transmute_slice_metadata` and
+`check_transmute_unchecked_slice_metadata` (fat-pointer / slice-metadata transmutes) — both
+of which lower to a GOTO program cleanly (~10 s), i.e. a solver-performance limit, not a
+crash. CBMC 6.10.0 verdict parity spot-checked on three (`check_typed_swap_u8`,
+`transmute_2ways_f32_to_i32`, `should_succeed_tuple_to_array`): all three `VERIFICATION
+FAILED` in **both** tools with failures *exclusively* Kani `reachability_check` markers
+(3/7120 and 5/382 — not real assertion violations), so ESBMC's matching FAILED is correct
+parity, including on the `should_succeed` harness which raw-FAILs at the CBMC level too. See
+the 2026-07-14 reassessment near the top of this section for the cross-umbrella picture.
 
 **Still open (this umbrella):** (a) ESBMC stops at the first failing property — a
 `--multi-property` run to confirm it reproduces *all* of CBMC's reachability markers (not
-just the first) would tighten parity from verdict-level to full property-set; (b) the
-remaining ~190 candidates in the umbrella are not individually swept — the seven above cover
-the shape space but a bulk sweep against the full Kani corpus would quantify the true
-recovery; (c) CBMC-binary regression fixtures (`cbmc_transmute*`) are not yet added — the
-fixes were validated against the live Kani binaries and native C reproducers, since this
-build has no regression suite configured.
+just the first) would tighten parity from verdict-level to full property-set; (b) full CBMC
+per-property parity is spot-checked (3/133), not exhaustive — a batch CBMC cross-run would
+confirm the remaining 128; (c) the 2 slice-metadata timeouts want a solver-performance look
+(fat-pointer reinterpret encoding); (d) CBMC-binary regression fixtures (`cbmc_transmute*`)
+are not yet added — the fixes were validated against the live Kani binaries and native C
+reproducers, since this build has no regression suite configured.
 
 **Affected Operations**:
 - `mem::transmute()` - type reinterpretation
@@ -1245,6 +1303,11 @@ _RNvNtNtNtCsfemxtvIyyHd_4core10intrinsics6verify10struct_mod28transmute_2ways_ar
 ---
 
 ## PRIORITY MATRIX FOR INVESTIGATION
+
+> **Note (2026-07-14):** this matrix reflects the *pre-fix* baseline. The four UMBRELLA #1
+> fixes made all eight umbrella minimal reproducers crash-free (§ Reassessment above), so
+> the tiering below now ranks *residual* work — verdict parity, solver performance, and the
+> non-crash gaps — rather than crash elimination. Re-tier after the global corpus sweep.
 
 ### Tier 1 - Highest ROI (affects most tests, likely shared root cause)
 
