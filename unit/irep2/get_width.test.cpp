@@ -55,3 +55,19 @@ TEST_CASE("array get_width overflows unsigned int (R1)", "[core][irep2]")
   REQUIRE(arr->get_width() == static_cast<unsigned int>(full));
 #endif
 }
+
+// R3: a vector with a non-constant size must throw, not null-deref the failed
+// dynamic_cast (its guarding assert is compiled out under NDEBUG).
+TEST_CASE("vector get_width rejects a symbolic size (R3)", "[core][irep2]")
+{
+  config.ansi_c.word_size = 64;
+
+  expr2tc sym_size = symbol2tc(get_uint_type(64), "vec_size");
+
+  type2tc vec = vector_type2tc(get_uint_type(16), sym_size);
+  REQUIRE_THROWS_AS(vec->get_width(), array_type2t::dyn_sized_array_excp);
+
+  // Same input, array path: confirm the two behave identically.
+  type2tc arr = array_type2tc(get_uint_type(16), sym_size, false);
+  REQUIRE_THROWS_AS(arr->get_width(), array_type2t::dyn_sized_array_excp);
+}
