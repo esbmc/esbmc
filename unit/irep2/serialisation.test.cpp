@@ -15,9 +15,9 @@
 // mechanism (and its test case) out on Windows, which has neither fork() nor
 // <sys/wait.h>.
 #if !defined(_WIN32)
-#include <csignal>
-#include <sys/wait.h>
-#include <unistd.h>
+#  include <csignal>
+#  include <sys/wait.h>
+#  include <unistd.h>
 #endif
 
 #include <irep2/irep2.h>
@@ -38,7 +38,8 @@ void require_aborts(const std::function<void()> &fn)
   if (pid == 0)
   {
     // Consume the freopen result to satisfy -Werror=unused-result.
-    if (!freopen("/dev/null", "w", stderr) || !freopen("/dev/null", "w", stdout))
+    if (
+      !freopen("/dev/null", "w", stderr) || !freopen("/dev/null", "w", stdout))
       _exit(2);
     fn();
     _exit(0); // unreachable if fn aborts
