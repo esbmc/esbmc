@@ -139,9 +139,8 @@ smt_astt smt_solver_baset::convert_byte_extract_bv_mode(
     source = bitcast2tc(get_uint_type(src_width), source);
 
   // ESBMC's own byte_extract2t is byte-granular (an 8-bit result), but a
-  // migrated CBMC byte_extract_little_endian may reinterpret a wider value --
-  // e.g. Rust's without_provenance_mut reads a pointer out of an integer. The
-  // result is data.type wide; when the target isn't a plain bitvector
+  // migrated CBMC byte_extract_little_endian may reinterpret a wider value
+  // The result is data.type wide; when the target isn't a plain bitvector
   // (pointer/float/aggregate) the extracted bits are reinterpreted into its
   // sort via a bitcast. For the ubiquitous 8-bit bitvector case out_width is 8
   // and this collapses to the original single-byte extraction.

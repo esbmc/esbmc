@@ -711,13 +711,6 @@ void fix_type(
     return;
   }
 
-  // Recursive-aggregate guard: if this tag is already being inlined higher up
-  // the stack, inlining its definition again would never terminate (e.g. a
-  // Rust struct holding a pointer to itself, ubiquitous in core). Leave a
-  // 'symbol' type behind instead; migrate_type maps it to symbol_type2tc(ident)
-  // resolved lazily via the symbol table -- exactly how ESBMC's own frontends
-  // encode recursive aggregates -- and the type symbol named `ident` carries
-  // the concrete definition.
   if (!expanding.insert(ident).second)
   {
     irept ref = mk("symbol");
