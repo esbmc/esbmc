@@ -1,0 +1,5 @@
+CORE
+cbmc_strlen_fail.goto
+--binary --unwind 8
+^VERIFICATION FAILED$
+assertion
