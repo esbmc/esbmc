@@ -8,13 +8,13 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/module_locator.h>
 #include <python-frontend/param_annotations.h>
-#include <python-frontend/python_annotation.h>
+#include <python-frontend/python_annotation/python_annotation.h>
 #include <python-frontend/python_class_builder.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_dict_handler.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_lambda.h>
-#include <python-frontend/python_list.h>
+#include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_typechecking.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>

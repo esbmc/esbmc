@@ -2,7 +2,7 @@
 
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_dict_handler.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_expr_builder.h>

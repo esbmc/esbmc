@@ -1,10 +1,10 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_annotation.h>
+#include <python-frontend/python_annotation/python_annotation.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_lambda.h>
-#include <python-frontend/python_list.h>
+#include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_typechecking.h>
 #include <util/encoding.h>
 #include <python-frontend/string/string_handler.h>

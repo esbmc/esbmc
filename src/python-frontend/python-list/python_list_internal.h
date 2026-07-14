@@ -3,7 +3,7 @@
 // Shared include bundle for the python-list module translation units.  This is
 // the exact set of headers the original monolithic python_list.cpp pulled in,
 // so every split unit sees the same declarations it did before the refactor.
-#include <python-frontend/python_list.h>
+#include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/tuple_handler.h>

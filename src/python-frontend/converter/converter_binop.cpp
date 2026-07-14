@@ -2,10 +2,10 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_dict_handler.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_expr_builder.h>
-#include <python-frontend/python_list.h>
+#include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_math.h>
 #include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/string/string_handler.h>

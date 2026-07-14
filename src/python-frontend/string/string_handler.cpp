@@ -2,7 +2,7 @@
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_int_overflow.h>
-#include <python-frontend/python_list.h>
+#include <python-frontend/python-list/python_list.h>
 #include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
