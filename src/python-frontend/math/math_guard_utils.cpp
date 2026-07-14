@@ -2,7 +2,7 @@
 
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/type_handler.h>
+#include <python-frontend/type/type_handler.h>
 
 namespace
 {

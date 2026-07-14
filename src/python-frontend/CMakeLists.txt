@@ -52,7 +52,7 @@ add_library(pythonfrontend STATIC
             python-list/list_set_ops.cpp
             math/python_math.cpp
             python_set.cpp
-            python_typechecking.cpp
+            type/python_typechecking.cpp
             pythonastgen.c
             module/module_manager.cpp
             module/module_locator.cpp
@@ -60,7 +60,7 @@ add_library(pythonfrontend STATIC
             python_annotation/annotation_parser.cpp
             python_annotation/annotation_utils.cpp
             symbol_id.cpp
-            type_handler.cpp
+            type/type_handler.cpp
             math/cmath_lowering_policy.cpp
             math/complex_handler.cpp
             math/complex_handler_utils.cpp

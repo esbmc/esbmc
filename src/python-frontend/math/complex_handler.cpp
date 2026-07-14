@@ -2,7 +2,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/math/python_math.h>
-#include <python-frontend/type_handler.h>
+#include <python-frontend/type/type_handler.h>
 
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>

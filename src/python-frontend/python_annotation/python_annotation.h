@@ -4,7 +4,7 @@
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/module/module_manager.h>
 #include <python-frontend/module/module.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/python_annotation/annotation_parser.h>
 #include <python-frontend/python_annotation/annotation_utils.h>

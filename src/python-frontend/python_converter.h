@@ -7,8 +7,8 @@
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_set.h>
 #include <util/context.h>
 #include <util/namespace.h>

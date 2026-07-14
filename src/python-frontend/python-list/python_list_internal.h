@@ -10,11 +10,11 @@
 #include <util/c_types.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/function_call/expr.h>
-#include <python-frontend/type_handler.h>
+#include <python-frontend/type/type_handler.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/string/string_builder.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/type/type_utils.h>
 #include <util/expr.h>
 #include <util/type.h>
 #include <util/symbol.h>
