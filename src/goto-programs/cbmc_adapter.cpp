@@ -936,18 +936,21 @@ bool fix_builtin_call(irept &code)
   // the copy via ARRAY_COPY/ARRAY_REPLACE/ARRAY_SET OTHER-instructions, which
   // ESBMC's symex has no handler for and silently skips -- so the copy never
   // happens and a post-copy read of the destination reports a false FAILED.
-  // Rather than teach symex those array ops, retarget the call to ESBMC's own
-  // well-tested memory intrinsic: symex dispatches any c:@F@__ESBMC* call to
-  // run_intrinsic purely by callee name (symex_main.cpp), so only the function
-  // symbol's identifier needs to change -- the 3-argument signature (dst/src/n,
-  // s/c/n) already matches intrinsic_memcpy/memset/memmove, and the lhs may be
-  // nil (the return value is often discarded). The instruction stays a
-  // FUNCTION_CALL, so return false: the caller then keeps CBMC's original
-  // FUNCTION_CALL instruction type rather than forcing it to ASSIGN.
+  // memcmp is a bodyless external returning nondet, so a valid comparison also
+  // reports a false FAILED. Rather than teach symex those array ops, retarget
+  // the call to ESBMC's own well-tested memory intrinsic: symex dispatches any
+  // c:@F@__ESBMC* call to run_intrinsic purely by callee name (symex_main.cpp),
+  // so only the function symbol's identifier needs to change -- the 3-argument
+  // signature (dst/src/n, s/c/n, s1/s2/n) already matches
+  // intrinsic_memcpy/memset/memmove/memcmp, and the lhs may be nil (the return
+  // value is often discarded). The instruction stays a FUNCTION_CALL, so return
+  // false: the caller then keeps CBMC's original FUNCTION_CALL instruction type
+  // rather than forcing it to ASSIGN.
   static const std::unordered_map<std::string, const char *> mem_intrinsics = {
     {"memcpy", "c:@F@__ESBMC_memcpy"},
     {"memset", "c:@F@__ESBMC_memset"},
-    {"memmove", "c:@F@__ESBMC_memmove"}};
+    {"memmove", "c:@F@__ESBMC_memmove"},
+    {"memcmp", "c:@F@__ESBMC_memcmp"}};
   auto mem_it = mem_intrinsics.find(callee);
   if (mem_it != mem_intrinsics.end())
   {
