@@ -994,6 +994,147 @@ TEST_CASE(
   REQUIRE(is_symbol_type(kept));
 }
 
+namespace
+{
+// Register a lambda/def-alias call variable: a Python-mode symbol whose
+// table type is pointer-to-code.
+type2tc add_funcptr_var(contextt &ctx, const std::string &id)
+{
+  const type2tc code_t = code_type2tc(
+    std::vector<type2tc>{get_int32_type()},
+    get_int32_type(),
+    std::vector<irep_idt>{"x"},
+    /*ellipsis=*/false);
+  const type2tc ptr_t = pointer_type2tc(code_t);
+
+  symbolt var;
+  var.id = var.name = id;
+  var.mode = "Python";
+  var.set_type(ptr_t);
+  ctx.add(var);
+  return code_t;
+}
+} // namespace
+
+TEST_CASE(
+  "python_adjust rewrites a statement call through a function pointer",
+  "[python-adjust]")
+{
+  // `op(3)` as a statement: the arm re-types the pointer-to-code callee,
+  // wraps the dereference, and casts the argument to the parameter type.
+  contextt ctx;
+  const type2tc code_t = add_funcptr_var(ctx, "py_fptr_stmt");
+
+  const expr2tc callee = symbol2tc(code_t, "py_fptr_stmt");
+  const expr2tc arg = gen_zero(get_uint64_type());
+  expr2tc call = code_function_call2tc(
+    expr2tc(), callee, std::vector<expr2tc>{arg}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(call);
+
+  REQUIRE(is_code_function_call2t(call));
+  const code_function_call2t &c = to_code_function_call2t(call);
+  REQUIRE(is_dereference2t(c.function));
+  REQUIRE(is_code_type(c.function->type));
+  REQUIRE(is_pointer_type(to_dereference2t(c.function).value->type));
+  REQUIRE(c.operands.size() == 1);
+  REQUIRE(is_typecast2t(c.operands[0]));
+  REQUIRE(c.operands[0]->type == get_int32_type());
+}
+
+TEST_CASE(
+  "python_adjust rewrites an expression call through a function pointer",
+  "[python-adjust]")
+{
+  // `assert f(3) == 6` migrates the call as a function_call sideeffect
+  // whose operand is the callee — the second call shape the arm covers.
+  contextt ctx;
+  const type2tc code_t = add_funcptr_var(ctx, "py_fptr_expr");
+
+  const expr2tc callee = symbol2tc(code_t, "py_fptr_expr");
+  expr2tc call = sideeffect2tc(
+    get_int32_type(),
+    callee,
+    expr2tc(),
+    std::vector<expr2tc>{gen_zero(get_int32_type())},
+    type2tc(),
+    sideeffect2t::allockind::function_call);
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(call);
+
+  REQUIRE(is_sideeffect2t(call));
+  const sideeffect2t &s = to_sideeffect2t(call);
+  REQUIRE(is_dereference2t(s.operand));
+  REQUIRE(is_code_type(s.operand->type));
+  // Same-typed argument needs no cast.
+  REQUIRE(is_constant_int2t(s.arguments[0]));
+}
+
+TEST_CASE(
+  "python_adjust leaves unregistered and non-code pointer callees alone",
+  "[python-adjust]")
+{
+  // No-op guards: an unregistered callee symbol, and a registered one whose
+  // pointer type does not point at code — both must be left unchanged.
+  contextt ctx;
+  symbolt var;
+  var.id = var.name = "py_int_ptr_var";
+  var.mode = "Python";
+  var.set_type(pointer_type2tc(get_int32_type()));
+  ctx.add(var);
+
+  const type2tc bogus_code = code_type2tc(
+    std::vector<type2tc>{}, get_empty_type(), std::vector<irep_idt>{}, false);
+
+  expr2tc unregistered = code_function_call2tc(
+    expr2tc(),
+    symbol2tc(bogus_code, "py_no_such_fn"),
+    std::vector<expr2tc>{},
+    locationt());
+  const expr2tc unregistered_orig = unregistered;
+
+  expr2tc non_code = code_function_call2tc(
+    expr2tc(),
+    symbol2tc(bogus_code, "py_int_ptr_var"),
+    std::vector<expr2tc>{},
+    locationt());
+  const expr2tc non_code_orig = non_code;
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(unregistered);
+  adjuster.adjust_expr(non_code);
+
+  REQUIRE(unregistered == unregistered_orig);
+  REQUIRE(non_code == non_code_orig);
+}
+
+TEST_CASE(
+  "python_adjust leaves a direct code-typed call untouched",
+  "[python-adjust]")
+{
+  // A plain def call: the callee's table type is already code — no rewrite.
+  contextt ctx;
+  const type2tc code_t = code_type2tc(
+    std::vector<type2tc>{}, get_empty_type(), std::vector<irep_idt>{}, false);
+  symbolt fn;
+  fn.id = fn.name = "py_direct_fn";
+  fn.mode = "Python";
+  fn.set_type(code_t);
+  ctx.add(fn);
+
+  const expr2tc callee = symbol2tc(code_t, "py_direct_fn");
+  expr2tc call = code_function_call2tc(
+    expr2tc(), callee, std::vector<expr2tc>{}, locationt());
+  const expr2tc original = call;
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(call);
+
+  REQUIRE(call == original);
+}
+
 TEST_CASE(
   "python_adjust pre-pass leaves an empty (incomplete) tag unchanged",
   "[python-adjust]")

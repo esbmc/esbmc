@@ -17,7 +17,6 @@
 #include <catch2/catch.hpp>
 
 #include <cstdint>
-#include <utility>
 
 #include <irep2/irep2.h>
 #include <irep2/irep2_expr.h>
@@ -28,18 +27,14 @@
 
 namespace
 {
-const constant_int2t &as_uint(BigInt v)
+constant_int2t as_uint(const BigInt &v)
 {
-  static expr2tc held;
-  held = constant_int2tc(get_uint_type(64), std::move(v));
-  return to_constant_int2t(held);
+  return constant_int2t(get_uint_type(64), v);
 }
 
-const constant_int2t &as_int(BigInt v)
+constant_int2t as_int(const BigInt &v)
 {
-  static expr2tc held;
-  held = constant_int2tc(get_int_type(64), std::move(v));
-  return to_constant_int2t(held);
+  return constant_int2t(get_int_type(64), v);
 }
 } // namespace
 
@@ -90,7 +85,7 @@ TEST_CASE(
 
   const BigInt two_pow_64 =
     BigInt(static_cast<BigInt::ullong_t>(UINT64_MAX)) + BigInt(1); // 2^64
-  const constant_int2t &big = as_uint(BigInt(two_pow_64));
+  const constant_int2t big = as_uint(BigInt(two_pow_64));
 
   REQUIRE_FALSE(big.value.is_uint64()); // as_ulong()'s guard would fire
   REQUIRE_FALSE(big.value.is_int64());  // as_long()'s guard would fire

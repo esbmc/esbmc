@@ -259,9 +259,12 @@ bool esbmc_parseoptionst::process_goto_program(
       }
     }
 
-    bool is_k_induction = cmdline.isset("inductive-step") ||
-                          cmdline.isset("k-induction") ||
-                          cmdline.isset("k-induction-parallel");
+    // Under --termination, goto_termination does its own havoc, so
+    // goto_k_induction must not also run (#6031).
+    bool is_k_induction =
+      (cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
+       cmdline.isset("k-induction-parallel")) &&
+      !options.get_bool_option("termination");
 
     // --termination reuses k-induction's havoc machinery via
     // goto_termination, so the post-havoc invariant injection applies
