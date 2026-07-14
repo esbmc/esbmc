@@ -142,7 +142,9 @@ std::string bitwuzllob_convt::dump_smt()
   if (options.get_bool_option("smt-formula-only"))
     return smtlib_convt::dump_smt();
   log_status("SMT formula written to {}", formula_path);
-  return "SMT formula dumped successfully";
+  /* Formula already written to formula_path; empty return keeps bmc.cpp from
+   * overwriting it with this string (issue #6059). */
+  return "";
 }
 
 smt_resultt bitwuzllob_convt::dec_solve()
