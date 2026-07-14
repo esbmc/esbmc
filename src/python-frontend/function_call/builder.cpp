@@ -1,7 +1,7 @@
 #include <python-frontend/function_call/builder.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/numpy_call_expr.h>
+#include <python-frontend/numpy/numpy_call_expr.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>

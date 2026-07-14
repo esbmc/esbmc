@@ -1,5 +1,5 @@
 #include <python-frontend/json_utils.h>
-#include <python-frontend/numpy_call_expr.h>
+#include <python-frontend/numpy/numpy_call_expr.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/python-list/python_list.h>
