@@ -6,7 +6,7 @@
 #include <python-frontend/python_consteval.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/python_lambda.h>

@@ -1,5 +1,5 @@
-#include <python-frontend/python_exception_handler.h>
-#include <python-frontend/exception_utils.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/exception/exception_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/string/string_builder.h>

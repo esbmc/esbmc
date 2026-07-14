@@ -4,7 +4,7 @@
 #include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math/math_guard_utils.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_set.h>
 #include <python-frontend/string/string_builder.h>

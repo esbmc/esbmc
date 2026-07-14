@@ -39,7 +39,7 @@ add_library(pythonfrontend STATIC
             python-dict/dict_methods.cpp
             python-dict/dict_compare.cpp
             python_expr_builder.cpp
-            python_exception_handler.cpp
+            exception/python_exception_handler.cpp
             python_lambda.cpp
             python-list/list_type_inference.cpp
             python-list/list_type_map.cpp
@@ -73,7 +73,7 @@ add_library(pythonfrontend STATIC
             string/string_handler.cpp
             string/string_method_handler.cpp
             string/string_handler_utils.cpp
-            exception_utils.cpp
+            exception/exception_utils.cpp
             string/char_utils.cpp
             math/math_guard_utils.cpp
             math/parse_float.cpp

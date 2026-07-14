@@ -7,7 +7,7 @@
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/python_annotation/python_annotation.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_typechecking.h>

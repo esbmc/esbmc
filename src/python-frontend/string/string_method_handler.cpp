@@ -1,5 +1,5 @@
 #include <python-frontend/string/char_utils.h>
-#include <python-frontend/exception_utils.h>
+#include <python-frontend/exception/exception_utils.h>
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/math/round_to_nearest_guard.h>

@@ -10,7 +10,7 @@
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>

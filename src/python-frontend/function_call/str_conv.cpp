@@ -1,7 +1,7 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <irep2/irep2_utils.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/math/round_to_nearest_guard.h>
