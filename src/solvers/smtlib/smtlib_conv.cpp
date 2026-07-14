@@ -161,20 +161,19 @@ smt_solver_baset *create_new_smtlib_solver(
 
 std::string smtlib_convt::dump_smt()
 {
+  assert(emit_opt_output);
+  emit_opt_output.emit("%s\n", "(check-sat)");
+
   auto path = config.options.get_option("output");
   if (path.empty() || path == "-")
-  {
-    assert(emit_opt_output);
-    emit_opt_output.emit("%s\n", "(check-sat)");
     log_status("SMT formula written to standard output");
-  }
   else
-  {
-    assert(emit_opt_output);
-    emit_opt_output.emit("%s\n", "(check-sat)");
     log_status("SMT formula written to output file {}", path);
-  }
-  return "SMT formula dumped successfully";
+
+  /* The formula was already written through emit_opt_output, which targets the
+   * --output path. Return empty so bmc.cpp's dump path does not reopen and
+   * overwrite that same file with this string (issue #6059). */
+  return "";
 }
 
 smtlib_convt::file_emitter::file_emitter(const std::string &path)
