@@ -11,6 +11,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
+#include <utility>
 #include <vector>
 
 // The unsupported-kind death-test forks and waits on a POSIX child; guard the
@@ -59,29 +60,34 @@ TEST_CASE("with_type round-trips on supported kinds (H-B5)", "[core][irep2]")
 
   type2tc u32 = get_uint_type(32);
   type2tc u64 = get_uint_type(64);
+  type2tc s32 = get_int_type(32);
   expr2tc c5 = constant_int2tc(u32, BigInt(5));
   expr2tc c7 = constant_int2tc(u32, BigInt(7));
 
-  // Kinds whose first field is &expr2t::type and whose ctor accepts it.
-  std::vector<expr2tc> supported{
-    constant_int2tc(u32, BigInt(5)),
-    symbol2tc(u32, "x"),
-    add2tc(u32, c5, c7),
-    sub2tc(u32, c5, c7),
-    mul2tc(u32, c5, c7),
-    bitand2tc(u32, c5, c7),
-    bitor2tc(u32, c5, c7),
+  // Kinds whose first field is &expr2t::type and whose ctor accepts it, each
+  // paired with a valid alternate type. Arithmetic kinds assert that the
+  // result-type width matches the operand width (assert_arith_2ops_consistency,
+  // active in non-Release builds), so their alternate must keep the operand
+  // width (u32 -> s32); pure type-slot kinds accept an arbitrary type (u64).
+  std::vector<std::pair<expr2tc, type2tc>> supported{
+    {constant_int2tc(u32, BigInt(5)), u64},
+    {symbol2tc(u32, "x"), u64},
+    {add2tc(u32, c5, c7), s32},
+    {sub2tc(u32, c5, c7), s32},
+    {mul2tc(u32, c5, c7), s32},
+    {bitand2tc(u32, c5, c7), s32},
+    {bitor2tc(u32, c5, c7), s32},
   };
 
-  for (const expr2tc &e : supported)
+  for (const auto &[e, alt] : supported)
   {
     // Re-applying the same type is a structural identity.
     REQUIRE(e->with_type(e->type) == e);
 
     // Substituting a type changes only the type; reverting restores the node.
-    expr2tc retyped = e->with_type(u64);
-    REQUIRE(retyped->type == u64);
-    REQUIRE(retyped->with_type(u32) == e);
+    expr2tc retyped = e->with_type(alt);
+    REQUIRE(retyped->type == alt);
+    REQUIRE(retyped->with_type(e->type) == e);
   }
 }
 

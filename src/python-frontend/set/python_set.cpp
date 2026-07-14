@@ -1,7 +1,7 @@
-#include <python-frontend/python_set.h>
+#include <python-frontend/set/python_set.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
-#include <python-frontend/python_list.h>
+#include <python-frontend/python-list/python_list.h>
 #include <c2goto/library/python/python_types.h>
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
