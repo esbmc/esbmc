@@ -1,9 +1,10 @@
 # Integrating NeuroSym as an SMT Backend in ESBMC — Technical Design Document
 
 **Status:** Draft design / plan
-**Author:** (prepared for the ESBMC team)
+**Author:** Lucas C. Cordeiro (ESBMC team)
 **Scope:** Add the NeuroSym neural-guided SMT solver (GAN + Z3 fallback, QF_BV / QF_LIA over SMT-LIB2) as a selectable ESBMC backend.
-**Grounding:** All ESBMC references below were read from the current `master` tree. Key files: `src/solvers/solve.cpp`, `src/solvers/solve.h`, `src/solvers/solver_config.h.in`, `src/solvers/smtlib/smtlib_conv.{h,cpp}`, `src/solvers/bitwuzllob/bitwuzllob_conv.{h,cpp}`, `src/esbmc/options.cpp`, `src/solvers/CMakeLists.txt`.
+**Grounding (ESBMC side):** All ESBMC references below were read from the current `master` tree. Key files: `src/solvers/solve.cpp`, `src/solvers/solve.h`, `src/solvers/solver_config.h.in`, `src/solvers/smtlib/smtlib_conv.{h,cpp}`, `src/solvers/bitwuzllob/bitwuzllob_conv.{h,cpp}`, `src/esbmc/options.cpp`, `src/esbmc/parseoptions/{command_line_options,driver}.cpp`, `src/solvers/CMakeLists.txt`.
+**Grounding (NeuroSym side):** The NeuroSym claims in this document — the `python main.py --stdin` invocation, the QF_BV/QF_LIA-only fragment (no arrays, no reals, no quantifiers), the GAN-candidate + Z3-fallback control flow, the fixed-dimension feature encodings (8576 QF_LIA / 10752 QF_BV), and the existing C++ code being a KLEE bridge that shells out to Python — describe the NeuroSym research prototype and are **not yet pinned** to a public reference (NeuroSym is not publicly indexed at the time of writing). Before implementation starts, replace this placeholder with the exact source: **NeuroSym repository:** `<repo URL @ commit hash — TBD>`; **paper:** `<DOI / venue — TBD, if published>`. Until pinned, every NeuroSym-side claim must be re-validated against the actual NeuroSym checkout (the Phase 1 PoC and the §8 open questions do exactly this).
 
 ---
 
@@ -12,7 +13,7 @@
 ESBMC **already contains** a production subprocess-over-SMT-LIB2 backend and a worked example of subclassing it:
 
 - `smtlib_convt` (`src/solvers/smtlib/smtlib_conv.{h,cpp}`) is the solver-independent SMT-LIB2 serializer. It implements every `smt_solver_baset` term builder by *printing* SMT-LIB2 and can drive an external solver two ways: an interactive **stdin/stdout pipe** (`process_emitter`, selected with `--smtlib-solver-prog <cmd>`) and/or a **file** (`file_emitter`, `--output`).
-- `bitwuzllob_convt` (`src/solvers/bitwuzllob/bitwuzllob_conv.{h,cpp}`) is a ~330-line backend that **derives from `smtlib_convt`**, reuses its serializer, spawns an external solver as a subprocess, parses `sat`/`unsat`/`unknown` from its stdout, and uses a second interactive SMT-LIB2 process only when a model is needed. It is registered in `solve.cpp` exactly like a native backend.
+- `bitwuzllob_convt` (`src/solvers/bitwuzllob/bitwuzllob_conv.{h,cpp}`) is a ~450-line backend (414-line `.cpp` + 42-line header) that **derives from `smtlib_convt`**, reuses its serializer, spawns an external solver as a subprocess, parses `sat`/`unsat`/`unknown` from its stdout, and uses a second interactive SMT-LIB2 process only when a model is needed. It is registered in `solve.cpp` exactly like a native backend.
 
 NeuroSym is invoked as `python main.py --stdin`, speaks SMT-LIB2, and returns `sat`/`unsat` (+ model) on stdout. **This is the bitwuzllob shape almost exactly.** The recommended design is therefore a new `neurosym_convt : public smtlib_convt`, modelled line-for-line on `bitwuzllob_convt`.
 
@@ -55,7 +56,7 @@ A backend factory signals "I have no native arrays/FP/tuples" by leaving `*array
 ### 1.2 Registration mechanism (verified, `solve.cpp`)
 
 - A backend exposes a factory `smt_solver_baset *create_new_<name>_solver(const optionst&, const namespacet&, tuple_iface**, array_iface**, fp_convt**)` (`solver_creator` typedef in `solve.h`).
-- It is entered in the compile-time map `esbmc_solvers` under `#ifdef <MACRO>`, and its name is added to `all_solvers[]` (whose order encodes default-selection priority).
+- It is entered in the compile-time map `esbmc_solvers` under `#ifdef <MACRO>`, and its name is added to `all_solvers[]` (whose order encodes default-selection priority). `pick_default_solver` additionally skips backends that depend on external programs (`smtlib`, `bitwuzllob`) so they are never chosen implicitly — NeuroSym must join this exclusion list (§2.2).
 - `resolve_user_solver_choice` reads `options.get_bool_option("<name>")`, so a `--<name>` boolean flag selects it — **no factory edit needed** beyond the map/array entries.
 
 ### 1.3 The SMT-LIB backend, in detail (verified, `smtlib_conv.{h,cpp}`)
@@ -63,7 +64,7 @@ A backend factory signals "I have no native arrays/FP/tuples" by leaving `*array
 `class smtlib_convt : public smt_solver_baset, public array_iface, public fp_convt`. Relevant machinery we inherit for free:
 
 - **Two output sinks**: `struct process_emitter emit_proc` (interactive pipe to `--smtlib-solver-prog`) and `struct file_emitter emit_opt_output` (`--output` file). `emit(...)` / `flush()` fan out to both.
-- **Solve path**: `dec_solve()` (line 665) calls `pre_solve()`, emits `(check-sat)`, then `read_check_sat_response()` (line 683) which maps stdout to `P_SATISFIABLE` / `P_UNSATISFIABLE`, else logs "Unrecognized check-sat output". When no interactive solver is attached it returns `P_SMTLIB` (formula-only mode).
+- **Solve path**: `dec_solve()` (line 665) calls `pre_solve()`, emits `(check-sat)`, then `read_check_sat_response()` (line 683) which maps stdout to `P_SATISFIABLE` / `P_UNSATISFIABLE`; on unrecognized output it logs "Unrecognized check-sat output" and **aborts** (`smtlib_conv.cpp:707`). When no interactive solver is attached it returns `P_SMTLIB` (formula-only mode).
 - **Header emitted before the formula** (line ~402–405): logic string is
   `options.get_bool_option("int-encoding") ? "QF_AUFLIRA" : "QF_AUFBV"`, then
   `(set-option :produce-models true)` and `(set-logic <logic>)`.
@@ -77,7 +78,7 @@ This is the template. Salient reusable patterns:
 
 - **Ctor delegation**: `bitwuzllob_convt(ns, options)` → `smtlib_convt(ns, options, model_prog, formula_path)`, i.e. it configures the pipe/file sinks independently of `--smtlib-solver-prog`/`--output`.
 - **One-shot guard**: `bool solved`; `dec_solve()` aborts on a second `(check-sat)` — "supports a single (check-sat) query per run; incremental strategies are not supported."
-- **Strategy rejection at factory time**: it refuses `--incremental-bmc`, `--k-induction`, `--termination`, `--multi-property`, `--parallel-solving`, etc., with a clear error. NeuroSym (batch) needs the same guard.
+- **Strategy rejection at factory time**: it refuses `--incremental-bmc`, `--falsification`, `--k-induction`, `--k-induction-parallel`, `--termination`, `--smt-during-symex`, `--multi-property`, and `--parallel-solving` with a clear error (`bitwuzllob_conv.cpp:32-40`). NeuroSym (batch) needs the same guard, copied verbatim.
 - **Verdict parsing**: `parse_verdict_line` accepts `sat`/`unsat`/`unknown` amid log noise; `unknown → P_ERROR`.
 - **Signal hygiene**: forks the solver into its own process group and registers it for `killpg` on timeout/signal (`register_pgroup_for_cleanup`). Discards a verdict if the child died on a signal (`WIFSIGNALED`). **We inherit these lessons directly.**
 - **Model via a side process**: because Mallob's one-shot process can't answer `(get-value)`, bitwuzllob spins up a *second* interactive SMT-LIB2 solver (`--bitwuzllob-model-prog`, e.g. `z3 -in`) fed the same formula, and only reads its model when a counterexample is required. **NeuroSym has the identical limitation and can use the identical trick** — with the elegant extra that NeuroSym's own internal Z3 fallback could serve the model directly if it exposed `(get-value)`.
@@ -111,9 +112,9 @@ src/solvers/neurosym/
 |---|---|
 | `src/solvers/CMakeLists.txt` | add `set(ESBMC_ENABLE_neurosym 0)` to the top block; `add_subdirectory(neurosym)` **after** `smtlib` (it reuses the smtlib library, like bitwuzllob). |
 | `src/solvers/solver_config.h.in` | add `#if @ESBMC_ENABLE_neurosym@` / `#define NEUROSYM` / `#endif`. |
-| `src/solvers/solve.cpp` | declare `solver_creator create_new_neurosym_solver;`; add `#ifdef NEUROSYM {"neurosym", create_new_neurosym_solver},#endif` to `esbmc_solvers`; add `"neurosym"` to `all_solvers[]`. Add `"neurosym"` to the int-encoding-rejection guard **only if** we do not support QF_LIA (see §3.4). |
+| `src/solvers/solve.cpp` | declare `solver_creator create_new_neurosym_solver;`; add `#ifdef NEUROSYM {"neurosym", create_new_neurosym_solver},#endif` to `esbmc_solvers`; add `"neurosym"` to `all_solvers[]` **immediately after `"bitwuzllob"`**, grouping the external-program backends at the head of the array. **Critically, also extend the never-implicit exclusion in `pick_default_solver` (`solve.cpp:71-77`)** — it skips `smtlib` and `bitwuzllob` because they "depend on external programs the user must configure, so they are never picked implicitly", and NeuroSym (a Python subprocess needing a NeuroSym checkout + PyTorch at runtime) is exactly this class: without the exclusion, an `-DENABLE_NEUROSYM=On` build would silently make an unconfigured Python subprocess the default solver. Add `"neurosym"` to the int-encoding-rejection guard **only if** we do not support QF_LIA (see §3.4). |
 | `src/esbmc/options.cpp` | in the solver option group (near `{"bitwuzllob", …}`, lines ~526–538) add: `{"neurosym", NULL, "Use NeuroSym (neural-guided GAN + Z3 fallback, QF_BV/QF_LIA)"}`, `{"neurosym-prog", value<std::string>(), "Command to run NeuroSym (default: python main.py --stdin)"}`, `{"neurosym-model-prog", value<std::string>(), "Interactive SMT-LIB2 solver for counterexample models (e.g. \"z3 -in\")"}`, and optionally `{"neurosym-timeout", value<unsigned>(), …}`. |
-| `src/esbmc/esbmc_parseoptions.cpp` | optional: add `"neurosym"` to the `preferred[]`/multi-solver diagnostic arrays so `--list-solvers` / conflict warnings mention it (selection itself is data-driven, no factory edit). |
+| `src/esbmc/parseoptions/driver.cpp` | optional, cosmetic: add `cmdline.isset("neurosym")` to the `user_picked_solver` flag list in the Solidity solver auto-selection block (`driver.cpp:252-256`). Without it, a Solidity run with `--neurosym` logs a misleading "auto-selecting bitwuzla" message — harmless, since the explicit flag still wins in `resolve_user_solver_choice`, but confusing. No edit is needed for `--list-solvers`: it prints `ESBMC_AVAILABLE_SOLVERS` directly (`parseoptions/command_line_options.cpp:341`), which §2.7 extends via CMake (consistent with §2.6). |
 | `BUILDING.md` | document `-DENABLE_NEUROSYM=On`, the Python/PyTorch/Z3 runtime prerequisites, and `--neurosym` usage. |
 | `.github/workflows/build.yml` | (Phase 4/5) matrix entry that installs NeuroSym + PyTorch and runs a regression subset with `--neurosym`. |
 | CMake option declaration | add `option(ENABLE_NEUROSYM "…" ON/OFF)` alongside the other `ENABLE_*` solver options (where `ENABLE_BITWUZLLOB` is declared). |
@@ -158,15 +159,15 @@ smt_solver_baset *create_new_neurosym_solver(
 {
   // reject incremental strategies NeuroSym's one-shot model can't serve
   static const char *incompatible[] = {
-    "incremental-bmc","k-induction","k-induction-parallel","termination",
-    "smt-during-symex","multi-property","parallel-solving"};
+    "incremental-bmc","falsification","k-induction","k-induction-parallel",
+    "termination","smt-during-symex","multi-property","parallel-solving"};
   for (const char *opt : incompatible)
     if (options.get_bool_option(opt)) { log_error(...); abort(); }
 
   neurosym_convt *conv = new neurosym_convt(ns, options);
   *tuple_api = nullptr;   // -> smt_tuple_node_flattener  (tuples -> BV)
   *array_api = nullptr;   // -> array_convt               (arrays -> BV)
-  *fp_api    = nullptr;   // -> fp_convt                  (floats -> BV, needs --fp2bv path)
+  *fp_api    = nullptr;   // -> fp_convt                  (floats -> BV, automatic)
   return conv;
 }
 ```
@@ -203,7 +204,7 @@ ESBMC's default encoding is **QF_AUFBV** (`smtlib_conv.cpp:402`): quantifier-fre
 - **Bit-vectors** — pervasive (all integer/pointer arithmetic). ✅ NeuroSym supports QF_BV.
 - **Arrays** — pervasive (the memory model, `__ESBMC_alloc`, every heap object, `memcpy`, string buffers) via the theory of arrays. ❌ NeuroSym has no arrays → **must flatten with `array_convt`**.
 - **Tuples/structs** — common. ❌ → flatten with `smt_tuple_node_flattener`.
-- **Floating point** — common in numeric code. ❌ → flatten with `fp_convt` (`--fp2bv`).
+- **Floating point** — common in numeric code. ❌ → flatten with `fp_convt` (installed automatically when `*fp_api` is left null — `solve.cpp:228`; no `--fp2bv` flag needed).
 - **Uninterpreted functions** — used for some abstractions/nondeterminism. ❌ NeuroSym support unknown → see §3.3.
 
 **Verdict:** NeuroSym's *native* fragment is far narrower than a typical ESBMC query, but ESBMC's flatteners can reduce arrays + tuples + FP to **pure QF_BV**, which NeuroSym does support. So the practical question is not "does NeuroSym support arrays?" (no, but it doesn't need to) but "how large/hard is the flattened QF_BV formula, and does neural guidance help on it?" (§6).
@@ -217,7 +218,7 @@ ESBMC's default encoding is **QF_AUFBV** (`smtlib_conv.cpp:402`): quantifier-fre
 | Linear integer arith (QF_LIA) | only under `--ir`/`--ir-ieee` | **yes** | direct (needs `set-logic QF_LIA`) | ⚠️ see §3.4 |
 | Arrays (memory model) | yes (default) | no | `array_convt` → BV | ✅ flattened |
 | Structs / tuples | yes | no | tuple flattener → BV | ✅ flattened |
-| IEEE floating-point | yes (default `--floatbv`) | no | `fp_convt` / `--fp2bv` → BV | ✅ flattened |
+| IEEE floating-point | yes (default `--floatbv`) | no | `fp_convt` → BV (automatic, §1.1) | ✅ flattened |
 | Uninterpreted functions | sometimes | unknown | avoid, or fail loudly / fall back | ⚠️ §3.3 |
 | Quantifiers | rarely (some intrinsics) | no (QF_*) | not supported | ❌ fall back |
 | Strings (SMT string theory) | no (ESBMC models strings as arrays) | no | already arrays → BV | ✅ N/A |
@@ -234,11 +235,11 @@ NeuroSym supports QF_LIA, and ESBMC has an integer mode (`--ir`), but the base s
 
 ### 3.5 Incrementality
 
-k-induction, incremental-BMC, `--multi-property`, `--parallel-solving`, and `--smt-during-symex` all issue repeated `(check-sat)` with `push`/`pop`. NeuroSym's `--stdin` is batch (one formula, one answer). **Reject these at factory time** (copy bitwuzllob's `incompatible[]` list). Plain single-shot BMC (`esbmc file.c --unwind N --neurosym`) is the supported mode.
+k-induction, incremental-BMC, `--falsification`, `--multi-property`, `--parallel-solving`, and `--smt-during-symex` all issue repeated `(check-sat)` queries. NeuroSym's `--stdin` is batch (one formula, one answer). **Reject these at factory time** (copy bitwuzllob's `incompatible[]` list verbatim — including `"falsification"`, which is an incremental strategy like the rest). Plain single-shot BMC (`esbmc file.c --unwind N --neurosym`) is the supported mode.
 
 ### 3.6 Fallback mechanisms (layered)
 
-1. **Internal (free):** NeuroSym *itself* falls back to Z3 when the GAN's candidate fails verification — so for any formula in QF_BV/QF_LIA, NeuroSym is already sound and complete without ESBMC doing anything. This is the primary fallback and the reason the integration is sound.
+1. **Internal (free):** NeuroSym *itself* falls back to Z3 when the GAN's candidate fails verification — so for any formula in QF_BV/QF_LIA, NeuroSym is already sound and complete without ESBMC doing anything. This is the primary fallback and the reason the integration is sound. **Explicit trust asymmetry:** the two verdict directions are *not* equally protected. A **SAT** verdict is independently confirmed by the side model-solver (§2.5) — divergence aborts, as in bitwuzllob. An **UNSAT** verdict, however, becomes `VERIFICATION SUCCESSFUL` on nothing but NeuroSym's word that failed GAN candidates always route through Z3 — a claim about a research prototype's internal control flow. A false `unsat` is ESBMC's worst failure mode. Until §8 Q10 is answered affirmatively, treat NeuroSym's `unsat` as a **trust assumption**, mitigated two ways: (a) the §5.3 differential harness compares verdicts against Z3/Bitwuzla; (b) an optional `--neurosym-verify-unsat` mode (Phase 5) re-checks every `unsat` with the side solver during the evaluation phase.
 2. **ESBMC-level (unsupported fragment):** if a query uses UF/quantifiers/reals NeuroSym can't parse, or NeuroSym crashes/times out, `neurosym_convt` returns `P_ERROR`/`external_process_died`, and we **optionally re-dispatch the same VCC to a linked solver** (Z3/Bitwuzla). A clean design: a `--neurosym-fallback z3` option that, on `P_ERROR`, constructs a Z3 `smt_convt` for that query. (Simplest first cut: no auto-redispatch — surface the error and let the user pick a different `--solver`. Auto-fallback is a Phase-5 nicety.)
 3. **Model fallback:** if NeuroSym can't produce a model, the `--neurosym-model-prog` side-solver does (§2.5).
 
@@ -269,13 +270,13 @@ k-induction, incremental-BMC, `--multi-property`, `--parallel-solving`, and `--s
 
 ### Phase 4 — Full backend integration + regression tests
 - **Tasks:** Force array/tuple/fp flattening (the `nullptr` factory), add `--neurosym` regression tests, CI matrix entry, BUILDING.md docs, `--ir` rejection guard.
-- **Code changes:** finalize factory; `regression/esbmc/github_<N>-neurosym*/`; `build.yml`.
+- **Code changes:** finalize factory; `regression/esbmc/neurosym_basic{,_fail}/` (§5.1); `build.yml`.
 - **Testing:** ≥2 regression tests (one `CORE` pass, one failing) with `--neurosym` in the `test.desc` flag line; differential run of a BV regression subset `--neurosym` vs `--z3`/`--bitwuzla` — verdicts must agree modulo timeout.
 - **Risks/opens:** flattened QF_BV formulas may be large/slow; CI runners need PyTorch (heavy). Gate CI behind a manual/nightly job initially.
 - **Complexity:** **Medium–High** (3–5 days).
 
 ### Phase 5 — Optimization, caching, timeouts, benchmarking
-- **Tasks:** `--neurosym-timeout` (SIGTERM the process group — infra already present); optional formula caching (hash → verdict) to skip re-solving identical VCCs; optional auto-fallback to Z3 on `P_ERROR`; the benchmarking harness (§6). Investigate persistent NeuroSym process to amortize Python/PyTorch startup (**needs NeuroSym incremental mode — Tier C**).
+- **Tasks:** `--neurosym-timeout` (SIGTERM the process group — infra already present); optional formula caching (hash → verdict) to skip re-solving identical VCCs; optional auto-fallback to Z3 on `P_ERROR`; an optional `--neurosym-verify-unsat` cross-check mode that re-solves every `unsat` with the side solver during evaluation (§3.6 trust asymmetry — drop it only once §8 Q10 is answered and differentially validated); the benchmarking harness (§6). Investigate persistent NeuroSym process to amortize Python/PyTorch startup (**needs NeuroSym incremental mode — Tier C**).
 - **Code changes:** timeout plumbing; a small verdict cache; `--neurosym-fallback`.
 - **Testing:** benchmark suite; verify timeout kills the whole subtree (no orphan Python/PyTorch).
 - **Risks/opens:** GAN model-load time may dominate small queries (measure startup overhead explicitly, §6); reproducibility of GAN results across runs (§7).
@@ -288,7 +289,7 @@ k-induction, incremental-BMC, `--multi-property`, `--parallel-solving`, and `--s
 ### 5.1 Regression tests to reuse
 - **QF_BV:** `regression/esbmc/` integer-arithmetic/bit-op tests, `regression/esbmc-cpp/` BV-heavy cases, `regression/bitwuzla*` analogues. Pick small, purely-BV programs (no FP, no big arrays) for the first agreement runs.
 - **QF_LIA:** only if §3.4 is pursued — `--ir` tests.
-- Author 2 new tests per ESBMC convention: `regression/esbmc/github_<N>-neurosym/` (safe, expect `VERIFICATION SUCCESSFUL`) and `…-neurosym_fail/` (unsafe, expect `VERIFICATION FAILED`), each with `--neurosym` on the flag line. **Note:** CI on macOS runs only `regression/python` — these C tests validate on Linux only.
+- Author 2 new tests per ESBMC convention, with descriptive names (the `github_<N>` prefix is reserved for issue reproducers): `regression/esbmc/neurosym_basic/` (safe, expect `VERIFICATION SUCCESSFUL`) and `regression/esbmc/neurosym_basic_fail/` (unsafe, expect `VERIFICATION FAILED`), each with `--neurosym` on the flag line. **Note:** CI on macOS runs only `regression/python` — these C tests validate on Linux only.
 
 ### 5.2 Unit tests (Catch2, `unit/`)
 - **SMT-LIB2 generation:** feed a fixed small formula through `neurosym_convt`'s (inherited) serializer with the logic override; assert the emitted text contains `(set-logic QF_BV)` and the expected `(bv…)` terms, and **not** `QF_AUFBV` or `declare-fun … Array`.
@@ -296,7 +297,7 @@ k-induction, incremental-BMC, `--multi-property`, `--parallel-solving`, and `--s
 - **No mocks** (per repo policy): drive the real serializer; for parsing, call the real function on literal strings.
 
 ### 5.3 Integration / differential tests
-- Wrap NeuroSym in a tiny deterministic stub *only for CI without PyTorch* is disallowed (no test doubles) — instead run real NeuroSym in a nightly job, and for PR CI run a **differential harness**: same programs under `--neurosym` and `--z3`; assert identical `VERIFICATION SUCCESSFUL/FAILED`. Divergence ⇒ almost always a wrong signed/unsigned or flattening bug (per the integrate-solver guide's §10 warning).
+- Wrapping NeuroSym in a deterministic stub for PyTorch-less CI is disallowed (no test doubles); instead run real NeuroSym in a nightly job, and for PR CI run a **differential harness**: same programs under `--neurosym` and `--z3`; assert identical `VERIFICATION SUCCESSFUL/FAILED`. Divergence ⇒ almost always a wrong signed/unsigned or flattening bug (per the integrate-solver guide's §10 warning).
 
 ### 5.4 Expected behaviour table
 
@@ -309,6 +310,8 @@ k-induction, incremental-BMC, `--multi-property`, `--parallel-solving`, and `--s
 | Timeout | killed by `--neurosym-timeout` | `P_ERROR` | timeout reported; process group reaped |
 | Unsupported logic (UF/reals/quant) | parse error / `unknown` | `P_ERROR` | clean error + guidance to use `--z3` |
 | Malformed output | no recognizable verdict line | `P_ERROR` (last-tail logged) | clean error |
+
+**Footnote — "clean error, no ESBMC crash" is a property of the bitwuzllob-style path, not the base class.** The graceful rows above hold because `run_neurosym()` parses verdicts with `parse_verdict_line` (tolerant; unmatched → `P_ERROR`). The base `smtlib_convt::read_check_sat_response` instead **aborts** on unrecognized output (`smtlib_conv.cpp:707`). This matters for Tier A (`--smtlib --smtlib-solver-prog`, which routes through the base implementation) and for the §2.5 native-`(get-value)` future path (which would point `emit_proc` at NeuroSym and again use the base reader) — either NeuroSym's stdout must be verdict-clean on that channel, or the reader needs hardening first.
 
 ---
 
@@ -363,6 +366,7 @@ For ESBMC's flattened QF_BV, expect NeuroSym to be **slower on small queries** (
 7. **Startup cost / warm process:** Is there a server/daemon mode that keeps PyTorch and the GAN model loaded across queries? (Amortizing startup is the key to competitiveness on small formulas.)
 8. **Determinism:** Are seeds fixed? Is the verdict guaranteed reproducible run-to-run given the Z3 fallback?
 9. **QF_LIA arrays/reals:** Any plan to support arrays, or pure `QF_LIA` (no reals) so ESBMC's `--ir` mode could target it?
+10. **UNSAT soundness — the single most safety-relevant question:** Is the Z3 fallback *always* consulted before emitting `unsat`, or can the pipeline emit `unsat` heuristically (e.g. after the GAN exhausts candidates without a Z3 confirmation)? For a verifier, a false `unsat` silently turns a buggy program into `VERIFICATION SUCCESSFUL` (§3.6); the SAT direction is independently confirmed by the model side-solver, but UNSAT currently rests entirely on this control-flow guarantee.
 
 ---
 
