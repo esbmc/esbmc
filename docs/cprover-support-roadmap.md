@@ -85,6 +85,8 @@ and the symbol/function table layout.
 | Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Libm body bridge extended to `modf`/`modff`/`modfl` (integer/fractional split via pointer out-param) (§4.8, Phase 2) | ✅ (PR #6039) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
 | Libm body bridge extended to `rint`/`rintf`/`rintl` (round to nearest integer, ambient rounding mode) (§4.8, Phase 2) | ✅ (PR #6041) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
+| Body bridge generalised to libc: `strlen`/`strcmp`/`strncmp` string.h query functions (byte-loop bodies, need `--unwind`); `link_cbmc_libm_bodies` → `link_cbmc_libc_bodies` (§4.8, Phase 2) | ✅ (PR #6045) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
+| Libc bridge extended to `strcpy`/`strncpy`/`strcat`/`strncat`/`strchr` string.h copy/search functions (write through dst ptr / return ptr) (§4.8, Phase 2) | ✅ (PR #6047) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
@@ -745,6 +747,32 @@ ties `rint(2.5) == 2.0` and `rint(3.5) == 4.0` (not 3.0/4.0 under a naive round-
 (Bitwuzla + Z3), all three widths (`cbmc_rint` SUCCESSFUL), plus a wrong-tie negative (`cbmc_rint_fail`:
 `rint(2.5) == 3.0` ⇒ FAILED). `lrint`/`llrint` (integer-returning) already match CBMC and are left
 as-is. This closes the exact-result libm bridge family.
+
+**Generalised (PR #6045) to the libc string family: `strlen`/`strcmp`/`strncmp`.** The bridge is not
+libm-specific — it copies any bodied `c:@F@name` onto its bodyless plain-named counterpart — so it
+extends verbatim to the string.h query functions, which CBMC likewise emits as **bodyless externals
+returning nondet** (`strlen("hello")` reported a false `FAILED` where CBMC says `SUCCESSFUL`).
+`link_cbmc_libm_bodies` was renamed to `link_cbmc_libc_bodies` and the three names added to its list
+and the additions boilerplate. The one behavioural difference from the libm entries: ESBMC's
+`strlen`/`strcmp`/`strncmp` operational-model bodies (`libc/string.c`) are **byte loops**, not
+straight-line, so a call reaching them must be given an `--unwind` bound like any other loop —
+unchanged from ESBMC's native string semantics, and the same requirement the memcpy byte-loop path
+already carries. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), `--unwind 8`: `cbmc_strlen`
+(incl. empty string), `cbmc_strcmp` (equal / `<` / `>`), `cbmc_strncmp` (prefix-equal vs differing)
+all SUCCESSFUL, and `cbmc_strlen_fail` (`strlen("hello") == 4`) FAILED. `strcpy`/`strcat` (which write
+through a destination pointer) are the same mechanism and are a natural follow-up.
+
+**Extended (PR #6047) to the copy/search functions: `strcpy`/`strncpy`/`strcat`/`strncat`/`strchr`.**
+The same `link_cbmc_libc_bodies` bridge, five more names in the list and boilerplate — no new
+mechanism. These differ from the query functions only in effect: `strcpy`/`strncpy`/`strcat`/`strncat`
+**write** the result through the destination pointer (the copied loop body stores each byte), and
+`strchr` **returns** a pointer into the argument (or `NULL`). Both work through the bridge unchanged —
+the copied body carries the writes/return, and the caller's destination buffer must simply be large
+enough (out-of-bounds is caught by ESBMC's own dereference checks, as natively). Byte loops, so
+`--unwind` as above. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), `--unwind 10`: `cbmc_strcpy`
+(`strcpy`+`strncpy`), `cbmc_strcat` (`strcat`+`strncat`), `cbmc_strchr` (found and not-found → `NULL`)
+all SUCCESSFUL, and `cbmc_strcpy_fail` (`strcpy(d,"hello"); d[0]=='x'`) FAILED. This closes the
+common string.h family.
 
 **Ruled out as an alternative fix** (for the remaining libm family, from the #5743
 diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
