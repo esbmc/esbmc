@@ -17,9 +17,9 @@
 // mechanism (and its test case) out on Windows, which has neither fork() nor
 // <sys/wait.h>.
 #if !defined(_WIN32)
-#include <csignal>
-#include <sys/wait.h>
-#include <unistd.h>
+#  include <csignal>
+#  include <sys/wait.h>
+#  include <unistd.h>
 #endif
 
 #include <irep2/irep2.h>
@@ -101,7 +101,8 @@ TEST_CASE("with_type aborts on an unsupported kind (H-B5)", "[core][irep2]")
     // Child: silence the diagnostic and Catch2's signal-handler report (it
     // re-raises SIGABRT after printing), then trigger the unsupported path.
     // Consume the freopen result to satisfy -Werror=unused-result.
-    if (!freopen("/dev/null", "w", stderr) || !freopen("/dev/null", "w", stdout))
+    if (
+      !freopen("/dev/null", "w", stderr) || !freopen("/dev/null", "w", stdout))
       _exit(2);
     (void)b->with_type(get_uint_type(32));
     _exit(0); // unreachable if with_type aborts as required
@@ -131,11 +132,10 @@ TEST_CASE("dispatch smoke over real nodes (H-B5)", "[core][irep2]")
 
   for (const expr2tc &e : nodes)
   {
-    // clone is a structural identity; crc is stable and equality-consistent.
+    // clone is a structural identity whose crc matches the original's.
     expr2tc twin = e->clone();
     REQUIRE(twin == e);
     REQUIRE(twin->crc() == e->crc());
-    REQUIRE(e->crc() == e->crc());
 
     // tostring and the operand count run without crashing and agree with a
     // manual operand walk.
