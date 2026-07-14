@@ -884,6 +884,7 @@ as a progress tracker.
 | Milestone | Harness | Location | Technique | Verdict | Status |
 |---|---|---|---|---|---|
 | **M0** | H-A1 refcount conservation, single-free & self-alias UAF-safety (I1) | `unit/irep2/refcount.test.cpp`, `refcount_ops.h`, `refcount.fuzz.cpp` | **Tier B** — Catch2 property tests + a **nondeterministic-input** operation driver, both over the **real** `irep_container<T>`; reads the actual `irep2t::refcount` atomic after copy / move / assign / detach | 5 cases, 91 assertions PASS on `master` @ 4ba1903130; libFuzzer run 2,000,000 execs, no violation | **Done** (PR #6024). Verifies the genuine implementation, not a model, per §2 Tier B. The `run_ops` driver decodes a byte stream (libFuzzer, or fixed-seed in the unit test) into a sequence of container ops and checks refcount conservation after each; the libFuzzer target (`-DENABLE_FUZZER=On`) adds ASan UAF/double-free coverage. Built under the `Sanitizer` build type (ASan) the fixed cases also witness UAF freedom. |
+| **M4** | H-A9 guard shared-prefix walk agrees with the naive scan (I8) | `unit/irep2/guard.test.cpp` | **Tier B** — drives the **real** `guard2tc`: builds guards that share a cached and-chain prefix then diverge, runs the real `operator-=` (calls `common_pointer_prefix_size` unconditionally, `irep2_guard.cpp:342`) and `operator|=` (`:468`), and differentially checks the observable result against a naive set-difference / prefix-factoring reference. Anti-vacuity: injecting an over-reporting bug into `common_pointer_prefix_size` fails 4/5 cases. In asserts-on builds the real code additionally self-checks `walk == scan` (`irep2_guard.cpp:106`). | 5 cases, 713 assertions PASS; dual-verified (differential + injected-bug detection) | **Done** (this PR). Verifies the genuine implementation per the Tier-B mandate — **no** lifted C model. |
 
 **Approach note.** H-A1 is realised as a **Tier-B** harness (real classes) rather
 than a Tier-A standalone C model: verifying `irep2`'s *actual* C++ is the goal, and
@@ -911,9 +912,14 @@ nondet input, but reach the real classes differently:
   `NDEBUG` library is an ODR/layout mismatch (the repo build never does this).
   The oracle uses `abort()`, not `assert()`, so it stays live under `NDEBUG`.
 
-**Next task:** M1 — H-A6 `as_ulong`/`as_long` truncation (R2), then H-A5 width
-overflow (R1). These are genuine arithmetic kernels: implement as a fix to the
-real `irep2_expr.cpp`/`irep2_type.cpp` plus a Tier-B unit test asserting the
-checked accessor on the real `constant_int2t`/`get_width` (fix-and-prove-in-one-PR
-per §7).
+**Methodology (hard rule).** Every harness verifies the **actual irep2 C++**, never
+a hand-written C/standalone model of it — even for ESBMC-liftable kernels. File-local
+internals (e.g. `common_pointer_prefix_size`, anon-namespace) are exercised through
+the public API that calls them and cross-checked differentially against a naive
+reference computed in-test.
+
+**Next task:** M4 remainder / M5 — H-B4 (guard algebra logical equivalence: `-=`/`|=`
+vs a naive reference, SMT-checked on small terms), then H-A10 (`gen_zero`/`gen_one`
+recursion), then the relational laws H-B1 (ordering/equality), H-B2 (CRC↔cmp), H-B5
+(`with_type`/per-kind sweep). All Tier-B on the real classes.
 
