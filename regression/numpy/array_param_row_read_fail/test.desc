@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy arrays cannot be passed as function parameters yet
+^ERROR: TypeError: 'int' object is not subscriptable

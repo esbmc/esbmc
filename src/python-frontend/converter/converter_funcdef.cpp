@@ -645,6 +645,203 @@ static bool param_is_list_like_in_body(
   return false;
 }
 
+// True for a `np.array([...])` call node with a literal list argument whose
+// shape `type_handler::get_typet` can already resolve.
+static bool is_numpy_array_literal_call(const nlohmann::json &node)
+{
+  if (!node.is_object() || node.value("_type", "") != "Call")
+    return false;
+
+  const auto &func = node["func"];
+  if (
+    func.value("_type", "") != "Attribute" ||
+    func.value("attr", "") != "array" || !func.contains("value") ||
+    func["value"].value("id", "") != "np")
+    return false;
+
+  return node.contains("args") && node["args"].is_array() &&
+         !node["args"].empty() && node["args"][0].value("_type", "") == "List";
+}
+
+// One `Call` node together with the name of the function whose body it
+// textually appears in (empty for a module-level call).
+struct numpy_param_call_site
+{
+  const nlohmann::json *call;
+  std::string enclosing_function;
+};
+
+static void collect_call_sites(
+  const nlohmann::json &node,
+  const std::string &enclosing_function,
+  std::vector<numpy_param_call_site> &out)
+{
+  if (node.is_array())
+  {
+    for (const auto &elem : node)
+      collect_call_sites(elem, enclosing_function, out);
+    return;
+  }
+
+  if (!node.is_object())
+    return;
+
+  if (node.value("_type", "") == "Call")
+    out.push_back({&node, enclosing_function});
+
+  std::string next_enclosing = enclosing_function;
+  if (node.value("_type", "") == "FunctionDef" && node.contains("name"))
+    next_enclosing = node["name"].get<std::string>();
+
+  for (auto it = node.begin(); it != node.end(); ++it)
+  {
+    if (it.value().is_object() || it.value().is_array())
+      collect_call_sites(it.value(), next_enclosing, out);
+  }
+}
+
+// Finds a module-level `FunctionDef` node named `name`.
+static const nlohmann::json *
+find_function_def(const nlohmann::json &module_body, const std::string &name)
+{
+  for (const auto &stmt : module_body)
+  {
+    if (
+      stmt.value("_type", "") == "FunctionDef" &&
+      stmt.value("name", "") == name)
+      return &stmt;
+  }
+  return nullptr;
+}
+
+// True when `param_name` is ever subscripted by another variable (fancy/
+// boolean-mask indexing, e.g. `a[mask]`) rather than a literal index/slice,
+// anywhere in `node`. Mask-based indexing through a numpy-array *parameter*
+// isn't modelled yet (that's the symbolic 2-D+ mask work tracked separately);
+// keeping such a parameter on its old Any/PyListObject* default preserves its
+// existing explicit-rejection diagnostic instead of crashing deeper in the
+// pipeline.
+static bool param_used_with_variable_index(
+  const std::string &param_name,
+  const nlohmann::json &node)
+{
+  if (node.is_array())
+  {
+    for (const auto &elem : node)
+      if (param_used_with_variable_index(param_name, elem))
+        return true;
+    return false;
+  }
+
+  if (!node.is_object())
+    return false;
+
+  if (
+    node.value("_type", "") == "Subscript" && node.contains("value") &&
+    node["value"].value("_type", "") == "Name" &&
+    node["value"].value("id", "") == param_name && node.contains("slice") &&
+    node["slice"].value("_type", "") == "Name")
+    return true;
+
+  for (auto it = node.begin(); it != node.end(); ++it)
+  {
+    if (it.value().is_object() || it.value().is_array())
+      if (param_used_with_variable_index(param_name, it.value()))
+        return true;
+  }
+  return false;
+}
+
+bool python_converter::try_infer_numpy_param_type(
+  const std::string &func_name,
+  size_t param_index,
+  typet &out,
+  std::set<std::string> &visiting) const
+{
+  const std::string key = func_name + "#" + std::to_string(param_index);
+  if (!visiting.insert(key).second)
+    return false;
+
+  const nlohmann::json &module_body = (*ast_json)["body"];
+
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      call.value("func", nlohmann::json::object()).value("_type", "") !=
+        "Name" ||
+      call["func"].value("id", "") != func_name || !call.contains("args") ||
+      call["args"].size() <= param_index)
+      continue;
+
+    const nlohmann::json &arg = call["args"][param_index];
+
+    if (is_numpy_array_literal_call(arg))
+    {
+      out = type_handler_.get_typet(arg["args"][0]);
+      return true;
+    }
+
+    if (arg.value("_type", "") != "Name")
+      continue;
+
+    const std::string arg_name = arg.value("id", "");
+
+    if (site.enclosing_function.empty())
+    {
+      // Argument is a module-level variable: look for its defining
+      // `Assign`/`AnnAssign` among the module's top-level statements. The
+      // typechecking pre-pass rewrites plain `Assign` nodes to `AnnAssign`
+      // once it infers a type, so both forms need to be recognised.
+      for (const auto &stmt : module_body)
+      {
+        const std::string stmt_type = stmt.value("_type", "");
+        std::string target_name;
+        if (
+          stmt_type == "Assign" && stmt.contains("targets") &&
+          !stmt["targets"].empty())
+          target_name = stmt["targets"][0].value("id", "");
+        else if (stmt_type == "AnnAssign" && stmt.contains("target"))
+          target_name = stmt["target"].value("id", "");
+
+        if (
+          target_name == arg_name &&
+          is_numpy_array_literal_call(stmt.value("value", nlohmann::json())))
+        {
+          out = type_handler_.get_typet(stmt["value"]["args"][0]);
+          return true;
+        }
+      }
+      continue;
+    }
+
+    // Argument is a name local to the caller: if it is itself one of the
+    // caller's own parameters, resolve that parameter recursively (the
+    // "forwarded through an intermediate function" case).
+    const nlohmann::json *enclosing_def =
+      find_function_def(module_body, site.enclosing_function);
+    if (enclosing_def == nullptr)
+      continue;
+
+    const nlohmann::json &enclosing_params = (*enclosing_def)["args"]["args"];
+    for (size_t i = 0; i < enclosing_params.size(); i++)
+    {
+      if (enclosing_params[i].value("arg", "") == arg_name)
+      {
+        if (try_infer_numpy_param_type(
+              site.enclosing_function, i, out, visiting))
+          return true;
+        break;
+      }
+    }
+  }
+
+  return false;
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -673,6 +870,34 @@ size_t python_converter::register_function_argument(
     }
     else
       arg_type = get_type_from_annotation(element["annotation"], element);
+  }
+
+  // An unannotated (or bare `list`) parameter defaults to Any/PyListObject*,
+  // which numpy arrays cannot pass through without an unsound reinterpret of
+  // their raw bytes. If every call site that can be resolved from the AST
+  // feeds this parameter a numpy array of a known shape, keep that concrete
+  // array type instead so the parameter stays usable inside the callee.
+  if (
+    arg_name != "self" && arg_name != "cls" &&
+    (arg_type == any_type() || arg_type == type_handler_.get_list_type()))
+  {
+    const nlohmann::json *owning_function =
+      find_function_def((*ast_json)["body"], id.get_function());
+    bool used_as_mask_index =
+      owning_function != nullptr &&
+      param_used_with_variable_index(arg_name, (*owning_function)["body"]);
+
+    if (!used_as_mask_index)
+    {
+      typet inferred_array_type;
+      std::set<std::string> visiting;
+      if (try_infer_numpy_param_type(
+            id.get_function(),
+            type.arguments().size(),
+            inferred_array_type,
+            visiting))
+        arg_type = inferred_array_type;
+    }
   }
 
   // Arrays are converted to pointers so that the backend receives the same
