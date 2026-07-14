@@ -885,7 +885,8 @@ as a progress tracker.
 |---|---|---|---|---|---|
 | **M0** | H-A1 refcount conservation, single-free & self-alias UAF-safety (I1) | `unit/irep2/refcount.test.cpp`, `refcount_ops.h`, `refcount.fuzz.cpp` | **Tier B** — Catch2 property tests + a **nondeterministic-input** operation driver, both over the **real** `irep_container<T>`; reads the actual `irep2t::refcount` atomic after copy / move / assign / detach | 5 cases, 91 assertions PASS on `master` @ 4ba1903130; libFuzzer run 2,000,000 execs, no violation | **Done** (PR #6024). Verifies the genuine implementation, not a model, per §2 Tier B. The `run_ops` driver decodes a byte stream (libFuzzer, or fixed-seed in the unit test) into a sequence of container ops and checks refcount conservation after each; the libFuzzer target (`-DENABLE_FUZZER=On`) adds ASan UAF/double-free coverage. Built under the `Sanitizer` build type (ASan) the fixed cases also witness UAF freedom. |
 | **M4** | H-A9 guard shared-prefix walk agrees with the naive scan (I8) | `unit/irep2/guard.test.cpp` | **Tier B** — drives the **real** `guard2tc`: builds guards that share a cached and-chain prefix then diverge, runs the real `operator-=` (calls `common_pointer_prefix_size` unconditionally, `irep2_guard.cpp:342`) and `operator|=` (`:468`), and differentially checks the observable result against a naive set-difference / prefix-factoring reference. Anti-vacuity: injecting an over-reporting bug into `common_pointer_prefix_size` fails 4/5 cases. In asserts-on builds the real code additionally self-checks `walk == scan` (`irep2_guard.cpp:106`). | 5 cases, 713 assertions PASS; dual-verified (differential + injected-bug detection) | **Done** (PR #6043). Verifies the genuine implementation per the Tier-B mandate — **no** lifted C model. |
-| **M5** | H-B2 CRC↔cmp consistency & determinism (I4) | `unit/irep2/crc_consistency.test.cpp` | **Tier B** — over a corpus of **real** expr2tc/type2tc with structurally-equal-but-distinct-pointer pairs, asserts `a==b ⇒ a.crc()==b.crc()` (mandatory) and reports (via WARN, no hard bound) the collision rate for `a!=b`; plus determinism across independent construction (two 2000-deep add chains hash identically; a 1999-deep one does not). Anti-vacuity: seeding the per-node crc with `&node` (address-dependent) fails all 3 cases. | 3 cases, 34 assertions PASS, 0 collisions | **Done** (this PR). |
+| **M5** | H-B2 CRC↔cmp consistency & determinism (I4) | `unit/irep2/crc_consistency.test.cpp` | **Tier B** — over a corpus of **real** expr2tc/type2tc with structurally-equal-but-distinct-pointer pairs, asserts `a==b ⇒ a.crc()==b.crc()` (mandatory) and reports (via WARN, no hard bound) the collision rate for `a!=b`; plus determinism across independent construction (two 2000-deep add chains hash identically; a 1999-deep one does not). Anti-vacuity: seeding the per-node crc with `&node` (address-dependent) fails all 3 cases. | 3 cases, 34 assertions PASS, 0 collisions | **Done** (PR #6050). |
+| **M5** | H-B5 `with_type` / dispatch totality (P2-robustness) | `unit/irep2/with_type.test.cpp` | **Tier B** — over the **real** classes: (a) supported kinds (`constant_int`/`symbol`/arith & bitwise binops) round-trip `e.with_type(e->type)==e` and substitute-then-revert to the original; (b) an **unsupported** kind (`constant_bool`, whose ctor takes no type) hits the deliberate `abort()` — verified via a POSIX `fork()` death-test asserting the child dies with `SIGABRT` (guarded out on Windows); (c) a `constexpr` X-macro fold over `expr_kinds.inc`/`type_kinds.inc` `static_assert`s the kind count equals `end_expr_id`/`end_type_id` (guards manifest/enum drift); plus a clone/crc/cmp/tostring/`get_num_sub_exprs`==`foreach_operand` smoke. Anti-vacuity: making `rebuild_with_type` keep the old type fails the substitution check. | 3 cases, 50 assertions PASS | **Done** (this PR). Full 122-kind construction factory deferred; the sweep covers the `with_type` contract + representative dispatch smoke. |
 
 **Approach note.** H-A1 is realised as a **Tier-B** harness (real classes) rather
 than a Tier-A standalone C model: verifying `irep2`'s *actual* C++ is the goal, and
@@ -916,11 +917,15 @@ nondet input, but reach the real classes differently:
 **Methodology (hard rule).** Every harness verifies the **actual irep2 C++**, never
 a hand-written model. Corpora use `*2tc` constructors (not the `get_*_type`
 singletons) where a structurally-equal-but-distinct-pointer node is needed so the
-real cmp/crc path is exercised rather than the same-pointer short-circuit.
+real cmp/crc path is exercised rather than the same-pointer short-circuit. Where a
+property needs a process-level effect (a deliberate `abort()`), a POSIX `fork()`
+death-test on the real class is used (guarded out on Windows) rather than skipping
+it.
 
-**Next task:** M5 remainder — H-B5 (`with_type` round-trip / per-kind dispatch
-totality: for each expr kind, either `supports_with_type_v` + structural
-round-trip, or the documented-unsupported abort path; kind count derived from
-`expr_kinds.inc`), then H-A10 (`gen_zero`/`gen_one` recursion & aggregate size
-loops on real `irep2_utils`). All Tier-B on the real classes.
+**Next task:** M5/M2 remainder — H-A10 (`gen_zero`/`gen_one` recursion & aggregate
+size loops on real `irep2_utils`: bounded recursion depth, non-negative bounded
+element counts, `union` non-empty precondition). Then the P3 serialisation case
+(`tostring`/`pretty` enum-name exhaustiveness, R7). After that the plan's Tier-A/B
+harness set is complete; remaining is M6 Tier-C (TSan recipe) and the doc verdict
+log. All Tier-B on the real classes.
 
