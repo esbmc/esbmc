@@ -6,7 +6,6 @@
 
 namespace std
 {
-
 // remove_reference — primary plus lvalue specialization (valid in C++03)
 template <class T>
 struct remove_reference
@@ -235,6 +234,36 @@ struct integer_sequence
 
 template <size_t... Ints>
 using index_sequence = integer_sequence<size_t, Ints...>;
+
+// make_integer_sequence / make_index_sequence: build 0..N-1 by peeling one
+// index per level. Recursion depth is O(N), which is fine for the small,
+// statically-sized tuples this models generate the sequence for.
+//
+// The counter is a plain size_t, deliberately NOT of type T: partially
+// specializing on a non-type parameter whose declared type is the
+// specialization's own free type parameter T ("<T, 0, Is...>" where N's
+// type is T) is ill-formed ([temp.class.spec.match]) - some compilers only
+// diagnose it as unbounded template recursion instead of rejecting it
+// outright. Keeping the counter's type fixed at size_t sidesteps this.
+template <class T, size_t N, T... Is>
+struct __make_integer_sequence_impl
+{
+  using type =
+    typename __make_integer_sequence_impl<T, N - 1, T(N - 1), Is...>::type;
+};
+
+template <class T, T... Is>
+struct __make_integer_sequence_impl<T, 0, Is...>
+{
+  using type = integer_sequence<T, Is...>;
+};
+
+template <class T, T N>
+using make_integer_sequence =
+  typename __make_integer_sequence_impl<T, static_cast<size_t>(N)>::type;
+
+template <size_t N>
+using make_index_sequence = make_integer_sequence<size_t, N>;
 #endif
 
 } // namespace std
