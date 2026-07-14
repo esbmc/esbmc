@@ -53,6 +53,19 @@ Direct leak of 16 byte(s) in 1 object(s) allocated from:
     #2 0xcccc in main src/main.cc:3:5
 """
 
+# Realistic ThreadSanitizer data-race report. TSan frames use a different
+# layout from ASan's, but the trailing SUMMARY line pairs kind with file:line.
+TSAN_REPORT = """\
+==================
+WARNING: ThreadSanitizer: data race (pid=4242)
+  Write of size 4 at 0x7b04 by thread T1:
+    #0 irep_container::release() src/irep2/irep2.h:161 (esbmc+0x1234)
+  Previous read of size 4 at 0x7b04 by main thread:
+    #0 irep_container::crc() src/irep2/irep2.h:319 (esbmc+0x5678)
+SUMMARY: ThreadSanitizer: data race src/irep2/irep2.h:161 in irep_container::release()
+==================
+"""
+
 
 def _tail_iter(text: str):
     """Yield every line of ``text`` after the first (which is the
@@ -127,6 +140,14 @@ class ParseLog(unittest.TestCase):
         # after the tool name.
         self.assertIn("detected", findings[0].kind.lower() + " memory leaks")
         self.assertEqual(findings[0].location, "src/payload.cc:88:13")
+
+    def test_tsan_report(self):
+        f = _write(self.dir, "sanitizer.104", TSAN_REPORT)
+        findings = cf.parse_log(f)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].tool, "TSan")
+        self.assertEqual(findings[0].kind, "data race")
+        self.assertEqual(findings[0].location, "src/irep2/irep2.h:161")
 
     def test_mixed_file(self):
         f = _write(self.dir, "sanitizer.103", UBSAN_LINE + ASAN_REPORT)

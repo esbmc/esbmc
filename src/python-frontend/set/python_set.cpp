@@ -1,0 +1,1212 @@
+#include <python-frontend/set/python_set.h>
+#include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
+#include <python-frontend/python-list/python_list.h>
+#include <c2goto/library/python/python_types.h>
+#include <util/arith_tools.h>
+#include <util/expr_util.h>
+#include <util/python_types.h>
+#include <util/string_constant.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
+#include <irep2/irep2_utils.h>
+#include <util/migrate.h>
+#include <util/c_typecast.h>
+
+using namespace python_expr;
+
+namespace
+{
+// Build v + 1 : size_type via the shared add helper (V.3).
+exprt build_size_inc(const exprt &v)
+{
+  return build_add(v, gen_one(size_type()), size_type());
+}
+} // namespace
+
+symbolt &python_set::create_set_list()
+{
+  locationt location = converter_.get_location_from_decl(set_value_);
+  const type_handler &type_handler = converter_.get_type_handler();
+
+  // Create list symbol for set representation
+  const typet list_type = type_handler.get_list_type();
+  symbolt &list_symbol =
+    converter_.create_tmp_symbol(set_value_, "$py_set$", list_type, exprt());
+
+  // Declare list
+  code_declt list_decl(build_symbol(list_symbol));
+  list_decl.location() = location;
+  converter_.add_instruction(list_decl);
+
+  // Initialize list with storage array
+  const symbolt *create_func_sym =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_create");
+  assert(create_func_sym);
+
+  // Add list_create call to the block
+  code_function_callt list_create_func_call;
+  list_create_func_call.function() = build_symbol(*create_func_sym);
+  list_create_func_call.lhs() = build_symbol(list_symbol);
+  list_create_func_call.type() = list_type;
+  list_create_func_call.location() = location;
+  converter_.add_instruction(list_create_func_call);
+
+  // Mark as set
+  list_symbol.is_set = true;
+
+  return list_symbol;
+}
+
+exprt python_set::get()
+{
+  symbolt &set_symbol = create_set_list();
+  const std::string &set_id = set_symbol.id.as_string();
+
+  // Create a python_list helper to reuse push functionality
+  python_list list_helper(converter_, set_value_);
+
+  // Track unique elements (sets don't allow duplicates)
+  std::set<exprt> elements;
+
+  for (auto &e : set_value_["elts"])
+  {
+    exprt elem = converter_.get_expr(e);
+
+    // Skip duplicates
+    if (elements.count(elem))
+      continue;
+
+    elements.insert(elem);
+
+    // Use list push functionality
+    exprt set_push_func_call =
+      list_helper.build_push_list_call(set_symbol, set_value_, elem);
+    converter_.add_instruction(set_push_func_call);
+
+    // Track type information
+    list_helper.add_type_info(
+      set_id, elem.identifier().as_string(), elem.type());
+  }
+
+  return build_symbol(set_symbol);
+}
+
+exprt python_set::get_empty_set()
+{
+  // Create an empty list structure for the set
+  symbolt &set_symbol = create_set_list();
+
+  // No elements to add for empty set
+  // Type information will be determined when elements are added
+  return build_symbol(set_symbol);
+}
+
+exprt python_set::get_from_iterable(
+  const exprt &iterable,
+  const nlohmann::json &element)
+{
+  symbolt &set_symbol = create_set_list();
+  const std::string &set_id = set_symbol.id.as_string();
+  locationt loc = converter_.get_location_from_decl(element);
+
+  python_list list_helper(converter_, element);
+  const type_handler &th = converter_.get_type_handler();
+  const typet list_type = th.get_list_type();
+
+  // Fast path for concrete string literals to avoid symbolic loop expansion.
+  if (iterable.id() == "string-constant")
+  {
+    std::set<unsigned char> unique_chars;
+    const std::string literal =
+      id2string(to_string_constant(iterable).mb_value());
+    for (unsigned char ch : literal)
+    {
+      if (ch == '\0')
+        break;
+
+      if (!unique_chars.insert(ch).second)
+        continue;
+
+      const exprt elem_expr =
+        from_integer(BigInt(static_cast<unsigned int>(ch)), char_type());
+      exprt set_push_func_call =
+        list_helper.build_push_list_call(set_symbol, element, elem_expr);
+      converter_.add_instruction(set_push_func_call);
+      list_helper.add_type_info(set_id, std::string(), elem_expr.type());
+    }
+
+    return build_symbol(set_symbol);
+  }
+
+  // Determine length expression for the iterable
+  exprt length_expr;
+  if (iterable.type() == list_type)
+  {
+    const symbolt *size_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error("__ESBMC_list_size not found in symbol table");
+
+    symbolt &len_sym = converter_.create_tmp_symbol(
+      element, "$set_len$", size_type(), gen_zero(size_type()));
+    code_declt len_decl(build_symbol(len_sym));
+    len_decl.location() = loc;
+    converter_.add_instruction(len_decl);
+
+    code_function_callt size_call;
+    size_call.function() = build_symbol(*size_func);
+    size_call.arguments().push_back(
+      iterable.type().is_pointer() ? iterable : build_address_of(iterable));
+    size_call.lhs() = build_symbol(len_sym);
+    size_call.type() = size_type();
+    size_call.location() = loc;
+    converter_.add_instruction(size_call);
+
+    length_expr = build_symbol(len_sym);
+  }
+  else if (
+    iterable.type().is_array() && iterable.type().subtype() == char_type())
+  {
+    const array_typet &arr_type = to_array_type(iterable.type());
+    // V.1k keystone (W): build `size - 1` in IREP2. The array dimension is not
+    // guaranteed to be size_type-wide (see the loop-condition note below), so
+    // reconcile operand widths with the same c_implicit_typecast_arithmetic
+    // clang_cpp_adjust applies to the legacy minus_exprt -- a byte-identical,
+    // idempotent transform that lets sub2t's matched-width invariant hold.
+    exprt size_op = arr_type.size();
+    exprt one_op = gen_one(size_type());
+    namespacet ns(converter_.symbol_table());
+    c_implicit_typecast_arithmetic(size_op, one_op, ns);
+    expr2tc size2, one2;
+    migrate_expr(size_op, size2);
+    migrate_expr(one_op, one2);
+    length_expr = migrate_expr_back(sub2tc(size2->type, size2, one2));
+  }
+  else if (
+    iterable.type().is_pointer() && iterable.type().subtype() == char_type())
+  {
+    // Use bounded length from runtime to avoid unbounded strlen
+    const symbolt *strlen_bounded =
+      converter_.symbol_table().find_symbol("c:@F@__python_strnlen_bounded");
+    if (!strlen_bounded)
+      throw std::runtime_error(
+        "__python_strnlen_bounded not found in symbol table");
+
+    symbolt &len_sym = converter_.create_tmp_symbol(
+      element, "$set_strlen$", size_type(), gen_zero(size_type()));
+    code_declt len_decl(build_symbol(len_sym));
+    len_decl.location() = loc;
+    converter_.add_instruction(len_decl);
+
+    code_function_callt len_call;
+    len_call.function() = build_symbol(*strlen_bounded);
+    len_call.lhs() = build_symbol(len_sym);
+    len_call.arguments().push_back(iterable);
+    len_call.arguments().push_back(
+      from_integer(BigInt(ESBMC_PY_STRNLEN_BOUND), size_type()));
+    len_call.type() = size_type();
+    len_call.location() = loc;
+    converter_.add_instruction(len_call);
+
+    // Ensure bounded strlen doesn't exceed the configured limit.
+    // If it does, the model would silently truncate, so assert to make it explicit.
+    // (len_sym and the bound literal are both size_type — same width.)
+    exprt bound_check = build_less_equal(
+      build_symbol(len_sym),
+      from_integer(BigInt(ESBMC_PY_STRNLEN_BOUND), size_type()));
+    code_assertt bound_assert(bound_check);
+    bound_assert.location() = loc;
+    bound_assert.location().comment(
+      "set(): string length exceeds ESBMC_PY_STRNLEN_BOUND");
+    converter_.add_instruction(bound_assert);
+
+    length_expr = build_symbol(len_sym);
+  }
+  else
+  {
+    throw std::runtime_error(
+      "Unsupported iterable type in set(): " + iterable.type().id_string());
+  }
+
+  // Loop counter
+  symbolt &idx_sym = converter_.create_tmp_symbol(
+    element, "$set_i$", size_type(), gen_zero(size_type()));
+  code_declt idx_decl(build_symbol(idx_sym));
+  idx_decl.location() = loc;
+  converter_.add_instruction(idx_decl);
+
+  code_assignt idx_init(build_symbol(idx_sym), gen_zero(size_type()));
+  idx_init.location() = loc;
+  converter_.add_instruction(idx_init);
+
+  // Loop condition: i < length, built in IREP2 (V.1k keystone, W). idx_sym
+  // (size_type) and length_expr can have mismatched bit-widths (the
+  // runtime-string path), so reconcile the operands with the same
+  // c_implicit_typecast_arithmetic clang_cpp_adjust's adjust_expr_rel applies
+  // -- a byte-identical, idempotent transform -- letting lessthan2t's
+  // matched-width invariant hold at construction.
+  exprt idx_op = build_symbol(idx_sym);
+  exprt len_op = length_expr;
+  namespacet ns(converter_.symbol_table());
+  c_implicit_typecast_arithmetic(idx_op, len_op, ns);
+  exprt cond = build_less_than(idx_op, len_op);
+
+  code_blockt loop_body;
+
+  // Switch context so helper calls insert into loop body
+  {
+    struct current_block_guard
+    {
+      python_converter &converter;
+      code_blockt *saved;
+
+      current_block_guard(python_converter &converter, code_blockt *next)
+        : converter(converter), saved(converter.current_block)
+      {
+        converter.current_block = next;
+      }
+
+      ~current_block_guard()
+      {
+        converter.current_block = saved;
+      }
+    } block_guard(converter_, &loop_body);
+
+    exprt elem_expr;
+    bool use_pyobject = false;
+    const symbolt *contains_func = nullptr;
+    const symbolt *push_obj_func = nullptr;
+    symbolt *elem_obj_sym = nullptr;
+    if (iterable.type() == list_type)
+    {
+      // Build list_at call (cannot use python_list::build_list_at_call here)
+      pointer_typet obj_type(th.get_list_element_type());
+      const symbolt *list_at_func_sym =
+        converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+      assert(list_at_func_sym);
+
+      // Left legacy: list_at.function()/.arguments() are read below to build a
+      // code_function_callt, which needs the side_effect-specific API.
+      side_effect_expr_function_callt list_at;
+      list_at.function() = build_symbol(*list_at_func_sym);
+      if (iterable.type().is_pointer())
+        list_at.arguments().push_back(iterable);
+      else
+        list_at.arguments().push_back(build_address_of(iterable));
+      list_at.arguments().push_back(build_symbol(idx_sym));
+      list_at.type() = obj_type;
+      list_at.location() = loc;
+
+      typet elem_type;
+      if (iterable.is_symbol())
+      {
+        const std::string &list_id = iterable.identifier().as_string();
+        elem_type = python_list::get_list_element_type(list_id);
+      }
+      if (elem_type == typet())
+        elem_type = any_type();
+
+      // Materialize list_at into a temporary PyObject* in the loop body
+      symbolt &tmp_obj = converter_.create_tmp_symbol(
+        element, "$set_elem_obj$", obj_type, exprt());
+      code_declt tmp_obj_decl(build_symbol(tmp_obj));
+      tmp_obj_decl.location() = loc;
+      loop_body.copy_to_operands(tmp_obj_decl);
+
+      code_function_callt list_at_call;
+      list_at_call.function() = list_at.function();
+      list_at_call.arguments() = list_at.arguments();
+      list_at_call.lhs() = build_symbol(tmp_obj);
+      list_at_call.type() = obj_type;
+      list_at_call.location() = loc;
+      loop_body.copy_to_operands(list_at_call);
+
+      if (elem_type == any_type())
+      {
+        use_pyobject = true;
+        contains_func =
+          converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains");
+        push_obj_func = converter_.symbol_table().find_symbol(
+          "c:@F@__ESBMC_list_push_object");
+        if (!contains_func || !push_obj_func)
+          throw std::runtime_error(
+            "__ESBMC_list_contains/__ESBMC_list_push_object not found");
+
+        elem_obj_sym = &tmp_obj;
+      }
+      else
+      {
+        elem_expr =
+          list_helper.extract_pyobject_value(build_symbol(tmp_obj), elem_type);
+
+        if (elem_type != typet())
+        {
+          const std::string elem_id = elem_expr.is_symbol()
+                                        ? elem_expr.identifier().as_string()
+                                        : std::string();
+          list_helper.add_type_info(set_id, elem_id, elem_expr.type());
+        }
+      }
+    }
+    else if (
+      iterable.type().is_array() && iterable.type().subtype() == char_type())
+    {
+      exprt array_index =
+        build_index(iterable, build_symbol(idx_sym), char_type());
+      elem_expr = array_index;
+      list_helper.add_type_info(set_id, std::string(), elem_expr.type());
+    }
+    else
+    {
+      // char* case: *(iterable + i). iterable is a resolved char* and idx_sym
+      // a synthetic size_type, so build the pointer arithmetic in IREP2 (V.3).
+      exprt ptr_add =
+        build_add(iterable, build_symbol(idx_sym), iterable.type());
+      // ptr_add is a synthetic char* value, so build the dereference in IREP2.
+      elem_expr = build_dereference(ptr_add, char_type());
+      list_helper.add_type_info(set_id, std::string(), elem_expr.type());
+
+      // Break if we hit the null terminator (V.3: built in IREP2).
+      expr2tc elem2;
+      migrate_expr(elem_expr, elem2);
+      exprt is_zero = migrate_expr_back(
+        equality2tc(elem2, gen_zero(migrate_type(char_type()))));
+      code_breakt brk;
+      code_ifthenelset break_if;
+      break_if.cond() = is_zero;
+      break_if.then_case() = brk;
+      loop_body.copy_to_operands(break_if);
+    }
+
+    // If not already present in the set, push element
+    if (use_pyobject)
+    {
+      symbolt &contains_result = converter_.create_tmp_symbol(
+        element, "$contains$", bool_type(), gen_boolean(false));
+      code_declt contains_decl(build_symbol(contains_result));
+      loop_body.copy_to_operands(contains_decl);
+
+      code_function_callt contains_call;
+      contains_call.function() = build_symbol(*contains_func);
+      contains_call.lhs() = build_symbol(contains_result);
+      contains_call.arguments().push_back(
+        set_symbol.get_type().is_pointer()
+          ? build_symbol(set_symbol)
+          : build_address_of(build_symbol(set_symbol)));
+
+      const exprt elem_obj = build_symbol(*elem_obj_sym);
+      contains_call.arguments().push_back(
+        build_deref_member(elem_obj, "value", pointer_typet(empty_typet())));
+      contains_call.arguments().push_back(
+        build_deref_member(elem_obj, "type_id", size_type()));
+      contains_call.arguments().push_back(
+        build_deref_member(elem_obj, "size", size_type()));
+
+      contains_call.type() = bool_type();
+      contains_call.location() = loc;
+      loop_body.copy_to_operands(contains_call);
+
+      // V.3: build the "not contained" guard in IREP2.
+      expr2tc cr2;
+      migrate_expr(build_symbol(contains_result), cr2);
+      exprt not_contains = migrate_expr_back(not2tc(cr2));
+
+      code_blockt push_block;
+      exprt push_call = build_call_expr(
+        *push_obj_func,
+        bool_type(),
+        {set_symbol.get_type().is_pointer()
+           ? build_symbol(set_symbol)
+           : build_address_of(build_symbol(set_symbol)),
+         build_symbol(*elem_obj_sym),
+         from_integer(BigInt(0), size_type()),
+         from_integer(BigInt(0), int_type())});
+      push_call.location() = loc;
+      push_block.copy_to_operands(
+        converter_.convert_expression_to_code(push_call));
+
+      code_ifthenelset push_if;
+      push_if.cond() = not_contains;
+      push_if.then_case() = push_block;
+      loop_body.copy_to_operands(push_if);
+    }
+    else
+    {
+      exprt contains_expr =
+        list_helper.contains(elem_expr, build_symbol(set_symbol));
+      // V.3: build the "not contained" guard in IREP2.
+      expr2tc ce2;
+      migrate_expr(contains_expr, ce2);
+      exprt not_contains = migrate_expr_back(not2tc(ce2));
+
+      code_blockt push_block;
+      exprt push_call =
+        list_helper.build_push_list_call(set_symbol, element, elem_expr);
+      push_block.copy_to_operands(push_call);
+
+      code_ifthenelset push_if;
+      push_if.cond() = not_contains;
+      push_if.then_case() = push_block;
+      loop_body.copy_to_operands(push_if);
+    }
+
+    // Increment index: i = i + 1 (V.3: built in IREP2).
+    exprt idx_inc =
+      build_add(build_symbol(idx_sym), gen_one(size_type()), size_type());
+    code_assignt idx_update(build_symbol(idx_sym), idx_inc);
+    loop_body.copy_to_operands(idx_update);
+  }
+
+  // Create while loop
+  codet while_loop;
+  while_loop.set_statement("while");
+  while_loop.copy_to_operands(cond, loop_body);
+  converter_.add_instruction(while_loop);
+
+  return build_symbol(set_symbol);
+}
+
+exprt python_set::build_set_difference_call(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  symbolt &result_set = create_set_list();
+  locationt loc = converter_.get_location_from_decl(element);
+
+  const symbolt *size_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+  const symbolt *at_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+  const symbolt *contains_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains");
+  const symbolt *push_obj_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+
+  assert(size_func && at_func && contains_func && push_obj_func);
+
+  // Get size of LHS set
+  symbolt &n_sym = converter_.create_tmp_symbol(
+    element, "$lhs_size$", size_type(), gen_zero(size_type()));
+  code_declt n_decl(build_symbol(n_sym));
+  converter_.add_instruction(n_decl);
+
+  code_function_callt get_size;
+  get_size.function() = build_symbol(*size_func);
+  get_size.arguments().push_back(
+    lhs.type().is_pointer() ? lhs : build_address_of(lhs));
+  get_size.lhs() = build_symbol(n_sym);
+  get_size.type() = size_type();
+  get_size.location() = loc;
+  converter_.add_instruction(get_size);
+
+  // Loop counter
+  symbolt &i_sym = converter_.create_tmp_symbol(
+    element, "$i$", size_type(), gen_zero(size_type()));
+  code_declt i_decl(build_symbol(i_sym));
+  converter_.add_instruction(i_decl);
+
+  code_assignt i_init(build_symbol(i_sym), gen_zero(size_type()));
+  converter_.add_instruction(i_init);
+
+  // Loop condition: i < n
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
+
+  code_blockt body;
+
+  // Get element at index i from LHS
+  exprt at_call = build_call_expr(
+    *at_func,
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    {lhs.type().is_pointer() ? lhs : build_address_of(lhs),
+     build_symbol(i_sym)});
+  at_call.location() = loc;
+
+  symbolt &elem_sym = converter_.create_tmp_symbol(
+    element,
+    "$elem$",
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    exprt());
+  code_declt elem_decl(build_symbol(elem_sym));
+  elem_decl.copy_to_operands(at_call);
+  body.copy_to_operands(elem_decl);
+
+  // Check if element is in RHS
+  symbolt &contains_result = converter_.create_tmp_symbol(
+    element, "$contains$", bool_type(), gen_boolean(false));
+  code_declt contains_decl(build_symbol(contains_result));
+  body.copy_to_operands(contains_decl);
+
+  code_function_callt contains_call;
+  contains_call.function() = build_symbol(*contains_func);
+  contains_call.lhs() = build_symbol(contains_result);
+  contains_call.arguments().push_back(
+    rhs.type().is_pointer() ? rhs : build_address_of(rhs));
+
+  // Extract element value/type_id/size from (*elem) (V.3).
+  const exprt elem = build_symbol(elem_sym);
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "value", pointer_typet(empty_typet())));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "type_id", size_type()));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "size", size_type()));
+
+  contains_call.type() = bool_type();
+  contains_call.location() = loc;
+  body.copy_to_operands(contains_call);
+
+  // If element NOT in RHS, add to result
+  code_blockt then_block;
+
+  exprt push_call = build_call_expr(
+    *push_obj_func,
+    bool_type(),
+    {build_symbol(result_set),
+     build_symbol(elem_sym),
+     from_integer(BigInt(0), size_type()),
+     from_integer(BigInt(0), int_type())});
+  push_call.location() = loc;
+  then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
+
+  // V.3: build the "not contained" guard in IREP2.
+  expr2tc cr2;
+  migrate_expr(build_symbol(contains_result), cr2);
+  exprt not_contains = migrate_expr_back(not2tc(cr2));
+
+  codet if_stmt;
+  if_stmt.set_statement("ifthenelse");
+  if_stmt.copy_to_operands(not_contains, then_block);
+  body.copy_to_operands(if_stmt);
+
+  // Increment counter
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
+  code_assignt i_step(build_symbol(i_sym), i_inc);
+  body.copy_to_operands(i_step);
+
+  // Create loop
+  codet loop;
+  loop.set_statement("while");
+  loop.copy_to_operands(cond, body);
+  converter_.add_instruction(loop);
+
+  return build_symbol(result_set);
+}
+
+exprt python_set::build_set_intersection_call(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  symbolt &result_set = create_set_list();
+  locationt loc = converter_.get_location_from_decl(element);
+
+  const symbolt *size_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+  const symbolt *at_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+  const symbolt *contains_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains");
+  const symbolt *push_obj_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+
+  assert(size_func && at_func && contains_func && push_obj_func);
+
+  // Get size of LHS set
+  symbolt &n_sym = converter_.create_tmp_symbol(
+    element, "$lhs_size$", size_type(), gen_zero(size_type()));
+  code_declt n_decl(build_symbol(n_sym));
+  converter_.add_instruction(n_decl);
+
+  code_function_callt get_size;
+  get_size.function() = build_symbol(*size_func);
+  get_size.arguments().push_back(
+    lhs.type().is_pointer() ? lhs : build_address_of(lhs));
+  get_size.lhs() = build_symbol(n_sym);
+  get_size.type() = size_type();
+  get_size.location() = loc;
+  converter_.add_instruction(get_size);
+
+  // Loop counter
+  symbolt &i_sym = converter_.create_tmp_symbol(
+    element, "$i$", size_type(), gen_zero(size_type()));
+  code_declt i_decl(build_symbol(i_sym));
+  converter_.add_instruction(i_decl);
+
+  code_assignt i_init(build_symbol(i_sym), gen_zero(size_type()));
+  converter_.add_instruction(i_init);
+
+  // Loop condition: i < n
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
+
+  code_blockt body;
+
+  // Get element at index i from LHS
+  exprt at_call = build_call_expr(
+    *at_func,
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    {lhs.type().is_pointer() ? lhs : build_address_of(lhs),
+     build_symbol(i_sym)});
+  at_call.location() = loc;
+
+  symbolt &elem_sym = converter_.create_tmp_symbol(
+    element,
+    "$elem$",
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    exprt());
+  code_declt elem_decl(build_symbol(elem_sym));
+  elem_decl.copy_to_operands(at_call);
+  body.copy_to_operands(elem_decl);
+
+  // Check if element is in RHS
+  symbolt &contains_result = converter_.create_tmp_symbol(
+    element, "$contains$", bool_type(), gen_boolean(false));
+  code_declt contains_decl(build_symbol(contains_result));
+  body.copy_to_operands(contains_decl);
+
+  code_function_callt contains_call;
+  contains_call.function() = build_symbol(*contains_func);
+  contains_call.lhs() = build_symbol(contains_result);
+  contains_call.arguments().push_back(
+    rhs.type().is_pointer() ? rhs : build_address_of(rhs));
+
+  // Extract element value/type_id/size from (*elem) (V.3).
+  const exprt elem = build_symbol(elem_sym);
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "value", pointer_typet(empty_typet())));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "type_id", size_type()));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "size", size_type()));
+
+  contains_call.type() = bool_type();
+  contains_call.location() = loc;
+  body.copy_to_operands(contains_call);
+
+  // If element IS in RHS, add to result
+  code_blockt then_block;
+
+  exprt push_call = build_call_expr(
+    *push_obj_func,
+    bool_type(),
+    {build_symbol(result_set),
+     build_symbol(elem_sym),
+     from_integer(BigInt(0), size_type()),
+     from_integer(BigInt(0), int_type())});
+  push_call.location() = loc;
+  then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
+
+  codet if_stmt;
+  if_stmt.set_statement("ifthenelse");
+  if_stmt.copy_to_operands(build_symbol(contains_result), then_block);
+  body.copy_to_operands(if_stmt);
+
+  // Increment counter
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
+  code_assignt i_step(build_symbol(i_sym), i_inc);
+  body.copy_to_operands(i_step);
+
+  // Create loop
+  codet loop;
+  loop.set_statement("while");
+  loop.copy_to_operands(cond, body);
+  converter_.add_instruction(loop);
+
+  return build_symbol(result_set);
+}
+
+exprt python_set::build_set_copy(
+  const symbolt &self,
+  const nlohmann::json &element)
+{
+  // self ∪ ∅ is a fresh deduplicated copy of self.
+  symbolt &empty = create_set_list();
+  return build_set_union_call(build_symbol(self), build_symbol(empty), element);
+}
+
+exprt python_set::build_set_union_call(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  symbolt &result_set = create_set_list();
+  locationt loc = converter_.get_location_from_decl(element);
+
+  // First, copy all elements from LHS
+  const symbolt *extend_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_extend");
+  assert(extend_func);
+
+  code_function_callt extend_call;
+  extend_call.function() = build_symbol(*extend_func);
+  extend_call.arguments().push_back(build_symbol(result_set));
+  extend_call.arguments().push_back(
+    lhs.type().is_pointer() ? lhs : build_address_of(lhs));
+  extend_call.type() = empty_typet();
+  extend_call.location() = loc;
+  converter_.add_instruction(extend_call);
+
+  // Now iterate through RHS and add elements not already in result
+  const symbolt *size_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+  const symbolt *at_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+  const symbolt *contains_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains");
+  const symbolt *push_obj_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+
+  assert(size_func && at_func && contains_func && push_obj_func);
+
+  // Get size of RHS set
+  symbolt &n_sym = converter_.create_tmp_symbol(
+    element, "$rhs_size$", size_type(), gen_zero(size_type()));
+  code_declt n_decl(build_symbol(n_sym));
+  converter_.add_instruction(n_decl);
+
+  code_function_callt get_size;
+  get_size.function() = build_symbol(*size_func);
+  get_size.arguments().push_back(
+    rhs.type().is_pointer() ? rhs : build_address_of(rhs));
+  get_size.lhs() = build_symbol(n_sym);
+  get_size.type() = size_type();
+  get_size.location() = loc;
+  converter_.add_instruction(get_size);
+
+  // Loop counter
+  symbolt &i_sym = converter_.create_tmp_symbol(
+    element, "$i$", size_type(), gen_zero(size_type()));
+  code_declt i_decl(build_symbol(i_sym));
+  converter_.add_instruction(i_decl);
+
+  code_assignt i_init(build_symbol(i_sym), gen_zero(size_type()));
+  converter_.add_instruction(i_init);
+
+  // Loop condition: i < n
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
+
+  code_blockt body;
+
+  // Get element at index i from RHS
+  exprt at_call = build_call_expr(
+    *at_func,
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    {rhs.type().is_pointer() ? rhs : build_address_of(rhs),
+     build_symbol(i_sym)});
+  at_call.location() = loc;
+
+  symbolt &elem_sym = converter_.create_tmp_symbol(
+    element,
+    "$elem$",
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    exprt());
+  code_declt elem_decl(build_symbol(elem_sym));
+  elem_decl.copy_to_operands(at_call);
+  body.copy_to_operands(elem_decl);
+
+  // Check if element is already in result
+  symbolt &contains_result = converter_.create_tmp_symbol(
+    element, "$contains$", bool_type(), gen_boolean(false));
+  code_declt contains_decl(build_symbol(contains_result));
+  body.copy_to_operands(contains_decl);
+
+  code_function_callt contains_call;
+  contains_call.function() = build_symbol(*contains_func);
+  contains_call.lhs() = build_symbol(contains_result);
+  contains_call.arguments().push_back(build_symbol(result_set));
+
+  // Extract element value/type_id/size from (*elem) (V.3).
+  const exprt elem = build_symbol(elem_sym);
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "value", pointer_typet(empty_typet())));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "type_id", size_type()));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "size", size_type()));
+
+  contains_call.type() = bool_type();
+  contains_call.location() = loc;
+  body.copy_to_operands(contains_call);
+
+  // If element NOT in result, add it
+  code_blockt then_block;
+
+  exprt push_call = build_call_expr(
+    *push_obj_func,
+    bool_type(),
+    {build_symbol(result_set),
+     build_symbol(elem_sym),
+     from_integer(BigInt(0), size_type()),
+     from_integer(BigInt(0), int_type())});
+  push_call.location() = loc;
+  then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
+
+  // V.3: build the "not contained" guard in IREP2.
+  expr2tc cr2;
+  migrate_expr(build_symbol(contains_result), cr2);
+  exprt not_contains = migrate_expr_back(not2tc(cr2));
+
+  codet if_stmt;
+  if_stmt.set_statement("ifthenelse");
+  if_stmt.copy_to_operands(not_contains, then_block);
+  body.copy_to_operands(if_stmt);
+
+  // Increment counter
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
+  code_assignt i_step(build_symbol(i_sym), i_inc);
+  body.copy_to_operands(i_step);
+
+  // Create loop
+  codet loop;
+  loop.set_statement("while");
+  loop.copy_to_operands(cond, body);
+  converter_.add_instruction(loop);
+
+  return build_symbol(result_set);
+}
+
+// Walk @p source_expr, push every element into @p sink whose membership
+// in @p ref_expr matches @p want_in_ref. Used by update /
+// symmetric_difference to express "elements not in X" filters with a
+// single helper. Static member of python_set so it inherits the friend
+// access python_set already has on python_converter's privates.
+void python_set::emit_filtered_extend(
+  python_converter &converter,
+  const exprt &source_expr,
+  const exprt &ref_expr,
+  const symbolt &sink,
+  bool want_in_ref,
+  const nlohmann::json &element)
+{
+  contextt &symtab = converter.symbol_table();
+  const symbolt *size_func = symtab.find_symbol("c:@F@__ESBMC_list_size");
+  const symbolt *at_func = symtab.find_symbol("c:@F@__ESBMC_list_at");
+  const symbolt *contains_func =
+    symtab.find_symbol("c:@F@__ESBMC_list_contains");
+  const symbolt *push_obj_func =
+    symtab.find_symbol("c:@F@__ESBMC_list_push_object");
+  assert(size_func && at_func && contains_func && push_obj_func);
+
+  locationt loc = converter.get_location_from_decl(element);
+
+  auto as_ptr = [](const exprt &e) {
+    return e.type().is_pointer() ? e : exprt(build_address_of(e));
+  };
+
+  symbolt &n_sym = converter.create_tmp_symbol(
+    element, "$set_meth_n$", size_type(), gen_zero(size_type()));
+  converter.add_instruction(code_declt(build_symbol(n_sym)));
+  code_function_callt size_call;
+  size_call.function() = build_symbol(*size_func);
+  size_call.arguments().push_back(as_ptr(source_expr));
+  size_call.lhs() = build_symbol(n_sym);
+  size_call.type() = size_type();
+  size_call.location() = loc;
+  converter.add_instruction(size_call);
+
+  symbolt &i_sym = converter.create_tmp_symbol(
+    element, "$set_meth_i$", size_type(), gen_zero(size_type()));
+  converter.add_instruction(code_declt(build_symbol(i_sym)));
+  converter.add_instruction(
+    code_assignt(build_symbol(i_sym), gen_zero(size_type())));
+
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
+
+  code_blockt body;
+
+  exprt at_call = build_call_expr(
+    *at_func,
+    pointer_typet(converter.get_type_handler().get_list_element_type()),
+    {as_ptr(source_expr), build_symbol(i_sym)});
+  at_call.location() = loc;
+
+  symbolt &elem_sym = converter.create_tmp_symbol(
+    element,
+    "$set_meth_elem$",
+    pointer_typet(converter.get_type_handler().get_list_element_type()),
+    exprt());
+  code_declt elem_decl(build_symbol(elem_sym));
+  elem_decl.copy_to_operands(at_call);
+  body.copy_to_operands(elem_decl);
+
+  symbolt &contains_result = converter.create_tmp_symbol(
+    element, "$set_meth_in$", bool_type(), gen_boolean(false));
+  body.copy_to_operands(code_declt(build_symbol(contains_result)));
+
+  code_function_callt contains_call;
+  contains_call.function() = build_symbol(*contains_func);
+  contains_call.lhs() = build_symbol(contains_result);
+  contains_call.arguments().push_back(as_ptr(ref_expr));
+  const exprt elem = build_symbol(elem_sym);
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "value", pointer_typet(empty_typet())));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "type_id", size_type()));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "size", size_type()));
+  contains_call.type() = bool_type();
+  contains_call.location() = loc;
+  body.copy_to_operands(contains_call);
+
+  exprt push_call = build_call_expr(
+    *push_obj_func,
+    bool_type(),
+    {build_symbol(sink),
+     build_symbol(elem_sym),
+     from_integer(BigInt(0), size_type()),
+     from_integer(BigInt(0), int_type())});
+  push_call.location() = loc;
+
+  exprt guard = build_symbol(contains_result);
+  if (!want_in_ref)
+    guard = build_not(guard);
+
+  code_blockt then_block;
+  then_block.copy_to_operands(converter.convert_expression_to_code(push_call));
+
+  codet if_stmt;
+  if_stmt.set_statement("ifthenelse");
+  if_stmt.copy_to_operands(guard, then_block);
+  body.copy_to_operands(if_stmt);
+
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
+  body.copy_to_operands(code_assignt(build_symbol(i_sym), i_inc));
+
+  codet loop;
+  loop.set_statement("while");
+  loop.copy_to_operands(cond, body);
+  converter.add_instruction(loop);
+}
+
+exprt python_set::build_set_relation_call(
+  const exprt &self,
+  const exprt &other,
+  const nlohmann::json &element,
+  const std::string &method_name)
+{
+  contextt &symtab = converter_.symbol_table();
+  locationt loc = converter_.get_location_from_decl(element);
+
+  auto as_ptr = [](const exprt &e) {
+    return e.type().is_pointer() ? e : exprt(build_address_of(e));
+  };
+
+  // A.issubset(B) holds iff every element of A is in B; issuperset is the
+  // mirror (every element of B is in A). A.isdisjoint(B) holds iff no element
+  // of A is in B. Iterate one list, clear a bool result initialised to true
+  // when the per-element predicate fails (an element missing from the other
+  // set for subset/superset; an element present in the other set for
+  // disjoint).
+  const bool superset = method_name == "issuperset";
+  const bool disjoint = method_name == "isdisjoint";
+  const exprt iterated = superset ? as_ptr(other) : as_ptr(self);
+  const exprt container = superset ? as_ptr(self) : as_ptr(other);
+
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$" + method_name + "$", bool_type(), gen_boolean(true));
+  converter_.add_instruction(code_declt(build_symbol(result)));
+  converter_.add_instruction(
+    code_assignt(build_symbol(result), gen_boolean(true)));
+
+  const symbolt *size_func = symtab.find_symbol("c:@F@__ESBMC_list_size");
+  const symbolt *at_func = symtab.find_symbol("c:@F@__ESBMC_list_at");
+  const symbolt *contains_func =
+    symtab.find_symbol("c:@F@__ESBMC_list_contains");
+  assert(size_func && at_func && contains_func);
+
+  symbolt &n_sym = converter_.create_tmp_symbol(
+    element, "$" + method_name + "_n$", size_type(), gen_zero(size_type()));
+  converter_.add_instruction(code_declt(build_symbol(n_sym)));
+  code_function_callt size_call;
+  size_call.function() = build_symbol(*size_func);
+  size_call.arguments().push_back(iterated);
+  size_call.lhs() = build_symbol(n_sym);
+  size_call.type() = size_type();
+  size_call.location() = loc;
+  converter_.add_instruction(size_call);
+
+  symbolt &i_sym = converter_.create_tmp_symbol(
+    element, "$" + method_name + "_i$", size_type(), gen_zero(size_type()));
+  converter_.add_instruction(code_declt(build_symbol(i_sym)));
+  converter_.add_instruction(
+    code_assignt(build_symbol(i_sym), gen_zero(size_type())));
+
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
+
+  code_blockt body;
+
+  exprt at_call = build_call_expr(
+    *at_func,
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    {iterated, build_symbol(i_sym)});
+  at_call.location() = loc;
+
+  symbolt &elem_sym = converter_.create_tmp_symbol(
+    element,
+    "$" + method_name + "_elem$",
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    exprt());
+  code_declt elem_decl(build_symbol(elem_sym));
+  elem_decl.copy_to_operands(at_call);
+  body.copy_to_operands(elem_decl);
+
+  symbolt &in = converter_.create_tmp_symbol(
+    element, "$" + method_name + "_in$", bool_type(), gen_boolean(false));
+  body.copy_to_operands(code_declt(build_symbol(in)));
+
+  code_function_callt contains_call;
+  contains_call.function() = build_symbol(*contains_func);
+  contains_call.lhs() = build_symbol(in);
+  contains_call.arguments().push_back(container);
+  const exprt elem = build_symbol(elem_sym);
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "value", pointer_typet(empty_typet())));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "type_id", size_type()));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "size", size_type()));
+  contains_call.type() = bool_type();
+  contains_call.location() = loc;
+  body.copy_to_operands(contains_call);
+
+  // disjoint clears on presence (`in`); subset/superset clear on absence.
+  exprt trigger;
+  if (disjoint)
+    trigger = build_symbol(in);
+  else
+    trigger = build_not(build_symbol(in));
+  code_blockt then_block;
+  then_block.copy_to_operands(
+    code_assignt(build_symbol(result), gen_boolean(false)));
+  codet if_stmt;
+  if_stmt.set_statement("ifthenelse");
+  if_stmt.copy_to_operands(trigger, then_block);
+  body.copy_to_operands(if_stmt);
+
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
+  body.copy_to_operands(code_assignt(build_symbol(i_sym), i_inc));
+
+  codet loop;
+  loop.set_statement("while");
+  loop.copy_to_operands(cond, body);
+  converter_.add_instruction(loop);
+
+  return build_symbol(result);
+}
+
+exprt python_set::build_set_method_call(
+  const symbolt &self,
+  const exprt &other,
+  const nlohmann::json &element,
+  const std::string &method_name)
+{
+  if (
+    method_name == "issubset" || method_name == "issuperset" ||
+    method_name == "isdisjoint")
+    return build_set_relation_call(
+      build_symbol(self), other, element, method_name);
+
+  if (method_name == "update")
+  {
+    // For each elem in `other`, push to `self` iff not already present.
+    emit_filtered_extend(
+      converter_, other, build_symbol(self), self, false, element);
+    return nil_exprt();
+  }
+
+  if (method_name == "symmetric_difference")
+    return build_set_symmetric_difference_call(
+      build_symbol(self), other, element);
+
+  // The non-mutating union/intersection/difference methods reuse the same
+  // builders as the |, & and - operators; each returns a fresh set and leaves
+  // self unchanged.
+  if (method_name == "union")
+    return build_set_union_call(build_symbol(self), other, element);
+
+  if (method_name == "intersection")
+    return build_set_intersection_call(build_symbol(self), other, element);
+
+  if (method_name == "difference")
+    return build_set_difference_call(build_symbol(self), other, element);
+
+  throw std::runtime_error("unsupported set method: " + method_name);
+}
+
+exprt python_set::handle_operations(
+  python_converter &converter,
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  const type_handler &type_handler = converter.get_type_handler();
+  typet list_type = type_handler.get_list_type();
+
+  // Ensure both operands are lists (sets are represented as lists)
+  if (lhs.type() != list_type || rhs.type() != list_type)
+    return nil_exprt();
+
+  // Resolve function calls to temporary variables
+  auto resolve_list_call = [&](exprt &expr) -> bool {
+    if (
+      expr.id().as_string() != "sideeffect" ||
+      expr.get("statement") != "function_call" || expr.type() != list_type)
+      return false;
+
+    locationt location = converter.get_location_from_decl(element);
+
+    // Create temporary variable for the list
+    symbolt &tmp_var_symbol = converter.create_tmp_symbol(
+      element, "tmp_set_op", list_type, gen_zero(list_type));
+
+    code_declt tmp_var_decl(build_symbol(tmp_var_symbol));
+    tmp_var_decl.location() = location;
+    converter.add_instruction(tmp_var_decl);
+
+    side_effect_expr_function_callt &side_effect =
+      to_side_effect_expr_function_call(expr);
+
+    code_function_callt call;
+    call.function() = side_effect.function();
+    call.arguments() = side_effect.arguments();
+    call.lhs() = build_symbol(tmp_var_symbol);
+    call.type() = list_type;
+    call.location() = location;
+
+    converter.add_instruction(call);
+    expr = build_symbol(tmp_var_symbol);
+    return true;
+  };
+
+  resolve_list_call(lhs);
+  resolve_list_call(rhs);
+
+  python_set set_handler(converter, element);
+
+  // Map Python set operations to internal functions
+  if (op == "Sub") // Set difference: a - b
+    return set_handler.build_set_difference_call(lhs, rhs, element);
+  else if (op == "BitAnd") // Set intersection: a & b
+    return set_handler.build_set_intersection_call(lhs, rhs, element);
+  else if (op == "BitOr") // Set union: a | b
+    return set_handler.build_set_union_call(lhs, rhs, element);
+  else if (op == "BitXor") // Set symmetric difference: a ^ b
+    return set_handler.build_set_symmetric_difference_call(lhs, rhs, element);
+
+  return nil_exprt();
+}
+
+exprt python_set::build_set_symmetric_difference_call(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  // (lhs - rhs) ∪ (rhs - lhs) — collect into a fresh set, mirroring the
+  // symmetric_difference() method.
+  symbolt &result = create_set_list();
+  emit_filtered_extend(converter_, lhs, rhs, result, false, element);
+  emit_filtered_extend(converter_, rhs, lhs, result, false, element);
+  return build_symbol(result);
+}

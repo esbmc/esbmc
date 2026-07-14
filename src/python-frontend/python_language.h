@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/language.h>
-#include <python-frontend/global_scope.h>
+#include <python-frontend/module/global_scope.h>
 
 #include <nlohmann/json.hpp>
 
