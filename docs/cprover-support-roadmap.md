@@ -83,6 +83,8 @@ and the symbol/function table layout.
 | Builtin-call rewrite for `fabs`/`fabsf`/`fabsl` FUNCTION_CALLs → `abs` expr (§4.8, Phase 2) | ✅ (PR #5789) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Libm body bridge: `ceil`/`floor`/`trunc`/`round` (+`f`/`l`) resolve to the operational-model bodies (§4.8, Phase 2) | ✅ (PR #5814) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
+| Libm body bridge extended to `modf`/`modff`/`modfl` (integer/fractional split via pointer out-param) (§4.8, Phase 2) | ✅ (PR #6039) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
+| Libm body bridge extended to `rint`/`rintf`/`rintl` (round to nearest integer, ambient rounding mode) (§4.8, Phase 2) | ✅ (PR #6041) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
@@ -102,6 +104,7 @@ and the symbol/function table layout.
 | Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
 | Rotate expressions `rol`/`ror` (`__builtin_rotateleft`/`rotateright`) → `(x << d) \| (x >> (W − d))` with `d = n mod W` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call retarget for `memcpy`/`memset`/`memmove` FUNCTION_CALLs → ESBMC's `c:@F@__ESBMC_*` memory intrinsics (CBMC's ARRAY_COPY/REPLACE/SET body is unexecutable in ESBMC symex); `__*_impl` byte-loop fallbacks linked via the additions (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp` |
+| Builtin-call retarget for `memcmp` FUNCTION_CALLs → `c:@F@__ESBMC_memcmp` intrinsic (CBMC's bodyless external returns nondet); `__memcmp_impl` byte-loop fallback linked via the additions (§4.8, Phase 2) | ✅ (PR #6042) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp` |
 | Builtin-call rewrite for `__builtin_nan`/`__builtin_nanf` FUNCTION_CALLs → `ieee_div(0.0, 0.0)` (quiet NaN, mirroring CBMC's own `floatbv_div(0,0,rm)` body); `nanl` left bodyless for parity (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Find-first-set builtin `find_first_set` (`__builtin_ffs`/`ffsl`/`ffsll`) → `(x==0)?0:popcount(~x&(x-1))+1` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for `__builtin_huge_val{,f,l}`/`__builtin_inf{,f,l}` FUNCTION_CALLs → +∞ floatbv constant (sign 0, exponent all ones, mantissa 0), width-generic incl. 128-bit long double (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
@@ -639,6 +642,19 @@ them. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3): `cbmc_memcpy` (full
 `cbmc_memcpy_fail` (`dst[0] == 'z'` after copying `'a'`) `FAILED`. A symbolic-size copy verifies to
 CBMC's verdict too, but takes the byte-loop path and so needs an `--unwind` bound like any other
 symbolic-length loop — unchanged from ESBMC's native `memcpy` semantics.
+
+**`memcmp` — ✅ landed.** Unlike memcpy/memset/memmove (which reach ESBMC as unexecutable
+`ARRAY_*` OTHER-instructions), CBMC emits `memcmp` as a **bodyless external returning nondet**,
+so a valid comparison — `char a[4]="abc",b[4]="abc"; assert(memcmp(a,b,4)==0)` — reported a false
+`FAILED` where CBMC says `SUCCESSFUL`. The fix is the same retarget: `fix_builtin_call` rewrites the
+callee identifier to `c:@F@__ESBMC_memcmp`, ESBMC's own memcmp intrinsic (`intrinsic_memcmp`,
+`symex_main.cpp` dispatches it by name; the 3-argument `s1/s2/n` signature already matches), and the
+additions boilerplate references `memcmp` so `string.c`'s body — which takes `&__memcmp_impl` — force-links
+the byte-loop fallback `intrinsic_memcmp` bumps to for a symbolic length. Verdict parity with CBMC,
+dual-solver (Bitwuzla + Z3): `cbmc_memcmp` (equal buffers, and `<`/`>` sign on a one-byte difference)
+`SUCCESSFUL`, a symbolic-length `memcmp(a,b,n)` with `n<=7` also `SUCCESSFUL` (exercising the
+`__memcmp_impl` fallback), and `cbmc_memcmp_fail` (differing bytes asserted equal) `FAILED`.
+
 **`__builtin_nan` / `__builtin_nanf` — ✅ landed.** CBMC provides a bodied
 `<builtin-library-__builtin_nan>` model that returns `floatbv_div(0, 0, __CPROVER_rounding_mode)`
 (i.e. `0.0/0.0`, a quiet NaN), but that body does not survive the reader/adapter (its
@@ -701,6 +717,34 @@ libm functions whose operational-model bodies match CBMC's verdict. Deliberately
 transcendentals (`sin`/`cos`/`exp`/`log`/`pow`, ...), whose approximations differ between the two
 tools, and `fmod`, whose CBMC model is itself nondet (a precise ESBMC body would diverge in the
 over-approximation direction). Tests `cbmc_copysign`/`_fail`, `cbmc_fmax`/`_fail`.
+
+**Extended (PR #6039) to `modf`/`modff`/`modfl`** — another *exact-result* libm function,
+distinguished from the rest of the bridged family by an **out-parameter**: `modf(value, iptr)`
+splits `value` into its integer part (written through `iptr`) and its returned fractional part,
+with no rounding. CBMC models it precisely (`modf(3.75, &ip)` ⇒ `ip == 3.0`, return `0.75`),
+but ESBMC saw the CBMC binary's plain-named `modf` as a **bodyless external returning nondet**,
+so a valid split reported a false `FAILED` where CBMC says `SUCCESSFUL`. The bridge mechanism is
+width- and signature-agnostic — it copies the bodied `c:@F@modf`'s body **and type** onto the
+bodyless declaration, and `argument_assignments` binds the `double` and `double *` actuals by the
+copied type's parameter names — so the pointer out-param needs no special handling beyond adding
+the three names to the `libm[]` list and their addresses to the additions boilerplate (which
+force-links the operational-model body, itself defined via truncate-toward-zero `nearbyint` +
+`copysign` in `libm/modf.c`). Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), across all
+three widths (`cbmc_modf` SUCCESSFUL) and a wrong-fraction negative (`cbmc_modf_fail`:
+`modf(3.75,…) == 0.5` ⇒ FAILED, confirming the split is really computed, not vacuously passed).
+
+**Extended (PR #6041) to `rint`/`rintf`/`rintl`** — round-to-nearest-integer, the last of the
+*exact-result* libm functions the corpus exercises. Unlike `modf` (which forces round-toward-zero
+internally), `rint` rounds under the **ambient** rounding mode; ESBMC's operational-model body
+(`libm/rint.c`) is `nearbyint(f)`, whose floatbv encoding honours `__ESBMC_rounding_mode`. On the
+CBMC binary the plain-named `rint` was a **bodyless external returning nondet**, so a valid
+`rint(2.5) == 2.0` reported a false `FAILED` where CBMC verifies `SUCCESSFUL`. Same one-line bridge
+as `modf` (three names into the `libm[]` list + the additions boilerplate). The `--binary` path's
+default rounding mode is round-to-nearest-even, matching CBMC: verified across the round-half-to-even
+ties `rint(2.5) == 2.0` and `rint(3.5) == 4.0` (not 3.0/4.0 under a naive round-half-up), dual-solver
+(Bitwuzla + Z3), all three widths (`cbmc_rint` SUCCESSFUL), plus a wrong-tie negative (`cbmc_rint_fail`:
+`rint(2.5) == 3.0` ⇒ FAILED). `lrint`/`llrint` (integer-returning) already match CBMC and are left
+as-is. This closes the exact-result libm bridge family.
 
 **Ruled out as an alternative fix** (for the remaining libm family, from the #5743
 diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
