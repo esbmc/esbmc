@@ -1032,16 +1032,6 @@ private:
   exprt build_binary_expression(const std::string &op, exprt &lhs, exprt &rhs);
 
   /**
-   * @brief Promotes operands for IEEE floating-point operations.
-   *
-   * @param bin_expr The binary expression (operands may be modified).
-   * @param lhs The original left operand.
-   * @param rhs The original right operand.
-   */
-  void
-  promote_ieee_operands(exprt &bin_expr, const exprt &lhs, const exprt &rhs);
-
-  /**
    * @brief Infers function return type from return statements in the body.
    *
    * @param body The JSON AST node representing the function body statements.

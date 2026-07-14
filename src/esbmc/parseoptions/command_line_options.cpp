@@ -551,14 +551,15 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     cmdline.isset("check-vacuity") || cmdline.isset("loop-invariant-check"))
     options.set_option("check-vacuity", true);
 
-  // Check for conflicting strategies
-  if (cmdline.isset("k-induction") && cmdline.isset("termination"))
+  // Conflicting strategies: --termination checks a different property and
+  // takes priority over k-induction. Disable both k-induction variants so
+  // only the termination strategy runs (#6031).
+  if (options.is_kind() && cmdline.isset("termination"))
   {
     log_warning(
-      "Both --k-induction and --termination specified. "
-      "Using --k-induction (which does not include termination checking).");
-    // Optionally disable termination flag
-    options.set_option("termination", false);
+      "Both k-induction and --termination specified. Using --termination.");
+    options.set_option("k-induction", false);
+    options.set_option("k-induction-parallel", false);
   }
 
   // interval-symex-guard is designed for plain BMC loop-counter tracking.

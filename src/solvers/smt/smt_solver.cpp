@@ -1130,6 +1130,17 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     args[1] = convert_ast(if_ref.true_value);
     args[2] = convert_ast(if_ref.false_value);
     a = args[1]->ite(this, args[0], args[2]);
+    if (ir_ieee && is_floatbv_type(expr->type))
+    {
+      smt_astt np_t = ir_ieee_api->get_nan_pred(args[1]);
+      smt_astt np_f = ir_ieee_api->get_nan_pred(args[2]);
+      if (np_t || np_f)
+      {
+        smt_astt t = np_t ? np_t : mk_smt_bool(false);
+        smt_astt f = np_f ? np_f : mk_smt_bool(false);
+        ir_ieee_api->store_nan_pred(a, mk_ite(args[0], t, f));
+      }
+    }
     break;
   }
   case expr2t::isnan_id:
@@ -1377,6 +1388,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       expr2tc ite = if2tc(abs.type, ge, abs.value, neg);
 
       a = convert_ast(ite);
+      if (ir_ieee && is_floatbv_type(abs.value))
+        ir_ieee_api->propagate_nan_pred(a, args[0]);
     }
     break;
   }
@@ -1582,6 +1595,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
     {
       a = mk_neg(args[0]);
+      if (ir_ieee && is_floatbv_type(neg.value))
+        ir_ieee_api->propagate_nan_pred(a, args[0]);
     }
     else if (is_floatbv_type(neg.value))
     {

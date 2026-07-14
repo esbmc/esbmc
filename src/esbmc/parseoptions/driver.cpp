@@ -205,7 +205,10 @@ int esbmc_parseoptionst::doit()
   // Eventually we will modify it and implement parallel version for all
   // available strategies. Just run it first before everything else
   // for now.
-  if (cmdline.isset("k-induction-parallel"))
+  //
+  // The parallel driver has no termination interpretation, so --termination
+  // takes priority: fall through to the sequential strategy instead (#6031).
+  if (cmdline.isset("k-induction-parallel") && !cmdline.isset("termination"))
     return doit_k_induction_parallel();
 
   // Parse ESBMC options (CMD + set internal options)

@@ -799,6 +799,44 @@ Stated plainly, to avoid over-claiming:
    unreachability would be circular. We rely on the compiler's exhaustiveness
    check and note it explicitly.
 
+### 13.1 Tier-C concurrency recipe (M6) — implemented
+
+The concurrency argument for the atomic `refcount` / `crc_val` cache / debug
+`writer_thread` stamp (`irep2.h`) is **not** discharged by BMC; it is exercised
+under **ThreadSanitizer** and backed by a hand-proof. Artefacts:
+
+- **CI job.** `.github/workflows/sanitizers.yml` gains a `tsan` matrix leg
+  (alongside `asan`/`ubsan`) that builds `./scripts/build.sh -b Sanitizer -s TSAN`
+  and runs the `CORE` regression suite. `TSAN_OPTIONS` (log-file capture +
+  `scripts/sanitizers/tsan-suppressions.txt`) is set by
+  `scripts/sanitizers/common-options.sh`; `scripts/sanitizers/collect_findings.py`
+  now parses TSan `SUMMARY:` lines into the deduplicated job summary, and the raw
+  logs upload as artifacts. The job is `continue-on-error` (bring-up posture,
+  push-to-master + `workflow_dispatch`), matching how `asan`/`ubsan` were
+  introduced — it reports data races without gating master while suppressions
+  settle.
+- **Local reproduction.** `./scripts/build.sh -b Sanitizer -s TSAN` then
+  `source scripts/sanitizers/common-options.sh && ctest -L '^esbmc/$'`; for the
+  refcount/CRC paths specifically, run a `--parallel-solving` workload and
+  inspect `$ESBMC_SANITIZER_LOG_DIR/sanitizer.*`.
+- **Hand-proof (release/acquire).** A node is deleted exactly once: `release()`
+  does `fetch_sub(release)` and the thread observing the `1→0` transition deletes
+  behind an acquire fence, so every prior mutation *happens-before* the delete
+  (`irep2.h` container lifecycle). `crc()` publishes via a release store and reads
+  via an acquire load, so a cache hit observes a fully-written node. The
+  `writer_thread` stamp asserts the single-writer discipline in debug builds.
+  These are linearisation arguments TSan can *witness a violation of* but not
+  *prove absent*; the suppressions file therefore deliberately does **not**
+  pre-silence irep2.
+- **R8 re-audit checklist.** Re-run and re-read this section whenever any of the
+  following changes: (1) symex or any irep2 consumer becomes multi-threaded
+  (invalidates the `guard_seq` non-atomic-refcount thread-confinement assumption,
+  `guard_seq.h:34-43`); (2) a `memory_order` on `refcount`/`crc_val` is weakened;
+  (3) the `writer_thread` stamp is removed or its `#ifndef NDEBUG` guard changes;
+  (4) a new field is added to `irep2t` that participates in the CRC cache or
+  refcount lifecycle. On any of these, confirm the TSan job is still green and the
+  hand-proof above still holds.
+
 ---
 
 ## Appendix A — Methodological basis
@@ -872,3 +910,120 @@ Cross-check a Tier-A kernel against the source before transcription:
 ```sh
 grep -n "get_width" src/irep2/irep2_type.cpp     # confirm the arithmetic line
 ```
+
+---
+
+## Execution log (per-harness verdicts)
+
+Appended as each harness is implemented and run, per §12 deliverable #6. Records
+the harness location, technique, verdict, and the landing PR so the plan doubles
+as a progress tracker.
+
+| Milestone | Harness | Location | Technique | Verdict | Status |
+|---|---|---|---|---|---|
+| **M0** | H-A1 refcount conservation, single-free & self-alias UAF-safety (I1) | `unit/irep2/refcount.test.cpp`, `refcount_ops.h`, `refcount.fuzz.cpp` | **Tier B** — Catch2 property tests + a **nondeterministic-input** operation driver, both over the **real** `irep_container<T>`; reads the actual `irep2t::refcount` atomic after copy / move / assign / detach | 5 cases, 91 assertions PASS on `master` @ 4ba1903130; libFuzzer run 2,000,000 execs, no violation | **Done** (PR #6024). Verifies the genuine implementation, not a model, per §2 Tier B. The `run_ops` driver decodes a byte stream (libFuzzer, or fixed-seed in the unit test) into a sequence of container ops and checks refcount conservation after each; the libFuzzer target (`-DENABLE_FUZZER=On`) adds ASan UAF/double-free coverage. Built under the `Sanitizer` build type (ASan) the fixed cases also witness UAF freedom. Also pins **H-A2** (COW detach clones iff shared) and **H-A3** (self-aliasing assignment UAF-safety) as Tier-B cases on the real container. |
+| **M1** | H-A6 `as_ulong`/`as_long` >64-bit truncation (R2, I10) | `unit/irep2/const_int.test.cpp`; fix in `irep2_expr.cpp:101-118` | **Tier B** — real `constant_int2t`; `as_ulong` now asserts `value.is_uint64()`, `as_long` asserts `value.is_int64()` before the `to_uint64/to_int64` narrowing | PASS on real classes | **Done** (PR #6027, fix-and-prove-in-one-PR). |
+| **M1** | H-A5 `get_width` >32-bit width overflow (R1) | `unit/irep2/get_width.test.cpp`; fix in `irep2_type.cpp:129-215` | **Tier B** — real `array/vector/struct::get_width`; 64-bit-accumulate + reject a product/sum that truncates on the narrow to `unsigned int` | PASS; truncation observed only under NDEBUG | **Done** (PR #6029). |
+| **M2** | H-A7 `constant_string` byte reconstruction | `unit/irep2/const_string.test.cpp` | **Tier B** — real `constant_string_access`; bounds/shift/endianness | PASS | **Done** (PR #6030). |
+| **M2** | H-A8 `get_sub_expr` index accumulation | `unit/irep2/subexpr_index.test.cpp` | **Tier B** — real dispatch; no `size_t` underflow, in-bounds, null past end | PASS | **Done** (PR #6032). |
+| **M3** | H-A4 `hash_combine` + `feed_bigint` CRC ingestion | `unit/irep2/crc_bigint.test.cpp` | **Tier B** — real BigInt CRC heap-grow path; no OOB, sign mixed | PASS | **Done** (PR #6033). |
+| **M3** | H-A5 deref variant — `vector_type2t::get_width` symbolic-size guard (R3) | `unit/irep2/get_width.test.cpp`; fix in `irep2_type.cpp:156-171` | **Tier B** — real `vector_type2t`; a non-`constant_int` size now throws `dyn_sized_array_excp` instead of null-deref'ing the failed `dynamic_cast` (assert compiled out under NDEBUG). Anti-vacuity: unfixed code **SIGSEGVs** on the same input under RelWithDebInfo | PASS (fixed); SIGSEGV (unfixed) | **Done** (this PR, fix-and-prove-in-one-PR). Adds only the guard branch (**C-Live**, discharged by the reachability witness — the test input reaches it and the pre-fix crash proves the path executes); no assert removed, so no C-Dead. |
+| **M0** | H-A1 refcount conservation, single-free & self-alias UAF-safety (I1) | `unit/irep2/refcount.test.cpp`, `refcount_ops.h`, `refcount.fuzz.cpp` | **Tier B** — Catch2 property tests + a **nondeterministic-input** operation driver, both over the **real** `irep_container<T>`; reads the actual `irep2t::refcount` atomic after copy / move / assign / detach | 5 cases, 91 assertions PASS on `master` @ 4ba1903130; libFuzzer run 2,000,000 execs, no violation | **Done** (PR #6024). Verifies the genuine implementation, not a model, per §2 Tier B. The `run_ops` driver decodes a byte stream (libFuzzer, or fixed-seed in the unit test) into a sequence of container ops and checks refcount conservation after each; the libFuzzer target (`-DENABLE_FUZZER=On`) adds ASan UAF/double-free coverage. Built under the `Sanitizer` build type (ASan) the fixed cases also witness UAF freedom. |
+| **M4** | H-A9 guard shared-prefix walk agrees with the naive scan (I8) | `unit/irep2/guard.test.cpp` | **Tier B** — drives the **real** `guard2tc`: builds guards that share a cached and-chain prefix then diverge, runs the real `operator-=` (calls `common_pointer_prefix_size` unconditionally, `irep2_guard.cpp:342`) and `operator|=` (`:468`), and differentially checks the observable result against a naive set-difference / prefix-factoring reference. Anti-vacuity: injecting an over-reporting bug into `common_pointer_prefix_size` fails 4/5 cases. In asserts-on builds the real code additionally self-checks `walk == scan` (`irep2_guard.cpp:106`). | 5 cases, 713 assertions PASS; dual-verified (differential + injected-bug detection) | **Done** (PR #6043). Verifies the genuine implementation per the Tier-B mandate — **no** lifted C model. |
+| **M5** | H-B2 CRC↔cmp consistency & determinism (I4) | `unit/irep2/crc_consistency.test.cpp` | **Tier B** — over a corpus of **real** expr2tc/type2tc with structurally-equal-but-distinct-pointer pairs, asserts `a==b ⇒ a.crc()==b.crc()` (mandatory) and reports (via WARN, no hard bound) the collision rate for `a!=b`; plus determinism across independent construction (two 2000-deep add chains hash identically; a 1999-deep one does not). Anti-vacuity: seeding the per-node crc with `&node` (address-dependent) fails all 3 cases. | 3 cases, 34 assertions PASS, 0 collisions | **Done** (PR #6050). |
+| **M5** | H-B5 `with_type` / dispatch totality (P2-robustness) | `unit/irep2/with_type.test.cpp` | **Tier B** — over the **real** classes: (a) supported kinds (`constant_int`/`symbol`/arith & bitwise binops) round-trip `e.with_type(e->type)==e` and substitute-then-revert to the original; (b) an **unsupported** kind (`constant_bool`, whose ctor takes no type) hits the deliberate `abort()` — verified via a POSIX `fork()` death-test asserting the child dies with `SIGABRT` (guarded out on Windows); (c) a `constexpr` X-macro fold over `expr_kinds.inc`/`type_kinds.inc` `static_assert`s the kind count equals `end_expr_id`/`end_type_id` (guards manifest/enum drift); plus a clone/crc/cmp/tostring/`get_num_sub_exprs`==`foreach_operand` smoke. Anti-vacuity: making `rebuild_with_type` keep the old type fails the substitution check. | 3 cases, 50 assertions PASS | **Done** (this PR). Full 122-kind construction factory deferred; the sweep covers the `with_type` contract + representative dispatch smoke. |
+| **M5** | H-B1 ordering is a strict total order; equality is an equivalence (I5) | `unit/irep2/ordering.test.cpp` | **Tier B** — sweeps the **real** `type2tc`/`expr2tc` `operator<` / `operator==` (and underlying `lt`) over a diverse corpus (mixed kinds, widths, BigInt signs, structurally-equal-but-distinct duplicates, unequal-length arrays), asserting on all ordered pairs trichotomy, `lt==0 ⇔ ==`, `sign(lt)` antisymmetry, and on all triples transitivity of `<` and `==`. Reflexivity/irreflexivity fall out of the diagonal; symmetry of `==` follows from trichotomy holding at both `(i,j)` and `(j,i)`. Anti-vacuity: forcing `do_type_lt(BigInt)` to `0` fails both cases. | 2 cases, 2646 assertions PASS | **Done** (this PR). Extends the single-pair checks in `irep2.test.cpp:135-309` to a full relational sweep. |
+| **M2** | H-A10 `gen_zero`/`gen_one` recursion & aggregate size loops (P2) | `unit/irep2/gen_value.test.cpp` | **Tier B** — drives the **real** `gen_zero`/`gen_one` (`irep2_utils.cpp`): scalar zeros/ones are structurally correct; `gen_zero` recurses over array/vector/struct/union (element loops over the `constant_int` size) and nested struct-of-array, each compared to a manually-built expected zero; determinism across calls; and both `gen_zero`(unsupported `empty_type`) and `gen_one`(aggregate) hit `abort()`, checked via a POSIX `fork()`/`SIGABRT` death-test (guarded out on Windows). Anti-vacuity: an off-by-one in the array element loop fails the member-count and structural checks. | 4 cases, 23 assertions PASS | **Done** (this PR). |
+| **M4** | H-B4 guard set-algebra logical equivalence (P0-soundness) | `unit/irep2/guard_algebra.test.cpp` | **Tier B** — drives the **real** `guard2tc` `operator-=` / `operator|=`, then checks the genuine `as_expr()` result trees against naive references (`-=` = conjunct set difference `AND(g1 \ g2)`; `|=` = `as_expr(g1) ∨ as_expr(g2)`) by **exhaustive boolean evaluation** over every 2ⁿ atom assignment — an exact equivalence check on boolean terms, no external SMT. Anti-vacuity: swapping `|=`'s residual `or2tc→and2tc`, and neutering `-=`'s set-difference filter, each fail 2/3 cases. | 3 cases, 5721 assertions PASS | **Done** (this PR). Verifies the genuine operators, not a model. |
+| **M6** | Tier-C concurrency (R8): TSan CI job + hand-proof + re-audit checklist | `.github/workflows/sanitizers.yml`, `scripts/sanitizers/{common-options.sh,tsan-suppressions.txt,collect_findings.py}`, doc §13.1 | **Tier C** — a `tsan` matrix leg builds `-s TSAN` and runs the `CORE` regression, capturing data races on the atomic refcount / CRC cache / writer-stamp (`irep2.h`); `collect_findings.py` now parses TSan `SUMMARY:` lines (unit-tested). Documented, **not** BMC-claimed, per §2 Tier C. | CI job wired (`continue-on-error` bring-up); `test_collect_findings.py` 27 tests PASS incl. new TSan case | **Done** (PR #6054). Completes §12 deliverable #5. |
+| **M5** | H-B2 CRC↔cmp consistency & determinism (I4) | `unit/irep2/crc_consistency.test.cpp` | **Tier B** — over a corpus of **real** expr2tc/type2tc with structurally-equal-but-distinct-pointer pairs, asserts `a==b ⇒ a.crc()==b.crc()` (mandatory) and reports (via WARN, no hard bound) the collision rate for `a!=b`; plus determinism across independent construction (two 2000-deep add chains hash identically; a 1999-deep one does not). Anti-vacuity: seeding the per-node crc with `&node` (address-dependent) fails all 3 cases. | 3 cases, 34 assertions PASS, 0 collisions | **Done** (PR #6050). |
+| **M5** | P3 serialisation enum-name exhaustiveness (R7) | `unit/irep2/serialisation.test.cpp` | **Tier B** — sweeps every value of the `constant_string_kindt` / `symbol_renaming_level` / `printf_kindt` / `sideeffect_allockind` enums through the real `type_to_string` overloads asserting a non-empty name (guards the `assert(0 && "Unrecognized…")` tails, `irep2_utils.cpp:449-565`); asserts `get_type_id`/`get_expr_id`/`pretty` are non-empty for representative real nodes; and pins the abort via a POSIX `fork()`/`SIGABRT` death-test on an out-of-range enum (guarded out on Windows). Anti-vacuity: making one enum case return `""` fails the sweep. | 3 cases, 63 assertions PASS | **Done** (PR #6053). |
+
+**Approach note.** H-A1 is realised as a **Tier-B** harness (real classes) rather
+than a Tier-A standalone C model: verifying `irep2`'s *actual* C++ is the goal, and
+the ownership/refcount contract is directly observable on the real
+`irep_container` (the `refcount` atomic is a public member). Tier-A standalone
+C harnesses remain the right tool only for the self-contained arithmetic kernels
+(H-A5/H-A6 width & `as_ulong`) that *can* be lifted out of the template layer
+faithfully.
+
+**Nondeterministic input — fuzzing vs. ESBMC (empirical).** Both explore with
+nondet input, but reach the real classes differently:
+- **ESBMC on the real classes: not possible.** A driver that `#include`s the real
+  `irep2` headers fails to parse at the *first* stdlib header — ESBMC's bundled
+  C++ operational models do not provide `<atomic>` (nor `immer`, `fmt`), and there
+  is no model for `std::atomic::fetch_add` or `immer`'s persistent trie. Confirmed
+  by direct trial. So nondet-input + ESBMC applies only to the **lifted arithmetic
+  kernels** (Tier A: H-A5/H-A6/H-A7), where it gives bounded-exhaustive proofs a
+  fuzzer only samples.
+- **Fuzzing on the real classes: the right nondet tool here.** `refcount.fuzz.cpp`
+  drives the genuine `irep_container` with libFuzzer bytes under ASan. The same
+  `run_ops` driver is replayed deterministically by the unit test so the property
+  is pinned in normal CI even with fuzzing off. NB the fuzz target must be built
+  **internally consistent** w.r.t. `NDEBUG`: the `#ifndef NDEBUG writer_thread`
+  member changes `sizeof(irep2t)`, so mixing an asserts-on object with an
+  `NDEBUG` library is an ODR/layout mismatch (the repo build never does this).
+  The oracle uses `abort()`, not `assert()`, so it stays live under `NDEBUG`.
+
+**Progress summary.** Tier-A kernels are complete: H-A1/H-A2/H-A3 (refcount, COW
+detach, self-alias — PR #6024), H-A4 (CRC/BigInt — #6033), H-A5/R1 (width overflow
+— #6029), H-A5-deref/R3 (vector-width guard — this PR), H-A6/R2 (`as_ulong` — #6027),
+H-A7 (string recon — #6030), H-A8 (sub-expr index — #6032). All three source-level
+findings R1/R2/R3 are fixed-and-pinned. Remaining Tier-A: H-A9 (guard prefix walk),
+H-A10 (`gen_zero`/`gen_one` recursion).
+
+**Next task:** M4 — H-A9 guard shared-prefix walk (`common_pointer_prefix_size`
+`irep2_guard.cpp:64-108`) agrees with the naive element-scan reference, then H-B4
+(guard algebra logical equivalence). Highest soundness stakes; run dual-solver
+(Bitwuzla + Z3). H-A9 is a lifted Tier-A kernel (conjunct-id arrays, no atomics),
+so ESBMC-on-a-standalone-model is viable here — unlike the refcount/COW harnesses
+which had to be Tier-B. See R4 (§10): the walk's correctness depends on the
+debug-only canonical-chain assert, so the harness is the load-bearing regression.
+**Methodology (hard rule).** Every harness verifies the **actual irep2 C++**, never
+a hand-written model. Relational and logical laws are swept over the genuine
+containers/operators; equivalence checks evaluate the real trees exhaustively.
+File-local internals (e.g. `common_pointer_prefix_size`, anon-namespace) are
+exercised through the public API that calls them.
+
+**Next task:** M5 remainder — H-B2 (CRC↔cmp consistency: `a==b ⇒ a.crc()==b.crc()`,
+plus a collision-rate report, over the same style of corpus on real nodes), then
+H-B5 (`with_type` round-trip / per-kind sweep derived from `expr_kinds.inc`), then
+H-A10 (`gen_zero`/`gen_one` recursion on real `irep2_utils`). All Tier-B on real
+classes.
+a hand-written model. File-local internals (e.g. `common_pointer_prefix_size`,
+anon-namespace) are exercised through the public API that calls them.
+
+**Next task:** the P3 serialisation case (R7) — `tostring`/`pretty` / `type_to_string`
+enum-name exhaustiveness: every expr/type kind has a printable name, guarding the
+`assert(0 && "Unrecognized…")` tails (`irep2_utils.cpp:449-565`); a fork/SIGABRT
+death-test can pin the abort for an out-of-range id if needed. After that, all
+Tier-A/B harnesses are complete — remaining is M6 Tier-C (TSan CI recipe + §13
+hand-proof note) and folding the per-harness verdicts into this doc's §10/§11.
+a hand-written C/standalone model of it — even for ESBMC-liftable kernels. File-local
+internals (e.g. `common_pointer_prefix_size`, anon-namespace) are exercised through
+the public API that calls them and cross-checked differentially against a naive
+reference computed in-test. Logical-equivalence checks (guard algebra) evaluate the
+real `as_expr()` trees exhaustively over boolean assignments rather than shelling out
+to an external SMT solver — exact for boolean terms and fully in-process.
+
+**Plan status — complete.** All milestones M0–M6 are implemented: the R1/R2/R3
+source fixes; the Tier-A/B harnesses H-A1/A4/A5/A6/A7/A8/A9/A10 and H-B1/B2/B4/B5;
+the P3 serialisation case (R7); and the Tier-C concurrency recipe (M6, §13.1). Each
+verifies the **actual irep2 C++** — never a hand-written model — with an anti-vacuity
+companion. The §12 deliverables are discharged; further work is maintenance (keep the
+harnesses green, action any TSan finding, and follow the §13.1 R8 re-audit checklist
+when the concurrency assumptions change).
+a hand-written model. Corpora use `*2tc` constructors (not the `get_*_type`
+singletons) where a structurally-equal-but-distinct-pointer node is needed so the
+real cmp/crc path is exercised rather than the same-pointer short-circuit. Where a
+property needs a process-level effect (a deliberate `abort()`), a POSIX `fork()`
+death-test on the real class is used (guarded out on Windows) rather than skipping
+it.
+
+**Next task:** M5/M2 remainder — H-A10 (`gen_zero`/`gen_one` recursion & aggregate
+size loops on real `irep2_utils`: bounded recursion depth, non-negative bounded
+element counts, `union` non-empty precondition). Then the P3 serialisation case
+(`tostring`/`pretty` enum-name exhaustiveness, R7). After that the plan's Tier-A/B
+harness set is complete; remaining is M6 Tier-C (TSan recipe) and the doc verdict
+log. All Tier-B on the real classes.
+
