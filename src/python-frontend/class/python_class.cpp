@@ -1,4 +1,4 @@
-#include <python-frontend/python_class.h>
+#include <python-frontend/class/python_class.h>
 #include <cassert>
 
 namespace
