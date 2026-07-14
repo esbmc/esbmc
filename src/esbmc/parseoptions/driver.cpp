@@ -253,7 +253,7 @@ int esbmc_parseoptionst::doit()
         cmdline.isset("bitwuzla") || cmdline.isset("boolector") ||
         cmdline.isset("yices") || cmdline.isset("mathsat") ||
         cmdline.isset("cvc4") || cmdline.isset("smtlib") ||
-        cmdline.isset("default-solver");
+        cmdline.isset("neurosym") || cmdline.isset("default-solver");
       if (!user_picked_solver && !incremental_mode)
       {
         const std::string padded =

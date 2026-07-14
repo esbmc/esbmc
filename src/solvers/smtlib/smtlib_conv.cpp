@@ -391,18 +391,21 @@ smtlib_convt::smtlib_convt(
   const namespacet &_ns,
   const optionst &_options,
   const std::string &solver_prog,
-  const std::string &output_path)
+  const std::string &output_path,
+  const std::string &logic)
   : smt_solver_baset(_ns, _options),
     array_iface(true, false),
     fp_convt(this),
     emit_proc(solver_prog),
     emit_opt_output(output_path)
 {
-  std::string logic =
-    options.get_bool_option("int-encoding") ? "QF_AUFLIRA" : "QF_AUFBV";
+  std::string used_logic = !logic.empty() ? logic
+                           : options.get_bool_option("int-encoding")
+                             ? "QF_AUFLIRA"
+                             : "QF_AUFBV";
 
   emit("%s", "(set-option :produce-models true)\n");
-  emit("(set-logic %s)\n", logic.c_str());
+  emit("(set-logic %s)\n", used_logic.c_str());
   emit("%s", "(set-info :status unknown)\n");
 }
 
