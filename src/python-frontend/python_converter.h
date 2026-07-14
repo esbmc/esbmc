@@ -9,7 +9,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
-#include <python-frontend/python_set.h>
+#include <python-frontend/set/python_set.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_code.h>

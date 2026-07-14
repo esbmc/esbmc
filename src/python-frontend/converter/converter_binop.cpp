@@ -9,7 +9,7 @@
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/string/string_handler.h>
-#include <python-frontend/tuple_handler.h>
+#include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>

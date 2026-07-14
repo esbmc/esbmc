@@ -6,10 +6,10 @@
 #include <python-frontend/math/math_guard_utils.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
-#include <python-frontend/python_set.h>
+#include <python-frontend/set/python_set.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
+#include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_expr_builder.h>
@@ -32,7 +32,7 @@
 #include <unordered_map>
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
-#include <python-frontend/python_consteval.h>
+#include <python-frontend/consteval/python_consteval.h>
 #include <regex>
 #include <stdexcept>
 #include <unordered_set>

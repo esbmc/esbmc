@@ -1,4 +1,4 @@
-#include <python-frontend/python_set.h>
+#include <python-frontend/set/python_set.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python-list/python_list.h>

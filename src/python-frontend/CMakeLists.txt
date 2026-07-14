@@ -29,7 +29,7 @@ add_library(pythonfrontend STATIC
             python_adjust.cpp
             class/python_class.cpp
             class/python_class_builder.cpp
-            python_consteval.cpp
+            consteval/python_consteval.cpp
             python-dict/dict_core.cpp
             python-dict/dict_nested.cpp
             python-dict/dict_construction.cpp
@@ -51,7 +51,7 @@ add_library(pythonfrontend STATIC
             python-list/list_comprehension.cpp
             python-list/list_set_ops.cpp
             math/python_math.cpp
-            python_set.cpp
+            set/python_set.cpp
             type/python_typechecking.cpp
             pythonastgen.c
             module/module_manager.cpp
@@ -77,7 +77,7 @@ add_library(pythonfrontend STATIC
             string/char_utils.cpp
             math/math_guard_utils.cpp
             math/parse_float.cpp
-            tuple_handler.cpp
+            tuple/tuple_handler.cpp
             math/convert_float_literal.cpp)
 
 target_include_directories(pythonfrontend
