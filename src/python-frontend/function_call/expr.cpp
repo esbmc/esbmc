@@ -1,9 +1,9 @@
 #include <python-frontend/function_call/expr.h>
-#include <python-frontend/cmath_lowering_policy.h>
-#include <python-frontend/complex_handler.h>
-#include <python-frontend/complex_handler_utils.h>
+#include <python-frontend/math/cmath_lowering_policy.h>
+#include <python-frontend/math/complex_handler.h>
+#include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/math_guard_utils.h>
+#include <python-frontend/math/math_guard_utils.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_set.h>

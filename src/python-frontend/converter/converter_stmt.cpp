@@ -1,5 +1,5 @@
 #include <python-frontend/converter/converter_internal.h>
-#include <python-frontend/convert_float_literal.h>
+#include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_consteval.h>
@@ -11,7 +11,7 @@
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_typechecking.h>
-#include <python-frontend/python_math.h>
+#include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>

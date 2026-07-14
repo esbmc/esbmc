@@ -1,5 +1,5 @@
-#include <python-frontend/convert_float_literal.h>
-#include <python-frontend/parse_float.h>
+#include <python-frontend/math/convert_float_literal.h>
+#include <python-frontend/math/parse_float.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>

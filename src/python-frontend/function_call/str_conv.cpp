@@ -4,9 +4,9 @@
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
-#include <python-frontend/round_to_nearest_guard.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/type_handler.h>
-#include <python-frontend/round_to_nearest_guard.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>

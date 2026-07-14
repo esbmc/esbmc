@@ -7,8 +7,8 @@
 // implementations live in function_call/expr.{h,cpp}.
 
 #include <python-frontend/function_call/expr.h>
-#include <python-frontend/complex_handler.h>
-#include <python-frontend/complex_handler_utils.h>
+#include <python-frontend/math/complex_handler.h>
+#include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/string/string_handler_utils.h>

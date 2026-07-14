@@ -1,7 +1,7 @@
 #include <python-frontend/string/char_utils.h>
-#include <python-frontend/complex_handler.h>
+#include <python-frontend/math/complex_handler.h>
 #include <python-frontend/converter/converter_internal.h>
-#include <python-frontend/convert_float_literal.h>
+#include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/builder.h>
 #include <python-frontend/python_consteval.h>
 #include <python-frontend/function_call/expr.h>

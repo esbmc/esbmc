@@ -50,7 +50,7 @@ add_library(pythonfrontend STATIC
             python-list/list_string_ops.cpp
             python-list/list_comprehension.cpp
             python-list/list_set_ops.cpp
-            python_math.cpp
+            math/python_math.cpp
             python_set.cpp
             python_typechecking.cpp
             pythonastgen.c
@@ -61,9 +61,9 @@ add_library(pythonfrontend STATIC
             python_annotation/annotation_utils.cpp
             symbol_id.cpp
             type_handler.cpp
-            cmath_lowering_policy.cpp
-            complex_handler.cpp
-            complex_handler_utils.cpp
+            math/cmath_lowering_policy.cpp
+            math/complex_handler.cpp
+            math/complex_handler_utils.cpp
             function_call/builtins.cpp
             function_call/expr.cpp
             function_call/str_conv.cpp
@@ -75,10 +75,10 @@ add_library(pythonfrontend STATIC
             string/string_handler_utils.cpp
             exception_utils.cpp
             string/char_utils.cpp
-            math_guard_utils.cpp
-            parse_float.cpp
+            math/math_guard_utils.cpp
+            math/parse_float.cpp
             tuple_handler.cpp
-            convert_float_literal.cpp)
+            math/convert_float_literal.cpp)
 
 target_include_directories(pythonfrontend
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
