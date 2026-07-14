@@ -341,50 +341,6 @@ exprt python_list::build_bool_mask_row_select(
       "requires a mask variable that is assigned exactly once (no "
       "reassignment) so its literal value can be resolved unambiguously");
 
-  const nlohmann::json mask_decl = json_utils::find_var_decl(
-    mask_name, converter_.current_function_name(), converter_.ast());
-
-  if (
-    mask_decl.is_null() || !mask_decl.contains("value") ||
-    mask_decl["value"].value("_type", "") != "Call" ||
-    !mask_decl["value"].contains("args") ||
-    mask_decl["value"]["args"].empty() ||
-    mask_decl["value"]["args"][0].value("_type", "") != "List")
-    return reject(
-      "requires a mask variable whose value is a concrete boolean literal, "
-      "e.g. mask = np.array([True, False, ...])");
-
-  const nlohmann::json &mask_elts = mask_decl["value"]["args"][0]["elts"];
-
-  std::vector<bool> mask_values;
-  mask_values.reserve(mask_elts.size());
-  for (const auto &elt : mask_elts)
-  {
-    if (
-      elt.value("_type", "") != "Constant" || !elt.contains("value") ||
-      !elt["value"].is_boolean())
-      return reject("requires every mask element to be a literal bool");
-    mask_values.push_back(elt["value"].get<bool>());
-  }
-
-  if (BigInt(mask_values.size()) != num_rows)
-    return reject(
-      "requires the mask literal's element count to match the mask's "
-      "declared array length");
-
-  BigInt selected_count = 0;
-  for (bool v : mask_values)
-    if (v)
-      ++selected_count;
-
-  const array_typet result_type(
-    row_type, from_integer(selected_count, size_type()));
-  symbolt &result = converter_.create_tmp_symbol(
-    element, "$bool_mask_rows$", result_type, exprt());
-  code_declt result_decl(build_symbol(result));
-  result_decl.location() = location;
-  converter_.add_instruction(result_decl);
-
   // Whole-array assignment (`dst[k] = src[i]` where both sides are
   // themselves arrays) is not valid C and is unsupported by the backend --
   // confirmed empirically, ESBMC's C frontend itself rejects `b[0]=a[0]` as
@@ -398,17 +354,113 @@ exprt python_list::build_bool_mask_row_select(
   const BigInt num_cols =
     binary2integer(row_array_type.size().value().c_str(), false);
 
-  BigInt dst_row = 0;
+  const nlohmann::json mask_decl = json_utils::find_var_decl(
+    mask_name, converter_.current_function_name(), converter_.ast());
+
+  bool mask_is_literal =
+    !mask_decl.is_null() && mask_decl.contains("value") &&
+    mask_decl["value"].value("_type", "") == "Call" &&
+    mask_decl["value"].contains("args") &&
+    !mask_decl["value"]["args"].empty() &&
+    mask_decl["value"]["args"][0].value("_type", "") == "List";
+
+  std::vector<bool> mask_values;
+  if (mask_is_literal)
+  {
+    const nlohmann::json &mask_elts = mask_decl["value"]["args"][0]["elts"];
+    mask_values.reserve(mask_elts.size());
+    for (const auto &elt : mask_elts)
+    {
+      if (
+        elt.value("_type", "") != "Constant" || !elt.contains("value") ||
+        !elt["value"].is_boolean())
+      {
+        mask_is_literal = false;
+        break;
+      }
+      mask_values.push_back(elt["value"].get<bool>());
+    }
+    if (mask_is_literal && BigInt(mask_values.size()) != num_rows)
+      return reject(
+        "requires the mask literal's element count to match the mask's "
+        "declared array length");
+  }
+
+  if (mask_is_literal)
+  {
+    BigInt selected_count = 0;
+    for (bool v : mask_values)
+      if (v)
+        ++selected_count;
+
+    const array_typet result_type(
+      row_type, from_integer(selected_count, size_type()));
+    symbolt &result = converter_.create_tmp_symbol(
+      element, "$bool_mask_rows$", result_type, exprt());
+    code_declt result_decl(build_symbol(result));
+    result_decl.location() = location;
+    converter_.add_instruction(result_decl);
+
+    BigInt dst_row = 0;
+    for (BigInt src_row = 0; src_row < num_rows; ++src_row)
+    {
+      if (!mask_values[src_row.to_uint64()])
+        continue;
+
+      exprt src_row_expr =
+        build_index(array, from_integer(src_row, size_type()), row_type);
+      exprt dst_row_expr = build_index(
+        build_symbol(result), from_integer(dst_row, size_type()), row_type);
+
+      for (BigInt col = 0; col < num_cols; ++col)
+      {
+        exprt src_elem =
+          build_index(src_row_expr, from_integer(col, size_type()), elem_type);
+        exprt dst_elem =
+          build_index(dst_row_expr, from_integer(col, size_type()), elem_type);
+        code_assignt assign(dst_elem, src_elem);
+        assign.location() = location;
+        converter_.add_instruction(assign);
+      }
+      ++dst_row;
+    }
+
+    return build_symbol(result);
+  }
+
+  // Symbolic fallback: the mask couldn't be resolved to a compile-time
+  // boolean literal (e.g. `mask = np.array([n, not n])` with a nondet/
+  // runtime-computed element). Per the bounded-result-plus-explicit-count
+  // architecture decision (numpy-architecture-decisions.md #1), allocate a
+  // worst-case-sized result (every row selected) and copy each selected row
+  // into the next free slot, tracked by a runtime `count`. Slots at/after
+  // `count` are unspecified padding the caller must not read.
+  const array_typet result_type(row_type, from_integer(num_rows, size_type()));
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$bool_mask_rows$", result_type, exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  symbolt &count_var = converter_.create_tmp_symbol(
+    element, "$bool_mask_row_count$", size_type(), gen_zero(size_type()));
+  code_declt count_decl(build_symbol(count_var));
+  count_decl.location() = location;
+  converter_.add_instruction(count_decl);
+  code_assignt count_init(build_symbol(count_var), gen_zero(size_type()));
+  count_init.location() = location;
+  converter_.add_instruction(count_init);
+
   for (BigInt src_row = 0; src_row < num_rows; ++src_row)
   {
-    if (!mask_values[src_row.to_uint64()])
-      continue;
-
+    exprt mask_elem =
+      build_index(mask, from_integer(src_row, size_type()), bool_type());
     exprt src_row_expr =
       build_index(array, from_integer(src_row, size_type()), row_type);
-    exprt dst_row_expr = build_index(
-      build_symbol(result), from_integer(dst_row, size_type()), row_type);
+    exprt dst_row_expr =
+      build_index(build_symbol(result), build_symbol(count_var), row_type);
 
+    code_blockt then_block;
     for (BigInt col = 0; col < num_cols; ++col)
     {
       exprt src_elem =
@@ -417,9 +469,20 @@ exprt python_list::build_bool_mask_row_select(
         build_index(dst_row_expr, from_integer(col, size_type()), elem_type);
       code_assignt assign(dst_elem, src_elem);
       assign.location() = location;
-      converter_.add_instruction(assign);
+      then_block.copy_to_operands(assign);
     }
-    ++dst_row;
+
+    exprt increment =
+      build_add(build_symbol(count_var), gen_one(size_type()), size_type());
+    code_assignt count_increment(build_symbol(count_var), increment);
+    count_increment.location() = location;
+    then_block.copy_to_operands(count_increment);
+
+    codet if_stmt;
+    if_stmt.set_statement("ifthenelse");
+    if_stmt.copy_to_operands(mask_elem, then_block);
+    if_stmt.location() = location;
+    converter_.add_instruction(if_stmt);
   }
 
   return build_symbol(result);
