@@ -227,9 +227,12 @@ class TestCase:
                 self.test_mode in SUPPORTED_TEST_MODES
             ), f"{self.test_dir}: {self.test_mode} is not supported"
 
-            # Second line - Test file
+            # Second line - Test file. Empty means "no positional input file"
+            # (e.g. a test exercising an option like Solidity's --sol that
+            # supplies the input file itself).
             self.test_file = fp.readline().strip()
-            assert os.path.exists(self.test_dir + "/" + self.test_file)
+            if self.test_file:
+                assert os.path.exists(self.test_dir + "/" + self.test_file)
 
             # Third line - Arguments of executable
             self.test_args = fp.readline().strip()
@@ -280,7 +283,8 @@ class TestCase:
             except ValueError:
                 pass
 
-        result.append(os.path.join(self.test_dir, self.test_file))
+        if self.test_file:
+            result.append(os.path.join(self.test_dir, self.test_file))
         return result
 
     def __str__(self):
