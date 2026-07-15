@@ -355,7 +355,7 @@ static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
     "fmaxf",     "fmax",     "fmaxl",     "fdimf",  "fdim",    "fdiml",
     "modff",     "modf",     "modfl",     "rintf",  "rint",    "rintl",
     "strlen",    "strcmp",   "strncmp",   "strcpy", "strncpy", "strcat",
-    "strncat",   "strchr"};
+    "strncat",   "strchr",   "strrchr"};
 
   for (const char *name : libc)
   {
@@ -422,7 +422,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)memcmp,\n"
     "  (void *)strlen,    (void *)strcmp,   (void *)strncmp,\n"
     "  (void *)strcpy,    (void *)strncpy,  (void *)strcat,\n"
-    "  (void *)strncat,   (void *)strchr,\n"
+    "  (void *)strncat,   (void *)strchr,   (void *)strrchr,\n"
     "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)

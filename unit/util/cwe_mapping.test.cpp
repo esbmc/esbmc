@@ -249,7 +249,8 @@ TEST_CASE(
         "Access to object out of bounds: heap object",
         "dereference failure: memset of memory segment of size 4",
         "dereference failure on memcpy: reading memory segment of size 4",
-        "Same object violation",
+        "Relational comparison between pointers is only valid for pointers to "
+        "the same object",
         "Cast arithmetic overflow",
         "arithmetic overflow",
         "division by zero",

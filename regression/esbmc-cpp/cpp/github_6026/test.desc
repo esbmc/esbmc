@@ -1,4 +1,4 @@
 CORE
-main.py
---unwind 10
+main.cpp
+--std c++17
 ^VERIFICATION SUCCESSFUL$
