@@ -1,23 +1,23 @@
 #include <python-frontend/converter/converter_internal.h>
-#include <python-frontend/convert_float_literal.h>
+#include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_annotation.h>
-#include <python-frontend/python_consteval.h>
+#include <python-frontend/python_annotation/python_annotation.h>
+#include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_dict_handler.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python_expr_builder.h>
-#include <python-frontend/python_int_overflow.h>
+#include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/python_lambda.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/python_math.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
@@ -412,7 +412,14 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
 
 exprt python_converter::get_lambda_expr(const nlohmann::json &element)
 {
-  return lambda_handler_->get_lambda_expr(element);
+  // The body is converted here with the lambda's parameters still unbound, so
+  // any division inside it must not emit a ZeroDivisionError guard (which would
+  // fire on the unconstrained divisor); it is checked at the bound call site.
+  bool saved = converting_lambda_body_;
+  converting_lambda_body_ = true;
+  exprt result = lambda_handler_->get_lambda_expr(element);
+  converting_lambda_body_ = saved;
+  return result;
 }
 
 exprt python_converter::get_named_expr(const nlohmann::json &element)

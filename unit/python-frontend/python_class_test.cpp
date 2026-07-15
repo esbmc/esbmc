@@ -2,7 +2,7 @@
 #include <catch2/catch.hpp>
 #include <nlohmann/json.hpp>
 #include <sstream>
-#include <python-frontend/python_class.h>
+#include <python-frontend/class/python_class.h>
 
 using json = nlohmann::json;
 

@@ -161,20 +161,19 @@ smt_solver_baset *create_new_smtlib_solver(
 
 std::string smtlib_convt::dump_smt()
 {
+  assert(emit_opt_output);
+  emit_opt_output.emit("%s\n", "(check-sat)");
+
   auto path = config.options.get_option("output");
   if (path.empty() || path == "-")
-  {
-    assert(emit_opt_output);
-    emit_opt_output.emit("%s\n", "(check-sat)");
     log_status("SMT formula written to standard output");
-  }
   else
-  {
-    assert(emit_opt_output);
-    emit_opt_output.emit("%s\n", "(check-sat)");
     log_status("SMT formula written to output file {}", path);
-  }
-  return "SMT formula dumped successfully";
+
+  /* The formula was already written through emit_opt_output, which targets the
+   * --output path. Return empty so bmc.cpp's dump path does not reopen and
+   * overwrite that same file with this string (issue #6059). */
+  return "";
 }
 
 smtlib_convt::file_emitter::file_emitter(const std::string &path)
@@ -391,18 +390,21 @@ smtlib_convt::smtlib_convt(
   const namespacet &_ns,
   const optionst &_options,
   const std::string &solver_prog,
-  const std::string &output_path)
+  const std::string &output_path,
+  const std::string &logic)
   : smt_solver_baset(_ns, _options),
     array_iface(true, false),
     fp_convt(this),
     emit_proc(solver_prog),
     emit_opt_output(output_path)
 {
-  std::string logic =
-    options.get_bool_option("int-encoding") ? "QF_AUFLIRA" : "QF_AUFBV";
+  std::string used_logic = !logic.empty() ? logic
+                           : options.get_bool_option("int-encoding")
+                             ? "QF_AUFLIRA"
+                             : "QF_AUFBV";
 
   emit("%s", "(set-option :produce-models true)\n");
-  emit("(set-logic %s)\n", logic.c_str());
+  emit("(set-logic %s)\n", used_logic.c_str());
   emit("%s", "(set-info :status unknown)\n");
 }
 

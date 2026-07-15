@@ -19,6 +19,32 @@ TEST_CASE("cwe_for matches array bounds violated", "[util][cwe_mapping]")
     std::vector<unsigned>{121, 125, 129, 131, 193, 787});
 }
 
+TEST_CASE("cwe_for distinguishes heap OOB (CWE-122)", "[util][cwe_mapping]")
+{
+  // Heap variants swap CWE-121 (stack) for CWE-122 (heap) and must win the
+  // substring match over the generic comment they contain.
+  REQUIRE(
+    cwe_for("array bounds violated: heap object") ==
+    std::vector<unsigned>{122, 125, 129, 131, 193, 787});
+  REQUIRE(
+    std::string(cwe_rule_for("array bounds violated: heap object").sarif_id) ==
+    "heap-array-bounds-violated");
+
+  REQUIRE(
+    cwe_for("Access to object out of bounds: heap object") ==
+    std::vector<unsigned>{122, 125, 787, 823});
+  REQUIRE(
+    std::string(
+      cwe_rule_for("Access to object out of bounds: heap object").sarif_id) ==
+    "heap-object-out-of-bounds");
+
+  // The freeform prefix ESBMC prepends to dereference-failure comments must
+  // not change the match.
+  REQUIRE(
+    cwe_for("dereference failure: array bounds violated: heap object") ==
+    std::vector<unsigned>{122, 125, 129, 131, 193, 787});
+}
+
 TEST_CASE("cwe_for matches arithmetic overflow", "[util][cwe_mapping]")
 {
   REQUIRE(
@@ -98,6 +124,20 @@ TEST_CASE("cwe_for matches unchecked return value", "[util][cwe_mapping]")
     "unchecked-return-value");
 }
 
+TEST_CASE("cwe_for matches non-termination verdict", "[util][cwe_mapping]")
+{
+  // Both --termination verdict messages contain "non-terminating execution".
+  REQUIRE(
+    cwe_for("Recurrent set shows a non-terminating execution") ==
+    std::vector<unsigned>{835});
+  REQUIRE(
+    cwe_for("Inductive step shows a non-terminating execution (k = 3)") ==
+    std::vector<unsigned>{835});
+  REQUIRE(
+    std::string(cwe_rule_for("Recurrent set shows a non-terminating execution")
+                  .sarif_id) == "infinite-loop");
+}
+
 TEST_CASE("cwe_for matches dead store", "[util][cwe_mapping]")
 {
   REQUIRE(
@@ -143,6 +183,7 @@ TEST_CASE("format_cwe_list formats correctly", "[util][cwe_mapping]")
 TEST_CASE("cwe_name resolves known ids", "[util][cwe_mapping]")
 {
   REQUIRE(cwe_name(476) == "NULL Pointer Dereference");
+  REQUIRE(cwe_name(122) == "Heap-based Buffer Overflow");
   REQUIRE(cwe_name(190) == "Integer Overflow or Wraparound");
   REQUIRE(cwe_name(369) == "Divide By Zero");
   REQUIRE(cwe_name(617) == "Reachable Assertion");
@@ -151,6 +192,8 @@ TEST_CASE("cwe_name resolves known ids", "[util][cwe_mapping]")
   REQUIRE(cwe_name(252) == "Unchecked Return Value");
   REQUIRE(cwe_name(563) == "Assignment to Variable without Use");
   REQUIRE(cwe_name(674) == "Uncontrolled Recursion");
+  REQUIRE(
+    cwe_name(835) == "Loop with Unreachable Exit Condition ('Infinite Loop')");
   // Unknown id returns empty view.
   REQUIRE(cwe_name(0).empty());
   REQUIRE(cwe_name(99999).empty());
@@ -201,7 +244,9 @@ TEST_CASE(
         "Operand of free must have zero pointer offset",
         "dereference failure: forgotten memory",
         "array bounds violated",
+        "array bounds violated: heap object",
         "Access to object out of bounds",
+        "Access to object out of bounds: heap object",
         "dereference failure: memset of memory segment of size 4",
         "dereference failure on memcpy: reading memory segment of size 4",
         "Same object violation",
@@ -216,6 +261,7 @@ TEST_CASE(
         "use of uninitialized variable: foo",
         "unchecked return value of fopen: f",
         "unreachable code reached",
+        "Recurrent set shows a non-terminating execution",
         "dead store: assignment to x never read",
         ""})
   {
@@ -243,6 +289,7 @@ TEST_CASE(
        {"dereference failure: NULL pointer",
         "dereference failure: invalid pointer freed",
         "array bounds violated",
+        "array bounds violated: heap object",
         "arithmetic overflow",
         "division by zero",
         "atomicity violation",
@@ -251,8 +298,10 @@ TEST_CASE(
         "use of uninitialized variable: foo",
         "unchecked return value of fopen: f",
         "Access to object out of bounds",
+        "Access to object out of bounds: heap object",
         "dereference failure: memset of memory segment of size 4",
         "undefined behavior on shift operation",
+        "Recurrent set shows a non-terminating execution",
         "dead store: assignment to x never read"})
   {
     for (unsigned id : cwe_for(comment))

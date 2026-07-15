@@ -33,31 +33,51 @@ bool has_sub(const irept &i, const irep_idt &k)
   return m.find(k) != m.end();
 }
 
-// CBMC stores integer constant values as hex; ESBMC wants a binary string
-// whose length matches the constant's own type width. The Rust reference
-// (`format!("{:032b}", ...)`) hardcoded 32, which truncated the representation
-// of constants in wider (e.g. 64-bit) types: a 64-bit value was emitted as a
-// <=33-char string and silently interpreted at 32 bits, so e.g. -5000000000LL
-// verified as its low 32 bits (roadmap §4.3/§7). Pad to `width` bits instead.
-// Values needing more than 64 bits (128-bit constants, §4.3) are out of range
-// for this uint64_t path and are returned unchanged rather than crashing
-// std::stoull -- note this leaves such a value as a raw hex string (a known
-// limitation, roadmap §4.3), but the >64-bit path is not otherwise exercised.
+// CBMC stores constant values (integer and floating-point alike) as hex;
+// ESBMC wants a binary string whose length matches the constant's own type
+// width. The Rust reference (`format!("{:032b}", ...)`) hardcoded 32, which
+// truncated the representation of constants in wider (e.g. 64-bit) types: a
+// 64-bit value was emitted as a <=33-char string and silently interpreted at
+// 32 bits, so e.g. -5000000000LL verified as its low 32 bits (roadmap §4.3/§7).
+// Pad to `width` bits instead.
 std::string hex_to_bin(const std::string &hex, std::size_t width)
 {
-  if (hex.size() > 16) // > 64 bits: cannot round-trip through uint64_t
-    return hex;
-  unsigned long long n = std::stoull(hex, nullptr, 16);
   std::string bits;
-  if (n == 0)
-    bits = "0";
-  else
-    while (n != 0)
+  if (hex.size() > 16)
+  {
+    // > 64 bits (e.g. a 128-bit float128 / long double constant): the value no
+    // longer round-trips through uint64_t, so expand each hex digit to its four
+    // bits directly. A non-hex character means the string is not hex after all
+    // (already binary, or something unexpected) -- leave it unchanged.
+    bits.reserve(hex.size() * 4);
+    for (char ch : hex)
     {
-      bits.push_back(static_cast<char>('0' + (n & 1)));
-      n >>= 1;
+      int v;
+      if (ch >= '0' && ch <= '9')
+        v = ch - '0';
+      else if (ch >= 'a' && ch <= 'f')
+        v = ch - 'a' + 10;
+      else if (ch >= 'A' && ch <= 'F')
+        v = ch - 'A' + 10;
+      else
+        return hex;
+      for (int b = 3; b >= 0; --b)
+        bits.push_back(static_cast<char>('0' + ((v >> b) & 1)));
     }
-  std::reverse(bits.begin(), bits.end());
+  }
+  else
+  {
+    unsigned long long n = std::stoull(hex, nullptr, 16);
+    if (n == 0)
+      bits = "0";
+    else
+      while (n != 0)
+      {
+        bits.push_back(static_cast<char>('0' + (n & 1)));
+        n >>= 1;
+      }
+    std::reverse(bits.begin(), bits.end());
+  }
   if (bits.size() < width)
     bits = std::string(width - bits.size(), '0') + bits;
   return bits;
@@ -198,6 +218,125 @@ void fix_expression(irept &irep)
     }
   }
 
+  if (irep.id() == "rol" || irep.id() == "ror")
+  {
+    // CBMC lowers __builtin_rotateleft{8,16,32,64}/__builtin_rotateright... to
+    // rol/ror expression ids, which migrate_expr has no handler for (aborts with
+    // "migrate expr failed"); ESBMC has no rotate irep2 node either. As with
+    // clz/ctz above, reproduce the rotate from ids migrate_expr already lowers
+    // (shl, lshr, bitor, bitand, "-"), so no new node is needed:
+    //   rol(x, n) = (x << d) | (x >> (W - d)),  ror(x, n) = (x >> d) | (x << (W - d))
+    // where d = n mod W. CBMC takes the distance mod the width (rol(x, W) == x,
+    // rol(x, W + k) == rol(x, k)); W is always a power of two, so `& (W - 1)` is
+    // the modulus. The complement (W - d) is also masked with (W - 1) so that
+    // d == 0 yields a 0 shift rather than a full-width shift: rol(x, 0) then
+    // reduces to (x << 0) | (x >> 0) == x. Scoped to the CBMC --binary path.
+    const bool left = irep.id() == "rol";
+    const irept x = irep.get_sub().empty() ? irept() : irep.get_sub()[0];
+    const irept n = irep.get_sub().size() > 1 ? irep.get_sub()[1] : irept();
+    const irept optype = x.find("type"); // value's bitvector type
+    const std::size_t width = bv_width(optype);
+
+    // d = n & (W - 1); co = (W - d) & (W - 1)  (both in the value's width)
+    const irept d =
+      mk_binary("bitand", optype, n, mk_bv_const(optype, width - 1));
+    const irept co = mk_binary(
+      "bitand",
+      optype,
+      mk_binary("-", optype, mk_bv_const(optype, width), d),
+      mk_bv_const(optype, width - 1));
+
+    irept lo = mk_binary(left ? "shl" : "lshr", optype, x, d);
+    irept hi = mk_binary(left ? "lshr" : "shl", optype, x, co);
+
+    irep.id("bitor");
+    irep.get_sub().clear();
+    irep.get_sub().push_back(lo);
+    irep.get_sub().push_back(hi);
+  }
+
+  if (irep.id() == "find_first_set")
+  {
+    // CBMC lowers __builtin_ffs/ffsl/ffsll to a find_first_set irep, which
+    // migrate_expr has no handler for (it aborts with "migrate expr failed").
+    // find_first_set(x) is the 1-based index of the least-significant set bit,
+    // or 0 when x is zero -- exactly __builtin_ffs. ESBMC's native path does not
+    // model ffs at all, so, as with clz/ctz above, reproduce it here in terms of
+    // ids migrate_expr already lowers rather than adding an irep2 node:
+    //   ffs(x) = (x == 0) ? 0 : popcount(~x & (x - 1)) + 1
+    // The popcount term is exactly ctz(x) (see the count_trailing_zeros rewrite
+    // above); the x == 0 guard is load-bearing because ~0 & (0 - 1) is all-ones,
+    // whose popcount is the width, not 0. Scoped to the CBMC --binary path, so it
+    // never perturbs native handling (which never emits find_first_set).
+    const irept operand = irep.get_sub().empty() ? irept() : irep.get_sub()[0];
+    const irept optype = operand.find("type"); // operand's bitvector type
+    const irept restype = irep.find("type");   // int result type (signedbv/32)
+
+    // ctz(x) = popcount(~x & (x - 1)), reusing the trailing-zeros formula.
+    irept ctz_arg = mk_binary(
+      "bitand",
+      optype,
+      mk_unary("bitnot", optype, operand),
+      mk_binary("-", optype, operand, mk_bv_const(optype, 1)));
+    irept popcount("popcount");
+    popcount.add("type") = restype; // migrate forces int32; kept well-formed
+    popcount.get_sub().push_back(ctz_arg);
+
+    // ctz(x) + 1, then guard the zero input: (x == 0) ? 0 : ctz(x) + 1.
+    irept ctz_plus1 =
+      mk_binary("+", restype, popcount, mk_bv_const(restype, 1));
+    irept bool_ty("bool");
+    irept is_zero = mk_binary("=", bool_ty, operand, mk_bv_const(optype, 0));
+
+    irep.id("if");
+    irep.get_sub().clear();
+    irep.get_sub().push_back(is_zero);
+    irep.get_sub().push_back(mk_bv_const(restype, 0));
+    irep.get_sub().push_back(ctz_plus1);
+  }
+
+  if (irep.id() == "bitreverse")
+  {
+    // CBMC lowers __builtin_bitreverse{8,16,32,64} to a bitreverse irep (reverse
+    // the bit order: bit i <-> bit W-1-i), which migrate_expr has no handler for
+    // (aborts with "migrate expr failed"); ESBMC has no bitreverse irep2 node.
+    // As with clz/ctz above, reproduce it from ids migrate_expr already lowers
+    // (bitand, shl, lshr, bitor) via the standard SWAR reversal: swap adjacent
+    // bits, then 2-bit groups, then 4-bit, ... doubling the group size each step
+    //   acc = ((acc & mask_k) << k) | ((acc >> k) & mask_k)
+    // where mask_k selects the low k bits of every 2k-bit block. Scoped to the
+    // CBMC --binary path, so it never perturbs native handling.
+    const irept operand = irep.get_sub().empty() ? irept() : irep.get_sub()[0];
+    const irept optype = operand.find("type"); // value's bitvector type
+    const std::size_t width = bv_width(optype);
+
+    irept acc = operand;
+    for (std::size_t k = 1; k < width; k <<= 1)
+    {
+      // mask_k: low k bits set in each 2k-bit block, across the full width.
+      const unsigned long long block = (k >= 64) ? ~0ULL : ((1ULL << k) - 1);
+      unsigned long long m = 0;
+      for (std::size_t pos = 0; pos < width; pos += 2 * k)
+        m |= block << pos;
+      const irept mask = mk_bv_const(optype, m);
+
+      // acc = ((acc & mask) << k) | ((acc >> k) & mask)
+      irept lo = mk_binary(
+        "shl",
+        optype,
+        mk_binary("bitand", optype, acc, mask),
+        mk_bv_const(optype, k));
+      irept hi = mk_binary(
+        "bitand",
+        optype,
+        mk_binary("lshr", optype, acc, mk_bv_const(optype, k)),
+        mask);
+      acc = mk_binary("bitor", optype, lo, hi);
+    }
+
+    irep = acc;
+  }
+
   if (irep.id() == "sign" && irep.find("type").id() == "bool")
   {
     // CBMC's sign-bit predicate "sign" is bool-typed and used directly in
@@ -230,6 +369,27 @@ void fix_expression(irept &irep)
     irep.get_sub().clear();
     irep.get_sub().push_back(signbit);
     irep.get_sub().push_back(zero);
+  }
+
+  if (
+    (irep.id() == "forall" || irep.id() == "exists") &&
+    irep.get_sub().size() == 2 && irep.get_sub()[0].id() == "tuple")
+  {
+    // CBMC binds a quantifier's variable(s) inside a "tuple" node in the first
+    // operand; ESBMC's forall2t/exists2t (and the solver, smt_solver.cpp) expect
+    // side_1 to be the bound symbol itself. Unwrap a single-symbol tuple to the
+    // bare symbol. A tuple with more than one bound variable is left untouched
+    // (forall2t binds exactly one symbol) so it aborts cleanly rather than
+    // silently dropping the extra binders -- a soundness hazard.
+    const irept &tuple = irep.get_sub()[0];
+    if (tuple.get_sub().size() == 1)
+    {
+      // Copy the bound symbol out before overwriting the slot that holds the
+      // tuple (the source lives inside it), mirroring fix_builtin_call's
+      // copy-before-mutate discipline.
+      const irept bound = tuple.get_sub()[0];
+      irep.get_sub()[0] = bound;
+    }
   }
 
   if (irep.id() == "side_effect")
@@ -273,12 +433,17 @@ void fix_expression(irept &irep)
     if (type_id != "pointer" && type_id != "bool" && has_sub(irep, "value"))
     {
       const std::string val = irep.find("value").id_string();
-      // Value may be a hex representation or binary; we want the binary one.
-      // A value already exactly 32 chars is treated as an existing 32-bit
-      // binary string and left as-is; anything else is a hex value converted to
-      // a binary string of the type's own bit width (see hex_to_bin).
-      if (val.size() != 32)
-        irep.add("value") = mk(hex_to_bin(val, bv_width(irep.find("type"))));
+      const std::size_t width = bv_width(irep.find("type"));
+      // CBMC stores the value as hex; ESBMC wants a binary string of the type's
+      // own bit width. A value already exactly `width` chars long is an existing
+      // binary string (e.g. one this pass produced earlier) and is left as-is;
+      // anything else is hex and gets converted (see hex_to_bin). Keying on the
+      // type width, not a hardcoded 32, is what makes 128-bit float128 / long
+      // double work: its value is 32 hex chars, which a `!= 32` guard mistook
+      // for an already-binary 32-bit value and left as raw hex, so migrate
+      // misdecoded it (1.5L read as ~0 -- a false verdict, not a crash).
+      if (val.size() != width)
+        irep.add("value") = mk(hex_to_bin(val, width));
     }
   }
 
@@ -289,6 +454,10 @@ void fix_expression(irept &irep)
     "notequal",
     "and",
     "or",
+    // Boolean implication (a ==> b); migrate_expr lowers "=>" to implies2t via a
+    // wrapped operand pair. Common in quantifier bodies (__CPROVER_forall guards)
+    // but valid in any boolean context.
+    "=>",
     "mod",
     "not",
     "*",
@@ -309,6 +478,19 @@ void fix_expression(irept &irep)
     "overflow_result--",
     "overflow_result-*",
     "overflow_result-shr",
+    // Overflow *predicates* (distinct from overflow_result, which returns the
+    // value+flag pair): CBMC's `overflow-<op>` bool node, which __builtin_add/
+    // sub/mul_overflow_p lower to. migrate_expr handles the whole family via
+    // convert_operand_pair, so each just needs its operands wrapped (same
+    // requirement as popcount/isnan); +/-/* are exercised by the builtins, the
+    // rest share the identical mechanism.
+    "overflow-+",
+    "overflow--",
+    "overflow-*",
+    "overflow-/",
+    "overflow-mod",
+    "overflow-shl",
+    "overflow-unary-",
     "lshr",
     "ashr",
     "shl",
@@ -326,6 +508,7 @@ void fix_expression(irept &irep)
     "bitxor",
     "bitnot",
     "struct",
+    "union",
     "return",
     "r_ok",
     "w_ok",
@@ -344,7 +527,13 @@ void fix_expression(irept &irep)
     // an empty list (same failure shape as isnan/pointer_offset). __builtin_bswap
     // / __builtin_popcount lower to these ids in CBMC's goto.
     "popcount",
-    "bswap"};
+    "bswap",
+    // Quantifier predicates: __CPROVER_forall/__CPROVER_exists lower to these
+    // ids, which migrate_expr handles via op0()/op1() (bound symbol, predicate).
+    // Without wrapping CBMC's raw operands into "operands" here, op0() reads an
+    // empty operand list and segfaults (same failure shape as isnan/popcount).
+    "forall",
+    "exists"};
 
   const std::string cur = irep.id_string();
 
@@ -388,11 +577,32 @@ void expand_anon_struct(const irept &self)
   abort();
 }
 
-void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
+// `expanding` holds the tag identifiers whose definitions are currently being
+// inlined on the recursion stack, so a recursive aggregate (e.g. a Rust struct
+// holding a pointer to itself) can be detected and broken -- see the tag branch
+// below. The two-argument overload seeds it for external callers.
+void fix_type(
+  irept &self,
+  const std::unordered_map<std::string, irept> &cache,
+  std::unordered_set<std::string> &expanding)
 {
   if (self.id() == "c_bool")
   {
     self.id("signedbv");
+    return;
+  }
+
+  if (self.id() == "c_enum_tag")
+  {
+    // CBMC references an enum type via a c_enum_tag node -- the tag counterpart
+    // of c_enum, mirroring struct_tag/union_tag. migrate_type maps c_enum/
+    // incomplete_c_enum to a signed int (C99 6.7.2.2.3) but has no case for the
+    // tag, so any enum-typed object aborts with "ERROR: c_enum_tag". An enum is
+    // consistently int-typed and migrate discards the underlying width anyway,
+    // so rather than resolve the tag through the cache (which only holds struct/
+    // union definitions) rewrite it to a bare c_enum and let migrate yield the
+    // same int type.
+    self = mk("c_enum");
     return;
   }
 
@@ -421,7 +631,7 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
     // Detect the bool underlying before that rewrite and keep the result "bool".
     const bool bool_underlying =
       underlying.id() == "bool" || underlying.id() == "c_bool";
-    fix_type(underlying, cache);
+    fix_type(underlying, cache, expanding);
     const irep_idt bf_width = self.find("width").id();
     self.id(bool_underlying ? irep_idt("bool") : underlying.id());
     self.get_sub().clear();
@@ -450,7 +660,7 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
     !self.get_sub().empty())
   {
     for (auto &v : self.get_sub())
-      fix_type(v, cache);
+      fix_type(v, cache, expanding);
     // The pointed-to type is the sole positional sub, exactly like the array
     // case below -- it must be assigned directly, not wrapped in an
     // intermediate group irep. typet::subtype() (util/type.h) is a direct
@@ -482,11 +692,11 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
   if (!is_tag)
   {
     for (auto &v : self.get_sub())
-      fix_type(v, cache);
+      fix_type(v, cache, expanding);
     for (auto &p : self.get_named_sub())
-      fix_type(p.second, cache);
+      fix_type(p.second, cache, expanding);
     for (auto &p : self.get_comments())
-      fix_type(p.second, cache);
+      fix_type(p.second, cache, expanding);
     return;
   }
 
@@ -501,18 +711,35 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
     return;
   }
 
+  if (!expanding.insert(ident).second)
+  {
+    irept ref = mk("symbol");
+    ref.identifier(ident);
+    self = ref;
+    return;
+  }
+
   self = it->second;
 
   // The resolved aggregate may itself contain tags; redo the cache walk.
   if (irep_contains(self, "struct_tag") || irep_contains(self, "union_tag"))
   {
     for (auto &v : self.get_sub())
-      fix_type(v, cache);
+      fix_type(v, cache, expanding);
     for (auto &p : self.get_named_sub())
-      fix_type(p.second, cache);
+      fix_type(p.second, cache, expanding);
     for (auto &p : self.get_comments())
-      fix_type(p.second, cache);
+      fix_type(p.second, cache, expanding);
   }
+
+  expanding.erase(ident);
+}
+
+// External entry point: fresh expansion stack per top-level type.
+void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
+{
+  std::unordered_set<std::string> expanding;
+  fix_type(self, cache, expanding);
 }
 
 // Builds the malloc/alloca side_effect_exprt (irep shape) do_mem would have
@@ -651,6 +878,64 @@ irept build_fma_rhs(const irept &lhs, const irept::subt &args)
   return result;
 }
 
+// __builtin_nan("")/__builtin_nanf("") construct a quiet NaN. CBMC's own
+// <builtin-library-__builtin_nan> body returns floatbv_div(0, 0, rounding_mode),
+// i.e. 0.0/0.0, so mirror that exactly: ieee_div of two +0.0 constants of the
+// result's float type. The NaN-payload string argument is ignored -- it does not
+// affect NaN-ness, and ESBMC's own C frontend likewise folds __builtin_nan to a
+// constant NaN without dereferencing it. ieee_div is in fix_expression's
+// operand-wrap set and defaults its rounding mode like the rest of the ieee_*
+// family. Restricted to double/float: CBMC 6.5.0 does not model __builtin_nanl
+// as a NaN (its result compares equal to itself, so x != x is FALSE), so nanl is
+// deliberately left as a bodyless external -- whose nondet return already yields
+// the same FAILED verdict CBMC gives -- to preserve verdict parity.
+irept build_nan_rhs(const irept &lhs)
+{
+  const irept ftype = lhs.find("type");
+  irept zero(irep_idt("constant"));
+  zero.add("type") = ftype;
+  zero.add("value") = mk("0"); // hex 0 -> +0.0 after width-aware conversion
+  irept result(irep_idt("ieee_div"));
+  result.add("type") = ftype;
+  result.get_sub().push_back(zero);
+  result.get_sub().push_back(zero);
+  return result;
+}
+
+// __builtin_huge_val{,f,l} / __builtin_inf{,f,l} construct positive infinity.
+// CBMC's <builtin-library-*> bodies return it, but the bodies do not survive the
+// reader/adapter (their flattened floatbv nodes have no migrate handler), so
+// these reach symex as bodyless externals returning nondet -- and a valid
+// `double x = __builtin_huge_val(); assert(x > 1e30)` reports a false FAILED.
+// Emit +Inf directly as a floatbv constant: sign 0, exponent all ones, mantissa
+// 0. The value is written as the full-width binary bit pattern (fix_expression's
+// constant branch leaves an already-width-length string unchanged), which works
+// for every width including 128-bit long double -- unlike a 64-bit literal.
+// (__builtin_inf -- double, no suffix -- is folded to a constant by CBMC and
+// never reaches here; it is matched for uniformity and is harmless.)
+irept build_inf_rhs(const irept &lhs)
+{
+  const irept ftype = lhs.find("type");
+  const std::size_t width = bv_width(ftype);
+  const std::string fs = ftype.find("f").id_string();
+  const std::size_t frac =
+    (!fs.empty() && fs.find_first_not_of("0123456789") == std::string::npos)
+      ? static_cast<std::size_t>(std::stoul(fs))
+      : 0;
+  // width = 1 (sign) + exp_bits + frac, so exp_bits = width - 1 - frac.
+  const std::size_t exp_bits = (width > frac + 1) ? width - 1 - frac : 0;
+
+  // MSB-first: sign(0), exponent(all ones), fraction(zeros).
+  std::string bits(width, '0');
+  for (std::size_t i = 1; i <= exp_bits; ++i)
+    bits[i] = '1';
+
+  irept c(irep_idt("constant"));
+  c.add("type") = ftype;
+  c.add("value") = mk(bits);
+  return c;
+}
+
 // CBMC-sourced FUNCTION_CALL instructions never go through ESBMC's own
 // goto_convert, so ESBMC's builtin-call rewrites (e.g. malloc ->
 // side_effect_exprt via goto-programs/builtin_functions.cpp, or sqrtf ->
@@ -671,6 +956,33 @@ bool fix_builtin_call(irept &code)
     return false;
 
   const std::string callee = sub[1].find("identifier").id_string();
+
+  // memcpy/memset/memmove: CBMC inlines a <builtin-library-*> body that performs
+  // the copy via ARRAY_COPY/ARRAY_REPLACE/ARRAY_SET OTHER-instructions, which
+  // ESBMC's symex has no handler for and silently skips -- so the copy never
+  // happens and a post-copy read of the destination reports a false FAILED.
+  // memcmp is a bodyless external returning nondet, so a valid comparison also
+  // reports a false FAILED. Rather than teach symex those array ops, retarget
+  // the call to ESBMC's own well-tested memory intrinsic: symex dispatches any
+  // c:@F@__ESBMC* call to run_intrinsic purely by callee name (symex_main.cpp),
+  // so only the function symbol's identifier needs to change -- the 3-argument
+  // signature (dst/src/n, s/c/n, s1/s2/n) already matches
+  // intrinsic_memcpy/memset/memmove/memcmp, and the lhs may be nil (the return
+  // value is often discarded). The instruction stays a FUNCTION_CALL, so return
+  // false: the caller then keeps CBMC's original FUNCTION_CALL instruction type
+  // rather than forcing it to ASSIGN.
+  static const std::unordered_map<std::string, const char *> mem_intrinsics = {
+    {"memcpy", "c:@F@__ESBMC_memcpy"},
+    {"memset", "c:@F@__ESBMC_memset"},
+    {"memmove", "c:@F@__ESBMC_memmove"},
+    {"memcmp", "c:@F@__ESBMC_memcmp"}};
+  auto mem_it = mem_intrinsics.find(callee);
+  if (mem_it != mem_intrinsics.end())
+  {
+    code.get_sub()[1].set("identifier", mem_it->second);
+    return false;
+  }
+
   // Copy out of `code` before mutating it below -- sub/args (and anything
   // referencing into them) alias code.get_sub(), which code.get_sub().clear()
   // invalidates.
@@ -712,6 +1024,13 @@ bool fix_builtin_call(irept &code)
     rhs = build_unary_fp_rhs(lhs, args, "nearbyint");
   else if (callee == "fma" || callee == "fmaf" || callee == "fmal")
     rhs = build_fma_rhs(lhs, args);
+  else if (callee == "__builtin_nan" || callee == "__builtin_nanf")
+    rhs = build_nan_rhs(lhs);
+  else if (
+    callee == "__builtin_huge_val" || callee == "__builtin_huge_valf" ||
+    callee == "__builtin_huge_vall" || callee == "__builtin_inf" ||
+    callee == "__builtin_inff" || callee == "__builtin_infl")
+    rhs = build_inf_rhs(lhs);
   // "abs" mirrors what clang_c_adjust_expr.cpp builds for a recognised
   // fabs/fabsf/fabsl call; migrate_expr's abs handler reads op0(), so "abs"
   // must be in fix_expression's operand-wrap set for the argument to reach it.

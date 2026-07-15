@@ -2,16 +2,16 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_dict_handler.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python_expr_builder.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/python_math.h>
-#include <python-frontend/round_to_nearest_guard.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/math/python_math.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/string/string_handler.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
@@ -536,13 +536,6 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   }
   return build_boolean_chain(logical_expr);
 }
-inline bool is_ieee_op(const exprt &expr)
-{
-  const std::string &id = expr.id().as_string();
-  return id == "ieee_add" || id == "ieee_mul" || id == "ieee_sub" ||
-         id == "ieee_div";
-}
-
 // Attach source location from symbol table if expr is a symbol
 static void attach_symbol_location(exprt &expr, contextt &symbol_table)
 {
@@ -1524,6 +1517,62 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         "values");
   }
 
+  // Python raises a *catchable* ZeroDivisionError when the divisor of /, //, or
+  // % is zero (for both int and float operands, unlike C/IEEE). Model it as a
+  // guarded exception raise — the same mechanism list indexing uses for
+  // IndexError — so that `try: x / 0 except ZeroDivisionError: ...` is treated
+  // as SAFE while a bare division by zero propagates and fails. The built-in
+  // C-level div-by-zero assertion cannot express this: it fires regardless of
+  // the surrounding try/except, so caught divisions were wrongly reported.
+  if (
+    (op == "Div" || op == "FloorDiv" || op == "Mod") &&
+    (rhs.type().is_signedbv() || rhs.type().is_unsignedbv() ||
+     rhs.type().is_floatbv()) &&
+    !converting_lambda_body_ && !in_rhs_type_probe_)
+  {
+    // The divisor is referenced by both the zero-check guard and the division
+    // itself. If it carries a side effect (a call, or a nondet) it would be
+    // evaluated twice -- `x / f()` calling f twice, and `x / nondet()` guarding
+    // a different value than the one divided by. Hoist a side-effecting divisor
+    // into a temporary so it is evaluated exactly once.
+    std::function<bool(const exprt &)> has_side_effect =
+      [&](const exprt &e) -> bool {
+      if (e.id() == "sideeffect")
+        return true;
+      for (const exprt &sub : e.operands())
+        if (has_side_effect(sub))
+          return true;
+      return false;
+    };
+
+    locationt div_loc = get_location_from_decl(element);
+    if (has_side_effect(rhs))
+    {
+      symbolt &tmp =
+        create_tmp_symbol(element, "$div_rhs$", rhs.type(), exprt());
+      code_declt decl(symbol_expr(tmp));
+      decl.location() = div_loc;
+      add_instruction(decl);
+      code_assignt assign(symbol_expr(tmp), rhs);
+      assign.location() = div_loc;
+      add_instruction(assign);
+      rhs = symbol_expr(tmp);
+    }
+
+    exprt is_zero("=", bool_type());
+    is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
+
+    exprt raise = get_exception_handler().gen_exception_raise(
+      "ZeroDivisionError", "division by zero");
+    code_expressiont throw_code(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = is_zero;
+    guard.then_case() = throw_code;
+    guard.location() = div_loc;
+    add_instruction(guard);
+  }
+
   // Build the binary expression
   exprt bin_expr = build_binary_expression(op, lhs, rhs);
 
@@ -1542,9 +1591,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     op == "Mod" && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
     (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
     return math_handler_.handle_int_modulo(lhs, rhs, bin_expr);
-
-  // Promote operands for IEEE operations
-  promote_ieee_operands(bin_expr, lhs, rhs);
 
   // Handle chained comparisons
   if (element.contains("comparators") && element["comparators"].size() > 1)
@@ -2398,6 +2444,32 @@ exprt python_converter::build_binary_expression(
       return 1;
     return static_cast<const bv_typet &>(t).get_width();
   };
+
+  // Reconcile the int/float and float/float-width mixes the arms below do
+  // not cover, following the C usual arithmetic conversions (CPython agrees
+  // for the shapes Python emits): the integer side converts to the float
+  // type, the narrower float widens to the wider. Bitwise operands were
+  // already coerced to int above, so no float reaches a bitwise op.
+  {
+    const bool lhs_float = lhs.type().is_floatbv();
+    const bool rhs_float = rhs.type().is_floatbv();
+    if (lhs_float && is_bv_or_bool(rhs.type()))
+      rhs = typecast_exprt(rhs, lhs.type());
+    else if (rhs_float && is_bv_or_bool(lhs.type()))
+      lhs = typecast_exprt(lhs, rhs.type());
+    else if (lhs_float && rhs_float && lhs.type() != rhs.type())
+    {
+      // Distinct float types differ in width today (float16/32/64 only); an
+      // equal-width different-format pair would fall through unreconciled.
+      const unsigned lw = bit_width(lhs.type());
+      const unsigned rw = bit_width(rhs.type());
+      if (lw < rw)
+        lhs = typecast_exprt(lhs, rhs.type());
+      else if (rw < lw)
+        rhs = typecast_exprt(rhs, lhs.type());
+    }
+  }
+
   // Adjust types for non-relational operations
   if (!type_utils::is_relational_op(op))
   {
@@ -2477,20 +2549,4 @@ exprt python_converter::build_binary_expression(
   bin_expr.copy_to_operands(lhs, rhs);
 
   return bin_expr;
-}
-
-void python_converter::promote_ieee_operands(
-  exprt &bin_expr,
-  const exprt &lhs,
-  const exprt &rhs)
-{
-  if (!is_ieee_op(bin_expr))
-    return;
-
-  const typet &target_type = lhs.type().is_floatbv() ? lhs.type() : rhs.type();
-
-  if (!lhs.type().is_floatbv())
-    bin_expr.op0() = typecast_exprt(lhs, target_type);
-  if (!rhs.type().is_floatbv())
-    bin_expr.op1() = typecast_exprt(rhs, target_type);
 }

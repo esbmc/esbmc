@@ -3996,3 +3996,157 @@ a false `SUCCESSFUL`**): the `format()` builtin with a negative float and an emp
 `repr()` of a bare float/int still does not fold. The §3 design-level blockers, §3c policy-banned
 timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand. The §5 priority
 order stands.
+
+## 84. 2026-07-09 re-validation (seventy-fourth sweep) & format() empty-spec float
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. This sweep takes the
+first §83b-named follow-up: the `format()` builtin with a **float** and an empty spec threw a clean
+error instead of folding, even though `str()`/`repr()` (§80) and `"{}".format()` (§82/§83) all fold
+the same value correctly.
+
+### 84a. Feature restored: `format(<float>)` with an empty spec folds to `str(<float>)`
+
+**`format(1.0)` / `format(-1.0)` (and any float with no spec) threw
+`format() spec '' is not supported for this value` instead of folding to `"1.0"` / `"-1.0"`.**
+
+`handle_format` (`src/python-frontend/function_call/str_conv.cpp`) routes numeric values through
+`py_format_number`, which models only the explicit float presentation types (`f`/`e`/`g`/`%`) and
+returns `std::nullopt` for the repr-like *default* float format (the §81a fail-closed boundary). With
+an empty spec that `nullopt` fell through to the string-only fallback and then the reject, so
+`format(1.0)` errored — a `UnaryOp`-routing gap for the negative case and a plain missing branch for
+the positive one (both floats hit the same reject). CPython's `format(x)` / `format(x, "")` is
+`x.__format__("")` = `str(x)`, so `format(1.0) == "1.0"` and `format(-1.0) == "-1.0"`.
+
+**Fix (de-duplicate, no new divergence)**: extract the `str()`/`repr()` float renderer that §80 added
+to `handle_float_to_str` into a shared free helper `py_str_from_double(double)`
+(`std::to_string`'s `%f`, trailing-zero strip, `".0"` restored for whole numbers, under a
+`round_to_nearest_guard`), route `handle_float_to_str` through it, and add a `spec.empty() &&
+is_float` branch to `handle_format` that folds `py_str_from_double(dval)`. `dval` comes from
+`const_double_from_json`, which already carries the `UnaryOp(USub)` sign, so the positive and negative
+literal branches share one path. Deliberately **not** reusing `string_method_handler.cpp`'s
+`format_value_from_json` (the `"{}".format` renderer): that uses a default `ostringstream` (six
+*significant* digits, `format(1234.5678)` → `"1234.57"`), whereas `str()` uses `%f` (six *fractional*
+digits, `str(1234.5678)` → `"1234.5678"`) — `format(x) == str(x)` requires the `str()` renderer.
+
+This is a **restore-working-behaviour** fix (the prior behaviour was a clean error / spurious
+`FAILED`, never a false `SUCCESSFUL`). It shares `str()`'s exact renderer, so it inherits — and
+introduces no new instance of — the known `str()` gap for values needing more than six fractional
+digits (`str(1/3)`) or scientific notation (`str(1e16)`); those remain a separate §80-noted follow-up.
+New regression pair `regression/python/builtin_format_empty_spec_float{,_fail}` (CORE): the positive
+is the liveness witness for the new branch, covering whole-number floats (positive/negative,
+`-1000000.0`), signed zero (`-0.0` → `"-0.0"`), dyadic fractionals, an explicit empty spec
+(`format(1.5, "")`), and the unaffected int/string empty-spec paths; the `_fail` pins the
+previously-erroring `format(-1.0) == "-1"`, now correctly `FAILED`. Every positive assertion was
+differential-tested bit-for-bit against CPython (14/14 match, and the `_fail` claim is genuinely
+false); the focused `format`/`fstring`/`percent`/`str`/`repr` ctest subset (168 tests) passes 100%.
+Solver-agnostic (a frontend constant fold — the assertions simplify to `assert(true/false)` with zero
+remaining VCCs, so Bitwuzla/Z3 agree trivially).
+
+### 84b. Next candidate & everything else: unchanged disposition
+The remaining §83b candidate stands: `repr()` of a bare float/int still does not fold (a clean
+`ERROR`/spurious `FAILED`, never a false `SUCCESSFUL`) — the natural next sweep, and the sibling of
+this one (`repr(x)` would route through the same `py_str_from_double` helper). The §3 design-level
+blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib` case
+all stand. The §5 priority order stands.
+## 85. 2026-07-09 re-validation (seventy-fifth sweep) & repr() of a bare int/float
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. This sweep takes the
+second §83b/§84b-named follow-up (the sibling of the §84 `format()` empty-spec float sweep): `repr()`
+of a bare int or float did not fold.
+
+### 85a. Feature restored: `repr(<int>)` / `repr(<float>)` folds to `str(value)`
+
+**`repr(5)` / `repr(1.0)` (and any bare int/float) hit the general-call handler
+(`WARNING: Undefined function 'repr' - replacing with assert(false)`), so a program using them reported
+a spurious `FAILED` instead of folding to `"5"` / `"1.0"`.**
+
+The `repr()` dispatch-table entry (`src/python-frontend/function_call/expr.cpp`) folded only the
+`complex` case and delegated everything else — including bare ints and floats — to
+`handle_general_function_call`, which treats `repr` as an undefined user function. `str()` of the same
+value already folded (via the builtin-type-constructor entry → `build_constant_from_arg` /
+`convert_to_string`); only the `repr()` side was missing. For an int or a float
+`repr(x) == str(x)` in Python (only `str`/container/object reprs differ — `repr("x")` adds quotes,
+`repr(True)` is `"True"`), so the numeric case can reuse the exact `str()` folding.
+
+**Fix**: in the `repr()` action, after the `complex` check, route an int- or float-typed operand
+through `converter_.get_string_handler().convert_to_string(value_expr)` — the same helper `str()`'s
+numeric path uses, which folds a constant to a char-array literal and dispatches a non-constant to the
+matching `__python_*_to_str` runtime model. The gate excludes `bool` and every non-numeric type
+(`!vt.is_bool() && (is_integer_type(vt) || vt.is_floatbv())`), so `repr` of a string, bool, list or
+object keeps the general-call fallback — a clean error, never a wrong fold. This restores working
+behaviour and cannot introduce a false `SUCCESSFUL` (an unmodelled `repr` still errors). Because it
+delegates to the shared `str()` renderer, it inherits — and adds no new instance of — `str()`'s known
+float gap (>6 fractional digits / scientific notation), which remains the §80 follow-up.
+
+New regression pair `regression/python/builtin_repr_int_float{,_fail}` (CORE): the positive is the
+liveness witness for the new branch, covering int literals (positive/negative/zero/large), whole and
+dyadic-fractional float literals (`repr(1.0)` keeps `"1.0"`, `repr(-0.125)`), a non-constant int that
+exercises the runtime `__python_*_to_str` path (`repr(x) == "42"`), and `repr(x) == str(x)`
+consistency; the `_fail` pins the previously-erroring `repr(-1.0) == "-1"`, now correctly `FAILED`.
+Every positive assertion was differential-tested bit-for-bit against CPython (`repr(v) == str(v)` for
+all cited ints and floats); the focused `repr`/`str`/`format`/`fstring`/`percent` ctest subset
+(168 tests) passes 100%. The constant folds are solver-agnostic; the non-constant `repr(x)` case
+lowers to the same runtime model as `str(x)`.
+
+### 85b. Next candidate & everything else: unchanged disposition
+With both §84b candidates now closed (`format()` empty-spec float in §84 / PR, `repr()` int/float
+here), the natural next sweep is a fresh idiom battery against `master` to surface the next isolated,
+soundly-fixable defect (`repr` of a **string** — needing quote-wrapping and escaping — and `repr` of a
+`bool`/`None` remain deliberately out of scope: each is a clean error, never a false `SUCCESSFUL`). The
+§3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand. The §5 priority order stands.
+
+---
+
+## 86. 2026-07-09 re-validation (seventy-sixth sweep) & "{}".format() shortest-repr float
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. §83b nominated the
+`format()` empty-spec gap (closed in §84); probing it surfaced a distinct, more serious defect on a
+*different* renderer — a false `SUCCESSFUL` — which this sweep fixes.
+
+### 86a. New isolated, soundly-fixable defect found & fixed
+**An empty `"{}"` replacement field rendered a float with only 6 significant digits, so
+`"{}".format(1.23456789)` folded to `"1.23457"` and the false
+`assert "{}".format(1.23456789) == "1.23457"` verified `SUCCESSFUL`.**
+
+`format_float_value` (`src/python-frontend/string/string_method_handler.cpp`) renders a constant float
+the way CPython's `str()` does, for the empty `"{}"` field used by `str.format()`. §82/§83
+special-cased whole-number floats below `1e16` (`str(1.0) == "1.0"`), but every other float fell
+through to `std::ostringstream << d`, whose default is **6 significant digits**. So
+`"{}".format(1.23456789)` folded to `"1.23457"`, `"{}".format(123456789.5)` to `"1.23457e+08"`, and
+`"{}".format(3.14159265)` to `"3.14159"`. Asserting the *wrong* string verified `SUCCESSFUL` (a
+soundness hole) while asserting the *correct* CPython string reported a spurious `FAILED`.
+
+This is a **separate renderer** from the `%.6f` fixed-decimal `str()` fold that §87 (PR #5945)
+addresses: that one loses *decimals* (`str(0.1234567)` → `"0.123457"`), this one loses *significant
+digits*. Both were live on `master` simultaneously.
+
+**Fix**: render the fallback with the fewest significant digits that still read back as the same
+double — `%.*g` for precision 1..16, returning the first whose `strtod` compares equal, else `%.17g`
+(`DBL_DECIMAL_DIG`, which always round-trips). This is exactly how CPython's `repr` chooses its
+digits. `%g`'s fixed-vs-exponential cut-over (exponent `< -4` or `>= p`) provably agrees with
+CPython's (`< -4` or `>= 16`) here: every whole float below `1e16` is handled by the earlier branch,
+and a non-whole float always needs more significant digits than its decimal exponent, so `p > E`. The
+pre-existing `round_to_nearest_guard` pins `FE_TONEAREST` across both `snprintf` and `strtod`.
+
+Note this renders *every* float correctly rather than refusing to fold the inexact ones, so it
+strictly subsumes the "fold only when provably exact" strategy; consolidating the three float
+renderers (`format_float_value`, `handle_float_to_str`, `py_format_number`) onto one shortest-repr
+helper is the natural follow-up.
+
+This is a **wrong-value/soundness fix**. New regression pair
+`regression/python/str_format_shortest_repr{,_fail}` (CORE): the positive covers long-digit values
+(`1.23456789`, `3.14159265358979`, `0.30000000000000004`, `123456789.5`), negatives, the unchanged
+whole-number and short cases (`1.0`, `-0.0`, `0.1`), and both sides of each cut-over (`0.0001` /
+`1e-05`, `1e15` / `1e16`, `1.5e20`, `1e300`); the `_fail` pins the previously-false-`SUCCESSFUL`
+`"{}".format(1.23456789) == "1.23457"`. CPython sanity confirms every positive assertion holds and
+the `_fail` claim is genuinely false; a differential run of the renderer against CPython `repr` over
+~440,000 doubles (uniform 64-bit patterns plus subnormals) found **0 mismatches**; dual-solver
+Bitwuzla + Z3 agree on the positive test; all 197 existing `format`/`fstring`/`percent`/`repr`/`str_`
+regression tests pass unchanged.
+
+### 86b. Next candidate & everything else: unchanged disposition
+Next: consolidate the remaining float renderers onto the shortest-repr helper, which would let the
+`str()` fold cover the inexact values §87 leaves nondet. The §3 design-level blockers, §3c
+policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand.
+The §5 priority order stands.

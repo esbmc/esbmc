@@ -9,11 +9,12 @@ Weakness Enumeration (CWE) identifiers. The mapping is pinned to **MITRE CWE
 retains ids whose Vulnerability Mapping Usage is `ALLOWED` or
 `ALLOWED-WITH-REVIEW`.
 
-ESBMC currently distinguishes **33 unique CWE identifiers** across **28
-violation kinds**: CWE-120, 121, 125, 129, 131, 190, 191, 193, 252, 362, 366,
-369, 401, 415, 416, 457, 469, 476, 562, 563, 590, 617, 674, 681, 761, 787, 822,
-823, 824, 825, 833, 908, 1335. One of these — CWE-563 — is an *advisory* rather
-than a property violation; see [Advisories](#advisories) below.
+ESBMC currently distinguishes **35 unique CWE identifiers** across **29
+violation kinds**: CWE-120, 121, 122, 125, 129, 131, 190, 191, 193, 252, 362,
+366, 369, 401, 415, 416, 457, 469, 476, 562, 563, 590, 617, 674, 681, 761, 787,
+822, 823, 824, 825, 833, 835, 908, 1335. One of these — CWE-563 — is an
+*advisory* rather than a property violation; see [Advisories](#advisories)
+below.
 
 The CWE ids appear in:
 
@@ -43,7 +44,9 @@ substring table ordered longest-substring-first.
 | `dereference failure: free() of non-dynamic memory`          | 590, 761                                    |
 | `Operand of free must have zero pointer offset`              | 590, 761                                    |
 | `dereference failure: forgotten memory`                      | 401                                         |
+| `array bounds violated: heap object`                         | 122, 125, 129, 131, 193, 787                |
 | `array bounds violated`                                      | 121, 125, 129, 131, 193, 787                |
+| `Access to object out of bounds: heap object`                | 122, 125, 787, 823                          |
 | `Access to object out of bounds`                             | 125, 787, 823                               |
 | `dereference failure: memset of memory segment`              | 120, 125, 787                               |
 | `dereference failure on memcpy: reading memory segment`      | 120, 125, 787                               |
@@ -59,6 +62,7 @@ substring table ordered longest-substring-first.
 | `use of uninitialized variable`                              | 457                                         |
 | `unchecked return value`                                     | 252                                         |
 | `unreachable code reached`                                   | 617                                         |
+| `non-terminating execution`                                  | 835                                         |
 | `dead store` _(advisory; `--dead-store-check`)_              | 563                                         |
 | `uncontrolled recursion in <function>`                       | 674                                         |
 | `recursion unwinding assertion` / `unwinding assertion loop` | _(none — k-bound exceeded, not a weakness)_ |
@@ -76,6 +80,41 @@ The last two rows distinguish two different recursion outcomes:
   when the recursion merely exceeds the unwind bound. A recursion that
   terminates but is deeper than the bound keeps this comment and no CWE, since
   it signals insufficient unwinding rather than a weakness.
+
+### Heap vs. stack out-of-bounds
+
+When the overflowed object is a `malloc`/`calloc`/`realloc` allocation, the
+symbolic-execution dereference code (`src/pointer-analysis/dereference.cpp`)
+appends `: heap object` to the bounds-violation comment. The heap variants swap
+**CWE-121** (Stack-based Buffer Overflow) for **CWE-122** (Heap-based Buffer
+Overflow) and, being strict superstrings of the generic comments, win the
+longest-substring-first match. `alloca`, which lives on the stack, keeps the
+generic (stack) mapping. Compile-time array bounds checks
+(`src/goto-programs/goto_check.cpp`) only fire on lexical arrays and never see
+heap objects, so they are unchanged.
+
+As with the generic bounds entries, the heap variants do not distinguish reads
+from writes — the CWE list keeps both CWE-125 (Out-of-bounds Read) and CWE-787
+(Out-of-bounds Write), so a heap OOB read is also annotated with CWE-122.
+
+### Non-termination (CWE-835)
+
+The `--termination` strategy refutes the termination property by proving a
+loop's exit condition unreachable (via k-induction or a recurrent set). This
+is [CWE-835](https://cwe.mitre.org/data/definitions/835.html), "Loop with
+Unreachable Exit Condition ('Infinite Loop')". Unlike the property violations
+above, a non-termination verdict is proven by UNSAT and therefore has **no
+counterexample trace**, so ESBMC anchors the CWE annotation to the loop's exit
+marker. Markers inside ESBMC's own library helpers — such as the
+`while (atexit_count > 0)` loop in `__ESBMC_atexit_handler`, which is linked
+into every program — rank below markers in user code, so the reported location
+never points into ESBMC's installed sources. The annotation still reaches the
+text output (the `CWE: CWE-835` line
+follows the `... non-terminating execution` verdict) and the SARIF, JSON and
+GraphML outputs, exactly as it does for any other violation kind. (The YAML
+witness format has no CWE field, so it is unaffected.) Unwinding-assertion
+failures remain intentionally unmapped — they signal an insufficient k-bound,
+not a weakness.
 
 ## Advisories
 
