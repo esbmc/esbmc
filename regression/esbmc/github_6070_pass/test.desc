@@ -1,0 +1,4 @@
+CORE
+main.c
+--k-induction --multi-property --cex-output out.cex --unwind 5
+^VERIFICATION SUCCESSFUL$
