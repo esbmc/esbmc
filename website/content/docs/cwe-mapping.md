@@ -50,7 +50,7 @@ substring table ordered longest-substring-first.
 | `Access to object out of bounds`                             | 125, 787, 823                               |
 | `dereference failure: memset of memory segment`              | 120, 125, 787                               |
 | `dereference failure on memcpy: reading memory segment`      | 120, 125, 787                               |
-| `Same object violation`                                      | 469                                         |
+| `Relational comparison between pointers is only valid for pointers to the same object` | 469 |
 | `division by zero`                                           | 369                                         |
 | `NaN on`                                                     | 681                                         |
 | `arithmetic overflow`                                        | 190, 191                                    |
