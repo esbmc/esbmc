@@ -3,6 +3,7 @@
 #include <type_traits>
 #include "utility"
 #include "cstddef"
+#include "functional"
 
 namespace std
 {
@@ -213,6 +214,52 @@ constexpr // since C++14
 {
   return tuple<unwrap_decay_t<Types>...>(std::forward<Types>(args)...);
 }
+
+#  if __cplusplus >= 201703L
+// apply / make_from_tuple: this file's get() has only lvalue and
+// const-lvalue overloads (no tuple&& overload), so forwarding an rvalue
+// tuple below still binds the const-lvalue get() and copies each element
+// rather than moving it. Harmless for copyable element types (the only
+// kind this OM's tuple constructor accepts today - see the copy-only
+// tuple(const Head&, const Tail&...) ctor above); revisit alongside move
+// support for tuple itself. std::invoke() above is a simplified model that
+// only calls plain callables, so member-function/member-data-pointer
+// callables are not supported here either.
+namespace __apply_detail
+{
+template <class F, class Tuple, std::size_t... I>
+constexpr decltype(auto) apply_impl(F &&f, Tuple &&t, std::index_sequence<I...>)
+{
+  return std::invoke(
+    std::forward<F>(f), std::get<I>(std::forward<Tuple>(t))...);
+}
+
+template <class T, class Tuple, std::size_t... I>
+constexpr T make_from_tuple_impl(Tuple &&t, std::index_sequence<I...>)
+{
+  return T(std::get<I>(std::forward<Tuple>(t))...);
+}
+} // namespace __apply_detail
+
+template <class F, class Tuple>
+constexpr decltype(auto) apply(F &&f, Tuple &&t)
+{
+  return __apply_detail::apply_impl(
+    std::forward<F>(f),
+    std::forward<Tuple>(t),
+    std::make_index_sequence<
+      std::tuple_size<std::remove_reference_t<Tuple>>::value>{});
+}
+
+template <class T, class Tuple>
+constexpr T make_from_tuple(Tuple &&t)
+{
+  return __apply_detail::make_from_tuple_impl<T>(
+    std::forward<Tuple>(t),
+    std::make_index_sequence<
+      std::tuple_size<std::remove_reference_t<Tuple>>::value>{});
+}
+#  endif
 
 #endif
 

@@ -4130,6 +4130,11 @@ whatever long tail remains before the flip itself can be attempted.
 
 #### S6 flip-readiness census (2026-07-11) — 92.2% of the runnable suite passes hop-off; the 278-test gap classifies into five families
 
+> **2026-07-15 — figure is stale, see "F-A1 drill, round 2" below.** Spot-checks
+> of this census's own named F-A1/F-B examples no longer reproduce on current
+> master; a corpus-wide crash sweep found zero surviving F-A1 crashes. The true
+> gap is smaller than 278/271; a fresh census is needed for an exact number.
+
 **Method.** All 4,261 `regression/python` test dirs, hop-off (env-gated
 `clang_cpp_adjust` skip + `--python-irep2-adjust`, Bitwuzla, 20 s cap,
 8-way parallel), each CORE test's verdict compared against its `test.desc`
@@ -4223,6 +4228,58 @@ instrumentation produced three load-bearing negative results:
 expression being widthed) to name the constructing site, rather than
 walking the pass's view again. The fix will live where that node is built,
 not in `python_adjust`.
+
+#### F-A1 drill, round 2 (2026-07-15) — the reproducers are gone; the census figure is stale
+
+Ran the round-2 probe: all four `get_width` throw sites (`empty_type2t`,
+`symbol_type2t`, `cpp_name_type2t`, `code_type2t`) instrumented with a
+`backtrace()`/`backtrace_symbols_fd()` dump on throw, plus an env-var gate
+(`ESBMC_PY_SKIP_LEGACY_ADJUST`) reproducing the hop-off harness (skip
+`clang_cpp_adjust`, run only `--python-irep2-adjust`) — both throwaway,
+reverted after the drill, not landed.
+
+**Result: none of round 1's named reproducers still crash.** `builtin2`,
+`casting-chr-func`, and `cast` (the F-A1 census examples) all now run
+hop-off to their expected `test.desc` verdict with zero exceptions thrown.
+Spot-checking the F-B family too (`dict17`/`dict25`/`dict28`/`dict31` —
+"symbol retains N unresolved nodes" survivors): all four also pass hop-off
+cleanly now, no exit-invariant error.
+
+**Corpus-wide confirmation.** A hop-off sweep over every `CORE`
+`regression/python` test (8s cap, 8-way parallel, keeping any abnormal
+exit) found 66 genuine aborts — but **grepping all 66 logs for the
+throw-site markers found zero hits**: not one of the 66 crashes routes
+through `type2t::get_width()` on an unresolved type. The F-A1 crash family,
+as characterized by the 2026-07-11 census, does not reproduce anywhere in
+the current CORE corpus under hop-off.
+
+**Reading.** `git log` confirms nothing in the V.1k/`python_adjust`/
+`clang_cpp_adjust` area has changed since round 1's PR #6003 — so this
+isn't a regression-fix landing since the census; the S1–S6 stack
+(`#5985`→`#6003`), once fully merged together, evidently resolved more of
+the F-A1/F-B gap than any single incremental PR's own testing showed. The
+**S6 census's 271-test/92.4%-pass figure is stale** and the true current
+gap is smaller — by how much is unmeasured; an attempt to re-run the exact
+S6 verdict-vs-`test.desc` methodology for a fresh number was abandoned
+this round (see gotcha below) and should be redone with sturdier tooling
+before more F-A1/F-B-shaped work is attempted, to avoid fixing something
+already fixed.
+
+**Gotcha pinned for the next full-corpus sweep in this environment:** on
+macOS, the harness's default `bash` (invoked as `/bin/bash` with no
+explicit path) is the system-shipped **3.2** (no `mapfile`, pre-GPLv3),
+while `bash` resolved via `$PATH` is Homebrew's **5.3**. A script written
+assuming bash 4+ array/`mapfile` features runs fine when hand-tested via
+an explicit `bash script.sh` invocation (PATH-resolved 5.3) but can silently
+misbehave — or the *tool's own* command layer executes under 3.2 even when
+a nested `bash -c` was intended to pick up 5.3, depending on how the
+Bash-tool wraps the command. Write full-corpus sweep scripts portable to
+bash 3.2 (plain `while read` line loops instead of `mapfile`, no bash-4-only
+array/associative-array syntax) and always keep the raw `test.desc` line
+count off `wc -l` (which undercounts by one when the file lacks a trailing
+newline — several `test.desc` files do) — read every line with a
+`while IFS= read -r line || [ -n "$line" ]` loop instead, which handles a
+missing final newline correctly.
 
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7

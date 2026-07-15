@@ -265,6 +265,13 @@ private:
   int current_line_;
   std::string python_filename_;
   bool filter_global_elements_ = false;
+  // True only while add_type_annotation(func_name) (the --function
+  // entry-point pass over the *main* module) is running, so add_annotation's
+  // bare-call forward-reference scan is scoped to that module. The scan
+  // searches only the current ast_, so applying it while annotating an
+  // *imported* module (e.g. an OM calling another OM's helper) would throw
+  // on any name that module itself imports (github #5937).
+  bool annotating_function_entry_point_ = false;
   std::vector<Json> referenced_global_elements;
   std::set<std::string> functions_in_analysis_;
   std::set<std::string> resolving_rhs_vars_;

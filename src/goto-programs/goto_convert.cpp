@@ -795,6 +795,32 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
       replace_new_object(var, ctor_code);
       convert(to_code(ctor_code), dest);
     }
+    else if (
+      initializer.id() == "sideeffect" &&
+      initializer.statement() == "temporary_object" &&
+      initializer.operands().size() == 1 &&
+      initializer.op0().id() == "sideeffect" &&
+      initializer.op0().statement() == "function_call")
+    {
+      // A temporary_object wrapping a plain (non-constructor) function call
+      // (C++ `T t = f(...);` where f returns T by value): call it with `var`
+      // as the lhs directly instead of routing the result through a fresh
+      // return_value$ temporary. The generic path below would give that
+      // temporary its own scope-exit destructor for what is semantically the
+      // same object as `var` (github #2306). `var`'s own destructor is
+      // scheduled below via targets.destructor_stack regardless of which
+      // branch above ran; if that destructor appears to not fire for a
+      // function ending in an explicit `return <expr>;`, look at
+      // convert_return's handling of its local unwind program instead of
+      // here -- that path is a separate, pre-existing gap.
+      const exprt &call_expr = initializer.op0();
+      code_function_callt call;
+      call.location() = call_expr.location();
+      call.lhs() = var;
+      call.function() = call_expr.op0();
+      call.arguments() = call_expr.op1().operands();
+      convert_function_call(call, dest);
+    }
     else
     {
       goto_programt sideeffects;

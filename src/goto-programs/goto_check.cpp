@@ -940,13 +940,20 @@ void goto_checkt::pointer_rel_check(
     is_pointer_type(*expr->get_sub_expr(0)) &&
     is_pointer_type(*expr->get_sub_expr(1)))
   {
-    // add same-object subgoal
+    // Relational comparison is only well-defined when both operands point
+    // into the same array object (or one past its end); otherwise it is
+    // undefined behaviour (C11 6.5.8p5).
     expr2tc side_1 = *expr->get_sub_expr(0);
     expr2tc side_2 = *expr->get_sub_expr(1);
 
     expr2tc same_object = same_object2tc(side_1, side_2);
     add_guarded_claim(
-      same_object, "Same object violation", "pointer", loc, guard);
+      same_object,
+      "Relational comparison between pointers is only valid for pointers "
+      "to the same object",
+      "pointer",
+      loc,
+      guard);
   }
 }
 

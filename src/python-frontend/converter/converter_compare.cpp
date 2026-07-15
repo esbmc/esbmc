@@ -335,17 +335,20 @@ exprt python_converter::handle_string_comparison(
         return index2tc(migrate_type(char_type()), expr2, index2);
       }
 
-      // Pointer path: reproduce the legacy dereference node verbatim — its
-      // two-arg constructor takes char_type().subtype() (nil), not char_type(),
-      // as the result type — then migrate it forward for a uniform expr2tc.
+      // Pointer path: build the pointer-plus-index arithmetic and the
+      // dereference natively in IREP2 (V.1k arith site). The legacy two-arg
+      // dereference_exprt(op, tp) ctor sets the result type to tp.subtype()
+      // (nil, since char_type() is not a pointer type) rather than tp
+      // itself; migrate_type(char_type().subtype()) reproduces that exact
+      // quirk byte-for-byte.
       exprt ptr = expr;
       if (!ptr.type().is_pointer())
         ptr = address_of_exprt(expr);
-      plus_exprt ptr_plus(ptr, index);
-      ptr_plus.type() = ptr.type();
-      expr2tc deref2;
-      migrate_expr(dereference_exprt(ptr_plus, char_type()), deref2);
-      return deref2;
+      expr2tc ptr2, index2;
+      migrate_expr(ptr, ptr2);
+      migrate_expr(index, index2);
+      expr2tc ptr_plus2 = add2tc(ptr2->type, ptr2, index2);
+      return dereference2tc(migrate_type(char_type().subtype()), ptr_plus2);
     };
 
     char literal_char = 0;
