@@ -1,5 +1,5 @@
 CORE
 main.cpp
---multi-property --no-standard-checks --symmetry-breaking
+--multi-property --no-standard-checks
 ^VERIFICATION FAILED$
 position-specific bug must still be caught

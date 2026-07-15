@@ -329,7 +329,7 @@ void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
 
   if (!state.assertions.empty())
   {
-    if (config.options.get_bool_option("symmetry-breaking"))
+    if (!config.options.get_bool_option("no-symmetry-breaking"))
       assert_symmetry_breaking(*this, smt_conv);
     smt_conv.assert_expr(disjunction(state.assertions));
   }
