@@ -15,6 +15,7 @@
 #  undef small
 #endif
 
+#include <filesystem>
 #include <fmt/format.h>
 #include <regex>
 #include <ac_config.h>
@@ -2154,6 +2155,16 @@ smt_resultt bmct::multi_property_check(
       const bool want_ctest =
         options.get_bool_option("generate-ctest-testcase");
 
+      // A bare "{index}-" prefix collides across k-induction phases/k-steps,
+      // since ce_counter restarts at zero on every multi_property_check call
+      // (discussion #6070); tag with phase and k too. Inductive-step and
+      // diagnose runs return early at the `if (is) return` guard above, so
+      // the ternary only needs base/fwd/bmc.
+      const std::string run_phase = bs ? "base" : (fc ? "fwd" : "bmc");
+      std::string run_kval = options.get_option("unwind");
+      if (run_kval.empty())
+        run_kval = "0";
+
       // Emit testcase metadata once per claim (not once per witness).
       if (want_testcase)
         generate_testcase_metadata();
@@ -2178,12 +2189,23 @@ smt_resultt bmct::multi_property_check(
           w.nondet_inputs = collect_nondet_values(local_eq, *solver_ptr);
         w.ce_index = ce_counter++;
 
+        const std::string witness_id =
+          fmt::format("{}-k{}-{}", run_phase, run_kval, w.ce_index);
+
+        // Prefix only the basename, keeping any directory the user gave
+        // (e.g. "cex/out" -> "cex/{id}-out").
+        auto tag_artifact = [&witness_id](const std::string &path) {
+          std::filesystem::path p(path);
+          return (p.parent_path() / (witness_id + "-" + p.filename().string()))
+            .string();
+        };
+
         // Emit machine-readable artifacts NOW, while this witness's solver
         // model is still live. After the next dec_solve(), the model is
         // either gone (UNSAT) or replaced by the next witness's values.
         if (!cex_output.empty())
         {
-          std::ofstream out(fmt::format("{}-{}", w.ce_index, cex_output));
+          std::ofstream out(tag_artifact(cex_output));
           show_goto_trace(out, ns, w.trace);
         }
         // For graphml/yaml the writer reads the path from `options`;
@@ -2191,23 +2213,17 @@ smt_resultt bmct::multi_property_check(
         // same file (and so it's safe under --parallel-solving).
         if (want_graphml)
           violation_graphml_goto_trace(
-            options,
-            ns,
-            w.trace,
-            fmt::format("{}-{}", w.ce_index, graphml_path));
+            options, ns, w.trace, tag_artifact(graphml_path));
         if (want_yaml)
           violation_yaml_goto_trace(
-            options, ns, w.trace, fmt::format("{}-{}", w.ce_index, yaml_path));
+            options, ns, w.trace, tag_artifact(yaml_path));
         if (want_testcase)
           generate_testcase(
-            "testcase-" + std::to_string(w.ce_index) + ".xml",
-            local_eq,
-            *solver_ptr);
+            "testcase-" + witness_id + ".xml", local_eq, *solver_ptr);
         if (want_html)
-          generate_html_report(
-            std::to_string(w.ce_index), ns, w.trace, options);
+          generate_html_report(witness_id, ns, w.trace, options);
         if (want_json)
-          generate_json_report(std::to_string(w.ce_index), ns, w.trace);
+          generate_json_report(witness_id, ns, w.trace);
         if (want_pytest)
           pytest_gen.collect(local_eq, *solver_ptr);
         if (want_ctest)
