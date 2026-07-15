@@ -3,7 +3,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_annotation/python_annotation.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_lambda.h>
+#include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/type/python_typechecking.h>
 #include <util/encoding.h>
