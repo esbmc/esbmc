@@ -1,17 +1,17 @@
 #include <python-frontend/function_call/expr.h>
-#include <python-frontend/cmath_lowering_policy.h>
-#include <python-frontend/complex_handler.h>
-#include <python-frontend/complex_handler_utils.h>
+#include <python-frontend/math/cmath_lowering_policy.h>
+#include <python-frontend/math/complex_handler.h>
+#include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/math_guard_utils.h>
-#include <python-frontend/python_exception_handler.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/python_set.h>
+#include <python-frontend/math/math_guard_utils.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/set/python_set.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_expr_builder.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
@@ -32,7 +32,7 @@
 #include <unordered_map>
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
-#include <python-frontend/python_consteval.h>
+#include <python-frontend/consteval/python_consteval.h>
 #include <regex>
 #include <stdexcept>
 #include <unordered_set>
@@ -5048,6 +5048,15 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     exprt arg = converter_.get_expr(arg_node);
     converter_.current_lhs = saved_lhs;
 
+    // A list passed to a callee may be mutated there (e.g. appended to), which
+    // the caller's static length tracking does not observe. Mark the symbol so
+    // later constant-index accesses fall back to the runtime bounds check
+    // instead of a stale convert-time IndexError (GitHub #5991). Marking a
+    // non-list symbol is harmless -- the flag is only read on the list
+    // constant-index path.
+    if (arg.is_symbol())
+      converter_.mark_list_call_escaped(arg.identifier().as_string());
+
     // A function name passed as an argument decays to a function pointer,
     // mirroring C's implicit function-to-pointer conversion.
     if (arg.type().is_code() && arg.is_symbol())
@@ -5332,6 +5341,28 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
     {
+      // A numpy array is modeled as a fixed-size C array, not the heap
+      // PyListObject struct backing Python's `list`. Passing its address to
+      // a list-typed parameter (the default for both `List[T]`-annotated and
+      // untyped parameters) reinterprets raw element bytes as PyListObject
+      // fields instead of decaying to a compatible element pointer, which
+      // silently produced wrong results/alignment faults instead of a real
+      // bug (no regression relied on this, since it never worked). Reject it
+      // explicitly rather than emit an unsound cast.
+      if (
+        arg.type().subtype() != char_type() && param_idx < params.size() &&
+        params[param_idx].type().is_pointer())
+      {
+        const typet &target =
+          converter_.ns.follow(params[param_idx].type().subtype());
+        if (
+          target.is_struct() && to_struct_type(target).tag().as_string().find(
+                                  "__ESBMC_PyListObj") != std::string::npos)
+          throw std::runtime_error(
+            "TypeError: numpy arrays cannot be passed as function "
+            "parameters yet");
+      }
+
       if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
       {
         arg = string_constantt(

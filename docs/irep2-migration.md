@@ -3683,6 +3683,604 @@ drift the SMT encoding; *RV-adj6 (eager-vs-lazy source)* — the parity subtlety
 above. Until S1–S6 land and RV2 is discharged the F-P11 converter wall stays
 blocked by design; no further pre-adjust converter drain can proceed ahead of it.
 
+#### S1 outcome (2026-07-11) — `adjust_type` landed; two empirical findings
+
+**S1 is in** (branch `feat/python-adjust-s1-type-completion`):
+`python_adjust::adjust_type` reproduces the legacy completion steps a Python
+body exercises — recursive macro symbol-type expansion, array (VLA) size +
+element-type adjustment, and struct/union member-type recursion followed by
+alignment padding — and `adjust_expr` now completes each node's own type first
+(`with_type` only on change), mirroring the legacy `adjust_expr`'s leading
+`adjust_type(expr.type())`. Three deliberate deviations from the legacy pass,
+documented in the header: an unknown *top-level* type symbol is left by-name
+for the B.4 exit invariant to flag rather than `abort()`ed (an unknown tag
+buried inside an aggregate still aborts downstream in `add_padding`'s
+`ns.follow`); the `vector_typet` half of `is_array_like` has no arm (the
+Python frontend never emits vector types — a census-confirmed dead branch);
+and **type symbols themselves are not yet adjusted** — the legacy `adjust()`
+completes all `is_type` symbols *first* "so that symbolic-type resolution
+always receives fixed up types" (`clang_c_adjust_expr.cpp:31-42`), which
+`clang_cpp_adjust` still does on the live pipeline. **The B.5 flip must add a
+type-symbol pre-pass** (an S-step no entry in the S1–S6 list covers today)
+before `python_adjust` becomes the sole resolver, or `ns.follow`/`add_padding`
+will resolve against unadjusted tag layouts. Padding satisfies RV-adj5 *by
+construction*:
+the pass reuses `add_padding` itself through the lossless
+`migrate_type_back` → `add_padding` → `migrate_type` round-trip rather than
+reimplementing its alignment arithmetic. Gate: 20/20 unit tests
+(`python_adjust_test`, every new branch exercised), 76/76 flag-on fixture +
+acceptance-family regressions, dual-solver (Bitwuzla + Z3) verdict parity,
+stderr byte-parity vs. the unpatched master build.
+
+**Finding 1 — `#is_padding` does not survive the IREP2 round-trip (new
+RV-adj5 sub-hazard, resolved).** `struct_type2t` carries no per-member
+attribute channel, so a padded struct that round-trips through IREP2 loses the
+`#is_padding` component flag; `add_padding` then aligns the existing pad
+member as if it were a regular field (`padding.cpp:262` vs `:276`) and
+double-pads — the legacy idempotence assert (`clang_c_adjust_expr.cpp:741-743`)
+holds only because typet-land preserves the flag. S1 re-derives the flag from
+the reserved pad-member names (`anon_pad$`/`anon_bit_field_pad$`/
+`ext_int_pad$` — `$` cannot appear in a Python identifier) before re-padding;
+idempotence is unit-pinned. **S2 must inherit this re-derivation** when it
+completes `constant_struct2t` literals against a padded layout, and the
+eventual W3/V.2 attribute-carriage design should list `#is_padding` among the
+attributes needing an IREP2-native home.
+
+**Finding 2 — the flag-on pipeline already reports pre-existing B.4
+exit-invariant errors on OM model bodies (pre-S1, master).** Running any
+fixture test flag-on emits ~26 `python_adjust: symbol ... retains an
+unresolved by-name ... node` errors for operational-model functions
+(`min`/`max`/`sorted`/`sum`/`any`/`reversed`/`choice`/...) on the **unpatched
+master build** (A/B-confirmed 2026-07-11; verdicts still SUCCESSFUL because
+`typecheck` does not fail on the pass's error return and `clang_cpp_adjust`'s
+resolution feeds goto-convert). So the B.4 "0 divergences" validation was
+verdict-level; post-`clang_cpp_adjust` OM bodies genuinely retain by-name
+member/index/struct-literal nodes the current `resolve_source` cannot follow.
+This is direct empirical input to RV-adj6 and sizes the real B.5 completion
+gap: S2/S3 must resolve exactly these survivors (or the B.5 flip's exit
+invariant will hard-fail), and the next S-step should start by classifying
+those ~26 bodies' unresolved nodes.
+
+#### S2 outcome (2026-07-11) — survivors classified (100% exception literals); aggregate-literal completion landed; flag-on exit invariant now clean
+
+**Classification (the S1-outcome action item).** The exit-invariant
+diagnostics were enriched (`collect_unresolved_sources`: one entry per node —
+kind, by-name tag, member name), and the full survivor census on the flag-on
+pipeline is decisive: **116 unresolved nodes, 100% `constant_struct2t`
+literals with by-name exception tags** — 101 `tag-IndexError`, 10
+`tag-ValueError`, 5 `tag-ZeroDivisionError` (the OM model bodies' `raise
+IndexError(...)` literals) — and **zero** member/index survivors. So S2 alone
+drains the entire pre-existing work-list, and S3 (member/index operand
+coercion) has **no pre-existing survivors**: its work only materialises when
+the converter starts emitting pre-adjust nodes or at the flip.
+
+**S2 is in** (branch `feat/python-adjust-s2-aggregate-literal`, stacked on
+S1): `adjust_expr` gains a `constant_struct2t` arm — guard-lookup the tag (no
+abort on an unknown symbol; the exit invariant flags it instead), `ns.follow`
+to the struct, complete it via S1's `adjust_type` (padding), insert
+`gen_zero` padding operands at the reserved `$`-named component positions
+when the literal lacks them (mirroring the legacy `adjust_struct` insertion,
+`clang_c_adjust_expr.cpp:152-176`), and rebuild with the resolved type. This
+resolves *eagerly* where the legacy pass leaves the literal's type lazily
+by-name — the RV-adj6 divergence, deliberate and now exercised: IREP2's
+strong construction invariant requires the resolved type on the node. On
+today's pipeline the survivors' operands were already padded by
+`clang_cpp_adjust`, so only the retype fires; the insertion path serves
+converter-built literals post-flip (unit-pinned).
+
+**Acceptance.** Flag-on exit-invariant errors: **26 symbols / 116 nodes → 0**,
+dual-solver (Bitwuzla + Z3) verdicts unchanged; exception-heavy regressions
+(`try_except_else{,_fail}`, `except_tuple_types{,_fail}`,
+`list_index_valueerror{,_fail}`, `slice_step_zero_valueerror`) hold identical
+verdicts flag-on vs flag-off (the eager retype does not disturb cpp-throw
+catch matching); 76/76 fixture + acceptance families; 27/27 unit tests. The
+exit invariant additionally flags a *resolved*-struct literal whose operand
+count disagrees with its component list (`constant_struct2t`'s constructor
+asserts only the type kind, so that mismatch would otherwise reach symex
+silently). The flag-on pipeline is exit-invariant-clean for the first time —
+the B.5 flip's hard-fail risk from Finding 2 is retired.
+
+#### Type-symbol pre-pass (2026-07-11) — the S1-documented S-gap closed
+
+`adjust()` now mirrors `clang_c_adjust::adjust()`'s two-phase order: a
+pre-pass completes every **Python-mode** `is_type` symbol's IREP2 type via
+`adjust_type` (macro expansion + padding, write-back only on change) before
+the value walk, so symbolic-type resolution always follows fixed-up tags.
+The mode scoping is load-bearing, not cosmetic: C/C++-header types can carry
+bitfields whose `#bitfield` flag does not survive the IREP2 round-trip —
+re-padding those from the migrated view would write a corrupted layout back
+into the table — while every converter-emitted tag is mode `"Python"`
+(`create_symbol`, `converter_util.cpp`). Incomplete (forward-declared) tags
+migrate to a 0-member struct view; `add_padding` is a no-op there and the
+change-detection guard prevents any lossy write-back (unit-pinned, along
+with the completed-tag, non-Python-skip, and pre-pass→value-walk chain
+cases). Inert on the live flag-on pipeline (0 exit-invariant errors,
+dual-solver verdicts unchanged, 76/76 fixture). Remaining legacy completion
+**not** yet reproduced, both recorded as scope limits in `python_adjust.h`:
+non-type symbols' *own* types (`adjust_symbol`,
+`clang_c_adjust_expr.cpp:70-74` — limit 3), and **legacy-only struct
+metadata across a firing write-back** (limit 4, review-caught, latent):
+`set_type(type2tc)` drops the `"bases"` sub-irep that
+`exception_typeid.cpp:37` and `base_type.cpp:421` read for Python
+exception-hierarchy/catch matching (plus component `access`/`#is_padding`
+cosmetics). Inert while the write-back never fires; the flip must either
+re-attach preserved sub-ireps on a legacy write-back or land the W3/V.2
+IREP2-native carriage for `"bases"` first — and should also start honouring
+`adjust()`'s error return at the `python_language.cpp` call site.
+
+**Flip note (S6 prerequisite):**
+cpp-throw catch matching is safe under S2 only because exception ids are
+derived *upstream* — `clang_cpp_adjust::convert_exception_id` builds
+`code_cpp_throw2t`'s `exception_list` from the thrown *symbol* type's
+identifier (`substr(4)` off the `tag-` name) before this pass runs. Once the
+flip removes the `clang_cpp_adjust` hop, that derivation must be re-homed
+(either into `python_adjust` before the eager literal retype, or taught to
+read the resolved `struct_type2t::name`).
+
+#### Flip-probe census (2026-07-11) — the S4/S5 questions answered empirically; ordered flip-blocker list
+
+**Method.** A local, uncommitted probe gated the `clang_cpp_adjust` hop
+(`python_language.cpp:273`) behind an environment variable and ran four
+trivial flag-on programs — scalar-param call (`f(1)` into `x: float`),
+mixed-width arithmetic (`int * float`), class attribute
+(`C(4).v`), and list subscript (`l[1]`) — against the same binary with the
+hop on (baseline: 4/4 `VERIFICATION SUCCESSFUL`) and off.
+
+**Result: 4/4 SIGSEGV** — every probe, including ones with no user
+exceptions or classes at all, crashes after GOTO generation inside
+`exception_loweringt::run`'s THROW scan (`remove_exceptions.cpp:128-138`,
+crash-report symbolication). Root cause confirmed by source audit:
+`exception_list` is populated **exclusively** by `clang_cpp_adjust`
+(`clang_cpp_adjust_expr.cpp:403-411`); the Python frontend itself only emits
+an empty list for bare re-raises (`python_exception_handler.cpp:229`). The
+OM model bodies contain `raise IndexError(...)` throws even for a plain list
+subscript, so with the hop skipped every operand-carrying THROW reaches the
+unguarded `t.exception_list.front()` on an empty vector. (That `.front()` is
+also a crash-not-diagnostic fragility worth hardening in the flip-era work;
+not shipped now — the branch is unreachable on the normal pipeline.)
+
+**Consequences.**
+1. **Exception-id re-homing is the FIRST flip blocker**, not one item among
+   several: S3/S4/S5 completion gaps cannot even be *measured* empirically
+   until throws carry ids without `clang_cpp_adjust`. The natural home is
+   converter-side at throw construction (`python_exception_handler` knows the
+   class and its bases when it builds the cpp-throw), which also retires the
+   `"bases"`-at-lowering dependency for the *throw* side; catch-side
+   hierarchy matching still needs the `"bases"` carriage (scope limit 4).
+2. **S4 placement is settled by construction-assert reasoning**: IREP2
+   arith/relational constructors reject mismatched widths, so a
+   post-migration pass can never see the nodes S4 would fix — width
+   reconciliation must live **converter-side**, i.e. in
+   `build_binary_expression` (the F-P11 chokepoint) via the proven
+   width-hazard recipe (`c_implicit_typecast_arithmetic` + the #5581
+   sub-`int`-width narrow-back guard). Validation lever: once the converter
+   reconciles inline, the legacy `adjust_expr_binary_arithmetic` becomes a
+   no-op on those nodes, so flag-off GOTO-byte A/B parity gates the change
+   *today*, before any flip.
+3. **S5 (call-argument casts) remains open but bounded**: the legacy pass
+   `gen_typecast`s every argument to its declared parameter type
+   (`clang_c_adjust_expr.cpp:933-961`); the converter performs its own
+   pointer/struct coercions (`function_call/expr.cpp:5130-5174`) but general
+   scalar param casts are unverified — measurable only after blocker 1.
+
+**Ordered flip-blocker list (supersedes the scattered notes above):**
+(1) exception-id derivation re-homed to the Python path; (2) `"bases"`
+carriage for catch-side hierarchy matching (scope limit 4 / W3-V.2);
+(3) S3 member/index source resolution at scale (the B.3 pointer-source
+finding); (4) S4 converter-side width reconciliation in
+`build_binary_expression`; (5) S5 argument-cast census + completion;
+(6) honour `adjust()`'s error return at the `python_language.cpp` call site.
+
+#### Blocker #1 re-homing probe (2026-07-12) — "at throw construction" is refuted; the derivation needs the post-conversion state
+
+The census above placed blocker #1's natural home "converter-side at throw
+construction (`python_exception_handler` knows the class and its bases when it
+builds the cpp-throw)". A direct probe **refutes that placement.**
+
+**Method.** Made `clang_cpp_adjust::convert_exception_id` a namespace-parameterised
+`static` (behaviour-preserving: the three in-tree call sites and two recursive
+calls pass `ns`; baseline unchanged) and called it at the operand-carrying
+cpp-throw construction in `python_exception_handler::get_raise_statement`
+(`:382`), attaching the derived `exception_list` exactly as
+`adjust_side_effect_throw` does. Intended to be inert (the still-running
+`clang_cpp_adjust` hop overwrites the list with a byte-identical one) and to be
+validated by a temporary parity assert in `adjust_side_effect_throw`.
+
+**Result: SIGSEGV during conversion**, before any parity assert could fire.
+`convert_exception_id`'s symbol arm dereferences `ns.lookup(identifier)->get_type()`
+with **no null guard** (`clang_cpp_adjust_expr.cpp:455`); at construction time
+`identifier` is the by-name tag `type_handler::get_typet(exc_name)` emits
+(observed: `tag-ValueError`), which **does not resolve** in the converter's
+namespace — the Python exception class lives under a mangled id
+(`py:…@C@ValueError@…`), never under `tag-ValueError`, so the lookup returns
+`nullptr`. Baseline (hop on) is green on the same program, so the legacy pass
+does **not** take that failing lookup: by the time `clang_cpp_adjust` runs it has
+already `adjust_expr`'d the throw operand, so it derives ids from the *resolved*
+operand type (concrete struct / `#cpp_type`), not the transient `symbol_type`
+present at construction.
+
+**Consequences.**
+1. **Blocker #1's home is a post-conversion pass, not throw construction.** The
+   derivation depends on operand-type resolution (symbol→struct following, or the
+   `#cpp_type`/`bases` a completed table carries) that only exists *after*
+   conversion. Re-homing must therefore run where that state is available — a
+   converter-side pass over the finished symbol table *before* `clang_cpp_adjust`,
+   or (aligning with the S-series end state) inside `python_adjust`, which already
+   runs post-conversion and becomes the sole resolver after the S6 flip. This
+   also entangles blocker #1 with S3 (member/index/operand resolution): the id
+   source is the *resolved* operand, so #1 sits downstream of S3, not ahead of it.
+2. **`convert_exception_id`'s unguarded `ns.lookup(...)->get_type()` is a latent
+   crash-vs-diagnostic fragility** — a sibling of the `remove_exceptions`
+   `t.exception_list.front()` one flagged above. Both should be hardened in the
+   flip-era work; both are unreachable on the current pipeline (the lookup only
+   sees resolved types post-`adjust_expr`), so neither is shipped now.
+
+Blocker #1's list entry (1) is refined accordingly: *re-home the derivation to a
+post-conversion pass that reads resolved operand types — not to throw
+construction.*
+
+#### S3 assessment (2026-07-12) — member/index operand coercion is structurally N/A for IREP2; S3 ≈ already done
+
+The S-list frames S3 as "reproduce the pointer-deref / `p[i]`→`*(p+i)` / index
+typecast steps for the pointer-backed Python container/instance sources"
+(mirroring `clang_c_adjust::adjust_index`/`adjust_member`). A code audit shows
+that framing is a **legacy-`exprt` view that does not carry over to IREP2** — the
+Key-implementation-insight of `irep2-keystone-implementation-plan.md` (§"most of
+`clang_cpp_adjust`'s completion must happen at converter construction") is right,
+and this pins it for the index/member surface specifically:
+
+- **`index2t`/`member2t` cannot hold a pointer source.** The construction asserts
+  permit only array/vector (`index2t`, `irep2_expr.h:1646`) or struct/union
+  (`member2t`) sources, plus the transient `symbol_type` B.1 resolves. So there is
+  **no pointer-sourced `index2t` to desugar** — the `p[i]`→`*(p+i)` rewrite
+  (`clang_c_adjust_expr.cpp:487-495`) and `adjust_member`'s base-wrapping
+  (`:296-312`) are structurally unreachable on IREP2 nodes.
+- **The converter already does the desugaring at construction.** `build_index`
+  (`python_expr_builder.cpp:106-122`) falls back to the legacy `index_exprt` for a
+  dyn-array/pointer source (Python lists, strings, dicts — the pointer-backed
+  containers) and only builds an `index2t` over an array/vector/`symbol_type`
+  source; `build_deref_member` (`:92-101`) pre-builds the `dereference2t` for a
+  pointer-to-struct instance, so the `member2t` source is already the resolved
+  struct. The pointer cases the S-list worried about therefore never reach an
+  IREP2 node needing coercion — they ride the legacy node `clang_cpp_adjust` still
+  owns until V.3 migrates *that* builder, a separate track.
+- **The one IREP2-applicable step — the `symbol_type` source follow — is already
+  B.1, and already unit-tested** for both arms (`python_adjust_test.cpp`: "B.1
+  follows a direct symbol_type member source to its struct" and "…index source to
+  its array").
+
+**Residual.** The sole `adjust_index` step with no converter/B.1 analogue is the
+index-operand typecast `gen_typecast(ns, index_expr, index_type())`
+(`clang_c_adjust_expr.cpp:484`): `build_index` migrates the index operand raw, and
+today `clang_cpp_adjust` supplies the `index_type()` cast (visible as the
+`[(signed long int)i]` casts in flag-off GOTO). Whether an IREP2 `index2t` *needs*
+that cast post-flip is a **symex-tolerance question that cannot be settled without
+the flip** (on the flag-on pipeline `clang_cpp_adjust` still runs first and
+supplies it, so any `python_adjust` reproduction is a byte-identical no-op — an
+inert-but-unverifiable-for-necessity capability). Recorded as an open flip-era
+item, not built speculatively.
+
+**Consequence for the plan.** S3 is **≈ done**: its only IREP2-applicable behaviour
+(symbol-type source following) landed in B.1. The remaining pre-flip S-work is
+therefore S4 (width reconciliation — largely drained by the keystone W-tasks 1–4b)
+and blocker #1 (post-conversion, per the probe above); S5 still trails blocker #1.
+This shortens the critical path to the S6 flip by removing an S-step that read as
+open but is structurally satisfied.
+#### Blocker 1 outcome (2026-07-11) — throw exception ids derived in `python_adjust`; the flip probe now verifies simple programs end-to-end
+
+`adjust_expr` gains a `code_cpp_throw2t` arm: an **empty** `exception_list`
+on an operand-carrying throw is completed via the new
+`derive_exception_ids`, mirroring `convert_exception_id` across every shape
+the frontend emits: `[bare class, direct bases...]` for a class operand
+(both the by-name `symbol_type2t` tag and the S2-resolved `struct_type2t`,
+whose `name` is the bare tag), `"void_ptr"` for the untypeable-raise
+`any_type()` operand (review-caught: `raise pkg.Error(...)` falls back to a
+`pointer(empty)` operand — a conservative-empty policy here would re-create
+the very `front()` crash the arm prevents), a `_ptr` suffix through real
+pointers, and legacy's never-empty synthetic-id fallback. A legacy-filled
+list is untouched (`adjust_side_effect_throw` overwrites unconditionally
+and runs first, so the arm is inert today); a bare re-raise keeps its empty
+list, as legacy does. Second review catch (M2): the type-symbol pre-pass's
+own write-back would have dropped the legacy-only `"bases"` sub-irep before
+this derivation read it — the pre-pass now **re-attaches `"bases"` on the
+legacy view across its write-back**, discharging the `"bases"` half of
+scope limit (4) for the tags it rewrites (unit-pinned end-to-end: a padded
+tag still yields the full `[E, Exception]` chain).
+
+**Flip-probe re-run (same env-gated hop-skip method, reverted after):**
+the four census probes that previously died 4/4 SIGSEGV in
+`remove_exceptions` now verify **4/4 `VERIFICATION SUCCESSFUL` with
+`clang_cpp_adjust` skipped entirely** — the accumulated pass (B.1 source
+resolution + S1 type completion + S2 literals + type-symbol pre-pass +
+exception ids) is already a sufficient resolver for simple programs, and
+the `python_irep2_adjust_nested_attr` fixture case also passes hop-off.
+Harder exception tests still fail hop-off (`except_tuple_types` FAILED:
+catch-side hierarchy matching needs the `"bases"` carriage — blocker 2;
+`try_except_else` retains one exit-invariant survivor), which is the point:
+**blockers 2–5 are now empirically measurable**, and the hop-off run of the
+exception suite is the natural work-list generator for them.
+
+#### Blocker 2 outcome (2026-07-11) — catch ids derived at construction; the exception suite holds correct verdicts hop-off
+
+The blocker-2 diagnosis sharpened on implementation: the catch side's
+failure mode was not the `"bases"` hierarchy after all, but the same
+missing-id disease as blocker 1 in a different organ. The per-handler
+`"exception_id"` attribute is set only by `clang_cpp_adjust::adjust_catch`
+(from the block's type; `clang_cpp_adjust_code.cpp:206-225`), and the
+source-form cpp-catch **migration reads that attribute**
+(`migrate.cpp:2488-2526`) — skip the hop and every handler migrates with an
+empty id that matches no throw, so catches silently never fire (the
+`except_tuple_types` wrong verdict). Fix: `emit_catch_block` now derives
+the id at construction — bare class name for a class tag, `"ellipsis"` for
+the bare-except catch-all, the type id otherwise — exactly what
+`adjust_catch`'s `convert_exception_id` `front()` yields for each shape.
+The legacy pass still runs today and overwrites with the identical value:
+**GOTO-byte A/B parity verified** (`--goto-functions-only`, stash method,
+byte-identical), 43/43 `regression/python` exception tests green.
+
+**Hop-off validation:** `except_tuple_types{,_fail}`, `try_except_else`,
+`list_index_valueerror{,_fail}` all give **correct verdicts** (positives
+SUCCESSFUL, negatives FAILED) with `clang_cpp_adjust` skipped — catch
+matching now works end-to-end without the legacy hop, throw + catch both.
+A broader hop-off sample (`dict40`, `raise_noarg_custom_exception`,
+`contains_dunder` pass) narrows the remaining gap to programs that produce
+**no verdict** hop-off: `try_finally` and `lambda_default_arg` (crash/hang
+— the S3 member/index-at-scale and S5 argument-cast families). Those are
+the blocker-3+ work-list.
+
+#### No-verdict diagnosis outcome (2026-07-11) — try_finally fixed (a blocker-2 straggler); scope limit (3) closed; the lambda-call rewrite is the pinned next step
+
+**`try_finally` was not a new family** — it was a blocker-2 straggler: the
+synthetic finally + re-raise catch-all handler is built outside
+`emit_catch_block` (`python_exception_handler.cpp`, `get_try_statement`)
+and set only its ellipsis *type*, so hop-off its `exception_id` migrated
+empty and failed `remove_exceptions`' handler-shape check with a clean
+diagnostic (not a crash). Fixed with the same construction-time pre-set
+(`exception_id = "ellipsis"`); GOTO-byte A/B identical on the normal
+pipeline; `try_finally` hop-off now **`VERIFICATION SUCCESSFUL`**. Census
+confirmed this was the only remaining cpp-catch construction site without
+the pre-set.
+
+**Scope limit (3) closed**: `adjust()` now completes each non-type
+Python-mode symbol's *own* type (the legacy `adjust_symbol` analogue,
+write-back only on change, unit-pinned with the non-Python skip). This
+resolved the lambda-*variable* symbol-type half of the
+`lambda_default_arg` hop-off failure.
+
+**Pinned next step — the lambda/def-alias *call* rewrite.** The remaining
+hop-off failure is precise: `goto-convert`'s `do_function_call_symbol`
+checks the callee symbol's table type (`builtin_functions.cpp:627`), and a
+lambda variable's table type is pointer-to-code (`python_lambda.cpp:50`).
+On the legacy pipeline `adjust_expr` re-types symbol expressions from the
+table and `adjust_side_effect_function_call` wraps the pointer callee in an
+implicit dereference (`clang_c_adjust_expr.cpp:918-926`), turning the
+direct-symbol call into a function-pointer call. A first
+`code_function_call2t` arm in `python_adjust` did **not fire** for the
+failing shape and was removed rather than shipped unproven — the next
+iteration must first dump the migrated body to identify the actual node
+kind carrying the call (likely a `sideeffect` function-call expression
+inside the statement, not a `code_function_call2t`), then rebuild the arm
+against that shape.
+
+#### Call-rewrite outcome (2026-07-11) — both call shapes covered; the residual is S4-in-the-body
+
+The shape hypothesis was right: an expression-context call (`assert f(3) ==
+6`) migrates as a **`sideeffect2t` with `allockind::function_call`** whose
+`operand` is the callee (`migrate.cpp:1967-1976`), not a
+`code_function_call2t` — which is why the first arm never fired.
+`python_adjust` now rewrites **both** shapes through a shared
+`wrap_function_pointer_callee`: re-type a symbol callee from the table when
+the table says pointer-to-code, dereference onto the `ns.follow`ed code
+type, and cast each argument to its declared parameter type
+(`typecast2tc`) — the legacy `adjust_symbol` + implicit-deref +
+`adjust_function_call_arguments` trio for exactly the calls the converter's
+indirect path leaves unreconciled. Inert on the live pipeline (legacy
+rewrote these calls pre-migration, so the callee arrives as a dereference);
+unit-pinned per shape plus the direct-call no-op.
+
+**Hop-off status of `lambda_default_arg`:** progressed from the
+goto-convert hard error to a **residual solver sort mismatch inside the
+lambda body** — the S4 general-reconciliation family proper (arithmetic
+over untyped-parameter carriers), not a call-shape issue. Per the census,
+S4 lives converter-side in `build_binary_expression`; the lambda body is
+the first concrete reproducer for it. That is the next work item, with the
+flag-off GOTO-byte A/B gate the census prescribed.
+
+#### S4 outcome (2026-07-11) — int/float reconciliation landed converter-side; the diverse hop-off sweep is 10/10 green
+
+The gap was narrower than the census framed it: `build_binary_expression`
+already normalises bv/bv width mixes (both the non-relational max-width
+rule and the relational common-width rule) — what it never reconciled was
+the **int/float mix and the float/float width mix**, exactly the casts
+`adjust_expr_binary_arithmetic` inserts post-hoc today. A 30-line block
+after the bitwise int-coercion completes them at construction: the integer
+side converts to the float type, the narrower float widens to the wider (C
+usual arithmetic conversions; CPython agrees for the shapes Python emits).
+The #5581 sub-`int` hazard does not arise — the block deliberately avoids
+`c_implicit_typecast_arithmetic` and its promotion floor, casting directly
+to the float operand's type.
+
+**Gates:** GOTO-byte A/B **byte-identical** vs base on both an
+`int * float` program and the `lambda_default_arg` test (the legacy pass
+re-derives the same casts and becomes a no-op — the census's idempotence
+prediction confirmed); 203/203 div/mod/pow/mult/compare/int8/dtype +
+326/326 math/gamma/round/float/lambda + 76/76 fixture.
+
+**Review outcomes folded in:** `promote_ieee_operands` became provably
+dead under the new block (the reconciliation runs on the same mutated
+operand references before any ieee id is picked) and was **removed** —
+the A/B dump stayed byte-identical to the original base with the removal
+in, which is the empirical C-Dead discharge; `try_resolve_constant_double`
+now peels typecasts over constants so `7 // 2.0`-style folds survive the
+new casts (the F2 model-size regression); the float32-Div parity question
+(F1) is **moot today** — `np.float32` scalars cannot reach the general
+binop path (unsupported constructor; numpy array ops promote in
+`numpy_call_expr`'s own rank table), recorded here in case that changes;
+an equal-width different-format float pair (a future bfloat16) would fall
+through unreconciled — commented at the site (F3).
+
+**Hop-off:** `lambda_default_arg` — the S4 reproducer — now
+**`VERIFICATION SUCCESSFUL` under Bitwuzla and Z3** with
+`clang_cpp_adjust` skipped, and a 10-test diverse sweep (exceptions,
+finally, lambdas, dicts, dunders, strings, f-strings, list ops) is **10/10
+SUCCESSFUL**. Every named flip blocker with a known reproducer is now
+discharged. **Next: the S6 flip-readiness census** — run the *full*
+`regression/python` suite hop-off (the RV2-shaped gate) to enumerate
+whatever long tail remains before the flip itself can be attempted.
+
+#### S6 flip-readiness census (2026-07-11) — 92.2% of the runnable suite passes hop-off; the 278-test gap classifies into five families
+
+> **2026-07-15 — figure is stale, see "F-A1 drill, round 2" below.** Spot-checks
+> of this census's own named F-A1/F-B examples no longer reproduce on current
+> master; a corpus-wide crash sweep found zero surviving F-A1 crashes. The true
+> gap is smaller than 278/271; a fresh census is needed for an exact number.
+
+**Method.** All 4,261 `regression/python` test dirs, hop-off (env-gated
+`clang_cpp_adjust` skip + `--python-irep2-adjust`, Bitwuzla, 20 s cap,
+8-way parallel), each CORE test's verdict compared against its `test.desc`
+expectation; then a **hop-on baseline over every non-OK test with the same
+harness/solver/cap** to separate flip-caused failures from pre-existing or
+environmental ones (local build is Bitwuzla-only; some descs pin other
+solvers or `--ir`). KNOWNBUG/FUTURE and no-verdict-expectation descs
+skipped (365).
+
+**Topline: 3,275 of 3,553 runnable CORE tests (92.2%) pass with
+`clang_cpp_adjust` skipped entirely.** 341 of the 619 hop-off failures
+also fail hop-on under the same harness (pre-existing/environmental —
+excluded). The genuine flip gap is **278 tests**, classifying by failure
+signature into:
+
+| Family | ~Count | Signature / examples | Reading |
+|---|---|---|---|
+| **F-A: crashes, unclassified** | ~160 | bare `signal N`, first-error lines are mypy noise | needs crash-report sub-classification (the macOS `.ips` + `atos` recipe); expect them to distribute over F-B–F-E's root causes |
+| **F-B: exit-invariant survivors** | 18 | `python_adjust: symbol 'python_user_main' retains N unresolved ... nodes` — `dict_bool_key`, `dict17/25/28/31`, ... | **S3's real work-list at last**: dict-heavy bodies carry member/index sources `resolve_source` cannot follow; also shows `adjust()`'s error return being ignored (flip prereq 6) lets a detected inconsistency proceed to a crash |
+| **F-C: string/array index lowering** | 12 | `Unexpected index type in computed goto`-style abort — `concat3/11`, `github_3090_2` | string concat/subscript path expects an adjusted index shape |
+| **F-D: bytes/tuple select** | 7+ | `Select operation applied to tuple` — `bytes`, `int_from_bytes_*` | bytes lowered as tuple reaches the solver unadjusted |
+| **F-E: complex/cmath** | ~30 | 23 conservative WRONG verdicts (expected SUCCESSFUL, got FAILED: `cmath_polar_rect_*`, `complex_cmath_log_edges`) + 7 timeouts (`complex_pow_*`) | the complex OM (a struct type) needs a completion the pass doesn't do; wrongness is in the conservative direction (spurious counterexample), not unsound |
+
+**Reading for the flip decision.** The gap is concentrated and
+family-shaped, not diffuse: dicts (F-B), string indexing (F-C), bytes
+(F-D), complex (F-E), plus an unclassified crash mass (F-A) that likely
+folds into the same causes. No family is evidence against the staged
+approach — each is the same "one legacy completion, one arm" pattern that
+S1–S4 retired one by one. **Next steps in order:** (1) sub-classify F-A by
+symbolicated crash site; (2) F-B first among fixes (it is S3's concrete
+work-list and doubles as the prereq-6 error-propagation fix); (3) the flip
+itself stays gated on RV2 (this census re-run clean, dual-solver) — flag
+default stays off until the gap is drained.
+
+#### F-A sub-classification (2026-07-11) — the crash mass resolves into six named root causes; one dominates
+
+The "bare-signal" appearance was an artifact of first-error pollution (the
+crashes print their diagnostic via `libc++abi: terminating ...`, and the
+census signature grep surfaced a preceding mypy line instead — no `.ips`
+symbolication needed). Re-sweeping all 246 crashing gap tests and grepping
+the exception text directly:
+
+| Sub-family | Count | Signature (examples) | Root cause |
+|---|---|---|---|
+| **F-A1: unresolved symbol type at an IREP2 consumer** | **116 (47%)** | `type2t::symbolic_type_excp` (`builtin2`, `cast`, `casting-chr-func`) | **the S3 gap proper** — a transient `symbol_type2t` survives into symex/solver code that needs a concrete type (get_width/follow); the single dominant flip work item |
+| F-A2: pointer-offset index | 24 | `Unexpected index type in compute_pointer_offset` (`concat3/11`, `github_3090_*`) | string concat/subscript emits an index shape only the legacy adjust normalises (F-C, larger than first counted) |
+| F-A3: Optional/tuple literal completion | 32 | the pass's own exit-invariant detail lines — `struct literal 'tag-Optional_signedbv...'` / `tag-tuple_*` (`dict17/25/28/31/32_fail`) | S2's arm cannot complete these literals (operand-count vs component mismatch, or unregistered synthetic tags); the invariant *catches* it but the discarded `adjust()` error return (prereq 6) lets execution continue into a crash — F-B and this are one family |
+| F-A4: any-type/void\* typecast | 15 | `Unexpected type in int/ptr typecast` (`github_2992_logic`, `github_3337_*`) | the unannotated-parameter void\* carrier meets a cast the legacy pass reshaped |
+| F-A5: encoding mismatches | 12+9+8+4 | `Bitwuzla error` / `Select on tuple` / call-arg `got struct, expected struct` / `shr` | S4/S5 residue in other node builders; the struct-vs-struct arg mismatch smells like padded-vs-unpadded layouts meeting at a call |
+| F-A6: harness artifact | 7 | `--python-irep2-adjust cannot be specified more than once` (`python_irep2_adjust_*`) | the census harness appended the flag to descs that already carry it — **false gap entries; true gap is 271, pass rate 92.4%** |
+
+**Consequence for ordering.** F-A1 (116) + F-A3/F-B (32+18 overlapping) are
+both S3-shaped: the resolution `python_adjust` performs today
+(member/index sources, aggregate literals) is not yet the *whole* body-wide
+completion — the next work item is drilling one F-A1 reproducer
+(`builtin2` is tiny) to find which node kind carries the surviving
+`symbol_type2t`, then extending the pass arm-by-arm exactly as S1–S4 did.
+Honouring `adjust()`'s error return (prereq 6) should land with the F-A3
+fix so detected inconsistencies degrade to a clean frontend error instead
+of a symex crash.
+
+#### F-A1 drill, round 1 (2026-07-11) — negative results that reshape the fix
+
+Drilling `builtin2` (`chr`/`ord` round-trip) hop-off with throw-site
+instrumentation produced three load-bearing negative results:
+
+1. **The throw is `empty_type2t::get_width`, not `symbol_type2t`'s** — the
+   exception class is shared, and the F-A1 family name ("unresolved symbol
+   type") was wrong in the specific: the surviving type is *empty*, not
+   by-name. All four `get_width` throw sites raise the same
+   `symbolic_type_excp`.
+2. **Bodies are clean at adjust time.** An instrumented walk over every
+   node the pass visits found no empty-typed *expression* (only code
+   statements, which are legitimately typeless). The empty-typed expression
+   that reaches `get_width` is therefore **introduced downstream of the
+   pass** — during goto-convert or symex — so no `python_adjust` arm can
+   fix F-A1 directly, and a speculative empty-symbol re-type arm written
+   during the drill was discarded unproven (C-Live discipline).
+3. **The observable GOTO delta for `builtin2` is narrow**: hop-on carries
+   legacy `adjust_expr_rel`'s integer promotions in the return expression
+   (`(signed int)(back_to_char[0]) == 65`); hop-off compares the raw
+   `char`-typed accesses. Both shapes are IREP2-legal (same-type operands),
+   so the promotions themselves are unlikely to be the crash cause — but
+   they are the only body difference, so the crash path runs through how
+   symex/goto-convert consume the unpromoted form (suspect: the
+   `char[0]`-typed string variable's zero-size array meeting the return
+   binding of `__python_chr`'s `char*`).
+
+**Next probe (round 2):** instrument the *consumer* — catch
+`symbolic_type_excp` at its symex/goto-convert call frames (or log the
+expression being widthed) to name the constructing site, rather than
+walking the pass's view again. The fix will live where that node is built,
+not in `python_adjust`.
+
+#### F-A1 drill, round 2 (2026-07-15) — the reproducers are gone; the census figure is stale
+
+Ran the round-2 probe: all four `get_width` throw sites (`empty_type2t`,
+`symbol_type2t`, `cpp_name_type2t`, `code_type2t`) instrumented with a
+`backtrace()`/`backtrace_symbols_fd()` dump on throw, plus an env-var gate
+(`ESBMC_PY_SKIP_LEGACY_ADJUST`) reproducing the hop-off harness (skip
+`clang_cpp_adjust`, run only `--python-irep2-adjust`) — both throwaway,
+reverted after the drill, not landed.
+
+**Result: none of round 1's named reproducers still crash.** `builtin2`,
+`casting-chr-func`, and `cast` (the F-A1 census examples) all now run
+hop-off to their expected `test.desc` verdict with zero exceptions thrown.
+Spot-checking the F-B family too (`dict17`/`dict25`/`dict28`/`dict31` —
+"symbol retains N unresolved nodes" survivors): all four also pass hop-off
+cleanly now, no exit-invariant error.
+
+**Corpus-wide confirmation.** A hop-off sweep over every `CORE`
+`regression/python` test (8s cap, 8-way parallel, keeping any abnormal
+exit) found 66 genuine aborts — but **grepping all 66 logs for the
+throw-site markers found zero hits**: not one of the 66 crashes routes
+through `type2t::get_width()` on an unresolved type. The F-A1 crash family,
+as characterized by the 2026-07-11 census, does not reproduce anywhere in
+the current CORE corpus under hop-off.
+
+**Reading.** `git log` confirms nothing in the V.1k/`python_adjust`/
+`clang_cpp_adjust` area has changed since round 1's PR #6003 — so this
+isn't a regression-fix landing since the census; the S1–S6 stack
+(`#5985`→`#6003`), once fully merged together, evidently resolved more of
+the F-A1/F-B gap than any single incremental PR's own testing showed. The
+**S6 census's 271-test/92.4%-pass figure is stale** and the true current
+gap is smaller — by how much is unmeasured; an attempt to re-run the exact
+S6 verdict-vs-`test.desc` methodology for a fresh number was abandoned
+this round (see gotcha below) and should be redone with sturdier tooling
+before more F-A1/F-B-shaped work is attempted, to avoid fixing something
+already fixed.
+
+**Gotcha pinned for the next full-corpus sweep in this environment:** on
+macOS, the harness's default `bash` (invoked as `/bin/bash` with no
+explicit path) is the system-shipped **3.2** (no `mapfile`, pre-GPLv3),
+while `bash` resolved via `$PATH` is Homebrew's **5.3**. A script written
+assuming bash 4+ array/`mapfile` features runs fine when hand-tested via
+an explicit `bash script.sh` invocation (PATH-resolved 5.3) but can silently
+misbehave — or the *tool's own* command layer executes under 3.2 even when
+a nested `bash -c` was intended to pick up 5.3, depending on how the
+Bash-tool wraps the command. Write full-corpus sweep scripts portable to
+bash 3.2 (plain `while read` line loops instead of `mapfile`, no bash-4-only
+array/associative-array syntax) and always keep the raw `test.desc` line
+count off `wc -l` (which undercounts by one when the file lacks a trailing
+newline — several `test.desc` files do) — read every line with a
+`while IFS= read -r line || [ -n "$line" ]` loop instead, which handles a
+missing final newline correctly.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written

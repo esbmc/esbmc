@@ -58,6 +58,13 @@ Many SMT solvers are currently supported:
 
 In addition, ESBMC can be configured to use the SMTLIB interactive text format with a pipe to communicate with an arbitrary solver process, although there are not insignificant overheads involved.
 
+Two further backends drive external one-shot solver processes over SMT-LIB2 files (built by default via `-DENABLE_BITWUZLLOB=On` / `-DENABLE_NEUROSYM=On`; the external program is only needed at runtime):
+
+ * `--bitwuzllob` runs Bitwuzla on the massively parallel Mallob platform (`--bitwuzllob-prog`, default `mallob -mono=%f -mono-app=SMT`).
+ * `--neurosym` runs NeuroSym, a neural-guided SMT solver (a GAN proposes candidate models, with a Z3 fallback preserving soundness and completeness) for the QF_BV fragment (`--neurosym-prog`, default `python main.py %f`, run from a NeuroSym checkout with Python, PyTorch and Z3 installed). ESBMC flattens arrays, structs and floating-point to pure bit-vectors for it; integer/real mode (`--ir`) is not supported.
+
+Both are one-shot backends: incremental strategies (`--k-induction`, `--incremental-bmc`, ...) are rejected, and counterexamples require a local interactive SMT-LIB2 model solver (`--bitwuzllob-model-prog` / `--neurosym-model-prog`, e.g. `"z3 -in"`) or `--result-only`.
+
 ## Installing ESBMC
 
 ### Ubuntu

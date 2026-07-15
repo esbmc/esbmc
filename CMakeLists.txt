@@ -17,6 +17,7 @@ set(ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION
 # The only default solver available is smtlib
 set(ESBMC_AVAILABLE_SOLVERS "smtlib")
 
+set(MIN_SUPPORTED_LLVM_VERSION_MAJOR 18)
 set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 22)
 
 #################################

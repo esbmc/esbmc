@@ -467,6 +467,27 @@ void goto_convertt::convert_block(const codet &code, goto_programt &dest)
   targets.destructor_stack = old_stack;
 }
 
+void goto_convertt::convert_controlled(const codet &code, goto_programt &dest)
+{
+  // A braced block gets its own destructor scope via convert_block; a bare
+  // controlled substatement (e.g. `if (c) throw std::bad_alloc();`) does not, so
+  // full-expression temporaries created in it would leak their destructors onto
+  // the enclosing block's stack and run on sibling paths where the object was
+  // never constructed -> spurious use-after-free (#5950). Wrap a non-block
+  // substatement so it is scoped identically to a braced one.
+  if (code.get_statement() == "block")
+  {
+    convert(code, dest); // convert_block already scopes the destructor stack
+    return;
+  }
+
+  code_blockt block;
+  block.copy_to_operands(code);
+  block.location() = code.location();
+  block.end_location(code.location());
+  convert(block, dest); // dispatches to convert_block, which scopes + unwinds
+}
+
 void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
 {
   if (code.operands().size() != 1)
@@ -774,6 +795,32 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
       replace_new_object(var, ctor_code);
       convert(to_code(ctor_code), dest);
     }
+    else if (
+      initializer.id() == "sideeffect" &&
+      initializer.statement() == "temporary_object" &&
+      initializer.operands().size() == 1 &&
+      initializer.op0().id() == "sideeffect" &&
+      initializer.op0().statement() == "function_call")
+    {
+      // A temporary_object wrapping a plain (non-constructor) function call
+      // (C++ `T t = f(...);` where f returns T by value): call it with `var`
+      // as the lhs directly instead of routing the result through a fresh
+      // return_value$ temporary. The generic path below would give that
+      // temporary its own scope-exit destructor for what is semantically the
+      // same object as `var` (github #2306). `var`'s own destructor is
+      // scheduled below via targets.destructor_stack regardless of which
+      // branch above ran; if that destructor appears to not fire for a
+      // function ending in an explicit `return <expr>;`, look at
+      // convert_return's handling of its local unwind program instead of
+      // here -- that path is a separate, pre-existing gap.
+      const exprt &call_expr = initializer.op0();
+      code_function_callt call;
+      call.location() = call_expr.location();
+      call.lhs() = var;
+      call.function() = call_expr.op0();
+      call.arguments() = call_expr.op1().operands();
+      convert_function_call(call, dest);
+    }
     else
     {
       goto_programt sideeffects;
@@ -798,8 +845,17 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   }
 
   // do destructor
+  //
+  // The C++ frontend's `array_init$` is a construction helper: it builds an
+  // aggregate/array member, then copies its contents into the object under
+  // construction (`*this = array_init$`).  Giving it an automatic scope-exit
+  // destructor would run the copied members' destructors a second time (and
+  // double-free any resource-owning member), so skip it -- its members are
+  // owned and destroyed through `*this`.  `array_init$` is a reserved
+  // synthetic name (`$` cannot appear in a user identifier), so this cannot
+  // match a user variable.
   code_function_callt destructor;
-  if (get_destructor(ns, s->get_type(), destructor))
+  if (s->name != "array_init$" && get_destructor(ns, s->get_type(), destructor))
   {
     // add "this"
     address_of_exprt this_expr(symbol_expr);
@@ -1172,7 +1228,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
 
   // do the w label
   goto_programt tmp_w;
-  convert(to_code(code.op3()), tmp_w);
+  convert_controlled(to_code(code.op3()), tmp_w);
 
   // y: goto u;
   goto_programt tmp_y;
@@ -1241,7 +1297,7 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
 
   // do the x label
   goto_programt tmp_x;
-  convert(to_code(code.op1()), tmp_x);
+  convert_controlled(to_code(code.op1()), tmp_x);
 
   // y: if(c) goto v;
   y->make_goto(v);
@@ -1310,7 +1366,7 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
 
   // do the w label
   goto_programt tmp_w;
-  convert(to_code(code.op1()), tmp_w);
+  convert_controlled(to_code(code.op1()), tmp_w);
   goto_programt::targett w = tmp_w.instructions.begin();
 
   // y: if(c) goto w;
@@ -1789,12 +1845,12 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
 
   // convert 'then'-branch
   goto_programt tmp_op1;
-  convert(to_code(code.op1()), tmp_op1);
+  convert_controlled(to_code(code.op1()), tmp_op1);
 
   goto_programt tmp_op2;
 
   if (has_else)
-    convert(to_code(code.op2()), tmp_op2);
+    convert_controlled(to_code(code.op2()), tmp_op2);
 
   exprt tmp_guard = code.op0();
 

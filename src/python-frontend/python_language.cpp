@@ -1,9 +1,9 @@
 #include <python-frontend/python_language.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_annotation.h>
-#include <python-frontend/global_scope.h>
+#include <python-frontend/python_annotation/python_annotation.h>
+#include <python-frontend/module/global_scope.h>
 #include <python-frontend/python_adjust.h>
-#include <python-frontend/round_to_nearest_guard.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/param_annotations.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message.h>

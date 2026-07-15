@@ -23,7 +23,25 @@ A `test.desc` file may also contain `CHECK_JSON` lines, after the stdout/stderr 
 - `<op>`. One of `==`, `!=`, `<`, `>`, `<=`, `>=`.
 - `<literal>`. A JSON literal: number, `"string"`, `true`, `false`, or `null`.
 
-When any `CHECK_JSON` directive is present the runner executes ESBMC in a fresh temporary directory so parallel tests cannot clobber each other's output files. The test passes only if every regex matches and every `CHECK_JSON` passes.
+A `test.desc` file may also contain `CHECK_FILE` lines for non-JSON output files ESBMC writes (for example an SMT-LIB2 dump from `--output <file>`), which stdout/stderr regexes cannot reach. Each line has the form `CHECK_FILE <file> <op> <regex>`, where:
+
+- `<file>`. Path of the file relative to ESBMC's working directory.
+- `<op>`. Either `contains` (the regex must match somewhere in the file) or `absent` (the regex must not match).
+- `<regex>`. A Python regex matched with `re.MULTILINE`; the rest of the line, so it may contain spaces.
+
+When any `CHECK_JSON` or `CHECK_FILE` directive is present the runner executes ESBMC in a fresh temporary directory so parallel tests cannot clobber each other's output files. The test passes only if every regex matches and every `CHECK_JSON`/`CHECK_FILE` passes.
+
+For example, `regression/smtlib/github_6059/test.desc` asserts the `--output` dump holds the real formula and not the status string that used to overwrite it:
+
+```
+CORE
+main.c
+--smtlib --smt-formula-only --output out.smt2
+^SMT formula written to output file out\.smt2$
+CHECK_FILE out.smt2 contains \(check-sat\)
+CHECK_FILE out.smt2 contains \(assert
+CHECK_FILE out.smt2 absent SMT formula dumped successfully
+```
 
 For example, `regression/goto-coverage/k_path_cov_json_1/test.desc` is:
 

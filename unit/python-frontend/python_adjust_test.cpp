@@ -5,6 +5,8 @@
 #include <util/context.h>
 #include <util/symbol.h>
 #include <util/c_types.h>
+#include <util/config.h>
+#include <util/migrate.h>
 #include <irep2/irep2_utils.h>
 #include <string>
 #include <vector>
@@ -263,6 +265,10 @@ TEST_CASE(
 {
   // A member2t whose source is already a resolved struct must be left alone
   // (idempotence: re-running the adjuster is a no-op on resolved nodes).
+  // A concrete-struct source drives adjust_type's struct arm through
+  // add_padding, whose alignment arithmetic reads config.ansi_c; set the data
+  // model so the pass does not divide by a zero alignment (SIGFPE on x86).
+  config.ansi_c.set_data_model(configt::LP64);
   contextt ctx;
   const type2tc struct_t = add_struct_type(ctx, "Baz", "z");
 
@@ -311,6 +317,10 @@ TEST_CASE(
   // adjust() walks code symbols, resolving transient member sources in the
   // body and writing the symbol back. The body wraps `obj.x` (obj : tag-Foo);
   // after adjust() the stored body's member source is the resolved struct.
+  // The pre-pass adjust_type's the concrete tag-Foo struct, driving
+  // add_padding's alignment arithmetic (config.ansi_c); set the data model so
+  // it does not divide by a zero alignment (SIGFPE on x86).
+  config.ansi_c.set_data_model(configt::LP64);
   contextt ctx;
   const type2tc struct_t = add_struct_type(ctx, "Foo", "x");
 
@@ -340,6 +350,10 @@ TEST_CASE(
   // When the body has nothing to resolve (its member source is already a
   // resolved struct), adjust() must not rewrite the symbol — the value stays
   // byte-identical so the legacy cache and goto-convert body are untouched.
+  // The concrete-struct source drives add_padding, whose alignment arithmetic
+  // reads config.ansi_c; set the data model so it does not divide by a zero
+  // alignment (SIGFPE on x86).
+  config.ansi_c.set_data_model(configt::LP64);
   contextt ctx;
   const type2tc struct_t = add_struct_type(ctx, "Qux", "w");
 
@@ -413,10 +427,10 @@ TEST_CASE(
   "[python-adjust]")
 {
   // constant_struct2t is the third relaxed construction assert (irep2_expr.h):
-  // its own type may be a transient by-name symbol_type2t. The pass does not
-  // resolve aggregate-literal types (that is the B.5-era whole-body resolution),
-  // so a survivor must be caught by the post-adjust invariant and adjust() must
-  // return true (error).
+  // its own type may be a transient by-name symbol_type2t. S2 resolves a
+  // *registered* tag (tests below); this literal's tag-Rec is unregistered,
+  // so it must survive resolution and be caught by the post-adjust invariant:
+  // adjust() returns true (error).
   contextt ctx;
   const expr2tc lit = constant_struct2tc(
     symbol_type2tc("tag-Rec"),
@@ -427,4 +441,994 @@ TEST_CASE(
 
   python_adjust adjuster(ctx);
   REQUIRE(adjuster.adjust());
+}
+
+// --- S1: IREP2-native adjust_type (V.1k/B.5 combined-milestone step S1) ---
+//
+// The padding tests need the target data model set (add_padding's alignment
+// arithmetic reads config.ansi_c); set it explicitly so the tests do not
+// depend on invocation order.
+
+TEST_CASE(
+  "python_adjust S1 adjust_type expands a macro symbol type, chained",
+  "[python-adjust]")
+{
+  // py_alias2 -> py_alias1 -> int32: the macro arm must recurse until the
+  // type is concrete, mirroring clang_c_adjust::adjust_type's is_macro loop.
+  contextt ctx;
+  symbolt alias1;
+  alias1.id = alias1.name = "py_alias1";
+  alias1.mode = "Python";
+  alias1.is_type = true;
+  alias1.is_macro = true;
+  alias1.set_type(get_int32_type());
+  ctx.add(alias1);
+
+  symbolt alias2;
+  alias2.id = alias2.name = "py_alias2";
+  alias2.mode = "Python";
+  alias2.is_type = true;
+  alias2.is_macro = true;
+  alias2.set_type(symbol_type2tc("py_alias1"));
+  ctx.add(alias2);
+
+  type2tc t = symbol_type2tc("py_alias2");
+  python_adjust adjuster(ctx);
+  adjuster.adjust_type(t);
+
+  REQUIRE(t == get_int32_type());
+}
+
+TEST_CASE(
+  "python_adjust S1 adjust_type leaves a non-macro tag by-name",
+  "[python-adjust]")
+{
+  // The RV-adj6 parity subtlety: the legacy pass only overwrites is_macro
+  // symbol types; a struct tag reference stays by-name and is followed at
+  // consumption time. Eagerly resolving it here would diverge.
+  contextt ctx;
+  add_struct_type(ctx, "Foo", "x");
+
+  type2tc t = symbol_type2tc("tag-Foo");
+  const type2tc original = t;
+  python_adjust adjuster(ctx);
+  adjuster.adjust_type(t);
+
+  REQUIRE(t == original);
+}
+
+TEST_CASE(
+  "python_adjust S1 adjust_type completes an array element type",
+  "[python-adjust]")
+{
+  // Array arm: the element type recurses through adjust_type (here a macro
+  // alias expands to int32) while the size expression is preserved.
+  contextt ctx;
+  symbolt alias;
+  alias.id = alias.name = "py_elem_alias";
+  alias.mode = "Python";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(get_int32_type());
+  ctx.add(alias);
+
+  const expr2tc size = gen_long(get_uint64_type(), 4);
+  type2tc t = array_type2tc(symbol_type2tc("py_elem_alias"), size, false);
+  python_adjust adjuster(ctx);
+  adjuster.adjust_type(t);
+
+  REQUIRE(is_array_type(t));
+  REQUIRE(to_array_type(t).subtype == get_int32_type());
+  REQUIRE(to_array_type(t).array_size == size);
+}
+
+TEST_CASE(
+  "python_adjust S1 adjust_type pads a misaligned struct like add_padding",
+  "[python-adjust]")
+{
+  // struct { int8 c; int32 i; } needs 3 bytes of padding after `c` on any
+  // data model with 4-byte int alignment. The pass must reproduce the legacy
+  // add_padding layout exactly (RV-adj5): one unsignedbv(24) padding member
+  // between the fields, total size a multiple of the alignment.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  type2tc t = struct_type2tc(
+    std::vector<type2tc>{signedbv_type2tc(8), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "Packed2",
+    false);
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_type(t);
+
+  REQUIRE(is_struct_type(t));
+  const struct_type2t &st = to_struct_type(t);
+  REQUIRE(st.members.size() == 3);
+  REQUIRE(st.member_names[0] == "c");
+  REQUIRE(st.member_names[2] == "i");
+  REQUIRE(is_unsignedbv_type(st.members[1]));
+  REQUIRE(st.members[1]->get_width() == 24);
+
+  // Idempotence: a second pass over the already-padded struct is a no-op —
+  // the inertness guarantee for the live (post-clang_cpp_adjust) pipeline.
+  const type2tc padded = t;
+  adjuster.adjust_type(t);
+  REQUIRE(t == padded);
+}
+
+TEST_CASE(
+  "python_adjust S1 adjust_type pads a union like add_padding, idempotently",
+  "[python-adjust]")
+{
+  // union { int8 b[5]; int32 i; } is 5 bytes wide with 4-byte alignment, so
+  // add_padding appends a trailing `$pad` member widening it to 8 bytes. The
+  // second pass exercises the `$pad` case of the #is_padding re-derivation:
+  // the union arm must be as idempotent as the struct one.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc bytes5 =
+    array_type2tc(signedbv_type2tc(8), gen_long(get_uint64_type(), 5), false);
+  type2tc t = union_type2tc(
+    std::vector<type2tc>{bytes5, get_int32_type()},
+    std::vector<irep_idt>{"b", "i"},
+    std::vector<irep_idt>{"b", "i"},
+    "U1",
+    false);
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_type(t);
+
+  REQUIRE(is_union_type(t));
+  const union_type2t &ut = to_union_type(t);
+  REQUIRE(ut.members.size() == 3);
+  REQUIRE(ut.member_names[2] == "$pad");
+  REQUIRE(is_unsignedbv_type(ut.members[2]));
+
+  const type2tc padded = t;
+  adjuster.adjust_type(t);
+  REQUIRE(t == padded);
+}
+
+TEST_CASE(
+  "python_adjust S1 adjust_type completes a struct member's macro type",
+  "[python-adjust]")
+{
+  // Aggregate-member recursion: a member whose type is a macro alias expands
+  // before padding runs, so the layout is computed over concrete types.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  symbolt alias;
+  alias.id = alias.name = "py_field_alias";
+  alias.mode = "Python";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(get_int32_type());
+  ctx.add(alias);
+
+  type2tc t = struct_type2tc(
+    std::vector<type2tc>{symbol_type2tc("py_field_alias")},
+    std::vector<irep_idt>{"v"},
+    std::vector<irep_idt>{"v"},
+    "Rec1",
+    false);
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_type(t);
+
+  REQUIRE(is_struct_type(t));
+  REQUIRE(to_struct_type(t).members.at(0) == get_int32_type());
+}
+
+TEST_CASE(
+  "python_adjust S2 completes a by-name struct literal to its resolved type",
+  "[python-adjust]")
+{
+  // The OM exception-literal shape (raise IndexError(...)): a
+  // constant_struct2t typed by-name whose operands are already complete. S2
+  // retypes it to the followed struct — eagerly, unlike the legacy
+  // adjust_struct (RV-adj6) — and the exit invariant stops flagging it.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc struct_t = add_struct_type(ctx, "Exc", "id");
+
+  const expr2tc lit = constant_struct2tc(
+    symbol_type2tc("tag-Exc"),
+    std::vector<expr2tc>{gen_zero(get_int32_type())});
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(lit)});
+  add_code_symbol(ctx, "py_adjust_s2_lit_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  const expr2tc &stored = ctx.find_symbol("py_adjust_s2_lit_sym")->get_value2();
+  const expr2tc &stmt = to_code_block2t(stored).operands.at(0);
+  const expr2tc &resolved = to_code_expression2t(stmt).operand;
+  REQUIRE(is_constant_struct2t(resolved));
+  REQUIRE(resolved->type == struct_t);
+  REQUIRE(to_constant_struct2t(resolved).datatype_members.size() == 1);
+}
+
+TEST_CASE(
+  "python_adjust S2 inserts missing padding operands into a struct literal",
+  "[python-adjust]")
+{
+  // A converter-built literal carries only the value operands; the followed
+  // struct pads to { c, anon_pad$, i } (S1), so S2 must insert a zero pad
+  // operand at position 1, mirroring the legacy adjust_struct insertion.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc unpadded = struct_type2tc(
+    std::vector<type2tc>{signedbv_type2tc(8), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "PadLit",
+    false);
+  symbolt type_sym;
+  type_sym.id = type_sym.name = "tag-PadLit";
+  type_sym.mode = "Python";
+  type_sym.is_type = true;
+  type_sym.set_type(unpadded);
+  ctx.add(type_sym);
+
+  expr2tc lit = constant_struct2tc(
+    symbol_type2tc("tag-PadLit"),
+    std::vector<expr2tc>{
+      gen_zero(signedbv_type2tc(8)), gen_zero(get_int32_type())});
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(lit);
+
+  REQUIRE(is_constant_struct2t(lit));
+  REQUIRE(is_struct_type(lit->type));
+  const struct_type2t &st = to_struct_type(lit->type);
+  const constant_struct2t &cs = to_constant_struct2t(lit);
+  REQUIRE(st.members.size() == 3);
+  REQUIRE(cs.datatype_members.size() == 3);
+  REQUIRE(is_unsignedbv_type(cs.datatype_members[1]->type));
+  REQUIRE(cs.datatype_members[1]->type->get_width() == 24);
+  REQUIRE(cs.datatype_members[2]->type == get_int32_type());
+
+  // Idempotence: the completed literal is stable under a second walk.
+  const expr2tc done = lit;
+  adjuster.adjust_expr(lit);
+  REQUIRE(lit == done);
+}
+
+TEST_CASE(
+  "python_adjust S2 completes a macro-tag struct literal",
+  "[python-adjust]")
+{
+  // A literal typed by a macro alias of a struct: the leading type-completion
+  // block must NOT retype it bare (that would skip the padding-operand
+  // insertion); the S2 arm owns the shape end-to-end and pads it.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc unpadded = struct_type2tc(
+    std::vector<type2tc>{signedbv_type2tc(8), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "MacroLit",
+    false);
+  symbolt alias;
+  alias.id = alias.name = "py_struct_alias";
+  alias.mode = "Python";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(unpadded);
+  ctx.add(alias);
+
+  expr2tc lit = constant_struct2tc(
+    symbol_type2tc("py_struct_alias"),
+    std::vector<expr2tc>{
+      gen_zero(signedbv_type2tc(8)), gen_zero(get_int32_type())});
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(lit);
+
+  REQUIRE(is_constant_struct2t(lit));
+  REQUIRE(is_struct_type(lit->type));
+  REQUIRE(to_struct_type(lit->type).members.size() == 3);
+  REQUIRE(to_constant_struct2t(lit).datatype_members.size() == 3);
+}
+
+TEST_CASE(
+  "python_adjust S2 leaves a structurally short literal for the invariant",
+  "[python-adjust]")
+{
+  // A literal missing a *value* operand (only `c`, no `i`): pad insertion
+  // cannot make the counts match, so the literal must stay by-name and be
+  // flagged — never rebuilt with misaligned operands.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc unpadded = struct_type2tc(
+    std::vector<type2tc>{signedbv_type2tc(8), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "ShortLit",
+    false);
+  symbolt type_sym;
+  type_sym.id = type_sym.name = "tag-ShortLit";
+  type_sym.mode = "Python";
+  type_sym.is_type = true;
+  type_sym.set_type(unpadded);
+  ctx.add(type_sym);
+
+  const expr2tc lit = constant_struct2tc(
+    symbol_type2tc("tag-ShortLit"),
+    std::vector<expr2tc>{gen_zero(signedbv_type2tc(8))});
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(lit)});
+  add_code_symbol(ctx, "py_adjust_s2_short_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE(adjuster.adjust());
+}
+
+TEST_CASE(
+  "python_adjust invariant flags a resolved literal with an operand-count "
+  "mismatch",
+  "[python-adjust]")
+{
+  // The durable half of the S2 safety net: even a literal that already
+  // carries a resolved struct type is flagged when its operand count
+  // disagrees with the component list (constant_struct2t's constructor
+  // asserts only the type kind, so this would otherwise reach symex).
+  // The pre-pass adjust_type's the concrete tag-Mismatch struct, driving
+  // add_padding's alignment arithmetic (config.ansi_c); set the data model so
+  // it does not divide by a zero alignment (SIGFPE on x86).
+  config.ansi_c.set_data_model(configt::LP64);
+  contextt ctx;
+  const type2tc struct_t = add_struct_type(ctx, "Mismatch", "x");
+
+  const expr2tc lit = constant_struct2tc(struct_t, std::vector<expr2tc>{});
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(lit)});
+  add_code_symbol(ctx, "py_adjust_s2_mismatch_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE(adjuster.adjust());
+}
+
+TEST_CASE(
+  "python_adjust S2 leaves a scalar-tag struct literal for the invariant",
+  "[python-adjust]")
+{
+  // tag-Scalar follows to int (not a struct): S2 must not retype the literal;
+  // the survivor is flagged by the exit invariant instead.
+  contextt ctx;
+  symbolt scalar_type_sym;
+  scalar_type_sym.id = scalar_type_sym.name = "tag-Scalar";
+  scalar_type_sym.mode = "Python";
+  scalar_type_sym.is_type = true;
+  scalar_type_sym.set_type(get_int32_type());
+  ctx.add(scalar_type_sym);
+
+  const expr2tc lit = constant_struct2tc(
+    symbol_type2tc("tag-Scalar"),
+    std::vector<expr2tc>{gen_zero(get_int32_type())});
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(lit)});
+  add_code_symbol(ctx, "py_adjust_s2_scalar_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE(adjuster.adjust());
+}
+
+TEST_CASE(
+  "python_adjust pre-pass completes a Python tag symbol in the table",
+  "[python-adjust]")
+{
+  // The type-symbol pre-pass (mirroring clang_c_adjust::adjust()'s first
+  // loop): an unpadded Python-mode tag with a macro-typed member is
+  // macro-expanded and padded in the symbol table itself, so later
+  // resolution follows the fixed-up layout.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  symbolt alias;
+  alias.id = alias.name = "py_prepass_alias";
+  alias.mode = "Python";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(signedbv_type2tc(8));
+  ctx.add(alias);
+
+  const type2tc unpadded = struct_type2tc(
+    std::vector<type2tc>{symbol_type2tc("py_prepass_alias"), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "PrePad",
+    false);
+  symbolt tag;
+  tag.id = tag.name = "tag-PrePad";
+  tag.mode = "Python";
+  tag.is_type = true;
+  tag.set_type(unpadded);
+  ctx.add(tag);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  const type2tc &stored = ctx.find_symbol("tag-PrePad")->get_type2();
+  REQUIRE(is_struct_type(stored));
+  const struct_type2t &st = to_struct_type(stored);
+  REQUIRE(st.members.size() == 3);
+  REQUIRE(st.members[0] == signedbv_type2tc(8));
+  REQUIRE(is_unsignedbv_type(st.members[1]));
+  REQUIRE(st.member_names[2] == "i");
+}
+
+TEST_CASE(
+  "python_adjust pre-pass skips a non-Python type symbol",
+  "[python-adjust]")
+{
+  // C/C++-header types may carry bitfields whose #bitfield flag the IREP2
+  // round-trip drops; the pre-pass must not re-pad them (RV-adj4 scoping).
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc unpadded = struct_type2tc(
+    std::vector<type2tc>{signedbv_type2tc(8), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "CPad",
+    false);
+  symbolt tag;
+  tag.id = tag.name = "tag-CPad";
+  tag.mode = "C";
+  tag.is_type = true;
+  tag.set_type(unpadded);
+  ctx.add(tag);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  REQUIRE(ctx.find_symbol("tag-CPad")->get_type2() == unpadded);
+}
+
+TEST_CASE(
+  "python_adjust pre-pass output feeds the value walk's resolution",
+  "[python-adjust]")
+{
+  // End-to-end across the two phases: the tag starts unpadded in the table;
+  // the pre-pass pads it, and the value walk's resolve_source then follows a
+  // transient member source to the *padded* layout — the reason the type
+  // pre-pass must run first (clang_c_adjust's "so that symbolic-type
+  // resolution always receives fixed up types").
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc unpadded = struct_type2tc(
+    std::vector<type2tc>{signedbv_type2tc(8), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "Chain",
+    false);
+  symbolt tag;
+  tag.id = tag.name = "tag-Chain";
+  tag.mode = "Python";
+  tag.is_type = true;
+  tag.set_type(unpadded);
+  ctx.add(tag);
+
+  const expr2tc source = symbol2tc(symbol_type2tc("tag-Chain"), "obj");
+  const expr2tc member = member2tc(get_int32_type(), source, "i");
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(member)});
+  add_code_symbol(ctx, "py_adjust_chain_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  const expr2tc &stored = ctx.find_symbol("py_adjust_chain_sym")->get_value2();
+  const expr2tc &stmt = to_code_block2t(stored).operands.at(0);
+  const expr2tc &resolved = to_code_expression2t(stmt).operand;
+  REQUIRE(is_member2t(resolved));
+  const type2tc &src_type = to_member2t(resolved).source_value->type;
+  REQUIRE(is_struct_type(src_type));
+  REQUIRE(to_struct_type(src_type).members.size() == 3);
+}
+
+TEST_CASE(
+  "python_adjust adjust() completes a non-type symbol's own type",
+  "[python-adjust]")
+{
+  // The legacy adjust_symbol analogue (scope limit (3) closing): a variable
+  // whose type is a by-name macro alias — the lambda-variable shape — is
+  // completed in the table so goto-convert sees the concrete type.
+  contextt ctx;
+  symbolt alias;
+  alias.id = alias.name = "py_var_alias";
+  alias.mode = "Python";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(get_int32_type());
+  ctx.add(alias);
+
+  symbolt var;
+  var.id = var.name = "py_adjust_var_sym";
+  var.mode = "Python";
+  var.set_type(symbol_type2tc("py_var_alias"));
+  ctx.add(var);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  REQUIRE(
+    ctx.find_symbol("py_adjust_var_sym")->get_type2() == get_int32_type());
+}
+
+TEST_CASE(
+  "python_adjust adjust() skips a non-Python symbol's own type",
+  "[python-adjust]")
+{
+  // Same RV-adj4 scoping as the type-symbol pre-pass.
+  contextt ctx;
+  symbolt alias;
+  alias.id = alias.name = "c_var_alias";
+  alias.mode = "C";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(get_int32_type());
+  ctx.add(alias);
+
+  symbolt var;
+  var.id = var.name = "c_adjust_var_sym";
+  var.mode = "C";
+  var.set_type(symbol_type2tc("c_var_alias"));
+  ctx.add(var);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  const type2tc &kept = ctx.find_symbol("c_adjust_var_sym")->get_type2();
+  REQUIRE(is_symbol_type(kept));
+}
+
+namespace
+{
+// Register a lambda/def-alias call variable: a Python-mode symbol whose
+// table type is pointer-to-code.
+type2tc add_funcptr_var(contextt &ctx, const std::string &id)
+{
+  const type2tc code_t = code_type2tc(
+    std::vector<type2tc>{get_int32_type()},
+    get_int32_type(),
+    std::vector<irep_idt>{"x"},
+    /*ellipsis=*/false);
+  const type2tc ptr_t = pointer_type2tc(code_t);
+
+  symbolt var;
+  var.id = var.name = id;
+  var.mode = "Python";
+  var.set_type(ptr_t);
+  ctx.add(var);
+  return code_t;
+}
+} // namespace
+
+TEST_CASE(
+  "python_adjust rewrites a statement call through a function pointer",
+  "[python-adjust]")
+{
+  // `op(3)` as a statement: the arm re-types the pointer-to-code callee,
+  // wraps the dereference, and casts the argument to the parameter type.
+  contextt ctx;
+  const type2tc code_t = add_funcptr_var(ctx, "py_fptr_stmt");
+
+  const expr2tc callee = symbol2tc(code_t, "py_fptr_stmt");
+  const expr2tc arg = gen_zero(get_uint64_type());
+  expr2tc call = code_function_call2tc(
+    expr2tc(), callee, std::vector<expr2tc>{arg}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(call);
+
+  REQUIRE(is_code_function_call2t(call));
+  const code_function_call2t &c = to_code_function_call2t(call);
+  REQUIRE(is_dereference2t(c.function));
+  REQUIRE(is_code_type(c.function->type));
+  REQUIRE(is_pointer_type(to_dereference2t(c.function).value->type));
+  REQUIRE(c.operands.size() == 1);
+  REQUIRE(is_typecast2t(c.operands[0]));
+  REQUIRE(c.operands[0]->type == get_int32_type());
+}
+
+TEST_CASE(
+  "python_adjust rewrites an expression call through a function pointer",
+  "[python-adjust]")
+{
+  // `assert f(3) == 6` migrates the call as a function_call sideeffect
+  // whose operand is the callee — the second call shape the arm covers.
+  contextt ctx;
+  const type2tc code_t = add_funcptr_var(ctx, "py_fptr_expr");
+
+  const expr2tc callee = symbol2tc(code_t, "py_fptr_expr");
+  expr2tc call = sideeffect2tc(
+    get_int32_type(),
+    callee,
+    expr2tc(),
+    std::vector<expr2tc>{gen_zero(get_int32_type())},
+    type2tc(),
+    sideeffect2t::allockind::function_call);
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(call);
+
+  REQUIRE(is_sideeffect2t(call));
+  const sideeffect2t &s = to_sideeffect2t(call);
+  REQUIRE(is_dereference2t(s.operand));
+  REQUIRE(is_code_type(s.operand->type));
+  // Same-typed argument needs no cast.
+  REQUIRE(is_constant_int2t(s.arguments[0]));
+}
+
+TEST_CASE(
+  "python_adjust leaves unregistered and non-code pointer callees alone",
+  "[python-adjust]")
+{
+  // No-op guards: an unregistered callee symbol, and a registered one whose
+  // pointer type does not point at code — both must be left unchanged.
+  contextt ctx;
+  symbolt var;
+  var.id = var.name = "py_int_ptr_var";
+  var.mode = "Python";
+  var.set_type(pointer_type2tc(get_int32_type()));
+  ctx.add(var);
+
+  const type2tc bogus_code = code_type2tc(
+    std::vector<type2tc>{}, get_empty_type(), std::vector<irep_idt>{}, false);
+
+  expr2tc unregistered = code_function_call2tc(
+    expr2tc(),
+    symbol2tc(bogus_code, "py_no_such_fn"),
+    std::vector<expr2tc>{},
+    locationt());
+  const expr2tc unregistered_orig = unregistered;
+
+  expr2tc non_code = code_function_call2tc(
+    expr2tc(),
+    symbol2tc(bogus_code, "py_int_ptr_var"),
+    std::vector<expr2tc>{},
+    locationt());
+  const expr2tc non_code_orig = non_code;
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(unregistered);
+  adjuster.adjust_expr(non_code);
+
+  REQUIRE(unregistered == unregistered_orig);
+  REQUIRE(non_code == non_code_orig);
+}
+
+TEST_CASE(
+  "python_adjust leaves a direct code-typed call untouched",
+  "[python-adjust]")
+{
+  // A plain def call: the callee's table type is already code — no rewrite.
+  contextt ctx;
+  const type2tc code_t = code_type2tc(
+    std::vector<type2tc>{}, get_empty_type(), std::vector<irep_idt>{}, false);
+  symbolt fn;
+  fn.id = fn.name = "py_direct_fn";
+  fn.mode = "Python";
+  fn.set_type(code_t);
+  ctx.add(fn);
+
+  const expr2tc callee = symbol2tc(code_t, "py_direct_fn");
+  expr2tc call = code_function_call2tc(
+    expr2tc(), callee, std::vector<expr2tc>{}, locationt());
+  const expr2tc original = call;
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(call);
+
+  REQUIRE(call == original);
+}
+
+TEST_CASE(
+  "python_adjust pre-pass leaves an empty (incomplete) tag unchanged",
+  "[python-adjust]")
+{
+  // A forward-declared class tag (python_class_builder::ensure_sym) is an
+  // incomplete struct with no components; the pre-pass must pass through
+  // without padding or crashing, and without writing the symbol back.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc empty_struct = struct_type2tc(
+    std::vector<type2tc>{},
+    std::vector<irep_idt>{},
+    std::vector<irep_idt>{},
+    "Fwd",
+    false);
+  symbolt tag;
+  tag.id = tag.name = "tag-Fwd";
+  tag.mode = "Python";
+  tag.is_type = true;
+  tag.set_type(empty_struct);
+  ctx.add(tag);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  REQUIRE(ctx.find_symbol("tag-Fwd")->get_type2() == empty_struct);
+}
+
+namespace
+{
+// Register `tag-<name>` whose LEGACY type is a struct carrying a "bases"
+// sub-irep listing `tag-<base>` — the layout python_class_builder::get_bases
+// produces and clang_cpp_adjust::convert_exception_id consumes.
+void add_class_with_base(
+  contextt &ctx,
+  const std::string &name,
+  const std::string &base)
+{
+  struct_typet legacy;
+  legacy.tag(name);
+  exprt &bases = static_cast<exprt &>(legacy.add("bases"));
+  bases.get_sub().emplace_back(irept("tag-" + base));
+
+  symbolt tag;
+  tag.id = tag.name = "tag-" + name;
+  tag.mode = "Python";
+  tag.is_type = true;
+  tag.set_type(legacy);
+  ctx.add(tag);
+}
+} // namespace
+
+TEST_CASE(
+  "python_adjust completes an empty throw exception list from the class",
+  "[python-adjust]")
+{
+  // Flip blocker #1: a cpp-throw whose exception_list the legacy pass never
+  // derived must get [derived, direct bases...] from its operand's tag —
+  // the same one-level chain convert_exception_id produces.
+  contextt ctx;
+  add_class_with_base(ctx, "E", "Exception");
+
+  const expr2tc operand = symbol2tc(symbol_type2tc("tag-E"), "e");
+  expr2tc thr =
+    code_cpp_throw2tc(operand, std::vector<irep_idt>{}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  REQUIRE(is_code_cpp_throw2t(thr));
+  const code_cpp_throw2t &t = to_code_cpp_throw2t(thr);
+  REQUIRE(t.exception_list.size() == 2);
+  REQUIRE(t.exception_list[0] == "E");
+  REQUIRE(t.exception_list[1] == "Exception");
+}
+
+TEST_CASE(
+  "python_adjust leaves a legacy-filled throw exception list untouched",
+  "[python-adjust]")
+{
+  // Inertness on today's pipeline: clang_cpp_adjust already derived the
+  // list; the arm must not re-derive or reorder it.
+  contextt ctx;
+  add_class_with_base(ctx, "E", "Exception");
+
+  const expr2tc operand = symbol2tc(symbol_type2tc("tag-E"), "e");
+  const std::vector<irep_idt> legacy_ids{"E", "Exception"};
+  expr2tc thr = code_cpp_throw2tc(operand, legacy_ids, locationt());
+  const expr2tc original = thr;
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  REQUIRE(thr == original);
+}
+
+TEST_CASE(
+  "python_adjust derives void_ptr for an untypeable raise operand",
+  "[python-adjust]")
+{
+  // The attribute-raise fallback (`raise pkg.Error(...)`) types the operand
+  // any_type() = pointer(empty); legacy convert_exception_id derives
+  // "void_ptr" for it. An empty list here would re-create the
+  // remove_exceptions front() crash the arm exists to prevent.
+  contextt ctx;
+  const expr2tc operand =
+    symbol2tc(pointer_type2tc(get_empty_type()), "untyped_exc");
+  expr2tc thr =
+    code_cpp_throw2tc(operand, std::vector<irep_idt>{}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  const code_cpp_throw2t &t = to_code_cpp_throw2t(thr);
+  REQUIRE(t.exception_list.size() == 1);
+  REQUIRE(t.exception_list[0] == "void_ptr");
+}
+
+TEST_CASE(
+  "python_adjust gives a non-class throw operand the never-empty fallback",
+  "[python-adjust]")
+{
+  // A shape the converter never emits (int operand) still must not leave an
+  // empty list — remove_exceptions dereferences front(). The synthetic
+  // type-id never matches a real throw, mirroring legacy's fallback.
+  contextt ctx;
+  expr2tc thr = code_cpp_throw2tc(
+    gen_zero(get_int32_type()), std::vector<irep_idt>{}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  const code_cpp_throw2t &t = to_code_cpp_throw2t(thr);
+  REQUIRE(t.exception_list.size() == 1);
+  REQUIRE(t.exception_list[0] == "signedbv");
+}
+
+TEST_CASE("python_adjust leaves a bare re-raise untouched", "[python-adjust]")
+{
+  // A bare `raise` lowers to a nil-operand throw with an empty list; legacy
+  // skips it (adjust_side_effect_throw returns early) and so must this arm.
+  contextt ctx;
+  expr2tc thr =
+    code_cpp_throw2tc(expr2tc(), std::vector<irep_idt>{}, locationt());
+  const expr2tc original = thr;
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  REQUIRE(thr == original);
+}
+
+TEST_CASE(
+  "python_adjust derives all direct bases of a multi-base class",
+  "[python-adjust]")
+{
+  // register_chain treats the tail as flat direct bases of front(); the
+  // derivation must emit every direct base in declaration order.
+  contextt ctx;
+  struct_typet legacy;
+  legacy.tag("M");
+  exprt &bases = static_cast<exprt &>(legacy.add("bases"));
+  bases.get_sub().emplace_back(irept("tag-A"));
+  bases.get_sub().emplace_back(irept("tag-B"));
+  symbolt tag;
+  tag.id = tag.name = "tag-M";
+  tag.mode = "Python";
+  tag.is_type = true;
+  tag.set_type(legacy);
+  ctx.add(tag);
+
+  const expr2tc operand = symbol2tc(symbol_type2tc("tag-M"), "m");
+  expr2tc thr =
+    code_cpp_throw2tc(operand, std::vector<irep_idt>{}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  const code_cpp_throw2t &t = to_code_cpp_throw2t(thr);
+  REQUIRE(t.exception_list.size() == 3);
+  REQUIRE(t.exception_list[0] == "M");
+  REQUIRE(t.exception_list[1] == "A");
+  REQUIRE(t.exception_list[2] == "B");
+}
+
+TEST_CASE(
+  "python_adjust pre-pass write-back preserves bases for the throw chain",
+  "[python-adjust]")
+{
+  // The M2 hazard: the type-symbol pre-pass rewrites a tag (padding fires),
+  // and set_type(type2tc) would drop the legacy-only "bases" sub-irep the
+  // throw derivation reads. The write-back must re-attach it, so a body
+  // throw still derives the full chain after the tag was rewritten.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  struct_typet legacy;
+  legacy.tag("E");
+  {
+    struct_union_typet::componentt c;
+    c.id("component");
+    c.type() = migrate_type_back(signedbv_type2tc(8));
+    c.set_name("c");
+    c.pretty_name("c");
+    legacy.components().push_back(c);
+    struct_union_typet::componentt i;
+    i.id("component");
+    i.type() = migrate_type_back(get_int32_type());
+    i.set_name("i");
+    i.pretty_name("i");
+    legacy.components().push_back(i);
+  }
+  exprt &bases = static_cast<exprt &>(legacy.add("bases"));
+  bases.get_sub().emplace_back(irept("tag-Exception"));
+  symbolt tag;
+  tag.id = tag.name = "tag-E";
+  tag.mode = "Python";
+  tag.is_type = true;
+  tag.set_type(legacy);
+  ctx.add(tag);
+
+  const expr2tc operand = symbol2tc(symbol_type2tc("tag-E"), "e");
+  const expr2tc thr =
+    code_cpp_throw2tc(operand, std::vector<irep_idt>{}, locationt());
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(thr)});
+  add_code_symbol(ctx, "py_adjust_throw_prepass_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  // The pre-pass padded (rewrote) the tag...
+  const symbolt *out_tag = ctx.find_symbol("tag-E");
+  REQUIRE(is_struct_type(out_tag->get_type2()));
+  REQUIRE(to_struct_type(out_tag->get_type2()).members.size() == 3);
+  // ...its legacy view kept the bases...
+  REQUIRE(out_tag->get_type().find("bases").is_not_nil());
+  // ...and the body throw derived the full chain through it.
+  const expr2tc &stored =
+    ctx.find_symbol("py_adjust_throw_prepass_sym")->get_value2();
+  const expr2tc &stmt = to_code_block2t(stored).operands.at(0);
+  const expr2tc &out_thr = to_code_expression2t(stmt).operand;
+  const code_cpp_throw2t &t = to_code_cpp_throw2t(out_thr);
+  REQUIRE(t.exception_list.size() == 2);
+  REQUIRE(t.exception_list[0] == "E");
+  REQUIRE(t.exception_list[1] == "Exception");
+}
+
+TEST_CASE(
+  "python_adjust derives throw ids through an S2-resolved literal operand",
+  "[python-adjust]")
+{
+  // The OM raise shape end-to-end: the throw operand is a by-name struct
+  // literal; operand recursion (S2) retypes it to the resolved struct first,
+  // and the throw arm must derive the chain from that resolved shape.
+  contextt ctx;
+  add_class_with_base(ctx, "E", "Exception");
+
+  const expr2tc lit =
+    constant_struct2tc(symbol_type2tc("tag-E"), std::vector<expr2tc>{});
+  expr2tc thr = code_cpp_throw2tc(lit, std::vector<irep_idt>{}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  const code_cpp_throw2t &t = to_code_cpp_throw2t(thr);
+  REQUIRE(is_constant_struct2t(t.operand));
+  REQUIRE(is_struct_type(t.operand->type));
+  REQUIRE(t.exception_list.size() == 2);
+  REQUIRE(t.exception_list[0] == "E");
+  REQUIRE(t.exception_list[1] == "Exception");
+}
+
+TEST_CASE(
+  "python_adjust S1 adjust_expr completes a node's own type",
+  "[python-adjust]")
+{
+  // adjust_expr's leading type-completion (mirroring the legacy adjust_expr's
+  // adjust_type(expr.type())): a symbol whose type is a macro alias is
+  // retyped to the concrete type via with_type.
+  contextt ctx;
+  symbolt alias;
+  alias.id = alias.name = "py_expr_alias";
+  alias.mode = "Python";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(get_int32_type());
+  ctx.add(alias);
+
+  expr2tc e = symbol2tc(symbol_type2tc("py_expr_alias"), "x");
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(e);
+
+  REQUIRE(is_symbol2t(e));
+  REQUIRE(e->type == get_int32_type());
 }

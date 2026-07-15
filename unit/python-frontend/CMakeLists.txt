@@ -5,7 +5,9 @@ new_unit_test(symbol_id_test "symbol_id_test.cpp" "pythonfrontend")
 new_unit_test(python_class_test "python_class_test.cpp" "pythonfrontend")
 new_unit_test(complex_type_test "complex_type_test.cpp" "pythonfrontend;util_esbmc;bigint")
 new_unit_test(irep2_type_roundtrip_test "irep2_type_roundtrip_test.cpp" "pythonfrontend;util_esbmc;bigint")
-new_unit_test(python_adjust_test "python_adjust_test.cpp" "pythonfrontend;util_esbmc;bigint")
+# clangcfrontend_stuff provides add_padding (padding.cpp), which
+# python_adjust's S1 adjust_type reuses for byte-identical struct layout.
+new_unit_test(python_adjust_test "python_adjust_test.cpp" "pythonfrontend;clangcfrontend_stuff;util_esbmc;bigint")
 new_unit_test(function_call_cache_test "function_call_cache_test.cpp" "pythonfrontend")
 new_unit_test(json_utils_alias_test "json_utils_alias_test.cpp" "pythonfrontend")
 if(NOT WIN32)

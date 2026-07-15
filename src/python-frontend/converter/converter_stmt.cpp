@@ -1,23 +1,23 @@
 #include <python-frontend/converter/converter_internal.h>
-#include <python-frontend/convert_float_literal.h>
+#include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_consteval.h>
+#include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
-#include <python-frontend/python_dict_handler.h>
-#include <python-frontend/python_annotation.h>
-#include <python-frontend/python_exception_handler.h>
-#include <python-frontend/python_lambda.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/python_typechecking.h>
-#include <python-frontend/python_math.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
+#include <python-frontend/python_annotation/python_annotation.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/lambda/python_lambda.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/type/python_typechecking.h>
+#include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
@@ -3600,6 +3600,14 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // Extract 'then' block from AST
   exprt then;
 
+  // A Python conditional expression `body if test else orelse` short-circuits:
+  // only the selected branch is evaluated. When a ternary branch emits
+  // side-effecting instructions (notably a subscript's IndexError raise), they
+  // must run only when that branch is taken. Capture each branch's side effects
+  // into its own block so they can be guarded by the condition below, instead of
+  // leaking unconditionally into the enclosing block.
+  code_blockt then_side_effects, else_side_effects;
+
   // Skip the 'then' block when the condition evaluates to false.
   if (cond.is_constant() && cond.value() == "false" && type != "IfExp")
   {
@@ -3612,6 +3620,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         ast_node["body"],
         /*is_function_body=*/false,
         /*is_loop_body=*/type == "While");
+    else if (type == "IfExp")
+    {
+      code_blockt *saved_block = current_block;
+      current_block = &then_side_effects;
+      then = get_expr(ast_node["body"]);
+      current_block = saved_block;
+    }
     else
       then = get_expr(ast_node["body"]);
   }
@@ -3626,6 +3641,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     // Append 'else' block to the statement
     if (ast_node["orelse"].is_array())
       else_expr = get_block(ast_node["orelse"]);
+    else if (type == "IfExp")
+    {
+      code_blockt *saved_block = current_block;
+      current_block = &else_side_effects;
+      else_expr = get_expr(ast_node["orelse"]);
+      current_block = saved_block;
+    }
     else
       else_expr = get_expr(ast_node["orelse"]);
   }
@@ -3676,7 +3698,55 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       }
     }
 
-    // Create fully symbolic if expression
+    // When a branch emits side-effecting instructions (notably a subscript's
+    // IndexError raise, or a materialised nested access whose value expression
+    // references temps the branch declared), lower the ternary as a
+    // short-circuiting if/else into a result temp: each branch runs its own
+    // side effects and assigns its value to the temp, so ONLY the selected
+    // branch is evaluated — matching Python's short-circuit semantics. Emitting
+    // the value assignment inside the guarded branch keeps the branch's temps in
+    // scope (a flat value-select would reference them from outside their guard).
+    // Keep the pure value-select `if_expr` when neither branch has side effects
+    // (the common case), avoiding churn. A pure-expression context has no
+    // current_block to emit into, and there its branches carry no side effects.
+    if (
+      current_block && (!then_side_effects.operands().empty() ||
+                        !else_side_effects.operands().empty()))
+    {
+      symbolt result_symbol =
+        create_return_temp_variable(result_type, location, "ternary_result");
+      symbol_table_.add(result_symbol);
+      exprt result_expr = symbol_expr(result_symbol);
+
+      code_declt result_decl(result_expr);
+      result_decl.location() = location;
+      current_block->copy_to_operands(result_decl);
+
+      auto coerce = [&](const exprt &branch) -> exprt {
+        if (branch.type() == result_type)
+          return branch;
+        return typecast_exprt(branch, result_type);
+      };
+
+      code_assignt then_assign(result_expr, coerce(then));
+      then_assign.location() = location;
+      then_side_effects.copy_to_operands(then_assign);
+
+      code_assignt else_assign(result_expr, coerce(else_expr));
+      else_assign.location() = location;
+      else_side_effects.copy_to_operands(else_assign);
+
+      code_ifthenelset guard;
+      guard.location() = location;
+      guard.cond() = cond;
+      guard.then_case() = then_side_effects;
+      guard.else_case() = else_side_effects;
+      current_block->copy_to_operands(guard);
+
+      return result_expr;
+    }
+
+    // Create fully symbolic if expression (pure branches, no side effects)
     exprt if_expr("if", result_type);
     if_expr.copy_to_operands(cond, then, else_expr);
     return if_expr;

@@ -92,6 +92,7 @@ ignored_dirs=(
   "github_4666_2d"
   "github_4666_shape"
   "github_5102_nested_list_copy"
+  "github_5937_fail"
   "torch_mm_allclose"
   "global"
   "infer-func-no-return_fail"
@@ -160,6 +161,8 @@ ignored_dirs=(
   "string-symbolic-8"
   "complex_str_nonconstant"
   "dataclass_factory_kwarg_ignored"
+  "harness_time_monotonic"
+  "harness_time_monotonic_fail"
 )
 
 # Prefixes for ESBMC-specific regression directories that are not suitable for
@@ -167,6 +170,8 @@ ignored_dirs=(
 ignored_prefixes=(
   "github_4666_"
   "github_4668_"
+  "harness_numpy_"
+  "harness_torch_"
 )
 
 for dir in */; do

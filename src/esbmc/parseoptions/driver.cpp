@@ -205,7 +205,10 @@ int esbmc_parseoptionst::doit()
   // Eventually we will modify it and implement parallel version for all
   // available strategies. Just run it first before everything else
   // for now.
-  if (cmdline.isset("k-induction-parallel"))
+  //
+  // The parallel driver has no termination interpretation, so --termination
+  // takes priority: fall through to the sequential strategy instead (#6031).
+  if (cmdline.isset("k-induction-parallel") && !cmdline.isset("termination"))
     return doit_k_induction_parallel();
 
   // Parse ESBMC options (CMD + set internal options)
@@ -250,7 +253,7 @@ int esbmc_parseoptionst::doit()
         cmdline.isset("bitwuzla") || cmdline.isset("boolector") ||
         cmdline.isset("yices") || cmdline.isset("mathsat") ||
         cmdline.isset("cvc4") || cmdline.isset("smtlib") ||
-        cmdline.isset("default-solver");
+        cmdline.isset("neurosym") || cmdline.isset("default-solver");
       if (!user_picked_solver && !incremental_mode)
       {
         const std::string padded =
