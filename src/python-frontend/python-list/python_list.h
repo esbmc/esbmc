@@ -99,22 +99,20 @@ public:
    * @brief Lower whole-row boolean-mask selection `a[mask]` on a 2-D array.
    * The runtime-list model used by build_bool_mask_index cannot hold an
    * array-typed element (confirmed empirically: pushing a row produces a
-   * bit-vector/array sort mismatch at the SMT backend), so this first tries
-   * to resolve @p mask to a concrete boolean literal (`np.array([True,
-   * False, ...])`) whose declaring assignment is found via AST lookup — the
-   * selected row count is then known at conversion time and the result is
-   * built as an exactly-sized array, mirroring build_column_select. When the
-   * mask can't be resolved that way (a nondet/runtime-computed element), it
-   * falls back to the bounded-result + explicit-count model (see
-   * numpy-architecture-decisions.md #1): a worst-case-sized (every row
-   * selected) result array plus a runtime `count` of rows actually copied;
-   * slots at/after `count` are unspecified padding. Both paths reject a
-   * reassigned mask variable, since the literal path's AST lookup can't tell
-   * which assignment reaches this use site.
+   * bit-vector/array sort mismatch at the SMT backend), so this requires
+   * @p mask to resolve to a concrete boolean literal (`np.array([True,
+   * False, ...])`) whose declaring assignment is found via AST lookup —
+   * the selected row count is then known at conversion time and the result
+   * is built as a fixed-size array, mirroring build_column_select. A
+   * symbolic (non-literal) mask is rejected explicitly: per ADR-NP-001
+   * (numpy-architecture-decisions.md), a bounded-capacity result with a
+   * detached runtime `count` is not sound until the canonical ndarray
+   * descriptor exists to carry the logical size as part of the value
+   * itself, so it must stay an explicit rejection rather than an
+   * approximation with observable padding.
    * @param array   Source 2-D array expression.
-   * @param mask    Boolean mask array expression (its value is read at
-   *                runtime for the symbolic path; re-read from the AST for
-   *                the literal path).
+   * @param mask    Boolean mask array expression (used only for its type/
+   *                length; values are re-read from the AST).
    * @param element The Subscript AST node, used for location info and to
    *                recover the mask's variable name.
    */
