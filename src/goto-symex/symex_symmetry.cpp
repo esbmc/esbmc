@@ -66,18 +66,16 @@ cmp_kindt flip(cmp_kindt k)
   abort();
 }
 
-// +1: side_1 op side_2 being true selects the greater of the two operands
-// (max idiom); -1: selects the lesser (min idiom).
+// +1 when the comparison being true selects the greater operand (max),
+// -1 when it selects the lesser (min).
 int extremum_of(cmp_kindt k)
 {
   return (k == cmp_kindt::GT || k == cmp_kindt::GE) ? 1 : -1;
 }
 
-// One optional resolution hop through `def_of`. Used only to see through
-// the separate guard/branch-value SSA steps that ESBMC's phi-merge lowering
-// introduces around an `if (cond) x = v;` statement (the ite's own operand
-// is a plain symbol reference to a temporary defined by a preceding step),
-// not to inline arbitrarily deep -- so cost stays O(1) per operand.
+// Follow at most one `def_of` hop -- enough to see through the temporary
+// ESBMC's phi-merge lowering inserts around `if (cond) x = v;`, so cost
+// stays O(1) per operand.
 expr2tc resolve_once(
   const expr2tc &e,
   const std::unordered_map<std::string, expr2tc> &def_of)
@@ -96,13 +94,9 @@ bool operand_matches(
   return cond_side == branch || cond_side == resolve_once(branch, def_of);
 }
 
-// Recognises `ite(cond, t, e)` as a max/min idiom: `cond` (after peeling at
-// most one leading `not` and one symbol-lookup hop) is a comparison whose
-// two operands are `t` and `e` in either order. Returns +1 for max (the
-// ite's result is always >= t and >= e), -1 for min (<= t and <= e), 0 if
-// `cond` doesn't match this shape. This is a fact about ite/comparison
-// semantics alone -- true regardless of what t, e, or cond mean -- so no
-// solver confirmation is needed.
+// Returns +1 if `ite(cond, t, e)` is a max idiom (result >= t and >= e),
+// -1 for min, 0 otherwise. A pure fact about ite/comparison semantics, so
+// no solver confirmation is needed.
 int classify_ite_extremum(
   expr2tc cond,
   const expr2tc &t,
@@ -153,11 +147,8 @@ void assert_symmetry_breaking(
 
     const if2t &ite = to_if2t(step.rhs);
 
-    // The injected bounds are tautologies only over a *total* order. Restrict
-    // to the ordered types the recognised idiom can produce. floatbv is
-    // deliberately absent: IEEE-754 comparisons are not a total order (any
-    // relation involving a NaN operand is false), so `ite(t > e, t, e)` is not
-    // provably >= t and >= e when t or e may be NaN.
+    // The injected bounds are tautologies only over a total order; floatbv
+    // is excluded because IEEE-754 comparisons involving NaN are all false.
     const type2tc &ty = ite.type;
     if (!(is_signedbv_type(ty) || is_unsignedbv_type(ty) ||
           is_fixedbv_type(ty) || is_pointer_type(ty)))
