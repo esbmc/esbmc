@@ -152,12 +152,11 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
 // trivial-type declarations (DECL + optional side-effect-free ASSIGN + scope-exit
 // DEAD, the block managing the destructor stack as convert_block does), a value
 // return (RETURN + unconditional GOTO to the function's end), and a
-// side-effect-free `if`/`if-else` whose branches convert natively and whose
-// converted shape doesn't match one of generate_ifthenelse's assert-folding
-// special cases (general branch shape only: `v: if(!c) goto y/z; w: P;
-// [x: goto z; y: Q;] z: ;`). Each reads its own code_*2t fields directly (no
-// legacy round-trip) and carries the statement's own location, matching
-// goto_convertt::convert() byte-for-byte on this subset.
+// side-effect-free `if`/`if-else` whose branches convert natively (the
+// general, unfolded branch shape only — see the assert-fold guard below).
+// Each reads its own code_*2t fields directly (no legacy round-trip) and
+// carries the statement's own location, matching goto_convertt::convert()
+// byte-for-byte on this subset.
 bool goto_convert_functionst::convert_native_rec(
   const expr2tc &code2,
   goto_programt &dest)
@@ -404,14 +403,9 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_ifthenelse2t &ite = to_code_ifthenelse2t(code2);
 
-    // convert_ifthenelse (goto_convert.cpp:1814) removes side effects from the
-    // guard via remove_sideeffects, and additionally special-cases a
-    // side-effecting `&&` condition by splitting it into nested ifs before that
-    // (:1830) — both unreachable once the guard is side-effect-free, since a
-    // side-effect anywhere in `a && b` makes has_sideeffect(a && b) true too.
-    // The branch-coverage instrumentation options additionally suppress the
-    // remove_sideeffects call regardless (:1859); fall back on those so a
-    // side-effecting guard is never mishandled under that combination.
+    // A side-effecting guard needs remove_sideeffects (goto_convert.cpp:1814),
+    // which this kind doesn't reproduce; the condition-coverage options
+    // suppress that call regardless, so fall back on those too.
     if (
       has_sideeffect(ite.cond) ||
       options.get_bool_option("condition-coverage") ||
@@ -426,11 +420,8 @@ bool goto_convert_functionst::convert_native_rec(
     goto_programt tmp_op1;
     if (!convert_native_rec(ite.then_case, tmp_op1))
       return false;
-    // A then-branch that isn't itself a code_block2t (e.g. a bare code_decl2t)
-    // would leak a scope-exit code_dead with no enclosing block to unwind it.
-    // Every recursive kind restores the stack to its own entry state on both
-    // exits except decl (which deliberately grows it), so a size mismatch here
-    // means exactly that shape; fall back rather than risk it.
+    // A non-block branch (e.g. a bare decl) could leak a scope-exit code_dead
+    // with no enclosing block to unwind it.
     if (targets.destructor_stack.size() != stack_before_then.size())
     {
       targets.destructor_stack = stack_before_then;
@@ -450,13 +441,10 @@ bool goto_convert_functionst::convert_native_rec(
       }
     }
 
-    // generate_ifthenelse (goto_convert.cpp:1657) folds a then/else branch that
-    // reduces to a single (or, else-less, a leading) `assert(false)` directly
-    // into the enclosing guard instead of emitting the general branch shape —
-    // and only when --validate-violation-witness is off (:1683,:1706,:1730).
-    // Reproducing the folds themselves is out of scope for this kind; detect
-    // the same shapes on the already-converted branches and fall back so the
-    // general path below is never reached where a fold should have fired.
+    // generate_ifthenelse (goto_convert.cpp:1657) folds a branch that reduces
+    // to a lone `assert(false)` directly into the guard instead of emitting
+    // the general shape below (--validate-violation-witness disables this);
+    // fall back rather than reproduce the fold.
     if (!options.get_bool_option("validate-violation-witness"))
     {
       auto is_lone_false_assert = [](const goto_programt &p) {
@@ -478,20 +466,9 @@ bool goto_convert_functionst::convert_native_rec(
         return false;
     }
 
-    // Every convert_native_rec kind emits at least one instruction (a block
-    // that would otherwise be empty adds its own trailing SKIP), so the
-    // "flip around if the then-branch converted to nothing" path in
-    // generate_ifthenelse (:1748) never triggers here — both branches are
-    // guaranteed non-empty at this point.
-
     const locationt &location = ite.location;
 
-    // Reproduce generate_ifthenelse's general (unfolded) shape exactly:
-    //   v: if(!c) goto y/z;
-    //   w: P;
-    //   x: goto z;      (else only)
-    //   y: Q;            (else only)
-    //   z: ;
+    // v: if(!c) goto y/z; w: P; x: goto z; (else only) y: Q; (else only) z: ;
     goto_programt tmp_z;
     goto_programt::targett z = tmp_z.add_instruction();
     z->make_skip();
