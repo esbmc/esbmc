@@ -90,7 +90,8 @@ const std::vector<entry_t> &rules_table()
         "Access to object out of bounds",
         {125, 787, 823}}},
       // Pointer relational.
-      {"Same object violation",
+      {"Relational comparison between pointers is only valid for pointers to "
+       "the same object",
        {"same-object-violation",
         "Same-object pointer comparison violation",
         {469}}},

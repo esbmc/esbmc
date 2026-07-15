@@ -1,4 +1,5 @@
 CORE
 main.py
---unwind 10
+--function main --incremental-bmc
+
 ^VERIFICATION SUCCESSFUL$

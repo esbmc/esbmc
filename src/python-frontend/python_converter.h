@@ -614,6 +614,15 @@ private:
     module_locator &locator,
     code_blockt &code);
 
+  /// Converts every module-level and function-local Import/ImportFrom
+  /// statement in the current AST, appending the resulting code to
+  /// `all_imports_block`. Shared by both the whole-module conversion path
+  /// and the --function entry path (github #5937): the latter used to
+  /// build its own code block without ever calling this, so any call
+  /// through an imported module fell through to the unsupported-function
+  /// stub.
+  void convert_module_imports(code_blockt &all_imports_block);
+
   nlohmann::json build_dunder_call(
     const nlohmann::json &object,
     const std::string &dunder_name,

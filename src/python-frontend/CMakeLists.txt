@@ -40,7 +40,7 @@ add_library(pythonfrontend STATIC
             python-dict/dict_compare.cpp
             python_expr_builder.cpp
             exception/python_exception_handler.cpp
-            python_lambda.cpp
+            lambda/python_lambda.cpp
             python-list/list_type_inference.cpp
             python-list/list_type_map.cpp
             python-list/list_construction.cpp

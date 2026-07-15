@@ -1,0 +1,4 @@
+CORE
+cbmc_strrchr.goto
+--binary --unwind 10
+^VERIFICATION SUCCESSFUL$
