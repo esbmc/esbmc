@@ -1,5 +1,8 @@
 import numpy as np
 
+# ADR-NP-001: a comparison-derived 2-D row mask also stays explicitly
+# rejected until the canonical ndarray descriptor exists (see
+# numpy-architecture-decisions.md).
 x = nondet_int()
 y = nondet_int()
 n = nondet_bool()
@@ -9,6 +12,3 @@ __ESBMC_assume(x > y)
 a = np.array([[5, 6], [7, 8]])
 mask = np.array([n, not n])
 b = a[mask]
-
-assert b[0][0] == 5
-assert b[0][1] == 6
