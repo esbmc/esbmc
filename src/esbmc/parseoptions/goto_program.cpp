@@ -349,15 +349,15 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
 {
   static const char *const libc[] = {
-    "ceilf",        "ceil",    "ceill",     "floorf",        "floor",
-    "floorl",       "truncf",  "trunc",     "truncl",        "roundf",
-    "round",        "roundl",  "copysignf", "copysign",      "copysignl",
-    "fminf",        "fmin",    "fminl",     "fmaxf",         "fmax",
-    "fmaxl",        "fdimf",   "fdim",      "fdiml",         "modff",
-    "modf",         "modfl",   "rintf",     "rint",          "rintl",
-    "strlen",       "strcmp",  "strncmp",   "strcpy",        "strncpy",
-    "strcat",       "strncat", "strchr",    "__fpclassifyf", "__fpclassifyd",
-    "__fpclassifyl"};
+    "ceilf",         "ceil",         "ceill",     "floorf",   "floor",
+    "floorl",        "truncf",       "trunc",     "truncl",   "roundf",
+    "round",         "roundl",       "copysignf", "copysign", "copysignl",
+    "fminf",         "fmin",         "fminl",     "fmaxf",    "fmax",
+    "fmaxl",         "fdimf",        "fdim",      "fdiml",    "modff",
+    "modf",          "modfl",        "rintf",     "rint",     "rintl",
+    "strlen",        "strcmp",       "strncmp",   "strcpy",   "strncpy",
+    "strcat",        "strncat",      "strchr",    "strrchr",  "__fpclassifyf",
+    "__fpclassifyd", "__fpclassifyl"};
 
   for (const char *name : libc)
   {
@@ -432,7 +432,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)memcmp,\n"
     "  (void *)strlen,    (void *)strcmp,   (void *)strncmp,\n"
     "  (void *)strcpy,    (void *)strncpy,  (void *)strcat,\n"
-    "  (void *)strncat,   (void *)strchr,\n"
+    "  (void *)strncat,   (void *)strchr,   (void *)strrchr,\n"
     "  (void *)__fpclassifyf, (void *)__fpclassifyd, (void *)__fpclassifyl,\n"
     "};\n"
     "int main(void) { return 0; }\n";

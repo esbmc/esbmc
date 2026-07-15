@@ -87,6 +87,7 @@ and the symbol/function table layout.
 | Libm body bridge extended to `rint`/`rintf`/`rintl` (round to nearest integer, ambient rounding mode) (§4.8, Phase 2) | ✅ (PR #6041) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
 | Body bridge generalised to libc: `strlen`/`strcmp`/`strncmp` string.h query functions (byte-loop bodies, need `--unwind`); `link_cbmc_libm_bodies` → `link_cbmc_libc_bodies` (§4.8, Phase 2) | ✅ (PR #6045) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Libc bridge extended to `strcpy`/`strncpy`/`strcat`/`strncat`/`strchr` string.h copy/search functions (write through dst ptr / return ptr) (§4.8, Phase 2) | ✅ (PR #6047) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
+| Libc bridge extended to `strrchr` (reverse-scan search, returns ptr to last match / `NULL`; CBMC-modelled unlike `strstr`/`strspn`/`strcspn`/`strpbrk`/`memchr`) (§4.8, Phase 2) | ✅ (PR #6083) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
@@ -773,6 +774,20 @@ enough (out-of-bounds is caught by ESBMC's own dereference checks, as natively).
 (`strcpy`+`strncpy`), `cbmc_strcat` (`strcat`+`strncat`), `cbmc_strchr` (found and not-found → `NULL`)
 all SUCCESSFUL, and `cbmc_strcpy_fail` (`strcpy(d,"hello"); d[0]=='x'`) FAILED. This closes the
 common string.h family.
+
+**Extended to the reverse search `strrchr`.** One more name in the `link_cbmc_libc_bodies`
+list and the additions boilerplate — no new mechanism. `strrchr` returns a pointer to the
+**last** occurrence of a byte (or `NULL`), the reverse-scan counterpart of `strchr`; ESBMC's
+operational-model body (`libc/string.c`) implements it by repeatedly calling the already-bridged
+`strchr`, so it is a byte loop and needs `--unwind` like the rest of the family. CBMC 6.8.0
+models `strrchr` with a real body (it does **not** model `strstr`/`strspn`/`strcspn`/`strpbrk`/
+`memchr` — those reach CBMC as `no body for callee` and are left bodyless so the nondet-return
+verdict still matches CBMC, rather than bridged into a divergence). On the CBMC binary the
+plain-named `strrchr` was a **bodyless external returning nondet**, so a valid
+`strrchr("hello",'l') == h+3` reported a false `FAILED` where CBMC verifies `SUCCESSFUL`.
+Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), `--unwind 10`: `cbmc_strrchr` (last match
+`h+3` and not-found → `NULL`) SUCCESSFUL, and `cbmc_strrchr_fail` (`strrchr("hello",'l') == h+2`,
+the *first* not the last match) FAILED, confirming the reverse scan is really computed.
 
 **Extended to the FP classifier `fpclassify`.** CBMC's `<math.h>` lowers the `fpclassify(x)`
 macro to a call to the width-specific internal `__fpclassifyf`/`__fpclassifyd`/`__fpclassifyl`

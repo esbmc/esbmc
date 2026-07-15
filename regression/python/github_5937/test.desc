@@ -1,4 +1,5 @@
 CORE
 main.py
---function pick_one --no-bounds-check
+--function main --incremental-bmc
+
 ^VERIFICATION SUCCESSFUL$
