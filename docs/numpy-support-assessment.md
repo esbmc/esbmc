@@ -4,6 +4,8 @@
 
 This file tracks what is **not yet implemented or broken** in the NumPy
 module. Completed items are in the git history and `regression/numpy/`.
+Architectural decisions that gate specific pendencies here (referenced as
+`ADR-NP-XXX`) are the normative source in `numpy-architecture-decisions.md`.
 
 ---
 
@@ -20,8 +22,8 @@ module. Completed items are in the git history and `regression/numpy/`.
   reads the mask's current value at the point of use rather than folding it
   statically. This also covers `a[i][mask]` (a row sliced off a 2-D array,
   then filtered). See `regression/numpy/bool_mask_symbolic_*`. The 2-D
-  *row-select* path (`a[mask]` selecting whole rows) now also supports a
-  symbolic mask — see the dedicated entry below.
+  *row-select* path (`a[mask]` selecting whole rows) still requires a
+  literal mask — see "Missing indexing / slicing" below (ADR-NP-001).
 - **`a[i, j, k]` and n-D tuple indexing** — confirmed already implemented
   for literal/negative/symbolic integer indices on 3-D+ arrays, including
   out-of-bounds bounds-checking; the assessment above was stale. Mixing a
@@ -41,16 +43,6 @@ module. Completed items are in the git history and `regression/numpy/`.
   numpy array *out* of a function by value is a separate, still-unsupported
   case — see "Missing indexing / slicing" below. See
   `regression/numpy/numpy_param_array_*` and `array_param_*`.
-- **Symbolic (non-literal) boolean-mask *row* selection on 2-D arrays**
-  (`a[mask]` selecting whole rows) — a mask that can't be resolved to a
-  compile-time literal (nondet/runtime-computed elements) now falls back to
-  the bounded-result-plus-explicit-count model recommended in
-  `numpy-architecture-decisions.md` #1: a worst-case-sized result (every row
-  selected) plus a runtime `count` of rows actually copied, with slots at/
-  after `count` left as unspecified padding. The literal path (exact-sized
-  result, no padding) still runs first when the mask resolves statically.
-  Both paths reject a reassigned mask variable. See
-  `regression/numpy/numpy_bool_mask_rows_*` and `bool_mask_2d_symbolic_success`.
 - **Mixing a slice with integer indices in one tuple index** (`a[:, 0, 0]`,
   `a[0, :, 0]`) — an N-D tuple subscript with exactly one full-slice axis
   (`:`) and every other axis a literal/resolvable integer now lowers to a
@@ -72,6 +64,7 @@ module. Completed items are in the git history and `regression/numpy/`.
 
 | Feature | Status | Notes |
 |---|---|---|
+| Symbolic/non-literal boolean-mask *row* selection (`a[mask]` on a 2-D array) | Missing | `build_bool_mask_row_select` requires the mask to be a concrete literal (`np.array([True, False])`) resolved from its AST declaration; a mask built from nondet/computed values is rejected explicitly. A bounded-result-plus-explicit-count fallback (worst-case-sized result + a runtime `count`, unused slots left as padding) was prototyped and reverted: the count lives outside the result's type, so `len`/`shape` and any other consumer would observe the physical capacity instead of the logical size — `ADR-NP-001` (`numpy-architecture-decisions.md`) classifies this as unsound (violates the "shape is part of the modelled value" principle) and requires the canonical ndarray descriptor (buffer/shape/strides/offset) before this can be implemented soundly. The 1-D case is supported — see "Recently completed". |
 | Returning a numpy array *out* of a function by value | Missing | Arrays aren't valid by-value return types in the current GOTO model (confirmed empirically: the backend rejects the array-typed return with "Can't construct rvalue reference to array type during dereference"). A function may still receive an array parameter and return a *scalar* derived from it (e.g. `a[i][j]`) — only returning the array/a sub-array itself is blocked. |
 | Boolean-mask indexing through a function parameter (`def f(a, mask): return a[mask]`) | Missing | Rejected explicitly at the call boundary (parameter keeps its old `Any`/`PyListObject*` default) rather than attempting the array-parameter inference, since combining the two features wasn't validated together in this PR. |
 | Strided column slice combined with explicit bounds (`a[:, 1:3:2]`) | Missing | `build_strided_column_select` only models the bare-step form (`a[:, ::step]`); combining a column step with explicit bounds is rejected explicitly, since the result width would then need to be resolved from runtime bounds instead of the array's static shape. |
@@ -117,32 +110,42 @@ Either model correctly or downgrade to explicit "unsupported".
 
 ## Prioritised next steps
 
-1. **NumPy arrays as function return values** — a function can receive an
+1. **Canonical bounded ndarray descriptor** (buffer/capacity/shape/strides/
+   offset/rank/dtype/buffer_id, see `numpy-architecture-decisions.md`) —
+   blocks ADR-NP-001 (symbolic 2-D boolean-mask row selection) and the
+   definitive model for ADR-NP-003 (views/aliasing). This is the
+   foundational next PR: several other items on this list are gated on it.
+2. **Symbolic/non-literal boolean-mask *row* selection** (2-D `a[mask]`) —
+   ADR-NP-001; needs the canonical descriptor above so the result's logical
+   row count is part of the modelled value instead of a detached runtime
+   counter.
+3. **NumPy arrays as function return values** — a function can receive an
    array parameter and use/forward it, but cannot return the array (or a
    sub-array) itself by value; only a scalar derived from it. Needs either
    a distinct by-reference return representation (the caller passes a
    destination pointer, mirroring the parameter decay already used) or a
    small wrapper-struct return type, since arrays aren't valid by-value
-   return types in the current GOTO model. This is the next PR to pick up.
-2. **Boolean-mask indexing through a function parameter**
+   return types in the current GOTO model.
+4. **Boolean-mask indexing through a function parameter**
    (`def f(a, mask): return a[mask]`) — currently rejected explicitly at the
    call boundary rather than combined with the array-parameter inference
    from this PR; needs the two features validated together.
-3. **Strided column slice combined with explicit bounds** (`a[:, 1:3:2]`) —
+5. **Strided column slice combined with explicit bounds** (`a[:, 1:3:2]`) —
    currently rejected explicitly; the bare-step form (`a[:, ::step]`) is
    supported. Would need the result width resolved from runtime bounds
    instead of the array's static shape.
-4. **Bounded/partial slice or multiple slice axes mixed with integer
+6. **Bounded/partial slice or multiple slice axes mixed with integer
    indices in one tuple** (`a[0:2, 0, 0]`, `a[:, :, 0]`) — currently
    rejected explicitly; the single-full-slice-axis case is supported.
 
 ### Out of scope
-- `np.random.*` — nondeterminism model requires a separate design decision.
-- True SMT-array scalability — solver-level change; tracked in #5121.
-- Views / strides / aliasing — deep model change; separate PR.
-- Extending the runtime-list model to hold array-typed elements — not
-  needed for symbolic 2-D boolean-mask row selection (closed via the
-  bounded-result + explicit-count model, see "Recently completed"), and
-  still considered a disproportionately risky change for any other use
-  case; revisit only if a real need for array-typed list elements shows up
-  elsewhere.
+- `np.random.*` — nondeterminism model requires ADR-NP-002 (accepted,
+  implementation pending).
+- True SMT-array scalability — `array_typet` already lowers to SMT
+  select/store; see ADR-NP-004. Any further change is benchmark-gated.
+- Views / strides / aliasing — ADR-NP-003; soundness-protection stage
+  first, definitive model gated on the canonical descriptor.
+- Extending the runtime-list model to hold array-typed elements — rejected
+  as an approach for symbolic 2-D boolean-mask row selection (see
+  ADR-NP-001's "Alternativas rejeitadas"); still considered
+  disproportionately risky for any other use case.
