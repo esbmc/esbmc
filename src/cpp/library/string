@@ -1704,6 +1704,7 @@ __ESBMC_HIDE:
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
   this->_size = (n);
   strncpy(this->str, s.str + pos, n);
+  this->str[n] = '\0';
   return *this;
 }
 
@@ -1716,6 +1717,7 @@ __ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
   this->_size = (n);
   strncpy(this->str, s, n);
+  this->str[n] = '\0';
   return *this;
 }
 
