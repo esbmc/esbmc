@@ -2,8 +2,10 @@
 #include <solvers/smt/smt_conv.h>
 #include <util/message.h>
 #include <irep2/irep2.h>
+#include <iterator>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace
 {
@@ -123,6 +125,102 @@ int classify_ite_extremum(
 
   return 0;
 }
+
+// A running max/min fold still being extended: `tip` is the latest result,
+// `leaves` are all the original (non-chain) values folded into it so far.
+struct chain_infot
+{
+  expr2tc tip;
+  std::vector<expr2tc> leaves;
+  int dir;
+  unsigned depth;
+};
+
+// Looks up `operand` as another chain's current tip, resolving one def_of hop
+// first (mirrors operand_matches) so phi-merge temporaries don't hide it.
+chain_infot *find_tip(
+  std::unordered_map<std::string, chain_infot> &active_tip,
+  const expr2tc &operand,
+  int dir,
+  const std::unordered_map<std::string, expr2tc> &def_of)
+{
+  if (!is_symbol2t(operand))
+    return nullptr;
+
+  auto try_name = [&](const std::string &name) -> chain_infot * {
+    auto it = active_tip.find(name);
+    return it != active_tip.end() && it->second.dir == dir ? &it->second
+                                                           : nullptr;
+  };
+
+  if (chain_infot *hit = try_name(to_symbol2t(operand).get_symbol_name()))
+    return hit;
+
+  expr2tc resolved = resolve_once(operand, def_of);
+  return is_symbol2t(resolved) && resolved != operand
+           ? try_name(to_symbol2t(resolved).get_symbol_name())
+           : nullptr;
+}
+
+// Extends (or starts) the running chain(s) that `lhs = ite(cond, t, e)`
+// belongs to, so the leaf-to-final bounds can be injected in one pass over
+// `active_tip` once the SSA scan is done, instead of re-deriving them via
+// solver-side transitive chaining across every intermediate step.
+void extend_chain(
+  std::unordered_map<std::string, chain_infot> &active_tip,
+  const expr2tc &lhs,
+  const expr2tc &t,
+  const expr2tc &e,
+  int dir,
+  const std::unordered_map<std::string, expr2tc> &def_of)
+{
+  chain_infot *t_tip = find_tip(active_tip, t, dir, def_of);
+  chain_infot *e_tip = find_tip(active_tip, e, dir, def_of);
+
+  chain_infot next;
+  next.tip = lhs;
+  next.dir = dir;
+
+  if (t_tip && e_tip && t_tip == e_tip)
+  {
+    // Both branches resolve to the same active tip (e.g. ite(cond, x, x)):
+    // this fold introduces no new leaf, just renames the tip to `lhs`.
+    next.leaves = std::move(t_tip->leaves);
+    next.depth = t_tip->depth;
+  }
+  else if (t_tip && e_tip)
+  {
+    next.leaves = std::move(t_tip->leaves);
+    next.leaves.insert(
+      next.leaves.end(),
+      std::make_move_iterator(e_tip->leaves.begin()),
+      std::make_move_iterator(e_tip->leaves.end()));
+    next.depth = t_tip->depth + e_tip->depth;
+  }
+  else if (t_tip)
+  {
+    next.leaves = std::move(t_tip->leaves);
+    next.leaves.push_back(e);
+    next.depth = t_tip->depth + 1;
+  }
+  else if (e_tip)
+  {
+    next.leaves = std::move(e_tip->leaves);
+    next.leaves.push_back(t);
+    next.depth = e_tip->depth + 1;
+  }
+  else
+  {
+    next.leaves = {t, e};
+    next.depth = 1;
+  }
+
+  if (t_tip)
+    active_tip.erase(to_symbol2t(t_tip->tip).get_symbol_name());
+  if (e_tip && e_tip != t_tip)
+    active_tip.erase(to_symbol2t(e_tip->tip).get_symbol_name());
+  active_tip[to_symbol2t(lhs).get_symbol_name()] = std::move(next);
+}
 } // namespace
 
 void assert_symmetry_breaking(
@@ -130,48 +228,72 @@ void assert_symmetry_breaking(
   smt_convt &smt_conv)
 {
   std::unordered_map<std::string, expr2tc> def_of;
+  std::unordered_map<std::string, chain_infot> active_tip;
+
+  unsigned per_step_hints = 0;
+  unsigned direct_hints = 0;
   for (const auto &step : equation.SSA_steps)
   {
     if (step.ignore || !step.is_assignment() || !is_symbol2t(step.lhs))
       continue;
+
+    if (is_if2t(step.rhs))
+    {
+      const if2t &ite = to_if2t(step.rhs);
+
+      // The injected bounds are tautologies only over a total order;
+      // floatbv is excluded because IEEE-754 comparisons involving NaN are
+      // all false.
+      const type2tc &ty = ite.type;
+      if (
+        is_signedbv_type(ty) || is_unsignedbv_type(ty) || is_fixedbv_type(ty) ||
+        is_pointer_type(ty))
+      {
+        int dir = classify_ite_extremum(
+          ite.cond, ite.true_value, ite.false_value, def_of);
+        if (dir != 0)
+        {
+          smt_conv.assert_expr(
+            dir > 0 ? lessthanequal2tc(ite.true_value, step.lhs)
+                    : lessthanequal2tc(step.lhs, ite.true_value));
+          smt_conv.assert_expr(
+            dir > 0 ? lessthanequal2tc(ite.false_value, step.lhs)
+                    : lessthanequal2tc(step.lhs, ite.false_value));
+          per_step_hints += 2;
+
+          extend_chain(
+            active_tip, step.lhs, ite.true_value, ite.false_value, dir, def_of);
+        }
+      }
+    }
+
     def_of[to_symbol2t(step.lhs).get_symbol_name()] = step.rhs;
   }
 
-  unsigned hints = 0;
-  for (const auto &step : equation.SSA_steps)
+  // Whatever chain tips are still unconsumed are chain-finals: assert a
+  // direct bound from every leaf ever folded into them, so proving a
+  // property against the final result doesn't need the solver to chain
+  // per-step bounds transitively across the whole fold. Chains of depth 1
+  // are skipped since their leaves are exactly the per-step bounds above.
+  for (const auto &[name, info] : active_tip)
   {
-    if (step.ignore || !step.is_assignment() || !is_symbol2t(step.lhs))
+    if (info.depth < 2)
       continue;
-    if (!is_if2t(step.rhs))
-      continue;
-
-    const if2t &ite = to_if2t(step.rhs);
-
-    // The injected bounds are tautologies only over a total order; floatbv
-    // is excluded because IEEE-754 comparisons involving NaN are all false.
-    const type2tc &ty = ite.type;
-    if (!(is_signedbv_type(ty) || is_unsignedbv_type(ty) ||
-          is_fixedbv_type(ty) || is_pointer_type(ty)))
-      continue;
-
-    int dir =
-      classify_ite_extremum(ite.cond, ite.true_value, ite.false_value, def_of);
-    if (dir == 0)
-      continue;
-
-    smt_conv.assert_expr(
-      dir > 0 ? lessthanequal2tc(ite.true_value, step.lhs)
-              : lessthanequal2tc(step.lhs, ite.true_value));
-    smt_conv.assert_expr(
-      dir > 0 ? lessthanequal2tc(ite.false_value, step.lhs)
-              : lessthanequal2tc(step.lhs, ite.false_value));
-    hints += 2;
+    for (const expr2tc &leaf : info.leaves)
+    {
+      smt_conv.assert_expr(
+        info.dir > 0 ? lessthanequal2tc(leaf, info.tip)
+                     : lessthanequal2tc(info.tip, leaf));
+      direct_hints++;
+    }
   }
 
-  if (hints > 0)
+  if (per_step_hints + direct_hints > 0)
     log_debug(
       "symmetry-breaking",
-      "injected {} redundant extremum bound(s) from recognised max/min ite "
-      "assignments",
-      hints);
+      "injected {} redundant extremum bound(s) ({} per-step, {} "
+      "direct-to-final) from recognised max/min ite assignments",
+      per_step_hints + direct_hints,
+      per_step_hints,
+      direct_hints);
 }

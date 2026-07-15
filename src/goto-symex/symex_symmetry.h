@@ -10,7 +10,9 @@ class smt_convt;
 /// max, `<=` for a min) into `smt_conv`. This hands the solver the fold
 /// bound directly instead of forcing it to case-split to re-derive it --
 /// the motivating case (discussion #5998 / Z3 #10125) is a running max/min
-/// folded over free values.
+/// folded over free values. For a chain of such ites, a direct leaf-to-final
+/// bound is also asserted, so a property against the chain's final result
+/// doesn't force the solver to chain the per-step bounds transitively.
 ///
 /// Each bound is a tautology implied by the ite's own definition, so it
 /// cannot change satisfiability, provided the comparison is over a total
