@@ -352,8 +352,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"cex-output",
      boost::program_options::value<std::string>(),
      "Save the counterexample into a file or, "
-     "in multi-property mode, multiple files with name prefix 'N-' "
-     "where 'N' is a decimal increasing from zero"},
+     "in multi-property mode, multiple files with name prefix "
+     "'<phase>-k<K>-<N>-', where <phase> is the verification phase "
+     "(base/fwd/indstep/bmc), <K> the unwind bound, and <N> a decimal "
+     "increasing from zero. The phase and k tags keep counterexamples from "
+     "different k-induction steps from overwriting each other"},
     {"file-output",
      boost::program_options::value<std::string>(),
      "Redirect all output to a file (no stdout/stderr)"},
