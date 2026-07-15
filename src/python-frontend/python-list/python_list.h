@@ -99,15 +99,22 @@ public:
    * @brief Lower whole-row boolean-mask selection `a[mask]` on a 2-D array.
    * The runtime-list model used by build_bool_mask_index cannot hold an
    * array-typed element (confirmed empirically: pushing a row produces a
-   * bit-vector/array sort mismatch at the SMT backend), so this requires
-   * @p mask to resolve to a concrete boolean literal (`np.array([True,
-   * False, ...])`) whose declaring assignment is found via AST lookup —
-   * the selected row count is then known at conversion time and the result
-   * is built as a fixed-size array, mirroring build_column_select. A
-   * symbolic (non-literal) mask is rejected explicitly.
+   * bit-vector/array sort mismatch at the SMT backend), so this first tries
+   * to resolve @p mask to a concrete boolean literal (`np.array([True,
+   * False, ...])`) whose declaring assignment is found via AST lookup — the
+   * selected row count is then known at conversion time and the result is
+   * built as an exactly-sized array, mirroring build_column_select. When the
+   * mask can't be resolved that way (a nondet/runtime-computed element), it
+   * falls back to the bounded-result + explicit-count model (see
+   * numpy-architecture-decisions.md #1): a worst-case-sized (every row
+   * selected) result array plus a runtime `count` of rows actually copied;
+   * slots at/after `count` are unspecified padding. Both paths reject a
+   * reassigned mask variable, since the literal path's AST lookup can't tell
+   * which assignment reaches this use site.
    * @param array   Source 2-D array expression.
-   * @param mask    Boolean mask array expression (used only for its type/
-   *                length; values are re-read from the AST).
+   * @param mask    Boolean mask array expression (its value is read at
+   *                runtime for the symbolic path; re-read from the AST for
+   *                the literal path).
    * @param element The Subscript AST node, used for location info and to
    *                recover the mask's variable name.
    */
@@ -128,6 +135,28 @@ public:
   exprt build_column_select(
     const exprt &array,
     const nlohmann::json &col_index_node,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Lower an N-D mixed slice/index tuple subscript with exactly one
+   * full-slice axis and every other axis a literal (or resolvable runtime)
+   * integer, e.g. `a[:, 0, 0]` or `a[0, :, 0]` on a 3-D array. Generalizes
+   * build_column_select beyond 2-D: for each position along the slice axis,
+   * the other axes are chained-indexed via the existing single-axis
+   * `build_index` path, and the resulting scalar/sub-array is copied into a
+   * fresh result sized to the slice axis's extent. Any other combination
+   * (a bounded/partial slice, more than one slice axis, ...) is rejected by
+   * the caller before reaching this function.
+   * @param array      Source N-D array expression.
+   * @param idx_nodes  One AST node per axis, in order; exactly one must be a
+   *                   full slice (`:`).
+   * @param slice_axis Index into @p idx_nodes of the full-slice axis.
+   * @param element    The Subscript AST node, used for location info.
+   */
+  exprt build_mixed_slice_tuple_select(
+    const exprt &array,
+    const std::vector<nlohmann::json> &idx_nodes,
+    std::size_t slice_axis,
     const nlohmann::json &element);
 
   /**

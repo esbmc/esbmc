@@ -661,6 +661,90 @@ exprt python_list::build_column_select(
   return build_symbol(result);
 }
 
+exprt python_list::build_mixed_slice_tuple_select(
+  const exprt &array,
+  const std::vector<nlohmann::json> &idx_nodes,
+  std::size_t slice_axis,
+  const nlohmann::json &element)
+{
+  const namespacet ns(converter_.symbol_table());
+  const locationt location = converter_.get_location_from_decl(element);
+
+  // Walk one nested array dimension per idx_nodes entry, collecting each
+  // axis's extent and the type reached after indexing it. A dimension count
+  // shorter than idx_nodes means the tuple has more entries than the array
+  // has axes.
+  std::vector<BigInt> axis_sizes(idx_nodes.size());
+  std::vector<typet> types_after(idx_nodes.size());
+  typet current_type = ns.follow(array.type());
+  for (std::size_t axis = 0; axis < idx_nodes.size(); ++axis)
+  {
+    if (!current_type.is_array())
+    {
+      std::ostringstream msg;
+      msg << "IndexError: too many indices for array: array has fewer "
+             "dimensions than the "
+          << idx_nodes.size() << " indices given";
+      if (!location.is_nil())
+        msg << " at " << location.get_file() << ":" << location.get_line();
+      throw std::runtime_error(msg.str());
+    }
+
+    const array_typet &at = to_array_type(current_type);
+    axis_sizes[axis] = binary2integer(at.size().value().c_str(), false);
+    current_type = ns.follow(at.subtype());
+    types_after[axis] = current_type;
+  }
+
+  const typet result_elem_type = types_after.back();
+  if (result_elem_type.is_array())
+  {
+    std::ostringstream msg;
+    msg << "TypeError: mixed slice/index tuple indexing currently supports "
+           "only fully-indexed trailing axes";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  std::vector<exprt> fixed_idx(idx_nodes.size());
+  for (std::size_t axis = 0; axis < idx_nodes.size(); ++axis)
+  {
+    if (axis == slice_axis)
+      continue;
+    fixed_idx[axis] = resolve_fixed_axis_index(
+      idx_nodes[axis], axis_sizes[axis], static_cast<unsigned>(axis), element);
+  }
+
+  const BigInt slice_len = axis_sizes[slice_axis];
+  const array_typet result_type(
+    result_elem_type, from_integer(slice_len, size_type()));
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$tuple_mixed_slice$", result_type, exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  for (BigInt pos = 0; pos < slice_len; ++pos)
+  {
+    exprt current = array;
+    for (std::size_t axis = 0; axis < idx_nodes.size(); ++axis)
+    {
+      exprt idx_expr =
+        (axis == slice_axis) ? from_integer(pos, size_type()) : fixed_idx[axis];
+      current = build_index(current, idx_expr, types_after[axis]);
+    }
+
+    exprt dst_elem = build_index(
+      build_symbol(result), from_integer(pos, size_type()), result_elem_type);
+    code_assignt assign(dst_elem, current);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+  }
+
+  return build_symbol(result);
+}
+
 exprt python_list::build_fancy_index(
   const exprt &array,
   const std::vector<nlohmann::json> &indices,
