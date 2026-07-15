@@ -1,9 +1,14 @@
 name: Sanitizers
 
-# Builds ESBMC under clang's AddressSanitizer and UndefinedBehaviorSanitizer
-# and runs the CORE regression suite, capturing every sanitizer diagnostic
-# to per-PID log files. The deduplicated findings are written to the job
-# summary; the raw logs upload as artifacts for triage.
+# Builds ESBMC under clang's AddressSanitizer, UndefinedBehaviorSanitizer and
+# ThreadSanitizer and runs the CORE regression suite, capturing every sanitizer
+# diagnostic to per-PID log files. The deduplicated findings are written to the
+# job summary; the raw logs upload as artifacts for triage.
+#
+# The tsan leg is the Tier-C concurrency check for the irep2 verification plan
+# (docs/irep2-verification-plan.md §13): it exercises the atomic refcount /
+# CRC cache / writer-stamp scheme in src/irep2/irep2.h under real workloads,
+# and is the tripwire for the guard_seq thread-confinement assumption.
 #
 # This workflow tracks https://github.com/esbmc/esbmc/issues/223.
 #
@@ -33,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sanitizer: [asan, ubsan]
+        sanitizer: [asan, ubsan, tsan]
     env:
       ESBMC_SANITIZER_LOG_DIR: ${{ github.workspace }}/sanitizer-logs
     steps:
@@ -45,8 +50,29 @@ jobs:
       - name: Build ESBMC (${{ matrix.sanitizer }})
         run: |
           case "${{ matrix.sanitizer }}" in
-            asan)  STYPE=ASAN ;;
+            asan)
+              STYPE=ASAN
+              # c2goto is invoked at build time to generate the .goto library
+              # models and embeds clang/LLVM.  Under ASan the bundled clang
+              # trips a use-after-poison (LLVM BumpPtrAllocator region
+              # poisoning) and a diagnostic-printer leak — noise that lives in
+              # clang, not ESBMC.  With the default options those abort the
+              # build tool and stop ninja.  Let the build tools continue past
+              # the report (needs -fsanitize-recover=address, set in
+              # Sanitizers.cmake), skip LSan for the build, and exit 0 so the
+              # .goto outputs are produced.  The regression step keeps its own
+              # options from common-options.sh.
+              export ASAN_OPTIONS="detect_leaks=0:halt_on_error=0:abort_on_error=0:exitcode=0"
+              ;;
             ubsan) STYPE=UBSAN ;;
+            tsan)
+              STYPE=TSAN
+              # As with ASan, the build-time c2goto invocations embed clang; do
+              # not let a bundled-clang report abort the build tool so the .goto
+              # models are still produced. The regression step sets its own
+              # TSAN_OPTIONS from common-options.sh.
+              export TSAN_OPTIONS="halt_on_error=0:exitcode=0"
+              ;;
             *) echo "unknown sanitizer ${{ matrix.sanitizer }}"; exit 1 ;;
           esac
           ./scripts/build.sh -b Sanitizer -s "$STYPE"

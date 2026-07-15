@@ -111,4 +111,21 @@ tmp_path create_tmp_dir(const std::string &format = "esbmc.%%%%-%%%%-%%%%");
 void create_path_and_write(const std::string &path, const char *s, size_t n);
 void register_tmp_for_cleanup(const std::string &path);
 void cleanup_registered_tmps();
+
+/**
+ * @brief Track child process groups so the signal/timeout exit paths can
+ * kill them.
+ *
+ * A backend that spawns an external solver into its own process group (so
+ * the group can be killed as a unit, MPI ranks included) registers the pgid
+ * here. On a timeout or fatal signal ESBMC exits without running
+ * destructors; kill_registered_pgroups(), called from those handlers, sends
+ * SIGKILL to each still-registered group so the children do not linger.
+ * unregister_pgroup() is called once the child has been reaped normally.
+ * No-op on Windows. `pgid` is a pid_t widened to long to keep this header
+ * POSIX-free.
+ */
+void register_pgroup_for_cleanup(long pgid);
+void unregister_pgroup(long pgid);
+void kill_registered_pgroups();
 } // namespace file_operations

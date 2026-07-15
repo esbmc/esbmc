@@ -182,6 +182,17 @@ void goto_inlinet::expand_function_call(
 
   const irep_idt &identifier = to_symbol2t(function).thename;
 
+  // Calls to __builtin_va_start/__builtin_va_copy exist solely as markers
+  // for symex's va_list-started tracking; they have no body and are
+  // intercepted in run_builtin, so they must survive inlining untouched.
+  if (
+    identifier == "c:@F@__builtin_va_start" ||
+    identifier == "c:@F@__builtin_va_copy")
+  {
+    ++target;
+    return;
+  }
+
   // see if we are already expanding it
   if (recursion_set.find(identifier) != recursion_set.end())
   {

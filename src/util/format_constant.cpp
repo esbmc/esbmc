@@ -2,17 +2,18 @@
 #include <util/format_constant.h>
 #include <util/ieee_float.h>
 #include <irep2/irep2_utils.h>
-#include <util/i2string.h>
+#include <util/mp_arith.h>
 
 std::string format_constantt::operator()(const expr2tc &expr)
 {
   if (is_constant_expr(expr))
   {
-    if (is_unsignedbv_type(expr))
-      return i2string(to_constant_int2t(expr).as_ulong());
-
-    if (is_signedbv_type(expr))
-      return i2string(to_constant_int2t(expr).as_long());
+    // Format the full-width value directly from the BigInt. Going through
+    // as_ulong()/as_long() would silently truncate any constant wider than
+    // 64 bits (e.g. __int128) to its low 64 bits (finding R2); integer2string
+    // prints the exact value at any width and handles the sign.
+    if (is_unsignedbv_type(expr) || is_signedbv_type(expr))
+      return integer2string(to_constant_int2t(expr).value);
 
     if (is_fixedbv_type(expr))
       return fixedbvt(to_constant_fixedbv2t(expr).value).format(*this);

@@ -1,24 +1,25 @@
 #include <python-frontend/string/char_utils.h>
-#include <python-frontend/complex_handler.h>
+#include <python-frontend/math/complex_handler.h>
 #include <python-frontend/converter/converter_internal.h>
-#include <python-frontend/convert_float_literal.h>
+#include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/builder.h>
-#include <python-frontend/python_consteval.h>
+#include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/module_locator.h>
-#include <python-frontend/python_annotation.h>
-#include <python-frontend/python_class_builder.h>
+#include <python-frontend/module/module_locator.h>
+#include <python-frontend/param_annotations.h>
+#include <python-frontend/python_annotation/python_annotation.h>
+#include <python-frontend/class/python_class_builder.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_dict_handler.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python_lambda.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/python_typechecking.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/type/python_typechecking.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_typecast.h>
@@ -556,6 +557,16 @@ void python_converter::convert()
     // Pre-walk the import graph so each annotator can see subscript usages
     // from any other module (GitHub #4554).
     pre_collect_module_asts(*ast_json, locator);
+
+    // Retype each imported module's list parameters from their call sites,
+    // before import_module_into_block annotates and converts them. The entry
+    // module was retyped in python_languaget::parse(); it is read here only to
+    // find the calls that reach into the imported modules (GitHub #5936).
+    std::vector<python_param_annotations::module_ast> modules{
+      {ast_json, nullptr, ""}};
+    for (auto &entry : module_ast_pool_)
+      modules.push_back({&entry.second, &entry.second, entry.first});
+    python_param_annotations::propagate_tuple_list_params(modules);
 
     // Accumulate all imports
     code_blockt all_imports_block;

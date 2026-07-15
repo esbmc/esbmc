@@ -1,7 +1,7 @@
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
-#include <python-frontend/type_handler.h>
+#include <python-frontend/type/type_handler.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/std_code.h>

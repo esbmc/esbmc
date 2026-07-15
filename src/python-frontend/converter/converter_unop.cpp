@@ -1,6 +1,6 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/type/type_utils.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>

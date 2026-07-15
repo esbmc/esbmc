@@ -1,0 +1,4 @@
+CORE
+cbmc_nan_fail.goto
+--binary
+^VERIFICATION FAILED$

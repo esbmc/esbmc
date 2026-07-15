@@ -16,6 +16,11 @@ on:
             description: "Whether to run tests (regression) for this build"
             required: true
             type: boolean
+        canon-names:
+            description: "Upload the build as a canonical esbmc-<platform>.zip release asset"
+            required: false
+            default: false
+            type: boolean
     workflow_call:
       inputs:
         operating-system:
@@ -30,6 +35,11 @@ on:
             description: "Whether to run tests (regression) for this build"
             required: true
             type: boolean
+        canon-names:
+            description: "Upload the build as a canonical esbmc-<platform>.zip release asset"
+            required: false
+            default: false
+            type: boolean
 
 jobs:
   build-unix:
@@ -39,6 +49,7 @@ jobs:
       operating-system: ${{ inputs.operating-system }}
       build-flags: ${{ inputs.build-flags }}
       testing: ${{ inputs.testing }}
+      canon-names: ${{ inputs.canon-names }}
 
   build-windows:
     if: ${{ startsWith(inputs.operating-system, 'windows-') }}
@@ -47,3 +58,4 @@ jobs:
       operating-system: ${{ inputs.operating-system }}
       build-flags: ${{ inputs.build-flags }}
       testing: ${{ inputs.testing }}
+      canon-names: ${{ inputs.canon-names }}

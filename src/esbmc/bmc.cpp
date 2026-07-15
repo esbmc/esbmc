@@ -122,6 +122,17 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
 
   if (witness_yaml_output != "")
     correctness_yaml_goto_trace(options, ns, goto_trace);
+
+  // On a successful verification there is no error trace, but dead-store
+  // advisories (CWE-563) are still valid and must reach SARIF. Emit an
+  // advisory-only document; guarded so flag-off runs write nothing new.
+  if (
+    !dead_store_advisories.empty() &&
+    !options.get_option("sarif-output").empty())
+  {
+    sarif_goto_trace(options, ns, goto_trace, dead_store_advisories);
+    dead_store_sarif_written = true;
+  }
 }
 
 void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
@@ -151,7 +162,10 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     violation_yaml_goto_trace(options, ns, goto_trace);
 
   if (!options.get_option("sarif-output").empty())
-    sarif_goto_trace(options, ns, goto_trace);
+  {
+    sarif_goto_trace(options, ns, goto_trace, dead_store_advisories);
+    dead_store_sarif_written = true;
+  }
 
   if (options.get_bool_option("generate-testcase"))
   {
@@ -1344,6 +1358,21 @@ smt_resultt bmct::start_bmc()
     // multi-property traces are output during the run(eq)
     report_trace(res, *eq);
   report_result(res);
+
+  // Dead-store advisories are verdict-independent, but the trace paths that
+  // emit them (successful_trace / error_trace) do not run on every verdict —
+  // e.g. a FAILED run under --no-cex / --result-only, or an SMTLIB-only
+  // emission. Emit an advisory-only SARIF document here if none was written
+  // with a trace, so the advisory is not silently dropped (the textual
+  // advisory prints unconditionally in the driver).
+  if (
+    !dead_store_sarif_written && !dead_store_advisories.empty() &&
+    !options.get_option("sarif-output").empty())
+  {
+    goto_tracet empty_trace;
+    sarif_goto_trace(options, ns, empty_trace, dead_store_advisories);
+    dead_store_sarif_written = true;
+  }
   return res;
 }
 

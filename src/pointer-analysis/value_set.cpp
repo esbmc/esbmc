@@ -1144,6 +1144,16 @@ void value_sett::assign(
       if (is_code_type(subtype))
         continue;
 
+      // The rhs may carry a member that the lhs type does not have — e.g. a
+      // class-specific vtable-pointer component present in only one of two
+      // structurally-related struct declarations (a subclass/superclass pair,
+      // or the same tag declared across translation units). There is no
+      // storage on the lhs to assign into, so skip it rather than building an
+      // ill-formed member access (which trips a member2t component-lookup
+      // assertion and, in release builds, yields a malformed expression).
+      if (!struct_union_get_component_number(lhs_type, name).has_value())
+        continue;
+
       expr2tc lhs_member = member2tc(subtype, lhs, name);
 
       expr2tc rhs_member;

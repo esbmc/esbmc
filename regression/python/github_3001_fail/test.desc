@@ -1,4 +1,6 @@
 CORE
 main.py
 --unwind 1
-^  AttributeError: object has no attribute 'bar' \(possible types: 'Foo', 'Bar'\)$
+^VERIFICATION FAILED$
+AttributeError: object has no attribute 'bar' \(possible types: 'Foo', 'Bar'\)
+uncaught exception: AttributeError

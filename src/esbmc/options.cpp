@@ -101,6 +101,83 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Simplify the trace and exclude the assignments whose variables are not "
      "from user-input files"}}},
+  {"Frontend",
+   {{"include,I",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "path"),
+     "Set include path"},
+    {"include-file",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "file"),
+     "Include files via frontend's -include option before anything else"},
+    {"nostdinc", NULL, "Do not include from standard system paths"},
+    {"idirafter",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "path"),
+     "Append system include path to search after system headers"},
+    {"define,D",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "macro"),
+     "Define preprocessor macro"},
+    {"warning,W",
+     boost::program_options::value<std::vector<std::string>>(),
+     "Enable specific frontend warnings, disable with \"no-\" prefix, or pass "
+     "options directly to the C/C++ frontends with the form "
+     "-Wc,OPT1,OPT2,..."},
+    {"std",
+     boost::program_options::value<std::string>()->value_name("version"),
+     "Set C/C++ standard version"},
+    {"sysroot",
+     boost::program_options::value<std::string>()->value_name("<path>"),
+     "Set the sysroot for the frontend"},
+    {"no-abstracted-cpp-includes",
+     NULL,
+     "Do not include abstract C++ operational models"},
+    {"force,f",
+     boost::program_options::value<std::vector<std::string>>(),
+     "Pass -f flags to the C/C++ frontend"},
+    {"preprocess", NULL, "Stop after preprocessing"},
+    {"no-inlining", NULL, "Disable inlining function calls"},
+    {"full-inlining", NULL, "Perform full inlining of function calls"},
+    {"all-claims", NULL, "Keep all claims"},
+    {"keep-verified-claims",
+     NULL,
+     "Do not skip verified claims in multi-property verification"},
+    {"show-loops", NULL, "Show the loops in the program"},
+    {"show-claims", NULL, "Only show claims"},
+    {"show-vcc", NULL, "Show the verification conditions"},
+    {"no-library", NULL, "Disable built-in abstract C library"},
+    {"no-string-literal", NULL, "Ignore string literals (replace with NULL)"},
+    {"binary", NULL, "Read goto program instead of source code"},
+    {"cprover", NULL, "Deprecated no-op (kept for backward compatibility)"},
+    {"no-cprover-additions",
+     NULL,
+     "Do not auto-link ESBMC additions when reading a CBMC goto-binary"},
+    {"dont-care-about-missing-extensions",
+     NULL,
+     "Don't crash on unsupported extensions"},
+    {"old-frontend",
+     NULL,
+     "Parse source files using the old frontend (deprecated)"},
+    {"funsigned-char", NULL, "Make \"char\" unsigned by default"},
+    {"fms-extensions", NULL, "Enable microsoft C extensions"},
+    {"argv-max-args",
+     boost::program_options::value<int>()->default_value(2)->value_name("nr"),
+     "Maximum number of argv entries backed with nondet strings (default 2). "
+     "Higher values widen coverage at the cost of a larger SMT formula."},
+    {"argv-max-strlen",
+     boost::program_options::value<int>()->default_value(256)->value_name("nr"),
+     "Maximum length (in bytes, including the null terminator) of each backed "
+     "argv string (default 256)."},
+    {"gcc-nested-functions",
+     NULL,
+     "Enable GCC nested functions extension (source-level lambda lifting)"},
+    {"sv-comp",
+     NULL,
+     "Enable SV-COMP mode: suppress GCC-acceptable frontend diagnostics "
+     "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
+     "physical line numbers for witnesses, and avoid malloc/free in the "
+     "fopen/fclose models. Set automatically by the SV-COMP wrapper."}}},
 #ifdef ENABLE_PYTHON_FRONTEND
   {"Python frontend",
    {
@@ -189,83 +266,6 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("fname"),
      "Convert the assert(cond) to assert(!cond)"}}},
 #endif
-  {"Frontend",
-   {{"include,I",
-     boost::program_options::value<std::vector<std::string>>()->value_name(
-       "path"),
-     "Set include path"},
-    {"include-file",
-     boost::program_options::value<std::vector<std::string>>()->value_name(
-       "file"),
-     "Include files via frontend's -include option before anything else"},
-    {"nostdinc", NULL, "Do not include from standard system paths"},
-    {"idirafter",
-     boost::program_options::value<std::vector<std::string>>()->value_name(
-       "path"),
-     "Append system include path to search after system headers"},
-    {"define,D",
-     boost::program_options::value<std::vector<std::string>>()->value_name(
-       "macro"),
-     "Define preprocessor macro"},
-    {"warning,W",
-     boost::program_options::value<std::vector<std::string>>(),
-     "Enable specific frontend warnings, disable with \"no-\" prefix, or pass "
-     "options directly to the C/C++ frontends with the form "
-     "-Wc,OPT1,OPT2,..."},
-    {"std",
-     boost::program_options::value<std::string>()->value_name("version"),
-     "Set C/C++ standard version"},
-    {"sysroot",
-     boost::program_options::value<std::string>()->value_name("<path>"),
-     "Set the sysroot for the frontend"},
-    {"no-abstracted-cpp-includes",
-     NULL,
-     "Do not include abstract C++ operational models"},
-    {"force,f",
-     boost::program_options::value<std::vector<std::string>>(),
-     "Pass -f flags to the C/C++ frontend"},
-    {"preprocess", NULL, "Stop after preprocessing"},
-    {"no-inlining", NULL, "Disable inlining function calls"},
-    {"full-inlining", NULL, "Perform full inlining of function calls"},
-    {"all-claims", NULL, "Keep all claims"},
-    {"keep-verified-claims",
-     NULL,
-     "Do not skip verified claims in multi-property verification"},
-    {"show-loops", NULL, "Show the loops in the program"},
-    {"show-claims", NULL, "Only show claims"},
-    {"show-vcc", NULL, "Show the verification conditions"},
-    {"no-library", NULL, "Disable built-in abstract C library"},
-    {"no-string-literal", NULL, "Ignore string literals (replace with NULL)"},
-    {"binary", NULL, "Read goto program instead of source code"},
-    {"cprover", NULL, "Deprecated no-op (kept for backward compatibility)"},
-    {"no-cprover-additions",
-     NULL,
-     "Do not auto-link ESBMC additions when reading a CBMC goto-binary"},
-    {"dont-care-about-missing-extensions",
-     NULL,
-     "Don't crash on unsupported extensions"},
-    {"old-frontend",
-     NULL,
-     "Parse source files using the old frontend (deprecated)"},
-    {"funsigned-char", NULL, "Make \"char\" unsigned by default"},
-    {"fms-extensions", NULL, "Enable microsoft C extensions"},
-    {"argv-max-args",
-     boost::program_options::value<int>()->default_value(2)->value_name("nr"),
-     "Maximum number of argv entries backed with nondet strings (default 2). "
-     "Higher values widen coverage at the cost of a larger SMT formula."},
-    {"argv-max-strlen",
-     boost::program_options::value<int>()->default_value(256)->value_name("nr"),
-     "Maximum length (in bytes, including the null terminator) of each backed "
-     "argv string (default 256)."},
-    {"gcc-nested-functions",
-     NULL,
-     "Enable GCC nested functions extension (source-level lambda lifting)"},
-    {"sv-comp",
-     NULL,
-     "Enable SV-COMP mode: suppress GCC-acceptable frontend diagnostics "
-     "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
-     "physical line numbers for witnesses, and avoid malloc/free in the "
-     "fopen/fclose models. Set automatically by the SV-COMP wrapper."}}},
   {"Architecture",
    {
      {"no-arch", NULL, "Don't set up an architecture"},
@@ -466,7 +466,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"bidirectional",
      NULL,
      "Search the inductive step counterexample for assignments"},
-    {"unlimited-k-steps", NULL, "Set max number of iteration to UINT_MAX"},
+    {"unlimited-k-steps",
+     NULL,
+     "Remove the upper bound on the number of k-induction steps"},
     {"max-inductive-step",
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "Set max k value for the inductive step"},
@@ -522,6 +524,31 @@ const struct group_opt_templ all_cmd_options[] = {
     {"cvc5", NULL, "Use CVC5"},
     {"yices", NULL, "Use Yices"},
     {"bitwuzla", NULL, "Use Bitwuzla (default)"},
+    {"bitwuzllob",
+     NULL,
+     "Use Bitwuzllob (Bitwuzla on the massively parallel Mallob platform) by "
+     "running an external mallob binary in one-shot mono mode"},
+    {"bitwuzllob-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Command running Mallob in mono mode; every %f is replaced by the "
+     "SMT-LIB2 formula file (default: \"mallob -mono=%f -mono-app=SMT\")"},
+    {"bitwuzllob-model-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Local interactive SMT-LIB2 solver used to build the counterexample "
+     "when Bitwuzllob reports satisfiable (e.g. \"z3 -in\")"},
+    {"neurosym",
+     NULL,
+     "Use NeuroSym (neural-guided GAN + Z3 fallback, QF_BV) by running an "
+     "external NeuroSym Python program in one-shot batch mode"},
+    {"neurosym-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Command running NeuroSym on an SMT-LIB2 file; every %f is replaced by "
+     "the formula file, appended when absent (default: \"python main.py "
+     "%f\")"},
+    {"neurosym-model-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Local interactive SMT-LIB2 solver used to build the counterexample "
+     "when NeuroSym reports satisfiable (e.g. \"z3 -in\")"},
     {"bv", NULL, "Use solver with bit-vector arithmetic"},
     {"ir",
      NULL,
@@ -614,6 +641,9 @@ const struct group_opt_templ all_cmd_options[] = {
      "Enable runtime isinstance assertions for annotated code"},
     {"memory-leak-check", NULL, "Enable memory leak check"},
     {"overflow-check", NULL, "Enable arithmetic over- and underflow check"},
+    {"restrict-check",
+     NULL,
+     "Check C restrict-qualified pointer parameters do not alias"},
     {"unsigned-overflow-check",
      NULL,
      "Enable arithmetic over- and underflow check for unsigned integers"},
@@ -642,6 +672,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"unchecked-return-value-check",
      NULL,
      "Enable check for unchecked return values of fallible calls (CWE-252)"},
+    {"dead-store-check",
+     NULL,
+     "Emit advisory notes for dead stores / assignments never read (CWE-563)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(
@@ -852,7 +885,16 @@ const struct group_opt_templ all_cmd_options[] = {
      "Deprecated no-op (accepted for backward compatibility). goto_convert "
      "always lowers function bodies through the IREP2 round-trip "
      "(migrate legacy codet → code_*2t → codet) since V.4.4; the legacy "
-     "bypass and the --no-irep2-bodies escape hatch have been removed."}}},
+     "bypass and the --no-irep2-bodies escape hatch have been removed."},
+    {"irep2-native-body",
+     NULL,
+     "Experimental, default off (W1-loc spike Phase C, esbmc/esbmc#4715). "
+     "Route function bodies to an IREP2-native goto_convert that consumes "
+     "code_*2t directly and inherits the statement location onto value "
+     "operands at consumption, skipping the whole-body legacy round-trip. "
+     "Grown one statement kind at a time; any body containing an unsupported "
+     "construct falls back to the round-trip path, so flag-on is byte-"
+     "identical to flag-off until the native path is complete."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},

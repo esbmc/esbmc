@@ -1,0 +1,5 @@
+CORE
+main.py
+--function pick_one --no-bounds-check
+^VERIFICATION FAILED$
+Unsupported function 'choice' is reached

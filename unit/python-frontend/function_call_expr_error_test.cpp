@@ -8,7 +8,7 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/function_call/cache.h>
-#include <python-frontend/global_scope.h>
+#include <python-frontend/module/global_scope.h>
 #include <python-frontend/symbol_id.h>
 #include <util/config.h>
 #include <util/context.h>
@@ -131,10 +131,11 @@ TEST_CASE(
     exprt result = function_call_expr_test_access::generate_attribute_error(
       fce, "foo", {"MyClass"}, expected);
 
-    // The assert instruction should have been emitted into the block.
+    // A catchable AttributeError throw (issue #5904) should have been emitted
+    // into the block as a code-expression instruction.
     REQUIRE(block.operands().size() == 1);
     REQUIRE(block.operands()[0].is_code());
-    REQUIRE(to_code(block.operands()[0]).get_statement() == "assert");
+    REQUIRE(to_code(block.operands()[0]).get_statement() == "expression");
 
     // Returned expression must be a sideeffect/nondet with the expected type.
     REQUIRE(result.id() == "sideeffect");

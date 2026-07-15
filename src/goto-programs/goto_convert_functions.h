@@ -56,6 +56,25 @@ protected:
     const irep_idt &identifier,
     const locationt &location);
 
+  // W1-loc spike Phase C (esbmc/esbmc#4715): consume the IREP2 body `body2`
+  // natively, emitting `dest` without the whole-body legacy round-trip and
+  // inheriting each `code_*2t::location` onto its value operands at
+  // consumption (design D3; Phase B proved this reproduces the round-trip's
+  // locations byte-identically). Returns true iff every statement kind in
+  // `body2` is supported by the native dispatcher; returns false — leaving
+  // `dest` untouched — the moment it meets an unsupported kind, so the caller
+  // falls back to `goto_convert_rec` and flag-on stays byte-identical to
+  // flag-off until the native path is complete. Gated on --irep2-native-body.
+  bool try_convert_body_native(const expr2tc &body2, goto_programt &dest);
+
+  // Consume one IREP2 statement `code2` natively, appending to `dest`. Returns
+  // false the instant an unsupported kind (or a shape the native emission would
+  // not reproduce byte-identically) appears, so the caller discards the partial
+  // walk and falls back to `goto_convert_rec`. A member so it can reuse the
+  // inherited goto_convertt machinery (has_sideeffect / is_atomic_symbol /
+  // has_atomic_read / ns) to gate the value-statement kinds.
+  bool convert_native_rec(const expr2tc &code2, goto_programt &dest);
+
   void wallop_type_impl(
     irep_idt name,
     typename_mapt &typenames,

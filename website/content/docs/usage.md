@@ -430,6 +430,66 @@ arithmetic overflow on mul
 VERIFICATION FAILED
 ```
 
+## Checking `restrict` pointer aliasing
+
+The C `restrict` qualifier is a promise to the compiler that, for the lifetime of
+the pointer, the object it points to is accessed *only* through that pointer.
+Calling a function with two `restrict` parameters that alias the same object —
+when at least one access is a write — is undefined behaviour (C11 6.7.3.1).
+Compilers exploit this promise to optimise, so a violation can silently miscompile.
+
+The opt-in `--restrict-check` flag turns that contract into a checkable property.
+At the entry of every function with two or more `restrict`-qualified pointer
+parameters, ESBMC asserts that their pointed-to element footprints
+(`sizeof(*p)` bytes each) do not overlap within a shared object:
+
+```c
+void f(int *restrict a, int *restrict b) {
+  *a = 1;
+  *b = 2;
+}
+
+int main(void) {
+  int x = 0;
+  f(&x, &x);   // a and b alias the same object
+  return 0;
+}
+```
+
+```sh
+esbmc file.c --restrict-check
+```
+
+ESBMC reports the aliasing at the function entry:
+
+```
+[Counterexample]
+
+State 1 file file.c line 2 column 3 function f thread 0
+----------------------------------------------------
+Violated property:
+  file file.c line 2 column 3 function f
+  restrict pointer aliasing
+  !(a != 0 && b != 0 && SAME-OBJECT(a, b) && POINTER_OFFSET(a) < POINTER_OFFSET(b) + 4 && POINTER_OFFSET(b) < POINTER_OFFSET(a) + 4)
+
+VERIFICATION FAILED
+```
+
+The footprint is an *under-approximation* of the accessed region, so two pointers
+into the same object whose element ranges are genuinely disjoint are never
+flagged — `f(&arr[0], &arr[2])` verifies successfully. Null parameters designate
+no object and are exempt.
+
+The check is **off by default**; without `--restrict-check` the program above
+verifies successfully. Its scope and known limitations:
+
+- Only function-parameter aliasing is checked; there is no whole-program
+  "based-on" tracking of derived pointers.
+- It over-approximates the *modification* clause of 6.7.3.1p4: the assertion
+  fires on overlap regardless of whether the body performs a modifying access,
+  and `const`-qualified targets are not exempt (a `const` access path is still
+  undefined once the shared object is modified by any means).
+
 ## Multiple Property Verification
 
 ```sh

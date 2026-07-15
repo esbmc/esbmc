@@ -37,5 +37,5 @@ src/CPackSourceConfig.cmake
 *.dSYM/
 regression/**/test
 
-# Generated doxygen API reference (see .doxygen)
+# Generated doxygen API reference (see .config/Doxyfile)
 docs/html/

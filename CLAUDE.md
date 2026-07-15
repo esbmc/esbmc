@@ -98,6 +98,14 @@ Before implementing any feature or bug fix, always work on a dedicated branch:
 - After implementation, simplify and clean up the code aggressively — remove unnecessary conditional checks while ensuring correctness.
 - Run ESBMC over your solution to formally check that it works and does not introduce new errors.
 
+## Code Comments
+
+Write few comments — favour self-explanatory code (clear names, small functions) over narration. Keep added comments to a minimum in PRs; excess comments are noise reviewers must wade through.
+
+- **Do not** restate what the code plainly does (`i++; // increment i`), label structure (`// constructor`, `// helpers`), narrate the change or its history (`// added null check`, `// was: foo()`), or echo a function/variable name in prose.
+- **Do** comment only when it adds what the code cannot convey: a non-obvious *why* (rationale, trade-off, workaround with an issue/PR link), a caveat or invariant a caller must respect, a citation to the C/C++ standard or a solver/algorithm detail, or genuinely subtle logic. One line beats a paragraph.
+- Preserve existing meaningful comments and the file's established doc conventions (e.g. Doxygen-style headers where already used). Match the surrounding comment density rather than exceeding it.
+
 ## Post-implementation Pass
 
 After implementing any non-trivial coding task, before committing:

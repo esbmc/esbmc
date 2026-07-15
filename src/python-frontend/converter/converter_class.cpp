@@ -1,11 +1,11 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_class_builder.h>
+#include <python-frontend/class/python_class_builder.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>

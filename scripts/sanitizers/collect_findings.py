@@ -48,6 +48,16 @@ _UBSAN_RE = re.compile(
 _HEADER_RE = re.compile(
     r"==\d+==ERROR: (?P<tool>AddressSanitizer|LeakSanitizer): (?P<kind>\S+)")
 
+# ThreadSanitizer emits a "WARNING:" report whose stack frames use a different
+# layout from ASan's ("#0 func file:line (module+off)" rather than
+# "#0 0xADDR in func loc"), but every report ends with a one-line SUMMARY that
+# already pairs the kind with its file:line — parse that instead of walking
+# frames.
+#   SUMMARY: ThreadSanitizer: data race src/irep2/irep2.h:161 in ...
+_TSAN_RE = re.compile(
+    r"SUMMARY: ThreadSanitizer: (?P<kind>[\w -]+?) "
+    r"(?P<loc>[^:\s]+:\d+(?::\d+)?)")
+
 # Stack frames look like:
 #   #0 0xdeadbeef in symbol_name path/to/file.cc:42:3
 _FRAME_RE = re.compile(
@@ -140,6 +150,11 @@ def parse_log(path: Path) -> List[Finding]:
             if ubsan:
                 kind = ubsan.group("msg").split(":", 1)[0].strip()
                 out.append(Finding("UBSan", kind, ubsan.group("loc")))
+                continue
+            tsan = _TSAN_RE.search(line)
+            if tsan:
+                out.append(
+                    Finding("TSan", tsan.group("kind"), tsan.group("loc")))
                 continue
             header = _HEADER_RE.search(line)
             if header:

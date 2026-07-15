@@ -1,23 +1,23 @@
 #include <python-frontend/converter/converter_internal.h>
-#include <python-frontend/convert_float_literal.h>
+#include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_annotation.h>
-#include <python-frontend/python_consteval.h>
+#include <python-frontend/python_annotation/python_annotation.h>
+#include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_dict_handler.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python_expr_builder.h>
-#include <python-frontend/python_int_overflow.h>
+#include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/python_lambda.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/python_math.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
@@ -412,7 +412,14 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
 
 exprt python_converter::get_lambda_expr(const nlohmann::json &element)
 {
-  return lambda_handler_->get_lambda_expr(element);
+  // The body is converted here with the lambda's parameters still unbound, so
+  // any division inside it must not emit a ZeroDivisionError guard (which would
+  // fire on the unconstrained divisor); it is checked at the bound call site.
+  bool saved = converting_lambda_body_;
+  converting_lambda_body_ = true;
+  exprt result = lambda_handler_->get_lambda_expr(element);
+  converting_lambda_body_ = saved;
+  return result;
 }
 
 exprt python_converter::get_named_expr(const nlohmann::json &element)
@@ -1204,17 +1211,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           element.contains("value") && element["value"].contains("id")
             ? element["value"]["id"].get<std::string>()
             : std::string();
+        // Raise a catchable Python AttributeError (issue #5904) rather than
+        // aborting the frontend, so it can escape main() (uncaught) or be
+        // suppressed by a matching `except AttributeError`.
         std::ostringstream msg;
-        msg << "AttributeError: '";
-        if (!base_name.empty())
-          msg << base_name;
-        else
-          msg << "object";
-        msg << "' has no attribute '" << attr_name << "'";
-        const locationt loc = get_location_from_decl(element);
-        if (!loc.is_nil())
-          msg << " at " << loc.get_file() << ":" << loc.get_line();
-        throw std::runtime_error(msg.str());
+        msg << "'" << (base_name.empty() ? "object" : base_name)
+            << "' object has no attribute '" << attr_name << "'";
+        expr = get_exception_handler().gen_exception_raise(
+          "AttributeError", msg.str());
+        break;
       }
 
       // Read-modify-set: we may push_back a new component into the class
@@ -1371,8 +1376,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           }
           else
           {
-            throw std::runtime_error(
-              "Attribute \"" + attr_name + "\" not found");
+            // Instance of a known class but the attribute genuinely does not
+            // exist: raise a catchable AttributeError (issue #5904) instead of
+            // aborting conversion.
+            expr = get_exception_handler().gen_exception_raise(
+              "AttributeError",
+              "'" + extract_class_name_from_tag(obj_type_name) +
+                "' object has no attribute '" + attr_name + "'");
           }
         }
         else
@@ -1647,6 +1657,56 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           if (!loc.is_nil())
             msg << " at " << loc.get_file() << ":" << loc.get_line();
           throw std::runtime_error(msg.str());
+        }
+
+        // Fancy indexing through a variable holding a concrete literal
+        // list of integers, e.g. `idx = [0, 2]; a[idx]`. `idx` is a plain
+        // Python list (not a numpy int array), so it reaches here as the
+        // list model's struct type rather than an array_typet. Resolve it
+        // the same way build_bool_mask_row_select resolves a mask
+        // variable: read its sole AST declaration and reuse
+        // build_fancy_index, which already handles a literal list at the
+        // subscript site (`a[[0, 2]]`).
+        if (mask_type == type_handler_.get_list_type())
+        {
+          const std::string idx_name = slice["id"].get<std::string>();
+          const locationt loc = get_location_from_decl(element);
+
+          auto reject = [&](const std::string &reason) {
+            std::ostringstream msg;
+            msg << "TypeError: fancy indexing through a variable (a[idx]) "
+                << reason;
+            if (!loc.is_nil())
+              msg << " at " << loc.get_file() << ":" << loc.get_line();
+            throw std::runtime_error(msg.str());
+          };
+
+          // find_var_decl returns the first textual assignment in scope,
+          // not necessarily the one reaching this use site; reject any
+          // reassignment rather than risk resolving a stale index list.
+          if (json_utils::has_multiple_assignments_in_scope(
+                idx_name, current_func_name_, *ast_json))
+            reject(
+              "requires an index variable that is assigned exactly once "
+              "(no reassignment) so its literal value can be resolved "
+              "unambiguously");
+
+          const nlohmann::json idx_decl =
+            json_utils::find_var_decl(idx_name, current_func_name_, *ast_json);
+
+          if (
+            idx_decl.is_null() || !idx_decl.contains("value") ||
+            idx_decl["value"].value("_type", "") != "List" ||
+            !idx_decl["value"].contains("elts"))
+            reject(
+              "requires an index variable whose value is a concrete "
+              "literal list of integers, e.g. idx = [0, 2]");
+
+          std::vector<nlohmann::json> idx_elts(
+            idx_decl["value"]["elts"].begin(), idx_decl["value"]["elts"].end());
+          python_list list(*this, element);
+          expr = list.build_fancy_index(array, idx_elts, element);
+          break;
         }
       }
     }

@@ -1,0 +1,4 @@
+CORE
+cbmc_nan.goto
+--binary
+^VERIFICATION SUCCESSFUL$

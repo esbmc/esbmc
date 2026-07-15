@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
@@ -143,11 +145,21 @@ unsigned int array_type2t::get_width() const
   assert(const_elem_size != nullptr);
   unsigned long num_elems = const_elem_size->as_ulong();
 
-  return num_elems * sub_width;
+  // R1: reject a product that truncates on the narrowing to unsigned int.
+  // Division form so the multiply cannot itself overflow.
+  assert(
+    sub_width == 0 ||
+    num_elems <= std::numeric_limits<unsigned int>::max() / sub_width);
+  return static_cast<unsigned int>(num_elems * sub_width);
 }
 
 unsigned int vector_type2t::get_width() const
 {
+  // A non-constant size fails the dynamic_cast below; the guarding assert is
+  // compiled out under NDEBUG, so guard here as array_type2t::get_width does.
+  if (array_size->expr_id != expr2t::constant_int_id)
+    throw array_type2t::dyn_sized_array_excp(array_size);
+
   unsigned int sub_width = subtype->get_width();
 
   const expr2t *elem_size = array_size.get();
@@ -156,7 +168,11 @@ unsigned int vector_type2t::get_width() const
   assert(const_elem_size != nullptr);
   unsigned long num_elems = const_elem_size->as_ulong();
 
-  return num_elems * sub_width;
+  // R1: see array_type2t::get_width.
+  assert(
+    sub_width == 0 ||
+    num_elems <= std::numeric_limits<unsigned int>::max() / sub_width);
+  return static_cast<unsigned int>(num_elems * sub_width);
 }
 
 unsigned int pointer_type2t::get_width() const
@@ -182,13 +198,14 @@ unsigned int cpp_name_type2t::get_width() const
 
 unsigned int struct_type2t::get_width() const
 {
-  // Iterate over members accumulating width.
+  // R1: accumulate in 64 bits and reject a total that truncates.
   std::vector<type2tc>::const_iterator it;
-  unsigned int width = 0;
+  uint64_t width = 0;
   for (it = members.begin(); it != members.end(); ++it)
     width += (*it)->get_width();
 
-  return width;
+  assert(width <= std::numeric_limits<unsigned int>::max());
+  return static_cast<unsigned int>(width);
 }
 
 unsigned int union_type2t::get_width() const

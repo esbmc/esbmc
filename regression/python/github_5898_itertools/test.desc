@@ -1,0 +1,4 @@
+CORE
+main.py
+--function first_n --no-bounds-check
+^ERROR: Could not resolve type of receiver in member call

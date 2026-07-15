@@ -31,7 +31,8 @@ unsigned parse_line(std::string_view s)
 void sarif_goto_trace(
   const optionst &options,
   const namespacet & /*ns*/,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const std::vector<dead_store_advisoryt> &advisories)
 {
   const std::string out_path = options.get_option("sarif-output");
   if (out_path.empty())
@@ -43,6 +44,7 @@ void sarif_goto_trace(
   struct result_t
   {
     std::string rule_id;
+    std::string level = "error";
     std::string message;
     std::string file;
     unsigned line = 0;
@@ -52,6 +54,13 @@ void sarif_goto_trace(
   std::map<std::string, std::string> rule_descs; // id -> short description
   std::map<std::string, std::vector<unsigned>> rule_cwes; // id -> ids
   std::set<unsigned> all_cwes;
+
+  auto record_rule = [&](const result_t &r, const cwe_rule_t &rule) {
+    rule_descs[r.rule_id] = rule.short_description;
+    rule_cwes[r.rule_id] = r.cwes;
+    for (unsigned id : r.cwes)
+      all_cwes.insert(id);
+  };
 
   for (const auto &step : goto_trace.steps)
   {
@@ -66,11 +75,24 @@ void sarif_goto_trace(
     r.line = parse_line(step.pc->location.get_line().as_string());
     r.cwes = rule.cwes;
 
-    rule_descs[r.rule_id] = rule.short_description;
-    rule_cwes[r.rule_id] = r.cwes;
-    for (unsigned id : r.cwes)
-      all_cwes.insert(id);
+    record_rule(r, rule);
+    results.push_back(std::move(r));
+  }
 
+  // Dead-store advisories (CWE-563) are emitted as note-level results and do
+  // not affect the verdict.
+  for (const auto &adv : advisories)
+  {
+    const cwe_rule_t &rule = cwe_rule_for(adv.comment);
+    result_t r;
+    r.rule_id = rule.sarif_id;
+    r.level = "note";
+    r.message = adv.comment;
+    r.file = adv.file;
+    r.line = adv.line;
+    r.cwes = rule.cwes;
+
+    record_rule(r, rule);
     results.push_back(std::move(r));
   }
 
@@ -136,7 +158,7 @@ void sarif_goto_trace(
   {
     json result;
     result["ruleId"] = r.rule_id;
-    result["level"] = "error";
+    result["level"] = r.level;
     result["message"]["text"] = r.message;
 
     json loc;

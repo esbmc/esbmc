@@ -3,7 +3,7 @@ title: Setup
 weight: 1
 ---
 
-To install ESBMC, download the latest binary for Linux or Windows from
+To install ESBMC, download the latest binary for Linux, Windows or macOS from
 [GitHub](https://github.com/esbmc/esbmc/releases), then save and unzip it on your
 disk.
 

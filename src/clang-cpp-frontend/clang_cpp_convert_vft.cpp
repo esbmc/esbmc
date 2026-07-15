@@ -440,6 +440,14 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
     // Change argument identifier field to thunk function
     arg.set("#identifier", arg_symb.id);
 
+    // In a multi-file build the same class — and thus the same thunk — can be
+    // converted once per translation unit that sees its definition. The thunk
+    // function symbol itself is merged via move_symbol_to_context, so its
+    // argument symbols may already exist; re-adding an identical symbol is a
+    // no-op, not an error. Skip it rather than aborting on the duplicate.
+    if (context.find_symbol(arg_symb.id) != nullptr)
+      continue;
+
     // add the argument to the symbol table
     symbolt *tmp_symbol;
     if (context.move(arg_symb, tmp_symbol))

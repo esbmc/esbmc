@@ -198,6 +198,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   dyn_info_arr_name = sym.dyn_info_arr_name;
 
   dynamic_memory = sym.dynamic_memory;
+  va_started = sym.va_started;
   interval_domain_state = sym.interval_domain_state;
 
   stack_limit = sym.stack_limit;
@@ -644,6 +645,10 @@ void goto_symext::symex_assign_rec(
   {
     symex_assign_structure(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
+  else if (is_constant_array2t(lhs))
+  {
+    symex_assign_array_structure(lhs, full_lhs, rhs, full_rhs, guard, hidden);
+  }
   else if (is_constant_union2t(lhs))
   {
     symex_assign_union(lhs, full_lhs, rhs, full_rhs, guard, hidden);
@@ -739,6 +744,35 @@ void goto_symext::symex_assign_structure(
     expr2tc rhs_memb = member2tc(it, rhs, structtype.member_names[i]);
     symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
     i++;
+  }
+}
+
+void goto_symext::symex_assign_array_structure(
+  const expr2tc &lhs,
+  const expr2tc &full_lhs,
+  expr2tc &rhs,
+  expr2tc &full_rhs,
+  guard2tc &guard,
+  const bool hidden)
+{
+  const array_type2t &arrtype = to_array_type(lhs->type);
+  const constant_array2t &the_array = to_constant_array2t(lhs);
+
+  // Explicitly project lhs elements out of the array literal and recurse,
+  // mirroring symex_assign_structure. This handles a re-constituted array
+  // (e.g. an array-typed struct member surfaced by symex_assign_structure)
+  // by assigning element-wise through the index expressions.
+  //
+  // The sibling constant_array_of2t (repeat-initialised array) is deliberately
+  // not handled here: its members alias a single initializer value rather than
+  // distinct element lvalues, so it falls through to the unhandled-lhs abort as
+  // before. Projecting it would need per-index lvalues that it does not carry.
+  for (std::size_t i = 0; i < the_array.datatype_members.size(); i++)
+  {
+    const expr2tc &lhs_elem = the_array.datatype_members[i];
+    expr2tc rhs_elem =
+      index2tc(arrtype.subtype, rhs, constant_int2tc(index_type2(), BigInt(i)));
+    symex_assign_rec(lhs_elem, full_lhs, rhs_elem, full_rhs, guard, hidden);
   }
 }
 

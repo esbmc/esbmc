@@ -1,17 +1,17 @@
 #include <python-frontend/function_call/expr.h>
-#include <python-frontend/cmath_lowering_policy.h>
-#include <python-frontend/complex_handler.h>
-#include <python-frontend/complex_handler_utils.h>
+#include <python-frontend/math/cmath_lowering_policy.h>
+#include <python-frontend/math/complex_handler.h>
+#include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/math_guard_utils.h>
-#include <python-frontend/python_exception_handler.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/python_set.h>
+#include <python-frontend/math/math_guard_utils.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/set/python_set.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_expr_builder.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
@@ -32,6 +32,7 @@
 #include <unordered_map>
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
+#include <python-frontend/consteval/python_consteval.h>
 #include <regex>
 #include <stdexcept>
 #include <unordered_set>
@@ -1897,14 +1898,65 @@ exprt function_call_expr::handle_list_remove() const
   return result;
 }
 
+const symbolt *function_call_expr::resolve_list_receiver_symbol(
+  std::string &display_name) const
+{
+  if (const symbolt *named = get_object_list_symbol(display_name))
+    return named;
+
+  const nlohmann::json &receiver = call_["func"]["value"];
+  if (receiver.value("_type", "") != "List")
+    return nullptr;
+
+  // Converting the literal emits its list_create/list_push instructions and
+  // yields the temporary symbol that holds the list.
+  display_name = "[list literal]";
+  const exprt list = converter_.get_expr(receiver);
+  if (!list.is_symbol())
+    return nullptr;
+
+  return converter_.find_symbol(list.identifier().as_string());
+}
+
+std::optional<exprt> function_call_expr::fold_constant_list_query() const
+{
+  // A wholly literal `[...].count(x)` / `[...].index(x[, start[, end]])` folds
+  // here so the result stays independent of --unwind: the list model searches
+  // with a loop, and a truncated one silently mis-verifies. The evaluator
+  // implements CPython's semantics, including index()'s start/end slicing and
+  // numeric equality across bool/int/float. An absent element (index raises
+  // ValueError) yields no value and falls through to the model, which lowers
+  // the exception.
+  //
+  // Only a *literal* receiver folds: a named receiver may have been mutated
+  // (append/insert/subscript store) or shadowed in an inner scope, neither of
+  // which module-level constant seeding can see, so folding it would bake in
+  // a stale value. The evaluator is likewise given an empty module so the
+  // needle and start/end operands fold only when they are literals
+  // themselves, never through seeded globals with the same blind spots.
+  if (call_["func"]["value"].value("_type", "") != "List")
+    return std::nullopt;
+
+  static const nlohmann::json no_module;
+  python_consteval evaluator(no_module);
+  const auto folded = evaluator.try_eval_global_expr(call_);
+  if (!folded || folded->kind != PyConstValue::INT)
+    return std::nullopt;
+
+  return from_integer(folded->int_val, long_long_int_type());
+}
+
 exprt function_call_expr::handle_list_count() const
 {
   const auto &args = call_["args"];
   if (args.size() != 1)
     throw std::runtime_error("list.count() takes exactly one argument");
 
+  if (std::optional<exprt> folded = fold_constant_list_query())
+    return *folded;
+
   std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  const symbolt *list_symbol = resolve_list_receiver_symbol(list_display_name);
   materialize_list_symbol(list_symbol);
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -1920,8 +1972,11 @@ exprt function_call_expr::handle_list_index() const
   if (args.empty() || args.size() > 3)
     throw std::runtime_error("list.index() takes one to three arguments");
 
+  if (std::optional<exprt> folded = fold_constant_list_query())
+    return *folded;
+
   std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  const symbolt *list_symbol = resolve_list_receiver_symbol(list_display_name);
   materialize_list_symbol(list_symbol);
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2211,9 +2266,15 @@ bool function_call_expr::is_list_method_call() const
     return false;
 
   // Tuples are claimed earlier; only claim count/index here when the receiver
-  // resolves to a list symbol so str receivers fall through.
+  // resolves to a list symbol so str receivers fall through. A list *literal*
+  // receiver has no symbol yet, so claim it on the AST node: otherwise it fell
+  // through to the general-call handler, which folded `[1, 2, 1].index(1, 1)`
+  // to a constant 0 and verified false assertions.
   if (method_name == "count" || method_name == "index")
   {
+    if (call_["func"]["value"].value("_type", "") == "List")
+      return true;
+
     std::string dummy;
     const symbolt *sym = get_object_list_symbol(dummy);
     const typet list_type = type_handler_.get_list_type();
@@ -3597,10 +3658,23 @@ function_call_expr::get_dispatch_table()
            format_complex_string(real_val, imag_val));
        }
        exprt value_expr = converter_.get_expr(arg);
-       if (
-         !value_expr.is_nil() && value_expr.statement() != "cpp-throw" &&
-         is_complex_type(value_expr.type()))
-         return handle_complex_to_str();
+       if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
+       {
+         if (is_complex_type(value_expr.type()))
+           return handle_complex_to_str();
+         // repr(x) == str(x) for an int or a float (only str/container/object
+         // reprs differ from str), so reuse str()'s numeric folding via
+         // convert_to_string: it folds a constant to a char-array literal and
+         // dispatches a non-constant to the matching __python_*_to_str model.
+         // Bool, strings and everything else keep the general-call fallback
+         // (repr(True) is "True", repr("x") adds quotes) — a clean error, never
+         // a wrong fold.
+         const typet &vt = value_expr.type();
+         if (
+           !vt.is_bool() &&
+           (type_utils::is_integer_type(vt) || vt.is_floatbv()))
+           return converter_.get_string_handler().convert_to_string(value_expr);
+       }
        return handle_general_function_call();
      },
      "repr()"},
@@ -4647,10 +4721,43 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
       else
       {
         const std::string &func_name = function_id_.get_function();
+        locationt location = converter_.get_location_from_decl(call_);
+
+        // A method call `recv.foo()` on a receiver of a *known* type that has
+        // no such method is a Python AttributeError, not an unsupported free
+        // function. Raise a catchable AttributeError (issue #5904) so it can
+        // escape main() (uncaught) or be suppressed by `except AttributeError`.
+        // When the receiver's type is unknown (an imported module such as
+        // `random.choice(...)`, or an unannotated value) we cannot prove the
+        // attribute is missing — the module/object may genuinely provide it and
+        // ESBMC simply does not model it — so fall through to the generic
+        // unsupported-function stub. Bare free-function calls (`func()`, a Name)
+        // likewise keep that stub.
+        if (
+          call_.contains("func") && call_["func"].is_object() &&
+          call_["func"].value("_type", "") == "Attribute")
+        {
+          const std::string recv = get_object_name();
+          const std::string recv_type = type_handler_.get_var_type(recv);
+          if (!recv_type.empty())
+          {
+            // Return the cpp-throw directly (not a nondet placeholder) so it
+            // propagates through nested expression contexts via
+            // contains_cpp_throw, matching how attribute access and the binop
+            // TypeError raise are consumed.
+            exprt raise =
+              converter_.get_exception_handler().gen_exception_raise(
+                "AttributeError",
+                "'" + recv_type + "' object has no attribute '" + func_name +
+                  "'");
+            raise.location() = location;
+            return raise;
+          }
+        }
+
         log_warning(
           "Undefined function '{}' - replacing with assert(false)", func_name);
         // Create a side effect expression with nondet for assignments
-        locationt location = converter_.get_location_from_decl(call_);
         // Create a nondet expression as a placeholder that won't crash
         // This allows the code to continue but marks it as undefined behavior
         exprt nondet_expr("sideeffect", empty_typet());
@@ -4941,6 +5048,15 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     exprt arg = converter_.get_expr(arg_node);
     converter_.current_lhs = saved_lhs;
 
+    // A list passed to a callee may be mutated there (e.g. appended to), which
+    // the caller's static length tracking does not observe. Mark the symbol so
+    // later constant-index accesses fall back to the runtime bounds check
+    // instead of a stale convert-time IndexError (GitHub #5991). Marking a
+    // non-list symbol is harmless -- the flag is only read on the list
+    // constant-index path.
+    if (arg.is_symbol())
+      converter_.mark_list_call_escaped(arg.identifier().as_string());
+
     // A function name passed as an argument decays to a function pointer,
     // mirroring C's implicit function-to-pointer conversion.
     if (arg.type().is_code() && arg.is_symbol())
@@ -5225,6 +5341,28 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
     {
+      // A numpy array is modeled as a fixed-size C array, not the heap
+      // PyListObject struct backing Python's `list`. Passing its address to
+      // a list-typed parameter (the default for both `List[T]`-annotated and
+      // untyped parameters) reinterprets raw element bytes as PyListObject
+      // fields instead of decaying to a compatible element pointer, which
+      // silently produced wrong results/alignment faults instead of a real
+      // bug (no regression relied on this, since it never worked). Reject it
+      // explicitly rather than emit an unsound cast.
+      if (
+        arg.type().subtype() != char_type() && param_idx < params.size() &&
+        params[param_idx].type().is_pointer())
+      {
+        const typet &target =
+          converter_.ns.follow(params[param_idx].type().subtype());
+        if (
+          target.is_struct() && to_struct_type(target).tag().as_string().find(
+                                  "__ESBMC_PyListObj") != std::string::npos)
+          throw std::runtime_error(
+            "TypeError: numpy arrays cannot be passed as function "
+            "parameters yet");
+      }
+
       if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
       {
         arg = string_constantt(
@@ -5815,7 +5953,7 @@ exprt function_call_expr::generate_attribute_error(
   const typet &expected_type) const
 {
   locationt location = converter_.get_location_from_decl(call_);
-  std::ostringstream error_msg;
+  std::ostringstream detail;
 
   if (possible_classes.size() > 1)
   {
@@ -5827,29 +5965,30 @@ exprt function_call_expr::generate_attribute_error(
         display_classes += ", ";
       display_classes += "'" + possible_classes[i] + "'";
     }
-    error_msg << "AttributeError: object has no attribute '" << method_name
-              << "' (possible types: " << display_classes << ")";
+    detail << "object has no attribute '" << method_name
+           << "' (possible types: " << display_classes << ")";
   }
   else if (possible_classes.size() == 1)
   {
-    error_msg << "AttributeError: '" << possible_classes[0]
-              << "' object has no attribute '" << method_name << "'";
+    detail << "'" << possible_classes[0] << "' object has no attribute '"
+           << method_name << "'";
   }
   else
   {
-    error_msg << "AttributeError: object has no attribute '" << method_name
-              << "'";
+    detail << "object has no attribute '" << method_name << "'";
   }
 
-  log_warning("{}", error_msg.str());
+  log_warning("AttributeError: {}", detail.str());
 
-  // V.3: build the always-fail assert condition in IREP2.
-  code_assertt assert_code(migrate_expr_back(gen_false_expr()));
-  assert_code.location() = location;
-  assert_code.location().user_provided(true);
-  assert_code.location().comment(error_msg.str());
-
-  converter_.add_instruction(assert_code);
+  // Raise a catchable Python AttributeError (issue #5904) rather than a bare
+  // assert(false), so it can escape main() (uncaught) or be suppressed by a
+  // matching `except AttributeError`.
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "AttributeError", detail.str());
+  codet throw_code("expression");
+  throw_code.location() = location;
+  throw_code.operands().push_back(raise);
+  converter_.add_instruction(throw_code);
 
   // Compute fallback type: use expected_type if valid, otherwise Any
   typet fallback_type = expected_type;
@@ -5862,7 +6001,7 @@ exprt function_call_expr::generate_attribute_error(
   nondet_fallback.statement("nondet");
   nondet_fallback.location() = location;
   nondet_fallback.location().user_provided(true);
-  nondet_fallback.location().comment(error_msg.str());
+  nondet_fallback.location().comment("AttributeError: " + detail.str());
 
   return nondet_fallback;
 }

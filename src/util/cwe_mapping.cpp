@@ -68,11 +68,23 @@ const std::vector<entry_t> &rules_table()
        {"free-non-zero-offset",
         "free() with non-zero pointer offset",
         {590, 761}}},
-      // Bounds.
+      // Bounds. The "heap object" variants are emitted when the overflowed
+      // object is a malloc/calloc/realloc allocation, so CWE-122 (Heap-based
+      // Buffer Overflow) replaces CWE-121 (Stack-based). They are strict
+      // superstrings of the generic comments, so the longest-first sort below
+      // makes them win the substring match for heap accesses.
+      {"array bounds violated: heap object",
+       {"heap-array-bounds-violated",
+        "Array bounds violated on heap object",
+        {122, 125, 129, 131, 193, 787}}},
       {"array bounds violated",
        {"array-bounds-violated",
         "Array bounds violated",
         {121, 125, 129, 131, 193, 787}}},
+      {"Access to object out of bounds: heap object",
+       {"heap-object-out-of-bounds",
+        "Access to heap object out of bounds",
+        {122, 125, 787, 823}}},
       {"Access to object out of bounds",
        {"object-out-of-bounds",
         "Access to object out of bounds",
@@ -105,6 +117,21 @@ const std::vector<entry_t> &rules_table()
       // Reachability.
       {"unreachable code reached",
        {"reachable-error", "Reachable error/assertion", {617}}},
+      // Non-termination (--termination). Proven via k-induction / recurrent
+      // set; the verdict has no counterexample trace, so this substring is
+      // matched against the verdict comment itself ("... non-terminating
+      // execution ...") rather than against a violated-property comment.
+      {"non-terminating execution",
+       {"infinite-loop", "Loop with unreachable exit condition", {835}}},
+      // Dead store advisory (CWE-563). Emitted only under --dead-store-check;
+      // note-level, does not flip the verdict. See docs/cwe-mapping.md.
+      {"dead store", {"dead-store", "Dead store", {563}}},
+      // Uncontrolled recursion (CWE-674). Emitted only when symex proves a
+      // recursive function has no reachable base case (see
+      // symex_function.cpp); the plain "recursion unwinding assertion" for a
+      // merely-exhausted k-bound stays unmapped.
+      {"uncontrolled recursion",
+       {"uncontrolled-recursion", "Uncontrolled recursion", {674}}},
     };
     // Sort by descending substring length so that strict-substring overlaps
     // (e.g. "invalidated dynamic object freed" vs "invalidated dynamic
@@ -127,6 +154,7 @@ const std::map<unsigned, std::string_view> &names_map()
   static const std::map<unsigned, std::string_view> m = {
     {120, "Buffer Copy without Checking Size of Input"},
     {121, "Stack-based Buffer Overflow"},
+    {122, "Heap-based Buffer Overflow"},
     {125, "Out-of-bounds Read"},
     {129, "Improper Validation of Array Index"},
     {131, "Incorrect Calculation of Buffer Size"},
@@ -146,8 +174,10 @@ const std::map<unsigned, std::string_view> &names_map()
     {469, "Use of Pointer Subtraction to Determine Size"},
     {476, "NULL Pointer Dereference"},
     {562, "Return of Stack Variable Address"},
+    {563, "Assignment to Variable without Use"},
     {590, "Free of Memory not on the Heap"},
     {617, "Reachable Assertion"},
+    {674, "Uncontrolled Recursion"},
     {681, "Incorrect Conversion between Numeric Types"},
     {761, "Free of Pointer not at Start of Buffer"},
     {787, "Out-of-bounds Write"},
@@ -156,6 +186,7 @@ const std::map<unsigned, std::string_view> &names_map()
     {824, "Access of Uninitialized Pointer"},
     {825, "Expired Pointer Dereference"},
     {833, "Deadlock"},
+    {835, "Loop with Unreachable Exit Condition ('Infinite Loop')"},
     {908, "Use of Uninitialized Resource"},
     {1335, "Incorrect Bitwise Shift of Integer"},
   };

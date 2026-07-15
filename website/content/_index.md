@@ -41,10 +41,8 @@ solver.
 {{< card link="docs/development/building" title="Build Guide" icon="cog" >}}
 {{< /cards >}} {{< /tab >}}
 
-{{< tab name="macOS" >}} {{< callout type="warning" icon="warning" >}} macOS
-does not have any downloadable builds at the moment. You can however build from
-scratch using our [build](docs/development/building) guide. {{< /callout >}}
-{{< cards >}}
+{{< tab name="macOS" >}} {{< cards >}}
+{{< card link="https://github.com/esbmc/esbmc/releases/latest/download/esbmc-macos.zip" title="Download" icon="download" >}}
 {{< card link="docs/development/building" title="Build Guide" icon="cog" >}}
 {{< /cards >}} {{< /tab >}}
 

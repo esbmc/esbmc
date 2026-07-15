@@ -95,10 +95,6 @@ smt_astt array_convt::mk_array_symbol(
     "Can't create array of arrays with "
     "array flattener. Should be flattened elsewhere");
 
-  // Create either a new bounded or unbounded array.
-  size_t domain_width = ms->get_domain_width();
-  size_t array_size = 1UL << domain_width;
-
   // Create new AST storage
   array_ast *mast = new_ast(ms);
   mast->symname = name;
@@ -120,7 +116,11 @@ smt_astt array_convt::mk_array_symbol(
   }
 
   // For bounded arrays, populate it's storage vector with a bunch of fresh bvs
-  // of the correct sort.
+  // of the correct sort. is_unbounded_array() above guarantees a domain width
+  // <= 10 here, so 1UL << domain_width stays well within range (computing it
+  // before the unbounded check would shift by up to the full index width and
+  // is undefined behaviour once that reaches 64).
+  size_t array_size = 1UL << ms->get_domain_width();
   mast->array_fields.reserve(array_size);
 
   unsigned long i;

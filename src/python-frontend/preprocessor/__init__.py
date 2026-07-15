@@ -17,6 +17,7 @@ from preprocessor.loop_mixin import LoopMixin
 from preprocessor.module_lifecycle_mixin import ModuleLifecycleMixin
 from preprocessor.module_rewrite_mixin import ModuleRewriteMixin
 from preprocessor.preprocessor_state_mixin import PreprocessorStateMixin
+from preprocessor.sequence_iterator_mixin import SequenceIteratorMixin
 from preprocessor.type_inference_mixin import TypeInferenceMixin
 
 __all__ = ["Preprocessor"]
@@ -36,6 +37,7 @@ class Preprocessor(
         LoopMixin,
         ModuleRewriteMixin,
         ModuleLifecycleMixin,
+        SequenceIteratorMixin,
         PreprocessorStateMixin,
         AstUtilsMixin,
         ImportTypingMixin,
