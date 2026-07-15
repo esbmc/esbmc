@@ -92,6 +92,7 @@ ignored_dirs=(
   "github_4666_2d"
   "github_4666_shape"
   "github_5102_nested_list_copy"
+  "github_5937_fail"
   "torch_mm_allclose"
   "global"
   "infer-func-no-return_fail"
