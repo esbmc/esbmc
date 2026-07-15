@@ -151,12 +151,15 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
 // (assign/expression) that reduce to one ASSIGN/OTHER with nothing to lower,
 // trivial-type declarations (DECL + optional side-effect-free ASSIGN + scope-exit
 // DEAD, the block managing the destructor stack as convert_block does), a value
-// return (RETURN + unconditional GOTO to the function's end), and a
+// return (RETURN + unconditional GOTO to the function's end), a
 // side-effect-free `if`/`if-else` whose branches convert natively (the
-// general, unfolded branch shape only — see the assert-fold guard below).
-// Each reads its own code_*2t fields directly (no legacy round-trip) and
-// carries the statement's own location, matching goto_convertt::convert()
-// byte-for-byte on this subset.
+// general, unfolded branch shape only — see the assert-fold guard below),
+// and a side-effect-free `while` whose body converts natively with no
+// break/continue (neither kind is supported yet, so either falls the whole
+// loop back): `v: if(!c) goto z; x: P; y: goto v; z: ;`. Each reads its own
+// code_*2t fields directly (no legacy round-trip) and carries the
+// statement's own location, matching goto_convertt::convert() byte-for-byte
+// on this subset.
 bool goto_convert_functionst::convert_native_rec(
   const expr2tc &code2,
   goto_programt &dest)
@@ -505,6 +508,80 @@ bool goto_convert_functionst::convert_native_rec(
       dest.destructive_append(tmp_x);
       dest.destructive_append(tmp_y);
     }
+    dest.destructive_append(tmp_z);
+    return true;
+  }
+
+  if (is_code_while2t(code2))
+  {
+    const code_while2t &w = to_code_while2t(code2);
+
+    // convert_while (goto_convert.cpp:1255) removes side effects from the
+    // condition via generate_conditional_branch, exactly as the if/else guard
+    // does; require a side-effect-free condition for the same reason.
+    if (has_sideeffect(w.cond))
+      return false;
+
+    const locationt &location = w.location;
+
+    // convert_while saves/restores the break/continue targets around the
+    // body regardless of whether the body ends up using them; do the same so
+    // a native-supported break/continue can be layered in later without
+    // touching this sequencing. Neither kind is supported yet (no
+    // is_code_break2t/is_code_continue2t arm below), so a body using either
+    // falls back through the unsupported-kind catch-all — this is inert
+    // structurally, not a correctness dependency.
+    break_continue_targetst old_break_continue(targets);
+
+    //    while(c) P;
+    //--------------------
+    // v: if(!c) goto z;
+    // x: P;
+    // y: goto v;          <-- continue target
+    // z: ;                <-- break target
+    goto_programt tmp_z;
+    goto_programt::targett z = tmp_z.add_instruction();
+    z->make_skip();
+    z->location = location;
+
+    goto_programt tmp_branch;
+    goto_programt::targett v = tmp_branch.add_instruction();
+    v->make_goto(z, not2tc(w.cond));
+    v->location = location;
+
+    goto_programt tmp_y;
+    goto_programt::targett y = tmp_y.add_instruction();
+
+    targets.set_break(z);
+    targets.set_continue(y);
+
+    // Same defensive check as the if/else branches: a body that isn't itself
+    // a code_block2t could in principle leak a scope-exit code_dead with no
+    // enclosing block to unwind it.
+    destructor_stackt stack_before_body = targets.destructor_stack;
+    goto_programt tmp_x;
+    bool body_ok = convert_native_rec(w.body, tmp_x);
+
+    old_break_continue.restore(targets);
+
+    if (!body_ok || targets.destructor_stack.size() != stack_before_body.size())
+    {
+      targets.destructor_stack = stack_before_body;
+      return false;
+    }
+
+    y->make_goto(v);
+    y->guard = gen_true_expr();
+    y->location = location;
+    // pragma_unroll_count defaults to 0 both here and on a fresh instruction
+    // (see goto_program.h), so an unconditional assignment is the exact
+    // equivalent of convert_while's `if (!"#pragma_unroll".empty()) ...` —
+    // absent and explicit-zero are indistinguishable either way.
+    y->pragma_unroll_count = w.pragma_unroll_count;
+
+    dest.destructive_append(tmp_branch);
+    dest.destructive_append(tmp_x);
+    dest.destructive_append(tmp_y);
     dest.destructive_append(tmp_z);
     return true;
   }
