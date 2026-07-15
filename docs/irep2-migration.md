@@ -4281,6 +4281,60 @@ newline — several `test.desc` files do) — read every line with a
 `while IFS= read -r line || [ -n "$line" ]` loop instead, which handles a
 missing final newline correctly.
 
+#### F-B prereq-6 fix (2026-07-15) — correcting round 2's dict17/25/28/31 claim; the discarded `adjust()` error return crashed for real
+
+Re-attempted the S6 census re-run with the same hop-off harness. The
+verdict-vs-`test.desc` numeric census was abandoned again (the crash-detection
+logic in the sweep script only greps process *stdout*, so a `SIGSEGV` mid-run
+silently reads as "no match, gap" without ever being distinguished from an
+ordinary wrong-verdict failure — the next attempt needs to check the
+subprocess exit code, not just its output). But a manual spot-check of
+`dict17` under hop-off (`ESBMC_PY_SKIP_LEGACY_ADJUST=1 ... --python-irep2-adjust
+--unwind 3`, the exact flags its own `test.desc` pins) **found round 2's claim
+above wrong**: the run reliably (3/3) segfaults, not "passes cleanly". Round
+2's spot-check omitted `--unwind 3` and so likely exercised a different,
+shallower code path that happened not to reach the crash — a reminder to
+always replay a test's own `test.desc` flags exactly, never a simplified
+stand-in, when spot-checking a specific regression test's hop-off behaviour.
+
+**Root cause, confirmed:** `python_adjust::adjust()` returns `true` when its
+own post-condition check (B.4) finds a symbol still carrying an unresolved
+node — here, `dict17`'s `Optional[int]` literal, which S2's aggregate-literal
+arm cannot complete (an operand-count/component-count mismatch, the F-A3
+family). The call site in `python_languaget::typecheck`
+(`python_language.cpp`) discarded that return value, so a detected,
+already-diagnosed invariant violation fell through into `goto_convert` /
+symex processing the malformed struct literal anyway, and crashed downstream
+(`SIGSEGV`, not a clean frontend error) — this is exactly the **prereq 6**
+item the S6/F-A3 notes above named but never landed.
+
+**Fix:** honour the return value, matching `clang_cpp_adjust::adjust()`'s own
+convention immediately above the call site (`if (adjuster.adjust()) return
+true;`) — `if (py_adjuster.adjust()) return true;`. Confirmed: the crash is
+gone (clean `CONVERSION ERROR` instead of `SIGSEGV`) under hop-off; the real,
+shipped configuration (`--python-irep2-adjust` alone, no hop-off) is
+**unaffected** — `clang_cpp_adjust` always runs first there and fully
+resolves everything, so `adjust()` never returns `true` on that path today,
+confirmed by `dict17` still verifying `SUCCESSFUL` under the plain flag. The
+new `if` branch is therefore dead-but-tested on the live pipeline, in the
+same sense the rest of `python_adjust.{h,cpp}` already is (B.0–B.2) — proven
+reachable (C-Live) only via the throwaway hop-off env-gate, reverted after
+the check, matching how the round-1/round-2 drills themselves were proven.
+No regression test exercises the fixed branch directly for the same reason;
+the existing `python_irep2_adjust_*`/`python_adjust` regression + unit
+suites (52 tests) and a 322-test dict/exception/try stratum hold green.
+
+**Consequence for the census.** F-A3/F-B (32+18 tests, per the 2026-07-11
+table) presumably still fail under hop-off — the underlying struct-literal
+completion gap (S2's arm cannot complete `Optional`/`tuple` literals) is
+*not* fixed, only its failure mode is (crash → clean error, still a wrong
+verdict vs `test.desc`'s `SUCCESSFUL`). Round 2's "F-A1/F-B gap is smaller
+than 271" finding should be treated as **unconfirmed for the F-B slice**
+until a corrected, exit-code-aware census actually re-measures it — the
+positive finding for F-A1 (empty_type2t crashes) stands on its own separate,
+correctly-attributed evidence (§ "F-A1 drill, round 2" above) and is not
+affected by this correction.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
