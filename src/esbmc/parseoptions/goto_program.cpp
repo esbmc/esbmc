@@ -349,13 +349,15 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
 {
   static const char *const libc[] = {
-    "ceilf",     "ceil",     "ceill",     "floorf", "floor",   "floorl",
-    "truncf",    "trunc",    "truncl",    "roundf", "round",   "roundl",
-    "copysignf", "copysign", "copysignl", "fminf",  "fmin",    "fminl",
-    "fmaxf",     "fmax",     "fmaxl",     "fdimf",  "fdim",    "fdiml",
-    "modff",     "modf",     "modfl",     "rintf",  "rint",    "rintl",
-    "strlen",    "strcmp",   "strncmp",   "strcpy", "strncpy", "strcat",
-    "strncat",   "strchr"};
+    "ceilf",        "ceil",    "ceill",     "floorf",        "floor",
+    "floorl",       "truncf",  "trunc",     "truncl",        "roundf",
+    "round",        "roundl",  "copysignf", "copysign",      "copysignl",
+    "fminf",        "fmin",    "fminl",     "fmaxf",         "fmax",
+    "fmaxl",        "fdimf",   "fdim",      "fdiml",         "modff",
+    "modf",         "modfl",   "rintf",     "rint",          "rintl",
+    "strlen",       "strcmp",  "strncmp",   "strcpy",        "strncpy",
+    "strcat",       "strncat", "strchr",    "__fpclassifyf", "__fpclassifyd",
+    "__fpclassifyl"};
 
   for (const char *name : libc)
   {
@@ -407,6 +409,14 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "/* Auto-generated: bundle all ESBMC additions for CBMC gotos. */\n"
     "#include <math.h>\n"
     "#include <string.h>\n"
+    // CBMC's <math.h> lowers fpclassify(x) to __fpclassify{f,d,l}(x). Only
+    // __fpclassifyd is new here -- glibc's <math.h> already declares
+    // __fpclassifyf/__fpclassifyl (and macOS's declares all three), but none of
+    // that is guaranteed across libcs/feature-test macros, so declare all three
+    // explicitly to take their addresses (bodies live in libm/fpclassify.c).
+    "extern int __fpclassifyf(float);\n"
+    "extern int __fpclassifyd(double);\n"
+    "extern int __fpclassifyl(long double);\n"
     "void *const __esbmc_cbmc_libc_refs[] = {\n"
     "  (void *)ceilf,     (void *)ceil,     (void *)ceill,\n"
     "  (void *)floorf,    (void *)floor,    (void *)floorl,\n"
@@ -423,6 +433,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)strlen,    (void *)strcmp,   (void *)strncmp,\n"
     "  (void *)strcpy,    (void *)strncpy,  (void *)strcat,\n"
     "  (void *)strncat,   (void *)strchr,\n"
+    "  (void *)__fpclassifyf, (void *)__fpclassifyd, (void *)__fpclassifyl,\n"
     "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)
