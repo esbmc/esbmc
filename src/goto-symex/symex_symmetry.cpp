@@ -153,11 +153,14 @@ void assert_symmetry_breaking(
 
     const if2t &ite = to_if2t(step.rhs);
 
-    // IEEE-754 comparisons are not a total order (any relation involving a
-    // NaN operand is false), so `ite(t > e, t, e)` is not provably >= t and
-    // >= e when t or e may be NaN -- the soundness argument below only
-    // holds for total-order comparisons (int/bitvector/pointer).
-    if (is_floatbv_type(ite.type))
+    // The injected bounds are tautologies only over a *total* order. Restrict
+    // to the ordered types the recognised idiom can produce. floatbv is
+    // deliberately absent: IEEE-754 comparisons are not a total order (any
+    // relation involving a NaN operand is false), so `ite(t > e, t, e)` is not
+    // provably >= t and >= e when t or e may be NaN.
+    const type2tc &ty = ite.type;
+    if (!(is_signedbv_type(ty) || is_unsignedbv_type(ty) ||
+          is_fixedbv_type(ty) || is_pointer_type(ty)))
       continue;
 
     int dir =
