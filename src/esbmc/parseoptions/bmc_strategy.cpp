@@ -517,8 +517,8 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
   }
   catch (const smtlib_convt::external_process_died &e)
   {
-    // An external SMT solver process (an --smtlib solver, or the bitwuzllob
-    // model solver) died or returned an unusable response at a point past the
+    // An external SMT solver process (an --smtlib solver, or a one-shot
+    // backend's model solver) died or returned an unusable response past the
     // backend's own recovery — e.g. while a counterexample was being read out
     // via (get-value). Report a clean failure rather than let the exception
     // reach std::terminate.

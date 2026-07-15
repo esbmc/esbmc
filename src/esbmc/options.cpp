@@ -536,6 +536,19 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("<cmd>"),
      "Local interactive SMT-LIB2 solver used to build the counterexample "
      "when Bitwuzllob reports satisfiable (e.g. \"z3 -in\")"},
+    {"neurosym",
+     NULL,
+     "Use NeuroSym (neural-guided GAN + Z3 fallback, QF_BV) by running an "
+     "external NeuroSym Python program in one-shot batch mode"},
+    {"neurosym-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Command running NeuroSym on an SMT-LIB2 file; every %f is replaced by "
+     "the formula file, appended when absent (default: \"python main.py "
+     "%f\")"},
+    {"neurosym-model-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Local interactive SMT-LIB2 solver used to build the counterexample "
+     "when NeuroSym reports satisfiable (e.g. \"z3 -in\")"},
     {"bv", NULL, "Use solver with bit-vector arithmetic"},
     {"ir",
      NULL,

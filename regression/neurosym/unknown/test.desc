@@ -1,0 +1,5 @@
+CORE
+main.c
+--neurosym --neurosym-prog unknown-neurosym.sh --result-only
+solver returned unknown
+SMT solver failed

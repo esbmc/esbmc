@@ -183,14 +183,17 @@ class smtlib_convt : public smt_solver_baset,
 {
 public:
   smtlib_convt(const namespacet &_ns, const optionst &options);
-  /* Used by process-based derived backends (e.g. bitwuzllob) that need the
-   * interactive-pipe and file sinks configured independently of the
-   * --smtlib-solver-prog and --output options. */
+  /* Used by process-based derived backends (e.g. bitwuzllob, neurosym) that
+   * need the interactive-pipe and file sinks configured independently of the
+   * --smtlib-solver-prog and --output options. A backend whose solver rejects
+   * the default QF_AUFBV/QF_AUFLIRA can override the emitted (set-logic ...)
+   * via `logic`; empty selects the default. */
   smtlib_convt(
     const namespacet &_ns,
     const optionst &options,
     const std::string &solver_prog,
-    const std::string &output_path);
+    const std::string &output_path,
+    const std::string &logic = "");
   ~smtlib_convt() override;
 
   smt_resultt dec_solve() override;
