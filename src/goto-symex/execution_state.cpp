@@ -267,7 +267,7 @@ void execution_statet::symex_step(reachability_treet &art)
     {
       expr2tc thecode = instruction.code, assign;
       if (make_return_assignment(assign, thecode))
-        goto_symext::symex_assign(assign, true);
+        goto_symext::symex_assign(assign);
       symex_return(thecode);
       analyze_assign(assign);
     }
@@ -787,9 +787,7 @@ void execution_statet::get_expr_globals(
     // dependency.
     expr2tc p = expr;
     bool point_to_global = false;
-    if (
-      symbol->get_type().is_pointer() && symbol->name != "invalid_object" &&
-      !symbol->static_lifetime)
+    if (symbol->get_type().is_pointer() && symbol->name != "invalid_object")
     {
       expr2tc tmp = expr;
       /* Rename it so that it can be dereferenced in current state */

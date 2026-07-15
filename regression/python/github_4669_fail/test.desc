@@ -2,4 +2,4 @@ CORE
 main.py
 --incremental-bmc
 ^VERIFICATION FAILED$
-division by zero
+uncaught exception

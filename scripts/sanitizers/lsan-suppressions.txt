@@ -6,4 +6,10 @@
 # Keep each rule paired with the issue that tracks the underlying leak.
 # See: https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer
 #
-# (empty — populated as the bring-up CI run surfaces findings)
+# Bundled-clang leak observed while c2goto generates the .goto library models
+# at build time (clang::TextDiagnosticPrinter::BeginSourceFile — diagnostic
+# objects c2goto never frees).  The build step disables LSan entirely
+# (detect_leaks=0), so this rule is dormant; it is kept here so that if leak
+# detection is re-enabled during the build the finding is classified as known
+# bundled-clang noise rather than an ESBMC regression.  Refs #223.
+leak:TextDiagnosticPrinter

@@ -100,14 +100,20 @@ void expr2t::dump() const
 
 unsigned long constant_int2t::as_ulong() const
 {
-  // XXXjmorse - add assertion that we don't exceed machine word width?
   assert(!value.is_negative());
+  // Guard the documented truncation (R2): to_uint64() shifts every digit
+  // into a 64-bit accumulator, silently dropping the high digits when the
+  // magnitude exceeds 64 bits. is_uint64() is true iff the magnitude fits.
+  assert(value.is_uint64());
   return value.to_uint64();
 }
 
 long constant_int2t::as_long() const
 {
-  // XXXjmorse - add assertion that we don't exceed machine word width?
+  // Guard the documented truncation/overflow (R2): to_int64() negates the
+  // (possibly truncated) to_uint64() magnitude, so it is only correct when
+  // the value fits the signed 64-bit range. is_int64() is sign-aware.
+  assert(value.is_int64());
   return value.to_int64();
 }
 

@@ -1,0 +1,5 @@
+CORE
+cbmc_modf_fail.goto
+--binary
+^VERIFICATION FAILED$
+assertion

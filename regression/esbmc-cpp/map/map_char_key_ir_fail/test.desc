@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--ir --unwind 2
+
+^  file .*main\.cpp line 14 .*function main$
+^VERIFICATION FAILED$

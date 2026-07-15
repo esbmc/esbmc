@@ -249,7 +249,7 @@ ESBMC exactly as on Linux — follow the **Ubuntu / Debian** tab. {{% /details %
 
 | package   | required | minimum version |
 | --------- | -------- | --------------- |
-| clang     | yes      | 11.0.0          |
+| clang     | yes      | 18.0.0          |
 | boost     | yes      | 1.77            |
 | CMake     | yes      | 3.18.0          |
 | Boolector | no       | 3.2.2           |
@@ -308,6 +308,11 @@ ESBMC supports **Bitwuzla**, **Boolector**, **CVC4**, **CVC5**, **MathSAT**,
 cannot verify most programs. For a single-solver build, the platform tabs above
 are enough.
 
+ESBMC can additionally drive **Bitwuzllob** — Bitwuzla running on the massively
+parallel [Mallob](https://satres.kikit.kit.edu/) platform — as an external
+process; see [Using Bitwuzllob](#using-bitwuzllob) below. It needs no build-time
+setup (the backend is enabled by default, `-DENABLE_BITWUZLLOB=ON`).
+
 The recipe below mirrors the multi-solver build used in ESBMC's CI: build each
 solver into the project directory, then point the configure step at them. Build
 only the solvers you need.
@@ -323,13 +328,44 @@ ESBMC_CLANG=-DDOWNLOAD_DEPENDENCIES=On
 ESBMC_STATIC=ON
 ```
 
-For a shared build, use the system LLVM/Clang instead (Ubuntu example):
+A static build passes `-static` to the linker, so every system library ESBMC
+(and the downloaded LLVM) depends on must be available as a static archive.
+On Ubuntu, make sure the `.a` variants are installed, e.g. `sudo apt-get install
+zlib1g-dev` (provides `libz.a`); without it the configure step fails with
+`ld: attempted static link of dynamic object .../libz.so`. If in doubt, use the
+shared build below, or drive the static build through `./scripts/build.sh`,
+which provisions the static toolchain the same way ESBMC's release CI does.
+
+For a shared build, use the system LLVM/Clang instead. Because this recipe does
+not pass `-DDOWNLOAD_DEPENDENCIES`, the fmt, nlohmann-json, yaml-cpp and immer
+libraries must also come from the system. Use **Clang 18 or newer**: current
+ESBMC uses the C++23 explicit-object-parameter ("deducing this") API added in
+Clang 18, so older toolchains such as `llvm-16` no longer compile it and fail
+with `'clang::CXXMethodDecl' has no member named
+'isExplicitObjectMemberFunction'`. ESBMC's CI builds this configuration with
+Clang 21; any version `>= 18` works. Ubuntu example:
 
 ```sh
-sudo apt-get install libclang-cpp16-dev
-ESBMC_CLANG="-DLLVM_DIR=/usr/lib/llvm-16/lib/cmake/llvm -DClang_DIR=/usr/lib/cmake/clang-16"
+sudo apt-get install libclang-18-dev libclang-cpp18-dev \
+  libfmt-dev nlohmann-json3-dev libyaml-cpp-dev libimmer-dev
+ESBMC_CLANG="-DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm -DClang_DIR=/usr/lib/cmake/clang-18"
 ESBMC_STATIC=OFF
 ```
+
+`libclang-18-dev` ships `/usr/lib/cmake/clang-18/ClangConfig.cmake`, which
+`find_package(Clang)` needs; without it the configure step fails with
+`Could not find a package configuration file provided by "Clang"`. Depending on
+how your system LLVM was packaged you may also need `libzstd-dev` and
+`libcurlpp-dev`, which its CMake targets pull in. If your distribution does not
+package Clang 18 or newer, install one from <https://apt.llvm.org> and bump the
+version number in the package names and paths above.
+
+Keep `LLVM_DIR` and `Clang_DIR` on the **same** toolchain version. Mixing them
+(e.g. `LLVM_DIR` on `llvm-16` while `Clang_DIR` is `clang-18`) links
+`libLLVM-16` against `libclang-cpp-18` and fails late with
+`undefined reference … DSO missing from command line`; ESBMC now stops such a
+configuration at CMake time. When switching compiler versions, reconfigure in a
+fresh build directory — a stale `CMakeCache.txt` keeps the old paths.
 
 ### Build the solvers
 
@@ -353,7 +389,8 @@ brew install z3 && cp -rp $(brew info z3 | egrep "/usr[/a-zA-Z\.0-9]+ " -o) z3
 {{% /details %}}
 
 {{% details title="Bitwuzla" closed="true" %}} Requires MPFR >= 4.2.1
-(`apt-get install libmpfr-dev` / `brew install mpfr`).
+(`apt-get install libmpfr-dev` / `brew install mpfr`) and Meson
+(`pip install meson`).
 
 ```sh
 git clone --depth=1 --branch=0.9.0 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install && cd ../..
@@ -418,6 +455,32 @@ ESBMC is installed into the `release` folder. Add `-DCMAKE_BUILD_TYPE=Debug` to
 enable ESBMC's internal assertions.
 
 {{% /steps %}}
+
+## Using Bitwuzllob
+
+Bitwuzllob (Schreiber, Niemetz, Preiner — TACAS'26) integrates Bitwuzla into
+the massively parallel Mallob platform, distributing the bit-blasted SAT
+queries across hundreds of cores. Mallob is an MPI program that cannot be
+linked into ESBMC, so the `--bitwuzllob` backend writes the verification
+condition to an SMT-LIB2 file and runs Mallob's one-shot *mono* mode on it as
+an external process. Notes:
+
+- **Linux only** (Mallob supports x86/ARM Linux). Build Mallob with the SMT
+  application engine following the artifact of the TACAS'26 paper
+  (https://doi.org/10.5281/zenodo.17478480), and make sure the `mallob` binary
+  and its MPI runtime are available.
+- The command is configurable via `--bitwuzllob-prog`; every `%f` is replaced
+  by the formula file (default: `mallob -mono=%f -mono-app=SMT`). For example:
+  `esbmc file.c --bitwuzllob --bitwuzllob-prog "mpirun -np 8 mallob -mono=%f -mono-app=SMT"`.
+- A terminated mono process cannot answer model queries, so building a
+  counterexample additionally needs a local interactive SMT-LIB2 solver via
+  `--bitwuzllob-model-prog` (e.g. `"z3 -in"` or `"bitwuzla"`); it replays the
+  same formula and serves the `(get-value ...)` queries. Alternatively pass
+  `--result-only` to skip the counterexample.
+- One-shot mono mode serves a single `(check-sat)`, so incremental strategies
+  (`--incremental-bmc`, `--k-induction`, ...) are rejected — use a linked
+  solver such as `--bitwuzla` for those. Like Bitwuzla, Bitwuzllob is
+  bit-vector-only and cannot serve `--ir`/`--ir-ieee`.
 
 ## Advanced
 

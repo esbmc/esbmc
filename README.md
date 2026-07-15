@@ -13,7 +13,7 @@ ESBMC supports:
 - The Soot framework via Jimple as its Java/Kotlin frontend;
 - The CPython 3.10 parser as its [Python frontend](./src/python-frontend/README.md); the first SMT-based bounded model checker for Python programs;
 - Implements the Solidity grammar production rules as its Solidity frontend;
-- The ESBMC-PLC frontend for verifying IEC 61131-3 [Ladder Diagram](https://esbmc.github.io/docs/ld/) programs for programmable logic controllers (PLCs), enabled at build time with `-DENABLE_LD_FRONTEND=On`;
+- The ESBMC-PLC frontend for verifying IEC 61131-3 [Ladder Diagram](https://esbmc.github.io/docs/ld/) programs for programmable logic controllers (PLCs);
 - Supports IEEE floating-point arithmetic for various SMT solvers.
 
 ESBMC implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
@@ -24,7 +24,7 @@ Our main website is [esbmc.org](http://esbmc.org).
 
 ### Features
 
-ESBMC detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of implementation errors that can be detected include:
+ESBMC detects software errors by simulating a finite prefix of the program's execution with all possible inputs. Classes of implementation errors that can be detected include:
  * User-specified assertion failures
  * Out-of-bounds array access
  * Illegal pointer dereferences, such as:
@@ -34,6 +34,7 @@ ESBMC detects errors in software by simulating a finite prefix of the program ex
    * Misaligned memory access
  * Integer overflows
  * Undefined behavior on shift operations
+ * `restrict`-qualified pointer parameters that alias
  * Floating-point for NaN
  * Divide by zero
  * Memory leaks
@@ -56,6 +57,13 @@ Many SMT solvers are currently supported:
  * Yices 2.2+
 
 In addition, ESBMC can be configured to use the SMTLIB interactive text format with a pipe to communicate with an arbitrary solver process, although there are not insignificant overheads involved.
+
+Two further backends drive external one-shot solver processes over SMT-LIB2 files (built by default via `-DENABLE_BITWUZLLOB=On` / `-DENABLE_NEUROSYM=On`; the external program is only needed at runtime):
+
+ * `--bitwuzllob` runs Bitwuzla on the massively parallel Mallob platform (`--bitwuzllob-prog`, default `mallob -mono=%f -mono-app=SMT`).
+ * `--neurosym` runs NeuroSym, a neural-guided SMT solver (a GAN proposes candidate models, with a Z3 fallback preserving soundness and completeness) for the QF_BV fragment (`--neurosym-prog`, default `python main.py %f`, run from a NeuroSym checkout with Python, PyTorch and Z3 installed). ESBMC flattens arrays, structs and floating-point to pure bit-vectors for it; integer/real mode (`--ir`) is not supported.
+
+Both are one-shot backends: incremental strategies (`--k-induction`, `--incremental-bmc`, ...) are rejected, and counterexamples require a local interactive SMT-LIB2 model solver (`--bitwuzllob-model-prog` / `--neurosym-model-prog`, e.g. `"z3 -in"`) or `--result-only`.
 
 ## Installing ESBMC
 

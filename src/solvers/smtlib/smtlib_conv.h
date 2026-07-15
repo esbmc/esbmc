@@ -183,9 +183,27 @@ class smtlib_convt : public smt_solver_baset,
 {
 public:
   smtlib_convt(const namespacet &_ns, const optionst &options);
+  /* Used by process-based derived backends (e.g. bitwuzllob, neurosym) that
+   * need the interactive-pipe and file sinks configured independently of the
+   * --smtlib-solver-prog and --output options. A backend whose solver rejects
+   * the default QF_AUFBV/QF_AUFLIRA can override the emitted (set-logic ...)
+   * via `logic`; empty selects the default. */
+  smtlib_convt(
+    const namespacet &_ns,
+    const optionst &options,
+    const std::string &solver_prog,
+    const std::string &output_path,
+    const std::string &logic = "");
   ~smtlib_convt() override;
 
   smt_resultt dec_solve() override;
+  /* Emit (check-sat) to the configured sinks and flush them. Non-template so
+   * derived backends in other translation units can call it without relying
+   * on cross-TU instantiations of the emit() member template. */
+  void emit_check_sat();
+  /* Read and parse the solver's response to an already-emitted (check-sat)
+   * from the interactive pipe. Requires emit_proc. */
+  smt_resultt read_check_sat_response();
   const std::string solver_text() override;
 
   smt_astt mk_add(smt_astt a, smt_astt b) override;
@@ -305,6 +323,9 @@ public:
     FILE *out_stream;
     FILE *in_stream;
     void *org_sigpipe_handler; /* TODO: static */
+    /* pid_t of the solver process; stored as long to keep this header
+     * POSIX-free. -1 when no process is running. */
+    long solver_proc_pid;
 
     std::string solver_name;
     std::string solver_version;
@@ -319,6 +340,11 @@ public:
     template <typename... Ts>
     void emit(const char *fmt, Ts &&...) const;
     void flush() const;
+
+    /* Stop the solver process before its answer is needed (e.g. the
+     * verdict came from elsewhere and no model will be read). Idempotent;
+     * afterwards operator bool() is false. */
+    void terminate() noexcept;
 
     explicit operator bool() const noexcept;
   } emit_proc;
@@ -372,6 +398,9 @@ public:
 
   static const std::string temp_prefix;
 
+  /** Thrown when the external solver process can no longer provide a usable
+   *  answer: a write hit EPIPE (the process died) or its response could not be
+   *  parsed (typically EOF from a dead process). */
   struct external_process_died : std::runtime_error
   {
     using std::runtime_error::runtime_error;
