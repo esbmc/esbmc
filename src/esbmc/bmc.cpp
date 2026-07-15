@@ -15,6 +15,7 @@
 #  undef small
 #endif
 
+#include <filesystem>
 #include <fmt/format.h>
 #include <regex>
 #include <ac_config.h>
@@ -2154,6 +2155,21 @@ smt_resultt bmct::multi_property_check(
       const bool want_ctest =
         options.get_bool_option("generate-ctest-testcase");
 
+      // Witness/counterexample filenames must be unique across every solver
+      // run, not just within one. The k-induction driver calls
+      // multi_property_check once per phase (base/forward/inductive) and per
+      // k-step, each time with a fresh ce_counter starting at zero, so a bare
+      // "{index}-" prefix collides across phases and k-steps: two distinct
+      // failures both land in "0-<name>" and the later one overwrites the
+      // earlier (discussion #6070). Tag each artifact with the phase and k as
+      // well so every run gets its own file. Only base-case (and plain BMC)
+      // runs reach here: inductive-step and diagnose runs return early at the
+      // `if (is) return` guard above, so those phases never emit witnesses.
+      const std::string run_phase = bs ? "base" : (fc ? "fwd" : "bmc");
+      std::string run_kval = options.get_option("unwind");
+      if (run_kval.empty())
+        run_kval = "0";
+
       // Emit testcase metadata once per claim (not once per witness).
       if (want_testcase)
         generate_testcase_metadata();
@@ -2178,12 +2194,26 @@ smt_resultt bmct::multi_property_check(
           w.nondet_inputs = collect_nondet_values(local_eq, *solver_ptr);
         w.ce_index = ce_counter++;
 
+        // Per-witness identifier, unique across phases and k-steps (see the
+        // run_phase/run_kval comment above): "{phase}-k{K}-{index}".
+        const std::string witness_id =
+          fmt::format("{}-k{}-{}", run_phase, run_kval, w.ce_index);
+
+        // Prefix only the basename with witness_id, keeping any directory the
+        // user gave in the path (e.g. "cex/out" -> "cex/{id}-out"); prefixing
+        // the whole path would redirect the file to a different directory.
+        auto tag_artifact = [&witness_id](const std::string &path) {
+          std::filesystem::path p(path);
+          return (p.parent_path() / (witness_id + "-" + p.filename().string()))
+            .string();
+        };
+
         // Emit machine-readable artifacts NOW, while this witness's solver
         // model is still live. After the next dec_solve(), the model is
         // either gone (UNSAT) or replaced by the next witness's values.
         if (!cex_output.empty())
         {
-          std::ofstream out(fmt::format("{}-{}", w.ce_index, cex_output));
+          std::ofstream out(tag_artifact(cex_output));
           show_goto_trace(out, ns, w.trace);
         }
         // For graphml/yaml the writer reads the path from `options`;
@@ -2191,23 +2221,17 @@ smt_resultt bmct::multi_property_check(
         // same file (and so it's safe under --parallel-solving).
         if (want_graphml)
           violation_graphml_goto_trace(
-            options,
-            ns,
-            w.trace,
-            fmt::format("{}-{}", w.ce_index, graphml_path));
+            options, ns, w.trace, tag_artifact(graphml_path));
         if (want_yaml)
           violation_yaml_goto_trace(
-            options, ns, w.trace, fmt::format("{}-{}", w.ce_index, yaml_path));
+            options, ns, w.trace, tag_artifact(yaml_path));
         if (want_testcase)
           generate_testcase(
-            "testcase-" + std::to_string(w.ce_index) + ".xml",
-            local_eq,
-            *solver_ptr);
+            "testcase-" + witness_id + ".xml", local_eq, *solver_ptr);
         if (want_html)
-          generate_html_report(
-            std::to_string(w.ce_index), ns, w.trace, options);
+          generate_html_report(witness_id, ns, w.trace, options);
         if (want_json)
-          generate_json_report(std::to_string(w.ce_index), ns, w.trace);
+          generate_json_report(witness_id, ns, w.trace);
         if (want_pytest)
           pytest_gen.collect(local_eq, *solver_ptr);
         if (want_ctest)
