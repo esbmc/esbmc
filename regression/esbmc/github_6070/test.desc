@@ -1,0 +1,6 @@
+CORE
+main.c
+--k-induction --multi-property --cex-output out.cex --unwind 5
+^VERIFICATION FAILED$
+CHECK_FILE base-k2-0-out.cex contains fail_when_i_is_1
+CHECK_FILE base-k4-0-out.cex contains fail_when_i_is_3
