@@ -244,7 +244,8 @@ std::string python_annotation<Json>::resolve_subscript_type(
       if (
         !idx_node.empty() && idx_node.contains("annotation") &&
         !idx_node["annotation"].is_null() &&
-        extract_type_info(idx_node["annotation"], idx_base_type, idx_element_type) &&
+        extract_type_info(
+          idx_node["annotation"], idx_base_type, idx_element_type) &&
         idx_base_type == "list")
         slice_is_list_var = true;
       // No (or non-list) annotation resolved -- idx may still be an
@@ -4152,6 +4153,7 @@ template <class Json>
 void python_annotation<Json>::add_type_annotation(const std::string &func_name)
 {
   current_line_ = 0;
+  annotating_function_entry_point_ = true;
 
   for (Json &elem : ast_["body"])
   {
@@ -4530,16 +4532,22 @@ void python_annotation<Json>::add_annotation(Json &body)
       continue;
     }
 
-    const std::string function_flag = config.options.get_option("function");
-    if (!function_flag.empty())
+    if (annotating_function_entry_point_)
     {
       if (
         stmt_type == "Expr" && element.contains("value") &&
         element["value"]["_type"] == "Call" &&
         element["value"]["func"]["_type"] == "Name")
       {
-        auto &func_node = json_utils::find_function(
-          ast_["body"], element["value"]["func"]["id"]);
+        // Use the const overload (returns by value, empty on a miss)
+        // rather than the non-const one (returns by reference, throws on a
+        // miss): the callee named here need not be a top-level FunctionDef
+        // in this same ast_ (it could be a builtin or something resolved
+        // elsewhere), and this is a best-effort forward-reference scan, not
+        // a hard requirement.
+        const Json &top_level_body = ast_["body"];
+        Json func_node = json_utils::find_function(
+          top_level_body, element["value"]["func"]["id"]);
         if (!func_node.empty())
           add_annotation(func_node);
       }
