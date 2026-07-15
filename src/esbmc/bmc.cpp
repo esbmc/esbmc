@@ -2155,16 +2155,11 @@ smt_resultt bmct::multi_property_check(
       const bool want_ctest =
         options.get_bool_option("generate-ctest-testcase");
 
-      // Witness/counterexample filenames must be unique across every solver
-      // run, not just within one. The k-induction driver calls
-      // multi_property_check once per phase (base/forward/inductive) and per
-      // k-step, each time with a fresh ce_counter starting at zero, so a bare
-      // "{index}-" prefix collides across phases and k-steps: two distinct
-      // failures both land in "0-<name>" and the later one overwrites the
-      // earlier (discussion #6070). Tag each artifact with the phase and k as
-      // well so every run gets its own file. Only base-case (and plain BMC)
-      // runs reach here: inductive-step and diagnose runs return early at the
-      // `if (is) return` guard above, so those phases never emit witnesses.
+      // A bare "{index}-" prefix collides across k-induction phases/k-steps,
+      // since ce_counter restarts at zero on every multi_property_check call
+      // (discussion #6070); tag with phase and k too. Inductive-step and
+      // diagnose runs return early at the `if (is) return` guard above, so
+      // the ternary only needs base/fwd/bmc.
       const std::string run_phase = bs ? "base" : (fc ? "fwd" : "bmc");
       std::string run_kval = options.get_option("unwind");
       if (run_kval.empty())
@@ -2194,14 +2189,11 @@ smt_resultt bmct::multi_property_check(
           w.nondet_inputs = collect_nondet_values(local_eq, *solver_ptr);
         w.ce_index = ce_counter++;
 
-        // Per-witness identifier, unique across phases and k-steps (see the
-        // run_phase/run_kval comment above): "{phase}-k{K}-{index}".
         const std::string witness_id =
           fmt::format("{}-k{}-{}", run_phase, run_kval, w.ce_index);
 
-        // Prefix only the basename with witness_id, keeping any directory the
-        // user gave in the path (e.g. "cex/out" -> "cex/{id}-out"); prefixing
-        // the whole path would redirect the file to a different directory.
+        // Prefix only the basename, keeping any directory the user gave
+        // (e.g. "cex/out" -> "cex/{id}-out").
         auto tag_artifact = [&witness_id](const std::string &path) {
           std::filesystem::path p(path);
           return (p.parent_path() / (witness_id + "-" + p.filename().string()))
