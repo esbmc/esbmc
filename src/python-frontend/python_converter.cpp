@@ -350,6 +350,78 @@ void python_converter::pre_collect_module_asts(
   }
 }
 
+void python_converter::convert_module_imports(code_blockt &all_imports_block)
+{
+  // Convert imported modules
+  module_locator locator((*ast_json)["ast_output_dir"].get<std::string>());
+
+  // Pre-walk the import graph so each annotator can see subscript usages
+  // from any other module (GitHub #4554).
+  pre_collect_module_asts(*ast_json, locator);
+
+  // Retype each imported module's list parameters from their call sites,
+  // before import_module_into_block annotates and converts them. The entry
+  // module was retyped in python_languaget::parse(); it is read here only to
+  // find the calls that reach into the imported modules (GitHub #5936).
+  std::vector<python_param_annotations::module_ast> modules{
+    {ast_json, nullptr, ""}};
+  for (auto &entry : module_ast_pool_)
+    modules.push_back({&entry.second, &entry.second, entry.first});
+  python_param_annotations::propagate_tuple_list_params(modules);
+
+  for (const auto &elem : (*ast_json)["body"])
+  {
+    if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
+    {
+      if (elem.value("module_not_found", false))
+      {
+        const std::string module_name = (elem["_type"] == "ImportFrom")
+                                          ? elem["module"]
+                                          : elem["names"][0]["name"];
+        log_warning("skipping unresolvable import: {}", module_name);
+        continue;
+      }
+      is_importing_module = true;
+      if (!import_module_into_block(elem, locator, all_imports_block))
+      {
+        const std::string &module_name = (elem["_type"] == "ImportFrom")
+                                           ? elem["module"]
+                                           : elem["names"][0]["name"];
+        throw std::runtime_error(
+          "Cannot open file: " + locator.module_path(module_name));
+      }
+    }
+  }
+
+  // Do the same for imports that appear directly inside functions.
+  for (const auto &elem : (*ast_json)["body"])
+  {
+    if (
+      elem["_type"] != "FunctionDef" || !elem.contains("body") ||
+      !elem["body"].is_array())
+      continue;
+
+    for (const auto &stmt : elem["body"])
+    {
+      if (stmt["_type"] != "ImportFrom" && stmt["_type"] != "Import")
+        continue;
+
+      is_importing_module = true;
+      if (!import_module_into_block(stmt, locator, all_imports_block))
+      {
+        const std::string &module_name = (stmt["_type"] == "ImportFrom")
+                                           ? stmt["module"]
+                                           : stmt["names"][0]["name"];
+        throw std::runtime_error(
+          "Cannot open file: " + locator.module_path(module_name));
+      }
+    }
+  }
+
+  is_importing_module = false;
+  current_python_file = main_python_file;
+}
+
 void python_converter::convert()
 {
   main_python_file = (*ast_json)["filename"].get<std::string>();
@@ -480,6 +552,14 @@ void python_converter::convert()
     // Add intrinsic assignments first
     block.copy_to_operands(intrinsic_block);
 
+    // Convert module-level and function-local imports so imported
+    // functions/classes are bound in the symbol table (github #5937):
+    // without this, any call through an imported module falls through to
+    // the generic "unsupported function" stub.
+    code_blockt imports_block;
+    convert_module_imports(imports_block);
+    block.copy_to_operands(imports_block);
+
     // Convert classes referenced by the function
     for (const auto &clazz : global_scope_.classes())
     {
@@ -551,77 +631,9 @@ void python_converter::convert()
   }
   else
   {
-    // Convert imported modules
-    module_locator locator((*ast_json)["ast_output_dir"].get<std::string>());
-
-    // Pre-walk the import graph so each annotator can see subscript usages
-    // from any other module (GitHub #4554).
-    pre_collect_module_asts(*ast_json, locator);
-
-    // Retype each imported module's list parameters from their call sites,
-    // before import_module_into_block annotates and converts them. The entry
-    // module was retyped in python_languaget::parse(); it is read here only to
-    // find the calls that reach into the imported modules (GitHub #5936).
-    std::vector<python_param_annotations::module_ast> modules{
-      {ast_json, nullptr, ""}};
-    for (auto &entry : module_ast_pool_)
-      modules.push_back({&entry.second, &entry.second, entry.first});
-    python_param_annotations::propagate_tuple_list_params(modules);
-
     // Accumulate all imports
     code_blockt all_imports_block;
-
-    for (const auto &elem : (*ast_json)["body"])
-    {
-      if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
-      {
-        if (elem.value("module_not_found", false))
-        {
-          const std::string module_name = (elem["_type"] == "ImportFrom")
-                                            ? elem["module"]
-                                            : elem["names"][0]["name"];
-          log_warning("skipping unresolvable import: {}", module_name);
-          continue;
-        }
-        is_importing_module = true;
-        if (!import_module_into_block(elem, locator, all_imports_block))
-        {
-          const std::string &module_name = (elem["_type"] == "ImportFrom")
-                                             ? elem["module"]
-                                             : elem["names"][0]["name"];
-          throw std::runtime_error(
-            "Cannot open file: " + locator.module_path(module_name));
-        }
-      }
-    }
-
-    // Do the same for imports that appear directly inside functions.
-    for (const auto &elem : (*ast_json)["body"])
-    {
-      if (
-        elem["_type"] != "FunctionDef" || !elem.contains("body") ||
-        !elem["body"].is_array())
-        continue;
-
-      for (const auto &stmt : elem["body"])
-      {
-        if (stmt["_type"] != "ImportFrom" && stmt["_type"] != "Import")
-          continue;
-
-        is_importing_module = true;
-        if (!import_module_into_block(stmt, locator, all_imports_block))
-        {
-          const std::string &module_name = (stmt["_type"] == "ImportFrom")
-                                             ? stmt["module"]
-                                             : stmt["names"][0]["name"];
-          throw std::runtime_error(
-            "Cannot open file: " + locator.module_path(module_name));
-        }
-      }
-    }
-
-    is_importing_module = false;
-    current_python_file = main_python_file;
+    convert_module_imports(all_imports_block);
 
     // Convert main statements
     exprt main_block = get_block((*ast_json)["body"]);
