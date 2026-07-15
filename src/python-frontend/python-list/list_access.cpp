@@ -661,6 +661,93 @@ exprt python_list::build_column_select(
   return build_symbol(result);
 }
 
+exprt python_list::build_strided_column_select(
+  const exprt &array,
+  const nlohmann::json &col_slice_node,
+  const nlohmann::json &element)
+{
+  const namespacet ns(converter_.symbol_table());
+  const typet resolved_array_type = ns.follow(array.type());
+  const locationt location = converter_.get_location_from_decl(element);
+
+  auto reject = [&](const std::string &reason) -> exprt {
+    std::ostringstream msg;
+    msg << "TypeError: strided column slicing (a[:, ::step]) " << reason;
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  };
+
+  // Only the bare-step form (`a[:, ::step]`) is modelled; combining a
+  // strided column slice with explicit bounds (`a[:, 1:3:2]`) would need a
+  // runtime-sized result to stay general, which is out of scope here.
+  if (
+    (col_slice_node.contains("lower") && !col_slice_node["lower"].is_null()) ||
+    (col_slice_node.contains("upper") && !col_slice_node["upper"].is_null()))
+    return reject("currently supports only a bare step, not explicit bounds");
+
+  if (!resolved_array_type.is_array())
+    return reject("requires a fixed-shape 2-D array");
+  const array_typet &outer_type = to_array_type(resolved_array_type);
+  const typet row_type = ns.follow(outer_type.subtype());
+  if (!row_type.is_array())
+    return reject("requires a fixed-shape 2-D array");
+  const array_typet &row_array_type = to_array_type(row_type);
+  const typet elem_type = ns.follow(row_array_type.subtype());
+  if (elem_type.is_array())
+    return reject(
+      "currently supports only 2-D arrays; 3-D+ arrays are not modelled");
+
+  const BigInt num_rows =
+    binary2integer(outer_type.size().value().c_str(), false);
+  const BigInt num_cols =
+    binary2integer(row_array_type.size().value().c_str(), false);
+
+  BigInt step_val = 1;
+  if (col_slice_node.contains("step") && !col_slice_node["step"].is_null())
+  {
+    if (!try_get_literal_int(col_slice_node["step"], step_val))
+      return reject("requires a literal step");
+    if (step_val == 0)
+      return reject("step cannot be zero");
+  }
+
+  const BigInt result_cols =
+    step_val < 0 ? num_cols : (num_cols + (step_val - 1)) / step_val;
+
+  const array_typet new_row_type(
+    elem_type, from_integer(result_cols, size_type()));
+  const array_typet result_type(
+    new_row_type, from_integer(num_rows, size_type()));
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$strided_col_slice$", result_type, exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  for (BigInt row = 0; row < num_rows; ++row)
+  {
+    exprt row_expr =
+      build_index(array, from_integer(row, size_type()), row_type);
+    exprt sliced_row = handle_range_slice(row_expr, col_slice_node);
+    exprt dst_row = build_index(
+      build_symbol(result), from_integer(row, size_type()), new_row_type);
+
+    for (BigInt col = 0; col < result_cols; ++col)
+    {
+      exprt src_elem =
+        build_index(sliced_row, from_integer(col, size_type()), elem_type);
+      exprt dst_elem =
+        build_index(dst_row, from_integer(col, size_type()), elem_type);
+      code_assignt assign(dst_elem, src_elem);
+      assign.location() = location;
+      converter_.add_instruction(assign);
+    }
+  }
+
+  return build_symbol(result);
+}
+
 exprt python_list::build_mixed_slice_tuple_select(
   const exprt &array,
   const std::vector<nlohmann::json> &idx_nodes,
@@ -1216,8 +1303,45 @@ exprt python_list::handle_range_slice(
 
     exprt src = build_index(array, src_idx, elem_type);
     exprt dst = build_index(build_symbol(result), build_symbol(idx), elem_type);
-    code_assignt assign(dst, src);
-    body.copy_to_operands(assign);
+
+    // Whole-row assignment (`dst[k] = src[i]` where both sides are
+    // themselves arrays, i.e. this is the outer axis of a 2-D array being
+    // sliced with a step) is not valid C and is unsupported by the backend,
+    // same as build_bool_mask_row_select/build_column_select - copy each
+    // row column by column instead. The column count is fixed at
+    // conversion time even though the row position is only known at
+    // runtime, so the inner copy can be unrolled.
+    const typet resolved_elem_type = ns.follow(elem_type);
+    if (resolved_elem_type.is_array())
+    {
+      const array_typet &row_type = to_array_type(resolved_elem_type);
+      const typet col_elem_type = ns.follow(row_type.subtype());
+      if (col_elem_type.is_array())
+      {
+        std::ostringstream msg;
+        msg << "TypeError: strided slicing currently supports only 2-D "
+               "arrays; 3-D+ arrays are not modelled";
+        if (!location.is_nil())
+          msg << " at " << location.get_file() << ":" << location.get_line();
+        throw std::runtime_error(msg.str());
+      }
+      const BigInt num_cols =
+        binary2integer(row_type.size().value().c_str(), false);
+      for (BigInt col = 0; col < num_cols; ++col)
+      {
+        exprt src_elem =
+          build_index(src, from_integer(col, size_type()), col_elem_type);
+        exprt dst_elem =
+          build_index(dst, from_integer(col, size_type()), col_elem_type);
+        code_assignt col_assign(dst_elem, src_elem);
+        body.copy_to_operands(col_assign);
+      }
+    }
+    else
+    {
+      code_assignt assign(dst, src);
+      body.copy_to_operands(assign);
+    }
 
     // i++ (V.3: synthetic size_type increment, built in IREP2)
     exprt incr =

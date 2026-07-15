@@ -138,6 +138,25 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Lower a strided column slice `a[:, ::step]` on a fixed-shape 2-D
+   * array: every row is sliced independently via handle_range_slice (which
+   * already implements step/negative-step semantics for 1-D arrays), then
+   * copied column by column into a fresh 2-D result. Only the bare-step
+   * form is modelled - explicit bounds combined with a column step
+   * (`a[:, 1:3:2]`) are rejected, since the result width would then need to
+   * be resolved from runtime bounds instead of the array's static shape.
+   * @param array          Source 2-D array expression.
+   * @param col_slice_node AST `Slice` node for the column axis (axis 1);
+   *                       its `step` must be a literal integer and its
+   *                       `lower`/`upper` must be absent.
+   * @param element        The Subscript AST node, used for location info.
+   */
+  exprt build_strided_column_select(
+    const exprt &array,
+    const nlohmann::json &col_slice_node,
+    const nlohmann::json &element);
+
+  /**
    * @brief Lower an N-D mixed slice/index tuple subscript with exactly one
    * full-slice axis and every other axis a literal (or resolvable runtime)
    * integer, e.g. `a[:, 0, 0]` or `a[0, :, 0]` on a 3-D array. Generalizes

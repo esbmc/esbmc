@@ -1564,7 +1564,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           {
             python_list list(*this, element);
             if (is_full_slice_node(idx_nodes[0]))
-              expr = list.build_column_select(array, idx_nodes[1], element);
+            {
+              // a[:, j] (single-column select) vs a[:, i:j:step] (strided
+              // column slice, e.g. a[:, ::2]) - the column axis being a
+              // `Slice` node rather than a plain index tells them apart.
+              expr = idx_nodes[1].value("_type", "") == "Slice"
+                       ? list.build_strided_column_select(
+                           array, idx_nodes[1], element)
+                       : list.build_column_select(array, idx_nodes[1], element);
+            }
             else
             {
               exprt current = list.index(array, idx_nodes[0]);
