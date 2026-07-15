@@ -459,8 +459,7 @@ bool goto_convert_functionst::convert_native_rec(
     // general path below is never reached where a fold should have fired.
     if (!options.get_bool_option("validate-violation-witness"))
     {
-      auto is_lone_false_assert = [](const goto_programt &p)
-      {
+      auto is_lone_false_assert = [](const goto_programt &p) {
         return p.instructions.size() == 1 &&
                p.instructions.back().is_assert() &&
                is_false(p.instructions.back().guard) &&
