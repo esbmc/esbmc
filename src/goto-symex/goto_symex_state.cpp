@@ -196,6 +196,14 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       bool all_constant_updates = true;
       expr2tc current = expr;
 
+      // Inlining an aggregate value is only sound when the whole enclosing
+      // struct is fixed-size. A fixed-size aggregate written into a struct that
+      // also carries a dynamic/infinite-sized member (e.g. a Solidity `bytes`
+      // field) leaves that member in the propagated constant, and computing its
+      // byte size downstream throws array_type2t::inf_sized_array_excp. Scalar
+      // updates stay unrestricted, matching pre-aggregate-propagation behaviour.
+      const bool struct_is_fixed_size = type_has_constant_size(expr->type);
+
       while (is_with2t(current))
       {
         const with2t &w = to_with2t(current);
@@ -206,7 +214,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
         const bool aggregate_update =
           (is_struct_type(uv->type) || is_array_type(uv->type) ||
            is_union_type(uv->type)) &&
-          type_has_constant_size(uv->type);
+          type_has_constant_size(uv->type) && struct_is_fixed_size;
         if (!(scalar_update || aggregate_update) || !constant_propagation(uv))
         {
           all_constant_updates = false;
