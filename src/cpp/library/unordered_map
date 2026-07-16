@@ -171,7 +171,9 @@ public:
 
 private:
     // Simple fixed-size array storage
-    static const size_t MAX_SIZE = 1024; // Small size for verification
+    // 64 slots keeps the inline data_ array small: with std::string's inline
+    // buffer, 1024 slots made one map ~140KB and solver encodings timed out.
+    static const size_t MAX_SIZE = 64;
     value_type data_[MAX_SIZE];
     size_type size_;
     hasher hash_function_;
