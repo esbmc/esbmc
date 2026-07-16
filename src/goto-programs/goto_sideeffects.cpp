@@ -55,8 +55,367 @@ static exprt rebuild_or_chain(const exprt::operandst &disjuncts, std::size_t i)
   return result;
 }
 
+/// Extract the symbol bound by a quantifier from its first argument,
+/// which has the shape (possibly typecast) address_of(symbol).
+static const exprt *quantifier_bound_var(const exprt &arg)
+{
+  const exprt *e = &arg;
+  while (e->id() == "typecast" && e->operands().size() == 1)
+    e = &e->op0();
+  if (
+    e->id() == "address_of" && e->operands().size() == 1 &&
+    e->op0().is_symbol())
+    return &e->op0();
+  return nullptr;
+}
+
+static irep_idt quantifier_bound_var_id(const exprt &arg)
+{
+  const exprt *sym = quantifier_bound_var(arg);
+  return sym ? sym->identifier() : irep_idt();
+}
+
+static bool mentions_symbol(const exprt &e, const std::set<irep_idt> &ids)
+{
+  if (e.is_symbol())
+    return ids.count(e.identifier()) != 0;
+  forall_operands (it, e)
+    if (mentions_symbol(*it, ids))
+      return true;
+  return false;
+}
+
+/// A side effect other than a nested function call (e.g. ++ on a parameter)
+/// cannot be replicated by argument substitution.
+static bool has_non_call_sideeffect(const exprt &e)
+{
+  if (e.id() == "sideeffect" && e.statement() != "function_call")
+    return true;
+  forall_operands (it, e)
+    if (has_non_call_sideeffect(*it))
+      return true;
+  return false;
+}
+
+static std::size_t count_symbol_occurrences(const exprt &e, const irep_idt &id)
+{
+  std::size_t n = e.is_symbol() && e.identifier() == id ? 1 : 0;
+  forall_operands (it, e)
+    n += count_symbol_occurrences(*it, id);
+  return n;
+}
+
+/// Post-order (evaluation-order) walk: true when the occurrence of @p id
+/// precedes every other side effect in @p e.  Substituting a side-effecting
+/// value at a later position would reorder calls across a sequence point.
+static bool
+symbol_before_sideeffects(const exprt &e, const irep_idt &id, bool &seen_id)
+{
+  forall_operands (it, e)
+    if (!symbol_before_sideeffects(*it, id, seen_id))
+      return false;
+  if (e.is_symbol() && e.identifier() == id)
+    seen_id = true;
+  else if (e.id() == "sideeffect" && !seen_id)
+    return false;
+  return true;
+}
+
+static bool substitutes_in_eval_order(const exprt &e, const irep_idt &id)
+{
+  bool seen_id = false;
+  return symbol_before_sideeffects(e, id, seen_id);
+}
+
+/// Substituting an argument under address_of would take the address of an
+/// rvalue or conflate distinct parameter objects (e.g. `&a != &b`).
+static bool
+param_under_address_of(const exprt &e, const std::set<irep_idt> &ids)
+{
+  if (e.id() == "address_of")
+    return mentions_symbol(e, ids);
+  forall_operands (it, e)
+    if (param_under_address_of(*it, ids))
+      return true;
+  return false;
+}
+
+static void
+replace_symbols_in_expr(exprt &e, const std::map<irep_idt, exprt> &map)
+{
+  if (e.is_symbol())
+  {
+    auto it = map.find(e.identifier());
+    if (it != map.end())
+    {
+      e = it->second;
+      return;
+    }
+  }
+  Forall_operands (it, e)
+    replace_symbols_in_expr(*it, map);
+}
+
+/// Returns the __ESBMC_forall/__ESBMC_exists symbol when @p e is a call to a
+/// quantifier intrinsic, nullptr otherwise.
+static const symbolt *
+quantifier_intrinsic_call(const exprt &e, const namespacet &ns)
+{
+  if (
+    e.id() != "sideeffect" || e.statement() != "function_call" ||
+    e.operands().size() < 2 || !e.op0().is_symbol())
+    return nullptr;
+  const symbolt *fsym = ns.lookup(e.op0().identifier());
+  if (
+    fsym && (fsym->name == "__ESBMC_forall" || fsym->name == "__ESBMC_exists"))
+    return fsym;
+  return nullptr;
+}
+
+static constexpr unsigned max_quantifier_inline_depth = 16;
+
+static bool
+flatten_body_statements(const codet &code, std::vector<const codet *> &out)
+{
+  const irep_idt &statement = code.get_statement();
+  if (statement == "block" || statement == "decl-block")
+  {
+    forall_operands (it, code)
+      if (!it->is_code() || !flatten_body_statements(to_code(*it), out))
+        return false;
+    return true;
+  }
+  if (statement == "skip")
+    return true;
+  out.push_back(&code);
+  return true;
+}
+
+/// Build the inlined form of @p call to @p fsym: the callee's body must be
+/// local declarations with initializers followed by a single
+/// `return <expr>;`.  The declarations and then the actual arguments are
+/// substituted into the return expression.  Returns false when the callee
+/// does not have this shape.
+bool goto_convertt::try_inline_pure_call(
+  const symbolt &fsym,
+  const exprt &call,
+  exprt &out)
+{
+  const exprt &value = fsym.get_value();
+  if (!value.is_code() || fsym.get_type().id() != "code")
+    return false;
+
+  std::vector<const codet *> stmts;
+  if (!flatten_body_statements(to_code(value), stmts) || stmts.empty())
+    return false;
+
+  const codet &ret = *stmts.back();
+  if (
+    ret.get_statement() != "return" || ret.operands().size() != 1 ||
+    ret.op0().is_nil())
+    return false;
+
+  const code_typet &ftype = to_code_type(fsym.get_type());
+  if (ftype.has_ellipsis())
+    return false;
+  const code_typet::argumentst &params = ftype.arguments();
+  const exprt::operandst &args = call.op1().operands();
+  if (params.size() != args.size())
+    return false;
+
+  exprt result = ret.op0();
+
+  // Fold local declarations into the return expression, last first, so that
+  // each occurrence count sees the fully substituted downstream uses.
+  for (std::size_t i = stmts.size() - 1; i-- > 0;)
+  {
+    const codet &decl = *stmts[i];
+    if (
+      decl.get_statement() != "decl" || decl.operands().size() != 2 ||
+      !decl.op0().is_symbol())
+      return false;
+    const irep_idt &id = decl.op0().identifier();
+    // A static local is initialized once, not per call.
+    const symbolt *local = ns.lookup(id);
+    if (!local || local->static_lifetime)
+      return false;
+    exprt init = decl.op1();
+    if (has_non_call_sideeffect(init) || mentions_symbol(init, {id}))
+      return false;
+    // Same rule as for arguments below: a side-effecting initializer must
+    // end up evaluated exactly once, before every side effect sequenced
+    // after it.
+    if (
+      has_sideeffect(init) && (count_symbol_occurrences(result, id) != 1 ||
+                               !substitutes_in_eval_order(result, id)))
+      return false;
+    if (param_under_address_of(result, {id}))
+      return false;
+    if (init.type() != decl.op0().type())
+      init.make_typecast(decl.op0().type());
+    std::map<irep_idt, exprt> local_map;
+    local_map.emplace(id, std::move(init));
+    replace_symbols_in_expr(result, local_map);
+  }
+
+  if (has_non_call_sideeffect(result))
+    return false;
+
+  std::map<irep_idt, exprt> param_map;
+  std::set<irep_idt> param_ids;
+  for (std::size_t i = 0; i < params.size(); i++)
+  {
+    const irep_idt &id = params[i].get_identifier();
+    if (id.empty())
+      return false;
+    exprt arg = args[i];
+    if (has_non_call_sideeffect(arg))
+      return false;
+    // A side-effecting argument must be evaluated exactly once; substitution
+    // would drop it (unused parameter) or duplicate it (parameter used more
+    // than once).  It is also sequenced before the callee body, so its
+    // occurrence must precede every side effect already in the body.
+    if (
+      has_sideeffect(arg) && (count_symbol_occurrences(result, id) != 1 ||
+                              !substitutes_in_eval_order(result, id)))
+      return false;
+    if (arg.type() != params[i].type())
+      arg.make_typecast(params[i].type());
+    param_ids.insert(id);
+    param_map.emplace(id, std::move(arg));
+  }
+
+  if (param_under_address_of(result, param_ids))
+    return false;
+
+  replace_symbols_in_expr(result, param_map);
+  if (result.type() != call.type())
+    result.make_typecast(call.type());
+  result.location() = call.find_location();
+  out.swap(result);
+  return true;
+}
+
+/// Inline calls to pure single-return functions occurring under a quantifier
+/// binder, so that the bound variable stays visible in the body for
+/// replace_name_in_body() in smt_solver.cpp.  Hoisting such a call to a temp
+/// would freeze the bound variable at its pre-quantifier value, detaching the
+/// body from the binder (GitHub discussion #6100).  Nested quantifier
+/// intrinsic calls are recursed into but left intact; calls that cannot be
+/// inlined are left in place.
+void goto_convertt::inline_calls_in_quantifier_body(exprt &expr, unsigned depth)
+{
+  if (quantifier_intrinsic_call(expr, ns))
+  {
+    exprt::operandst &args = expr.op1().operands();
+    if (args.size() == 2)
+      inline_calls_in_quantifier_body(args[1], depth);
+    return;
+  }
+
+  if (
+    expr.id() == "sideeffect" && expr.statement() == "function_call" &&
+    expr.operands().size() >= 2 && expr.op0().is_symbol())
+  {
+    const symbolt *fsym = ns.lookup(expr.op0().identifier());
+    exprt inlined;
+    if (!fsym || depth == 0 || !try_inline_pure_call(*fsym, expr, inlined))
+      return;
+    expr.swap(inlined);
+    inline_calls_in_quantifier_body(expr, depth - 1);
+    return;
+  }
+
+  Forall_operands (it, expr)
+    inline_calls_in_quantifier_body(*it, depth);
+}
+
+/// Find a side effect that mentions one of @p bound_vars.  Such a side
+/// effect cannot be hoisted soundly: the temp would freeze the bound
+/// variable at its pre-quantifier value.  Quantifier intrinsic calls are
+/// skipped, with their own bound variable added while scanning their body.
+const exprt *goto_convertt::find_sideeffect_on_bound_var(
+  const exprt &expr,
+  const std::set<irep_idt> &bound_vars)
+{
+  if (quantifier_intrinsic_call(expr, ns))
+  {
+    const exprt::operandst &args = expr.op1().operands();
+    if (args.size() != 2)
+      return nullptr;
+    std::set<irep_idt> inner_vars = bound_vars;
+    const irep_idt inner_id = quantifier_bound_var_id(args[0]);
+    if (!inner_id.empty())
+      inner_vars.insert(inner_id);
+    return find_sideeffect_on_bound_var(args[1], inner_vars);
+  }
+
+  if (expr.id() == "sideeffect" && mentions_symbol(expr, bound_vars))
+    return &expr;
+
+  forall_operands (it, expr)
+    if (const exprt *found = find_sideeffect_on_bound_var(*it, bound_vars))
+      return found;
+  return nullptr;
+}
+
+/// In an assertion, a __ESBMC_forall in positive polarity is equivalent to
+/// its body over a fresh unconstrained variable: assert(forall x. B) fails
+/// exactly when some x violates B.  When the body keeps a side effect on the
+/// bound variable that inlining cannot remove (e.g. a call to a libc model
+/// whose body is only linked at the GOTO level), rewrite the binder away so
+/// the call is hoisted as an ordinary call on the fresh variable.  Bodies
+/// the binder path can model are left alone, as are __ESBMC_exists and
+/// quantifiers in negative positions (!, ==>, ?:, __ESBMC_assume).
+void goto_convertt::skolemize_asserted_foralls(exprt &expr, goto_programt &dest)
+{
+  if (expr.id() == "typecast" && expr.operands().size() == 1)
+  {
+    skolemize_asserted_foralls(expr.op0(), dest);
+    return;
+  }
+
+  if (expr.is_and() || expr.id() == "or")
+  {
+    Forall_operands (it, expr)
+      skolemize_asserted_foralls(*it, dest);
+    return;
+  }
+
+  const symbolt *fsym = quantifier_intrinsic_call(expr, ns);
+  if (!fsym || fsym->name != "__ESBMC_forall")
+    return;
+  exprt::operandst &args = expr.op1().operands();
+  if (args.size() != 2 || !has_sideeffect(args[1]))
+    return;
+  const exprt *bvar = quantifier_bound_var(args[0]);
+  if (!bvar)
+    return;
+
+  inline_calls_in_quantifier_body(args[1], max_quantifier_inline_depth);
+  if (!find_sideeffect_on_bound_var(args[1], {bvar->identifier()}))
+    return;
+
+  symbolt &skolem = new_tmp_symbol(bvar->type());
+  skolem.location = expr.find_location();
+  code_declt decl(symbol_expr(skolem));
+  decl.location() = skolem.location;
+  convert_decl(decl, dest);
+
+  exprt body;
+  body.swap(args[1]);
+  std::map<irep_idt, exprt> skolem_map;
+  skolem_map.emplace(bvar->identifier(), symbol_expr(skolem));
+  replace_symbols_in_expr(body, skolem_map);
+  if (body.type() != expr.type())
+    body.make_typecast(expr.type());
+  expr.swap(body);
+  skolemize_asserted_foralls(expr, dest);
+}
+
 void goto_convertt::remove_sideeffects_for_quantifier_body(
   exprt &body,
+  const std::set<irep_idt> &bound_vars,
   goto_programt &dest)
 {
   if (!has_sideeffect(body))
@@ -71,11 +430,12 @@ void goto_convertt::remove_sideeffects_for_quantifier_body(
 
   // Recurse into || and && without converting them to short-circuit ITE chains.
   // This preserves the logical structure so that replace_name_in_body() in
-  // smt_conv.cpp can substitute the bound variable throughout the full body.
+  // smt_solver.cpp can substitute the bound variable throughout the full
+  // body.
   if (expr->is_or() || expr->is_and())
   {
     for (auto &op : expr->operands())
-      remove_sideeffects_for_quantifier_body(op, dest);
+      remove_sideeffects_for_quantifier_body(op, bound_vars, dest);
     return;
   }
 
@@ -86,30 +446,47 @@ void goto_convertt::remove_sideeffects_for_quantifier_body(
   // body.  Without this, the temp assignment is a separate instruction
   // without the enclosing quantifier's guard context, causing spurious
   // array-bounds violations (GitHub #3995).
-  if (
-    expr->id() == "sideeffect" && expr->statement() == "function_call" &&
-    expr->operands().size() >= 2 && expr->op0().is_symbol())
+  if (const symbolt *fsym = quantifier_intrinsic_call(*expr, ns))
   {
-    const symbolt *fsym = ns.lookup(expr->op0().identifier());
-    if (
-      fsym &&
-      (fsym->name == "__ESBMC_forall" || fsym->name == "__ESBMC_exists"))
+    exprt::operandst &args = expr->op1().operands();
+    if (args.size() == 2)
     {
-      exprt::operandst &args = expr->op1().operands();
-      if (args.size() == 2)
+      if (has_sideeffect(args[1]))
       {
-        if (has_sideeffect(args[1]))
-          remove_sideeffects_for_quantifier_body(args[1], dest);
-
-        bool is_forall = (fsym->name == "__ESBMC_forall");
-        exprt quant(is_forall ? "forall" : "exists", typet("bool"));
-        quant.copy_to_operands(args[0]);
-        quant.copy_to_operands(args[1]);
-        quant.location() = expr->find_location();
-        body = quant;
-        return;
+        std::set<irep_idt> inner_vars = bound_vars;
+        const irep_idt inner_id = quantifier_bound_var_id(args[0]);
+        if (!inner_id.empty())
+          inner_vars.insert(inner_id);
+        remove_sideeffects_for_quantifier_body(args[1], inner_vars, dest);
       }
+
+      bool is_forall = (fsym->name == "__ESBMC_forall");
+      exprt quant(is_forall ? "forall" : "exists", typet("bool"));
+      quant.copy_to_operands(args[0]);
+      quant.copy_to_operands(args[1]);
+      quant.location() = expr->find_location();
+      body = quant;
+      return;
     }
+  }
+
+  // A remaining side effect on a bound variable cannot be hoisted: fail
+  // loudly rather than produce a vacuous quantifier (GitHub discussion
+  // #6100).
+  if (const exprt *se = find_sideeffect_on_bound_var(body, bound_vars))
+  {
+    const bool is_call = se->statement() == "function_call" &&
+                         se->operands().size() >= 1 && se->op0().is_symbol();
+    log_error(
+      "{}: cannot model {} on a quantified variable inside "
+      "__ESBMC_forall/__ESBMC_exists; the quantifier body must be a "
+      "side-effect-free expression, possibly calling functions whose body "
+      "is local declarations followed by a single `return <expr>;' and "
+      "whose side-effecting arguments are each used exactly once",
+      se->find_location().as_string(),
+      is_call ? "call to `" + se->op0().identifier().as_string() + "'"
+              : "side effect `" + se->statement().as_string() + "'");
+    abort();
   }
 
   // Leaf that is not a boolean connector or nested quantifier: use the
@@ -538,9 +915,18 @@ void goto_convertt::remove_sideeffects(
         }
       }
 
+      // A __ESBMC_forall the binder path cannot model (a residual side
+      // effect on the bound variable) is sound to rewrite over a fresh
+      // unconstrained variable when it sits in positive polarity of an
+      // assertion; see skolemize_asserted_foralls.
+      if (
+        fsym && (fsym->name == "__ESBMC_assert" || fsym->name == "assert") &&
+        !expr.op1().operands().empty())
+        skolemize_asserted_foralls(expr.op1().operands().front(), dest);
+
       // Special handling for __ESBMC_forall/__ESBMC_exists(ptr, body):
-      // preserve logical structure of || / && body so the bound variable
-      // remains visible for substitution in smt_conv.cpp.
+      // the body must be processed under the binder so the bound variable
+      // remains visible for substitution in smt_solver.cpp.
       if (
         fsym &&
         (fsym->name == "__ESBMC_forall" || fsym->name == "__ESBMC_exists"))
@@ -548,17 +934,14 @@ void goto_convertt::remove_sideeffects(
         exprt::operandst &args = expr.op1().operands();
         if (args.size() == 2 && has_sideeffect(args[1]))
         {
-          exprt *body_expr = &args[1];
-          while (body_expr->id() == "typecast" &&
-                 body_expr->operands().size() == 1)
-            body_expr = &body_expr->op0();
-
-          if (body_expr->is_or() || body_expr->is_and())
-          {
-            remove_sideeffects_for_quantifier_body(*body_expr, dest);
-            remove_function_call(expr, dest, result_is_used);
-            return;
-          }
+          inline_calls_in_quantifier_body(args[1], max_quantifier_inline_depth);
+          std::set<irep_idt> bound_vars;
+          const irep_idt id = quantifier_bound_var_id(args[0]);
+          if (!id.empty())
+            bound_vars.insert(id);
+          remove_sideeffects_for_quantifier_body(args[1], bound_vars, dest);
+          remove_function_call(expr, dest, result_is_used);
+          return;
         }
       }
     }
