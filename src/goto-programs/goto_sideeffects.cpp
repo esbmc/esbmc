@@ -7,7 +7,11 @@
 #include <util/message/format.h>
 #include <util/migrate.h>
 #include <util/rename.h>
+#include <util/replace_symbol.h>
+#include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/std_types.h>
+#include <set>
 
 /// Recursively flatten a (possibly nested) binary && expression into a flat
 /// list of conjuncts.  Clang represents A && B && C as and(and(A,B),C).
@@ -53,6 +57,85 @@ static exprt rebuild_or_chain(const exprt::operandst &disjuncts, std::size_t i)
   exprt result = exprt("or", bool_type());
   result.copy_to_operands(disjuncts[i], rebuild_or_chain(disjuncts, i + 1));
   return result;
+}
+
+static bool references_any_symbol(const exprt &e, const std::set<irep_idt> &ids)
+{
+  if (e.is_symbol() && ids.count(e.identifier()))
+    return true;
+  forall_operands (it, e)
+    if (references_any_symbol(*it, ids))
+      return true;
+  return false;
+}
+
+bool goto_convertt::try_inline_predicate_call(const exprt &call, exprt &result)
+{
+  if (!call.op0().is_symbol())
+    return false;
+
+  const symbolt *fsym = ns.lookup(call.op0().identifier());
+  if (fsym == nullptr)
+    return false;
+  const exprt &fvalue = fsym->get_value();
+  if (fvalue.is_nil() || !fvalue.is_code())
+    return false;
+
+  // Body must be a block whose single statement is a side-effect-free
+  // `return <expr>;`.
+  const codet &fbody = to_code(fvalue);
+  if (fbody.get_statement() != "block" || fbody.operands().size() != 1)
+    return false;
+  if (
+    !fbody.op0().is_code() || to_code(fbody.op0()).get_statement() != "return")
+    return false;
+
+  const code_returnt &ret = to_code_return(to_code(fbody.op0()));
+  if (!ret.has_return_value() || has_sideeffect(ret.return_value()))
+    return false;
+
+  if (!fsym->get_type().is_code())
+    return false;
+
+  // Substitute each actual argument for its parameter in the return value.
+  const code_typet::argumentst &params =
+    to_code_type(fsym->get_type()).arguments();
+  const exprt::operandst &args = call.op1().operands();
+  if (params.size() != args.size())
+    return false;
+
+  replace_symbolt replace;
+  std::set<irep_idt> param_ids;
+  for (std::size_t i = 0; i < params.size(); ++i)
+  {
+    const irep_idt &id = params[i].get_identifier();
+    if (id.empty())
+      return false;
+    exprt arg = args[i];
+    // A side-effecting argument (e.g. eq(g++, 6)) must not be substituted into
+    // the quantifier body, where it would execute under the quantifier.
+    if (has_sideeffect(arg))
+      return false;
+    if (arg.type() != params[i].type())
+      arg.make_typecast(params[i].type());
+    replace.insert(id, arg);
+    param_ids.insert(id);
+  }
+
+  exprt inlined = ret.return_value();
+  replace.replace(inlined);
+
+  // If a parameter symbol survived substitution (identifier mismatch), the
+  // body would reference an unconstrained free symbol. Fall back rather than
+  // emit a silently unsound quantifier.
+  if (references_any_symbol(inlined, param_ids))
+    return false;
+
+  if (inlined.type() != bool_type())
+    inlined.make_typecast(bool_type());
+
+  result = inlined;
+  return true;
 }
 
 void goto_convertt::remove_sideeffects_for_quantifier_body(
@@ -110,6 +193,25 @@ void goto_convertt::remove_sideeffects_for_quantifier_body(
         return;
       }
     }
+
+    // A plain function call in the quantifier body: inline a pure predicate so
+    // the bound variable flows into it, instead of hoisting the call into a
+    // temp evaluated once with the enclosing scope's variable (discussion
+    // #6100).
+    exprt inlined;
+    if (try_inline_predicate_call(*expr, inlined))
+    {
+      *expr = inlined;
+      return;
+    }
+
+    log_warning(
+      "function call inside a quantifier body could not be inlined (only a "
+      "single-`return` side-effect-free predicate is supported); the bound "
+      "variable does not flow into it, so the result may be unsound. Inline "
+      "the predicate manually. See {}:{}.",
+      expr->find_location().get_file(),
+      expr->find_location().get_line());
   }
 
   // Leaf that is not a boolean connector or nested quantifier: use the
@@ -544,17 +646,14 @@ void goto_convertt::remove_sideeffects(
         exprt::operandst &args = expr.op1().operands();
         if (args.size() == 2 && has_sideeffect(args[1]))
         {
-          exprt *body_expr = &args[1];
-          while (body_expr->id() == "typecast" &&
-                 body_expr->operands().size() == 1)
-            body_expr = &body_expr->op0();
-
-          if (body_expr->is_or() || body_expr->is_and())
-          {
-            remove_sideeffects_for_quantifier_body(*body_expr, dest);
-            remove_function_call(expr, dest, result_is_used);
-            return;
-          }
+          // Route the whole body through the quantifier handler: it preserves
+          // the logical structure of || / && (so the bound variable stays
+          // visible for substitution in smt_conv.cpp) and inlines pure
+          // predicate calls (so a call like eq(var, 6) is coupled to the bound
+          // variable instead of being hoisted into a temp; discussion #6100).
+          remove_sideeffects_for_quantifier_body(args[1], dest);
+          remove_function_call(expr, dest, result_is_used);
+          return;
         }
       }
     }

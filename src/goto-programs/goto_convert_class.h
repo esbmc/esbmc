@@ -89,6 +89,14 @@ protected:
   // replace_name_in_body() in smt_conv.cpp.
   void remove_sideeffects_for_quantifier_body(exprt &body, goto_programt &dest);
 
+  // Try to inline a call to a pure predicate (a function whose body is a
+  // single side-effect-free `return <expr>;`) by substituting the actual
+  // arguments for the parameters in the return expression. Used to keep
+  // function calls inside quantifier bodies coupled to the bound variable
+  // instead of being hoisted into a temp (discussion #6100). Returns true and
+  // writes the inlined expression to @p result on success.
+  bool try_inline_predicate_call(const exprt &call, exprt &result);
+
   void remove_assignment(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_post(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_pre(exprt &expr, goto_programt &dest, bool result_is_used);
