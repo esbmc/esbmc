@@ -4,6 +4,7 @@
 #include <goto-programs/goto_program.h>
 #include <list>
 #include <queue>
+#include <set>
 #include <stack>
 #include <util/expr_util.h>
 #include <irep2/irep2_guard.h>
@@ -86,8 +87,17 @@ protected:
   // Used by remove_sideeffects() to process a quantifier body expression.
   // Recursively walks || and && sub-expressions without converting them to
   // short-circuit ITE chains, so that bound variables remain reachable by
-  // replace_name_in_body() in smt_conv.cpp.
-  void remove_sideeffects_for_quantifier_body(exprt &body, goto_programt &dest);
+  // replace_name_in_body() in smt_solver.cpp.  @p bound_vars holds the
+  // identifiers bound by the enclosing quantifiers.
+  void remove_sideeffects_for_quantifier_body(
+    exprt &body,
+    const std::set<irep_idt> &bound_vars,
+    goto_programt &dest);
+  void inline_calls_in_quantifier_body(exprt &expr, unsigned depth);
+  bool try_inline_pure_call(const symbolt &fsym, const exprt &call, exprt &out);
+  const exprt *find_sideeffect_on_bound_var(
+    const exprt &expr,
+    const std::set<irep_idt> &bound_vars);
 
   void remove_assignment(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_post(exprt &expr, goto_programt &dest, bool result_is_used);
