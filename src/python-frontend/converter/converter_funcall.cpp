@@ -479,7 +479,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     nlohmann::json func_node;
     if (can_fold)
     {
-      func_node = find_function((*ast_json)["body"], "parse_nested_parens");
+      func_node = try_find_function((*ast_json)["body"], "parse_nested_parens");
       if (func_node.empty())
         can_fold = false;
     }
@@ -752,12 +752,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       !is_class(func_name, *ast_json))
     {
       // A call into an unrecognised module (e.g. itertools.islice) has no
-      // definition in the AST, so find_function returns an empty node. Skip
+      // definition in the AST, so try_find_function returns an empty node. Skip
       // loading here and let the call fall through to the "Undefined function
       // - replacing with assert(false)" fallback instead of feeding an empty
       // node to get_function_definition, which would dereference missing
       // fields and abort (issue #5898).
-      const auto &func_node = find_function((*ast_json)["body"], func_name);
+      const auto &func_node = try_find_function((*ast_json)["body"], func_name);
       if (!func_node.empty())
         get_function_definition(func_node);
     }
@@ -781,9 +781,6 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     if (!current_func_name_.empty())
     {
       // Walk the function nesting path (split on "@F@").
-      // Use const ref so the non-throwing find_function overload
-      // (returns empty JSON on miss) is selected instead of the
-      // mutable-ref overload that throws.
       const nlohmann::json &ast_body = (*ast_json)["body"];
       nlohmann::json cur_body = ast_body;
       std::string remaining = current_func_name_;
@@ -801,8 +798,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           part = remaining;
           remaining.clear();
         }
-        auto fn =
-          find_function(static_cast<const nlohmann::json &>(cur_body), part);
+        auto fn = try_find_function(cur_body, part);
         if (fn.empty() || !fn.contains("body") || !fn["body"].is_array())
           break;
         for (const auto &stmt : fn["body"])
@@ -823,7 +819,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     if (
       !locally_shadowed && !type_utils::is_builtin_type(callee) &&
       !type_utils::is_python_model_func(callee) &&
-      !find_function((*ast_json)["body"], callee).empty())
+      !try_find_function((*ast_json)["body"], callee).empty())
     {
       // Collect constant arguments
       bool all_const = true;
