@@ -235,8 +235,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
   if (k_step_base >= max_k_step)
   {
     log_error(
-      "Please specify --base-k-step smaller than max-k-step if you want "
-      "to use incremental verification.");
+      "--base-k-step ({}) must be smaller than --max-k-step ({}).",
+      k_step_base,
+      max_k_step);
     abort();
   }
 
