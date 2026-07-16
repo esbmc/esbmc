@@ -154,6 +154,18 @@ private:
    *  No-op if neither operand has a known NaN predicate. */
   void store_combined_nan_pred(smt_astt result, smt_astt s1, smt_astt s2);
 
+  /** Returns the max-normal threshold for the given float precision. */
+  smt_astt get_max_normal_real(const floatbv_type2t &fbv_type) const;
+
+  /** True iff x > max_normal (positive infinity in the real-arithmetic encoding). */
+  smt_astt is_pos_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const;
+
+  /** True iff x < −max_normal (negative infinity in the real-arithmetic encoding). */
+  smt_astt is_neg_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const;
+
+  /** True iff |x| > max_normal (either sign of infinity). */
+  smt_astt is_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const;
+
   /** Dispatch the appropriate five-way rounding-mode enclosure. */
   std::pair<smt_astt, smt_astt> apply_enclosure(
     smt_astt real_result,

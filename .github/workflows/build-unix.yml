@@ -83,10 +83,18 @@ jobs:
         # platform-portable and covered by the Linux PR job.
         # On PR Linux, skip python-intensive to keep fast feedback.
         # On other systems/events (push, dispatch), run everything.
+        #
+        # The Linux legs run the full esbmc-cpp suite, which contains
+        # memory-heavy container/string cases (e.g. unordered_map/copy_move_fail
+        # peaks ~8GB, map/multimap _string_class-2_bug ~3GB each). Under -j4 on a
+        # 16GB runner these can align and exhaust RAM, ending the job with a
+        # "runner received a shutdown signal" (OOM). Run the Linux legs with -j2
+        # to bound peak concurrent memory. The macOS leg runs only the light
+        # python/ suite and keeps -j4.
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
           ctest -j4 --output-on-failure --progress -L '^python/$'
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          ctest -j4 --output-on-failure --progress -LE python-intensive .
+          ctest -j2 --output-on-failure --progress -LE python-intensive .
         else
-          ctest -j4 --output-on-failure --progress .
+          ctest -j2 --output-on-failure --progress .
         fi

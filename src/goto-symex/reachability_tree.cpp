@@ -406,10 +406,20 @@ bool reachability_treet::check_for_hash_collision() const
   const execution_statet &ex_state = get_cur_state();
 
   std::size_t hash = ex_state.generate_hash();
-  if (hit_hashes.find(hash) != hit_hashes.end())
+  auto it = hit_hashes.find(hash);
+  if (it == hit_hashes.end())
+    return false;
+
+  // Without a context bound, CS_number never gates scheduling, so equal
+  // fingerprints are bisimilar and any collision prunes soundly.
+  if (CS_bound == -1)
     return true;
 
-  return false;
+  // Under a context bound, prune only if the recorded state was reached at a
+  // cswitch count no greater than the current one (i.e. with at least as much
+  // remaining budget); otherwise the current state may reach interleavings the
+  // recorded one cannot, and pruning would be unsound.
+  return it->second <= ex_state.get_context_switch();
 }
 
 void reachability_treet::post_hash_collision_cleanup()
@@ -423,7 +433,11 @@ void reachability_treet::update_hash_collision_set()
   execution_statet &ex_state = get_cur_state();
 
   std::size_t hash = ex_state.generate_hash();
-  hit_hashes.insert(hash);
+  int cswitch = ex_state.get_context_switch();
+  auto res = hit_hashes.emplace(hash, cswitch);
+  // Keep the smallest cswitch per hash: most remaining budget subsumes the rest.
+  if (!res.second && cswitch < res.first->second)
+    res.first->second = cswitch;
 }
 
 void reachability_treet::remove_hash_collision_entry()

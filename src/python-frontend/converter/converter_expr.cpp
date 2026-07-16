@@ -1564,7 +1564,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           {
             python_list list(*this, element);
             if (is_full_slice_node(idx_nodes[0]))
-              expr = list.build_column_select(array, idx_nodes[1], element);
+            {
+              // a[:, j] (single-column select) vs a[:, i:j:step] (strided
+              // column slice, e.g. a[:, ::2]) - the column axis being a
+              // `Slice` node rather than a plain index tells them apart.
+              expr = idx_nodes[1].value("_type", "") == "Slice"
+                       ? list.build_strided_column_select(
+                           array, idx_nodes[1], element)
+                       : list.build_column_select(array, idx_nodes[1], element);
+            }
             else
             {
               exprt current = list.index(array, idx_nodes[0]);
@@ -1572,6 +1580,35 @@ exprt python_converter::get_expr(const nlohmann::json &element)
                 current = list.index(current, idx_nodes[1]);
               expr = current;
             }
+            break;
+          }
+
+          // N-D mixed slice/index tuple: exactly one full-slice axis (`:`)
+          // and every other axis a literal or resolvable-at-runtime integer,
+          // e.g. `a[:, 0, 0]` or `a[0, :, 0]`. A bounded/partial slice
+          // (`a[0:2, 0, 0]`) or more than one slice axis (`a[:, :, 0]`)
+          // stays unsupported.
+          std::size_t slice_axis_count = 0;
+          std::size_t slice_axis = 0;
+          bool has_partial_slice = false;
+          for (std::size_t i = 0; i < idx_nodes.size(); ++i)
+          {
+            if (idx_nodes[i].value("_type", "") != "Slice")
+              continue;
+            if (is_full_slice_node(idx_nodes[i]))
+            {
+              ++slice_axis_count;
+              slice_axis = i;
+            }
+            else
+              has_partial_slice = true;
+          }
+
+          if (!has_partial_slice && slice_axis_count == 1)
+          {
+            python_list list(*this, element);
+            expr = list.build_mixed_slice_tuple_select(
+              array, idx_nodes, slice_axis, element);
             break;
           }
 

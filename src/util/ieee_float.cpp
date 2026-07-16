@@ -558,6 +558,9 @@ void ieee_floatt::align()
     case UNKNOWN:
     case NONDETERMINISTIC:
     case ROUND_TO_EVEN:
+    case ROUND_TO_AWAY:
+      // round-to-nearest (ties-to-even or ties-to-away): overflow rounds to
+      // infinity
       infinity_flag = true;
       break;
 

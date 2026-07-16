@@ -118,6 +118,16 @@ exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
     result.type() = t;
     return result;
   }
+  // A pointer source (e.g. a numpy-array function parameter, decayed the
+  // same way a C array parameter decays to a pointer to its element type)
+  // indexes like plain C pointer arithmetic: `arr[idx]` is `*(arr + idx)`,
+  // not a direct array index over the pointer itself.
+  if (is_pointer_type(arr2->type))
+  {
+    plus_exprt ptr_plus_idx(arr, idx);
+    ptr_plus_idx.type() = arr.type();
+    return build_dereference(ptr_plus_idx, t);
+  }
   return index_exprt(arr, idx, t);
 }
 

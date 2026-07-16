@@ -79,7 +79,7 @@ bool json_arg_contains_or_is_complex_impl(
       return true;
 
     const nlohmann::json &func_node =
-      json_utils::find_function(converter.ast()["body"], called_name);
+      json_utils::try_find_function(converter.ast()["body"], called_name);
 
     if (!func_node.empty())
     {

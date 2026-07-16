@@ -4200,7 +4200,7 @@ std::optional<exprt> function_call_expr::try_handle_round(bool is_user_imported)
 {
   const std::string &func_name = function_id_.get_function();
   const bool has_user_round =
-    !find_function(converter_.ast()["body"], func_name).empty();
+    !try_find_function(converter_.ast()["body"], func_name).empty();
   if (
     func_name == "round" && call_.contains("func") &&
     call_["func"].value("_type", "") == "Name" && !has_user_round &&
@@ -4234,7 +4234,7 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   if (
     func_name == "sum" && !is_user_imported && !is_numpy_model_call &&
     (n_args == 1 || n_args == 2) &&
-    find_function(converter_.ast()["body"], func_name).empty())
+    try_find_function(converter_.ast()["body"], func_name).empty())
   {
     exprt arg = converter_.get_expr(call_["args"][0]);
     const typet &at = converter_.ns.follow(arg.type());
@@ -4653,8 +4653,8 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
 
         // Extract return type from function definition in AST
         typet return_type = empty_typet();
-        const auto &func_node =
-          find_function(converter_.ast()["body"], function_id_.get_function());
+        const auto &func_node = try_find_function(
+          converter_.ast()["body"], function_id_.get_function());
         if (!func_node.empty())
         {
           if (func_node.contains("returns") && !func_node["returns"].is_null())
@@ -5767,7 +5767,7 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
 
     // Look up the function definition
     const auto &func_node =
-      json_utils::find_function(converter_.ast()["body"], func_name);
+      json_utils::try_find_function(converter_.ast()["body"], func_name);
 
     if (
       func_node.empty() || !func_node.is_object() ||

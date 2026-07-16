@@ -492,6 +492,16 @@ static void extract_and_remove_side_effects_impl(
       continue;
     }
 
+    // Consecutive __ESBMC_loop_invariant() calls for the same loop lower to
+    // several adjacent LOOP_INVARIANT instructions (issue #3936), separated
+    // only by the DECL/ASSIGN that compute each invariant's temporaries. Skip
+    // past an earlier LOOP_INVARIANT so we keep collecting the side effects of
+    // *every* invariant in the cluster, not just the nearest one; otherwise a
+    // quantifier invariant that is not the last in the cluster is never
+    // re-evaluated after havoc and its stale pre-loop value is assumed.
+    if (search->is_loop_invariant())
+      continue;
+
     break;
   }
 

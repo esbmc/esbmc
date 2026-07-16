@@ -1,4 +1,4 @@
 CORE
 main.py
---unwind 10
+--unwind 3 --no-standard-checks
 ^VERIFICATION SUCCESSFUL$

@@ -342,8 +342,11 @@ protected:
   unsigned int next_thread_id;
   /** Whether partial-order-reduction is enabled */
   bool por;
-  /** Set of state hashes we've discovered */
-  std::set<std::size_t> hit_hashes;
+  /** State hashes discovered, mapped to the smallest context-switch count at
+   *  which each was seen. A collision prunes only when the recorded cswitch is
+   *  no greater than the current state's; pruning a state with more remaining
+   *  budget would be unsound under --context-bound. */
+  std::unordered_map<std::size_t, int> hit_hashes;
   /** Flag as to whether we're picking interleaving directions explicitly.
    *  Corresponds to the --interactive-ileaves option. */
   bool interactive_ileaves;

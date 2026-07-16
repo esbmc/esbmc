@@ -133,6 +133,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-abstracted-cpp-includes",
      NULL,
      "Do not include abstract C++ operational models"},
+    {"mix-cpp-host-headers",
+     NULL,
+     "Keep the C++ host system headers visible alongside ESBMC's "
+     "operational models, instead of suppressing them with -nostdinc++; "
+     "a #include not covered by the bundled OMs falls through to the "
+     "host headers. May cause ambiguous-name errors for names both "
+     "define (e.g. char_traits, istream)"},
     {"force,f",
      boost::program_options::value<std::vector<std::string>>(),
      "Pass -f flags to the C/C++ frontend"},
@@ -461,7 +468,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "Set max number of iteration (default is 50)"},
     {"base-k-step",
      boost::program_options::value<int>()->default_value(1)->value_name("nr"),
-     "Start the base case from n step (default is 1)"},
+     "Start the base case from n step (n >= 1, default is 1); n = 0 is "
+     "rejected because it sets --unwind 0 (unlimited)"},
     {"show-cex",
      NULL,
      "Print the counter-example produced by the inductive step"},
@@ -565,6 +573,12 @@ const struct group_opt_templ all_cmd_options[] = {
     {"parallel-solving",
      NULL,
      "Solve each VCC in parallel (this activates --multi-property)"},
+    {"no-symmetry-breaking",
+     NULL,
+     "Disable recognising running max/min folds (e.g. over an uninitialised "
+     "array) and asserting the redundant bounds they imply before solving "
+     "(enabled by default to avoid case-split blowup in the backend solver "
+     "on symmetric formulas)"},
     {"smtlib", NULL, "Use SMT lib format"},
     {"default-solver",
      boost::program_options::value<std::string>()->value_name("<solver>"),

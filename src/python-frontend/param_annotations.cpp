@@ -14,8 +14,8 @@ bool is_node(const nlohmann::json &node, const char *type)
 }
 
 /// The top-level FunctionDef named @p name in @p body, or null. Unlike
-/// json_utils::find_function this hands back the node itself, so that a call
-/// site can be probed, and a parameter rewritten, without copying the function.
+/// json_utils::try_find_function this hands back the node itself, so that a
+/// call site can be probed, and a parameter rewritten, without copying it.
 template <typename Json>
 Json *find_function(Json &body, const std::string &name)
 {

@@ -129,6 +129,13 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     adjust_expr_binary_arithmetic(expr);
     adjust_reference(expr);
   }
+  else if (
+    (expr.id() == "unary-" || expr.id() == "bitnot") &&
+    expr.type().id() == "complex")
+  {
+    adjust_expr_unary_complex(expr);
+    adjust_reference(expr);
+  }
   else if (expr.id() == "shl" || expr.id() == "shr")
   {
     adjust_expr_shifts(expr);
@@ -460,6 +467,32 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
   {
     adjust_float_arith(expr);
   }
+}
+
+void clang_c_adjust::adjust_expr_unary_complex(exprt &expr)
+{
+  adjust_operands(expr);
+
+  // -z negates both components; ~z is GNU complex conjugation (negate the
+  // imaginary part only). Lowered component-wise like the binary arithmetic
+  // above -- there is no complex negation/conjugation in the SMT layer.
+  // No ieee_ rewrite is needed: negation is a sign-bit flip (fp.neg), exact
+  // and rounding-mode-free, unlike the binary ops.
+  const typet &complex_t = expr.type();
+  const typet &elem_t = to_complex_type(complex_t).base_type();
+  const exprt &op = expr.op0();
+
+  auto negate = [&elem_t](const exprt &e) {
+    exprt neg("unary-", elem_t);
+    neg.copy_to_operands(e);
+    return neg;
+  };
+
+  exprt re = member_exprt(op, "real", elem_t);
+  struct_exprt result(complex_t);
+  result.operands().push_back(expr.id() == "unary-" ? negate(re) : re);
+  result.operands().push_back(negate(member_exprt(op, "imag", elem_t)));
+  expr.swap(result);
 }
 
 void clang_c_adjust::adjust_index(index_exprt &index)

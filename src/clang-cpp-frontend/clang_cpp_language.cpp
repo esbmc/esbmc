@@ -43,6 +43,12 @@ void clang_cpp_languaget::build_include_args(
   bool do_inc = !config.options.get_bool_option("no-abstracted-cpp-includes") &&
                 !config.options.get_bool_option("no-library");
 
+  if (!do_inc && config.options.get_bool_option("mix-cpp-host-headers"))
+    log_warning(
+      "--mix-cpp-host-headers has no effect: the abstracted C++ includes "
+      "are already disabled via --no-abstracted-cpp-includes or "
+      "--no-library, so only the host headers are used");
+
   if (do_inc)
   {
     cppinc = esbmct::abstract_cpp_includes();
@@ -57,8 +63,12 @@ void clang_cpp_languaget::build_include_args(
     // OMs define names in namespace std while the host headers put them in
     // an inline namespace (std::__1 on libc++, std:: on libstdc++ but with
     // different ODR identity).
-    // Users who need the host headers can pass --no-abstracted-cpp-includes.
-    compiler_args.push_back("-nostdinc++");
+    // Users who need only the host headers can pass
+    // --no-abstracted-cpp-includes; users who want both side by side (e.g.
+    // to reach a system header the bundled OMs don't cover, accepting the
+    // ambiguous-name risk above) can pass --mix-cpp-host-headers instead.
+    if (!config.options.get_bool_option("mix-cpp-host-headers"))
+      compiler_args.push_back("-nostdinc++");
   }
 
   clang_c_languaget::build_include_args(compiler_args);
