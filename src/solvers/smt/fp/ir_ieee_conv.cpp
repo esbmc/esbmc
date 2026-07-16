@@ -735,9 +735,39 @@ smt_astt ir_ieee_convt::encode_ieee_fma(const expr2tc &expr)
     auto bounds =
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
     store_interval(real_result, bounds.first, bounds.second);
+
+    // 0 × ±∞ in the multiply sub-step is an invalid operation.
+    smt_astt zero = ctx->get_zero_real();
+    smt_astt mul_nan = ctx->mk_or(
+      ctx->mk_and(ctx->mk_eq(val1, zero), is_inf_real(val2, fbv_type)),
+      ctx->mk_and(is_inf_real(val1, fbv_type), ctx->mk_eq(val2, zero)));
+
+    // An infinite product combined with an opposite-signed infinite addend is
+    // an invalid operation.  In IEEE 754 FMA the intermediate product is
+    // computed at infinite precision, so it is infinite only when a factor is
+    // infinite — a pair of large finite values whose product merely overflows
+    // is NOT an invalid operation.  We therefore check factor infiniteness
+    // rather than the magnitude of the intermediate product.
+    smt_astt v1_pos = ctx->mk_gt(val1, zero);
+    smt_astt v1_neg = ctx->mk_lt(val1, zero);
+    smt_astt v2_pos = ctx->mk_gt(val2, zero);
+    smt_astt v2_neg = ctx->mk_lt(val2, zero);
+    smt_astt same_sign = ctx->mk_or(
+      ctx->mk_and(v1_pos, v2_pos), ctx->mk_and(v1_neg, v2_neg));
+    smt_astt opp_sign = ctx->mk_or(
+      ctx->mk_and(v1_pos, v2_neg), ctx->mk_and(v1_neg, v2_pos));
+    smt_astt either_factor_inf = ctx->mk_or(
+      is_inf_real(val1, fbv_type), is_inf_real(val2, fbv_type));
+    smt_astt add_nan = ctx->mk_and(
+      either_factor_inf,
+      ctx->mk_or(
+        ctx->mk_and(same_sign, is_neg_inf_real(val3, fbv_type)),
+        ctx->mk_and(opp_sign, is_pos_inf_real(val3, fbv_type))));
+
     smt_astt nan_p = combine_nan_preds(
       combine_nan_preds(get_nan_pred(val1), get_nan_pred(val2)),
-      get_nan_pred(val3));
+      combine_nan_preds(
+        get_nan_pred(val3), combine_nan_preds(mul_nan, add_nan)));
     if (nan_p)
       store_nan_pred(real_result, nan_p);
     return real_result;
