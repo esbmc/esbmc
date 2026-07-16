@@ -1498,8 +1498,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // the value field before dispatching to the tuple handler.
     if (
       array_type.is_struct() &&
-      to_struct_type(array_type).tag().as_string().starts_with(
-        "tag-Optional_"))
+      to_struct_type(array_type).tag().as_string().starts_with("tag-Optional_"))
     {
       exprt unwrapped = unwrap_optional_if_needed(array, element);
       if (tuple_handler_->is_tuple_type(unwrapped.type()))
