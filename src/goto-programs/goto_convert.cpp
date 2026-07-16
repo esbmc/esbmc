@@ -1084,7 +1084,15 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
 
       codet tmp_code = to_code(destructor);
       replace_new_object(deref_op, tmp_code);
-      convert(tmp_code, dest);
+
+      // [expr.delete]/7: deleting a null pointer invokes no destructor.
+      exprt cond("notequal", bool_typet());
+      cond.copy_to_operands(tmp_op, gen_zero(tmp_op.type()));
+      code_ifthenelset guarded;
+      guarded.cond().swap(cond);
+      guarded.then_case() = tmp_code;
+      guarded.location() = code.location();
+      convert(guarded, dest);
     }
     else
       assert(0);
