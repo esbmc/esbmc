@@ -565,13 +565,19 @@ void fix_expression(irept &irep)
   }
 }
 
+// CBMC's anonymous-aggregate naming convention (roadmap §4.3).
+bool is_anon_tag(const std::string &ident)
+{
+  return ident.size() >= 11 && ident.compare(0, 10, "tag-#anon#") == 0;
+}
+
 void expand_anon_struct(const irept &self)
 {
   if (has_sub(self, "components"))
     return;
   // ESBMC has no parser for CBMC's anonymous naming convention.
   const std::string ident = self.find("identifier").id_string();
-  if (ident.size() < 11 || ident.compare(0, 10, "tag-#anon#") != 0)
+  if (!is_anon_tag(ident))
     return;
   log_error("CBMC adapter: unsupported anonymous aggregate {}", ident);
   abort();
@@ -653,6 +659,41 @@ void fix_type(
     irept &components = self.add("components");
     for (auto &v : components.get_sub())
       v.id("component"); // fix_struct
+  }
+
+  if (self.id() == "pointer")
+  {
+    // A struct/union tag under a pointer becomes a "symbol" back-reference
+    // instead of being inlined -- the shape ESBMC's native frontends produce.
+    // C recursion necessarily passes through a pointer (a struct cannot
+    // contain itself by value), so this keeps every spelling of a recursive
+    // type identical; inlining here left the symbol table with a
+    // once-unrolled definition while instruction types were depth-1, and
+    // comparisons between the two spellings either recursed without bound
+    // (stack overflow in type2t::cmp) or reported a false "incompatible
+    // base type". Anonymous tags cannot be recursive and ESBMC-side
+    // resolution of their identifiers is unproven, so they keep the inline
+    // path. Both pointee spellings must be handled: the raw positional sub,
+    // and the already-moved "subtype" named-sub when a later pass re-fixes
+    // with a fuller cache (mutually-recursive definitions resolve only then).
+    irept *pointee = nullptr;
+    if (has_sub(self, "subtype"))
+      pointee = &self.add("subtype");
+    else if (!self.get_sub().empty())
+      pointee = &self.get_sub()[0];
+    if (
+      pointee &&
+      (pointee->id() == "struct_tag" || pointee->id() == "union_tag") &&
+      has_sub(*pointee, "identifier"))
+    {
+      const std::string ident = pointee->find("identifier").id_string();
+      if (!is_anon_tag(ident) && cache.count(ident) != 0)
+      {
+        irept ref = mk("symbol");
+        ref.identifier(ident);
+        *pointee = ref;
+      }
+    }
   }
 
   if (
@@ -739,6 +780,25 @@ void fix_type(
 void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
 {
   std::unordered_set<std::string> expanding;
+  fix_type(self, cache, expanding);
+}
+
+// Entry point for a type SYMBOL's own definition: seed the expansion stack
+// with the symbol's own tag identity so a self-reference (struct node { ...
+// struct node *next; }) becomes a "symbol" back-reference immediately --
+// the shape ESBMC's native frontends produce. Without the seed, the
+// definition pass inlines the tag into itself once, and the symbol table
+// ends up holding a once-unrolled definition while every other spelling of
+// the type is depth-1: symbol-following type comparisons between the two
+// spellings never align, and symex recurses without bound (stack-overflow
+// segfault in type2t::cmp) the moment a pointer-typed member is read
+// through a dereference (a.next->next on a linked list).
+void fix_type_symbol_definition(
+  irept &self,
+  const std::unordered_map<std::string, irept> &cache,
+  const std::string &self_ident)
+{
+  std::unordered_set<std::string> expanding{self_ident};
   fix_type(self, cache, expanding);
 }
 
@@ -1283,7 +1343,10 @@ cbmc_adapted_resultt adapt_cbmc_to_esbmc(cbmc_parse_resultt parsed)
       // should have been resolved"). Key by the symbol name, which equals the
       // reference identifier at every scope (identical to the old key at file
       // scope, where name == "tag-" + base_name).
-      fix_type(sym.stype, type_cache);
+      // Seed the expansion stack with the definition's own identity so
+      // self-references stay "symbol" back-references (see
+      // fix_type_symbol_definition).
+      fix_type_symbol_definition(sym.stype, type_cache, sym.name);
       type_cache[sym.name] = sym.stype;
     }
     out.symbols.push_back(symbol_to_esbmc_irep(sym));
@@ -1292,7 +1355,12 @@ cbmc_adapted_resultt adapt_cbmc_to_esbmc(cbmc_parse_resultt parsed)
   // A symbol might be defined later; re-check every symbol with the full cache.
   for (auto &symbol : out.symbols)
   {
-    fix_type(symbol, type_cache);
+    const bool is_type_symbol = has_sub(symbol, "is_type");
+    if (is_type_symbol)
+      fix_type_symbol_definition(
+        symbol, type_cache, symbol.find("name").id_string());
+    else
+      fix_type(symbol, type_cache);
     if (
       irep_contains(symbol, "struct_tag") || irep_contains(symbol, "union_tag"))
     {
