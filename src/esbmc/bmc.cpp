@@ -26,6 +26,7 @@
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/features.h>
 #include <goto-symex/sarif.h>
+#include <goto-symex/symex_symmetry.h>
 #include <goto-symex/xml_goto_trace.h>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
@@ -77,6 +78,11 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       algorithms.emplace_back(std::make_unique<simple_slice>());
     else
       algorithms.emplace_back(std::make_unique<symex_slicet>(options));
+
+    // Runs after slicing so it only decorates surviving max/min folds and
+    // cannot resurrect assignments the slicer dropped.
+    if (!opts.get_bool_option("no-symmetry-breaking"))
+      algorithms.emplace_back(std::make_unique<symmetry_breakingt>());
 
     if (opts.get_bool_option("ssa-features-dump"))
       algorithms.emplace_back(std::make_unique<ssa_features>());

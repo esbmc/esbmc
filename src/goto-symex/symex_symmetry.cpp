@@ -1,14 +1,17 @@
 #include <goto-symex/symex_symmetry.h>
-#include <solvers/smt/smt_conv.h>
 #include <util/message.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <iterator>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace
 {
+using SSA_stepst = symex_target_equationt::SSA_stepst;
+
 enum class cmp_kindt
 {
   GT,
@@ -127,10 +130,13 @@ int classify_ite_extremum(
 }
 
 // A running max/min fold still being extended: `tip` is the latest result,
-// `leaves` are all the original (non-chain) values folded into it so far.
+// `tip_step` is the assignment that defines it (so a direct leaf-to-final
+// bound can be injected right after it), and `leaves` are all the original
+// (non-chain) values folded into it so far.
 struct chain_infot
 {
   expr2tc tip;
+  SSA_stepst::iterator tip_step;
   std::vector<expr2tc> leaves;
   int dir;
   unsigned depth;
@@ -163,12 +169,14 @@ chain_infot *find_tip(
 }
 
 // Extends (or starts) the running chain(s) that `lhs = ite(cond, t, e)`
-// belongs to, so the leaf-to-final bounds can be injected in one pass over
-// `active_tip` once the SSA scan is done, instead of re-deriving them via
-// solver-side transitive chaining across every intermediate step.
+// (defined at `lhs_step`) belongs to, so the leaf-to-final bounds can be
+// injected in one pass over `active_tip` once the SSA scan is done, instead
+// of re-deriving them via solver-side transitive chaining across every
+// intermediate step.
 void extend_chain(
   std::unordered_map<std::string, chain_infot> &active_tip,
   const expr2tc &lhs,
+  SSA_stepst::iterator lhs_step,
   const expr2tc &t,
   const expr2tc &e,
   int dir,
@@ -179,6 +187,7 @@ void extend_chain(
 
   chain_infot next;
   next.tip = lhs;
+  next.tip_step = lhs_step;
   next.dir = dir;
 
   if (t_tip && e_tip && t_tip == e_tip)
@@ -221,19 +230,44 @@ void extend_chain(
     active_tip.erase(to_symbol2t(e_tip->tip).get_symbol_name());
   active_tip[to_symbol2t(lhs).get_symbol_name()] = std::move(next);
 }
+
+// Builds an unconditional ASSUME step carrying `cond`, borrowing the source
+// location and loop number of the assignment it was derived from.
+symex_target_equationt::SSA_stept make_assume(
+  const expr2tc &cond,
+  const symex_target_equationt::SSA_stept &origin)
+{
+  symex_target_equationt::SSA_stept step;
+  step.type = goto_trace_stept::ASSUME;
+  step.guard = gen_true_expr();
+  step.cond = cond;
+  step.source = origin.source;
+  step.loop_number = origin.loop_number;
+  return step;
+}
 } // namespace
 
-void assert_symmetry_breaking(
-  const symex_target_equationt &equation,
-  smt_convt &smt_conv)
+// Precondition: called once per freshly produced equation. The pass holds no
+// cross-run state, but it is not idempotent -- re-running it over a list that
+// already carries its ASSUME steps would inject a duplicate (harmless but
+// redundant) set of bounds. The BMC driver satisfies this: each formula from
+// get_next_formula() gets its own algorithms run.
+bool symmetry_breakingt::run(SSA_stepst &steps)
 {
   std::unordered_map<std::string, expr2tc> def_of;
   std::unordered_map<std::string, chain_infot> active_tip;
 
+  // Bounds are collected against the assignment they follow and inserted
+  // once the scan is done: mutating the list mid-scan would feed the new
+  // ASSUME steps back into the loop, and list iterators stay valid across
+  // insertions so the recorded positions remain sound.
+  std::vector<std::pair<SSA_stepst::iterator, expr2tc>> pending;
+
   unsigned per_step_hints = 0;
   unsigned direct_hints = 0;
-  for (const auto &step : equation.SSA_steps)
+  for (auto it = steps.begin(); it != steps.end(); ++it)
   {
+    const symex_target_equationt::SSA_stept &step = *it;
     if (step.ignore || !step.is_assignment() || !is_symbol2t(step.lhs))
       continue;
 
@@ -253,16 +287,24 @@ void assert_symmetry_breaking(
           ite.cond, ite.true_value, ite.false_value, def_of);
         if (dir != 0)
         {
-          smt_conv.assert_expr(
+          pending.emplace_back(
+            it,
             dir > 0 ? lessthanequal2tc(ite.true_value, step.lhs)
                     : lessthanequal2tc(step.lhs, ite.true_value));
-          smt_conv.assert_expr(
+          pending.emplace_back(
+            it,
             dir > 0 ? lessthanequal2tc(ite.false_value, step.lhs)
                     : lessthanequal2tc(step.lhs, ite.false_value));
           per_step_hints += 2;
 
           extend_chain(
-            active_tip, step.lhs, ite.true_value, ite.false_value, dir, def_of);
+            active_tip,
+            step.lhs,
+            it,
+            ite.true_value,
+            ite.false_value,
+            dir,
+            def_of);
         }
       }
     }
@@ -270,7 +312,7 @@ void assert_symmetry_breaking(
     def_of[to_symbol2t(step.lhs).get_symbol_name()] = step.rhs;
   }
 
-  // Whatever chain tips are still unconsumed are chain-finals: assert a
+  // Whatever chain tips are still unconsumed are chain-finals: inject a
   // direct bound from every leaf ever folded into them, so proving a
   // property against the final result doesn't need the solver to chain
   // per-step bounds transitively across the whole fold. Chains of depth 1
@@ -281,12 +323,16 @@ void assert_symmetry_breaking(
       continue;
     for (const expr2tc &leaf : info.leaves)
     {
-      smt_conv.assert_expr(
+      pending.emplace_back(
+        info.tip_step,
         info.dir > 0 ? lessthanequal2tc(leaf, info.tip)
                      : lessthanequal2tc(info.tip, leaf));
       direct_hints++;
     }
   }
+
+  for (const auto &[pos, cond] : pending)
+    steps.insert(std::next(pos), make_assume(cond, *pos));
 
   if (per_step_hints + direct_hints > 0)
     log_debug(
@@ -296,4 +342,6 @@ void assert_symmetry_breaking(
       per_step_hints + direct_hints,
       per_step_hints,
       direct_hints);
+
+  return true;
 }

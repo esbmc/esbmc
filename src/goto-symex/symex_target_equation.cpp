@@ -2,7 +2,6 @@
 #include <functional>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_symex_state.h>
-#include <goto-symex/symex_symmetry.h>
 #include <goto-symex/symex_target_equation.h>
 #include <langapi/language_util.h>
 #include <solvers/smt/smt_conv.h>
@@ -328,11 +327,7 @@ void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
       vacuity_mode);
 
   if (!state.assertions.empty())
-  {
-    if (!config.options.get_bool_option("no-symmetry-breaking"))
-      assert_symmetry_breaking(*this, smt_conv);
     smt_conv.assert_expr(disjunction(state.assertions));
-  }
 }
 
 void symex_target_equationt::output(std::ostream &out) const
