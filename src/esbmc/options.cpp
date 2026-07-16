@@ -573,6 +573,12 @@ const struct group_opt_templ all_cmd_options[] = {
     {"parallel-solving",
      NULL,
      "Solve each VCC in parallel (this activates --multi-property)"},
+    {"no-symmetry-breaking",
+     NULL,
+     "Disable recognising running max/min folds (e.g. over an uninitialised "
+     "array) and asserting the redundant bounds they imply before solving "
+     "(enabled by default to avoid case-split blowup in the backend solver "
+     "on symmetric formulas)"},
     {"smtlib", NULL, "Use SMT lib format"},
     {"default-solver",
      boost::program_options::value<std::string>()->value_name("<solver>"),
