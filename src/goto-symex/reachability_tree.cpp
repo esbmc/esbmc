@@ -410,20 +410,15 @@ bool reachability_treet::check_for_hash_collision() const
   if (it == hit_hashes.end())
     return false;
 
-  // Without a context bound (CS_bound == -1), CS_number has no effect on the
-  // transition system — it only gates scheduling via check_if_ileaves_blocked
-  // when CS_bound != -1. States with an equal fingerprint are then bisimilar
-  // regardless of their cswitch count, so any collision may be pruned soundly.
+  // Without a context bound, CS_number never gates scheduling, so equal
+  // fingerprints are bisimilar and any collision prunes soundly.
   if (CS_bound == -1)
     return true;
 
-  // Under a context bound, only prune when the recorded state was reached with
-  // a context-switch count no greater than the current one. In that case the
-  // recorded state had at least as much remaining switch budget
-  // (CS_bound - CS_number), so whatever interleavings the current state could
-  // still reach were already reachable from the recorded one. If the recorded
-  // cswitch is larger, the current state has strictly more budget and may reach
-  // interleavings the recorded state could not — pruning it would be unsound.
+  // Under a context bound, prune only if the recorded state was reached at a
+  // cswitch count no greater than the current one (i.e. with at least as much
+  // remaining budget); otherwise the current state may reach interleavings the
+  // recorded one cannot, and pruning would be unsound.
   return it->second <= ex_state.get_context_switch();
 }
 
@@ -440,9 +435,7 @@ void reachability_treet::update_hash_collision_set()
   std::size_t hash = ex_state.generate_hash();
   int cswitch = ex_state.get_context_switch();
   auto res = hit_hashes.emplace(hash, cswitch);
-  // Keep the smallest cswitch seen for this hash: the state with the most
-  // remaining budget subsumes the rest, and recording it lets later
-  // higher-cswitch states be pruned soundly.
+  // Keep the smallest cswitch per hash: most remaining budget subsumes the rest.
   if (!res.second && cswitch < res.first->second)
     res.first->second = cswitch;
 }
