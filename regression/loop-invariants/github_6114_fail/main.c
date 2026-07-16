@@ -1,5 +1,8 @@
-// discussion #6114 (negative): a wrong earlier quantifier invariant must still
-// be caught once it is re-evaluated after havoc, so the verdict stays FAILED.
+// discussion #6114 (negative): the earlier quantifier invariant is not
+// inductive (a[k] == 1 never holds, since the body writes 0). The fix must
+// re-evaluate it after havoc, so its inductive step is caught (FAILED). Without
+// the fix it keeps its vacuous pre-loop value and passes spuriously. No user
+// assertion, so the only checkable property is the wrong invariant itself.
 #define N 4
 int main()
 {
@@ -14,6 +17,5 @@ int main()
   {
     a[i] = 0;
     ++i;
-    __ESBMC_assert(a[0] == 1, "a0 is one");
   }
 }
