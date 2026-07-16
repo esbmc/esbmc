@@ -871,8 +871,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
             // is the placed object, not a copied-from temp.
             exprt wrap = static_cast<const exprt &>(init.initializer());
             assert(
-              wrap.is_code() &&
-              to_code(wrap).get_statement() == "expression");
+              wrap.is_code() && to_code(wrap).get_statement() == "expression");
             exprt call = wrap.op0();
             replace_new_object_with(target, call);
             comma.copy_to_operands(call);
