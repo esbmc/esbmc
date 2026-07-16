@@ -133,6 +133,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-abstracted-cpp-includes",
      NULL,
      "Do not include abstract C++ operational models"},
+    {"mix-cpp-host-headers",
+     NULL,
+     "Keep the C++ host system headers visible alongside ESBMC's "
+     "operational models, instead of suppressing them with -nostdinc++; "
+     "a #include not covered by the bundled OMs falls through to the "
+     "host headers. May cause ambiguous-name errors for names both "
+     "define (e.g. char_traits, istream)"},
     {"force,f",
      boost::program_options::value<std::vector<std::string>>(),
      "Pass -f flags to the C/C++ frontend"},
