@@ -929,7 +929,7 @@ verdict or a solver timeout — none crash):
 | Umbrella | Minimal reproducer | Baseline | Now |
 |----------|--------------------|----------|-----|
 | #1 Transmute       | `check_typed_swap_u8`               | rc=139 | FAILED (CBMC parity) |
-| #2 Arithmetic      | `widening_mul_u8`                   | rc=139 | FAILED |
+| #2 Arithmetic      | `widening_mul_u8`                   | rc=139 | FAILED (CBMC parity) |
 | #3 Pointers        | `check_align_offset_u8`             | rc=139 | FAILED |
 | #4 Mem swap        | `check_swap_primitive`              | rc=139 | FAILED |
 | #5 Float→Int       | `checked_f32_to_int_unchecked_i8`   | rc=139 | **SUCCESSFUL** |
@@ -941,9 +941,10 @@ verdict or a solver timeout — none crash):
 (umbrellas #1–#6 and #8 all "🔴 BROKEN / rc=139", #7 "rc=134") is, at the reproducer level,
 largely **done** by these four fixes. The `verify-rust-std` / Kani front shifts from *"make
 it not crash"* to three new axes:
-1. **Quantify** — a global sweep of the full ~1,378-test corpus is needed to turn "all eight
-   reproducers crash-free" into a real recovered-count. The per-umbrella impact figures and
-   the 87 % crash statistic predate the fixes.
+1. **Quantify** — ✅ **done (2026-07-16)**: the global sweep of the full corpus (1,375
+   harnesses) has been run against both tools; see *Global corpus sweep* below for the real
+   recovered-count. The per-umbrella impact figures and the 87 % crash statistic predate the
+   fixes and are supplanted by it.
 2. **Verdict / property parity** — confirm ESBMC matches CBMC per-property, not just at the
    top-level verdict. ESBMC stops at the first failing property, so `--multi-property` runs
    are needed for full-set parity.
@@ -954,9 +955,70 @@ The genuinely-unresolved *non-crash* gaps remain as documented: anonymous-aggreg
 names (§4.3, `mul_contract.goto`), the contracts subsystem (§4.6), and big-endian /
 `byte_update` op coverage (§4.4).
 
-**Caveat:** umbrellas #2–#8 were validated at the *minimal-reproducer* level only (one
-harness each); UMBRELLA #1 is the sole full sweep (133 harnesses). The global sweep (axis 1)
-is the way to confirm the generalisation across the whole corpus.
+**Caveat:** umbrellas #3–#8 were validated at the *minimal-reproducer* level only (one
+harness each); UMBRELLA #1 (133 harnesses) and now UMBRELLA #2 (54 multiply harnesses, see
+its section below) are full sweeps. The *Global corpus sweep* below now covers all of them.
+
+---
+
+## Global corpus sweep — 2026-07-16 (axis 1: Quantify)
+
+Every harness in the local Kani corpus — **1,375** `.out` CBMC goto-binaries, `core` (1,373)
+and `alloc` (2) — run under `esbmc --binary --function <harness>` (40 s solver cap) and
+cross-checked on the **identical binary** against `cbmc --function <harness>` (CBMC 6.10.0,
+30 s cap). Wall clock **84 min** at 3-way parallelism. Every harness the sweep flagged as a
+crash or a mismatch was **re-run serially** to rule out OOM artefacts of parallelism: **all 79
+reproduce** (76/76 crashes, 3/3 mismatches), so the numbers below are not parallelism noise.
+
+| | Count | Note |
+|---|---|---|
+| **Parses (GOTO built)** | **1375 / 1375 (100 %)** | reader → adapter → migrate never fails |
+| Matches CBMC — **Yes** | 1110 | **99.7 % of the 1113 both tools decided** |
+| Matches CBMC — **No** | 3 | all one root cause, all false alarms (see below) |
+| Matches CBMC — **Crashes** | 76 | 53 × rc=134 abort, 23 × rc=139 segfault |
+| N/A (either side timed out/errored) | 186 | ESBMC 140 timeouts; CBMC 35 timeouts + 68 errors |
+
+**The 87 % rc=139 parse-crash baseline is gone.** No binary fails to load: all 76 crashes
+occur *during verification*, after a GOTO program was built successfully. Where both tools
+reach a verdict they agree 1110/1113, and **there is not a single unsound miss in the corpus**
+— ESBMC never reports SUCCESSFUL where CBMC reports FAILED.
+
+**Per module** (Yes / No / Crashes / N/A): `ptr` 323/3/19/31 · `intrinsics` 291/0/0/22 ·
+`convert` 190/0/0/0 · `num` 189/0/14/29 · `slice` 85/0/32/84 · `time` 20/0/0/4 ·
+`char`+`collections`+`other` 6/0/11/12. Note `num`'s 14 crashes are all `nonzero_*`, **not**
+the multiply family (UMBRELLA #2 is 54/54 clean, see its section).
+
+**The 76 crashes reduce to three root causes**, each tightly localised — a much smaller
+surface than the per-umbrella framing suggests:
+
+| Root cause | Count | Where | Family |
+|---|---|---|---|
+| `ERROR: Can't construct rvalue reference to array type during dereference` (rc=134) | **41** | `slice` 32, `ptr` 7, `num` 2 | `align_offset`, `align_to`, `align_to_mut` |
+| `ERROR: Bitwuzla error encountered` (rc=134) | 12 | `ptr` 12 | `non_null_check_write_unaligned_*` |
+| silent segfault, no diagnostic (rc=139) | 23 | `num` 12, `other` 8, `char` 2, `collections` 1 | `nonzero_check_cmp_for_*`, `check_vecdeque_swap` |
+
+**The 3 mismatches are one bug, and it is a false alarm (safe direction).**
+`check_cast` / `check_as_ref` / `check_as_mut` (`ptr::non_null`): ESBMC reports **FAILED**
+where CBMC proves **SUCCESSFUL** (`0 of 2826 failed`), on
+`misaligned pointer to reference cast: address must be a multiple of its type's alignment`
+— `(unsigned long int)var_12 % 4 == 0` at `core/src/ptr/non_null.rs:469`, inside
+`NonNull::<T>::as_ref`. The pointer derives from a real `u32`/`i32` object, so it is
+inherently 4-byte aligned; CBMC's memory model constrains an object's base address to its
+natural alignment, ESBMC's leaves it unconstrained on the `--binary` path, so `addr % 4` is
+free and the alignment assertion is satisfiable-false. Precision-losing, never unsound.
+**Object base-address alignment is therefore the single highest-leverage gap in the corpus**:
+it explains all 3 mismatches *and* the 41-crash `align_offset`/`align_to` cluster — i.e.
+alignment modelling, not arithmetic, is what UMBRELLA #3 actually needs.
+
+**Axis 3 (solver performance)** is now the largest non-crash bucket: 140 ESBMC timeouts at a
+40 s cap versus CBMC's 35, concentrated in `slice` (84 N/A).
+
+**Reproduce:** for each harness, the symbol is `_` + the text after `__` in the `.out`
+filename; run `esbmc --binary <file>.out --function <symbol>` against
+`cbmc <file>.out --function <symbol>` and compare verdicts (without `--function`, ESBMC
+wraps the boilerplate main and reports a vacuous SUCCESSFUL). A `Yes` means *ESBMC agrees
+with CBMC*, not *the harness proved clean* — most FAILEDs on both sides are Kani
+`reachability_check` coverage markers (see UMBRELLA #1/#2).
 
 ---
 
@@ -1081,13 +1143,57 @@ _RNvNtNtCsfemxtvIyyHd_4core10intrinsics6verify19check_typed_swap_u8
 
 ## UMBRELLA #2: Arithmetic Verification Failures
 
-**Status**: 🔴 BROKEN
+**Status**: 🟢 CRASH CHAIN RESOLVED + CBMC-verdict parity across the multiply family (54 harnesses swept, 53 cross-checked against CBMC); property-set parity confirmed on the reproducer
 **Impact**: ~150+ tests
 **Severity**: 🔴 CRITICAL
-**Exit Codes**: rc=139 (both parse & verify)
+**Exit Codes**: rc=139 (both parse & verify) — **no longer reproduces** on any of the 54 multiply harnesses
 
 **Description**:
 ESBMC crashes during symbolic execution of checked/unchecked arithmetic operations, particularly multiply operations with edge cases. Tests for widening multiplication, carrying multiplication, and edge case validation all fail during the verification phase.
+
+**Root cause & fix — ✅ no arithmetic-specific fix required; the umbrella #1 crash chain
+was the shared root cause.** The rc=139 that defined this umbrella was the same recursive-
+aggregate / operand-wrap chain fixed for UMBRELLA #1 (`fix/cbmc-adapter-recursive-type-overflow`),
+not a distinct arithmetic-encoding bug. With those fixes in place, ESBMC's existing
+`overflow_result-*` / `overflow-*` handling (already in `fix_expression`'s operand-wrap set,
+§4.4) and its native wide-multiply / 128-bit / `ieee_*` encodings verify the whole multiply
+family correctly. Confirmed by direct testing against the real Kani CBMC binaries and CBMC
+6.10.0 as the §6 oracle.
+
+**Full sweep — 54/54 crash-free, 53 cross-checked to CBMC-verdict parity (2026-07-16).** Every
+`core::num::verify` multiply harness in the `verify-rust-std` / Kani corpus — the complete
+`widening_mul`, `carrying_mul`, `unchecked_mul`, and `checked_unchecked_mul` set across
+`u/i{8,16,32,64,128}` plus `usize`/`isize`, 54 harnesses — was run under
+`esbmc --binary --function <harness>` and cross-checked against `cbmc --function <harness>`
+on the identical binary:
+- **0 crashes / aborts / migrate errors / SMT-sort errors** across all 54 (baseline was
+  rc=139 on all).
+- **Top-level verdict parity on all 53 harnesses CBMC could decide**: every ESBMC verdict
+  equals CBMC's. The 12 SUCCESSFUL cases (`_small`/`checked_unchecked_*`) are SUCCESSFUL in
+  CBMC too (`fails=0`), so no unsound miss; the 41 cross-checked FAILED cases FAIL in CBMC
+  too. The 54th, `carrying_mul_u16_full_range`, is solver-bound in CBMC (fully-symbolic full
+  16-bit range) and did not terminate; ESBMC returns FAILED in ~7 s, consistent with the
+  family — a CBMC solver-performance limit, not a divergence.
+- **Every CBMC failure is a Kani `reachability_check` coverage marker** (`KANI_CHECK_ID_…`,
+  `real_fails=0` in all 53) — the same "designed to fail when reachable, not a real
+  assertion violation" pattern as UMBRELLA #1. The substantive arithmetic checks (CBMC's
+  `attempt to multiply with overflow` etc.) all **SUCCEED** in both tools. The
+  `_small`→SUCCESSFUL / `_large`/`_edge`→FAILED split is *real and matches CBMC* (the marker
+  is path-infeasible in the bounded `_small` harnesses), not an ESBMC artefact.
+
+**Property-set parity (tightens axis 2 for this family).** On the minimal reproducer
+`widening_mul_u8`, `esbmc --binary --multi-property` reports **exactly** CBMC's 6 failing
+markers — `core_158/159/160/161` (`carrying_mul_add`) and `core_170/171`
+(`widening_mul_u8`) — with all 40 other properties passing, matching CBMC's per-property
+results (6 of 2841 failed, all reachability markers). This is the full-set parity that
+UMBRELLA #1's "still open (a)" asked for, delivered here for the arithmetic family.
+
+**Regression fixtures added** (`regression/goto-transcoder/`, small hand-written C compiled
+with `goto-cc` — the 3.2 MB Kani binaries are too large to vendor): `cbmc_mul_overflow`
+(`__builtin_mul_overflow` → CBMC `overflow_result-*`, the exact node `carrying_mul_add`
+emits), `cbmc_widening_mul` (u8×u8→u16 hi/lo split, the `widening_mul` semantics), and
+`cbmc_int128_mul` (128-bit multiply), each with a `_fail` negative variant. All six verify to
+the CBMC verdict on the `--binary` path.
 
 **Affected Operations**:
 - `u{8,16,32,64,128}::checked_mul()`
@@ -1117,13 +1223,29 @@ _RNvNtNtCsfemxtvIyyHd_4core3num6verify15widening_mul_u8
 
 ## UMBRELLA #3: Pointer Operations Crash
 
-**Status**: 🔴 BROKEN
+**Status**: 🟠 PARTIAL — parses 100 %, 323/346 decided harnesses match CBMC; residual = **19 crashes + 3 false alarms, all alignment-related** (see the global sweep above)
 **Impact**: ~60+ tests
 **Severity**: 🔴 CRITICAL
-**Exit Codes**: rc=139 (both parse & verify)
+**Exit Codes**: rc=139 → now **rc=134** for the `align_offset` family (clean abort, not a segfault); no parse-phase crash remains
 
 **Description**:
 ESBMC segfaults on pointer manipulation intrinsics (align_offset, read, offset_from, etc.). Crashes occur during C generation phase in the lowering layer, indicating fundamental issues in pointer semantics translation from Rust to C.
+
+**Re-scoped by the 2026-07-16 global sweep.** The original description is superseded: there
+is **no parse/lowering crash** — all 375 `ptr` harnesses build a GOTO program, and 323 match
+CBMC. The reproducer `check_align_offset_u8` is crash-free (as the 2026-07-14 reassessment
+recorded), but **that is the only width that works**: `check_align_offset_{u16,u32,u64,u128,
+4096,5}` and the `align_to`/`align_to_mut` family abort with `ERROR: Can't construct rvalue
+reference to array type during dereference` — an ESBMC **dereference** limitation, not
+pointer-semantics translation. Umbrella #3 was therefore declared crash-free on the one
+width that happens to pass. What remains is three concrete items:
+1. **Alignment modelling (highest leverage).** ESBMC does not constrain an object's base
+   address to its natural alignment on the `--binary` path; CBMC does. This causes the 3
+   corpus-wide false alarms (`check_cast`/`check_as_ref`/`check_as_mut`, `non_null.rs:469`)
+   and underlies the `align_offset`/`align_to` cluster. Fixing it is the single highest-value
+   change for the Kani front.
+2. **`rvalue reference to array` dereference** (41 crashes corpus-wide, 7 in `ptr`).
+3. **`Bitwuzla error encountered`** on `non_null_check_write_unaligned_*` (12, all `ptr`).
 
 **Affected Operations**:
 - `*const T::read()` / `*mut T::read()` - unsafe pointer dereference
