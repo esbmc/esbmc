@@ -24,10 +24,11 @@ The Solidity compiler `solc` (≥ 0.5.0; ≥ 0.7 recommended) must be reachable 
 
 ## Basic Invocation
 
-Pass a `.sol` file directly:
+Pass a `.sol` file directly, either as a positional argument or via `--sol`:
 
 ```bash
 esbmc contract.sol
+esbmc --sol contract.sol
 ```
 
 If the source declares more than one contract, name the entry point with `--contract`:

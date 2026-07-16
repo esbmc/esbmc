@@ -1,0 +1,4 @@
+CORE
+main.c
+--k-induction --base-k-step 2 --max-k-step 10
+^VERIFICATION SUCCESSFUL$

@@ -555,8 +555,11 @@ frame (`push_ctx`/`pop_ctx`) per claim, so the feature is safe under
 `--smt-during-symex` and does not leak between claims. Machine-readable artifacts
 (`--cex-output`, `--generate-testcase`, `--generate-html-report`,
 `--generate-json-report`, `--witness-output-graphml`, `--witness-output-yaml`)
-fan out per witness using the `<ce>-<file>` prefix scheme, one file per witness,
-so it is also safe under `--parallel-solving`. Enumeration is skipped during the
+fan out per witness using the `<phase>-k<K>-<N>-<file>` prefix scheme —
+`<phase>` is the verification phase (`base`/`fwd`/`indstep`/`bmc`), `<K>` the
+unwind bound, and `<N>` a decimal increasing from zero — one file per witness,
+so it is also safe under `--parallel-solving`, and counterexamples found in
+different k-induction phases or k-steps do not overwrite each other. Enumeration is skipped during the
 inductive step of k-induction (a SAT result there means UNKNOWN, not a real
 counterexample).
 
@@ -580,7 +583,8 @@ path and enumerates input vectors on it.
 ## Supported SMT backends {#smt-backends}
 
 ESBMC integrates several SMT solvers directly via their APIs, and on Unix can
-also drive an external solver process over a pipe:
+also drive an external solver process, either interactively over a pipe or in
+one-shot batch mode:
 
 | Backend | Option |
 |---|---|
@@ -591,6 +595,19 @@ also drive an external solver process over a pipe:
 | CVC4 | `--cvc` |
 | Yices | `--yices` |
 | SMTLIB | `--smtlib --smtlib-solver-prog CMD` |
+| Bitwuzllob | `--bitwuzllob` |
+| NeuroSym | `--neurosym` |
+
+Bitwuzllob and NeuroSym are one-shot subprocess backends: ESBMC renders the
+formula to an SMT-LIB2 file and runs an external program on it in batch mode —
+`mallob` in mono mode (Bitwuzla on the massively parallel Mallob platform) for
+Bitwuzllob, and the NeuroSym neural-guided solver (GAN with Z3 fallback,
+QF_BV only) for NeuroSym. The external command is set with
+`--bitwuzllob-prog CMD` / `--neurosym-prog CMD` (every `%f` is replaced by the
+formula file), and counterexamples are reconstructed by a local interactive
+SMT-LIB2 solver given via `--bitwuzllob-model-prog CMD` /
+`--neurosym-model-prog CMD` (e.g. `"z3 -in"`). Neither backend is ever picked
+implicitly, and NeuroSym rejects `--ir` and incremental strategies.
 
 An alternative default solver can be set with `--default-solver SOLVER` (the
 name without the `--`), which suits a shell alias or the `ESBMC_OPTS`
