@@ -874,9 +874,11 @@ size_t python_converter::register_function_argument(
 
   // An unannotated (or bare `list`) parameter defaults to Any/PyListObject*,
   // which numpy arrays cannot pass through without an unsound reinterpret of
-  // their raw bytes. If every call site that can be resolved from the AST
-  // feeds this parameter a numpy array of a known shape, keep that concrete
-  // array type instead so the parameter stays usable inside the callee.
+  // their raw bytes. If a call site resolvable from the AST feeds this
+  // parameter a numpy array of a known shape, keep that concrete array type
+  // instead so the parameter stays usable inside the callee (other call
+  // sites are not cross-checked for consistency and may still be rejected
+  // at the boundary if they mismatch).
   if (
     arg_name != "self" && arg_name != "cls" &&
     (arg_type == any_type() || arg_type == type_handler_.get_list_type()))
