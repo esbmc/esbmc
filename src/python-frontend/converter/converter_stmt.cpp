@@ -1029,13 +1029,48 @@ typet python_converter::resolve_any_subscript_array_type(
   if (!probed_type.is_array())
     return current_type;
 
+  // A supported N-D mixed slice/index tuple (exactly one full-slice axis `:`
+  // and every other axis a literal/resolvable integer, e.g. `a[:, 0, 0]` -
+  // see build_mixed_slice_tuple_select) legitimately produces a 1-D result
+  // from a 3-D+ source, so it must skip the depth check below rather than be
+  // rejected just because the source is deep.
+  bool is_supported_mixed_slice_tuple = false;
+  if (
+    ast_node["value"].contains("slice") &&
+    ast_node["value"]["slice"].value("_type", "") == "Tuple" &&
+    ast_node["value"]["slice"].contains("elts"))
+  {
+    auto is_full_slice = [](const nlohmann::json &node) {
+      if (node.value("_type", "") != "Slice")
+        return false;
+      auto absent = [&](const char *k) {
+        return !node.contains(k) || node[k].is_null();
+      };
+      return absent("lower") && absent("upper") && absent("step");
+    };
+
+    std::size_t full_slice_count = 0;
+    bool has_partial_slice = false;
+    for (const auto &elt : ast_node["value"]["slice"]["elts"])
+    {
+      if (elt.value("_type", "") != "Slice")
+        continue;
+      if (is_full_slice(elt))
+        ++full_slice_count;
+      else
+        has_partial_slice = true;
+    }
+    is_supported_mixed_slice_tuple =
+      full_slice_count == 1 && !has_partial_slice;
+  }
+
   // Reject a source array of more than 2 dimensions: n-D indexing is out of
   // scope, and the resulting slice's nesting depth alone can't be told apart
   // from a legitimate 2-D row/column/fancy/mask selection (both are a
   // 2-level nested array), so the check has to look at the source instead.
   const nlohmann::json &source_node = ast_node["value"]["value"];
   exprt source_probe = get_expr(source_node);
-  if (!contains_cpp_throw(source_probe))
+  if (!contains_cpp_throw(source_probe) && !is_supported_mixed_slice_tuple)
   {
     std::size_t source_depth = 0;
     typet source_type = ns.follow(source_probe.type());
