@@ -148,11 +148,14 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
 // emission would not be byte-identical) appears — the caller discards the
 // partial `dest`, so a failed walk never corrupts the fallback body. So far:
 // the structural leaves (block/skip), the single-instruction value statements
-// (assign/expression) that reduce to one ASSIGN/OTHER with nothing to lower, and
+// (assign/expression) that reduce to one ASSIGN/OTHER with nothing to lower,
 // trivial-type declarations (DECL + optional side-effect-free ASSIGN + scope-exit
-// DEAD, the block managing the destructor stack as convert_block does). Each
-// reads its own code_*2t fields directly (no legacy round-trip) and carries the
-// statement's own location, matching goto_convertt::convert()
+// DEAD, the block managing the destructor stack as convert_block does), a value
+// return (RETURN + unconditional GOTO to the function's end), and a
+// side-effect-free `if`/`if-else` whose branches convert natively (the
+// general, unfolded branch shape only — see the assert-fold guard below).
+// Each reads its own code_*2t fields directly (no legacy round-trip) and
+// carries the statement's own location, matching goto_convertt::convert()
 // byte-for-byte on this subset.
 bool goto_convert_functionst::convert_native_rec(
   const expr2tc &code2,
@@ -393,6 +396,116 @@ bool goto_convert_functionst::convert_native_rec(
     goto_programt::targett g = dest.add_instruction();
     g->make_goto(targets.return_target, gen_true_expr());
     g->location = ret.location;
+    return true;
+  }
+
+  if (is_code_ifthenelse2t(code2))
+  {
+    const code_ifthenelse2t &ite = to_code_ifthenelse2t(code2);
+
+    // A side-effecting guard needs remove_sideeffects (goto_convert.cpp:1814),
+    // which this kind doesn't reproduce; the condition-coverage options
+    // suppress that call regardless, so fall back on those too.
+    if (
+      has_sideeffect(ite.cond) ||
+      options.get_bool_option("condition-coverage") ||
+      options.get_bool_option("condition-coverage-claims") ||
+      options.get_bool_option("condition-coverage-rm") ||
+      options.get_bool_option("condition-coverage-claims-rm"))
+      return false;
+
+    bool has_else = !is_nil_expr(ite.else_case);
+
+    destructor_stackt stack_before_then = targets.destructor_stack;
+    goto_programt tmp_op1;
+    if (!convert_native_rec(ite.then_case, tmp_op1))
+      return false;
+    // A non-block branch (e.g. a bare decl) could leak a scope-exit code_dead
+    // with no enclosing block to unwind it.
+    if (targets.destructor_stack.size() != stack_before_then.size())
+    {
+      targets.destructor_stack = stack_before_then;
+      return false;
+    }
+
+    goto_programt tmp_op2;
+    if (has_else)
+    {
+      destructor_stackt stack_before_else = targets.destructor_stack;
+      if (!convert_native_rec(ite.else_case, tmp_op2))
+        return false;
+      if (targets.destructor_stack.size() != stack_before_else.size())
+      {
+        targets.destructor_stack = stack_before_else;
+        return false;
+      }
+    }
+
+    // generate_ifthenelse (goto_convert.cpp:1657) folds a branch that reduces
+    // to a lone `assert(false)` directly into the guard instead of emitting
+    // the general shape below (--validate-violation-witness disables this);
+    // fall back rather than reproduce the fold.
+    if (!options.get_bool_option("validate-violation-witness"))
+    {
+      auto is_lone_false_assert = [](const goto_programt &p) {
+        return p.instructions.size() == 1 &&
+               p.instructions.back().is_assert() &&
+               is_false(p.instructions.back().guard) &&
+               p.instructions.back().labels.empty();
+      };
+      if (
+        is_lone_false_assert(tmp_op1) ||
+        (has_else && is_lone_false_assert(tmp_op2)))
+        return false;
+      if (
+        !has_else && tmp_op1.instructions.size() == 2 &&
+        tmp_op1.instructions.front().is_assert() &&
+        is_false(tmp_op1.instructions.front().guard) &&
+        tmp_op1.instructions.front().labels.empty() &&
+        tmp_op1.instructions.back().labels.empty())
+        return false;
+    }
+
+    const locationt &location = ite.location;
+
+    // v: if(!c) goto y/z; w: P; x: goto z; (else only) y: Q; (else only) z: ;
+    goto_programt tmp_z;
+    goto_programt::targett z = tmp_z.add_instruction();
+    z->make_skip();
+    z->location = location;
+
+    goto_programt tmp_y;
+    goto_programt::targett y;
+    if (has_else)
+    {
+      tmp_y.swap(tmp_op2);
+      y = tmp_y.instructions.begin();
+    }
+
+    goto_programt tmp_v;
+    goto_programt::targett v = tmp_v.add_instruction();
+    v->make_goto(has_else ? y : z, not2tc(ite.cond));
+    v->location = location;
+
+    goto_programt tmp_w;
+    tmp_w.swap(tmp_op1);
+
+    goto_programt tmp_x;
+    if (has_else)
+    {
+      goto_programt::targett x = tmp_x.add_instruction();
+      x->make_goto(z);
+      x->location = tmp_w.instructions.back().location;
+    }
+
+    dest.destructive_append(tmp_v);
+    dest.destructive_append(tmp_w);
+    if (has_else)
+    {
+      dest.destructive_append(tmp_x);
+      dest.destructive_append(tmp_y);
+    }
+    dest.destructive_append(tmp_z);
     return true;
   }
 
