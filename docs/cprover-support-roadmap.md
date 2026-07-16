@@ -112,6 +112,7 @@ and the symbol/function table layout.
 | Find-first-set builtin `find_first_set` (`__builtin_ffs`/`ffsl`/`ffsll`) → `(x==0)?0:popcount(~x&(x-1))+1` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for `__builtin_huge_val{,f,l}`/`__builtin_inf{,f,l}` FUNCTION_CALLs → +∞ floatbv constant (sign 0, exponent all ones, mantissa 0), width-generic incl. 128-bit long double (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Bit-reversal expression `bitreverse` (`__builtin_bitreverse{8,16,32,64}`) → SWAR reversal via `bitand`/`shl`/`lshr`/`bitor` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
+| `_Complex` support: `complex` type → subtype form; constructor/`complex_real`/`complex_imag`/real→complex `typecast`/`+ - * /`/`unary-` lowered to the native component-wise forms (§4.3 type + §4.4 exprs, Phases 2–3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type`, `fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -349,6 +350,54 @@ Scoped to the `--binary` path, so it never perturbs native handling (which never
 Verdict parity with CBMC, dual-solver (Bitwuzla + Z3): `cbmc_bitreverse` (32-bit alternating-bit
 swap `0xAAAAAAAA → 0x55555555`, low-nibble-to-high `0x0F → 0xF0000000`, and a 64-bit MSB case) and
 `cbmc_bitreverse_fail` (a wrong expected value → FAILED, confirming the reversal is really computed).
+
+**`_Complex` type & expressions — ✅ landed.** A `_Complex double z = 3.0 + 4.0i` aborted
+with `ERROR: complex` (`migrate expr failed`): CBMC emits a `complex` *type* (element type as
+the sole positional sub) plus a family of complex expression ireps, none of which the adapter
+normalised. ESBMC's own complex pipeline is complete — `complex_typet` is a
+`struct_union_typet` with `(real, imag)` components, `migrate_type` maps it to
+`complex_type2t` (read via `subtype()`), `constant_struct2t` explicitly admits complex-typed
+aggregates, and the SMT layer encodes `complex_id` as a tuple sort — so the whole fix is
+adapter-level rewrites into the exact shapes the native C frontend produces
+(`clang_c_convert.cpp`, `clang_c_adjust_expr.cpp`):
+- **Type** `complex` → move the positional element type into the `"subtype"` named-sub
+  (`migrate_type` reads `to_complex_type(type).base_type()`, a direct `find("subtype")`) —
+  the same normalisation `fix_type` already does for `pointer`/`array`. Needed in *both*
+  `fix_type` (symbol-table types) and `fix_expression` (inline expression types), with the
+  same type-vs-expression ambiguity as `"array"`: an expression always carries a `"type"`
+  named-sub, a type never does.
+- **Constructor** `complex(re, im)` → the native `"struct"` aggregate over the complex type.
+- **Accessors** `complex_real`/`complex_imag` (`__real__`/`__imag__`) → `"member"` accesses
+  on the `real`/`imag` components (the native `CK_FloatingComplexToReal`/`UO_Real` shape).
+- **Casts to and from complex** (`typecast`) → real→complex becomes the `{value, 0}`
+  aggregate (`CK_FloatingRealToComplex`), complex→complex a component-wise cast
+  (`CK_FloatingComplexCast`), complex→real a `real`-member access discarding the
+  imaginary part (C99 6.3.1.7, `CK_FloatingComplexToReal`); without these the cast
+  reached the solver and died with "Typecast for unexpected type". Complex→`_Bool`
+  cannot arise: goto-cc 6.8.0 itself crashes typechecking `if (z)`.
+- **Arithmetic `+ - * /`** (complex-typed, either operand promotable from a scalar) →
+  component-wise lowering copied from `adjust_expr_binary_arithmetic`, ieee ops on floatbv
+  elements; previously a raw `add2t` over the tuple sort **segfaulted both solvers**.
+  N-ary nodes (CBMC's simplifier can flatten `a+b+c`) are pre-folded to nested binaries.
+- **Negation `unary-`** → component-wise negation. Notably `-z` **segfaults on ESBMC's
+  native path** (the native frontend never lowers unary complex ops), so the CBMC path
+  gains coverage native still lacks, as with `ctz`.
+Deliberately not handled: GNU `~z` conjugation — CBMC 6.8.0 itself mis-models it (reports
+FAILURE on a mathematically-true conjugation assert), so there is no parity target; it keeps
+the pre-existing behaviour. **Deliberate divergence on `==` with ±0.0 components:** CBMC
+6.8.0 compares complex equality **bitwise**, so `z == -z` with `z = 0.0` is FAILED there —
+wrong per C99 6.5.9, which compares components as values (`+0.0 == -0.0` is true). ESBMC's
+tuple equality yields the C-correct SUCCESSFUL on both solvers; matching CBMC would mean
+manufacturing a known-wrong verdict, so this divergence is intentional (same policy as
+`nanl`/`~z`, but in the other direction — here ESBMC is the correct one). Verdict parity
+with CBMC, dual-solver (Bitwuzla + Z3), across
+construction, `__real__`/`__imag__`, all four binary ops (incl. an exact-dyadic division
+`(5+5i)/(3-i) == 1+2i`), a three-term sum, scalar promotion (`a * 2.0`), complex `==` on
+exact values, negation, a double→float complex cast, a complex→double cast, `_Complex
+float` arithmetic, and GCC's integer `_Complex int` (non-ieee component ops)
+(`cbmc_complex` SUCCESSFUL), plus a wrong-imaginary-part negative
+(`cbmc_complex_fail`: `__imag__ ((1+2i)*(3-1i)) == 4` ⇒ FAILED, confirming the arithmetic is
+really computed).
 
 **Overflow predicates `overflow-<op>` — ✅ landed.** `__builtin_add_overflow_p`/
 `__builtin_sub_overflow_p`/`__builtin_mul_overflow_p` lower to CBMC's bool-typed `overflow-+`/

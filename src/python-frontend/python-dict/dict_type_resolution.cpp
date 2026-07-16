@@ -186,6 +186,10 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
     !var_decl["annotation"].contains("slice");
   if (no_annotation || bare_dict_annotation)
   {
+    typet recorded = recorded_tuple_value_type(dict_expr);
+    if (!recorded.is_nil() && !recorded.is_empty())
+      return recorded;
+
     if (
       var_decl.contains("value") && var_decl["value"].is_object() &&
       var_decl["value"].value("_type", std::string()) == "Dict" &&
@@ -516,7 +520,42 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   }
 
   // Extract the value type from the dict annotation
-  return get_dict_value_type_from_annotation(var_decl["annotation"]);
+  typet result = get_dict_value_type_from_annotation(var_decl["annotation"]);
+  if (result.is_nil() || result.is_empty())
+  {
+    typet recorded = recorded_tuple_value_type(dict_expr);
+    if (!recorded.is_nil() && !recorded.is_empty())
+      return recorded;
+  }
+  return result;
+}
+
+/// Homogeneous tuple values: the struct type recorded at construction
+/// (tagged and string-padded), which neither an annotation nor an AST
+/// literal peek reproduces. Empty when the dict was not built from a
+/// literal or its value types are not a single tuple type.
+typet python_dict_handler::recorded_tuple_value_type(
+  const exprt &dict_expr) const
+{
+  const std::string &vals_id =
+    get_internal_list_id(dict_expr.identifier().as_string(), false);
+  if (vals_id.empty())
+    return empty_typet();
+
+  auto it = python_list::list_type_map.find(dict_value_types_key(vals_id));
+  if (it == python_list::list_type_map.end() || it->second.empty())
+    return empty_typet();
+
+  const typet &first = it->second.front().second;
+  const bool all_same_tuple =
+    converter_.get_tuple_handler().is_tuple_type(first) &&
+    std::all_of(
+      it->second.begin(),
+      it->second.end(),
+      [&first](const std::pair<std::string, typet> &e) {
+        return e.second == first;
+      });
+  return all_same_tuple ? first : static_cast<typet>(empty_typet());
 }
 
 typet python_dict_handler::get_dict_key_type_from_annotation(
