@@ -510,12 +510,16 @@ void python_converter::handle_assignment_type_adjustments(
     // and annotated `x: Any = value`.
     // Preprocessor-generated AnnAssign nodes
     // with Any annotation are excluded.
+    // Constructor calls must fall through to the regular ctor machinery:
+    // returning early here would emit no constructor call at all, leaving a
+    // nil assignment that crashes the SMT encoder.
     if (
       ast_node.contains("_type") && ast_node["_type"] == "AnnAssign" &&
       !ast_node.value("_inferred_annotation", false) &&
       !ast_node.value("esbmc_synthesized", false) && has_annotation &&
       ast_node["annotation"].contains("id") &&
       ast_node["annotation"]["id"] == "Any" && lhs.type().is_pointer() &&
+      !is_ctor_call && !rhs.type().is_code() &&
       json_utils::is_imported_from(*ast_json, "typing", "Any"))
     {
       if (rhs.type().is_array())
