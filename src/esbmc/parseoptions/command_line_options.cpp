@@ -414,6 +414,18 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("smt-during-symex", true);
   }
 
+  // A base-case start of k = 0 sets --unwind 0, which ESBMC treats as
+  // "unlimited" (loop termination is gated on max_unwind != 0), so the base
+  // case would unwind forever instead of running k = 0. Reject it up front,
+  // independently of --unlimited-k-steps (discussion #6093).
+  if (strtoul(cmdline.getval("base-k-step"), nullptr, 10) == 0)
+  {
+    log_error(
+      "Please specify --base-k-step >= 1: a base case of k = 0 sets "
+      "--unwind 0, which ESBMC treats as unlimited unwinding.");
+    abort();
+  }
+
   // check the user's parameters to run incremental verification
   if (!cmdline.isset("unlimited-k-steps"))
   {
