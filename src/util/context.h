@@ -119,6 +119,16 @@ public:
 
   void erase_symbol(irep_idt name);
 
+  /// Id of the most-recently-added symbol, or a nil id if the table is empty.
+  /// Pair with erase_since() to roll back a speculative batch of add() calls
+  /// (e.g. a discarded --irep2-native-body attempt, esbmc/esbmc#4715) in
+  /// O(k) for k symbols undone, instead of an O(n) scan of the whole table.
+  irep_idt mark() const;
+
+  /// Erase every symbol added after @p point (in insertion order, as
+  /// returned by mark()).
+  void erase_since(irep_idt point);
+
   /// Move the symbol with id @p name to the end of the insertion-order view,
   /// keeping it in the table. The C/C++ frontends need this when a symbol's
   /// definition must sort after symbols it now depends on (a completed struct

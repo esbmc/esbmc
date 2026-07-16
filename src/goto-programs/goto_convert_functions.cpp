@@ -230,6 +230,46 @@ bool goto_convert_functionst::convert_native_rec(
   if (is_code_assign2t(code2))
   {
     const code_assign2t &assign = to_code_assign2t(code2);
+    exprt lhs = migrate_expr_back(assign.target);
+    if (has_sideeffect(lhs) || lhs.id() == "if")
+      return false;
+
+    // convert_assign()'s function-call special case (goto_convert.cpp:998)
+    // dispatches a call-valued rhs straight to do_function_call(), bypassing
+    // the atomic checks the generic path below applies — a call result
+    // assigned to a C11 _Atomic lhs is NOT wrapped atomically in legacy
+    // either, so this branch must not add an is_atomic_symbol(lhs) guard:
+    // legacy itself doesn't apply one here. Delegate to the real
+    // do_function_call() (not a reimplementation) so `has_next =
+    // ESBMC_range_has_next_(...)` — the statement a desugared Python `for`
+    // loop's preprocessor hoists the call into (see docs/spike-v1k-w1loc.md)
+    // — converts natively. Narrow slice: callee and arguments must be
+    // side-effect-free, so do_function_call's own remove_sideeffects() calls
+    // on them are no-ops we can skip issuing; convert_function's
+    // tmp_symbol/context rollback (above) still protects the temp
+    // do_function_call allocates if a later statement in this body is
+    // unsupported and forces a fallback.
+    if (
+      is_sideeffect2t(assign.source) &&
+      to_sideeffect2t(assign.source).kind ==
+        sideeffect2t::allockind::function_call)
+    {
+      const sideeffect2t &se = to_sideeffect2t(assign.source);
+      if (has_sideeffect(se.operand))
+        return false;
+      for (const expr2tc &arg : se.arguments)
+        if (has_sideeffect(arg))
+          return false;
+
+      exprt function_legacy = migrate_expr_back(se.operand);
+      exprt::operandst args_legacy;
+      for (const expr2tc &arg : se.arguments)
+        args_legacy.push_back(migrate_expr_back(arg));
+
+      do_function_call(
+        lhs, function_legacy, args_legacy, assign.location, dest);
+      return true;
+    }
 
     // convert_assign() collapses to a single ASSIGN instruction only when there
     // is nothing to lower: no side effect in either operand (so goto_sideeffects
@@ -246,12 +286,10 @@ bool goto_convert_functionst::convert_native_rec(
     // `!has_sideeffect(e) && e.id() != "if"`): under --validate-violation-witness
     // it lowers `c ? a : b` to a DECL/IF/GOTO branch, which a single ASSIGN would
     // not reproduce. Mirror that exact entry condition so we fall back on it.
-    exprt lhs = migrate_expr_back(assign.target);
     exprt rhs = migrate_expr_back(assign.source);
     if (
-      has_sideeffect(lhs) || has_sideeffect(rhs) || lhs.id() == "if" ||
-      rhs.id() == "if" || rhs.type().is_code() || is_atomic_symbol(lhs, ns) ||
-      has_atomic_read(rhs, ns))
+      has_sideeffect(rhs) || rhs.id() == "if" || rhs.type().is_code() ||
+      is_atomic_symbol(lhs, ns) || has_atomic_read(rhs, ns))
       return false;
 
     // For side-effect-free operands the instruction convert_assign emits is
@@ -522,13 +560,6 @@ bool goto_convert_functionst::convert_native_rec(
   if (is_code_while2t(code2))
   {
     const code_while2t &w = to_code_while2t(code2);
-
-    // convert_while (goto_convert.cpp:1255) removes side effects from the
-    // condition via generate_conditional_branch, exactly as the if/else guard
-    // does; require a side-effect-free condition for the same reason.
-    if (has_sideeffect(w.cond))
-      return false;
-
     const locationt &location = w.location;
 
     // convert_while saves/restores the break/continue targets around the
@@ -551,8 +582,32 @@ bool goto_convert_functionst::convert_native_rec(
     z->location = location;
 
     goto_programt tmp_branch;
-    goto_programt::targett v = tmp_branch.add_instruction();
-    v->make_goto(z, not2tc(w.cond));
+    if (has_sideeffect(w.cond))
+    {
+      // convert_while (goto_convert.cpp:1255) builds this branch via the
+      // shared generate_conditional_branch helper, which itself decomposes
+      // &&/||/not and calls remove_sideeffects() at the leaf. Delegate to
+      // that helper verbatim instead of reimplementing it, so a direct call
+      // in the condition (`while (has_more()) ...`) gets identical
+      // temp-symbol numbering to the legacy path (the per-function
+      // tmp_symbol counter is rolled back on a later fallback — see the
+      // rollback note in convert_function, above). Note this is NOT what a
+      // desugared Python `for`/`while <call>` loop produces: the
+      // preprocessor always rewrites those into an explicit `while True: if
+      // not <call>(): break` before goto_convert ever sees them (confirmed
+      // empirically — see docs/spike-v1k-w1loc.md), so this path is reached
+      // by a C/C++ `while` whose condition is directly a call.
+      exprt cond_legacy = migrate_expr_back(w.cond);
+      generate_conditional_branch(
+        gen_not(cond_legacy), z, location, tmp_branch);
+    }
+    else
+    {
+      goto_programt::targett t = tmp_branch.add_instruction();
+      t->make_goto(z, not2tc(w.cond));
+      t->location = location;
+    }
+    goto_programt::targett v = tmp_branch.instructions.begin();
     v->location = location;
 
     goto_programt tmp_y;
@@ -626,6 +681,44 @@ bool goto_convert_functionst::convert_native_rec(
     goto_programt::targett t = dest.add_instruction();
     t->make_goto(targets.continue_target);
     t->location = c.location;
+    return true;
+  }
+
+  if (is_code_assert2t(code2))
+  {
+    const code_assert2t &a = to_code_assert2t(code2);
+
+    // convert_assert (goto_convert.cpp:1103) removes side effects from the
+    // guard before emitting; require a side-effect-free guard for the same
+    // reason as every other statement kind here. code_assert2t's guard is
+    // already expr2tc, so (unlike the legacy-exprt kinds) there is no
+    // migrate_expr round-trip to do.
+    if (has_sideeffect(a.guard))
+      return false;
+
+    // --no-assertions: convert_assert removes side effects (a no-op here)
+    // and returns without emitting an ASSERT — match that exactly, an empty
+    // conversion rather than falling back.
+    if (options.get_bool_option("no-assertions"))
+      return true;
+
+    goto_programt::targett t = dest.add_instruction(ASSERT);
+    t->guard = a.guard;
+    t->location = a.location;
+    t->location.property("assertion");
+    t->location.user_provided(true);
+    return true;
+  }
+
+  if (is_code_assume2t(code2))
+  {
+    const code_assume2t &a = to_code_assume2t(code2);
+    if (has_sideeffect(a.guard))
+      return false;
+
+    goto_programt::targett t = dest.add_instruction(ASSUME);
+    t->guard = a.guard;
+    t->location = a.location;
     return true;
   }
 
@@ -768,9 +861,29 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   // flag-on is byte-identical to flag-off. `code`/`end_location` above are
   // still computed from the round-trip; the native path only replaces the
   // body-instruction dispatch.
+  //
+  // A native attempt that reaches a side-effecting code_while2t condition or
+  // a code_assign2t with a function-call rhs (below) calls the shared
+  // remove_sideeffects()/do_function_call() helpers, which allocate temp
+  // symbols from the per-function tmp_symbol counter and add them to
+  // context. If a *later* statement in the same body is still unsupported,
+  // the whole attempt is discarded and dest falls back to goto_convert_rec —
+  // but tmp_symbol.counter and context aren't part of that discarded dest,
+  // so without an explicit rollback the fallback's own temp numbering would
+  // start from wherever the abandoned attempt left off, instead of from
+  // scratch like flag-off mode. Snapshot both before the attempt and roll
+  // back on failure so the fallback is byte-identical regardless of what the
+  // discarded attempt touched — and regardless of which future native kind
+  // ends up being the one that allocates a temp before failing.
+  unsigned tmp_counter_before = tmp_symbol.counter;
+  irep_idt context_mark_before = context.mark();
   if (!(options.get_bool_option("irep2-native-body") &&
         try_convert_body_native(symbol.get_value2(), f.body)))
+  {
+    tmp_symbol.counter = tmp_counter_before;
+    context.erase_since(context_mark_before);
     goto_convert_rec(code, f.body);
+  }
 
   // add non-det return value, if needed
   if (targets.has_return_value)
