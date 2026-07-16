@@ -524,6 +524,16 @@ void python_converter::handle_assignment_type_adjustments(
         if (rhs.type() != lhs.type())
           rhs = typecast_exprt(rhs, lhs.type());
       }
+      else if (rhs.type().is_struct() && lhs_symbol->get_value().is_nil())
+      {
+        // A struct value (e.g. a tuple read out of a dict) cannot round-trip
+        // through the void* cast below — every later component access would
+        // misread. Any is not a constraint, so adopt the rhs type. Only on
+        // the first binding: a re-annotation (`x: Any = 5; ...; x: Any =
+        // (1, 2)`) must not retype uses already emitted at the old type.
+        lhs_symbol->set_type(rhs.type());
+        lhs.type() = rhs.type();
+      }
       else if (!rhs.type().is_pointer() && !rhs.type().is_empty())
       {
         if (rhs.type().is_floatbv())
