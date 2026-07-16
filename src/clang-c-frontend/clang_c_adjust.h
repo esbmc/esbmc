@@ -51,8 +51,7 @@ protected:
   void adjust_expr_binary_arithmetic(exprt &expr);
   void adjust_expr_unary_complex(exprt &expr);
   void bind_sideeffect_operands(exprt &expr, code_blockt &block);
-  void
-  finish_complex_lowering(exprt &expr, exprt &result, code_blockt &block);
+  void finish_complex_lowering(exprt &expr, exprt &result, code_blockt &block);
   void adjust_expr_shifts(exprt &expr);
   void adjust_expr_unary_boolean(exprt &expr);
   void adjust_expr_binary_boolean(exprt &expr);
