@@ -1506,7 +1506,7 @@ void python_converter::handle_function_call_rhs(
       if (!func_name.empty())
       {
         const auto &func_def =
-          json_utils::find_function((*ast_json)["body"], func_name);
+          json_utils::try_find_function((*ast_json)["body"], func_name);
         if (
           !func_def.empty() && func_def.contains("returns") &&
           !func_def["returns"].is_null())
@@ -1839,13 +1839,13 @@ std::string python_converter::call_return_class(const nlohmann::json &rhs) const
   if (json_utils::is_class(fname, *ast_json))
     return "";
 
-  const auto &fn = json_utils::find_function((*ast_json)["body"], fname);
+  const auto &fn = json_utils::try_find_function((*ast_json)["body"], fname);
   if (fn.empty() || !fn.contains("returns") || fn["returns"].is_null())
     return "";
 
   // An @overload stub carries a single-class annotation (`-> Foo`) but the
   // overload set is polymorphic — the real return type is resolved per call
-  // site from the argument types. find_function returns the first stub, so
+  // site from the argument types. try_find_function returns the first stub, so
   // trusting its annotation would mis-type, e.g., a `Literal["bar"] -> Bar`
   // result as `Foo*` (#3057). Leave such results to the existing call-site
   // overload resolution rather than forcing a single Class* here.
@@ -3908,7 +3908,7 @@ void python_converter::get_return_statements(
       // Forward reference: function not yet processed
       // Look up return type from AST
       const auto &func_node =
-        json_utils::find_function((*ast_json)["body"], func_name);
+        json_utils::try_find_function((*ast_json)["body"], func_name);
 
       if (
         !func_node.empty() && func_node.contains("returns") &&

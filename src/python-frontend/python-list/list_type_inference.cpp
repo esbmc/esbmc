@@ -179,7 +179,7 @@ typet infer_elem_type_from_call_return(
   if (func["_type"] == "Name" && func.contains("id") && func["id"].is_string())
   {
     nlohmann::json function_node =
-      json_utils::find_function(ast["body"], func["id"].get<std::string>());
+      json_utils::try_find_function(ast["body"], func["id"].get<std::string>());
     return get_elem_type_from_return_annotation(function_node, type_handler_);
   }
 
@@ -204,7 +204,7 @@ typet infer_elem_type_from_call_return(
         json_utils::find_class(ast["body"], class_name);
       if (!class_node.is_null() && class_node.contains("body"))
       {
-        nlohmann::json function_node = json_utils::find_function(
+        nlohmann::json function_node = json_utils::try_find_function(
           class_node["body"], func["attr"].get<std::string>());
         return get_elem_type_from_return_annotation(
           function_node, type_handler_);
