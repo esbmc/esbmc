@@ -2539,7 +2539,17 @@ void python_converter::get_var_assign(
         }
       }
 
-      if (is_incompatible_scalar_string_retype(lhs.type(), rhs.type()))
+      // A tuple-struct variable (adopted from an explicit-Any binding) being
+      // rebound to a non-tuple value needs the same fresh slot: retyping the
+      // shared symbol would turn earlier member reads into member-of-scalar,
+      // which trips member2t's source-type assert at GOTO conversion.
+      const bool tuple_to_nontuple_rebind =
+        tuple_handler_->is_tuple_type(lhs.type()) && !rhs.type().is_empty() &&
+        !tuple_handler_->is_tuple_type(rhs.type());
+
+      if (
+        is_incompatible_scalar_string_retype(lhs.type(), rhs.type()) ||
+        tuple_to_nontuple_rebind)
       {
         std::string new_id;
         unsigned gen = 1;
