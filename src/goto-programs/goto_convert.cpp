@@ -1547,13 +1547,48 @@ void goto_convertt::convert_return(
       convert(to_code(new_code.return_value()), dest);
       return;
     }
+    // Scope-exit entries pushed while lowering the return value are dropped
+    // wholesale: a materialized return temporary (e.g. `return A(n);`) is the
+    // return slot itself and must survive both this return's unwind and the
+    // enclosing block's fall-through unwind. This also skips destructors of
+    // other full-expression temporaries (e.g. `return A(n).num;`), matching
+    // pre-existing behaviour (github #6075/#6076).
+    std::size_t value_stack_size = targets.destructor_stack.size();
     goto_programt sideeffects;
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
+    targets.destructor_stack.resize(value_stack_size);
   }
 
-  goto_programt dummy;
-  unwind_destructor_stack(code.location(), 0, dummy);
+  // C++ [stmt.return]: the return value is computed before the local
+  // objects' destructors run. When the scope holds an object with a
+  // non-trivial destructor, capture the value into a temporary, emit the
+  // unwind program, and return the temporary (a destructor may modify state
+  // the return expression reads, and symex treats RETURN as a jump, so the
+  // unwind cannot go after it). A destructor-free stack (plain C) keeps the
+  // old shape: scope exit is handled at block level (github #6077).
+  bool have_destructor = false;
+  for (const codet &d : targets.destructor_stack)
+    if (d.get_statement() == "function_call")
+    {
+      have_destructor = true;
+      break;
+    }
+
+  if (have_destructor)
+  {
+    if (
+      targets.has_return_value && new_code.has_return_value() &&
+      !new_code.return_value().is_constant())
+    {
+      std::size_t stack_size = targets.destructor_stack.size();
+      make_temp_symbol(new_code.return_value(), dest);
+      // The temporary is the return slot: it outlives the unwind, so drop
+      // the scope-exit entries convert_decl pushed for it.
+      targets.destructor_stack.resize(stack_size);
+    }
+    unwind_destructor_stack(code.location(), 0, dest);
+  }
 
   if (targets.has_return_value)
   {

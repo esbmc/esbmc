@@ -371,10 +371,12 @@ bool goto_convert_functionst::convert_native_rec(
     // A void function returning a value is a C/C++ constraint violation the
     // frontend rejects, so it never reaches here; only a valueless void return
     // does, which correctly emits just the end-of-function goto below.
-    // The destructor unwind convert_return runs writes into a discarded dummy
-    // program and is stack-neutral, so it has no effect on the emitted body; the
-    // enclosing block handler reproduces the real (skipped) destructor behaviour
-    // via the trailing-goto guard above.
+    // convert_return unwinds the destructor stack only when it holds a
+    // destructor FUNCTION_CALL, which cannot happen here: the decl handler
+    // falls back on any type with a destructor, so a native subtree's stack
+    // holds only scope-exit code_dead entries, which convert_return leaves
+    // alone; the enclosing block handler reproduces the (skipped) scope-exit
+    // behaviour via the trailing-goto guard above.
     exprt val = is_nil_expr(ret.operand) ? static_cast<exprt>(nil_exprt())
                                          : migrate_expr_back(ret.operand);
     if (
