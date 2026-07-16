@@ -557,6 +557,10 @@ void goto_convertt::remove_sideeffects(
   if (!has_sideeffect(expr) && expr.id() != "if")
     return;
 
+  // Snapshot for the discarded-temporary_object arm below: entries pushed
+  // while lowering this expression describe its full-expression temporaries.
+  std::size_t stack_size = targets.destructor_stack.size();
+
   if (expr.is_and() || expr.is_or())
   {
     if (!expr.is_boolean())
@@ -970,7 +974,40 @@ void goto_convertt::remove_sideeffects(
     else if (statement == "cpp_delete" || statement == "cpp_delete[]")
       remove_cpp_delete(expr, dest);
     else if (statement == "temporary_object")
-      remove_temporary_object(expr, dest);
+    {
+      const locationt location = expr.find_location();
+      remove_temporary_object(expr, dest, result_is_used);
+
+      // A discarded temporary dies at the end of its full expression
+      // (C++ [class.temporary]/4, github #6076), not at block exit: emit
+      // the scope-exit entries pushed while lowering this expression
+      // (destructors before DEADs, innermost temporaries first) right here.
+      // A result that is used keeps block-level scope, as does anything
+      // without a pending destructor call (plain DEADs of C-style temps).
+      if (!result_is_used)
+      {
+        bool have_destructor = false;
+        for (std::size_t i = stack_size; i < targets.destructor_stack.size();
+             i++)
+          if (targets.destructor_stack[i].get_statement() == "function_call")
+          {
+            have_destructor = true;
+            break;
+          }
+
+        if (have_destructor)
+        {
+          while (targets.destructor_stack.size() > stack_size)
+          {
+            codet d_code = targets.destructor_stack.back();
+            targets.destructor_stack.pop_back();
+            d_code.location() = location;
+            convert(d_code, dest);
+          }
+          expr.make_nil();
+        }
+      }
+    }
     else if (statement == "nondet")
     {
       // these are fine
@@ -1583,10 +1620,24 @@ void goto_convertt::remove_cpp_delete(exprt &expr, goto_programt &dest)
   expr.make_nil();
 }
 
-void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
+void goto_convertt::remove_temporary_object(
+  exprt &expr,
+  goto_programt &dest,
+  bool result_is_used)
 {
   if (expr.operands().size() != 1 && expr.operands().size() != 0)
     throw "temporary_object takes 0 or 1 operands";
+
+  // A discarded temporary whose value is already materialized in a symbol
+  // (e.g. the return_value$ of a discarded call, github #6076) needs no
+  // second copy: reuse that symbol as the object's identity, so it is
+  // destructed exactly once.
+  if (!result_is_used && expr.operands().size() == 1 && expr.op0().is_symbol())
+  {
+    exprt tmp = expr.op0();
+    expr.swap(tmp);
+    return;
+  }
 
   symbolt &new_symbol = new_tmp_symbol(expr.type());
 
