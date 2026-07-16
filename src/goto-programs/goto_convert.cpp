@@ -1084,7 +1084,24 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
 
       codet tmp_code = to_code(destructor);
       replace_new_object(deref_op, tmp_code);
-      convert(tmp_code, dest);
+
+      // C++ [expr.delete]/7: deleting a null pointer invokes no destructor.
+      goto_programt dtor_prog;
+      convert(tmp_code, dtor_prog);
+
+      goto_programt::targett t_skip = dtor_prog.add_instruction(SKIP);
+      t_skip->location = code.location();
+
+      goto_programt::targett t_null = dest.add_instruction();
+      t_null->make_goto(t_skip);
+      exprt is_null("not", typet("bool"));
+      exprt non_null("typecast", typet("bool"));
+      non_null.copy_to_operands(tmp_op);
+      is_null.move_to_operands(non_null);
+      migrate_expr(is_null, t_null->guard);
+      t_null->location = code.location();
+
+      dest.destructive_append(dtor_prog);
     }
     else
       assert(0);
