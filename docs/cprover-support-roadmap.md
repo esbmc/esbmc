@@ -789,6 +789,24 @@ Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), `--unwind 10`: `cbmc_strr
 `h+3` and not-found → `NULL`) SUCCESSFUL, and `cbmc_strrchr_fail` (`strrchr("hello",'l') == h+2`,
 the *first* not the last match) FAILED, confirming the reverse scan is really computed.
 
+**Extended to the FP classifier `fpclassify`.** CBMC's `<math.h>` lowers the `fpclassify(x)`
+macro to a call to the width-specific internal `__fpclassifyf`/`__fpclassifyd`/`__fpclassifyl`
+(chosen by argument type), which reach the adapter as **bodyless externals returning nondet**, so
+a valid `fpclassify(1.0) == FP_NORMAL` reported a false `FAILED` where CBMC verifies `SUCCESSFUL`.
+Same `link_cbmc_libc_bodies` bridge: ESBMC's own straight-line operational-model bodies
+(`libm/fpclassify.c`, a nested `isnan`/`isinf`/`isnormal`/`== 0` ternary — **no loops, so no
+`--unwind`**) are copied onto the bodyless declarations. The one wrinkle over the string family:
+only `__fpclassifyd` is genuinely undeclared everywhere (glibc's `<math.h>` already exposes
+`__fpclassifyf`/`__fpclassifyl` under its default feature-test macros, and macOS's declares all
+three) — but since that's not guaranteed across libcs, the additions boilerplate declares all
+three explicitly (`extern int __fpclassify{f,d,l}(...)`) before taking their addresses to
+force-link the bodies. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3): `cbmc_fpclassify`
+pins all five classes — `FP_NORMAL`/`FP_ZERO`/`FP_INFINITE`/`FP_NAN`/`FP_SUBNORMAL` — across
+`double`, plus a `float` and a `long double` normal, all `SUCCESSFUL`, and `cbmc_fpclassify_fail`
+(`fpclassify(0.0) == FP_NORMAL`, where `0.0` is `FP_ZERO`) `FAILED`, confirming the classifier is
+really evaluated. `signbit`/`isnan`/`isinf`/`isnormal` are handled at the expression level (§4.4),
+not here — `fpclassify` is the one classifier that lowers to a real libc call.
+
 **Ruled out as an alternative fix** (for the remaining libm family, from the #5743
 diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
 boilerplate *call* `sqrtf` so ESBMC's normal C-frontend linking supplies a body doesn't
