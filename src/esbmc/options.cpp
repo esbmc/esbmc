@@ -458,7 +458,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "Set max number of iteration (default is 50)"},
     {"base-k-step",
      boost::program_options::value<int>()->default_value(1)->value_name("nr"),
-     "Start the base case from n step (default is 1)"},
+     "Start the base case from n step (n >= 1, default is 1); n = 0 is "
+     "rejected because it sets --unwind 0 (unlimited)"},
     {"show-cex",
      NULL,
      "Print the counter-example produced by the inductive step"},
