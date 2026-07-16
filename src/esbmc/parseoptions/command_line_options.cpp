@@ -426,21 +426,21 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     // Get the start of the base-case, default 1
     uint64_t k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
 
-    // check whether k-step is greater than max-k-step
     if (k_step_inc >= max_k_step)
     {
       log_error(
-        "Please specify --k-step smaller than max-k-step if you want to use "
-        "incremental verification.");
+        "--k-step ({}) must be smaller than --max-k-step ({}).",
+        k_step_inc,
+        max_k_step);
       abort();
     }
 
-    // check whether k_step_inc is greater than max-k-step
     if (k_step_base >= max_k_step)
     {
       log_error(
-        "Please specify --base-k-step smaller than max-k-step if you want "
-        "to use incremental verification.");
+        "--base-k-step ({}) must be smaller than --max-k-step ({}).",
+        k_step_base,
+        max_k_step);
       abort();
     }
   }
