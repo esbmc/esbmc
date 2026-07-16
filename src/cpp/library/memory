@@ -6,6 +6,7 @@
 #include "utility"
 #include "type_traits"
 #include "stdlib.h"
+#include "new" // placement new for allocator construct
 
 namespace std
 {
@@ -37,7 +38,11 @@ public:
 
   pointer allocate(size_type n)
   {
-    return static_cast<pointer>(malloc(n * sizeof(T)));
+    pointer p = static_cast<pointer>(malloc(n * sizeof(T)));
+    // allocate() reports failure by throwing bad_alloc, never by returning
+    // null; the throw path is not modelled.
+    __ESBMC_assume(p != 0);
+    return p;
   }
 
   void deallocate(pointer ptr, size_type)
@@ -45,16 +50,25 @@ public:
     free(ptr);
   }
 
-  template <typename U, typename... Args>
-  void construct(U *ptr, Args &&...args)
+  // Non-template members on purpose: the frontend gives member templates of
+  // OM class templates no GOTO body, so the variadic construct/destroy were
+  // silent no-ops (github #6063).
+  // Assignment rather than placement new: the frontend drops the
+  // initializer of a placement new with primitive type, and in the model
+  // assignment into raw storage is how construction is represented anyway.
+  void construct(pointer ptr, const value_type &v)
   {
-    new (ptr) U(args...);
+    *ptr = v;
   }
 
-  template <typename U>
-  void destroy(U *ptr)
+  void construct(pointer ptr)
   {
-    ptr->~U();
+    *ptr = value_type();
+  }
+
+  void destroy(pointer ptr)
+  {
+    ptr->~value_type();
   }
 
   size_type max_size() const
@@ -147,6 +161,52 @@ struct default_delete
     delete ptr;
   }
 };
+
+#if __cplusplus >= 201103L
+// Minimal allocator_traits (github #6063): delegates to the allocator's own
+// members. Static member functions of class templates convert to GOTO
+// correctly (unlike free-function templates in OM headers).
+template <class Alloc>
+struct allocator_traits
+{
+  typedef Alloc allocator_type;
+  typedef typename Alloc::value_type value_type;
+  typedef value_type *pointer;
+  typedef const value_type *const_pointer;
+  typedef size_t size_type;
+  typedef ptrdiff_t difference_type;
+
+  static pointer allocate(Alloc &a, size_type n)
+  {
+    return a.allocate(n);
+  }
+
+  static void deallocate(Alloc &a, pointer p, size_type n)
+  {
+    a.deallocate(p, n);
+  }
+
+  static void construct(Alloc &a, pointer p, const value_type &v)
+  {
+    a.construct(p, v);
+  }
+
+  static void construct(Alloc &a, pointer p)
+  {
+    a.construct(p);
+  }
+
+  static void destroy(Alloc &a, pointer p)
+  {
+    a.destroy(p);
+  }
+
+  static size_type max_size(const Alloc &a)
+  {
+    return a.max_size();
+  }
+};
+#endif
 
 // Partial specialization of default_delete for array types
 template <class T>
