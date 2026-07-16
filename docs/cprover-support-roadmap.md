@@ -1068,9 +1068,22 @@ the 2026-07-14 reassessment near the top of this section for the cross-umbrella 
 just the first) would tighten parity from verdict-level to full property-set; (b) full CBMC
 per-property parity is spot-checked (3/133), not exhaustive — a batch CBMC cross-run would
 confirm the remaining 128; (c) the 2 slice-metadata timeouts want a solver-performance look
-(fat-pointer reinterpret encoding); (d) CBMC-binary regression fixtures (`cbmc_transmute*`)
-are not yet added — the fixes were validated against the live Kani binaries and native C
-reproducers, since this build has no regression suite configured.
+(fat-pointer reinterpret encoding).
+
+**(d) CBMC-binary regression fixtures — ✅ closed, to the extent goto-cc can express the
+four shapes.** Attempting the fixtures surfaced (and fixed) a live crash: the
+recursive-aggregate shape #6049's load-time guard covered crashed again at *symex* time on a
+plain linked list — now fixed with consistent recursive-type spellings (§4.3) and pinned by
+`cbmc_recursive_struct{,_fail}` (self- and mutual recursion). The union-operand shape is
+pinned by `cbmc_union_constant{,_fail}` (designated-initializer constant — the exact
+`constant_union2t`-with-no-members abort path — plus a global union initializer, member
+write/read, and union copy; verdict parity dual-solver). The remaining two shapes are **not
+goto-cc-expressible** and stay covered only by the live Kani-binary validation: the
+zero-sized-union-member sort mismatch needs a 0-width member, and CBMC 6.8.0 itself fails on
+the GCC empty-struct encoding (`l2_rename_rvalues case 'struct' not handled` — no parity
+target exists); the wide `byte_extract` reinterpret is introduced by CBMC's own symex, never
+persisted into a `.goto` by goto-cc (same finding as the byte-op wrap-set audit) — a
+committed Kani binary corpus is the way to pin those two, tracked under axis 1/2 above.
 
 **Affected Operations**:
 - `mem::transmute()` - type reinterpretation
