@@ -512,28 +512,11 @@ void python_converter::handle_assignment_type_adjustments(
     // with Any annotation are excluded.
     if (
       ast_node.contains("_type") && ast_node["_type"] == "AnnAssign" &&
-      !ast_node.value("_inferred_annotation", false) && has_annotation &&
+      !ast_node.value("_inferred_annotation", false) &&
+      !ast_node.value("esbmc_synthesized", false) && has_annotation &&
       ast_node["annotation"].contains("id") &&
       ast_node["annotation"]["id"] == "Any" && lhs.type().is_pointer() &&
-      [this]() {
-        // Check if "from typing import Any" exists in the source file
-        const auto &body = (*ast_json)["body"];
-        for (const auto &stmt : body)
-        {
-          if (
-            stmt.contains("_type") && stmt["_type"] == "ImportFrom" &&
-            stmt.contains("module") && stmt["module"] == "typing" &&
-            stmt.contains("names"))
-          {
-            for (const auto &name : stmt["names"])
-            {
-              if (name.contains("name") && name["name"] == "Any")
-                return true;
-            }
-          }
-        }
-        return false;
-      }())
+      json_utils::is_imported_from(*ast_json, "typing", "Any"))
     {
       if (rhs.type().is_array())
       {
@@ -650,11 +633,20 @@ void python_converter::handle_assignment_type_adjustments(
         lhs.type() = rhs.type();
       }
     }
-    // No annotation or preprocessor-inferred Any: propagate rhs type to lhs.
+    // No annotation or an inferred Any: propagate rhs type to lhs. An "Any"
+    // annotation counts as inferred when flagged by the annotation pass,
+    // when the preprocessor marked it as synthesized (e.g. the items()-loop
+    // value variable `v: Any = ESBMC_vals_N[i]`), or when the module never
+    // imports typing.Any (then no top-level user annotation can be a live
+    // Any). Without this, the declared void* overrides a concrete rhs type —
+    // a tuple dict-value read then misfolds every component access (#5444
+    // latent item).
     else if (
       (!has_annotation ||
-       (ast_node.value("_inferred_annotation", false) &&
-        ast_node["annotation"].value("id", std::string()) == "Any")) &&
+       (ast_node["annotation"].value("id", std::string()) == "Any" &&
+        (ast_node.value("_inferred_annotation", false) ||
+         ast_node.value("esbmc_synthesized", false) ||
+         !json_utils::is_imported_from(*ast_json, "typing", "Any")))) &&
       !rhs.type().is_empty() && lhs.type() != rhs.type() &&
       !rhs.type().is_code() &&
       !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty"))
@@ -2753,7 +2745,23 @@ void python_converter::get_var_assign(
           const std::string &src = python_dict_handler::get_internal_list_id(
             dict_id, component == "keys");
           if (!src.empty())
+          {
             python_list::copy_type_info(src, lhs_identifier);
+            // Tuple values are recorded under the $dict_value_types$ key,
+            // not the values-list id (github_3719_4), so the copy above is
+            // a no-op for them. Propagate the stored tuple struct type so
+            // the generic list tuple-element read resolves it.
+            if (component == "values")
+            {
+              typet tuple_t =
+                dict_handler_->recorded_tuple_value_type(dict_sym);
+              if (
+                !tuple_t.is_nil() && !tuple_t.is_empty() &&
+                python_list::get_list_type_map_size(lhs_identifier) == 0)
+                python_list::add_type_info_entry(
+                  lhs_identifier, std::string(), tuple_t);
+            }
+          }
         }
       }
 

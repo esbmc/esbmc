@@ -170,6 +170,28 @@ JsonType &find_function(JsonType &json, const std::string &func_name)
   throw std::runtime_error("Function " + func_name + " not found\n");
 }
 
+/// True when `from <module> import <entity>` appears at the AST top level.
+template <typename JsonType>
+bool is_imported_from(
+  const JsonType &ast,
+  const std::string &module,
+  const std::string &entity)
+{
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      stmt.contains("_type") && stmt["_type"] == "ImportFrom" &&
+      stmt.contains("module") && stmt["module"] == module &&
+      stmt.contains("names"))
+    {
+      for (const auto &name : stmt["names"])
+        if (name.contains("name") && name["name"] == entity)
+          return true;
+    }
+  }
+  return false;
+}
+
 template <typename JsonType>
 const JsonType &
 find_imported_function(const JsonType &ast, const std::string &func_name)
