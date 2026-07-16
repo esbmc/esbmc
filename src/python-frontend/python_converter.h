@@ -554,8 +554,9 @@ private:
 
   /**
    * @brief Infer a numpy-array parameter's concrete array type by scanning
-   * every call site of @c func_name across the module for the argument fed
-   * to @c param_index.
+   * call sites of @c func_name across the module and returning the shape of
+   * the first resolvable numpy-array argument fed to @c param_index (other
+   * call sites are not cross-checked for consistency).
    *
    * Mirrors, at a smaller scope, the call-site-driven retyping already used
    * by `python_param_annotations::propagate_tuple_list_params`: a numpy
