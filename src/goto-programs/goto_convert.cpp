@@ -823,6 +823,8 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
     }
     else
     {
+      std::size_t stack_size = targets.destructor_stack.size();
+
       goto_programt sideeffects;
       // the side effect is not just removed. Actually, it's converted and removed.
       remove_sideeffects(initializer, sideeffects);
@@ -831,6 +833,34 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
       code_assignt assign(var, initializer);
       assign.location() = new_code.location();
       copy(assign, ASSIGN, dest);
+
+      // Temporaries materialized while lowering the initializer die at the
+      // end of the full expression (C++ [class.temporary]/4, github #6075):
+      // emit their pending scope-exit entries (destructor then DEAD) right
+      // after the assignment. A reference declaration extends its
+      // temporary's lifetime to the scope ([class.temporary]/6) and a
+      // destructor-free tail (plain DEADs of C-style temps) keeps
+      // block-level scope, so both retain the old shape.
+      if (!is_lvalue_or_rvalue_reference(s->get_type()))
+      {
+        bool have_destructor = false;
+        for (std::size_t i = stack_size; i < targets.destructor_stack.size();
+             i++)
+          if (targets.destructor_stack[i].get_statement() == "function_call")
+          {
+            have_destructor = true;
+            break;
+          }
+
+        if (have_destructor)
+          while (targets.destructor_stack.size() > stack_size)
+          {
+            codet d_code = targets.destructor_stack.back();
+            targets.destructor_stack.pop_back();
+            d_code.location() = new_code.location();
+            convert(d_code, dest);
+          }
+      }
     }
   }
 

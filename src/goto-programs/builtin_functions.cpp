@@ -523,7 +523,16 @@ void goto_convertt::cpp_new_initializer(
       exprt deref_new("dereference", rhs.type().subtype());
       deref_new.copy_to_operands(lhs);
       replace_new_object(deref_new, initializer);
+
+      // A class-typed initializer may lower to a stack temporary copied into
+      // the heap object (`*new_ptr = tmp`). That temporary is a transfer
+      // slot, not a C++ object: the heap object owns the constructed state
+      // and is destructed via delete, so drop the scope-exit entries this
+      // conversion pushes -- destructing the slot would double-count
+      // (github #6075).
+      std::size_t stack_size = targets.destructor_stack.size();
       convert(to_code(initializer), dest);
+      targets.destructor_stack.resize(stack_size);
     }
     else
       assert(0);
