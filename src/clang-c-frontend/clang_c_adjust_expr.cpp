@@ -357,6 +357,71 @@ void clang_c_adjust::adjust_expr_shifts(exprt &expr)
   }
 }
 
+static bool contains_sideeffect(const exprt &expr)
+{
+  if (expr.id() == "sideeffect")
+    return true;
+  forall_operands (it, expr)
+    if (contains_sideeffect(*it))
+      return true;
+  return false;
+}
+
+// The complex lowerings below copy each operand into several component
+// (member) accesses. A side-effectful operand (e.g. a function call) must not
+// be copied -- goto-convert hoists every copy separately, evaluating the
+// effect more than once, a wrong verdict on a valid program. Bind each such
+// operand to a fresh temporary declared in `block` and replace it with the
+// temporary; finish_complex_lowering then wraps the lowered result and the
+// bindings in a statement expression, whose goto conversion
+// (remove_statement_expression) evaluates the block exactly once and declares
+// the temporaries per frame (so recursion is safe too).
+void clang_c_adjust::bind_sideeffect_operands(exprt &expr, code_blockt &block)
+{
+  Forall_operands (it, expr)
+  {
+    exprt &op = *it;
+    if (!contains_sideeffect(op))
+      continue;
+    // Embed file:line in the name and mark the symbol file_local with a
+    // module, like the compound-literal symbols (clang_c_convert.cpp): each
+    // TU is adjusted in an isolated context and merged by c_link, which only
+    // renames clashing symbols that are file_local with a module -- a bare
+    // "complex$1" would collide across TUs.
+    const std::string path = op.location().file().as_string();
+    const std::string file = path.substr(path.find_last_of("/\\") + 1);
+    symbolt &tmp = tmp_symbol.new_symbol(
+      context,
+      op.type(),
+      path + ":" + op.location().get_line().as_string() + "$complex$");
+    tmp.mode = "C";
+    tmp.module = file.substr(0, file.find_last_of('.'));
+    tmp.file_local = true;
+    tmp.location = op.location();
+    code_declt decl(symbol_expr(tmp), op);
+    decl.location() = op.location();
+    block.operands().push_back(decl);
+    op = symbol_expr(tmp);
+  }
+}
+
+void clang_c_adjust::finish_complex_lowering(
+  exprt &expr,
+  exprt &result,
+  code_blockt &block)
+{
+  if (block.operands().empty())
+  {
+    expr.swap(result);
+    return;
+  }
+  block.operands().push_back(code_expressiont(result));
+  side_effect_exprt stmt_expr("statement_expression", result.type());
+  stmt_expr.copy_to_operands(block);
+  stmt_expr.location() = expr.location();
+  expr.swap(stmt_expr);
+}
+
 void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
 {
   adjust_operands(expr);
@@ -366,6 +431,9 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
 
   if (op0.type().id() == "complex" || op1.type().id() == "complex")
   {
+    code_blockt bind_block;
+    bind_sideeffect_operands(expr, bind_block);
+
     const typet &complex_t =
       op0.type().id() == "complex" ? op0.type() : op1.type();
     const typet &elem_t = to_complex_type(complex_t).base_type();
@@ -446,7 +514,7 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
     struct_exprt result(complex_t);
     result.operands().push_back(new_real);
     result.operands().push_back(new_imag);
-    expr.swap(result);
+    finish_complex_lowering(expr, result, bind_block);
     return;
   }
 
@@ -473,6 +541,9 @@ void clang_c_adjust::adjust_expr_unary_complex(exprt &expr)
 {
   adjust_operands(expr);
 
+  code_blockt bind_block;
+  bind_sideeffect_operands(expr, bind_block);
+
   // -z negates both components; ~z is GNU complex conjugation (negate the
   // imaginary part only). Lowered component-wise like the binary arithmetic
   // above -- there is no complex negation/conjugation in the SMT layer.
@@ -492,7 +563,7 @@ void clang_c_adjust::adjust_expr_unary_complex(exprt &expr)
   struct_exprt result(complex_t);
   result.operands().push_back(expr.id() == "unary-" ? negate(re) : re);
   result.operands().push_back(negate(member_exprt(op, "imag", elem_t)));
-  expr.swap(result);
+  finish_complex_lowering(expr, result, bind_block);
 }
 
 void clang_c_adjust::adjust_index(index_exprt &index)
