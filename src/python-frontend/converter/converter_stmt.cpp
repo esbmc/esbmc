@@ -512,28 +512,11 @@ void python_converter::handle_assignment_type_adjustments(
     // with Any annotation are excluded.
     if (
       ast_node.contains("_type") && ast_node["_type"] == "AnnAssign" &&
-      !ast_node.value("_inferred_annotation", false) && has_annotation &&
+      !ast_node.value("_inferred_annotation", false) &&
+      !ast_node.value("esbmc_synthesized", false) && has_annotation &&
       ast_node["annotation"].contains("id") &&
       ast_node["annotation"]["id"] == "Any" && lhs.type().is_pointer() &&
-      [this]() {
-        // Check if "from typing import Any" exists in the source file
-        const auto &body = (*ast_json)["body"];
-        for (const auto &stmt : body)
-        {
-          if (
-            stmt.contains("_type") && stmt["_type"] == "ImportFrom" &&
-            stmt.contains("module") && stmt["module"] == "typing" &&
-            stmt.contains("names"))
-          {
-            for (const auto &name : stmt["names"])
-            {
-              if (name.contains("name") && name["name"] == "Any")
-                return true;
-            }
-          }
-        }
-        return false;
-      }())
+      json_utils::is_imported_from(*ast_json, "typing", "Any"))
     {
       if (rhs.type().is_array())
       {
@@ -650,11 +633,20 @@ void python_converter::handle_assignment_type_adjustments(
         lhs.type() = rhs.type();
       }
     }
-    // No annotation or preprocessor-inferred Any: propagate rhs type to lhs.
+    // No annotation or an inferred Any: propagate rhs type to lhs. An "Any"
+    // annotation counts as inferred when flagged by the annotation pass,
+    // when the preprocessor marked it as synthesized (e.g. the items()-loop
+    // value variable `v: Any = ESBMC_vals_N[i]`), or when the module never
+    // imports typing.Any (then no top-level user annotation can be a live
+    // Any). Without this, the declared void* overrides a concrete rhs type —
+    // a tuple dict-value read then misfolds every component access (#5444
+    // latent item).
     else if (
       (!has_annotation ||
-       (ast_node.value("_inferred_annotation", false) &&
-        ast_node["annotation"].value("id", std::string()) == "Any")) &&
+       (ast_node["annotation"].value("id", std::string()) == "Any" &&
+        (ast_node.value("_inferred_annotation", false) ||
+         ast_node.value("esbmc_synthesized", false) ||
+         !json_utils::is_imported_from(*ast_json, "typing", "Any")))) &&
       !rhs.type().is_empty() && lhs.type() != rhs.type() &&
       !rhs.type().is_code() &&
       !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty"))
@@ -1506,7 +1498,7 @@ void python_converter::handle_function_call_rhs(
       if (!func_name.empty())
       {
         const auto &func_def =
-          json_utils::find_function((*ast_json)["body"], func_name);
+          json_utils::try_find_function((*ast_json)["body"], func_name);
         if (
           !func_def.empty() && func_def.contains("returns") &&
           !func_def["returns"].is_null())
@@ -1839,13 +1831,13 @@ std::string python_converter::call_return_class(const nlohmann::json &rhs) const
   if (json_utils::is_class(fname, *ast_json))
     return "";
 
-  const auto &fn = json_utils::find_function((*ast_json)["body"], fname);
+  const auto &fn = json_utils::try_find_function((*ast_json)["body"], fname);
   if (fn.empty() || !fn.contains("returns") || fn["returns"].is_null())
     return "";
 
   // An @overload stub carries a single-class annotation (`-> Foo`) but the
   // overload set is polymorphic — the real return type is resolved per call
-  // site from the argument types. find_function returns the first stub, so
+  // site from the argument types. try_find_function returns the first stub, so
   // trusting its annotation would mis-type, e.g., a `Literal["bar"] -> Bar`
   // result as `Foo*` (#3057). Leave such results to the existing call-site
   // overload resolution rather than forcing a single Class* here.
@@ -2753,7 +2745,23 @@ void python_converter::get_var_assign(
           const std::string &src = python_dict_handler::get_internal_list_id(
             dict_id, component == "keys");
           if (!src.empty())
+          {
             python_list::copy_type_info(src, lhs_identifier);
+            // Tuple values are recorded under the $dict_value_types$ key,
+            // not the values-list id (github_3719_4), so the copy above is
+            // a no-op for them. Propagate the stored tuple struct type so
+            // the generic list tuple-element read resolves it.
+            if (component == "values")
+            {
+              typet tuple_t =
+                dict_handler_->recorded_tuple_value_type(dict_sym);
+              if (
+                !tuple_t.is_nil() && !tuple_t.is_empty() &&
+                python_list::get_list_type_map_size(lhs_identifier) == 0)
+                python_list::add_type_info_entry(
+                  lhs_identifier, std::string(), tuple_t);
+            }
+          }
         }
       }
 
@@ -3908,7 +3916,7 @@ void python_converter::get_return_statements(
       // Forward reference: function not yet processed
       // Look up return type from AST
       const auto &func_node =
-        json_utils::find_function((*ast_json)["body"], func_name);
+        json_utils::try_find_function((*ast_json)["body"], func_name);
 
       if (
         !func_node.empty() && func_node.contains("returns") &&

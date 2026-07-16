@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property --no-standard-checks
+^VERIFICATION FAILED$
+post-merge bound should fail for NaN x
