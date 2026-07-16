@@ -55,9 +55,9 @@ static exprt rebuild_or_chain(const exprt::operandst &disjuncts, std::size_t i)
   return result;
 }
 
-/// Extract the identifier bound by a quantifier from its first argument,
+/// Extract the symbol bound by a quantifier from its first argument,
 /// which has the shape (possibly typecast) address_of(symbol).
-static irep_idt quantifier_bound_var_id(const exprt &arg)
+static const exprt *quantifier_bound_var(const exprt &arg)
 {
   const exprt *e = &arg;
   while (e->id() == "typecast" && e->operands().size() == 1)
@@ -65,8 +65,14 @@ static irep_idt quantifier_bound_var_id(const exprt &arg)
   if (
     e->id() == "address_of" && e->operands().size() == 1 &&
     e->op0().is_symbol())
-    return e->op0().identifier();
-  return irep_idt();
+    return &e->op0();
+  return nullptr;
+}
+
+static irep_idt quantifier_bound_var_id(const exprt &arg)
+{
+  const exprt *sym = quantifier_bound_var(arg);
+  return sym ? sym->identifier() : irep_idt();
 }
 
 static bool mentions_symbol(const exprt &e, const std::set<irep_idt> &ids)
@@ -97,6 +103,28 @@ static std::size_t count_symbol_occurrences(const exprt &e, const irep_idt &id)
   forall_operands (it, e)
     n += count_symbol_occurrences(*it, id);
   return n;
+}
+
+/// Post-order (evaluation-order) walk: true when the occurrence of @p id
+/// precedes every other side effect in @p e.  Substituting a side-effecting
+/// value at a later position would reorder calls across a sequence point.
+static bool
+symbol_before_sideeffects(const exprt &e, const irep_idt &id, bool &seen_id)
+{
+  forall_operands (it, e)
+    if (!symbol_before_sideeffects(*it, id, seen_id))
+      return false;
+  if (e.is_symbol() && e.identifier() == id)
+    seen_id = true;
+  else if (e.id() == "sideeffect" && !seen_id)
+    return false;
+  return true;
+}
+
+static bool substitutes_in_eval_order(const exprt &e, const irep_idt &id)
+{
+  bool seen_id = false;
+  return symbol_before_sideeffects(e, id, seen_id);
 }
 
 /// Substituting an argument under address_of would take the address of an
@@ -146,10 +174,28 @@ quantifier_intrinsic_call(const exprt &e, const namespacet &ns)
 
 static constexpr unsigned max_quantifier_inline_depth = 16;
 
-/// Build the inlined form of @p call to @p fsym: the callee's single
-/// `return <expr>;` with the actual arguments substituted for the formal
-/// parameters.  Returns false when the callee is not a pure single-return
-/// expression function.
+static bool
+flatten_body_statements(const codet &code, std::vector<const codet *> &out)
+{
+  const irep_idt &statement = code.get_statement();
+  if (statement == "block" || statement == "decl-block")
+  {
+    forall_operands (it, code)
+      if (!it->is_code() || !flatten_body_statements(to_code(*it), out))
+        return false;
+    return true;
+  }
+  if (statement == "skip")
+    return true;
+  out.push_back(&code);
+  return true;
+}
+
+/// Build the inlined form of @p call to @p fsym: the callee's body must be
+/// local declarations with initializers followed by a single
+/// `return <expr>;`.  The declarations and then the actual arguments are
+/// substituted into the return expression.  Returns false when the callee
+/// does not have this shape.
 bool goto_convertt::try_inline_pure_call(
   const symbolt &fsym,
   const exprt &call,
@@ -159,13 +205,14 @@ bool goto_convertt::try_inline_pure_call(
   if (!value.is_code() || fsym.get_type().id() != "code")
     return false;
 
-  const codet *stmt = &to_code(value);
-  while (stmt->get_statement() == "block" && stmt->operands().size() == 1 &&
-         stmt->op0().is_code())
-    stmt = &to_code(stmt->op0());
+  std::vector<const codet *> stmts;
+  if (!flatten_body_statements(to_code(value), stmts) || stmts.empty())
+    return false;
+
+  const codet &ret = *stmts.back();
   if (
-    stmt->get_statement() != "return" || stmt->operands().size() != 1 ||
-    stmt->op0().is_nil())
+    ret.get_statement() != "return" || ret.operands().size() != 1 ||
+    ret.op0().is_nil())
     return false;
 
   const code_typet &ftype = to_code_type(fsym.get_type());
@@ -176,7 +223,41 @@ bool goto_convertt::try_inline_pure_call(
   if (params.size() != args.size())
     return false;
 
-  exprt result = stmt->op0();
+  exprt result = ret.op0();
+
+  // Fold local declarations into the return expression, last first, so that
+  // each occurrence count sees the fully substituted downstream uses.
+  for (std::size_t i = stmts.size() - 1; i-- > 0;)
+  {
+    const codet &decl = *stmts[i];
+    if (
+      decl.get_statement() != "decl" || decl.operands().size() != 2 ||
+      !decl.op0().is_symbol())
+      return false;
+    const irep_idt &id = decl.op0().identifier();
+    // A static local is initialized once, not per call.
+    const symbolt *local = ns.lookup(id);
+    if (!local || local->static_lifetime)
+      return false;
+    exprt init = decl.op1();
+    if (has_non_call_sideeffect(init) || mentions_symbol(init, {id}))
+      return false;
+    // Same rule as for arguments below: a side-effecting initializer must
+    // end up evaluated exactly once, before every side effect sequenced
+    // after it.
+    if (
+      has_sideeffect(init) && (count_symbol_occurrences(result, id) != 1 ||
+                               !substitutes_in_eval_order(result, id)))
+      return false;
+    if (param_under_address_of(result, {id}))
+      return false;
+    if (init.type() != decl.op0().type())
+      init.make_typecast(decl.op0().type());
+    std::map<irep_idt, exprt> local_map;
+    local_map.emplace(id, std::move(init));
+    replace_symbols_in_expr(result, local_map);
+  }
+
   if (has_non_call_sideeffect(result))
     return false;
 
@@ -192,8 +273,11 @@ bool goto_convertt::try_inline_pure_call(
       return false;
     // A side-effecting argument must be evaluated exactly once; substitution
     // would drop it (unused parameter) or duplicate it (parameter used more
-    // than once).
-    if (has_sideeffect(arg) && count_symbol_occurrences(result, id) != 1)
+    // than once).  It is also sequenced before the callee body, so its
+    // occurrence must precede every side effect already in the body.
+    if (
+      has_sideeffect(arg) && (count_symbol_occurrences(result, id) != 1 ||
+                              !substitutes_in_eval_order(result, id)))
       return false;
     if (arg.type() != params[i].type())
       arg.make_typecast(params[i].type());
@@ -275,6 +359,60 @@ const exprt *goto_convertt::find_sideeffect_on_bound_var(
   return nullptr;
 }
 
+/// In an assertion, a __ESBMC_forall in positive polarity is equivalent to
+/// its body over a fresh unconstrained variable: assert(forall x. B) fails
+/// exactly when some x violates B.  When the body keeps a side effect on the
+/// bound variable that inlining cannot remove (e.g. a call to a libc model
+/// whose body is only linked at the GOTO level), rewrite the binder away so
+/// the call is hoisted as an ordinary call on the fresh variable.  Bodies
+/// the binder path can model are left alone, as are __ESBMC_exists and
+/// quantifiers in negative positions (!, ==>, ?:, __ESBMC_assume).
+void goto_convertt::skolemize_asserted_foralls(exprt &expr, goto_programt &dest)
+{
+  if (expr.id() == "typecast" && expr.operands().size() == 1)
+  {
+    skolemize_asserted_foralls(expr.op0(), dest);
+    return;
+  }
+
+  if (expr.is_and() || expr.id() == "or")
+  {
+    Forall_operands (it, expr)
+      skolemize_asserted_foralls(*it, dest);
+    return;
+  }
+
+  const symbolt *fsym = quantifier_intrinsic_call(expr, ns);
+  if (!fsym || fsym->name != "__ESBMC_forall")
+    return;
+  exprt::operandst &args = expr.op1().operands();
+  if (args.size() != 2 || !has_sideeffect(args[1]))
+    return;
+  const exprt *bvar = quantifier_bound_var(args[0]);
+  if (!bvar)
+    return;
+
+  inline_calls_in_quantifier_body(args[1], max_quantifier_inline_depth);
+  if (!find_sideeffect_on_bound_var(args[1], {bvar->identifier()}))
+    return;
+
+  symbolt &skolem = new_tmp_symbol(bvar->type());
+  skolem.location = expr.find_location();
+  code_declt decl(symbol_expr(skolem));
+  decl.location() = skolem.location;
+  convert_decl(decl, dest);
+
+  exprt body;
+  body.swap(args[1]);
+  std::map<irep_idt, exprt> skolem_map;
+  skolem_map.emplace(bvar->identifier(), symbol_expr(skolem));
+  replace_symbols_in_expr(body, skolem_map);
+  if (body.type() != expr.type())
+    body.make_typecast(expr.type());
+  expr.swap(body);
+  skolemize_asserted_foralls(expr, dest);
+}
+
 void goto_convertt::remove_sideeffects_for_quantifier_body(
   exprt &body,
   const std::set<irep_idt> &bound_vars,
@@ -342,9 +480,9 @@ void goto_convertt::remove_sideeffects_for_quantifier_body(
     log_error(
       "{}: cannot model {} on a quantified variable inside "
       "__ESBMC_forall/__ESBMC_exists; the quantifier body must be a "
-      "side-effect-free expression, possibly calling functions with a single "
-      "`return <expr>;' body whose side-effecting arguments are each used "
-      "exactly once",
+      "side-effect-free expression, possibly calling functions whose body "
+      "is local declarations followed by a single `return <expr>;' and "
+      "whose side-effecting arguments are each used exactly once",
       se->find_location().as_string(),
       is_call ? "call to `" + se->op0().identifier().as_string() + "'"
               : "side effect `" + se->statement().as_string() + "'");
@@ -772,6 +910,15 @@ void goto_convertt::remove_sideeffects(
           return;
         }
       }
+
+      // A __ESBMC_forall the binder path cannot model (a residual side
+      // effect on the bound variable) is sound to rewrite over a fresh
+      // unconstrained variable when it sits in positive polarity of an
+      // assertion; see skolemize_asserted_foralls.
+      if (
+        fsym && (fsym->name == "__ESBMC_assert" || fsym->name == "assert") &&
+        !expr.op1().operands().empty())
+        skolemize_asserted_foralls(expr.op1().operands().front(), dest);
 
       // Special handling for __ESBMC_forall/__ESBMC_exists(ptr, body):
       // the body must be processed under the binder so the bound variable

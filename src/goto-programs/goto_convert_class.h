@@ -98,6 +98,7 @@ protected:
   const exprt *find_sideeffect_on_bound_var(
     const exprt &expr,
     const std::set<irep_idt> &bound_vars);
+  void skolemize_asserted_foralls(exprt &expr, goto_programt &dest);
 
   void remove_assignment(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_post(exprt &expr, goto_programt &dest, bool result_is_used);
