@@ -298,7 +298,14 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   if (config.options.get_bool_option("python-irep2-adjust"))
   {
     python_adjust py_adjuster(context);
-    py_adjuster.adjust();
+    // adjust() returns true when its own exit-invariant catches a symbol
+    // still carrying an unresolved node; a caller that ignores this (as this
+    // one used to) proceeds into goto-conversion over the malformed struct
+    // literal the invariant just flagged, and crashes downstream instead of
+    // failing cleanly here. Same convention as clang_cpp_adjust::adjust()
+    // above.
+    if (py_adjuster.adjust())
+      return true;
   }
 
   return false;
