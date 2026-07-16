@@ -4130,10 +4130,12 @@ whatever long tail remains before the flip itself can be attempted.
 
 #### S6 flip-readiness census (2026-07-11) — 92.2% of the runnable suite passes hop-off; the 278-test gap classifies into five families
 
-> **2026-07-15 — figure is stale, see "F-A1 drill, round 2" below.** Spot-checks
-> of this census's own named F-A1/F-B examples no longer reproduce on current
-> master; a corpus-wide crash sweep found zero surviving F-A1 crashes. The true
-> gap is smaller than 278/271; a fresh census is needed for an exact number.
+> **2026-07-15 — figure re-measured, see "Census re-run, corrected" below.**
+> An intermediate same-day finding ("F-A1 drill, round 2") claimed the gap
+> had shrunk; that claim was itself wrong (a spot-check methodology bug,
+> corrected in the same section) and is superseded by a properly re-run
+> census: **438/4054 (89.2% pass)** — the gap is *larger* than 278/271, not
+> smaller. F-A1/F-A3/F-B are all still live at roughly their original scale.
 
 **Method.** All 4,261 `regression/python` test dirs, hop-off (env-gated
 `clang_cpp_adjust` skip + `--python-irep2-adjust`, Bitwuzla, 20 s cap,
@@ -4229,7 +4231,15 @@ expression being widthed) to name the constructing site, rather than
 walking the pass's view again. The fix will live where that node is built,
 not in `python_adjust`.
 
-#### F-A1 drill, round 2 (2026-07-15) — the reproducers are gone; the census figure is stale
+#### F-A1 drill, round 2 (2026-07-15) — RETRACTED, see "Census re-run, corrected" below
+
+> **This section's finding is wrong.** `builtin2`/`cast` still crash 5/5
+> when invoked with their own `test.desc` flags; the corpus-wide sweep below
+> that claimed "zero surviving F-A1 crashes" ran the same buggy census
+> script (an unexported `$OUT` swallowing every gap write) later found and
+> fixed in "F-B prereq-6 fix". Left as originally written for the record of
+> what was (wrongly) concluded and why; do not cite the "gone"/"zero hits"
+> claims below as current.
 
 Ran the round-2 probe: all four `get_width` throw sites (`empty_type2t`,
 `symbol_type2t`, `cpp_name_type2t`, `code_type2t`) instrumented with a
@@ -4280,6 +4290,119 @@ count off `wc -l` (which undercounts by one when the file lacks a trailing
 newline — several `test.desc` files do) — read every line with a
 `while IFS= read -r line || [ -n "$line" ]` loop instead, which handles a
 missing final newline correctly.
+
+#### F-B prereq-6 fix (2026-07-15) — correcting round 2's dict17/25/28/31 claim; the discarded `adjust()` error return crashed for real
+
+Re-attempted the S6 census re-run with the same hop-off harness. The
+verdict-vs-`test.desc` numeric census was abandoned again (the crash-detection
+logic in the sweep script only greps process *stdout*, so a `SIGSEGV` mid-run
+silently reads as "no match, gap" without ever being distinguished from an
+ordinary wrong-verdict failure — the next attempt needs to check the
+subprocess exit code, not just its output). But a manual spot-check of
+`dict17` under hop-off (`ESBMC_PY_SKIP_LEGACY_ADJUST=1 ... --python-irep2-adjust
+--unwind 3`, the exact flags its own `test.desc` pins) **found round 2's claim
+above wrong**: the run reliably (3/3) segfaults, not "passes cleanly". Round
+2's spot-check omitted `--unwind 3` and so likely exercised a different,
+shallower code path that happened not to reach the crash — a reminder to
+always replay a test's own `test.desc` flags exactly, never a simplified
+stand-in, when spot-checking a specific regression test's hop-off behaviour.
+
+**Root cause, confirmed:** `python_adjust::adjust()` returns `true` when its
+own post-condition check (B.4) finds a symbol still carrying an unresolved
+node — here, `dict17`'s `Optional[int]` literal, which S2's aggregate-literal
+arm cannot complete (an operand-count/component-count mismatch, the F-A3
+family). The call site in `python_languaget::typecheck`
+(`python_language.cpp`) discarded that return value, so a detected,
+already-diagnosed invariant violation fell through into `goto_convert` /
+symex processing the malformed struct literal anyway, and crashed downstream
+(`SIGSEGV`, not a clean frontend error) — this is exactly the **prereq 6**
+item the S6/F-A3 notes above named but never landed.
+
+**Fix:** honour the return value, matching `clang_cpp_adjust::adjust()`'s own
+convention immediately above the call site (`if (adjuster.adjust()) return
+true;`) — `if (py_adjuster.adjust()) return true;`. Confirmed: the crash is
+gone (clean `CONVERSION ERROR` instead of `SIGSEGV`) under hop-off; the real,
+shipped configuration (`--python-irep2-adjust` alone, no hop-off) is
+**unaffected** — `clang_cpp_adjust` always runs first there and fully
+resolves everything, so `adjust()` never returns `true` on that path today,
+confirmed by `dict17` still verifying `SUCCESSFUL` under the plain flag. The
+new `if` branch is therefore dead-but-tested on the live pipeline, in the
+same sense the rest of `python_adjust.{h,cpp}` already is (B.0–B.2) — proven
+reachable (C-Live) only via the throwaway hop-off env-gate, reverted after
+the check, matching how the round-1/round-2 drills themselves were proven.
+No regression test exercises the fixed branch directly for the same reason;
+the existing `python_irep2_adjust_*`/`python_adjust` regression + unit
+suites (52 tests) and a 322-test dict/exception/try stratum hold green.
+
+**Consequence for the census.** F-A3/F-B (32+18 tests, per the 2026-07-11
+table) presumably still fail under hop-off — the underlying struct-literal
+completion gap (S2's arm cannot complete `Optional`/`tuple` literals) is
+*not* fixed, only its failure mode is (crash → clean error, still a wrong
+verdict vs `test.desc`'s `SUCCESSFUL`). Round 2's "F-A1/F-B gap is smaller
+than 271" finding should be treated as **unconfirmed for the F-B slice**
+until a corrected, exit-code-aware census actually re-measures it — the
+positive finding for F-A1 (empty_type2t crashes) stands on its own separate,
+correctly-attributed evidence (§ "F-A1 drill, round 2" above) and is not
+affected by this correction.
+
+#### Census re-run, corrected (2026-07-15) — round 2's F-A1 "doesn't reproduce" finding was ALSO wrong; verified gap is 438/4054 (89.2% pass), worse than the stale 92.4%
+
+The census script bug flagged just above (crash detection only grepped
+subprocess stdout, never checked the exit code) had one more consequence,
+found while fixing it: the script's `check_one` function used `$OUT` — the
+gap-log path — **without exporting it**. `export -f check_one` exports the
+*function*, but `xargs -P N ... bash -c 'check_one "$@"'` runs each call in a
+**new** child bash process that does not inherit unexported shell variables,
+so every write inside `check_one` targeted an empty-string path and silently
+vanished — this is why every census attempt this session (round 2's corpus
+sweep, and the first attempt at this re-run) reported `gap=0`/`mismatches=0`
+regardless of what was actually happening. Fixed with `export OUT`; confirmed
+by first reproducing the bug in isolation (a hand-rolled single-test harness
+that reported 0 even though a direct manual run of the exact same command
+showed a clean gap), then verifying the fix catches it.
+
+**With the export fixed and exit codes checked, the corrected census (all
+4,054 `CORE`, non-solver-pinned `regression/python` tests, hop-off,
+`--python-irep2-adjust`, 8s cap, 8-way parallel) found 438 gap tests: 268
+`GAP-CRASH` (206 SIGABRT, 45 rc=254/255 harness-exit-code artifacts, 12
+SIGSEGV, 1 SIGBUS), 92 `GAP-VERDICT` (ran to completion, wrong output), 78
+`GAP-TIMEOUT`.** That is **89.2% pass**, not an improvement on the
+2026-07-11 census's stale 92.4% — the true current gap is *larger*, not
+smaller as round 2 concluded.
+
+**Round 2's F-A1 finding was also wrong, verified this time with the
+discipline the F-B correction above demanded.** `builtin2` and `cast` — the
+exact two round-1/round-2 F-A1 reproducers — are both in the `GAP-CRASH`
+list (`rc=134`, `libc++abi: terminating due to uncaught exception of type
+type2t::symbolic_type_excp`, the identical signature named in round 1).
+Reproduced 5/5 across both tests with their exact `test.desc` flags
+(`builtin2`: `--unwind 1`; `cast`: `--incremental-bmc`) — not
+nondeterministic, not an artifact of a missing flag. Round 2's own
+methodology mistake (§ "F-B prereq-6 fix" above: spot-checking with a
+simplified command instead of the test's pinned flags) is confirmed as the
+cause here too, on inspection: round 2's session did not record which exact
+invocation it used for `builtin2`/`cast`, only the (wrong) conclusion.
+
+**Net effect: retract round 2's headline finding in full.** Neither the
+F-A1 crash family nor the F-B struct-literal family has shrunk since the
+2026-07-11 census; both are still live, at roughly their originally-measured
+size (F-A1 116, F-A3/F-B 32+18 named then; this census's 268 crashes +
+92 verdict mismatches are consistent with that scale, not a reduction). The
+`--python-irep2-adjust` flip remains gated on the same S3/F-A1 root-cause
+work round 1 scoped and never finished: instrument the symex/goto-convert
+*consumer* of the surviving empty-typed node (not `python_adjust`) to name
+the constructing site — see "F-A1 drill, round 1" above, still the correct
+next step, now on considerably firmer evidence than either "round" that
+followed it produced.
+
+**Process lesson, stated once more because it recurred:** two sessions in a
+row, a "the bug doesn't reproduce anymore" conclusion was reached from a
+spot-check that did not exactly replay the failing test's `test.desc` flags,
+and both times the real answer was the opposite. Any future "does X still
+reproduce" check on a *named regression test* must invoke it with that
+test's own flags, parsed the same way the test harness parses them — never
+a hand-typed approximation — before the result is trusted enough to write
+into this document.
 
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
