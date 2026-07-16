@@ -647,8 +647,17 @@ exprt python_list::build_strided_column_select(
       return reject("requires a literal step");
     if (step_val == 0)
       return reject("step cannot be zero");
+    // handle_range_slice's no-bounds negative-step path only models
+    // reversal (step=-1): its result length is the full row length
+    // regardless of |step|, which under-sizes/mis-sizes the result for any
+    // other negative step (e.g. a[:, ::-2]). Reject explicitly rather than
+    // silently returning a wrong-length slice.
+    if (step_val < 0 && step_val != -1)
+      return reject("currently supports only step=-1 for negative steps");
   }
 
+  // step=-1 reverses the whole row (full length); positive step take a
+  // ceil(num_cols / step)-sized subset.
   const BigInt result_cols =
     step_val < 0 ? num_cols : (num_cols + (step_val - 1)) / step_val;
 
