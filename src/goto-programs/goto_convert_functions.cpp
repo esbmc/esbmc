@@ -159,9 +159,14 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
 // the nearest enclosing loop's break/continue target, preceded by
 // unwind_destructor_stack's DEAD instructions for whatever was pushed since
 // that loop was entered — the inherited goto_convertt method is called
-// directly, already stack-neutral by design). Each reads its own code_*2t
-// fields directly (no legacy round-trip) and carries the statement's own
-// location, matching goto_convertt::convert() byte-for-byte on this subset.
+// directly, already stack-neutral by design), and a bare "foo();" call
+// statement to a plain named symbol with a body and side-effect-free
+// arguments (a single FUNCTION_CALL; the return-unused requirement means
+// do_function_call's temp-symbol machinery is never entered, so this kind
+// carries no shared-counter byte-identity risk). Each reads its own
+// code_*2t fields directly (no legacy round-trip) and carries the
+// statement's own location, matching goto_convertt::convert() byte-for-byte
+// on this subset.
 bool goto_convert_functionst::convert_native_rec(
   const expr2tc &code2,
   goto_programt &dest)
@@ -621,6 +626,43 @@ bool goto_convert_functionst::convert_native_rec(
     goto_programt::targett t = dest.add_instruction();
     t->make_goto(targets.continue_target);
     t->location = c.location;
+    return true;
+  }
+
+  if (is_code_function_call2t(code2))
+  {
+    const code_function_call2t &f = to_code_function_call2t(code2);
+
+    // Narrow slice: a bare "foo();" statement (return value unused, so no
+    // do_function_call temp-symbol machinery is ever entered) calling a
+    // plain named symbol (not the dereference/if/typecast-callee shapes
+    // do_function_call dispatches separately) with side-effect-free
+    // arguments (so its remove_sideeffects preamble is a no-op). Falls back
+    // on everything else, including every builtin name
+    // do_function_call_symbol special-cases (assume/assert/loop_invariant/
+    // etc.) — those are reached only when the callee symbol has no body,
+    // the same condition this handler excludes on below.
+    if (!is_nil_expr(f.ret) || !is_symbol2t(f.function))
+      return false;
+
+    for (const expr2tc &arg : f.operands)
+      if (has_sideeffect(arg))
+        return false;
+
+    const symbol2t &fsym = to_symbol2t(f.function);
+    symbolt *s = context.find_symbol(fsym.thename);
+    if (!s || !s->get_type().is_code())
+      return false;
+
+    bool skip_body =
+      options.get_bool_option("enable-unreachability-intrinsic") &&
+      (s->name == "reach_error" || s->name == "__VERIFIER_error");
+    if (s->get_value().is_nil() || !s->get_value().has_operands() || skip_body)
+      return false;
+
+    goto_programt::targett t = dest.add_instruction();
+    t->make_function_call(code2);
+    t->location = f.location;
     return true;
   }
 
