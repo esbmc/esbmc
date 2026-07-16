@@ -414,6 +414,18 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("smt-during-symex", true);
   }
 
+  // A base-case start of k = 0 sets --unwind 0, which ESBMC treats as
+  // "unlimited" (loop termination is gated on max_unwind != 0), so the base
+  // case would unwind forever instead of running k = 0. Reject it up front,
+  // independently of --unlimited-k-steps (discussion #6093).
+  if (strtoul(cmdline.getval("base-k-step"), nullptr, 10) == 0)
+  {
+    log_error(
+      "Please specify --base-k-step >= 1: a base case of k = 0 sets "
+      "--unwind 0, which ESBMC treats as unlimited unwinding.");
+    abort();
+  }
+
   // check the user's parameters to run incremental verification
   if (!cmdline.isset("unlimited-k-steps"))
   {
@@ -426,21 +438,21 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     // Get the start of the base-case, default 1
     uint64_t k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
 
-    // check whether k-step is greater than max-k-step
     if (k_step_inc >= max_k_step)
     {
       log_error(
-        "Please specify --k-step smaller than max-k-step if you want to use "
-        "incremental verification.");
+        "--k-step ({}) must be smaller than --max-k-step ({}).",
+        k_step_inc,
+        max_k_step);
       abort();
     }
 
-    // check whether k_step_inc is greater than max-k-step
     if (k_step_base >= max_k_step)
     {
       log_error(
-        "Please specify --base-k-step smaller than max-k-step if you want "
-        "to use incremental verification.");
+        "--base-k-step ({}) must be smaller than --max-k-step ({}).",
+        k_step_base,
+        max_k_step);
       abort();
     }
   }

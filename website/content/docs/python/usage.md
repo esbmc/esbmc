@@ -39,7 +39,7 @@ esbmc main.py --unwind 10
 | `--k-path-max-goals=M` | Per-function goal cap for k-path coverage (default 10000). |
 | `--generate-pytest-testcase` | Generate pytest test cases from counterexamples (see [Pytest Test Generation](./pytest-testgen)) |
 | `--python <path>` | Python interpreter binary to use (searched in `$PATH`; default `python`). It must be Python 3 — ESBMC errors out on a Python 2 interpreter. |
-| `--function <name>` | Verify a single function instead of the entire file |
+| `--function <name>` | Verify a single function instead of the entire file. Module-level and function-local imports are processed, so calls through imported modules resolve as they do at module scope |
 
 ## Writing Verification Harnesses
 

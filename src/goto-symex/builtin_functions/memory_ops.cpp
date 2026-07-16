@@ -1286,6 +1286,11 @@ void goto_symext::intrinsic_memset(
       bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
+    catch (const array_type2t::inf_sized_array_excp &)
+    {
+      bump_call(func_call, "c:@F@__memset_impl");
+      return;
+    }
 
     if (is_code_type(item_object->type))
     {
