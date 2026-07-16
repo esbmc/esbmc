@@ -499,6 +499,14 @@ public:
     return "$dict_value_types$" + vals_id;
   }
 
+  /// Key under which the (uniform) element type of list-typed dict values is
+  /// recorded, so a d[k] list read can type the inner elements (e.g. a
+  /// list-of-tuples value). Same collision-free naming scheme as above.
+  static std::string dict_value_list_elems_key(const std::string &vals_id)
+  {
+    return "$dict_value_list_elems$" + vals_id;
+  }
+
   /**
    * @brief Handles dict.update() method calls.
    * Implements Python's dict.update(other) semantics:
