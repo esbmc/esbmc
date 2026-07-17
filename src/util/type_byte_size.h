@@ -39,4 +39,13 @@ expr2tc compute_pointer_offset_bits(
 
 const expr2tc &get_base_object(const expr2tc &expr);
 
+/* Number of bytes an ExtInt is represented with: the smallest power of two
+ * that holds its width. */
+std::size_t ext_int_representation_bytes(const typet &type);
+
+/* The alignment of `type` in bytes: an explicit "alignment" attribute when
+ * present, 1 when packed, otherwise the natural alignment implied by the
+ * type's layout. */
+BigInt alignment(const typet &type, const namespacet &ns);
+
 #endif
