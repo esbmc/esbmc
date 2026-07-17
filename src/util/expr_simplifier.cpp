@@ -891,7 +891,7 @@ struct DivModtor
       if (get_value(c2) == 0)
         return expr2tc();
 
-      // Denominator is one? Simplify to numerator's constant
+      // Denominator is one? x/1 -> x (numerator); x%1 -> 0.
       if (get_value(c2) == 1)
       {
         if constexpr (Div)
@@ -1204,7 +1204,7 @@ expr2tc member2t::do_simplify() const
     unsigned no =
       struct_union_get_component_number(source_value->type, member).value();
 
-    // Clone constant struct, update its field according to this "with".
+    // Project the selected member value out of the constant aggregate.
     expr2tc s;
     if (is_constant_struct2t(source_value))
     {
@@ -2329,7 +2329,7 @@ static expr2tc do_bit_munge_operation(
   const expr2tc &simplified_side_1 = side_1;
   const expr2tc &simplified_side_2 = side_2;
 
-  /* Only support constant folding for integer and's. If you're a float,
+  /* Only constant-fold integer bitwise/shift ops. If you're a float,
    * pointer, or whatever, you're on your own. */
   if (
     is_constant_int2t(simplified_side_1) &&

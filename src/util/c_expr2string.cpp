@@ -1931,11 +1931,6 @@ std::string c_expr2stringt::convert_code(const codet &src, unsigned indent)
 std::string
 c_expr2stringt::convert_code_assign(const codet &src, unsigned indent)
 {
-  // Union remangle: If the right hand side is a constant array, containing
-  // byte extract expressions, then it's almost 100% certain to be a flattened
-  // union literal. Precise identification isn't feasible right now, sadly.
-  // In that case, replace with a special intrinsic indicating to the user that
-  // the original code is now meaningless.
   unsigned int precedent = 15;
   std::string tmp = convert(src.op0(), precedent);
   tmp += "=";

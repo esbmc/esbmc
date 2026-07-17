@@ -133,16 +133,14 @@ BigInt type_sizet::size_bits(const type2tc &type) const
 
   case type2t::struct_id:
   {
-    // Compute the size of all members of this struct, and add padding bytes
-    // so that they all start on wourd boundries. Also add any trailing bytes
-    // necessary to make arrays align properly if malloc'd, see C89 6.3.3.4.
+    // Sum the sizes of all members. Inter-member and trailing padding
+    // (for word-boundary and array-of-struct alignment; see C89 6.3.3.4) is
+    // inserted by the frontend as explicit padding members, so summing
+    // member sizes already accounts for it.
     BigInt accumulated_size = 0;
     for (auto const &it : to_struct_type(type).members)
       accumulated_size += size_bits(it);
 
-    // At the end of that, the tests above should have rounded accumulated size
-    // up to a size that contains the required trailing padding for array
-    // allocation alignment.
     return accumulated_size;
   }
 
@@ -241,9 +239,10 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
 
   case type2t::struct_id:
   {
-    // Compute the size of all members of this struct, and add padding bytes
-    // so that they all start on wourd boundries. Also add any trailing bytes
-    // necessary to make arrays align properly if malloc'd, see C89 6.3.3.4.
+    // Sum the sizes of all members. Inter-member and trailing padding
+    // (for word-boundary and array-of-struct alignment; see C89 6.3.3.4) is
+    // inserted by the frontend as explicit padding members, so summing
+    // member sizes already accounts for it.
     BigInt acc_cnst = 0;
     expr2tc acc_dyn;
     type2tc t = bitsize_type2();
@@ -257,10 +256,6 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
       else
         acc_dyn = s;
     }
-
-    // At the end of that, the tests above should have rounded accumulated size
-    // up to a size that contains the required trailing padding for array
-    // allocation alignment.
 
     if (!acc_dyn)
       return bitsize(acc_cnst);

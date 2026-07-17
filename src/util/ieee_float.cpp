@@ -1012,7 +1012,7 @@ bool operator==(const ieee_floatt &a, const ieee_floatt &b)
   if (a.infinity_flag && b.infinity_flag && (a.sign_flag == b.sign_flag))
     return true;
 
-  // If one is Nan, it's always false
+  // One is infinity and the other is not (or opposite-sign infinities): unequal
   if (a.infinity_flag || b.infinity_flag)
     return false;
 
@@ -1153,7 +1153,6 @@ void ieee_floatt::from_float(const float f)
 void ieee_floatt::make_NaN()
 {
   NaN_flag = true;
-  //sign=false;
   exponent = 0;
   fraction = 0;
   infinity_flag = false;
