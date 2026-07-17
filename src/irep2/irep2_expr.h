@@ -311,8 +311,7 @@ class constant_fixedbv2t : public expr2t
 public:
   fixedbvt value;
 
-  /** Primary constructor.
-   *  @param type Type of this expression.
+  /** Primary constructor. The type is derived from value.spec.
    *  @param value fixedbvt object containing number we'll be operating on
    */
   constant_fixedbv2t(const fixedbvt &value)
@@ -334,8 +333,7 @@ class constant_floatbv2t : public expr2t
 public:
   ieee_floatt value;
 
-  /** Primary constructor.
-   *  @param type Type of this expression.
+  /** Primary constructor. The type is derived from value.spec.
    *  @param value ieee_floatt object containing number we'll be operating on
    */
   constant_floatbv2t(const ieee_floatt &value)
@@ -537,10 +535,9 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Constant array.
- *  Contains a vector of array elements, pretty self explanatory. Only valid if
- *  its type has a constant sized array, can't have constant arrays of dynamic
- *  or infinitely sized arrays.
+/** Constant vector.
+ *  Holds one expression per lane of a vector-typed literal (the vector
+ *  analogue of constant_array2t).
  */
 class constant_vector2t : public expr2t
 {
@@ -548,8 +545,8 @@ public:
   std::vector<expr2tc> datatype_members;
 
   /** Primary constructor.
-   *  @param type Type of this array, must be a constant sized array
-   *  @param membrs Vector of elements in this array
+   *  @param type Vector type of this literal
+   *  @param members Vector of per-lane element expressions
    */
   constant_vector2t(const type2tc &type, const std::vector<expr2tc> &members)
     : expr2t(type, constant_vector_id), datatype_members(members)
@@ -1117,7 +1114,8 @@ ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_delete);
 #undef ESBMC_DEFINE_CODE_EXPRESSION_1OP
 
 /** `code_*` declaration carrying `(type, irep_idt name)`. Used for
- *  `code_decl`/`code_dead`. */
+ *  `code_dead`. (code_decl2t is defined separately below because it also
+ *  carries an initializer.) */
 #define ESBMC_DEFINE_CODE_DECL(name)                                           \
   class name##2t : public expr2t                                               \
   {                                                                            \
@@ -1272,7 +1270,7 @@ public:
    *  @param type Type of this expr.
    *  @param v1 First operand.
    *  @param v2 Second operand.
-   *  @param v3 Second operand.
+   *  @param v3 Third operand.
    *  @param rm rounding mode. */
   ieee_fma2t(
     const type2tc &type,
