@@ -197,7 +197,6 @@ void symex_slicet::run_on_assignment(
   symex_target_equationt::SSA_stept &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
-  // TODO: create an option to ignore nondet symbols (test case generation)
 
   // An array write `arr_n = arr_m with [const_i := v]` whose lhs is tracked is
   // still kept as a step, but the *store* is dropped (rewritten to the identity
@@ -326,8 +325,8 @@ void symex_slicet::run_on_renumber(symex_target_equationt::SSA_stept &SSA_step)
 
 /**
  * Naive slicer: slice every step after the last assertion
- * @param eq symex formula to be sliced
- * @return number of steps that were ignored
+ * @param steps SSA steps to be sliced
+ * @return always true; the number of ignored steps is reported via ignored()
  */
 bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
 {

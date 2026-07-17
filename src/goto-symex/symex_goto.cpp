@@ -22,9 +22,10 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   bool new_guard_false = (is_false(new_guard) || cur_state->guard.is_false());
   bool new_guard_true = is_true(new_guard);
 
-  // new_guard_false = TRUE means that the guard is false,
-  // new_guard_true = TRUE means that the guard is true.
-  // And if both variables are not TRUE we need to ask the solver whether the guard holds.
+  // new_guard_false: the branch is provably not taken (guard simplifies to
+  // false, or the current path is already dead). new_guard_true: the guard
+  // simplifies to true. When neither is known and --smt-symex-guard is on,
+  // ask the solver.
   if (
     !new_guard_false && !new_guard_true &&
     options.get_bool_option("smt-symex-guard"))

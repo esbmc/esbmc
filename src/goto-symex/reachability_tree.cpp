@@ -658,14 +658,6 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
     return false;
   }
 
-#if 0
-  if (por && !ex.is_thread_mpor_schedulable(tid)) {
-    if (!quiet)
-      log_status("Thread unschedulable due to POR");
-    return false;
-  }
-#endif
-
   if (ex.tid_is_set && ex.monitor_tid == tid)
   {
     if (!quiet)

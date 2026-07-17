@@ -426,7 +426,6 @@ expr2tc goto_symext::symex_mem_inf(
   if (is_nil_expr(lhs))
     return expr2tc(); // ignore
 
-  // size
   type2tc type = base_type;
 
   assert(!is_nil_type(base_type));

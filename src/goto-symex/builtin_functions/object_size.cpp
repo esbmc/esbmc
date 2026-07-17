@@ -37,10 +37,11 @@ void goto_symext::intrinsic_builtin_object_size(
   bool use_zero_for_unknown = (type_value == 2 || type_value == 3);
   bool consider_offset = (type_value == 1 || type_value == 3);
 
-  // Helper lambda for creating fallback size values.
-  // GCC's __builtin_object_size returns:
-  //   - (size_t)-1 if the object cannot be determined (for type=0 or 1),
-  //   - 0 if the object cannot be determined (for type=2 or 3).
+  // Helper lambda for creating fallback size values when the object
+  // cannot be determined:
+  //   - type 0/1: an SSIZE_MAX-style cap, 2^(word_size-1)-1 (GCC itself
+  //     returns (size_t)-1),
+  //   - type 2/3: 0.
   // The type parameter encodes whether we want the full size (0/2)
   // or remaining size after pointer offset (1/3).
   auto create_fallback_size = [&](bool use_zero) {
@@ -54,10 +55,8 @@ void goto_symext::intrinsic_builtin_object_size(
 
   if (internal_deref_items.empty())
   {
-    // Unable to determine the underlying object.
-    // Fall back to GCC semantics depending on type:
-    //   type 0/1 → (size_t)-1
-    //   type 2/3 → 0
+    // Unable to determine the underlying object; use the fallback sizes
+    // described above.
     obj_size = create_fallback_size(use_zero_for_unknown);
   }
   else

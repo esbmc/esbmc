@@ -95,7 +95,7 @@ void renaming::level2t::get_ident_name(expr2tc &sym) const
 
 void renaming::level1t::rename(expr2tc &expr)
 {
-  // rename all the symbols with their last known value
+  // rename symbols to their l1 activation-record names (no value substitution)
 
   if (is_nil_expr(expr))
     return;

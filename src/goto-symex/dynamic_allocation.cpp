@@ -38,7 +38,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
   if (is_valid_object2t(expr))
   {
     /* alloc */
-    // replace with CPROVER_alloc[POINTER_OBJECT(...)]
+    // replace with __ESBMC_alloc[POINTER_OBJECT(...)]
     const valid_object2t &obj = to_valid_object2t(expr);
 
     expr2tc obj_expr = pointer_object2tc(pointer_type2(), obj.value);
@@ -88,8 +88,8 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
   }
   else if (is_deallocated_obj2t(expr))
   {
-    /* !alloc */
-    // replace with CPROVER_alloc[POINTER_OBJECT(...)]
+    /* symbol operand: alloc bit as-is; otherwise !alloc */
+    // replace with __ESBMC_alloc[POINTER_OBJECT(...)]
     const deallocated_obj2t &obj = to_deallocated_obj2t(expr);
 
     expr2tc obj_expr = pointer_object2tc(pointer_type2(), obj.value);
@@ -107,7 +107,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
   }
   else if (is_dynamic_size2t(expr))
   {
-    // replace with CPROVER_alloc_size[POINTER_OBJECT(...)]
+    // replace with __ESBMC_alloc_size[POINTER_OBJECT(...)]
     //nec: ex37.c
     const dynamic_size2t &size = to_dynamic_size2t(expr);
 

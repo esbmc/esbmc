@@ -71,8 +71,8 @@ std::string ctest_generator::clean_variable_name(const std::string &name) const
   var_name.erase(
     std::remove(var_name.begin(), var_name.end(), '$'), var_name.end());
 
-  // If the name contains __VERIFIER_ functions, it's an internal temporary
-  // Extract just a simple name or return empty to trigger fallback naming
+  // Names referencing __VERIFIER_ helpers are internal temporaries;
+  // return empty to trigger fallback naming
   if (
     var_name.find("__VERIFIER_") != std::string::npos ||
     var_name.find("___VERIFIER_") != std::string::npos)
@@ -491,7 +491,7 @@ static std::string file_basename(const std::string &path)
   return slash == std::string::npos ? path : path.substr(slash + 1);
 }
 
-// Write CMakeLists.txt for a C project.
+// Write CMakeLists.txt for the generated test project (C or C++ per cpp_mode).
 // Generates esbmc_verifier.h and force-includes it via target_compile_options.
 // Ensure the original source file compiles correctly.
 static void write_cmake(
