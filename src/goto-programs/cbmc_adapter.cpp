@@ -1298,12 +1298,22 @@ irept symbol_to_esbmc_irep(const cbmc_symbolt &sym)
   if (sym.is_extern)
     result.add("is_extern") = mk("1");
 
-  // Flags ESBMC has no equivalent for are dropped (roadmap §4.5). Warn when one
-  // is actually set, since volatile/thread_local in particular affect soundness.
+  // thread_local translates directly: symbolt::is_thread_local is honoured by
+  // symex (per-thread L1 renaming, renaming.cpp) and the race analysis
+  // (rw_set.cpp). Only the static-lifetime case carries information -- CBMC
+  // sets the bit on every stack-allocated symbol (locals, parameters, return
+  // slots), which are per-frame in ESBMC by construction, so those are
+  // dropped silently rather than warned about on every load.
+  if (sym.is_thread_local && sym.is_static_lifetime)
+    result.is_thread_local(true);
+
+  // Flags ESBMC has no equivalent for are dropped (roadmap §4.5). Warn when
+  // one is actually set: volatile at the symbol level is rare (CBMC keeps the
+  // qualifier in the type, which migrates independently), weak matters only
+  // if a later link step could override the definition, and property marks
+  // CBMC-internal assertion bookkeeping.
   if (sym.is_volatile)
     log_warning("CBMC adapter: dropping 'volatile' on symbol {}", sym.name);
-  if (sym.is_thread_local)
-    log_warning("CBMC adapter: dropping 'thread_local' on symbol {}", sym.name);
   if (sym.is_weak)
     log_warning("CBMC adapter: dropping 'weak' on symbol {}", sym.name);
   if (sym.is_property)

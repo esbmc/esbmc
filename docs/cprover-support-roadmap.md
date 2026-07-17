@@ -550,10 +550,32 @@ float operand), `migrate` cannot tell them apart; `fix_expression` runs only on 
 perturbing native handling. `isinf` now matches CBMC's verdict exactly (reclassified
 `cbmc_isinf` KNOWNBUG→CORE; negative direction covered by `cbmc_isinf_fail`).
 
-### 4.5 Symbol metadata (Phase 2)
+### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
-`static_lifetime`, `file_local`, `is_extern`). `is_weak`, `is_volatile`, `is_thread_local`,
-`is_property`, etc. are dropped. Audit which affect soundness.
+`static_lifetime`, `file_local`, `is_extern`).
+
+**`is_thread_local` — ✅ translated.** `symbolt::is_thread_local` exists in ESBMC and is
+honoured by symex (per-thread L1 renaming, `renaming.cpp`) and the race analysis
+(`rw_set.cpp`), so the flag now round-trips via the same irept attribute the native
+`to_irep`/`from_irep` pair uses — but **only for static-lifetime symbols**, where it means
+genuine TLS (`_Thread_local` globals, CBMC's `__CPROVER_rounding_mode`). CBMC sets the bit
+on *every* stack-allocated symbol (locals, parameters, return slots), which are per-frame in
+ESBMC by construction; those are dropped silently instead of warned about — previously every
+`--binary` load emitted five-plus `dropping 'thread_local'` warnings on a hello-world.
+Today the flag is observably inert on this path (CBMC `START_THREAD`/`END_THREAD`
+instructions are rejected at load, §4.1, so only single-threaded binaries get this far, and
+single-threaded TLS is semantically a plain static) — translating it is forward-correctness
+for when thread instructions land. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3):
+`cbmc_thread_local` (TLS counter increment + a volatile global read) SUCCESSFUL /
+`cbmc_thread_local_fail` (wrong expected counter) FAILED.
+
+**Audited, still dropped (warn when set):** `is_volatile` — CBMC keeps the qualifier in the
+*type* (which migrates independently); the symbol-level flag never fired across the probe
+corpus, and CBMC's default verification treats volatile reads as ordinary memory anyway, so
+there is no verdict divergence to close. `is_weak` — weak/strong resolution already happened
+when goto-cc linked the `.goto`; it could only matter if a later link stage (e.g. the
+additions boilerplate) overrode a weak definition, so the warning stays as a tripwire.
+`is_property` — CBMC-internal assertion bookkeeping, no ESBMC counterpart needed.
 
 ### 4.6 Contracts subsystem (Phase 4)
 `__CPROVER_contracts_*` (requires/ensures/assigns/frees, `is_fresh`, object/write sets) is a
