@@ -99,7 +99,6 @@ void clang_cpp_adjust::gen_vptr_init_code(
    */
 
   // 1. set the type
-  //typet vtable_type = symbol_typet(comp.type().subtype().id());
   new_code.type() = comp.type();
 
   // 2. LHS: generate the member pointer dereference expression

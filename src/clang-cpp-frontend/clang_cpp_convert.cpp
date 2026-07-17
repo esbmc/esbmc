@@ -2197,7 +2197,6 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
   name = "this";
   id += name;
 
-  //this_param.cmt_base_name("this");
   this_param.cmt_base_name(name);
   this_param.cmt_identifier(id);
 

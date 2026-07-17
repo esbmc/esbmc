@@ -1,5 +1,5 @@
 /// \file
-/// C++ Language Type Checking
+/// Struct/union padding and alignment computation
 
 #include "padding.h"
 
