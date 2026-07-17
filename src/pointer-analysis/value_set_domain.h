@@ -29,8 +29,6 @@ public:
 
   value_sett *value_set;
 
-  // overloading
-
   virtual bool merge(const value_set_domaint &other, bool keepnew)
   {
     return value_set->make_union(*other.value_set, keepnew);
