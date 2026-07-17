@@ -88,8 +88,8 @@ bool solidity_convertert::get_type_description(
   }
   case SolidityGrammar::TypeNameT::PointerArrayToPtr:
   {
-    // auxiliary type: pointer (FuncToPtr decay)
-    // This part is for FunctionToPointer decay only
+    // auxiliary type: pointer (ArrayToPtr decay)
+    // This part is for ArrayToPointer decay only
     assert(typeIdentifier.find("ArrayToPtr") != std::string::npos);
 
     // Array type descriptor is like:
@@ -709,8 +709,6 @@ bool solidity_convertert::get_array_to_pointer_type(
   return false;
 }
 
-// parse a tuple to struct
-
 bool solidity_convertert::get_elementary_type_name_uint(
   SolidityGrammar::ElementaryTypeNameT &type,
   typet &out)
@@ -863,7 +861,6 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::STRING:
   {
     // cpp: std::string str;
-    // new_type = symbol_typet("tag-std::string");
     new_type = string_t;
     break;
   }
@@ -1025,8 +1022,6 @@ bool solidity_convertert::get_parameter_list(
 
   return false;
 }
-
-// parse the state variable
 
 bool solidity_convertert::get_array_pointer_type(
   const nlohmann::json &decl,

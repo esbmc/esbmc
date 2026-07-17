@@ -642,8 +642,6 @@ bool solidity_convertert::get_func_modifier(
       // move the symbol to the context
       symbolt &ret_sym = *move_symbol_to_context(ret_symbol);
       code_declt ret_decl(symbol_expr(ret_sym));
-      //ret_sym.value = func_modifier;
-      // ret_decl.operands().push_back(func_modifier);
       mod_body.operands().insert(mod_body.operands().begin(), ret_decl);
 
       // 2. replace every "return x" to "aux_var = x"
