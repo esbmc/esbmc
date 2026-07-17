@@ -1551,6 +1551,11 @@ class LoopMixin:
             value=subscript,
             simple=1,
         )
+        # ast2json serializes non-underscore attributes, so the converter can
+        # tell this synthesized annotation apart from a user-written one
+        # (an explicit `v: Any` must keep Any semantics; a synthesized one
+        # must not override the rhs element type).
+        assign.esbmc_synthesized = True
         self.ensure_all_locations(assign, node)
         return assign
 

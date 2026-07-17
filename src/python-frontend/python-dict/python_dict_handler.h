@@ -365,6 +365,13 @@ public:
   typet resolve_expected_type_for_dict_subscript(const exprt &dict_expr);
 
   /**
+   * @brief Stored tuple struct type of a literal dict's values, recorded at
+   * construction; empty unless every value has the same tuple type.
+   * @param dict_expr The dictionary expression (must be a symbol)
+   */
+  typet recorded_tuple_value_type(const exprt &dict_expr) const;
+
+  /**
    * @brief Check and handle dictionary subscript assignment
    *
    * Checks if the target is a dictionary subscript and handles the assignment

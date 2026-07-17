@@ -552,6 +552,30 @@ private:
     const locationt &location,
     bool is_keyword_only);
 
+  /**
+   * @brief Infer a numpy-array parameter's concrete array type by scanning
+   * call sites of @c func_name across the module and returning the shape of
+   * the first resolvable numpy-array argument fed to @c param_index (other
+   * call sites are not cross-checked for consistency).
+   *
+   * Mirrors, at a smaller scope, the call-site-driven retyping already used
+   * by `python_param_annotations::propagate_tuple_list_params`: a numpy
+   * array assigned via `np.array([...])` and passed straight through, or
+   * forwarded via another function's own array-typed parameter, resolves to
+   * that array's shape/type. Parameters fed only non-array arguments, or
+   * whose shape can't be determined this way, are left alone (defaulting to
+   * `Any`/list as before) so the boundary check in
+   * `function_call/expr.cpp` can reject the mismatch explicitly.
+   *
+   * @param visiting Tracks in-progress (function, index) pairs to guard
+   * against infinite recursion on mutually forwarding functions.
+   */
+  bool try_infer_numpy_param_type(
+    const std::string &func_name,
+    size_t param_index,
+    typet &out,
+    std::set<std::string> &visiting) const;
+
   void validate_return_paths(
     const nlohmann::json &function_node,
     const code_typet &type,
