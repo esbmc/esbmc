@@ -297,8 +297,14 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   {
     rhs = promote_to_complex(rhs);
   }
-  // Case 6: Align bit-widths between LHS and RHS if they differ
-  else if (lhs_type.width() != rhs_type.width())
+  // Case 6: Align bit-widths between LHS and RHS if they differ. Never
+  // "align" a tuple struct against a non-tuple: demoting the LHS symbol to
+  // the scalar's type corrupts already-emitted tuple member reads (see the
+  // fresh-alias gate in get_var_assign).
+  else if (
+    lhs_type.width() != rhs_type.width() &&
+    tuple_handler_->is_tuple_type(lhs_type) ==
+      tuple_handler_->is_tuple_type(rhs_type))
   {
     try
     {
@@ -510,12 +516,16 @@ void python_converter::handle_assignment_type_adjustments(
     // and annotated `x: Any = value`.
     // Preprocessor-generated AnnAssign nodes
     // with Any annotation are excluded.
+    // Constructor calls must fall through to the regular ctor machinery:
+    // returning early here would emit no constructor call at all, leaving a
+    // nil assignment that crashes the SMT encoder.
     if (
       ast_node.contains("_type") && ast_node["_type"] == "AnnAssign" &&
       !ast_node.value("_inferred_annotation", false) &&
       !ast_node.value("esbmc_synthesized", false) && has_annotation &&
       ast_node["annotation"].contains("id") &&
       ast_node["annotation"]["id"] == "Any" && lhs.type().is_pointer() &&
+      !is_ctor_call && !rhs.type().is_code() &&
       json_utils::is_imported_from(*ast_json, "typing", "Any"))
     {
       if (rhs.type().is_array())
@@ -523,6 +533,16 @@ void python_converter::handle_assignment_type_adjustments(
         rhs = string_handler_.get_array_base_address(rhs);
         if (rhs.type() != lhs.type())
           rhs = typecast_exprt(rhs, lhs.type());
+      }
+      else if (rhs.type().is_struct() && lhs_symbol->get_value().is_nil())
+      {
+        // A struct value (e.g. a tuple read out of a dict) cannot round-trip
+        // through the void* cast below — every later component access would
+        // misread. Any is not a constraint, so adopt the rhs type. Only on
+        // the first binding: a re-annotation (`x: Any = 5; ...; x: Any =
+        // (1, 2)`) must not retype uses already emitted at the old type.
+        lhs_symbol->set_type(rhs.type());
+        lhs.type() = rhs.type();
       }
       else if (!rhs.type().is_pointer() && !rhs.type().is_empty())
       {
@@ -649,7 +669,13 @@ void python_converter::handle_assignment_type_adjustments(
          !json_utils::is_imported_from(*ast_json, "typing", "Any")))) &&
       !rhs.type().is_empty() && lhs.type() != rhs.type() &&
       !rhs.type().is_code() &&
-      !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty"))
+      !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty") &&
+      // Never re-type a tuple-struct symbol to a non-tuple in place — it
+      // corrupts already-emitted tuple member reads (see the fresh-alias
+      // gate in get_var_assign, which handles such rebinds on the
+      // straight-line spine); elsewhere keep the struct type.
+      !(tuple_handler_->is_tuple_type(lhs_symbol->get_type()) &&
+        !tuple_handler_->is_tuple_type(rhs.type())))
     {
       lhs_symbol->set_type(rhs.type());
       lhs.type() = rhs.type();
@@ -2560,7 +2586,21 @@ void python_converter::get_var_assign(
         }
       }
 
-      if (is_incompatible_scalar_string_retype(lhs.type(), rhs.type()))
+      // A tuple-struct variable (adopted from an explicit-Any binding) being
+      // rebound to a non-tuple value needs the same fresh slot: retyping the
+      // shared symbol would turn earlier member reads into member-of-scalar,
+      // which trips member2t's source-type assert at GOTO conversion.
+      // Code-typed and unknown (void*) rhs are excluded exactly as in the
+      // propagate branch of handle_assignment_type_adjustments: neither
+      // yields a usable alias slot type.
+      const bool tuple_to_nontuple_rebind =
+        tuple_handler_->is_tuple_type(lhs.type()) && !rhs.type().is_empty() &&
+        !tuple_handler_->is_tuple_type(rhs.type()) && !rhs.type().is_code() &&
+        !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
+
+      if (
+        is_incompatible_scalar_string_retype(lhs.type(), rhs.type()) ||
+        tuple_to_nontuple_rebind)
       {
         std::string new_id;
         unsigned gen = 1;
