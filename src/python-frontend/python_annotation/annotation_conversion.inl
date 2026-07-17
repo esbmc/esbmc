@@ -961,7 +961,7 @@ std::string python_annotation<Json>::recover_list_type_from_appends(
   const std::string &scope = get_current_func_name();
   const Json &module_body = ast_["body"];
   Json func =
-    scope.empty() ? Json() : json_utils::find_function(module_body, scope);
+    scope.empty() ? Json() : json_utils::try_find_function(module_body, scope);
   const Json &body =
     (!func.empty() && func.contains("body")) ? func["body"] : module_body;
 
@@ -2663,13 +2663,10 @@ InferResult python_annotation<Json>::infer_type(
   {
     // If RHS is a function name (e.g. g = f), skip annotation so the
     // converter can infer the function-pointer type directly.
-    // Use the non-throwing (const) overload to avoid crashing on names
-    // that are not FunctionDefs.
     if (
       value_type == "Name" && stmt["value"].contains("id") &&
-      !json_utils::find_function(
-         static_cast<const nlohmann::json &>(ast_["body"]),
-         stmt["value"]["id"].template get<std::string>())
+      !json_utils::try_find_function(
+         ast_["body"], stmt["value"]["id"].template get<std::string>())
          .empty())
       return InferResult::UNKNOWN;
 
@@ -3753,12 +3750,9 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
             {
               const std::string &def_name =
                 def_node["id"].template get<std::string>();
-              // Use non-throwing (const) overload to avoid crashing when
-              // def_name is a variable (not a FunctionDef).
-              const nlohmann::json &const_body =
-                static_cast<const nlohmann::json &>(ast_["body"]);
+              const nlohmann::json &const_body = ast_["body"];
               // Direct function reference (op=f)?
-              if (!json_utils::find_function(const_body, def_name).empty())
+              if (!json_utils::try_find_function(const_body, def_name).empty())
                 inferred_type = "Any";
               // Function alias (op=g where g=f)?
               else
@@ -3773,7 +3767,7 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
                     stmt.contains("value") && stmt["value"].contains("_type") &&
                     stmt["value"]["_type"] == "Name" &&
                     stmt["value"].contains("id") &&
-                    !json_utils::find_function(
+                    !json_utils::try_find_function(
                        const_body,
                        stmt["value"]["id"].template get<std::string>())
                        .empty())
@@ -4206,7 +4200,8 @@ void python_annotation<Json>::get_global_elements(const Json &node)
       {
         try
         {
-          auto func_node = json_utils::find_function(ast_["body"], func_name);
+          auto func_node =
+            json_utils::find_function_or_throw(ast_["body"], func_name);
           get_global_elements(func_node);
         }
         catch (std::runtime_error &)
@@ -4539,14 +4534,11 @@ void python_annotation<Json>::add_annotation(Json &body)
         element["value"]["_type"] == "Call" &&
         element["value"]["func"]["_type"] == "Name")
       {
-        // Use the const overload (returns by value, empty on a miss)
-        // rather than the non-const one (returns by reference, throws on a
-        // miss): the callee named here need not be a top-level FunctionDef
-        // in this same ast_ (it could be a builtin or something resolved
-        // elsewhere), and this is a best-effort forward-reference scan, not
-        // a hard requirement.
+        // Best-effort forward-reference scan: the callee named here need
+        // not be a top-level FunctionDef in this same ast_ (it could be a
+        // builtin or something resolved elsewhere).
         const Json &top_level_body = ast_["body"];
-        Json func_node = json_utils::find_function(
+        Json func_node = json_utils::try_find_function(
           top_level_body, element["value"]["func"]["id"]);
         if (!func_node.empty())
           add_annotation(func_node);

@@ -161,6 +161,29 @@ irept mk_binary(
   return e;
 }
 
+// Element type of a complex type irep, tolerant of both shapes: CBMC's raw
+// form keeps it as the sole positional sub; the normalised form (fix_type /
+// fix_expression's own type case) as the "subtype" named-sub.
+irept complex_elem_type(const irept &ctype)
+{
+  if (has_sub(ctype, "subtype"))
+    return ctype.find("subtype");
+  if (!ctype.get_sub().empty())
+    return ctype.get_sub()[0];
+  return irept();
+}
+
+// A member access on a complex value's "real"/"imag" component; "member" is
+// in fix_expression's operand-wrap set.
+irept complex_member(const irept &op, const char *name, const irept &elem)
+{
+  irept m("member");
+  m.add("type") = elem;
+  m.set("component_name", name);
+  m.get_sub().push_back(op);
+  return m;
+}
+
 void fix_expression(irept &irep)
 {
   if (irep.id() == "count_leading_zeros" || irep.id() == "count_trailing_zeros")
@@ -392,6 +415,181 @@ void fix_expression(irept &irep)
     }
   }
 
+  if (irep.id() == "complex" && has_sub(irep, "type"))
+    // The complex *constructor* expression (real, imag operands) -- CBMC also
+    // uses the id "complex" for the _Complex *type* itself, the same
+    // type/expression ambiguity as "array" above; an expression always
+    // carries a "type" named-sub, a type never does (types are normalised by
+    // fix_type, which runs over the whole function irep afterwards). ESBMC's
+    // own C frontend builds a complex value as a "struct" expr over the
+    // complex type's (real, imag) components (clang_c_convert.cpp), and
+    // constant_struct2t explicitly admits a complex-typed aggregate. "struct"
+    // is in the operand-wrap set below.
+    irep.id("struct");
+
+  if (
+    irep.id() == "typecast" && irep.find("type").id() == "complex" &&
+    !irep.get_sub().empty())
+  {
+    // Casts *to* complex. There is no complex typecast in ESBMC's SMT layer;
+    // its own C frontend lowers a real -> complex cast to a {value, 0}
+    // aggregate and a complex -> complex cast to a component-wise cast
+    // (clang_c_convert.cpp, CK_FloatingRealToComplex / CK_FloatingComplexCast).
+    const irept elem = complex_elem_type(irep.find("type"));
+    const irept op = irep.get_sub()[0];
+    irept re, im;
+    if (op.find("type").id() == "complex")
+    {
+      re = complex_member(op, "real", complex_elem_type(op.find("type")));
+      im = complex_member(op, "imag", complex_elem_type(op.find("type")));
+    }
+    else
+    {
+      re = op;
+      im = mk_bv_const(elem, 0);
+    }
+    if (!(re.find("type") == elem))
+      re = mk_unary("typecast", elem, re);
+    if (!(im.find("type") == elem))
+      im = mk_unary("typecast", elem, im);
+    irep.id("struct");
+    irep.get_sub().clear();
+    irep.get_sub().push_back(re);
+    irep.get_sub().push_back(im);
+  }
+  else if (
+    irep.id() == "typecast" && !irep.get_sub().empty() &&
+    irep.get_sub()[0].find("type").id() == "complex")
+  {
+    // Casts *from* complex to a real type: C99 6.3.1.7 discards the imaginary
+    // part, and ESBMC's own C frontend lowers this to a member access on the
+    // real component (clang_c_convert.cpp, CK_FloatingComplexToReal). Without
+    // this the raw typecast reaches the solver and aborts ("Typecast for
+    // unexpected type"). The complex -> _Bool form does not arise: goto-cc
+    // 6.8.0 itself crashes typechecking it, so no binary can contain one.
+    const irept op = irep.get_sub()[0];
+    const irept elem = complex_elem_type(op.find("type"));
+    irept re = complex_member(op, "real", elem);
+    if (irep.find("type") == elem)
+      irep = re;
+    else
+      irep.get_sub()[0] = re;
+  }
+
+  if (
+    (irep.id() == "+" || irep.id() == "-" || irep.id() == "*" ||
+     irep.id() == "/") &&
+    irep.find("type").id() == "complex" && irep.get_sub().size() >= 2)
+  {
+    // Complex arithmetic. There is no complex add/sub/mul/div in ESBMC's SMT
+    // layer; its own C frontend lowers these component-wise over the (real,
+    // imag) members at adjust time (clang_c_adjust_expr.cpp::
+    // adjust_expr_binary_arithmetic). Mirror that lowering here.
+    //
+    // CBMC's +/* nodes can be n-ary (its simplifier may flatten a+b+c);
+    // pre-fold to nested binaries, left-associatively, so the component-wise
+    // lowering below only ever sees a pair. The nested node is complex-typed
+    // and lands inside the member operands, where the later recursion lowers
+    // it through this same case.
+    while (irep.get_sub().size() > 2)
+    {
+      irept inner(irep.id());
+      inner.add("type") = irep.find("type");
+      inner.get_sub().push_back(irep.get_sub()[0]);
+      inner.get_sub().push_back(irep.get_sub()[1]);
+      irep.get_sub().erase(irep.get_sub().begin());
+      irep.get_sub()[0] = inner;
+    }
+    const irept ctype = irep.find("type");
+    const irept elem = complex_elem_type(ctype);
+
+    // Promote a non-complex operand to {val, 0}, as the native frontend does.
+    auto promote = [&](irept e) {
+      if (e.find("type").id() == "complex")
+        return e;
+      irept s("struct");
+      s.add("type") = ctype;
+      s.get_sub().push_back(e);
+      s.get_sub().push_back(mk_bv_const(elem, 0));
+      return s;
+    };
+    const irept a = promote(irep.get_sub()[0]);
+    const irept b = promote(irep.get_sub()[1]);
+
+    // Component ops on a floatbv element must be the ieee_ forms, exactly as
+    // the float-arithmetic promotion below rewrites scalar float ops.
+    const bool fp = elem.id() == "floatbv";
+    auto mk_op = [&](const char *id, const irept &lhs, const irept &rhs) {
+      static const std::unordered_map<std::string, std::string> ieee = {
+        {"+", "ieee_add"},
+        {"-", "ieee_sub"},
+        {"*", "ieee_mul"},
+        {"/", "ieee_div"}};
+      return mk_binary(fp ? ieee.at(id) : irep_idt(id), elem, lhs, rhs);
+    };
+
+    const irept ar = complex_member(a, "real", elem);
+    const irept ai = complex_member(a, "imag", elem);
+    const irept br = complex_member(b, "real", elem);
+    const irept bi = complex_member(b, "imag", elem);
+    irept new_real, new_imag;
+    const std::string op = irep.id_string();
+    if (op == "+" || op == "-")
+    {
+      new_real = mk_op(op.c_str(), ar, br);
+      new_imag = mk_op(op.c_str(), ai, bi);
+    }
+    else if (op == "*")
+    {
+      new_real = mk_op("-", mk_op("*", ar, br), mk_op("*", ai, bi));
+      new_imag = mk_op("+", mk_op("*", ar, bi), mk_op("*", ai, br));
+    }
+    else
+    {
+      const irept denom = mk_op("+", mk_op("*", br, br), mk_op("*", bi, bi));
+      new_real =
+        mk_op("/", mk_op("+", mk_op("*", ar, br), mk_op("*", ai, bi)), denom);
+      new_imag =
+        mk_op("/", mk_op("-", mk_op("*", ai, br), mk_op("*", ar, bi)), denom);
+    }
+
+    irep.id("struct");
+    irep.get_sub().clear();
+    irep.get_sub().push_back(new_real);
+    irep.get_sub().push_back(new_imag);
+  }
+
+  if (
+    irep.id() == "unary-" && irep.find("type").id() == "complex" &&
+    !irep.get_sub().empty())
+  {
+    // Complex negation, component-wise like the binary arithmetic above.
+    // (ESBMC's native frontend does not lower unary complex ops at all --
+    // -z segfaults on the native path -- so the CBMC path gains coverage
+    // native still lacks, as with ctz. GNU ~z conjugation is deliberately
+    // NOT handled: CBMC 6.8.0 itself mis-models it, so there is no parity
+    // target to match.)
+    const irept elem = complex_elem_type(irep.find("type"));
+    const irept op = irep.get_sub()[0];
+    irep.id("struct");
+    irep.get_sub().clear();
+    irep.get_sub().push_back(
+      mk_unary("unary-", elem, complex_member(op, "real", elem)));
+    irep.get_sub().push_back(
+      mk_unary("unary-", elem, complex_member(op, "imag", elem)));
+  }
+
+  if (irep.id() == "complex_real" || irep.id() == "complex_imag")
+  {
+    // __real__ / __imag__ accessors. ESBMC's own C frontend lowers these to a
+    // member access on the complex value's (real, imag) components
+    // (clang_c_convert.cpp, CK_FloatingComplexToReal / UO_Real); migrate_expr
+    // has no complex_real/complex_imag handler. "member" is in the operand-wrap
+    // set below.
+    irep.set("component_name", irep.id() == "complex_real" ? "real" : "imag");
+    irep.id("member");
+  }
+
   if (irep.id() == "side_effect")
     irep.id("sideeffect");
   else if (irep.id() == "string_constant")
@@ -565,13 +763,19 @@ void fix_expression(irept &irep)
   }
 }
 
+// CBMC's anonymous-aggregate naming convention (roadmap §4.3).
+bool is_anon_tag(const std::string &ident)
+{
+  return ident.size() >= 11 && ident.compare(0, 10, "tag-#anon#") == 0;
+}
+
 void expand_anon_struct(const irept &self)
 {
   if (has_sub(self, "components"))
     return;
   // ESBMC has no parser for CBMC's anonymous naming convention.
   const std::string ident = self.find("identifier").id_string();
-  if (ident.size() < 11 || ident.compare(0, 10, "tag-#anon#") != 0)
+  if (!is_anon_tag(ident))
     return;
   log_error("CBMC adapter: unsupported anonymous aggregate {}", ident);
   abort();
@@ -655,6 +859,41 @@ void fix_type(
       v.id("component"); // fix_struct
   }
 
+  if (self.id() == "pointer")
+  {
+    // A struct/union tag under a pointer becomes a "symbol" back-reference
+    // instead of being inlined -- the shape ESBMC's native frontends produce.
+    // C recursion necessarily passes through a pointer (a struct cannot
+    // contain itself by value), so this keeps every spelling of a recursive
+    // type identical; inlining here left the symbol table with a
+    // once-unrolled definition while instruction types were depth-1, and
+    // comparisons between the two spellings either recursed without bound
+    // (stack overflow in type2t::cmp) or reported a false "incompatible
+    // base type". Anonymous tags cannot be recursive and ESBMC-side
+    // resolution of their identifiers is unproven, so they keep the inline
+    // path. Both pointee spellings must be handled: the raw positional sub,
+    // and the already-moved "subtype" named-sub when a later pass re-fixes
+    // with a fuller cache (mutually-recursive definitions resolve only then).
+    irept *pointee = nullptr;
+    if (has_sub(self, "subtype"))
+      pointee = &self.add("subtype");
+    else if (!self.get_sub().empty())
+      pointee = &self.get_sub()[0];
+    if (
+      pointee &&
+      (pointee->id() == "struct_tag" || pointee->id() == "union_tag") &&
+      has_sub(*pointee, "identifier"))
+    {
+      const std::string ident = pointee->find("identifier").id_string();
+      if (!is_anon_tag(ident) && cache.count(ident) != 0)
+      {
+        irept ref = mk("symbol");
+        ref.identifier(ident);
+        *pointee = ref;
+      }
+    }
+  }
+
   if (
     self.id() == "pointer" && !has_sub(self, "subtype") &&
     !self.get_sub().empty())
@@ -684,6 +923,22 @@ void fix_type(
     for (auto &p : self.get_named_sub())
       if (p.first == "size" && has_sub(p.second, "value"))
         fix_expression(p.second);
+  }
+
+  if (
+    self.id() == "complex" && !has_sub(self, "type") &&
+    !has_sub(self, "subtype") && !self.get_sub().empty())
+  {
+    // _Complex element type is the sole positional sub, exactly like pointer/
+    // array above; migrate_type reads it via subtype() (a direct
+    // find("subtype")). The !has_sub("type") conjunct keeps this from ever
+    // eating a complex *constructor* expression (which fix_expression re-ids
+    // to "struct" before fix_type runs -- but that ordering is not otherwise
+    // enforced, and treating a constructor as a type would silently drop its
+    // imaginary operand).
+    irept magic = self.get_sub()[0];
+    self.add("subtype") = magic;
+    self.get_sub().clear();
   }
 
   // struct_tag and union_tag are the two aggregate references CBMC emits; both
@@ -739,6 +994,25 @@ void fix_type(
 void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
 {
   std::unordered_set<std::string> expanding;
+  fix_type(self, cache, expanding);
+}
+
+// Entry point for a type SYMBOL's own definition: seed the expansion stack
+// with the symbol's own tag identity so a self-reference (struct node { ...
+// struct node *next; }) becomes a "symbol" back-reference immediately --
+// the shape ESBMC's native frontends produce. Without the seed, the
+// definition pass inlines the tag into itself once, and the symbol table
+// ends up holding a once-unrolled definition while every other spelling of
+// the type is depth-1: symbol-following type comparisons between the two
+// spellings never align, and symex recurses without bound (stack-overflow
+// segfault in type2t::cmp) the moment a pointer-typed member is read
+// through a dereference (a.next->next on a linked list).
+void fix_type_symbol_definition(
+  irept &self,
+  const std::unordered_map<std::string, irept> &cache,
+  const std::string &self_ident)
+{
+  std::unordered_set<std::string> expanding{self_ident};
   fix_type(self, cache, expanding);
 }
 
@@ -1084,12 +1358,22 @@ irept symbol_to_esbmc_irep(const cbmc_symbolt &sym)
   if (sym.is_extern)
     result.add("is_extern") = mk("1");
 
-  // Flags ESBMC has no equivalent for are dropped (roadmap §4.5). Warn when one
-  // is actually set, since volatile/thread_local in particular affect soundness.
+  // thread_local translates directly: symbolt::is_thread_local is honoured by
+  // symex (per-thread L1 renaming, renaming.cpp) and the race analysis
+  // (rw_set.cpp). Only the static-lifetime case carries information -- CBMC
+  // sets the bit on every stack-allocated symbol (locals, parameters, return
+  // slots), which are per-frame in ESBMC by construction, so those are
+  // dropped silently rather than warned about on every load.
+  if (sym.is_thread_local && sym.is_static_lifetime)
+    result.is_thread_local(true);
+
+  // Flags ESBMC has no equivalent for are dropped (roadmap §4.5). Warn when
+  // one is actually set: volatile at the symbol level is rare (CBMC keeps the
+  // qualifier in the type, which migrates independently), weak matters only
+  // if a later link step could override the definition, and property marks
+  // CBMC-internal assertion bookkeeping.
   if (sym.is_volatile)
     log_warning("CBMC adapter: dropping 'volatile' on symbol {}", sym.name);
-  if (sym.is_thread_local)
-    log_warning("CBMC adapter: dropping 'thread_local' on symbol {}", sym.name);
   if (sym.is_weak)
     log_warning("CBMC adapter: dropping 'weak' on symbol {}", sym.name);
   if (sym.is_property)
@@ -1283,7 +1567,10 @@ cbmc_adapted_resultt adapt_cbmc_to_esbmc(cbmc_parse_resultt parsed)
       // should have been resolved"). Key by the symbol name, which equals the
       // reference identifier at every scope (identical to the old key at file
       // scope, where name == "tag-" + base_name).
-      fix_type(sym.stype, type_cache);
+      // Seed the expansion stack with the definition's own identity so
+      // self-references stay "symbol" back-references (see
+      // fix_type_symbol_definition).
+      fix_type_symbol_definition(sym.stype, type_cache, sym.name);
       type_cache[sym.name] = sym.stype;
     }
     out.symbols.push_back(symbol_to_esbmc_irep(sym));
@@ -1292,7 +1579,12 @@ cbmc_adapted_resultt adapt_cbmc_to_esbmc(cbmc_parse_resultt parsed)
   // A symbol might be defined later; re-check every symbol with the full cache.
   for (auto &symbol : out.symbols)
   {
-    fix_type(symbol, type_cache);
+    const bool is_type_symbol = has_sub(symbol, "is_type");
+    if (is_type_symbol)
+      fix_type_symbol_definition(
+        symbol, type_cache, symbol.find("name").id_string());
+    else
+      fix_type(symbol, type_cache);
     if (
       irep_contains(symbol, "struct_tag") || irep_contains(symbol, "union_tag"))
     {

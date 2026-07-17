@@ -513,7 +513,7 @@ bool string_handler::try_extract_const_string_expr(
           if (!path.empty())
           {
             nlohmann::json func_scope =
-              json_utils::find_function(ast["body"], path.back());
+              json_utils::try_find_function(ast["body"], path.back());
             if (
               !func_scope.empty() && try_const_string_from_single_assignment(
                                        bare_name, func_scope, out))
@@ -3308,8 +3308,9 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
       const std::string &scope_func = converter_.get_current_func_name();
       const nlohmann::json &ast = converter_.get_ast_json();
       const nlohmann::json func_node =
-        scope_func.empty() ? nlohmann::json()
-                           : json_utils::find_function(ast["body"], scope_func);
+        scope_func.empty()
+          ? nlohmann::json()
+          : json_utils::try_find_function(ast["body"], scope_func);
       const nlohmann::json &scan_body =
         func_node.contains("body") ? func_node["body"] : ast["body"];
       if (list_var_is_mutated(scan_body, var_name))

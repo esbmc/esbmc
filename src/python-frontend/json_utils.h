@@ -148,8 +148,9 @@ bool is_module(const std::string &module_name, const JsonType &ast)
   return result;
 }
 
+/// Returns an empty JsonType on a miss. Never throws.
 template <typename JsonType>
-JsonType find_function(const JsonType &json, const std::string &func_name)
+JsonType try_find_function(const JsonType &json, const std::string &func_name)
 {
   for (const auto &elem : json)
   {
@@ -159,8 +160,9 @@ JsonType find_function(const JsonType &json, const std::string &func_name)
   return JsonType();
 }
 
+/// Throws std::runtime_error on a miss.
 template <typename JsonType>
-JsonType &find_function(JsonType &json, const std::string &func_name)
+JsonType &find_function_or_throw(JsonType &json, const std::string &func_name)
 {
   for (auto &elem : json)
   {

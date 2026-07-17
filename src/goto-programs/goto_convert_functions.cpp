@@ -153,10 +153,17 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
 // DEAD, the block managing the destructor stack as convert_block does), a value
 // return (RETURN + unconditional GOTO to the function's end), a
 // side-effect-free `if`/`if-else` whose branches convert natively (the
-// general, unfolded branch shape only — see the assert-fold guard below),
-// and a side-effect-free `while` whose body converts natively with no
-// break/continue (neither kind is supported yet, so either falls the whole
-// loop back): `v: if(!c) goto z; x: P; y: goto v; z: ;`. Each reads its own
+// general, unfolded branch shape only — see the assert-fold guard below), a
+// side-effect-free `while` whose body converts natively (`v: if(!c) goto z;
+// x: P; y: goto v; z: ;`), and `break`/`continue` (an unconditional GOTO to
+// the nearest enclosing loop's break/continue target, preceded by
+// unwind_destructor_stack's DEAD instructions for whatever was pushed since
+// that loop was entered — the inherited goto_convertt method is called
+// directly, already stack-neutral by design), and a bare "foo();" call
+// statement to a plain named symbol with a body and side-effect-free
+// arguments (a single FUNCTION_CALL; the return-unused requirement means
+// do_function_call's temp-symbol machinery is never entered, so this kind
+// carries no shared-counter byte-identity risk). Each reads its own
 // code_*2t fields directly (no legacy round-trip) and carries the
 // statement's own location, matching goto_convertt::convert() byte-for-byte
 // on this subset.
@@ -526,11 +533,10 @@ bool goto_convert_functionst::convert_native_rec(
 
     // convert_while saves/restores the break/continue targets around the
     // body regardless of whether the body ends up using them; do the same so
-    // a native-supported break/continue can be layered in later without
-    // touching this sequencing. Neither kind is supported yet (no
-    // is_code_break2t/is_code_continue2t arm below), so a body using either
-    // falls back through the unsupported-kind catch-all — this is inert
-    // structurally, not a correctness dependency.
+    // the code_break2t/code_continue2t arms below (which read
+    // targets.break_target/break_stack_size etc.) resolve to this loop's
+    // targets for anything in the body, and a nested loop's own
+    // set_break/set_continue correctly shadows them for its own body.
     break_continue_targetst old_break_continue(targets);
 
     //    while(c) P;
@@ -583,6 +589,80 @@ bool goto_convert_functionst::convert_native_rec(
     dest.destructive_append(tmp_x);
     dest.destructive_append(tmp_y);
     dest.destructive_append(tmp_z);
+    return true;
+  }
+
+  if (is_code_break2t(code2))
+  {
+    const code_break2t &b = to_code_break2t(code2);
+
+    // A break outside a loop/switch shouldn't reach here (switch isn't a
+    // supported kind), but stay defensive rather than trust the invariant.
+    if (!targets.break_set)
+      return false;
+
+    // unwind_destructor_stack emits the exit DEADs into `dest` then restores
+    // targets.destructor_stack to its pre-call state — a break is one exit
+    // path among several, so the entries stay live for the rest of the
+    // block's normal flow. The inherited goto_convertt method already does
+    // this exactly; no reimplementation needed.
+    unwind_destructor_stack(b.location, targets.break_stack_size, dest);
+
+    goto_programt::targett t = dest.add_instruction();
+    t->make_goto(targets.break_target);
+    t->location = b.location;
+    return true;
+  }
+
+  if (is_code_continue2t(code2))
+  {
+    const code_continue2t &c = to_code_continue2t(code2);
+
+    if (!targets.continue_set)
+      return false;
+
+    unwind_destructor_stack(c.location, targets.continue_stack_size, dest);
+
+    goto_programt::targett t = dest.add_instruction();
+    t->make_goto(targets.continue_target);
+    t->location = c.location;
+    return true;
+  }
+
+  if (is_code_function_call2t(code2))
+  {
+    const code_function_call2t &f = to_code_function_call2t(code2);
+
+    // Narrow slice: a bare "foo();" statement (return value unused, so no
+    // do_function_call temp-symbol machinery is ever entered) calling a
+    // plain named symbol (not the dereference/if/typecast-callee shapes
+    // do_function_call dispatches separately) with side-effect-free
+    // arguments (so its remove_sideeffects preamble is a no-op). Falls back
+    // on everything else, including every builtin name
+    // do_function_call_symbol special-cases (assume/assert/loop_invariant/
+    // etc.) — those are reached only when the callee symbol has no body,
+    // the same condition this handler excludes on below.
+    if (!is_nil_expr(f.ret) || !is_symbol2t(f.function))
+      return false;
+
+    for (const expr2tc &arg : f.operands)
+      if (has_sideeffect(arg))
+        return false;
+
+    const symbol2t &fsym = to_symbol2t(f.function);
+    symbolt *s = context.find_symbol(fsym.thename);
+    if (!s || !s->get_type().is_code())
+      return false;
+
+    bool skip_body =
+      options.get_bool_option("enable-unreachability-intrinsic") &&
+      (s->name == "reach_error" || s->name == "__VERIFIER_error");
+    if (s->get_value().is_nil() || !s->get_value().has_operands() || skip_body)
+      return false;
+
+    goto_programt::targett t = dest.add_instruction();
+    t->make_function_call(code2);
+    t->location = f.location;
     return true;
   }
 

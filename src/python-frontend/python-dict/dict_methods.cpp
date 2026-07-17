@@ -930,7 +930,7 @@ typet python_dict_handler::get_popitem_tuple_type(const exprt &dict_expr)
         {
           std::string func_name =
             var_decl["value"]["func"]["id"].get<std::string>();
-          nlohmann::json func_def = json_utils::find_function(
+          nlohmann::json func_def = json_utils::try_find_function(
             converter_.get_ast_json()["body"], func_name);
           if (
             !func_def.empty() && func_def.contains("returns") &&

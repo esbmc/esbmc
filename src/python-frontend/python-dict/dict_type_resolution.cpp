@@ -504,8 +504,8 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
       std::string func_name = call_node["func"]["id"].get<std::string>();
 
       // Find the function definition to get its return type annotation
-      nlohmann::json func_def =
-        json_utils::find_function(converter_.get_ast_json()["body"], func_name);
+      nlohmann::json func_def = json_utils::try_find_function(
+        converter_.get_ast_json()["body"], func_name);
 
       if (
         !func_def.empty() && func_def.contains("returns") &&
