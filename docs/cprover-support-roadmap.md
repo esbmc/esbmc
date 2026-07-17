@@ -163,6 +163,33 @@ CBMC's `ST[...]`/`SYM`/`*{...}` type-name grammar (a skeleton exists in the orig
 `adapter.rs::Anon2Struct`). Separately, the hex→binary constant rewrite goes through
 `uint64_t`, so constants wider than 64 bits (e.g. 128-bit) are wrong.
 
+**Recursive struct/union types (linked lists) — ✅ fixed.** A plain linked-list program —
+`struct node { int value; struct node *next; }` with `a.next->next` read through a
+dereference — **overflowed the stack** (segfault in `type2t::cmp`): the adapter's tag
+inlining produced *inconsistent spellings* of the recursive type. The definition pass cached
+`tag-node` with its self-reference still raw, then the re-check pass inlined it once,
+leaving the symbol table with a once-unrolled definition while instruction-level types were
+depth-1 — symbol-following type comparisons between two differently-unrolled recursive types
+never align. Fixed by making every spelling the shape ESBMC's native frontends produce:
+(1) a struct/union tag **under a pointer** always becomes a `"symbol"` back-reference
+instead of being inlined (C recursion necessarily passes through a pointer, and
+value-position tags cannot be recursive, so inlining stays for value positions); handled for
+both pointee spellings — the raw positional sub and the already-moved `subtype` named-sub —
+so **mutually-recursive** definitions, which resolve only on the re-check pass with the full
+cache, are covered too; (2) a type symbol's own definition is fixed with the expansion stack
+seeded with its own tag identity (`fix_type_symbol_definition`), so a self-reference can
+never unroll into its own definition. Anonymous tags (`tag-#anon#…`) keep the inline path —
+they have no symbol-table entry to reference and cannot be recursive. Without consistent
+spellings the failure mode after de-unrolling was a false
+`dereference failure: Object accessed with incompatible base type` (pointer vs pointer) from
+`dereference_type_compare`'s exact-equality check. Verdict parity with CBMC, dual-solver
+(Bitwuzla + Z3), across a linked list (member reads through one and two dereferences,
+pointer-member `== 0`) and a mutually-recursive pair (`a_t`/`b_t` cross-pointer cycle,
+`ma.b->a->x`, pointer identity `mb.a->b == &mb`): `cbmc_recursive_struct` SUCCESSFUL and
+`cbmc_recursive_struct_fail` (wrong list value) FAILED. Found while attempting the
+UMBRELLA-#1 `cbmc_transmute` fixtures — the recursive-aggregate shape #6049 fixed at *load*
+time crashed again at *symex* time.
+
 **Function-local struct/union tags — ✅ fixed.** A `struct_tag`/`union_tag` reference
 resolves to its definition by the type symbol's *name*, which CBMC scope-qualifies:
 `tag-S` at file scope but `main::1::tag-S` for a struct declared inside a function body. The
