@@ -4476,7 +4476,7 @@ exprt python_converter::get_block(
     case StatementType::PASS:
     // Imports are handled by parser.py so we can just ignore here.
     case StatementType::IMPORT:
-      // TODO: Raises are ignored for now. Handling case to avoid calling abort() on default.
+      // PASS and IMPORT need no action here; break to avoid the default throw.
       break;
     case StatementType::UNKNOWN:
     default:

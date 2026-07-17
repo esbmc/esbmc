@@ -42,8 +42,6 @@ using namespace python_expr;
 
 namespace
 {
-// Constants for UTF-8 encoding
-
 // Constants for symbol parsing
 constexpr const char *CLASS_MARKER = "@C@";
 constexpr const char *FUNCTION_MARKER = "@F@";
@@ -5569,8 +5567,9 @@ exprt function_call_expr::finalize_call(
               converter_.wrap_in_optional(default_val, param_info.type());
         }
 
-        // Convert array to pointer if parameter type is pointer
-        // This matches the behavior for positional arguments (line 2470-2480)
+        // Convert array to pointer if parameter type is pointer, matching the
+        // conversion applied to positional arguments in
+        // build_positional_arguments().
         const typet &param_type = param_info.type();
         if (default_val.type().is_array() && param_type.is_pointer())
         {

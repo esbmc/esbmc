@@ -4355,7 +4355,6 @@ void python_annotation<Json>::annotate_class(Json &class_element)
 {
   std::string saved_class_name = current_class_name_;
   std::string saved_context = current_func_name_context_;
-  //    current_func_name_context_ = ""; // Reset for class methods
 
   current_class_name_ = class_element["name"].template get<std::string>();
 

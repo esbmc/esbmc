@@ -352,8 +352,8 @@ private:
 
   /*
    * Handles min() or max() function calls by generating conditional expressions.
-   * Currently supports exactly 2 arguments.
-   * @TODO: Support multiple arguments.
+   * Accepts a single iterable/tuple argument or two or more positional
+   * arguments, building a comparison chain.
    * For min(a, b), generates: a < b ? a : b
    * For max(a, b), generates: a > b ? a : b
    * Performs type compatibility checking with automatic int-to-float promotion.

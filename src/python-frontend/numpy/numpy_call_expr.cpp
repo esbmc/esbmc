@@ -2453,7 +2453,8 @@ exprt numpy_call_expr::create_expr_from_call()
     }
 
     // numpy.linalg.eig — eigenvalues (only) of a square real matrix.
-    // Returns a 1-D list of eigenvalues sorted in descending order.
+    // Returns a 1-D list of eigenvalues (2x2: descending; 3x3 diagonal: in
+    // diagonal order).
     // Only concrete 2x2 and 3x3 real matrices with real eigenvalues are
     // supported; complex eigenvalues are rejected with an explicit error.
     if (function == "eig")
