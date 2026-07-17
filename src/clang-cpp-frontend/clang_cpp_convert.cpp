@@ -10,6 +10,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/QualTypeNames.h>
+#include <clang/AST/RecordLayout.h>
 #include <clang/AST/Type.h>
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
@@ -1609,8 +1610,21 @@ bool clang_cpp_convertert::build_destructor_chain(
   };
 
   // Cast `this` to the base's expected pointer type and emit the call.
-  auto emit_base_dtor = [&](const symbolt &sym) {
+  // A non-primary base subobject sits at a non-zero byte offset within the
+  // derived object (multiple inheritance); `this` must be adjusted to that
+  // subobject before the base destructor runs, otherwise ~Base reads the
+  // derived's leading storage (github #6021). This mirrors the method-receiver
+  // adjustment in clang_c_convert.cpp (char* + byte offset + reinterpret).
+  auto emit_base_dtor = [&](const symbolt &sym, uint64_t offset) {
     exprt this_expr = symbol_exprt(this_id, this_ptr_type);
+    if (offset > 0)
+    {
+      typet char_ptr = pointer_typet(char_type());
+      gen_typecast(ns, this_expr, char_ptr);
+      plus_exprt adjusted(this_expr, from_integer(offset, index_type()));
+      adjusted.type() = char_ptr;
+      this_expr = adjusted;
+    }
     gen_typecast(
       ns, this_expr, to_code_type(sym.get_type()).arguments().front().type());
     emit_dtor_call(sym, std::move(this_expr));
@@ -1682,6 +1696,8 @@ bool clang_cpp_convertert::build_destructor_chain(
   }
 
   // 2. Direct non-virtual base subobjects, reverse declaration order.
+  const clang::ASTRecordLayout &layout =
+    ASTContext->getASTRecordLayout(parent);
   for (const clang::CXXBaseSpecifier &base : llvm::reverse(parent->bases()))
   {
     if (base.isVirtual())
@@ -1692,7 +1708,7 @@ bool clang_cpp_convertert::build_destructor_chain(
     const symbolt *sym = lookup_dtor(rec->getDestructor());
     if (!sym)
       continue;
-    emit_base_dtor(*sym);
+    emit_base_dtor(*sym, layout.getBaseClassOffset(rec).getQuantity());
   }
 
   // 3. Virtual base subobjects, reverse declaration order.
@@ -1708,7 +1724,10 @@ bool clang_cpp_convertert::build_destructor_chain(
     const symbolt *sym = lookup_dtor(rec->getDestructor());
     if (!sym)
       continue;
-    emit_base_dtor(*sym);
+    // Virtual-base offsets are dynamic; ESBMC keeps virtual bases at the
+    // flattened offset 0, matching the method-receiver path which likewise
+    // skips static adjustment for virtual bases.
+    emit_base_dtor(*sym, 0);
   }
 
   return false;
