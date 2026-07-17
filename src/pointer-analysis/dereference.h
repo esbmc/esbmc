@@ -55,11 +55,10 @@
  *
  *  A particular point of interest is the byte layout of the data objects we're
  *  dealing with. The underlying SMT objects mean nothing during byte
- *  addressing, only the code in 'type_byte_size' is relevant. To aid
- *  dereferencing, that code ensures that all data objects are word aligned in
- *  all struct fields (and that trailing padding exists). This is so that we
- *  can avoid all scenarios where dereferences cross field boundries, as that
- *  will ultimately be an alignment violation.
+ *  addressing, only the code in 'type_byte_size' is relevant: struct layout
+ *  follows the target ABI (including packed structs). Accesses that cross
+ *  field boundaries or are misaligned are handled by byte-stitching, plus
+ *  alignment assertions where applicable.
  *
  *  The value set tracking code also maintains a 'minimum alignment' piece of
  *  data when the offset is nondeterministic, guarenteeing that the offset used
@@ -72,12 +71,11 @@
  *   * There are two different flavours of offsets, the offset of the pointer
  *     being dereferenced, and the offset caused by the expression that's
  *     dereferencing it.
- *   * 'Scalar step lists' are a list of expressions applied to a struct or
- *     array to access a scalar within the base object. For example, the expr
- *     "foo->bar[baz]" dereferences foo and applies a member then index expr.
- *     The idea behind this is that we can directly pull the scalar value out
- *     of the underlying type if possible, instead of having to compute a
- *     reference to a struct or array in dereference code.
+ *   * Member/index chains applied on top of a dereference (e.g.
+ *     "foo->bar[baz]", which dereferences foo then applies a member and an
+ *     index expr) are folded into a single bit offset (the "lexical
+ *     offset"), so the scalar can be extracted directly instead of having
+ *     to compute a reference to an intermediate struct or array.
  *   * In that vein, building a reference to a struct only happens as a last
  *     resort, and is vigorously asserted against. An exception to this rule
  *     is when the underlying object is a byte array: we have to support this

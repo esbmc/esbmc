@@ -19,13 +19,11 @@ bool starts_with(const std::string &str, const std::string &prefix)
          str.compare(0, prefix.size(), prefix) == 0;
 }
 
-// Helper function to check if a path is a system path
 bool is_system_path(const std::string &path)
 {
   return starts_with(std::filesystem::path(path).string(), "/usr/");
 }
 
-// Helper function to read file lines
 std::vector<std::string> read_file_lines(const std::string &filename)
 {
   std::vector<std::string> lines;
@@ -121,7 +119,7 @@ std::set<std::string> find_included_headers(
   return headers;
 }
 
-// Improved value serialization with seen set now inside method
+// Serialise a value to JSON; `seen` tracks pointer addresses to cut cycles.
 json serialize_value(const namespacet &ns, const expr2tc &expr)
 {
   class ValueSerializer

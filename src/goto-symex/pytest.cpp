@@ -14,7 +14,6 @@
 #include <algorithm>
 #include <unordered_set>
 
-// pytest_generator class implementation
 std::string pytest_generator::extract_module_name(const std::string &input_file)
 {
   std::string module_name = input_file;
@@ -42,7 +41,6 @@ std::string pytest_generator::clean_variable_name(const std::string &name) const
 {
   std::string var_name = name;
 
-  // Remove everything before the last '$' (if present) - for internal symbols like "$nondet_str$15"
   size_t dollar_pos = var_name.rfind('$');
   if (dollar_pos != std::string::npos && dollar_pos > 0)
   {
@@ -306,7 +304,8 @@ pytest_generator::convert_char_array_to_string(const expr2tc &array_expr) const
   const constant_array2t &arr = to_constant_array2t(array_expr);
   std::string result;
 
-  // Convert character array to string (stop at null terminator or -1)
+  // Convert character array to string (stop at null terminator or any
+  // negative value)
   for (const auto &elem : arr.datatype_members)
   {
     if (!is_constant_int2t(elem))
@@ -318,7 +317,7 @@ pytest_generator::convert_char_array_to_string(const expr2tc &array_expr) const
     if (value == 0 || value < 0)
       break;
 
-    // Only include valid ASCII/UTF-8 characters
+    // Only include 7-bit ASCII; non-ASCII bytes are dropped
     if (value > 0 && value <= 127)
     {
       result += static_cast<char>(value.to_int64());

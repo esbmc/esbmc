@@ -33,10 +33,10 @@ private:
   /// Escape string for Python representation
   std::string escape_python_string(const std::string &str) const;
 
-  /// TODO: Convert array to Python list representation
+  /// Convert array to Python list representation
   std::string convert_array_to_python_list(const expr2tc &array_expr) const;
 
-  /// TODO: Convert struct to Python dict representation
+  /// Convert struct to Python dict representation
   std::string convert_struct_to_python_dict(const expr2tc &struct_expr) const;
 
   /// Check if array is a character array (C string)

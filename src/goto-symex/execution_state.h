@@ -240,8 +240,8 @@ public:
    *  also passes the assignment to a reachability_treet analysis function to
    *  see whether the assignment should be generating a context switch.
    *  @param code Code representing assignment we're making.
-   *  @param guard A guard for the assignment, true by default
-   *  @param type Assignment type, visible by default
+   *  @param hidden Whether the assignment is hidden from the trace.
+   *  @param guard A guard for the assignment.
    */
   void symex_assign(
     const expr2tc &code,
@@ -323,7 +323,8 @@ public:
   /**
    *  Perform a context switch to thread ID i.
    *  Essentially this just updates the counter indicating which thread is
-   *  currently active. It also causes the execution guard to be reexecuted.
+   *  currently active. Callers taking a scheduling switch must follow this
+   *  with update_after_switch_point(), which re-executes the execution guard.
    *  @see execute_guard.
    *  @param i Thread ID to switch to.
    */
@@ -463,8 +464,7 @@ public:
    */
   void calculate_mpor_constraints();
 
-  /** Accessor method for mpor_schedulable. Ensures its access is within bounds
-   *  and is read-only. */
+  /** Read-only accessor for mpor_says_no. */
   bool is_transition_blocked_by_mpor() const
   {
     return mpor_says_no;
@@ -478,7 +478,7 @@ public:
 
   /**
    *  Has a context switch point occurred.
-   *  Four things can justify this:
+   *  Two things can justify this:
    *   1. cswitch forced by atomic end or yield.
    *   2. Global data read/written.
    *  @return True if context switch is now triggered
@@ -656,13 +656,10 @@ public:
 };
 
 /**
- *  Class for performing a DFS thread exploration.
- *  On the whole, just uses the same functionality provided by execution_statet
- *  but with the only modification that this class resets a portion of the
- *  global string pool when it destructs, to prevent string pool inflation.
- *  Specifically; names that have been generated in execution states that are
- *  generated later in execution that this one will all be no longer used after
- *  this one is destructed. So no need to keep their names around.
+ *  Execution state for DFS thread exploration.
+ *  On the whole, just uses the same functionality provided by execution_statet;
+ *  clone() duplicates the target equation (or pushes a solver context under
+ *  --smt-during-symex), and the destructor pops that context again.
  */
 
 class dfs_execution_statet : public execution_statet

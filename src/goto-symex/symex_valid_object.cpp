@@ -33,12 +33,10 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
                          ? to_valid_object2t(expr).value
                          : to_deallocated_obj2t(expr).value;
 
-    // check what we have
     if (is_address_of2t(obj_ref))
     {
       expr2tc &obj_operand = to_address_of2t(obj_ref).ptr_obj;
 
-      // see if that is a good one!
       const expr2tc *identifier = get_object(obj_operand);
 
       if (identifier != nullptr)

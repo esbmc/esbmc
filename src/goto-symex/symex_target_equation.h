@@ -30,8 +30,7 @@ public:
     ssa_smt_trace = config.options.get_bool_option("ssa-smt-trace");
   }
 
-  // assignment to a variable - must be symbol
-  // the value is destroyed
+  // assignment to a variable - lhs must be a symbol
   void assignment(
     const expr2tc &guard,
     const expr2tc &lhs,
@@ -58,7 +57,6 @@ public:
     unsigned loop_number) override;
 
   // record an assumption
-  // cond is destroyed
   void assumption(
     const expr2tc &guard,
     const expr2tc &cond,
@@ -66,7 +64,6 @@ public:
     unsigned loop_number) override;
 
   // record an assertion
-  // cond is destroyed
   void assertion(
     const expr2tc &guard,
     const expr2tc &cond,
@@ -131,15 +128,16 @@ public:
 
     expr2tc guard;
 
-    // for ASSIGNMENT
+    // for ASSIGNMENT; RENUMBER reuses lhs = symbol, rhs = new size
     expr2tc lhs, rhs;
     expr2tc original_lhs, original_rhs;
 
-    // for ASSUME/ASSERT. Interned: assertion messages are a small,
-    // highly repetitive set ("dereference failure", "array bounds
-    // violated", ...), so irep_idt both shrinks the inline footprint
-    // (4 bytes vs a 32-byte std::string) and dedups the payload across
-    // the many steps that share a message.
+    // cond: assume/assert condition, assignment equality, or branch guard.
+    // comment interned: assertion messages are a small, highly repetitive
+    // set ("dereference failure", "array bounds violated", ...), so
+    // irep_idt both shrinks the inline footprint (4 bytes vs a 32-byte
+    // std::string) and dedups the payload across the many steps that share
+    // a message.
     expr2tc cond;
     irep_idt comment;
 
@@ -166,7 +164,9 @@ public:
     std::unique_ptr<std::vector<stack_framet>> stack_trace_box;
 
     // Discharged assertion expression used for counterexample trace queries.
-    // Nil for non-assertion steps.
+    // Conversion sets it to the discharged claim for asserts and to true
+    // for ignored steps and other non-assume steps; it stays nil for
+    // non-ignored assumes and before conversion.
     expr2tc cond_expr;
 
     // for slicing
@@ -284,8 +284,8 @@ public:
 
   std::shared_ptr<symex_targett> clone() const override
   {
-    // No pointers or anything that requires ownership modification, can just
-    // duplicate self.
+    // SSA_stept's copy constructor deep-copies its unique_ptr payloads, so
+    // plain member-wise duplication is safe.
     return std::shared_ptr<symex_targett>(new symex_target_equationt(*this));
   }
 

@@ -116,7 +116,6 @@ void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
     default:
       if (location != previous_location)
       {
-        // just the location
         if (xml_location.name != "")
         {
           xmlt &xml_location_only = xml.new_element("location-only");

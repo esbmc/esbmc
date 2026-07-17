@@ -260,7 +260,8 @@ static inline expr2tc gen_value_by_byte(
       expr2tc local_member =
         member2tc(to_struct_type(type).members[i], src, name);
 
-      // Since it is a symbol, lets start from the old value
+      // Pointer members keep their old value (memset over a pointer is not
+      // modelled byte-wise here)
       if (is_pointer_type(to_struct_type(type).members[i]))
         data.datatype_members[i] = local_member;
 
@@ -1398,10 +1399,8 @@ void goto_symext::intrinsic_memset(
 
     if (!is_constant_int2t(item_offset))
     {
-      /* If we reached here, item_offset is not symbolic
-       * and we don't know what the actual value of it is...
-       *
-       * For now bump_call, later we should expand our simplifier
+      /* item_offset did not simplify to a constant (symbolic or too
+       * complex); for now bump_call, later we should expand our simplifier
        */
       log_debug(
         "memset", "TODO: some simplifications are missing, bumping call");

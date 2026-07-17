@@ -13,7 +13,6 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
   {
   case expr2t::index_id:
   {
-    // An array subscription
     index2t index = to_index2t(new_lhs);
 
     // Build new source value, it might be an index, in case of

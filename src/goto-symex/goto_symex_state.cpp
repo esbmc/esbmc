@@ -228,7 +228,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
         return true;
     }
 
-    // Handle WITH chains for structs where all updates are constants
+    // Handle WITH chains for arrays where all updates are constants
     if (is_array_type(expr->type))
     {
       // Check if this is a chain of WITHs with all constant updates
@@ -246,7 +246,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
         current = w.source_value;
       }
 
-      // If we reached a symbol and all updates were constants, propagate
+      // If all updates in the chain were constants, propagate
       if (all_constant_updates)
         return true;
     }
@@ -438,7 +438,7 @@ void goto_symex_statet::rename(expr2tc &expr)
 
 void goto_symex_statet::rename_address(expr2tc &expr)
 {
-  // rename all the symbols with their last known value
+  // rename symbols to their l1 storage names only (no value substitution)
 
   if (is_nil_expr(expr))
   {
@@ -608,8 +608,7 @@ std::vector<stack_framet> goto_symex_statet::gen_stack_trace() const
   call_stackt::const_reverse_iterator it;
   symex_targett::sourcet src;
 
-  // Format is a vector of strings, each recording a particular function
-  // invocation.
+  // Each stack_framet records one function invocation (name + call source).
 
   for (it = call_stack.rbegin(); it != call_stack.rend(); ++it)
   {
