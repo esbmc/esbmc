@@ -15,7 +15,8 @@ loc_from_node(const pugi::xml_node &n, const std::string &file)
 {
   LdLocation loc;
   loc.file = file;
-  // PLCopen XML does not standardise source coordinates; use addData if present.
+  // PLCopen XML does not standardise source coordinates; use the
+  // lineNumber/columnNumber attributes when present.
   if (auto line_attr = n.attribute("lineNumber"))
     loc.line = static_cast<unsigned>(line_attr.as_uint());
   if (auto col_attr = n.attribute("columnNumber"))
