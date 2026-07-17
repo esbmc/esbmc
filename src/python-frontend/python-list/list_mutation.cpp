@@ -45,7 +45,6 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   // Calculate element size in bytes
   exprt elem_size;
 
-  // For list pointers (PyListObj*), use pointer size
   typet list_type = converter_.get_type_handler().get_list_type();
   // None type: store pointer directly without copying
   // Set size to 0 so memcpy is skipped and NULL is preserved

@@ -201,10 +201,8 @@ public:
 
   /**
    * @brief Handle string repetition
-   * @param op multiply operator (Eq, Mult)
    * @param lhs Left operand
    * @param rhs Right operand
-   * @param element JSON element with location info
    * @return Repetition expression
    */
   exprt handle_string_repetition(exprt &lhs, exprt &rhs);
@@ -580,7 +578,7 @@ public:
   handle_string_casefold(const exprt &string_obj, const locationt &location);
 
   /**
-   * @brief Handle str.count() method (constant-only support)
+   * @brief Handle str.count() method (constant fold, else runtime model)
    */
   exprt handle_string_count(
     const exprt &string_obj,

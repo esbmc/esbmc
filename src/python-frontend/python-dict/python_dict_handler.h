@@ -630,9 +630,6 @@ private:
   /// Reference to the type handler for type operations
   type_handler &type_handler_;
 
-  /// Counter for generating unique dictionary variable names
-  static int dict_counter_;
-
   /// Maps dict struct symbol id to its internal keys-list symbol id.
   /// Populated in create_dict_from_literal; queried when lowering
   /// ESBMC_keys_N = d.keys() to propagate list_type_map entries.

@@ -818,7 +818,7 @@ static bool parse_format_padding(
 }
 
 // Apply fill/align/width padding to a literal string per Python's
-// format-spec mini-language. Returns padded as a fresh char_array expr.
+// format-spec mini-language. Returns the padded string.
 static std::string
 apply_padding(const std::string &input, char fill, char align, int width)
 {
