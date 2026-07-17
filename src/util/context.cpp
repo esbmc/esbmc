@@ -1,6 +1,8 @@
 #include <util/context.h>
 #include <util/message.h>
 #include <util/message/format.h>
+#include <cassert>
+#include <vector>
 
 using contextt_detail::by_id;
 using contextt_detail::by_order;
@@ -73,6 +75,34 @@ void contextt::erase_symbol(irep_idt name)
 
   // O(1): erasing from one index removes the element from all indices.
   by_id_idx.erase(it);
+}
+
+irep_idt contextt::mark() const
+{
+  const auto &order = symbols.get<by_order>();
+  return order.empty() ? irep_idt() : order.back().id;
+}
+
+void contextt::erase_since(irep_idt point)
+{
+  // A non-nil point must still be present, or the reverse walk below would
+  // never find it and silently erase the entire table instead of the
+  // intended suffix. This only holds if nothing erased or reordered `point`
+  // between the matching mark() and this call.
+  assert(point.empty() || find_symbol(point) != nullptr);
+
+  auto &order = symbols.get<by_order>();
+
+  // Walk backward from the newest symbol, collecting ids until we reach the
+  // mark (or exhaust the table, when the mark was taken on an empty table).
+  // Collect first: erase_symbol() below mutates `order`, which would
+  // invalidate an in-progress reverse iterator over it.
+  std::vector<irep_idt> to_erase;
+  for (auto it = order.rbegin(); it != order.rend() && it->id != point; ++it)
+    to_erase.push_back(it->id);
+
+  for (const irep_idt &id : to_erase)
+    erase_symbol(id);
 }
 
 symbolt *contextt::reorder_symbol_to_back(irep_idt name)
