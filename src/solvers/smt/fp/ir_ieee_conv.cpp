@@ -752,12 +752,12 @@ smt_astt ir_ieee_convt::encode_ieee_fma(const expr2tc &expr)
     smt_astt v1_neg = ctx->mk_lt(val1, zero);
     smt_astt v2_pos = ctx->mk_gt(val2, zero);
     smt_astt v2_neg = ctx->mk_lt(val2, zero);
-    smt_astt same_sign = ctx->mk_or(
-      ctx->mk_and(v1_pos, v2_pos), ctx->mk_and(v1_neg, v2_neg));
-    smt_astt opp_sign = ctx->mk_or(
-      ctx->mk_and(v1_pos, v2_neg), ctx->mk_and(v1_neg, v2_pos));
-    smt_astt either_factor_inf = ctx->mk_or(
-      is_inf_real(val1, fbv_type), is_inf_real(val2, fbv_type));
+    smt_astt same_sign =
+      ctx->mk_or(ctx->mk_and(v1_pos, v2_pos), ctx->mk_and(v1_neg, v2_neg));
+    smt_astt opp_sign =
+      ctx->mk_or(ctx->mk_and(v1_pos, v2_neg), ctx->mk_and(v1_neg, v2_pos));
+    smt_astt either_factor_inf =
+      ctx->mk_or(is_inf_real(val1, fbv_type), is_inf_real(val2, fbv_type));
     smt_astt add_nan = ctx->mk_and(
       either_factor_inf,
       ctx->mk_or(
