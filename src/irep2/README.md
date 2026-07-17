@@ -55,7 +55,7 @@ conversions live in `util/migrate.{h,cpp}`.
 
 | File | Contents |
 |------|----------|
-| `irep2.h` | Base classes `irep2t`, `type2t`, `expr2t`; the `irep_container` smart pointer (alias `expr2tc` / `type2tc`); the `make_irep` factory; `function_ref`; `hash_combine`; checked-cast helpers; the switch-on-id dispatchers for `cmp`/`lt`/`clone`/etc. |
+| `irep2.h` | Base classes `irep2t`, `type2t`, `expr2t`; the `irep_container` smart pointer (alias `expr2tc` / `type2tc`); the `make_irep` factory; `function_ref`; `hash_combine`; checked-cast helpers. Declares the `cmp`/`lt`/`clone`/etc. virtual entry points; the switch-on-id dispatchers themselves live in `irep2_expr.cpp` / `irep2_type.cpp` (and `irep2_crc.cpp` for `crc`). |
 | `expr_kinds.inc` / `type_kinds.inc` | Manifest of node kinds in declaration order. Single source of truth. |
 | `irep2_type.h` / `irep2_type.cpp` | Concrete type classes (`bool_type2t`, `signedbv_type2t`, `array_type2t`, `pointer_type2t`, `struct_type2t`, ...). Each kind inherits directly from `type2t` and owns its fields. Free family helpers in the same header (`struct_union_members`, `array_or_vector_subtype`, ...) provide uniform field access when the caller doesn't care which specific kind it is. |
 | `irep2_expr.h` / `irep2_expr.cpp` | Concrete expression classes (`constant_int2t`, `symbol2t`, `add2t`, `if2t`, `code_assign2t`, ...). Each kind inherits directly from `expr2t`. |
@@ -349,6 +349,9 @@ allockind   ::= "malloc" | "realloc" | "alloca" | "cpp_new" | "cpp_new_arr"
               | "nondet" | "va_arg" | "printf2" | "function_call"
               | "preincrement" | "postincrement" | "predecrement"
               | "postdecrement" | "old_snapshot" | "assigns_target"
+              | "statement_expression" | "temporary_object"
+              | "gcc_conditional_expression" | "cpp_delete"
+              | "cpp_delete_array"
 ```
 
 GOTO statements (`code_*`):
@@ -588,7 +591,7 @@ Listed in `type_kinds.inc` (one `IREP2_TYPE` row per kind); declared in
 | `signedbv` | Signed bitvector of given `width`. |
 | `fixedbv` | Fixed-point bitvector — total width split into integer and fraction bits. |
 | `floatbv` | IEEE-754 floating-point — fraction-bit and exponent-bit counts. |
-| `complex` | C `_Complex` — pair of identical scalar components. Currently stored with the same `members`/`member_names`/... shape as `struct`/`union` so the SMT tuple lowering can treat it uniformly; a follow-up will redesign it as a primitive `subtype` field. |
+| `complex` | C `_Complex` — stores only its element `subtype`; the SMT tuple lowering synthesises the (real, imag) 2-tuple view at the boundary via `struct_union_members` / `struct_union_member_names`. |
 | `cpp_name` | C++ qualified name with template arguments; used transiently by the C++ frontend. |
 
 ## Reference: expressions
