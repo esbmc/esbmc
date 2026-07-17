@@ -366,12 +366,18 @@ class Executor:
                 # Gracefully shut down the whole process group so
                 # grandchildren don't linger and starve the CI runner.
                 if os.name == "posix":
+                    # Best-effort: on macOS killpg can raise EPERM when the
+                    # group holds a process we can no longer signal, which
+                    # otherwise turns a tolerated timeout into a hard ERROR.
                     try:
                         os.killpg(proc.pid, signal.SIGTERM)
                         proc.wait(timeout=_TERM_GRACE)
                     except subprocess.TimeoutExpired:
-                        os.killpg(proc.pid, signal.SIGKILL)
-                    except ProcessLookupError:
+                        try:
+                            os.killpg(proc.pid, signal.SIGKILL)
+                        except OSError:
+                            pass
+                    except OSError:
                         pass
                 else:
                     proc.kill()
