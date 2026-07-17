@@ -640,7 +640,6 @@ void clang_c_adjust::adjust_expr_rel(exprt &expr)
 
 void clang_c_adjust::adjust_float_arith(exprt &expr)
 {
-  // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size() == 2);
   auto t = ns.follow(expr.type());
 

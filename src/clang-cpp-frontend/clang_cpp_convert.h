@@ -232,10 +232,9 @@ protected:
     const clang::CXXMethodDecl &cxxmdd,
     typet &ctor_return_type);
   /*
-   * Flag return type in ctor or dtor, e.g.
-   * A default copy constructor would have the return type below:
+   * Flag return type in ctor or dtor by setting it to the marker type
+   * `constructor` (or `destructor`), e.g. a constructor gets:
    * * return_type: constructor
-   *   #default_copy_cons: 1
    *
    * Arguments:
    *  cxxmdd: clang AST node representing the ctor/dtor we are dealing with
@@ -623,4 +622,4 @@ protected:
   bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr) override;
 };
 
-#endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
+#endif /* CLANG_CPP_FRONTEND_CLANG_CPP_CONVERT_H_ */
