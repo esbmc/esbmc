@@ -13,7 +13,7 @@
 typedef unsigned int gfp_t;
 
 char user_memory[USER_MEMORY_SPACE];     //mock user memory
-char kernel_memory[KERNEL_MEMORY_SPACE]; //mock user memory
+char kernel_memory[KERNEL_MEMORY_SPACE]; //mock kernel memory
 
 static void check_gfp_flags(gfp_t flags)
 {

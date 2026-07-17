@@ -448,7 +448,7 @@ std::string expr2ct::convert_code_assign(const codet &src, unsigned indent)
   dest += "=";
 
   exprt rhs = src.op1();
-  // Form a compound literal if assigning to a struct/union
+  // Form a compound literal if assigning an array/struct/union aggregate
   if (
     src.op1().id() == "array" || src.op1().id() == "array_of" ||
     src.op1().id() == "struct" || src.op1().id() == "union")
@@ -1122,9 +1122,6 @@ std::string expr2ct::convert_struct_union_body(
   std::string tag = struct_union_type.tag().as_string();
 
   dest += "(" + tag + ")";
-
-  //if(struct_union_type.components().size() == 0)
-  //  return dest;
 
   dest += "{";
 
