@@ -60,7 +60,7 @@ conversions live in `util/migrate.{h,cpp}`.
 | `irep2_type.h` / `irep2_type.cpp` | Concrete type classes (`bool_type2t`, `signedbv_type2t`, `array_type2t`, `pointer_type2t`, `struct_type2t`, ...). Each kind inherits directly from `type2t` and owns its fields. Free family helpers in the same header (`struct_union_members`, `array_or_vector_subtype`, ...) provide uniform field access when the caller doesn't care which specific kind it is. |
 | `irep2_expr.h` / `irep2_expr.cpp` | Concrete expression classes (`constant_int2t`, `symbol2t`, `add2t`, `if2t`, `code_assign2t`, ...). Each kind inherits directly from `expr2t`. |
 | `irep2_utils.h` | Inline predicates and helpers (`is_bv_type`, `is_number_type`, `is_scalar_type`, simplification helpers). |
-| `irep2_dispatch.h` | Generic `generic_*<K>` helpers that walk a kind's `K::fields` tuple via `std::apply` to implement cmp/lt/tostring/clone/get_sub_expr/foreach_operand uniformly, plus the per-field-type overloads they invoke. Switch dispatchers on `expr2t`/`type2t` route to these. |
+| `irep2_dispatch.h` | Generic `generic_*<K>` helpers that walk a kind's `K::fields` tuple via `std::apply` to implement cmp/lt/tostring/get_sub_expr/foreach_operand uniformly, plus the per-field-type overloads they invoke. Switch dispatchers on `expr2t`/`type2t` route to these. (`crc` and `clone` walk the same `K::fields` tuple from `irep2_crc.cpp` / `irep2_expr.cpp` / `irep2_type.cpp`.) |
 | `irep2_crc.cpp` | Iterative postorder CRC traversal and per-field CRC operations. Kept in one translation unit with internal linkage so the compiler sees and optimises the complete CRC path. |
 | `irep2_utils.cpp` | Definitions for the predicates and dispatch-catalogue overloads declared in `irep2_utils.h` and `irep2_dispatch.h`. |
 | `irep2_guard.{h,cpp}` / `guard_seq.h` | Path-condition guard container `guard2tc` — an `expr2tc` carrying a flat conjunct list — and `guard_seq`, the `immer::vector`-backed, oldest-first immutable conjunct sequence it stores (O(1) copy for the deep guard chains symex builds). |
@@ -83,8 +83,9 @@ struct neg2t : expr2t {                          // arithmetic negation, -v
 ```
 
 The generic helpers in `irep2_dispatch.h` walk `K::fields` via
-`std::apply` to implement `cmp`, `lt`, `clone`, `do_crc`, `hash`,
-`tostring`, `get_sub_expr`, and `foreach_operand` once for every kind.
+`std::apply` to implement `cmp`, `lt`, `tostring`, `get_sub_expr`, and
+`foreach_operand` once for every kind; `clone` (`irep2_expr.cpp` /
+`irep2_type.cpp`) and `do_crc` (`irep2_crc.cpp`) walk the same tuple.
 The switch-on-id dispatchers on `expr2t` / `type2t` (driven by the
 `expr_kinds.inc` / `type_kinds.inc` X-macro manifests) route each call
 to the matching `generic_*<K>`.
