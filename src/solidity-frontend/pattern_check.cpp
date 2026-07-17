@@ -1,10 +1,9 @@
 /// \file pattern_check.cpp
 /// \brief Implementation of pattern-based vulnerability detection.
 ///
-/// Walks the solc JSON AST to detect known Solidity vulnerability patterns
-/// such as authorization through tx.origin, unchecked external calls, and
-/// other syntactic anti-patterns that can be identified without symbolic
-/// execution.
+/// Walks the solc JSON AST to detect authorization through tx.origin
+/// (SWC-115) — a syntactic anti-pattern identifiable without symbolic
+/// execution. Further patterns are not yet implemented.
 
 #include <solidity-frontend/pattern_check.h>
 #include <util/message.h>

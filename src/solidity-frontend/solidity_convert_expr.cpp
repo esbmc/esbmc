@@ -2188,7 +2188,6 @@ bool solidity_convertert::get_new_object_expr(
   {
     callee_expr_json = expr["expression"];
   }
-  // nlohmann::json callee_expr_json = expr["expression"];
   if (callee_expr_json.contains("typeName"))
   {
     // case 1
@@ -2415,7 +2414,7 @@ bool solidity_convertert::get_binary_operator_expr(
 
   // 1. Convert LHS and RHS
   // For "Assignment" expression, it's called "leftHandSide" or "rightHandSide".
-  // For "BinaryOperation" expression, it's called "leftExpression" or "leftExpression"
+  // For "BinaryOperation" expression, it's called "leftExpression" or "rightExpression"
   exprt lhs, rhs;
   nlohmann::json rhs_json;
   locationt l;
