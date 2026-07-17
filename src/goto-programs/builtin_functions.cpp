@@ -699,8 +699,9 @@ void goto_convertt::do_function_call_symbol(
       !is_loop_invariant && !is_requires && !is_ensures)
       return;
 
-    // Rafael's invariant merging: combine consecutive __invariant() calls
-    // into a single LOOP_INVARIANT instruction for efficiency
+    // Rafael's invariant merging: combine consecutive
+    // __ESBMC_loop_invariant() calls into a single LOOP_INVARIANT
+    // instruction for efficiency
     // not tested yet, but should be correct
     goto_programt::targett t;
     expr2tc guard;

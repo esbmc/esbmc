@@ -430,7 +430,7 @@ void dump_intervals(
     [[maybe_unused]] auto print_vars = [&out, &i_it](const auto &map) {
       for (const auto &interval : map)
       {
-        // "state,var,min,max,bot,top";
+        // "state,line,column,function,var,min,max,bot,top";
         out << fmt::format(
           "{},{},{},{},{},{},{},{},{}\n",
           i_it->location_number,

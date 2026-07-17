@@ -1586,7 +1586,7 @@ void goto_convertt::convert_return(
     // code form codet("cpp-throw"). A throw has void type and cannot be used
     // as a return value; convert it as a statement and return early (the throw
     // is unconditional, so no RETURN instruction is needed).
-    // Mirrors the same guard in convert_expression (line ~475).
+    // Mirrors the `expr.is_code()` guard in convert_expression.
     if (
       new_code.return_value().is_code() &&
       to_code(new_code.return_value()).get_statement() == "cpp-throw")
