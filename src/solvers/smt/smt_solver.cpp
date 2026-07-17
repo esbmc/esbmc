@@ -2014,8 +2014,19 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     const constant_floatbv2t &thereal = to_constant_floatbv2t(expr);
     if (int_encoding)
     {
-      if (thereal.value.is_zero() || thereal.value.is_NaN())
+      if (thereal.value.is_zero())
         return mk_smt_real("0");
+      if (thereal.value.is_NaN())
+      {
+        if (ir_ieee)
+        {
+          smt_astt nan_var =
+            mk_fresh(mk_real_sort(), "ir_ieee::nan_const::", nullptr);
+          ir_ieee_api->store_nan_pred(nan_var, mk_smt_bool(true));
+          return nan_var;
+        }
+        return mk_smt_real("0");
+      }
       if (thereal.value.is_infinity())
       {
         // Encode ±∞ as ±double_inf_sentinel (one above double max_normal) for
@@ -2024,7 +2035,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
         // float) produces the same value as a double IEEE_DIV(x,0) result.
         // The double sentinel exceeds both single and double max_normal, so
         // isinf/isfinite predicates work correctly for both precisions.
-        // NaN handling is deferred to the IEEE corner-case phase.
+        // NaN is handled above; infinity is encoded as a sentinel value here.
         smt_astt sentinel = get_double_inf_sentinel();
         if (thereal.value.get_sign())
           return mk_sub(get_zero_real(), sentinel);
