@@ -5,8 +5,13 @@ class A
 {
 public:
   int num;
-  A(int n) : num(n) {}
-  ~A() { dtor_count++; }
+  A(int n) : num(n)
+  {
+  }
+  ~A()
+  {
+    dtor_count++;
+  }
 };
 
 int check()
