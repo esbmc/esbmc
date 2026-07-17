@@ -1,0 +1,375 @@
+#ifndef STL_ATOMIC
+#define STL_ATOMIC
+
+#include <cstddef>
+#include "OM_compiler_defs.h" // OM_CONSTEXPR, OM_NOEXCEPT
+
+// Sequentially-consistent model of <atomic> (github #6025): every access is
+// wrapped in an __ESBMC_atomic_begin/end section, which makes the operations
+// indivisible under ESBMC's interleaving semantics. Weaker memory orders are
+// accepted and treated as seq_cst — a sound over-approximation is NOT claimed
+// for weak-memory litmus tests; this models SC executions only.
+//
+// Free-function templates (std::atomic_load, kill_dependency, ...) are
+// deliberately absent: the frontend does not convert instantiated bodies of
+// free-function templates defined in OM headers (calls would return nondet).
+// Member functions of class templates convert correctly.
+
+#if __cplusplus >= 201103L
+
+namespace std
+{
+typedef enum memory_order
+{
+  memory_order_relaxed,
+  memory_order_consume,
+  memory_order_acquire,
+  memory_order_release,
+  memory_order_acq_rel,
+  memory_order_seq_cst
+} memory_order;
+
+inline void atomic_thread_fence(memory_order) OM_NOEXCEPT
+{
+  // Only seq_cst executions are modelled; fences add nothing under SC.
+}
+
+inline void atomic_signal_fence(memory_order) OM_NOEXCEPT
+{
+}
+
+template <class T>
+struct atomic
+{
+  T __val;
+
+  atomic() OM_NOEXCEPT = default;
+  OM_CONSTEXPR atomic(T v) OM_NOEXCEPT : __val(v)
+  {
+  }
+  atomic(const atomic &) = delete;
+  atomic &operator=(const atomic &) = delete;
+
+  bool is_lock_free() const OM_NOEXCEPT
+  {
+    return true;
+  }
+
+  void store(T v, memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    __val = v;
+    __ESBMC_atomic_end();
+  }
+
+  T load(memory_order = memory_order_seq_cst) const OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    T r = __val;
+    __ESBMC_atomic_end();
+    return r;
+  }
+
+  operator T() const OM_NOEXCEPT
+  {
+    return load();
+  }
+
+  T operator=(T v) OM_NOEXCEPT
+  {
+    store(v);
+    return v;
+  }
+
+  T exchange(T v, memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    T r = __val;
+    __val = v;
+    __ESBMC_atomic_end();
+    return r;
+  }
+
+  bool compare_exchange_strong(
+    T &expected,
+    T desired,
+    memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    bool ok = __val == expected;
+    if (ok)
+      __val = desired;
+    else
+      expected = __val;
+    __ESBMC_atomic_end();
+    return ok;
+  }
+
+  bool compare_exchange_strong(
+    T &expected,
+    T desired,
+    memory_order,
+    memory_order) OM_NOEXCEPT
+  {
+    return compare_exchange_strong(expected, desired);
+  }
+
+  // Spurious failure is not modelled: weak behaves like strong, so
+  // retry-loop iterations driven purely by spurious failures are absent.
+  bool compare_exchange_weak(
+    T &expected,
+    T desired,
+    memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    return compare_exchange_strong(expected, desired);
+  }
+
+  bool compare_exchange_weak(
+    T &expected,
+    T desired,
+    memory_order,
+    memory_order) OM_NOEXCEPT
+  {
+    return compare_exchange_strong(expected, desired);
+  }
+
+  T fetch_add(T v, memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    T r = __val;
+    __val = r + v;
+    __ESBMC_atomic_end();
+    return r;
+  }
+
+  T fetch_sub(T v, memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    T r = __val;
+    __val = r - v;
+    __ESBMC_atomic_end();
+    return r;
+  }
+
+  T fetch_and(T v, memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    T r = __val;
+    __val = r & v;
+    __ESBMC_atomic_end();
+    return r;
+  }
+
+  T fetch_or(T v, memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    T r = __val;
+    __val = r | v;
+    __ESBMC_atomic_end();
+    return r;
+  }
+
+  T fetch_xor(T v, memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    T r = __val;
+    __val = r ^ v;
+    __ESBMC_atomic_end();
+    return r;
+  }
+
+  T operator++() OM_NOEXCEPT
+  {
+    return fetch_add(T(1)) + T(1);
+  }
+  T operator++(int) OM_NOEXCEPT
+  {
+    return fetch_add(T(1));
+  }
+  T operator--() OM_NOEXCEPT
+  {
+    return fetch_sub(T(1)) - T(1);
+  }
+  T operator--(int) OM_NOEXCEPT
+  {
+    return fetch_sub(T(1));
+  }
+  T operator+=(T v) OM_NOEXCEPT
+  {
+    return fetch_add(v) + v;
+  }
+  T operator-=(T v) OM_NOEXCEPT
+  {
+    return fetch_sub(v) - v;
+  }
+};
+
+template <class T>
+struct atomic<T *>
+{
+  T *__val;
+
+  atomic() OM_NOEXCEPT = default;
+  OM_CONSTEXPR atomic(T *v) OM_NOEXCEPT : __val(v)
+  {
+  }
+  atomic(const atomic &) = delete;
+  atomic &operator=(const atomic &) = delete;
+
+  bool is_lock_free() const OM_NOEXCEPT
+  {
+    return true;
+  }
+
+  void store(T *v, memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    __val = v;
+    __ESBMC_atomic_end();
+  }
+
+  T *load(memory_order = memory_order_seq_cst) const OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    T *r = __val;
+    __ESBMC_atomic_end();
+    return r;
+  }
+
+  operator T *() const OM_NOEXCEPT
+  {
+    return load();
+  }
+
+  T *operator=(T *v) OM_NOEXCEPT
+  {
+    store(v);
+    return v;
+  }
+
+  T *exchange(T *v, memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    T *r = __val;
+    __val = v;
+    __ESBMC_atomic_end();
+    return r;
+  }
+
+  bool compare_exchange_strong(
+    T *&expected,
+    T *desired,
+    memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    bool ok = __val == expected;
+    if (ok)
+      __val = desired;
+    else
+      expected = __val;
+    __ESBMC_atomic_end();
+    return ok;
+  }
+
+  bool compare_exchange_weak(
+    T *&expected,
+    T *desired,
+    memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    return compare_exchange_strong(expected, desired);
+  }
+
+  T *fetch_add(ptrdiff_t v, memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    T *r = __val;
+    __val = r + v;
+    __ESBMC_atomic_end();
+    return r;
+  }
+
+  T *fetch_sub(ptrdiff_t v, memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    T *r = __val;
+    __val = r - v;
+    __ESBMC_atomic_end();
+    return r;
+  }
+
+  T *operator++() OM_NOEXCEPT
+  {
+    return fetch_add(1) + 1;
+  }
+  T *operator++(int) OM_NOEXCEPT
+  {
+    return fetch_add(1);
+  }
+  T *operator--() OM_NOEXCEPT
+  {
+    return fetch_sub(1) - 1;
+  }
+  T *operator--(int) OM_NOEXCEPT
+  {
+    return fetch_sub(1);
+  }
+};
+
+struct atomic_flag
+{
+  bool __val;
+
+  OM_CONSTEXPR atomic_flag() OM_NOEXCEPT : __val(false)
+  {
+  }
+  atomic_flag(const atomic_flag &) = delete;
+  atomic_flag &operator=(const atomic_flag &) = delete;
+
+  bool test_and_set(memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    bool r = __val;
+    __val = true;
+    __ESBMC_atomic_end();
+    return r;
+  }
+
+  void clear(memory_order = memory_order_seq_cst) OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    __val = false;
+    __ESBMC_atomic_end();
+  }
+
+  bool test(memory_order = memory_order_seq_cst) const OM_NOEXCEPT
+  {
+    __ESBMC_atomic_begin();
+    bool r = __val;
+    __ESBMC_atomic_end();
+    return r;
+  }
+};
+
+#define ATOMIC_FLAG_INIT                                                       \
+  {                                                                            \
+  }
+
+typedef atomic<bool> atomic_bool;
+typedef atomic<char> atomic_char;
+typedef atomic<signed char> atomic_schar;
+typedef atomic<unsigned char> atomic_uchar;
+typedef atomic<short> atomic_short;
+typedef atomic<unsigned short> atomic_ushort;
+typedef atomic<int> atomic_int;
+typedef atomic<unsigned int> atomic_uint;
+typedef atomic<long> atomic_long;
+typedef atomic<unsigned long> atomic_ulong;
+typedef atomic<long long> atomic_llong;
+typedef atomic<unsigned long long> atomic_ullong;
+typedef atomic<size_t> atomic_size_t;
+typedef atomic<ptrdiff_t> atomic_ptrdiff_t;
+} // namespace std
+
+#endif // __cplusplus >= 201103L
+
+#endif // STL_ATOMIC
