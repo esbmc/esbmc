@@ -56,8 +56,7 @@ public:
    *  for some special cases up to the backend, there may be optimizations made
    *  for array or tuple assigns, and so forth.
    *  @param ctx SMT context to do the assignment in.
-   *  @param sym Symbol to assign to
-   *  @return AST representing the assigned symbol */
+   *  @param sym Symbol to assign to */
   virtual void assign(smt_solver_baset *ctx, smt_astt sym) const;
 
   /** Abstractly produce an "update", i.e., an array 'with' or tuple 'with'.

@@ -480,7 +480,6 @@ public:
    *  @param s the sort.
    *  @param theint Integer representation of the bitvector. Any excess bits
    *         in the stored integer should be ignored.
-   *  @param w Width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
   virtual smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) = 0;
 
@@ -578,8 +577,9 @@ public:
    *  @name Integer overflow solver-converter API. */
 
   /** Detect integer arithmetic overflows. Takes an expression that is one of
-   *  add / sub / mul, and evaluates whether its operation applied to its
-   *  operands will result in an integer overflow or underflow.
+   *  add / sub / mul / div / modulus / shl, and evaluates whether its
+   *  operation applied to its operands will result in an integer overflow or
+   *  underflow.
    *  @param expr Expression to test for arithmetic overflows in.
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_arith(const expr2tc &expr);

@@ -320,7 +320,7 @@ smt_solver_baset::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
   unsigned from_width = cast.from->type->get_width();
 
   if (from_width == to_width)
-    return a; // output = output
+    return a;
 
   if (from_width < to_width)
     return mk_zero_ext(a, (to_width - from_width));
