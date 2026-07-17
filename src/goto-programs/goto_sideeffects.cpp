@@ -1628,11 +1628,12 @@ void goto_convertt::remove_temporary_object(
   if (expr.operands().size() != 1 && expr.operands().size() != 0)
     throw "temporary_object takes 0 or 1 operands";
 
-  // A discarded temporary whose value is already materialized in a symbol
-  // (e.g. the return_value$ of a discarded call, github #6076) needs no
-  // second copy: reuse that symbol as the object's identity, so it is
-  // destructed exactly once.
-  if (!result_is_used && expr.operands().size() == 1 && expr.op0().is_symbol())
+  // A temporary whose value is already materialized in a symbol (e.g. the
+  // return_value$ of a call lowered by remove_function_call) needs no second
+  // copy: reuse that symbol as the object's identity, so it is destructed
+  // exactly once (github #6076, #6075). A prvalue only lowers to a symbol
+  // when that symbol is such a compiler temporary, never a named variable.
+  if (expr.operands().size() == 1 && expr.op0().is_symbol())
   {
     exprt tmp = expr.op0();
     expr.swap(tmp);
