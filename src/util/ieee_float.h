@@ -276,8 +276,8 @@ public:
   friend bool operator>(const ieee_floatt &a, const ieee_floatt &b);
   friend bool operator>=(const ieee_floatt &a, const ieee_floatt &b);
 
-  // warning: these do packed equality, not IEEE equality
-  // e.g., NAN==NAN
+  // IEEE-value equality: NaN compares unequal to everything (including
+  // itself), and +0 == -0 despite differing bit patterns.
   friend bool operator==(const ieee_floatt &a, const ieee_floatt &b);
   friend bool operator!=(const ieee_floatt &a, const ieee_floatt &b);
 

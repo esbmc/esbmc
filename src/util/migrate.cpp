@@ -2661,7 +2661,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "overflow_result--")
   {
-    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    // Overflow_result : {result = op0 - op1, overflowed = overflow(op0 - op1)}
     type = migrate_type(expr.type());
     assert(expr.operands().size() == 2);
     expr2tc op0, op1;
@@ -2677,7 +2677,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "overflow_result-shr")
   {
-    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    // Overflow_result : {result = op0 >> op1, overflowed = overflow(op0 >> op1)}
     type = migrate_type(expr.type());
     assert(expr.operands().size() == 2);
     expr2tc op0, op1;
@@ -2693,7 +2693,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "overflow_result-*")
   {
-    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    // Overflow_result : {result = op0 * op1, overflowed = overflow(op0 * op1)}
     type = migrate_type(expr.type());
     assert(expr.operands().size() == 2);
     expr2tc op0, op1;
