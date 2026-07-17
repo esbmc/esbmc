@@ -2001,12 +2001,14 @@ exprt python_list::handle_index_access(
                 {
                   const auto &key_node = list_node["value"]["slice"];
 
-                  // Handle constant string key
+                  // Handle a constant key of any JSON scalar type
+                  // (string, int, bool); comparing the JSON values directly
+                  // avoids get<std::string>() throwing on an int key (d[1]).
                   if (
                     key_node["_type"] == "Constant" &&
                     key_node.contains("value"))
                   {
-                    std::string key = key_node["value"].get<std::string>();
+                    const auto &key_val = key_node["value"];
 
                     // For dict literals, get the corresponding value
                     if (
@@ -2022,7 +2024,8 @@ exprt python_list::handle_index_access(
                       {
                         if (
                           keys[i]["_type"] == "Constant" &&
-                          keys[i]["value"].get<std::string>() == key)
+                          keys[i].contains("value") &&
+                          keys[i]["value"] == key_val)
                         {
                           // Found the value: now get its element type
                           // (promotion-aware, see infer_literal_element_type).
