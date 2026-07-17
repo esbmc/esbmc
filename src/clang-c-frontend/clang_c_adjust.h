@@ -5,6 +5,7 @@
 #include <util/namespace.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/symbol_generator.h>
 
 /**
  * clang C adjuster class for:
@@ -24,6 +25,7 @@ public:
 protected:
   contextt &context;
   namespacet ns;
+  symbol_generator tmp_symbol{"clang_c_adjust::"};
 
   /**
    * methods for symbol adjustment
@@ -48,6 +50,8 @@ protected:
   virtual void adjust_member(member_exprt &expr);
   void adjust_expr_binary_arithmetic(exprt &expr);
   void adjust_expr_unary_complex(exprt &expr);
+  void bind_sideeffect_operands(exprt &expr, code_blockt &block);
+  void finish_complex_lowering(exprt &expr, exprt &result, code_blockt &block);
   void adjust_expr_shifts(exprt &expr);
   void adjust_expr_unary_boolean(exprt &expr);
   void adjust_expr_binary_boolean(exprt &expr);
