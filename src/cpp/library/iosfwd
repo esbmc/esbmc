@@ -1,0 +1,11 @@
+#ifndef STL_IOSFWD
+#define STL_IOSFWD
+
+// The operational model's stream classes (ios, istream, ostream) are plain
+// classes, not the standard's basic_* templates, so they cannot be
+// forward-declared with the standard <iosfwd> signatures. Pull in the model
+// headers instead; they are small, and code including <iosfwd> only needs
+// the stream names to be usable in declarations (github #6063).
+#include "iostream"
+
+#endif

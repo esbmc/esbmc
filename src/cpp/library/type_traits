@@ -95,6 +95,42 @@ struct remove_cv<const volatile T>
   typedef T type;
 };
 
+// is_const / is_volatile
+template <class T>
+struct is_const : false_type
+{
+};
+template <class T>
+struct is_const<const T> : true_type
+{
+};
+template <class T>
+struct is_volatile : false_type
+{
+};
+template <class T>
+struct is_volatile<volatile T> : true_type
+{
+};
+
+// is_member_pointer
+namespace detail
+{
+template <class T>
+struct is_member_pointer_base : false_type
+{
+};
+template <class T, class U>
+struct is_member_pointer_base<T U::*> : true_type
+{
+};
+} // namespace detail
+template <class T>
+struct is_member_pointer
+  : detail::is_member_pointer_base<typename remove_cv<T>::type>
+{
+};
+
 // remove_pointer
 template <class T>
 struct remove_pointer
@@ -339,6 +375,26 @@ struct is_pointer<T *const volatile> : true_type
 {
 };
 
+// is_base_of (Clang builtin, also valid pre-C++11)
+template <class Base, class Derived>
+struct is_base_of : integral_constant<bool, __is_base_of(Base, Derived)>
+{
+};
+
+// is_function (Clang builtin, also valid pre-C++11)
+template <class T>
+struct is_function : integral_constant<bool, __is_function(T)>
+{
+};
+
+#if __cplusplus >= 201103L
+// alignment_of
+template <class T>
+struct alignment_of : integral_constant<size_t, alignof(T)>
+{
+};
+#endif
+
 // is_reference
 template <class T>
 struct is_lvalue_reference : false_type
@@ -579,6 +635,18 @@ using make_signed_t = typename make_signed<T>::type;
 template <class T>
 using decay_t = typename decay<T>::type;
 
+template <class T>
+inline constexpr bool is_const_v = is_const<T>::value;
+template <class T>
+inline constexpr bool is_volatile_v = is_volatile<T>::value;
+template <class T>
+inline constexpr bool is_member_pointer_v = is_member_pointer<T>::value;
+template <class Base, class Derived>
+inline constexpr bool is_base_of_v = is_base_of<Base, Derived>::value;
+template <class T>
+inline constexpr bool is_function_v = is_function<T>::value;
+template <class T>
+inline constexpr size_t alignment_of_v = alignment_of<T>::value;
 template <class T>
 inline constexpr bool is_integral_v = is_integral<T>::value;
 template <class T>

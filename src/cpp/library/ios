@@ -7,6 +7,10 @@
 
 namespace std
 {
+// <ios> declares std::streamsize; the model defines it globally in
+// definitions.h (github #6063).
+using ::streamsize;
+
 enum _Ios_Fmtflags
 {
   __boolalpha = 1L << 0,

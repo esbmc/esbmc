@@ -763,6 +763,14 @@ public:
     return end_it;
   }
 
+  // const_iterator is a typedef for iterator in this model, so the const
+  // overload the standard requires (github #6063) delegates to the
+  // non-const one; find never writes through the backing arrays.
+  const_iterator find(const key_type &x) const
+  {
+    return const_cast<map *>(this)->find(x);
+  }
+
   key_compare key_comp() const
   {
     return key_compare();

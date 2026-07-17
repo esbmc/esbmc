@@ -118,6 +118,12 @@ template <
 class basic_string
 {
 public:
+  typedef CharT value_type;
+  typedef Traits traits_type;
+  typedef Alloc allocator_type;
+  typedef size_t size_type;
+  typedef std::ptrdiff_t difference_type;
+
   static const size_t npos = static_cast<size_t>(-1);
   char str[STRING_CAPACITY];
   int _size;
@@ -1090,6 +1096,10 @@ private:
 };
 
 typedef basic_string<char> string;
+// Declaration-level model: the underlying storage is char-based, which is
+// enough to parse interfaces taking std::wstring (github #6063); wide-string
+// operations are not modelled.
+typedef basic_string<wchar_t> wstring;
 } // namespace std
 
 namespace std
