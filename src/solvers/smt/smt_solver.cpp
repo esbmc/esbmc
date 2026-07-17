@@ -2114,6 +2114,15 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
 
     ir_ieee_api->assert_symbol_range(name, sym_ast, sym);
 
+    if (
+      ir_ieee && is_floatbv_type(sym.type) &&
+      name.rfind("nondet$symex::nondet", 0) == 0)
+    {
+      smt_astt nan_pred =
+        mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", nullptr);
+      ir_ieee_api->store_nan_pred(sym_ast, nan_pred);
+    }
+
     return sym_ast;
   }
 
