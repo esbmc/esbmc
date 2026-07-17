@@ -107,7 +107,6 @@ public:
   typedef smt_solver_baset::ast_vec ast_vect;
   typedef std::vector<ast_vect> array_update_vect;
 
-  // Fgasdf
   struct index_map_rec
   {
     expr2tc idx;

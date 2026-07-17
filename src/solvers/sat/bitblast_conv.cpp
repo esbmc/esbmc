@@ -748,7 +748,7 @@ void bitblast_convt::unsigned_divider(
   sat_api->assert_lit(
     sat_api->limplies(is_not_zero, lt_or_le(false, rem, op1, false)));
 
-  // "op1 != 0 => res <= op0"
+  // "op1 != 0 => rem <= op0"
 
   sat_api->assert_lit(
     sat_api->limplies(is_not_zero, lt_or_le(true, rem, op0, false)));
