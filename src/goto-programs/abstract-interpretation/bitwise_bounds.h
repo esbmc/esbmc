@@ -611,7 +611,7 @@ INT_X signed_max_xor(INT_X a, INT_X b, INT_X c, INT_X d)
  * Original lower bound on signed interval XOR, inspired by the case-based algorithm
  * for signed interval OR in Henry S. Warren Jr., "Hacker's Delight", 2003
  * @author Edoardo Manino.
- * @brief Maximum value of x ^ y given x in [a,b] and y in [c,d], potentially negative
+ * @brief Minimum value of x ^ y given x in [a,b] and y in [c,d], potentially negative
  * @param a Min value of variable x
  * @param b Max value of variable x
  * @param c Min value of variable y

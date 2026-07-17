@@ -63,7 +63,7 @@ class goto_programt
 {
 public:
   /*! \brief copy constructor
-      \param[in] src an empty goto program
+      \param[in] src the goto program to copy from
   */
   inline goto_programt(const goto_programt &src)
   {
@@ -76,7 +76,7 @@ public:
   }
 
   /*! \brief assignment operator
-      \param[in] src an empty goto program
+      \param[in] src the goto program to copy from
   */
   inline goto_programt &operator=(const goto_programt &src)
   {
@@ -126,7 +126,7 @@ public:
       return *loop_contract_data;
     }
 
-    //! the target for gotos and for start_thread nodes
+    //! the targets for gotos and catch
     typedef std::list<class instructiont>::iterator targett;
     typedef std::list<class instructiont>::const_iterator const_targett;
     typedef std::list<targett> targetst;
@@ -637,7 +637,7 @@ public:
     return --tmp;
   }
 
-  //! Adds an instruction of given type at the end.
+  //! Adds a copy of the given instruction at the end.
   //! \return The newly added instruction.
   inline targett add_instruction(instructiont &instruction)
   {

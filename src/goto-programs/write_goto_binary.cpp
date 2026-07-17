@@ -42,8 +42,5 @@ bool write_goto_binary(
     }
   }
 
-  //irepconverter.output_map(f);
-  //irepconverter.output_string_map(f);
-
   return false;
 }

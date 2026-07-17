@@ -67,8 +67,7 @@ public:
     enable_contraction_for_abstract_states; /// Use contractor for <= operations
   static bool
     enable_wrapped_intervals; /// Enabled wrapped intervals (disables Integers)
-  static bool
-    enable_real_intervals; /// Enabled wrapped intervals (disables Integers)
+  static bool enable_real_intervals; /// Enable real (floating-point) intervals
   static bool enable_assume_asserts; /// Asserts are propagates as assumptions
   static bool
     enable_eval_assumptions; /// Try to evaluate in a guard in a TVT to accelerate bottoms

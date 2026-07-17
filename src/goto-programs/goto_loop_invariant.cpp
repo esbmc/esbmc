@@ -329,11 +329,6 @@ static bool symbol_name_matches(
          s.compare(suffix_pos, d.size(), d) == 0;
 }
 
-/// Shared implementation used by both the legacy loop-invariant pass and the
-/// combined loop-invariant + k-induction pass.  See the declaration of
-/// goto_loop_invariantt::extract_and_remove_side_effects for a high-level
-/// description; this helper just takes an explicit goto_function parameter so
-/// it can be reused from both passes.
 /// Local helper: collect all symbol names reachable from an expression tree.
 static void
 collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols)
@@ -355,6 +350,11 @@ collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols)
   }
 }
 
+/// Shared implementation used by both the legacy loop-invariant pass and the
+/// combined loop-invariant + k-induction pass.  See the declaration of
+/// goto_loop_invariantt::extract_and_remove_side_effects for a high-level
+/// description; this helper just takes an explicit goto_function parameter so
+/// it can be reused from both passes.
 static void extract_and_remove_side_effects_impl(
   goto_functiont &goto_function,
   goto_programt::targett loop_head,

@@ -116,10 +116,10 @@ static void stamp_value_locations(exprt &expr, const locationt &loc)
 // statement's #location, but the legacy->IREP2->legacy body round-trip drops it
 // from the value operands. goto_convert then generates instructions from those
 // operands (e.g. the tmp/GOTO sequence a `&&`/`||` short-circuit lowers to,
-// whose location is read from the operand at goto_sideeffects.cpp:242) with an
+// whose location is read from the operand at goto_sideeffects.cpp) with an
 // empty location -- breaking any pass keyed on instruction location, e.g.
 // --condition-coverage skips conditions whose file is not the source file
-// (goto_coverage.cpp:947), reporting 0 conditions and a spurious SUCCESSFUL.
+// (goto_coverage.cpp), reporting 0 conditions and a spurious SUCCESSFUL.
 // Restore the frontend invariant by pushing each statement's location down onto
 // its location-less value operands. Each nested statement governs its subtree.
 static void restore_value_locations(exprt &code, const locationt &inherited)
@@ -234,7 +234,7 @@ bool goto_convert_functionst::convert_native_rec(
     if (has_sideeffect(lhs) || lhs.id() == "if")
       return false;
 
-    // convert_assign()'s function-call special case (goto_convert.cpp:998)
+    // convert_assign()'s function-call special case (goto_convert.cpp)
     // dispatches a call-valued rhs straight to do_function_call(), bypassing
     // the atomic checks the generic path below applies — a call result
     // assigned to a C11 _Atomic lhs is NOT wrapped atomically in legacy
@@ -282,7 +282,7 @@ bool goto_convert_functionst::convert_native_rec(
     // flag-off.
     //
     // A top-level ternary is the one non-side-effect shape remove_sideeffects
-    // still enters (goto_sideeffects.cpp:180 early-returns only on
+    // still enters (goto_sideeffects.cpp early-returns only on
     // `!has_sideeffect(e) && e.id() != "if"`): under --validate-violation-witness
     // it lowers `c ? a : b` to a DECL/IF/GOTO branch, which a single ASSIGN would
     // not reproduce. Mirror that exact entry condition so we fall back on it.
@@ -309,10 +309,10 @@ bool goto_convert_functionst::convert_native_rec(
     const code_expression2t &expr_stmt = to_code_expression2t(code2);
 
     // convert_expression() emits a single OTHER only in its plain else-branch
-    // (goto_convert.cpp:519-530): a side-effect operand is lowered by
+    // (goto_convert.cpp): a side-effect operand is lowered by
     // remove_sideeffects, a code-typed operand is re-dispatched through convert()
-    // (goto_convert.cpp:501), and a top-level ternary is peeled off
-    // unconditionally into convert_ifthenelse (goto_convert.cpp:507), before
+    // (goto_convert.cpp), and a top-level ternary is peeled off
+    // unconditionally into convert_ifthenelse (goto_convert.cpp), before
     // remove_sideeffects runs. Fall back on all of those, deciding with the exact
     // predicates convert_expression uses on a throwaway legacy view of the
     // operand.
@@ -344,14 +344,14 @@ bool goto_convert_functionst::convert_native_rec(
     if (s == nullptr)
       return false;
 
-    // convert_decl (goto_convert.cpp:705) has several paths this native handler
+    // convert_decl (goto_convert.cpp) has several paths this native handler
     // does not reproduce; fall back on each so flag-on stays byte-identical:
-    //  - a static-lifetime or code-typed symbol is a no-op SKIP (:730),
+    //  - a static-lifetime or code-typed symbol is a no-op SKIP,
     //  - an array type may be a VLA needing rewrite_vla_decl / a dynamic-size
-    //    generator (:734) — exclude all arrays conservatively,
+    //    generator — exclude all arrays conservatively,
     //  - a type with a destructor pushes a second stack entry and lowers a
-    //    FUNCTION_CALL at scope exit (:800),
-    //  - a temporary_object or side-effect initializer is lowered (:760-787).
+    //    FUNCTION_CALL at scope exit,
+    //  - a temporary_object or side-effect initializer is lowered.
     // What remains is exactly convert_decl's plain path: a DECL, an optional
     // side-effect-free ASSIGN, and one scope-exit code_dead.
     if (
@@ -366,7 +366,7 @@ bool goto_convert_functionst::convert_native_rec(
                                                : migrate_expr_back(decl.init);
     // A top-level ternary initializer is side-effect-free yet still lowered to a
     // DECL/IF/GOTO branch by remove_sideeffects under --validate-violation-witness
-    // (goto_sideeffects.cpp:180), which a single ASSIGN would not reproduce —
+    // (goto_sideeffects.cpp), which a single ASSIGN would not reproduce —
     // mirror the same guard the assign handler carries.
     if (
       initializer.is_not_nil() &&
@@ -404,7 +404,7 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_return2t &ret = to_code_return2t(code2);
 
-    // convert_return (goto_convert.cpp:1468) emits, for the plain case, a RETURN
+    // convert_return (goto_convert.cpp) emits, for the plain case, a RETURN
     // instruction (only when the function returns a value) followed by an
     // unconditional GOTO to the end-of-function target. Reproduce that exactly,
     // and fall back on every shape convert_return transforms, deciding with the
@@ -451,7 +451,7 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_ifthenelse2t &ite = to_code_ifthenelse2t(code2);
 
-    // A side-effecting guard needs remove_sideeffects (goto_convert.cpp:1814),
+    // A side-effecting guard needs remove_sideeffects (goto_convert.cpp),
     // which this kind doesn't reproduce; the condition-coverage options
     // suppress that call regardless, so fall back on those too.
     if (
@@ -489,7 +489,7 @@ bool goto_convert_functionst::convert_native_rec(
       }
     }
 
-    // generate_ifthenelse (goto_convert.cpp:1657) folds a branch that reduces
+    // generate_ifthenelse (goto_convert.cpp) folds a branch that reduces
     // to a lone `assert(false)` directly into the guard instead of emitting
     // the general shape below (--validate-violation-witness disables this);
     // fall back rather than reproduce the fold.
@@ -584,7 +584,7 @@ bool goto_convert_functionst::convert_native_rec(
     goto_programt tmp_branch;
     if (has_sideeffect(w.cond))
     {
-      // convert_while (goto_convert.cpp:1255) builds this branch via the
+      // convert_while (goto_convert.cpp) builds this branch via the
       // shared generate_conditional_branch helper, which itself decomposes
       // &&/||/not and calls remove_sideeffects() at the leaf. Delegate to
       // that helper verbatim instead of reimplementing it, so a direct call
@@ -688,7 +688,7 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_assert2t &a = to_code_assert2t(code2);
 
-    // convert_assert (goto_convert.cpp:1103) removes side effects from the
+    // convert_assert (goto_convert.cpp) removes side effects from the
     // guard before emitting; require a side-effect-free guard for the same
     // reason as every other statement kind here. code_assert2t's guard is
     // already expr2tc, so (unlike the legacy-exprt kinds) there is no
