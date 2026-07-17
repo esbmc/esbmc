@@ -567,6 +567,17 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
   return false;
 }
 
+// Substitute every "new_object" placeholder in @p dest with @p object
+// (mirrors goto_convertt::replace_new_object, which is not visible here).
+static void replace_new_object_with(const exprt &object, exprt &dest)
+{
+  if (dest.id() == "new_object")
+    dest = object;
+  else
+    Forall_operands (it, dest)
+      replace_new_object_with(object, *it);
+}
+
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
@@ -811,6 +822,73 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     typet t;
     if (get_type(ne.getType(), t))
       return true;
+
+    // Placement new ([expr.new]/11): no allocation happens; the object is
+    // constructed at the given address, which is also the result. Lower to
+    // comma(<initialize *(T*)place>, (T*)place). Only the reserved
+    // non-allocating ::operator new(size_t, void*) qualifies — a
+    // user-declared pointer-parameter operator new or std::nothrow keeps
+    // the allocating path below. The placement expression appears twice in
+    // the comma, so a side-effecting argument also falls back (with a
+    // warning) rather than being evaluated twice.
+    if (
+      !ne.isArray() && ne.getOperatorNew() &&
+      ne.getOperatorNew()->isReservedGlobalPlacementOperator())
+    {
+      if (ne.getPlacementArg(0)->HasSideEffects(*ASTContext))
+        log_warning(
+          "placement-new address with side effects is not modelled; "
+          "treating as allocating new at {}",
+          location.as_string());
+      else
+      {
+        exprt place;
+        if (get_expr(*ne.getPlacementArg(0), place))
+          return true;
+
+        exprt tp("typecast", t);
+        tp.copy_to_operands(place);
+
+        exprt target("dereference", t.subtype());
+        target.copy_to_operands(tp);
+
+        exprt comma("comma", t);
+        if (ne.hasInitializer())
+        {
+          exprt init;
+          if (get_expr(*ne.getInitializer(), init))
+            return true;
+
+          if (
+            init.id() == "sideeffect" &&
+            init.statement() == "temporary_object" &&
+            static_cast<const exprt &>(init.initializer()).is_not_nil())
+          {
+            // A class-type initializer arrives as a temporary_object whose
+            // initializer wraps the constructor call carrying an
+            // &new_object placeholder (make_temporary): retarget the call
+            // at the placement address and drop the temporary, so `this`
+            // is the placed object, not a copied-from temp.
+            exprt wrap = static_cast<const exprt &>(init.initializer());
+            assert(
+              wrap.is_code() && to_code(wrap).get_statement() == "expression");
+            exprt call = wrap.op0();
+            replace_new_object_with(target, call);
+            comma.copy_to_operands(call);
+          }
+          else
+          {
+            side_effect_exprt assign("assign");
+            assign.type() = t.subtype();
+            assign.copy_to_operands(target, init);
+            comma.copy_to_operands(assign);
+          }
+        }
+        comma.copy_to_operands(tp);
+        new_expr = comma;
+        break;
+      }
+    }
 
     if (ne.isArray())
     {
