@@ -769,28 +769,20 @@ bool is_anon_tag(const std::string &ident)
   return ident.size() >= 11 && ident.compare(0, 10, "tag-#anon#") == 0;
 }
 
-void expand_anon_struct(const irept &self)
+// A struct_tag/union_tag whose definition is not yet in the cache. CBMC emits
+// an anonymous aggregate's type symbol *after* the struct that contains it (the
+// aggregate tag encodes the container's layout), so the first fix pass reaches
+// the container's anonymous member before that symbol is cached. Leave the tag
+// unresolved -- exactly as fix_type already does for a not-yet-seen *named* tag
+// -- so the re-check pass in adapt_cbmc_to_esbmc, which runs with the full
+// cache, resolves it. Resolving from CBMC's own serialised type symbol (rather
+// than parsing the tag-name grammar) guarantees the definition is byte-identical
+// to the one the reader builds for the same member in an instruction, which
+// with2t::assert_type_compat_for_with compares by value. A tag that is still
+// unresolved after the re-check pass trips that pass's own
+// "should have been resolved" guard.
+void expand_anon_struct(const irept &)
 {
-  if (has_sub(self, "components"))
-    return;
-  // CBMC encodes an anonymous struct/union's full layout in its tag identifier
-  // (e.g. tag-#anon#UN[SYM#0={ST[S32'a'|S32'b']}'$anon0'|ARR2{S32}'arr']) rather
-  // than emitting a separate type symbol, so there is nothing in the tag cache
-  // to resolve the reference from -- the definition would have to be parsed out
-  // of the name. That parser is not implemented yet (roadmap §4.3): reproducing
-  // CBMC's exact array-size and nested-tag representation so the synthesised
-  // type is bit-identical to the one the reader builds for the same member in an
-  // instruction (with2t::assert_type_compat_for_with compares array2t/struct2t
-  // by value) is the hard part. Until then, fail cleanly -- a throw the
-  // create_goto_program handler turns into a graceful error exit -- rather than
-  // abort()-ing the whole process (matching the reader's malformed-input
-  // recovery, roadmap §4.7).
-  const std::string ident = self.find("identifier").id_string();
-  if (!is_anon_tag(ident))
-    return;
-  throw std::string(
-    "CBMC adapter: anonymous aggregate types are not yet supported (" + ident +
-    ")");
 }
 
 // `expanding` holds the tag identifiers whose definitions are currently being
