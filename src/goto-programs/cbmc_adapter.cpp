@@ -1407,6 +1407,27 @@ irept instruction_to_esbmc_irep(
 
   // ESBMC expects code arguments inside "operands".
   irept code = ins.code;
+
+  // CBMC's whole-object codet statements have no ESBMC symex counterpart, so
+  // migrate would abort() on them (SIGABRT). `array_set` (__CPROVER_array_set:
+  // set every element of the pointed-to array) carries no explicit length -- the
+  // extent comes from the pointee's type, which ESBMC's memset/array machinery
+  // does not reconstruct here -- and `havoc_object` (set the whole pointed-to
+  // object nondet) is likewise size-implicit. Decline cleanly (a throw the
+  // create_goto_program handler turns into a graceful error exit, roadmap §4.7)
+  // rather than crashing; these reach the adapter only from an explicit
+  // __CPROVER_array_set / __CPROVER_havoc_object (CBMC's own memset lowering is
+  // retargeted to __ESBMC_memset in fix_builtin_call before its ARRAY_SET body
+  // runs, §4.8).
+  if (code.id() != "nil")
+  {
+    const irep_idt stmt = code.find("statement").id();
+    if (stmt == "array_set" || stmt == "havoc_object")
+      throw std::string(
+        "CBMC adapter: '" + stmt.as_string() +
+        "' whole-object operations are not yet supported on the --binary path");
+  }
+
   const bool rewrote_builtin_call = fix_builtin_call(code);
   irept operands;
   operands.get_sub() = code.get_sub();
