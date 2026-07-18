@@ -426,6 +426,21 @@ directions.
 
 *Exit:* one command produces a goto binary + an ESBMC verdict per corpus program.
 
+**Status: harness landed, corpus outstanding.** `scripts/jbmc-poc-pipeline.sh`
+implements the pipeline half — jar discovery (fatal when absent or mis-set),
+`--no-lazy-methods`, symbol-table extraction, `symtab2gb`, the ESBMC run, and a
+`manifest.txt` recording jbmc/cbmc/ESBMC versions, the ESBMC source commit, the
+resolved jar, the goto header bytes and the verdict. It accepts either a class
+from `core-models.jar` (the no-JDK route) or a `--source File.java` (needs a
+JDK).
+
+The ~8-program tiered corpus is **not** landed: it cannot be compiled, and
+therefore cannot be validated, without a JDK. Checking in unvalidated `.java`
+files — or opaque `.class` files — was rejected in favour of leaving the gap
+explicit. Note that `command -v javac` is not a usable JDK probe on macOS,
+which ships a stub that exists on PATH and exits 0 while reporting no runtime;
+the harness matches the version string instead.
+
 ### Phase 1 — Fail gracefully, then measure (1 day)
 
 Convert **both** abort sites into the existing throw/catch clean-exit pattern
