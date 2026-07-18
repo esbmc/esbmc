@@ -158,12 +158,40 @@ harness, not `main`, is the entry. This unblocks the `verify-rust-std`/Kani flow
 proof harnesses by name.
 
 ### 4.3 Type system: anonymous structs and wide constants (Phase 3)
-`cbmc_adapter.cpp::expand_anon_struct` aborts on CBMC's anonymous-aggregate naming
+`cbmc_adapter.cpp::expand_anon_struct` cannot resolve CBMC's anonymous-aggregate naming
 (`tag-#anon#ST[...]`), which the contracts library uses heavily — this is why
 `mul_contract.goto` is rejected (identically to the reference). Needs an LL(k) parser for
 CBMC's `ST[...]`/`SYM`/`*{...}` type-name grammar (a skeleton exists in the original Rust
 `adapter.rs::Anon2Struct`). Separately, the hex→binary constant rewrite goes through
 `uint64_t`, so constants wider than 64 bits (e.g. 128-bit) are wrong.
+
+**Graceful failure instead of `abort()` — ✅ landed (PR #TBD).** `expand_anon_struct`
+previously `abort()`ed (SIGABRT/rc=134, a coredump) on any anonymous-aggregate tag it could
+not resolve. It now `throw`s a `std::string` that `create_goto_program`'s existing handler
+turns into a clean `log_error` + non-`abort` exit, matching the reader's malformed-input
+recovery (§4.7, PRs #5811/#5812). Pinned by `cbmc_anon_aggregate` (a nested anonymous union
+whose tag is `tag-#anon#UN[SYM#0={ST[S32'a'|S32'b']}'$anon0'|ARR2{S32}'arr']`; regexes the
+error message and confirms no abort). Anonymous aggregates CBMC *inlines* into the tag as full
+`components` still verify — only the name-encoded references are declined.
+
+**Reproducible locally with `goto-cc` (grammar characterised).** Contrary to the earlier
+assumption that this needed the Kani/contracts corpus, plain C nested anonymous aggregates
+compiled with `goto-cc` reach the adapter as name-encoded tags. Samples:
+`UN[S8'c'|S16'h'|U32'u']` (flat scalars — CBMC actually inlines these, so they already work),
+`UN[*{S32}'p'|S64'v']` (pointer member), `UN[F64'd'|S64'l']`,
+`ST[SYM#0={ST[S32'a']}'$anon0'|S32'b']` (nested struct),
+`UN[SYM#0={ST[...]}'$anon0'|ARR2{S32}'arr']` (union of nested-struct + array). Grammar:
+`agg := ('ST'|'UN') '[' member ('|' member)* ']'`; `member := type "'" name "'"`;
+`type := 'S'N | 'U'N | 'F'N | '*' '{' type '}' | "ARR" N '{' type '}' | agg |
+"SYM" '#' N '=' '{' type '}'`. **The hard part, and why a naive parser is unsound:**
+`with2t::assert_type_compat_for_with` (`irep2_expr.cpp`) compares the aggregate member type
+*by value* against the type the reader independently builds for the same member inside an
+instruction — so a synthesised `array2t` must reproduce CBMC's exact array-**size** constant
+(type and value), and a synthesised nested `struct2t`/`union2t` its exact **tag**, or symex
+aborts on a `with`. A trial parser that synthesised these from the name string produced
+`array2t`/`struct2t` values that did not match the instruction side (a 2-member scalar union
+tripped the `with` assert where a 3-member one happened to pass), confirming the full fix must
+mirror the reader's type construction, not invent its own. Deferred as its own task.
 
 **Recursive struct/union types (linked lists) — ✅ fixed.** A plain linked-list program —
 `struct node { int value; struct node *next; }` with `a.next->next` read through a

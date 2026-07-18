@@ -773,12 +773,24 @@ void expand_anon_struct(const irept &self)
 {
   if (has_sub(self, "components"))
     return;
-  // ESBMC has no parser for CBMC's anonymous naming convention.
+  // CBMC encodes an anonymous struct/union's full layout in its tag identifier
+  // (e.g. tag-#anon#UN[SYM#0={ST[S32'a'|S32'b']}'$anon0'|ARR2{S32}'arr']) rather
+  // than emitting a separate type symbol, so there is nothing in the tag cache
+  // to resolve the reference from -- the definition would have to be parsed out
+  // of the name. That parser is not implemented yet (roadmap §4.3): reproducing
+  // CBMC's exact array-size and nested-tag representation so the synthesised
+  // type is bit-identical to the one the reader builds for the same member in an
+  // instruction (with2t::assert_type_compat_for_with compares array2t/struct2t
+  // by value) is the hard part. Until then, fail cleanly -- a throw the
+  // create_goto_program handler turns into a graceful error exit -- rather than
+  // abort()-ing the whole process (matching the reader's malformed-input
+  // recovery, roadmap §4.7).
   const std::string ident = self.find("identifier").id_string();
   if (!is_anon_tag(ident))
     return;
-  log_error("CBMC adapter: unsupported anonymous aggregate {}", ident);
-  abort();
+  throw std::string(
+    "CBMC adapter: anonymous aggregate types are not yet supported (" + ident +
+    ")");
 }
 
 // `expanding` holds the tag identifiers whose definitions are currently being
