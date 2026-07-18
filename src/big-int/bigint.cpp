@@ -94,7 +94,8 @@ copy:
   return 0;
 }
 
-// Subtract unsigned digit strings, return carry. Assumes l1 >= l2!
+// Subtract unsigned digit strings (r = d1 - d2). Assumes l1 >= l2 and
+// d1 >= d2, so there is no borrow out.
 static void digit_sub(
   onedig_t const *d1,
   unsigned l1,
