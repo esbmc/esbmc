@@ -833,6 +833,52 @@ bool goto_convert_functionst::convert_native_rec(
     return true;
   }
 
+  if (is_code_goto2t(code2))
+  {
+    const code_goto2t &g = to_code_goto2t(code2);
+
+    // convert_goto stores migrate_expr(code) -- which round-trips back to
+    // code2 -- and defers the target to finish_gotos, recording the destructor
+    // stack as it stands here so the jump can unwind down to the label's depth.
+    // try_convert_body_native already calls finish_gotos over the native
+    // program, and both paths resolve against the same targets.labels, so a
+    // native goto/label pair resolves exactly as the legacy one does.
+    goto_programt::targett t = dest.add_instruction();
+    t->make_goto();
+    t->location = g.location;
+    t->code = code2;
+    targets.gotos.push_back(std::make_pair(t, targets.destructor_stack));
+    return true;
+  }
+
+  if (is_code_label2t(code2))
+  {
+    const code_label2t &l = to_code_label2t(code2);
+
+    // convert_label turns a label matching --error-label into an ASSERT(false)
+    // carrying property/comment/user_provided metadata; that shape is not
+    // reproduced here.
+    const std::string &error_label = options.get_option("error-label");
+    if (!error_label.empty() && id2string(l.label) == error_label)
+      return false;
+
+    goto_programt tmp;
+    if (!convert_native_rec(l.code, tmp))
+      return false;
+
+    // convert() always leaves at least one instruction (it appends a SKIP when
+    // a statement emitted nothing), so legacy can take instructions.begin()
+    // unconditionally; convert_native_rec only guarantees that for a block.
+    if (tmp.instructions.empty())
+      return false;
+
+    goto_programt::targett target = tmp.instructions.begin();
+    dest.destructive_append(tmp);
+    targets.labels.insert({l.label, {target, targets.destructor_stack}});
+    target->labels.push_front(l.label);
+    return true;
+  }
+
   return false; // unsupported kind: whole body falls back to goto_convert_rec
 }
 
@@ -844,10 +890,11 @@ bool goto_convert_functionst::try_convert_body_native(
   if (!convert_native_rec(body2, native))
     return false; // dest untouched; caller falls back to goto_convert_rec
 
-  // Mirror goto_convert_rec()'s post-passes. finish_gotos only resolves *named*
-  // (labelled) gotos, of which the native subset emits none — a code_return2t's
-  // goto targets the end-of-function iterator directly, not a label — so it stays
-  // a no-op. optimize_guarded_gotos runs identically here and in the legacy path
+  // Mirror goto_convert_rec()'s post-passes. finish_gotos resolves the *named*
+  // (labelled) gotos code_goto2t records in targets.gotos against the labels
+  // code_label2t registers, emitting the scope-exit DEADs a jump out of a block
+  // needs; a code_return2t's goto targets the end-of-function iterator directly,
+  // not a label, so it is untouched by this pass. optimize_guarded_gotos runs identically here and in the legacy path
   // over the same instruction sequence, so the folded output matches regardless.
   finish_gotos(native);
   optimize_guarded_gotos(native);
@@ -951,11 +998,20 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   // ends up being the one that allocates a temp before failing.
   unsigned tmp_counter_before = tmp_symbol.counter;
   irep_idt context_mark_before = context.mark();
+  targetst targets_before = targets;
   if (!(options.get_bool_option("irep2-native-body") &&
         try_convert_body_native(symbol.get_value2(), f.body)))
   {
     tmp_symbol.counter = tmp_counter_before;
     context.erase_since(context_mark_before);
+    // targets.labels/gotos/cases hold goto_programt::targett iterators into the
+    // native program the failed attempt just discarded, so leaving them in place
+    // makes finish_gotos dereference dangling iterators once the fallback has
+    // rebuilt the body. Restore the whole struct rather than clearing the fields
+    // this dispatcher populates directly: remove_sideeffects can re-enter the
+    // legacy convert() (a GCC statement expression lowers that way), which
+    // registers labels and switch cases the native layer never sees.
+    targets = targets_before;
     goto_convert_rec(code, f.body);
   }
 
