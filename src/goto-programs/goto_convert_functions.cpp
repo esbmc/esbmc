@@ -142,6 +142,23 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
   }
 }
 
+// True if `expr` contains a temporary_object side effect anywhere. Lowering one
+// pushes scope-exit entries that die at the end of the full expression
+// (C++ [class.temporary]/4, github #6075/#6076) rather than at block exit, and
+// the native dispatcher does not yet reproduce that interaction with the
+// destructor stack -- see the code_expression2t handler.
+static bool has_temporary_object(const exprt &expr)
+{
+  if (expr.id() == "sideeffect" && expr.statement() == "temporary_object")
+    return true;
+
+  forall_operands (it, expr)
+    if (has_temporary_object(*it))
+      return true;
+
+  return false;
+}
+
 // W1-loc spike Phase C (esbmc/esbmc#4715): consume one IREP2 statement `code2`
 // natively (design D3), appending to `dest`, and recurse into nested blocks.
 // Returns false the instant an unsupported kind (or a shape whose native
@@ -154,8 +171,9 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
 // return (RETURN + unconditional GOTO to the function's end), a
 // side-effect-free `if`/`if-else` whose branches convert natively (the
 // general, unfolded branch shape only — see the assert-fold guard below), a
-// plain `x = y;` assignment statement (the sideeffect_assign2t the C/C++
-// frontends wrap in an expression statement, delegated to convert_assign), a
+// side-effecting expression statement of any shape (assignment, compound
+// assignment, `++`/`--`, discarded call result — all delegated to the inherited
+// remove_sideeffects after the statement location is stamped onto the operand), a
 // side-effect-free `while` whose body converts natively (`v: if(!c) goto z;
 // x: P; y: goto v; z: ;`), and `break`/`continue` (an unconditional GOTO to
 // the nearest enclosing loop's break/continue target, preceded by
@@ -311,68 +329,60 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_expression2t &expr_stmt = to_code_expression2t(code2);
 
-    // The C/C++ frontends model an assignment *statement* (`x = y;`) as an
-    // expression statement wrapping a sideeffect_assign2t, not as the
-    // code_assign2t Python emits, so it arrives here rather than at the assign
-    // arm above. remove_sideeffects strips the wrapper and hands the operands
-    // to convert_assign, then nils the wrapper (result_is_used is false), so no
-    // OTHER follows. Call the inherited convert_assign with the code_assignt
-    // legacy builds rather than reimplementing it, so its atomic-dispatch
-    // branch stays byte-identical for free. Compound assignments (`+=`, ...)
-    // synthesize a fresh binary rhs and are a separate slice.
-    if (is_sideeffect_assign2t(expr_stmt.operand))
-    {
-      const sideeffect_assign2t &se = to_sideeffect_assign2t(expr_stmt.operand);
-      if (se.op != "assign")
-        return false;
-
-      // Same guards as the assign arm above: a side-effecting or top-level
-      // ternary operand would be lowered before convert_assign runs, and a
-      // code-typed source re-enters the legacy dispatcher via convert().
-      exprt assign_lhs = migrate_expr_back(se.lhs);
-      exprt assign_rhs = migrate_expr_back(se.rhs);
-      if (
-        has_sideeffect(assign_lhs) || assign_lhs.id() == "if" ||
-        has_sideeffect(assign_rhs) || assign_rhs.id() == "if" ||
-        assign_rhs.type().is_code())
-        return false;
-
-      // convert_expression restores the enclosing statement's location onto a
-      // side effect the round-trip left unlocated before remove_sideeffects
-      // reads it as the assignment's location; mirror that precedence.
-      locationt loc = se.location;
-      if (loc.get_file().empty())
-        loc = expr_stmt.location;
-      if (loc.is_nil() || loc.get_file().empty())
-        return false;
-
-      code_assignt assign(assign_lhs, assign_rhs);
-      assign.location() = loc;
-      convert_assign(assign, dest);
-      return true;
-    }
-
-    // convert_expression() emits a single OTHER only in its plain else-branch
-    // (goto_convert.cpp): a side-effect operand is lowered by
-    // remove_sideeffects, a code-typed operand is re-dispatched through convert()
-    // (goto_convert.cpp), and a top-level ternary is peeled off
-    // unconditionally into convert_ifthenelse (goto_convert.cpp), before
-    // remove_sideeffects runs. Fall back on all of those, deciding with the exact
-    // predicates convert_expression uses on a throwaway legacy view of the
-    // operand.
+    // Reproduce convert_expression() (goto_convert.cpp) verbatim on its two
+    // emitting branches. A code-typed operand is re-dispatched through the
+    // legacy convert(), and a top-level ternary is peeled unconditionally into
+    // convert_ifthenelse before remove_sideeffects runs; fall back on both.
     exprt op = migrate_expr_back(expr_stmt.operand);
-    if (op.is_nil() || has_sideeffect(op) || op.is_code() || op.id() == "if")
+    if (op.is_nil() || op.is_code() || op.id() == "if")
       return false;
 
-    // convert_expression locates the OTHER at the operand location, which
-    // restore_value_locations sets to the enclosing statement location. When the
-    // statement carries its own located #location that already IS that location,
-    // so emit code2 directly (migrate_expr drops the operand location, so the
-    // stored code round-trips to code2) at the statement location. Fall back on a
-    // location-less statement, whose operand the round-trip would instead stamp
-    // with an inherited block location.
+    // Every emission below is located at the statement, either directly or via
+    // the operand restore_value_locations stamps; without a usable statement
+    // location the legacy path would inherit an enclosing block's instead.
     if (expr_stmt.location.is_nil() || expr_stmt.location.get_file().empty())
       return false;
+
+    // IREP2 value expressions carry no location, so the back-migrated operand
+    // arrives unlocated and remove_sideeffects -- which reads the location for
+    // each instruction it emits off the operand being lowered -- would produce
+    // unlocated instructions. restore_value_locations already did this for the
+    // legacy path (same helper, same statement location); do it here too. This
+    // is the general form of the fix the side-effecting `while` condition
+    // needed, and it is what lets every side-effect shape below stay located:
+    // an assignment statement (`x = y;`, which the C/C++ frontends model as an
+    // expression statement wrapping a sideeffect_assign2t rather than the
+    // code_assign2t Python emits), a compound assignment, `++`/`--`, and a
+    // call statement whose result is discarded.
+    stamp_value_locations(op, expr_stmt.location);
+
+    // A temporary_object's scope-exit entries die at the end of the full
+    // expression, not at block exit, so lowering one here would need the
+    // destructor-stack interaction convert_decl/remove_sideeffects implement;
+    // until that is reproduced natively, fall back (C++ `g = use(T(a));`).
+    if (has_temporary_object(op))
+      return false;
+
+    if (has_sideeffect(op))
+    {
+      // convert_expression hands a side-effecting operand to remove_sideeffects
+      // with result_is_used false, then emits an OTHER only if anything is left
+      // (a lowered assignment nils itself, so most shapes emit nothing here).
+      // Call the inherited helper rather than reimplementing any of it, so each
+      // sub-case -- convert_assign for `=`, remove_assignment's synthesized rhs
+      // for `+=`, remove_pre/remove_post, do_function_call -- stays
+      // byte-identical, including the temp symbols they allocate (rolled back
+      // by convert_function if a later statement forces a fallback).
+      remove_sideeffects(op, dest, false);
+      if (op.is_not_nil())
+      {
+        codet other(to_code(migrate_expr_back(code2)));
+        other.op0() = op;
+        other.location() = op.location();
+        copy(other, OTHER, dest);
+      }
+      return true;
+    }
 
     goto_programt::targett t = dest.add_instruction(OTHER);
     t->code = code2;
