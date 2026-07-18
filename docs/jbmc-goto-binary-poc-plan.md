@@ -48,7 +48,8 @@ compiles a JSON symbol table into a goto binary. That yields a working pipeline:
 
 ```
 Test.java ──javac──> Test.class
-   └─ jbmc Test --no-lazy-methods --show-symbol-table --json-ui  ──> symtab.json
+   └─ jbmc Test -cp .:/usr/lib/core-models.jar --no-lazy-methods \
+                --show-symbol-table --json-ui                    ──> symtab.json
    └─ extract the {"symbolTable": …} element                     ──> st.json
    └─ symtab2gb st.json --out jbmc.goto                          ──> 0x7f 'G' 'B' 'F', v6
 ```
@@ -59,11 +60,26 @@ The output header is byte-for-byte the format ESBMC's reader targets:
 00000000: 7f47 4246 06a9 0100 3e65 6d70 7479 004e   .GBF....>empty.N
 ```
 
-`goto-instrument --show-goto-functions jbmc.goto` reads it back cleanly, so the binary
-is well-formed and not a JBMC-private dialect.
+`goto-instrument --show-goto-functions jbmc.goto` reads it back cleanly, and
+`goto-instrument --drop-unused-functions` rewrites a still-valid binary — so this is a
+genuinely shared format, not a JBMC-private dialect. Note the converse does **not** hold:
+`cbmc` in C mode on the same file dies with an invariant failure in `goto_symex.cpp`.
+Format-compatible is not the same as interchangeable.
 
-**`--no-lazy-methods` is load-bearing.** JBMC loads classes on demand; without it the
-symbol table is incomplete and the resulting binary would silently omit method bodies.
+**Both `--no-lazy-methods` and an explicit models classpath are load-bearing**, and the
+classpath matters more. JBMC loads classes on demand, and `core-models.jar` is *not*
+auto-loaded (there is no `--java-core-models` flag; the Ubuntu package merely drops it at
+`/usr/lib/core-models.jar`). Measured function counts for the same Java program:
+
+| configuration | functions |
+|---|---|
+| `-cp .` | 50 |
+| `-cp .` `--no-lazy-methods` | 52 |
+| `-cp .:core-models.jar` | 72 |
+| `-cp .:core-models.jar` `--no-lazy-methods` | **2500** |
+
+A ~48x spread. Any binary built without both flags silently omits method bodies, and any
+verdict from it is meaningful only relative to whatever happened to be on the classpath.
 
 ### 2.2 ESBMC already reads a JBMC binary — structurally
 
@@ -114,30 +130,53 @@ Everything else in the binary is standard CPROVER vocabulary that `cbmc_adapter`
 already handles: `signedbv`, `pointer`, `struct_tag`, `member`, `dereference`, `assign`,
 `block`, `code`, `constant`, `floatbv`. **No new number theory, no new memory model.**
 
+**Treat this table as a lower bound.** It was measured on a binary built *without*
+`core-models.jar` — i.e. the ~52-function configuration from §2.1, not the 2500-function
+one. A full-models binary may well contain constructs this corpus never reached (JVM
+concurrency instrumentation, `java_super_method_call`, generics attributes, lambda method
+handles). Phase 1 exists precisely to replace this estimate with a measurement over the
+real configuration.
+
+Additional Java-specific ids exist in `src/util/irep_ids.def` upstream that the corpus did
+not exercise: `java_super_method_call`, `exception_list`, `exception_id`,
+`exception_landingpad`, `throw_decl`, the `C_java_generic*` family, and
+`java_lambda_method_handle*`. (`java_new_array_data` is not in this list — see §2.4,
+where it is the one construct that survives JBMC's lowering.)
+
 ### 2.4 The decisive finding: JBMC's own pipeline lowers most of it
 
-`jbmc --show-goto-functions` reveals that JBMC's internal pipeline runs
-`remove_virtual_functions`, `remove_instanceof`, and `remove_exceptions` before symex.
-Comparing what survives in each route:
+`jbmc --show-goto-functions` reveals that JBMC's driver (`jbmc_parse_options.cpp`)
+unconditionally runs `remove_instanceof`, `remove_virtual_functions`, `remove_exceptions`,
+and `remove_java_new` before symex. Comparing what survives in each route (counts are
+word-boundary matched — a naive `grep -c java_new` substring-matches `java_new_array` and
+inflates the result):
 
 | Construct | Route A (`symtab2gb`) | Route B (JBMC-internal, post-lowering) |
 |---|---|---|
-| `java_new_array` | 11 | 11 |
+| `java_new` | 2 | **0** |
+| `java_new_array` | 11 | **0** |
 | `java_instanceof` | 1 | **0** |
 | `virtual_function` | 2 | **0** |
 | `CATCH` (`push`/`pop_catch`) | 4 | **0** |
+| `java_new_array_data` | 0 | 11 |
+| `side_effect statement="allocate"` | 2 | 15 |
 
-`symtab2gb` performs goto-conversion only — it does **not** run the Java lowering
-passes, because those live in JBMC's driver, not in the symbol-table-to-GOTO tool.
+`symtab2gb` performs goto-conversion only — it does **not** run the Java lowering passes,
+because those live in JBMC's driver, not in the symbol-table-to-GOTO tool.
 
-So the residual Java surface after JBMC's own lowering is essentially just
-**`java_new` and `java_new_array`** — two allocation side effects, both of which map
-naturally onto ESBMC's existing `sideeffect` allocation machinery (the same machinery
-`cbmc_adapter.cpp:1040-1067` already uses to turn CBMC's `malloc`/`alloca` into
-`sideeffect`). Class identifiers and Java array types are then plain structs.
+So JBMC's own lowering is more thorough than expected: it eliminates object *and* array
+allocation too, rewriting `java_new`/`java_new_array` into CBMC's generic
+`side_effect statement="allocate"`. The residual Java-specific surface is a single
+construct, **`java_new_array_data`**, plus the `allocate` side effect itself — which,
+despite being generic CPROVER vocabulary, ESBMC does **not** currently handle:
+`src/util/migrate.cpp:1937-1961` recognises `malloc`, `realloc`, `alloca`, `cpp_new`,
+`va_arg` but not `allocate`, and `cbmc_adapter.cpp` has no mapping for it (CBMC C-mode
+binaries reach ESBMC as `FUNCTION_CALL malloc`, which the adapter rewrites at
+`cbmc_adapter.cpp:1300-1303`). Class identifiers and Java array types are then plain
+structs.
 
 This reframes the whole PoC: **the cheap win is getting the lowered model out of JBMC,
-not teaching ESBMC to lower Java.**
+not teaching ESBMC to lower Java.** Two constructs, not seven.
 
 ---
 
@@ -145,19 +184,21 @@ not teaching ESBMC to lower Java.**
 
 ### Route A — `symtab2gb` today, lower inside ESBMC
 
-Works this instant with zero changes outside ESBMC. But ESBMC must then implement
-virtual dispatch resolution, `instanceof` against a class hierarchy, and Java exception
-region semantics — reimplementing three CPROVER passes, in an adapter that has no class
-hierarchy available (the hierarchy is a JBMC-side artefact). High cost, high risk of
-subtly diverging from JBMC's semantics, which defeats the "reuse CPROVER's JVM
-semantics" rationale.
+Works this instant with zero changes outside ESBMC. But ESBMC must then implement object
+and array allocation, virtual dispatch resolution, `instanceof` against a class hierarchy,
+and Java exception region semantics — reimplementing four CPROVER passes, in an adapter
+that has no class hierarchy available (the hierarchy is a JBMC-side artefact). High cost,
+high risk of subtly diverging from JBMC's semantics, which defeats the "reuse CPROVER's
+JVM semantics" rationale.
 
 ### Route B — teach JBMC to write a goto binary after lowering (**recommended**)
 
 Add a `--write-goto-binary <file>` to `jbmc`, dumping the goto model after its existing
-lowering passes. CBMC's `write_goto_binary()` is already linked into every CPROVER
-tool; this is plumbing, not new semantics — plausibly a few dozen lines upstream. ESBMC
-then only needs `java_new` / `java_new_array` plus Java struct-layout conventions.
+lowering passes. `write_goto_binary()` lives in *shared* `src/goto-programs/`, and
+`GOTO_BINARY_VERSION 6` is defined there once for all CPROVER tools — there is no
+Java-specific writer, and `grep -rn write_goto_binary jbmc/src/` returns nothing. So this
+is plumbing, not new semantics — plausibly a few dozen lines upstream. ESBMC then needs
+only `allocate` + `java_new_array_data` plus Java struct-layout conventions.
 
 **Recommendation: pursue B, with A as the fallback and as the *immediate* unblocked
 path for Phase 1.** Phase 1 below is deliberately route-agnostic so it delivers value
@@ -199,12 +240,21 @@ of Java.
 **Decision point:** if the list is dominated by constructs outside §2.3 — i.e. the
 simple corpus was misleading — reassess scope before writing any adapter code.
 
-### Phase 2 — `java_new` / `java_new_array` (2–3 days)
+### Phase 2 — allocation side effects (2–3 days)
 
-Map both onto ESBMC `sideeffect` allocation, following the `malloc`/`alloca` precedent
-in `cbmc_adapter.cpp:1040-1067`. `java_new_array` additionally carries a length operand
+Map CBMC's `side_effect statement="allocate"` and Java's `java_new_array_data` onto
+ESBMC `sideeffect` allocation, following the `malloc`/`alloca` precedent in
+`cbmc_adapter.cpp:1040-1067` and extending the statement dispatch at
+`src/util/migrate.cpp:1937-1961`. Array allocation additionally carries a length operand
 and JBMC's own `array-create-negative-size` check (already present as a plain assertion
 in the binary — ESBMC should inherit it, not re-derive it).
+
+`allocate` is worth doing on its own merits: it is generic CPROVER vocabulary that any
+`goto-instrument`-lowered binary may contain, so this benefits the CBMC roadmap too.
+
+On Route A, this phase instead targets `java_new`/`java_new_array` directly — which is
+why Route B is preferred: same effort, but Route B's two constructs also cover virtual
+dispatch, `instanceof`, and exceptions for free.
 
 *Exit:* T1–T3 corpus programs verify, verdicts matching JBMC.
 **This is the PoC's minimum publishable result:** it demonstrates the whole chain works
@@ -220,14 +270,25 @@ further ESBMC adapter work — or a concrete statement of what still fails.
 
 ### Phase 4 — Java runtime models (spike only, 1 day)
 
-JBMC's semantics depend on its Java core models (`java.lang.String`, boxed types, etc.).
-Even the trivial program in §2.1 pulled in 169 symbols, mostly models. Determine
-empirically whether these arrive inside the goto binary (in which case ESBMC gets them
-free) or are resolved lazily by JBMC at symex time (in which case ESBMC needs a linking
-story analogous to `link_cbmc_libc_bodies`, `goto_program.cpp:349`).
+Partly answered already by §2.1: models arrive in the binary **only** if `core-models.jar`
+is put on the classpath explicitly, and doing so with `--no-lazy-methods` inflates the
+model to ~2500 functions. Two things remain to determine:
 
-*Exit:* a yes/no on whether a linking mechanism is needed, sized if yes. **Do not build
-it in this PoC.**
+- **Scale.** Is a 2500-function goto binary tractable for ESBMC's symex at all? This is
+  the practical gate on non-trivial Java, and it is cheap to measure.
+- **Coverage.** `core-models.jar` is narrower than its name suggests — 91 classes, mostly
+  `java.lang`; `java.util` collections are essentially unmodelled. Unmodelled library
+  methods become bodyless stubs, so a corpus touching collections is verifying against
+  nothing.
+
+**`java.lang.String` is a special case and a genuine risk.** It is not modelled by the JAR
+at all — JBMC handles it via `java_string_library_preprocess.cpp` and CBMC's **string
+refinement solver**. ESBMC has no string-refinement backend, so string-heavy Java may be
+out of reach through this route regardless of how well IR ingestion works. Establish
+whether the corpus can avoid strings, and if not, say so plainly.
+
+*Exit:* a scale number, a coverage statement, and a yes/no on strings. **Do not build a
+linking mechanism in this PoC.**
 
 ### Phase 5 — Report and regression fixtures (1 day)
 
@@ -244,11 +305,16 @@ binaries with `test.desc`, matching the 131 existing CBMC fixtures, including ne
 
 Stated in advance so the PoC can honestly fail:
 
-- **Lazy loading is unavoidable.** If `--no-lazy-methods` still yields incomplete symbol
-  tables for non-trivial programs, every binary is silently partial and any verdict is
-  unsound. This is the most serious risk and Phase 0 should probe it directly.
-- **Model dependence is deep.** If Phase 4 finds JBMC resolves core models at symex time,
-  ESBMC inherits a Java runtime-library problem — a much larger project than IR ingestion.
+- **Model completeness cannot be established.** §2.1 shows the model size swings 50→2500
+  functions on flags alone. If we cannot state confidently that a given binary contains
+  every method the program reaches, every verdict is relative to an unknown classpath and
+  the whole exercise is unsound. This is the most serious risk.
+- **Scale.** If ESBMC's symex cannot handle a 2500-function model in reasonable time, the
+  route works only for programs that touch almost no library code.
+- **Strings.** JBMC delegates `java.lang.String` to CBMC's string refinement solver, which
+  ESBMC does not have. If the corpus cannot avoid strings, this is a hard stop for a large
+  class of real Java, independent of everything else in this plan.
+- **`java.util` is unmodelled.** Collections-using code verifies against bodyless stubs.
 - **Java struct conventions leak everywhere.** If `@class_identifier` / `java::array[T]`
   layouts turn out to need special handling across the adapter rather than being plain
   structs, the "reuse the CBMC reader" premise weakens.
@@ -269,8 +335,9 @@ integration with, `src/jimple-frontend/`. No JVM concurrency, reflection, generi
 ## 7. Reproducing the §2 probes
 
 ```sh
+MODELS=/usr/lib/core-models.jar
 javac Test.java
-jbmc Test --no-lazy-methods --show-symbol-table --json-ui > symtab.json
+jbmc Test -cp .:$MODELS --no-lazy-methods --show-symbol-table --json-ui > symtab.json
 python3 -c "import json;d=json.load(open('symtab.json'));\
 json.dump([e for e in d if 'symbolTable' in e][0], open('st.json','w'))"
 symtab2gb st.json --out jbmc.goto
@@ -278,11 +345,19 @@ xxd jbmc.goto | head -1                       # expect: 7f47 4246 06…
 goto-instrument --show-goto-functions jbmc.goto | head    # round-trip sanity
 esbmc --binary jbmc.goto --goto-functions-only
 
-# Route A vs Route B construct survival (§2.4)
+# Model size vs flags (§2.1) — expect roughly 50 / 52 / 72 / 2500
+for cp in "-cp ." "-cp .:$MODELS"; do for lz in "" "--no-lazy-methods"; do
+  printf '%-42s %s\n' "$cp $lz" "$(jbmc Rich $cp $lz --list-goto-functions 2>/dev/null | wc -l)"
+done; done
+
+# Route A vs Route B construct survival (§2.4).
+# -oE with \b is required: a plain `grep -c java_new` also matches java_new_array.
 jbmc Rich --no-lazy-methods --show-goto-functions > routeB.txt
 goto-instrument --show-goto-functions rich.goto > routeA.txt
-for k in java_new_array java_instanceof virtual_function CATCH; do
-  printf '%-18s A=%s B=%s\n' "$k" "$(grep -c $k routeA.txt)" "$(grep -c $k routeB.txt)"
+for k in 'java_new\b' 'java_new_array\b' 'java_new_array_data\b' \
+         'java_instanceof\b' 'virtual_function\b' 'CATCH' 'statement="allocate"'; do
+  printf '%-26s A=%-3s B=%s\n' "$k" \
+    "$(grep -oE "$k" routeA.txt | wc -l)" "$(grep -oE "$k" routeB.txt | wc -l)"
 done
 ```
 
@@ -290,7 +365,33 @@ done
 
 ## 8. Open questions for upstream
 
-1. Is there an existing supported way to obtain a *lowered* JBMC goto model as a binary
-   that this plan has missed?
-2. Would `diffblue/cbmc` accept a `jbmc --write-goto-binary` flag?
-3. Is `symtab2gb` on JBMC symbol tables a supported use, or an accident that may break?
+1. Would `diffblue/cbmc` accept a `jbmc --write-goto-binary` flag? (No such writer exists
+   in `jbmc/src/` today, and `--outfile` is the SMT/DIMACS formula, not GOTO — an easy trap.)
+2. Is `symtab2gb` on JBMC symbol tables a supported use, or an accident that may break?
+3. Is there a recommended way to state, for a given binary, that class loading was
+   complete for the program's reachable set — or is classpath discipline the only answer?
+
+### Version note
+
+Probes were run against locally installed `jbmc`/`cbmc` **6.5.0**; upstream `develop` is at
+**6.10.0**. `GOTO_BINARY_VERSION` is **6** in both, so the format conclusions hold, but
+Phase 0 should re-confirm the construct inventory against a current build before any
+upstream PR is opened.
+
+---
+
+## 9. References
+
+- L. C. Cordeiro, P. Kesseli, D. Kroening, P. Schrammel, M. Trtík, "JBMC: A Bounded Model
+  Checking Tool for Verifying Java Bytecode", CAV 2018, LNCS 10981, pp. 183–190
+  ([doi:10.1007/978-3-319-96145-3_10](https://doi.org/10.1007/978-3-319-96145-3_10)).
+- L. Cordeiro, D. Kroening, P. Schrammel, "JBMC: Bounded Model Checking for Java Bytecode
+  (Competition Contribution)", TACAS 2019, LNCS 11429, pp. 219–223
+  ([doi:10.1007/978-3-030-17502-3_17](https://doi.org/10.1007/978-3-030-17502-3_17)).
+
+Both describe JBMC's architecture and Java operational model. Neither documents lazy class
+loading — for that behaviour the source is authoritative
+(`jbmc/src/java_bytecode/lazy_goto_model.h`), as are `jbmc/src/java_bytecode/README.md` for
+exception lowering and [diffblue/java-models-library](https://github.com/diffblue/java-models-library)
+for `core-models.jar`. Note that <https://diffblue.github.io/cbmc/> documents CBMC/C only
+and has no Java section; JBMC documentation is effectively in-repo.
