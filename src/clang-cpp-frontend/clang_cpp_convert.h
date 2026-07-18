@@ -316,7 +316,15 @@ protected:
    *  - map: this map contains all base class(es) of this class std::map<class_id, pointer to clang AST of base class>
    *  - type: ESBMC IR representing the class' type
    */
-  void get_base_components_methods(base_map &map, struct_union_typet &type);
+  /* When the class has any virtual base, nesting is disabled and the legacy
+   * flattened layout is used for all of its bases: a shared virtual base must
+   * appear once in the most-derived object, which nested per-path subobjects
+   * cannot express yet (P5). See #1866, #3894. */
+  void get_base_components_methods(
+    base_map &map,
+    struct_union_typet &type,
+    bool has_virtual_bases,
+    const clang::CXXRecordDecl &cxxrd);
 
   /*
    * Methods for virtual tables and virtual pointers

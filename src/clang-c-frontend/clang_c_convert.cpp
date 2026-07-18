@@ -3793,6 +3793,18 @@ bool clang_c_convertert::get_cast_expr(
       }
       const typet base_t = symbol_typet(base_sym->id);
       const irep_idt comp = base_subobject_name(base_id);
+      // Only route structurally when the current class actually carries the
+      // nested subobject: a hierarchy containing a virtual base keeps the
+      // legacy flattened layout, so fall back to the plain typecast there.
+      const typet cur_struct =
+        ns.follow(ptr_mode ? cur.type().subtype() : cur.type());
+      if (
+        !cur_struct.is_struct() ||
+        !to_struct_type(cur_struct).has_component(comp))
+      {
+        routed = false;
+        break;
+      }
       if (ptr_mode)
       {
         dereference_exprt deref(cur, cur.type().subtype());

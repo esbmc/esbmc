@@ -161,8 +161,34 @@ changes) before the next.
     3. **Destructor chain:** `emit_base_dtor` still uses the byte offset;
        switch to `&this->@base@B`.
     4. **Thunks / covariant** (P4) once vptrs are nested.
-  * These are well-scoped follow-ons; the spike is preserved uncommitted on the
-    clean effort branch (kept on `wip/mi-nested-storage-core`) until green.
+  * **vptr-init migration (done):** `gen_vptr_initializations` now recurses
+    into `@base@` subobjects, emitting
+    `this->@base@B.@vtable_pointer = &vtable::tag-B@Derived`, so polymorphic
+    dispatch through a non-first base resolves again.
+  * **Virtual bases (deferred to P5):** a class with any virtual base keeps the
+    legacy flattened layout (`has_virtual_bases` guard) — a shared virtual base
+    must appear once in the most-derived object, which per-path nested
+    subobjects cannot express yet. The cast and base-ctor `this` routing also
+    self-check that the `@base@` component exists, falling back to a plain
+    typecast on flattened hierarchies.
+  * **Direct bases only:** nesting adds one `@base@` per *direct* base. Walking
+    the transitive `base_map` duplicated ancestors (`C : B, B : A` gave `C`
+    both `@base@A` and `@base@B`, the latter already nesting `@base@A`) and
+    broke multi-level MI.
+  * **Status: 1 failing test out of 2233** — `llbmc_multiple_inheritance`.
+    **Remaining blocker (P4):** `Base2 *o = new Derived(); delete o;`. Correct
+    structural upcasting makes `o` a genuine *interior* pointer
+    (`&d.@base@Base2`), but `symex_free` claims "Operand of free must have zero
+    pointer offset". Deleting through a base pointer with a virtual destructor
+    is legal C++; the sound fix is Itanium **offset-to-top / deleting-destructor**
+    semantics so the free targets the complete object. Note the pre-patch model
+    only "passed" this by keeping the upcast pointer unadjusted (offset 0) and
+    compensating at method-receiver casts — the stored pointer was itself wrong.
+    Relaxing the zero-offset claim for `cpp_delete` would make the test pass but
+    would mask genuine `delete (p+1)` bugs, so it is deliberately **not** done.
+  * **Wins:** six KNOWNBUGs promoted to CORE —
+    `github_1866_{distinct_names,own_field,method_call}`,
+    `mi_base_subobject_layout{,_fail}`, `inheritance09`.
 * **P3 — casts.** Replace the `is_method_receiver`-gated byte adjustment with
   the structural `@Base` path for all derived↔base conversions (kills the
   brittle AST-shape heuristic of #3894).

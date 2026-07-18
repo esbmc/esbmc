@@ -438,7 +438,8 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
       base_map bases;
       if (get_base_map(*cxxrd, bases))
         return true;
-      get_base_components_methods(bases, type);
+      get_base_components_methods(
+        bases, type, cxxrd->getNumVBases() > 0, *cxxrd);
     }
   }
 
@@ -2765,10 +2766,19 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
   const irep_idt &base_comp = initializer.get("#base_subobject");
   if (!base_comp.empty() && implicit_this_symb.type().is_pointer())
   {
-    dereference_exprt deref(
-      implicit_this_symb, implicit_this_symb.type().subtype());
-    member_exprt m(deref, base_comp, base_ctor_this_type.subtype());
-    implicit_this_symb = address_of_exprt(m);
+    // Only when the derived actually carries the nested subobject; a
+    // hierarchy with a virtual base keeps the legacy flattened layout.
+    const typet derived_struct =
+      ns.follow(implicit_this_symb.type().subtype());
+    if (
+      derived_struct.is_struct() &&
+      to_struct_type(derived_struct).has_component(base_comp))
+    {
+      dereference_exprt deref(
+        implicit_this_symb, implicit_this_symb.type().subtype());
+      member_exprt m(deref, base_comp, base_ctor_this_type.subtype());
+      implicit_this_symb = address_of_exprt(m);
+    }
   }
 
   // generate the type casting expr and push it to callee's arguments
@@ -2861,7 +2871,9 @@ bool clang_cpp_convertert::get_base_map(
 
 void clang_cpp_convertert::get_base_components_methods(
   base_map &map,
-  struct_union_typet &type)
+  struct_union_typet &type,
+  bool has_virtual_bases,
+  const clang::CXXRecordDecl &cxxrd)
 {
   irept::subt &base_ids = type.add("bases").get_sub();
   for (const auto &base : map)
@@ -2875,23 +2887,19 @@ void clang_cpp_convertert::get_base_components_methods(
 
     const struct_typet &base_type = to_struct_type(s->get_type());
 
-    // Nested base subobject: a single component of the base's type named
-    // "@base@<class_id>", instead of flattening the base's fields into the
-    // derived struct. Inherited member access, upcasts and base ctor/dtor
-    // `this` are routed structurally through this component
-    // (member_exprt(d, @base@B)), which is sound in ESBMC's dereference model
-    // -- unlike the byte-offset flattening it replaces. See #1866, #3894 and
-    // docs/design/cpp-multiple-inheritance-subobjects.md.
-    struct_typet::componentt base_comp;
-    const std::string comp_name = base_subobject_name(class_id);
-    base_comp.set_name(comp_name);
-    base_comp.set_base_name(comp_name);
-    base_comp.set_pretty_name(comp_name);
-    base_comp.type() = symbol_typet(s->id);
-    base_comp.set("from_base", true);
-    base_comp.set("is_base_subobject", true);
-    if (!is_duplicate_component(base_comp, type))
-      to_struct_type(type).components().push_back(base_comp);
+    if (has_virtual_bases)
+    {
+      // Legacy flattened layout. A shared virtual base must appear exactly
+      // once in the most-derived object, which per-path nested subobjects
+      // cannot express yet; keep the whole hierarchy flat so virtual
+      // inheritance behaves exactly as before (P5). See #1866, #3894.
+      for (auto component : base_type.components())
+      {
+        component.set("from_base", true);
+        if (!is_duplicate_component(component, type))
+          to_struct_type(type).components().push_back(component);
+      }
+    }
 
     // Methods stay flattened as metadata (they carry their own class `this`);
     // resolution goes through the base method symbol plus the receiver cast.
@@ -2903,6 +2911,43 @@ void clang_cpp_convertert::get_base_components_methods(
       if (!is_duplicate_method(method, type))
         to_struct_type(type).methods().push_back(method);
     }
+  }
+
+  if (has_virtual_bases)
+    return;
+
+  // Nested base subobjects: one "@base@<class_id>" component per *direct*
+  // base only. Each base's own struct already nests its own bases, so walking
+  // the transitive base_map here would duplicate an ancestor's storage (e.g.
+  // C : B, B : A would give C both @base@A and @base@B, the latter already
+  // containing @base@A). Inherited member access, upcasts and base ctor/dtor
+  // `this` are routed structurally through these components, which is sound in
+  // ESBMC's dereference model -- unlike the byte-offset flattening it
+  // replaces. See #1866, #3894 and
+  // docs/design/cpp-multiple-inheritance-subobjects.md.
+  for (const clang::CXXBaseSpecifier &base_spec : cxxrd.bases())
+  {
+    const clang::CXXRecordDecl *base_rd =
+      base_spec.getType()->getAsCXXRecordDecl();
+    if (!base_rd)
+      continue;
+
+    std::string base_name, base_id;
+    get_decl_name(*base_rd, base_name, base_id);
+    const symbolt *s = context.find_symbol(base_id);
+    if (!s)
+      continue;
+
+    struct_typet::componentt base_comp;
+    const std::string comp_name = base_subobject_name(base_id);
+    base_comp.set_name(comp_name);
+    base_comp.set_base_name(comp_name);
+    base_comp.set_pretty_name(comp_name);
+    base_comp.type() = symbol_typet(s->id);
+    base_comp.set("from_base", true);
+    base_comp.set("is_base_subobject", true);
+    if (!is_duplicate_component(base_comp, type))
+      to_struct_type(type).components().push_back(base_comp);
   }
 }
 
