@@ -38,6 +38,7 @@
 #include <util/std_expr.h>
 #include <util/options.h>
 #include <irep2/irep2_utils.h>
+#include <functional>
 #include <map>
 
 // ---------------------------------------------------------------------------
@@ -629,28 +630,77 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
       loop_assigns, dest, loop_head->location);
   }
 
-  // Emit side-effect instructions (use havoc'd variables).
+  // Symbols defined by the extracted side-effect block (function-call results
+  // and their temporaries). A conjunct that reads one of these is assumed
+  // *after* the side effects; one that does not is a pure constraint on the
+  // havoc'd variables and is assumed *before* them, so it bounds any havoc'd
+  // value feeding a side-effecting invariant — e.g. a function call whose body
+  // loops over that value. Without this ordering the call is symex'd with an
+  // unconstrained nondet bound and its inner loop's unwinding assertion fails
+  // spuriously (issue #6189).
+  std::set<irep_idt> side_effect_defs;
   for (const auto &instr : side_effects.instructions)
-    dest.instructions.push_back(instr);
-
-  // Assume invariants (entering the loop).
-  for (const auto &invariant : invariants)
   {
-    expr2tc inst_invariant = invariant;
-
-    // If frame rule is enabled, replace any old() references with snapshots
-    if (use_frame_rule && active_frame_enforcer)
+    if (instr.is_assign() && is_code_assign2t(instr.code))
     {
-      inst_invariant =
-        active_frame_enforcer->replace_old_with_snapshots(invariant);
+      const code_assign2t &a = to_code_assign2t(instr.code);
+      if (is_symbol2t(a.target))
+        side_effect_defs.insert(to_symbol2t(a.target).get_symbol_name());
     }
+    else if (instr.is_function_call() && is_code_function_call2t(instr.code))
+    {
+      const code_function_call2t &fc = to_code_function_call2t(instr.code);
+      if (!is_nil_expr(fc.ret) && is_symbol2t(fc.ret))
+        side_effect_defs.insert(to_symbol2t(fc.ret).get_symbol_name());
+    }
+  }
 
-    // Create assume instruction: just the invariant
+  auto uses_side_effect = [&side_effect_defs](const expr2tc &conjunct) {
+    std::set<irep_idt> syms;
+    collect_symbols_local(conjunct, syms);
+    for (const auto &s : syms)
+      if (side_effect_defs.count(s))
+        return true;
+    return false;
+  };
+
+  // Flatten top-level conjunctions so a pure conjunct can be split out even when
+  // the frontend folded it together with a side-effecting one into `a && b`.
+  // The conjunct guards are themselves pure: any embedded call has already been
+  // hoisted into the side_effects block (see file header).
+  std::function<void(const expr2tc &)> partition;
+  std::vector<expr2tc> pure, impure;
+  partition = [&](const expr2tc &e) {
+    if (is_and2t(e))
+    {
+      partition(to_and2t(e).side_1);
+      partition(to_and2t(e).side_2);
+    }
+    else
+      (uses_side_effect(e) ? impure : pure).push_back(e);
+  };
+  for (const auto &invariant : invariants)
+    partition(invariant);
+
+  auto emit_assume = [&](const expr2tc &conjunct) {
+    expr2tc inst = conjunct;
+    if (use_frame_rule && active_frame_enforcer)
+      inst = active_frame_enforcer->replace_old_with_snapshots(conjunct);
+
     goto_programt::targett t = dest.add_instruction(ASSUME);
-    t->guard = inst_invariant;
+    t->guard = inst;
     t->location = loop_head->location;
     t->location.comment("loop invariant step case");
-  }
+  };
+
+  // Assume pure conjuncts, run the side effects under those constraints, then
+  // assume the side-effect-dependent conjuncts.
+  for (const auto &conjunct : pure)
+    emit_assume(conjunct);
+  for (const auto &instr : side_effects.instructions)
+    dest.instructions.push_back(instr);
+  for (const auto &conjunct : impure)
+    emit_assume(conjunct);
 
   // Note: active_frame_enforcer is NOT deleted here.
   // It is reused in insert_inductive_step_and_termination for the ASSERT
