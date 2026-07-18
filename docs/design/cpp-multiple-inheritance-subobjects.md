@@ -1,9 +1,18 @@
 # C++ multiple-inheritance base subobjects (issues #1866, #3894)
 
-Status: **design / in progress** — foundational analysis for reworking how the
-Clang C++ frontend models base-class subobjects. Tracks esbmc/esbmc#3894
-(replace the brittle `ASTRecordLayout` dependency) and fixes esbmc/esbmc#1866
-(broken non-first-base access under multiple inheritance).
+Status: **P0–P4 implemented and green** for non-virtual inheritance; P5
+(virtual bases) still open. Reworks how the Clang C++ frontend models
+base-class subobjects: tracks esbmc/esbmc#3894 (replace the brittle
+`ASTRecordLayout` dependency) and fixes esbmc/esbmc#1866 (broken non-first-base
+access under multiple inheritance).
+
+The whole `esbmc-cpp` suite passes apart from four pre-existing
+macOS-environment failures (`github_2242_1/2`, `github_3897_collision`,
+`utility2_fail`), which fail identically without the change. Seven KNOWNBUGs
+became CORE: `github_1866_{distinct_names,own_field,method_call}`,
+`mi_base_subobject_layout{,_fail}`, `inheritance09`, `inheritance12`.
+Classes with a virtual base deliberately retain the legacy flattened layout
+until P5.
 
 ## 1. Symptom
 
@@ -137,6 +146,58 @@ changes) before the next.
   access and all base ctor/dtor/method `this` through `&d.@Base`. Removes the
   ctor/dtor asymmetry and the `getBaseClassOffset` calls in those paths. Fixes
   #1866's distinct-named case.
+  * **P1-core/P2 spike (validated, branch `wip/mi-nested-storage-core`):**
+    `get_base_components_methods` now emits a nested `@base@<id>` component per
+    base (methods still flattened as metadata); the `CK_DerivedToBase` cast is
+    routed structurally (`member_exprt(d, @base@B)` for lvalues,
+    `&(*p).@base@B` for pointers, chained per base-path hop); the base ctor
+    `this` is routed the same way. **Result: all four #1866 reproducers pass —
+    distinct-named fields, MI + own field, non-first-base method call, and the
+    single-inheritance baseline — with no `char*` arithmetic and no
+    pointer-bounds violations.** This confirms the structural approach is the
+    correct, sound fix.
+  * **Remaining migrations to reach green** (≈20 regressions, all in
+    polymorphic / cast subsystems that still assume the flat layout):
+    1. **vptr-init nesting (dominant):** `gen_vptr_initializations`
+       (`clang_cpp_adjust_code_gen.cpp`) only iterates the derived struct's
+       *direct* `is_vtptr` components, so base vptrs now living inside
+       `@base@B` are never initialised → polymorphic dispatch reads a null
+       vptr. Must recurse into `@base@` subobjects and emit
+       `this->@base@B.@vtable_pointer = &vtable::tag-B@Derived`.
+    2. **`dynamic_cast` / base→derived:** the structural downcast and
+       `offset_of_subobject` path (`clang_cpp_convert_vft.cpp`) must walk
+       `@base@` components instead of byte offsets.
+    3. **Destructor chain:** `emit_base_dtor` still uses the byte offset;
+       switch to `&this->@base@B`.
+    4. **Thunks / covariant** (P4) once vptrs are nested.
+  * **vptr-init migration (done):** `gen_vptr_initializations` now recurses
+    into `@base@` subobjects, emitting
+    `this->@base@B.@vtable_pointer = &vtable::tag-B@Derived`, so polymorphic
+    dispatch through a non-first base resolves again.
+  * **Virtual bases (deferred to P5):** a class with any virtual base keeps the
+    legacy flattened layout (`has_virtual_bases` guard) — a shared virtual base
+    must appear once in the most-derived object, which per-path nested
+    subobjects cannot express yet. The cast and base-ctor `this` routing also
+    self-check that the `@base@` component exists, falling back to a plain
+    typecast on flattened hierarchies.
+  * **Direct bases only:** nesting adds one `@base@` per *direct* base. Walking
+    the transitive `base_map` duplicated ancestors (`C : B, B : A` gave `C`
+    both `@base@A` and `@base@B`, the latter already nesting `@base@A`) and
+    broke multi-level MI.
+  * **Status: 1 failing test out of 2233** — `llbmc_multiple_inheritance`.
+    **Remaining blocker (P4):** `Base2 *o = new Derived(); delete o;`. Correct
+    structural upcasting makes `o` a genuine *interior* pointer
+    (`&d.@base@Base2`), but `symex_free` claims "Operand of free must have zero
+    pointer offset". Deleting through a base pointer with a virtual destructor
+    is legal C++; the sound fix is Itanium **offset-to-top / deleting-destructor**
+    semantics so the free targets the complete object. Note the pre-patch model
+    only "passed" this by keeping the upcast pointer unadjusted (offset 0) and
+    compensating at method-receiver casts — the stored pointer was itself wrong.
+    Relaxing the zero-offset claim for `cpp_delete` would make the test pass but
+    would mask genuine `delete (p+1)` bugs, so it is deliberately **not** done.
+  * **Wins:** six KNOWNBUGs promoted to CORE —
+    `github_1866_{distinct_names,own_field,method_call}`,
+    `mi_base_subobject_layout{,_fail}`, `inheritance09`.
 * **P3 — casts.** Replace the `is_method_receiver`-gated byte adjustment with
   the structural `@Base` path for all derived↔base conversions (kills the
   brittle AST-shape heuristic of #3894).

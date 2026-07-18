@@ -6,6 +6,51 @@
 #include <util/expr_util.h>
 #include <irep2/irep2.h>
 #include <util/std_expr.h>
+#include <string>
+
+// Component-name prefix the C++ frontend uses for nested base subobjects; see
+// base_subobject_name() in clang-c-frontend/clang_c_convert.h (#1866, #3894).
+static const std::string base_subobject_prefix = "@base@";
+
+// Build a member access to `member` within `source`, descending through nested
+// "@base@" base subobjects when the member is inherited rather than declared
+// directly in `source`'s class. Returns false if `member` is not reachable.
+static bool build_nested_member_access(
+  const expr2tc &source,
+  const irep_idt &member,
+  const type2tc &result_type,
+  const namespacet &ns,
+  expr2tc &out)
+{
+  if (is_nil_type(source->type))
+    return false;
+
+  const type2tc ft = ns.follow(source->type);
+  if (!is_struct_type(ft))
+    return false;
+
+  const struct_type2t &st = to_struct_type(ft);
+  for (std::size_t i = 0; i < st.members.size(); ++i)
+    if (st.member_names[i] == member)
+    {
+      out = member2tc(result_type, source, member);
+      return true;
+    }
+
+  for (std::size_t i = 0; i < st.members.size(); ++i)
+  {
+    const std::string name = st.member_names[i].as_string();
+    if (name.compare(
+          0, base_subobject_prefix.size(), base_subobject_prefix) != 0)
+      continue;
+
+    expr2tc base_access = member2tc(st.members[i], source, st.member_names[i]);
+    if (build_nested_member_access(base_access, member, result_type, ns, out))
+      return true;
+  }
+
+  return false;
+}
 
 static inline void convert_capability_member(
   expr2tc &expr,
@@ -149,8 +194,15 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
       const member_ref2t &ref = to_member_ref2t(member);
 
       // give the pm = &S::x and s.*pm
-      // convert the s.*pm into s.x
-      expr = member2tc(to_pointer_type(ref.type).subtype, source, ref.member);
+      // convert the s.*pm into s.x. Under the nested base-subobject layout an
+      // inherited member lives inside a "@base@" component, so resolve the
+      // access through that path when it is not a direct member (#1866, #3894).
+      const type2tc member_type = to_pointer_type(ref.type).subtype;
+      expr2tc nested;
+      if (build_nested_member_access(source, ref.member, member_type, ns, nested))
+        expr = nested;
+      else
+        expr = member2tc(member_type, source, ref.member);
     }
     else
     {
