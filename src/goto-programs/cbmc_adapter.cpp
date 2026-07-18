@@ -186,6 +186,29 @@ irept complex_member(const irept &op, const char *name, const irept &elem)
 
 void fix_expression(irept &irep)
 {
+  if (
+    irep.id() == "address_of" && !irep.get_sub().empty() &&
+    irep.get_sub()[0].id() == "label")
+  {
+    // GNU labels-as-values: CBMC lowers a computed goto (`goto *p`) into a
+    // concrete IF-chain that compares label addresses -- address_of(label) --
+    // for equality; the addresses are only ever compared, never dereferenced.
+    // ESBMC has no label-address node (its own frontend rejects indirect
+    // gotos), so map each distinct label to a unique non-null (void *)K
+    // constant: equality over those constants reproduces CBMC's control flow.
+    // Same-named labels in different functions could collide, but comparing
+    // their addresses across functions is undefined, so it cannot arise in a
+    // valid program.
+    static std::map<std::string, unsigned long long> label_addrs;
+    const std::string label = irep.get_sub()[0].find("identifier").id_string();
+    const unsigned long long addr =
+      label_addrs.emplace(label, label_addrs.size() + 1).first->second;
+    irept int_ty("unsignedbv");
+    int_ty.set("width", config.ansi_c.pointer_width());
+    irep = mk_unary("typecast", irep.find("type"), mk_bv_const(int_ty, addr));
+    // Fall through: the operand-wrap step normalises the new typecast/constant.
+  }
+
   if (irep.id() == "count_leading_zeros" || irep.id() == "count_trailing_zeros")
   {
     // CBMC lowers __builtin_clz/__builtin_ctz to these expression ids, which
