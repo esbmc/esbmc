@@ -428,7 +428,14 @@ static bool summary_apply_effect(const exprt &e, summary_statet &st)
   const bool inc = (s == "preincrement" || s == "postincrement");
   const bool dec = (s == "predecrement" || s == "postdecrement");
   auto it = st.env.find(id);
-  if ((!inc && !dec) || e.operands().size() != 1 || it == st.env.end())
+  // Whitelist the types `cur +/- from_integer(1, t)' is meaningful for, so an
+  // unhandled type degrades to a rejection.  from_integer() returns nil for
+  // anything but an integer bitvector or bool, and a nil operand here left an
+  // ill-formed `cur + nil' in env that crashed once the summary reached the
+  // solver (a `double' local incremented in a summarized loop).
+  if (
+    (!inc && !dec) || e.operands().size() != 1 || it == st.env.end() ||
+    (t.id() != "signedbv" && t.id() != "unsignedbv"))
     return false;
   exprt cur = it->second;
   summary_coerce(cur, t);
