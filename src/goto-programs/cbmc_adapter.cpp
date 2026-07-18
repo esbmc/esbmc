@@ -829,6 +829,8 @@ void reject_string_type(const irept &candidate)
 }
 
 // The named-sub keys under which a type -- and never an identifier -- appears.
+// Everything else (name, identifier, base_name, ...) holds the identifier text
+// as its id(), so descending one of those leaves type position.
 bool is_type_edge(const irep_idt &key)
 {
   return key == "type" || key == "subtype" || key == "return_type";
@@ -838,18 +840,28 @@ bool is_type_edge(const irep_idt &key)
 // inlined on the recursion stack, so a recursive aggregate (e.g. a Rust struct
 // holding a pointer to itself) can be detected and broken -- see the tag branch
 // below. The two-argument overload seeds it for external callers.
+// `in_type_position` records whether `self` was reached through a type edge.
+// The rewrites below key on self.id(), which for an identifier node is the
+// identifier text -- so without it, a C symbol named `c_bool`, `c_enum_tag` or
+// `string` is mistaken for the type of the same name. That is not hypothetical:
+// a function named c_bool had its name rewritten to `signedbv`, and the
+// resulting binary verified to FAILED on a program that should pass.
 void fix_type(
   irept &self,
   const std::unordered_map<std::string, irept> &cache,
-  std::unordered_set<std::string> &expanding)
+  std::unordered_set<std::string> &expanding,
+  bool in_type_position)
 {
-  if (self.id() == "c_bool")
+  if (in_type_position)
+    reject_string_type(self);
+
+  if (in_type_position && self.id() == "c_bool")
   {
     self.id("signedbv");
     return;
   }
 
-  if (self.id() == "c_enum_tag")
+  if (in_type_position && self.id() == "c_enum_tag")
   {
     // CBMC references an enum type via a c_enum_tag node -- the tag counterpart
     // of c_enum, mirroring struct_tag/union_tag. migrate_type maps c_enum/
@@ -888,7 +900,7 @@ void fix_type(
     // Detect the bool underlying before that rewrite and keep the result "bool".
     const bool bool_underlying =
       underlying.id() == "bool" || underlying.id() == "c_bool";
-    fix_type(underlying, cache, expanding);
+    fix_type(underlying, cache, expanding, true);
     const irep_idt bf_width = self.find("width").id();
     self.id(bool_underlying ? irep_idt("bool") : underlying.id());
     self.get_sub().clear();
@@ -952,7 +964,7 @@ void fix_type(
     !self.get_sub().empty())
   {
     for (auto &v : self.get_sub())
-      fix_type(v, cache, expanding);
+      fix_type(v, cache, expanding, true);
     // The pointed-to type is the sole positional sub, exactly like the array
     // case below -- it must be assigned directly, not wrapped in an
     // intermediate group irep. typet::subtype() (util/type.h) is a direct
@@ -1000,15 +1012,11 @@ void fix_type(
   if (!is_tag)
   {
     for (auto &v : self.get_sub())
-      fix_type(v, cache, expanding);
+      fix_type(v, cache, expanding, in_type_position);
     for (auto &p : self.get_named_sub())
-    {
-      if (is_type_edge(p.first))
-        reject_string_type(p.second);
-      fix_type(p.second, cache, expanding);
-    }
+      fix_type(p.second, cache, expanding, is_type_edge(p.first));
     for (auto &p : self.get_comments())
-      fix_type(p.second, cache, expanding);
+      fix_type(p.second, cache, expanding, false);
     return;
   }
 
@@ -1037,15 +1045,11 @@ void fix_type(
   if (irep_contains(self, "struct_tag") || irep_contains(self, "union_tag"))
   {
     for (auto &v : self.get_sub())
-      fix_type(v, cache, expanding);
+      fix_type(v, cache, expanding, in_type_position);
     for (auto &p : self.get_named_sub())
-    {
-      if (is_type_edge(p.first))
-        reject_string_type(p.second);
-      fix_type(p.second, cache, expanding);
-    }
+      fix_type(p.second, cache, expanding, is_type_edge(p.first));
     for (auto &p : self.get_comments())
-      fix_type(p.second, cache, expanding);
+      fix_type(p.second, cache, expanding, false);
   }
 
   expanding.erase(ident);
@@ -1055,7 +1059,7 @@ void fix_type(
 void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
 {
   std::unordered_set<std::string> expanding;
-  fix_type(self, cache, expanding);
+  fix_type(self, cache, expanding, false);
 }
 
 // Entry point for a type SYMBOL's own definition: seed the expansion stack
@@ -1074,7 +1078,7 @@ void fix_type_symbol_definition(
   const std::string &self_ident)
 {
   std::unordered_set<std::string> expanding{self_ident};
-  fix_type(self, cache, expanding);
+  fix_type(self, cache, expanding, false);
 }
 
 // Builds the malloc/alloca side_effect_exprt (irep shape) do_mem would have
