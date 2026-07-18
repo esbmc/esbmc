@@ -360,7 +360,7 @@ static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
     "__fpclassifyd", "__fpclassifyl", "isalnum",   "isalpha",  "isblank",
     "iscntrl",       "isdigit",       "isgraph",   "islower",  "isprint",
     "ispunct",       "isspace",       "isupper",   "isxdigit", "tolower",
-    "toupper"};
+    "toupper",       "atoi",          "atol",      "strtol"};
 
   for (const char *name : libc)
   {
@@ -410,11 +410,16 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
   // bodies present for the bump path, so the boilerplate must link them here.
   // The <ctype.h> classifiers/case-mappers (isdigit/toupper/...) are the same
   // bodyless-external shape; their ctype.c bodies are straight-line (no unwind).
+  // The <stdlib.h> string-to-integer parsers atoi/atol/strtol likewise bridge
+  // to stdlib.c bodies -- these are byte loops, so they need `--unwind` like the
+  // string.h family. CBMC 6.8.0 models atoi/atol/strtol but not atoll/strtoll,
+  // which stay bodyless (their nondet return already matches CBMC's verdict).
   static const char boilerplate[] =
     "/* Auto-generated: bundle all ESBMC additions for CBMC gotos. */\n"
     "#include <math.h>\n"
     "#include <string.h>\n"
     "#include <ctype.h>\n"
+    "#include <stdlib.h>\n"
     // CBMC's <math.h> lowers fpclassify(x) to __fpclassify{f,d,l}(x). Only
     // __fpclassifyd is new here -- glibc's <math.h> already declares
     // __fpclassifyf/__fpclassifyl (and macOS's declares all three), but none of
@@ -445,6 +450,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)islower,   (void *)isprint,  (void *)ispunct,\n"
     "  (void *)isspace,   (void *)isupper,  (void *)isxdigit,\n"
     "  (void *)tolower,   (void *)toupper,\n"
+    "  (void *)atoi,      (void *)atol,     (void *)strtol,\n"
     "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)

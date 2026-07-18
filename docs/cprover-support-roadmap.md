@@ -113,7 +113,8 @@ and the symbol/function table layout.
 | Builtin-call rewrite for `__builtin_huge_val{,f,l}`/`__builtin_inf{,f,l}` FUNCTION_CALLs → +∞ floatbv constant (sign 0, exponent all ones, mantissa 0), width-generic incl. 128-bit long double (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Bit-reversal expression `bitreverse` (`__builtin_bitreverse{8,16,32,64}`) → SWAR reversal via `bitand`/`shl`/`lshr`/`bitor` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | `_Complex` support: `complex` type → subtype form; constructor/`complex_real`/`complex_imag`/real→complex `typecast`/`+ - * /`/`unary-` lowered to the native component-wise forms (§4.3 type + §4.4 exprs, Phases 2–3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type`, `fix_expression` |
-| Libc body bridge extended to `<ctype.h>` classifiers/case-mappers `isalnum`/`isalpha`/`isblank`/`iscntrl`/`isdigit`/`isgraph`/`islower`/`isprint`/`ispunct`/`isspace`/`isupper`/`isxdigit`/`tolower`/`toupper` (bodyless externals → ESBMC's ASCII operational-model bodies) (§4.8, Phase 2) | ✅ (PR #TBD) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
+| Libc body bridge extended to `<ctype.h>` classifiers/case-mappers `isalnum`/`isalpha`/`isblank`/`iscntrl`/`isdigit`/`isgraph`/`islower`/`isprint`/`ispunct`/`isspace`/`isupper`/`isxdigit`/`tolower`/`toupper` (bodyless externals → ESBMC's ASCII operational-model bodies) (§4.8, Phase 2) | ✅ (PR #6157) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
+| Libc body bridge extended to `<stdlib.h>` string-to-integer parsers `atoi`/`atol`/`strtol` (byte-loop bodies, need `--unwind`; `atoll`/`strtoll` left bodyless — CBMC does not model them) (§4.8, Phase 2) | ✅ (PR #6158) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -924,6 +925,18 @@ and a symbolic `tolower(toupper(c)) == c` round-trip over `c ∈ [a,z]`) `SUCCES
 The macOS-`goto-cc` `<ctype.h>` *macro* form (`__istype`/`__isctype` over a `_DefaultRuneLocale`
 rune table) is a distinct, locale-table shape neither tool models deterministically and is out of
 scope here — the prototype form is what a portable C source and a Linux-glibc binary emit.
+
+**Extended to the `<stdlib.h>` string-to-integer parsers: `atoi`/`atol`/`strtol`.** Same
+`link_cbmc_libc_bodies` bridge — three more names in the list and the additions boilerplate.
+CBMC emits these as **bodyless externals returning nondet**, so a valid `atoi("42") == 42`
+reported a false `FAILED` where CBMC verifies `SUCCESSFUL`. ESBMC's operational-model bodies
+(`stdlib.c`, a shared `ATOI_DEF`/`STRTOL_DEF` digit-accumulation loop) are **byte loops**, so a
+call needs an `--unwind` bound like the string.h family. Selective, like `strrchr`: CBMC 6.8.0
+models `atoi`/`atol`/`strtol` but **not** `atoll`/`strtoll` (those reach CBMC as `no body` and
+are left bodyless so their nondet-return verdict still matches CBMC, rather than bridged into a
+divergence). Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), `--unwind 8`: `cbmc_atoi`
+(`atoi` positive/negative/zero, `atol`, `strtol` base-10 and base-16 `"ff" == 255`) `SUCCESSFUL`,
+and `cbmc_atoi_fail` (`atoi("42") == 43`) `FAILED`, confirming the digits are really parsed.
 
 **Ruled out as an alternative fix** (for the remaining libm family, from the #5743
 diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
