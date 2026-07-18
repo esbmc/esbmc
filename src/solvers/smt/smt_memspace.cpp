@@ -420,19 +420,19 @@ smt_astt smt_solver_baset::init_pointer_obj(
   expr2tc no_wraparound = greaterthanequal2tc(end_sym, start_sym);
   assert_expr(no_wraparound);
 
+  /* An object's address is a multiple of its type's alignment (C11 6.2.8,
+   * [basic.align]), so constrain the base address to it. This covers both an
+   * explicit alignas and the natural alignment every other object has; without
+   * the latter, `(uintptr_t)&x % alignof(T) == 0` is satisfiably false and
+   * yields a spurious counterexample. Types of alignment 1 constrain nothing. */
   if (type)
   {
-    const irept &alignment = type->find("alignment");
-    if (alignment.is_not_nil())
+    const BigInt a = alignment(*type, ns);
+    if (a > 1)
     {
-      expr2tc alignment2;
-      migrate_expr(static_cast<const exprt &>(alignment), alignment2);
-      assert(is_constant_int2t(alignment2));
-      alignment2 = typecast2tc(ptr_loc_type, alignment2);
-      expr2tc zero = gen_zero(ptr_loc_type);
-      expr2tc mod = modulus2tc(ptr_loc_type, start_sym, alignment2);
-      expr2tc mod_is_zero = equality2tc(mod, zero);
-      assert_expr(mod_is_zero);
+      expr2tc mod =
+        modulus2tc(ptr_loc_type, start_sym, constant_int2tc(ptr_loc_type, a));
+      assert_expr(equality2tc(mod, gen_zero(ptr_loc_type)));
     }
   }
 

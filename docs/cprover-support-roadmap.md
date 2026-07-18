@@ -159,12 +159,55 @@ harness, not `main`, is the entry. This unblocks the `verify-rust-std`/Kani flow
 proof harnesses by name.
 
 ### 4.3 Type system: anonymous structs and wide constants (Phase 3)
-`cbmc_adapter.cpp::expand_anon_struct` aborts on CBMC's anonymous-aggregate naming
-(`tag-#anon#ST[...]`), which the contracts library uses heavily — this is why
-`mul_contract.goto` is rejected (identically to the reference). Needs an LL(k) parser for
-CBMC's `ST[...]`/`SYM`/`*{...}` type-name grammar (a skeleton exists in the original Rust
-`adapter.rs::Anon2Struct`). Separately, the hex→binary constant rewrite goes through
-`uint64_t`, so constants wider than 64 bits (e.g. 128-bit) are wrong.
+
+**Anonymous struct/union members — ✅ fixed (no grammar parser needed).** The problem was
+never that ESBMC lacks a parser for CBMC's anonymous-aggregate tag-name grammar
+(`tag-#anon#ST[...]`) — CBMC **serialises the anonymous aggregate's full layout as an ordinary
+type symbol**, so it resolves through the adapter's existing tag cache like any named
+struct/union. The real fault was **ordering**: CBMC emits an anonymous aggregate's type symbol
+*after* the struct that contains it (the aggregate tag encodes the container's own layout), so
+the first fix pass reached the container's anonymous member before that symbol was cached. A
+not-yet-seen *named* tag survives this — `fix_type` leaves it unresolved and the re-check pass
+in `adapt_cbmc_to_esbmc` (which runs with the full cache) resolves it — but an anonymous tag
+took a separate path in `expand_anon_struct` that `abort()`ed on the cache miss. Fixed by making
+`expand_anon_struct` a no-op: an unresolved anonymous tag now defers to the same re-check pass as
+a named one. Because the definition comes from CBMC's own serialised symbol (not a reconstruction
+from the tag name), it is byte-identical to the type the reader builds for the same member inside
+an instruction — which `with2t::assert_type_compat_for_with` compares by value, the check an
+earlier tag-name-parser attempt kept tripping. Verdict parity with CBMC, dual-solver
+(Bitwuzla + Z3), across union/array overlays, a doubly-nested anonymous struct-in-union-in-struct,
+an anonymous union with a **pointer** member, an array-of-struct union arm, and a function-local
+anonymous aggregate (`cbmc_anon_struct` SUCCESSFUL / `cbmc_anon_struct_fail` FAILED on a wrong
+overlay value). The tag-name grammar and the reason a from-scratch parser is unsound are
+recorded in the git history of the reverted attempt.
+
+Separately, the hex→binary constant rewrite goes through `uint64_t`, so constants wider than 64
+bits (e.g. 128-bit) are wrong.
+**Prior graceful-decline (PR #6160), now superseded.** Before the resolution fix above,
+`expand_anon_struct` was made to `throw` a clean error instead of `abort()`ing on an
+anonymous-aggregate tag it could not resolve (PR #6160, §4.7 malformed-input recovery). That
+was replaced here by actually resolving the tag; its `cbmc_anon_aggregate` fixture (the
+`tag-#anon#UN[SYM#0={ST[S32'a'|S32'b']}'$anon0'|ARR2{S32}'arr']` nested union) now verifies
+**SUCCESSFUL** rather than erroring, and its `test.desc` is updated accordingly.
+
+**Reproducible locally with `goto-cc` (grammar characterised).** Contrary to the earlier
+assumption that this needed the Kani/contracts corpus, plain C nested anonymous aggregates
+compiled with `goto-cc` reach the adapter as name-encoded tags. Samples:
+`UN[S8'c'|S16'h'|U32'u']` (flat scalars — CBMC actually inlines these, so they already work),
+`UN[*{S32}'p'|S64'v']` (pointer member), `UN[F64'd'|S64'l']`,
+`ST[SYM#0={ST[S32'a']}'$anon0'|S32'b']` (nested struct),
+`UN[SYM#0={ST[...]}'$anon0'|ARR2{S32}'arr']` (union of nested-struct + array). Grammar:
+`agg := ('ST'|'UN') '[' member ('|' member)* ']'`; `member := type "'" name "'"`;
+`type := 'S'N | 'U'N | 'F'N | '*' '{' type '}' | "ARR" N '{' type '}' | agg |
+"SYM" '#' N '=' '{' type '}'`. **The hard part, and why a naive parser is unsound:**
+`with2t::assert_type_compat_for_with` (`irep2_expr.cpp`) compares the aggregate member type
+*by value* against the type the reader independently builds for the same member inside an
+instruction — so a synthesised `array2t` must reproduce CBMC's exact array-**size** constant
+(type and value), and a synthesised nested `struct2t`/`union2t` its exact **tag**, or symex
+aborts on a `with`. A trial parser that synthesised these from the name string produced
+`array2t`/`struct2t` values that did not match the instruction side (a 2-member scalar union
+tripped the `with` assert where a 3-member one happened to pass), confirming the full fix must
+mirror the reader's type construction, not invent its own. Deferred as its own task.
 
 **Recursive struct/union types (linked lists) — ✅ fixed.** A plain linked-list program —
 `struct node { int value; struct node *next; }` with `a.next->next` read through a
@@ -580,6 +623,39 @@ float operand), `migrate` cannot tell them apart; `fix_expression` runs only on 
 perturbing native handling. `isinf` now matches CBMC's verdict exactly (reclassified
 `cbmc_isinf` KNOWNBUG→CORE; negative direction covered by `cbmc_isinf_fail`).
 
+**Variadic functions (`va_start`) — decline cleanly instead of `abort()` (✅ landed).**
+CBMC lowers `va_start(ap, last)` to a `side_effect` that points the `va_list` at the last
+named parameter and then walks the stack for each `va_arg` (which it lowers to a raw
+`*(T *)ap` dereference). ESBMC models variadic arguments as **discrete per-call symbols**
+(`<fn>::va_argN`, `symex_function.cpp`), not a contiguous stack, so CBMC's pointer walk cannot
+recover them — and `migrate_expr` `abort()`ed (SIGABRT/rc=134) on the unrecognised `va_start`
+statement. `fix_expression` now `throw`s a clean error the `create_goto_program` handler turns
+into a graceful exit (matching §4.7). Correct `<stdarg.h>` support on the `--binary` path needs
+a contiguous vararg layout and is future work. Pinned by `cbmc_va_start`. **Other deep,
+still-unsupported constructs found by the same construct sweep** (each declines/diverges, none
+a quick adapter rewrite): `setjmp`/`longjmp` (non-local control flow; ESBMC returns a spurious
+FAILED where CBMC proves SUCCESSFUL), and SIMD vector types (`__attribute__((vector_size))` —
+CBMC lowers element-wise but ESBMC's vector SMT encoding hangs in the solver).
+**CPROVER pointer/introspection intrinsics — swept 2026-07-18.** `__CPROVER_POINTER_OBJECT`,
+`__CPROVER_POINTER_OFFSET`, `__CPROVER_same_object`, `__CPROVER_r_ok`, and `__CPROVER_assume`
+already verify to CBMC parity. Four gaps remain, each recorded for future work:
+- **`__CPROVER_DYNAMIC_OBJECT` (`is_dynamic_object`) — declined cleanly (✅ landed).** No
+  `migrate_expr` handler → it `abort()`ed. ESBMC tracks the identical fact in its symex-managed
+  `c:@__ESBMC_is_dynamic` bool array (indexed by pointer object, set on `malloc` in
+  `symex_assign.cpp`), so the faithful rewrite is `__ESBMC_is_dynamic[pointer_object(p)]` — but
+  that needs the array **force-linked even when the binary never calls `malloc`** (otherwise
+  absent) with its `__ESBMC_inf_size` shape preserved, so it is deferred. Only an *explicit*
+  `__CPROVER_DYNAMIC_OBJECT` reaches the adapter (CBMC's `free`/dynamic checks live in library
+  bodies re-linked at analysis time, not the serialised binary — a `free`-using binary verifies
+  fine), so `fix_expression` now throws a clean error instead of aborting. Pinned by
+  `cbmc_dynamic_object`.
+- **`__CPROVER_OBJECT_SIZE` (`object_size`)** — migrates (`→ c:@F@__ESBMC_get_object_size`,
+  already in the wrap-set) but the SMT **encoding hangs in the solver** (same class as the SIMD
+  vector hang, §4.4) — a solver-performance item, not an adapter gap.
+- **`__CPROVER_array_set` / `__CPROVER_havoc_object`** — reach migrate as unhandled `code`
+  statements (`ERROR: code`); the array/havoc codet family, akin to the `ARRAY_COPY`/`ARRAY_SET`
+  memcpy handling of §4.8.
+
 **Computed `goto` (GNU labels-as-values) — ✅ landed.** A `goto *p` over
 `void *t[] = {&&a, &&b}` reached the adapter as `address_of(label{identifier})` expressions
 (the label operand is typed `empty`), which `migrate_type` has no case for — it `abort()`ed
@@ -626,10 +702,37 @@ when goto-cc linked the `.goto`; it could only matter if a later link stage (e.g
 additions boilerplate) overrode a weak definition, so the warning stays as a tripwire.
 `is_property` — CBMC-internal assertion bookkeeping, no ESBMC counterpart needed.
 
-### 4.6 Contracts subsystem (Phase 4)
+### 4.6 Contracts subsystem (Phase 4) — 🔶 loads & verifies; gap is the unserialised contract library
 `__CPROVER_contracts_*` (requires/ensures/assigns/frees, `is_fresh`, object/write sets) is a
-whole subsystem. ESBMC has its own contracts (`src/goto-programs/contracts/`); the work is
-to bridge CBMC's encoding onto it rather than re-implement.
+whole subsystem. ESBMC has its own contracts (`src/goto-programs/contracts/`, including native
+`is_fresh` handling — `contracts.cpp::is_fresh_function`); the work is to bridge CBMC's encoding
+onto it rather than re-implement.
+
+**Concrete state (probed 2026-07-18, `goto-instrument --enforce-contract` /
+`--replace-call-with-contract` on `goto-cc` C).** A contract-instrumented CBMC binary **loads
+and reaches a verdict on the `--binary` path without crashing** — the anonymous-aggregate
+resolution (§4.3) and the existing expression coverage carry it through. `requires`/`ensures`
+lower to `ASSUME`/`ASSERT` (`// Assume requires clause` / `// Check ensures clause`) and are
+executed; the only load-time noise is a benign `dropping 'property' on symbol contract::<fn>`
+(§4.5 — `is_property` has no ESBMC counterpart, harmless).
+
+**The concrete gap is the contract *library*, not the encoding.** CBMC does **not** serialise
+the bodies of its contract-runtime functions into the `.goto` — `__CPROVER_enforce_requires_is_fresh`,
+the `__CPROVER_contracts_*` helpers, and the object/write-set machinery are **re-linked from
+CBMC's own contracts library at analysis time** (verified: the function is *called* in the
+instrumented body and its body is visible under `cbmc --show-goto-functions`, but the reader
+finds **zero serialised instructions** for it — exactly the libm/libc situation of §4.8, one
+subsystem up). So ESBMC sees `__CPROVER_enforce_requires_is_fresh` as a **bodyless external
+returning nondet**: `is_fresh` in a `requires` becomes an unconstrained assumption. That is
+**sound but imprecise** (dropping an assumption only widens the checked behaviour), not a
+miss — but it defeats the point of an `is_fresh` precondition. The bridge is to synthesise or
+retarget these onto ESBMC's native `is_fresh`/contracts machinery (the additions-boilerplate
+mechanism of §4.8, or a direct `c:@F@__ESBMC_is_fresh` retarget like the `memcpy` family). Not
+yet attempted: a **local verdict oracle is missing** — bare `goto-instrument --enforce-contract`
+without the contracts-library link does not actually fire the `ensures` check (a deliberately
+violated `ensures` verifies SUCCESSFUL under *CBMC itself* in this setup), so contract-*enforcement*
+parity cannot be validated until the library is linked on both sides. Loadability and the
+`requires`/`ensures` → `ASSUME`/`ASSERT` lowering are the parts confirmed working.
 
 ### 4.7 Versioning & robustness (Phase 5) — 🔶 malformed-input recovery landed
 Only CBMC binary **version 6** is accepted (a wrong version, like a non-magic header, is
@@ -1143,14 +1246,16 @@ reproduce** (76/76 crashes, 3/3 mismatches), so the numbers below are not parall
 |---|---|---|
 | **Parses (GOTO built)** | **1375 / 1375 (100 %)** | reader → adapter → migrate never fails |
 | Matches CBMC — **Yes** | 1110 | **99.7 % of the 1113 both tools decided** |
-| Matches CBMC — **No** | 3 | all one root cause, all false alarms (see below) |
+| Matches CBMC — **No** | 3 | all one root cause (alignment), all false alarms — ✅ fixed 2026-07-17, PR #6138; the CBMC baseline behind this row does not reproduce, see below |
 | Matches CBMC — **Crashes** | 76 | 53 × rc=134 abort, 23 × rc=139 segfault |
 | N/A (either side timed out/errored) | 186 | ESBMC 140 timeouts; CBMC 35 timeouts + 68 errors |
 
 **The 87 % rc=139 parse-crash baseline is gone.** No binary fails to load: all 76 crashes
 occur *during verification*, after a GOTO program was built successfully. Where both tools
 reach a verdict they agree 1110/1113, and **there is not a single unsound miss in the corpus**
-— ESBMC never reports SUCCESSFUL where CBMC reports FAILED.
+— ESBMC never reports SUCCESSFUL where CBMC reports FAILED. (The 3 disagreements are since
+fixed — PR #6138 — so a re-sweep should show 1113/1113; all three were false alarms, i.e. in
+the safe direction, so the no-unsound-miss result is unaffected either way.)
 
 **Per module** (Yes / No / Crashes / N/A): `ptr` 323/3/19/31 · `intrinsics` 291/0/0/22 ·
 `convert` 190/0/0/0 · `num` 189/0/14/29 · `slice` 85/0/32/84 · `time` 20/0/0/4 ·
@@ -1166,18 +1271,54 @@ surface than the per-umbrella framing suggests:
 | `ERROR: Bitwuzla error encountered` (rc=134) | 12 | `ptr` 12 | `non_null_check_write_unaligned_*` |
 | silent segfault, no diagnostic (rc=139) | 23 | `num` 12, `other` 8, `char` 2, `collections` 1 | `nonzero_check_cmp_for_*`, `check_vecdeque_swap` |
 
-**The 3 mismatches are one bug, and it is a false alarm (safe direction).**
-`check_cast` / `check_as_ref` / `check_as_mut` (`ptr::non_null`): ESBMC reports **FAILED**
-where CBMC proves **SUCCESSFUL** (`0 of 2826 failed`), on
+**The 3 mismatches were one bug — object base-address alignment — and it is ✅ fixed
+(2026-07-17, PR #6138).** `check_cast` / `check_as_ref` / `check_as_mut` (`ptr::non_null`)
+reported a false alarm on
 `misaligned pointer to reference cast: address must be a multiple of its type's alignment`
 — `(unsigned long int)var_12 % 4 == 0` at `core/src/ptr/non_null.rs:469`, inside
 `NonNull::<T>::as_ref`. The pointer derives from a real `u32`/`i32` object, so it is
-inherently 4-byte aligned; CBMC's memory model constrains an object's base address to its
-natural alignment, ESBMC's leaves it unconstrained on the `--binary` path, so `addr % 4` is
-free and the alignment assertion is satisfiable-false. Precision-losing, never unsound.
-**Object base-address alignment is therefore the single highest-leverage gap in the corpus**:
-it explains all 3 mismatches *and* the 41-crash `align_offset`/`align_to` cluster — i.e.
-alignment modelling, not arithmetic, is what UMBRELLA #3 actually needs.
+inherently 4-byte aligned, but ESBMC left the object's base address unconstrained, making
+`addr % 4` free and the assertion satisfiably-false. Precision-losing, never unsound.
+
+**The root cause was broader than "the `--binary` path".** `smt_memspace.cpp::init_pointer_obj`
+already constrained `start % alignment == 0`, but only for types carrying an explicit
+`"alignment"` irep attribute — which only the clang frontend sets, for aggregates (via
+`padding.cpp`) and explicit `alignas`. **Scalars were never constrained on any path**: on
+master, `int x; assert((uintptr_t)&x % 4 == 0)` reports `VERIFICATION FAILED` through the
+plain C frontend. The `--binary` path merely made it universal, since `padding.cpp` never
+runs there. The fix constrains every object to its type's alignment (natural alignment when
+no attribute is present; packed types keep alignment 1 and stay unconstrained), which
+required moving `alignment()` from `clang-c-frontend/padding.cpp` into `util/` beside
+`type_byte_size()` — the solver must not depend on a frontend.
+
+**Post-fix parity is per-property, not just verdict.** On each of the three, `esbmc --binary
+--multi-property` now reports *exactly* CBMC's failing set, and the substantive alignment
+assertion passes in both:
+
+| Harness | ESBMC now | CBMC 6.10.0 |
+|---|---|---|
+| `non_null_check_cast` | 1 failed — `core_0` marker | `1 of 85 failed` — same marker |
+| `non_null_check_as_ref` | 4 failed — `core_0..3` markers | `4 of 123 failed` — same markers |
+| `non_null_check_as_mut` | 4 failed — `core_0..3` markers | `4 of 123 failed` — same markers |
+
+⚠️ **Ground-truth correction — the recorded CBMC figure does not reproduce.** This section
+previously recorded CBMC *proving* these three `SUCCESSFUL` at `0 of 2826 failed`. Re-run
+today with the documented command (`cbmc <file>.out --function <symbol>`, CBMC 6.10.0), CBMC
+reports **`VERIFICATION FAILED`** on all three, with the property counts in the table above —
+all failures being Kani `reachability_check` markers. Neither the verdict nor the 2826 count
+reproduces, and the discrepancy is unexplained (a different flag set or a transcription slip
+in the original sweep are both plausible). **The sweep's "Matches CBMC — No: 3" row therefore
+rests on an unreproducible CBMC baseline and must be re-measured on the next sweep** — if
+CBMC does report FAILED, both tools agreed on the verdict all along and the corpus had *zero*
+verdict mismatches. What is certain either way: ESBMC failed an alignment check that CBMC
+passes, and no longer does.
+
+❌ **Alignment does *not* explain the 41-crash `align_offset`/`align_to` cluster** — the
+earlier claim that it did, and that alignment modelling was therefore "the single
+highest-leverage gap in the corpus", is **disproven**. On the fix branch
+`check_align_offset_u32` still aborts with `ERROR: Can't construct rvalue reference to array
+type during dereference` (`dereference.cpp:988`). That cluster is an independent ESBMC
+dereference limitation and is now the largest single item in the corpus; see UMBRELLA #3.
 
 **Axis 3 (solver performance)** is now the largest non-crash bucket: 140 ESBMC timeouts at a
 40 s cap versus CBMC's 35, concentrated in `slice` (84 N/A).
@@ -1405,7 +1546,7 @@ _RNvNtNtCsfemxtvIyyHd_4core3num6verify15widening_mul_u8
 
 ## UMBRELLA #3: Pointer Operations Crash
 
-**Status**: 🟠 PARTIAL — parses 100 %, 323/346 decided harnesses match CBMC; residual = **19 crashes + 3 false alarms, all alignment-related** (see the global sweep above)
+**Status**: 🟠 PARTIAL — parses 100 %, 323/346 decided harnesses match CBMC; the 3 false alarms are ✅ fixed (alignment, PR #6138), residual = **19 crashes**, led by the `rvalue reference to array` dereference limitation (see the global sweep above)
 **Impact**: ~60+ tests
 **Severity**: 🔴 CRITICAL
 **Exit Codes**: rc=139 → now **rc=134** for the `align_offset` family (clean abort, not a segfault); no parse-phase crash remains
@@ -1421,13 +1562,19 @@ recorded), but **that is the only width that works**: `check_align_offset_{u16,u
 reference to array type during dereference` — an ESBMC **dereference** limitation, not
 pointer-semantics translation. Umbrella #3 was therefore declared crash-free on the one
 width that happens to pass. What remains is three concrete items:
-1. **Alignment modelling (highest leverage).** ESBMC does not constrain an object's base
-   address to its natural alignment on the `--binary` path; CBMC does. This causes the 3
-   corpus-wide false alarms (`check_cast`/`check_as_ref`/`check_as_mut`, `non_null.rs:469`)
-   and underlies the `align_offset`/`align_to` cluster. Fixing it is the single highest-value
-   change for the Kani front.
-2. **`rvalue reference to array` dereference** (41 crashes corpus-wide, 7 in `ptr`).
-3. **`Bitwuzla error encountered`** on `non_null_check_write_unaligned_*` (12, all `ptr`).
+1. **`rvalue reference to array` dereference — now the top item** (41 crashes corpus-wide:
+   `slice` 32, `ptr` 7, `num` 2). `dereference.cpp:988` cannot build an rvalue reference to
+   an array-typed object, which is what the whole `align_offset`/`align_to`/`align_to_mut`
+   family needs. This is an ESBMC dereference limitation, unrelated to alignment modelling
+   (see below) — and it is the largest single crash cluster left in the corpus.
+2. **`Bitwuzla error encountered`** on `non_null_check_write_unaligned_*` (12, all `ptr`).
+3. **Alignment modelling — ✅ done (2026-07-17, PR #6138).** ESBMC left object base addresses
+   unconstrained; it now constrains them to the type's alignment, which resolved all 3
+   corpus-wide false alarms (`check_cast`/`check_as_ref`/`check_as_mut`) to per-property
+   parity with CBMC. Note this was **not** `--binary`-specific — scalars were unconstrained
+   on every path, including the plain C frontend. It also did **not** fix the
+   `align_offset`/`align_to` cluster, contrary to this section's earlier claim: the two are
+   independent, and item 1 above is what that family actually needs. See the global sweep.
 
 **Affected Operations**:
 - `*const T::read()` / `*mut T::read()` - unsafe pointer dereference
