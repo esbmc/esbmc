@@ -137,6 +137,32 @@ changes) before the next.
   access and all base ctor/dtor/method `this` through `&d.@Base`. Removes the
   ctor/dtor asymmetry and the `getBaseClassOffset` calls in those paths. Fixes
   #1866's distinct-named case.
+  * **P1-core/P2 spike (validated, branch `wip/mi-nested-storage-core`):**
+    `get_base_components_methods` now emits a nested `@base@<id>` component per
+    base (methods still flattened as metadata); the `CK_DerivedToBase` cast is
+    routed structurally (`member_exprt(d, @base@B)` for lvalues,
+    `&(*p).@base@B` for pointers, chained per base-path hop); the base ctor
+    `this` is routed the same way. **Result: all four #1866 reproducers pass —
+    distinct-named fields, MI + own field, non-first-base method call, and the
+    single-inheritance baseline — with no `char*` arithmetic and no
+    pointer-bounds violations.** This confirms the structural approach is the
+    correct, sound fix.
+  * **Remaining migrations to reach green** (≈20 regressions, all in
+    polymorphic / cast subsystems that still assume the flat layout):
+    1. **vptr-init nesting (dominant):** `gen_vptr_initializations`
+       (`clang_cpp_adjust_code_gen.cpp`) only iterates the derived struct's
+       *direct* `is_vtptr` components, so base vptrs now living inside
+       `@base@B` are never initialised → polymorphic dispatch reads a null
+       vptr. Must recurse into `@base@` subobjects and emit
+       `this->@base@B.@vtable_pointer = &vtable::tag-B@Derived`.
+    2. **`dynamic_cast` / base→derived:** the structural downcast and
+       `offset_of_subobject` path (`clang_cpp_convert_vft.cpp`) must walk
+       `@base@` components instead of byte offsets.
+    3. **Destructor chain:** `emit_base_dtor` still uses the byte offset;
+       switch to `&this->@base@B`.
+    4. **Thunks / covariant** (P4) once vptrs are nested.
+  * These are well-scoped follow-ons; the spike is preserved uncommitted on the
+    clean effort branch (kept on `wip/mi-nested-storage-core`) until green.
 * **P3 — casts.** Replace the `is_method_receiver`-gated byte adjustment with
   the structural `@Base` path for all derived↔base conversions (kills the
   brittle AST-shape heuristic of #3894).

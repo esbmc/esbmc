@@ -1919,6 +1919,19 @@ bool clang_cpp_convertert::get_function_body(
         initializer.derived_this_arg(
           ftype.arguments().at(0).get("#identifier"));
         initializer.base_ctor_derived(true);
+        // Route the base ctor `this` structurally through the nested
+        // "@base@<id>" subobject (non-virtual bases). See #1866, #3894.
+        if (!init->isBaseVirtual())
+        {
+          const clang::CXXRecordDecl *base_rd =
+            init->getBaseClass()->getAsCXXRecordDecl();
+          if (base_rd)
+          {
+            std::string bn, bid;
+            get_decl_name(*base_rd, bn, bid);
+            initializer.set("#base_subobject", base_subobject_name(bid));
+          }
+        }
         if (get_expr(*init->getInit(), initializer))
           return true;
         initializers.push_back(initializer);
@@ -2746,6 +2759,18 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
   assert(s);
   exprt implicit_this_symb = symbol_expr(this_symbol);
 
+  // Route `this` through the nested base subobject: &this->@base@<id>, so the
+  // base ctor operates on its own subobject (sound structural access, not a
+  // byte offset). Falls back to a plain cast for virtual bases. See #1866.
+  const irep_idt &base_comp = initializer.get("#base_subobject");
+  if (!base_comp.empty() && implicit_this_symb.type().is_pointer())
+  {
+    dereference_exprt deref(
+      implicit_this_symb, implicit_this_symb.type().subtype());
+    member_exprt m(deref, base_comp, base_ctor_this_type.subtype());
+    implicit_this_symb = address_of_exprt(m);
+  }
+
   // generate the type casting expr and push it to callee's arguments
   gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
   call.arguments().push_back(implicit_this_symb);
@@ -2850,17 +2875,26 @@ void clang_cpp_convertert::get_base_components_methods(
 
     const struct_typet &base_type = to_struct_type(s->get_type());
 
-    // pull components in
-    const struct_typet::componentst &components = base_type.components();
-    for (auto component : components)
-    {
-      // TODO: tweak access specifier
-      component.set("from_base", true);
-      if (!is_duplicate_component(component, type))
-        to_struct_type(type).components().push_back(component);
-    }
+    // Nested base subobject: a single component of the base's type named
+    // "@base@<class_id>", instead of flattening the base's fields into the
+    // derived struct. Inherited member access, upcasts and base ctor/dtor
+    // `this` are routed structurally through this component
+    // (member_exprt(d, @base@B)), which is sound in ESBMC's dereference model
+    // -- unlike the byte-offset flattening it replaces. See #1866, #3894 and
+    // docs/design/cpp-multiple-inheritance-subobjects.md.
+    struct_typet::componentt base_comp;
+    const std::string comp_name = base_subobject_name(class_id);
+    base_comp.set_name(comp_name);
+    base_comp.set_base_name(comp_name);
+    base_comp.set_pretty_name(comp_name);
+    base_comp.type() = symbol_typet(s->id);
+    base_comp.set("from_base", true);
+    base_comp.set("is_base_subobject", true);
+    if (!is_duplicate_component(base_comp, type))
+      to_struct_type(type).components().push_back(base_comp);
 
-    // pull methods in
+    // Methods stay flattened as metadata (they carry their own class `this`);
+    // resolution goes through the base method symbol plus the receiver cast.
     const struct_typet::componentst &methods = base_type.methods();
     for (auto method : methods)
     {
