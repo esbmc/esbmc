@@ -1,9 +1,18 @@
 # C++ multiple-inheritance base subobjects (issues #1866, #3894)
 
-Status: **design / in progress** — foundational analysis for reworking how the
-Clang C++ frontend models base-class subobjects. Tracks esbmc/esbmc#3894
-(replace the brittle `ASTRecordLayout` dependency) and fixes esbmc/esbmc#1866
-(broken non-first-base access under multiple inheritance).
+Status: **P0–P4 implemented and green** for non-virtual inheritance; P5
+(virtual bases) still open. Reworks how the Clang C++ frontend models
+base-class subobjects: tracks esbmc/esbmc#3894 (replace the brittle
+`ASTRecordLayout` dependency) and fixes esbmc/esbmc#1866 (broken non-first-base
+access under multiple inheritance).
+
+The whole `esbmc-cpp` suite passes apart from four pre-existing
+macOS-environment failures (`github_2242_1/2`, `github_3897_collision`,
+`utility2_fail`), which fail identically without the change. Seven KNOWNBUGs
+became CORE: `github_1866_{distinct_names,own_field,method_call}`,
+`mi_base_subobject_layout{,_fail}`, `inheritance09`, `inheritance12`.
+Classes with a virtual base deliberately retain the legacy flattened layout
+until P5.
 
 ## 1. Symptom
 
