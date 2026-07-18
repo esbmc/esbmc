@@ -30,6 +30,7 @@ javac_version() {
 
 CLASS=""
 SOURCE=""
+LAZY=0
 OUTDIR="jbmc-poc-out"
 ESBMC="${ESBMC:-esbmc}"
 ESBMC_ARGS=()
@@ -43,6 +44,8 @@ usage: $0 --class <fully.qualified.Class> [--source <File.java>]
             --source is given.
   --source  Java source to compile first. Requires a JDK on PATH.
   --outdir  where artefacts land (default: $OUTDIR).
+  --lazy    load classes on demand instead of passing --no-lazy-methods.
+            Required for a string-free model; see the note by JBMC_LOAD below.
 EOF
   exit 2
 }
@@ -52,6 +55,7 @@ while [ $# -gt 0 ]; do
     --class)  [ $# -ge 2 ] || die "--class needs a value"; CLASS="$2"; shift 2 ;;
     --source) [ $# -ge 2 ] || die "--source needs a value"; SOURCE="$2"; shift 2 ;;
     --outdir) [ $# -ge 2 ] || die "--outdir needs a value"; OUTDIR="$2"; shift 2 ;;
+    --lazy)   LAZY=1; shift ;;
     --)       shift; ESBMC_ARGS=("$@"); break ;;
     -h|--help) usage ;;
     *) die "unknown argument '$1' (try --help)" ;;
@@ -101,9 +105,22 @@ if [ -n "$SOURCE" ]; then
   CP="$OUTDIR:$MODELS"
 fi
 
-# --no-lazy-methods is load-bearing: lazy loading is jbmc's default and omits
-# method bodies the program reaches (§2.2).
-jbmc "$CLASS" -cp "$CP" --no-lazy-methods --show-symbol-table --json-ui \
+# --no-lazy-methods guards against jbmc silently omitting reachable method
+# bodies (§2.2), but against core-models.jar it also loads the whole jar --
+# including java.lang.String and the CProver string primitives that §5 names as
+# a hard stop. Measured on a trivial main: 915018 goto lines and 1876
+# cprover_string references with the flag, 1182 lines and *zero* without. For a
+# self-contained string-free corpus, lazy loading is both sufficient (the
+# program calls nothing outside itself) and necessary (the flag drags in the
+# machinery the corpus exists to avoid). Callers verifying library-using code
+# should leave the flag on and accept the string contamination.
+if [ "$LAZY" -eq 1 ]; then
+  JBMC_LOAD=""
+else
+  JBMC_LOAD="--no-lazy-methods"
+fi
+
+jbmc "$CLASS" -cp "$CP" $JBMC_LOAD --show-symbol-table --json-ui \
   > "$OUTDIR/symtab.json" 2> "$OUTDIR/jbmc.log" \
   || die "jbmc failed; see $OUTDIR/jbmc.log"
 
@@ -152,6 +169,7 @@ set -e
   echo "esbmc:        $("$ESBMC" --version 2>&1 | head -1)"
   echo "esbmc-path:   $(command -v "$ESBMC")"
   echo "javac:        $(javac_version)"
+  echo "class-loading: $([ "$LAZY" -eq 1 ] && echo lazy || echo no-lazy-methods)"
   echo "symbols:      $SYMBOLS"
   echo "goto-header:  $(od -An -tx1 -N4 "$OUTDIR/model.goto" | tr -d ' ')"
   echo "esbmc-status: $ESBMC_STATUS"

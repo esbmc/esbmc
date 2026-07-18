@@ -134,6 +134,16 @@ Measured function counts for the same Java program (Run 1):
 A ~48x spread. Any binary built without both flags silently omits method bodies, and any
 verdict from it is meaningful only relative to whatever happened to be on the classpath.
 
+> **Qualification (Run 4).** `--no-lazy-methods` is load-bearing for *library-using* code
+> and actively harmful for a string-free corpus, because against `core-models.jar` it
+> loads the whole jar — including `java.lang.String` and the CProver string primitives §5
+> names as a hard stop. Measured on a trivial `main`: 915018 goto lines and 1876
+> `cprover_string` references with the flag, 1182 lines and **zero** without. For
+> self-contained programs, lazy loading resolves everything they reach, so completeness
+> comes from the program being self-contained rather than from the flag. The corpus in
+> `scripts/jbmc-poc-corpus/` therefore runs lazy; §2.2's blanket phrasing should be read
+> as "load-bearing whenever the program calls library code".
+
 > **`core-models.jar` is not at a portable path.** Verified locations:
 > `/usr/lib/core-models.jar` in **Diffblue's release `.deb`** (`jbmc/CMakeLists.txt:32-38`
 > installs to `${CMAKE_INSTALL_LIBDIR}`); `/opt/homebrew/Cellar/cbmc/<version>/libexec/lib/core-models.jar`
@@ -434,14 +444,27 @@ resolved jar, the goto header bytes and the verdict. It accepts either a class
 from `core-models.jar` (the no-JDK route) or a `--source File.java` (needs a
 JDK).
 
-The ~8-program tiered corpus is **not** landed: it cannot be compiled, and
-therefore cannot be validated, without a JDK. Checking in unvalidated `.java`
-files — or opaque `.class` files — was rejected in favour of leaving the gap
-explicit.
+**Corpus landed (Run 4).** `scripts/jbmc-poc-corpus/` holds ten programs across
+the five tiers, each with a `_fail` variant, plus `run-corpus.sh`, which prints
+JBMC's verdict against ESBMC's per program. JBMC matches the intended verdict
+on **10/10**; every `_fail` was checked to fail for its *intended* property
+rather than incidentally.
 
-Scope of validation: the `--class` route is exercised end to end; the
-`--source` route is **untested**, since it needs the same absent JDK. Two
-traps found while building it are worth recording. `command -v javac` is not a
+ESBMC reaches **0/10** — every program blocked by `@class_identifier` typed
+`string` (§2.3.1). That is Phase 1's exit artefact: one construct, ten
+programs, no others reachable behind it.
+
+Two corpus constraints were found empirically and are recorded in the corpus
+README: division by zero fails verification even when caught, because JBMC
+checks `integer-divide-by-zero` as a property in its own right; and the plan's
+"both properties in one program" is replaced by paired clean/`_fail` variants,
+since a mixed program always yields `FAILED` and cannot distinguish the
+intended failure from an incidental one.
+
+Scope of validation: both the `--class` and `--source` routes are exercised end
+to end (the latter on JDK 26.0.1 — jbmc 6.8.0 reads class file version 70
+without complaint, so no `--release` downgrade is needed). Two traps found
+while building it are worth recording. `command -v javac` is not a
 usable JDK probe on macOS, which ships a stub that exists on PATH and exits 0
 while reporting no runtime — match the version string instead. And an empty
 bash array expanded under `set -u` aborts on bash 3.2 (stock on macOS) but not
