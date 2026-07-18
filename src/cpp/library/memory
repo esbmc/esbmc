@@ -231,8 +231,21 @@ public:
   {
   }
 
+  // [unique.ptr.single.ctor] p1: deliberately non-explicit, so that
+  // `cond ? make_unique<T>() : nullptr` and copy-initialisation work.
+  constexpr unique_ptr(nullptr_t) noexcept : ptr(nullptr), deleter(D())
+  {
+  }
+
   unique_ptr(const unique_ptr &) = delete;
   unique_ptr &operator=(const unique_ptr &) = delete;
+
+  // [unique.ptr.single.asgn] p5
+  unique_ptr &operator=(nullptr_t) noexcept
+  {
+    reset();
+    return *this;
+  }
 
   unique_ptr(unique_ptr &&other) noexcept
     : ptr(other.ptr), deleter(std::move(other.deleter))
@@ -348,8 +361,21 @@ public:
   {
   }
 
+  // [unique.ptr.single.ctor] p1: deliberately non-explicit, so that
+  // `cond ? make_unique<T>() : nullptr` and copy-initialisation work.
+  constexpr unique_ptr(nullptr_t) noexcept : ptr(nullptr), deleter(D())
+  {
+  }
+
   unique_ptr(const unique_ptr &) = delete;
   unique_ptr &operator=(const unique_ptr &) = delete;
+
+  // [unique.ptr.single.asgn] p5
+  unique_ptr &operator=(nullptr_t) noexcept
+  {
+    reset();
+    return *this;
+  }
 
   unique_ptr(unique_ptr &&other) noexcept
     : ptr(other.ptr), deleter(std::move(other.deleter))
