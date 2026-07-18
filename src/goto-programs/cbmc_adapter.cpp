@@ -834,6 +834,22 @@ void fix_type(
     return;
   }
 
+  if (self.id() == "string")
+  {
+    // CPROVER's symbolic string type. It reaches the adapter from every JBMC
+    // binary because the Java frontend types java.lang.Object's
+    // @class_identifier with it, and every Java class embeds java.lang.Object
+    // -- so this fires during type migration, before any instruction or side
+    // effect is examined. ESBMC has no string type: migrate_type's fall-through
+    // logs a bare type dump, which is why the failure reads as the unhelpful
+    // "ERROR: string". Representing it means first deciding how class tags are
+    // modelled (docs/jbmc-goto-binary-poc-plan.md §2.3.1 records the evidence),
+    // so decline cleanly here rather than guess at a mapping.
+    throw std::string(
+      "CBMC adapter: the 'string' type (Java's @class_identifier) is not yet "
+      "supported on the --binary path");
+  }
+
   if (self.id() == "c_bit_field")
   {
     // CBMC types a bitfield member as c_bit_field{width: N; sub[0]: <underlying
