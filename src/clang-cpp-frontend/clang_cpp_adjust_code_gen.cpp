@@ -65,8 +65,11 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
   exprt::operandst &body_ops = ctor_body.operands();
   std::size_t insert_at = 0;
   while (!is_dtor && insert_at < body_ops.size() &&
-         body_ops[insert_at].has_operands() &&
-         body_ops[insert_at].op0().get_bool("#is_base_ctor_call"))
+         ((body_ops[insert_at].has_operands() &&
+           body_ops[insert_at].op0().get_bool("#is_base_ctor_call")) ||
+          // A virtual-base ctor call wrapped in `if(__is_complete){...}`
+          // (esbmc/esbmc#938) is still a leading base-subobject construction.
+          body_ops[insert_at].get_bool("#base_ctor_call_guard")))
     ++insert_at;
 
   // iterate over the `components` and initialize each virtual pointers

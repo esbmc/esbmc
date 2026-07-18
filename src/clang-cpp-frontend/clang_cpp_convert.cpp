@@ -1093,6 +1093,11 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       call.arguments().push_back(arg);
     }
 
+    // Inherited constructors are lowered as base-object constructor calls, so
+    // the complete-object virtual-base initialisation must be suppressed.
+    if (ice.getConstructor()->getParent()->getNumVBases() > 0)
+      call.arguments().push_back(gen_boolean(false));
+
     call.set("constructor", 1);
     new_expr.swap(call);
     break;
@@ -1542,6 +1547,15 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   return false;
 }
 
+// A constructor needs the hidden `__is_complete` parameter iff its class has
+// one or more virtual base subobjects (directly or transitively). getNumVBases
+// returns the flattened set of virtual bases collected at this class, so it is
+// nonzero for every class in a hierarchy that reaches a virtual base. See #938.
+static bool ctor_needs_is_complete_param(const clang::CXXConstructorDecl &cxxcd)
+{
+  return cxxcd.getParent()->getNumVBases() > 0;
+}
+
 bool clang_cpp_convertert::get_constructor_call(
   const clang::CXXConstructExpr &constructor_call,
   exprt &new_expr)
@@ -1613,6 +1627,24 @@ bool clang_cpp_convertert::get_constructor_call(
       return true;
 
     call.arguments().push_back(single_arg);
+  }
+
+  // Append the hidden `__is_complete` flag for constructors of classes with
+  // virtual bases: a base-class constructor call (base_ctor_derived) is a
+  // base-object construction and must not initialise the shared virtual base,
+  // whereas any other construction site is the most-derived/complete object.
+  // A delegating call forwards the enclosing ctor's completeness verbatim.
+  if (ctor_needs_is_complete_param(*constructor_call.getConstructor()))
+  {
+    if (new_expr.get_bool("#delegating_ctor"))
+    {
+      symbolt *ic =
+        context.find_symbol(new_expr.get("#delegating_ctor_is_complete"));
+      assert(ic);
+      call.arguments().push_back(symbol_expr(*ic));
+    }
+    else
+      call.arguments().push_back(gen_boolean(!new_expr.base_ctor_derived()));
   }
 
   call.set("constructor", 1);
@@ -1908,6 +1940,14 @@ bool clang_cpp_convertert::get_function_body(
         initializer.set(
           "#delegating_ctor_this", ftype.arguments().at(0).get("#identifier"));
         initializer.set("#delegating_ctor", 1);
+        // For a class with virtual bases, a delegating constructor must pass
+        // its own completeness on to the target constructor (C1->C1, C2->C2):
+        // a base-object delegating ctor must not let the target re-initialise
+        // the virtual base. Forward the enclosing ctor's `__is_complete`. #938
+        if (ctor_needs_is_complete_param(cxxcd))
+          initializer.set(
+            "#delegating_ctor_is_complete",
+            ftype.arguments().back().get("#identifier"));
         if (get_expr(*init->getInit(), initializer))
           return true;
         initializers.push_back(initializer);
@@ -1921,6 +1961,28 @@ bool clang_cpp_convertert::get_function_body(
         initializer.base_ctor_derived(true);
         if (get_expr(*init->getInit(), initializer))
           return true;
+
+        // A virtual base subobject is initialised only by the most-derived
+        // (complete-object) constructor. Guard its initializer with the hidden
+        // `__is_complete` flag so base-object constructor calls skip it, per
+        // [class.base.init]/7 and the Itanium C1/C2 split. See #938.
+        if (init->isBaseVirtual())
+        {
+          const irep_idt is_complete_id =
+            ftype.arguments().back().get("#identifier");
+          symbolt *s = context.find_symbol(is_complete_id);
+          assert(s);
+          convert_expression_to_code(initializer);
+          code_ifthenelset guard;
+          guard.cond() = symbol_expr(*s);
+          guard.then_case() = to_code(initializer);
+          // Tag so gen_vptr_initializations still treats this as a leading
+          // base-subobject constructor call and inserts the vptr assignments
+          // *after* it (the guard's op0 is the condition, not the call).
+          guard.set("#base_ctor_call_guard", true);
+          initializer.swap(guard);
+        }
+
         initializers.push_back(initializer);
         init_sym_uptodate = false;
       }
@@ -2248,6 +2310,47 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
   return false;
 }
 
+bool clang_cpp_convertert::get_cxx_constructor_is_complete_param(
+  const clang::CXXConstructorDecl &cxxcd,
+  code_typet::argumentt &param)
+{
+  param.type() = bool_typet();
+
+  locationt location_begin;
+  get_location_from_decl(cxxcd, location_begin);
+
+  std::string id, name;
+  get_decl_name(cxxcd, name, id);
+
+  name = "__is_complete";
+  id += name;
+
+  param.cmt_base_name(name);
+  param.cmt_identifier(id);
+
+  // If the constructor is not defined we still need the parameter in the type
+  // (so call sites stay arity-consistent), but no symbol is required as the
+  // body -- and thus the guard reading it -- is never generated.
+  if (!cxxcd.isDefined())
+    return false;
+
+  symbolt param_symbol;
+  get_default_symbol(
+    param_symbol,
+    get_modulename_from_path(location_begin.file().as_string()),
+    param.type(),
+    name,
+    id,
+    location_begin);
+
+  param_symbol.lvalue = true;
+  param_symbol.is_parameter = true;
+  param_symbol.file_local = true;
+
+  context.move_symbol_to_context(param_symbol);
+  return false;
+}
+
 bool clang_cpp_convertert::get_function_params(
   const clang::FunctionDecl &fd,
   code_typet::argumentst &params)
@@ -2275,8 +2378,13 @@ bool clang_cpp_convertert::get_function_params(
   if (get_function_this_pointer_param(cxxmd, params))
     return true;
 
-  // reserve space for `this' pointer and params
-  params.resize(1 + fd.parameters().size());
+  // Constructors of classes with virtual bases carry a trailing
+  // `__is_complete` flag (Itanium C1/C2 split); reserve a slot for it.
+  const auto *cxxcd = llvm::dyn_cast<clang::CXXConstructorDecl>(&fd);
+  const bool needs_is_complete = cxxcd && ctor_needs_is_complete_param(*cxxcd);
+
+  // reserve space for `this' pointer, params and (optionally) `__is_complete'
+  params.resize(1 + fd.parameters().size() + (needs_is_complete ? 1 : 0));
 
   // TODO: replace the loop with get_function_params
   // Parse other args
@@ -2291,6 +2399,16 @@ bool clang_cpp_convertert::get_function_params(
     // All args are added shifted by one position, because
     // of the this pointer (first arg)
     params[i + 1].swap(param);
+  }
+
+  // Append `__is_complete' as the last parameter so the constructor body can
+  // gate virtual-base initialisation on it.
+  if (needs_is_complete)
+  {
+    code_typet::argumentt is_complete_param;
+    if (get_cxx_constructor_is_complete_param(*cxxcd, is_complete_param))
+      return true;
+    params.back().swap(is_complete_param);
   }
 
   return false;
