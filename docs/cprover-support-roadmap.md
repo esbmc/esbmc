@@ -158,21 +158,36 @@ harness, not `main`, is the entry. This unblocks the `verify-rust-std`/Kani flow
 proof harnesses by name.
 
 ### 4.3 Type system: anonymous structs and wide constants (Phase 3)
-`cbmc_adapter.cpp::expand_anon_struct` cannot resolve CBMC's anonymous-aggregate naming
-(`tag-#anon#ST[...]`), which the contracts library uses heavily — this is why
-`mul_contract.goto` is rejected (identically to the reference). Needs an LL(k) parser for
-CBMC's `ST[...]`/`SYM`/`*{...}` type-name grammar (a skeleton exists in the original Rust
-`adapter.rs::Anon2Struct`). Separately, the hex→binary constant rewrite goes through
-`uint64_t`, so constants wider than 64 bits (e.g. 128-bit) are wrong.
 
-**Graceful failure instead of `abort()` — ✅ landed (PR #TBD).** `expand_anon_struct`
-previously `abort()`ed (SIGABRT/rc=134, a coredump) on any anonymous-aggregate tag it could
-not resolve. It now `throw`s a `std::string` that `create_goto_program`'s existing handler
-turns into a clean `log_error` + non-`abort` exit, matching the reader's malformed-input
-recovery (§4.7, PRs #5811/#5812). Pinned by `cbmc_anon_aggregate` (a nested anonymous union
-whose tag is `tag-#anon#UN[SYM#0={ST[S32'a'|S32'b']}'$anon0'|ARR2{S32}'arr']`; regexes the
-error message and confirms no abort). Anonymous aggregates CBMC *inlines* into the tag as full
-`components` still verify — only the name-encoded references are declined.
+**Anonymous struct/union members — ✅ fixed (no grammar parser needed).** The problem was
+never that ESBMC lacks a parser for CBMC's anonymous-aggregate tag-name grammar
+(`tag-#anon#ST[...]`) — CBMC **serialises the anonymous aggregate's full layout as an ordinary
+type symbol**, so it resolves through the adapter's existing tag cache like any named
+struct/union. The real fault was **ordering**: CBMC emits an anonymous aggregate's type symbol
+*after* the struct that contains it (the aggregate tag encodes the container's own layout), so
+the first fix pass reached the container's anonymous member before that symbol was cached. A
+not-yet-seen *named* tag survives this — `fix_type` leaves it unresolved and the re-check pass
+in `adapt_cbmc_to_esbmc` (which runs with the full cache) resolves it — but an anonymous tag
+took a separate path in `expand_anon_struct` that `abort()`ed on the cache miss. Fixed by making
+`expand_anon_struct` a no-op: an unresolved anonymous tag now defers to the same re-check pass as
+a named one. Because the definition comes from CBMC's own serialised symbol (not a reconstruction
+from the tag name), it is byte-identical to the type the reader builds for the same member inside
+an instruction — which `with2t::assert_type_compat_for_with` compares by value, the check an
+earlier tag-name-parser attempt kept tripping. Verdict parity with CBMC, dual-solver
+(Bitwuzla + Z3), across union/array overlays, a doubly-nested anonymous struct-in-union-in-struct,
+an anonymous union with a **pointer** member, an array-of-struct union arm, and a function-local
+anonymous aggregate (`cbmc_anon_struct` SUCCESSFUL / `cbmc_anon_struct_fail` FAILED on a wrong
+overlay value). The tag-name grammar and the reason a from-scratch parser is unsound are
+recorded in the git history of the reverted attempt.
+
+Separately, the hex→binary constant rewrite goes through `uint64_t`, so constants wider than 64
+bits (e.g. 128-bit) are wrong.
+**Prior graceful-decline (PR #6160), now superseded.** Before the resolution fix above,
+`expand_anon_struct` was made to `throw` a clean error instead of `abort()`ing on an
+anonymous-aggregate tag it could not resolve (PR #6160, §4.7 malformed-input recovery). That
+was replaced here by actually resolving the tag; its `cbmc_anon_aggregate` fixture (the
+`tag-#anon#UN[SYM#0={ST[S32'a'|S32'b']}'$anon0'|ARR2{S32}'arr']` nested union) now verifies
+**SUCCESSFUL** rather than erroring, and its `test.desc` is updated accordingly.
 
 **Reproducible locally with `goto-cc` (grammar characterised).** Contrary to the earlier
 assumption that this needed the Kani/contracts corpus, plain C nested anonymous aggregates
