@@ -186,6 +186,26 @@ irept complex_member(const irept &op, const char *name, const irept &elem)
 
 void fix_expression(irept &irep)
 {
+  if (irep.id() == "is_dynamic_object")
+  {
+    // __CPROVER_DYNAMIC_OBJECT(p) -- true iff p points into a heap-allocated
+    // object -- lowers to an is_dynamic_object expr that migrate_expr has no
+    // handler for (it abort()s with "migrate expr failed"). ESBMC tracks the
+    // same fact in its symex-managed `c:@__ESBMC_is_dynamic` bool array
+    // (indexed by pointer object, set on malloc -- symex_assign.cpp), so the
+    // faithful rewrite is `__ESBMC_is_dynamic[pointer_object(p)]`. That needs
+    // the array force-linked even when the binary never calls malloc (it is
+    // otherwise absent) and its `__ESBMC_inf_size` shape preserved, so it is
+    // left as future work. Only an explicit __CPROVER_DYNAMIC_OBJECT reaches
+    // here -- CBMC's free()/dynamic checks live in library bodies it re-links
+    // at analysis time, not in the serialised binary -- so decline cleanly (a
+    // throw the create_goto_program handler turns into a graceful error exit,
+    // roadmap §4.7) rather than abort()-ing.
+    throw std::string(
+      "CBMC adapter: __CPROVER_DYNAMIC_OBJECT (is_dynamic_object) is not yet "
+      "supported on the --binary path");
+  }
+
   if (irep.id() == "count_leading_zeros" || irep.id() == "count_trailing_zeros")
   {
     // CBMC lowers __builtin_clz/__builtin_ctz to these expression ids, which
@@ -769,28 +789,20 @@ bool is_anon_tag(const std::string &ident)
   return ident.size() >= 11 && ident.compare(0, 10, "tag-#anon#") == 0;
 }
 
-void expand_anon_struct(const irept &self)
+// A struct_tag/union_tag whose definition is not yet in the cache. CBMC emits
+// an anonymous aggregate's type symbol *after* the struct that contains it (the
+// aggregate tag encodes the container's layout), so the first fix pass reaches
+// the container's anonymous member before that symbol is cached. Leave the tag
+// unresolved -- exactly as fix_type already does for a not-yet-seen *named* tag
+// -- so the re-check pass in adapt_cbmc_to_esbmc, which runs with the full
+// cache, resolves it. Resolving from CBMC's own serialised type symbol (rather
+// than parsing the tag-name grammar) guarantees the definition is byte-identical
+// to the one the reader builds for the same member in an instruction, which
+// with2t::assert_type_compat_for_with compares by value. A tag that is still
+// unresolved after the re-check pass trips that pass's own
+// "should have been resolved" guard.
+void expand_anon_struct(const irept &)
 {
-  if (has_sub(self, "components"))
-    return;
-  // CBMC encodes an anonymous struct/union's full layout in its tag identifier
-  // (e.g. tag-#anon#UN[SYM#0={ST[S32'a'|S32'b']}'$anon0'|ARR2{S32}'arr']) rather
-  // than emitting a separate type symbol, so there is nothing in the tag cache
-  // to resolve the reference from -- the definition would have to be parsed out
-  // of the name. That parser is not implemented yet (roadmap §4.3): reproducing
-  // CBMC's exact array-size and nested-tag representation so the synthesised
-  // type is bit-identical to the one the reader builds for the same member in an
-  // instruction (with2t::assert_type_compat_for_with compares array2t/struct2t
-  // by value) is the hard part. Until then, fail cleanly -- a throw the
-  // create_goto_program handler turns into a graceful error exit -- rather than
-  // abort()-ing the whole process (matching the reader's malformed-input
-  // recovery, roadmap §4.7).
-  const std::string ident = self.find("identifier").id_string();
-  if (!is_anon_tag(ident))
-    return;
-  throw std::string(
-    "CBMC adapter: anonymous aggregate types are not yet supported (" + ident +
-    ")");
 }
 
 // `expanding` holds the tag identifiers whose definitions are currently being
@@ -1407,6 +1419,27 @@ irept instruction_to_esbmc_irep(
 
   // ESBMC expects code arguments inside "operands".
   irept code = ins.code;
+
+  // CBMC's whole-object codet statements have no ESBMC symex counterpart, so
+  // migrate would abort() on them (SIGABRT). `array_set` (__CPROVER_array_set:
+  // set every element of the pointed-to array) carries no explicit length -- the
+  // extent comes from the pointee's type, which ESBMC's memset/array machinery
+  // does not reconstruct here -- and `havoc_object` (set the whole pointed-to
+  // object nondet) is likewise size-implicit. Decline cleanly (a throw the
+  // create_goto_program handler turns into a graceful error exit, roadmap §4.7)
+  // rather than crashing; these reach the adapter only from an explicit
+  // __CPROVER_array_set / __CPROVER_havoc_object (CBMC's own memset lowering is
+  // retargeted to __ESBMC_memset in fix_builtin_call before its ARRAY_SET body
+  // runs, §4.8).
+  if (code.id() != "nil")
+  {
+    const irep_idt stmt = code.find("statement").id();
+    if (stmt == "array_set" || stmt == "havoc_object")
+      throw std::string(
+        "CBMC adapter: '" + stmt.as_string() +
+        "' whole-object operations are not yet supported on the --binary path");
+  }
+
   const bool rewrote_builtin_call = fix_builtin_call(code);
   irept operands;
   operands.get_sub() = code.get_sub();
