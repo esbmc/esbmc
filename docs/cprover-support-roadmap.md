@@ -606,10 +606,37 @@ when goto-cc linked the `.goto`; it could only matter if a later link stage (e.g
 additions boilerplate) overrode a weak definition, so the warning stays as a tripwire.
 `is_property` — CBMC-internal assertion bookkeeping, no ESBMC counterpart needed.
 
-### 4.6 Contracts subsystem (Phase 4)
+### 4.6 Contracts subsystem (Phase 4) — 🔶 loads & verifies; gap is the unserialised contract library
 `__CPROVER_contracts_*` (requires/ensures/assigns/frees, `is_fresh`, object/write sets) is a
-whole subsystem. ESBMC has its own contracts (`src/goto-programs/contracts/`); the work is
-to bridge CBMC's encoding onto it rather than re-implement.
+whole subsystem. ESBMC has its own contracts (`src/goto-programs/contracts/`, including native
+`is_fresh` handling — `contracts.cpp::is_fresh_function`); the work is to bridge CBMC's encoding
+onto it rather than re-implement.
+
+**Concrete state (probed 2026-07-18, `goto-instrument --enforce-contract` /
+`--replace-call-with-contract` on `goto-cc` C).** A contract-instrumented CBMC binary **loads
+and reaches a verdict on the `--binary` path without crashing** — the anonymous-aggregate
+resolution (§4.3) and the existing expression coverage carry it through. `requires`/`ensures`
+lower to `ASSUME`/`ASSERT` (`// Assume requires clause` / `// Check ensures clause`) and are
+executed; the only load-time noise is a benign `dropping 'property' on symbol contract::<fn>`
+(§4.5 — `is_property` has no ESBMC counterpart, harmless).
+
+**The concrete gap is the contract *library*, not the encoding.** CBMC does **not** serialise
+the bodies of its contract-runtime functions into the `.goto` — `__CPROVER_enforce_requires_is_fresh`,
+the `__CPROVER_contracts_*` helpers, and the object/write-set machinery are **re-linked from
+CBMC's own contracts library at analysis time** (verified: the function is *called* in the
+instrumented body and its body is visible under `cbmc --show-goto-functions`, but the reader
+finds **zero serialised instructions** for it — exactly the libm/libc situation of §4.8, one
+subsystem up). So ESBMC sees `__CPROVER_enforce_requires_is_fresh` as a **bodyless external
+returning nondet**: `is_fresh` in a `requires` becomes an unconstrained assumption. That is
+**sound but imprecise** (dropping an assumption only widens the checked behaviour), not a
+miss — but it defeats the point of an `is_fresh` precondition. The bridge is to synthesise or
+retarget these onto ESBMC's native `is_fresh`/contracts machinery (the additions-boilerplate
+mechanism of §4.8, or a direct `c:@F@__ESBMC_is_fresh` retarget like the `memcpy` family). Not
+yet attempted: a **local verdict oracle is missing** — bare `goto-instrument --enforce-contract`
+without the contracts-library link does not actually fire the `ensures` check (a deliberately
+violated `ensures` verifies SUCCESSFUL under *CBMC itself* in this setup), so contract-*enforcement*
+parity cannot be validated until the library is linked on both sides. Loadability and the
+`requires`/`ensures` → `ASSUME`/`ASSERT` lowering are the parts confirmed working.
 
 ### 4.7 Versioning & robustness (Phase 5) — 🔶 malformed-input recovery landed
 Only CBMC binary **version 6** is accepted (a wrong version, like a non-magic header, is
