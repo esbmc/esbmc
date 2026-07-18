@@ -95,10 +95,20 @@ protected:
     goto_programt &dest);
   void inline_calls_in_quantifier_body(exprt &expr, unsigned depth);
   bool try_inline_pure_call(const symbolt &fsym, const exprt &call, exprt &out);
+  // Summarize a callee with straight-line assignments, if/else, and
+  // constant-trip-count loops into a single side-effect-free expression so it
+  // can appear in a quantifier body.  Returns false (leaving @p out untouched)
+  // for any shape it cannot soundly turn into a pure expression.
+  bool summarize_pure_call(const symbolt &fsym, const exprt &call, exprt &out);
   const exprt *find_sideeffect_on_bound_var(
     const exprt &expr,
     const std::set<irep_idt> &bound_vars);
   void skolemize_asserted_foralls(exprt &expr, goto_programt &dest);
+  // Rewrite __ESBMC_forall/__ESBMC_exists intrinsic calls into forall/exists
+  // expressions, summarizing calls in the body first, before any hoisting can
+  // freeze the bound variable.  Bodies that cannot be made side-effect-free are
+  // left as calls for the skolemization / quantifier-body fallbacks.
+  void convert_quantifier_calls(exprt &expr);
 
   void remove_assignment(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_post(exprt &expr, goto_programt &dest, bool result_is_used);
