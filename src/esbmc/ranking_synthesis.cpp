@@ -124,9 +124,10 @@ struct loop_skipt
 };
 
 // Forward declarations: subst_parallel and apply_body are used by the
-// loop recognizer (for dereference substitution and not yet measure
-// derivation respectively) but are defined further down alongside the
-// other transition-relation helpers. reaches_head is reused by the
+// loop recognizer (subst_parallel for dereference substitution, apply_body
+// to express path conditions in pre-iteration state) but are defined
+// further down alongside the other transition-relation helpers.
+// reaches_head is reused by the
 // dominance-aware prefix scan below. touches_memory is used by
 // try_inline_pure_helper before its definition.
 expr2tc
@@ -2091,14 +2092,6 @@ bool is_unsat(const expr2tc &formula, optionst &options, const namespacet &ns)
   return solver->dec_solve() == P_UNSATISFIABLE;
 }
 
-/// Derive a candidate difference measure m and its guard-implied lower
-/// bound L from a relational guard `a REL b`. For `a > b`, m = a - b
-/// and the guard implies m >= 1; for `a >= b`, m >= 0; `<`/`<=` swap
-/// the operands. The measure is computed in a type wide enough that the
-/// subtraction of the operand types cannot overflow — signed overflow
-/// would be UB and make the proof unsound. Returns false if the guard
-/// is not relational or its operands are not integer-typed (the
-/// difference/widening is only defined for integers).
 /// Build the widened-int64 difference `(int64)a - (int64)b` if both
 /// operands are scalar BV that we can safely lift without wraparound.
 /// Returns true on success and writes the lifted expression to @p out;
@@ -3458,13 +3451,6 @@ tvt try_prove_termination_by_ranking(
 
     goto_loopst loops(f_it->first, goto_functions, f_it->second);
 
-    // Pre-build the per-loop skip map: for each loop, an entry mapping
-    // its head's location number to its back-edge iterator and the
-    // names of every symbol it modifies. When we analyse a particular
-    // loop, we'll pass a filtered view that excludes that loop itself
-    // (the analysed loop must NOT be in its own skip map — that would
-    // make the entry walker step right over the loop and return empty
-    // seeds).
     // Pre-build the per-loop skip map: for each loop, an entry mapping
     // its head's location number to its back-edge iterator, the
     // names of every symbol it modifies, and its natural exit-target's
