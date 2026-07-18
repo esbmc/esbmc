@@ -154,6 +154,8 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
 // return (RETURN + unconditional GOTO to the function's end), a
 // side-effect-free `if`/`if-else` whose branches convert natively (the
 // general, unfolded branch shape only — see the assert-fold guard below), a
+// plain `x = y;` assignment statement (the sideeffect_assign2t the C/C++
+// frontends wrap in an expression statement, delegated to convert_assign), a
 // side-effect-free `while` whose body converts natively (`v: if(!c) goto z;
 // x: P; y: goto v; z: ;`), and `break`/`continue` (an unconditional GOTO to
 // the nearest enclosing loop's break/continue target, preceded by
@@ -176,7 +178,8 @@ bool goto_convert_functionst::convert_native_rec(
     const code_block2t &block = to_code_block2t(code2);
 
     // Mirror convert_block(): save the destructor stack, convert the children
-    // (a code_decl2t pushes a scope-exit code_dead), then emit those destructors
+    // (a code_decl2t pushes a scope-exit code_dead, as does an atomic
+    // assignment statement via convert_assign_atomic), then emit those destructors
     // at the block's end_location and restore the stack. A decl-free block
     // leaves the stack untouched, so the unwind and restore are both no-ops and
     // this stays byte-identical to the pre-decl handler for the block/skip/
@@ -307,6 +310,47 @@ bool goto_convert_functionst::convert_native_rec(
   if (is_code_expression2t(code2))
   {
     const code_expression2t &expr_stmt = to_code_expression2t(code2);
+
+    // The C/C++ frontends model an assignment *statement* (`x = y;`) as an
+    // expression statement wrapping a sideeffect_assign2t, not as the
+    // code_assign2t Python emits, so it arrives here rather than at the assign
+    // arm above. remove_sideeffects strips the wrapper and hands the operands
+    // to convert_assign, then nils the wrapper (result_is_used is false), so no
+    // OTHER follows. Call the inherited convert_assign with the code_assignt
+    // legacy builds rather than reimplementing it, so its atomic-dispatch
+    // branch stays byte-identical for free. Compound assignments (`+=`, ...)
+    // synthesize a fresh binary rhs and are a separate slice.
+    if (is_sideeffect_assign2t(expr_stmt.operand))
+    {
+      const sideeffect_assign2t &se = to_sideeffect_assign2t(expr_stmt.operand);
+      if (se.op != "assign")
+        return false;
+
+      // Same guards as the assign arm above: a side-effecting or top-level
+      // ternary operand would be lowered before convert_assign runs, and a
+      // code-typed source re-enters the legacy dispatcher via convert().
+      exprt assign_lhs = migrate_expr_back(se.lhs);
+      exprt assign_rhs = migrate_expr_back(se.rhs);
+      if (
+        has_sideeffect(assign_lhs) || assign_lhs.id() == "if" ||
+        has_sideeffect(assign_rhs) || assign_rhs.id() == "if" ||
+        assign_rhs.type().is_code())
+        return false;
+
+      // convert_expression restores the enclosing statement's location onto a
+      // side effect the round-trip left unlocated before remove_sideeffects
+      // reads it as the assignment's location; mirror that precedence.
+      locationt loc = se.location;
+      if (loc.get_file().empty())
+        loc = expr_stmt.location;
+      if (loc.is_nil() || loc.get_file().empty())
+        return false;
+
+      code_assignt assign(assign_lhs, assign_rhs);
+      assign.location() = loc;
+      convert_assign(assign, dest);
+      return true;
+    }
 
     // convert_expression() emits a single OTHER only in its plain else-branch
     // (goto_convert.cpp): a side-effect operand is lowered by
