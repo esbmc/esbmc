@@ -577,6 +577,20 @@ float operand), `migrate` cannot tell them apart; `fix_expression` runs only on 
 perturbing native handling. `isinf` now matches CBMC's verdict exactly (reclassified
 `cbmc_isinf` KNOWNBUG→CORE; negative direction covered by `cbmc_isinf_fail`).
 
+**Variadic functions (`va_start`) — decline cleanly instead of `abort()` (✅ landed).**
+CBMC lowers `va_start(ap, last)` to a `side_effect` that points the `va_list` at the last
+named parameter and then walks the stack for each `va_arg` (which it lowers to a raw
+`*(T *)ap` dereference). ESBMC models variadic arguments as **discrete per-call symbols**
+(`<fn>::va_argN`, `symex_function.cpp`), not a contiguous stack, so CBMC's pointer walk cannot
+recover them — and `migrate_expr` `abort()`ed (SIGABRT/rc=134) on the unrecognised `va_start`
+statement. `fix_expression` now `throw`s a clean error the `create_goto_program` handler turns
+into a graceful exit (matching §4.7). Correct `<stdarg.h>` support on the `--binary` path needs
+a contiguous vararg layout and is future work. Pinned by `cbmc_va_start`. **Other deep,
+still-unsupported constructs found by the same construct sweep** (each declines/diverges, none
+a quick adapter rewrite): `setjmp`/`longjmp` (non-local control flow; ESBMC returns a spurious
+FAILED where CBMC proves SUCCESSFUL), and SIMD vector types (`__attribute__((vector_size))` —
+CBMC lowers element-wise but ESBMC's vector SMT encoding hangs in the solver).
+
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
 `static_lifetime`, `file_local`, `is_extern`).
