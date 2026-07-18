@@ -610,6 +610,23 @@ void fix_expression(irept &irep)
     irep.id("member");
   }
 
+  if (irep.id() == "side_effect" && irep.find("statement").id() == "va_start")
+  {
+    // CBMC lowers va_start(ap, last) to a side_effect that points the va_list
+    // at the last named parameter and then walks the stack for each va_arg
+    // (which it lowers to a raw *(T *)ap dereference). ESBMC models variadic
+    // arguments as discrete per-call symbols, not a contiguous stack, so that
+    // pointer walk cannot recover them -- and migrate_expr abort()s on the
+    // unrecognised statement. Decline cleanly (a throw the create_goto_program
+    // handler turns into a graceful error exit, matching the malformed-input
+    // recovery of roadmap §4.7) rather than crashing; correct <stdarg.h>
+    // support on the --binary path needs a contiguous vararg layout and is
+    // future work (roadmap §4.4).
+    throw std::string(
+      "CBMC adapter: variadic functions (va_start/va_arg) are not yet "
+      "supported on the --binary path");
+  }
+
   if (irep.id() == "side_effect")
     irep.id("sideeffect");
   else if (irep.id() == "string_constant")
