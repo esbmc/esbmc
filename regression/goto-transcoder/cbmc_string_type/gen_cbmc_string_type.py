@@ -9,13 +9,19 @@ A real JBMC binary would be ~768 KiB and need a JDK to produce. Emitting the
 symbol table directly keeps the fixture at ~550 bytes and regenerable from any
 machine with cbmc's symtab2gb on PATH -- no JDK and no Java source involved.
 
-    ./gen_cbmc_string_type.py && symtab2gb symtab.json --out cbmc_string_type.goto
+    ./gen_cbmc_string_type.py
 
-Produced with cbmc 6.8.0 (GOTO_BINARY_VERSION 6).
+Regeneration is byte-identical. Produced with cbmc 6.8.0
+(GOTO_BINARY_VERSION 6).
 """
 
 import json
+import os
+import subprocess
+import tempfile
 from typing import Any, Dict
+
+OUTPUT = "cbmc_string_type.goto"
 
 INT = {"id": "signedbv", "namedSub": {"width": {"id": "32"}}}
 STRUCT_TAG = {"id": "struct_tag", "namedSub": {"identifier": {"id": "tag-S"}}}
@@ -94,8 +100,14 @@ def main():
             value=body),
     }
 
-    with open("symtab.json", "w", encoding="utf-8") as out:
-        json.dump({"symbolTable": table}, out)
+    here = os.path.dirname(os.path.abspath(__file__))
+    with tempfile.TemporaryDirectory() as tmp:
+        symtab = os.path.join(tmp, "symtab.json")
+        with open(symtab, "w", encoding="utf-8") as out:
+            json.dump({"symbolTable": table}, out)
+        subprocess.run(
+            ["symtab2gb", symtab, "--out", os.path.join(here, OUTPUT)],
+            check=True)
 
 
 if __name__ == "__main__":

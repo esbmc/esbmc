@@ -805,6 +805,35 @@ void expand_anon_struct(const irept &)
 {
 }
 
+// Decline CPROVER's symbolic `string` type, which reaches the adapter from
+// every JBMC binary: the Java frontend types java.lang.Object's
+// @class_identifier with it, and every Java class embeds java.lang.Object, so
+// it surfaces during type migration before any instruction is examined. ESBMC
+// has no string type -- migrate_type's fall-through logs a bare type dump,
+// which is why the failure reads as the unhelpful "ERROR: string".
+// Representing it means first deciding how class tags are modelled
+// (docs/jbmc-goto-binary-poc-plan.md §2.3.1 records the evidence), so decline
+// rather than guess at a mapping.
+//
+// This must only fire in a *type* position. fix_type walks whole symbols and
+// whole function bodies, so it also visits identifier nodes, whose id() is the
+// identifier text itself -- and `string` is an ordinary C identifier. A bare
+// string_typet serialises as {"id": "string"} with no subs, structurally
+// indistinguishable from such a node, so position is the only usable signal.
+void reject_string_type(const irept &candidate)
+{
+  if (candidate.id() == "string")
+    throw std::string(
+      "CBMC adapter: the 'string' type (Java's @class_identifier) is not yet "
+      "supported on the --binary path");
+}
+
+// The named-sub keys under which a type -- and never an identifier -- appears.
+bool is_type_edge(const irep_idt &key)
+{
+  return key == "type" || key == "subtype" || key == "return_type";
+}
+
 // `expanding` holds the tag identifiers whose definitions are currently being
 // inlined on the recursion stack, so a recursive aggregate (e.g. a Rust struct
 // holding a pointer to itself) can be detected and broken -- see the tag branch
@@ -832,22 +861,6 @@ void fix_type(
     // same int type.
     self = mk("c_enum");
     return;
-  }
-
-  if (self.id() == "string")
-  {
-    // CPROVER's symbolic string type. It reaches the adapter from every JBMC
-    // binary because the Java frontend types java.lang.Object's
-    // @class_identifier with it, and every Java class embeds java.lang.Object
-    // -- so this fires during type migration, before any instruction or side
-    // effect is examined. ESBMC has no string type: migrate_type's fall-through
-    // logs a bare type dump, which is why the failure reads as the unhelpful
-    // "ERROR: string". Representing it means first deciding how class tags are
-    // modelled (docs/jbmc-goto-binary-poc-plan.md §2.3.1 records the evidence),
-    // so decline cleanly here rather than guess at a mapping.
-    throw std::string(
-      "CBMC adapter: the 'string' type (Java's @class_identifier) is not yet "
-      "supported on the --binary path");
   }
 
   if (self.id() == "c_bit_field")
@@ -989,7 +1002,11 @@ void fix_type(
     for (auto &v : self.get_sub())
       fix_type(v, cache, expanding);
     for (auto &p : self.get_named_sub())
+    {
+      if (is_type_edge(p.first))
+        reject_string_type(p.second);
       fix_type(p.second, cache, expanding);
+    }
     for (auto &p : self.get_comments())
       fix_type(p.second, cache, expanding);
     return;
@@ -1022,7 +1039,11 @@ void fix_type(
     for (auto &v : self.get_sub())
       fix_type(v, cache, expanding);
     for (auto &p : self.get_named_sub())
+    {
+      if (is_type_edge(p.first))
+        reject_string_type(p.second);
       fix_type(p.second, cache, expanding);
+    }
     for (auto &p : self.get_comments())
       fix_type(p.second, cache, expanding);
   }
