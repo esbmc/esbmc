@@ -117,6 +117,22 @@ changes) before the next.
 * **P1 — nested subobject storage.** Add `@Base` components in **declaration
   order** instead of flattening; keep a compatibility shim so name-based
   lookups still resolve during migration. Validate layout via `--show-symbol-table`.
+  * **P1a done:** base collection is now declaration-ordered (`base_map` is an
+    ordered vector, not an alphabetical `std::map`), so the flattened layout
+    agrees with clang's ABI base order. No regressions.
+  * **P1b finding (byte-offset shortcut ruled out):** a trial that adjusted the
+    base ctor `this` by `getBaseClassOffset` via `(char*)this + off` fixed
+    simple POD MI (distinct-named `int`/DMI cases) but **regressed** polymorphic
+    MI (vptr shifts the ABI offset away from the flattened layout) and, even for
+    a guarded non-polymorphic case, tripped ESBMC's pointer-bounds checker when
+    the base ctor *writes* a field (`inheritance11`: "Access to object out of
+    bounds" in the `NetworkDevice` ctor). Conclusion: byte-offset `char*`
+    arithmetic on a flattened object is not sound in ESBMC's dereference model.
+    The base `this`/upcast **must** be a structural member address
+    `&d.@Base` (P2), which requires the nested `@Base` storage first — it is not
+    an optional optimisation but a correctness prerequisite. (The pre-existing
+    dtor/method-receiver offset paths avoid the trap only because those `this`
+    values are typically not written through, or are gated to narrow shapes.)
 * **P2 — member access & `this` through subobjects.** Route inherited member
   access and all base ctor/dtor/method `this` through `&d.@Base`. Removes the
   ctor/dtor asymmetry and the `getBaseClassOffset` calls in those paths. Fixes
