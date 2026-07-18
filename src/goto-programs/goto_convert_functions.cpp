@@ -435,7 +435,15 @@ bool goto_convert_functionst::convert_native_rec(
     if (initializer.is_not_nil())
     {
       code_assignt assign(var, initializer);
-      assign.location() = decl.location;
+      // convert_decl reads the ASSIGN location through codet's *mutable*
+      // location() accessor, which materialises an empty (id "", non-nil)
+      // #location when the declaration has none -- whereas code_decl2t::location
+      // stays properly nil, which the GOTO dump renders as "no location" rather
+      // than blank. Reproduce the materialised form so an unlocated declaration
+      // (e.g. a compound literal) stays byte-identical. The DECL above keeps the
+      // nil location: convert_decl emits it before the mutable access happens.
+      assign.location() =
+        decl.location.is_nil() ? locationt() : locationt(decl.location);
       copy(assign, ASSIGN, dest);
     }
 
