@@ -1964,7 +1964,30 @@ bool clang_c_convertert::get_base_flattened_inits(
   std::vector<exprt> &flat)
 {
   const auto *cxxrd = init.getType()->getAsCXXRecordDecl();
-  if (!cxxrd || cxxrd->getNumBases() == 0)
+
+  // Under the nested base-subobject layout the derived struct carries one
+  // "@base@<id>" component per direct base, so a base initializer maps to a
+  // single element and must NOT be expanded into the base's fields (which is
+  // what the legacy flattened layout required). Detect the layout from the
+  // converted struct type. See #1866, #3894.
+  bool nested_layout = false;
+  if (cxxrd && cxxrd->getNumBases() != 0)
+  {
+    typet derived_t;
+    if (!get_type(init.getType(), derived_t))
+    {
+      const typet &followed = ns.follow(derived_t);
+      if (followed.is_struct())
+        for (const auto &c : to_struct_type(followed).components())
+          if (c.get_bool("is_base_subobject"))
+          {
+            nested_layout = true;
+            break;
+          }
+    }
+  }
+
+  if (!cxxrd || cxxrd->getNumBases() == 0 || nested_layout)
   {
     for (unsigned j = 0, n = init.getNumInits(); j < n; ++j)
     {
