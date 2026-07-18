@@ -113,6 +113,7 @@ and the symbol/function table layout.
 | Builtin-call rewrite for `__builtin_huge_val{,f,l}`/`__builtin_inf{,f,l}` FUNCTION_CALLs → +∞ floatbv constant (sign 0, exponent all ones, mantissa 0), width-generic incl. 128-bit long double (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Bit-reversal expression `bitreverse` (`__builtin_bitreverse{8,16,32,64}`) → SWAR reversal via `bitand`/`shl`/`lshr`/`bitor` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | `_Complex` support: `complex` type → subtype form; constructor/`complex_real`/`complex_imag`/real→complex `typecast`/`+ - * /`/`unary-` lowered to the native component-wise forms (§4.3 type + §4.4 exprs, Phases 2–3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type`, `fix_expression` |
+| Libc body bridge extended to `<ctype.h>` classifiers/case-mappers `isalnum`/`isalpha`/`isblank`/`iscntrl`/`isdigit`/`isgraph`/`islower`/`isprint`/`ispunct`/`isspace`/`isupper`/`isxdigit`/`tolower`/`toupper` (bodyless externals → ESBMC's ASCII operational-model bodies) (§4.8, Phase 2) | ✅ (PR #TBD) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -904,6 +905,25 @@ pins all five classes — `FP_NORMAL`/`FP_ZERO`/`FP_INFINITE`/`FP_NAN`/`FP_SUBNO
 (`fpclassify(0.0) == FP_NORMAL`, where `0.0` is `FP_ZERO`) `FAILED`, confirming the classifier is
 really evaluated. `signbit`/`isnan`/`isinf`/`isnormal` are handled at the expression level (§4.4),
 not here — `fpclassify` is the one classifier that lowers to a real libc call.
+
+**Extended to the `<ctype.h>` character classifiers and case-mappers:
+`isalnum`/`isalpha`/`isblank`/`iscntrl`/`isdigit`/`isgraph`/`islower`/`isprint`/`ispunct`/
+`isspace`/`isupper`/`isxdigit`/`tolower`/`toupper` (all 14).** A C program compiled with
+`goto-cc` — the general-interop consumer (§1.2), not the Kani front — that declares a ctype
+function by prototype emits a **bodyless external returning nondet** for it, so a valid
+`isdigit('5') != 0` reported a false `FAILED` where CBMC (which models the whole family)
+verifies `SUCCESSFUL`. Same `link_cbmc_libc_bodies` bridge, 14 more names in the list and the
+additions boilerplate: ESBMC's operational-model bodies (`ctype.c`) are straight-line ASCII
+range/comparison checks — **no loops, so no `--unwind`** — copied onto the bodyless
+declarations. ESBMC's ASCII-locale model agrees with CBMC's over the exercised inputs; the two
+could in principle diverge only on non-ASCII / locale-dependent bytes, which neither models
+distinctly. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3): `cbmc_ctype` exercises all
+14 (each classifier a member + non-member pair, `tolower`/`toupper` a mapped + unmapped pair,
+and a symbolic `tolower(toupper(c)) == c` round-trip over `c ∈ [a,z]`) `SUCCESSFUL`, and
+`cbmc_ctype_fail` (`toupper('a') == 'B'`) `FAILED`, confirming the mapping is really computed.
+The macOS-`goto-cc` `<ctype.h>` *macro* form (`__istype`/`__isctype` over a `_DefaultRuneLocale`
+rune table) is a distinct, locale-table shape neither tool models deterministically and is out of
+scope here — the prototype form is what a portable C source and a Linux-glibc binary emit.
 
 **Ruled out as an alternative fix** (for the remaining libm family, from the #5743
 diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
