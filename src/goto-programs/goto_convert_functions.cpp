@@ -599,7 +599,17 @@ bool goto_convert_functionst::convert_native_rec(
       // not <call>(): break` before goto_convert ever sees them (confirmed
       // empirically — see docs/spike-v1k-w1loc.md), so this path is reached
       // by a C/C++ `while` whose condition is directly a call.
+      // generate_conditional_branch/remove_sideeffects read the location for
+      // each instruction they emit off the *operand* being lowered, not off the
+      // statement. IREP2 value expressions carry no location, so the
+      // back-migrated condition arrives unlocated and those instructions come
+      // out unlocated too; the legacy path avoids this because
+      // restore_value_locations has already pushed the enclosing statement's
+      // location onto the round-tripped body's value operands. Do the same with
+      // the same helper, so the decrement `while (t--)` lowers to stays located
+      // (instruction locations gate --condition-coverage and witness matching).
       exprt cond_legacy = migrate_expr_back(w.cond);
+      stamp_value_locations(cond_legacy, location);
       generate_conditional_branch(
         gen_not(cond_legacy), z, location, tmp_branch);
     }
