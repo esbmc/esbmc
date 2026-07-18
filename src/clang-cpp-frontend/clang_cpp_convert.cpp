@@ -2886,8 +2886,7 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
   {
     // Only when the derived actually carries the nested subobject; a
     // hierarchy with a virtual base keeps the legacy flattened layout.
-    const typet derived_struct =
-      ns.follow(implicit_this_symb.type().subtype());
+    const typet derived_struct = ns.follow(implicit_this_symb.type().subtype());
     if (
       derived_struct.is_struct() &&
       to_struct_type(derived_struct).has_component(base_comp))

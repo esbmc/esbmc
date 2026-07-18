@@ -40,8 +40,8 @@ static bool build_nested_member_access(
   for (std::size_t i = 0; i < st.members.size(); ++i)
   {
     const std::string name = st.member_names[i].as_string();
-    if (name.compare(
-          0, base_subobject_prefix.size(), base_subobject_prefix) != 0)
+    if (
+      name.compare(0, base_subobject_prefix.size(), base_subobject_prefix) != 0)
       continue;
 
     expr2tc base_access = member2tc(st.members[i], source, st.member_names[i]);
@@ -199,7 +199,8 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
       // access through that path when it is not a direct member (#1866, #3894).
       const type2tc member_type = to_pointer_type(ref.type).subtype;
       expr2tc nested;
-      if (build_nested_member_access(source, ref.member, member_type, ns, nested))
+      if (build_nested_member_access(
+            source, ref.member, member_type, ns, nested))
         expr = nested;
       else
         expr = member2tc(member_type, source, ref.member);

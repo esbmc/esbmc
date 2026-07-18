@@ -35,8 +35,8 @@ static void collect_base_subobject_offsets(
   for (std::size_t i = 0; i < st.members.size(); ++i)
   {
     const std::string name = st.member_names[i].as_string();
-    if (name.compare(
-          0, base_subobject_prefix.size(), base_subobject_prefix) != 0)
+    if (
+      name.compare(0, base_subobject_prefix.size(), base_subobject_prefix) != 0)
       continue;
 
     const BigInt off = base + member_offset(ft, st.member_names[i], &ns);

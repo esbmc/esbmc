@@ -75,8 +75,8 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
 
   // Build the `*this` lvalue that every vptr assignment is rooted at.
   namespacet ns(context);
-  const symbolt *this_symb = ns.lookup(
-    ctor_type.arguments().at(0).type().subtype().identifier());
+  const symbolt *this_symb =
+    ns.lookup(ctor_type.arguments().at(0).type().subtype().identifier());
   assert(this_symb);
   exprt this_operand = symbol_exprt(
     ctor_type.arguments().at(0).get("#identifier"), this_symb->get_type());
