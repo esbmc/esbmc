@@ -50,12 +50,12 @@ Two independent probe runs are reported below. Distinguishing them matters, beca
 absolute counts in §2.5 and §2.6 are corpus-dependent and only the *directional*
 conclusions replicate.
 
-| | Run 1 (original) | Run 2 (review replication) |
-|---|---|---|
-| `jbmc`/`cbmc` | 6.5.0 (Ubuntu, Diffblue `.deb`) | 6.8.0 (macOS, Homebrew) |
-| ESBMC | `c3deaba546` | `8.4.0`, feature branch, aarch64 |
-| JDK | OpenJDK 21 | none — corpus taken from `core-models.jar` |
-| Corpus | hand-written `Rich.java` | `java.lang.Integer` + transitive models |
+| | Run 1 (original) | Run 2 (review replication) | Run 3 (first-blocker triage) |
+|---|---|---|---|
+| `jbmc`/`cbmc` | 6.5.0 (Ubuntu, Diffblue `.deb`) | 6.8.0 (macOS, Homebrew) | 6.8.0 (macOS, Homebrew) |
+| ESBMC | `c3deaba546` | `8.4.0`, feature branch, aarch64 | `9bac4d40c7` (`master`), aarch64 |
+| JDK | OpenJDK 21 | none — corpus taken from `core-models.jar` | none |
+| Corpus | hand-written `Rich.java` | `java.lang.Integer` + transitive models | `java.lang.Integer` + transitive models |
 
 All ESBMC line references in this document are as they appear at **`c3deaba546`**, the
 commit Run 1 was measured against. Several have since drifted on `master`; §2.4 records
@@ -174,12 +174,57 @@ reproduced in Run 2** (exit code 134 = SIGABRT in each case):
 - ESBMC also core-dumps *after* correctly printing `ERROR: 'x.goto' is not a
   goto-binary.` — a clean-error path that still aborts.
 
-> **Run 2 caveat on the diagnostic.** With a different corpus and a newer ESBMC, the first
-> blocker surfaced as a bare `ERROR: string` before the abort, rather than a message
-> naming the construct. Whether this is corpus-specific, branch-specific, or a genuine
-> regression in error reporting was not determined. Phase 1 depends on this diagnostic
-> being informative, so **confirming it on `master`/x86-64 is a Phase 0 task**, not an
-> assumption.
+> **Run 2 caveat on the diagnostic — now resolved by Run 3.** With a different corpus and
+> a newer ESBMC, the first blocker surfaced as a bare `ERROR: string` before the abort,
+> rather than a message naming the construct. Run 3 traced it; see §2.3.1. It is neither a
+> regression in error reporting nor corpus noise — it is a *different and earlier* abort
+> site than the one §2.3 reports, and the message is uninformative because that site logs
+> a bare type dump.
+
+#### 2.3.1 The real first blocker: `@class_identifier` is typed `string` (Run 3)
+
+Run 3 attached a debugger to the `ERROR: string` abort on `master` (`9bac4d40c7`). The
+abort is **not** `migrate.cpp:2099` (`Unexpected side-effect statement`). It is
+`migrate.cpp:379`, the fall-through of `migrate_type0`:
+
+```cpp
+log_error("{}", type);   // a bare typet("string") pretty-prints as exactly: string
+abort();
+```
+
+The offending type is reached through two nested `struct` migrations from an instruction
+expression, and the enclosing struct is `java.lang.Object`:
+
+```
+java::java.lang.Object = struct {
+  @class_identifier   : string          <-- ID_string; migrate_type0 has no case for it
+  cproverMonitorCount : signedbv[32]
+}
+```
+
+**Consequence: this blocks 100% of Java input, unconditionally.** Every Java class embeds
+`java.lang.Object`, so ingestion fails during *type* migration, before symbol values,
+instructions, or any side effect are reached. It is reachable on Route A and Route B
+alike — lowering does not touch it, because it is a field type, not a statement.
+
+This corrects three claims elsewhere in this document:
+
+- **§2.3's transcript is not representative.** Run 1's `ERROR: Unexpected side-effect
+  statement: java_new_array` came from a binary built *without* `core-models.jar` (the
+  ~52-function configuration §2.2 warns against). It is a real blocker, but it is not the
+  first one in the load-bearing configuration.
+- **§2.5 under-rates `@class_identifier`.** The table lists it as a "class-tag component"
+  with 14 occurrences; §2.6 then asserts class identifiers "are then plain structs". The
+  component is plain; **its type is not** — `ID_string` has no ESBMC representation at
+  all. It ranks first, not last.
+- **§7 assumption 2 is false as stated.** The diagnostic does *not* name the offending
+  construct at this site: `migrate_type0`'s fall-through has no descriptive prefix, unlike
+  `migrate_expr`'s. Phase 1 must therefore repair **both** abort sites, and the
+  `migrate_type0` one needs a message prefix added, not merely a `throw` in place of the
+  `abort()`.
+
+§2.6's core conclusions are unaffected: the Route A → Route B lowering direction stands,
+and no new number theory or memory model is implied.
 
 ### 2.4 Drift between `c3deaba546` and current `master`
 
@@ -383,12 +428,24 @@ directions.
 
 ### Phase 1 — Fail gracefully, then measure (1 day)
 
-Convert the `abort()` at `migrate.cpp:2098-2099` on unknown Java side effects into the
-existing throw/catch clean-exit pattern (`cbmc_adapter.cpp:791-793` →
-`src/esbmc/parseoptions/goto_program.cpp:283-287`), and fix the core-dump-after-clean-error
-path from §2.3. Add a fixture pinning the new graceful-error message — **do not reuse
-`cbmc_anon_aggregate`, which no longer pins that behaviour** (§2.4). Then run the whole
-corpus and record, per program, the *first* unsupported construct.
+Convert **both** abort sites into the existing throw/catch clean-exit pattern
+(`cbmc_adapter.cpp:791-793` → `src/esbmc/parseoptions/goto_program.cpp:283-287`):
+
+1. `migrate.cpp:379` — `migrate_type0`'s fall-through, the *actual* first blocker (§2.3.1).
+   This one additionally needs a descriptive prefix; today it logs a bare type dump, which
+   is why Run 2 saw `ERROR: string`.
+2. `migrate.cpp:2098-2099` — `migrate_expr`'s unknown-side-effect arm, already descriptive.
+
+Then fix the core-dump-after-clean-error path from §2.3. Add a fixture pinning each new
+graceful-error message — **do not reuse `cbmc_anon_aggregate`, which no longer pins that
+behaviour** (§2.4). Then run the whole corpus and record, per program, the *first*
+unsupported construct.
+
+**Phase 1 no longer needs to discover its own first entry.** §2.3.1 already supplies it:
+`@class_identifier : string` on `java.lang.Object`, blocking every program in the corpus.
+Deciding how to represent `ID_string` — most plausibly as the class-tag integer or opaque
+pointer that ESBMC's struct model can carry — is the first Phase 2 task, ahead of
+`java_new_array_data`.
 
 This is the single highest-value phase: it converts "ESBMC crashes on Java" into a
 ranked, evidence-backed work-list, and it is useful to the CBMC roadmap independently
@@ -530,9 +587,11 @@ Stated in advance so the PoC can honestly fail:
 - **`java_new_array_data` needs symex-level work.** If porting CPROVER's symex handling
   (§2.6) rather than mapping a side effect turns out to be the real Phase 2 cost, the
   "two constructs" framing understates the work.
-- **Java struct conventions leak everywhere.** If `@class_identifier` / `java::array[T]`
-  layouts turn out to need special handling across the adapter rather than being plain
-  structs, the "reuse the CBMC reader" premise weakens.
+- **Java struct conventions leak everywhere.** **Partly realised already** (§2.3.1):
+  `@class_identifier` is a plain component, but carries type `ID_string`, which
+  `migrate_type0` cannot represent. That is one type mapping, not a cross-adapter leak, so
+  the premise holds for now — but it is the first evidence on this axis, and a second such
+  finding (e.g. `java::array[T]` needing bespoke layout) would be a genuine warning.
 - **`mode == "java"` symbols.** `cbmc` fails on JBMC binaries partly because it has no
   handler for Java-mode symbols (§2.2). ESBMC must answer the same question; if the answer
   requires a language handler, "no Java frontend" is harder to hold.
@@ -606,11 +665,32 @@ anything by using a class already inside the models jar, which is how the replic
 jbmc java.lang.Integer -cp $MODELS --show-symbol-table --json-ui > symtab.json
 ```
 
+**Run 3: locating the first blocker (§2.3.1).** The abort site is not visible from the
+message, so attach a debugger rather than reading stderr:
+
+```sh
+lldb -b -o "b migrate.cpp:379" -o "run" \
+     -o 'expr (const char*)type.id().c_str()' -o "up 2" \
+     -o 'expr (const char*)type.get("tag").c_str()' \
+     -- esbmc --binary jbmc.goto --goto-functions-only
+# expect: $0 = "string"   (the unrepresentable type)
+#         $1 = "java.lang.Object"   (the struct carrying it)
+
+# Confirm the component name straight from the symbol table:
+python3 -c "import json;t=json.load(open('st.json'))['symbolTable']['java::java.lang.Object']['type'];\
+print([(c['namedSub']['name']['id'], c['namedSub']['type']['id']) \
+       for c in t['namedSub']['components']['sub']])"
+# expect: [('@class_identifier', 'string'), ('cproverMonitorCount', 'signedbv')]
+```
+
 ### Assumptions the ~7-day budget rests on
 
 1. Phase 2's `java_new_array_data` work fits the existing `sideeffect` model (§2.6 flags
    this as the likeliest overrun).
-2. The Phase 1 diagnostic names the offending construct (§2.3 Run 2 caveat).
+2. ~~The Phase 1 diagnostic names the offending construct (§2.3 Run 2 caveat).~~
+   **Falsified by Run 3 (§2.3.1)**: at `migrate_type0`'s abort site it does not. Phase 1
+   absorbs the fix (add a prefix); the budget impact is hours, not days, but the
+   assumption should not be carried forward silently.
 3. A string-free corpus is achievable at every tier (§5).
 4. Phase 3's out-of-tree driver is written before, and independently of, upstream review.
 
