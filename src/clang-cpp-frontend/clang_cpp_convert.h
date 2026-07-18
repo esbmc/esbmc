@@ -262,6 +262,19 @@ protected:
     exprt &initializer);
 
   /*
+   * Constructors of a class with virtual bases carry a hidden trailing
+   * `__is_complete` boolean parameter that models the Itanium C1/C2 split:
+   * only the most-derived (complete-object) constructor initialises the
+   * shared virtual base subobjects, while base-object constructor calls skip
+   * them. This appends that parameter (and its symbol) for such constructors;
+   * classes without virtual bases are left with their original signature.
+   * See esbmc/esbmc#938.
+   */
+  bool get_cxx_constructor_is_complete_param(
+    const clang::CXXConstructorDecl &cxxcd,
+    code_typet::argumentt &param);
+
+  /*
    * This is an ancillary function deciding whether we need
    * need to build an new_object when dealing with constructor_call
    */
