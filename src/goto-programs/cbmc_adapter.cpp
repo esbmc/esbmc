@@ -186,6 +186,26 @@ irept complex_member(const irept &op, const char *name, const irept &elem)
 
 void fix_expression(irept &irep)
 {
+  if (irep.id() == "is_dynamic_object")
+  {
+    // __CPROVER_DYNAMIC_OBJECT(p) -- true iff p points into a heap-allocated
+    // object -- lowers to an is_dynamic_object expr that migrate_expr has no
+    // handler for (it abort()s with "migrate expr failed"). ESBMC tracks the
+    // same fact in its symex-managed `c:@__ESBMC_is_dynamic` bool array
+    // (indexed by pointer object, set on malloc -- symex_assign.cpp), so the
+    // faithful rewrite is `__ESBMC_is_dynamic[pointer_object(p)]`. That needs
+    // the array force-linked even when the binary never calls malloc (it is
+    // otherwise absent) and its `__ESBMC_inf_size` shape preserved, so it is
+    // left as future work. Only an explicit __CPROVER_DYNAMIC_OBJECT reaches
+    // here -- CBMC's free()/dynamic checks live in library bodies it re-links
+    // at analysis time, not in the serialised binary -- so decline cleanly (a
+    // throw the create_goto_program handler turns into a graceful error exit,
+    // roadmap §4.7) rather than abort()-ing.
+    throw std::string(
+      "CBMC adapter: __CPROVER_DYNAMIC_OBJECT (is_dynamic_object) is not yet "
+      "supported on the --binary path");
+  }
+
   if (irep.id() == "count_leading_zeros" || irep.id() == "count_trailing_zeros")
   {
     // CBMC lowers __builtin_clz/__builtin_ctz to these expression ids, which
