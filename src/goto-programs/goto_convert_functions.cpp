@@ -311,24 +311,17 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_expression2t &expr_stmt = to_code_expression2t(code2);
 
-    // The C/C++ frontends model an assignment *statement* (`x = y;`) as an
-    // expression statement wrapping a sideeffect_assign2t, not as the
-    // code_assign2t Python emits, so it arrives here rather than at the assign
-    // arm above. remove_sideeffects strips the wrapper and hands the operands
-    // to convert_assign, then nils the wrapper (result_is_used is false), so no
-    // OTHER follows. Call the inherited convert_assign with the code_assignt
-    // legacy builds rather than reimplementing it, so its atomic-dispatch
-    // branch stays byte-identical for free. Compound assignments (`+=`, ...)
-    // synthesize a fresh binary rhs and are a separate slice.
+    // C/C++ model an assignment *statement* as an expression statement wrapping
+    // a sideeffect_assign2t, not the code_assign2t Python emits. Delegating to
+    // convert_assign keeps its atomic-dispatch branch byte-identical; compound
+    // assignments (`+=`, ...) rebuild the rhs and are a separate slice.
     if (is_sideeffect_assign2t(expr_stmt.operand))
     {
       const sideeffect_assign2t &se = to_sideeffect_assign2t(expr_stmt.operand);
       if (se.op != "assign")
         return false;
 
-      // Same guards as the assign arm above: a side-effecting or top-level
-      // ternary operand would be lowered before convert_assign runs, and a
-      // code-typed source re-enters the legacy dispatcher via convert().
+      // Shapes convert_assign would lower first, or re-dispatch to legacy.
       exprt assign_lhs = migrate_expr_back(se.lhs);
       exprt assign_rhs = migrate_expr_back(se.rhs);
       if (
@@ -337,9 +330,7 @@ bool goto_convert_functionst::convert_native_rec(
         assign_rhs.type().is_code())
         return false;
 
-      // convert_expression restores the enclosing statement's location onto a
-      // side effect the round-trip left unlocated before remove_sideeffects
-      // reads it as the assignment's location; mirror that precedence.
+      // convert_expression fills an unlocated side effect in from the statement.
       locationt loc = se.location;
       if (loc.get_file().empty())
         loc = expr_stmt.location;
