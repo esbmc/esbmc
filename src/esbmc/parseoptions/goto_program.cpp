@@ -349,15 +349,18 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
 {
   static const char *const libc[] = {
-    "ceilf",         "ceil",         "ceill",     "floorf",   "floor",
-    "floorl",        "truncf",       "trunc",     "truncl",   "roundf",
-    "round",         "roundl",       "copysignf", "copysign", "copysignl",
-    "fminf",         "fmin",         "fminl",     "fmaxf",    "fmax",
-    "fmaxl",         "fdimf",        "fdim",      "fdiml",    "modff",
-    "modf",          "modfl",        "rintf",     "rint",     "rintl",
-    "strlen",        "strcmp",       "strncmp",   "strcpy",   "strncpy",
-    "strcat",        "strncat",      "strchr",    "strrchr",  "__fpclassifyf",
-    "__fpclassifyd", "__fpclassifyl"};
+    "ceilf",         "ceil",          "ceill",     "floorf",   "floor",
+    "floorl",        "truncf",        "trunc",     "truncl",   "roundf",
+    "round",         "roundl",        "copysignf", "copysign", "copysignl",
+    "fminf",         "fmin",          "fminl",     "fmaxf",    "fmax",
+    "fmaxl",         "fdimf",         "fdim",      "fdiml",    "modff",
+    "modf",          "modfl",         "rintf",     "rint",     "rintl",
+    "strlen",        "strcmp",        "strncmp",   "strcpy",   "strncpy",
+    "strcat",        "strncat",       "strchr",    "strrchr",  "__fpclassifyf",
+    "__fpclassifyd", "__fpclassifyl", "isalnum",   "isalpha",  "isblank",
+    "iscntrl",       "isdigit",       "isgraph",   "islower",  "isprint",
+    "ispunct",       "isspace",       "isupper",   "isxdigit", "tolower",
+    "toupper"};
 
   for (const char *name : libc)
   {
@@ -405,10 +408,13 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
   // cbmc_adapter retargets CBMC's memcpy/memset/memmove/memcmp calls straight to
   // the c:@F@__ESBMC_* intrinsics, but those intrinsics still need the *_impl
   // bodies present for the bump path, so the boilerplate must link them here.
+  // The <ctype.h> classifiers/case-mappers (isdigit/toupper/...) are the same
+  // bodyless-external shape; their ctype.c bodies are straight-line (no unwind).
   static const char boilerplate[] =
     "/* Auto-generated: bundle all ESBMC additions for CBMC gotos. */\n"
     "#include <math.h>\n"
     "#include <string.h>\n"
+    "#include <ctype.h>\n"
     // CBMC's <math.h> lowers fpclassify(x) to __fpclassify{f,d,l}(x). Only
     // __fpclassifyd is new here -- glibc's <math.h> already declares
     // __fpclassifyf/__fpclassifyl (and macOS's declares all three), but none of
@@ -434,6 +440,11 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)strcpy,    (void *)strncpy,  (void *)strcat,\n"
     "  (void *)strncat,   (void *)strchr,   (void *)strrchr,\n"
     "  (void *)__fpclassifyf, (void *)__fpclassifyd, (void *)__fpclassifyl,\n"
+    "  (void *)isalnum,   (void *)isalpha,  (void *)isblank,\n"
+    "  (void *)iscntrl,   (void *)isdigit,  (void *)isgraph,\n"
+    "  (void *)islower,   (void *)isprint,  (void *)ispunct,\n"
+    "  (void *)isspace,   (void *)isupper,  (void *)isxdigit,\n"
+    "  (void *)tolower,   (void *)toupper,\n"
     "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)
