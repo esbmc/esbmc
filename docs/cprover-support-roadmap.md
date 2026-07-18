@@ -622,6 +622,26 @@ float operand), `migrate` cannot tell them apart; `fix_expression` runs only on 
 perturbing native handling. `isinf` now matches CBMC's verdict exactly (reclassified
 `cbmc_isinf` KNOWNBUG→CORE; negative direction covered by `cbmc_isinf_fail`).
 
+**CPROVER pointer/introspection intrinsics — swept 2026-07-18.** `__CPROVER_POINTER_OBJECT`,
+`__CPROVER_POINTER_OFFSET`, `__CPROVER_same_object`, `__CPROVER_r_ok`, and `__CPROVER_assume`
+already verify to CBMC parity. Four gaps remain, each recorded for future work:
+- **`__CPROVER_DYNAMIC_OBJECT` (`is_dynamic_object`) — declined cleanly (✅ landed).** No
+  `migrate_expr` handler → it `abort()`ed. ESBMC tracks the identical fact in its symex-managed
+  `c:@__ESBMC_is_dynamic` bool array (indexed by pointer object, set on `malloc` in
+  `symex_assign.cpp`), so the faithful rewrite is `__ESBMC_is_dynamic[pointer_object(p)]` — but
+  that needs the array **force-linked even when the binary never calls `malloc`** (otherwise
+  absent) with its `__ESBMC_inf_size` shape preserved, so it is deferred. Only an *explicit*
+  `__CPROVER_DYNAMIC_OBJECT` reaches the adapter (CBMC's `free`/dynamic checks live in library
+  bodies re-linked at analysis time, not the serialised binary — a `free`-using binary verifies
+  fine), so `fix_expression` now throws a clean error instead of aborting. Pinned by
+  `cbmc_dynamic_object`.
+- **`__CPROVER_OBJECT_SIZE` (`object_size`)** — migrates (`→ c:@F@__ESBMC_get_object_size`,
+  already in the wrap-set) but the SMT **encoding hangs in the solver** (same class as the SIMD
+  vector hang, §4.4) — a solver-performance item, not an adapter gap.
+- **`__CPROVER_array_set` / `__CPROVER_havoc_object`** — reach migrate as unhandled `code`
+  statements (`ERROR: code`); the array/havoc codet family, akin to the `ARRAY_COPY`/`ARRAY_SET`
+  memcpy handling of §4.8.
+
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
 `static_lifetime`, `file_local`, `is_extern`).
