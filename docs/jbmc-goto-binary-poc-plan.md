@@ -437,9 +437,25 @@ JDK).
 The ~8-program tiered corpus is **not** landed: it cannot be compiled, and
 therefore cannot be validated, without a JDK. Checking in unvalidated `.java`
 files — or opaque `.class` files — was rejected in favour of leaving the gap
-explicit. Note that `command -v javac` is not a usable JDK probe on macOS,
-which ships a stub that exists on PATH and exits 0 while reporting no runtime;
-the harness matches the version string instead.
+explicit.
+
+Scope of validation: the `--class` route is exercised end to end; the
+`--source` route is **untested**, since it needs the same absent JDK. Two
+traps found while building it are worth recording. `command -v javac` is not a
+usable JDK probe on macOS, which ships a stub that exists on PATH and exits 0
+while reporting no runtime — match the version string instead. And an empty
+bash array expanded under `set -u` aborts on bash 3.2 (stock on macOS) but not
+on bash 5, so a Linux CI run will not catch it; `${A[@]+"${A[@]}"}` is
+required.
+
+The manifest records the symbol count, which is the direct measurement of the
+§2.2 completeness risk (16463 symbols for `java.lang.Integer` with
+`--no-lazy-methods` against `core-models.jar`, 1548 without). `MIN_SYMBOLS`
+enforces a floor when the caller knows what to expect; there is no defensible
+universal value, so it is opt-in rather than guessed. The ESBMC *commit* is not
+recorded — `esbmc --version` does not carry one — so the manifest records the
+resolved binary path instead, which at least distinguishes a build-tree binary
+from a packaged one.
 
 ### Phase 1 — Fail gracefully, then measure (1 day)
 
