@@ -505,7 +505,7 @@ public:
     size_t pos,
     size_t n);
   basic_string(basic_string<CharT, Traits, Alloc> &s, size_t n);
-  basic_string(char c, size_t n);
+  basic_string(size_t n, char c);
   explicit basic_string(int len);
 
   /* [string.cons]: the iterator-pair constructor. Templated so it serves raw
@@ -1192,10 +1192,12 @@ basic_string<CharT, Traits, Alloc>::basic_string(int len)
 }
 
 template <typename CharT, typename Traits, typename Alloc>
-basic_string<CharT, Traits, Alloc>::basic_string(char c, size_t n)
+basic_string<CharT, Traits, Alloc>::basic_string(size_t n, char c)
 {
-  __ESBMC_assert(n > 0, "the second parameter must be different than zero");
-  for (int i = 0; i < n; i++)
+__ESBMC_HIDE:
+  __ESBMC_assert(n < STRING_CAPACITY, "String capacity exceeded");
+
+  for (size_t i = 0; i < n; i++)
     str[i] = c;
   str[n] = '\0';
   _size = n;
