@@ -2851,7 +2851,22 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       // struct components.
       std::vector<exprt> flat_inits;
       const auto *cxxrd = init_stmt.getType()->getAsCXXRecordDecl();
-      const bool has_bases = cxxrd && cxxrd->getNumBases() > 0;
+
+      // Under the nested base-subobject layout the target carries one
+      // "@base@<id>" component per direct base, so a base-typed argument maps
+      // to a single element and must NOT be expanded into the base's fields
+      // (which is what the legacy flattened layout required). See #1866, #3894.
+      bool nested_layout = false;
+      if (t.is_struct())
+        for (const auto &c : to_struct_type(t).components())
+          if (c.get_bool("is_base_subobject"))
+          {
+            nested_layout = true;
+            break;
+          }
+
+      const bool has_bases =
+        cxxrd && cxxrd->getNumBases() > 0 && !nested_layout;
       for (const clang::Expr *e : args)
       {
         if (has_bases)
