@@ -3107,12 +3107,18 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
     // we return it, without casting to the ternary if type.
     if2t i = to_if2t(res);
 
+    // c is null when the solver produced no value for the condition (e.g. it
+    // still contains a quantifier); fall through to the operand recursion
+    // below, which handles unresolved sub-expressions.
     expr2tc c = get(i.cond);
-    if (is_true(c))
-      return get(i.true_value);
+    if (c)
+    {
+      if (is_true(c))
+        return get(i.true_value);
 
-    if (is_false(c))
-      return get(i.false_value);
+      if (is_false(c))
+        return get(i.false_value);
+    }
   }
 
   default:;
@@ -3185,7 +3191,14 @@ expr2tc smt_solver_baset::get_by_ast(const type2tc &type, smt_astt a)
   switch (type->type_id)
   {
   case type2t::bool_id:
-    return get_bool(a) ? gen_true_expr() : gen_false_expr();
+  {
+    // A null expr2tc is the established "solver produced no value" signal; the
+    // get() callers already treat it as unresolved (see #6191).
+    tvt val = get_bool(a);
+    if (val.is_unknown())
+      return expr2tc();
+    return val.is_true() ? gen_true_expr() : gen_false_expr();
+  }
 
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
@@ -3876,7 +3889,7 @@ tvt smt_solver_baset::l_get(smt_astt a)
   auto it = l_get_cache.find(a);
   if (it != l_get_cache.end())
     return it->second;
-  tvt res = get_bool(a) ? tvt(true) : tvt(false);
+  tvt res = get_bool(a);
   l_get_cache.emplace(a, res);
   return res;
 }

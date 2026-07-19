@@ -797,7 +797,7 @@ yices_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   return default_convert_array_of(init_val, domain_width, this);
 }
 
-bool yices_convt::get_bool(smt_astt a)
+tvt yices_convt::get_bool(smt_astt a)
 {
   int32_t val;
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
@@ -807,7 +807,7 @@ bool yices_convt::get_bool(smt_astt a)
     abort();
   }
 
-  return val ? true : false;
+  return tvt(val != 0);
 }
 
 BigInt yices_convt::get_bv(smt_astt a, bool is_signed)

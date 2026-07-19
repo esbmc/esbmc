@@ -550,8 +550,10 @@ public:
 
   /** Extract the assignment to a boolean variable from the SMT solver's model.
    *  @param a The AST whose value we wish to know.
-   *  @return Expression representation of a's value, as a constant_bool2tc */
-  virtual bool get_bool(smt_astt a) = 0;
+   *  @return a's value, or tvt::TV_UNKNOWN when the solver cannot reduce it to
+   *          a ground boolean. That is an expected outcome for terms that still
+   *          contain a quantifier: callers must not invent a value for it. */
+  virtual tvt get_bool(smt_astt a) = 0;
 
   /** Extract the assignment to a bitvector from the SMT solver's model.
    *  @param a The AST whose value we wish to know.
