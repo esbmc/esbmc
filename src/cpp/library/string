@@ -538,6 +538,9 @@ public:
   //TODO: operator+
 
   char &operator[](size_t pos);
+  const char &operator[](size_t pos) const;
+  void push_back(char c);
+  void reserve(size_t n = 0);
   char at(size_t pos) const;
   char front() const;
   char back() const;
@@ -1446,6 +1449,36 @@ char &basic_string<CharT, Traits, Alloc>::operator[](size_t pos)
     return this->str[pos];
 }
 
+// Stricter than [string.access] p1, which makes s[s.size()] return the null
+// character: basic_string(int) sets _size without initialising str[], so
+// str[_size] is not reliably '\0' and returning it would yield an
+// unconstrained byte. Do not widen this bound to pos <= _size; to model the
+// standard, return a static '\0' for pos == _size instead.
+template <typename CharT, typename Traits, typename Alloc>
+const char &basic_string<CharT, Traits, Alloc>::operator[](size_t pos) const
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(pos < this->_size, "Error! Invalid access memory area");
+  return this->str[pos];
+}
+
+template <typename CharT, typename Traits, typename Alloc>
+void basic_string<CharT, Traits, Alloc>::push_back(char c)
+{
+__ESBMC_HIDE:
+  *this += c;
+}
+
+// The model's buffer is a fixed-size array, so a request that fits is already
+// satisfied; a larger one cannot be modelled and is reported rather than
+// silently ignored.
+template <typename CharT, typename Traits, typename Alloc>
+void basic_string<CharT, Traits, Alloc>::reserve(size_t n)
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(n < STRING_CAPACITY, "String capacity exceeded");
+}
+
 template <typename CharT, typename Traits, typename Alloc>
 char basic_string<CharT, Traits, Alloc>::at(size_t pos) const
 {
@@ -1581,6 +1614,8 @@ basic_string<CharT, Traits, Alloc> &
 basic_string<CharT, Traits, Alloc>::operator+=(char s)
 {
 __ESBMC_HIDE:
+  // Guards the strcpy below, which writes _size + 2 bytes into str[].
+  __ESBMC_assert(this->_size + 1 < STRING_CAPACITY, "String capacity exceeded");
   int totalLen = this->_size + 1;
   char temp[totalLen + 1];
   int i = 0;
@@ -1638,10 +1673,13 @@ __ESBMC_HIDE:
   s._size = _tsz;
 }
 
+// The storage is a fixed buffer, so the capacity is constant; returning _size
+// instead would break [string.capacity]'s capacity() >= res_arg guarantee
+// after reserve(). One byte is kept for the terminator.
 template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::capacity() const
 {
-  return this->_size;
+  return STRING_CAPACITY - 1;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
