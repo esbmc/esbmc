@@ -2440,9 +2440,13 @@ void clang_cpp_convertert::name_param_and_continue(
   const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
   if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
   {
-    if (
-      (is_CopyOrMoveOperator(*md) && md->isImplicit()) ||
-      (is_ConstructorOrDestructor(*md) && is_defaulted_ctor(*md)))
+    /* Every implicit or explicitly-defaulted method gets a compiler-synthesised
+     * body that refers to its parameter, so the parameter needs a name even
+     * though the declaration leaves it unnamed. Testing isImplicit() alone left
+     * `= default` assignment and comparison operators — which are defaulted but
+     * not implicit — with an unnamed parameter, so their synthesised body read
+     * from an unbound operand (github #4377). */
+    if (md->isImplicit() || md->isDefaulted())
     {
       get_decl_name(*md, name, id);
 
