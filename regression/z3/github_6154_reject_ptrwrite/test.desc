@@ -1,0 +1,4 @@
+CORE
+main.c
+--z3
+cannot model call to .* on a quantified variable inside __ESBMC_forall/__ESBMC_exists

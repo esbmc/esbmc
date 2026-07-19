@@ -1,4 +1,6 @@
 #include <goto-programs/goto_convert_class.h>
+#include <irep2/irep2_utils.h>
+#include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
@@ -296,6 +298,421 @@ bool goto_convertt::try_inline_pure_call(
   return true;
 }
 
+namespace
+{
+/// State threaded through the structured-body summarizer.  @ref env maps each
+/// in-scope local (parameters seeded from the call's actual arguments) to its
+/// current symbolic value; @ref pc is the path condition reaching the current
+/// statement; @ref returns records (guard, value) for every `return' in program
+/// order, with the earliest matching guard winning; @ref locals holds every
+/// callee-local identifier, so a read of a not-yet-assigned local can be
+/// detected; @ref budget bounds loop unrolling.
+struct summary_statet
+{
+  std::map<irep_idt, exprt> env;
+  exprt pc;
+  std::vector<std::pair<exprt, exprt>> returns;
+  std::set<irep_idt> locals;
+  unsigned budget;
+};
+
+bool summary_has_sideeffect(const exprt &e)
+{
+  if (e.id() == "sideeffect")
+    return true;
+  forall_operands (it, e)
+    if (summary_has_sideeffect(*it))
+      return true;
+  return false;
+}
+
+/// Fold @p e to a constant boolean: 1 = true, 0 = false, -1 = not a constant.
+/// -1 covers both "genuinely symbolic" and "constant, but the simplifier could
+/// not fold it"; either way the caller rejects the callee, so a stronger
+/// simplifier only widens the set of accepted shapes, it never changes a result.
+int summary_fold_bool(const exprt &e)
+{
+  expr2tc e2;
+  migrate_expr(e, e2);
+  simplify(e2);
+  BigInt v;
+  if (to_integer(e2, v))
+    return -1;
+  return v.is_zero() ? 0 : 1;
+}
+
+/// Keeping the path condition literally `true' (rather than and(true, x)) lets
+/// the totality check below fold it without leaning on the simplifier.
+exprt summary_and(const exprt &a, const exprt &b)
+{
+  return a.is_true() ? b : gen_and(a, b);
+}
+
+void summary_coerce(exprt &e, const typet &t)
+{
+  if (e.type() != t)
+    e.make_typecast(t);
+}
+
+std::size_t summary_node_count(const exprt &e)
+{
+  std::size_t n = 1;
+  forall_operands (it, e)
+    n += summary_node_count(*it);
+  return n;
+}
+
+/// Total size of the summary built so far.  A branch merge embeds the
+/// pre-branch value in both arms, so an unrolled loop containing an if/else
+/// doubles the tracked values per iteration: bounding the iteration count alone
+/// still admits a 2^n-sized expression (a trip count of 18 already costs GBs).
+/// Bounding size instead makes an over-large body degrade to a clean rejection.
+std::size_t summary_size(const summary_statet &st)
+{
+  std::size_t n = 0;
+  for (const auto &kv : st.env)
+    n += summary_node_count(kv.second);
+  for (const auto &r : st.returns)
+    n += summary_node_count(r.first) + summary_node_count(r.second);
+  return n;
+}
+
+static constexpr std::size_t max_summary_nodes = 20000;
+} // namespace
+
+/// Substitute tracked locals in @p e with their env values.  Fails when @p e
+/// has a side effect, takes the address of a tracked local, or — after
+/// substitution — still mentions a callee-local (a read before assignment the
+/// summarizer cannot model).
+static bool summary_eval(const exprt &e, const summary_statet &st, exprt &out)
+{
+  if (summary_has_sideeffect(e) || param_under_address_of(e, st.locals))
+    return false;
+  exprt r = e;
+  replace_symbols_in_expr(r, st.env);
+  if (mentions_symbol(r, st.locals))
+    return false;
+  out.swap(r);
+  return true;
+}
+
+/// Apply a discarded expression statement (or a for-loop iterator) to @p st.
+/// A plain `=' assignment or a bare `++`/`--' on a tracked local scalar updates
+/// its value; a side-effect-free expression has no effect; anything else fails.
+/// The clang frontend lowers an assignment used as a statement (including an
+/// `if'/`for' controlled statement) to a side_effect_exprt("assign") rather
+/// than a code_assignt, which is why this is the only assignment form handled.
+static bool summary_apply_effect(const exprt &e, summary_statet &st)
+{
+  if (!summary_has_sideeffect(e))
+    return true;
+  // A `nondet' side effect carries no operands, so check before reaching op0().
+  if (e.id() != "sideeffect" || e.operands().empty() || !e.op0().is_symbol())
+    return false;
+  const irep_idt &id = e.op0().identifier();
+  if (!st.locals.count(id))
+    return false;
+  const typet &t = e.op0().type();
+  const irep_idt &s = e.statement();
+
+  if (s == "assign" && e.operands().size() == 2)
+  {
+    exprt val;
+    if (!summary_eval(e.op1(), st, val))
+      return false;
+    summary_coerce(val, t);
+    st.env[id] = val;
+    return true;
+  }
+
+  const bool inc = (s == "preincrement" || s == "postincrement");
+  const bool dec = (s == "predecrement" || s == "postdecrement");
+  auto it = st.env.find(id);
+  // Whitelist the types `cur +/- from_integer(1, t)' is meaningful for, so an
+  // unhandled type degrades to a rejection.  from_integer() returns nil for
+  // anything but an integer bitvector or bool, and a nil operand here left an
+  // ill-formed `cur + nil' in env that crashed once the summary reached the
+  // solver (a `double' local incremented in a summarized loop).
+  if (
+    (!inc && !dec) || e.operands().size() != 1 || it == st.env.end() ||
+    (t.id() != "signedbv" && t.id() != "unsignedbv"))
+    return false;
+  exprt cur = it->second;
+  summary_coerce(cur, t);
+  exprt val(inc ? "+" : "-", t);
+  val.copy_to_operands(cur, from_integer(1, t));
+  it->second = val;
+  return true;
+}
+
+/// Symbolically execute one structured statement of the callee, updating
+/// @p st.  Returns false for any construct the summarizer cannot soundly turn
+/// into a pure expression.
+static bool
+summarize_code(const codet &code, summary_statet &st, const namespacet &ns)
+{
+  const irep_idt &s = code.get_statement();
+
+  if (s == "skip")
+    return true;
+
+  if (s == "block" || s == "decl-block")
+  {
+    forall_operands (it, code)
+      if (!it->is_code() || !summarize_code(to_code(*it), st, ns))
+        return false;
+    return true;
+  }
+
+  if (s == "decl")
+  {
+    if (code.operands().empty() || !code.op0().is_symbol())
+      return false;
+    const irep_idt &id = code.op0().identifier();
+    const symbolt *ls = ns.lookup(id);
+    if (!ls || ls->static_lifetime)
+      return false;
+    st.locals.insert(id);
+    if (code.operands().size() == 2 && code.op1().is_not_nil())
+    {
+      exprt val;
+      if (!summary_eval(code.op1(), st, val))
+        return false;
+      summary_coerce(val, code.op0().type());
+      st.env[id] = val;
+    }
+    else
+      st.env.erase(id);
+    return true;
+  }
+
+  // A source-level assignment reaches us as a side_effect_exprt("assign")
+  // wrapped in a code_expressiont, never as a bare code_assignt, so only the
+  // "expression" form below is handled; anything else falls through to the
+  // conservative rejection at the end.
+  if (s == "expression")
+    return code.operands().size() == 1 && summary_apply_effect(code.op0(), st);
+
+  if (s == "return")
+  {
+    if (code.operands().size() != 1)
+      return false;
+    const code_returnt &r = to_code_return(code);
+    exprt val;
+    if (!r.has_return_value() || !summary_eval(r.return_value(), st, val))
+      return false;
+    st.returns.emplace_back(st.pc, val);
+    return true;
+  }
+
+  if (s == "ifthenelse")
+  {
+    if (code.operands().size() < 2)
+      return false;
+    const code_ifthenelset &i = to_code_ifthenelse(code);
+    // The frontend emits an ifthenelse with two operands when there is no
+    // else branch; op2() is only present with three (cf. convert_ifthenelse).
+    const bool has_else =
+      code.operands().size() == 3 && code.op2().is_not_nil();
+    exprt cv;
+    if (!summary_eval(i.cond(), st, cv))
+      return false;
+    const int f = summary_fold_bool(cv);
+    if (f == 1)
+      return summarize_code(i.then_case(), st, ns);
+    if (f == 0)
+      return !has_else || summarize_code(i.else_case(), st, ns);
+
+    const std::map<irep_idt, exprt> base = st.env;
+    const std::set<irep_idt> outer = st.locals;
+    const exprt saved_pc = st.pc;
+
+    st.pc = summary_and(saved_pc, cv);
+    if (!summarize_code(i.then_case(), st, ns))
+      return false;
+    const std::map<irep_idt, exprt> then_env = st.env;
+
+    st.env = base;
+    st.pc = summary_and(saved_pc, gen_not(cv));
+    if (has_else && !summarize_code(i.else_case(), st, ns))
+      return false;
+    const std::map<irep_idt, exprt> else_env = st.env;
+
+    st.pc = saved_pc;
+    st.env = base;
+    st.locals = outer;
+    // Merge every outer-scope local written on either path; a variable written
+    // in only one branch takes its pre-branch value on the other.  Values only
+    // defined on one path (declared without initializer, assigned in one branch)
+    // are left unset so a later unconditional read bails.  Locals declared
+    // inside a branch drop out of scope with the restore above.
+    std::set<irep_idt> keys;
+    for (const auto &kv : then_env)
+      if (outer.count(kv.first))
+        keys.insert(kv.first);
+    for (const auto &kv : else_env)
+      if (outer.count(kv.first))
+        keys.insert(kv.first);
+    for (const irep_idt &k : keys)
+    {
+      auto ti = then_env.find(k), ei = else_env.find(k), bi = base.find(k);
+      const exprt *tv = ti != then_env.end() ? &ti->second
+                        : bi != base.end()   ? &bi->second
+                                             : nullptr;
+      const exprt *ev = ei != else_env.end() ? &ei->second
+                        : bi != base.end()   ? &bi->second
+                                             : nullptr;
+      if (!tv || !ev)
+        continue;
+      if (*tv == *ev)
+        st.env[k] = *tv;
+      else
+      {
+        exprt e = *ev;
+        summary_coerce(e, tv->type());
+        st.env[k] = if_exprt(cv, *tv, e);
+      }
+    }
+    return true;
+  }
+
+  if (s == "for" || s == "while" || s == "dowhile")
+  {
+    const exprt *cond, *init = nullptr, *iter = nullptr;
+    const codet *body;
+    if (s == "for")
+    {
+      if (code.operands().size() != 4)
+        return false;
+      const code_fort &l = to_code_for(code);
+      init = &l.init();
+      cond = &l.cond();
+      iter = &l.iter();
+      body = &l.body();
+    }
+    else if (s == "while")
+    {
+      if (code.operands().size() != 2)
+        return false;
+      const code_whilet &l = to_code_while(code);
+      cond = &l.cond();
+      body = &l.body();
+    }
+    else
+    {
+      if (code.operands().size() != 2)
+        return false;
+      const code_dowhilet &l = to_code_dowhile(code);
+      cond = &l.cond();
+      body = &l.body();
+    }
+
+    if (
+      init && init->is_not_nil() &&
+      (!init->is_code() || !summarize_code(to_code(*init), st, ns)))
+      return false;
+
+    // Unroll while the loop condition folds to a constant true, threading the
+    // loop counter through env each iteration.  A condition that never folds
+    // (data-dependent trip count), an exhausted budget, or a summary that grew
+    // too large leaves the loop as a call the summarizer cannot turn into a
+    // pure expression.
+    for (bool first = true;; first = false)
+    {
+      if (summary_size(st) > max_summary_nodes)
+        return false;
+      if (!(s == "dowhile" && first))
+      {
+        if (cond->is_nil())
+          return false;
+        exprt cv;
+        if (!summary_eval(*cond, st, cv))
+          return false;
+        const int f = summary_fold_bool(cv);
+        if (f == -1)
+          return false;
+        if (f == 0)
+          break;
+      }
+      if (st.budget == 0)
+        return false;
+      st.budget--;
+      if (!summarize_code(*body, st, ns))
+        return false;
+      // The frontend wraps the loop iterator in a code_expressiont; route it
+      // through summarize_code, which unwraps the statement to apply its effect.
+      if (iter && iter->is_not_nil())
+      {
+        if (iter->is_code())
+        {
+          if (!summarize_code(to_code(*iter), st, ns))
+            return false;
+        }
+        else if (!summary_apply_effect(*iter, st))
+          return false;
+      }
+    }
+    return true;
+  }
+
+  return false;
+}
+
+bool goto_convertt::summarize_pure_call(
+  const symbolt &fsym,
+  const exprt &call,
+  exprt &out)
+{
+  const exprt &value = fsym.get_value();
+  if (!value.is_code() || fsym.get_type().id() != "code")
+    return false;
+
+  const code_typet &ftype = to_code_type(fsym.get_type());
+  if (ftype.has_ellipsis())
+    return false;
+  const code_typet::argumentst &params = ftype.arguments();
+  const exprt::operandst &args = call.op1().operands();
+  if (params.size() != args.size())
+    return false;
+
+  summary_statet st;
+  st.pc = true_exprt();
+  st.budget = max_quantifier_inline_depth * max_quantifier_inline_depth;
+
+  for (std::size_t i = 0; i < params.size(); i++)
+  {
+    const irep_idt &id = params[i].get_identifier();
+    if (id.empty() || summary_has_sideeffect(args[i]))
+      return false;
+    exprt arg = args[i];
+    summary_coerce(arg, params[i].type());
+    st.locals.insert(id);
+    st.env[id] = arg;
+  }
+
+  if (!summarize_code(to_code(value), st, ns))
+    return false;
+
+  // A trailing unconditional return guarantees the summary is total: the last
+  // recorded value is the fall-through, earlier returns wrap it as nested
+  // if-then-else so the earliest matching guard wins.
+  if (st.returns.empty() || summary_fold_bool(st.returns.back().first) != 1)
+    return false;
+
+  exprt result = st.returns.back().second;
+  for (std::size_t i = st.returns.size() - 1; i-- > 0;)
+  {
+    exprt v = st.returns[i].second;
+    summary_coerce(v, result.type());
+    result = if_exprt(st.returns[i].first, v, result);
+  }
+
+  summary_coerce(result, call.type());
+  result.location() = call.find_location();
+  out.swap(result);
+  return true;
+}
+
 /// Inline calls to pure single-return functions occurring under a quantifier
 /// binder, so that the bound variable stays visible in the body for
 /// replace_name_in_body() in smt_solver.cpp.  Hoisting such a call to a temp
@@ -319,7 +736,10 @@ void goto_convertt::inline_calls_in_quantifier_body(exprt &expr, unsigned depth)
   {
     const symbolt *fsym = ns.lookup(expr.op0().identifier());
     exprt inlined;
-    if (!fsym || depth == 0 || !try_inline_pure_call(*fsym, expr, inlined))
+    if (
+      !fsym || depth == 0 ||
+      (!try_inline_pure_call(*fsym, expr, inlined) &&
+       !summarize_pure_call(*fsym, expr, inlined)))
       return;
     expr.swap(inlined);
     inline_calls_in_quantifier_body(expr, depth - 1);
@@ -413,6 +833,33 @@ void goto_convertt::skolemize_asserted_foralls(exprt &expr, goto_programt &dest)
   skolemize_asserted_foralls(expr, dest);
 }
 
+void goto_convertt::convert_quantifier_calls(exprt &expr)
+{
+  if (const symbolt *fsym = quantifier_intrinsic_call(expr, ns))
+  {
+    exprt::operandst &args = expr.op1().operands();
+    if (args.size() == 2)
+    {
+      // Bottom-up: convert any nested quantifier calls first, then summarize
+      // the remaining calls so the bound variable stays free in the body.
+      convert_quantifier_calls(args[1]);
+      inline_calls_in_quantifier_body(args[1], max_quantifier_inline_depth);
+      if (!has_sideeffect(args[1]))
+      {
+        exprt quant(
+          fsym->name == "__ESBMC_forall" ? "forall" : "exists", typet("bool"));
+        quant.copy_to_operands(args[0], args[1]);
+        quant.location() = expr.find_location();
+        expr.swap(quant);
+      }
+    }
+    return;
+  }
+
+  Forall_operands (it, expr)
+    convert_quantifier_calls(*it);
+}
+
 void goto_convertt::remove_sideeffects_for_quantifier_body(
   exprt &body,
   const std::set<irep_idt> &bound_vars,
@@ -480,9 +927,10 @@ void goto_convertt::remove_sideeffects_for_quantifier_body(
     log_error(
       "{}: cannot model {} on a quantified variable inside "
       "__ESBMC_forall/__ESBMC_exists; the quantifier body must be a "
-      "side-effect-free expression, possibly calling functions whose body "
-      "is local declarations followed by a single `return <expr>;' and "
-      "whose side-effecting arguments are each used exactly once",
+      "side-effect-free expression, possibly calling functions built from "
+      "local declarations, assignments, if/else, and loops with a statically "
+      "constant trip count, and whose side-effecting arguments are each used "
+      "exactly once",
       se->find_location().as_string(),
       is_call ? "call to `" + se->op0().identifier().as_string() + "'"
               : "side effect `" + se->statement().as_string() + "'");
@@ -556,6 +1004,13 @@ void goto_convertt::remove_sideeffects(
   // on expr.location(), enabling column-accurate branching waypoint matching.
   if (!has_sideeffect(expr) && expr.id() != "if")
     return;
+
+  // Turn quantifier intrinsic calls into forall/exists expressions before the
+  // &&/|| and generic side-effect lowering below, so a nested quantifier's body
+  // is never hoisted into a temp (which would freeze the bound variable).  A
+  // quantifier call is itself a side effect, so the guard above never skips a
+  // convertible expression.
+  convert_quantifier_calls(expr);
 
   // Snapshot for the discarded-temporary_object arm below: entries pushed
   // while lowering this expression describe its full-expression temporaries.
