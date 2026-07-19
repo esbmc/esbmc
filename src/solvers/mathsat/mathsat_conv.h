@@ -134,7 +134,7 @@ public:
   void push_ctx() override;
   void pop_ctx() override;
 
-  bool get_bool(smt_astt a) override;
+  tvt get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;
   ieee_floatt get_fpbv(smt_astt a) override;
   expr2tc get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)

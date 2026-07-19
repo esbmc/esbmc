@@ -186,6 +186,29 @@ irept complex_member(const irept &op, const char *name, const irept &elem)
 
 void fix_expression(irept &irep)
 {
+  if (
+    irep.id() == "address_of" && !irep.get_sub().empty() &&
+    irep.get_sub()[0].id() == "label")
+  {
+    // GNU labels-as-values: CBMC lowers a computed goto (`goto *p`) into a
+    // concrete IF-chain that compares label addresses -- address_of(label) --
+    // for equality; the addresses are only ever compared, never dereferenced.
+    // ESBMC has no label-address node (its own frontend rejects indirect
+    // gotos), so map each distinct label to a unique non-null (void *)K
+    // constant: equality over those constants reproduces CBMC's control flow.
+    // Same-named labels in different functions could collide, but comparing
+    // their addresses across functions is undefined, so it cannot arise in a
+    // valid program.
+    static std::map<std::string, unsigned long long> label_addrs;
+    const std::string label = irep.get_sub()[0].find("identifier").id_string();
+    const unsigned long long addr =
+      label_addrs.emplace(label, label_addrs.size() + 1).first->second;
+    irept int_ty("unsignedbv");
+    int_ty.set("width", config.ansi_c.pointer_width());
+    irep = mk_unary("typecast", irep.find("type"), mk_bv_const(int_ty, addr));
+    // Fall through: the operand-wrap step normalises the new typecast/constant.
+  }
+
   if (irep.id() == "is_dynamic_object")
   {
     // __CPROVER_DYNAMIC_OBJECT(p) -- true iff p points into a heap-allocated
@@ -608,6 +631,23 @@ void fix_expression(irept &irep)
     // set below.
     irep.set("component_name", irep.id() == "complex_real" ? "real" : "imag");
     irep.id("member");
+  }
+
+  if (irep.id() == "side_effect" && irep.find("statement").id() == "va_start")
+  {
+    // CBMC lowers va_start(ap, last) to a side_effect that points the va_list
+    // at the last named parameter and then walks the stack for each va_arg
+    // (which it lowers to a raw *(T *)ap dereference). ESBMC models variadic
+    // arguments as discrete per-call symbols, not a contiguous stack, so that
+    // pointer walk cannot recover them -- and migrate_expr abort()s on the
+    // unrecognised statement. Decline cleanly (a throw the create_goto_program
+    // handler turns into a graceful error exit, matching the malformed-input
+    // recovery of roadmap §4.7) rather than crashing; correct <stdarg.h>
+    // support on the --binary path needs a contiguous vararg layout and is
+    // future work (roadmap §4.4).
+    throw std::string(
+      "CBMC adapter: variadic functions (va_start/va_arg) are not yet "
+      "supported on the --binary path");
   }
 
   if (irep.id() == "side_effect")

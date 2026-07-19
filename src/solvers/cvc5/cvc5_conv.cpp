@@ -44,11 +44,11 @@ smt_resultt cvc5_convt::dec_solve()
   return P_UNSATISFIABLE;
 }
 
-bool cvc5_convt::get_bool(smt_astt a)
+tvt cvc5_convt::get_bool(smt_astt a)
 {
   auto const *ca = to_solver_smt_ast<cvc5_smt_ast>(a);
   cvc5::Term e = slv.getValue(ca->a);
-  return e.getBooleanValue();
+  return tvt(e.getBooleanValue());
 }
 
 ieee_floatt cvc5_convt::get_fpbv(smt_astt a)

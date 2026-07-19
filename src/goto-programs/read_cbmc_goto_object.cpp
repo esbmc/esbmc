@@ -3,9 +3,11 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_program_irep.h>
 #include <util/c_types.h>
+#include <util/config.h>
 #include <util/expr_util.h>
 #include <util/migrate.h>
 #include <util/message.h>
+#include <util/std_expr.h>
 #include <util/symbol.h>
 #include <cassert>
 #include <cstdint>
@@ -308,6 +310,34 @@ bool parse_cbmc_goto(
   return false;
 }
 
+// Constrain each object's base address to its ABI alignment. CBMC gives every
+// object a highly-aligned base (empirically ≥ any scalar's natural alignment),
+// but ESBMC only constrains objects whose type already carries an "alignment"
+// attribute -- the frontend padding pass sets it on aggregates, but a plain
+// `int x;` is left unconstrained. A cast such as `(uintptr_t)&x % 4 == 0` is
+// then satisfiable-false and ESBMC reports a spurious misalignment (roadmap
+// §4.3 / the corpus `NonNull::as_ref` mismatch). Setting the attribute the SMT
+// layer already honours (smt_memspace.cpp asserts base % alignment == 0) closes
+// that gap. max_alignment (the alignment of max_align_t) is >= the natural
+// alignment of every scalar type, so it satisfies every real alignment check
+// while matching CBMC's over-aligned bases; it is a power of two, so the base
+// is trivially placeable (no UNSAT). Scoped to the CBMC --binary reader, so
+// native frontends are unaffected. An existing (frontend/CBMC) alignment is
+// kept as-is.
+static void set_object_alignment(symbolt &symbol)
+{
+  if (symbol.is_type || symbol.get_type().is_code())
+    return;
+  typet type = symbol.get_type();
+  if (type.id().empty() || type.id() == "empty")
+    return;
+  if (type.find("alignment").is_not_nil())
+    return;
+  const BigInt align(config.ansi_c.max_alignment());
+  type.set("alignment", constant_exprt(align, size_type()));
+  symbol.set_type(std::move(type));
+}
+
 bool read_cbmc_goto_object(
   std::istream &in,
   const std::string &filename,
@@ -337,6 +367,7 @@ bool read_cbmc_goto_object(
         migrate_symbol_type(symbol);
     }
 
+    set_object_alignment(symbol);
     context.add(symbol);
   }
 

@@ -115,6 +115,7 @@ and the symbol/function table layout.
 | `_Complex` support: `complex` type → subtype form; constructor/`complex_real`/`complex_imag`/real→complex `typecast`/`+ - * /`/`unary-` lowered to the native component-wise forms (§4.3 type + §4.4 exprs, Phases 2–3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type`, `fix_expression` |
 | Libc body bridge extended to `<ctype.h>` classifiers/case-mappers `isalnum`/`isalpha`/`isblank`/`iscntrl`/`isdigit`/`isgraph`/`islower`/`isprint`/`ispunct`/`isspace`/`isupper`/`isxdigit`/`tolower`/`toupper` (bodyless externals → ESBMC's ASCII operational-model bodies) (§4.8, Phase 2) | ✅ (PR #6157) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Libc body bridge extended to `<stdlib.h>` string-to-integer parsers `atoi`/`atol`/`strtol` (byte-loop bodies, need `--unwind`; `atoll`/`strtoll` left bodyless — CBMC does not model them) (§4.8, Phase 2) | ✅ (PR #6158) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
+| Computed `goto` (GNU labels-as-values): `address_of(label)` → unique `(void *)K` constant so CBMC's lowered label-address equality chain resolves (§4.4, Phase 2) | ✅ (PR #6161) | `cbmc_adapter.cpp::fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -622,6 +623,19 @@ float operand), `migrate` cannot tell them apart; `fix_expression` runs only on 
 perturbing native handling. `isinf` now matches CBMC's verdict exactly (reclassified
 `cbmc_isinf` KNOWNBUG→CORE; negative direction covered by `cbmc_isinf_fail`).
 
+**Variadic functions (`va_start`) — decline cleanly instead of `abort()` (✅ landed).**
+CBMC lowers `va_start(ap, last)` to a `side_effect` that points the `va_list` at the last
+named parameter and then walks the stack for each `va_arg` (which it lowers to a raw
+`*(T *)ap` dereference). ESBMC models variadic arguments as **discrete per-call symbols**
+(`<fn>::va_argN`, `symex_function.cpp`), not a contiguous stack, so CBMC's pointer walk cannot
+recover them — and `migrate_expr` `abort()`ed (SIGABRT/rc=134) on the unrecognised `va_start`
+statement. `fix_expression` now `throw`s a clean error the `create_goto_program` handler turns
+into a graceful exit (matching §4.7). Correct `<stdarg.h>` support on the `--binary` path needs
+a contiguous vararg layout and is future work. Pinned by `cbmc_va_start`. **Other deep,
+still-unsupported constructs found by the same construct sweep** (each declines/diverges, none
+a quick adapter rewrite): `setjmp`/`longjmp` (non-local control flow; ESBMC returns a spurious
+FAILED where CBMC proves SUCCESSFUL), and SIMD vector types (`__attribute__((vector_size))` —
+CBMC lowers element-wise but ESBMC's vector SMT encoding hangs in the solver).
 **CPROVER pointer/introspection intrinsics — swept 2026-07-18.** `__CPROVER_POINTER_OBJECT`,
 `__CPROVER_POINTER_OFFSET`, `__CPROVER_same_object`, `__CPROVER_r_ok`, and `__CPROVER_assume`
 already verify to CBMC parity. Four gaps remain, each recorded for future work:
@@ -641,6 +655,25 @@ already verify to CBMC parity. Four gaps remain, each recorded for future work:
 - **`__CPROVER_array_set` / `__CPROVER_havoc_object`** — reach migrate as unhandled `code`
   statements (`ERROR: code`); the array/havoc codet family, akin to the `ARRAY_COPY`/`ARRAY_SET`
   memcpy handling of §4.8.
+
+**Computed `goto` (GNU labels-as-values) — ✅ landed.** A `goto *p` over
+`void *t[] = {&&a, &&b}` reached the adapter as `address_of(label{identifier})` expressions
+(the label operand is typed `empty`), which `migrate_type` has no case for — it `abort()`ed
+with `ERROR: label`. ESBMC's own C frontend rejects indirect gotos outright
+(`ESBMC currently does not support indirect gotos`), so there is no native representation to
+mirror. But **CBMC has already lowered the indirect jump** at `goto-cc` time into a concrete
+conditional chain — `IF t[k] == address_of(label "a") THEN GOTO …; IF … "b" …` — so no
+indirect-goto symex is needed: the label addresses are only ever *compared for equality*,
+never dereferenced. `fix_expression` therefore rewrites each `address_of(label X)` into a
+unique non-null `(void *)K` constant (a `typecast` of a per-label counter to the pointer
+type), so those equality comparisons resolve to CBMC's control flow. Same-named labels in
+different functions would share a `K`, but comparing label addresses across functions is
+undefined and cannot occur in a valid program. Scoped to the `--binary` path, so it never
+perturbs native handling. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), across a
+3-way dispatch table (concrete selectors 0/1/2 and a symbolic in-range selector) —
+`cbmc_computed_goto` SUCCESSFUL — and a wrong-branch negative (`cbmc_computed_goto_fail`:
+`goto *t[1]` asserted to land on label `a` ⇒ FAILED), confirming the jump really targets the
+selected label rather than a nondet branch.
 
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
@@ -1286,6 +1319,27 @@ highest-leverage gap in the corpus", is **disproven**. On the fix branch
 `check_align_offset_u32` still aborts with `ERROR: Can't construct rvalue reference to array
 type during dereference` (`dereference.cpp:988`). That cluster is an independent ESBMC
 dereference limitation and is now the largest single item in the corpus; see UMBRELLA #3.
+
+**✅ Fixed 2026-07-18 (reproduced with plain C, no Kani corpus needed).**
+`int x; assert((unsigned long)&x % 4 == 0)` compiled with `goto-cc` reproduced the mismatch at
+minimal size — CBMC SUCCESSFUL, ESBMC FAILED. Diagnosis: ESBMC's SMT layer (`smt_memspace.cpp`)
+already asserts `base % alignment == 0` **when the object type carries an `"alignment"`
+attribute**, and the C-frontend padding pass sets it on aggregates — but a plain scalar
+(`int x;`) has none, so its base was unconstrained and `&x % 4` was satisfiable-false.
+(Native ESBMC via `__ESBMC_assert` reports the same FAILED, so this was never
+`--binary`-specific; `malloc`'d objects already verified aligned because the allocation path
+supplies alignment — only DECL'd scalars/objects were missing it.) Fixed in the CBMC reader
+(`read_cbmc_goto_object.cpp::set_object_alignment`): every loaded object symbol whose type
+lacks an `"alignment"` gets `config.ansi_c.max_alignment()` — `≥` the natural alignment of
+every scalar, a power of two (so trivially placeable, no UNSAT), and matching CBMC's own
+over-aligned object bases (empirically CBMC aligns every object to `≥32`). Scoped to the CBMC
+reader, so native frontends are untouched. Verdict parity with CBMC, dual-solver, across
+`int`/`long` stack vars, array elements, struct fields, globals, and pointer-cast checks
+(`cbmc_alignment` SUCCESSFUL / `cbmc_alignment_fail` — `&x % 4 == 1` — FAILED); the full
+`goto-transcoder` suite and reader unit tests still pass. This closes the 3 corpus mismatches
+(`check_cast`/`check_as_ref`/`check_as_mut`); the 41-crash `align_offset`/`align_to` cluster is
+the *separate* `rvalue reference to array` dereference limitation, not this. Precision (never
+soundness) — ESBMC only ever over-reported.
 
 **Axis 3 (solver performance)** is now the largest non-crash bucket: 140 ESBMC timeouts at a
 40 s cap versus CBMC's 35, concentrated in `slice` (84 N/A).

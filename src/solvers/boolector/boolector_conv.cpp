@@ -646,21 +646,22 @@ smt_astt boolector_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
     t->sort);
 }
 
-bool boolector_convt::get_bool(smt_astt a)
+tvt boolector_convt::get_bool(smt_astt a)
 {
   const btor_smt_ast *ast = to_solver_smt_ast<btor_smt_ast>(a);
   const char *result = boolector_bv_assignment(btor, ast->a);
 
   assert(result != NULL && "Boolector returned null bv assignment string");
 
-  bool res;
+  // A default-constructed tvt holds an indeterminate value, not TV_UNKNOWN.
+  tvt res(tvt::TV_UNKNOWN);
   switch (*result)
   {
   case '1':
-    res = true;
+    res = tvt(true);
     break;
   case '0':
-    res = false;
+    res = tvt(false);
     break;
   default:
     log_error("Can't get boolean value from Boolector");
