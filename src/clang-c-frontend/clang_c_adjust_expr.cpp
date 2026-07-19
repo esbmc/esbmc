@@ -1586,6 +1586,7 @@ void clang_c_adjust::adjust_comma(exprt &expr)
 {
   adjust_operands(expr);
 
+  assert(expr.operands().size() == 2);
   expr.type() = expr.op1().type();
 }
 

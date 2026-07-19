@@ -850,40 +850,47 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         exprt tp("typecast", t);
         tp.copy_to_operands(place);
 
+        // Default-initialising a non-class type performs no initialisation
+        // ([dcl.init.general]), so clang attaches no initializer and there is
+        // nothing to sequence: `new (p) int;` is just (int *)p. Emitting a
+        // comma here would leave it with a single operand and corrupt every
+        // downstream op1() access (esbmc/esbmc#6184).
+        if (!ne.hasInitializer())
+        {
+          new_expr = tp;
+          break;
+        }
+
         exprt target("dereference", t.subtype());
         target.copy_to_operands(tp);
 
-        exprt comma("comma", t);
-        if (ne.hasInitializer())
-        {
-          exprt init;
-          if (get_expr(*ne.getInitializer(), init))
-            return true;
+        exprt init;
+        if (get_expr(*ne.getInitializer(), init))
+          return true;
 
-          if (
-            init.id() == "sideeffect" &&
-            init.statement() == "temporary_object" &&
-            static_cast<const exprt &>(init.initializer()).is_not_nil())
-          {
-            // A class-type initializer arrives as a temporary_object whose
-            // initializer wraps the constructor call carrying an
-            // &new_object placeholder (make_temporary): retarget the call
-            // at the placement address and drop the temporary, so `this`
-            // is the placed object, not a copied-from temp.
-            exprt wrap = static_cast<const exprt &>(init.initializer());
-            assert(
-              wrap.is_code() && to_code(wrap).get_statement() == "expression");
-            exprt call = wrap.op0();
-            replace_new_object_with(target, call);
-            comma.copy_to_operands(call);
-          }
-          else
-          {
-            side_effect_exprt assign("assign");
-            assign.type() = t.subtype();
-            assign.copy_to_operands(target, init);
-            comma.copy_to_operands(assign);
-          }
+        exprt comma("comma", t);
+        if (
+          init.id() == "sideeffect" && init.statement() == "temporary_object" &&
+          static_cast<const exprt &>(init.initializer()).is_not_nil())
+        {
+          // A class-type initializer arrives as a temporary_object whose
+          // initializer wraps the constructor call carrying an
+          // &new_object placeholder (make_temporary): retarget the call
+          // at the placement address and drop the temporary, so `this`
+          // is the placed object, not a copied-from temp.
+          exprt wrap = static_cast<const exprt &>(init.initializer());
+          assert(
+            wrap.is_code() && to_code(wrap).get_statement() == "expression");
+          exprt call = wrap.op0();
+          replace_new_object_with(target, call);
+          comma.copy_to_operands(call);
+        }
+        else
+        {
+          side_effect_exprt assign("assign");
+          assign.type() = t.subtype();
+          assign.copy_to_operands(target, init);
+          comma.copy_to_operands(assign);
         }
         comma.copy_to_operands(tp);
         new_expr = comma;
