@@ -512,9 +512,16 @@ public:
    * pointers as well as the nested iterator types — the previous
    * const_iterator-only declaration was never defined, so a raw `char *` pair
    * (as boost's type_index uses) found no viable overload. The non-template
-   * (const CharT *, size_t) overload still wins for a pointer/length call. */
+   * (const CharT *, size_t) overload still wins for a pointer/length call.
+   *
+   * Constrained away from integral types, as libstdc++ constrains it with
+   * _RequireInputIter: without this, `basic_string(10, 42)` deduces InputIt=int
+   * and beats the (char, size_t) fill constructor on an exact match. */
   template <class InputIt>
-  basic_string(InputIt first, InputIt last)
+  basic_string(
+    InputIt first,
+    InputIt last,
+    typename enable_if<!is_integral<InputIt>::value>::type * = 0)
   {
   __ESBMC_HIDE:
     _size = 0;
