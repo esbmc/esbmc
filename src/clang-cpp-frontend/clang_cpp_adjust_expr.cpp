@@ -97,18 +97,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   }
   else if (statement == "cpp_delete" || statement == "cpp_delete[]")
   {
-    adjust_operands(expr);
-    // adjust side effect node to explicitly call class destructor
-    // e.g. the adjustment here will add the following instruction in GOTO:
-    // FUNCTION_CALL:  ~t2(&(*p))
-    code_function_callt destructor;
-    if (get_destructor(ns, expr.type(), destructor))
-    {
-      exprt new_object("new_object", expr.type());
-
-      destructor.arguments().push_back(address_of_exprt(new_object));
-      expr.set("destructor", destructor);
-    }
+    adjust_cpp_delete(expr);
   }
   else if (statement == "temporary_object")
   {
@@ -130,6 +119,96 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   }
   else
     clang_c_adjust::adjust_side_effect(expr);
+}
+
+void clang_cpp_adjust::adjust_cpp_delete(side_effect_exprt &expr)
+{
+  adjust_operands(expr);
+
+  // adjust side effect node to explicitly call class destructor
+  // e.g. the adjustment here will add the following instruction in GOTO:
+  // FUNCTION_CALL:  ~t2(&(*p))
+  const struct_typet *class_type = resolve_class_type(ns, expr.type());
+  if (class_type == nullptr)
+    return;
+
+  const struct_typet::componentt *dtor =
+    get_destructor_component(ns, *class_type);
+  if (dtor == nullptr)
+    return;
+
+  exprt new_object("new_object", expr.type());
+
+  code_function_callt destructor;
+  destructor.function() = destructor_binding(*class_type, *dtor, new_object);
+  destructor.arguments().push_back(address_of_exprt(new_object));
+  expr.set("destructor", destructor);
+}
+
+exprt clang_cpp_adjust::destructor_binding(
+  const struct_typet &class_type,
+  const struct_typet::componentt &dtor,
+  const exprt &object)
+{
+  exprt static_binding("symbol", dtor.type());
+  static_binding.identifier(dtor.name());
+
+  if (!dtor.get_bool("is_virtual"))
+    return static_binding;
+
+  // The slot is keyed by the destructor's `virtual_name`, i.e. the id of the
+  // ultimate overridden destructor. Select the vtable pointer whose table
+  // actually carries that slot rather than assuming the class's own vptr comes
+  // first among the components.
+  const struct_typet::componentt *vptr = nullptr;
+  const struct_typet::componentt *slot = nullptr;
+  const typet *vtable_type = nullptr;
+
+  for (const auto &comp : class_type.components())
+  {
+    if (!comp.get_bool("is_vtptr"))
+      continue;
+
+    const typet &candidate = ns.follow(comp.type().subtype());
+    if (candidate.id() != "struct")
+      continue;
+
+    for (const auto &entry : to_struct_type(candidate).components())
+      if (entry.get("virtual_name") == dtor.get("virtual_name"))
+      {
+        vptr = &comp;
+        slot = &entry;
+        vtable_type = &candidate;
+        break;
+      }
+
+    if (slot != nullptr)
+      break;
+  }
+
+  // A class with a virtual destructor always carries a vtable pointer and a
+  // matching slot: both are emitted together when the vtable is built. Falling
+  // back to the static destructor here would silently skip the derived
+  // destructors' side effects, so fail loudly instead.
+  if (slot == nullptr)
+  {
+    log_error(
+      "{}: no virtual table slot for destructor `{}` of `{}`",
+      __func__,
+      dtor.name(),
+      class_type.tag());
+    abort();
+  }
+
+  // *object.@vtable_pointer->~T#
+  member_exprt vptr_member(object, vptr->name(), vptr->type());
+  dereference_exprt vtable(vptr_member, vptr->type());
+  // No further adjust pass runs over this expression, so resolve the vtable
+  // symbol type here: member2t requires a resolved struct source.
+  vtable.type() = *vtable_type;
+
+  member_exprt slot_member(vtable, slot->name(), slot->type());
+  return dereference_exprt(slot_member, slot->type());
 }
 
 void clang_cpp_adjust::adjust_new(exprt &expr)

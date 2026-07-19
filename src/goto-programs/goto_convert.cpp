@@ -1109,7 +1109,12 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
     }
     else if (code.statement() == "cpp_delete")
     {
-      exprt deref_op("dereference", tmp_op.type().subtype());
+      // Follow the pointee: a virtually-bound destructor reads the vtable
+      // pointer out of this dereference, and member2t needs a resolved struct
+      // source. This cannot move to the C++ adjuster, because the
+      // replace_new_object below substitutes the placeholder node wholesale,
+      // type included. Only the C++ frontend emits cpp_delete.
+      exprt deref_op("dereference", ns.follow(tmp_op.type().subtype()));
       deref_op.copy_to_operands(tmp_op);
 
       codet tmp_code = to_code(destructor);
