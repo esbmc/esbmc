@@ -438,7 +438,8 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
       base_map bases;
       if (get_base_map(*cxxrd, bases))
         return true;
-      get_base_components_methods(bases, type);
+      get_base_components_methods(
+        bases, type, cxxrd->getNumVBases() > 0, *cxxrd);
     }
   }
 
@@ -1959,6 +1960,19 @@ bool clang_cpp_convertert::get_function_body(
         initializer.derived_this_arg(
           ftype.arguments().at(0).get("#identifier"));
         initializer.base_ctor_derived(true);
+        // Route the base ctor `this` structurally through the nested
+        // "@base@<id>" subobject (non-virtual bases). See #1866, #3894.
+        if (!init->isBaseVirtual())
+        {
+          const clang::CXXRecordDecl *base_rd =
+            init->getBaseClass()->getAsCXXRecordDecl();
+          if (base_rd)
+          {
+            std::string bn, bid;
+            get_decl_name(*base_rd, bn, bid);
+            initializer.set("#base_subobject", base_subobject_name(bid));
+          }
+        }
         if (get_expr(*init->getInit(), initializer))
           return true;
 
@@ -2864,6 +2878,26 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
   assert(s);
   exprt implicit_this_symb = symbol_expr(this_symbol);
 
+  // Route `this` through the nested base subobject: &this->@base@<id>, so the
+  // base ctor operates on its own subobject (sound structural access, not a
+  // byte offset). Falls back to a plain cast for virtual bases. See #1866.
+  const irep_idt &base_comp = initializer.get("#base_subobject");
+  if (!base_comp.empty() && implicit_this_symb.type().is_pointer())
+  {
+    // Only when the derived actually carries the nested subobject; a
+    // hierarchy with a virtual base keeps the legacy flattened layout.
+    const typet derived_struct = ns.follow(implicit_this_symb.type().subtype());
+    if (
+      derived_struct.is_struct() &&
+      to_struct_type(derived_struct).has_component(base_comp))
+    {
+      dereference_exprt deref(
+        implicit_this_symb, implicit_this_symb.type().subtype());
+      member_exprt m(deref, base_comp, base_ctor_this_type.subtype());
+      implicit_this_symb = address_of_exprt(m);
+    }
+  }
+
   // generate the type casting expr and push it to callee's arguments
   gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
   call.arguments().push_back(implicit_this_symb);
@@ -2939,13 +2973,14 @@ bool clang_cpp_convertert::get_base_map(
     std::string class_id, class_name;
     get_decl_name(base_cxxrd, class_name, class_id);
 
-    // avoid adding the same base, e.g. in case of diamond problem
-    if (map.find(class_id) != map.end())
+    // avoid adding the same base, e.g. in case of diamond problem; keep
+    // declaration order so the flattened layout matches the ABI base order
+    if (std::any_of(map.begin(), map.end(), [&](const auto &e) {
+          return e.first == class_id;
+        }))
       continue;
 
-    auto status = map.insert({class_id, base_cxxrd});
-    (void)status;
-    assert(status.second);
+    map.emplace_back(class_id, &base_cxxrd);
   }
 
   return false;
@@ -2953,7 +2988,9 @@ bool clang_cpp_convertert::get_base_map(
 
 void clang_cpp_convertert::get_base_components_methods(
   base_map &map,
-  struct_union_typet &type)
+  struct_union_typet &type,
+  bool has_virtual_bases,
+  const clang::CXXRecordDecl &cxxrd)
 {
   irept::subt &base_ids = type.add("bases").get_sub();
   for (const auto &base : map)
@@ -2967,17 +3004,22 @@ void clang_cpp_convertert::get_base_components_methods(
 
     const struct_typet &base_type = to_struct_type(s->get_type());
 
-    // pull components in
-    const struct_typet::componentst &components = base_type.components();
-    for (auto component : components)
+    if (has_virtual_bases)
     {
-      // TODO: tweak access specifier
-      component.set("from_base", true);
-      if (!is_duplicate_component(component, type))
-        to_struct_type(type).components().push_back(component);
+      // Legacy flattened layout. A shared virtual base must appear exactly
+      // once in the most-derived object, which per-path nested subobjects
+      // cannot express yet; keep the whole hierarchy flat so virtual
+      // inheritance behaves exactly as before (P5). See #1866, #3894.
+      for (auto component : base_type.components())
+      {
+        component.set("from_base", true);
+        if (!is_duplicate_component(component, type))
+          to_struct_type(type).components().push_back(component);
+      }
     }
 
-    // pull methods in
+    // Methods stay flattened as metadata (they carry their own class `this`);
+    // resolution goes through the base method symbol plus the receiver cast.
     const struct_typet::componentst &methods = base_type.methods();
     for (auto method : methods)
     {
@@ -2986,6 +3028,43 @@ void clang_cpp_convertert::get_base_components_methods(
       if (!is_duplicate_method(method, type))
         to_struct_type(type).methods().push_back(method);
     }
+  }
+
+  if (has_virtual_bases)
+    return;
+
+  // Nested base subobjects: one "@base@<class_id>" component per *direct*
+  // base only. Each base's own struct already nests its own bases, so walking
+  // the transitive base_map here would duplicate an ancestor's storage (e.g.
+  // C : B, B : A would give C both @base@A and @base@B, the latter already
+  // containing @base@A). Inherited member access, upcasts and base ctor/dtor
+  // `this` are routed structurally through these components, which is sound in
+  // ESBMC's dereference model -- unlike the byte-offset flattening it
+  // replaces. See #1866, #3894 and
+  // docs/design/cpp-multiple-inheritance-subobjects.md.
+  for (const clang::CXXBaseSpecifier &base_spec : cxxrd.bases())
+  {
+    const clang::CXXRecordDecl *base_rd =
+      base_spec.getType()->getAsCXXRecordDecl();
+    if (!base_rd)
+      continue;
+
+    std::string base_name, base_id;
+    get_decl_name(*base_rd, base_name, base_id);
+    const symbolt *s = context.find_symbol(base_id);
+    if (!s)
+      continue;
+
+    struct_typet::componentt base_comp;
+    const std::string comp_name = base_subobject_name(base_id);
+    base_comp.set_name(comp_name);
+    base_comp.set_base_name(comp_name);
+    base_comp.set_pretty_name(comp_name);
+    base_comp.type() = symbol_typet(s->id);
+    base_comp.set("from_base", true);
+    base_comp.set("is_base_subobject", true);
+    if (!is_duplicate_component(base_comp, type))
+      to_struct_type(type).components().push_back(base_comp);
   }
 }
 

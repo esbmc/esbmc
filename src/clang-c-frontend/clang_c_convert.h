@@ -49,6 +49,16 @@ class InitListExpr;
 std::string
 getFullyQualifiedName(const clang::QualType &, const clang::ASTContext &);
 
+// Name of the nested base-subobject component added to a derived struct for a
+// direct base whose class_id is `class_id`. Inherited member access, upcasts
+// and base ctor/dtor `this` are routed through this component. Must agree
+// between the storage site (get_base_components_methods) and the
+// derived->base cast handler. See esbmc/esbmc#1866, #3894.
+inline std::string base_subobject_name(const std::string &class_id)
+{
+  return "@base@" + class_id;
+}
+
 class clang_c_convertert
 {
 public:

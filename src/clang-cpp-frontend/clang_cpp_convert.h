@@ -285,13 +285,18 @@ protected:
   /*
    * Methods to pull bases in
    */
-  using base_map = std::map<std::string, const clang::CXXRecordDecl &>;
+  // Bases are collected in declaration (ABI) order, not alphabetical, so the
+  // flattened component layout agrees with clang's getBaseClassOffset used by
+  // the base-offset paths (dtor/cast/thunk). See #1866, #3894 and
+  // docs/design/cpp-multiple-inheritance-subobjects.md.
+  using base_map =
+    std::vector<std::pair<std::string, const clang::CXXRecordDecl *>>;
   /*
    * Recursively get the bases for this derived class.
    *
    * Params:
    *  - cxxrd: clang AST representing the class/struct we are currently dealing with
-   *  - map: this map contains all base class(es) of this class std::map<class_id, pointer to clang AST of base class>
+   *  - map: ordered list of (class_id, base clang AST) in declaration order, deduped
    */
   bool get_base_map(const clang::CXXRecordDecl &cxxrd, base_map &map);
   /*
@@ -324,7 +329,15 @@ protected:
    *  - map: this map contains all base class(es) of this class std::map<class_id, pointer to clang AST of base class>
    *  - type: ESBMC IR representing the class' type
    */
-  void get_base_components_methods(base_map &map, struct_union_typet &type);
+  /* When the class has any virtual base, nesting is disabled and the legacy
+   * flattened layout is used for all of its bases: a shared virtual base must
+   * appear once in the most-derived object, which nested per-path subobjects
+   * cannot express yet (P5). See #1866, #3894. */
+  void get_base_components_methods(
+    base_map &map,
+    struct_union_typet &type,
+    bool has_virtual_bases,
+    const clang::CXXRecordDecl &cxxrd);
 
   /*
    * Methods for virtual tables and virtual pointers
