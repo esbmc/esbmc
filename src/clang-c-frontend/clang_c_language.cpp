@@ -600,7 +600,14 @@ _Noreturn void __ESBMC_unreachable();
  * int i = 0;
  * __ESBMC_forall(&i, i < 0);
  *
- * This will return false, because 'i' became a local variable i.e, it means "forall i \in [min(int), (max(int))] . i < 0" */
+ * This will return false, because 'i' became a local variable i.e, it means "forall i \in [min(int), (max(int))] . i < 0"
+ *
+ * The body may call functions built from local declarations, straight-line
+ * assignments, if/else, and loops with a statically constant trip count: such a
+ * callee is summarized (loops unrolled, branches muxed) into a single pure
+ * expression (GitHub #6154).  Functions with a data-dependent trip count,
+ * pointer/array writes, recursion, or other non-summarizable shapes are still
+ * rejected inside a quantifier. */
 
 _Bool __ESBMC_forall(void*, _Bool);
 _Bool __ESBMC_exists(void*, _Bool);
