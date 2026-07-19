@@ -1,0 +1,4 @@
+CORE
+cbmc_string_type.goto
+--binary
+^ERROR: CBMC adapter: the 'string' type \(Java's @class_identifier\) is not yet supported
