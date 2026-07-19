@@ -159,6 +159,17 @@ static bool has_temporary_object(const exprt &expr)
   return false;
 }
 
+// The location restore_value_locations would propagate into `code`'s value
+// operands: the statement's own when it has one, otherwise whatever the
+// enclosing statement passed down. An empty result means that helper's
+// `if (here.get_file().empty()) return;` fired, i.e. nothing in this subtree is
+// stamped at all -- not even a statement that does carry its own location.
+static const locationt &
+effective_location(const locationt &own, const locationt &inherited)
+{
+  return (own.is_not_nil() && !own.get_file().empty()) ? own : inherited;
+}
+
 // W1-loc spike Phase C (esbmc/esbmc#4715): consume one IREP2 statement `code2`
 // natively (design D3), appending to `dest`, and recurse into nested blocks.
 // Returns false the instant an unsupported kind (or a shape whose native
@@ -189,7 +200,8 @@ static bool has_temporary_object(const exprt &expr)
 // on this subset.
 bool goto_convert_functionst::convert_native_rec(
   const expr2tc &code2,
-  goto_programt &dest)
+  goto_programt &dest,
+  const locationt &inherited)
 {
   if (is_code_block2t(code2))
   {
@@ -203,9 +215,10 @@ bool goto_convert_functionst::convert_native_rec(
     // this stays byte-identical to the pre-decl handler for the block/skip/
     // assign/expression subset.
     destructor_stackt old_stack = targets.destructor_stack;
+    const locationt &here = effective_location(block.location, inherited);
 
     for (const expr2tc &stmt : block.operands)
-      if (!convert_native_rec(stmt, dest))
+      if (!convert_native_rec(stmt, dest, here))
       {
         // Fallback: undo any code_dead this partial walk pushed, so the caller's
         // goto_convert_rec re-converts against a clean destructor stack.
@@ -337,25 +350,6 @@ bool goto_convert_functionst::convert_native_rec(
     if (op.is_nil() || op.is_code() || op.id() == "if")
       return false;
 
-    // Every emission below is located at the statement, either directly or via
-    // the operand restore_value_locations stamps; without a usable statement
-    // location the legacy path would inherit an enclosing block's instead.
-    if (expr_stmt.location.is_nil() || expr_stmt.location.get_file().empty())
-      return false;
-
-    // IREP2 value expressions carry no location, so the back-migrated operand
-    // arrives unlocated and remove_sideeffects -- which reads the location for
-    // each instruction it emits off the operand being lowered -- would produce
-    // unlocated instructions. restore_value_locations already did this for the
-    // legacy path (same helper, same statement location); do it here too. This
-    // is the general form of the fix the side-effecting `while` condition
-    // needed, and it is what lets every side-effect shape below stay located:
-    // an assignment statement (`x = y;`, which the C/C++ frontends model as an
-    // expression statement wrapping a sideeffect_assign2t rather than the
-    // code_assign2t Python emits), a compound assignment, `++`/`--`, and a
-    // call statement whose result is discarded.
-    stamp_value_locations(op, expr_stmt.location);
-
     // A temporary_object's scope-exit entries die at the end of the full
     // expression, not at block exit, so lowering one here would need the
     // destructor-stack interaction convert_decl/remove_sideeffects implement;
@@ -365,6 +359,16 @@ bool goto_convert_functionst::convert_native_rec(
 
     if (has_sideeffect(op))
     {
+      // remove_sideeffects reads the location for each instruction it emits off
+      // the operand being lowered, and IREP2 values carry none, so the operand
+      // needs the same stamping restore_value_locations gave the legacy path --
+      // with the same location, which is why `inherited` is threaded down: a
+      // located statement inside an unlocated block is stamped by neither.
+      const locationt &stamp =
+        effective_location(expr_stmt.location, inherited);
+      if (!stamp.get_file().empty())
+        stamp_value_locations(op, stamp);
+
       // convert_expression hands a side-effecting operand to remove_sideeffects
       // with result_is_used false, then emits an OTHER only if anything is left
       // (a lowered assignment nils itself, so most shapes emit nothing here).
@@ -376,13 +380,17 @@ bool goto_convert_functionst::convert_native_rec(
       remove_sideeffects(op, dest, false);
       if (op.is_not_nil())
       {
-        codet other(to_code(migrate_expr_back(code2)));
-        other.op0() = op;
+        code_expressiont other(op);
         other.location() = op.location();
         copy(other, OTHER, dest);
       }
       return true;
     }
+
+    // The OTHER carries the statement location directly; without a usable one
+    // the legacy path would instead locate it at an enclosing block.
+    if (expr_stmt.location.is_nil() || expr_stmt.location.get_file().empty())
+      return false;
 
     goto_programt::targett t = dest.add_instruction(OTHER);
     t->code = code2;
@@ -530,7 +538,8 @@ bool goto_convert_functionst::convert_native_rec(
 
     destructor_stackt stack_before_then = targets.destructor_stack;
     goto_programt tmp_op1;
-    if (!convert_native_rec(ite.then_case, tmp_op1))
+    if (!convert_native_rec(
+          ite.then_case, tmp_op1, effective_location(ite.location, inherited)))
       return false;
     // A non-block branch (e.g. a bare decl) could leak a scope-exit code_dead
     // with no enclosing block to unwind it.
@@ -544,7 +553,10 @@ bool goto_convert_functionst::convert_native_rec(
     if (has_else)
     {
       destructor_stackt stack_before_else = targets.destructor_stack;
-      if (!convert_native_rec(ite.else_case, tmp_op2))
+      if (!convert_native_rec(
+            ite.else_case,
+            tmp_op2,
+            effective_location(ite.location, inherited)))
         return false;
       if (targets.destructor_stack.size() != stack_before_else.size())
       {
@@ -671,7 +683,9 @@ bool goto_convert_functionst::convert_native_rec(
       // the same helper, so the decrement `while (t--)` lowers to stays located
       // (instruction locations gate --condition-coverage and witness matching).
       exprt cond_legacy = migrate_expr_back(w.cond);
-      stamp_value_locations(cond_legacy, location);
+      const locationt &stamp = effective_location(w.location, inherited);
+      if (!stamp.get_file().empty())
+        stamp_value_locations(cond_legacy, stamp);
       generate_conditional_branch(
         gen_not(cond_legacy), z, location, tmp_branch);
     }
@@ -695,7 +709,8 @@ bool goto_convert_functionst::convert_native_rec(
     // enclosing block to unwind it.
     destructor_stackt stack_before_body = targets.destructor_stack;
     goto_programt tmp_x;
-    bool body_ok = convert_native_rec(w.body, tmp_x);
+    bool body_ok = convert_native_rec(
+      w.body, tmp_x, effective_location(w.location, inherited));
 
     old_break_continue.restore(targets);
 
@@ -863,7 +878,8 @@ bool goto_convert_functionst::convert_native_rec(
       return false;
 
     goto_programt tmp;
-    if (!convert_native_rec(l.code, tmp))
+    if (!convert_native_rec(
+          l.code, tmp, effective_location(l.location, inherited)))
       return false;
 
     // convert() always leaves at least one instruction (it appends a SKIP when
@@ -887,7 +903,7 @@ bool goto_convert_functionst::try_convert_body_native(
   goto_programt &dest)
 {
   goto_programt native;
-  if (!convert_native_rec(body2, native))
+  if (!convert_native_rec(body2, native, locationt()))
     return false; // dest untouched; caller falls back to goto_convert_rec
 
   // Mirror goto_convert_rec()'s post-passes. finish_gotos resolves the *named*
