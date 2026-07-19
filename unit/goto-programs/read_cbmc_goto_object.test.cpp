@@ -14,6 +14,7 @@
 #include <goto-programs/cbmc_adapter.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_program.h>
+#include <util/config.h>
 #include <util/context.h>
 #include <util/migrate.h>
 #include <util/namespace.h>
@@ -25,6 +26,15 @@
 #ifndef CBMC_TEST_DATA_DIR
 #  define CBMC_TEST_DATA_DIR "."
 #endif
+
+// The reader consults the global config (object alignment, size_type), which
+// the driver populates from the command line before any binary is read. A
+// default-constructed config has char_width == 0, so max_alignment() divides by
+// zero. LP64 is the data model CBMC compiled the x86_64 fixture for.
+static void set_fixture_data_model()
+{
+  config.ansi_c.set_data_model(configt::LP64);
+}
 
 // Encode a value the way CBMC does: little-endian 7-bit varint.
 static std::string encode_varint(unsigned v)
@@ -245,6 +255,8 @@ TEST_CASE(
   "loads a CBMC binary into a symbol table and goto functions",
   "[cbmc-reader]")
 {
+  set_fixture_data_model();
+
   const std::string path = std::string(CBMC_TEST_DATA_DIR) + "/cbmc_hello.goto";
   std::ifstream in(path, std::ios::in | std::ios::binary);
   REQUIRE(in.good());
@@ -292,6 +304,8 @@ TEST_CASE(
   // read_cbmc_goto_object directly -- as this test does, with no C frontend
   // involved at all -- is exactly the scenario that would be broken if
   // read_cbmc_goto_object depended on that unrelated driver step.
+  set_fixture_data_model();
+
   const std::string path = std::string(CBMC_TEST_DATA_DIR) + "/cbmc_hello.goto";
   std::ifstream in(path, std::ios::in | std::ios::binary);
   REQUIRE(in.good());

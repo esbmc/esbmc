@@ -1320,6 +1320,27 @@ highest-leverage gap in the corpus", is **disproven**. On the fix branch
 type during dereference` (`dereference.cpp:988`). That cluster is an independent ESBMC
 dereference limitation and is now the largest single item in the corpus; see UMBRELLA #3.
 
+**✅ Fixed 2026-07-18 (reproduced with plain C, no Kani corpus needed).**
+`int x; assert((unsigned long)&x % 4 == 0)` compiled with `goto-cc` reproduced the mismatch at
+minimal size — CBMC SUCCESSFUL, ESBMC FAILED. Diagnosis: ESBMC's SMT layer (`smt_memspace.cpp`)
+already asserts `base % alignment == 0` **when the object type carries an `"alignment"`
+attribute**, and the C-frontend padding pass sets it on aggregates — but a plain scalar
+(`int x;`) has none, so its base was unconstrained and `&x % 4` was satisfiable-false.
+(Native ESBMC via `__ESBMC_assert` reports the same FAILED, so this was never
+`--binary`-specific; `malloc`'d objects already verified aligned because the allocation path
+supplies alignment — only DECL'd scalars/objects were missing it.) Fixed in the CBMC reader
+(`read_cbmc_goto_object.cpp::set_object_alignment`): every loaded object symbol whose type
+lacks an `"alignment"` gets `config.ansi_c.max_alignment()` — `≥` the natural alignment of
+every scalar, a power of two (so trivially placeable, no UNSAT), and matching CBMC's own
+over-aligned object bases (empirically CBMC aligns every object to `≥32`). Scoped to the CBMC
+reader, so native frontends are untouched. Verdict parity with CBMC, dual-solver, across
+`int`/`long` stack vars, array elements, struct fields, globals, and pointer-cast checks
+(`cbmc_alignment` SUCCESSFUL / `cbmc_alignment_fail` — `&x % 4 == 1` — FAILED); the full
+`goto-transcoder` suite and reader unit tests still pass. This closes the 3 corpus mismatches
+(`check_cast`/`check_as_ref`/`check_as_mut`); the 41-crash `align_offset`/`align_to` cluster is
+the *separate* `rvalue reference to array` dereference limitation, not this. Precision (never
+soundness) — ESBMC only ever over-reported.
+
 **Axis 3 (solver performance)** is now the largest non-crash bucket: 140 ESBMC timeouts at a
 40 s cap versus CBMC's 35, concentrated in `slice` (84 N/A).
 
