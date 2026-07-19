@@ -173,6 +173,10 @@ private:
     smt_astt hi_r,
     const floatbv_type2t &fbv_type,
     const expr2tc &rounding_mode);
+
+  /** Widen [lo, hi] to [min(0,lo), max(0,hi)] so that the zero produced by
+   *  mk_subnormal_flush is always within the stored interval. */
+  std::pair<smt_astt, smt_astt> widen_for_flush(smt_astt lo, smt_astt hi);
 };
 
 #endif /* SOLVERS_SMT_FP_IR_IEEE_CONV_H_ */
