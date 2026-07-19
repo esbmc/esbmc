@@ -50,7 +50,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       assert_ast(mk_le(ra_lo, real_result));
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
-      return real_result;
+      return mk_subnormal_flush(real_result, fbv_type);
     };
 
     auto select_nearest_eps =
@@ -161,7 +161,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
 
-      return real_result;
+      return mk_subnormal_flush(real_result, fbv_type);
     }
     else if (smt_fp_rounding_utils::is_round_to_plus_inf(rounding_mode))
     {
@@ -204,7 +204,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
 
-      return real_result;
+      return mk_subnormal_flush(real_result, fbv_type);
     }
     else if (smt_fp_rounding_utils::is_round_to_minus_inf(rounding_mode))
     {
@@ -249,7 +249,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
 
-      return real_result;
+      return mk_subnormal_flush(real_result, fbv_type);
     }
     else if (smt_fp_rounding_utils::is_round_to_zero(rounding_mode))
     {
@@ -307,7 +307,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
 
-      return real_result;
+      return mk_subnormal_flush(real_result, fbv_type);
     }
     else if (smt_fp_rounding_utils::is_round_to_away(rounding_mode))
     {
@@ -363,7 +363,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
 
-      return real_result;
+      return mk_subnormal_flush(real_result, fbv_type);
     }
     else
     {
@@ -507,6 +507,24 @@ smt_astt smt_solver_baset::get_single_max_normal()
   static const std::string val =
     integer2string((power(2, 24) - 1) * power(2, 104));
   return mk_smt_real(val);
+}
+
+smt_astt
+smt_solver_baset::mk_subnormal_flush(smt_astt r, const floatbv_type2t &fbv_type)
+{
+  const auto double_spec = ieee_float_spect::double_precision();
+  const auto single_spec = ieee_float_spect::single_precision();
+  smt_astt min_sub;
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+    min_sub = get_double_min_subnormal();
+  else if (
+    fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+    min_sub = get_single_min_subnormal();
+  else
+    return r;
+  smt_astt zero = get_zero_real();
+  smt_astt abs_r = mk_ite(mk_lt(r, zero), mk_sub(zero, r), r);
+  return mk_ite(mk_lt(abs_r, min_sub), zero, r);
 }
 
 smt_astt smt_solver_baset::get_double_inf_sentinel()
