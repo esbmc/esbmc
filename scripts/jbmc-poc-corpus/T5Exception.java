@@ -2,6 +2,8 @@
    supertype handler matching. Avoids division by zero and array indexing:
    JBMC checks both as properties in their own right, so a deliberately
    thrown ArithmeticException fails verification even when it is caught. */
+package jbmcpoc;
+
 public class T5Exception {
   static class Base extends Exception {
     private static final long serialVersionUID = 1L;

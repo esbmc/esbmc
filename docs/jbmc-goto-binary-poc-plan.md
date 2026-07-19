@@ -445,9 +445,9 @@ from `core-models.jar` (the no-JDK route) or a `--source File.java` (needs a
 JDK).
 
 **Corpus landed (Run 4).** `scripts/jbmc-poc-corpus/` holds ten programs across
-the five tiers, each with a `_fail` variant, plus `run-corpus.sh`, which prints
+the five tiers, each with a `Fail` variant, plus `run-corpus.sh`, which prints
 JBMC's verdict against ESBMC's per program. JBMC matches the intended verdict
-on **10/10**; every `_fail` was checked to fail for its *intended* property
+on **10/10**; every `Fail` variant was checked to fail for its *intended* property
 rather than incidentally.
 
 ESBMC reaches **0/10** — every program blocked by `@class_identifier` typed
@@ -457,7 +457,7 @@ programs, no others reachable behind it.
 Two corpus constraints were found empirically and are recorded in the corpus
 README: division by zero fails verification even when caught, because JBMC
 checks `integer-divide-by-zero` as a property in its own right; and the plan's
-"both properties in one program" is replaced by paired clean/`_fail` variants,
+"both properties in one program" is replaced by paired clean/`Fail` variants,
 since a mixed program always yields `FAILED` and cannot distinguish the
 intended failure from an incidental one.
 
@@ -595,7 +595,7 @@ linking mechanism in this PoC.**
 
 Land whatever works as `regression/goto-transcoder/`-style fixtures — checked-in `.goto`
 binaries with `test.desc`, matching the existing CBMC fixtures, including negative
-`_fail` variants and a **new** unsupported-construct test pinning the graceful-error
+`Fail` variants and a **new** unsupported-construct test pinning the graceful-error
 message (§2.4). Write up the verdict, including the soundness statement from §4.1.
 
 **Budget: ~7 working days plus upstream review latency**, with a go/no-go after Phase 1.

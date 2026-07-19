@@ -1,5 +1,7 @@
 /* T5 negative: the handler runs, but the asserted outcome is wrong. */
-public class T5Exception_fail {
+package jbmcpoc;
+
+public class T5ExceptionFail {
   static class Base extends Exception {
     private static final long serialVersionUID = 1L;
   }

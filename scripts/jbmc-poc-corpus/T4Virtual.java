@@ -1,4 +1,6 @@
 /* T4: inheritance, virtual dispatch and instanceof. */
+package jbmcpoc;
+
 public class T4Virtual {
   static class Shape {
     int area() { return 0; }

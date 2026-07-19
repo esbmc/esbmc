@@ -1,4 +1,6 @@
 /* T2: array allocation, indexing and bounds. */
+package jbmcpoc;
+
 public class T2Array {
   public static void main(String[] args) {
     int[] a = new int[4];

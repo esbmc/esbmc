@@ -5,7 +5,7 @@
 #
 #   PATH=/path/to/jdk/bin:$PATH ESBMC=/path/to/esbmc ./run-corpus.sh
 #
-# Programs ending in _fail carry a violated property; the rest verify clean.
+# Programs ending in Fail carry a violated property; the rest verify clean.
 # JBMC's verdicts are the reference (README.md records the measured values), so
 # a disagreement is an ESBMC finding, not a corpus defect.
 
@@ -16,6 +16,7 @@ PIPELINE="$HERE/../jbmc-poc-pipeline.sh"
 OUTROOT="${OUTROOT:-jbmc-poc-corpus-out}"
 UNWIND="${UNWIND:-6}"
 ESBMC="${ESBMC:-esbmc}"
+PACKAGE=jbmcpoc
 
 [ -x "$PIPELINE" ] || { echo "error: $PIPELINE not found" >&2; exit 1; }
 
@@ -29,7 +30,10 @@ if [ -z "$MODELS" ]; then
     [ -f "$c" ] && { MODELS="$c"; break; }
   done
 fi
-[ -n "$MODELS" ] && [ -f "$MODELS" ] || { echo "error: core-models.jar not found" >&2; exit 1; }
+if [ -z "$MODELS" ] || [ ! -f "$MODELS" ]; then
+  echo "error: core-models.jar not found" >&2
+  exit 1
+fi
 
 # grep exits 1 when a run produced no verdict at all (ESBMC declining, say).
 # Under `set -e` with pipefail that would abort the sweep on the first such
@@ -45,18 +49,19 @@ agree=0; total=0
 
 for src in "$HERE"/T*.java; do
   cls=$(basename "$src" .java)
-  case "$cls" in *_fail) expected=FAILED ;; *) expected=SUCCESSFUL ;; esac
+  case "$cls" in *Fail) expected=FAILED ;; *) expected=SUCCESSFUL ;; esac
 
   work="$OUTROOT/$cls"
   mkdir -p "$work"
 
   # JBMC reference verdict, compiled and run from a scratch dir.
   javac -d "$work" "$src" 2>/dev/null || { echo "$cls: javac failed" >&2; continue; }
-  jbmc "$cls" -cp "$work:$MODELS" --unwind "$UNWIND" > "$work/jbmc-verdict.log" 2>&1 || true
+  jbmc "$PACKAGE.$cls" -cp "$work:$MODELS" --unwind "$UNWIND" \
+    > "$work/jbmc-verdict.log" 2>&1 || true
   jv=$(verdict_of "$work/jbmc-verdict.log")
 
   # ESBMC via the shared pipeline.
-  ESBMC="$ESBMC" "$PIPELINE" --class "$cls" --source "$src" --lazy \
+  ESBMC="$ESBMC" "$PIPELINE" --class "$PACKAGE.$cls" --source "$src" --lazy \
     --outdir "$work/pipeline" > /dev/null 2>&1 || true
   ev=$(verdict_of "$work/pipeline/esbmc.log")
   if [ -z "$ev" ]; then

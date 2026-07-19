@@ -1,4 +1,6 @@
 /* T3: object allocation and instance fields. */
+package jbmcpoc;
+
 public class T3Object {
   static class Point {
     int x;

@@ -1,5 +1,7 @@
 /* T1 negative: the final assertion is violated for every input. */
-public class T1Arith_fail {
+package jbmcpoc;
+
+public class T1ArithFail {
   static int twice(int n) { return n + n; }
 
   public static void main(String[] args) {

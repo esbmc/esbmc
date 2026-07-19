@@ -1,5 +1,7 @@
 /* T3 negative: dereferences a null reference. */
-public class T3Object_fail {
+package jbmcpoc;
+
+public class T3ObjectFail {
   static class Point {
     int x;
 

@@ -1,5 +1,7 @@
 /* T4 negative: the override returns a different value than asserted. */
-public class T4Virtual_fail {
+package jbmcpoc;
+
+public class T4VirtualFail {
   static class Shape {
     int area() { return 0; }
   }

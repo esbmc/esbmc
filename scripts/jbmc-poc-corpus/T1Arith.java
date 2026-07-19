@@ -1,4 +1,6 @@
 /* T1: integer and boolean arithmetic. No allocation, no library calls. */
+package jbmcpoc;
+
 public class T1Arith {
   static int twice(int n) { return n + n; }
 

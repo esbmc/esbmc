@@ -5,19 +5,19 @@ JBMC-produced GOTO binaries. See `docs/jbmc-goto-binary-poc-plan.md`.
 
 | Tier | Programs | Exercises |
 |---|---|---|
-| T1 | `T1Arith`, `T1Arith_fail` | integer/boolean arithmetic, static calls |
-| T2 | `T2Array`, `T2Array_fail` | array allocation, indexing, bounds |
-| T3 | `T3Object`, `T3Object_fail` | object allocation, instance fields, null |
-| T4 | `T4Virtual`, `T4Virtual_fail` | inheritance, virtual dispatch, `instanceof` |
-| T5 | `T5Exception`, `T5Exception_fail` | `try`/`catch`, handler type matching |
+| T1 | `T1Arith`, `T1ArithFail` | integer/boolean arithmetic, static calls |
+| T2 | `T2Array`, `T2ArrayFail` | array allocation, indexing, bounds |
+| T3 | `T3Object`, `T3ObjectFail` | object allocation, instance fields, null |
+| T4 | `T4Virtual`, `T4VirtualFail` | inheritance, virtual dispatch, `instanceof` |
+| T5 | `T5Exception`, `T5ExceptionFail` | `try`/`catch`, handler type matching |
 
-Each tier ships a clean program and a `_fail` variant carrying one violated
+Each tier ships a clean program and a `Fail` variant carrying one violated
 property, so verdict matching is falsifiable in both directions. The plan asks
 for both properties in a single program; separate variants are used instead
 because a mixed program always yields `FAILED` and cannot distinguish "failed
 for the intended reason" from "failed for another one".
 
-Every `_fail` program was checked to fail for its *intended* property:
+Every `Fail` program was checked to fail for its *intended* property:
 assertion (T1, T4, T5), array bounds (T2), null dereference (T3).
 
 ## Running
@@ -67,3 +67,7 @@ accept the contamination.
   caught `ArithmeticException` still fails verification. An earlier T5 draft hit
   exactly this and was rewritten to use user-defined exceptions.
 - **Keep them self-contained**, so lazy loading stays sufficient.
+- **Declare `package jbmcpoc;` and name the negative variant `<Tier>Fail`**, not
+  `<Tier>_fail`. `run-corpus.sh` derives the expected verdict from the `Fail`
+  suffix and qualifies the class name with the package before handing it to
+  jbmc, so both are load-bearing rather than cosmetic.
