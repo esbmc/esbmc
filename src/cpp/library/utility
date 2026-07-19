@@ -62,6 +62,17 @@ struct add_rvalue_reference<void>
   typedef void type;
 };
 
+template <class T>
+struct add_lvalue_reference
+{
+  typedef T &type;
+};
+template <>
+struct add_lvalue_reference<void>
+{
+  typedef void type;
+};
+
 // move
 template <class T>
 constexpr remove_reference_t<T> &&move(T &&t) noexcept

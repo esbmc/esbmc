@@ -10,6 +10,16 @@
 
 namespace std
 {
+/* [specialized.addressof]. The canonical char-reference cast chain that
+ * bypasses an overloaded unary operator& does not survive the pointer model,
+ * so take the address directly: types overloading operator& are then not
+ * modelled faithfully, which is the usual OM trade-off. */
+template <typename T>
+constexpr T *addressof(T &r) noexcept
+{
+  return &r;
+}
+
 // Minimal allocator implementation
 template <typename T>
 class allocator

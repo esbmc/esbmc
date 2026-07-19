@@ -507,7 +507,25 @@ public:
   basic_string(basic_string<CharT, Traits, Alloc> &s, size_t n);
   basic_string(char c, size_t n);
   explicit basic_string(int len);
-  basic_string(const_iterator begin, const_iterator end);
+
+  /* [string.cons]: the iterator-pair constructor. Templated so it serves raw
+   * pointers as well as the nested iterator types — the previous
+   * const_iterator-only declaration was never defined, so a raw `char *` pair
+   * (as boost's type_index uses) found no viable overload. The non-template
+   * (const CharT *, size_t) overload still wins for a pointer/length call. */
+  template <class InputIt>
+  basic_string(InputIt first, InputIt last)
+  {
+  __ESBMC_HIDE:
+    _size = 0;
+    for (; first != last; ++first)
+    {
+      __ESBMC_assert(_size + 1 < STRING_CAPACITY, "basic_string overflow");
+      str[_size++] = *first;
+    }
+    str[_size] = '\0';
+  }
+
   char *c_str() const;
   bool operator>(basic_string<CharT, Traits, Alloc> &a);
   bool operator>(const char *a);
