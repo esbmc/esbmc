@@ -115,6 +115,10 @@ std::string configt::triple::to_string() const
 
 bool configt::set(const cmdlinet &cmdline)
 {
+  // Every positional argument, i.e. all input files. options["input-file"] only
+  // retains the last one, since optionst has no list-valued storage.
+  args = cmdline.args;
+
   if (cmdline.isset("std"))
     language.std = cmdline.getval("std");
 
