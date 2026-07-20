@@ -751,6 +751,50 @@ numeric parsing is caught by none of the `std::string`/`const char *` handlers,
 so a malformed constant in a binary reaches `std::terminate` rather than the
 clean-exit path. Worth folding into the graceful-decline work as its own fix.
 
+#### 4.1.2 First interning attempt — what it established, and why it failed
+
+A first cut at real interning was written and **reverted, not committed**. It is
+recorded here because the negative results are reusable.
+
+*Design that still looks right.* Map the bare `string` type to a 32-bit integer,
+and intern each distinct class-name literal to a distinct integer through a
+program-wide map (a function-local `static`, so injectivity holds across every
+symbol and function — `fix_type` is invoked per symbol, so a per-call map would
+let two spellings of one class name compare unequal). Scope it to the bare
+`string` type only: Java program strings are the `java::java.lang.String`
+struct, and CProver's string primitives are separate ids, so both keep
+declining rather than being silently interned into a wrong model.
+
+*Why the attempt failed.* The hook was placed in `fix_type`, but constants
+inside instruction bodies are rewritten by a **different traversal**,
+`fix_expression` (`cbmc_adapter.cpp:701-719`), which converts a constant's value
+via `hex_to_bin` keyed on `bv_width` of its *already-rewritten* type. Any real
+implementation must handle both traversals, and must run before the type edge
+rewrites `string` to `signedbv` — that type is the only signal distinguishing a
+class-identifier literal from an ordinary integer constant.
+
+*The rank-3 crash, localised.* Independent of interning, the failure is
+
+```
+hex_to_bin(hex="", width=32)              cbmc_adapter.cpp:44
+  <- fix_expression                        cbmc_adapter.cpp:716
+  <- instruction_to_esbmc_irep             cbmc_adapter.cpp:1621
+     function "java::array[reference].clone:()Ljava/lang/Object;"
+```
+
+The trigger is a constant with an **empty value** and a 32-bit type — not a
+class-name literal at all. `std::stoull("")` throws `std::invalid_argument`,
+and lldb shows the unwinder reaching `failed_throw` → `std::terminate`.
+
+*Unresolved, and flagged rather than glossed.* Wrapping that `stoull` in a
+`catch (const std::logic_error &)` — which `std::invalid_argument` derives from
+— did **not** take effect: the handler never ran, and the exception still
+terminated, even with the new string confirmed present in the rebuilt binary
+(`strings`), a current object file, and a single `hex_to_bin` definition and a
+single `libgotoprograms.a` in the tree. Whatever the cause, it is not a stale
+build in any of the obvious senses, and it should be understood before the
+graceful-decline fix for empty constants is trusted.
+
 ### Phase 4 — Java runtime models (spike only, 1 day)
 
 Partly answered already by §2.2: models arrive in the binary **only** if `core-models.jar`
