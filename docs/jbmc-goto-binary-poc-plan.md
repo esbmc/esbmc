@@ -792,8 +792,42 @@ and lldb shows the unwinder reaching `failed_throw` → `std::terminate`.
 terminated, even with the new string confirmed present in the rebuilt binary
 (`strings`), a current object file, and a single `hex_to_bin` definition and a
 single `libgotoprograms.a` in the tree. Whatever the cause, it is not a stale
-build in any of the obvious senses, and it should be understood before the
-graceful-decline fix for empty constants is trusted.
+build in any of the obvious senses. It became moot — interning removes the call
+entirely — but the anomaly was never explained and is recorded in case it
+resurfaces.
+
+#### 4.1.3 Interning landed (Run 7)
+
+Ranks 1 and 3 are cleared. The rewrite lives in **`fix_expression`**, not
+`fix_type`: `cbmc_to_esbmc_irep` runs `function_to_esbmc_irep` (line 1729)
+*before* `fix_type` (line 1730), so a constant still carries the `string` type
+there — the only signal separating a class identifier from an ordinary integer.
+That ordering also explains rank 3: `bv_width` finds no width on `string`,
+falls back to 32, and hands an empty value to `hex_to_bin` as if it were hex.
+
+Interning is verified by property, not by absence of a crash:
+`cbmc_class_id_intern` asserts that the same literal compares equal and two
+distinct literals compare unequal; `cbmc_class_id_intern_fail` asserts two
+distinct literals *are* equal and must report FAILED. The second is
+load-bearing — a degenerate implementation collapsing every literal to one
+constant satisfies the first fixture alone. Observed lowering is `ASSERT 0 == 1`
+for `Alpha`/`Beta`, i.e. injective as intended.
+
+**Rank 4 is `array_set`**, reached on the lowered T4Virtual binary:
+
+```
+ERROR: CBMC adapter: 'array_set' whole-object operations are not yet supported
+```
+
+A clean decline rather than a crash, which is Phase 1 doing its job.
+
+> **Fixture caveat found in passing.** A `symtab2gb` binary has no
+> `__CPROVER__start`, so ESBMC wraps the *boilerplate* main and the fixture's
+> own `main` is never called — the warning at `goto_program.cpp:262` says so,
+> and the verdict is vacuous. `cbmc_class_id_intern_fail` verified SUCCESSFUL
+> with a false assertion until `--function main` was added. **Existing
+> `goto-transcoder` fixtures asserting `VERIFICATION SUCCESSFUL` without
+> `--function` may be vacuously green**; that is worth auditing separately.
 
 ### Phase 4 — Java runtime models (spike only, 1 day)
 
