@@ -204,6 +204,25 @@ irept complex_elem_type(const irept &ctype)
   return irept();
 }
 
+// Byte width of a Java array element. Java arrays hold only primitives and
+// references, and every such type reaches the adapter carrying an explicit
+// "width" -- c_bool[8], signedbv/unsignedbv[N], floatbv[N] and pointers alike
+// (measured across the lowered corpus). Anything else has no width here and is
+// declined by the caller rather than guessed at: bv_width's silent fall back to
+// 32 would size an allocation wrongly, which is a false verdict rather than a
+// crash.
+bool element_bytes(const irept &elem_type, std::size_t &bytes)
+{
+  const std::string ws = elem_type.find("width").id_string();
+  if (ws.empty() || ws.find_first_not_of("0123456789") != std::string::npos)
+    return false;
+  const std::size_t bits = static_cast<std::size_t>(std::stoul(ws));
+  if (bits == 0 || bits % 8 != 0)
+    return false;
+  bytes = bits / 8;
+  return true;
+}
+
 // A member access on a complex value's "real"/"imag" component; "member" is
 // in fix_expression's operand-wrap set.
 irept complex_member(const irept &op, const char *name, const irept &elem)
@@ -679,6 +698,80 @@ void fix_expression(irept &irep)
     throw std::string(
       "CBMC adapter: variadic functions (va_start/va_arg) are not yet "
       "supported on the --binary path");
+  }
+
+  if (irep.id() == "side_effect" && irep.find("statement").id() == "allocate")
+  {
+    // CBMC's generic object allocation (remove_java_new.cpp:99-103): operands
+    // are the byte size and a zero-initialise flag, and the type is already the
+    // result pointer. That is a malloc in all but name. The flag is false in
+    // every emitted instance because CBMC follows the allocation with its own
+    // zero-initialising assignment; a true flag would mean the fill is implicit
+    // and dropping it would leave the object nondet, so decline instead.
+    const irept::subt ops = irep.get_sub();
+    if (ops.size() != 2)
+      throw std::string(
+        "CBMC adapter: 'allocate' expects a size and a zero-init flag");
+    const std::string zero_flag = ops[1].find("value").id_string();
+    if (zero_flag != "false" && zero_flag != "0")
+      throw std::string(
+        "CBMC adapter: zero-initialising 'allocate' is not yet supported on "
+        "the --binary path");
+
+    irept size_arg(irep_idt("typecast"));
+    size_arg.add("type") = static_cast<const irept &>(size_type());
+    size_arg.get_sub().push_back(ops[0]);
+    fix_expression(size_arg);
+
+    irep.id("sideeffect");
+    irep.add("statement") = mk("malloc");
+    irep.get_sub().clear();
+    irep.get_sub().push_back(ops[0]);
+    irep.add("#size") = size_arg;
+    irep.add("#type") = static_cast<const irept &>(char_type());
+  }
+
+  if (
+    irep.id() == "side_effect" &&
+    irep.find("statement").id() == "java_new_array_data")
+  {
+    // JBMC's lowering allocates an array payload with this side effect
+    // (remove_java_new.cpp:239-251): its type is pointer-to-element and the
+    // element *count* rides in the "size" named-sub, not an operand. ESBMC has
+    // no counterpart, but the shape is exactly a malloc once the count is
+    // scaled to bytes -- migrate_expr then maps it to allockind::malloc.
+    const irept elem = complex_elem_type(irep.find("type"));
+    std::size_t bytes = 0;
+    if (!element_bytes(elem, bytes))
+      throw std::string(
+        "CBMC adapter: java_new_array_data element type has no usable width");
+
+    const irept count = irep.find("size");
+    const irept count_type = count.find("type");
+    irept nbytes = count;
+    if (bytes != 1)
+    {
+      nbytes = irept(irep_idt("*"));
+      nbytes.add("type") = count_type;
+      nbytes.get_sub().push_back(count);
+      nbytes.get_sub().push_back(mk_bv_const(count_type, bytes));
+    }
+
+    irept size_arg(irep_idt("typecast"));
+    size_arg.add("type") = static_cast<const irept &>(size_type());
+    size_arg.get_sub().push_back(nbytes);
+    // "#size" is a comment, which no later pass recurses into -- normalise it
+    // here, as build_mem_rhs does for the same reason.
+    fix_expression(size_arg);
+
+    irep.id("sideeffect");
+    irep.add("statement") = mk("malloc");
+    irep.add("#size") = size_arg;
+    irep.add("#type") = elem;
+    // Marks this malloc as a Java array payload so the paired ARRAY_SET two
+    // instructions later can recover the same byte extent (see
+    // instruction_to_esbmc_irep); the count is not derivable from the type.
+    irep.add("#java_array_payload") = mk("1");
   }
 
   if (irep.id() == "side_effect")
@@ -1528,10 +1621,59 @@ irept symbol_to_esbmc_irep(const cbmc_symbolt &sym)
   return result;
 }
 
+// True if `v` writes all-zero bits: Java's primitive default and the null
+// reference. Any other fill needs a per-element loop, so the caller declines.
+bool is_zero_fill(const irept &v)
+{
+  if (v.id() != "constant")
+    return false;
+  const std::string val = v.find("value").id_string();
+  if (val == "NULL")
+    return true;
+  return !val.empty() && val.find_first_not_of('0') == std::string::npos;
+}
+
+// Rewrites JBMC's `ARRAY_SET payload <0|NULL>` into a __ESBMC_memset call over
+// the byte extent recorded when the payload was allocated two instructions
+// earlier. __CPROVER_array_set carries no length of its own -- that is why the
+// general case is still declined -- but the Java lowering always pairs it with
+// a java_new_array_data whose element count we captured. Returns false (caller
+// declines) if the pairing, the operand shape, or the all-zero fill does not
+// hold, so an unrecognised array_set never silently becomes a no-op.
+bool rewrite_java_array_set(
+  irept &code,
+  const std::unordered_map<std::string, irept> &payload_extent)
+{
+  const irept::subt ops = code.get_sub();
+  if (ops.size() != 2 || !is_zero_fill(ops[1]))
+    return false;
+
+  auto it = payload_extent.find(ops[0].find("identifier").id_string());
+  if (it == payload_extent.end())
+    return false;
+
+  irept func(irep_idt("symbol"));
+  func.set("identifier", "c:@F@__ESBMC_memset");
+
+  irept args;
+  args.get_sub().push_back(ops[0]);
+  args.get_sub().push_back(
+    mk_bv_const(static_cast<const irept &>(int_type()), 0));
+  args.get_sub().push_back(it->second);
+
+  code.add("statement") = mk("function_call");
+  code.get_sub().clear();
+  code.get_sub().push_back(get_nil_irep());
+  code.get_sub().push_back(func);
+  code.get_sub().push_back(args);
+  return true;
+}
+
 irept instruction_to_esbmc_irep(
   const cbmc_instructiont &ins,
   const std::map<unsigned, unsigned> &target_revmap,
-  const std::string &function_name)
+  const std::string &function_name,
+  std::unordered_map<std::string, irept> &payload_extent)
 {
   irept result;
 
@@ -1552,7 +1694,11 @@ irept instruction_to_esbmc_irep(
   if (code.id() != "nil")
   {
     const irep_idt stmt = code.find("statement").id();
-    if (stmt == "array_set" || stmt == "havoc_object")
+    if (stmt == "array_set" && rewrite_java_array_set(code, payload_extent))
+    {
+      // Rewritten into a __ESBMC_memset call; fall through as a FUNCTION_CALL.
+    }
+    else if (stmt == "array_set" || stmt == "havoc_object")
       throw std::string(
         "CBMC adapter: '" + stmt.as_string() +
         "' whole-object operations are not yet supported on the --binary path");
@@ -1610,6 +1756,19 @@ irept instruction_to_esbmc_irep(
   result.add("function") = mk(function_name);
 
   fix_expression(result);
+
+  // fix_expression is what turns java_new_array_data into a marked malloc, so
+  // the extent is only visible now. Record it against the payload symbol for
+  // the ARRAY_SET that follows.
+  const irept &fixed = result.find("code");
+  if (fixed.find("statement").id() == "assign")
+  {
+    const irept::subt &ops = fixed.find("operands").get_sub();
+    if (ops.size() == 2 && has_sub(ops[1], "#java_array_payload"))
+      payload_extent[ops[0].find("identifier").id_string()] =
+        ops[1].find("#size");
+  }
+
   return result;
 }
 
@@ -1623,13 +1782,17 @@ irept function_to_esbmc_irep(const cbmc_functiont &func)
     target_revmap[func.instructions[i].target_number] = i;
 
   irept result(irep_idt("goto-program"));
+  // Byte extent per Java array payload symbol, populated at the allocation and
+  // read by the ARRAY_SET that follows it. Function-local: JBMC emits the
+  // allocate/assign/fill triple within a single function.
+  std::unordered_map<std::string, irept> payload_extent;
   for (const auto &ins : func.instructions)
   {
     const bool is_output =
       ins.code.id() != "nil" && ins.code.find("statement").id() == "output";
     if (!is_output)
-      result.get_sub().push_back(
-        instruction_to_esbmc_irep(ins, target_revmap, func.name));
+      result.get_sub().push_back(instruction_to_esbmc_irep(
+        ins, target_revmap, func.name, payload_extent));
   }
   return result;
 }

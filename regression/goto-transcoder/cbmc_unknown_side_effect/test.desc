@@ -1,4 +1,4 @@
 CORE
 cbmc_unknown_side_effect.goto
 --binary
-^ERROR: Unexpected side-effect statement: allocate$
+^ERROR: Unexpected side-effect statement: totally_unknown_side_effect$

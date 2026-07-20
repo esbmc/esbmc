@@ -2,11 +2,14 @@
 """Regenerate cbmc_unknown_side_effect.goto.
 
 The fixture pins ESBMC's graceful decline of a side-effect statement it has no
-case for. `allocate` is used because it is the real one: JBMC's own lowering
-rewrites java_new/java_new_array into side_effect_exprt(ID_allocate, ...), and
-ESBMC's migrate.cpp dispatch recognises malloc/realloc/alloca/cpp_new/... but
-not allocate (docs/jbmc-goto-binary-poc-plan.md 2.6). Phase 2 implements it;
-until then the contract is a clean error rather than SIGABRT.
+case for.
+
+It originally used `allocate`, the real blocker from
+docs/jbmc-goto-binary-poc-plan.md 2.6, and served as the negative test that
+Phase 2 would have to update. Phase 2 has since implemented `allocate`, so the
+statement here is a synthetic id instead: the contract under test is the
+graceful decline itself, which must keep working for whatever construct is
+unsupported next.
 
     ./gen_cbmc_unknown_side_effect.py
 
@@ -55,11 +58,10 @@ def main():
     p = {"id": "symbol",
          "namedSub": {"identifier": {"id": "p"}, "type": VOID_PTR}}
 
-    # side_effect_exprt(ID_allocate, {size, zero-init}, void*) -- the shape
-    # remove_java_new.cpp:100-105 emits for an object allocation.
     allocate = {
         "id": "side_effect",
-        "namedSub": {"statement": {"id": "allocate"}, "type": VOID_PTR},
+        "namedSub": {"statement": {"id": "totally_unknown_side_effect"},
+                     "type": VOID_PTR},
         "sub": [constant("8", SIZE), constant("0", INT)],
     }
 
