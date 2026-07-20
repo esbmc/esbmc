@@ -707,6 +707,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<int>()->default_value(128)->value_name("nr"),
      "Set maximum number of elements to copy symbolically in realloc (default "
      "is 128)"},
+    {"max-quantifier-summary-nodes",
+     boost::program_options::value<int>()->value_name("nr"),
+     "Set maximum expression size when summarizing a function called inside "
+     "__ESBMC_forall/__ESBMC_exists (default is 20000)"},
     {"enable-unreachability-intrinsic",
      NULL,
      "Enable unreach-call style checking: activates __ESBMC_unreachable() and "

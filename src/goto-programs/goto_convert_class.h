@@ -100,6 +100,9 @@ protected:
   // can appear in a quantifier body.  Returns false (leaving @p out untouched)
   // for any shape it cannot soundly turn into a pure expression.
   bool summarize_pure_call(const symbolt &fsym, const exprt &call, exprt &out);
+  // Why summarize_pure_call() gave up, keyed by callsite location, so that
+  // the rejection reported for a quantifier body can name the cause.
+  std::map<std::string, std::string> summary_reject_reasons;
   const exprt *find_sideeffect_on_bound_var(
     const exprt &expr,
     const std::set<irep_idt> &bound_vars);
