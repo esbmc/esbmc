@@ -24,7 +24,7 @@ private:
 
   std::vector<std::vector<test_variable>> test_cases;
   std::string function_name;
-  std::string source_file;
+  std::vector<std::string> source_files;
   mutable std::mutex data_mutex;
 
   /// Build a per-type value fingerprint for deduplication in generate().
