@@ -3,7 +3,7 @@ main.cu
 --generate-ctest-testcase
 ^Generated CTest test case\: test_case\.cpp$
 ^VERIFICATION FAILED$
-CHECK_FILE CMakeLists.txt contains project\(ESBMCGeneratedTest CXX CUDA\)
-CHECK_FILE CMakeLists.txt contains add_executable\(test_case /.*/main\.cu test_case\.cpp\)
-CHECK_FILE CMakeLists.txt contains \# Configuring this project requires a CUDA toolkit \(nvcc\)\.
-CHECK_FILE CMakeLists.txt contains add_compile_options\("\$<\$<COMPILE_LANGUAGE:CXX>:-O0;-g;--coverage>"\)
+CHECK_FILE esbmc-ctest/CMakeLists.txt contains project\(ESBMCGeneratedTest CXX CUDA\)
+CHECK_FILE esbmc-ctest/CMakeLists.txt contains add_executable\(test_case /.*/main\.cu test_case\.cpp\)
+CHECK_FILE esbmc-ctest/CMakeLists.txt contains \# Configuring this project requires a CUDA toolkit \(nvcc\)\.
+CHECK_FILE esbmc-ctest/CMakeLists.txt contains add_compile_options\("\$<\$<COMPILE_LANGUAGE:CXX>:-O0;-g;--coverage>"\)

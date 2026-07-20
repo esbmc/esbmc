@@ -45,6 +45,12 @@
 #include <vector>
 #include <nlohmann/json.hpp>
 
+static std::string ctest_output_dir(const optionst &options)
+{
+  std::string dir = options.get_option("ctest-output-dir");
+  return dir.empty() ? ctest_generator::default_output_dir : dir;
+}
+
 std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
 std::mutex goto_functionst::reached_claims_mutex;
@@ -190,7 +196,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 
   if (options.get_bool_option("generate-ctest-testcase"))
   {
-    ctest_gen.generate_single(".", eq, smt_conv, ns);
+    ctest_gen.generate_single(ctest_output_dir(options), eq, smt_conv, ns);
   }
 
   if (options.get_bool_option("generate-html-report"))
@@ -1145,7 +1151,7 @@ void report_coverage(
   // Generate CTest test cases from collected data (for coverage mode)
   if (options.get_bool_option("generate-ctest-testcase"))
   {
-    ctest_gen.generate();
+    ctest_gen.generate(ctest_output_dir(options));
   }
 }
 

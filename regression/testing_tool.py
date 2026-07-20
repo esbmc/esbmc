@@ -209,6 +209,47 @@ def _run_check_file(check, base_dir):
     return True, None
 
 
+# SEED_FILE directive: create a file in ESBMC's working directory before the
+# run, so a test can establish a precondition CHECK_FILE then asserts on --
+# e.g. that ESBMC refuses to overwrite a file it did not generate.
+SEED_FILE_KEYWORD = "SEED_FILE"
+
+
+def _is_seed_file_line(stripped):
+    """True iff the first whitespace-delimited token is SEED_FILE."""
+    head = stripped.split(maxsplit=1)
+    return bool(head) and head[0] == SEED_FILE_KEYWORD
+
+
+def _parse_seed_file(line):
+    """Parse one SEED_FILE directive into (file, content)."""
+    parts = line.split(None, 2)
+    if len(parts) not in (2, 3) or parts[0] != SEED_FILE_KEYWORD:
+        raise ValueError(
+            f"SEED_FILE expects: SEED_FILE <file> [content]; got: {line!r}"
+        )
+    file = parts[1]
+    # Omitting the content seeds a zero-byte file, which is a distinct case
+    # from a file whose first line is empty.
+    content = parts[2] if len(parts) == 3 else ""
+    if os.path.isabs(file) or os.path.normpath(file).startswith(".."):
+        raise ValueError(
+            f"SEED_FILE file must be a relative path inside ESBMC's working "
+            f"directory; got {file!r}"
+        )
+    return (file, content)
+
+
+def _run_seed_file(seed, base_dir):
+    """Write one seeded file. Raises on failure -- a test whose precondition
+    could not be established would otherwise pass vacuously."""
+    file, content = seed
+    path = os.path.join(base_dir, file)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(content + "\n" if content else "")
+
+
 # Bring up a single benchmark
 BENCHMARK_BRINGUP = False
 
@@ -242,9 +283,17 @@ class TestCase:
             self.test_regex = []
             self.check_json = []
             self.check_file = []
+            self.seed_file = []
             for line in fp:
                 stripped = line.strip()
-                if _is_check_json_line(stripped):
+                if _is_seed_file_line(stripped):
+                    try:
+                        self.seed_file.append(_parse_seed_file(stripped))
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"{self.test_dir}/test.desc: {exc}"
+                        ) from exc
+                elif _is_check_json_line(stripped):
                     try:
                         self.check_json.append(_parse_check_json(stripped))
                     except ValueError as exc:
@@ -300,6 +349,7 @@ class TestCase:
         self.test_mode = "CORE"
         self.check_json = []
         self.check_file = []
+        self.seed_file = []
         self._initialize_test_case()
 
     def save_test(self):
@@ -437,9 +487,12 @@ def _add_test(test_case, executor):
         # output files.
         tmp_dir = (
             tempfile.mkdtemp(prefix="esbmc-regress-")
-            if test_case.check_json or test_case.check_file else None
+            if test_case.check_json or test_case.check_file
+            or test_case.seed_file else None
         )
         try:
+            for seed in test_case.seed_file:
+                _run_seed_file(seed, tmp_dir)
             stdout, stderr, rc = executor.run(test_case, cwd=tmp_dir)
 
             if stdout is None:
