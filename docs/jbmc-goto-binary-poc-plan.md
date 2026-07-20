@@ -825,9 +825,30 @@ A clean decline rather than a crash, which is Phase 1 doing its job.
 > `__CPROVER__start`, so ESBMC wraps the *boilerplate* main and the fixture's
 > own `main` is never called — the warning at `goto_program.cpp:262` says so,
 > and the verdict is vacuous. `cbmc_class_id_intern_fail` verified SUCCESSFUL
-> with a false assertion until `--function main` was added. **Existing
-> `goto-transcoder` fixtures asserting `VERIFICATION SUCCESSFUL` without
-> `--function` may be vacuously green**; that is worth auditing separately.
+> with a false assertion until `--function main` was added.
+
+#### 4.1.4 Vacuous-fixture audit of `regression/goto-transcoder/` (Run 7)
+
+The caveat above prompted an audit of all 150 fixtures on two independent
+dimensions. **Both come back clean; no existing fixture is vacuous.**
+
+| Dimension | Population | Result |
+|---|---|---|
+| Reaches its entry point | 81 expecting `SUCCESSFUL` with no `--function` | **0** emit `no entry point to bridge` |
+| Has something to prove | 85 expecting `SUCCESSFUL` | **85** carry ≥ 1 claim |
+
+The reason the suite is unaffected is structural: fixtures built by `goto-cc`
+or `cbmc` embed `__CPROVER__start`, so the entry point bridges and the warning
+never fires (`cbmc_memcpy` carries two references to it). Only `symtab2gb`
+binaries lack it, and those are exactly the fixtures added by this PoC — all of
+which now pass `--function main` or fail during ingestion before an entry point
+matters. The hazard was real but self-inflicted and is now contained.
+
+> **Method note.** The first run of the claims dimension reported 0/85 fixtures
+> carrying claims, which was an artefact of discarding stderr — ESBMC logs
+> there. It was caught because `cbmc_string_ident` was known to have three
+> assertions, contradicting the result. An audit that reports *everything* as
+> broken deserves the same suspicion as one that reports nothing.
 
 ### Phase 4 — Java runtime models (spike only, 1 day)
 
