@@ -515,11 +515,18 @@ smt_solver_baset::mk_subnormal_flush(smt_astt r, const floatbv_type2t &fbv_type)
   const auto double_spec = ieee_float_spect::double_precision();
   const auto single_spec = ieee_float_spect::single_precision();
   smt_astt min_sub;
+  // get_double_min_subnormal()/get_single_min_subnormal() are decimal
+  // literals deliberately rounded UP to stay conservative when used as an
+  // enclosure epsilon elsewhere; that rounding makes them exceed the true
+  // 2^-1074 / 2^-149 boundary, so reusing them here would flush the
+  // smallest representable subnormal itself to zero. Use the exact
+  // power-of-two fraction instead, so only real results that are not
+  // representable at all get flushed.
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
-    min_sub = get_double_min_subnormal();
+    min_sub = mk_smt_real("1/" + integer2string(power(2, 1074)));
   else if (
     fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
-    min_sub = get_single_min_subnormal();
+    min_sub = mk_smt_real("1/" + integer2string(power(2, 149)));
   else
     return r;
   smt_astt zero = get_zero_real();
