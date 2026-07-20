@@ -760,18 +760,32 @@ void fix_expression(irept &irep)
     irept size_arg(irep_idt("typecast"));
     size_arg.add("type") = static_cast<const irept &>(size_type());
     size_arg.get_sub().push_back(nbytes);
+    // The paired ARRAY_SET needs this same extent, but as an *unfixed* copy:
+    // it becomes a call argument that the normal pass will fix once, and
+    // fixing twice re-wraps the operands into an empty list.
+    const irept raw_size_arg = size_arg;
     // "#size" is a comment, which no later pass recurses into -- normalise it
     // here, as build_mem_rhs does for the same reason.
     fix_expression(size_arg);
 
     irep.id("sideeffect");
     irep.add("statement") = mk("malloc");
+    // java_new_array_data is built with no operands (the count rides in the
+    // "size" named-sub), but migrate_expr's allocation arm reads op0 -- an
+    // operand-less sideeffect dereferences a null exprt there. Mirror
+    // build_mem_rhs and carry the size as the operand too.
+    irep.get_sub().clear();
+    irep.get_sub().push_back(nbytes);
     irep.add("#size") = size_arg;
-    irep.add("#type") = elem;
-    // Marks this malloc as a Java array payload so the paired ARRAY_SET two
-    // instructions later can recover the same byte extent (see
-    // instruction_to_esbmc_irep); the count is not derivable from the type.
-    irep.add("#java_array_payload") = mk("1");
+    // char, not the element type: "#size" is already a byte count, and comments
+    // are not traversed by fix_type, so an element type left here would reach
+    // migrate un-rewritten (a Java boolean[] payload arrives as c_bool, which
+    // migrate has no case for).
+    irep.add("#type") = static_cast<const irept &>(char_type());
+    // Carries the byte extent to the paired ARRAY_SET two instructions later
+    // (see instruction_to_esbmc_irep); the count is not derivable from the
+    // type. A comment, so no later pass traverses or re-fixes it.
+    irep.add("#java_array_payload") = raw_size_arg;
   }
 
   if (irep.id() == "side_effect")
@@ -1655,7 +1669,7 @@ bool rewrite_java_array_set(
   irept func(irep_idt("symbol"));
   func.set("identifier", "c:@F@__ESBMC_memset");
 
-  irept args;
+  irept args(irep_idt("arguments"));
   args.get_sub().push_back(ops[0]);
   args.get_sub().push_back(
     mk_bv_const(static_cast<const irept &>(int_type()), 0));
@@ -1691,14 +1705,13 @@ irept instruction_to_esbmc_irep(
   // __CPROVER_array_set / __CPROVER_havoc_object (CBMC's own memset lowering is
   // retargeted to __ESBMC_memset in fix_builtin_call before its ARRAY_SET body
   // runs, §4.8).
+  bool rewrote_array_set = false;
   if (code.id() != "nil")
   {
     const irep_idt stmt = code.find("statement").id();
-    if (stmt == "array_set" && rewrite_java_array_set(code, payload_extent))
-    {
-      // Rewritten into a __ESBMC_memset call; fall through as a FUNCTION_CALL.
-    }
-    else if (stmt == "array_set" || stmt == "havoc_object")
+    if (stmt == "array_set")
+      rewrote_array_set = rewrite_java_array_set(code, payload_extent);
+    if (!rewrote_array_set && (stmt == "array_set" || stmt == "havoc_object"))
       throw std::string(
         "CBMC adapter: '" + stmt.as_string() +
         "' whole-object operations are not yet supported on the --binary path");
@@ -1723,8 +1736,10 @@ irept instruction_to_esbmc_irep(
   // an OTHER "free" codet; the instruction kind must agree with the rewritten
   // code, not CBMC's original raw type. 13 is ASSIGN, 4 is OTHER (shared
   // numbering, see map_cbmc_instruction_type).
+  // 16 is FUNCTION_CALL: the memset call that replaced an ARRAY_SET.
   result.add("typeid") = mk(
-    rewrote_builtin_call
+    rewrote_array_set ? "16"
+    : rewrote_builtin_call
       ? (code.find("statement").id() == "free" ? "4" : "13")
       : std::to_string(map_cbmc_instruction_type(ins.instr_type)));
   result.add("guard") = ins.guard;
@@ -1766,7 +1781,7 @@ irept instruction_to_esbmc_irep(
     const irept::subt &ops = fixed.find("operands").get_sub();
     if (ops.size() == 2 && has_sub(ops[1], "#java_array_payload"))
       payload_extent[ops[0].find("identifier").id_string()] =
-        ops[1].find("#size");
+        ops[1].find("#java_array_payload");
   }
 
   return result;
@@ -1788,9 +1803,14 @@ irept function_to_esbmc_irep(const cbmc_functiont &func)
   std::unordered_map<std::string, irept> payload_extent;
   for (const auto &ins : func.instructions)
   {
-    const bool is_output =
-      ins.code.id() != "nil" && ins.code.find("statement").id() == "output";
-    if (!is_output)
+    // __CPROVER_input/__CPROVER_output are trace-display annotations with no
+    // constraint semantics, and migrate_expr has no case for either. JBMC emits
+    // `input` for the entry point's arguments, so dropping only `output` left
+    // every Java main failing to migrate.
+    const irep_idt stmt =
+      ins.code.id() != "nil" ? ins.code.find("statement").id() : irep_idt();
+    const bool is_io = stmt == "output" || stmt == "input";
+    if (!is_io)
       result.get_sub().push_back(instruction_to_esbmc_irep(
         ins, target_revmap, func.name, payload_extent));
   }
