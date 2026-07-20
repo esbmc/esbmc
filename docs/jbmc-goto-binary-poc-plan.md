@@ -912,6 +912,57 @@ self-referential than C's. That is the first place to look.
 > does not exist crashes rather than reporting it. That is an ESBMC robustness
 > bug independent of this PoC and reachable from any `--binary` input.
 
+#### 4.1.7 First end-to-end Java verdicts (Run 9)
+
+**Rank 7 was not recursion.** The single-frame lldb backtrace was an artefact of
+batch mode exiting on the crash; `lldb -k "bt"` gives the real chain, and it
+ends in `migrate_expr` reading `op0()` on an operand-less `sideeffect` — a
+defect in the rank-4 mapping, not a pre-existing one. The §4.1.6 note claiming
+the crash was downstream of the adapter is **wrong**: `"Reading GOTO program
+from file"` is logged *before* the read starts, so it was always inside it.
+
+Four defects followed, each hidden behind the last: the missing operand;
+`#type` holding an element type where comments are never traversed, so a
+`boolean[]` payload reached migrate as `c_bool`; `__CPROVER_input` being
+undropped where the symmetric `output` was; and the memset call needing
+instruction type FUNCTION_CALL with an arguments node literally named
+`arguments`, which is what the operand-wrap set keys on.
+
+**Results on T4Virtual (virtual dispatch), lowered via
+`jbmc --no-refine-strings --write-goto-binary`:**
+
+| Program | JBMC | ESBMC | Agree |
+|---|---|---|---|
+| `T4Virtual` | SUCCESSFUL | SUCCESSFUL | yes |
+| `T4VirtualFail` | FAILED | FAILED | yes |
+
+The pair matters more than either verdict: differing results show the run is
+not vacuous.
+
+**`--no-refine-strings` is load-bearing and changes §5's calculus.** With
+refinement on (JBMC's default), the binary carries
+`cprover_associate_array_to_pointer_func` and ESBMC declines — the predicted
+string hard stop. With it off, those primitives disappear entirely (measured:
+0 occurrences) and a string-free program verifies. So the stop applies to
+programs that *use* strings, not to every program that merely links
+`java.lang.String`.
+
+> **These verdicts are not proofs, and must not be reported as such.** The run
+> needs `--unwind 6 --no-unwinding-assertions`, because Java's `<clinit>`
+> static-initialiser recursion otherwise unwinds without bound (observed past
+> 2283 iterations). `--no-unwinding-assertions` is precisely the flag that
+> yields false SUCCESSFUL on truncated loops, so the SUCCESSFUL verdict is
+> "ESBMC agrees with JBMC on this binary at this bound" — exactly the
+> distinction §4.1's soundness bar demands. The FAILED verdict is stronger: a
+> counterexample is a witness regardless of bound. Making the SUCCESSFUL side
+> trustworthy needs the `<clinit>` recursion bounded properly, which is the
+> next piece of work.
+
+`--force-malloc-success` is also required: without it the allocation of
+`String[] args` reports a NULL-dereference, since ESBMC models malloc as able
+to fail and JBMC does not. That is a known pointer-model difference (§5), not a
+JVM-semantics gap.
+
 > **Fixture caveat found in passing.** A `symtab2gb` binary has no
 > `__CPROVER__start`, so ESBMC wraps the *boilerplate* main and the fixture's
 > own `main` is never called — the warning at `goto_program.cpp:262` says so,
