@@ -821,6 +821,30 @@ ERROR: CBMC adapter: 'array_set' whole-object operations are not yet supported
 
 A clean decline rather than a crash, which is Phase 1 doing its job.
 
+**Ranks 4 and 5 are one feature, not two.** `ARRAY_SET` never appears alone in
+the lowered binary; all ten occurrences sit in a fixed triple emitted by
+`remove_java_new`:
+
+```
+ASSIGN tmp_new_data_array := side_effect statement="java_new_array_data" size=…
+ASSIGN *X.data          := tmp_new_data_array
+ARRAY_SET tmp_new_data_array <0 | NULL>
+```
+
+That is Java array allocation followed by default-initialisation — zero for
+primitives, `NULL` for references. Implementing `java_new_array_data` without
+`array_set` yields an uninitialised payload and vice versa, so Phase 2 should
+schedule them together rather than as consecutive ranks.
+
+**This also makes `array_set` tractable here, contrary to the adapter's general
+case.** `cbmc_adapter.cpp:1541-1551` declines it because
+`__CPROVER_array_set` carries no explicit length and the extent must come from
+the pointee type. In the Java lowering the length *is* recoverable: it is the
+`size` operand of the `java_new_array_data` allocation on the immediately
+preceding instruction. A Java-shaped implementation can therefore pair the two
+instead of reconstructing an extent from types — which is the part §4 Phase 2
+flagged as the likeliest overrun.
+
 > **Fixture caveat found in passing.** A `symtab2gb` binary has no
 > `__CPROVER__start`, so ESBMC wraps the *boilerplate* main and the fixture's
 > own `main` is never called — the warning at `goto_program.cpp:262` says so,
