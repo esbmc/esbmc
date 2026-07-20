@@ -703,6 +703,54 @@ only into the `jbmc` executable. Without `java_bytecode_languaget` the driver
 cannot load a `.class` file at all, so no amount of linking against the shipped
 archive substitutes for cloning and building `diffblue/cbmc`.
 
+**Status: done, and the flag replaces the driver (Run 6).** With the source
+available, adding the flag to `jbmc` itself turned out to be *simpler* than an
+out-of-tree driver and yields the upstream diff directly, so the plan's
+"driver first, PR second" hedge is satisfied by a locally patched `jbmc`
+rather than a separate binary. The patch is checked in at
+`scripts/jbmc-write-goto-binary.patch` — **26 lines**, against
+`cbmc-6.8.0`, matching §3's "plausibly a few dozen lines" estimate.
+
+It hooks `get_goto_program` immediately after `show_loaded_functions`, where
+`process_whole_model_and_freeze` has already run every lowering pass, and calls
+the shared `write_goto_binary`. Measured on T4Virtual:
+
+| Construct | Route A | Route B (`--write-goto-binary`) |
+|---|---|---|
+| `java_new` | 5 | **0** |
+| `java_new_array` | 10 | **0** |
+| `java_instanceof` | 1 | **0** |
+| `virtual_function` | 7 | **0** |
+| `CATCH` | 8 | **0** |
+| `java_new_array_data` | 0 | **10** |
+| `statement="allocate"` | 3 | **18** |
+
+**This is the third independent replication of §2.6's direction, and the first
+from a real goto binary** rather than `--show-goto-functions` text: 450692
+bytes, header `7f47 4246 06`, byte-identical across rebuilds.
+
+**ESBMC on the lowered binary still stops at rank 1** (`string`), confirming
+§4.1.1's complementarity claim: Route B removes rank 2 but not rank 1, so
+neither piece alone yields a verdict.
+
+**Rank 3, revealed by combining Route B with the interning probe:**
+
+```
+libc++abi: terminating due to uncaught exception of type
+std::invalid_argument: stoull: no conversion
+```
+
+The probe maps the class-identifier *type* to an integer but leaves its
+*values* as string literals, which ESBMC's constant parsing then fails to read
+as integers. This is the concrete specification for the real interning work:
+**a type mapping alone is not sufficient — literals must be interned in the
+same pass**, or the model is internally inconsistent.
+
+It also exposes a gap Phase 1 did not close: `std::invalid_argument` from
+numeric parsing is caught by none of the `std::string`/`const char *` handlers,
+so a malformed constant in a binary reaches `std::terminate` rather than the
+clean-exit path. Worth folding into the graceful-decline work as its own fix.
+
 ### Phase 4 — Java runtime models (spike only, 1 day)
 
 Partly answered already by §2.2: models arrive in the binary **only** if `core-models.jar`
