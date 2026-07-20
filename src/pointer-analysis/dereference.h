@@ -562,6 +562,13 @@ private:
     const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
+  void construct_array_ref(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment = 0);
 
 public:
   void set_block_assertions(void)

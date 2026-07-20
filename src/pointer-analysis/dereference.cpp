@@ -984,10 +984,12 @@ void dereferencet::build_reference_rec(
     flags |= flag_dst_scalar;
   else if (is_array_type(type))
   {
-    log_error(
-      "Can't construct rvalue reference to array type during dereference\n"
-      "(It isn't allowed by C anyway)\n");
-    abort();
+    // Reading a whole array value through a pointer. C forbids array-typed
+    // rvalues (arrays decay to pointers), but languages where arrays are
+    // first-class values (e.g. Rust `let a: [u8; N] = *ptr;`) reach here via a
+    // CBMC goto-binary. Build the array element by element from the source.
+    construct_array_ref(value, offset, type, guard, mode, alignment);
+    return;
   }
   else
   {
@@ -1297,6 +1299,67 @@ void dereferencet::construct_from_array(
       extract_bits_from_byte_array(
         value, offset_bits, type_byte_size_bits(type).to_uint64()));
   }
+}
+
+void dereferencet::construct_array_ref(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode,
+  unsigned long alignment)
+{
+  const array_type2t &arr_type = to_array_type(type);
+
+  // A dereference target array always has a concrete size; a flexible/infinite
+  // array member can't be loaded as a whole value.
+  if (!arr_type.array_size || !is_constant_int2t(arr_type.array_size))
+  {
+    dereference_failure(
+      "Bad dereference",
+      "Cannot construct reference to array of non-constant size",
+      guard);
+    value = make_failed_symbol(type);
+    return;
+  }
+
+  // Fast path: loading the whole object at offset 0 with a matching layout,
+  // which is the common case (e.g. a Rust `[u8; N]` value load). Avoids
+  // unrolling into N element reads.
+  if (is_constant_int2t(offset) && to_constant_int2t(offset).value == 0)
+  {
+    if (base_type_eq(value->type, type, ns))
+      return;
+    if (is_scalar_type(value) && value->type->get_width() == type->get_width())
+    {
+      value = bitcast2tc(type, value);
+      return;
+    }
+  }
+
+  // General path: read each element from the source at its own offset and
+  // assemble them. Each recursive call re-dispatches on the source shape, so
+  // this transparently handles array, struct, scalar-reinterpret and union
+  // sources, and nests for multidimensional arrays.
+  const expr2tc source = value;
+  const BigInt count = to_constant_int2t(arr_type.array_size).value;
+  const BigInt elem_bits = type_byte_size_bits(arr_type.subtype, &ns);
+
+  std::vector<expr2tc> elements;
+  elements.reserve(count.to_uint64());
+  for (BigInt i = 0; i < count; i += 1)
+  {
+    expr2tc elem_offset = add2tc(
+      offset->type, offset, constant_int2tc(offset->type, i * elem_bits));
+    simplify(elem_offset);
+
+    expr2tc element = source;
+    build_reference_rec(
+      element, elem_offset, arr_type.subtype, guard, mode, alignment);
+    elements.push_back(element);
+  }
+
+  value = constant_array2tc(type, std::move(elements));
 }
 
 void dereferencet::construct_from_const_offset(
