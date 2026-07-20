@@ -124,6 +124,37 @@ std::string int_to_hex(unsigned long long value)
   return s;
 }
 
+// CPROVER's bare `string` type carries Java's @class_identifier. Every observed
+// use is equality against, copy of, or assignment of a class-name *literal* --
+// never concatenation, length or indexing (plan §4.1.1 measures both routes).
+// So intern each distinct literal to a distinct integer and compare integers:
+// faithful for equality, and no string-refinement backend is implied.
+//
+// Scoped deliberately to the bare `string` type. Java program strings are the
+// java::java.lang.String struct, and CProver's string primitives are their own
+// ids; both stay unhandled and decline gracefully rather than being interned
+// into a silently wrong model.
+constexpr unsigned CLASS_ID_WIDTH = 32;
+
+// Interning must be injective program-wide, or two spellings of one class name
+// compare unequal. fix_type/fix_expression run per symbol and per function, so
+// the map is a function-local static rather than a parameter; persisting it
+// across binaries in one process is correct for the same reason.
+std::string intern_class_identifier(const std::string &literal)
+{
+  static std::unordered_map<std::string, unsigned> interned;
+  return int_to_hex(interned.emplace(literal, interned.size()).first->second);
+}
+
+void intern_string_type(irept &candidate)
+{
+  if (candidate.id() == "string")
+  {
+    candidate.id("signedbv");
+    candidate.set("width", CLASS_ID_WIDTH);
+  }
+}
+
 // A "constant" irep of the given bitvector type holding `value`. The value is
 // emitted as a hex string so fix_expression's own constant branch converts it
 // to a binary string of the type's exact width on the later recursion (the same
@@ -687,6 +718,19 @@ void fix_expression(irept &irep)
 
   if (irep.id() == "constant")
   {
+    // This pass runs before fix_type (see cbmc_to_esbmc_irep), so a class
+    // identifier still carries its `string` type here -- the only signal
+    // separating it from an ordinary integer constant. Intern the literal and
+    // retype it, then let the hex path below encode it like any other integer.
+    // Without this, bv_width finds no width on `string`, falls back to 32, and
+    // hands the literal (or an empty value) to hex_to_bin as if it were hex.
+    if (irep.find("type").id() == "string")
+    {
+      irep.add("value") =
+        mk(intern_class_identifier(irep.find("value").id_string()));
+      intern_string_type(irep.add("type"));
+    }
+
     const std::string type_id = irep.find("type").id_string();
     if (type_id != "pointer" && type_id != "bool" && has_sub(irep, "value"))
     {
@@ -860,13 +904,6 @@ void expand_anon_struct(const irept &)
 // identifier text itself -- and `string` is an ordinary C identifier. A bare
 // string_typet serialises as {"id": "string"} with no subs, structurally
 // indistinguishable from such a node, so position is the only usable signal.
-void reject_string_type(const irept &candidate)
-{
-  if (candidate.id() == "string")
-    throw std::string(
-      "CBMC adapter: the 'string' type (Java's @class_identifier) is not yet "
-      "supported on the --binary path");
-}
 
 // The named-sub keys under which a type -- and never an identifier -- appears.
 // Everything else (name, identifier, base_name, ...) holds the identifier text
@@ -893,7 +930,7 @@ void fix_type(
   bool in_type_position)
 {
   if (in_type_position)
-    reject_string_type(self);
+    intern_string_type(self);
 
   if (in_type_position && self.id() == "c_bool")
   {
