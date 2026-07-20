@@ -37,7 +37,7 @@ Both modes generate:
 - `CMakeLists.txt` - CMake build configuration
 - `esbmc_verifier.h` - Forward declarations for `__VERIFIER_*` functions (force-included automatically)
 
-The output file extension (`.c` or `.cpp`) and CMake language (`C` or `CXX`) are determined automatically from the input file extension. Files with `.cpp`, `.cc`, or `.cxx` extensions are treated as C++.
+The output file extension (`.c` or `.cpp`) and CMake language (`C` or `CXX`) are determined automatically from the input file extension, using the same table ESBMC uses to pick a frontend: `.cpp`, `.cc`, `.cxx`, `.ipp` and `.cu` are treated as C++, as is `.C` on non-Windows platforms. A `.cu` input additionally enables CMake's `CUDA` language, so configuring that generated project requires a CUDA toolkit (`nvcc`).
 
 When two reached witnesses resolve to the same nondet input vector, the second is dropped — ESBMC prints `Skipped N duplicate test case(s).` so the generated test count may be smaller than the reached-witness count reported in `[Coverage]`. This is most visible under `--k-path-coverage`, where multiple bounded-path goals can share a single witness model.
 
