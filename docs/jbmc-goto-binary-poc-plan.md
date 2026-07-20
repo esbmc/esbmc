@@ -845,6 +845,39 @@ preceding instruction. A Java-shaped implementation can therefore pair the two
 instead of reconstructing an extent from types — which is the part §4 Phase 2
 flagged as the likeliest overrun.
 
+#### 4.1.5 Design for the array pair, from both sides' contracts
+
+Both ends are now pinned against source rather than inferred, so the
+implementation is specified before it is attempted.
+
+*What CBMC emits* (`remove_java_new.cpp:239-251`):
+`side_effect_exprt(ID_java_new_array_data, allocate_data_type, location)` where
+`allocate_data_type` is `pointer_type(element_type)`, and the element **count**
+is set via `set(ID_size, …)` — a *named-sub*, not an operand. It is the
+`length_upper_bound` when the instruction carries one, else the length operand.
+
+*What ESBMC accepts* (`migrate.cpp:1941-1966`): a `sideeffect` with statement
+`malloc` reads `#size` (a **byte** count) and `#type`, and maps to
+`allockind::malloc` → `symex_malloc`. `build_mem_rhs`
+(`cbmc_adapter.cpp:1040-1067`) is the existing precedent for constructing it,
+including the `typecast` to `size_type()` that `get_alloc_size` expects.
+
+*The mapping.* `java_new_array_data` becomes a `malloc` sideeffect keeping the
+side effect's own pointer type, with `#size` = `size` × `sizeof(element)` cast
+to `size_t`, and `#type` = the element type. `ARRAY_SET p <0|NULL>` becomes a
+zero-fill of that same byte extent — sound for both observed fill values, since
+Java's primitive default and the null reference are both all-zero bits. The
+adapter already retargets CBMC's memset lowering to `__ESBMC_memset`
+(`cbmc_adapter.cpp:1549-1551`), so that machinery is in place.
+
+*The one piece of state required.* `instruction_to_esbmc_irep` handles one
+instruction at a time, but `ARRAY_SET` needs the count from the allocation two
+instructions earlier. Since `function_to_esbmc_irep` walks a function's
+instructions in order, a map from payload-symbol name to its byte extent,
+populated at the allocation and read at the `ARRAY_SET`, is sufficient and
+stays within one function's scope. This is the only new coupling the design
+introduces, and it is where a review should look hardest.
+
 > **Fixture caveat found in passing.** A `symtab2gb` binary has no
 > `__CPROVER__start`, so ESBMC wraps the *boilerplate* main and the fixture's
 > own `main` is never called — the warning at `goto_program.cpp:262` says so,
