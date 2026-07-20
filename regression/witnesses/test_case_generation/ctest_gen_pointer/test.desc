@@ -1,0 +1,7 @@
+CORE
+main.c
+--generate-ctest-testcase
+^Generated CTest test case\: test_case\.c$
+^VERIFICATION FAILED$
+CHECK_FILE test_case.c contains static void\* const v\[\]
+CHECK_FILE test_case.c absent static const void\*
