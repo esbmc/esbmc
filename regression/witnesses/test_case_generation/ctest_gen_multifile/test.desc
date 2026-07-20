@@ -4,3 +4,4 @@ helper.c
 ^Generated CTest test case\: test_case\.c$
 ^VERIFICATION FAILED$
 CHECK_FILE CMakeLists.txt contains add_executable\(test_case /.*/main\.c /.*/helper\.c test_case\.c\)
+CHECK_FILE CMakeLists.txt contains project\(ESBMCGeneratedTest C\)

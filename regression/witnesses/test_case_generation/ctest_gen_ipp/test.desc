@@ -1,0 +1,7 @@
+CORE
+main.ipp
+--generate-ctest-testcase
+^Generated CTest test case\: test_case\.cpp$
+^VERIFICATION FAILED$
+CHECK_FILE CMakeLists.txt contains project\(ESBMCGeneratedTest CXX\)
+CHECK_FILE CMakeLists.txt contains add_executable\(test_case /.*/main\.ipp test_case\.cpp\)
