@@ -599,6 +599,52 @@ a work estimate. And the ranks are equal at 10/10, so "ranked by how many
 programs each blocks" does not discriminate here; the ordering above is
 first-encountered, not severity.
 
+#### 4.1.1 How `@class_identifier` is actually used (Run 5)
+
+Measured on the corpus, counting `class_identifier` occurrences in
+`--show-goto-functions` output:
+
+| Route | Uses | Shape |
+|---|---|---|
+| A (`symtab2gb`) | 1 per program | a single field-to-field copy in `java::array[reference].clone()` |
+| B (post-lowering, T4Virtual) | 5 | 1 copy, 1 literal assign, **3 equality-vs-literal** |
+
+Route B's extra uses are introduced by the lowering itself —
+`remove_virtual_functions` and `remove_instanceof` rewrite dispatch and type
+tests into comparisons like
+
+```
+IF "java::jbmcpoc.T4Virtual$Shape" = (...).@java.lang.Object.@class_identifier
+```
+
+**This qualifies §2.6's "two constructs" framing.** That count is correct for
+*side effects*, but Route B additionally converts virtual dispatch and
+`instanceof` into class-identifier string equality, which §2.6 does not count
+because it is not a side effect. The obligation does not vanish on Route B; it
+changes shape.
+
+**The shape is the good news.** Every observed use is equality against a string
+*literal*, or copy/assignment of one — never concatenation, length, indexing or
+any other string operation. That is exactly what interning satisfies: map each
+distinct class-identifier literal to a distinct integer and compare integers.
+No string-refinement backend is needed, so §5's "Strings" hard stop does **not**
+extend to `@class_identifier` — it applies to `java.lang.String` *program* data,
+which is a separate question.
+
+The soundness condition to preserve: interning is only valid while class
+identifiers are compared, not manipulated. If a `CProver.classIdentifier` value
+ever flows into the `ID_cprover_string_*` primitives (§4 Phase 4), the integer
+tag is no longer a faithful model and that path must be declined rather than
+approximated.
+
+**Consequence for sequencing.** Interning alone does not produce a verdict on
+Route A: rank 2 (`java_new_array`) blocks every program immediately behind it,
+in the entry harness. Route B removes rank 2 but needs interning for the
+comparisons above. So the two pieces of work are complements, and neither
+yields a corpus verdict alone — which makes Phase 3's lowering driver, not
+Phase 2's `allocate` mapping, the shorter path to the PoC's minimum publishable
+result.
+
 ### Phase 2 — allocation side effects (2–3 days)
 
 Map CBMC's `side_effect statement="allocate"` and Java's `java_new_array_data` onto
