@@ -681,6 +681,28 @@ which `remove_exceptions` mode was measured (§2.6).
 further ESBMC adapter work — or a concrete statement of what still fails. Upstream merge
 is explicitly **not** an exit criterion.
 
+**Prerequisite measured (Run 5): the driver needs a CBMC source build.** A
+packaged CBMC is not enough, so budget for this before starting. Homebrew's
+`cbmc` 6.8.0 ships `libexec/lib/libcprover.6.8.0.a` and an `include/cprover/`
+holding only the high-level C API (`api.h`, `api_options.h`,
+`verification_result.h`) — none of the internal headers the driver must include.
+Symbol counts in that archive:
+
+| Symbol | Present |
+|---|---|
+| `write_goto_binary` | **yes** (3 overloads) |
+| `remove_virtual_functions` | **yes** (10) — shared with C++ |
+| `remove_java_new` | no |
+| `remove_instanceof` | no |
+| `java_bytecode_languaget` | no |
+| `lazy_goto_model` | no |
+
+The pattern is consistent with §2.6's finding about `symtab2gb`: everything under
+shared `src/goto-programs/` is in the archive, everything under `jbmc/` is linked
+only into the `jbmc` executable. Without `java_bytecode_languaget` the driver
+cannot load a `.class` file at all, so no amount of linking against the shipped
+archive substitutes for cloning and building `diffblue/cbmc`.
+
 ### Phase 4 — Java runtime models (spike only, 1 day)
 
 Partly answered already by §2.2: models arrive in the binary **only** if `core-models.jar`
