@@ -485,10 +485,13 @@ const struct group_opt_templ all_cmd_options[] = {
      "Set max k value for the inductive step"},
     {"loop-invariant",
      NULL,
-     "Verify using loop invariant + k-induction (combined mode)"},
+     "Verify using loop invariant + k-induction (combined mode). Still unwinds "
+     "the loop; use when the property follows from the invariant alone"},
     {"loop-invariant-check",
      NULL,
-     "Verify using loop invariant inductive check (standalone mode)"},
+     "Verify using loop invariant havoc abstraction (standalone mode). Cuts "
+     "the loop, so cost is independent of the bound; the only mode that "
+     "reasons about the loop exit condition"},
     {"loop-frame-rule",
      NULL,
      "Enable frame rule for loop invariant checking "
