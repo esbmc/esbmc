@@ -878,6 +878,40 @@ populated at the allocation and read at the `ARRAY_SET`, is sufficient and
 stays within one function's scope. This is the only new coupling the design
 introduces, and it is where a review should look hardest.
 
+#### 4.1.6 Implemented (Run 8): ranks 4–6 cleared, ingestion now completes
+
+The design above landed essentially unchanged, plus `allocate`, which turned
+out to be the next rank behind the pair. One ordering detail worth recording:
+`fix_expression` runs *last* in `instruction_to_esbmc_irep`, so the malloc is
+only observable after it — the extent is therefore recorded post-fix and
+consumed by the following instruction.
+
+`allocate` is the easiest of the three (operands are already a byte size and a
+zero-init flag) and is **not Java-specific**, so it benefits any
+`goto-instrument`-lowered binary, as §2.6 anticipated.
+
+**Ingestion of the lowered T4Virtual binary now completes with no adapter
+error** — ranks 1 through 6 are all cleared.
+
+**Rank 7 is a segfault after ingestion**, in later processing rather than in
+the adapter:
+
+```
+irept::read(this=0x0)   irep.cpp:67
+```
+
+lldb reports a single frame with a null `this` and no caller chain, and the
+crash survives a 64 MB stack, which is the signature of unbounded recursion
+rather than an ordinary null dereference. The adapter has prior form here — the
+`fix_type_symbol_definition` comment records a stack-overflow in `type2t::cmp`
+from a once-unrolled self-referential type, and Java's class graph is far more
+self-referential than C's. That is the first place to look.
+
+> **Separately: `--function main` segfaults on a Java binary.** There is no
+> `main` symbol — the entry is `__CPROVER__start` — and naming a function that
+> does not exist crashes rather than reporting it. That is an ESBMC robustness
+> bug independent of this PoC and reachable from any `--binary` input.
+
 > **Fixture caveat found in passing.** A `symtab2gb` binary has no
 > `__CPROVER__start`, so ESBMC wraps the *boilerplate* main and the fixture's
 > own `main` is never called — the warning at `goto_program.cpp:262` says so,
