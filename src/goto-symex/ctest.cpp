@@ -375,7 +375,9 @@ static void write_nondet_functions(
 
     out << c_type << " __VERIFIER_nondet_" << verifier_type << "(void) {\n";
     out << "  static int i = 0;\n";
-    out << "  static const " << c_type << " v[] = { ";
+    // East const: c_type is "void*" for pointers, so a leading const would
+    // qualify the pointee and make `return v[i++]` discard it.
+    out << "  static " << c_type << " const v[] = { ";
     for (size_t j = 0; j < values.size(); ++j)
     {
       if (j > 0)
