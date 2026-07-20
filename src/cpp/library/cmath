@@ -200,6 +200,37 @@ CIMPORT3(isfinite);
 CIMPORT3(isnormal);
 CIMPORT3(signbit);
 
+/* [c.math.fpclass]. Expressed via the classifiers above rather than
+ * __builtin_fpclassify, whose 5-category form the frontend does not lower. */
+#undef fpclassify
+
+#define OM_FPCLASSIFY(type)                                                    \
+  inline int fpclassify(type x)                                                \
+  {                                                                            \
+    if (__builtin_isnan(x))                                                    \
+      return FP_NAN;                                                           \
+    if (__builtin_isinf(x))                                                    \
+      return FP_INFINITE;                                                      \
+    if (x == (type)0)                                                          \
+      return FP_ZERO;                                                          \
+    if (__builtin_isnormal(x))                                                 \
+      return FP_NORMAL;                                                        \
+    return FP_SUBNORMAL;                                                       \
+  }
+
+OM_FPCLASSIFY(float)
+OM_FPCLASSIFY(double)
+OM_FPCLASSIFY(long double)
+
+#undef OM_FPCLASSIFY
+
+template <typename T>
+inline typename std::enable_if<std::is_integral<T>::value, int>::type
+fpclassify(T x)
+{
+  return fpclassify((double)x);
+}
+
 #undef trunc
 #undef truncf
 #undef truncl
