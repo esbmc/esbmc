@@ -613,6 +613,13 @@ private:
     const guard2tc &guard,
     modet mode,
     unsigned long alignment);
+  void construct_array_ref(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment = 0);
   class quantifier_scopet;
 
   /** Variables bound by quantifiers enclosing the expression currently being
