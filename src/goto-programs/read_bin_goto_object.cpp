@@ -41,7 +41,7 @@ bool read_bin_goto_object(
             << "\n";
 
       log_error("{}", str.str());
-      abort();
+      return true;
     }
   }
 
@@ -58,7 +58,7 @@ bool read_bin_goto_object(
       str << "The input was compiled with a different version of "
           << "goto-cc, please recompile";
       log_error("{}", str.str());
-      abort();
+      return true;
     }
   }
 
