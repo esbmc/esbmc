@@ -691,6 +691,39 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             return from_integer(1, int_type());
         }
 
+        // `.shape`/`.ndim` on a boolean-mask row-selection result
+        // (build_bool_mask_row_select_symbolic): shape is `(count, cols)`,
+        // reading the struct's runtime logical row count rather than the
+        // `rows` buffer's physical (worst-case) capacity; rank is always 2
+        // (row selection is only modelled for 2-D arrays).
+        if (
+          (attr_name == "shape" || attr_name == "ndim") &&
+          python_list::is_bool_mask_rows_type(base_type))
+        {
+          if (attr_name == "ndim")
+            return from_integer(2, int_type());
+
+          const struct_typet &result_type = to_struct_type(base_type);
+          const array_typet &rows_type =
+            to_array_type(ns.follow(result_type.components()[0].type()));
+          const BigInt num_cols = binary2integer(
+            to_array_type(ns.follow(rows_type.subtype()))
+              .size()
+              .value()
+              .c_str(),
+            false);
+
+          exprt count_member = python_expr::build_member(
+            base_expr, "count", result_type.components()[1].type());
+          expr2tc count2;
+          migrate_expr(count_member, count2);
+          exprt count_as_int =
+            migrate_expr_back(typecast2tc(migrate_type(int_type()), count2));
+
+          return build_shape_tuple_expr(
+            *this, {count_as_int, from_integer(num_cols, int_type())});
+        }
+
         if (base_type.is_struct())
         {
           const struct_typet &struct_type = to_struct_type(base_type);
@@ -1116,6 +1149,37 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           expr = from_integer(1, int_type());
           break;
         }
+      }
+
+      // `.shape`/`.ndim` on a boolean-mask row-selection result: mirrors the
+      // general attribute-access path above.
+      if (
+        (attr_name == "shape" || attr_name == "ndim") &&
+        python_list::is_bool_mask_rows_type(symbol->get_type()))
+      {
+        if (attr_name == "ndim")
+        {
+          expr = from_integer(2, int_type());
+          break;
+        }
+
+        const struct_typet &result_type = to_struct_type(symbol->get_type());
+        const array_typet &rows_type =
+          to_array_type(ns.follow(result_type.components()[0].type()));
+        const BigInt num_cols = binary2integer(
+          to_array_type(ns.follow(rows_type.subtype())).size().value().c_str(),
+          false);
+
+        exprt count_member = python_expr::build_member(
+          expr, "count", result_type.components()[1].type());
+        expr2tc count2;
+        migrate_expr(count_member, count2);
+        exprt count_as_int =
+          migrate_expr_back(typecast2tc(migrate_type(int_type()), count2));
+
+        expr = build_shape_tuple_expr(
+          *this, {count_as_int, from_integer(num_cols, int_type())});
+        break;
       }
 
       // Delegate complex attribute access (.real, .imag) to the handler.
