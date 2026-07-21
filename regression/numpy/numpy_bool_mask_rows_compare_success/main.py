@@ -1,7 +1,6 @@
 import numpy as np
 
-# ADR-NP-001: a comparison-derived 2-D row mask also stays explicitly
-# rejected until the canonical ndarray descriptor exists (see
+# ADR-NP-001: a comparison-derived 2-D row mask is now supported (see
 # numpy-architecture-decisions.md).
 x = nondet_int()
 y = nondet_int()
