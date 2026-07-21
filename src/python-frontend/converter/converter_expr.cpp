@@ -1566,6 +1566,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       break;
     }
 
+    // Boolean-mask row-selection result (build_bool_mask_row_select_symbolic):
+    // a struct, not an array_typet, so it needs its own dispatch ahead of
+    // the array/list handling below.
+    if (python_list::is_bool_mask_rows_type(array_type))
+    {
+      python_list list(*this, element);
+      expr = list.index_bool_mask_rows(array, slice, element);
+      break;
+    }
+
     // Handle dictionary subscript with type inference from annotations
     if (
       array_type_for_dict.is_struct() &&

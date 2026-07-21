@@ -145,6 +145,23 @@ public:
   static bool is_bool_mask_rows_type(const typet &type);
 
   /**
+   * @brief Index `b[i]` into a boolean-mask row-selection result (see
+   * build_bool_mask_row_select_symbolic): normalizes a negative @p
+   * slice_node index against the struct's runtime `count` member (not the
+   * `rows` buffer's physical capacity), bounds-checks it against `count`
+   * (raising IndexError out of bounds, mirroring build_list_at_call), and
+   * returns the selected row.
+   * @param array      The boolean-mask row-selection result expression.
+   * @param slice_node AST node for the row index (a plain integer index;
+   *                    slicing is not supported).
+   * @param element    The Subscript AST node, used for location info.
+   */
+  exprt index_bool_mask_rows(
+    const exprt &array,
+    const nlohmann::json &slice_node,
+    const nlohmann::json &element);
+
+  /**
    * @brief Lower 2-D column selection `a[:, j]` to a bounded copy over every
    * row of a fixed-shape 2-D array, collecting `row[j]` into a fresh 1-D
    * array. @p array must be a fixed-size array of fixed-size rows (numpy

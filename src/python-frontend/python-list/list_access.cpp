@@ -556,6 +556,70 @@ exprt python_list::build_bool_mask_row_select_symbolic(
   return build_symbol(result);
 }
 
+exprt python_list::index_bool_mask_rows(
+  const exprt &array,
+  const nlohmann::json &slice_node,
+  const nlohmann::json &element)
+{
+  const locationt location = converter_.get_location_from_decl(element);
+
+  if (slice_node.value("_type", "") == "Slice")
+  {
+    std::ostringstream msg;
+    msg << "TypeError: slicing a boolean-mask row-selection result is not "
+           "supported yet";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  const namespacet ns(converter_.symbol_table());
+  const struct_typet &result_type = to_struct_type(ns.follow(array.type()));
+  const array_typet &rows_array_type =
+    to_array_type(ns.follow(result_type.components()[0].type()));
+  const typet row_type = rows_array_type.subtype();
+
+  exprt index = converter_.get_expr(slice_node);
+  index = converter_.unwrap_optional_if_needed(index);
+
+  exprt rows_member = build_member(array, "rows", rows_array_type);
+  exprt count_member = build_member(array, "count", size_type());
+  exprt index_as_size = build_typecast(index, size_type());
+
+  // actual_index = (index < 0) ? (count + index) : index, normalized
+  // against the logical row count rather than the buffer's physical
+  // capacity (mirrors build_list_at_call's negative-index handling).
+  const type2tc size_t2 = migrate_type(size_type());
+  expr2tc index2, index_as_size2, count2;
+  migrate_expr(index, index2);
+  migrate_expr(index_as_size, index_as_size2);
+  migrate_expr(count_member, count2);
+
+  expr2tc is_negative = lessthan2tc(index2, gen_zero(index2->type));
+  expr2tc positive_index = add2tc(size_t2, count2, index_as_size2);
+  expr2tc converted_index2 =
+    if2tc(size_t2, is_negative, positive_index, index_as_size2);
+  exprt converted_index = migrate_expr_back(converted_index2);
+
+  if (!config.options.get_bool_option("no-bounds-check"))
+  {
+    expr2tc oob = greaterthanequal2tc(converted_index2, count2);
+
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "IndexError", "index out of range for boolean-mask row selection");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = migrate_expr_back(oob);
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    converter_.add_instruction(guard);
+  }
+
+  return build_index(rows_member, converted_index, row_type);
+}
+
 namespace
 {
 // Recognizes a literal integer index node: a plain Constant, or a negated
