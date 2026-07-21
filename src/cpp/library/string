@@ -1398,6 +1398,30 @@ __ESBMC_HIDE:
   }
 }
 
+// Free const char*-on-the-left overloads, so "lit" >= s / "lit" <= s resolve
+// (the member operators only cover s >= "lit" / s <= "lit").
+template <typename CharT, typename Traits, typename Alloc>
+bool operator>=(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs)
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(
+    lhs != NULL, "The first parameter must be different than NULL");
+  __ESBMC_assert(
+    rhs.str != NULL, "The second parameter must be different than NULL");
+  return strcmp(lhs, rhs.str) >= 0;
+}
+
+template <typename CharT, typename Traits, typename Alloc>
+bool operator<=(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs)
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(
+    lhs != NULL, "The first parameter must be different than NULL");
+  __ESBMC_assert(
+    rhs.str != NULL, "The second parameter must be different than NULL");
+  return strcmp(lhs, rhs.str) <= 0;
+}
+
 template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::length() const
 {

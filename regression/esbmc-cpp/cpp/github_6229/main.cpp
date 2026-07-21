@@ -25,5 +25,14 @@ int main()
   assert(!("AAAA" > a));
   assert(!("AAAA" < a));
 
+  // >= / <= with the literal on the left: these free overloads were missing, so
+  // "lit" >= s / "lit" <= s did not compile at all.
+  assert("AAAA" >= b);
+  assert("AAAA" >= a); // equal
+  assert(!("AA" >= a));
+  assert("AA" <= a);
+  assert("AAAA" <= a); // equal
+  assert(!("AAAA" <= b));
+
   return 0;
 }
