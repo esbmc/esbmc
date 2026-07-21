@@ -1219,6 +1219,49 @@ bool interval_domaint::join(
   return result;
 }
 
+void interval_domaint::phi_join_with_snapshot(
+  const expr2tc &lhs,
+  const std::shared_ptr<interval_map> &if_snapshot)
+{
+  if (!is_symbol2t(lhs))
+    return;
+  const irep_idt &name = to_symbol2t(lhs).thename;
+  const auto if_it = if_snapshot->find(name);
+
+  copy_if_needed();
+
+  if (if_it == if_snapshot->end())
+  {
+    // JOIN(TOP, else) = TOP
+    intervals->erase(name);
+    return;
+  }
+
+  const auto dst_it = intervals->find(name);
+  if (dst_it == intervals->end())
+    return; // JOIN(if, TOP) = TOP
+
+  const auto &src = if_it->second;
+  auto &dst = dst_it->second;
+  if (src.index() != dst.index())
+    return;
+
+  switch (src.index())
+  {
+  case 0:
+    join_intervals<integer_intervalt>(std::get<0>(src), std::get<0>(dst), false);
+    break;
+  case 1:
+    join_intervals<real_intervalt>(std::get<1>(src), std::get<1>(dst), false);
+    break;
+  case 2:
+    join_intervals<wrapped_interval>(std::get<2>(src), std::get<2>(dst), false);
+    break;
+  default:
+    break;
+  }
+}
+
 void interval_domaint::assign(const expr2tc &expr, const bool recursive)
 {
   assert(is_code_assign2t(expr));
