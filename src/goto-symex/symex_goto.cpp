@@ -472,8 +472,9 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     // process_instruction never sees synthetic phi assignments; update the
     // interval domain here using the if-branch snapshot so the JOIN is correct
     // (both SSA names share the same base-name key in the domain).
-    if (interval_domain_state && merge_state.interval_snapshot &&
-        !cur_state->guard.is_false() && !merge_state.guard.is_false())
+    if (
+      interval_domain_state && merge_state.interval_snapshot &&
+      !cur_state->guard.is_false() && !merge_state.guard.is_false())
     {
       auto snap = std::static_pointer_cast<interval_domaint::interval_map>(
         merge_state.interval_snapshot);

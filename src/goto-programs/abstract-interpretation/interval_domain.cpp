@@ -1249,7 +1249,8 @@ void interval_domaint::phi_join_with_snapshot(
   switch (src.index())
   {
   case 0:
-    join_intervals<integer_intervalt>(std::get<0>(src), std::get<0>(dst), false);
+    join_intervals<integer_intervalt>(
+      std::get<0>(src), std::get<0>(dst), false);
     break;
   case 1:
     join_intervals<real_intervalt>(std::get<1>(src), std::get<1>(dst), false);

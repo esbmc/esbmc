@@ -103,7 +103,8 @@ public:
     guard2tc guard;
     unsigned int thread_id;
     variable_name_sett local_variables;
-    std::shared_ptr<void> interval_snapshot; // interval_domaint::interval_map; set in symex_goto.cpp
+    std::shared_ptr<void>
+      interval_snapshot; // interval_domaint::interval_map; set in symex_goto.cpp
 
     explicit merge_statet(const goto_symex_statet &s)
       : num_instructions(s.num_instructions),

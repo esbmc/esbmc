@@ -1362,8 +1362,7 @@ exprt python_dict_handler::handle_dict_update(
   // CPython: dict.update([E], **F) — at most one positional iterable plus any
   // number of keyword pairs.
   if (args.size() > 1)
-    throw std::runtime_error(
-      "update() takes at most one positional argument");
+    throw std::runtime_error("update() takes at most one positional argument");
 
   // Apply each keyword argument as dict[name] = value. Runs after the optional
   // positional source so `d.update(other, k=v)` matches CPython's order.
