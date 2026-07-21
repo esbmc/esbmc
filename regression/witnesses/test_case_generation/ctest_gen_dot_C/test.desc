@@ -3,5 +3,5 @@ main.C
 --generate-ctest-testcase
 ^Generated CTest test case\: test_case\.cpp$
 ^VERIFICATION FAILED$
-CHECK_FILE CMakeLists.txt contains project\(ESBMCGeneratedTest CXX\)
-CHECK_FILE CMakeLists.txt contains add_executable\(test_case /.*/main\.C test_case\.cpp\)
+CHECK_FILE esbmc-ctest/CMakeLists.txt contains project\(ESBMCGeneratedTest CXX\)
+CHECK_FILE esbmc-ctest/CMakeLists.txt contains add_executable\(test_case /.*/main\.C test_case\.cpp\)

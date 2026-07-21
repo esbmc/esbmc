@@ -370,6 +370,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"generate-ctest-testcase",
      NULL,
      "If a solution is found, generates CTest testcases for C programs"},
+    {"ctest-output-dir",
+     boost::program_options::value<std::string>()->value_name("<dir>"),
+     "Directory for --generate-ctest-testcase output (default: esbmc-ctest)"},
     {"generate-html-report",
      NULL,
      "If a violation is found, generates a HTML report"},
@@ -485,10 +488,13 @@ const struct group_opt_templ all_cmd_options[] = {
      "Set max k value for the inductive step"},
     {"loop-invariant",
      NULL,
-     "Verify using loop invariant + k-induction (combined mode)"},
+     "Verify using loop invariant + k-induction (combined mode). Still unwinds "
+     "the loop; use when the property follows from the invariant alone"},
     {"loop-invariant-check",
      NULL,
-     "Verify using loop invariant inductive check (standalone mode)"},
+     "Verify using loop invariant havoc abstraction (standalone mode). Cuts "
+     "the loop, so cost is independent of the bound; the only mode that "
+     "reasons about the loop exit condition"},
     {"loop-frame-rule",
      NULL,
      "Enable frame rule for loop invariant checking "
@@ -707,6 +713,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<int>()->default_value(128)->value_name("nr"),
      "Set maximum number of elements to copy symbolically in realloc (default "
      "is 128)"},
+    {"max-quantifier-summary-nodes",
+     boost::program_options::value<int>()->value_name("nr"),
+     "Set maximum expression size when summarizing a function called inside "
+     "__ESBMC_forall/__ESBMC_exists (default is 20000)"},
     {"enable-unreachability-intrinsic",
      NULL,
      "Enable unreach-call style checking: activates __ESBMC_unreachable() and "

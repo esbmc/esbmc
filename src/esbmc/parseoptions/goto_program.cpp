@@ -306,7 +306,7 @@ bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
   {
     if (goto_reader.read_goto_binary(arg, context, goto_functions))
     {
-      log_error("Failed to open `{}'", arg);
+      log_error("Failed to read `{}'", arg);
       return true;
     }
   }
