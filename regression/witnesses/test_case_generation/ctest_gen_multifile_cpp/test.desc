@@ -3,4 +3,4 @@ helper.cpp
 --std c++11 --generate-ctest-testcase main.cpp
 ^Generated CTest test case\: test_case\.cpp$
 ^VERIFICATION FAILED$
-CHECK_FILE CMakeLists.txt contains add_executable\(test_case /.*/main\.cpp /.*/helper\.cpp test_case\.cpp\)
+CHECK_FILE esbmc-ctest/CMakeLists.txt contains add_executable\(test_case /.*/main\.cpp /.*/helper\.cpp test_case\.cpp\)

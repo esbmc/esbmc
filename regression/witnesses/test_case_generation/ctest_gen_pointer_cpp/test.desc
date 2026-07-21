@@ -3,5 +3,5 @@ main.cpp
 --std c++11 --generate-ctest-testcase
 ^Generated CTest test case\: test_case\.cpp$
 ^VERIFICATION FAILED$
-CHECK_FILE test_case.cpp contains static void\* const v\[\]
-CHECK_FILE test_case.cpp absent static const void\*
+CHECK_FILE esbmc-ctest/test_case.cpp contains static void\* const v\[\]
+CHECK_FILE esbmc-ctest/test_case.cpp absent static const void\*
