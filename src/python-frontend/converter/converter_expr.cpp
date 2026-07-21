@@ -12,6 +12,7 @@
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/math/python_math.h>
+#include <python-frontend/numpy/ndarray_descriptor.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
@@ -668,6 +669,28 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           }
         }
 
+        // `.ndim`: the rank of the canonical bounded ndarray descriptor
+        // (numpy-architecture-decisions.md). The runtime list model only
+        // ever backs a 1-D array, so its rank is always 1.
+        if (attr_name == "ndim")
+        {
+          if (base_type.is_array())
+          {
+            std::vector<int> dims =
+              type_handler_.get_array_type_shape(base_type);
+            ndarray_descriptor descriptor(
+              std::vector<long long>(dims.begin(), dims.end()), "", 0);
+            descriptor.validate();
+            return from_integer(descriptor.rank(), int_type());
+          }
+
+          const typet list_type = type_handler_.get_list_type();
+          if (
+            base_type == list_type || (base_expr.type().is_pointer() &&
+                                       base_expr.type().subtype() == list_type))
+            return from_integer(1, int_type());
+        }
+
         if (base_type.is_struct())
         {
           const struct_typet &struct_type = to_struct_type(base_type);
@@ -1061,6 +1084,36 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           exprt list_len =
             migrate_expr_back(typecast2tc(migrate_type(int_type()), size_call));
           expr = build_shape_tuple_expr(*this, {list_len});
+          break;
+        }
+      }
+
+      // `.ndim`: mirrors the `.shape` block above (see the general
+      // attribute-access path for the descriptor-backed rank computation).
+      if (attr_name == "ndim")
+      {
+        typet sym_type = symbol->get_type();
+        if (sym_type.is_pointer())
+          sym_type = sym_type.subtype();
+        if (sym_type.id() == "symbol")
+          sym_type = ns.follow(sym_type);
+
+        if (sym_type.is_array())
+        {
+          std::vector<int> dims = type_handler_.get_array_type_shape(sym_type);
+          ndarray_descriptor descriptor(
+            std::vector<long long>(dims.begin(), dims.end()), "", 0);
+          descriptor.validate();
+          expr = from_integer(descriptor.rank(), int_type());
+          break;
+        }
+
+        const typet list_type = type_handler_.get_list_type();
+        if (
+          sym_type == list_type || (symbol->get_type().is_pointer() &&
+                                    symbol->get_type().subtype() == list_type))
+        {
+          expr = from_integer(1, int_type());
           break;
         }
       }
