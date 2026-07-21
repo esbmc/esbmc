@@ -2121,6 +2121,14 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
       smt_astt nan_pred =
         mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", nullptr);
       ir_ieee_api->store_nan_pred(sym_ast, nan_pred);
+
+      // A nondet float is otherwise an unconstrained real. Without this,
+      // it can take a value strictly between 0 and the smallest subnormal
+      // (a magnitude no floating-point operation ever produces), which
+      // breaks identities like x+0==x now that mk_subnormal_flush()
+      // distinguishes that gap from zero.
+      const floatbv_type2t &fbv_type = to_floatbv_type(sym.type);
+      assert_ast(mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type)));
     }
 
     return sym_ast;
