@@ -314,7 +314,19 @@ struct summary_statet
   std::vector<std::pair<exprt, exprt>> returns;
   std::set<irep_idt> locals;
   unsigned budget;
+  std::size_t max_nodes;
+  /// Why the summary was abandoned, reported alongside the rejection.  Set at
+  /// the originating failure only: callers just propagate `false'.
+  std::string reject;
 };
+
+/// Record why @p st cannot be summarized, and fail.
+bool summary_reject(summary_statet &st, std::string reason)
+{
+  if (st.reject.empty())
+    st.reject = std::move(reason);
+  return false;
+}
 
 bool summary_has_sideeffect(const exprt &e)
 {
@@ -352,6 +364,135 @@ void summary_coerce(exprt &e, const typet &t)
 {
   if (e.type() != t)
     e.make_typecast(t);
+}
+
+/// Whether `if(c, e, e')' may be pushed into the operands of @p id.  `/', `mod',
+/// `index' and `dereference' are excluded because the mux would then select
+/// their operand rather than their result, leaving a single site where the
+/// source had one per arm -- a divisor check, say, would cover only the
+/// selected divisor.  (goto_check does not currently instrument inside a
+/// quantifier body, so this is about not depending on that.)
+bool summary_mux_pushable(const irep_idt &id)
+{
+  static const std::set<irep_idt> ids = {
+    "+",
+    "-",
+    "*",
+    "typecast",
+    "if",
+    "=",
+    "notequal",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "and",
+    "or",
+    "not",
+    "bitand",
+    "bitor",
+    "bitxor"};
+  return ids.count(id) != 0;
+}
+
+/// Identity element of @p id over integer bitvector type @p t, or nil.
+exprt summary_identity(const irep_idt &id, const typet &t)
+{
+  if (t.id() != "signedbv" && t.id() != "unsignedbv")
+    return nil_exprt();
+  if (id == "+" || id == "-" || id == "bitor" || id == "bitxor")
+    return from_integer(0, t);
+  if (id == "*")
+    return from_integer(1, t);
+  return nil_exprt();
+}
+
+/// Rewrite `A - k' (constant @p k) to `A + (-k)', so that merging it against
+/// `A + k'' pushes the mux under a common `+'.  Modular bitvector arithmetic
+/// makes this exact, including at the type's minimum.
+exprt summary_normalize_sub(const exprt &e)
+{
+  BigInt v;
+  if (
+    e.id() != "-" || e.operands().size() != 2 ||
+    (e.type().id() != "signedbv" && e.type().id() != "unsignedbv") ||
+    e.op1().type() != e.type() || to_integer(e.op1(), v))
+    return e;
+  exprt r("+", e.type());
+  r.copy_to_operands(e.op0(), from_integer(-v, e.type()));
+  return r;
+}
+
+/// Build `if(@p cond, @p then_val, @p else_val)', pushing the mux inwards so an
+/// operand common to both arms is named once instead of copied into each.
+///
+/// Without this, merging the two paths of an if/else inside an unrolled loop
+/// duplicates the whole running value every iteration, making the summary 2^n
+/// for a trip count of n and tripping the size cap at n=10 (GitHub discussion
+/// #6154).  The rewrites below keep the accumulator shape linear:
+/// `if(c, X + k, X)' becomes `X + if(c, k, 0)'.
+exprt summary_mux(const exprt &cond, const exprt &tv, const exprt &ev)
+{
+  if (tv == ev)
+    return tv;
+
+  const exprt t = summary_normalize_sub(tv), e = summary_normalize_sub(ev);
+
+  if (
+    t.id() == e.id() && t.type() == e.type() && !t.operands().empty() &&
+    t.operands().size() == e.operands().size() && summary_mux_pushable(t.id()))
+  {
+    std::size_t diff = 0, ndiff = 0;
+    for (std::size_t i = 0; i < t.operands().size(); i++)
+      if (!(t.operands()[i] == e.operands()[i]))
+      {
+        diff = i;
+        ndiff++;
+      }
+    // The differing operands must already agree in type.  `typecast' does not
+    // constrain its operand's type, so without this the recursive call falls
+    // through to the coercing fallback below and silently narrows the wider
+    // arm -- `(int)c' vs `(int)l' would become `(int)if(c, c, (char)l)'.
+    if (ndiff == 1 && t.operands()[diff].type() == e.operands()[diff].type())
+    {
+      exprt r = t;
+      r.operands()[diff] =
+        summary_mux(cond, t.operands()[diff], e.operands()[diff]);
+      return r;
+    }
+  }
+
+  // `if(c, X op k, X)' -> `X op if(c, k, identity)'.  Tried with either arm as
+  // the grown one, since an if/else may write the variable on either path.
+  for (const bool then_grew : {true, false})
+  {
+    const exprt &g = then_grew ? t : e;
+    const exprt &x = then_grew ? e : t;
+    if (g.operands().size() != 2 || g.type() != x.type())
+      continue;
+    const exprt unit = summary_identity(g.id(), g.type());
+    if (unit.is_nil())
+      continue;
+    // `-' is not commutative: only its left operand may be the running value.
+    const bool left = g.op0() == x;
+    if (!left && (g.id() == "-" || !(g.op1() == x)))
+      continue;
+    const exprt &k = left ? g.op1() : g.op0();
+    if (k.type() != g.type())
+      continue;
+    exprt m =
+      then_grew ? summary_mux(cond, k, unit) : summary_mux(cond, unit, k);
+    exprt r(g.id(), g.type());
+    if (left)
+      r.copy_to_operands(x, m);
+    else
+      r.copy_to_operands(m, x);
+    return r;
+  }
+
+  exprt fallback = ev;
+  summary_coerce(fallback, tv.type());
+  return if_exprt(cond, tv, fallback);
 }
 
 std::size_t summary_node_count(const exprt &e)
@@ -564,14 +705,7 @@ summarize_code(const codet &code, summary_statet &st, const namespacet &ns)
                                              : nullptr;
       if (!tv || !ev)
         continue;
-      if (*tv == *ev)
-        st.env[k] = *tv;
-      else
-      {
-        exprt e = *ev;
-        summary_coerce(e, tv->type());
-        st.env[k] = if_exprt(cv, *tv, e);
-      }
+      st.env[k] = summary_mux(cv, *tv, *ev);
     }
     return true;
   }
@@ -619,8 +753,11 @@ summarize_code(const codet &code, summary_statet &st, const namespacet &ns)
     // pure expression.
     for (bool first = true;; first = false)
     {
-      if (summary_size(st) > max_summary_nodes)
-        return false;
+      if (summary_size(st) > st.max_nodes)
+        return summary_reject(
+          st,
+          "summary exceeded " + std::to_string(st.max_nodes) +
+            " expression nodes (raise --max-quantifier-summary-nodes)");
       if (!(s == "dowhile" && first))
       {
         if (cond->is_nil())
@@ -630,12 +767,15 @@ summarize_code(const codet &code, summary_statet &st, const namespacet &ns)
           return false;
         const int f = summary_fold_bool(cv);
         if (f == -1)
-          return false;
+          return summary_reject(
+            st,
+            "loop condition is not a compile-time constant (data-dependent "
+            "trip count)");
         if (f == 0)
           break;
       }
       if (st.budget == 0)
-        return false;
+        return summary_reject(st, "loop unrolling budget exhausted");
       st.budget--;
       if (!summarize_code(*body, st, ns))
         return false;
@@ -655,7 +795,7 @@ summarize_code(const codet &code, summary_statet &st, const namespacet &ns)
     return true;
   }
 
-  return false;
+  return summary_reject(st, "unsupported statement `" + s.as_string() + "'");
 }
 
 bool goto_convertt::summarize_pure_call(
@@ -663,6 +803,12 @@ bool goto_convertt::summarize_pure_call(
   const exprt &call,
   exprt &out)
 {
+  // Keyed by callsite, not callee: the same function may be summarized at
+  // several sites with different arguments, and a success at one must not
+  // erase -- or a failure at one mis-attribute -- the reason at another.
+  const std::string site = call.find_location().as_string();
+  summary_reject_reasons.erase(site);
+
   const exprt &value = fsym.get_value();
   if (!value.is_code() || fsym.get_type().id() != "code")
     return false;
@@ -678,6 +824,17 @@ bool goto_convertt::summarize_pure_call(
   summary_statet st;
   st.pc = true_exprt();
   st.budget = max_quantifier_inline_depth * max_quantifier_inline_depth;
+  st.max_nodes = max_summary_nodes;
+  const std::string max_nodes_opt =
+    options.get_option("max-quantifier-summary-nodes");
+  if (!max_nodes_opt.empty())
+  {
+    // Read as signed: a negative value would wrap to SIZE_MAX and turn the
+    // guard into an unbounded unroll.  The cap bounds loop unrolling only; a
+    // loop-free callee is bounded by its own source and summarizes regardless.
+    const long long v = std::stoll(max_nodes_opt);
+    st.max_nodes = v > 0 ? static_cast<std::size_t>(v) : 0;
+  }
 
   for (std::size_t i = 0; i < params.size(); i++)
   {
@@ -691,20 +848,28 @@ bool goto_convertt::summarize_pure_call(
   }
 
   if (!summarize_code(to_code(value), st, ns))
+  {
+    if (!st.reject.empty())
+      summary_reject_reasons[site] = st.reject;
     return false;
+  }
 
   // A trailing unconditional return guarantees the summary is total: the last
   // recorded value is the fall-through, earlier returns wrap it as nested
   // if-then-else so the earliest matching guard wins.
   if (st.returns.empty() || summary_fold_bool(st.returns.back().first) != 1)
+  {
+    summary_reject_reasons[site] =
+      "no unconditional return on the callee's fall-through path";
     return false;
+  }
 
   exprt result = st.returns.back().second;
   for (std::size_t i = st.returns.size() - 1; i-- > 0;)
   {
     exprt v = st.returns[i].second;
     summary_coerce(v, result.type());
-    result = if_exprt(st.returns[i].first, v, result);
+    result = summary_mux(st.returns[i].first, v, result);
   }
 
   summary_coerce(result, call.type());
@@ -924,16 +1089,24 @@ void goto_convertt::remove_sideeffects_for_quantifier_body(
   {
     const bool is_call = se->statement() == "function_call" &&
                          se->operands().size() >= 1 && se->op0().is_symbol();
+    std::string why;
+    if (is_call)
+    {
+      auto it = summary_reject_reasons.find(se->find_location().as_string());
+      if (it != summary_reject_reasons.end())
+        why = "; reason: " + it->second;
+    }
     log_error(
       "{}: cannot model {} on a quantified variable inside "
       "__ESBMC_forall/__ESBMC_exists; the quantifier body must be a "
       "side-effect-free expression, possibly calling functions built from "
       "local declarations, assignments, if/else, and loops with a statically "
       "constant trip count, and whose side-effecting arguments are each used "
-      "exactly once",
+      "exactly once{}",
       se->find_location().as_string(),
       is_call ? "call to `" + se->op0().identifier().as_string() + "'"
-              : "side effect `" + se->statement().as_string() + "'");
+              : "side effect `" + se->statement().as_string() + "'",
+      why);
     abort();
   }
 
