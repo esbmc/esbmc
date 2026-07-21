@@ -1,7 +1,5 @@
 import numpy as np
 
-# ADR-NP-001: a symbolic 2-D row mask (nondet-derived) is now supported (see
-# numpy-architecture-decisions.md).
 n = nondet_bool()
 __ESBMC_assume(n)
 

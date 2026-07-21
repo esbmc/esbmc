@@ -1,6 +1,6 @@
 import numpy as np
 
-# ADR-NP-001: an all-false symbolic mask produces shape (0, cols).
+# An all-false symbolic mask produces shape (0, cols).
 a = np.array([[1, 2], [3, 4]])
 m0 = nondet_bool()
 m1 = nondet_bool()

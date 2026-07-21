@@ -1,6 +1,6 @@
 import numpy as np
 
-# ADR-NP-001: an all-true symbolic mask preserves every row, in order.
+# An all-true symbolic mask preserves every row, in order.
 a = np.array([[1, 2], [3, 4]])
 m0 = nondet_bool()
 m1 = nondet_bool()

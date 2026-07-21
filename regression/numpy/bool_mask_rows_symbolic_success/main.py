@@ -1,6 +1,6 @@
 import numpy as np
 
-# ADR-NP-001: a[mask] with a symbolic mask preserves row order.
+# a[mask] with a symbolic mask preserves row order.
 a = np.array([[1, 2], [3, 4], [5, 6]])
 m0 = nondet_bool()
 m1 = nondet_bool()

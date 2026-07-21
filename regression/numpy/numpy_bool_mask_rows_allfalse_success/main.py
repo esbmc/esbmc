@@ -1,6 +1,6 @@
 import numpy as np
 
-# ADR-NP-001: an all-false symbolic mask now builds a result with a runtime
+# an all-false symbolic mask now builds a result with a runtime
 # count of zero (see numpy-architecture-decisions.md).
 n = nondet_bool()
 __ESBMC_assume(not n)
