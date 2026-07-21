@@ -17,7 +17,8 @@ bool ast_equal_ignoring_location(
 {
   static constexpr const char *loc_keys[] = {
     "lineno", "col_offset", "end_lineno", "end_col_offset"};
-  auto is_loc_key = [&](const std::string &k) {
+  auto is_loc_key = [&](const std::string &k)
+  {
     for (const char *lk : loc_keys)
       if (k == lk)
         return true;
@@ -313,7 +314,8 @@ exprt python_list::build_bool_mask_row_select(
     throw std::runtime_error(msg.str());
   }
 
-  auto reject = [&](const std::string &reason) -> exprt {
+  auto reject = [&](const std::string &reason) -> exprt
+  {
     std::ostringstream msg;
     msg << "TypeError: boolean-mask row selection (a[mask]) " << reason;
     if (!location.is_nil())
@@ -336,22 +338,25 @@ exprt python_list::build_bool_mask_row_select(
   // fast path below, but build_bool_mask_row_select_symbolic reads the
   // mask's live runtime value directly (not its AST declaration), so
   // reassignment is sound there.
-  if (json_utils::has_multiple_assignments_in_scope(
-        mask_name, converter_.current_function_name(), converter_.ast()))
+  if (
+    json_utils::has_multiple_assignments_in_scope(
+      mask_name, converter_.current_function_name(), converter_.ast()))
     return build_bool_mask_row_select_symbolic(array, mask, element);
 
   const nlohmann::json mask_decl = json_utils::find_var_decl(
     mask_name, converter_.current_function_name(), converter_.ast());
 
+  // No local declaration is found for a mask that is itself a function
+  // parameter: there is no AST assignment to resolve a literal from, so
+  // read its runtime value instead, same as the
+  // reassigned-mask case above.
   if (
     mask_decl.is_null() || !mask_decl.contains("value") ||
     mask_decl["value"].value("_type", "") != "Call" ||
     !mask_decl["value"].contains("args") ||
     mask_decl["value"]["args"].empty() ||
     mask_decl["value"]["args"][0].value("_type", "") != "List")
-    return reject(
-      "requires a mask variable whose value is a concrete boolean literal, "
-      "e.g. mask = np.array([True, False, ...])");
+    return build_bool_mask_row_select_symbolic(array, mask, element);
 
   const nlohmann::json &mask_elts = mask_decl["value"]["args"][0]["elts"];
 
@@ -463,7 +468,7 @@ exprt python_list::build_bool_mask_row_select_symbolic(
   const BigInt num_cols =
     binary2integer(row_array_type.size().value().c_str(), false);
 
-  // Canonical bounded descriptor result (ADR-NP-001): a `rows` buffer sized
+  // Canonical bounded descriptor result: a `rows` buffer sized
   // at the worst case (every row selected) plus a `count` member holding
   // the number of rows actually selected, so the logical row count is part
   // of the modelled value instead of a detached counter.
@@ -802,7 +807,8 @@ exprt python_list::build_strided_column_select(
   const typet resolved_array_type = ns.follow(array.type());
   const locationt location = converter_.get_location_from_decl(element);
 
-  auto reject = [&](const std::string &reason) -> exprt {
+  auto reject = [&](const std::string &reason) -> exprt
+  {
     std::ostringstream msg;
     msg << "TypeError: strided column slicing (a[:, ::step]) " << reason;
     if (!location.is_nil())
@@ -1091,7 +1097,8 @@ exprt python_list::remove_function_calls_recursive(
   const nlohmann::json &node)
 {
   // Bounds might generate intermediate calls, we need to add lhs to all of them.
-  const auto add_lhs_var_bound = [&](exprt &foo) -> exprt {
+  const auto add_lhs_var_bound = [&](exprt &foo) -> exprt
+  {
     if (!foo.is_function_call())
       return foo;
     code_function_callt &call = static_cast<code_function_callt &>(foo);
@@ -1205,7 +1212,8 @@ exprt python_list::handle_range_slice(
 
       // Extract start/end bounds from slice node
       auto get_bound_expr =
-        [&](const std::string &name, long long default_val) -> exprt {
+        [&](const std::string &name, long long default_val) -> exprt
+      {
         if (!slice_node.contains(name) || slice_node[name].is_null())
           return from_integer(default_val, signedbv_typet(64));
 
@@ -1244,7 +1252,8 @@ exprt python_list::handle_range_slice(
     }
 
     // For array types (local string literals), generate inline loop
-    auto to_size_expr = [&](const exprt &expr) -> exprt {
+    auto to_size_expr = [&](const exprt &expr) -> exprt
+    {
       if (expr.type() == size_type())
         return expr;
       return build_typecast(expr, size_type());
@@ -1253,19 +1262,19 @@ exprt python_list::handle_range_slice(
     // call site feeds size_type operands (process_bound, to_size_expr,
     // array_len and logical_len all yield size_type), so operand and result
     // widths match the size_type result — no reconciliation needed.
-    auto size_add = [](const exprt &lhs, const exprt &rhs) -> exprt {
-      return build_add(lhs, rhs, size_type());
-    };
-    auto size_sub = [](const exprt &lhs, const exprt &rhs) -> exprt {
-      return build_sub(lhs, rhs, size_type());
-    };
-    auto size_mul = [](const exprt &lhs, const exprt &rhs) -> exprt {
+    auto size_add = [](const exprt &lhs, const exprt &rhs) -> exprt
+    { return build_add(lhs, rhs, size_type()); };
+    auto size_sub = [](const exprt &lhs, const exprt &rhs) -> exprt
+    { return build_sub(lhs, rhs, size_type()); };
+    auto size_mul = [](const exprt &lhs, const exprt &rhs) -> exprt
+    {
       expr2tc l, r;
       migrate_expr(lhs, l);
       migrate_expr(rhs, r);
       return migrate_expr_back(mul2tc(migrate_type(size_type()), l, r));
     };
-    auto size_div = [](const exprt &lhs, const exprt &rhs) -> exprt {
+    auto size_div = [](const exprt &lhs, const exprt &rhs) -> exprt
+    {
       expr2tc l, r;
       migrate_expr(lhs, l);
       migrate_expr(rhs, r);
@@ -1289,7 +1298,8 @@ exprt python_list::handle_range_slice(
 
     // Process slice bounds (handles null, negative indices)
     auto process_bound =
-      [&](const std::string &bound_name, const exprt &default_value) -> exprt {
+      [&](const std::string &bound_name, const exprt &default_value) -> exprt
+    {
       if (!slice_node.contains(bound_name) || slice_node[bound_name].is_null())
         return to_size_expr(default_value);
 
@@ -1339,7 +1349,8 @@ exprt python_list::handle_range_slice(
       const type2tc size_t2 = migrate_type(size_type());
       expr2tc len2;
       migrate_expr(logical_len, len2);
-      auto clamp_to_len = [&](exprt &bound) {
+      auto clamp_to_len = [&](exprt &bound)
+      {
         expr2tc b2;
         migrate_expr(bound, b2);
         bound = migrate_expr_back(
@@ -1542,13 +1553,15 @@ exprt python_list::handle_range_slice(
   // signed_t2 result is the exact round-trip of the legacy plus/minus whose
   // result type was overridden to signed_t.
   const type2tc signed_t2 = migrate_type(signed_t);
-  auto signed_add = [&](const exprt &lhs, const exprt &rhs) -> exprt {
+  auto signed_add = [&](const exprt &lhs, const exprt &rhs) -> exprt
+  {
     expr2tc lhs2, rhs2;
     migrate_expr(lhs, lhs2);
     migrate_expr(rhs, rhs2);
     return migrate_expr_back(add2tc(signed_t2, lhs2, rhs2));
   };
-  auto signed_sub = [&](const exprt &lhs, const exprt &rhs) -> exprt {
+  auto signed_sub = [&](const exprt &lhs, const exprt &rhs) -> exprt
+  {
     expr2tc lhs2, rhs2;
     migrate_expr(lhs, lhs2);
     migrate_expr(rhs, rhs2);
@@ -1559,7 +1572,8 @@ exprt python_list::handle_range_slice(
   // Returns an expression of `counter_type`. We always work through signed
   // arithmetic so negative bounds (literal or runtime), the -1 stop sentinel,
   // and the clamp tree stay representable.
-  auto resolve_bound = [&](const std::string &name, bool is_upper) -> exprt {
+  auto resolve_bound = [&](const std::string &name, bool is_upper) -> exprt
+  {
     const exprt size_signed = build_typecast(build_symbol(size_sym), signed_t);
     const exprt zero_s = from_integer(0, signed_t);
     const exprt one_s = from_integer(1, signed_t);
@@ -1871,7 +1885,8 @@ void python_list::handle_slice_assignment(
       if (rev_fn)
       {
         const typet i64r = signedbv_typet(64);
-        auto rev_bound = [&](const char *name, bool &present) -> exprt {
+        auto rev_bound = [&](const char *name, bool &present) -> exprt
+        {
           present = slice_node.contains(name) && !slice_node[name].is_null();
           if (!present)
             return from_integer(0, i64r);
@@ -1946,7 +1961,8 @@ void python_list::handle_slice_assignment(
       "List slice assignment requires a list right-hand side");
 
   const typet i64 = signedbv_typet(64);
-  auto bound_expr = [&](const char *name, bool &present) -> exprt {
+  auto bound_expr = [&](const char *name, bool &present) -> exprt
+  {
     present = slice_node.contains(name) && !slice_node[name].is_null();
     if (!present)
       return from_integer(0, i64);
@@ -1988,7 +2004,8 @@ void python_list::handle_slice_assignment(
   // else (pointers, structs, strings, nested lists, non-literal/heterogeneous
   // RHS) keeps elem_size 0, making the model fall back to the per-element
   // o->size read — exact prior behaviour, so a wrong length is impossible.
-  auto scalar_width = [](const typet &t) -> size_t {
+  auto scalar_width = [](const typet &t) -> size_t
+  {
     if (
       (t.id() == "signedbv" || t.id() == "unsignedbv" || t.id() == "floatbv" ||
        t.id() == "fixedbv") &&
@@ -2952,9 +2969,8 @@ exprt python_list::extract_pyobject_value(
   if (elem_type.is_floatbv())
   {
     // Helper: build (*pyobject_expr).field for a given field/type.
-    auto member_of = [&](const char *field, const typet &ftype) -> exprt {
-      return build_deref_member(pyobject_expr, field, ftype);
-    };
+    auto member_of = [&](const char *field, const typet &ftype) -> exprt
+    { return build_deref_member(pyobject_expr, field, ftype); };
 
     // Look up __ESBMC_float_buf global (static in list.c, but still in symbol table)
     const symbolt *fbuf_sym =

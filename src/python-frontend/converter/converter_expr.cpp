@@ -107,9 +107,8 @@ static bool is_full_slice_node(const nlohmann::json &node)
 {
   if (!(node.contains("_type") && node["_type"] == "Slice"))
     return false;
-  auto is_absent = [&](const char *key) {
-    return !node.contains(key) || node[key].is_null();
-  };
+  auto is_absent = [&](const char *key)
+  { return !node.contains(key) || node[key].is_null(); };
   return is_absent("lower") && is_absent("upper") && is_absent("step");
 }
 
@@ -574,7 +573,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Resolve `<base>.<attr>` after unwrapping Optional[T] / pointer-to-struct
       // / complex types. Returns nil if the attribute cannot be resolved.
       auto resolve_member_on_base =
-        [this](exprt base_expr, const std::string &attr_name) -> exprt {
+        [this](exprt base_expr, const std::string &attr_name) -> exprt
+      {
         typet base_type = base_expr.type();
         if (base_type.is_pointer())
           base_type = base_type.subtype();
@@ -904,7 +904,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // name is shadowed by a local binding in the current scope (e.g. a
       // parameter named `node` when `from node import Node` is in scope).
       // Python's scoping rules give precedence to the local binding.
-      auto name_resolves_to_symbol = [&](const std::string &name) {
+      auto name_resolves_to_symbol = [&](const std::string &name)
+      {
         symbol_id sid = create_symbol_id();
         sid.set_object(name);
         if (find_symbol(sid.to_string()))
@@ -1236,17 +1237,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         symbolt *target_class_symbol = nullptr;
 
         // Search all class types in the symbol table to find one that has this attribute
-        symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
-          if (target_class_symbol)
-            return; // Already found
-
-          if (s.id.as_string().find("tag-") == 0 && s.get_type().is_struct())
+        symbol_table_.foreach_operand_in_order(
+          [&](const symbolt &s)
           {
-            const struct_typet &struct_type = to_struct_type(s.get_type());
-            if (struct_type.has_component(attr_name))
-              target_class_symbol = const_cast<symbolt *>(&s);
-          }
-        });
+            if (target_class_symbol)
+              return; // Already found
+
+            if (s.id.as_string().find("tag-") == 0 && s.get_type().is_struct())
+            {
+              const struct_typet &struct_type = to_struct_type(s.get_type());
+              if (struct_type.has_component(attr_name))
+                target_class_symbol = const_cast<symbolt *>(&s);
+            }
+          });
 
         if (!target_class_symbol)
         {
@@ -1303,16 +1306,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       if (!class_symbol)
       {
         std::string fallback_class_id;
-        symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
-          if (!fallback_class_id.empty())
-            return;
-          if (s.id.as_string().find("tag-") == 0 && s.get_type().is_struct())
+        symbol_table_.foreach_operand_in_order(
+          [&](const symbolt &s)
           {
-            const struct_typet &st = to_struct_type(s.get_type());
-            if (st.has_component(attr_name))
-              fallback_class_id = s.id.as_string();
-          }
-        });
+            if (!fallback_class_id.empty())
+              return;
+            if (s.id.as_string().find("tag-") == 0 && s.get_type().is_struct())
+            {
+              const struct_typet &st = to_struct_type(s.get_type());
+              if (st.has_component(attr_name))
+                fallback_class_id = s.id.as_string();
+            }
+          });
         if (!fallback_class_id.empty())
           class_symbol = symbol_table_.find_symbol(fallback_class_id);
       }
@@ -1343,7 +1348,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // type, so own it locally and set it back at the end.
       typet class_symbol_type = class_symbol->get_type();
       struct_typet &class_type = static_cast<struct_typet &>(class_symbol_type);
-      auto build_member_expr_from_class = [&](const typet &attr_type) -> exprt {
+      auto build_member_expr_from_class = [&](const typet &attr_type) -> exprt
+      {
         typet clean_type = clean_attribute_type(attr_type);
         exprt base = symbol_expr(*symbol);
         typet base_type = base.type();
@@ -1474,10 +1480,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             const typet &attr_type = class_type.get_component(attr_name).type();
             expr = build_member_expr_from_class(attr_type);
           }
-          else if (is_property_method(
-                     (*ast_json)["body"],
-                     extract_class_name_from_tag(obj_type_name),
-                     attr_name))
+          else if (
+            is_property_method(
+              (*ast_json)["body"],
+              extract_class_name_from_tag(obj_type_name),
+              attr_name))
           {
             // Reading a @property: invoke its getter. Rewrite `obj.attr` to a
             // call `obj.attr()` and convert that, reusing the method-call
@@ -1667,7 +1674,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     const bool array_is_runtime_list =
       array_type == list_type ||
       (array_type.is_pointer() && ns.follow(array_type.subtype()) == list_type);
-    const bool array_is_builtin_array = array_type.is_array();
+    // A parameter used in an `a[mask]` pattern decays to pointer-to-whole-
+    // array (see register_function_argument), so recognizing it here needs
+    // the same pointer unwrap already used for the dict/tuple cases above.
+    const bool array_is_builtin_array =
+      array_type.is_array() ||
+      (array_type.is_pointer() && ns.follow(array_type.subtype()).is_array());
     const bool tuple_index_targets_list_model =
       array_is_runtime_list || array_is_builtin_array;
 
@@ -1810,13 +1822,33 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       exprt mask_candidate = get_expr(slice);
       if (!contains_cpp_throw(mask_candidate))
       {
-        const typet mask_type = ns.follow(mask_candidate.type());
+        typet mask_type = ns.follow(mask_candidate.type());
+        // A mask parameter decays to pointer-to-whole-array
+        // unwrap it the same way `array` is unwrapped below.
+        if (mask_type.is_pointer())
+        {
+          typet pointed = ns.follow(mask_type.subtype());
+          if (pointed.is_array())
+          {
+            mask_candidate =
+              python_expr::build_dereference(mask_candidate, pointed);
+            mask_type = pointed;
+          }
+        }
         if (mask_type.is_array())
         {
           if (ns.follow(mask_type.subtype()).is_bool())
           {
+            exprt mask_array = array;
+            if (array_type.is_pointer())
+            {
+              typet pointed = ns.follow(array_type.subtype());
+              if (pointed.is_array())
+                mask_array = python_expr::build_dereference(array, pointed);
+            }
             python_list list(*this, element);
-            expr = list.build_bool_mask_index(array, mask_candidate, element);
+            expr =
+              list.build_bool_mask_index(mask_array, mask_candidate, element);
             break;
           }
 
@@ -1850,7 +1882,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           const std::string idx_name = slice["id"].get<std::string>();
           const locationt loc = get_location_from_decl(element);
 
-          auto reject = [&](const std::string &reason) {
+          auto reject = [&](const std::string &reason)
+          {
             std::ostringstream msg;
             msg << "TypeError: fancy indexing through a variable (a[idx]) "
                 << reason;
@@ -1862,8 +1895,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           // find_var_decl returns the first textual assignment in scope,
           // not necessarily the one reaching this use site; reject any
           // reassignment rather than risk resolving a stale index list.
-          if (json_utils::has_multiple_assignments_in_scope(
-                idx_name, current_func_name_, *ast_json))
+          if (
+            json_utils::has_multiple_assignments_in_scope(
+              idx_name, current_func_name_, *ast_json))
             reject(
               "requires an index variable that is assigned exactly once "
               "(no reassignment) so its literal value can be resolved "
@@ -1991,7 +2025,8 @@ static exprt make_slice_struct_expr(
   // lowered to a check of those flags in converter_compare.cpp
   // (try_lower_slice_member_is_none). See github #4543.
   auto lower_int =
-    [&](const nlohmann::json *node, const typet &field_type) -> exprt {
+    [&](const nlohmann::json *node, const typet &field_type) -> exprt
+  {
     if (!node || node->is_null())
       return side_effect_expr_nondett(field_type);
     exprt value = conv.get_expr(*node);
@@ -2006,9 +2041,8 @@ static exprt make_slice_struct_expr(
     return value;
   };
 
-  auto present_flag = [](const nlohmann::json *node) {
-    return node && !node->is_null();
-  };
+  auto present_flag = [](const nlohmann::json *node)
+  { return node && !node->is_null(); };
 
   // V.3: build the PySliceObject value in IREP2. Each member is built exactly
   // as the legacy struct_exprt did -- start/stop/step (a value, nondet, or an

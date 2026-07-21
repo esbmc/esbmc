@@ -118,8 +118,7 @@ public:
 
   /**
    * @brief Lower whole-row boolean-mask selection `a[mask]` on a 2-D array
-   * for a symbolic (non-literal) @p mask, per ADR-NP-001
-   * (numpy-architecture-decisions.md): the result is the canonical bounded
+   * for a symbolic (non-literal) mask: the result is the canonical bounded
    * descriptor shape — a worst-case-sized `rows` buffer (capacity ==
    * @p array's row count) plus a runtime `count` member holding the number
    * of rows actually selected, so the logical size is part of the modelled
