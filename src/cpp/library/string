@@ -1234,12 +1234,9 @@ bool basic_string<CharT, Traits, Alloc>::operator>(
 __ESBMC_HIDE:
   __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
   int i;
-  for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++)
-  {
-    if (this->str[i] > a.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; this->str[i] != '\0' && this->str[i] == a.str[i]; i++)
+    ;
+  return (unsigned char)this->str[i] > (unsigned char)a.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1248,12 +1245,9 @@ bool basic_string<CharT, Traits, Alloc>::operator>(const char *a)
 __ESBMC_HIDE:
   __ESBMC_assert(a != NULL, "The parameter must be different than NULL");
   int i;
-  for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++)
-  {
-    if (this->str[i] > a[i])
-      return true;
-  }
-  return false;
+  for (i = 0; this->str[i] != '\0' && this->str[i] == a[i]; i++)
+    ;
+  return (unsigned char)this->str[i] > (unsigned char)a[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1267,12 +1261,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs.str[i] != '\0') && (rhs.str[i] != '\0'); i++)
-  {
-    if (lhs.str[i] > rhs.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] > (unsigned char)rhs.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1286,12 +1277,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs.str[i] != '\0') && (rhs.str[i] != '\0'); i++)
-  {
-    if (lhs.str[i] < rhs.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] < (unsigned char)rhs.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1303,12 +1291,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs[i] != '\0') && (rhs.str[i] != '\0'); i++)
-  {
-    if (lhs[i] > rhs.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs[i] != '\0' && lhs[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs[i] > (unsigned char)rhs.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1320,12 +1305,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs.str[i] != '\0') && (rhs[i] != '\0'); i++)
-  {
-    if (lhs.str[i] > rhs[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] > (unsigned char)rhs[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1335,12 +1317,9 @@ bool basic_string<CharT, Traits, Alloc>::operator<(
 __ESBMC_HIDE:
   __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
   int i;
-  for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++)
-  {
-    if (this->str[i] < a.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; this->str[i] != '\0' && this->str[i] == a.str[i]; i++)
+    ;
+  return (unsigned char)this->str[i] < (unsigned char)a.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1349,12 +1328,9 @@ bool basic_string<CharT, Traits, Alloc>::operator<(const char *a)
 __ESBMC_HIDE:
   __ESBMC_assert(a != NULL, "The parameter must be different than NULL");
   int i;
-  for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++)
-  {
-    if (this->str[i] < a[i])
-      return true;
-  }
-  return false;
+  for (i = 0; this->str[i] != '\0' && this->str[i] == a[i]; i++)
+    ;
+  return (unsigned char)this->str[i] < (unsigned char)a[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1366,12 +1342,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs[i] != '\0') && (rhs.str[i] != '\0'); i++)
-  {
-    if (lhs[i] < rhs.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs[i] != '\0' && lhs[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs[i] < (unsigned char)rhs.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1383,12 +1356,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs.str[i] != '\0') && (rhs[i] != '\0'); i++)
-  {
-    if (lhs.str[i] < rhs[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] < (unsigned char)rhs[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
