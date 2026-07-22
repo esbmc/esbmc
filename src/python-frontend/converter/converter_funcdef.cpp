@@ -175,8 +175,7 @@ bool python_converter::function_is_generator(
   // function/lambda scopes: a yield inside those belongs to the inner
   // generator, not this one.
   std::function<bool(const nlohmann::json &)> scan =
-    [&](const nlohmann::json &node) -> bool
-  {
+    [&](const nlohmann::json &node) -> bool {
     if (node.is_object())
     {
       auto it = node.find("_type");
@@ -211,9 +210,8 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
 {
   TypeFlags flags;
 
-  std::function<void(const nlohmann::json &)> scan =
-    [&](const nlohmann::json &body)
-  {
+  std::function<void(const nlohmann::json &)> scan = [&](const nlohmann::json
+                                                           &body) {
     for (const auto &stmt : body)
     {
       if (stmt["_type"] == "Return" && stmt["value"].is_null())
@@ -413,8 +411,7 @@ bool body_returns_list_value(const nlohmann::json &body)
   collect_list_bound_names(body, list_names);
 
   std::function<bool(const nlohmann::json &)> check =
-    [&](const nlohmann::json &b) -> bool
-  {
+    [&](const nlohmann::json &b) -> bool {
     if (!b.is_array())
       return false;
     for (const auto &stmt : b)
@@ -506,13 +503,11 @@ static void collect_self_attr_stores_of_param(
   if (!body.is_array())
     return;
 
-  auto rhs_is_param = [&](const nlohmann::json &v)
-  {
+  auto rhs_is_param = [&](const nlohmann::json &v) {
     return v.is_object() && v.value("_type", "") == "Name" &&
            v.contains("id") && v["id"] == param_name;
   };
-  auto extract_self_attr = [](const nlohmann::json &t) -> std::string
-  {
+  auto extract_self_attr = [](const nlohmann::json &t) -> std::string {
     if (
       t.is_object() && t.value("_type", "") == "Attribute" &&
       t.contains("value") && t["value"].is_object() &&
@@ -781,8 +776,7 @@ bool python_converter::try_infer_numpy_param_type(
   // typed for a smaller one -- unnoticed, not just truncated.
   bool found = false;
   typet resolved_type;
-  auto record = [&](const typet &candidate)
-  {
+  auto record = [&](const typet &candidate) {
     if (found && resolved_type != candidate)
       throw std::runtime_error(
         "TypeError: conflicting array shapes inferred for parameter " +
@@ -857,9 +851,8 @@ bool python_converter::try_infer_numpy_param_type(
       if (enclosing_params[i].value("arg", "") == arg_name)
       {
         typet forwarded_type;
-        if (
-          try_infer_numpy_param_type(
-            site.enclosing_function, i, forwarded_type, visiting))
+        if (try_infer_numpy_param_type(
+              site.enclosing_function, i, forwarded_type, visiting))
           record(forwarded_type);
         break;
       }
@@ -917,12 +910,11 @@ size_t python_converter::register_function_argument(
   {
     typet inferred_array_type;
     std::set<std::string> visiting;
-    if (
-      try_infer_numpy_param_type(
-        id.get_function(),
-        type.arguments().size(),
-        inferred_array_type,
-        visiting))
+    if (try_infer_numpy_param_type(
+          id.get_function(),
+          type.arguments().size(),
+          inferred_array_type,
+          visiting))
       arg_type = inferred_array_type;
   }
 
@@ -1266,8 +1258,7 @@ void python_converter::validate_return_paths(
 
 typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
 {
-  auto infer_constant_type = [](const nlohmann::json &constant_value) -> typet
-  {
+  auto infer_constant_type = [](const nlohmann::json &constant_value) -> typet {
     if (constant_value.is_number_float())
       return double_type();
     if (constant_value.is_number_integer())
@@ -1541,8 +1532,7 @@ void python_converter::get_function_definition(
   // real implementation (a union return) is typed `void*` and never reaches
   // this branch. The same migration is applied below to a return type recovered
   // by post-annotation inference (e.g. `return self`).
-  auto migrate_user_class_return = [&](typet &t) -> bool
-  {
+  auto migrate_user_class_return = [&](typet &t) -> bool {
     if (
       is_user_class_struct_type(t) &&
       !json_utils::has_overload_decorator(function_node))
@@ -1569,11 +1559,9 @@ void python_converter::get_function_definition(
   // This applies even when the function has an explicit return annotation:
   // Python does not enforce annotations, so `-> int` with `return None` in
   // the body must be modelled as Optional[int].
-  auto body_has_none_return = [](const nlohmann::json &body) -> bool
-  {
+  auto body_has_none_return = [](const nlohmann::json &body) -> bool {
     std::function<bool(const nlohmann::json &)> scan =
-      [&](const nlohmann::json &stmts) -> bool
-    {
+      [&](const nlohmann::json &stmts) -> bool {
       for (const auto &s : stmts)
       {
         if (s["_type"] == "Return")
@@ -1668,8 +1656,7 @@ void python_converter::get_function_definition(
   // bodies used to abort() in converter_expr (a core dump) as soon as the
   // module was imported. Return the stub's type suffix (e.g. "int") so we can
   // synthesise a safe body instead of converting the real one; "" otherwise.
-  auto nondet_stub_suffix = [](const std::string &name) -> std::string
-  {
+  auto nondet_stub_suffix = [](const std::string &name) -> std::string {
     for (const std::string_view prefix : {"__VERIFIER_nondet_", "nondet_"})
     {
       if (name.rfind(prefix, 0) == 0)
@@ -1747,8 +1734,7 @@ void python_converter::get_function_definition(
     // type instead would narrow a heterogeneous function to the wrong branch
     // and collapse the call-site cross-type `==` fold to constant False
     // (GitHub #5157).
-    auto top_level_return_type = [&]() -> std::optional<typet>
-    {
+    auto top_level_return_type = [&]() -> std::optional<typet> {
       for (const auto &instr : function_body.operands())
       {
         if (!instr.is_code() || to_code(instr).get_statement() != "return")
@@ -1766,8 +1752,7 @@ void python_converter::get_function_definition(
     // leaves the return type empty -> void -> the value is stripped by
     // remove_returns and the call site reads nondet.
     std::function<std::optional<typet>(const exprt &)> nested_return_type =
-      [&](const exprt &node) -> std::optional<typet>
-    {
+      [&](const exprt &node) -> std::optional<typet> {
       if (node.is_code() && to_code(node).get_statement() == "return")
       {
         const code_returnt &ret = to_code_return(to_code(node));
