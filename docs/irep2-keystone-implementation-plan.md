@@ -5,6 +5,17 @@ Working plan for the IREP2-native resolution keystone tracked in
 `feat/python-irep2-adjust-keystone` and is the execution roadmap; the
 canonical record stays in `irep2-migration.md`. Delete on merge.
 
+> **Status (2026-07-22).** Every W and D site in the ordered list below has
+> landed — task 4's "deferred, entangled" residue closed with
+> [#5725](https://github.com/esbmc/esbmc/pull/5725), and the retain boundary for
+> custom `isinstance`/`isnone` nodes is a finding, not outstanding work. The one
+> item still open is the **float residue** (task 6's last bullet), and its file
+> citations had gone stale — they are corrected in place below. Several paths
+> named here also moved when `python-frontend` was split into subdirectories
+> (`python_math.cpp` → `math/`, `numpy_call_expr.cpp` → `numpy/`); the entries
+> keep their original wording with the current location noted, rather than being
+> silently rewritten, so the commit trail stays legible.
+
 ## What the spike established (see irep2-migration.md, "Spike result 2026-06-30")
 
 The residual that blocks the converter from building IREP2 directly is two
@@ -62,18 +73,26 @@ matched-text parity over the affected regression suite, asserts build.
    (The doc's stale `python_list.cpp:4120/4533` line numbers; python-list is now
    split. Other list loop conditions — `list_access`, `list_construction:165`,
    `list_comprehension:494` — were already migrated by earlier V.3 sweeps.)
-4. **W** [PARTIAL] `python_math.cpp` floor-div/modulo sign-correction trees —
-   the four `value < 0` sign tests migrated via a shared `build_sign_test`
-   helper. Commit 5642865dfa. REMAINING in these trees (deferred, entangled):
-   the `mod(lhs,rhs)` node (nested width-hazard on lhs/rhs), the bool `xor`
-   (must stay bool-xor, not bitxor — #4548 Bitwuzla crash), `and`, the modulo
-   `if(cond, rhs, 0)` (mismatched branch widths), and the outer `+`/`-`.
+4. **W** [DONE] `python_math.cpp` floor-div/modulo sign-correction trees — the
+   four `value < 0` sign tests migrated via a shared `build_sign_test` helper
+   (commit 5642865dfa), and the residue this entry once listed as "deferred,
+   entangled" — the `mod(lhs,rhs)` node, the bool `xor` (still bool-xor, not
+   bitxor — #4548), `and`, the modulo `if(cond, rhs, 0)`, and the outer `+`/`-`
+   — all landed in [#5725](https://github.com/esbmc/esbmc/pull/5725) via
+   `python_expr::build_{mod,and,xor,if,add,sub}`. The file has since moved to
+   `src/python-frontend/math/python_math.cpp`; the call sites are its
+   `handle_floor_division` / `handle_int_modulo`.
 4b. **W** [DONE] `list_mutation.cpp:935` — `idx < str_len` in
    build_extend_list_call. Commit fe23ac42b5. **With this, every clean
    loop-condition / sign-test width-hazard is drained.** A full census
    (`grep '("<"' etc. across src/python-frontend`) leaves only: the entangled
-   `python_math` tree nodes (task 4 remaining) and one float site
-   `numpy_call_expr.cpp:2503` (ieee_sub + rounding-mode — a different hazard).
+   `python_math` tree nodes (task 4, since drained — see above) and one float
+   site then cited as `numpy_call_expr.cpp:2503` (ieee_sub + rounding-mode — a
+   different hazard). **Both citations are now stale:** `numpy_call_expr.cpp`
+   builds no `ieee_*` nodes at all, and the float residue lives in
+   `src/python-frontend/math/complex_handler.cpp` (the `exprt("ieee_add")`
+   family in `complex_pow`'s operand dispatch). `complex_mul`/`complex_div`/
+   `complex_log` there are already `ieee_*2tc`.
 
 5. **D** [PARTIAL] `builtins.cpp:369` isinstance is-None — DONE (commit
    9a7755247f). **Key finding: the F-P11 wall is milder than framed here.**
@@ -109,9 +128,14 @@ matched-text parity over the affected regression suite, asserts build.
      `__getitem__` path) → `build_dereference` (commit a22a6486fe). The base is a
      pointer-to-tuple parameter; build_dereference handles #cpp_type + dyn-array
      fallback. github_4539 suite (9) + A/B parity.
-   - [TODO, risky] `numpy_call_expr.cpp:1607` complex int→double — FLOAT
-     (ieee ops + rounding-mode; the `out.type()=...` + adjust_float_arith
-     rounding-mode is the known-fragile migration path, defer).
+   - [TODO, risky] The float residue — `ieee_*` construction plus the
+     rounding-mode/`adjust_float_arith` path, still the known-fragile migration.
+     Originally cited as `numpy_call_expr.cpp:1607`; **that citation is stale**
+     (no `ieee_*` nodes remain in that file). What is left is the
+     `exprt("ieee_add"/"ieee_sub"/"ieee_mul"/"ieee_div")` dispatch in
+     `src/python-frontend/math/complex_handler.cpp`. Its sibling helpers
+     (`complex_mul`, `complex_div`, `complex_log`) are already IREP2, so this is
+     the last legacy float site on the converter's complex path.
 
 ## Verification protocol per commit
 
