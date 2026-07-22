@@ -125,7 +125,7 @@ Architectural decisions that gate specific pendencies here (referenced as
 
 | Category | Missing items |
 |---|---|
-| Array creation | `empty` |
+| Array creation | `empty`; `empty_like`/`zeros_like`/`ones_like`/`full_like` |
 | Sorting / searching | `sort`, `argsort`, `searchsorted`, `unique` |
 | Statistics | `median`, `percentile` |
 | Linear algebra | `inv`/`solve` limited to ≤3×3; `norm` limited to Frobenius; `eig`/`svd` limited to ≤3×3 concrete matrices |
