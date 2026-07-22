@@ -192,6 +192,12 @@ private:
    */
   exprt handle_float_is_integer_literal() const;
 
+  /**
+   * @brief Fold (3.5).hex() on a constant float literal receiver to CPython's
+   *        hexadecimal string ("0x1.c000000000000p+1").
+   */
+  exprt handle_float_hex_literal() const;
+
   /*
    * Extracts a string representation from a symbol's constant value.
    * Handles both character arrays (e.g., ['6', '5']) and single-character
@@ -518,6 +524,8 @@ private:
   bool is_int_literal_method_call() const;
   // float.is_integer() on a constant float-literal receiver.
   bool is_float_is_integer_literal_call() const;
+  // float.hex() on a constant float-literal receiver.
+  bool is_float_hex_literal_call() const;
   // __iter__ on a builtin iterable (range/list/tuple/str/set/...).
   bool is_iter_on_builtin_call() const;
   // x.__str__() with no args on a builtin scalar (int/float/bool/str).

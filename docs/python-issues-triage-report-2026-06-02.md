@@ -4150,3 +4150,41 @@ Next: consolidate the remaining float renderers onto the shortest-repr helper, w
 `str()` fold cover the inexact values §87 leaves nondet. The §3 design-level blockers, §3c
 policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand.
 The §5 priority order stands.
+
+## 90. 2026-07-22 re-validation (eightieth sweep) & float.hex() literal fold
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. This sweep is
+**independent of the §87–§89 float-format work** (open stacked PRs #6247←#6249←#6250) — it is a fresh
+branch off `master` in a different file/path, deliberately not deepening that stack. It closes the
+last of the §15b "unmodeled method" catalogue: `float.hex()`.
+
+> **Note on numbering.** §87–§89 are in flight on the stacked PRs above and not yet on `master`; this
+> section is numbered §90 so it does not collide with them. When all land, the maintainer orders
+> §87→§88→§89→§90.
+
+### 90a. New isolated, soundly-fixable defect found & fixed
+**`float.hex()` on a constant float receiver was unmodeled** — ESBMC replaced the undefined method
+with a nondet string, so `(3.5).hex() == "0x1.c000000000000p+1"` reported a spurious `FAILED`
+(catalogued in §15b as an "isolated add-the-model candidate").
+
+**Fix**: fold a literal-receiver `(x).hex()` to CPython's exact hexadecimal string, mirroring the
+existing `float.is_integer()` literal fold (§18) — a new `is_float_hex_literal_call()` predicate +
+`handle_float_hex_literal()` handler + dispatch entry in `function_call/expr.cpp`. The rendering is a
+one-liner: glibc's `"%.13a"` prints the 13 hex mantissa digits (= the 52-bit significand), which is
+**byte-identical to CPython for every finite non-zero value** (verified by a C-vs-CPython differential
+over normal, subnormal, negative and boundary values — the only divergence is zero, which CPython
+collapses to a single `"0"` mantissa while `%a` pads to 13, special-cased here). `%a` is exact (no
+rounding), so no `round_to_nearest_guard` is needed. Only a **literal** receiver is folded; a `Name`
+receiver has no float OM for `hex()` and stays unsupported, and inf/nan cannot arise (a float literal
+that overflows, e.g. `1e400`, already fails the AST-JSON parse upstream), so the inf/nan branches were
+dropped as unreachable.
+
+New regression pair `regression/python/float_hex_literal{,_fail}` (CORE): the positive covers normal
+values, carried sign, `-0.0`, and large/small/subnormal magnitudes (`1e300`, `1e-300`, `5e-324`);
+the `_fail` pins the wrong-value assertion as `FAILED`. Every positive cross-checked against CPython
+`float.hex`; 11-test float-method subset green; clang-format 11 + YAPF clean.
+
+### 90b. Everything else: unchanged disposition
+`float.fromhex()` (the classmethod inverse) remains an unsupported stub — a natural follow-up. The §3
+design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand. The §5 priority order stands.

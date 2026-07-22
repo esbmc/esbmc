@@ -1070,6 +1070,41 @@ exprt function_call_expr::handle_float_is_integer_literal() const
   return migrate_expr_back(is_int ? gen_true_expr() : gen_false_expr());
 }
 
+// Render a double as CPython's float.hex() does. "%.13a" prints the 13 hex
+// mantissa digits (= the 52-bit significand), so the representation is exact
+// and byte-identical to CPython for every finite non-zero value; only zero
+// (which CPython collapses to a single "0" mantissa) needs special spelling.
+// A float literal can never be inf/nan here — those overflow the AST-JSON
+// parser before reaching this fold — but %a would still spell them correctly.
+static std::string py_float_hex(double d)
+{
+  if (d == 0.0)
+    return std::signbit(d) ? "-0x0.0p+0" : "0x0.0p+0";
+  char buf[64];
+  std::snprintf(buf, sizeof(buf), "%.13a", d);
+  return buf;
+}
+
+exprt function_call_expr::handle_float_hex_literal() const
+{
+  if (
+    !call_["args"].empty() ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    throw std::runtime_error("hex() takes no arguments");
+
+  // Receiver is a constant float literal, or a unary +/- over one.
+  const auto &obj = call_["func"]["value"];
+  const nlohmann::json &lit = obj["_type"] == "UnaryOp" ? obj["operand"] : obj;
+  double d = lit["value"].get<double>();
+  if (
+    obj["_type"] == "UnaryOp" && obj.contains("op") &&
+    ((obj["op"].is_object() && obj["op"].value("_type", "") == "USub") ||
+     (obj["op"].is_string() && obj["op"] == "USub")))
+    d = -d;
+
+  return converter_.get_string_builder().build_string_literal(py_float_hex(d));
+}
+
 exprt function_call_expr::handle_bytes_fromhex() const
 {
   // bytes.fromhex("0102") == b"\x01\x02". Fold a constant hex string into a
@@ -2797,6 +2832,28 @@ bool function_call_expr::is_float_is_integer_literal_call() const
            (obj["op"] == "USub" || obj["op"] == "UAdd")));
 }
 
+bool function_call_expr::is_float_hex_literal_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+  if (function_id_.get_function() != "hex")
+    return false;
+  const auto &obj = call_["func"]["value"];
+  // A constant float literal, or a unary +/- over one; a Name receiver has no
+  // float.hex() operational model and is left unsupported.
+  if (
+    obj["_type"] == "Constant" && obj.contains("value") &&
+    obj["value"].is_number_float())
+    return true;
+  return obj["_type"] == "UnaryOp" && obj.contains("op") &&
+         obj.contains("operand") && obj["operand"].contains("value") &&
+         obj["operand"]["value"].is_number_float() &&
+         ((obj["op"].is_object() && (obj["op"].value("_type", "") == "USub" ||
+                                     obj["op"].value("_type", "") == "UAdd")) ||
+          (obj["op"].is_string() &&
+           (obj["op"] == "USub" || obj["op"] == "UAdd")));
+}
+
 bool function_call_expr::is_iter_on_builtin_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -3477,6 +3534,12 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_float_is_integer_literal_call(); },
      [this]() { return handle_float_is_integer_literal(); },
      "float.is_integer()"},
+
+    // float.hex() on a constant literal receiver, e.g. (3.5).hex(). A Name
+    // receiver has no float OM for hex() and stays unsupported.
+    {[this]() { return is_float_hex_literal_call(); },
+     [this]() { return handle_float_hex_literal(); },
+     "float.hex()"},
 
     // Min/Max functions
     {[this]() { return is_min_max_call(); },
