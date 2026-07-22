@@ -78,16 +78,6 @@ const symbolt *complex_handler::find_cached_symbol(const std::string &id) const
 // Shared IEEE / complex arithmetic helpers
 // -----------------------------------------------------------------------
 
-exprt complex_handler::ieee_binop(
-  const irep_idt &id,
-  const exprt &x,
-  const exprt &y)
-{
-  exprt out(id, cached_double_type());
-  out.copy_to_operands(x, y);
-  return out;
-}
-
 exprt complex_handler::complex_mul(const exprt &x, const exprt &y) const
 {
   // V.3: build the whole complex product in IREP2, back-migrating once. Members
@@ -95,7 +85,7 @@ exprt complex_handler::complex_mul(const exprt &x, const exprt &y) const
   // complex_member); each IEEE op carries the default __ESBMC_rounding_mode
   // symbol migrate_expr attaches to a legacy ieee_* node; the double-typed
   // result needs no typecast -- so this back-migrates to the same struct the
-  // legacy make_complex(ieee_binop...) path produced (goto byte-identical,
+  // legacy make_complex(ieee_*) path produced (goto byte-identical,
   // verified via --goto-functions-only diff on the complex-power tests).
   // Mirrors complex_member / complex_typecast.
   const type2tc dt2 = migrate_type(cached_double_type());
@@ -131,7 +121,7 @@ exprt complex_handler::complex_div(
   // the double-typed .real/.imag members (member2t over the complex struct, as
   // complex_member does) and each IEEE op carries the default
   // __ESBMC_rounding_mode symbol migrate_expr attaches to a legacy ieee_* node
-  // -- so the back-migrated struct matches the legacy make_complex(ieee_binop)
+  // -- so the back-migrated struct matches the legacy make_complex(ieee_*)
   // path (goto byte-identical). Like complex_mul.
   const type2tc dt2 = migrate_type(cached_double_type());
   const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
@@ -198,7 +188,7 @@ exprt complex_handler::complex_log(
   // V.3: build |z|^2 = zr*zr + zi*zi in IREP2, back-migrating once for the
   // legacy handle_sqrt consumer. The IEEE ops carry the default
   // __ESBMC_rounding_mode symbol migrate_expr attaches to a legacy ieee_* node,
-  // so the back-migrated node matches the legacy ieee_binop tree (goto
+  // so the back-migrated node matches the legacy ieee_* tree (goto
   // byte-identical). Like complex_mul.
   const type2tc dt2 = migrate_type(dt);
   const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
@@ -572,7 +562,7 @@ exprt complex_handler::handle_binary_op(
     // complex struct, as complex_member does) and each IEEE op carries the
     // default __ESBMC_rounding_mode symbol migrate_expr attaches to a legacy
     // ieee_* node -- so the back-migrated struct matches the legacy
-    // make_complex(ieee_binop...) path (goto byte-identical). Like complex_mul.
+    // make_complex(ieee_*) path (goto byte-identical). Like complex_mul.
     const type2tc dt2 = migrate_type(cached_double_type());
     const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
     expr2tc lhs2, rhs2;
