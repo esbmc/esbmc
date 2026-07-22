@@ -186,7 +186,8 @@ effective_location(const locationt &own, const locationt &inherited)
 // assignment, `++`/`--`, discarded call result — all delegated to the inherited
 // remove_sideeffects after the statement location is stamped onto the operand), a
 // side-effect-free `while` whose body converts natively (`v: if(!c) goto z;
-// x: P; y: goto v; z: ;`), and `break`/`continue` (an unconditional GOTO to
+// x: P; y: goto v; z: ;`), its `do`/`while` counterpart (`w: P; y: if(c) goto
+// w; z: ;`), and `break`/`continue` (an unconditional GOTO to
 // the nearest enclosing loop's break/continue target, preceded by
 // unwind_destructor_stack's DEAD instructions for whatever was pushed since
 // that loop was entered — the inherited goto_convertt method is called
@@ -731,6 +732,76 @@ bool goto_convert_functionst::convert_native_rec(
 
     dest.destructive_append(tmp_branch);
     dest.destructive_append(tmp_x);
+    dest.destructive_append(tmp_y);
+    dest.destructive_append(tmp_z);
+    return true;
+  }
+
+  if (is_code_dowhile2t(code2))
+  {
+    const code_dowhile2t &dw = to_code_dowhile2t(code2);
+
+    // convert_dowhile lowers the condition with remove_sideeffects and makes
+    // the first emitted instruction the continue target; with a side-effect-free
+    // condition that program is empty and the continue target collapses onto
+    // the conditional goto. Restrict this kind to that shape — a side-effecting
+    // condition is a separate slice, as it was for code_while2t.
+    if (has_sideeffect(dw.cond))
+      return false;
+
+    break_continue_targetst old_break_continue(targets);
+    const locationt &here = effective_location(dw.location, inherited);
+
+    //    do P while(c);
+    //--------------------
+    // w: P;
+    // y: if(c) goto w;    <-- continue target (no condition side effects)
+    // z: ;                <-- break target
+    goto_programt tmp_y;
+    goto_programt::targett y = tmp_y.add_instruction();
+
+    goto_programt tmp_z;
+    goto_programt::targett z = tmp_z.add_instruction();
+    z->make_skip();
+    z->location = dw.location;
+
+    targets.set_break(z);
+    targets.set_continue(y);
+
+    // As in the if/while arms: a body that is not itself a code_block2t could
+    // leak a scope-exit code_dead with no enclosing block to unwind it.
+    destructor_stackt stack_before_body = targets.destructor_stack;
+    goto_programt tmp_w;
+    bool body_ok = convert_native_rec(dw.body, tmp_w, here);
+
+    old_break_continue.restore(targets);
+
+    // convert_dowhile takes `w` as tmp_w.instructions.begin(); every kind
+    // supported so far emits at least one instruction per statement, but an
+    // empty body would make that target dangling rather than merely wrong.
+    if (
+      !body_ok || tmp_w.instructions.empty() ||
+      targets.destructor_stack.size() != stack_before_body.size())
+    {
+      targets.destructor_stack = stack_before_body;
+      return false;
+    }
+
+    y->make_goto(tmp_w.instructions.begin());
+    y->guard = dw.cond;
+    // convert_dowhile reads the condition's location off the operand
+    // (code.op0().find_location()), which restore_value_locations has stamped
+    // with the governing statement location on the legacy path. Where that
+    // top-down walk skips an unlocated subtree the operand stays location-less
+    // and find_location() reports the *nil* irep — distinct from a
+    // default-constructed, empty-id locationt (the nil-vs-empty distinction of
+    // #6176), so reproduce it explicitly.
+    y->location = here.get_file().empty()
+                    ? static_cast<const locationt &>(get_nil_irep())
+                    : here;
+    y->pragma_unroll_count = dw.pragma_unroll_count;
+
+    dest.destructive_append(tmp_w);
     dest.destructive_append(tmp_y);
     dest.destructive_append(tmp_z);
     return true;
