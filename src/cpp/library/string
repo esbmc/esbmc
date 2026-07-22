@@ -535,17 +535,7 @@ public:
 
   char *c_str() const;
   bool operator>(basic_string<CharT, Traits, Alloc> &a);
-  bool operator>(const char *a);
-  friend bool
-  operator>(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs);
-  friend bool
-  operator>(basic_string<CharT, Traits, Alloc> &lhs, const char *rhs);
   bool operator<(basic_string<CharT, Traits, Alloc> &a);
-  bool operator<(const char *a);
-  friend bool
-  operator<(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs);
-  friend bool
-  operator<(basic_string<CharT, Traits, Alloc> &lhs, const char *rhs);
   bool operator>=(basic_string<CharT, Traits, Alloc> &a);
   bool operator>=(const char *lhs);
   bool operator<=(basic_string<CharT, Traits, Alloc> &a);
@@ -1244,17 +1234,6 @@ __ESBMC_HIDE:
 }
 
 template <typename CharT, typename Traits, typename Alloc>
-bool basic_string<CharT, Traits, Alloc>::operator>(const char *a)
-{
-__ESBMC_HIDE:
-  __ESBMC_assert(a != NULL, "The parameter must be different than NULL");
-  int i;
-  for (i = 0; this->str[i] != '\0' && this->str[i] == a[i]; i++)
-    ;
-  return (unsigned char)this->str[i] > (unsigned char)a[i];
-}
-
-template <typename CharT, typename Traits, typename Alloc>
 bool operator>(
   const basic_string<CharT, Traits, Alloc> &lhs,
   const basic_string<CharT, Traits, Alloc> &rhs)
@@ -1324,17 +1303,6 @@ __ESBMC_HIDE:
   for (i = 0; this->str[i] != '\0' && this->str[i] == a.str[i]; i++)
     ;
   return (unsigned char)this->str[i] < (unsigned char)a.str[i];
-}
-
-template <typename CharT, typename Traits, typename Alloc>
-bool basic_string<CharT, Traits, Alloc>::operator<(const char *a)
-{
-__ESBMC_HIDE:
-  __ESBMC_assert(a != NULL, "The parameter must be different than NULL");
-  int i;
-  for (i = 0; this->str[i] != '\0' && this->str[i] == a[i]; i++)
-    ;
-  return (unsigned char)this->str[i] < (unsigned char)a[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
