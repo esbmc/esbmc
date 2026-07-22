@@ -132,8 +132,7 @@ cd esbmc
 cmake -GNinja -Bbuild -DDOWNLOAD_DEPENDENCIES=1 -DENABLE_Z3=1 \
   -DLLVM_DIR=$(brew --prefix llvm@21)/lib/cmake/llvm \
   -DClang_DIR=$(brew --prefix llvm@21)/lib/cmake/clang \
-  -DZ3_DIR=$(brew --prefix z3) \
-  -DC2GOTO_SYSROOT=$(xcrun --show-sdk-path)
+  -DZ3_DIR=$(brew --prefix z3)
 ninja -C build
 ```
 
@@ -148,8 +147,14 @@ optionally installs Boolector/Bitwuzla, and installs `esbmc` globally:
 {{% /details %}}
 
 {{% details title="Xcode SDK" closed="true" %}} A full Xcode or the Command Line
-Tools SDK is required. If `xcrun --show-sdk-path` fails, install the tools with
-`xcode-select --install`. {{% /details %}}
+Tools SDK is required — macOS keeps the C library headers inside the SDK rather
+than in `/usr/include`. CMake detects it automatically (`CMAKE_OSX_SYSROOT`,
+then `xcrun --show-sdk-path`) and stores it in `C2GOTO_SYSROOT`; pass
+`-DC2GOTO_SYSROOT=<path to MacOSX.sdk>` only to override that choice. If
+`xcrun --show-sdk-path` fails, install the tools with `xcode-select --install`.
+
+A build that ends up with no SDK fails while generating the libc models, with
+`complex.c:1:10: fatal error: 'complex.h' file not found`. {{% /details %}}
 
 {{% /steps %}} {{< /tab >}}
 

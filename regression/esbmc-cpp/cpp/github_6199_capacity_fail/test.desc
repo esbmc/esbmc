@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--unwind 12
+^VERIFICATION FAILED$
+^  String capacity exceeded$

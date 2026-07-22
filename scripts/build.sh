@@ -209,7 +209,6 @@ prepare_platform_config() {
       BASE_ARGS+=(
         "-DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION"
         "-DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION"
-        "-DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       )
 
       SOLVER_FLAGS+=("-DENABLE_GOTO_CONTRACTOR=OFF" "-DENABLE_Z3=ON")
