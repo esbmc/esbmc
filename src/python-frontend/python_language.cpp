@@ -61,10 +61,9 @@ static std::string python_astgen_key()
   return key;
 }
 
-// TODO: Rename this function as it is dumping other files now.
-static const std::string &dump_python_script()
+// Read-only parser scripts and model sources, shared across runs.
+static const std::string &python_scripts_dir()
 {
-  // Dump all Python (.py) files from src/python-frontend into a temporary directory
   static const auto p = file_operations::cached_extract_dir(
     "python-astgen", python_astgen_key(), [](const std::string &root) {
 #define ESBMC_FLAIL(body, size, hash, ...)                                     \
@@ -74,6 +73,28 @@ static const std::string &dump_python_script()
 #undef ESBMC_FLAIL
     });
   return p.path();
+}
+
+// Per-process directory the parser writes its AST JSON into. It cannot be the
+// shared script cache: the parser emits <name>.json here and, under
+// --deadlock-check, rewrites models/threading.py, so concurrent ESBMC runs
+// would clobber each other. The parser reads model sources only from
+// <dir>/models, so expose the cached models there — a symlink in the common
+// case, or a private copy when --deadlock-check must mutate them.
+static const std::string &python_output_dir(bool deadlock_check)
+{
+  static const auto dir = [&]() {
+    auto d = file_operations::create_tmp_dir("esbmc-python-out-%%%%-%%%%-%%%%");
+    const fs::path src = fs::path(python_scripts_dir()) / "models";
+    const fs::path dst = fs::path(d.path()) / "models";
+    boost::system::error_code ec;
+    if (deadlock_check)
+      fs::copy(src, dst, fs::copy_options::recursive, ec);
+    else
+      fs::create_directory_symlink(src, dst, ec);
+    return d;
+  }();
+  return dir.path();
 }
 
 languaget *new_python_language()
@@ -89,8 +110,13 @@ bool python_languaget::parse(const std::string &path)
   if (!fs::exists(script))
     return true;
 
-  ast_output_dir = dump_python_script();
-  fs::path parser_path(ast_output_dir);
+  const bool deadlock_check = config.options.get_bool_option("deadlock-check");
+
+  // Run the parser from the shared, read-only script cache, but have it write
+  // its AST JSON into a per-process directory.
+  const std::string &scripts_dir = python_scripts_dir();
+  ast_output_dir = python_output_dir(deadlock_check);
+  fs::path parser_path(scripts_dir);
   parser_path /= "parser/__main__.py";
 
   // Execute Python script to generate JSON file from AST
@@ -100,7 +126,7 @@ bool python_languaget::parse(const std::string &path)
   // deadlock-aware threading model (models/threading_deadlock.py). The
   // C frontend handles the analogous swap via preprocessor #defines
   // (clang-c-frontend/c_preprocess.cpp).
-  if (config.options.get_bool_option("deadlock-check"))
+  if (deadlock_check)
     args.push_back("--deadlock-check");
 
   // Get Python interpreter path informed by the user
