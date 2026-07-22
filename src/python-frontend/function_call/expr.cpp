@@ -3734,6 +3734,12 @@ exprt function_call_expr::handle_general_function_call()
   if (std::optional<exprt> folded = try_fold_sorted())
     return *folded;
 
+  // A pure `def f(a): return a` over an array-shaped parameter is inlined
+  // to the caller's own argument (see try_fold_identity_array_return):
+  // arrays aren't a valid by-value return type yet.
+  if (std::optional<exprt> identity = try_fold_identity_array_return())
+    return *identity;
+
   // Skip builtin dispatch if the user imported a function with the same name
   // e.g. "from other import sum" defines a user sum that shadows the builtin
   bool is_user_imported =
@@ -4192,6 +4198,63 @@ std::optional<exprt> function_call_expr::fold_sorted_symbolic_tuples(
     }
   }
   return std::nullopt;
+}
+
+std::optional<exprt> function_call_expr::try_fold_identity_array_return()
+{
+  if (call_["func"].value("_type", "") != "Name")
+    return std::nullopt;
+
+  const std::string &func_name = function_id_.get_function();
+  const nlohmann::json func_node =
+    json_utils::try_find_function(converter_.ast()["body"], func_name);
+  if (func_node.empty() || !func_node.contains("body"))
+    return std::nullopt;
+
+  const nlohmann::json &body = func_node["body"];
+  if (body.size() != 1 || body[0].value("_type", "") != "Return")
+    return std::nullopt;
+
+  const nlohmann::json &ret_val = body[0].value("value", nlohmann::json());
+  if (ret_val.is_null() || ret_val.value("_type", "") != "Name")
+    return std::nullopt;
+
+  const std::string returned_name = ret_val["id"].get<std::string>();
+  const nlohmann::json &params = func_node["args"]["args"];
+  size_t param_index = params.size();
+  for (size_t i = 0; i < params.size(); i++)
+  {
+    if (params[i].value("arg", "") == returned_name)
+    {
+      param_index = i;
+      break;
+    }
+  }
+  if (param_index >= params.size() || param_index >= call_["args"].size())
+    return std::nullopt;
+
+  exprt arg_expr = converter_.get_expr(call_["args"][param_index]);
+  const typet &arg_type = converter_.ns.follow(arg_expr.type());
+  typet element_candidate;
+  if (arg_type.is_array())
+    element_candidate = arg_type;
+  else if (arg_type.is_pointer())
+    element_candidate = converter_.ns.follow(arg_type.subtype());
+
+  if (!element_candidate.is_array())
+    return std::nullopt;
+
+  // Strings are also modelled as char arrays in this codebase; restrict this
+  // fold to numpy-shaped (non-char) arrays so plain `def f(s): return s`
+  // string passthroughs -- already handled correctly elsewhere -- are left
+  // to their existing path.
+  typet innermost = converter_.ns.follow(element_candidate);
+  while (innermost.is_array())
+    innermost = converter_.ns.follow(to_array_type(innermost).subtype());
+  if (innermost == char_type())
+    return std::nullopt;
+
+  return arg_expr;
 }
 
 std::optional<exprt> function_call_expr::try_handle_round(bool is_user_imported)
