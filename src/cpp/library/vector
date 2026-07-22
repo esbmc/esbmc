@@ -329,10 +329,12 @@ public:
     _capacity = 10;
   }
 
-  // TODO: Support destructors.
-  // Check discussion at https://github.com/esbmc/esbmc/pull/2515
-#if 0
-  // Destructor
+  // Frees the heap buffer so vectors do not leak under --memory-leak-check.
+  // Copy-initialisation from a named vector and copy elision from a temporary
+  // both reach the deep-copying copy constructor, so each object owns its own
+  // buffer and there is no double free. By-value parameters are still shallow
+  // byte-copied by the frontend (they alias the caller's buffer), so passing a
+  // vector by value under --memory-leak-check remains unsupported.
   ~vector()
   {
     if (buf != nullptr)
@@ -343,7 +345,7 @@ public:
       _capacity = 0;
     }
   }
-#endif
+
   vector(iterator t1, iterator t2, const Allocator &alloc = Allocator())
     : _size(0)
   {
