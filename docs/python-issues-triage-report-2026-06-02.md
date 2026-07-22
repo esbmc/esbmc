@@ -4117,9 +4117,9 @@ through to `std::ostringstream << d`, whose default is **6 significant digits**.
 `"{}".format(3.14159265)` to `"3.14159"`. Asserting the *wrong* string verified `SUCCESSFUL` (a
 soundness hole) while asserting the *correct* CPython string reported a spurious `FAILED`.
 
-This is a **separate renderer** from the `%.6f` fixed-decimal `str()` fold that §87 (PR #5945)
+This is a **separate renderer** from the `%.6f` fixed-decimal `str()` fold that PR #5945
 addresses: that one loses *decimals* (`str(0.1234567)` → `"0.123457"`), this one loses *significant
-digits*. Both were live on `master` simultaneously.
+digits*. Both were live on `master` simultaneously. (§87 below consolidates the two renderers.)
 
 **Fix**: render the fallback with the fewest significant digits that still read back as the same
 double — `%.*g` for precision 1..16, returning the first whose `strtod` compares equal, else `%.17g`
@@ -4147,6 +4147,57 @@ regression tests pass unchanged.
 
 ### 86b. Next candidate & everything else: unchanged disposition
 Next: consolidate the remaining float renderers onto the shortest-repr helper, which would let the
-`str()` fold cover the inexact values §87 leaves nondet. The §3 design-level blockers, §3c
-policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand.
-The §5 priority order stands.
+`str()` fold cover the inexact values PR #5945 leaves nondet (done in §87). The §3 design-level
+blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib`
+case all stand. The §5 priority order stands.
+
+## 87. 2026-07-22 re-validation (seventy-seventh sweep) & consolidate float str/repr onto one shortest-repr helper
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. §86b nominated
+consolidating the float renderers; this sweep does it and, in doing so, closes the `str()`/`repr()`
+soundness/completeness gap PR #5945 left open.
+
+### 87a. Two renderers unified; str()/repr()/f-string now fold inexact floats
+`str()`, `repr()` and f-string interpolation route a constant float through
+`string_handler::convert_to_string` → `cpython_float_str`. PR #5945 (§86's referenced predecessor)
+made that renderer render CPython's `str()` with a fixed `%.6f`-style fold and **refuse** (return
+`nullopt` → nondet string) whenever the 6-decimal spelling was inexact *or* the value fell outside
+CPython's fixed-notation range `[1e-4, 1e16)`. So `str(0.1 + 0.2)`, `str(1e-5)`, `str(1e16)` and
+`repr(0.1234567)` all degraded to a nondet string: a *correct*-value assertion reported a spurious
+`FAILED`, and a *wrong*-value assertion could not be falsified.
+
+Meanwhile §86 (PR #5942) had already given the empty-`"{}"` `format()` renderer
+(`format_float_value`) a **complete** shortest-repr algorithm: a whole value `< 1e16` renders as
+`N.0`; every other value uses the fewest `%.*g` significant digits (1..16, else `%.17g`) that read
+back as the same double — exactly how CPython's `repr` chooses its digits, with `%g`'s
+fixed/exponential cut-over provably agreeing with CPython's `1e16` boundary. That renderer was
+already validated in PR #5942 over ~440,000 doubles (0 mismatches vs CPython `repr`).
+
+**Fix**: make `cpython_float_str` *be* that algorithm (now total — it renders every double, including
+`nan`/`inf`), and delete the duplicate `format_float_value`, routing its two callers to
+`cpython_float_str`. One renderer now backs `str()`, `repr()`, f-strings, and empty-`"{}"`
+`format()`. Because the body is byte-for-byte the PR #5942 algorithm, `str()`/`repr()` inherit that
+440k-double validation for free. The pre-existing `round_to_nearest_guard` still pins `FE_TONEAREST`
+across `snprintf`/`strtod`.
+
+This is a **wrong-value/soundness + completeness fix**: previously-nondet folds are now exact, so
+correct assertions verify `SUCCESSFUL` and wrong ones are provably `FAILED`. New regression pair
+`regression/python/str_repr_shortest_repr{,_fail}` (CORE): the positive covers long-digit `str()`
+(`1.23456789`, `0.30000000000000004`, `123456789.5`), `repr(0.1234567)`, both exponential ranges
+(`1e-05`, `1e16`, `1.5e20`, `1e300`), both sides of the fixed/exp cut-over (`0.0001`, `1e15`), the
+unchanged short/whole cases (`2.5`, `0.1`, `1.0`, `1000000.0`), and f-string interpolation; the
+`_fail` pins the previously-unfalsifiable `str(1.23456789) == "1.23457"` as a real `FAILED`. The
+stale "fold is now refused / nondet" comment in `str_float_precision_loss_fail` is refreshed (that
+value now folds exactly, so the wrong assertion is provably false). All existing
+`str_float_repr_exact` (§86/PR #5945), `str_format_shortest_repr` (§86), `builtin_repr`,
+`complex_repr`, `percent`, and `fstring` regression tests pass unchanged; dual verdict checks confirm
+positives `SUCCESSFUL` and negatives `FAILED`.
+
+`py_format_number`'s explicit-spec renderer (`format(x, ".2f")`, width/sign/grouping) is a distinct
+concern — it uses user-supplied precision, not shortest-repr — and its default-typed float path
+(`format(x, "10")`, no presentation type) still returns `nullopt`; wiring that path to the shared
+helper is the natural next candidate.
+
+### 87b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.
