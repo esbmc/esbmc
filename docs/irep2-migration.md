@@ -2446,8 +2446,7 @@ in the invoked `python3`, and each test spawns the external parser.
    `python-intensive` / full 3558 at phase boundaries only. Respect the
    project 5-minute full-suite cap — narrow scope per commit (the full suite
    far exceeds it; pick a representative stratum covering int/float/str/
-   list/dict/set/class/complex/numpy/overflow). Clean
-   `/tmp/esbmc-headers-*` after runs (AGENTS.md "/tmp disk space").
+   list/dict/set/class/complex/numpy/overflow).
 
 **Phase-4.3-specific equivalence test (the load-bearing one):** for a
 representative corpus of annotated JSON type nodes, assert
