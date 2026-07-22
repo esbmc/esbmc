@@ -1985,6 +1985,46 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
     return "Any";
   }
 
+  // Handle self.method() calls: resolve the method in the current class (or,
+  // failing that, along its base chain) and adopt its return type. Without
+  // this the `self` receiver is unresolved, so an unannotated
+  // `self.attr = self.method()` is left untyped and the attribute defaults to
+  // its enclosing class — which later emits a call to a nonexistent method on
+  // that attribute and aborts GOTO conversion (#6242).
+  if (obj == "self" && !attr_name.empty() && !current_class_name_.empty())
+  {
+    for (std::string cls = current_class_name_; !cls.empty();)
+    {
+      Json class_node = json_utils::find_class(ast_["body"], cls);
+      if (class_node.empty() || !class_node.contains("body"))
+        break;
+      for (const Json &member : class_node["body"])
+      {
+        if (member["_type"] != "FunctionDef" || member["name"] != attr_name)
+          continue;
+        if (member.contains("returns") && !member["returns"].is_null())
+        {
+          const Json &ret = member["returns"];
+          if (ret.contains("id"))
+            return ret["id"].template get<std::string>();
+          if (
+            ret.contains("_type") && ret["_type"] == "Subscript" &&
+            ret.contains("value") && ret["value"].contains("id"))
+            return ret["value"]["id"].template get<std::string>();
+        }
+        std::string inferred =
+          infer_from_return_statements(member["body"], attr_name);
+        return inferred.empty() ? "Any" : inferred;
+      }
+      // Not defined in this class — continue up the first base, as super() does.
+      cls.clear();
+      if (
+        class_node.contains("bases") && !class_node["bases"].empty() &&
+        class_node["bases"][0].contains("id"))
+        cls = class_node["bases"][0]["id"].template get<std::string>();
+    }
+  }
+
   // Handle dict.keys() and dict.values()
   if (attr_name == "keys" || attr_name == "values")
   {
