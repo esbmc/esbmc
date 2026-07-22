@@ -112,6 +112,13 @@ set(ESBMC_CHERI_PURECAP_SYSROOT "" CACHE STRING "Path containing the mips64-unkn
 
 set(ESBMC_BUNDLE_LIBC_32BIT "${ENABLE_BUNDLE_LIBC_32BIT}" CACHE BOOL "Enable 32-bit libc bundling" FORCE)
 
+# Where the extracted-internals cache lives. The default is the system temp
+# directory: it is tmpfs on Linux, and systemd-tmpfiles ages its contents out,
+# so stale entries from old builds are reclaimed without ESBMC evicting
+# anything itself. Switching it to the user cache directory makes the cache
+# survive reboots, at the cost of growing until it is cleared by hand.
+option(ESBMC_CACHE_IN_HOME "Cache extracted internals under the user cache dir instead of the system temp dir" OFF)
+
 # Demand C++23
 set(CMAKE_CXX_STANDARD 23)
 

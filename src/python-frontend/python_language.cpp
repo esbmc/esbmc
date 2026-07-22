@@ -50,28 +50,29 @@ extern "C"
 #undef ESBMC_FLAIL
 }
 
+/* Digests of the bundled Python sources, emitted next to the arrays by
+ * scripts/flail.py, so this key tracks any edit to any of them. */
+static std::string python_astgen_key()
+{
+  std::string key;
+#define ESBMC_FLAIL(body, size, hash, ...) key += hash;
+#include <pythonastgen.h>
+#undef ESBMC_FLAIL
+  return key;
+}
+
 // TODO: Rename this function as it is dumping other files now.
 static const std::string &dump_python_script()
 {
   // Dump all Python (.py) files from src/python-frontend into a temporary directory
-  static bool dumped = false;
-  static auto p =
-    file_operations::create_tmp_dir("esbmc-python-astgen-%%%%-%%%%-%%%%");
-  if (!dumped)
-  {
-    dumped = true;
-#define ESBMC_FLAIL(body, size, ...)                                           \
-  {                                                                            \
-    fs::path filePath(fs::path(p.path()) / #__VA_ARGS__);                      \
-    fs::path directory = filePath.parent_path();                               \
-    if (!directory.empty() && !fs::exists(directory))                          \
-      fs::create_directories(directory);                                       \
-    std::ofstream(filePath.string()).write(body, size);                        \
-  }
-
+  static const auto p = file_operations::cached_extract_dir(
+    "python-astgen", python_astgen_key(), [](const std::string &root) {
+#define ESBMC_FLAIL(body, size, hash, ...)                                     \
+  file_operations::create_path_and_write(                                      \
+    (fs::path(root) / #__VA_ARGS__).string(), body, size);
 #include <pythonastgen.h>
 #undef ESBMC_FLAIL
-  }
+    });
   return p.path();
 }
 

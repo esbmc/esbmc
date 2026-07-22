@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdio> /* FILE */
+#include <functional>
 #include <string>
 
 /**
@@ -100,6 +101,49 @@ tmp_file create_tmp_file(
   const char *mode = "w+");
 
 tmp_path create_tmp_dir(const std::string &format = "esbmc.%%%%-%%%%-%%%%");
+
+/**
+ * @brief Directory holding content embedded at build time, reused across runs.
+ *
+ * ESBMC ships its clang resource headers, operational models and helper
+ * scripts as byte arrays inside the binary and has to materialise them on disk
+ * before clang can see them. Doing that on every invocation costs both time and
+ * a few MB of scratch space per run, so entries are instead kept in a cache
+ * directory keyed by their content.
+ *
+ * @param name        identifies the payload, e.g. "clang-headers"
+ * @param content_key changes whenever the extracted bytes change; concatenate
+ *                    the per-file digests carried in each ESBMC_FLAIL() row
+ *                    emitted by scripts/flail.py. Hashed here into a short slug,
+ *                    so `<name>-<slug>` names exactly this content.
+ * @param extract     called with a directory to populate, on a miss only
+ *
+ * On a miss `extract` writes into a staging directory which is then published
+ * with rename(2). A concurrent ESBMC therefore never observes a half-written
+ * entry, and an entry that exists is by construction complete — so a hit needs
+ * no validation. Losing the publish race is not an error: the winner's entry is
+ * equivalent by definition, being keyed on the same content.
+ *
+ * Entries live under a root we own at mode 0700 — by default
+ * `<tmpdir>/esbmc-cache-<uid>`, or the user cache directory when built with
+ * ESBMC_CACHE_IN_HOME; $ESBMC_CACHE_DIR overrides both. On a shared machine the
+ * uid in the default name keeps users apart, and the root's ownership is
+ * confirmed before use so a leftover or wrong-mode directory of that name is
+ * declined rather than reused.
+ *
+ * The returned path outlives the process. When no cache directory is usable
+ * (nowhere to derive a root from, or one that is read-only or not ours), or
+ * when `extract` fails partway (e.g. a full disk), this degrades to a private
+ * temporary directory removed on exit, i.e. the behaviour of create_tmp_dir() —
+ * a partial tree is never published for a later run to trust.
+ *
+ * `extract` must signal failure by throwing (the file_operations writers do so
+ * on a short write); a normal return is taken as a complete extraction.
+ */
+tmp_path cached_extract_dir(
+  const std::string &name,
+  const std::string &content_key,
+  const std::function<void(const std::string &)> &extract);
 
 /**
  *  @brief Creates all folders needed for a path

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import hashlib
 import platform
 import unittest
 from pathlib import Path
@@ -98,17 +99,26 @@ class Flail:
     def __init__(self, filepath: str, prefix : str = ''):
         self.filepath = filepath
         self.prefix = prefix
+        self.digest = None
 
     def custom_od(self):
         '''
         Generates octal representation of a file
+
+        Also accumulates a SHA-256 over the path and the bytes into
+        self.digest, so the emitted digest and the emitted array are always
+        derived from the same read of the same file.
         '''
         chars_per_line = 16
         lines = []
+        h = hashlib.sha256()
+        h.update(self.filepath.encode('utf-8') + b'\0')
         with open(self.filepath, 'rb') as f:
             for chunk in iter(lambda: f.read(chars_per_line), b''):
+                h.update(chunk)
                 line = [ int(x,16) for x in chunk.hex(' ').split(' ')]
                 lines.append(' '.join(map(str, line)))
+        self.digest = h.hexdigest()
         return lines
 
 
@@ -163,8 +173,11 @@ class Flail:
                 header.write('extern const char %s[];\n' % name)
                 header.write('extern const unsigned int %s_size;\n' % name)
             else:
-                header.write('%s(%s, %s_size, %s)\n' % (macro, name, name,
-                                                        self.filepath))
+                # The content digest is the third field so consumers that only
+                # want the path ignore it via the variadic tail, while the cache
+                # key-builders read it. One macro to balance, not two.
+                header.write('%s(%s, %s_size, "%s", %s)\n' %
+                             (macro, name, name, self.digest, self.filepath))
 
     def run(self, output_file, header = None, macro : str = None):
         step_2 = self.custom_od()
@@ -198,8 +211,8 @@ def parse_args(argv):
                             esbmc/build/src/c2goto/clibd32.goto
             NB:
             --macro MACRO is only meaningful in combination with --header;
-            if specified, the header file will contain invocations of MACRO(body, size, fpath) for each input file where body is the name of
-            the extern char[] symbol defining the binary content of the input file, size is its size and fpath is the path to the input file as passed to this script.
+            if specified, the header file will contain invocations of MACRO(body, size, hash, fpath) for each input file where body is the name of
+            the extern char[] symbol defining the binary content of the input file, size is its size, hash is a SHA-256 digest of the content, and fpath is the path to the input file as passed to this script.
             If MACRO is not defined, the header will define it before the invocations to declare the body and size symbols as extern to facilitate usage
             of the header in a C file
             '''))
@@ -224,7 +237,7 @@ def main():
             header = open(args.header, 'w')
             if args.macro:
                 header.write('#ifndef %s\n' % args.macro)
-                header.write('# define %s(body, size, ...)'
+                header.write('# define %s(body, size, hash, ...)'
                              ' extern const char body[];'
                              ' extern const unsigned int size;\n' % args.macro)
                 header.write('#endif\n')
@@ -326,3 +339,35 @@ class TestFlail(unittest.TestCase):
         obj = Flail("libs/ast2json/__init__.py", 'esbmc_')
         expected = "esbmc_libs_ast2json___init___buf"
         self.assertEqual(obj.obtain_var_name(), expected)
+
+    def _digest_of(self, directory, name, content):
+        path = os.path.join(directory, name)
+        with open(path, 'wb') as f:
+            f.write(content)
+        obj = Flail(path)
+        obj.custom_od()
+        return path, obj.digest
+
+    def test_digest_covers_content(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            path, digest = self._digest_of(d, 'a.h', b'contents')
+            expected = hashlib.sha256(path.encode('utf-8') + b'\0' +
+                                      b'contents').hexdigest()
+            self.assertEqual(digest, expected)
+
+    def test_digest_changes_with_content(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            _, first = self._digest_of(d, 'a.h', b'one')
+            _, second = self._digest_of(d, 'a.h', b'two')
+            self.assertNotEqual(first, second)
+
+    def test_digest_changes_with_path(self):
+        # Renaming a bundled file has to invalidate the cache too: the
+        # extracted layout depends on the name, not just the bytes.
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            _, first = self._digest_of(d, 'a.h', b'same')
+            _, second = self._digest_of(d, 'b.h', b'same')
+            self.assertNotEqual(first, second)
