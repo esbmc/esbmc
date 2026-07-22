@@ -4238,3 +4238,40 @@ guarantee) and typeless-float grouping remain the next candidates.
 ### 88b. Everything else: unchanged disposition
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. The §5 priority order stands.
+
+## 89. 2026-07-22 re-validation (seventy-ninth sweep) & format() typeless-float grouping
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. §88b nominated two
+follow-ups; this sweep takes the **grouping** half and deliberately leaves default-type precision
+alone (see 89a). (Stacked on §88 / PR #6249, which added the typeless-float path.)
+
+### 89a. Default-type precision left as a clean reject; grouping modelled
+**Default-type precision (`format(x, ".2")`) is NOT modelled — on purpose.** CPython's `None`
+presentation type with a precision is a `g`-variant that diverges from `%.*g` in edge cases: `.0`/`.1`
+force exponential to keep a float appearance (`format(1.5, ".0") == "2e+00"`, not `"2"`), and it
+differs from `%.*g` on values like `100.0`/`123.456`. Modelling it approximately risks a false
+`SUCCESSFUL`; per the guiding policy (an unsound fold is worse than an honest KNOWNBUG) it keeps
+returning `nullopt` and rejecting cleanly. Verified `format(1.5, ".2")` still errors, never mis-folds.
+
+**Typeless-float grouping (`format(1234.5, ",")`) IS modelled.** `py_format_number`
+(`src/python-frontend/function_call/str_conv.cpp`) rejected every float grouping spec
+(`if (grouping != 0 || alt) return nullopt`). CPython groups **only the integer part** of a
+fixed-notation float by 3 (for `,` and `_`), leaving the fractional part and any exponential/`inf`/
+`nan` rendering untouched. Fix: for the default-type path, after rendering the magnitude via the §87
+shared `cpython_float_str` helper, split at the `.` and pass the integer head through the existing
+`group_digits` helper — but only when that head is **all digits**, which naturally skips exponential
+(`"1.5e+20"` head is the single digit `"1"`, a grouping no-op) and `inf`/`nan`. Grouping stays
+rejected for explicit float types (`",.1f"`) and, via the pre-existing top-level guard, for
+grouping + zero/`=` padding (`"08,"`) — both left as clean `nullopt` rejections.
+
+This is a **feature-completeness fix** with the soundness boundary intact. New pair
+`regression/python/format_float_grouping{,_fail}` (CORE): the positive covers `,`/`_` grouping,
+short groups (`999.0`), sign/width/align composition (`"+,"`, `"15,"`, `"<15,"`), and the ungrouped
+exponential cases (`1.5e20`, `1e16`); the `_fail` pins `format(1234.5, ",") == "1234.5"` as `FAILED`.
+Every positive assertion cross-checked against CPython `format`; `format(1234.5, "08,")` and
+`format(1234.5, ",.1f")` confirmed to still reject cleanly; 22-test format subset green;
+clang-format 11 + YAPF clean.
+
+### 89b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.
