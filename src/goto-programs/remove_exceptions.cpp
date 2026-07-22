@@ -397,6 +397,13 @@ private:
   // it silently.
   bool thread_entry_unresolved = false;
   unsigned storage_counter = 0;
+  // A synthesized std::bad_exception THROW (operand + exception_list), built
+  // once and reused at every dynamic-spec-check site that needs the
+  // [except.unexpected] substitution, mirroring build_bad_cast_throw's single
+  // shared instance. Populated lazily by bad_exception_throw() on first use;
+  // nil (and cached as such) when <exception> is not resolvable.
+  expr2tc bad_exception_throw_;
+  bool bad_exception_throw_built_ = false;
   // Dynamic types of every real (operand-carrying) throw in the program, in
   // first-seen order. Used to partition the entry-epilogue uncaught-exception
   // property by type so the verdict names the escaping exception. This is the
@@ -525,6 +532,40 @@ private:
     // only its type identity and address matter to the handler).
     expr2tc operand = make_exception_storage(migrate_symbol_type(*sym));
     return code_cpp_throw2tc(operand, exception_list);
+  }
+
+  /// A synthesized std::bad_exception THROW, or nil when <exception> is not
+  /// resolvable (the program cannot reference a dynamic exception
+  /// specification without it). Same construction as build_bad_cast_throw;
+  /// built once and cached, since a program either has std::bad_exception
+  /// available at every call site or none.
+  expr2tc bad_exception_throw()
+  {
+    if (bad_exception_throw_built_)
+      return bad_exception_throw_;
+    bad_exception_throw_built_ = true;
+
+    const symbolt *sym = ns.lookup("tag-std::bad_exception");
+    if (!sym)
+      sym = ns.lookup("tag-class std::bad_exception");
+    if (!sym)
+      return bad_exception_throw_;
+
+    std::vector<irep_idt> exception_list;
+    const std::string tag = id2string(sym->id);
+    exception_list.emplace_back(tag.substr(4)); // strip "tag-"
+    if (sym->get_type().id() == "struct")
+    {
+      const struct_typet &st = to_struct_type(sym->get_type());
+      const exprt &bases = static_cast<const exprt &>(st.find("bases"));
+      if (bases.is_not_nil())
+        for (const auto &base : bases.get_sub())
+          exception_list.emplace_back(id2string(base.id()).substr(4));
+    }
+
+    expr2tc operand = make_exception_storage(migrate_symbol_type(*sym));
+    bad_exception_throw_ = code_cpp_throw2tc(operand, exception_list);
+    return bad_exception_throw_;
   }
 
   /// Replace each __ESBMC_throw_bad_cast() call — the bodyless intrinsic a
@@ -1098,15 +1139,16 @@ private:
     return disj;
   }
 
-  /// A call to the installed std::unexpected handler — the set_unexpected
-  /// builtin records it as __ESBMC_unexpected — or nil when none is installed.
+  /// A call to __ESBMC_run_unexpected(), the OM entry point that invokes the
+  /// installed std::unexpected handler (or the default, which calls
+  /// std::terminate()) — nil when the exception OM is not linked.
   expr2tc make_unexpected_call()
   {
-    const symbolt *h = ns.lookup("c:@F@__ESBMC_unexpected");
+    const symbolt *h = ns.lookup("c:@F@__ESBMC_run_unexpected");
     if (!h)
       return expr2tc();
     code_function_callt fc;
-    fc.function() = h->get_value();
+    fc.function() = symbol_exprt(h->id, h->get_type());
     expr2tc call;
     migrate_expr(fc, call);
     return call;
@@ -1252,10 +1294,12 @@ private:
   /// Enforce a dynamic exception specification throw(allowed...) (including the
   /// empty throw()) at the epilogue. When an exception the spec does not permit
   /// is propagating out, run the std::unexpected handler and re-check: a handler
-  /// that rethrows a permitted type lets it propagate; anything else (handler
-  /// returns, rethrows a disallowed type, or no handler installed) is a
-  /// violation. Mirrors the imperative goto_symext path: one handler call, no
-  /// std::bad_exception substitution.
+  /// that rethrows a permitted type lets it propagate; a handler that rethrows a
+  /// type the spec doesn't allow is replaced by std::bad_exception when the spec
+  /// includes it ([except.unexpected]) and propagates from there; anything else
+  /// (handler returns, rethrows a disallowed type with no std::bad_exception in
+  /// the spec, or no handler installed) is a violation. The imperative
+  /// goto_symext path does not model this substitution.
   void build_dynamic_spec_check(
     goto_programt &body,
     goto_programt::targett epilogue,
@@ -1330,6 +1374,35 @@ private:
 
       // Handler rethrew a permitted type -> let it propagate.
       ins(fail)->make_goto(ret, permitted());
+
+      // Handler rethrew a type the specification does not allow. Per
+      // [except.unexpected], if the specification includes std::bad_exception
+      // the escaping exception is *replaced* by one and propagation continues
+      // from here; otherwise the specification is genuinely violated (falls
+      // through to fail).
+      expr2tc bad_exc = bad_exception_throw();
+      if (!is_nil_expr(bad_exc))
+      {
+        const code_cpp_throw2t &be = to_code_cpp_throw2t(bad_exc);
+        const irep_idt &bad_exc_name = be.exception_list.front();
+        if (
+          std::find(allowed.begin(), allowed.end(), bad_exc_name) !=
+          allowed.end())
+        {
+          const unsigned bad_tid = registry.id_of(bad_exc_name);
+          auto a_tid = ins(fail);
+          a_tid->make_assignment();
+          a_tid->code = code_assign2tc(
+            type_id, constant_int2tc(type_id->type, BigInt(bad_tid)));
+
+          auto a_val = ins(fail);
+          a_val->make_assignment();
+          expr2tc addr = address_of2tc(be.operand->type, be.operand);
+          a_val->code = code_assign2tc(value, typecast2tc(value->type, addr));
+
+          ins(fail)->make_goto(ret);
+        }
+      }
     }
     // Fall through to fail.
   }

@@ -188,9 +188,30 @@ extern "C" void __ESBMC_rethrow_current_exception()
 __ESBMC_HIDE:;
   if (__ESBMC_exception_detail::__ESBMC_handled_exception_depth == 0)
   {
-    __ESBMC_exc_terminate_reason =
-      __ESBMC_exception_detail::__ESBMC_terminate_reason_no_active;
-    std::terminate();
+    // No catch has entered a handler for this exception yet, but one may
+    // still be actively propagating -- a bare `throw;` from within
+    // std::unexpected() ([except.unexpected]) re-raises the exception whose
+    // dynamic-exception-specification it is resolving, before any handler
+    // for it exists. The lowering of that call clears `thrown` but preserves
+    // typeid/value for exactly this case, so a nonzero typeid here means an
+    // in-flight exception, not "none". This is context-insensitive (any bare
+    // rethrow with an empty handled-stack takes this path, not only one from
+    // std::unexpected()); a bare `throw;` from a destructor unwinding past a
+    // not-yet-handled exception would, per [except.terminate], have to
+    // terminate unconditionally instead. That path is not modelled anywhere
+    // in this lowering today (no destructor/unwind-specific handling exists
+    // in remove_exceptions.cpp), so it is not currently reachable -- scope
+    // this narrower (e.g. a dedicated in-unexpected-handler flag) if that
+    // ever changes.
+    if (__ESBMC_exc_typeid == 0)
+    {
+      __ESBMC_exc_terminate_reason =
+        __ESBMC_exception_detail::__ESBMC_terminate_reason_no_active;
+      std::terminate();
+    }
+    __ESBMC_exc_thrown = 1;
+    __ESBMC_exc_uncaught_count = __ESBMC_exc_uncaught_count + 1;
+    return;
   }
 
   __SIZE_TYPE__ top =

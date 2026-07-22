@@ -1,3 +1,8 @@
+// myfunction's throw(int) spec is violated by `throw 'x'` (char), which runs
+// myunexpected(); it throws 5, an int, which the spec permits, so it
+// propagates and is caught by catch(int). Ground-truthed against real
+// clang++ -std=c++03: prints "unexpected called" / "caught int", exits 0 --
+// a well-defined recovery, not a violation (github #6022).
 #include <iostream>
 #include <exception>
 using namespace std;
