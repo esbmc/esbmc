@@ -51,6 +51,13 @@ set(inputs
            ubuntu20.04/kernel_5.15.0-76/include/linux/spinlock.h
            ubuntu20.04/kernel_5.15.0-76/include/linux/slab.h
            ubuntu20.04/kernel_5.15.0-76/include/asm/uaccess.h
+           # CXL driver verification support
+           ubuntu20.04/kernel_5.15.0-76/include/asm/io.h
+           ubuntu20.04/kernel_5.15.0-76/include/linux/cxl.h
+           ubuntu20.04/kernel_5.15.0-76/include/linux/cxlmem.h
+           ubuntu20.04/kernel_5.15.0-76/include/linux/pci.h
+           ubuntu20.04/kernel_5.15.0-76/include/linux/irq.h
+           ubuntu20.04/kernel_5.15.0-76/include/linux/dma-mapping.h
    )
 mangle(mangled_files ${CMAKE_CURRENT_SOURCE_DIR} ${inputs}
        PREFIX esbmc_libc_header_
