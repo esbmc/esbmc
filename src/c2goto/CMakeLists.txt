@@ -20,7 +20,7 @@ set_target_properties(c2goto PROPERTIES
   PRIVATE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libc.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libm.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/headers/libc_hdr.h")
 
 
-if(DEFINED C2GOTO_SYSROOT)
+if(C2GOTO_SYSROOT)
   set(multiarch_flags --sysroot "${C2GOTO_SYSROOT}")
 endif()
 
