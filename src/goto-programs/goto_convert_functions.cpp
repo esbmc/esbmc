@@ -187,7 +187,9 @@ effective_location(const locationt &own, const locationt &inherited)
 // remove_sideeffects after the statement location is stamped onto the operand), a
 // side-effect-free `while` whose body converts natively (`v: if(!c) goto z;
 // x: P; y: goto v; z: ;`), its `do`/`while` counterpart (`w: P; y: if(c) goto
-// w; z: ;`), and `break`/`continue` (an unconditional GOTO to
+// w; z: ;`), the `for` loop that `while` shape desugars from (init, then the
+// same shape with the iteration statement at the continue target), and
+// `break`/`continue` (an unconditional GOTO to
 // the nearest enclosing loop's break/continue target, preceded by
 // unwind_destructor_stack's DEAD instructions for whatever was pushed since
 // that loop was entered — the inherited goto_convertt method is called
@@ -802,6 +804,108 @@ bool goto_convert_functionst::convert_native_rec(
     y->pragma_unroll_count = dw.pragma_unroll_count;
 
     dest.destructive_append(tmp_w);
+    dest.destructive_append(tmp_y);
+    dest.destructive_append(tmp_z);
+    return true;
+  }
+
+  if (is_code_for2t(code2))
+  {
+    const code_for2t &f = to_code_for2t(code2);
+
+    // convert_for lowers the condition with remove_sideeffects and makes the
+    // first instruction that emits the loop's back-edge target; with a
+    // side-effect-free condition that program is empty and the back edge
+    // collapses onto the guard instruction. Restrict this kind to that shape,
+    // as code_while2t was first sliced. A condition-less `for(;;)` is excluded
+    // too: legacy migrates the nil operand straight into the guard.
+    if (is_nil_expr(f.cond) || has_sideeffect(f.cond))
+      return false;
+
+    const locationt &here = effective_location(f.location, inherited);
+    destructor_stackt stack_before = targets.destructor_stack;
+
+    //    for(A; c; B) P;
+    //--------------------
+    //    A;
+    // v: if(!c) goto z;
+    // w: P;
+    // x: B;               <-- continue target
+    // y: goto v;
+    // z: ;                <-- break target
+
+    // convert_for emits the init straight into dest, before it saves the
+    // break/continue targets, and leaves any scope-exit code_dead a
+    // declaration pushes for the enclosing block to unwind.
+    if (!is_nil_expr(f.init) && !convert_native_rec(f.init, dest, here))
+    {
+      targets.destructor_stack = stack_before;
+      return false;
+    }
+
+    break_continue_targetst old_break_continue(targets);
+
+    goto_programt tmp_v;
+    goto_programt::targett v = tmp_v.add_instruction();
+
+    goto_programt tmp_z;
+    goto_programt::targett z = tmp_z.add_instruction(SKIP);
+    z->location = f.location;
+
+    // convert_for converts the iteration statement *before* the body and
+    // before installing the loop targets. Keep that order: both may allocate
+    // from the shared tmp_symbol counter, and the numbering is observable.
+    // A missing iteration statement still emits a SKIP (which is what the
+    // continue target then points at), not nothing.
+    destructor_stackt stack_before_iter = targets.destructor_stack;
+    goto_programt tmp_x;
+    bool iter_ok = true;
+    if (is_nil_expr(f.iter))
+    {
+      tmp_x.add_instruction(SKIP);
+      tmp_x.instructions.back().location = f.location;
+    }
+    else
+      iter_ok = convert_native_rec(f.iter, tmp_x, here);
+
+    if (
+      !iter_ok || tmp_x.instructions.empty() ||
+      targets.destructor_stack.size() != stack_before_iter.size())
+    {
+      old_break_continue.restore(targets);
+      targets.destructor_stack = stack_before;
+      return false;
+    }
+
+    targets.set_break(z);
+    targets.set_continue(tmp_x.instructions.begin());
+
+    v->make_goto(z);
+    v->guard = not2tc(f.cond);
+    v->location = f.location;
+
+    destructor_stackt stack_before_body = targets.destructor_stack;
+    goto_programt tmp_w;
+    bool body_ok = convert_native_rec(f.body, tmp_w, here);
+
+    old_break_continue.restore(targets);
+
+    if (!body_ok || targets.destructor_stack.size() != stack_before_body.size())
+    {
+      targets.destructor_stack = stack_before;
+      return false;
+    }
+
+    goto_programt tmp_y;
+    goto_programt::targett y = tmp_y.add_instruction();
+    y->make_goto(v);
+    y->guard = gen_true_expr();
+    y->location = f.location;
+    y->pragma_unroll_count = f.pragma_unroll_count;
+
+    dest.destructive_append(tmp_v);
+    dest.destructive_append(tmp_w);
+    dest.destructive_append(tmp_x);
     dest.destructive_append(tmp_y);
     dest.destructive_append(tmp_z);
     return true;
