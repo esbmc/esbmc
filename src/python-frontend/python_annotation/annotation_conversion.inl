@@ -1810,6 +1810,26 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
 }
 
 template <class Json>
+std::string python_annotation<Json>::method_return_type(
+  const Json &member,
+  const std::string &method_name)
+{
+  if (member.contains("returns") && !member["returns"].is_null())
+  {
+    const Json &ret = member["returns"];
+    if (ret.contains("id"))
+      return ret["id"].template get<std::string>();
+    if (
+      ret.contains("_type") && ret["_type"] == "Subscript" &&
+      ret.contains("value") && ret["value"].contains("id"))
+      return ret["value"]["id"].template get<std::string>();
+  }
+  std::string inferred =
+    infer_from_return_statements(member["body"], method_name);
+  return inferred.empty() ? "Any" : inferred;
+}
+
+template <class Json>
 std::string python_annotation<Json>::get_type_from_method(const Json &call)
 {
   std::string type("");
@@ -1965,20 +1985,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
         {
           if (member["_type"] != "FunctionDef" || member["name"] != attr_name)
             continue;
-          if (member.contains("returns") && !member["returns"].is_null())
-          {
-            const Json &ret = member["returns"];
-            if (ret.contains("id"))
-              return ret["id"].template get<std::string>();
-            if (
-              ret.contains("_type") && ret["_type"] == "Subscript" &&
-              ret.contains("value") && ret["value"].contains("id"))
-              return ret["value"]["id"].template get<std::string>();
-          }
-          // attr_name == member["name"] by the loop invariant above
-          std::string inferred =
-            infer_from_return_statements(member["body"], attr_name);
-          return inferred.empty() ? "Any" : inferred;
+          return method_return_type(member, attr_name);
         }
       }
     }
@@ -1993,7 +2000,12 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
   // that attribute and aborts GOTO conversion (#6242).
   if (obj == "self" && !attr_name.empty() && !current_class_name_.empty())
   {
-    for (std::string cls = current_class_name_; !cls.empty();)
+    // `visited` guards against cyclic base declarations (e.g. class A(B) /
+    // class B(A)): these do not run in Python but ast.parse still accepts
+    // them, so the walk must not loop forever.
+    std::set<std::string> visited;
+    for (std::string cls = current_class_name_;
+         !cls.empty() && visited.insert(cls).second;)
     {
       Json class_node = json_utils::find_class(ast_["body"], cls);
       if (class_node.empty() || !class_node.contains("body"))
@@ -2002,19 +2014,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       {
         if (member["_type"] != "FunctionDef" || member["name"] != attr_name)
           continue;
-        if (member.contains("returns") && !member["returns"].is_null())
-        {
-          const Json &ret = member["returns"];
-          if (ret.contains("id"))
-            return ret["id"].template get<std::string>();
-          if (
-            ret.contains("_type") && ret["_type"] == "Subscript" &&
-            ret.contains("value") && ret["value"].contains("id"))
-            return ret["value"]["id"].template get<std::string>();
-        }
-        std::string inferred =
-          infer_from_return_statements(member["body"], attr_name);
-        return inferred.empty() ? "Any" : inferred;
+        return method_return_type(member, attr_name);
       }
       // Not defined in this class — continue up the first base, as super() does.
       cls.clear();
