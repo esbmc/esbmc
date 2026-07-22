@@ -796,22 +796,31 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_dowhile2t &dw = to_code_dowhile2t(code2);
 
-    // convert_dowhile lowers the condition with remove_sideeffects and makes
-    // the first emitted instruction the continue target; with a side-effect-free
-    // condition that program is empty and the continue target collapses onto
-    // the conditional goto. Restrict this kind to that shape — a side-effecting
-    // condition is a separate slice, as it was for code_while2t.
+    const locationt &here = effective_location(dw.location, inherited);
+
+    // convert_dowhile lowers the condition with remove_sideeffects before it
+    // saves the break/continue targets, and makes the first instruction that
+    // emits the continue target. Keep both: the lowering may allocate from the
+    // shared tmp_symbol counter, whose numbering is observable.
+    goto_programt sideeffects;
+    expr2tc guard = dw.cond;
     if (has_sideeffect(dw.cond))
-      return false;
+    {
+      exprt cond = migrate_expr_back(dw.cond);
+      if (!here.get_file().empty())
+        stamp_value_locations(cond, here);
+      remove_sideeffects(cond, sideeffects);
+      migrate_expr(cond, guard);
+    }
 
     break_continue_targetst old_break_continue(targets);
-    const locationt &here = effective_location(dw.location, inherited);
 
     //    do P while(c);
     //--------------------
     // w: P;
-    // y: if(c) goto w;    <-- continue target (no condition side effects)
-    // z: ;                <-- break target
+    // x: sideeffects in c  <-- continue target, collapsing onto y when empty
+    // y: if(c) goto w;
+    // z: ;                 <-- break target
     goto_programt tmp_y;
     goto_programt::targett y = tmp_y.add_instruction();
 
@@ -821,7 +830,8 @@ bool goto_convert_functionst::convert_native_rec(
     z->location = dw.location;
 
     targets.set_break(z);
-    targets.set_continue(y);
+    targets.set_continue(
+      sideeffects.instructions.empty() ? y : sideeffects.instructions.begin());
 
     // As in the if/while arms: a body that is not itself a code_block2t could
     // leak a scope-exit code_dead with no enclosing block to unwind it.
@@ -843,7 +853,7 @@ bool goto_convert_functionst::convert_native_rec(
     }
 
     y->make_goto(tmp_w.instructions.begin());
-    y->guard = dw.cond;
+    y->guard = guard;
     // convert_dowhile reads the condition's location off the operand
     // (code.op0().find_location()), which restore_value_locations has stamped
     // with the governing statement location on the legacy path. Where that
@@ -857,6 +867,7 @@ bool goto_convert_functionst::convert_native_rec(
     y->pragma_unroll_count = dw.pragma_unroll_count;
 
     dest.destructive_append(tmp_w);
+    dest.destructive_append(sideeffects);
     dest.destructive_append(tmp_y);
     dest.destructive_append(tmp_z);
     return true;
@@ -866,13 +877,9 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_for2t &f = to_code_for2t(code2);
 
-    // convert_for lowers the condition with remove_sideeffects and makes the
-    // first instruction that emits the loop's back-edge target; with a
-    // side-effect-free condition that program is empty and the back edge
-    // collapses onto the guard instruction. Restrict this kind to that shape,
-    // as code_while2t was first sliced. A condition-less `for(;;)` is excluded
-    // too: legacy migrates the nil operand straight into the guard.
-    if (is_nil_expr(f.cond) || has_sideeffect(f.cond))
+    // A condition-less `for(;;)` is excluded: legacy migrates the nil operand
+    // straight into the guard.
+    if (is_nil_expr(f.cond))
       return false;
 
     const locationt &here = effective_location(f.location, inherited);
@@ -881,11 +888,12 @@ bool goto_convert_functionst::convert_native_rec(
     //    for(A; c; B) P;
     //--------------------
     //    A;
+    // u: sideeffects in c  <-- back-edge target, collapsing onto v when empty
     // v: if(!c) goto z;
     // w: P;
-    // x: B;               <-- continue target
-    // y: goto v;
-    // z: ;                <-- break target
+    // x: B;                <-- continue target
+    // y: goto u;
+    // z: ;                 <-- break target
 
     // convert_for emits the init straight into dest, before it saves the
     // break/continue targets, and leaves any scope-exit code_dead a
@@ -894,6 +902,21 @@ bool goto_convert_functionst::convert_native_rec(
     {
       targets.destructor_stack = stack_before;
       return false;
+    }
+
+    // convert_for lowers the condition before it saves the break/continue
+    // targets and before it converts the iteration statement; the lowering may
+    // allocate from the shared tmp_symbol counter, whose numbering is
+    // observable, so the order is kept.
+    goto_programt sideeffects;
+    expr2tc guard = f.cond;
+    if (has_sideeffect(f.cond))
+    {
+      exprt cond = migrate_expr_back(f.cond);
+      if (!here.get_file().empty())
+        stamp_value_locations(cond, here);
+      remove_sideeffects(cond, sideeffects);
+      migrate_expr(cond, guard);
     }
 
     break_continue_targetst old_break_continue(targets);
@@ -934,7 +957,7 @@ bool goto_convert_functionst::convert_native_rec(
     targets.set_continue(tmp_x.instructions.begin());
 
     v->make_goto(z);
-    v->guard = not2tc(f.cond);
+    v->guard = not2tc(guard);
     v->location = f.location;
 
     destructor_stackt stack_before_body = targets.destructor_stack;
@@ -951,11 +974,13 @@ bool goto_convert_functionst::convert_native_rec(
 
     goto_programt tmp_y;
     goto_programt::targett y = tmp_y.add_instruction();
-    y->make_goto(v);
+    y->make_goto(
+      sideeffects.instructions.empty() ? v : sideeffects.instructions.begin());
     y->guard = gen_true_expr();
     y->location = f.location;
     y->pragma_unroll_count = f.pragma_unroll_count;
 
+    dest.destructive_append(sideeffects);
     dest.destructive_append(tmp_v);
     dest.destructive_append(tmp_w);
     dest.destructive_append(tmp_x);
@@ -968,16 +993,12 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_switch2t &sw = to_code_switch2t(code2);
 
-    // convert_switch lowers the switch value with remove_sideeffects and
-    // prepends whatever that emits ahead of the case guards; restrict this kind
-    // to the side-effect-free case, as every other value-carrying kind here is,
-    // so that preamble is empty and each guard reads the value directly.
-    if (has_sideeffect(sw.value))
-      return false;
+    const locationt &here = effective_location(sw.location, inherited);
 
     //    switch(v) { case x: Px; case y: Py; default: Pd; }
     // --------------------
     //    <LOCATION>          <-- the switch statement itself
+    //    sideeffects in v
     //    if(v==x) goto X;
     //    if(v==y) goto Y;
     //    goto d;
@@ -988,7 +1009,18 @@ bool goto_convert_functionst::convert_native_rec(
 
     dest.add_instruction()->make_location(sw.location);
 
-    const exprt argument = migrate_expr_back(sw.value);
+    // convert_switch lowers the value with remove_sideeffects before it saves
+    // the break/default/case targets, and the guards then compare against the
+    // *lowered* value. Keep both: the lowering may allocate from the shared
+    // tmp_symbol counter, whose numbering is observable.
+    exprt argument = migrate_expr_back(sw.value);
+    goto_programt sideeffects;
+    if (has_sideeffect(sw.value))
+    {
+      if (!here.get_file().empty())
+        stamp_value_locations(argument, here);
+      remove_sideeffects(argument, sideeffects);
+    }
 
     break_switch_targetst old_targets(targets);
     destructor_stackt stack_before = targets.destructor_stack;
@@ -1005,8 +1037,7 @@ bool goto_convert_functionst::convert_native_rec(
     targets.cases.clear();
 
     goto_programt tmp;
-    bool body_ok = convert_native_rec(
-      sw.body, tmp, effective_location(sw.location, inherited));
+    bool body_ok = convert_native_rec(sw.body, tmp, here);
 
     if (!body_ok || targets.destructor_stack.size() != stack_before.size())
     {
@@ -1040,6 +1071,7 @@ bool goto_convert_functionst::convert_native_rec(
     d_jump->make_goto(targets.default_target);
     d_jump->location = targets.default_target->location;
 
+    dest.destructive_append(sideeffects);
     dest.destructive_append(tmp_cases);
     dest.destructive_append(tmp);
     dest.destructive_append(tmp_z);
