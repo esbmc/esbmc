@@ -51,6 +51,12 @@ static std::string ctest_output_dir(const optionst &options)
   return dir.empty() ? ctest_generator::default_output_dir : dir;
 }
 
+static std::string pytest_output_dir(const optionst &options)
+{
+  std::string dir = options.get_option("pytest-output-dir");
+  return dir.empty() ? pytest_generator::default_output_dir : dir;
+}
+
 std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
 std::mutex goto_functionst::reached_claims_mutex;
@@ -191,7 +197,8 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     std::string module_name = pytest_generator::extract_module_name(input_file);
     std::string pytest_filename =
       pytest_generator::generate_pytest_filename(module_name);
-    pytest_gen.generate_single(pytest_filename, eq, smt_conv, ns);
+    pytest_gen.generate_single(
+      pytest_output_dir(options), pytest_filename, eq, smt_conv, ns);
   }
 
   if (options.get_bool_option("generate-ctest-testcase"))
@@ -1145,7 +1152,7 @@ void report_coverage(
     std::string module_name = pytest_generator::extract_module_name(input_file);
     std::string pytest_filename =
       pytest_generator::generate_pytest_filename(module_name);
-    pytest_gen.generate(pytest_filename);
+    pytest_gen.generate(pytest_output_dir(options), pytest_filename);
   }
 
   // Generate CTest test cases from collected data (for coverage mode)
