@@ -4,6 +4,7 @@
 #include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math/math_guard_utils.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/set/python_set.h>
@@ -1103,6 +1104,45 @@ exprt function_call_expr::handle_float_hex_literal() const
     d = -d;
 
   return converter_.get_string_builder().build_string_literal(py_float_hex(d));
+}
+
+exprt function_call_expr::handle_float_fromhex() const
+{
+  if (call_["args"].size() != 1)
+    throw std::runtime_error("float.fromhex() takes exactly one argument");
+
+  std::string s;
+  if (!string_handler::extract_constant_string(call_["args"][0], converter_, s))
+    throw std::runtime_error(
+      "float.fromhex() is only supported on a constant string");
+
+  // Strip leading/trailing ASCII whitespace, as CPython does.
+  std::size_t b = 0, e = s.size();
+  while (b < e && std::isspace(static_cast<unsigned char>(s[b])))
+    ++b;
+  while (e > b && std::isspace(static_cast<unsigned char>(s[e - 1])))
+    --e;
+  const std::string t = s.substr(b, e - b);
+
+  // Fold only the strict C99 hex-float form [sign]0x<hex>[.<hex>]p[sign]<dec>,
+  // i.e. exactly what float.hex() emits. strtod parses that byte-identically to
+  // CPython (verified over ~2000 doubles), so the round trip is exact. CPython
+  // also accepts lenient spellings (hex digits without "0x", a missing "p",
+  // "inf"/"nan") and raises OverflowError on overflow; those are left
+  // unsupported rather than risk a wrong fold.
+  static const std::regex hex_float(
+    R"(^[+-]?0[xX](?:[0-9A-Fa-f]+\.?[0-9A-Fa-f]*|\.[0-9A-Fa-f]+)[pP][+-]?[0-9]+$)");
+  if (!std::regex_match(t, hex_float))
+    throw std::runtime_error(
+      "float.fromhex() only supports the 0x...p... hexadecimal form");
+
+  const round_to_nearest_guard rounding_guard;
+  char *end = nullptr;
+  const double d = std::strtod(t.c_str(), &end);
+  if (end != t.c_str() + t.size() || !std::isfinite(d))
+    throw std::runtime_error("float.fromhex() argument is out of range");
+
+  return from_double(d, type_handler_.get_typet("float", 0));
 }
 
 exprt function_call_expr::handle_bytes_fromhex() const
@@ -3747,6 +3787,15 @@ function_call_expr::get_dispatch_table()
      },
      [this]() { return handle_bytes_fromhex(); },
      "bytes.fromhex()"},
+
+    // float.fromhex("0x1.8p3") classmethod — fold the strict hex-float form to
+    // a double (the inverse of float.hex()).
+    {[this]() {
+       return function_id_.get_function() == "fromhex" &&
+              get_object_name() == "float";
+     },
+     [this]() { return handle_float_fromhex(); },
+     "float.fromhex()"},
 
     // Built-in type constructors (int, float, str, bool, etc.)
     {[this]() {

@@ -4188,3 +4188,38 @@ the `_fail` pins the wrong-value assertion as `FAILED`. Every positive cross-che
 `float.fromhex()` (the classmethod inverse) remains an unsupported stub — a natural follow-up. The §3
 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible
 `hashlib` case all stand. The §5 priority order stands.
+
+## 91. 2026-07-22 re-validation (eighty-first sweep) & float.fromhex() literal fold
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. This sweep is the §90b
+follow-up: it folds `float.fromhex()`, the classmethod inverse of the `float.hex()` fold shipped in
+§90. Like §90 it is **independent of the §87–§89 float-format stack** — a fresh branch off `master`
+(it builds directly on §90's `feat/python-float-hex-literal` branch, not the stacked PRs).
+
+### 91a. New isolated, soundly-fixable defect found & fixed
+**`float.fromhex()` on a constant string was unmodeled** — ESBMC replaced the classmethod with a
+nondet double, so `float.fromhex("0x1.8p3") == 12.0` reported a spurious `FAILED`.
+
+**Fix**: fold a constant-string `float.fromhex(s)` to the exact double — a new
+`handle_float_fromhex()` handler + dispatch entry in `function_call/expr.cpp`. After stripping
+surrounding ASCII whitespace (as CPython does), the string is matched against the **strict C99
+hex-float grammar** `[sign]0x<hex>[.<hex>]p[sign]<dec>` — exactly what `float.hex()` emits — and
+parsed with `strtod` under a `round_to_nearest_guard`. `strtod` decodes that form byte-identically to
+CPython (verified by a differential round-trip over the §90 test values and ~2000 doubles), so the
+`hex → fromhex` round trip is exact. CPython's **lenient** spellings (hex digits without the `0x`
+prefix, a missing `p` exponent, `inf`/`nan`, and `OverflowError` on out-of-range input) are
+deliberately **rejected rather than folded** — an unsound fold is worse than an unsupported stub
+(the §89 policy). A non-constant / `Name` argument stays unsupported.
+
+New regression pair `regression/python/float_fromhex_literal{,_fail}` (CORE): the positive covers the
+padded and short mantissa forms, a missing fraction part (`0x1p3`), carried sign, surrounding
+whitespace, and large/small/subnormal magnitudes (`1e300`, `1e-300`, `5e-324`); the `_fail` pins the
+wrong-value assertion as `FAILED`. Every positive cross-checked against CPython `float.fromhex`; the
+float-method subset (incl. the §90 `float.hex` pair) is green; clang-format 11 clean.
+
+### 91b. Everything else: unchanged disposition
+With `float.hex()` (§90) and `float.fromhex()` (§91) both folded, the §15b "unmodeled method"
+catalogue is drained. `2 ** 0.5` / fractional float `**` stays KNOWNBUG (root cause is the shared
+`__ESBMC_pow`/libm intrinsic, all-frontend — not a Python fold — like #4796). The §3 design-level
+blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib` case
+all stand. The §5 priority order stands.

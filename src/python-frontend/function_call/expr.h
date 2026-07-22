@@ -198,6 +198,12 @@ private:
    */
   exprt handle_float_hex_literal() const;
 
+  /**
+   * @brief Fold float.fromhex("0x1.8p3") on a constant string to a double,
+   *        the inverse of float.hex().
+   */
+  exprt handle_float_fromhex() const;
+
   /*
    * Extracts a string representation from a symbol's constant value.
    * Handles both character arrays (e.g., ['6', '5']) and single-character
