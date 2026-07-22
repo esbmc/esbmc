@@ -3,6 +3,7 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/remove_no_op.h>
+#include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_types.h>
 #include <util/i2string.h>
@@ -170,6 +171,56 @@ effective_location(const locationt &own, const locationt &inherited)
   return (own.is_not_nil() && !own.get_file().empty()) ? own : inherited;
 }
 
+// A statement's own location field, i.e. exactly what migrate_expr_back writes
+// into the legacy `#location` the legacy path then reads back. Only the kinds
+// convert_native_rec supports are listed; anything else cannot reach a caller.
+static const locationt &statement_location(const expr2tc &code2)
+{
+  switch (code2->expr_id)
+  {
+  case expr2t::code_block_id:
+    return to_code_block2t(code2).location;
+  case expr2t::code_skip_id:
+    return to_code_skip2t(code2).location;
+  case expr2t::code_assign_id:
+    return to_code_assign2t(code2).location;
+  case expr2t::code_expression_id:
+    return to_code_expression2t(code2).location;
+  case expr2t::code_decl_id:
+    return to_code_decl2t(code2).location;
+  case expr2t::code_return_id:
+    return to_code_return2t(code2).location;
+  case expr2t::code_ifthenelse_id:
+    return to_code_ifthenelse2t(code2).location;
+  case expr2t::code_while_id:
+    return to_code_while2t(code2).location;
+  case expr2t::code_dowhile_id:
+    return to_code_dowhile2t(code2).location;
+  case expr2t::code_for_id:
+    return to_code_for2t(code2).location;
+  case expr2t::code_switch_id:
+    return to_code_switch2t(code2).location;
+  case expr2t::code_switch_case_id:
+    return to_code_switch_case2t(code2).location;
+  case expr2t::code_break_id:
+    return to_code_break2t(code2).location;
+  case expr2t::code_continue_id:
+    return to_code_continue2t(code2).location;
+  case expr2t::code_assert_id:
+    return to_code_assert2t(code2).location;
+  case expr2t::code_assume_id:
+    return to_code_assume2t(code2).location;
+  case expr2t::code_function_call_id:
+    return to_code_function_call2t(code2).location;
+  case expr2t::code_goto_id:
+    return to_code_goto2t(code2).location;
+  case expr2t::code_label_id:
+    return to_code_label2t(code2).location;
+  default:
+    return static_cast<const locationt &>(get_nil_irep());
+  }
+}
+
 // W1-loc spike Phase C (esbmc/esbmc#4715): consume one IREP2 statement `code2`
 // natively (design D3), appending to `dest`, and recurse into nested blocks.
 // Returns false the instant an unsupported kind (or a shape whose native
@@ -188,7 +239,9 @@ effective_location(const locationt &own, const locationt &inherited)
 // side-effect-free `while` whose body converts natively (`v: if(!c) goto z;
 // x: P; y: goto v; z: ;`), its `do`/`while` counterpart (`w: P; y: if(c) goto
 // w; z: ;`), the `for` loop that `while` shape desugars from (init, then the
-// same shape with the iteration statement at the continue target), and
+// same shape with the iteration statement at the continue target), a
+// side-effect-free `switch` whose body converts natively (the LOCATION node,
+// the case-guard chain, the arms, and the trailing break target), and
 // `break`/`continue` (an unconditional GOTO to
 // the nearest enclosing loop's break/continue target, preceded by
 // unwind_destructor_stack's DEAD instructions for whatever was pushed since
@@ -911,12 +964,136 @@ bool goto_convert_functionst::convert_native_rec(
     return true;
   }
 
+  if (is_code_switch2t(code2))
+  {
+    const code_switch2t &sw = to_code_switch2t(code2);
+
+    // convert_switch lowers the switch value with remove_sideeffects and
+    // prepends whatever that emits ahead of the case guards; restrict this kind
+    // to the side-effect-free case, as every other value-carrying kind here is,
+    // so that preamble is empty and each guard reads the value directly.
+    if (has_sideeffect(sw.value))
+      return false;
+
+    //    switch(v) { case x: Px; case y: Py; default: Pd; }
+    // --------------------
+    //    <LOCATION>          <-- the switch statement itself
+    //    if(v==x) goto X;
+    //    if(v==y) goto Y;
+    //    goto d;
+    // X: Px;
+    // Y: Py;
+    // d: Pd;
+    // z: ;                   <-- break target, and default when there is none
+
+    dest.add_instruction()->make_location(sw.location);
+
+    const exprt argument = migrate_expr_back(sw.value);
+
+    break_switch_targetst old_targets(targets);
+    destructor_stackt stack_before = targets.destructor_stack;
+
+    goto_programt tmp_z;
+    goto_programt::targett z = tmp_z.add_instruction(SKIP);
+    z->location = sw.location;
+
+    // convert_switch clears `cases` but deliberately not `cases_map`; both are
+    // saved and restored by old_targets, so a nested switch behaves as it does
+    // on the legacy path.
+    targets.set_break(z);
+    targets.set_default(z);
+    targets.cases.clear();
+
+    goto_programt tmp;
+    bool body_ok = convert_native_rec(
+      sw.body, tmp, effective_location(sw.location, inherited));
+
+    if (!body_ok || targets.destructor_stack.size() != stack_before.size())
+    {
+      old_targets.restore(targets);
+      targets.destructor_stack = stack_before;
+      return false;
+    }
+
+    goto_programt tmp_cases;
+    for (auto &it : targets.cases)
+    {
+      exprt guard_expr;
+      case_guard(argument, it.second, guard_expr);
+
+      goto_programt::targett x = tmp_cases.add_instruction();
+      x->make_goto(it.first);
+      migrate_expr(guard_expr, x->guard);
+      x->location = sw.location;
+      if (
+        options.get_bool_option("validate-violation-witness") ||
+        options.get_option("witness-output-yaml") != "")
+        for (const auto &op : it.second)
+        {
+          BigInt val;
+          if (!to_integer(op, val))
+            x->switch_case_ids.push_back(integer2string(val));
+        }
+    }
+
+    goto_programt::targett d_jump = tmp_cases.add_instruction();
+    d_jump->make_goto(targets.default_target);
+    d_jump->location = targets.default_target->location;
+
+    dest.destructive_append(tmp_cases);
+    dest.destructive_append(tmp);
+    dest.destructive_append(tmp_z);
+
+    old_targets.restore(targets);
+    return true;
+  }
+
+  if (is_code_switch_case2t(code2))
+  {
+    const code_switch_case2t &sc = to_code_switch_case2t(code2);
+
+    goto_programt tmp;
+    if (!convert_native_rec(
+          sc.code, tmp, effective_location(sc.location, inherited)))
+      return false;
+
+    // convert() always leaves at least one instruction (it appends a SKIP when
+    // a statement emitted nothing), so legacy can take instructions.begin()
+    // unconditionally; convert_native_rec only guarantees that for a block.
+    if (tmp.instructions.empty())
+      return false;
+
+    goto_programt::targett target = tmp.insert(tmp.instructions.begin());
+    target->make_skip();
+    target->location = statement_location(sc.code);
+    dest.destructive_append(tmp);
+
+    if (sc.is_default)
+    {
+      targets.set_default(target);
+      return true;
+    }
+
+    // Consecutive labels on one statement (`case 1: case 2: P;`) share a
+    // target, so the arm accumulates its case operands into one entry.
+    cases_mapt::iterator entry = targets.cases_map.find(target);
+    if (entry == targets.cases_map.end())
+    {
+      targets.cases.push_back(std::make_pair(target, caset()));
+      entry =
+        targets.cases_map.insert(std::make_pair(target, --targets.cases.end()))
+          .first;
+    }
+    entry->second->second.push_back(migrate_expr_back(sc.case_op));
+    return true;
+  }
+
   if (is_code_break2t(code2))
   {
     const code_break2t &b = to_code_break2t(code2);
 
-    // A break outside a loop/switch shouldn't reach here (switch isn't a
-    // supported kind), but stay defensive rather than trust the invariant.
+    // A break outside a loop or switch shouldn't reach here, but stay defensive
+    // rather than trust the invariant.
     if (!targets.break_set)
       return false;
 
