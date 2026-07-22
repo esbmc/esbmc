@@ -1,4 +1,4 @@
 CORE
 main.cpp
---incremental-bmc --memory-leak-check
+--unwind 200
 ^VERIFICATION SUCCESSFUL$

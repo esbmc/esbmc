@@ -1,5 +1,5 @@
-THOROUGH
+CORE
 main.cpp
---incremental-bmc
+--unwind 12
 ^VERIFICATION FAILED$
 ^  String capacity exceeded$
