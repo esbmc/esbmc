@@ -305,10 +305,10 @@ docs/
 
 | Metric | Count |
 |--------|-------|
-| Total commits | 5 |
+| Total commits | 6 |
 | Total regression tests | 22 |
-| Passing tests | 16 |
-| Bug-detecting tests | 6 |
+| Passing tests | 15 |
+| Bug-detecting tests | 7 |
 | Kernel headers added | 6 |
 | Operational model lines | ~1,050 |
 | Documentation pages | 2 |
