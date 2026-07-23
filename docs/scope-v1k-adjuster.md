@@ -195,3 +195,43 @@ already drained inline site-by-site with no whole-body pass; Spike-1 (§5.1) con
 every remaining site — including the doc's "known-hard" and/or node — drains inline
 with zero asserts-on aborts, so **the adjuster is unnecessary: finish inline and
 retire the dead pass.**
+
+---
+
+## Appendix — flip hop-off re-census (2026-07-23)
+
+With S1–S4 and the flip-prep fixes landed (#5985/#5988/#5992/#5995/#5996/#5999),
+the `python_adjust` "flip" (skip `clang_cpp_adjust` on the Python path, run
+`python_adjust` alone) was re-measured to update the stale 2026-07-10 census.
+Method: an `ESBMC_PY_SKIP_LEGACY_ADJUST` env gate around the `clang_cpp_adjust`
+call in `python_language.cpp` (throwaway, reverted), comparing the hop-off
+verdict to the normal (hop-on) verdict over 150 `regression/python` tests.
+
+**Result: 132/150 MATCH (88%), 0 wrong verdicts, 16 no-verdict, 2 skipped
+(KNOWNBUG/FUTURE).** The **zero wrong verdicts** is the important number — the
+adjuster is *sound* where it produces a verdict; the gap is entirely
+crash/hang (no silent unsoundness).
+
+Blocker distribution of the 16 no-verdict cases:
+
+- **~6 × `type2t::symbolic_type_excp`** — `builtin2`, `builtin2_fail`, `cast`,
+  `cast_fail`, `casting-chr-func`, `casting-chr-var-multibyte`. This is the S3
+  gap the earlier F-A1 drill localised: an `empty_type2t` is constructed
+  **downstream** in goto-convert/symex (not left by `python_adjust` at adjust
+  time — the bodies are clean when `adjust()` returns), so the fix is *not* a new
+  `python_adjust` arm. Round-2 recipe (still the next step): instrument the four
+  `get_width` throw sites (`irep2_type.cpp:168-223`) to name the constructing
+  consumer, fix there. This is the dominant, deepest remaining flip blocker.
+- **~10 × hang / unsupported / timeout** — `abs-fail`, `assign-fail`,
+  `boolop-short-circuit{,-fail}`, `boolop-len-or`, `bytes_fromhex_invalid_fail`,
+  `bytes_range_error_fail`, `branch_coverage-fail` (coverage-mode), `builtin2`
+  neighbours, `builtin_all_nonliteral` (reached solving), `bytearray_unsupported`
+  (frontend feature gap). These are heterogeneous and lower-priority than the
+  `symbolic_type_excp` cluster; several may resolve once the S3 downstream fix
+  lands (an unresolved width can also manifest as a non-terminating symex).
+
+**Takeaway.** The flip is close (88%) and sound (0 wrong verdicts); the single
+highest-value remaining task is the S3 `symbolic_type_excp` / downstream
+`empty_type2t` fix, which is a consumer-side (goto-convert/symex) investigation,
+not an adjuster arm. The full flip (default-on, delete the `clang_cpp_adjust`
+hop) remains a dedicated multi-PR effort gated on dual-solver verdict parity.
