@@ -8,6 +8,7 @@
 # placeholders, leaving this case unretyped (and so out of #6243's scope);
 # this test only pins that it no longer crashes.
 class Service:
+
     def __init__(self, name):
         self._name = name
 

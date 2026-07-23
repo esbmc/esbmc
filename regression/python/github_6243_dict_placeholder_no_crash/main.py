@@ -6,6 +6,7 @@
 # surfaces as a clean AttributeError verdict instead, a different shape
 # than the tuple case's plain assertion mismatch, so it needs its own test).
 class Service:
+
     def __init__(self, name):
         self._name = name
 

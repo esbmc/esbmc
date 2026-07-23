@@ -11,6 +11,7 @@
 # for function-scoped `global` declarations, not another retype-on-rebind
 # fix.
 class Service:
+
     def __init__(self, name):
         self._name = name
         self._tag = 1
