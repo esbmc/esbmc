@@ -376,3 +376,54 @@ be dead instrumentation (C-Live cannot be discharged), because neither reaches
 
 The genuine remaining reachable slices are therefore `temporary_object` and the
 C++ throw/catch machinery; the next native-kind PR should target the former.
+
+## Appendix D — the native-kind ladder is drained; coverage census (2026-07-23)
+
+The reachable native-kind slices named above have all landed as PRs, so the
+**Phase C native-kind ladder is essentially complete** for the reachable set:
+
+| Slice | PR | Mechanism |
+|---|---|---|
+| `temporary_object` in an expression statement | #6290 | guard removed; the `code_return2t` handler falls back when a destructor `FUNCTION_CALL` is on the stack (C++ [stmt.return]) |
+| local-object declaration (destructor type / lowered initializer) | #6307 | delegated to `convert_decl` (on #6290) |
+| return with a pending destructor | #6315 | delegated to `convert_return`, replacing #6290's whole-function fallback (on #6307) — the shared `tmp_symbol` counter byte-identity was proven, not corpus-luck |
+| `throw` statement | #6295 | the `code_expression2t` handler delegates a code `cpp-throw` operand to `convert_throw` |
+| `try`/`catch` (`code_cpp_catch2t`) | #6302 | delegated to `convert_catch` |
+
+Together these take a C++ function with local objects and exceptions native
+end-to-end under the flag (the plain statements convert natively; the destructor
+/ exception machinery is delegated to the exact legacy path, byte-identically).
+
+**Census (120 `regression/esbmc-cpp/cpp` tests, measured with the stack applied,
+over *every* function including library / operational-model bodies):**
+`try_convert_body_native` succeeds on **≈78.7 %** of functions (20 770 native /
+5 626 fallback). The census instruments `try_convert_body_native`'s outcome and
+the `expr2t::expr_id` at the unsupported-kind fallback.
+
+Two findings direct the remaining work:
+
+1. **Unsupported-kind fallbacks are drained.** The *only* `expr_id` reaching the
+   final "unsupported kind" `return false` is `code_cpp_delete` (id 92, 115×) —
+   and even that is not worth a handler: a statement-level `delete p;` in user
+   code is a `code_expression2t` wrapping a `sideeffect2t(cpp_delete)`, already
+   lowered natively by the #6177 expression handler via `remove_sideeffects` →
+   `remove_cpp_delete` (a `void f(T* p){ g = p->v; delete p; }` probe shows no
+   `code_cpp_delete2t` reaches `convert_native_rec` at all). The code-statement
+   `code_cpp_delete2t` the census counts arises only inside operational-model
+   destructor bodies that convert far enough to reach it, and a dedicated
+   handler for it is reachable only stacked on the whole destructor arc — a
+   marginal, library-only gain. So the native-kind ladder has no reachable
+   unsupported kind left worth a slice.
+2. **The remaining ~5 500 fallbacks are guard fallbacks**, not missing kinds:
+   shapes an existing handler deliberately refuses (a side-effecting branch/loop
+   condition the coverage options touch, a decl of array/VLA type, an atomic or
+   code-typed operand, a top-level ternary under `--validate-violation-witness`,
+   etc.), overwhelmingly in complex library / OM bodies. Reducing these is
+   shape-by-shape work with diminishing per-slice value.
+
+**Recommendation.** The reachable native-kind ladder is drained; the destructor
+arc (#6290 → #6307 → #6315) plus throw/catch (#6295, #6302) should be landed as a
+group. Further native-coverage gains are guard-fallback reductions (low value per
+slice) — better weighed against the other open Part V workstreams (the V.3
+converter-construction residue, or the V.5 IREP2-native counterexample printer)
+than pursued mechanically.
