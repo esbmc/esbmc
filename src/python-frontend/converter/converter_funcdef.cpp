@@ -904,6 +904,7 @@ size_t python_converter::register_function_argument(
   // instead so the parameter stays usable inside the callee (other call
   // sites are not cross-checked for consistency and may still be rejected
   // at the boundary if they mismatch).
+  bool numpy_array_param = false;
   if (
     arg_name != "self" && arg_name != "cls" &&
     (arg_type == any_type() || arg_type == type_handler_.get_list_type()))
@@ -915,25 +916,37 @@ size_t python_converter::register_function_argument(
           type.arguments().size(),
           inferred_array_type,
           visiting))
+    {
       arg_type = inferred_array_type;
+      numpy_array_param = true;
+    }
   }
 
   // Arrays are converted to pointers so that the backend receives the same
   // representation regardless of how the parameter is declared: normally
   // pointer-to-element (or pointer-to-row for a 2-D array), matching C decay.
-  // A parameter playing either role in an `a[mask]` pattern
+  // A numpy-inferred parameter playing either role in an `a[mask]` pattern
   // keeps pointer-to-*whole-array* instead: 1-D decay otherwise
   // erases the array length entirely (bool* looks identical to "pointer to
   // one bool"), and even for `a` itself, row-only decay would make a single
   // dereference yield one row instead of the full array the row-selection
-  // model expects.
+  // model expects. This whole-array decay only applies to parameters typed
+  // via the numpy inference above -- an array parameter typed some other way
+  // (e.g. a `str` argument, itself a char array) must keep ordinary C decay,
+  // since a bare-variable subscript of it (e.g. `s[i]` in a loop) is a
+  // completely unrelated, extremely common pattern that must not be
+  // mistaken for numpy mask indexing.
   if (arg_type.is_array())
   {
-    const nlohmann::json *owning_function =
-      find_function_def((*ast_json)["body"], id.get_function());
-    bool used_in_variable_index_subscript =
-      owning_function != nullptr && param_used_in_variable_index_subscript(
-                                      arg_name, (*owning_function)["body"]);
+    bool used_in_variable_index_subscript = false;
+    if (numpy_array_param)
+    {
+      const nlohmann::json *owning_function =
+        find_function_def((*ast_json)["body"], id.get_function());
+      used_in_variable_index_subscript =
+        owning_function != nullptr && param_used_in_variable_index_subscript(
+                                        arg_name, (*owning_function)["body"]);
+    }
 
     arg_type = used_in_variable_index_subscript
                  ? gen_pointer_type(arg_type)
