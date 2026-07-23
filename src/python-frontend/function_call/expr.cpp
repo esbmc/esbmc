@@ -1071,19 +1071,44 @@ exprt function_call_expr::handle_float_is_integer_literal() const
   return migrate_expr_back(is_int ? gen_true_expr() : gen_false_expr());
 }
 
-// Render a double as CPython's float.hex() does. "%.13a" prints the 13 hex
-// mantissa digits (= the 52-bit significand), so the representation is exact
-// and byte-identical to CPython for every finite non-zero value; only zero
-// (which CPython collapses to a single "0" mantissa) needs special spelling.
-// A float literal can never be inf/nan here — those overflow the AST-JSON
-// parser before reaching this fold — but %a would still spell them correctly.
+// Render a double as CPython's float.hex() does: sign, a leading hex digit,
+// 13 hex mantissa digits (the 52-bit significand), and a binary exponent
+// "p{sign}{n}". This mirrors CPython's float_hex() (Objects/floatobject.c)
+// bit-for-bit rather than delegating to "%a": the C standard leaves the
+// leading-digit normalisation of %a implementation-defined, and glibc keeps a
+// subnormal's leading digit 0 with exponent -1022 while macOS/BSD libc
+// renormalises to a leading 1 with a smaller exponent — so %a is not portable
+// for subnormals (e.g. 5e-324). A float literal can never be inf/nan here:
+// those overflow the AST-JSON parser before reaching this fold.
 static std::string py_float_hex(double d)
 {
   if (d == 0.0)
     return std::signbit(d) ? "-0x0.0p+0" : "0x0.0p+0";
-  char buf[64];
-  std::snprintf(buf, sizeof(buf), "%.13a", d);
-  return buf;
+
+  const bool neg = std::signbit(d);
+  int e;
+  double m = std::frexp(std::fabs(d), &e); // 0.5 <= m < 1, |d| = m * 2^e
+  // Subnormals share the minimum exponent (-1022): keep a leading 0 digit
+  // rather than renormalising to a leading 1.
+  const int shift = 1 - std::max(-1021 - e, 0);
+  m = std::ldexp(m, shift);
+  e -= shift;
+  const int lead = static_cast<int>(m); // 0 (subnormal) or 1 (normal)
+  m -= lead;
+
+  std::string mantissa;
+  for (int i = 0; i < 13; ++i)
+  {
+    m *= 16.0;
+    const int digit = static_cast<int>(m);
+    mantissa += "0123456789abcdef"[digit];
+    m -= digit;
+  }
+
+  char exponent[16];
+  std::snprintf(exponent, sizeof(exponent), "p%+d", e);
+  return std::string(neg ? "-0x" : "0x") + static_cast<char>('0' + lead) + '.' +
+         mantissa + exponent;
 }
 
 exprt function_call_expr::handle_float_hex_literal() const

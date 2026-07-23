@@ -4257,12 +4257,17 @@ with a nondet string, so `(3.5).hex() == "0x1.c000000000000p+1"` reported a spur
 
 **Fix**: fold a literal-receiver `(x).hex()` to CPython's exact hexadecimal string, mirroring the
 existing `float.is_integer()` literal fold (§18) — a new `is_float_hex_literal_call()` predicate +
-`handle_float_hex_literal()` handler + dispatch entry in `function_call/expr.cpp`. The rendering is a
-one-liner: glibc's `"%.13a"` prints the 13 hex mantissa digits (= the 52-bit significand), which is
-**byte-identical to CPython for every finite non-zero value** (verified by a C-vs-CPython differential
-over normal, subnormal, negative and boundary values — the only divergence is zero, which CPython
-collapses to a single `"0"` mantissa while `%a` pads to 13, special-cased here). `%a` is exact (no
-rounding), so no `round_to_nearest_guard` is needed. Only a **literal** receiver is folded; a `Name`
+`handle_float_hex_literal()` handler + dispatch entry in `function_call/expr.cpp`. The renderer
+mirrors CPython's `float_hex()` (`Objects/floatobject.c`) directly via `frexp`/`ldexp` instead of
+delegating to `"%a"`: the C standard leaves the leading-digit normalisation of `%a`
+implementation-defined, and while glibc keeps a subnormal's leading digit `0` with exponent `-1022`
+(matching CPython), macOS/BSD libc renormalises to a leading `1` with a smaller exponent — so `%a` is
+**not portable for subnormals** (`5e-324` renders `0x1.0000000000000p-1074` on macOS vs CPython's
+`0x0.0000000000001p-1022`). The manual renderer extracts the leading digit and 13 hex mantissa digits
+(= the 52-bit significand) by exact powers-of-two scaling — no rounding — and is **byte-identical to
+CPython for every finite value on both glibc and macOS** (verified by a C-vs-CPython differential over
+normal, subnormal, negative and boundary values); zero is special-cased to CPython's single-`0`
+mantissa spelling. Only a **literal** receiver is folded; a `Name`
 receiver has no float OM for `hex()` and stays unsupported, and inf/nan cannot arise (a float literal
 that overflows, e.g. `1e400`, already fails the AST-JSON parse upstream), so the inf/nan branches were
 dropped as unreachable.
