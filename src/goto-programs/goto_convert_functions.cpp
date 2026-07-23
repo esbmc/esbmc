@@ -537,17 +537,28 @@ bool goto_convert_functionst::convert_native_rec(
     // A void function returning a value is a C/C++ constraint violation the
     // frontend rejects, so it never reaches here; only a valueless void return
     // does, which correctly emits just the end-of-function goto below.
-    // convert_return runs an unwind-before-RETURN whenever the destructor stack
-    // holds a destructor FUNCTION_CALL (C++ [stmt.return]: locals are destroyed
-    // after the value is computed but before the jump; a constant value takes a
-    // simpler sub-path). This native handler reproduces only the plain
-    // (destructor-free) shape, so it must fall back the moment such an entry is
-    // present -- a full-expression temporary lowered by the code_expression2t
-    // handler pushes exactly this (its ~T call), which the decl handler's own
-    // destructor fallback does not cover.
+    // When the destructor stack holds a destructor FUNCTION_CALL, convert_return
+    // runs an unwind-before-RETURN (C++ [stmt.return]: capture the value into a
+    // temp, run the destructors, then return the temp; a constant value takes a
+    // simpler sub-path). Reproducing that natively would allocate a
+    // return_value$ temp from the shared tmp_symbol counter -- the byte-identity
+    // hazard this dispatcher avoids -- so delegate the whole return statement to
+    // the legacy convert()/convert_return rather than fall back the entire
+    // function. convert_return leaves the destructor stack unchanged (its unwind
+    // is non-destructive and any return-temp entries are resized away) and emits
+    // a trailing unconditional goto, so the enclosing block handler's
+    // unreachable guard skips the scope-exit unwind and no destructor runs
+    // twice. Any temp it allocates is covered by convert_function's
+    // snapshot/restore on a later fallback; restore the value-operand locations
+    // first as the legacy body round-trip does.
     for (const codet &d : targets.destructor_stack)
       if (d.get_statement() == "function_call")
-        return false;
+      {
+        exprt op = migrate_expr_back(code2);
+        restore_value_locations(op, effective_location(ret.location, inherited));
+        convert(to_code(op), dest);
+        return true;
+      }
 
     exprt val = is_nil_expr(ret.operand) ? static_cast<exprt>(nil_exprt())
                                          : migrate_expr_back(ret.operand);
