@@ -4339,40 +4339,17 @@ std::optional<exprt> function_call_expr::fold_sorted_symbolic_tuples(
 
 std::optional<exprt> function_call_expr::try_fold_identity_array_return()
 {
-  if (call_["func"].value("_type", "") != "Name")
+  std::optional<nlohmann::json> ret_val =
+    converter_.select_return_value_for_call(call_);
+  if (!ret_val)
+    return std::nullopt;
+  if (!converter_.return_value_uses_call_argument(*ret_val, call_))
     return std::nullopt;
 
-  const std::string &func_name = function_id_.get_function();
-  const nlohmann::json func_node =
-    json_utils::try_find_function(converter_.ast()["body"], func_name);
-  if (func_node.empty() || !func_node.contains("body"))
-    return std::nullopt;
-
-  const nlohmann::json &body = func_node["body"];
-  if (body.size() != 1 || body[0].value("_type", "") != "Return")
-    return std::nullopt;
-
-  const nlohmann::json &ret_val = body[0].value("value", nlohmann::json());
-  if (ret_val.is_null() || ret_val.value("_type", "") != "Name")
-    return std::nullopt;
-
-  const std::string returned_name = ret_val["id"].get<std::string>();
-  const nlohmann::json &params = func_node["args"]["args"];
-
-  // Restrict to the exact `def f(a): return a` shape: one parameter, one
-  // positional argument, no keywords. A function with more parameters, or a
-  // call with extra positional/keyword arguments, would have those other
-  // arguments' evaluation and type-checking silently skipped by substituting
-  // only the returned one.
-  if (params.size() != 1 || params[0].value("arg", "") != returned_name)
-    return std::nullopt;
-  if (
-    call_["args"].size() != 1 ||
-    (call_.contains("keywords") && !call_["keywords"].empty()))
-    return std::nullopt;
-
-  exprt arg_expr = converter_.get_expr(call_["args"][0]);
-  const typet &arg_type = converter_.ns.follow(arg_expr.type());
+  nlohmann::json substituted =
+    converter_.substitute_call_arguments(*ret_val, call_);
+  exprt ret_expr = converter_.get_expr(substituted);
+  const typet &arg_type = converter_.ns.follow(ret_expr.type());
   typet element_candidate;
   if (arg_type.is_array())
     element_candidate = arg_type;
@@ -4392,7 +4369,7 @@ std::optional<exprt> function_call_expr::try_fold_identity_array_return()
   if (innermost == char_type())
     return std::nullopt;
 
-  return arg_expr;
+  return ret_expr;
 }
 
 std::optional<exprt> function_call_expr::try_handle_round(bool is_user_imported)

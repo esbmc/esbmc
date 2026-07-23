@@ -175,19 +175,15 @@ public:
     const nlohmann::json &element);
 
   /**
-   * @brief Lower a strided column slice `a[:, ::step]` on a fixed-shape 2-D
-   * array: every row is sliced independently via handle_range_slice (step>0
-   * and step=-1 reverse; other negative steps are rejected explicitly, since
-   * handle_range_slice's no-bounds negative-step path only models
-   * reversal), then copied column by column into a fresh 2-D result. Only
-   * the bare-step form is modelled - explicit bounds combined with a column
-   * step (`a[:, 1:3:2]`) are rejected, since the result width would then
-   * need to be resolved from runtime bounds instead of the array's static
-   * shape.
+   * @brief Lower a strided column slice `a[:, start:stop:step]` on a
+   * fixed-shape 2-D array: the literal slice bounds are resolved at conversion
+   * time and each selected column is copied into a fresh 2-D result. Bare
+   * negative steps other than `-1` are still rejected because their result
+   * width would differ from the old full-reversal path.
    * @param array          Source 2-D array expression.
    * @param col_slice_node AST `Slice` node for the column axis (axis 1);
-   *                       its `step` must be a literal integer and its
-   *                       `lower`/`upper` must be absent.
+   *                       its `step`, `lower`, and `upper` must be literal
+   *                       integers when present.
    * @param element        The Subscript AST node, used for location info.
    */
   exprt build_strided_column_select(
@@ -196,25 +192,20 @@ public:
     const nlohmann::json &element);
 
   /**
-   * @brief Lower an N-D mixed slice/index tuple subscript with exactly one
-   * full-slice axis and every other axis a literal (or resolvable runtime)
-   * integer, e.g. `a[:, 0, 0]` or `a[0, :, 0]` on a 3-D array. Generalizes
-   * build_column_select beyond 2-D: for each position along the slice axis,
-   * the other axes are chained-indexed via the existing single-axis
-   * `build_index` path, and the resulting scalar/sub-array is copied into a
-   * fresh result sized to the slice axis's extent. Any other combination
-   * (a bounded/partial slice, more than one slice axis, ...) is rejected by
-   * the caller before reaching this function.
+   * @brief Lower an N-D mixed slice/index tuple subscript with one or more
+   * bounded slice axes and fixed-index axes, e.g. `a[:, 0, 0]`,
+   * `a[0:2, 0, 0]`, or `a[:, :, 0]` on a 3-D array. Slice bounds are resolved
+   * at conversion time, and the selected scalar cells are copied into a fresh
+   * fixed-shape result.
    * @param array      Source N-D array expression.
-   * @param idx_nodes  One AST node per axis, in order; exactly one must be a
-   *                   full slice (`:`).
-   * @param slice_axis Index into @p idx_nodes of the full-slice axis.
+   * @param idx_nodes  One AST node per axis, in order; at least one must be a
+   *                   slice and every non-slice node is treated as a fixed
+   *                   index.
    * @param element    The Subscript AST node, used for location info.
    */
   exprt build_mixed_slice_tuple_select(
     const exprt &array,
     const std::vector<nlohmann::json> &idx_nodes,
-    std::size_t slice_axis,
     const nlohmann::json &element);
 
   /**
