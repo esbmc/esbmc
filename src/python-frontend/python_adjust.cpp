@@ -218,6 +218,22 @@ void python_adjust::adjust_expr(expr2tc &expr)
     if (resolve_source(source))
       expr = index2tc(i.type, source, i.index);
   }
+  else if (is_dereference2t(expr) && is_empty_type(expr->type))
+  {
+    // A pointer dereference whose result type the converter left empty -- a
+    // Python element access `s[i]` over a char*-like source (chr()'s result is
+    // the canonical case). clang_cpp_adjust resolves the read type to the
+    // pointee; do the same so symex does not get_width() an empty deref target
+    // (the S3 symbolic_type_excp root, docs/scope-v1k-adjuster round-4). Only
+    // when the pointee is itself concrete; dereference2t is immutable, rebuild.
+    const dereference2t &d = to_dereference2t(expr);
+    if (is_pointer_type(d.value->type))
+    {
+      const type2tc &pointee = to_pointer_type(d.value->type).subtype;
+      if (!is_empty_type(pointee))
+        expr = dereference2tc(pointee, d.value);
+    }
+  }
   else if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
   {
     // S2: aggregate-literal completion — the third relaxed construction
