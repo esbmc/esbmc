@@ -192,25 +192,20 @@ public:
     const nlohmann::json &element);
 
   /**
-   * @brief Lower an N-D mixed slice/index tuple subscript with exactly one
-   * full-slice axis and every other axis a literal (or resolvable runtime)
-   * integer, e.g. `a[:, 0, 0]` or `a[0, :, 0]` on a 3-D array. Generalizes
-   * build_column_select beyond 2-D: for each position along the slice axis,
-   * the other axes are chained-indexed via the existing single-axis
-   * `build_index` path, and the resulting scalar/sub-array is copied into a
-   * fresh result sized to the slice axis's extent. Any other combination
-   * (a bounded/partial slice, more than one slice axis, ...) is rejected by
-   * the caller before reaching this function.
+   * @brief Lower an N-D mixed slice/index tuple subscript with one or more
+   * bounded slice axes and fixed-index axes, e.g. `a[:, 0, 0]`,
+   * `a[0:2, 0, 0]`, or `a[:, :, 0]` on a 3-D array. Slice bounds are resolved
+   * at conversion time, and the selected scalar cells are copied into a fresh
+   * fixed-shape result.
    * @param array      Source N-D array expression.
-   * @param idx_nodes  One AST node per axis, in order; exactly one must be a
-   *                   full slice (`:`).
-   * @param slice_axis Index into @p idx_nodes of the full-slice axis.
+   * @param idx_nodes  One AST node per axis, in order; at least one must be a
+   *                   slice and every non-slice node is treated as a fixed
+   *                   index.
    * @param element    The Subscript AST node, used for location info.
    */
   exprt build_mixed_slice_tuple_select(
     const exprt &array,
     const std::vector<nlohmann::json> &idx_nodes,
-    std::size_t slice_axis,
     const nlohmann::json &element);
 
   /**

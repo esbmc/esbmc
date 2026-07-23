@@ -1408,20 +1408,40 @@ typet python_converter::resolve_any_subscript_array_type(
       };
       return absent("lower") && absent("upper") && absent("step");
     };
+    auto is_literal_int = [](const nlohmann::json &node) {
+      if (
+        node.value("_type", "") == "Constant" && node.contains("value") &&
+        node["value"].is_number_integer())
+        return true;
+      return node.value("_type", "") == "UnaryOp" && node.contains("op") &&
+             node["op"].value("_type", "") == "USub" &&
+             node.contains("operand") &&
+             node["operand"].value("_type", "") == "Constant" &&
+             node["operand"].contains("value") &&
+             node["operand"]["value"].is_number_integer();
+    };
+    auto is_supported_slice = [&](const nlohmann::json &node) {
+      if (is_full_slice(node))
+        return true;
+      for (const char *key : {"lower", "upper", "step"})
+        if (
+          node.contains(key) && !node[key].is_null() &&
+          !is_literal_int(node[key]))
+          return false;
+      return true;
+    };
 
-    std::size_t full_slice_count = 0;
-    bool has_partial_slice = false;
+    std::size_t slice_count = 0;
+    bool all_slices_supported = true;
     for (const auto &elt : ast_node["value"]["slice"]["elts"])
     {
       if (elt.value("_type", "") != "Slice")
         continue;
-      if (is_full_slice(elt))
-        ++full_slice_count;
-      else
-        has_partial_slice = true;
+      ++slice_count;
+      if (!is_supported_slice(elt))
+        all_slices_supported = false;
     }
-    is_supported_mixed_slice_tuple =
-      full_slice_count == 1 && !has_partial_slice;
+    is_supported_mixed_slice_tuple = slice_count != 0 && all_slices_supported;
   }
 
   // Reject a source array of more than 2 dimensions: n-D indexing is out of

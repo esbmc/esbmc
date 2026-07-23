@@ -1729,32 +1729,22 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             break;
           }
 
-          // N-D mixed slice/index tuple: exactly one full-slice axis (`:`)
-          // and every other axis a literal or resolvable-at-runtime integer,
-          // e.g. `a[:, 0, 0]` or `a[0, :, 0]`. A bounded/partial slice
-          // (`a[0:2, 0, 0]`) or more than one slice axis (`a[:, :, 0]`)
-          // stays unsupported.
+          // N-D mixed slice/index tuple: one or more bounded slice axes and
+          // fixed-index axes, e.g. `a[:, 0, 0]`, `a[0:2, 0, 0]`, or
+          // `a[:, :, 0]`.
           std::size_t slice_axis_count = 0;
-          std::size_t slice_axis = 0;
-          bool has_partial_slice = false;
           for (std::size_t i = 0; i < idx_nodes.size(); ++i)
           {
             if (idx_nodes[i].value("_type", "") != "Slice")
               continue;
-            if (is_full_slice_node(idx_nodes[i]))
-            {
-              ++slice_axis_count;
-              slice_axis = i;
-            }
-            else
-              has_partial_slice = true;
+            ++slice_axis_count;
           }
 
-          if (!has_partial_slice && slice_axis_count == 1)
+          if (slice_axis_count != 0)
           {
             python_list list(*this, element);
-            expr = list.build_mixed_slice_tuple_select(
-              array, idx_nodes, slice_axis, element);
+            expr =
+              list.build_mixed_slice_tuple_select(array, idx_nodes, element);
             break;
           }
 

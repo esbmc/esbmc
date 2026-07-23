@@ -930,11 +930,18 @@ exprt python_list::build_strided_column_select(
 exprt python_list::build_mixed_slice_tuple_select(
   const exprt &array,
   const std::vector<nlohmann::json> &idx_nodes,
-  std::size_t slice_axis,
   const nlohmann::json &element)
 {
   const namespacet ns(converter_.symbol_table());
   const locationt location = converter_.get_location_from_decl(element);
+
+  auto reject = [&](const std::string &reason) -> void {
+    std::ostringstream msg;
+    msg << "TypeError: mixed slice/index tuple indexing " << reason;
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  };
 
   // Walk one nested array dimension per idx_nodes entry, collecting each
   // axis's extent and the type reached after indexing it. A dimension count
@@ -962,51 +969,140 @@ exprt python_list::build_mixed_slice_tuple_select(
     types_after[axis] = current_type;
   }
 
-  const typet result_elem_type = types_after.back();
-  if (result_elem_type.is_array())
-  {
-    std::ostringstream msg;
-    msg << "TypeError: mixed slice/index tuple indexing currently supports "
-           "only fully-indexed trailing axes";
-    if (!location.is_nil())
-      msg << " at " << location.get_file() << ":" << location.get_line();
-    throw std::runtime_error(msg.str());
-  }
+  auto resolve_slice_indices = [&](
+                                 const nlohmann::json &slice_node,
+                                 std::size_t axis) -> std::vector<BigInt> {
+    BigInt step_val = 1;
+    if (slice_node.contains("step") && !slice_node["step"].is_null())
+    {
+      if (!try_get_literal_int(slice_node["step"], step_val))
+        reject("requires literal slice bounds");
+      if (step_val == 0)
+        reject("slice step cannot be zero");
+    }
 
+    const BigInt axis_len = axis_sizes[axis];
+    auto resolve_bound = [&](const std::string &name, bool is_lower) -> BigInt {
+      const bool present =
+        slice_node.contains(name) && !slice_node[name].is_null();
+      if (!present)
+      {
+        if (step_val > 0)
+          return is_lower ? BigInt(0) : axis_len;
+        return is_lower ? axis_len - 1 : BigInt(-1);
+      }
+
+      BigInt value;
+      if (!try_get_literal_int(slice_node[name], value))
+        reject("requires literal slice bounds");
+
+      if (value < 0)
+        value += axis_len;
+
+      if (step_val > 0)
+      {
+        if (value < 0)
+          return BigInt(0);
+        if (value > axis_len)
+          return axis_len;
+        return value;
+      }
+
+      if (value < 0)
+        return BigInt(-1);
+      if (value >= axis_len)
+        return axis_len - 1;
+      return value;
+    };
+
+    const BigInt start = resolve_bound("lower", true);
+    const BigInt stop = resolve_bound("upper", false);
+    std::vector<BigInt> indices;
+    if (step_val > 0)
+    {
+      for (BigInt idx = start; idx < stop; idx += step_val)
+        indices.push_back(idx);
+    }
+    else
+    {
+      for (BigInt idx = start; idx > stop; idx += step_val)
+        indices.push_back(idx);
+    }
+    return indices;
+  };
+
+  std::vector<std::vector<BigInt>> slice_indices(idx_nodes.size());
   std::vector<exprt> fixed_idx(idx_nodes.size());
+  std::vector<std::size_t> slice_axes;
   for (std::size_t axis = 0; axis < idx_nodes.size(); ++axis)
   {
-    if (axis == slice_axis)
-      continue;
-    fixed_idx[axis] = resolve_fixed_axis_index(
-      idx_nodes[axis], axis_sizes[axis], static_cast<unsigned>(axis), element);
+    if (idx_nodes[axis].value("_type", "") == "Slice")
+    {
+      slice_axes.push_back(axis);
+      slice_indices[axis] = resolve_slice_indices(idx_nodes[axis], axis);
+    }
+    else
+    {
+      fixed_idx[axis] = resolve_fixed_axis_index(
+        idx_nodes[axis],
+        axis_sizes[axis],
+        static_cast<unsigned>(axis),
+        element);
+    }
   }
 
-  const BigInt slice_len = axis_sizes[slice_axis];
-  const array_typet result_type(
-    result_elem_type, from_integer(slice_len, size_type()));
+  if (slice_axes.empty())
+    reject("requires at least one slice axis");
+
+  const typet result_elem_type = types_after.back();
+  if (result_elem_type.is_array())
+    reject("currently supports only fully-indexed trailing axes");
+
+  typet result_type = result_elem_type;
+  for (auto it = slice_axes.rbegin(); it != slice_axes.rend(); ++it)
+  {
+    const BigInt len = BigInt(slice_indices[*it].size());
+    result_type = array_typet(result_type, from_integer(len, size_type()));
+  }
   symbolt &result = converter_.create_tmp_symbol(
     element, "$tuple_mixed_slice$", result_type, exprt());
   code_declt result_decl(build_symbol(result));
   result_decl.location() = location;
   converter_.add_instruction(result_decl);
 
-  for (BigInt pos = 0; pos < slice_len; ++pos)
-  {
-    exprt current = array;
-    for (std::size_t axis = 0; axis < idx_nodes.size(); ++axis)
-    {
-      exprt idx_expr =
-        (axis == slice_axis) ? from_integer(pos, size_type()) : fixed_idx[axis];
-      current = build_index(current, idx_expr, types_after[axis]);
-    }
+  std::function<void(std::size_t, const exprt &, const exprt &)> copy_axis =
+    [&](std::size_t axis, const exprt &src, const exprt &dst) {
+      if (axis == idx_nodes.size())
+      {
+        code_assignt assign(dst, src);
+        assign.location() = location;
+        converter_.add_instruction(assign);
+        return;
+      }
 
-    exprt dst_elem = build_index(
-      build_symbol(result), from_integer(pos, size_type()), result_elem_type);
-    code_assignt assign(dst_elem, current);
-    assign.location() = location;
-    converter_.add_instruction(assign);
-  }
+      if (idx_nodes[axis].value("_type", "") != "Slice")
+      {
+        exprt src_next = build_index(src, fixed_idx[axis], types_after[axis]);
+        copy_axis(axis + 1, src_next, dst);
+        return;
+      }
+
+      for (std::size_t pos = 0; pos < slice_indices[axis].size(); ++pos)
+      {
+        exprt src_next = build_index(
+          src,
+          from_integer(slice_indices[axis][pos], size_type()),
+          types_after[axis]);
+        const array_typet &dst_array_type =
+          to_array_type(ns.follow(dst.type()));
+        const typet dst_elem_type = ns.follow(dst_array_type.subtype());
+        exprt dst_next = build_index(
+          dst, from_integer(BigInt(pos), size_type()), dst_elem_type);
+        copy_axis(axis + 1, src_next, dst_next);
+      }
+    };
+
+  copy_axis(0, array, build_symbol(result));
 
   return build_symbol(result);
 }
