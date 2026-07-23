@@ -2566,16 +2566,25 @@ InferResult python_annotation<Json>::infer_type(
       return InferResult::UNKNOWN;
 
     // A forward-reference (string) annotation `node: 'Foo'` is a Constant whose
-    // value is the type-name string; a dotted annotation `node: a.b.Robot` is an
-    // Attribute whose last component is the type name. Reading
-    // annotation["value"]["id"] blindly does operator[] on a JSON string / a
-    // null and aborts with nlohmann type_error (#6284), so dispatch on the node
-    // shape instead.
+    // value is the type-name string; a dotted annotation `node: mod.Robot` /
+    // `node: a.b.Robot` is an Attribute whose last component (attr) is the type
+    // name. Reading annotation["value"]["id"] blindly does operator[] on a JSON
+    // string / a null and aborts with nlohmann type_error (#6284), so dispatch
+    // on the node shape instead. The Attribute branch must precede the
+    // value.id branch: for a single-dot annotation the Attribute's value is a
+    // Name holding the module prefix (`mod`), so value.id would otherwise pick
+    // the prefix rather than the type name (`Robot`).
     if (
       stmt["annotation"].contains("_type") &&
       stmt["annotation"]["_type"] == "Constant" &&
+      stmt["annotation"].contains("value") &&
       stmt["annotation"]["value"].is_string())
       inferred_type = stmt["annotation"]["value"].template get<std::string>();
+    else if (
+      stmt["annotation"].contains("_type") &&
+      stmt["annotation"]["_type"] == "Attribute" &&
+      stmt["annotation"].contains("attr"))
+      inferred_type = stmt["annotation"]["attr"].template get<std::string>();
     else if (
       stmt["annotation"].contains("value") &&
       stmt["annotation"]["value"].is_object() &&
@@ -2584,11 +2593,6 @@ InferResult python_annotation<Json>::infer_type(
         stmt["annotation"]["value"]["id"].template get<std::string>();
     else if (stmt["annotation"].contains("id"))
       inferred_type = stmt["annotation"]["id"].template get<std::string>();
-    else if (
-      stmt["annotation"].contains("_type") &&
-      stmt["annotation"]["_type"] == "Attribute" &&
-      stmt["annotation"].contains("attr"))
-      inferred_type = stmt["annotation"]["attr"].template get<std::string>();
     else if (
       stmt["annotation"].contains("_type") &&
       stmt["annotation"]["_type"] == "BinOp")
