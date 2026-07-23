@@ -225,7 +225,10 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // the canonical case). clang_cpp_adjust resolves the read type to the
     // pointee; do the same so symex does not get_width() an empty deref target
     // (the S3 symbolic_type_excp root, docs/scope-v1k-adjuster round-4). Only
-    // when the pointee is itself concrete; dereference2t is immutable, rebuild.
+    // when the pointee is non-empty -- a void*-like empty pointee is left for
+    // the exit invariant, exactly as clang leaves a void deref empty. An array
+    // operand (clang's `*a` -> `a[0]` rewrite) does not occur on the Python
+    // path (subscripts lower to index2t). dereference2t is immutable, rebuild.
     const dereference2t &d = to_dereference2t(expr);
     if (is_pointer_type(d.value->type))
     {
