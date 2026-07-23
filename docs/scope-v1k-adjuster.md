@@ -235,3 +235,38 @@ highest-value remaining task is the S3 `symbolic_type_excp` / downstream
 `empty_type2t` fix, which is a consumer-side (goto-convert/symex) investigation,
 not an adjuster arm. The full flip (default-on, delete the `clang_cpp_adjust`
 hop) remains a dedicated multi-PR effort gated on dual-solver verdict parity.
+
+### Round-2 drill on the `symbolic_type_excp` cluster (2026-07-23)
+
+Localised the dominant blocker (builtin2 = `chr(ord('A'))`). A backtrace at
+`empty_type2t::get_width` (throwaway) names the consumer: it is thrown from
+`dereferencet::construct_from_array` (`dereference.cpp:1216`,
+`deref_size = type->get_width()`) during `make_return_assignment` of
+`test_chr_ord` — symex dereferences the returned `chr()` value with an **empty
+target type**.
+
+The GOTO delta is a single missing cast in the return expression:
+
+- hop-on:  `RETURN: (signed int)(back_to_char[0]) == 65 && …`
+- hop-off: `RETURN: back_to_char[0] == 65 && …`
+
+`back_to_char` is `signed char[0]`; clang_cpp_adjust promotes the `char` element
+to `int` for the comparison, and without that promotion symex derives an empty
+deref type on the `char[0]` read.
+
+**Refuted hypothesis (negative result, do not retry):** a `python_adjust` arm
+mirroring `clang_c_adjust::adjust_expr_rel` — reconcile the two relational
+operands with `gen_typecast_arithmetic` — does **not** insert this cast. Traced
+with a debug print: the arm fires on every relational node, but
+`gen_typecast_arithmetic` produces no promotion for the builtin2 return equality
+because the operands the adjuster sees already carry matching types. So the
+hop-on `(signed int)` cast is **not** emitted by `adjust_expr_rel`; it comes from
+a different `clang_cpp_adjust` path (candidate: `adjust_index` / the char-array
+element read, `clang_c_adjust_expr.cpp`). That path is the next drill target.
+
+**Second lesson (mechanism trap):** a wholesale `migrate_expr_back` +
+`migrate_expr` round-trip of a node **reverts** any resolved `member2t`/`index2t`
+source in its subtree back to a by-name `symbol_type2t` (the exit invariant then
+rejects it, e.g. `__ESBMC_list_sort`). A flip arm that needs to rewrite a node
+must wrap/rebuild operands **in place** and never round-trip an
+already-resolved subtree.
