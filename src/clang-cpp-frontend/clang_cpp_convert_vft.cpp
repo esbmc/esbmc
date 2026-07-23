@@ -987,12 +987,11 @@ bool clang_cpp_convertert::build_dynamic_cast(
       else
       {
         // For T* the result must point to the T sub-object inside D:
-        //   result = src + (off(T inside D) - off(S inside D))
-        // When both offsets are zero (single inheritance with S and T
-        // at the start of D) the structural typecast is exact.
-        // Otherwise a per-D byte adjustment is required, which we
-        // don't compute yet — refuse the cast instead of silently
-        // emitting a pointer into the wrong sub-object.
+        //   result = (T*)((char*)src - off(S inside D) + off(T inside D))
+        // When both offsets are zero (single inheritance with S and T at
+        // the start of D) the structural typecast is exact; otherwise the
+        // pointer is re-based through char* byte arithmetic, mirroring the
+        // (void*) arm above.
         auto off_S = offset_of_subobject(*ASTContext, D, S);
         auto off_T = offset_of_subobject(*ASTContext, D, T);
         if (!off_S || !off_T)
@@ -1003,16 +1002,28 @@ bool clang_cpp_convertert::build_dynamic_cast(
             D->getNameAsString());
           abort();
         }
-        if (*off_S != 0 || *off_T != 0)
-        {
-          log_error(
-            "dynamic_cast: multiple inheritance with non-zero base "
-            "offset in `{}` is not supported",
-            D->getNameAsString());
-          abort();
-        }
         exprt adj = src_pointer;
-        gen_typecast(ns, adj, target_type);
+        if (*off_S == 0 && *off_T == 0)
+        {
+          // S and T both start at D: the structural typecast is exact.
+          gen_typecast(ns, adj, target_type);
+        }
+        else
+        {
+          typet char_ptr = pointer_typet(char_type());
+          gen_typecast(ns, adj, char_ptr);
+          if (*off_S > 0)
+          {
+            adj = minus_exprt(adj, from_integer(*off_S, index_type()));
+            adj.type() = char_ptr;
+          }
+          if (*off_T > 0)
+          {
+            adj = plus_exprt(adj, from_integer(*off_T, index_type()));
+            adj.type() = char_ptr;
+          }
+          gen_typecast(ns, adj, target_type);
+        }
         result = adj;
       }
       arms.push_back({vt_addr, result});
