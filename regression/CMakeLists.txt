@@ -324,6 +324,7 @@ else()
                     extensions
                     cuda/COM_sanity_checks
                     linux
+                    cxl
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
                     ${REGRESSIONS_PYTHON_INTENSIVE}
