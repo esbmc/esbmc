@@ -151,6 +151,10 @@ private:
   std::string infer_lambda_return_type(const Json &lambda_elem) const;
   std::string
   infer_from_return_statements(const Json &body, const std::string &func_name);
+  // Return type of a FunctionDef @p member: its declared `-> T` (or `-> T[...]`)
+  // annotation, else the type inferred from its return statements, else "Any".
+  std::string
+  method_return_type(const Json &member, const std::string &method_name);
   void collect_return_types(
     const Json &body,
     const std::string &func_name,
