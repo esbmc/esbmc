@@ -143,23 +143,6 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
   }
 }
 
-// True if `expr` contains a temporary_object side effect anywhere. Lowering one
-// pushes scope-exit entries that die at the end of the full expression
-// (C++ [class.temporary]/4, github #6075/#6076) rather than at block exit, and
-// the native dispatcher does not yet reproduce that interaction with the
-// destructor stack -- see the code_expression2t handler.
-static bool has_temporary_object(const exprt &expr)
-{
-  if (expr.id() == "sideeffect" && expr.statement() == "temporary_object")
-    return true;
-
-  forall_operands (it, expr)
-    if (has_temporary_object(*it))
-      return true;
-
-  return false;
-}
-
 // The location restore_value_locations would propagate into `code`'s value
 // operands: the statement's own when it has one, otherwise whatever the
 // enclosing statement passed down. An empty result means that helper's
@@ -432,13 +415,6 @@ bool goto_convert_functionst::convert_native_rec(
       return true;
     }
 
-    // A temporary_object's scope-exit entries die at the end of the full
-    // expression, not at block exit, so lowering one here would need the
-    // destructor-stack interaction convert_decl/remove_sideeffects implement;
-    // until that is reproduced natively, fall back (C++ `g = use(T(a));`).
-    if (has_temporary_object(op))
-      return false;
-
     if (has_sideeffect(op))
     {
       // remove_sideeffects reads the location for each instruction it emits off
@@ -568,12 +544,18 @@ bool goto_convert_functionst::convert_native_rec(
     // A void function returning a value is a C/C++ constraint violation the
     // frontend rejects, so it never reaches here; only a valueless void return
     // does, which correctly emits just the end-of-function goto below.
-    // convert_return unwinds the destructor stack only when it holds a
-    // destructor FUNCTION_CALL, which cannot happen here: the decl handler
-    // falls back on any type with a destructor, so a native subtree's stack
-    // holds only scope-exit code_dead entries, which convert_return leaves
-    // alone; the enclosing block handler reproduces the (skipped) scope-exit
-    // behaviour via the trailing-goto guard above.
+    // convert_return runs an unwind-before-RETURN whenever the destructor stack
+    // holds a destructor FUNCTION_CALL (C++ [stmt.return]: locals are destroyed
+    // after the value is computed but before the jump; a constant value takes a
+    // simpler sub-path). This native handler reproduces only the plain
+    // (destructor-free) shape, so it must fall back the moment such an entry is
+    // present -- a full-expression temporary lowered by the code_expression2t
+    // handler pushes exactly this (its ~T call), which the decl handler's own
+    // destructor fallback does not cover.
+    for (const codet &d : targets.destructor_stack)
+      if (d.get_statement() == "function_call")
+        return false;
+
     exprt val = is_nil_expr(ret.operand) ? static_cast<exprt>(nil_exprt())
                                          : migrate_expr_back(ret.operand);
     if (
