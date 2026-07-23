@@ -9,6 +9,7 @@ import sys
 import re
 import argparse
 import os
+import tempfile
 import textwrap
 
 
@@ -176,8 +177,8 @@ class Flail:
                 # The content digest is the third field so consumers that only
                 # want the path ignore it via the variadic tail, while the cache
                 # key-builders read it. One macro to balance, not two.
-                header.write('%s(%s, %s_size, "%s", %s)\n' %
-                             (macro, name, name, self.digest, self.filepath))
+                header.write(f'{macro}({name}, {name}_size, '
+                             f'"{self.digest}", {self.filepath})\n')
 
     def run(self, output_file, header = None, macro : str = None):
         step_2 = self.custom_od()
@@ -212,7 +213,8 @@ def parse_args(argv):
             NB:
             --macro MACRO is only meaningful in combination with --header;
             if specified, the header file will contain invocations of MACRO(body, size, hash, fpath) for each input file where body is the name of
-            the extern char[] symbol defining the binary content of the input file, size is its size, hash is a SHA-256 digest of the content, and fpath is the path to the input file as passed to this script.
+            the extern char[] symbol defining the binary content of the input file, size is its size, hash is a SHA-256 digest of the content,
+            and fpath is the path to the input file as passed to this script.
             If MACRO is not defined, the header will define it before the invocations to declare the body and size symbols as extern to facilitate usage
             of the header in a C file
             '''))
@@ -237,9 +239,9 @@ def main():
             header = open(args.header, 'w')
             if args.macro:
                 header.write('#ifndef %s\n' % args.macro)
-                header.write('# define %s(body, size, hash, ...)'
+                header.write(f'# define {args.macro}(body, size, hash, ...)'
                              ' extern const char body[];'
-                             ' extern const unsigned int size;\n' % args.macro)
+                             ' extern const unsigned int size;\n')
                 header.write('#endif\n')
         for infile in args.input:
             obj = Flail(infile, args.prefix)
@@ -349,7 +351,6 @@ class TestFlail(unittest.TestCase):
         return path, obj.digest
 
     def test_digest_covers_content(self):
-        import tempfile
         with tempfile.TemporaryDirectory() as d:
             path, digest = self._digest_of(d, 'a.h', b'contents')
             expected = hashlib.sha256(path.encode('utf-8') + b'\0' +
@@ -357,7 +358,6 @@ class TestFlail(unittest.TestCase):
             self.assertEqual(digest, expected)
 
     def test_digest_changes_with_content(self):
-        import tempfile
         with tempfile.TemporaryDirectory() as d:
             _, first = self._digest_of(d, 'a.h', b'one')
             _, second = self._digest_of(d, 'a.h', b'two')
@@ -366,7 +366,6 @@ class TestFlail(unittest.TestCase):
     def test_digest_changes_with_path(self):
         # Renaming a bundled file has to invalidate the cache too: the
         # extracted layout depends on the name, not just the bytes.
-        import tempfile
         with tempfile.TemporaryDirectory() as d:
             _, first = self._digest_of(d, 'a.h', b'same')
             _, second = self._digest_of(d, 'b.h', b'same')

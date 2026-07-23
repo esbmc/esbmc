@@ -27,6 +27,9 @@ const std::string &clang_c_languaget::clang_resource_dir()
   /* Clang appends /include to the resource dir, hence the layout below. */
   static const auto dir = file_operations::cached_extract_dir(
     "clang-headers", bundled_headers_key(), [](const std::string &root) {
+      /* Only read inside the ESBMC_FLAIL expansions below, which cppcheck
+       * cannot resolve. */
+      // cppcheck-suppress unreadVariable
       const std::string path = root + "/include";
 #  define ESBMC_FLAIL(body, size, hash, ...)                                   \
     file_operations::create_path_and_write(path + "/" #__VA_ARGS__, body, size);

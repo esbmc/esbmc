@@ -39,6 +39,9 @@ static class
    * this runs at most once per build, since the result is cached. */
   static void extract(const std::string &root)
   {
+    /* The path variables are only read inside the ESBMC_FLAIL expansions of
+     * the generated includes, which cppcheck cannot resolve. */
+    // cppcheck-suppress unreadVariable
     const std::string headers = root + "/headers";
 #define ESBMC_FLAIL(body, size, hash, ...)                                     \
   file_operations::create_path_and_write(                                      \
@@ -52,6 +55,7 @@ static class
 #include <libc.h>
 #undef ESBMC_FLAIL
 
+    // cppcheck-suppress unreadVariable
     const std::string libm = libc + "/libm";
 #define ESBMC_FLAIL(body, size, hash, ...)                                     \
   file_operations::create_path_and_write(libm + "/" #__VA_ARGS__, body, size);
