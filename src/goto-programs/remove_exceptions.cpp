@@ -1011,7 +1011,13 @@ private:
     // for a typed catch. The decrement of the uncaught count goes there, so it
     // happens once the exception has entered its handler ([except.uncaught]) and
     // after the catch-parameter is bound (§5.5).
-    auto before_body = h.target;
+    // Anchor the handler prologue (uncaught decrement, handled-stack push) so
+    // it precedes the handler body. A typed catch reassigns this to its binding
+    // instruction below; a catch-all has no binding, and its `h.target` is the
+    // body's first instruction, so anchoring on `landing` keeps the push ahead
+    // of a bare `throw;` (otherwise it landed after the rethrow, leaving the
+    // handled stack empty so the re-raise found no exception -- #6297).
+    auto before_body = landing;
     if (h.type != ellipsis_id)
     {
       auto bind = std::next(h.target);
