@@ -2338,6 +2338,26 @@ bool function_call_expr::is_list_method_call() const
     return sym != nullptr && sym->get_type() == list_type;
   }
 
+  // append/insert/remove/extend/sort/reverse/appendleft/popleft are list-only
+  // mutators. A str receiver has none of them; routing e.g. "abc".append("d")
+  // into the list model passes a char array where a list pointer is expected
+  // and crashes (#6264). Exclude string receivers so dispatch falls through and
+  // the general handler raises the correct AttributeError. Non-str receivers
+  // keep the previous behavior (claimed as a list method).
+  {
+    const auto &recv = call_["func"]["value"];
+    if (
+      recv.value("_type", "") == "Constant" && recv.contains("value") &&
+      recv["value"].is_string())
+      return false;
+    if (recv.value("_type", "") == "Name" && recv.contains("id"))
+    {
+      const symbolt *rsym = lookup_python_symbol(recv["id"].get<std::string>());
+      if (rsym && type_utils::is_string_type(rsym->get_type()))
+        return false;
+    }
+  }
+
   return true;
 }
 
