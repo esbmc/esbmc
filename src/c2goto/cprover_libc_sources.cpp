@@ -87,6 +87,7 @@ public:
 #include <libc.h>
 #undef ESBMC_FLAIL
 
+    // cppcheck-suppress unreadVariable
     const std::string libm = libc + "/libm";
 #define ESBMC_FLAIL(body, size, hash, ...) f(libm + "/" #__VA_ARGS__);
 #include <libm.h>
