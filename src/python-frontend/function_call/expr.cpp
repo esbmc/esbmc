@@ -5037,15 +5037,25 @@ size_t function_call_expr::bind_call_receiver(
       // the class type, so the object is sized symbolically by the struct at
       // symex time — robust to the class struct still gaining fields after this
       // construction (which a byte-sized allocation cannot handle).
-      // If the lvalue is `object`/Any (a pointer to void/empty), the
-      // new_object interception cannot size the allocation — the pointee type
-      // has no width. Retype the lvalue (and its symbol) to the class being
-      // constructed; a `void*`/Any slot legitimately holds the resulting
-      // `Class*` pointer. Without this, `t: object = Box()` aborts in symex.
+      // If the lvalue is `object`/Any (a pointer to void/empty) or a `None`
+      // placeholder (a prior `g = None` binding, pointer-to-bool per
+      // none_type()), the new_object interception cannot size the allocation
+      // correctly — the pointee type has no width, or the wrong (bool)
+      // width. Retype the lvalue (and its symbol) to the class being
+      // constructed; a `void*`/Any or `None` slot legitimately holds the
+      // resulting `Class*` pointer once rebound. Without this, `t: object =
+      // Box()` aborts in symex (#4773), and `g = None; g = Box()` allocates
+      // a bool-sized object and overruns it as soon as the constructor
+      // writes a real field (#6243). The none_type() check is a structural
+      // match on pointer-to-bool: this frontend reserves that shape
+      // exclusively for the None sentinel (see util/python_types.cpp), so
+      // it cannot collide with a real user-level bool pointer (Python
+      // exposes no raw pointers).
       if (
         converter_.current_lhs->type().is_pointer() &&
         (converter_.current_lhs->type().subtype().id() == "empty" ||
-         converter_.current_lhs->type().subtype().id().empty()))
+         converter_.current_lhs->type().subtype().id().empty() ||
+         converter_.current_lhs->type() == none_type()))
       {
         const typet class_ptr = gen_pointer_type(call.type());
         converter_.current_lhs->type() = class_ptr;
