@@ -11,7 +11,11 @@
 #include <util/std_types.h>
 #include <util/std_expr.h>
 #include <util/message.h>
+#include <util/type_byte_size.h>
+#include <util/c_types.h>
 #include <irep2/irep2_utils.h>
+
+#include <optional>
 
 #include <algorithm>
 
@@ -993,6 +997,63 @@ private:
     }
   }
 
+  /// Byte offset of the *direct* base subobject of class @p target_tag inside
+  /// struct @p st, or nullopt when @p st has no such direct base. Only direct
+  /// bases are resolved: a transitive or absent base returns nullopt, so the
+  /// caller keeps the plain (unadjusted) cast rather than ever emitting a wrong
+  /// offset.
+  std::optional<BigInt>
+  direct_base_offset(const type2tc &st, const irep_idt &target_tag)
+  {
+    if (!is_struct_type(st))
+      return std::nullopt;
+    const struct_type2t &s = to_struct_type(st);
+    const std::string want = "@base@" + id2string(target_tag);
+    for (const irep_idt &m : s.member_names)
+      if (m.as_string() == want)
+        return member_offset(st, m, &ns);
+    return std::nullopt;
+  }
+
+  /// The `catch_ptr_type` view of the stored thrown object for a catch of class
+  /// @p catch_type. `value` points at the *most-derived* object, so when the
+  /// caught type is a base sitting at a non-zero offset inside the dynamic type
+  /// (multiple inheritance), the pointer is re-based per the runtime type_id:
+  ///   type_id == id(D) ? (T*)((char*)value + off(T in D)) : (T*)value
+  /// Only non-zero-offset bases add an arm, so a single-inheritance / exact /
+  /// first-base catch keeps exactly the plain `(T*)value` it had.
+  expr2tc catch_object_pointer(
+    const type2tc &catch_ptr_type,
+    const irep_idt &catch_type)
+  {
+    expr2tc result = typecast2tc(catch_ptr_type, value);
+
+    const irep_idt target_tag = "tag-" + id2string(catch_type);
+    const type2tc char_ptr = pointer_type2tc(get_uint8_type());
+    for (const auto &[dname, id] : registry.concrete_subtypes(catch_type))
+    {
+      const symbolt *dsym = ns.lookup(irep_idt("tag-" + id2string(dname)));
+      if (!dsym)
+        continue;
+      std::optional<BigInt> off =
+        direct_base_offset(migrate_type(dsym->get_type()), target_tag);
+      if (!off || *off == 0)
+        continue;
+      expr2tc rebased = typecast2tc(
+        catch_ptr_type,
+        add2tc(
+          char_ptr,
+          typecast2tc(char_ptr, value),
+          constant_int2tc(index_type2(), *off)));
+      result = if2tc(
+        catch_ptr_type,
+        equality2tc(type_id, constant_int2tc(type_id->type, BigInt(id))),
+        rebased,
+        result);
+    }
+    return result;
+  }
+
   /// Insert `__ESBMC_exc_thrown = false` before a handler and rewrite its
   /// `var = NONDET` binding to read the thrown object via __ESBMC_exc_value:
   ///   catch (T &v): v is a T* — bind the address      v = (T*)value
@@ -1021,11 +1082,13 @@ private:
       // the stored object/pointer out: var = *(decltype(var)*)value. The two
       // pointer-typed forms are told apart by the catch type's `_ptr` suffix.
       bool ref_catch = is_pointer_type(var->type) && !is_pointer_catch(h.type);
-      expr2tc src =
-        ref_catch
-          ? typecast2tc(var->type, value)
-          : dereference2tc(
-              var->type, typecast2tc(pointer_type2tc(var->type), value));
+      // View the stored object as the caught class, re-basing to the correct
+      // base subobject when the catch is by a non-zero-offset base of a
+      // multiple-inheritance dynamic type (else a plain cast).
+      type2tc catch_ptr_type =
+        ref_catch ? var->type : pointer_type2tc(var->type);
+      expr2tc obj_ptr = catch_object_pointer(catch_ptr_type, h.type);
+      expr2tc src = ref_catch ? obj_ptr : dereference2tc(var->type, obj_ptr);
       bind->code = code_assign2tc(var, src);
       before_body = bind;
     }
