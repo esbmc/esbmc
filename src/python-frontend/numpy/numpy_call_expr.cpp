@@ -4447,6 +4447,9 @@ exprt numpy_call_expr::get()
         shape_numeric.is_int)
       {
         validate_ndarray_shape({shape_numeric.int_value});
+        if (shape_numeric.int_value > std::numeric_limits<int>::max())
+          throw std::runtime_error(
+            "ValueError: array size overflows during creation");
         auto list =
           create_list(static_cast<int>(shape_numeric.int_value), fill_value);
         return converter_.get_expr(list);

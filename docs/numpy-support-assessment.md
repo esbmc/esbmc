@@ -52,13 +52,15 @@ Architectural decisions that gate specific pendencies here (referenced as
   is supported. See `regression/numpy/bool_mask_param_*` and
   `regression/numpy/array_param_mask_success`.
 - **Identity array return from a function** (`def f(a): return a`) — a
-  user function whose entire body is `return <param>` (or
-  `return <param>[literal-index]` when that indexes to another array, e.g.
-  a row of a 2-D array) is inlined at the call site to the caller's own
-  argument expression, since arrays still aren't a valid by-value return
-  type in the current GOTO model (see "Missing indexing/slicing" below).
-  This is a narrow, call-site-local fix, not a general return mechanism —
-  see the note on the general case below. See
+  user function with exactly one parameter whose entire body is
+  `return <that param>` is inlined at the call site to the caller's own
+  argument expression (restricted to a single positional argument, no
+  keywords, so no other argument's evaluation or type-checking is skipped),
+  since arrays still aren't a valid by-value return type in the current GOTO
+  model (see "Missing indexing/slicing" below). This is a narrow,
+  call-site-local fix, not a general return mechanism — it does not cover
+  `return <param>[index]` or functions with more than one parameter — see
+  the note on the general case below. See
   `regression/numpy/array_return_identity_success` and
   `array_return_empty_edge`.
 - **`np.std` and `np.var`** — 1-D and 2-D (flattened) concrete numeric
@@ -192,11 +194,11 @@ Either model correctly or downgrade to explicit "unsupported".
    "Recently completed" is a starting point but isn't wired into the
    general indexing/assignment path yet.
 2. **NumPy arrays as function return values, general case** — only the
-   narrow identity-return pattern (`return <param>` or
-   `return <param>[literal-index]`) is fixed; a sub-array return from a
-   non-trivial function body (e.g. `def f(a): return a[0]` when `0` isn't
-   simply substitutable, or any function with more than the one return
-   statement) is still unsupported. Two implementation strategies were
+   narrow identity-return pattern (a single-parameter function whose entire
+   body is `return <that param>`) is fixed; a sub-array return
+   (`def f(a): return a[0]`), a function with more than one parameter, or
+   any function with more than the one return statement is still
+   unsupported. Two implementation strategies were
    tried and reverted this round — see the "Missing indexing / slicing"
    table entry above for the detailed failure analysis. Both hit the same
    root cause: `y = f(...)`'s type is decided by more than one code path

@@ -4221,19 +4221,20 @@ std::optional<exprt> function_call_expr::try_fold_identity_array_return()
 
   const std::string returned_name = ret_val["id"].get<std::string>();
   const nlohmann::json &params = func_node["args"]["args"];
-  size_t param_index = params.size();
-  for (size_t i = 0; i < params.size(); i++)
-  {
-    if (params[i].value("arg", "") == returned_name)
-    {
-      param_index = i;
-      break;
-    }
-  }
-  if (param_index >= params.size() || param_index >= call_["args"].size())
+
+  // Restrict to the exact `def f(a): return a` shape: one parameter, one
+  // positional argument, no keywords. A function with more parameters, or a
+  // call with extra positional/keyword arguments, would have those other
+  // arguments' evaluation and type-checking silently skipped by substituting
+  // only the returned one.
+  if (params.size() != 1 || params[0].value("arg", "") != returned_name)
+    return std::nullopt;
+  if (
+    call_["args"].size() != 1 ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
     return std::nullopt;
 
-  exprt arg_expr = converter_.get_expr(call_["args"][param_index]);
+  exprt arg_expr = converter_.get_expr(call_["args"][0]);
   const typet &arg_type = converter_.ns.follow(arg_expr.type());
   typet element_candidate;
   if (arg_type.is_array())
