@@ -270,3 +270,27 @@ source in its subtree back to a by-name `symbol_type2t` (the exit invariant then
 rejects it, e.g. `__ESBMC_list_sort`). A flip arm that needs to rewrite a node
 must wrap/rebuild operands **in place** and never round-trip an
 already-resolved subtree.
+
+### Round-3 drill + scope call (2026-07-23)
+
+Probed the structure of the failing builtin2 return comparison. It is **not** a
+simple `equality2t(index2t, const)` — no equality with an `index2t`, a
+`dereference2t`, or an empty-typed operand reaches `adjust_expr` (the equalities
+that do are pointer/null comparisons). `back_to_char` is a **zero-length
+`signed char[0]`** modelled as a pointer, so `back_to_char[0]` lowers to a
+nested pointer-access sub-expression, and the `empty_type2t` sits on that
+nested node — deeper than a relational operand. The next drill needs to dump the
+**full expression** `dereferencet::construct_from_array` is dereferencing
+(instrument `dereference.cpp:1216` to print the operand, not just crash on
+`get_width`), then trace which node carries the empty subtype back through
+goto-convert to the adjusted body.
+
+**Scope call.** Two drill rounds have shown this blocker is not a localized
+adjuster arm: it is a nested pointer/array element-type resolution that spans the
+converter, `python_adjust`, goto-convert and symex, on a **default-off** flip
+path. It is the "multi-quarter" adjuster-flip work the record has always flagged,
+not a loop-sized slice. Recommendation: the `symbolic_type_excp` cluster (and the
+flip generally) should be a **focused, single-owner effort**, sequenced after the
+already-built, review-clean W1-loc / destructor-arc / V.3 PRs are merged — not
+pursued further by incremental autonomous drills, which now yield findings
+without a shippable fix.
