@@ -1063,6 +1063,14 @@ std::optional<nlohmann::json> python_converter::select_return_value_for_call(
   if (params.size() != call_node["args"].size())
     return std::nullopt;
 
+  auto is_trivial_arg = [](const nlohmann::json &node) {
+    return node.value("_type", "") == "Name" ||
+           node.value("_type", "") == "Constant";
+  };
+  for (const auto &arg : call_node["args"])
+    if (!is_trivial_arg(arg))
+      return std::nullopt;
+
   auto param_index =
     [&](const std::string &name) -> std::optional<std::size_t> {
     for (std::size_t i = 0; i < params.size(); ++i)
@@ -1093,35 +1101,51 @@ std::optional<nlohmann::json> python_converter::select_return_value_for_call(
     return std::nullopt;
   };
 
-  std::function<std::optional<nlohmann::json>(const nlohmann::json &)> scan =
-    [&](const nlohmann::json &body) -> std::optional<nlohmann::json> {
+  struct return_scan_result
+  {
+    bool invalid = false;
+    bool found = false;
+    nlohmann::json value;
+  };
+
+  std::function<return_scan_result(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &body) -> return_scan_result {
     for (const auto &stmt : body)
     {
       if (stmt.value("_type", "") == "Return")
       {
         if (!stmt.contains("value") || stmt["value"].is_null())
-          return std::nullopt;
-        return stmt["value"];
+          return {true, false, nlohmann::json()};
+        return {false, true, stmt["value"]};
       }
 
       if (stmt.value("_type", "") == "If")
       {
         std::optional<bool> test_value = bool_constant(stmt["test"]);
         if (!test_value)
-          return std::nullopt;
+          return {true, false, nlohmann::json()};
 
         const nlohmann::json &chosen =
           *test_value ? stmt["body"] : stmt["orelse"];
         if (chosen.is_array())
-          if (std::optional<nlohmann::json> ret = scan(chosen))
+        {
+          return_scan_result ret = scan(chosen);
+          if (ret.invalid || ret.found)
             return ret;
+        }
+        continue;
       }
+
+      return {true, false, nlohmann::json()};
     }
 
-    return std::nullopt;
+    return {};
   };
 
-  return scan(func_node["body"]);
+  return_scan_result result = scan(func_node["body"]);
+  if (result.invalid || !result.found)
+    return std::nullopt;
+  return result.value;
 }
 
 nlohmann::json python_converter::substitute_call_arguments(
