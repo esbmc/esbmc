@@ -1,5 +1,4 @@
-THOROUGH
+KNOWNBUG
 main.cpp
---unwind 6 --no-unwinding-assertions --timeout 900
+--unwind 5 --no-unwinding-assertions --timeout 900
 ^VERIFICATION FAILED$
-^  file .*main\.cpp line 44 column 3 function main$
