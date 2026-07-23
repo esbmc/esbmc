@@ -812,14 +812,6 @@ exprt python_list::build_strided_column_select(
     throw std::runtime_error(msg.str());
   };
 
-  // Only the bare-step form (`a[:, ::step]`) is modelled; combining a
-  // strided column slice with explicit bounds (`a[:, 1:3:2]`) would need a
-  // runtime-sized result to stay general, which is out of scope here.
-  if (
-    (col_slice_node.contains("lower") && !col_slice_node["lower"].is_null()) ||
-    (col_slice_node.contains("upper") && !col_slice_node["upper"].is_null()))
-    return reject("currently supports only a bare step, not explicit bounds");
-
   if (!resolved_array_type.is_array())
     return reject("requires a fixed-shape 2-D array");
   const array_typet &outer_type = to_array_type(resolved_array_type);
@@ -844,19 +836,64 @@ exprt python_list::build_strided_column_select(
       return reject("requires a literal step");
     if (step_val == 0)
       return reject("step cannot be zero");
-    // handle_range_slice's no-bounds negative-step path only models
-    // reversal (step=-1): its result length is the full row length
-    // regardless of |step|, which under-sizes/mis-sizes the result for any
-    // other negative step (e.g. a[:, ::-2]). Reject explicitly rather than
-    // silently returning a wrong-length slice.
-    if (step_val < 0 && step_val != -1)
-      return reject("currently supports only step=-1 for negative steps");
   }
 
-  // step=-1 reverses the whole row (full length); positive step take a
-  // ceil(num_cols / step)-sized subset.
-  const BigInt result_cols =
-    step_val < 0 ? num_cols : (num_cols + (step_val - 1)) / step_val;
+  const bool has_lower =
+    col_slice_node.contains("lower") && !col_slice_node["lower"].is_null();
+  const bool has_upper =
+    col_slice_node.contains("upper") && !col_slice_node["upper"].is_null();
+
+  if (!has_lower && !has_upper && step_val < 0 && step_val != -1)
+    return reject("currently supports only step=-1 for negative steps");
+
+  auto resolve_bound = [&](const std::string &name, bool is_lower) -> BigInt {
+    const bool present =
+      col_slice_node.contains(name) && !col_slice_node[name].is_null();
+    if (!present)
+    {
+      if (step_val > 0)
+        return is_lower ? BigInt(0) : num_cols;
+      return is_lower ? num_cols - 1 : BigInt(-1);
+    }
+
+    BigInt value;
+    if (!try_get_literal_int(col_slice_node[name], value))
+      return reject("requires literal bounds"), BigInt(0);
+
+    if (value < 0)
+      value += num_cols;
+
+    if (step_val > 0)
+    {
+      if (value < 0)
+        return BigInt(0);
+      if (value > num_cols)
+        return num_cols;
+      return value;
+    }
+
+    if (value < 0)
+      return BigInt(-1);
+    if (value >= num_cols)
+      return num_cols - 1;
+    return value;
+  };
+
+  const BigInt start = resolve_bound("lower", true);
+  const BigInt stop = resolve_bound("upper", false);
+  std::vector<BigInt> selected_cols;
+  if (step_val > 0)
+  {
+    for (BigInt col = start; col < stop; col += step_val)
+      selected_cols.push_back(col);
+  }
+  else
+  {
+    for (BigInt col = start; col > stop; col += step_val)
+      selected_cols.push_back(col);
+  }
+
+  const BigInt result_cols = BigInt(selected_cols.size());
 
   const array_typet new_row_type(
     elem_type, from_integer(result_cols, size_type()));
@@ -872,16 +909,15 @@ exprt python_list::build_strided_column_select(
   {
     exprt row_expr =
       build_index(array, from_integer(row, size_type()), row_type);
-    exprt sliced_row = handle_range_slice(row_expr, col_slice_node);
     exprt dst_row = build_index(
       build_symbol(result), from_integer(row, size_type()), new_row_type);
 
-    for (BigInt col = 0; col < result_cols; ++col)
+    for (std::size_t col = 0; col < selected_cols.size(); ++col)
     {
-      exprt src_elem =
-        build_index(sliced_row, from_integer(col, size_type()), elem_type);
+      exprt src_elem = build_index(
+        row_expr, from_integer(selected_cols[col], size_type()), elem_type);
       exprt dst_elem =
-        build_index(dst_row, from_integer(col, size_type()), elem_type);
+        build_index(dst_row, from_integer(BigInt(col), size_type()), elem_type);
       code_assignt assign(dst_elem, src_elem);
       assign.location() = location;
       converter_.add_instruction(assign);

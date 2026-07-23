@@ -175,19 +175,15 @@ public:
     const nlohmann::json &element);
 
   /**
-   * @brief Lower a strided column slice `a[:, ::step]` on a fixed-shape 2-D
-   * array: every row is sliced independently via handle_range_slice (step>0
-   * and step=-1 reverse; other negative steps are rejected explicitly, since
-   * handle_range_slice's no-bounds negative-step path only models
-   * reversal), then copied column by column into a fresh 2-D result. Only
-   * the bare-step form is modelled - explicit bounds combined with a column
-   * step (`a[:, 1:3:2]`) are rejected, since the result width would then
-   * need to be resolved from runtime bounds instead of the array's static
-   * shape.
+   * @brief Lower a strided column slice `a[:, start:stop:step]` on a
+   * fixed-shape 2-D array: the literal slice bounds are resolved at conversion
+   * time and each selected column is copied into a fresh 2-D result. Bare
+   * negative steps other than `-1` are still rejected because their result
+   * width would differ from the old full-reversal path.
    * @param array          Source 2-D array expression.
    * @param col_slice_node AST `Slice` node for the column axis (axis 1);
-   *                       its `step` must be a literal integer and its
-   *                       `lower`/`upper` must be absent.
+   *                       its `step`, `lower`, and `upper` must be literal
+   *                       integers when present.
    * @param element        The Subscript AST node, used for location info.
    */
   exprt build_strided_column_select(

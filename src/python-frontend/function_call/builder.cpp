@@ -753,6 +753,10 @@ exprt function_call_builder::build() const
     if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
       return from_integer(1, long_long_int_type());
 
+    typet len_arg_type = converter_.ns.follow(arg_expr.type());
+    if (len_arg_type.is_array() && len_arg_type.subtype() != char_type())
+      return to_array_type(len_arg_type).size();
+
     // len() of a tuple-typed expression (e.g. an inline str.partition() result
     // that is not bound to a Name, so the __ESBMC_len_tuple routing above never
     // fires) is the number of components. Without this the call falls through to
