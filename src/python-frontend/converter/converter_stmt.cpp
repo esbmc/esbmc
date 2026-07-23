@@ -954,6 +954,151 @@ exprt python_converter::get_rhs_with_dict_resolution(
     dict_expr, ast_node["value"]["slice"], target_type);
 }
 
+std::string python_converter::resolve_name_symbol_id(const std::string &name)
+{
+  symbol_id sid = create_symbol_id();
+  sid.set_object(name);
+  if (symbol_table_.find_symbol(sid.to_string()) != nullptr)
+    return sid.to_string();
+
+  sid.set_function("");
+  if (symbol_table_.find_symbol(sid.to_string()) != nullptr)
+    return sid.to_string();
+
+  return "";
+}
+
+std::string
+python_converter::root_name_from_subscript(const nlohmann::json &node) const
+{
+  if (!node.is_object() || !node.contains("_type"))
+    return "";
+
+  if (node["_type"] == "Name" && node.contains("id"))
+    return node["id"].get<std::string>();
+
+  if (node["_type"] == "Subscript" && node.contains("value"))
+    return root_name_from_subscript(node["value"]);
+
+  return "";
+}
+
+bool python_converter::is_basic_numpy_view_subscript(
+  const nlohmann::json &node) const
+{
+  if (
+    !node.is_object() || node.value("_type", "") != "Subscript" ||
+    !node.contains("value") || !node.contains("slice"))
+    return false;
+
+  auto is_basic_index = [&](const nlohmann::json &idx) {
+    const std::string type = idx.value("_type", "");
+    return type == "Constant" || type == "UnaryOp" || type == "Name" ||
+           type == "Slice";
+  };
+
+  const nlohmann::json &slice = node["slice"];
+  if (slice.value("_type", "") == "Tuple" && slice.contains("elts"))
+  {
+    for (const auto &idx : slice["elts"])
+      if (!is_basic_index(idx))
+        return false;
+    return true;
+  }
+
+  return is_basic_index(slice);
+}
+
+bool python_converter::contains_copied_numpy_view_name(
+  const nlohmann::json &node)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+
+  if (node.is_object())
+  {
+    if (node.value("_type", "") == "Name" && node.contains("id"))
+    {
+      const std::string id =
+        resolve_name_symbol_id(node["id"].get<std::string>());
+      return !id.empty() && numpy_view_copy_sources_.count(id) != 0;
+    }
+
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (contains_copied_numpy_view_name(it.value()))
+        return true;
+  }
+  else
+  {
+    for (const auto &elem : node)
+      if (contains_copied_numpy_view_name(elem))
+        return true;
+  }
+
+  return false;
+}
+
+void python_converter::reject_unsafe_numpy_view_target(
+  const nlohmann::json &target)
+{
+  if (!target.is_object() || target.value("_type", "") != "Subscript")
+    return;
+
+  const std::string root_name = root_name_from_subscript(target);
+  if (root_name.empty())
+    return;
+
+  const std::string root_id = resolve_name_symbol_id(root_name);
+  if (root_id.empty())
+    return;
+
+  if (numpy_view_copy_sources_.count(root_id) != 0)
+    throw std::runtime_error(
+      "TypeError: writing through a copied numpy view is not supported");
+
+  for (const auto &entry : numpy_view_copy_sources_)
+    if (entry.second == root_id)
+      throw std::runtime_error(
+        "TypeError: writing to a numpy array with a live copied view is not "
+        "supported");
+}
+
+void python_converter::record_numpy_view_copy(
+  const exprt &lhs,
+  const nlohmann::json &rhs_node)
+{
+  if (!lhs.is_symbol())
+    return;
+
+  if (!is_basic_numpy_view_subscript(rhs_node))
+  {
+    clear_numpy_view_copy(lhs);
+    return;
+  }
+
+  const std::string root_name = root_name_from_subscript(rhs_node["value"]);
+  if (root_name.empty())
+  {
+    clear_numpy_view_copy(lhs);
+    return;
+  }
+
+  const std::string source_id = resolve_name_symbol_id(root_name);
+  if (source_id.empty())
+  {
+    clear_numpy_view_copy(lhs);
+    return;
+  }
+
+  numpy_view_copy_sources_[lhs.identifier().as_string()] = source_id;
+}
+
+void python_converter::clear_numpy_view_copy(const exprt &lhs)
+{
+  if (lhs.is_symbol())
+    numpy_view_copy_sources_.erase(lhs.identifier().as_string());
+}
+
 std::string python_converter::infer_type_from_any_annotation(
   const nlohmann::json &ast_node,
   const std::string &lhs_type)
@@ -2097,6 +2242,8 @@ void python_converter::get_var_assign(
 
   if (target.contains("_type") && target["_type"] == "Subscript")
   {
+    reject_unsafe_numpy_view_target(target);
+
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
 
@@ -2477,6 +2624,18 @@ void python_converter::get_var_assign(
   bool is_ctor_call = type_handler_.is_constructor_call(ast_node["value"]);
   current_lhs = &lhs;
   is_converting_lhs = false;
+
+  if (
+    ast_node.contains("value") && ast_node["value"].is_object() &&
+    (ast_node["value"].value("_type", "") == "List" ||
+     ast_node["value"].value("_type", "") == "Tuple" ||
+     ast_node["value"].value("_type", "") == "Dict") &&
+    contains_copied_numpy_view_name(ast_node["value"]))
+  {
+    throw std::runtime_error(
+      "TypeError: storing a copied numpy view in a container is not "
+      "supported");
+  }
 
   // Get RHS
   exprt rhs;
@@ -2949,10 +3108,18 @@ void python_converter::get_var_assign(
           annotated_name,
           annotation_location,
           target_block);
+      record_numpy_view_copy(lhs, ast_node["value"]);
       current_lhs = nullptr;
       return;
     }
 
+    if (
+      ast_node.contains("value") && ast_node["value"].is_object() &&
+      ast_node["value"].value("_type", "") == "Subscript" &&
+      lhs.type().is_array())
+      record_numpy_view_copy(lhs, ast_node["value"]);
+    else
+      clear_numpy_view_copy(lhs);
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
@@ -3988,6 +4155,10 @@ void python_converter::get_return_statements(
     target_block.copy_to_operands(return_code);
     return;
   }
+
+  if (contains_copied_numpy_view_name(ast_node["value"]))
+    throw std::runtime_error(
+      "TypeError: returning a copied numpy view is not supported");
 
   exprt return_value = get_expr(ast_node["value"]);
   locationt location = get_location_from_decl(ast_node);

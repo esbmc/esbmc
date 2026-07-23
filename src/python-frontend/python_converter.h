@@ -817,6 +817,20 @@ private:
     const nlohmann::json &ast_node,
     const typet &current_type);
 
+  std::string resolve_name_symbol_id(const std::string &name);
+
+  std::string root_name_from_subscript(const nlohmann::json &node) const;
+
+  bool is_basic_numpy_view_subscript(const nlohmann::json &node) const;
+
+  bool contains_copied_numpy_view_name(const nlohmann::json &node);
+
+  void reject_unsafe_numpy_view_target(const nlohmann::json &target);
+
+  void record_numpy_view_copy(const exprt &lhs, const nlohmann::json &rhs_node);
+
+  void clear_numpy_view_copy(const exprt &lhs);
+
   // =========================================================================
   // Unpacking helper methods
   // =========================================================================
@@ -1216,6 +1230,7 @@ private:
   // fancy/mask/column selection).
   exprt cached_any_subscript_rhs_;
   bool has_cached_any_subscript_rhs_ = false;
+  std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;
