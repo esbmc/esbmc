@@ -2565,11 +2565,30 @@ InferResult python_annotation<Json>::infer_type(
     if (!stmt.contains("annotation") || stmt["annotation"].is_null())
       return InferResult::UNKNOWN;
 
-    if (stmt["annotation"].contains("value"))
+    // A forward-reference (string) annotation `node: 'Foo'` is a Constant whose
+    // value is the type-name string; a dotted annotation `node: a.b.Robot` is an
+    // Attribute whose last component is the type name. Reading
+    // annotation["value"]["id"] blindly does operator[] on a JSON string / a
+    // null and aborts with nlohmann type_error (#6284), so dispatch on the node
+    // shape instead.
+    if (
+      stmt["annotation"].contains("_type") &&
+      stmt["annotation"]["_type"] == "Constant" &&
+      stmt["annotation"]["value"].is_string())
+      inferred_type = stmt["annotation"]["value"].template get<std::string>();
+    else if (
+      stmt["annotation"].contains("value") &&
+      stmt["annotation"]["value"].is_object() &&
+      stmt["annotation"]["value"].contains("id"))
       inferred_type =
         stmt["annotation"]["value"]["id"].template get<std::string>();
     else if (stmt["annotation"].contains("id"))
       inferred_type = stmt["annotation"]["id"].template get<std::string>();
+    else if (
+      stmt["annotation"].contains("_type") &&
+      stmt["annotation"]["_type"] == "Attribute" &&
+      stmt["annotation"].contains("attr"))
+      inferred_type = stmt["annotation"]["attr"].template get<std::string>();
     else if (
       stmt["annotation"].contains("_type") &&
       stmt["annotation"]["_type"] == "BinOp")
