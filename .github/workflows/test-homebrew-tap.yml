@@ -1,0 +1,116 @@
+name: Test Homebrew Tap Installation
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to test'
+        required: false
+        default: 'homebrew-test'
+        type: string
+
+jobs:
+  test-tap:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      
+      - name: Pull latest changes and checkout branch
+        run: |
+          git fetch origin
+          git checkout ${{ inputs.branch }}
+          git pull origin ${{ inputs.branch }}
+          echo "✅ Checked out to branch: ${{ inputs.branch }}"
+          echo "Current commit: $(git rev-parse HEAD)"
+      
+      - name: Verify Formula exists
+        run: |
+          if [ ! -f "Formula/esbmc.rb" ]; then
+            echo "❌ Error: Formula/esbmc.rb not found"
+            exit 1
+          fi
+          echo "✅ Formula file found"
+          cat Formula/esbmc.rb
+      
+      - name: Test Formula syntax
+        run: |
+          ruby -c Formula/esbmc.rb
+          echo "✅ Ruby syntax OK"
+      
+      - name: Remove existing tap if present
+        run: |
+          brew untap esbmc/esbmc 2>/dev/null || true
+          brew untap ${{ github.repository_owner }}/esbmc 2>/dev/null || true
+          brew uninstall esbmc 2>/dev/null || true
+      
+      - name: Tap from this repository
+        run: |
+          echo "📦 Tapping from: https://github.com/${{ github.repository }}"
+          brew tap ${{ github.repository_owner }}/esbmc https://github.com/${{ github.repository }}
+      
+      - name: Switch to test branch in tap
+        run: |
+          cd $(brew --repository ${{ github.repository_owner }}/esbmc)
+          git checkout ${{ inputs.branch }}
+          echo "✅ Tap is on branch: $(git branch --show-current)"
+          echo "Current commit: $(git rev-parse HEAD)"
+      
+      - name: Show Formula info
+        run: |
+          brew info ${{ github.repository_owner }}/esbmc/esbmc
+      
+      - name: Audit Formula
+        run: |
+          brew audit --strict ${{ github.repository_owner }}/esbmc/esbmc || true
+      
+      - name: Install ESBMC (dry-run)
+        run: |
+          echo "📝 Simulating installation..."
+          brew install --dry-run ${{ github.repository_owner }}/esbmc/esbmc
+      
+      - name: Install ESBMC (actual)
+        run: |
+          echo "🚀 Installing ESBMC..."
+          brew install --verbose ${{ github.repository_owner }}/esbmc/esbmc
+      
+      - name: Verify installation
+        run: |
+          esbmc --version
+          which esbmc
+          echo "✅ ESBMC installed successfully!"
+      
+      - name: Test ESBMC with simple C program
+        run: |
+          cat > test.c << 'EOF'
+          #include <assert.h>
+          int main() {
+            int x = 5;
+            assert(x == 5);
+            return 0;
+          }
+          EOF
+          esbmc test.c --no-bounds-check --no-pointer-check
+          echo "✅ C test passed!"
+      
+      - name: Test ESBMC with simple Python program
+        run: |
+          cat > test.py << 'EOF'
+          def main():
+              x: int = 5
+              assert x == 5
+          
+          if __name__ == "__main__":
+              main()
+          EOF
+          esbmc test.py
+          echo "✅ Python test passed!"
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          brew uninstall esbmc 2>/dev/null || true
+          brew untap ${{ github.repository_owner }}/esbmc 2>/dev/null || true
