@@ -695,9 +695,10 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
   // may be taken or a reference bound to it. Distributing the address-of over
   // the branches lets the resulting pointer alias the selected operand; left
   // as address_of(if(...)) the pointer analysis fails to resolve either arm
-  // (#6291). Only a glvalue conditional (identical arm types) reaches here; the
-  // type check keeps a prvalue conditional (which cannot have its address
-  // taken) from producing an if with mismatched pointer arms.
+  // (#6291). Clang only emits address_of(if) for a genuine lvalue conditional,
+  // whose arms already share a type (adjust_if has also typecast them to the
+  // conditional's type by now); the equal-type check is a defensive guard so a
+  // hypothetical mismatched if never yields an if with divergent pointer arms.
   if (
     op.id() == "if" && op.operands().size() == 3 &&
     op.op1().type() == op.op2().type())
