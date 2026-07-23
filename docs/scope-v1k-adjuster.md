@@ -294,3 +294,27 @@ flip generally) should be a **focused, single-owner effort**, sequenced after th
 already-built, review-clean W1-loc / destructor-arc / V.3 PRs are merged — not
 pursued further by incremental autonomous drills, which now yield findings
 without a shippable fix.
+
+### Round-4 drill — root cause pinned (2026-07-23)
+
+Instrumented the crash site (`dereferencet::construct_from_array`,
+`dereference.cpp:1216`) to dump the empty node. The **deref *result* type is
+empty**: symex dereferences a `char[5]` array
+(`symex_dynamic::alloca::dynamic_1_array`, subtype `signedbv` width 8) but the
+read's target type is `empty_type2t`. So `back_to_char[0]` is a `dereference2t`
+whose **result type is left empty** by the converter; `clang_cpp_adjust` resolves
+it to the char element type (after which the comparison promotes char→int), and
+`python_adjust` does neither.
+
+**Concrete root and fix direction.** `python_adjust` resolves member/index
+*source* types (`resolve_source`) but has **no arm that resolves an empty
+*result* type** on an `index2t`/`dereference2t`, and no `dereference2t` arm at
+all. The fix is two-part, in order: (1) resolve the empty result type of the
+element access to the source's element type (`char`); (2) then the char→int
+promotion the comparison needs becomes expressible (round-2's relational arm
+no-opped precisely because the operand type was empty — zero width — so
+`gen_typecast_arithmetic` had nothing to promote). Both must be byte-identical to
+`clang_cpp_adjust`'s output and gated on the hop-off corpus. This is the S3
+"member/index at scale" work, now pinned to a specific missing capability
+(result-type resolution for element accesses), still a focused-owner slice rather
+than a loop drill.
