@@ -111,7 +111,11 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   {
     if (obj["_type"] == "ImportFrom")
     {
-      if (load_and_check(obj["module"].template get<std::string>()))
+      // `from . import X` (relative, no module name) has module == null; skip
+      // it rather than crashing on a null-to-string conversion (#6281).
+      if (
+        !obj["module"].is_null() &&
+        load_and_check(obj["module"].template get<std::string>()))
         return true;
     }
     else if (obj["_type"] == "Import")
