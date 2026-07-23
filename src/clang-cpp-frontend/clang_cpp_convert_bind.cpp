@@ -4,7 +4,10 @@
  *  x->F
  *  where F represents a virtual/overriding method
  *
- *  clang::MemberExpr may represent x->F or x.F, but we don't care about dot operator.
+ *  A clang::MemberExpr may be written with `->` or `.`. Both need dynamic
+ *  binding when Clang reports the call performs virtual dispatch (e.g. a call
+ *  through a reference or a dereferenced pointer, `(*x).F` / `ref.F`); only a
+ *  call on a statically-typed complete object is devirtualised.
  */
 
 #include <util/compiler_defs.h>
@@ -31,10 +34,6 @@ CC_DIAGNOSTIC_POP()
 bool clang_cpp_convertert::perform_virtual_dispatch(
   const clang::MemberExpr &member)
 {
-  // x.F() can't be a virtual dispatch
-  if (!member.isArrow())
-    return false;
-
   const clang::Decl &decl = *member.getMemberDecl();
   switch (decl.getKind())
   {
@@ -115,7 +114,14 @@ bool clang_cpp_convertert::get_vft_binding_expr_base(
   if (get_expr(*member.getBase(), base))
     return true;
 
-  new_expr = dereference_exprt(base, base.type());
+  // For `ptr->F`, the base is a pointer and the object is `*ptr`. For `obj.F`
+  // (a reference or dereferenced-pointer object expression that still needs
+  // dynamic dispatch), the base already denotes the object lvalue, so binding
+  // its vtable pointer must not add a further dereference.
+  if (member.isArrow())
+    new_expr = dereference_exprt(base, base.type());
+  else
+    new_expr = base;
 
   return false;
 }
