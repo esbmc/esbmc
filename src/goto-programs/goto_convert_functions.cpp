@@ -1298,8 +1298,9 @@ bool goto_convert_functionst::convert_native_rec(
     // a fallback. The round-trip drops the value-operand locations inside the
     // blocks, so run the same restore_value_locations pass the legacy body gets.
     // The bodyless CATCH marker form never appears in a function body (it is
-    // synthesised into the goto program by convert_catch), so operands are
-    // always present here; convert() handles either shape regardless.
+    // synthesised into the goto program by convert_catch), so a source-level
+    // cpp-catch here always carries its try block plus >=1 handler -- which is
+    // what convert_catch's assert(operands >= 2) requires.
     exprt op = migrate_expr_back(code2);
     restore_value_locations(op, effective_location(c.location, inherited));
     convert(to_code(op), dest);
