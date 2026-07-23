@@ -1,5 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-uncaught exception: AttributeError
+Unsupported function 'append' is reached
 ^VERIFICATION FAILED$

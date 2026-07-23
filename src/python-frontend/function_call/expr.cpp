@@ -2339,26 +2339,29 @@ bool function_call_expr::is_list_method_call() const
   }
 
   // append/insert/remove/extend/sort/reverse/appendleft/popleft are list-only
-  // mutators. A str receiver has none of them; routing e.g. "abc".append("d")
-  // into the list model passes a char array where a list pointer is expected
-  // and crashes (#6264). Exclude string receivers so dispatch falls through and
-  // the general handler raises the correct AttributeError. Non-str receivers
-  // keep the previous behavior (claimed as a list method).
+  // mutators. Claim them *positively* — only when the receiver actually resolves
+  // to a list — mirroring the count/index/pop/copy/clear guards above. A
+  // non-list receiver (str, bytes, int, or a str/bytes reached through an
+  // attribute or subscript) then falls through to the general handler, which
+  // raises the correct AttributeError instead of being routed into the list
+  // model, where a char array is passed where a list pointer is expected and
+  // aborts GOTO conversion (#6264).
+  //
+  // A list *literal* / BinOp receiver (`[1, 2].append(x)`, `(a + b).append(x)`)
+  // has no symbol yet, so claim it directly. get_object_list_symbol resolves
+  // Name, Subscript, Attribute (via a $attr_list$ temp) and Call (via a
+  // $call_list$ temp) receivers, returning non-null only for list_type, so it
+  // covers self.items.append / nested[i].append / f().append while excluding
+  // str/bytes.
   {
-    const auto &recv = call_["func"]["value"];
-    if (
-      recv.value("_type", "") == "Constant" && recv.contains("value") &&
-      recv["value"].is_string())
-      return false;
-    if (recv.value("_type", "") == "Name" && recv.contains("id"))
-    {
-      const symbolt *rsym = lookup_python_symbol(recv["id"].get<std::string>());
-      if (rsym && type_utils::is_string_type(rsym->get_type()))
-        return false;
-    }
+    const std::string recv_type = call_["func"]["value"].value("_type", "");
+    if (recv_type == "List" || recv_type == "BinOp" || recv_type == "ListComp")
+      return true;
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym != nullptr && sym->get_type() == list_type;
   }
-
-  return true;
 }
 
 exprt function_call_expr::handle_list_method() const
