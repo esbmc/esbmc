@@ -4238,3 +4238,81 @@ guarantee) and typeless-float grouping remain the next candidates.
 ### 88b. Everything else: unchanged disposition
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. The §5 priority order stands.
+
+## 90. 2026-07-22 re-validation (eightieth sweep) & float.hex() literal fold
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. This sweep is
+**independent of the §87–§89 float-format work** (open stacked PRs #6247←#6249←#6250) — it is a fresh
+branch off `master` in a different file/path, deliberately not deepening that stack. It closes the
+last of the §15b "unmodeled method" catalogue: `float.hex()`.
+
+> **Note on numbering.** §87–§89 are in flight on the stacked PRs above and not yet on `master`; this
+> section is numbered §90 so it does not collide with them. When all land, the maintainer orders
+> §87→§88→§89→§90.
+
+### 90a. New isolated, soundly-fixable defect found & fixed
+**`float.hex()` on a constant float receiver was unmodeled** — ESBMC replaced the undefined method
+with a nondet string, so `(3.5).hex() == "0x1.c000000000000p+1"` reported a spurious `FAILED`
+(catalogued in §15b as an "isolated add-the-model candidate").
+
+**Fix**: fold a literal-receiver `(x).hex()` to CPython's exact hexadecimal string, mirroring the
+existing `float.is_integer()` literal fold (§18) — a new `is_float_hex_literal_call()` predicate +
+`handle_float_hex_literal()` handler + dispatch entry in `function_call/expr.cpp`. The renderer
+mirrors CPython's `float_hex()` (`Objects/floatobject.c`) directly via `frexp`/`ldexp` instead of
+delegating to `"%a"`: the C standard leaves the leading-digit normalisation of `%a`
+implementation-defined, and while glibc keeps a subnormal's leading digit `0` with exponent `-1022`
+(matching CPython), macOS/BSD libc renormalises to a leading `1` with a smaller exponent — so `%a` is
+**not portable for subnormals** (`5e-324` renders `0x1.0000000000000p-1074` on macOS vs CPython's
+`0x0.0000000000001p-1022`). The manual renderer extracts the leading digit and 13 hex mantissa digits
+(= the 52-bit significand) by exact powers-of-two scaling — no rounding — and is **byte-identical to
+CPython for every finite value on both glibc and macOS** (verified by a C-vs-CPython differential over
+normal, subnormal, negative and boundary values); zero is special-cased to CPython's single-`0`
+mantissa spelling. Only a **literal** receiver is folded; a `Name`
+receiver has no float OM for `hex()` and stays unsupported, and inf/nan cannot arise (a float literal
+that overflows, e.g. `1e400`, already fails the AST-JSON parse upstream), so the inf/nan branches were
+dropped as unreachable.
+
+New regression pair `regression/python/float_hex_literal{,_fail}` (CORE): the positive covers normal
+values, carried sign, `-0.0`, and large/small/subnormal magnitudes (`1e300`, `1e-300`, `5e-324`);
+the `_fail` pins the wrong-value assertion as `FAILED`. Every positive cross-checked against CPython
+`float.hex`; 11-test float-method subset green; clang-format 11 + YAPF clean.
+
+### 90b. Everything else: unchanged disposition
+`float.fromhex()` (the classmethod inverse) remains an unsupported stub — a natural follow-up. The §3
+design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand. The §5 priority order stands.
+
+## 91. 2026-07-22 re-validation (eighty-first sweep) & float.fromhex() literal fold
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. This sweep is the §90b
+follow-up: it folds `float.fromhex()`, the classmethod inverse of the `float.hex()` fold shipped in
+§90. Like §90 it is **independent of the §87–§89 float-format stack** — a fresh branch off `master`
+(it builds directly on §90's `feat/python-float-hex-literal` branch, not the stacked PRs).
+
+### 91a. New isolated, soundly-fixable defect found & fixed
+**`float.fromhex()` on a constant string was unmodeled** — ESBMC replaced the classmethod with a
+nondet double, so `float.fromhex("0x1.8p3") == 12.0` reported a spurious `FAILED`.
+
+**Fix**: fold a constant-string `float.fromhex(s)` to the exact double — a new
+`handle_float_fromhex()` handler + dispatch entry in `function_call/expr.cpp`. After stripping
+surrounding ASCII whitespace (as CPython does), the string is matched against the **strict C99
+hex-float grammar** `[sign]0x<hex>[.<hex>]p[sign]<dec>` — exactly what `float.hex()` emits — and
+parsed with `strtod` under a `round_to_nearest_guard`. `strtod` decodes that form byte-identically to
+CPython (verified by a differential round-trip over the §90 test values and ~2000 doubles), so the
+`hex → fromhex` round trip is exact. CPython's **lenient** spellings (hex digits without the `0x`
+prefix, a missing `p` exponent, `inf`/`nan`, and `OverflowError` on out-of-range input) are
+deliberately **rejected rather than folded** — an unsound fold is worse than an unsupported stub
+(the §89 policy). A non-constant / `Name` argument stays unsupported.
+
+New regression pair `regression/python/float_fromhex_literal{,_fail}` (CORE): the positive covers the
+padded and short mantissa forms, a missing fraction part (`0x1p3`), carried sign, surrounding
+whitespace, and large/small/subnormal magnitudes (`1e300`, `1e-300`, `5e-324`); the `_fail` pins the
+wrong-value assertion as `FAILED`. Every positive cross-checked against CPython `float.fromhex`; the
+float-method subset (incl. the §90 `float.hex` pair) is green; clang-format 11 clean.
+
+### 91b. Everything else: unchanged disposition
+With `float.hex()` (§90) and `float.fromhex()` (§91) both folded, the §15b "unmodeled method"
+catalogue is drained. `2 ** 0.5` / fractional float `**` stays KNOWNBUG (root cause is the shared
+`__ESBMC_pow`/libm intrinsic, all-frontend — not a Python fold — like #4796). The §3 design-level
+blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib` case
+all stand. The §5 priority order stands.

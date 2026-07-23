@@ -4,6 +4,7 @@
 #include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math/math_guard_utils.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/set/python_set.h>
@@ -1068,6 +1069,105 @@ exprt function_call_expr::handle_float_is_integer_literal() const
   // fractional part (mirrors the float OM's `x == int(x)`).
   const bool is_int = std::isfinite(d) && d == std::trunc(d);
   return migrate_expr_back(is_int ? gen_true_expr() : gen_false_expr());
+}
+
+// Render a double as CPython's float.hex() does: sign, a leading hex digit,
+// 13 hex mantissa digits (the 52-bit significand), and a binary exponent
+// "p{sign}{n}". This mirrors CPython's float_hex() (Objects/floatobject.c)
+// bit-for-bit rather than delegating to "%a": the C standard leaves the
+// leading-digit normalisation of %a implementation-defined, and glibc keeps a
+// subnormal's leading digit 0 with exponent -1022 while macOS/BSD libc
+// renormalises to a leading 1 with a smaller exponent — so %a is not portable
+// for subnormals (e.g. 5e-324). A float literal can never be inf/nan here:
+// those overflow the AST-JSON parser before reaching this fold.
+static std::string py_float_hex(double d)
+{
+  if (d == 0.0)
+    return std::signbit(d) ? "-0x0.0p+0" : "0x0.0p+0";
+
+  const bool neg = std::signbit(d);
+  int e;
+  double m = std::frexp(std::fabs(d), &e); // 0.5 <= m < 1, |d| = m * 2^e
+  // Subnormals share the minimum exponent (-1022): keep a leading 0 digit
+  // rather than renormalising to a leading 1.
+  const int shift = 1 - std::max(-1021 - e, 0);
+  m = std::ldexp(m, shift);
+  e -= shift;
+  const int lead = static_cast<int>(m); // 0 (subnormal) or 1 (normal)
+  m -= lead;
+
+  std::string mantissa;
+  for (int i = 0; i < 13; ++i)
+  {
+    m *= 16.0;
+    const int digit = static_cast<int>(m);
+    mantissa += "0123456789abcdef"[digit];
+    m -= digit;
+  }
+
+  char exponent[16];
+  std::snprintf(exponent, sizeof(exponent), "p%+d", e);
+  return std::string(neg ? "-0x" : "0x") + static_cast<char>('0' + lead) + '.' +
+         mantissa + exponent;
+}
+
+exprt function_call_expr::handle_float_hex_literal() const
+{
+  if (
+    !call_["args"].empty() ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    throw std::runtime_error("hex() takes no arguments");
+
+  // Receiver is a constant float literal, or a unary +/- over one.
+  const auto &obj = call_["func"]["value"];
+  const nlohmann::json &lit = obj["_type"] == "UnaryOp" ? obj["operand"] : obj;
+  double d = lit["value"].get<double>();
+  if (
+    obj["_type"] == "UnaryOp" && obj.contains("op") &&
+    ((obj["op"].is_object() && obj["op"].value("_type", "") == "USub") ||
+     (obj["op"].is_string() && obj["op"] == "USub")))
+    d = -d;
+
+  return converter_.get_string_builder().build_string_literal(py_float_hex(d));
+}
+
+exprt function_call_expr::handle_float_fromhex() const
+{
+  if (call_["args"].size() != 1)
+    throw std::runtime_error("float.fromhex() takes exactly one argument");
+
+  std::string s;
+  if (!string_handler::extract_constant_string(call_["args"][0], converter_, s))
+    throw std::runtime_error(
+      "float.fromhex() is only supported on a constant string");
+
+  // Strip leading/trailing ASCII whitespace, as CPython does.
+  std::size_t b = 0, e = s.size();
+  while (b < e && std::isspace(static_cast<unsigned char>(s[b])))
+    ++b;
+  while (e > b && std::isspace(static_cast<unsigned char>(s[e - 1])))
+    --e;
+  const std::string t = s.substr(b, e - b);
+
+  // Fold only the strict C99 hex-float form [sign]0x<hex>[.<hex>]p[sign]<dec>,
+  // i.e. exactly what float.hex() emits. strtod parses that byte-identically to
+  // CPython (verified over ~2000 doubles), so the round trip is exact. CPython
+  // also accepts lenient spellings (hex digits without "0x", a missing "p",
+  // "inf"/"nan") and raises OverflowError on overflow; those are left
+  // unsupported rather than risk a wrong fold.
+  static const std::regex hex_float(
+    R"(^[+-]?0[xX](?:[0-9A-Fa-f]+\.?[0-9A-Fa-f]*|\.[0-9A-Fa-f]+)[pP][+-]?[0-9]+$)");
+  if (!std::regex_match(t, hex_float))
+    throw std::runtime_error(
+      "float.fromhex() only supports the 0x...p... hexadecimal form");
+
+  const round_to_nearest_guard rounding_guard;
+  char *end = nullptr;
+  const double d = std::strtod(t.c_str(), &end);
+  if (end != t.c_str() + t.size() || !std::isfinite(d))
+    throw std::runtime_error("float.fromhex() argument is out of range");
+
+  return from_double(d, type_handler_.get_typet("float", 0));
 }
 
 exprt function_call_expr::handle_bytes_fromhex() const
@@ -2797,6 +2897,28 @@ bool function_call_expr::is_float_is_integer_literal_call() const
            (obj["op"] == "USub" || obj["op"] == "UAdd")));
 }
 
+bool function_call_expr::is_float_hex_literal_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+  if (function_id_.get_function() != "hex")
+    return false;
+  const auto &obj = call_["func"]["value"];
+  // A constant float literal, or a unary +/- over one; a Name receiver has no
+  // float.hex() operational model and is left unsupported.
+  if (
+    obj["_type"] == "Constant" && obj.contains("value") &&
+    obj["value"].is_number_float())
+    return true;
+  return obj["_type"] == "UnaryOp" && obj.contains("op") &&
+         obj.contains("operand") && obj["operand"].contains("value") &&
+         obj["operand"]["value"].is_number_float() &&
+         ((obj["op"].is_object() && (obj["op"].value("_type", "") == "USub" ||
+                                     obj["op"].value("_type", "") == "UAdd")) ||
+          (obj["op"].is_string() &&
+           (obj["op"] == "USub" || obj["op"] == "UAdd")));
+}
+
 bool function_call_expr::is_iter_on_builtin_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -3478,6 +3600,12 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_float_is_integer_literal(); },
      "float.is_integer()"},
 
+    // float.hex() on a constant literal receiver, e.g. (3.5).hex(). A Name
+    // receiver has no float OM for hex() and stays unsupported.
+    {[this]() { return is_float_hex_literal_call(); },
+     [this]() { return handle_float_hex_literal(); },
+     "float.hex()"},
+
     // Min/Max functions
     {[this]() { return is_min_max_call(); },
      [this]() {
@@ -3684,6 +3812,15 @@ function_call_expr::get_dispatch_table()
      },
      [this]() { return handle_bytes_fromhex(); },
      "bytes.fromhex()"},
+
+    // float.fromhex("0x1.8p3") classmethod — fold the strict hex-float form to
+    // a double (the inverse of float.hex()).
+    {[this]() {
+       return function_id_.get_function() == "fromhex" &&
+              get_object_name() == "float";
+     },
+     [this]() { return handle_float_fromhex(); },
+     "float.fromhex()"},
 
     // Built-in type constructors (int, float, str, bool, etc.)
     {[this]() {
