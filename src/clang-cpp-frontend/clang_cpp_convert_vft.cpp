@@ -122,6 +122,12 @@ static bool is_pure_virtual(const clang::CXXMethodDecl &md)
 #endif
 }
 
+// Defined further down; used by add_thunk_method to size the this-adjustment.
+static std::optional<uint64_t> offset_of_subobject(
+  const clang::ASTContext &ctx,
+  const clang::CXXRecordDecl *D,
+  const clang::CXXRecordDecl *S);
+
 /**
  * @brief Returns the ultimate overridden method for a given CXXMethodDecl.
  *
@@ -317,41 +323,17 @@ void clang_cpp_convertert::add_thunk_method(
   std::string base_class_id, base_class_name;
   get_decl_name(*md.getParent(), base_class_name, base_class_id);
 
-  // Compute the byte offset of the base class sub-object within the derived
-  // class. For non-first base classes in multiple inheritance this is non-zero,
-  // and the thunk must subtract it from its Base* this to recover Derived*.
-  // Sum the per-link non-virtual base offsets along the full inheritance path,
-  // so an *indirect* non-first base (e.g. Derived : Middle, Middle : First, B)
-  // gets its cumulative offset rather than 0 (#6288). Virtual bases have a
-  // dynamic offset that this static subtraction cannot model, so any path
-  // crossing a virtual base is left at 0 (unchanged; tracked separately, #940).
-  uint64_t base_offset = 0;
+  // Byte offset of the base sub-object within the derived class. For non-first
+  // base classes in multiple inheritance this is non-zero, and the thunk must
+  // subtract it from its Base* this to recover Derived*. offset_of_subobject
+  // sums the offset along the full inheritance path, so an *indirect* non-first
+  // base (e.g. Derived : Middle, Middle : First, B) gets its cumulative offset
+  // rather than 0 (#6288). A path crossing a virtual base yields nullopt (its
+  // dynamic offset cannot be statically subtracted); fall back to 0 there,
+  // unchanged from before (tracked separately, #940).
   const clang::CXXRecordDecl *base_rd = md.getParent();
-  if (base_rd != &derived_rd)
-  {
-    clang::CXXBasePaths paths;
-    if (derived_rd.isDerivedFrom(base_rd, paths))
-    {
-      const clang::CXXBasePath &path = paths.front();
-      uint64_t off = 0;
-      bool crosses_virtual = false;
-      for (const auto &elem : path)
-      {
-        if (elem.Base->isVirtual())
-        {
-          crosses_virtual = true;
-          break;
-        }
-        const clang::CXXRecordDecl *link_base =
-          elem.Base->getType()->getAsCXXRecordDecl();
-        const clang::ASTRecordLayout &link_layout =
-          ASTContext->getASTRecordLayout(elem.Class);
-        off += link_layout.getBaseClassOffset(link_base).getQuantity();
-      }
-      if (!crosses_virtual)
-        base_offset = off;
-    }
-  }
+  const uint64_t base_offset =
+    offset_of_subobject(*ASTContext, &derived_rd, base_rd).value_or(0);
 
   // Create the thunk method symbol
   symbolt thunk_func_symb;
