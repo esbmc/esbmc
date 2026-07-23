@@ -250,7 +250,10 @@ static const locationt &statement_location(const expr2tc &code2)
 // statement to a plain named symbol with a body and side-effect-free
 // arguments (a single FUNCTION_CALL; the return-unused requirement means
 // do_function_call's temp-symbol machinery is never entered, so this kind
-// carries no shared-counter byte-identity risk). Each reads its own
+// carries no shared-counter byte-identity risk), and an expression statement
+// whose operand is a code cpp-throw (a `throw ...;`), which is delegated to the
+// legacy convert() exactly as convert_expression's is_code branch does so a
+// throw no longer forces a whole-function fallback. Each reads its own
 // code_*2t fields directly (no legacy round-trip) and carries the
 // statement's own location, matching goto_convertt::convert() byte-for-byte
 // on this subset.
@@ -398,13 +401,35 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_expression2t &expr_stmt = to_code_expression2t(code2);
 
-    // Reproduce convert_expression() (goto_convert.cpp) verbatim on its two
-    // emitting branches. A code-typed operand is re-dispatched through the
-    // legacy convert(), and a top-level ternary is peeled unconditionally into
-    // convert_ifthenelse before remove_sideeffects runs; fall back on both.
+    // Reproduce convert_expression() (goto_convert.cpp) verbatim on its
+    // emitting branches. A top-level ternary is peeled unconditionally into
+    // convert_ifthenelse before remove_sideeffects runs; fall back on it.
     exprt op = migrate_expr_back(expr_stmt.operand);
-    if (op.is_nil() || op.is_code() || op.id() == "if")
+    if (op.is_nil() || op.id() == "if")
       return false;
+
+    // convert_expression re-dispatches a code-typed operand straight through
+    // the legacy convert(): the --irep2-bodies round-trip lowers an
+    // expression-position side_effect_exprt("cpp-throw") to its code form
+    // codet("cpp-throw"), the only code shape that reaches here (migrate.cpp).
+    // Reproduce that delegation for cpp-throw so a throw statement no longer
+    // forces a whole-function fallback -- convert()'s convert_throw owns the
+    // C++ stack unwind and the throw-object side-effect lowering. The operand
+    // carries no location (IREP2 values do not), and convert_throw reads it for
+    // the THROW instruction, so stamp the statement location first exactly as
+    // restore_value_locations does on the legacy path. Any other code operand
+    // is unexpected here; fall back.
+    if (op.is_code())
+    {
+      if (op.statement() != "cpp-throw")
+        return false;
+      const locationt &stamp =
+        effective_location(expr_stmt.location, inherited);
+      if (!stamp.get_file().empty())
+        op.location() = stamp;
+      convert(to_code(op), dest);
+      return true;
+    }
 
     // A temporary_object's scope-exit entries die at the end of the full
     // expression, not at block exit, so lowering one here would need the
