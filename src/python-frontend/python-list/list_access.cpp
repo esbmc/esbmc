@@ -331,31 +331,36 @@ exprt python_list::build_bool_mask_row_select(
   const std::string mask_name = element["slice"]["id"].get<std::string>();
 
   // find_var_decl returns the first textual assignment to mask_name in
-  // scope, not the one that actually reaches this use site. If the mask is
-  // reassigned anywhere in scope, trusting that first declaration could
-  // silently select rows using a stale mask value instead of the one
-  // actually in effect here, so reject rather than risk an unsound result.
+  // scope, not the one that actually reaches this use site. A reassigned
+  // mask can't be trusted via that first declaration for the literal
+  // fast path below, but build_bool_mask_row_select_symbolic reads the
+  // mask's live runtime value directly (not its AST declaration), so
+  // reassignment is sound there.
   if (json_utils::has_multiple_assignments_in_scope(
         mask_name, converter_.current_function_name(), converter_.ast()))
-    return reject(
-      "requires a mask variable that is assigned exactly once (no "
-      "reassignment) so its literal value can be resolved unambiguously");
+    return build_bool_mask_row_select_symbolic(array, mask, element);
 
   const nlohmann::json mask_decl = json_utils::find_var_decl(
     mask_name, converter_.current_function_name(), converter_.ast());
 
+  // No local declaration is found for a mask that is itself a function
+  // parameter: there is no AST assignment to resolve a literal from, so
+  // read its runtime value instead, same as the
+  // reassigned-mask case above.
   if (
     mask_decl.is_null() || !mask_decl.contains("value") ||
     mask_decl["value"].value("_type", "") != "Call" ||
     !mask_decl["value"].contains("args") ||
     mask_decl["value"]["args"].empty() ||
     mask_decl["value"]["args"][0].value("_type", "") != "List")
-    return reject(
-      "requires a mask variable whose value is a concrete boolean literal, "
-      "e.g. mask = np.array([True, False, ...])");
+    return build_bool_mask_row_select_symbolic(array, mask, element);
 
   const nlohmann::json &mask_elts = mask_decl["value"]["args"][0]["elts"];
 
+  // Every element a literal bool takes the compile-time-sized fast path
+  // below; any other element (nondet, a computed value, ...) means the
+  // mask is symbolic, which build_bool_mask_row_select_symbolic handles by
+  // reading the mask's runtime value in a bounded loop instead.
   std::vector<bool> mask_values;
   mask_values.reserve(mask_elts.size());
   for (const auto &elt : mask_elts)
@@ -363,7 +368,7 @@ exprt python_list::build_bool_mask_row_select(
     if (
       elt.value("_type", "") != "Constant" || !elt.contains("value") ||
       !elt["value"].is_boolean())
-      return reject("requires every mask element to be a literal bool");
+      return build_bool_mask_row_select_symbolic(array, mask, element);
     mask_values.push_back(elt["value"].get<bool>());
   }
 
@@ -423,6 +428,198 @@ exprt python_list::build_bool_mask_row_select(
   }
 
   return build_symbol(result);
+}
+
+bool python_list::is_bool_mask_rows_type(const typet &type)
+{
+  if (!type.is_struct())
+    return false;
+  return to_struct_type(type).tag().as_string().find(
+           "tag-numpy_bool_mask_rows") == 0;
+}
+
+exprt python_list::build_bool_mask_row_select_symbolic(
+  const exprt &array,
+  const exprt &mask,
+  const nlohmann::json &element)
+{
+  const namespacet ns(converter_.symbol_table());
+  const array_typet &outer_type =
+    static_cast<const array_typet &>(ns.follow(array.type()));
+  const typet row_type = outer_type.subtype();
+  const BigInt num_rows =
+    binary2integer(outer_type.size().value().c_str(), false);
+  const locationt location = converter_.get_location_from_decl(element);
+
+  const array_typet &row_array_type = to_array_type(ns.follow(row_type));
+  const typet elem_type = ns.follow(row_array_type.subtype());
+  if (elem_type.is_array())
+  {
+    std::ostringstream msg;
+    msg << "TypeError: boolean-mask row selection (a[mask]) currently "
+           "supports only 2-D arrays; 3-D+ rows are not modelled";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+  const BigInt num_cols =
+    binary2integer(row_array_type.size().value().c_str(), false);
+
+  // Canonical bounded descriptor result: a `rows` buffer sized
+  // at the worst case (every row selected) plus a `count` member holding
+  // the number of rows actually selected, so the logical row count is part
+  // of the modelled value instead of a detached counter.
+  const array_typet rows_buffer_type(
+    row_type, from_integer(num_rows, size_type()));
+  struct_typet result_type;
+  result_type.components().push_back(
+    struct_typet::componentt("rows", "rows", rows_buffer_type));
+  result_type.components().push_back(
+    struct_typet::componentt("count", "count", size_type()));
+  result_type.tag(
+    "tag-numpy_bool_mask_rows_" + row_type.to_string() + "_" +
+    integer2string(num_rows));
+
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$bool_mask_rows$", result_type, exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  exprt rows_member =
+    build_member(build_symbol(result), "rows", rows_buffer_type);
+  exprt count_member = build_member(build_symbol(result), "count", size_type());
+
+  code_assignt count_init(count_member, gen_zero(size_type()));
+  count_init.location() = location;
+  converter_.add_instruction(count_init);
+
+  symbolt &index_var = converter_.create_tmp_symbol(
+    element, "$mask_row_i$", size_type(), gen_zero(size_type()));
+  code_declt index_decl(build_symbol(index_var));
+  index_decl.location() = location;
+  converter_.add_instruction(index_decl);
+  code_assignt index_init(build_symbol(index_var), gen_zero(size_type()));
+  index_init.location() = location;
+  converter_.add_instruction(index_init);
+
+  code_blockt loop_body;
+
+  // Redirect current_block so every statement built below (the per-column
+  // copy and the count increment) lands inside the loop body instead of
+  // being hoisted once before the loop runs (mirrors build_bool_mask_index).
+  code_blockt *saved_block = converter_.current_block;
+  converter_.current_block = &loop_body;
+
+  exprt mask_elem = build_index(mask, build_symbol(index_var), bool_type());
+  exprt src_row_expr = build_index(array, build_symbol(index_var), row_type);
+  exprt dst_row_expr = build_index(rows_member, count_member, row_type);
+
+  code_blockt then_block;
+  for (BigInt col = 0; col < num_cols; ++col)
+  {
+    exprt src_elem =
+      build_index(src_row_expr, from_integer(col, size_type()), elem_type);
+    exprt dst_elem =
+      build_index(dst_row_expr, from_integer(col, size_type()), elem_type);
+    code_assignt assign(dst_elem, src_elem);
+    assign.location() = location;
+    then_block.copy_to_operands(assign);
+  }
+  exprt count_increment =
+    build_add(count_member, gen_one(size_type()), size_type());
+  code_assignt count_inc_stmt(count_member, count_increment);
+  count_inc_stmt.location() = location;
+  then_block.copy_to_operands(count_inc_stmt);
+
+  codet if_stmt;
+  if_stmt.set_statement("ifthenelse");
+  if_stmt.copy_to_operands(mask_elem, then_block);
+  if_stmt.location() = location;
+  loop_body.copy_to_operands(if_stmt);
+
+  exprt index_increment =
+    build_add(build_symbol(index_var), gen_one(size_type()), size_type());
+  code_assignt index_inc_stmt(build_symbol(index_var), index_increment);
+  index_inc_stmt.location() = location;
+  loop_body.copy_to_operands(index_inc_stmt);
+
+  converter_.current_block = saved_block;
+
+  exprt loop_condition =
+    build_less_than(build_symbol(index_var), outer_type.size());
+
+  codet while_stmt;
+  while_stmt.set_statement("while");
+  while_stmt.copy_to_operands(loop_condition, loop_body);
+  while_stmt.location() = location;
+  converter_.add_instruction(while_stmt);
+
+  return build_symbol(result);
+}
+
+exprt python_list::index_bool_mask_rows(
+  const exprt &array,
+  const nlohmann::json &slice_node,
+  const nlohmann::json &element)
+{
+  const locationt location = converter_.get_location_from_decl(element);
+
+  if (slice_node.value("_type", "") == "Slice")
+  {
+    std::ostringstream msg;
+    msg << "TypeError: slicing a boolean-mask row-selection result is not "
+           "supported yet";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  const namespacet ns(converter_.symbol_table());
+  const struct_typet &result_type = to_struct_type(ns.follow(array.type()));
+  const array_typet &rows_array_type =
+    to_array_type(ns.follow(result_type.components()[0].type()));
+  const typet row_type = rows_array_type.subtype();
+
+  exprt index = converter_.get_expr(slice_node);
+  index = converter_.unwrap_optional_if_needed(index);
+
+  exprt rows_member = build_member(array, "rows", rows_array_type);
+  exprt count_member = build_member(array, "count", size_type());
+  exprt index_as_size = build_typecast(index, size_type());
+
+  // actual_index = (index < 0) ? (count + index) : index, normalized
+  // against the logical row count rather than the buffer's physical
+  // capacity (mirrors build_list_at_call's negative-index handling).
+  const type2tc size_t2 = migrate_type(size_type());
+  expr2tc index2, index_as_size2, count2;
+  migrate_expr(index, index2);
+  migrate_expr(index_as_size, index_as_size2);
+  migrate_expr(count_member, count2);
+
+  expr2tc is_negative = lessthan2tc(index2, gen_zero(index2->type));
+  expr2tc positive_index = add2tc(size_t2, count2, index_as_size2);
+  expr2tc converted_index2 =
+    if2tc(size_t2, is_negative, positive_index, index_as_size2);
+  exprt converted_index = migrate_expr_back(converted_index2);
+
+  if (!config.options.get_bool_option("no-bounds-check"))
+  {
+    expr2tc oob = greaterthanequal2tc(converted_index2, count2);
+
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "IndexError", "index out of range for boolean-mask row selection");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = migrate_expr_back(oob);
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    converter_.add_instruction(guard);
+  }
+
+  return build_index(rows_member, converted_index, row_type);
 }
 
 namespace
