@@ -4117,9 +4117,9 @@ through to `std::ostringstream << d`, whose default is **6 significant digits**.
 `"{}".format(3.14159265)` to `"3.14159"`. Asserting the *wrong* string verified `SUCCESSFUL` (a
 soundness hole) while asserting the *correct* CPython string reported a spurious `FAILED`.
 
-This is a **separate renderer** from the `%.6f` fixed-decimal `str()` fold that §87 (PR #5945)
+This is a **separate renderer** from the `%.6f` fixed-decimal `str()` fold that PR #5945
 addresses: that one loses *decimals* (`str(0.1234567)` → `"0.123457"`), this one loses *significant
-digits*. Both were live on `master` simultaneously.
+digits*. Both were live on `master` simultaneously. (§87 below consolidates the two renderers.)
 
 **Fix**: render the fallback with the fewest significant digits that still read back as the same
 double — `%.*g` for precision 1..16, returning the first whose `strtod` compares equal, else `%.17g`
@@ -4147,6 +4147,208 @@ regression tests pass unchanged.
 
 ### 86b. Next candidate & everything else: unchanged disposition
 Next: consolidate the remaining float renderers onto the shortest-repr helper, which would let the
-`str()` fold cover the inexact values §87 leaves nondet. The §3 design-level blockers, §3c
-policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand.
-The §5 priority order stands.
+`str()` fold cover the inexact values PR #5945 leaves nondet (done in §87). The §3 design-level
+blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib`
+case all stand. The §5 priority order stands.
+
+## 87. 2026-07-22 re-validation (seventy-seventh sweep) & consolidate float str/repr onto one shortest-repr helper
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. §86b nominated
+consolidating the float renderers; this sweep does it and, in doing so, closes the `str()`/`repr()`
+soundness/completeness gap PR #5945 left open.
+
+### 87a. Two renderers unified; str()/repr()/f-string now fold inexact floats
+`str()`, `repr()` and f-string interpolation route a constant float through
+`string_handler::convert_to_string` → `cpython_float_str`. PR #5945 (§86's referenced predecessor)
+made that renderer render CPython's `str()` with a fixed `%.6f`-style fold and **refuse** (return
+`nullopt` → nondet string) whenever the 6-decimal spelling was inexact *or* the value fell outside
+CPython's fixed-notation range `[1e-4, 1e16)`. So `str(0.1 + 0.2)`, `str(1e-5)`, `str(1e16)` and
+`repr(0.1234567)` all degraded to a nondet string: a *correct*-value assertion reported a spurious
+`FAILED`, and a *wrong*-value assertion could not be falsified.
+
+Meanwhile §86 (PR #5942) had already given the empty-`"{}"` `format()` renderer
+(`format_float_value`) a **complete** shortest-repr algorithm: a whole value `< 1e16` renders as
+`N.0`; every other value uses the fewest `%.*g` significant digits (1..16, else `%.17g`) that read
+back as the same double — exactly how CPython's `repr` chooses its digits, with `%g`'s
+fixed/exponential cut-over provably agreeing with CPython's `1e16` boundary. That renderer was
+already validated in PR #5942 over ~440,000 doubles (0 mismatches vs CPython `repr`).
+
+**Fix**: make `cpython_float_str` *be* that algorithm (now total — it renders every double, including
+`nan`/`inf`), and delete the duplicate `format_float_value`, routing its two callers to
+`cpython_float_str`. One renderer now backs `str()`, `repr()`, f-strings, and empty-`"{}"`
+`format()`. Because the body is byte-for-byte the PR #5942 algorithm, `str()`/`repr()` inherit that
+440k-double validation for free. The pre-existing `round_to_nearest_guard` still pins `FE_TONEAREST`
+across `snprintf`/`strtod`.
+
+This is a **wrong-value/soundness + completeness fix**: previously-nondet folds are now exact, so
+correct assertions verify `SUCCESSFUL` and wrong ones are provably `FAILED`. New regression pair
+`regression/python/str_repr_shortest_repr{,_fail}` (CORE): the positive covers long-digit `str()`
+(`1.23456789`, `0.30000000000000004`, `123456789.5`), `repr(0.1234567)`, both exponential ranges
+(`1e-05`, `1e16`, `1.5e20`, `1e300`), both sides of the fixed/exp cut-over (`0.0001`, `1e15`), the
+unchanged short/whole cases (`2.5`, `0.1`, `1.0`, `1000000.0`), and f-string interpolation; the
+`_fail` pins the previously-unfalsifiable `str(1.23456789) == "1.23457"` as a real `FAILED`. The
+stale "fold is now refused / nondet" comment in `str_float_precision_loss_fail` is refreshed (that
+value now folds exactly, so the wrong assertion is provably false). All existing
+`str_float_repr_exact` (§86/PR #5945), `str_format_shortest_repr` (§86), `builtin_repr`,
+`complex_repr`, `percent`, and `fstring` regression tests pass unchanged; dual verdict checks confirm
+positives `SUCCESSFUL` and negatives `FAILED`.
+
+`py_format_number`'s explicit-spec renderer (`format(x, ".2f")`, width/sign/grouping) is a distinct
+concern — it uses user-supplied precision, not shortest-repr — and its default-typed float path
+(`format(x, "10")`, no presentation type) still returns `nullopt`; wiring that path to the shared
+helper is the natural next candidate.
+
+### 87b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.
+
+## 88. 2026-07-22 re-validation (seventy-eighth sweep) & format() typeless float spec via the shared helper
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. §87b nominated wiring
+`py_format_number`'s default-typed float path to the shared shortest-repr helper; this sweep does it.
+(Stacked on §87 / PR #6247, which makes `cpython_float_str` public and total.)
+
+### 88a. Default-typed float format specs now fold instead of rejecting
+`py_format_number` (`src/python-frontend/function_call/str_conv.cpp`) renders a constant number under
+a `str.format`/`format()` spec. Its float branch **required an explicit presentation type**
+(`f`/`e`/`g`/`%`) and returned `nullopt` for a typeless spec, so `format(1.5, "10")`, `format(-1.5,
+"08")`, `format(1.5, "=+10")` — width/align/sign/zero-pad with no type — degraded to the sound
+`ERROR: format() spec ... is not supported` rejection (a nondet string), even though CPython renders
+them as `str()` then pads.
+
+**Fix**: accept `type == 0` and render the digits with `string_handler::cpython_float_str(ad)` (the
+§87 shared shortest-repr helper) on the magnitude, then reuse the existing sign/width/align/zero-pad
+machinery. The explicit-type path (snprintf with the spec's precision) is unchanged. The default-type
+combinations that are *not* modelled still return `nullopt` and reject cleanly: grouping
+(`format(1234.5, ",")` — needs the fill to participate in grouping) and default-type precision
+(`format(1.5, ".2")` — a distinct `g`-like fold). `#` was already rejected for floats.
+
+This is a **feature-completeness fix** with the soundness boundary intact (unsupported specs still get
+a clean `ERROR`, never a wrong fold). New regression pair
+`regression/python/format_default_float_spec{,_fail}` (CORE): the positive covers width/align/sign/
+zero-pad (`"10"`, `"<10"`, `"^10"`, `"08"`, `"=+10"`), inexact and exponential values (`0.3...004`,
+`1e-05`, `1e16`), and a whole-number float; the `_fail` pins `format(1.5, "10") == "1.5"` as `FAILED`.
+Every positive assertion was cross-checked against CPython `format`; declined specs (grouping,
+default-type precision) confirmed to still reject cleanly; all `format`/`str_format`/`percent`/`repr`
+regression tests pass (202-test format subset green).
+
+`format(x, ".2")`-style default-type precision (CPython's `g`-like fold with a decimal-point
+guarantee) and typeless-float grouping remain the next candidates.
+
+### 88b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.
+
+## 89. 2026-07-22 re-validation (seventy-ninth sweep) & format() typeless-float grouping
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. §88b nominated two
+follow-ups; this sweep takes the **grouping** half and deliberately leaves default-type precision
+alone (see 89a). (Stacked on §88 / PR #6249, which added the typeless-float path.)
+
+### 89a. Default-type precision left as a clean reject; grouping modelled
+**Default-type precision (`format(x, ".2")`) is NOT modelled — on purpose.** CPython's `None`
+presentation type with a precision is a `g`-variant that diverges from `%.*g` in edge cases: `.0`/`.1`
+force exponential to keep a float appearance (`format(1.5, ".0") == "2e+00"`, not `"2"`), and it
+differs from `%.*g` on values like `100.0`/`123.456`. Modelling it approximately risks a false
+`SUCCESSFUL`; per the guiding policy (an unsound fold is worse than an honest KNOWNBUG) it keeps
+returning `nullopt` and rejecting cleanly. Verified `format(1.5, ".2")` still errors, never mis-folds.
+
+**Typeless-float grouping (`format(1234.5, ",")`) IS modelled.** `py_format_number`
+(`src/python-frontend/function_call/str_conv.cpp`) rejected every float grouping spec
+(`if (grouping != 0 || alt) return nullopt`). CPython groups **only the integer part** of a
+fixed-notation float by 3 (for `,` and `_`), leaving the fractional part and any exponential/`inf`/
+`nan` rendering untouched. Fix: for the default-type path, after rendering the magnitude via the §87
+shared `cpython_float_str` helper, split at the `.` and pass the integer head through the existing
+`group_digits` helper — but only when that head is **all digits**, which naturally skips exponential
+(`"1.5e+20"` head is the single digit `"1"`, a grouping no-op) and `inf`/`nan`. Grouping stays
+rejected for explicit float types (`",.1f"`) and, via the pre-existing top-level guard, for
+grouping + zero/`=` padding (`"08,"`) — both left as clean `nullopt` rejections.
+
+This is a **feature-completeness fix** with the soundness boundary intact. New pair
+`regression/python/format_float_grouping{,_fail}` (CORE): the positive covers `,`/`_` grouping,
+short groups (`999.0`), sign/width/align composition (`"+,"`, `"15,"`, `"<15,"`), and the ungrouped
+exponential cases (`1.5e20`, `1e16`); the `_fail` pins `format(1234.5, ",") == "1234.5"` as `FAILED`.
+Every positive assertion cross-checked against CPython `format`; `format(1234.5, "08,")` and
+`format(1234.5, ",.1f")` confirmed to still reject cleanly; 22-test format subset green;
+clang-format 11 + YAPF clean.
+
+### 89b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.
+## 90. 2026-07-22 re-validation (eightieth sweep) & float.hex() literal fold
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. This sweep is
+**independent of the §87–§89 float-format work** (open stacked PRs #6247←#6249←#6250) — it is a fresh
+branch off `master` in a different file/path, deliberately not deepening that stack. It closes the
+last of the §15b "unmodeled method" catalogue: `float.hex()`.
+
+> **Note on numbering.** §87–§89 are in flight on the stacked PRs above and not yet on `master`; this
+> section is numbered §90 so it does not collide with them. When all land, the maintainer orders
+> §87→§88→§89→§90.
+
+### 90a. New isolated, soundly-fixable defect found & fixed
+**`float.hex()` on a constant float receiver was unmodeled** — ESBMC replaced the undefined method
+with a nondet string, so `(3.5).hex() == "0x1.c000000000000p+1"` reported a spurious `FAILED`
+(catalogued in §15b as an "isolated add-the-model candidate").
+
+**Fix**: fold a literal-receiver `(x).hex()` to CPython's exact hexadecimal string, mirroring the
+existing `float.is_integer()` literal fold (§18) — a new `is_float_hex_literal_call()` predicate +
+`handle_float_hex_literal()` handler + dispatch entry in `function_call/expr.cpp`. The renderer
+mirrors CPython's `float_hex()` (`Objects/floatobject.c`) directly via `frexp`/`ldexp` instead of
+delegating to `"%a"`: the C standard leaves the leading-digit normalisation of `%a`
+implementation-defined, and while glibc keeps a subnormal's leading digit `0` with exponent `-1022`
+(matching CPython), macOS/BSD libc renormalises to a leading `1` with a smaller exponent — so `%a` is
+**not portable for subnormals** (`5e-324` renders `0x1.0000000000000p-1074` on macOS vs CPython's
+`0x0.0000000000001p-1022`). The manual renderer extracts the leading digit and 13 hex mantissa digits
+(= the 52-bit significand) by exact powers-of-two scaling — no rounding — and is **byte-identical to
+CPython for every finite value on both glibc and macOS** (verified by a C-vs-CPython differential over
+normal, subnormal, negative and boundary values); zero is special-cased to CPython's single-`0`
+mantissa spelling. Only a **literal** receiver is folded; a `Name`
+receiver has no float OM for `hex()` and stays unsupported, and inf/nan cannot arise (a float literal
+that overflows, e.g. `1e400`, already fails the AST-JSON parse upstream), so the inf/nan branches were
+dropped as unreachable.
+
+New regression pair `regression/python/float_hex_literal{,_fail}` (CORE): the positive covers normal
+values, carried sign, `-0.0`, and large/small/subnormal magnitudes (`1e300`, `1e-300`, `5e-324`);
+the `_fail` pins the wrong-value assertion as `FAILED`. Every positive cross-checked against CPython
+`float.hex`; 11-test float-method subset green; clang-format 11 + YAPF clean.
+
+### 90b. Everything else: unchanged disposition
+`float.fromhex()` (the classmethod inverse) remains an unsupported stub — a natural follow-up. The §3
+design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand. The §5 priority order stands.
+
+## 91. 2026-07-22 re-validation (eighty-first sweep) & float.fromhex() literal fold
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. This sweep is the §90b
+follow-up: it folds `float.fromhex()`, the classmethod inverse of the `float.hex()` fold shipped in
+§90. Like §90 it is **independent of the §87–§89 float-format stack** — a fresh branch off `master`
+(it builds directly on §90's `feat/python-float-hex-literal` branch, not the stacked PRs).
+
+### 91a. New isolated, soundly-fixable defect found & fixed
+**`float.fromhex()` on a constant string was unmodeled** — ESBMC replaced the classmethod with a
+nondet double, so `float.fromhex("0x1.8p3") == 12.0` reported a spurious `FAILED`.
+
+**Fix**: fold a constant-string `float.fromhex(s)` to the exact double — a new
+`handle_float_fromhex()` handler + dispatch entry in `function_call/expr.cpp`. After stripping
+surrounding ASCII whitespace (as CPython does), the string is matched against the **strict C99
+hex-float grammar** `[sign]0x<hex>[.<hex>]p[sign]<dec>` — exactly what `float.hex()` emits — and
+parsed with `strtod` under a `round_to_nearest_guard`. `strtod` decodes that form byte-identically to
+CPython (verified by a differential round-trip over the §90 test values and ~2000 doubles), so the
+`hex → fromhex` round trip is exact. CPython's **lenient** spellings (hex digits without the `0x`
+prefix, a missing `p` exponent, `inf`/`nan`, and `OverflowError` on out-of-range input) are
+deliberately **rejected rather than folded** — an unsound fold is worse than an unsupported stub
+(the §89 policy). A non-constant / `Name` argument stays unsupported.
+
+New regression pair `regression/python/float_fromhex_literal{,_fail}` (CORE): the positive covers the
+padded and short mantissa forms, a missing fraction part (`0x1p3`), carried sign, surrounding
+whitespace, and large/small/subnormal magnitudes (`1e300`, `1e-300`, `5e-324`); the `_fail` pins the
+wrong-value assertion as `FAILED`. Every positive cross-checked against CPython `float.fromhex`; the
+float-method subset (incl. the §90 `float.hex` pair) is green; clang-format 11 clean.
+
+### 91b. Everything else: unchanged disposition
+With `float.hex()` (§90) and `float.fromhex()` (§91) both folded, the §15b "unmodeled method"
+catalogue is drained. `2 ** 0.5` / fractional float `**` stays KNOWNBUG (root cause is the shared
+`__ESBMC_pow`/libm intrinsic, all-frontend — not a Python fold — like #4796). The §3 design-level
+blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib` case
+all stand. The §5 priority order stands.

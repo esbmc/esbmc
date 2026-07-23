@@ -59,6 +59,7 @@ ignored_dirs=(
   "enumerate15_fail"
   "func-no-params-types-fail"
   "function-option-fail"
+  "github_6211_function_multi_fail"
   "github_2843_fail"
   "github_2843_4_fail"
   "github_2908_1"

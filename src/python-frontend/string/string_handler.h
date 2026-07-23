@@ -907,21 +907,20 @@ private:
     std::size_t width,
     int precision);
 
+public:
   /**
-   * @brief Render a constant double as CPython's str()/repr() would, or return
-   *        nullopt when the result cannot be produced exactly.
+   * @brief Render a constant double as CPython's str()/repr() would: the
+   *        shortest decimal string that reads back as the same double.
    *
-   * The frontend renders floats with a fixed 6-decimal format, which diverges
-   * from CPython's shortest round-trip repr and would otherwise fold to a WRONG
-   * constant string (verifying a false assertion SUCCESSFUL): precision loss
-   * (str(0.333333333) would give "0.333333") and notation (CPython uses
-   * exponential outside [1e-4, 1e16): str(1e-5) == "1e-05", str(1e16) ==
-   * "1e+16"). Fold only when provably CPython's repr: the value is zero or in
-   * CPython's fixed-notation range AND the 6-decimal rendering round-trips to
-   * the exact same double. Otherwise return nullopt so callers emit a sound
-   * nondet string rather than a wrong constant.
+   * A whole value below 1e16 gets the "N.0" spelling; every other finite value
+   * (and nan/inf) uses the fewest %g significant digits that round-trip, which
+   * reproduces CPython's shortest repr and its fixed/exponential cut-over. This
+   * is total: it renders every double, so str()/repr() and f-string
+   * interpolation fold to the exact CPython string for inexact values too
+   * (str(0.1 + 0.2) == "0.30000000000000004", str(1e-5) == "1e-05"). The caller
+   * still emits a nondet string for a 32-bit float or a nondet value.
    */
-  static std::optional<std::string> cpython_float_str(double d);
+  static std::string cpython_float_str(double d);
 };
 
 #endif // PYTHON_FRONTEND_STRING_HANDLER_H
