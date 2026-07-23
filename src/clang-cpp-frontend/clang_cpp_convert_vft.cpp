@@ -320,23 +320,36 @@ void clang_cpp_convertert::add_thunk_method(
   // Compute the byte offset of the base class sub-object within the derived
   // class. For non-first base classes in multiple inheritance this is non-zero,
   // and the thunk must subtract it from its Base* this to recover Derived*.
-  // TODO: This loop only searches direct bases of derived_rd. If base_rd is
-  // an indirect base (e.g. Derived : Middle, Middle : B8), base_offset will
-  // incorrectly remain 0. A complete fix requires summing offsets along the
-  // full inheritance path using CXXBasePaths::isDerivedFrom or a recursive
-  // walk — to be addressed as a follow-up.
+  // Sum the per-link non-virtual base offsets along the full inheritance path,
+  // so an *indirect* non-first base (e.g. Derived : Middle, Middle : First, B)
+  // gets its cumulative offset rather than 0 (#6288). Virtual bases have a
+  // dynamic offset that this static subtraction cannot model, so any path
+  // crossing a virtual base is left at 0 (unchanged; tracked separately, #940).
   uint64_t base_offset = 0;
   const clang::CXXRecordDecl *base_rd = md.getParent();
-  const clang::ASTRecordLayout &layout =
-    ASTContext->getASTRecordLayout(&derived_rd);
-  for (const auto &base_spec : derived_rd.bases())
+  if (base_rd != &derived_rd)
   {
-    const clang::CXXRecordDecl *spec_rd =
-      base_spec.getType()->getAsCXXRecordDecl();
-    if (spec_rd == base_rd && !base_spec.isVirtual())
+    clang::CXXBasePaths paths;
+    if (derived_rd.isDerivedFrom(base_rd, paths))
     {
-      base_offset = layout.getBaseClassOffset(base_rd).getQuantity();
-      break;
+      const clang::CXXBasePath &path = paths.front();
+      uint64_t off = 0;
+      bool crosses_virtual = false;
+      for (const auto &elem : path)
+      {
+        if (elem.Base->isVirtual())
+        {
+          crosses_virtual = true;
+          break;
+        }
+        const clang::CXXRecordDecl *link_base =
+          elem.Base->getType()->getAsCXXRecordDecl();
+        const clang::ASTRecordLayout &link_layout =
+          ASTContext->getASTRecordLayout(elem.Class);
+        off += link_layout.getBaseClassOffset(link_base).getQuantity();
+      }
+      if (!crosses_virtual)
+        base_offset = off;
     }
   }
 
