@@ -11,10 +11,12 @@
 static size_t current = 0;
 static bool error = false;
 
+// ESBMC uses a Clang frontend, so __PRETTY_FUNCTION__ follows Clang's
+// spelling ("X<void>::X() [T = void]"), not GCC's ("X<T>::X() [with T = void]").
 static char const *names[] =
 {
-  "X<T>::X() [with T = void]",
-  "X<T>::~X() [with T = void]",
+  "X<void>::X() [T = void]",
+  "X<void>::~X() [T = void]",
   0
 };
 

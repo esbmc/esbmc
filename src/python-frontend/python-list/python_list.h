@@ -99,26 +99,65 @@ public:
    * @brief Lower whole-row boolean-mask selection `a[mask]` on a 2-D array.
    * The runtime-list model used by build_bool_mask_index cannot hold an
    * array-typed element (confirmed empirically: pushing a row produces a
-   * bit-vector/array sort mismatch at the SMT backend), so this requires
-   * @p mask to resolve to a concrete boolean literal (`np.array([True,
-   * False, ...])`) whose declaring assignment is found via AST lookup —
-   * the selected row count is then known at conversion time and the result
-   * is built as a fixed-size array, mirroring build_column_select. A
-   * symbolic (non-literal) mask is rejected explicitly: per ADR-NP-001
-   * (numpy-architecture-decisions.md), a bounded-capacity result with a
-   * detached runtime `count` is not sound until the canonical ndarray
-   * descriptor exists to carry the logical size as part of the value
-   * itself, so it must stay an explicit rejection rather than an
-   * approximation with observable padding.
+   * bit-vector/array sort mismatch at the SMT backend), so this takes a
+   * different path: when @p mask resolves to a concrete boolean literal
+   * (`np.array([True, False, ...])`) whose declaring assignment is found via
+   * AST lookup, the selected row count is known at conversion time and the
+   * result is a fixed-size array, mirroring build_column_select. Otherwise
+   * (a symbolic/reassigned mask), it delegates to
+   * build_bool_mask_row_select_symbolic.
    * @param array   Source 2-D array expression.
-   * @param mask    Boolean mask array expression (used only for its type/
-   *                length; values are re-read from the AST).
+   * @param mask    Boolean mask array expression.
    * @param element The Subscript AST node, used for location info and to
    *                recover the mask's variable name.
    */
   exprt build_bool_mask_row_select(
     const exprt &array,
     const exprt &mask,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Lower whole-row boolean-mask selection `a[mask]` on a 2-D array
+   * for a symbolic (non-literal) mask: the result is the canonical bounded
+   * descriptor shape — a worst-case-sized `rows` buffer (capacity ==
+   * @p array's row count) plus a runtime `count` member holding the number
+   * of rows actually selected, so the logical size is part of the modelled
+   * value rather than a detached counter. A single runtime while-loop scans
+   * @p mask once, copying each selected row (column by column, since
+   * whole-row assignment isn't valid GOTO) into the next free `rows` slot
+   * and incrementing `count`, preserving input order.
+   * @param array   Source 2-D array expression.
+   * @param mask    Boolean mask array expression, same length as @p array's
+   *                row count.
+   * @param element The Subscript AST node, used for location info.
+   */
+  exprt build_bool_mask_row_select_symbolic(
+    const exprt &array,
+    const exprt &mask,
+    const nlohmann::json &element);
+
+  /**
+   * @brief True if @p type is a result struct built by
+   * build_bool_mask_row_select_symbolic (identified by its `tag-` prefix,
+   * mirroring tuple_handler::is_tuple_type).
+   */
+  static bool is_bool_mask_rows_type(const typet &type);
+
+  /**
+   * @brief Index `b[i]` into a boolean-mask row-selection result (see
+   * build_bool_mask_row_select_symbolic): normalizes a negative @p
+   * slice_node index against the struct's runtime `count` member (not the
+   * `rows` buffer's physical capacity), bounds-checks it against `count`
+   * (raising IndexError out of bounds, mirroring build_list_at_call), and
+   * returns the selected row.
+   * @param array      The boolean-mask row-selection result expression.
+   * @param slice_node AST node for the row index (a plain integer index;
+   *                    slicing is not supported).
+   * @param element    The Subscript AST node, used for location info.
+   */
+  exprt index_bool_mask_rows(
+    const exprt &array,
+    const nlohmann::json &slice_node,
     const nlohmann::json &element);
 
   /**

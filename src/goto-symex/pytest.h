@@ -73,6 +73,10 @@ private:
 public:
   pytest_generator() = default;
 
+  /// Default directory for --generate-pytest-testcase output, overridable
+  /// with --pytest-output-dir (github #6220).
+  static constexpr const char *default_output_dir = "esbmc-pytest";
+
   /// Extract module name from input file path and removes .py extension and directory
   static std::string extract_module_name(const std::string &input_file);
 
@@ -85,11 +89,16 @@ public:
   /// Collect test data from a counterexample (called for each CEX in coverage mode)
   void collect(const symex_target_equationt &target, smt_convt &smt_conv);
 
-  /// Generate pytest file from collected data (called at end of coverage mode)
-  void generate(const std::string &file_name) const;
+  /// Generate pytest file from collected data (called at end of coverage
+  /// mode). `file_name` is the bare filename (e.g. "test_foo.py"); the file
+  /// is written to output_dir/file_name (github #6220).
+  void
+  generate(const std::string &output_dir, const std::string &file_name) const;
 
-  /// Single-shot generation for non-coverage mode
+  /// Single-shot generation for non-coverage mode. `file_name` is the bare
+  /// filename; the file is written to output_dir/file_name (github #6220).
   void generate_single(
+    const std::string &output_dir,
     const std::string &file_name,
     const symex_target_equationt &target,
     smt_convt &smt_conv,

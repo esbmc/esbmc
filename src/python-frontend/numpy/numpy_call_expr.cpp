@@ -1,4 +1,5 @@
 #include <python-frontend/json_utils.h>
+#include <python-frontend/numpy/ndarray_descriptor.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/math/python_int_overflow.h>
@@ -4434,11 +4435,25 @@ exprt numpy_call_expr::get()
 
     const std::string arg_type = shape_arg["_type"];
 
-    if (arg_type == "Constant")
+    if (arg_type == "Constant" || arg_type == "UnaryOp")
     {
-      // np.zeros(n) or np.ones(n) — 1D
-      auto list = create_list(shape_arg["value"].get<int>(), fill_value);
-      return converter_.get_expr(list);
+      // np.zeros(n) or np.ones(n) — 1D. try_extract_numeric_constant also
+      // resolves a negative literal (UnaryOp USub over a Constant), so the
+      // shape can be validated (ADR: negative dimensions are rejected, not
+      // silently truncated to an empty array) before building the list.
+      numeric_value shape_numeric;
+      if (
+        try_extract_numeric_constant(shape_arg, shape_numeric) &&
+        shape_numeric.is_int)
+      {
+        validate_ndarray_shape({shape_numeric.int_value});
+        if (shape_numeric.int_value > std::numeric_limits<int>::max())
+          throw std::runtime_error(
+            "ValueError: array size overflows during creation");
+        auto list =
+          create_list(static_cast<int>(shape_numeric.int_value), fill_value);
+        return converter_.get_expr(list);
+      }
     }
 
     if (arg_type == "Tuple")
