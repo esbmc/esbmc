@@ -141,7 +141,6 @@ __ESBMC_HIDE:;
   // Set currently reading state
   __esbmc_currently_reading = 1;
 
-  // (rest of existing fgets implementation...)
   _Bool early_termination = 0;
   // check for pre-conditions
   __ESBMC_assert(

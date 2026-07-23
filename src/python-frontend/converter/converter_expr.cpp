@@ -1493,6 +1493,20 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         array_type = pointed;
       }
     }
+    // Unwrap Optional[tuple] (e.g. `v = d.get(k); v[0]`): subscripting
+    // implies the payload is present (None would be a TypeError), so read
+    // the value field before dispatching to the tuple handler.
+    if (
+      array_type.is_struct() &&
+      to_struct_type(array_type).tag().as_string().starts_with("tag-Optional_"))
+    {
+      exprt unwrapped = unwrap_optional_if_needed(array, element);
+      if (tuple_handler_->is_tuple_type(unwrapped.type()))
+      {
+        array = unwrapped;
+        array_type = unwrapped.type();
+      }
+    }
     if (tuple_handler_->is_tuple_type(array_type))
     {
       expr = tuple_handler_->handle_tuple_subscript(array, slice, element);

@@ -45,6 +45,18 @@
 #include <vector>
 #include <nlohmann/json.hpp>
 
+static std::string ctest_output_dir(const optionst &options)
+{
+  std::string dir = options.get_option("ctest-output-dir");
+  return dir.empty() ? ctest_generator::default_output_dir : dir;
+}
+
+static std::string pytest_output_dir(const optionst &options)
+{
+  std::string dir = options.get_option("pytest-output-dir");
+  return dir.empty() ? pytest_generator::default_output_dir : dir;
+}
+
 std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
 std::mutex goto_functionst::reached_claims_mutex;
@@ -122,8 +134,6 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
   std::string witness_yaml_output = options.get_option("witness-output-yaml");
 
   goto_tracet goto_trace;
-  // correctness witness, why did goto trace ignore it in the past?
-  // build_successful_goto_trace(eq, ns, goto_trace);
   if (witness_graphml_output != "")
     correctness_graphml_goto_trace(options, ns, goto_trace);
 
@@ -187,12 +197,13 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     std::string module_name = pytest_generator::extract_module_name(input_file);
     std::string pytest_filename =
       pytest_generator::generate_pytest_filename(module_name);
-    pytest_gen.generate_single(pytest_filename, eq, smt_conv, ns);
+    pytest_gen.generate_single(
+      pytest_output_dir(options), pytest_filename, eq, smt_conv, ns);
   }
 
   if (options.get_bool_option("generate-ctest-testcase"))
   {
-    ctest_gen.generate_single(".", eq, smt_conv, ns);
+    ctest_gen.generate_single(ctest_output_dir(options), eq, smt_conv, ns);
   }
 
   if (options.get_bool_option("generate-html-report"))
@@ -1141,13 +1152,13 @@ void report_coverage(
     std::string module_name = pytest_generator::extract_module_name(input_file);
     std::string pytest_filename =
       pytest_generator::generate_pytest_filename(module_name);
-    pytest_gen.generate(pytest_filename);
+    pytest_gen.generate(pytest_output_dir(options), pytest_filename);
   }
 
   // Generate CTest test cases from collected data (for coverage mode)
   if (options.get_bool_option("generate-ctest-testcase"))
   {
-    ctest_gen.generate();
+    ctest_gen.generate(ctest_output_dir(options));
   }
 }
 
@@ -1339,9 +1350,8 @@ void bmct::report_result(smt_resultt &res)
     }
     break;
 
-    // Return failure if we didn't actually check anything, we just emitted the
-    // test information to an SMTLIB formatted file. Causes esbmc to quit
-    // immediately (with no error reported)
+    // SMTLIB-only emission: nothing was actually checked, so return without
+    // reporting any verdict.
   case P_SMTLIB:
     return;
 
@@ -1865,10 +1875,10 @@ smt_resultt bmct::multi_property_check(
   bool is_branch_func_cov =
     options.get_bool_option("branch-function-coverage") ||
     options.get_bool_option("branch-function-coverage-claims");
-  // "k-Path Cov" — keyed off the dedicated boolean (see line ~717
-  // comment); needed in the is_goto_cov disjunction so the
-  // claim_slicer reads the witness comment, matching the form stored
-  // in goto_coveraget::all_claims.
+  // "k-Path Cov" — keyed off the dedicated k-path-coverage-enabled
+  // boolean (see the note where it is set above); needed in the
+  // is_goto_cov disjunction so the claim_slicer reads the witness
+  // comment, matching the form stored in goto_coveraget::all_claims.
   bool is_k_path_cov = options.get_bool_option("k-path-coverage-enabled");
 
   // is_vb: enable verbose output coverage info if the option "--verbosity coverage:N" is set, where N should larger than 0
@@ -1952,7 +1962,7 @@ smt_resultt bmct::multi_property_check(
     // text we stored in insert_assert); otherwise it reads the negated
     // assertion expression. k-path goals are stored the same way as
     // branch / condition goals, so they must be in this disjunction —
-    // otherwise the claim_sig built at line ~1751 disagrees with the
+    // otherwise the claim_sig built just below disagrees with the
     // form in goto_coveraget::all_claims and every JSON entry shows up
     // as uncovered even when reached_claims has the matching reached
     // signature (PR #4330 review).

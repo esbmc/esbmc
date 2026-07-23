@@ -231,11 +231,13 @@ void show_goto_trace_gui(
   }
 }
 
-/* 
-   Return true if 
-   - the location's file_name matches the user input
+/*
+   Return true if
+   - the location's file_name matches the user input or one of the
+     user-supplied include files
    - the location is explicitly labeled as user_provided
    - the location is empty
+   - the location is the esbmc_intrinsics.h exception
 */
 bool input_file_check(const locationt &l)
 {
@@ -511,31 +513,6 @@ void correctness_yaml_goto_trace(
   yml.verified_file = options.get_option("input-file");
   log_progress(
     "Generating Correctness Yaml Witness for: {}", yml.verified_file);
-
-#if 0
-  for (const auto &step : goto_trace.steps)
-  {
-    /* checking restrictions for correctness yaml */
-    if (
-      (!(is_valid_witness_step(ns, step))) ||
-      (!(step.is_assume() || step.is_assert())))
-      continue;
-
-    std::string invariant = get_invariant(
-      yml.verified_file,
-      std::atoi(step.pc->location.get_line().c_str()),
-      options);
-
-    if (invariant.empty())
-      continue; /* we don't have to consider this invariant */
-
-    std::string function = step.pc->location.get_function().c_str();
-    get_line_number(
-      yml.verified_file,
-      std::atoi(step.pc->location.get_line().c_str()),
-      options);
-  }
-#endif
 
   yml.generate_yaml(options);
 }

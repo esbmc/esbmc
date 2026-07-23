@@ -1,5 +1,6 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/std_expr.h>
+#include <functional>
 
 void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
 {
@@ -65,23 +66,60 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
   exprt::operandst &body_ops = ctor_body.operands();
   std::size_t insert_at = 0;
   while (!is_dtor && insert_at < body_ops.size() &&
-         body_ops[insert_at].has_operands() &&
-         body_ops[insert_at].op0().get_bool("#is_base_ctor_call"))
+         ((body_ops[insert_at].has_operands() &&
+           body_ops[insert_at].op0().get_bool("#is_base_ctor_call")) ||
+          // A virtual-base ctor call wrapped in `if(__is_complete){...}`
+          // (esbmc/esbmc#938) is still a leading base-subobject construction.
+          body_ops[insert_at].get_bool("#base_ctor_call_guard")))
     ++insert_at;
 
-  // iterate over the `components` and initialize each virtual pointers
-  for (const auto &comp : components)
-  {
-    if (!comp.get_bool("is_vtptr"))
-      continue;
+  // Build the `*this` lvalue that every vptr assignment is rooted at.
+  namespacet ns(context);
+  const symbolt *this_symb =
+    ns.lookup(ctor_type.arguments().at(0).type().subtype().identifier());
+  assert(this_symb);
+  exprt this_operand = symbol_exprt(
+    ctor_type.arguments().at(0).get("#identifier"), this_symb->get_type());
+  dereference_exprt this_deref(this_operand.type());
+  this_deref.operands().resize(0);
+  this_deref.operands().push_back(this_operand);
 
-    side_effect_exprt new_code("assign");
-    gen_vptr_init_code(comp, new_code, ctor_type);
-    codet code_expr("expression");
-    code_expr.move_to_operands(new_code);
-    body_ops.insert(body_ops.begin() + insert_at, code_expr);
-    ++insert_at;
-  }
+  // Initialise every vptr reachable from this class: its own, plus those of
+  // the nested "@base@" base subobjects. Base vptrs live inside their
+  // subobject now, so the LHS is a member path (this->@base@B->vptr) rather
+  // than a flat member. The RHS is unchanged: each vptr is pointed at *this*
+  // class's vtable for that vptr-class (vtable::tag-B@Derived), which is what
+  // overrides the base ctor's own assignment. See #1866, #3894.
+  std::function<void(const struct_typet &, const exprt &)> emit_vptr_inits =
+    [&](const struct_typet &st, const exprt &access) {
+      for (const auto &comp : st.components())
+      {
+        exprt member = member_exprt(comp.name(), comp.type());
+        member.operands().resize(0);
+        member.operands().push_back(access);
+
+        if (comp.get_bool("is_vtptr"))
+        {
+          side_effect_exprt new_code("assign");
+          new_code.type() = comp.type();
+          new_code.operands().push_back(member);
+          new_code.operands().push_back(gen_vptr_init_rhs(comp, ctor_type));
+          codet code_expr("expression");
+          code_expr.move_to_operands(new_code);
+          body_ops.insert(body_ops.begin() + insert_at, code_expr);
+          ++insert_at;
+        }
+        else if (comp.get_bool("is_base_subobject"))
+        {
+          const typet followed = ns.follow(comp.type());
+          if (followed.is_struct())
+            emit_vptr_inits(to_struct_type(followed), member);
+        }
+      }
+    };
+
+  emit_vptr_inits(to_struct_type(ctor_class_symb->get_type()), this_deref);
+  (void)components;
 
   value.need_vptr_init(false);
   symbol.set_value(std::move(value));
@@ -99,7 +137,6 @@ void clang_cpp_adjust::gen_vptr_init_code(
    */
 
   // 1. set the type
-  //typet vtable_type = symbol_typet(comp.type().subtype().id());
   new_code.type() = comp.type();
 
   // 2. LHS: generate the member pointer dereference expression

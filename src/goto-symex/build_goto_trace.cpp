@@ -13,7 +13,6 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
   {
   case expr2t::index_id:
   {
-    // An array subscription
     index2t index = to_index2t(new_lhs);
 
     // Build new source value, it might be an index, in case of
@@ -73,6 +72,8 @@ void build_goto_trace(
     if (SSA_step.hidden)
       continue;
 
+    // is_true() also drops steps whose guard the solver could not evaluate:
+    // such a step has no authentic state to report (see #6191).
     if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
@@ -136,8 +137,14 @@ void build_goto_trace(
       }
     }
 
+    // An unevaluatable assertion condition (e.g. one still containing a
+    // quantifier) must render as violated, not as held: this is the assertion
+    // the solver already reported as failing. Hence is_true(), not !is_false().
     if (SSA_step.is_assert())
-      goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond_expr).is_false();
+      goto_trace_step.guard = smt_conv.l_get(SSA_step.cond_expr).is_true();
+    // Keeps the opposite idiom on purpose: here guard is a direction bit, not
+    // a violation flag, so unknown has no fail-safe value and flipping would
+    // swap one invented branch direction for another.
     else if (SSA_step.is_assume() || SSA_step.is_branching())
       goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond).is_false();
 

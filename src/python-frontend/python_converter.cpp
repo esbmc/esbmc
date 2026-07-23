@@ -60,10 +60,12 @@ python_converter::get_op(const std::string &op, const typet &type) const
 python_converter::python_converter(
   contextt &_context,
   const nlohmann::json *ast,
-  const global_scope &gs)
+  const global_scope &gs,
+  const std::vector<nlohmann::json> *extra_asts)
   : symbol_table_(_context),
     ast_json(ast),
     entry_ast_(ast),
+    extra_asts_(extra_asts),
     global_scope_(gs),
     type_handler_(*this),
     string_builder_(new string_builder(*this, &string_handler_)),
@@ -422,6 +424,35 @@ void python_converter::convert_module_imports(code_blockt &all_imports_block)
   current_python_file = main_python_file;
 }
 
+void python_converter::convert_extra_translation_unit(
+  const nlohmann::json &extra_ast,
+  code_blockt &init_code,
+  code_blockt &combined_user_code)
+{
+  current_python_file = extra_ast["filename"].get<std::string>();
+  create_builtin_symbols();
+
+  // convert_module_imports() returns void, so it can't go through with_ast()
+  // (whose decltype(auto) result can't bind void); swap ast_json by hand
+  // instead. It also resets current_python_file to main_python_file on
+  // exit, so that must be undone afterwards too.
+  code_blockt extra_imports_block;
+  const nlohmann::json *saved_ast_json = ast_json;
+  ast_json = &extra_ast;
+  convert_module_imports(extra_imports_block);
+  ast_json = saved_ast_json;
+  current_python_file = extra_ast["filename"].get<std::string>();
+  if (!extra_imports_block.operands().empty())
+    init_code.copy_to_operands(extra_imports_block);
+
+  exprt extra_block = with_ast(&extra_ast, [&]() {
+    preregister_global_variables(extra_ast["body"]);
+    return get_block(extra_ast["body"]);
+  });
+  codet extra_code = convert_expression_to_code(extra_block);
+  combined_user_code.copy_to_operands(extra_code);
+}
+
 void python_converter::convert()
 {
   main_python_file = (*ast_json)["filename"].get<std::string>();
@@ -529,6 +560,17 @@ void python_converter::convert()
   const std::string function = config.options.get_option("function");
   if (!function.empty())
   {
+    // --function only ever searches the entry file's AST for the named
+    // function (below); silently ignoring any extra positional command-line
+    // files here would reproduce the exact silent-drop unsoundness github
+    // #6211 reports, just gated behind --function instead of file order. Fail
+    // loudly instead of guessing which file the caller meant.
+    if (extra_asts_ && !extra_asts_->empty())
+      throw std::runtime_error(
+        "--function does not support multiple positional Python files; "
+        "pass a single file, or drop --function to verify the whole "
+        "program (github #6211)");
+
     /* If the user passes --function, we add only a call to the
      * respective function in __ESBMC_main instead of entire Python program
      */
@@ -645,6 +687,23 @@ void python_converter::convert()
     init_code.copy_to_operands(intrinsic_block);
     if (!all_imports_block.operands().empty())
       init_code.copy_to_operands(all_imports_block);
+
+    // GitHub #6211: merge any additional positional Python files passed on
+    // the command line as extra translation units of the same program,
+    // mirroring how the C frontend merges multiple .c files' declarations
+    // (clang_c_languaget::parse -> mergeASTs). Without this, only the entry
+    // file's statements reach python_user_main and every other file's code
+    // (including any assertions) silently drops out of verification.
+    if (extra_asts_ && !extra_asts_->empty())
+    {
+      code_blockt combined_user_code;
+      combined_user_code.copy_to_operands(user_code);
+      for (const auto &extra_ast : *extra_asts_)
+        convert_extra_translation_unit(
+          extra_ast, init_code, combined_user_code);
+      current_python_file = main_python_file;
+      user_code = combined_user_code;
+    }
   }
 
   /*

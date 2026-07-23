@@ -118,6 +118,12 @@ template <
 class basic_string
 {
 public:
+  typedef CharT value_type;
+  typedef Traits traits_type;
+  typedef Alloc allocator_type;
+  typedef size_t size_type;
+  typedef std::ptrdiff_t difference_type;
+
   static const size_t npos = static_cast<size_t>(-1);
   char str[STRING_CAPACITY];
   int _size;
@@ -499,22 +505,40 @@ public:
     size_t pos,
     size_t n);
   basic_string(basic_string<CharT, Traits, Alloc> &s, size_t n);
-  basic_string(char c, size_t n);
+  basic_string(size_t n, char c);
   explicit basic_string(int len);
-  basic_string(const_iterator begin, const_iterator end);
+
+  /* [string.cons]: the iterator-pair constructor. Templated so it serves raw
+   * pointers as well as the nested iterator types — the previous
+   * const_iterator-only declaration was never defined, so a raw `char *` pair
+   * (as boost's type_index uses) found no viable overload. The non-template
+   * (const CharT *, size_t) overload still wins for a pointer/length call.
+   *
+   * Constrained away from integral types, as libstdc++ constrains it with
+   * _RequireInputIter: without this, `basic_string(10, 42)` deduces InputIt=int
+   * and beats the (char, size_t) fill constructor on an exact match. */
+  template <class InputIt>
+  basic_string(
+    InputIt first,
+    InputIt last,
+    typename enable_if<!is_integral<InputIt>::value>::type * = 0)
+  {
+  __ESBMC_HIDE:
+    _size = 0;
+    for (; first != last; ++first)
+    {
+      __ESBMC_assert(_size + 1 < STRING_CAPACITY, "basic_string overflow");
+      str[_size++] = *first;
+    }
+    str[_size] = '\0';
+  }
+
   char *c_str() const;
   bool operator>(basic_string<CharT, Traits, Alloc> &a);
-  bool operator>(const char *a);
-  friend bool
-  operator>(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs);
-  friend bool
-  operator>(basic_string<CharT, Traits, Alloc> &lhs, const char *rhs);
   bool operator<(basic_string<CharT, Traits, Alloc> &a);
-  bool operator<(const char *a);
-  friend bool
-  operator<(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs);
-  friend bool
-  operator<(basic_string<CharT, Traits, Alloc> &lhs, const char *rhs);
+  // The const char* relational overloads are non-member free templates (like
+  // operator==/!=), not members: a member operator>(const char*) would be
+  // ambiguous with the free operator>(basic_string&, const char*) for s > "lit".
   bool operator>=(basic_string<CharT, Traits, Alloc> &a);
   bool operator>=(const char *lhs);
   bool operator<=(basic_string<CharT, Traits, Alloc> &a);
@@ -532,6 +556,9 @@ public:
   //TODO: operator+
 
   char &operator[](size_t pos);
+  const char &operator[](size_t pos) const;
+  void push_back(char c);
+  void reserve(size_t n = 0);
   char at(size_t pos) const;
   char front() const;
   char back() const;
@@ -1090,6 +1117,10 @@ private:
 };
 
 typedef basic_string<char> string;
+// Declaration-level model: the underlying storage is char-based, which is
+// enough to parse interfaces taking std::wstring (github #6063); wide-string
+// operations are not modelled.
+typedef basic_string<wchar_t> wstring;
 } // namespace std
 
 namespace std
@@ -1116,14 +1147,16 @@ template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc>::basic_string(const CharT *s, size_t n)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(n < strlen(s), "basic_string overflow");
+  // [string.cons]: constructs from the range [s, s + n); n is unrelated to
+  // strlen(s) and the range may contain embedded null characters. Check for
+  // null before any dereference, then copy exactly n characters.
   __ESBMC_assert(s != NULL, "invalid basic_string");
+  __ESBMC_assert(n < STRING_CAPACITY, "String capacity exceeded");
 
-  int i;
   _size = n;
-  for (i = 0; (i < _size) && (s[i] != '\0'); i++)
+  for (size_t i = 0; i < n; i++)
     str[i] = s[i];
-  str[i] = '\0';
+  str[n] = '\0';
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1154,10 +1187,12 @@ basic_string<CharT, Traits, Alloc>::basic_string(int len)
 }
 
 template <typename CharT, typename Traits, typename Alloc>
-basic_string<CharT, Traits, Alloc>::basic_string(char c, size_t n)
+basic_string<CharT, Traits, Alloc>::basic_string(size_t n, char c)
 {
-  __ESBMC_assert(n > 0, "the second parameter must be different than zero");
-  for (int i = 0; i < n; i++)
+__ESBMC_HIDE:
+  __ESBMC_assert(n < STRING_CAPACITY, "String capacity exceeded");
+
+  for (size_t i = 0; i < n; i++)
     str[i] = c;
   str[n] = '\0';
   _size = n;
@@ -1196,26 +1231,9 @@ bool basic_string<CharT, Traits, Alloc>::operator>(
 __ESBMC_HIDE:
   __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
   int i;
-  for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++)
-  {
-    if (this->str[i] > a.str[i])
-      return true;
-  }
-  return false;
-}
-
-template <typename CharT, typename Traits, typename Alloc>
-bool basic_string<CharT, Traits, Alloc>::operator>(const char *a)
-{
-__ESBMC_HIDE:
-  __ESBMC_assert(a != NULL, "The parameter must be different than NULL");
-  int i;
-  for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++)
-  {
-    if (this->str[i] > a[i])
-      return true;
-  }
-  return false;
+  for (i = 0; this->str[i] != '\0' && this->str[i] == a.str[i]; i++)
+    ;
+  return (unsigned char)this->str[i] > (unsigned char)a.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1229,12 +1247,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs.str[i] != '\0') && (rhs.str[i] != '\0'); i++)
-  {
-    if (lhs.str[i] > rhs.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] > (unsigned char)rhs.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1248,12 +1263,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs.str[i] != '\0') && (rhs.str[i] != '\0'); i++)
-  {
-    if (lhs.str[i] < rhs.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] < (unsigned char)rhs.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1265,12 +1277,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs[i] != '\0') && (rhs.str[i] != '\0'); i++)
-  {
-    if (lhs[i] > rhs.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs[i] != '\0' && lhs[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs[i] > (unsigned char)rhs.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1282,12 +1291,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs.str[i] != '\0') && (rhs[i] != '\0'); i++)
-  {
-    if (lhs.str[i] > rhs[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] > (unsigned char)rhs[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1297,26 +1303,9 @@ bool basic_string<CharT, Traits, Alloc>::operator<(
 __ESBMC_HIDE:
   __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
   int i;
-  for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++)
-  {
-    if (this->str[i] < a.str[i])
-      return true;
-  }
-  return false;
-}
-
-template <typename CharT, typename Traits, typename Alloc>
-bool basic_string<CharT, Traits, Alloc>::operator<(const char *a)
-{
-__ESBMC_HIDE:
-  __ESBMC_assert(a != NULL, "The parameter must be different than NULL");
-  int i;
-  for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++)
-  {
-    if (this->str[i] < a[i])
-      return true;
-  }
-  return false;
+  for (i = 0; this->str[i] != '\0' && this->str[i] == a.str[i]; i++)
+    ;
+  return (unsigned char)this->str[i] < (unsigned char)a.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1328,12 +1317,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs[i] != '\0') && (rhs.str[i] != '\0'); i++)
-  {
-    if (lhs[i] < rhs.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs[i] != '\0' && lhs[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs[i] < (unsigned char)rhs.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1345,12 +1331,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs.str[i] != '\0') && (rhs[i] != '\0'); i++)
-  {
-    if (lhs.str[i] < rhs[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] < (unsigned char)rhs[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1419,6 +1402,30 @@ __ESBMC_HIDE:
   }
 }
 
+// Free const char*-on-the-left overloads, so "lit" >= s / "lit" <= s resolve
+// (the member operators only cover s >= "lit" / s <= "lit").
+template <typename CharT, typename Traits, typename Alloc>
+bool operator>=(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs)
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(
+    lhs != NULL, "The first parameter must be different than NULL");
+  __ESBMC_assert(
+    rhs.str != NULL, "The second parameter must be different than NULL");
+  return strcmp(lhs, rhs.str) >= 0;
+}
+
+template <typename CharT, typename Traits, typename Alloc>
+bool operator<=(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs)
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(
+    lhs != NULL, "The first parameter must be different than NULL");
+  __ESBMC_assert(
+    rhs.str != NULL, "The second parameter must be different than NULL");
+  return strcmp(lhs, rhs.str) <= 0;
+}
+
 template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::length() const
 {
@@ -1434,6 +1441,36 @@ char &basic_string<CharT, Traits, Alloc>::operator[](size_t pos)
     return this->str[this->_size - 1];
   else
     return this->str[pos];
+}
+
+// Stricter than [string.access] p1, which makes s[s.size()] return the null
+// character: basic_string(int) sets _size without initialising str[], so
+// str[_size] is not reliably '\0' and returning it would yield an
+// unconstrained byte. Do not widen this bound to pos <= _size; to model the
+// standard, return a static '\0' for pos == _size instead.
+template <typename CharT, typename Traits, typename Alloc>
+const char &basic_string<CharT, Traits, Alloc>::operator[](size_t pos) const
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(pos < this->_size, "Error! Invalid access memory area");
+  return this->str[pos];
+}
+
+template <typename CharT, typename Traits, typename Alloc>
+void basic_string<CharT, Traits, Alloc>::push_back(char c)
+{
+__ESBMC_HIDE:
+  *this += c;
+}
+
+// The model's buffer is a fixed-size array, so a request that fits is already
+// satisfied; a larger one cannot be modelled and is reported rather than
+// silently ignored.
+template <typename CharT, typename Traits, typename Alloc>
+void basic_string<CharT, Traits, Alloc>::reserve(size_t n)
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(n < STRING_CAPACITY, "String capacity exceeded");
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1571,6 +1608,8 @@ basic_string<CharT, Traits, Alloc> &
 basic_string<CharT, Traits, Alloc>::operator+=(char s)
 {
 __ESBMC_HIDE:
+  // Guards the strcpy below, which writes _size + 2 bytes into str[].
+  __ESBMC_assert(this->_size + 1 < STRING_CAPACITY, "String capacity exceeded");
   int totalLen = this->_size + 1;
   char temp[totalLen + 1];
   int i = 0;
@@ -1628,10 +1667,13 @@ __ESBMC_HIDE:
   s._size = _tsz;
 }
 
+// The storage is a fixed buffer, so the capacity is constant; returning _size
+// instead would break [string.capacity]'s capacity() >= res_arg guarantee
+// after reserve(). One byte is kept for the terminator.
 template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::capacity() const
 {
-  return this->_size;
+  return STRING_CAPACITY - 1;
 }
 
 template <typename CharT, typename Traits, typename Alloc>

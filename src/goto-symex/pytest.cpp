@@ -1,5 +1,6 @@
 #include <goto-symex/pytest.h>
 #include <goto-symex/slice.h>
+#include <goto-symex/test_gen_guard.h>
 #include <ac_config.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_expr.h>
@@ -8,13 +9,26 @@
 #include <util/message.h>
 #include <util/config.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <map>
 #include <algorithm>
 #include <unordered_set>
 
-// pytest_generator class implementation
+// The entry Python file: the first positional file on the command line.
+// config.options.get_option("input-file") only ever holds the *last*
+// positional file (optionst's option_map is single-valued and each
+// positional arg overwrites the previous one), which named the wrong
+// module whenever more than one .py file was passed (github #6211).
+// config.args preserves the full, correctly ordered file list.
+static std::string entry_python_file()
+{
+  if (!config.args.empty())
+    return config.args.front();
+  return config.options.get_option("input-file");
+}
+
 std::string pytest_generator::extract_module_name(const std::string &input_file)
 {
   std::string module_name = input_file;
@@ -38,11 +52,29 @@ pytest_generator::generate_pytest_filename(const std::string &module_name)
   return "test_" + module_name + ".py";
 }
 
+// Refuse to clobber a file we did not generate ourselves (github #6220, same
+// guard as --generate-ctest-testcase's #6214 fix). `file_path` is the full
+// path (output directory + filename) the caller is about to write.
+static bool begin_pytest_generation(const std::filesystem::path &file_path)
+{
+  const std::filesystem::path &out_dir = file_path.parent_path();
+  if (!out_dir.empty())
+  {
+    std::error_code ec;
+    std::filesystem::create_directories(out_dir, ec);
+    if (ec)
+    {
+      log_error("cannot create {}: {}", out_dir.string(), ec.message());
+      return false;
+    }
+  }
+  return can_write_all({file_path}, "--pytest-output-dir");
+}
+
 std::string pytest_generator::clean_variable_name(const std::string &name) const
 {
   std::string var_name = name;
 
-  // Remove everything before the last '$' (if present) - for internal symbols like "$nondet_str$15"
   size_t dollar_pos = var_name.rfind('$');
   if (dollar_pos != std::string::npos && dollar_pos > 0)
   {
@@ -306,7 +338,8 @@ pytest_generator::convert_char_array_to_string(const expr2tc &array_expr) const
   const constant_array2t &arr = to_constant_array2t(array_expr);
   std::string result;
 
-  // Convert character array to string (stop at null terminator or -1)
+  // Convert character array to string (stop at null terminator or any
+  // negative value)
   for (const auto &elem : arr.datatype_members)
   {
     if (!is_constant_int2t(elem))
@@ -318,7 +351,7 @@ pytest_generator::convert_char_array_to_string(const expr2tc &array_expr) const
     if (value == 0 || value < 0)
       break;
 
-    // Only include valid ASCII/UTF-8 characters
+    // Only include 7-bit ASCII; non-ASCII bytes are dropped
     if (value > 0 && value <= 127)
     {
       result += static_cast<char>(value.to_int64());
@@ -1033,7 +1066,9 @@ pytest_generator::fingerprint(const std::vector<std::string> &test_case)
   return fp;
 }
 
-void pytest_generator::generate(const std::string &file_name) const
+void pytest_generator::generate(
+  const std::string &output_dir,
+  const std::string &file_name) const
 {
   std::lock_guard<std::mutex> lock(data_mutex);
 
@@ -1061,11 +1096,16 @@ void pytest_generator::generate(const std::string &file_name) const
     log_status("Skipped {} duplicate test case(s).", skipped);
 
   // Extract module name from input file
-  std::string input_file = config.options.get_option("input-file");
+  std::string input_file = entry_python_file();
   std::string module_name = extract_module_name(input_file);
 
+  const std::filesystem::path out_path =
+    std::filesystem::path(output_dir) / file_name;
+  if (!begin_pytest_generation(out_path))
+    return;
+
   // Generate pytest file
-  std::ofstream pytest_file(file_name);
+  std::ofstream pytest_file(out_path);
 
   // Write file components
   write_file_header(pytest_file, input_file);
@@ -1078,6 +1118,7 @@ void pytest_generator::generate(const std::string &file_name) const
   write_test_function(pytest_file, test_func_name, param_names);
 
   pytest_file.close();
+  log_status("Wrote generated files to {}", output_dir);
   log_status(
     "Generated pytest test case with {} test(s): {}",
     unique_cases.size(),
@@ -1091,6 +1132,7 @@ bool pytest_generator::has_tests() const
 }
 
 void pytest_generator::generate_single(
+  const std::string &output_dir,
   const std::string &file_name,
   const symex_target_equationt &target,
   smt_convt &smt_conv,
@@ -1099,7 +1141,7 @@ void pytest_generator::generate_single(
   (void)ns; // Suppress unused parameter warning
 
   // Extract original Python file name and module name
-  std::string original_file = config.options.get_option("input-file");
+  std::string original_file = entry_python_file();
   std::string module_name = extract_module_name(original_file);
 
   // Track nondet symbols we've seen to avoid duplicates
@@ -1453,8 +1495,13 @@ void pytest_generator::generate_single(
     return;
   }
 
+  const std::filesystem::path out_path =
+    std::filesystem::path(output_dir) / file_name;
+  if (!begin_pytest_generation(out_path))
+    return;
+
   // Generate pytest file
-  std::ofstream pytest_file(file_name);
+  std::ofstream pytest_file(out_path);
 
   // Write file components
   write_file_header(pytest_file, original_file);
@@ -1466,5 +1513,6 @@ void pytest_generator::generate_single(
   write_test_function(pytest_file, func_name, current_param_names);
 
   pytest_file.close();
+  log_status("Wrote generated files to {}", output_dir);
   log_status("Generated pytest test case: {}", file_name);
 }

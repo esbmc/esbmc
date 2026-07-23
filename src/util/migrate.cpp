@@ -375,8 +375,13 @@ static type2tc migrate_type0(const typet &type)
     return array_type2tc(get_uint8_type(), expr2tc(), true);
   }
 
-  log_error("{}", type);
-  abort();
+  // Logged as well as thrown: migrate_* is reachable from paths with no
+  // enclosing handler (unit tests, c2goto), where an escaping std::string
+  // reaches std::terminate without its content ever being printed. The log
+  // carries the full recursive dump because a bare id is not enough to
+  // identify struct_tag/c_bit_field, whose identity lives in namedSub.
+  log_error("Unexpected type: {}", type);
+  throw std::string("Unexpected type: ") + id2string(type.id());
 }
 
 type2tc migrate_type(const typet &type)
@@ -2096,7 +2101,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     else
     {
       log_error("Unexpected side-effect statement: {}", expr.statement());
-      abort();
+      throw std::string("Unexpected side-effect statement: ") +
+        id2string(expr.statement());
     }
 
     new_expr_ref =
@@ -2661,7 +2667,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "overflow_result--")
   {
-    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    // Overflow_result : {result = op0 - op1, overflowed = overflow(op0 - op1)}
     type = migrate_type(expr.type());
     assert(expr.operands().size() == 2);
     expr2tc op0, op1;
@@ -2677,7 +2683,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "overflow_result-shr")
   {
-    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    // Overflow_result : {result = op0 >> op1, overflowed = overflow(op0 >> op1)}
     type = migrate_type(expr.type());
     assert(expr.operands().size() == 2);
     expr2tc op0, op1;
@@ -2693,7 +2699,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "overflow_result-*")
   {
-    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    // Overflow_result : {result = op0 * op1, overflowed = overflow(op0 * op1)}
     type = migrate_type(expr.type());
     assert(expr.operands().size() == 2);
     expr2tc op0, op1;

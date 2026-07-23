@@ -362,9 +362,8 @@ class vector_type2t : public type2t
 {
 public:
   /** Primary constructor.
-   *  @param subtype Type of elements in this array.
-   *  @param size Size of this array.
-   *  @param inf Whether or not this array is infinitely sized
+   *  @param _subtype Type of elements in this vector.
+   *  @param size Number of lanes.
    */
   vector_type2t(const type2tc &_subtype, const expr2tc &size)
     : type2t(vector_id),

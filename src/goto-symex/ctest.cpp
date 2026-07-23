@@ -1,24 +1,77 @@
 #include <goto-symex/ctest.h>
 #include <goto-symex/slice.h>
+#include <goto-symex/test_gen_guard.h>
 #include <ac_config.h>
+#include <langapi/mode.h>
 #include <solvers/smt/smt_conv.h>
 #include <util/prefix.h>
 #include <util/message/format.h>
 #include <irep2/irep2_expr.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <unordered_set>
 #include <algorithm>
 #include <map>
 
+// Defer to the langapi extension table rather than keeping a private copy:
+// the two drifted apart once already (github #6213), leaving .C/.ipp/.cu
+// sources verified as C++ but described to CMake as C.
 static bool is_cpp_source(const std::string &filename)
 {
+  return language_id_by_path(filename) == language_idt::CPP;
+}
+
+// Cannot delegate as above: langapi classifies .cu as plain CPP, so it has no
+// finer answer to give. CMake does distinguish, mapping .cu to its own CUDA
+// language, and without that language enabled it silently drops the file from
+// the target even under project(... CXX).
+static bool is_cuda_source(const std::string &filename)
+{
   size_t dot = filename.rfind('.');
-  if (dot == std::string::npos)
+  return dot != std::string::npos && filename.substr(dot) == ".cu";
+}
+
+static bool any_cpp_source(const std::vector<std::string> &filenames)
+{
+  return std::any_of(filenames.begin(), filenames.end(), is_cpp_source);
+}
+
+static bool any_cuda_source(const std::vector<std::string> &filenames)
+{
+  return std::any_of(filenames.begin(), filenames.end(), is_cuda_source);
+}
+
+static std::vector<std::filesystem::path> all_outputs(
+  const std::filesystem::path &out_dir,
+  const std::vector<std::string> &test_files)
+{
+  std::vector<std::filesystem::path> paths{
+    out_dir / "CMakeLists.txt", out_dir / "esbmc_verifier.h"};
+  for (const auto &name : test_files)
+    paths.push_back(out_dir / name);
+  return paths;
+}
+
+// Non-throwing: this runs after the verdict is computed, so a failure here
+// must be reported rather than abort the run.
+//
+// The check is advisory, not atomic: nothing stops the files being created
+// between here and the writes below. That is an acceptable trade-off for a
+// single-shot CLI writing into a directory the user controls.
+static bool begin_generation(
+  const std::filesystem::path &out_dir,
+  const std::vector<std::string> &test_files)
+{
+  std::error_code ec;
+  std::filesystem::create_directories(out_dir, ec);
+  if (ec)
+  {
+    log_error("cannot create {}: {}", out_dir.string(), ec.message());
     return false;
-  std::string ext = filename.substr(dot);
-  return ext == ".cpp" || ext == ".cc" || ext == ".cxx";
+  }
+  return can_write_all(all_outputs(out_dir, test_files), "--ctest-output-dir");
 }
 
 std::string ctest_generator::clean_variable_name(const std::string &name) const
@@ -71,8 +124,8 @@ std::string ctest_generator::clean_variable_name(const std::string &name) const
   var_name.erase(
     std::remove(var_name.begin(), var_name.end(), '$'), var_name.end());
 
-  // If the name contains __VERIFIER_ functions, it's an internal temporary
-  // Extract just a simple name or return empty to trigger fallback naming
+  // Names referencing __VERIFIER_ helpers are internal temporaries;
+  // return empty to trigger fallback naming
   if (
     var_name.find("__VERIFIER_") != std::string::npos ||
     var_name.find("___VERIFIER_") != std::string::npos)
@@ -298,7 +351,7 @@ void ctest_generator::clear()
   std::lock_guard<std::mutex> lock(data_mutex);
   test_cases.clear();
   function_name.clear();
-  source_file.clear();
+  source_files.clear();
 }
 
 void ctest_generator::collect(
@@ -337,9 +390,9 @@ void ctest_generator::collect(
     if (!extracted_func_name.empty() && function_name.empty())
       function_name = extracted_func_name;
 
-    // Store source file if not set
-    if (source_file.empty())
-      source_file = config.options.get_option("input-file");
+    // Store source files if not set
+    if (source_files.empty())
+      source_files = config.args;
 
     // Keep the original collection path intact: every counterexample
     // that reaches collect() is stored.
@@ -375,7 +428,9 @@ static void write_nondet_functions(
 
     out << c_type << " __VERIFIER_nondet_" << verifier_type << "(void) {\n";
     out << "  static int i = 0;\n";
-    out << "  static const " << c_type << " v[] = { ";
+    // East const: c_type is "void*" for pointers, so a leading const would
+    // qualify the pointee and make `return v[i++]` discard it.
+    out << "  static " << c_type << " const v[] = { ";
     for (size_t j = 0; j < values.size(); ++j)
     {
       if (j > 0)
@@ -390,7 +445,7 @@ static void write_nondet_functions(
 
 // Write a C test case file to path.
 static void write_c_test_file(
-  const std::string &path,
+  const std::filesystem::path &path,
   const type_values_t &type_values,
   const c_types_t &c_types,
   size_t index = 0,
@@ -411,7 +466,7 @@ static void write_c_test_file(
 
 // Write a C++ test case file to path(bool is used instead of _Bool).
 static void write_cpp_test_file(
-  const std::string &path,
+  const std::filesystem::path &path,
   const type_values_t &type_values,
   const c_types_t &c_types,
   size_t index = 0,
@@ -442,9 +497,9 @@ static void write_cpp_test_file(
 
 // Write esbmc_verifier.h with forward declarations for all __VERIFIER_*
 // functions used by the SV-COMP / ESBMC verification interface.
-static void write_verifier_header()
+static void write_verifier_header(const std::filesystem::path &out_dir)
 {
-  std::ofstream h("esbmc_verifier.h");
+  std::ofstream h(out_dir / "esbmc_verifier.h");
   h << "// Auto-generated by ESBMC " << ESBMC_VERSION << "\n";
   h << "//\n";
   h << "// This header declares the __VERIFIER_* functions used by the\n";
@@ -485,38 +540,70 @@ static void write_verifier_header()
   h << "#endif\n";
 }
 
-static std::string file_basename(const std::string &path)
+// Absolute, so the generated project configures regardless of where ESBMC ran
+// relative to the sources.
+static std::string sources_to_cmake_list(const std::vector<std::string> &srcs)
 {
-  size_t slash = path.rfind('/');
-  return slash == std::string::npos ? path : path.substr(slash + 1);
+  std::string list;
+  for (const auto &src : srcs)
+  {
+    if (!list.empty())
+      list += " ";
+    // Non-throwing: this runs after the verdict is computed, so a failure here
+    // must degrade to the path as given rather than abort the run.
+    std::error_code ec;
+    std::filesystem::path abs = std::filesystem::absolute(src, ec);
+    list += ec ? src : abs.lexically_normal().string();
+  }
+  return list;
 }
 
-// Write CMakeLists.txt for a C project.
+// Write CMakeLists.txt for the generated test project (C or C++ per cpp_mode).
 // Generates esbmc_verifier.h and force-includes it via target_compile_options.
-// Ensure the original source file compiles correctly.
+// Ensure the original source files compile correctly.
 static void write_cmake(
   bool cpp_mode,
+  bool cuda_mode,
+  const std::filesystem::path &out_dir,
   const std::string &project_name,
-  const std::string &src_file,
+  const std::vector<std::string> &src_files,
   const std::vector<std::string> &target_names,
   const std::vector<std::string> &test_files)
 {
-  write_verifier_header();
+  write_verifier_header(out_dir);
 
-  const std::string lang = cpp_mode ? "CXX" : "C";
+  // Mixed C/C++ inputs never reach here: ESBMC rejects them during conversion
+  // ("main already defined by another language module").
+  std::string lang = cpp_mode ? "CXX" : "C";
+  if (cuda_mode)
+    lang += " CUDA";
   const std::string compiler_id =
     cpp_mode ? "CMAKE_CXX_COMPILER_ID" : "CMAKE_C_COMPILER_ID";
 
-  std::string src = file_basename(src_file);
-  std::ofstream cmake("CMakeLists.txt");
+  std::string src = sources_to_cmake_list(src_files);
+  std::ofstream cmake(out_dir / "CMakeLists.txt");
   cmake << "# Auto-generated by ESBMC " << ESBMC_VERSION << "\n";
   cmake << "cmake_minimum_required(VERSION 3.10)\n";
+  if (cuda_mode)
+    // ESBMC verifies .cu through its own operational models and needs no CUDA
+    // toolkit, but CMake enables the language eagerly, so configuring this
+    // project does require nvcc. Say so before it fails with "No CUDA toolset".
+    cmake << "# Configuring this project requires a CUDA toolkit (nvcc).\n";
   cmake << "project(" << project_name << " " << lang << ")\n\n";
   cmake << "enable_testing()\n\n";
   cmake << "option(ENABLE_COVERAGE \"Enable coverage reporting\" OFF)\n";
   cmake << "if(ENABLE_COVERAGE AND " << compiler_id
         << " MATCHES \"GNU|Clang\")\n";
-  cmake << "  add_compile_options(-O0 -g --coverage)\n";
+  if (cuda_mode)
+  {
+    // nvcc rejects --coverage, so restrict the flags to the C++ sources.
+    cmake << "  add_compile_options(\"$<$<COMPILE_LANGUAGE:CXX>:-O0;-g;"
+             "--coverage>\")\n";
+  }
+  else
+  {
+    cmake << "  add_compile_options(-O0 -g --coverage)\n";
+  }
   cmake << "  add_link_options(--coverage)\n";
   cmake << "endif()\n\n";
   cmake << "# Each test case is compiled with the original source + test case "
@@ -535,7 +622,7 @@ static void write_cmake(
   }
 }
 
-void ctest_generator::generate() const
+void ctest_generator::generate(const std::string &output_dir) const
 {
   std::lock_guard<std::mutex> lock(data_mutex);
 
@@ -545,7 +632,8 @@ void ctest_generator::generate() const
     return;
   }
 
-  bool cpp_mode = is_cpp_source(source_file);
+  bool cpp_mode = any_cpp_source(source_files);
+  bool cuda_mode = any_cuda_source(source_files);
   std::string test_ext = cpp_mode ? ".cpp" : ".c";
 
   // Deduplicate before writing: keep the first case with each per-type value
@@ -565,14 +653,21 @@ void ctest_generator::generate() const
 
   std::vector<std::string> target_names;
   std::vector<std::string> test_file_names;
+  for (size_t i = 0; i < unique_indices.size(); ++i)
+  {
+    target_names.push_back("test_case_" + std::to_string(i + 1));
+    test_file_names.push_back(target_names.back() + test_ext);
+  }
+
+  // Safe to relocate the project because sources_to_cmake_list emits absolute
+  // paths; making those relative would silently break this.
+  const std::filesystem::path out_dir(output_dir);
+  if (!begin_generation(out_dir, test_file_names))
+    return;
 
   for (size_t i = 0; i < unique_indices.size(); ++i)
   {
     const auto &tc = test_cases[unique_indices[i]];
-    std::string target = "test_case_" + std::to_string(i + 1);
-    std::string test_file = target + test_ext;
-    target_names.push_back(target);
-    test_file_names.push_back(test_file);
 
     // Build type maps from the collected test variables.
     type_values_t type_values;
@@ -585,19 +680,30 @@ void ctest_generator::generate() const
 
     if (cpp_mode)
       write_cpp_test_file(
-        test_file, type_values, c_types, i + 1, unique_indices.size());
+        out_dir / test_file_names[i],
+        type_values,
+        c_types,
+        i + 1,
+        unique_indices.size());
     else
       write_c_test_file(
-        test_file, type_values, c_types, i + 1, unique_indices.size());
+        out_dir / test_file_names[i],
+        type_values,
+        c_types,
+        i + 1,
+        unique_indices.size());
   }
 
   write_cmake(
     cpp_mode,
+    cuda_mode,
+    out_dir,
     "ESBMCGeneratedTests",
-    source_file,
+    source_files,
     target_names,
     test_file_names);
 
+  log_status("Wrote generated files to {}", out_dir.string());
   log_status(
     "Generated {} CTest test case(s) with CMakeLists.txt",
     unique_indices.size());
@@ -609,10 +715,9 @@ void ctest_generator::generate_single(
   smt_convt &smt_conv,
   const namespacet &ns)
 {
-  (void)output_dir;
   (void)ns;
 
-  std::string src_file = config.options.get_option("input-file");
+  const std::vector<std::string> &src_files = config.args;
 
   std::unordered_set<std::string> seen_nondets;
   std::vector<test_variable> test_vars;
@@ -652,7 +757,8 @@ void ctest_generator::generate_single(
     return;
   }
 
-  bool cpp_mode = is_cpp_source(src_file);
+  bool cpp_mode = any_cpp_source(src_files);
+  bool cuda_mode = any_cuda_source(src_files);
   std::string test_ext = cpp_mode ? ".cpp" : ".c";
 
   // Build type maps from the extracted test variables.
@@ -666,12 +772,23 @@ void ctest_generator::generate_single(
 
   std::string test_file_name = "test_case" + test_ext;
 
-  if (cpp_mode)
-    write_cpp_test_file(test_file_name, type_values, c_types);
-  else
-    write_c_test_file(test_file_name, type_values, c_types);
-  write_cmake(
-    cpp_mode, "ESBMCGeneratedTest", src_file, {"test_case"}, {test_file_name});
+  const std::filesystem::path out_dir(output_dir);
+  if (!begin_generation(out_dir, {test_file_name}))
+    return;
 
+  if (cpp_mode)
+    write_cpp_test_file(out_dir / test_file_name, type_values, c_types);
+  else
+    write_c_test_file(out_dir / test_file_name, type_values, c_types);
+  write_cmake(
+    cpp_mode,
+    cuda_mode,
+    out_dir,
+    "ESBMCGeneratedTest",
+    src_files,
+    {"test_case"},
+    {test_file_name});
+
+  log_status("Wrote generated files to {}", out_dir.string());
   log_status("Generated CTest test case: {}", test_file_name);
 }

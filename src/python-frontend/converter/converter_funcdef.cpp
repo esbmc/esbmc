@@ -856,10 +856,8 @@ size_t python_converter::register_function_argument(
   std::string arg_name = element["arg"].get<std::string>();
   typet arg_type;
 
-  if (arg_name == "self")
+  if (arg_name == "self" || arg_name == "cls")
     arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
-  else if (arg_name == "cls")
-    arg_type = any_type();
   else
   {
     if (!element.contains("annotation") || element["annotation"].is_null())
@@ -1100,9 +1098,10 @@ void python_converter::process_function_arguments(
 
   // Refine unannotated Any parameters to list model type when body usage
   // clearly matches list semantics (len(x), x[i], list mutator methods).
-  // Restrict this refinement to functions from the main source file to avoid
-  // affecting imported module internals.
-  if (location.get_file().as_string() == main_python_file)
+  // Restrict this refinement to the program's own files (the entry file or
+  // an extra positional command-line file, github #6211) to avoid affecting
+  // imported module internals.
+  if (is_program_file(location.get_file().as_string()))
   {
     for (auto &param_arg : type.arguments())
     {

@@ -197,7 +197,6 @@ bool solidity_convertert::add_auxiliary_members(
   }
 
   t = string_t;
-  //set_sol_type(t, SolidityGrammar::SolType::STRING);
   get_builtin_symbol(
     "_ESBMC_bind_cname",
     sol_prefix + "_ESBMC_bind_cname",

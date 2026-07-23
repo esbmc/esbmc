@@ -208,7 +208,8 @@ public:
     unsigned int l1_num;
     unsigned int t_num;
 
-    // Not a part of comparisons etc,
+    // Derived from the fields above; used as the fast-path primary key in
+    // compare() and by name_rec_hash.
     size_t hash;
   };
 

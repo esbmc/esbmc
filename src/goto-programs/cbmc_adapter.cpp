@@ -124,6 +124,37 @@ std::string int_to_hex(unsigned long long value)
   return s;
 }
 
+// CPROVER's bare `string` type carries Java's @class_identifier. Every observed
+// use is equality against, copy of, or assignment of a class-name *literal* --
+// never concatenation, length or indexing (plan §4.1.1 measures both routes).
+// So intern each distinct literal to a distinct integer and compare integers:
+// faithful for equality, and no string-refinement backend is implied.
+//
+// Scoped deliberately to the bare `string` type. Java program strings are the
+// java::java.lang.String struct, and CProver's string primitives are their own
+// ids; both stay unhandled and decline gracefully rather than being interned
+// into a silently wrong model.
+constexpr unsigned CLASS_ID_WIDTH = 32;
+
+// Interning must be injective program-wide, or two spellings of one class name
+// compare unequal. fix_type/fix_expression run per symbol and per function, so
+// the map is a function-local static rather than a parameter; persisting it
+// across binaries in one process is correct for the same reason.
+std::string intern_class_identifier(const std::string &literal)
+{
+  static std::unordered_map<std::string, unsigned> interned;
+  return int_to_hex(interned.emplace(literal, interned.size()).first->second);
+}
+
+void intern_string_type(irept &candidate)
+{
+  if (candidate.id() == "string")
+  {
+    candidate.id("signedbv");
+    candidate.set("width", CLASS_ID_WIDTH);
+  }
+}
+
 // A "constant" irep of the given bitvector type holding `value`. The value is
 // emitted as a hex string so fix_expression's own constant branch converts it
 // to a binary string of the type's exact width on the later recursion (the same
@@ -173,6 +204,25 @@ irept complex_elem_type(const irept &ctype)
   return irept();
 }
 
+// Byte width of a Java array element. Java arrays hold only primitives and
+// references, and every such type reaches the adapter carrying an explicit
+// "width" -- c_bool[8], signedbv/unsignedbv[N], floatbv[N] and pointers alike
+// (measured across the lowered corpus). Anything else has no width here and is
+// declined by the caller rather than guessed at: bv_width's silent fall back to
+// 32 would size an allocation wrongly, which is a false verdict rather than a
+// crash.
+bool element_bytes(const irept &elem_type, std::size_t &bytes)
+{
+  const std::string ws = elem_type.find("width").id_string();
+  if (ws.empty() || ws.find_first_not_of("0123456789") != std::string::npos)
+    return false;
+  const std::size_t bits = static_cast<std::size_t>(std::stoul(ws));
+  if (bits == 0 || bits % 8 != 0)
+    return false;
+  bytes = bits / 8;
+  return true;
+}
+
 // A member access on a complex value's "real"/"imag" component; "member" is
 // in fix_expression's operand-wrap set.
 irept complex_member(const irept &op, const char *name, const irept &elem)
@@ -186,6 +236,49 @@ irept complex_member(const irept &op, const char *name, const irept &elem)
 
 void fix_expression(irept &irep)
 {
+  if (
+    irep.id() == "address_of" && !irep.get_sub().empty() &&
+    irep.get_sub()[0].id() == "label")
+  {
+    // GNU labels-as-values: CBMC lowers a computed goto (`goto *p`) into a
+    // concrete IF-chain that compares label addresses -- address_of(label) --
+    // for equality; the addresses are only ever compared, never dereferenced.
+    // ESBMC has no label-address node (its own frontend rejects indirect
+    // gotos), so map each distinct label to a unique non-null (void *)K
+    // constant: equality over those constants reproduces CBMC's control flow.
+    // Same-named labels in different functions could collide, but comparing
+    // their addresses across functions is undefined, so it cannot arise in a
+    // valid program.
+    static std::map<std::string, unsigned long long> label_addrs;
+    const std::string label = irep.get_sub()[0].find("identifier").id_string();
+    const unsigned long long addr =
+      label_addrs.emplace(label, label_addrs.size() + 1).first->second;
+    irept int_ty("unsignedbv");
+    int_ty.set("width", config.ansi_c.pointer_width());
+    irep = mk_unary("typecast", irep.find("type"), mk_bv_const(int_ty, addr));
+    // Fall through: the operand-wrap step normalises the new typecast/constant.
+  }
+
+  if (irep.id() == "is_dynamic_object")
+  {
+    // __CPROVER_DYNAMIC_OBJECT(p) -- true iff p points into a heap-allocated
+    // object -- lowers to an is_dynamic_object expr that migrate_expr has no
+    // handler for (it abort()s with "migrate expr failed"). ESBMC tracks the
+    // same fact in its symex-managed `c:@__ESBMC_is_dynamic` bool array
+    // (indexed by pointer object, set on malloc -- symex_assign.cpp), so the
+    // faithful rewrite is `__ESBMC_is_dynamic[pointer_object(p)]`. That needs
+    // the array force-linked even when the binary never calls malloc (it is
+    // otherwise absent) and its `__ESBMC_inf_size` shape preserved, so it is
+    // left as future work. Only an explicit __CPROVER_DYNAMIC_OBJECT reaches
+    // here -- CBMC's free()/dynamic checks live in library bodies it re-links
+    // at analysis time, not in the serialised binary -- so decline cleanly (a
+    // throw the create_goto_program handler turns into a graceful error exit,
+    // roadmap §4.7) rather than abort()-ing.
+    throw std::string(
+      "CBMC adapter: __CPROVER_DYNAMIC_OBJECT (is_dynamic_object) is not yet "
+      "supported on the --binary path");
+  }
+
   if (irep.id() == "count_leading_zeros" || irep.id() == "count_trailing_zeros")
   {
     // CBMC lowers __builtin_clz/__builtin_ctz to these expression ids, which
@@ -590,6 +683,111 @@ void fix_expression(irept &irep)
     irep.id("member");
   }
 
+  if (irep.id() == "side_effect" && irep.find("statement").id() == "va_start")
+  {
+    // CBMC lowers va_start(ap, last) to a side_effect that points the va_list
+    // at the last named parameter and then walks the stack for each va_arg
+    // (which it lowers to a raw *(T *)ap dereference). ESBMC models variadic
+    // arguments as discrete per-call symbols, not a contiguous stack, so that
+    // pointer walk cannot recover them -- and migrate_expr abort()s on the
+    // unrecognised statement. Decline cleanly (a throw the create_goto_program
+    // handler turns into a graceful error exit, matching the malformed-input
+    // recovery of roadmap §4.7) rather than crashing; correct <stdarg.h>
+    // support on the --binary path needs a contiguous vararg layout and is
+    // future work (roadmap §4.4).
+    throw std::string(
+      "CBMC adapter: variadic functions (va_start/va_arg) are not yet "
+      "supported on the --binary path");
+  }
+
+  if (irep.id() == "side_effect" && irep.find("statement").id() == "allocate")
+  {
+    // CBMC's generic object allocation (remove_java_new.cpp:99-103): operands
+    // are the byte size and a zero-initialise flag, and the type is already the
+    // result pointer. That is a malloc in all but name. The flag is false in
+    // every emitted instance because CBMC follows the allocation with its own
+    // zero-initialising assignment; a true flag would mean the fill is implicit
+    // and dropping it would leave the object nondet, so decline instead.
+    const irept::subt ops = irep.get_sub();
+    if (ops.size() != 2)
+      throw std::string(
+        "CBMC adapter: 'allocate' expects a size and a zero-init flag");
+    const std::string zero_flag = ops[1].find("value").id_string();
+    if (zero_flag != "false" && zero_flag != "0")
+      throw std::string(
+        "CBMC adapter: zero-initialising 'allocate' is not yet supported on "
+        "the --binary path");
+
+    irept size_arg(irep_idt("typecast"));
+    size_arg.add("type") = static_cast<const irept &>(size_type());
+    size_arg.get_sub().push_back(ops[0]);
+    fix_expression(size_arg);
+
+    irep.id("sideeffect");
+    irep.add("statement") = mk("malloc");
+    irep.get_sub().clear();
+    irep.get_sub().push_back(ops[0]);
+    irep.add("#size") = size_arg;
+    irep.add("#type") = static_cast<const irept &>(char_type());
+  }
+
+  if (
+    irep.id() == "side_effect" &&
+    irep.find("statement").id() == "java_new_array_data")
+  {
+    // JBMC's lowering allocates an array payload with this side effect
+    // (remove_java_new.cpp:239-251): its type is pointer-to-element and the
+    // element *count* rides in the "size" named-sub, not an operand. ESBMC has
+    // no counterpart, but the shape is exactly a malloc once the count is
+    // scaled to bytes -- migrate_expr then maps it to allockind::malloc.
+    const irept elem = complex_elem_type(irep.find("type"));
+    std::size_t bytes = 0;
+    if (!element_bytes(elem, bytes))
+      throw std::string(
+        "CBMC adapter: java_new_array_data element type has no usable width");
+
+    const irept count = irep.find("size");
+    const irept count_type = count.find("type");
+    irept nbytes = count;
+    if (bytes != 1)
+    {
+      nbytes = irept(irep_idt("*"));
+      nbytes.add("type") = count_type;
+      nbytes.get_sub().push_back(count);
+      nbytes.get_sub().push_back(mk_bv_const(count_type, bytes));
+    }
+
+    irept size_arg(irep_idt("typecast"));
+    size_arg.add("type") = static_cast<const irept &>(size_type());
+    size_arg.get_sub().push_back(nbytes);
+    // The paired ARRAY_SET needs this same extent, but as an *unfixed* copy:
+    // it becomes a call argument that the normal pass will fix once, and
+    // fixing twice re-wraps the operands into an empty list.
+    const irept raw_size_arg = size_arg;
+    // "#size" is a comment, which no later pass recurses into -- normalise it
+    // here, as build_mem_rhs does for the same reason.
+    fix_expression(size_arg);
+
+    irep.id("sideeffect");
+    irep.add("statement") = mk("malloc");
+    // java_new_array_data is built with no operands (the count rides in the
+    // "size" named-sub), but migrate_expr's allocation arm reads op0 -- an
+    // operand-less sideeffect dereferences a null exprt there. Mirror
+    // build_mem_rhs and carry the size as the operand too.
+    irep.get_sub().clear();
+    irep.get_sub().push_back(nbytes);
+    irep.add("#size") = size_arg;
+    // char, not the element type: "#size" is already a byte count, and comments
+    // are not traversed by fix_type, so an element type left here would reach
+    // migrate un-rewritten (a Java boolean[] payload arrives as c_bool, which
+    // migrate has no case for).
+    irep.add("#type") = static_cast<const irept &>(char_type());
+    // Carries the byte extent to the paired ARRAY_SET two instructions later
+    // (see instruction_to_esbmc_irep); the count is not derivable from the
+    // type. A comment, so no later pass traverses or re-fixes it.
+    irep.add("#java_array_payload") = raw_size_arg;
+  }
+
   if (irep.id() == "side_effect")
     irep.id("sideeffect");
   else if (irep.id() == "string_constant")
@@ -627,6 +825,19 @@ void fix_expression(irept &irep)
 
   if (irep.id() == "constant")
   {
+    // This pass runs before fix_type (see cbmc_to_esbmc_irep), so a class
+    // identifier still carries its `string` type here -- the only signal
+    // separating it from an ordinary integer constant. Intern the literal and
+    // retype it, then let the hex path below encode it like any other integer.
+    // Without this, bv_width finds no width on `string`, falls back to 32, and
+    // hands the literal (or an empty value) to hex_to_bin as if it were hex.
+    if (irep.find("type").id() == "string")
+    {
+      irep.add("value") =
+        mk(intern_class_identifier(irep.find("value").id_string()));
+      intern_string_type(irep.add("type"));
+    }
+
     const std::string type_id = irep.find("type").id_string();
     if (type_id != "pointer" && type_id != "bool" && has_sub(irep, "value"))
     {
@@ -769,34 +980,72 @@ bool is_anon_tag(const std::string &ident)
   return ident.size() >= 11 && ident.compare(0, 10, "tag-#anon#") == 0;
 }
 
-void expand_anon_struct(const irept &self)
+// A struct_tag/union_tag whose definition is not yet in the cache. CBMC emits
+// an anonymous aggregate's type symbol *after* the struct that contains it (the
+// aggregate tag encodes the container's layout), so the first fix pass reaches
+// the container's anonymous member before that symbol is cached. Leave the tag
+// unresolved -- exactly as fix_type already does for a not-yet-seen *named* tag
+// -- so the re-check pass in adapt_cbmc_to_esbmc, which runs with the full
+// cache, resolves it. Resolving from CBMC's own serialised type symbol (rather
+// than parsing the tag-name grammar) guarantees the definition is byte-identical
+// to the one the reader builds for the same member in an instruction, which
+// with2t::assert_type_compat_for_with compares by value. A tag that is still
+// unresolved after the re-check pass trips that pass's own
+// "should have been resolved" guard.
+void expand_anon_struct(const irept &)
 {
-  if (has_sub(self, "components"))
-    return;
-  // ESBMC has no parser for CBMC's anonymous naming convention.
-  const std::string ident = self.find("identifier").id_string();
-  if (!is_anon_tag(ident))
-    return;
-  log_error("CBMC adapter: unsupported anonymous aggregate {}", ident);
-  abort();
+}
+
+// Decline CPROVER's symbolic `string` type, which reaches the adapter from
+// every JBMC binary: the Java frontend types java.lang.Object's
+// @class_identifier with it, and every Java class embeds java.lang.Object, so
+// it surfaces during type migration before any instruction is examined. ESBMC
+// has no string type -- migrate_type's fall-through logs a bare type dump,
+// which is why the failure reads as the unhelpful "ERROR: string".
+// Representing it means first deciding how class tags are modelled
+// (docs/jbmc-goto-binary-poc-plan.md §2.3.1 records the evidence), so decline
+// rather than guess at a mapping.
+//
+// This must only fire in a *type* position. fix_type walks whole symbols and
+// whole function bodies, so it also visits identifier nodes, whose id() is the
+// identifier text itself -- and `string` is an ordinary C identifier. A bare
+// string_typet serialises as {"id": "string"} with no subs, structurally
+// indistinguishable from such a node, so position is the only usable signal.
+
+// The named-sub keys under which a type -- and never an identifier -- appears.
+// Everything else (name, identifier, base_name, ...) holds the identifier text
+// as its id(), so descending one of those leaves type position.
+bool is_type_edge(const irep_idt &key)
+{
+  return key == "type" || key == "subtype" || key == "return_type";
 }
 
 // `expanding` holds the tag identifiers whose definitions are currently being
 // inlined on the recursion stack, so a recursive aggregate (e.g. a Rust struct
 // holding a pointer to itself) can be detected and broken -- see the tag branch
 // below. The two-argument overload seeds it for external callers.
+// `in_type_position` records whether `self` was reached through a type edge.
+// The rewrites below key on self.id(), which for an identifier node is the
+// identifier text -- so without it, a C symbol named `c_bool`, `c_enum_tag` or
+// `string` is mistaken for the type of the same name. That is not hypothetical:
+// a function named c_bool had its name rewritten to `signedbv`, and the
+// resulting binary verified to FAILED on a program that should pass.
 void fix_type(
   irept &self,
   const std::unordered_map<std::string, irept> &cache,
-  std::unordered_set<std::string> &expanding)
+  std::unordered_set<std::string> &expanding,
+  bool in_type_position)
 {
-  if (self.id() == "c_bool")
+  if (in_type_position)
+    intern_string_type(self);
+
+  if (in_type_position && self.id() == "c_bool")
   {
     self.id("signedbv");
     return;
   }
 
-  if (self.id() == "c_enum_tag")
+  if (in_type_position && self.id() == "c_enum_tag")
   {
     // CBMC references an enum type via a c_enum_tag node -- the tag counterpart
     // of c_enum, mirroring struct_tag/union_tag. migrate_type maps c_enum/
@@ -835,7 +1084,7 @@ void fix_type(
     // Detect the bool underlying before that rewrite and keep the result "bool".
     const bool bool_underlying =
       underlying.id() == "bool" || underlying.id() == "c_bool";
-    fix_type(underlying, cache, expanding);
+    fix_type(underlying, cache, expanding, true);
     const irep_idt bf_width = self.find("width").id();
     self.id(bool_underlying ? irep_idt("bool") : underlying.id());
     self.get_sub().clear();
@@ -899,7 +1148,7 @@ void fix_type(
     !self.get_sub().empty())
   {
     for (auto &v : self.get_sub())
-      fix_type(v, cache, expanding);
+      fix_type(v, cache, expanding, true);
     // The pointed-to type is the sole positional sub, exactly like the array
     // case below -- it must be assigned directly, not wrapped in an
     // intermediate group irep. typet::subtype() (util/type.h) is a direct
@@ -947,11 +1196,11 @@ void fix_type(
   if (!is_tag)
   {
     for (auto &v : self.get_sub())
-      fix_type(v, cache, expanding);
+      fix_type(v, cache, expanding, in_type_position);
     for (auto &p : self.get_named_sub())
-      fix_type(p.second, cache, expanding);
+      fix_type(p.second, cache, expanding, is_type_edge(p.first));
     for (auto &p : self.get_comments())
-      fix_type(p.second, cache, expanding);
+      fix_type(p.second, cache, expanding, false);
     return;
   }
 
@@ -980,11 +1229,11 @@ void fix_type(
   if (irep_contains(self, "struct_tag") || irep_contains(self, "union_tag"))
   {
     for (auto &v : self.get_sub())
-      fix_type(v, cache, expanding);
+      fix_type(v, cache, expanding, in_type_position);
     for (auto &p : self.get_named_sub())
-      fix_type(p.second, cache, expanding);
+      fix_type(p.second, cache, expanding, is_type_edge(p.first));
     for (auto &p : self.get_comments())
-      fix_type(p.second, cache, expanding);
+      fix_type(p.second, cache, expanding, false);
   }
 
   expanding.erase(ident);
@@ -994,7 +1243,7 @@ void fix_type(
 void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
 {
   std::unordered_set<std::string> expanding;
-  fix_type(self, cache, expanding);
+  fix_type(self, cache, expanding, false);
 }
 
 // Entry point for a type SYMBOL's own definition: seed the expansion stack
@@ -1013,7 +1262,7 @@ void fix_type_symbol_definition(
   const std::string &self_ident)
 {
   std::unordered_set<std::string> expanding{self_ident};
-  fix_type(self, cache, expanding);
+  fix_type(self, cache, expanding, false);
 }
 
 // Builds the malloc/alloca side_effect_exprt (irep shape) do_mem would have
@@ -1386,15 +1635,88 @@ irept symbol_to_esbmc_irep(const cbmc_symbolt &sym)
   return result;
 }
 
+// True if `v` writes all-zero bits: Java's primitive default and the null
+// reference. Any other fill needs a per-element loop, so the caller declines.
+bool is_zero_fill(const irept &v)
+{
+  if (v.id() != "constant")
+    return false;
+  const std::string val = v.find("value").id_string();
+  if (val == "NULL")
+    return true;
+  return !val.empty() && val.find_first_not_of('0') == std::string::npos;
+}
+
+// Rewrites JBMC's `ARRAY_SET payload <0|NULL>` into a __ESBMC_memset call over
+// the byte extent recorded when the payload was allocated two instructions
+// earlier. __CPROVER_array_set carries no length of its own -- that is why the
+// general case is still declined -- but the Java lowering always pairs it with
+// a java_new_array_data whose element count we captured. Returns false (caller
+// declines) if the pairing, the operand shape, or the all-zero fill does not
+// hold, so an unrecognised array_set never silently becomes a no-op.
+bool rewrite_java_array_set(
+  irept &code,
+  const std::unordered_map<std::string, irept> &payload_extent)
+{
+  const irept::subt ops = code.get_sub();
+  if (ops.size() != 2 || !is_zero_fill(ops[1]))
+    return false;
+
+  auto it = payload_extent.find(ops[0].find("identifier").id_string());
+  if (it == payload_extent.end())
+    return false;
+
+  irept func(irep_idt("symbol"));
+  func.set("identifier", "c:@F@__ESBMC_memset");
+
+  irept args(irep_idt("arguments"));
+  args.get_sub().push_back(ops[0]);
+  args.get_sub().push_back(
+    mk_bv_const(static_cast<const irept &>(int_type()), 0));
+  args.get_sub().push_back(it->second);
+
+  code.add("statement") = mk("function_call");
+  code.get_sub().clear();
+  code.get_sub().push_back(get_nil_irep());
+  code.get_sub().push_back(func);
+  code.get_sub().push_back(args);
+  return true;
+}
+
 irept instruction_to_esbmc_irep(
   const cbmc_instructiont &ins,
   const std::map<unsigned, unsigned> &target_revmap,
-  const std::string &function_name)
+  const std::string &function_name,
+  std::unordered_map<std::string, irept> &payload_extent)
 {
   irept result;
 
   // ESBMC expects code arguments inside "operands".
   irept code = ins.code;
+
+  // CBMC's whole-object codet statements have no ESBMC symex counterpart, so
+  // migrate would abort() on them (SIGABRT). `array_set` (__CPROVER_array_set:
+  // set every element of the pointed-to array) carries no explicit length -- the
+  // extent comes from the pointee's type, which ESBMC's memset/array machinery
+  // does not reconstruct here -- and `havoc_object` (set the whole pointed-to
+  // object nondet) is likewise size-implicit. Decline cleanly (a throw the
+  // create_goto_program handler turns into a graceful error exit, roadmap §4.7)
+  // rather than crashing; these reach the adapter only from an explicit
+  // __CPROVER_array_set / __CPROVER_havoc_object (CBMC's own memset lowering is
+  // retargeted to __ESBMC_memset in fix_builtin_call before its ARRAY_SET body
+  // runs, §4.8).
+  bool rewrote_array_set = false;
+  if (code.id() != "nil")
+  {
+    const irep_idt stmt = code.find("statement").id();
+    if (stmt == "array_set")
+      rewrote_array_set = rewrite_java_array_set(code, payload_extent);
+    if (!rewrote_array_set && (stmt == "array_set" || stmt == "havoc_object"))
+      throw std::string(
+        "CBMC adapter: '" + stmt.as_string() +
+        "' whole-object operations are not yet supported on the --binary path");
+  }
+
   const bool rewrote_builtin_call = fix_builtin_call(code);
   irept operands;
   operands.get_sub() = code.get_sub();
@@ -1414,8 +1736,10 @@ irept instruction_to_esbmc_irep(
   // an OTHER "free" codet; the instruction kind must agree with the rewritten
   // code, not CBMC's original raw type. 13 is ASSIGN, 4 is OTHER (shared
   // numbering, see map_cbmc_instruction_type).
+  // 16 is FUNCTION_CALL: the memset call that replaced an ARRAY_SET.
   result.add("typeid") = mk(
-    rewrote_builtin_call
+    rewrote_array_set ? "16"
+    : rewrote_builtin_call
       ? (code.find("statement").id() == "free" ? "4" : "13")
       : std::to_string(map_cbmc_instruction_type(ins.instr_type)));
   result.add("guard") = ins.guard;
@@ -1447,6 +1771,19 @@ irept instruction_to_esbmc_irep(
   result.add("function") = mk(function_name);
 
   fix_expression(result);
+
+  // fix_expression is what turns java_new_array_data into a marked malloc, so
+  // the extent is only visible now. Record it against the payload symbol for
+  // the ARRAY_SET that follows.
+  const irept &fixed = result.find("code");
+  if (fixed.find("statement").id() == "assign")
+  {
+    const irept::subt &ops = fixed.find("operands").get_sub();
+    if (ops.size() == 2 && has_sub(ops[1], "#java_array_payload"))
+      payload_extent[ops[0].find("identifier").id_string()] =
+        ops[1].find("#java_array_payload");
+  }
+
   return result;
 }
 
@@ -1460,13 +1797,22 @@ irept function_to_esbmc_irep(const cbmc_functiont &func)
     target_revmap[func.instructions[i].target_number] = i;
 
   irept result(irep_idt("goto-program"));
+  // Byte extent per Java array payload symbol, populated at the allocation and
+  // read by the ARRAY_SET that follows it. Function-local: JBMC emits the
+  // allocate/assign/fill triple within a single function.
+  std::unordered_map<std::string, irept> payload_extent;
   for (const auto &ins : func.instructions)
   {
-    const bool is_output =
-      ins.code.id() != "nil" && ins.code.find("statement").id() == "output";
-    if (!is_output)
-      result.get_sub().push_back(
-        instruction_to_esbmc_irep(ins, target_revmap, func.name));
+    // __CPROVER_input/__CPROVER_output are trace-display annotations with no
+    // constraint semantics, and migrate_expr has no case for either. JBMC emits
+    // `input` for the entry point's arguments, so dropping only `output` left
+    // every Java main failing to migrate.
+    const irep_idt stmt =
+      ins.code.id() != "nil" ? ins.code.find("statement").id() : irep_idt();
+    const bool is_io = stmt == "output" || stmt == "input";
+    if (!is_io)
+      result.get_sub().push_back(instruction_to_esbmc_irep(
+        ins, target_revmap, func.name, payload_extent));
   }
   return result;
 }

@@ -42,8 +42,6 @@ using namespace python_expr;
 
 namespace
 {
-// Constants for UTF-8 encoding
-
 // Constants for symbol parsing
 constexpr const char *CLASS_MARKER = "@C@";
 constexpr const char *FUNCTION_MARKER = "@F@";
@@ -4976,19 +4974,15 @@ size_t function_call_expr::bind_call_receiver(
     // Check if this is an instance method being called through the class
     // e.g., MyClass.method(instance) where the first param should be 'self'
     const code_typet &func_type = to_code_type(func_symbol->get_type());
-    bool first_param_is_self = false;
+    std::string first_param;
 
     if (!func_type.arguments().empty())
-    {
-      const std::string &first_param =
-        func_type.arguments()[0].get_base_name().as_string();
-      first_param_is_self = (first_param == "self");
-    }
+      first_param = func_type.arguments()[0].get_base_name().as_string();
 
     // If first parameter is 'self' and we have positional arguments,
     // the first positional arg should be treated as 'self', not as a regular argument
     if (
-      first_param_is_self && !call_["args"].empty() &&
+      first_param == "self" && !call_["args"].empty() &&
       (!call_.contains("keywords") || call_["keywords"].empty() ||
        call_["keywords"][0]["arg"] != "self"))
     {
@@ -4996,11 +4990,34 @@ size_t function_call_expr::bind_call_receiver(
       // Don't add a NULL cls parameter
       param_offset = 1;
     }
+    else if (first_param != "self" && first_param != "cls")
+    {
+      // A genuine @staticmethod (or any call whose callee declares no
+      // bound-receiver parameter at all): no implicit argument is bound
+      // here. Previously this branch unconditionally pushed a bogus null
+      // "cls" argument, shifting every real argument one slot and
+      // corrupting arity (github #6255).
+      param_offset = 0;
+    }
     else
     {
-      // Passing a void pointer to the "cls" argument
-      // (V.3: build the void* null via the IREP2 factory).
-      typet t = pointer_typet(empty_typet());
+      // first_param == "cls" (a real @classmethod, or an int/float OM
+      // method using the same cls-first convention for an always-null
+      // receiver slot -- see the int/float special-casing below), or
+      // first_param == "self" with no usable positional argument.
+      //
+      // A real cls must be typed like self -- a pointer to the callee's
+      // own class -- so cls.<attr> resolves through the same
+      // struct-component lookup that already works for self.<attr>
+      // (github #6255); a bare "self" fallback keeps the prior
+      // pointer-to-void placeholder.
+      std::string cls_name = function_id_.get_class();
+      if (cls_name.empty())
+        cls_name =
+          symbol_id::from_string(func_symbol->id.as_string()).get_class();
+      typet t = (first_param == "cls" && !cls_name.empty())
+                  ? gen_pointer_type(type_handler_.get_typet(cls_name))
+                  : pointer_typet(empty_typet());
       call.arguments().push_back(migrate_expr_back(gen_zero(migrate_type(t))));
       param_offset = 1;
 
@@ -5569,8 +5586,9 @@ exprt function_call_expr::finalize_call(
               converter_.wrap_in_optional(default_val, param_info.type());
         }
 
-        // Convert array to pointer if parameter type is pointer
-        // This matches the behavior for positional arguments (line 2470-2480)
+        // Convert array to pointer if parameter type is pointer, matching the
+        // conversion applied to positional arguments in
+        // build_positional_arguments().
         const typet &param_type = param_info.type();
         if (default_val.type().is_array() && param_type.is_pointer())
         {

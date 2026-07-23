@@ -7,7 +7,8 @@ exprt jimple_method::to_exprt(
   const std::string &class_name,
   const std::string &) const
 {
-  // Dummy will be return expression. It will just hold the type
+  // Returned as an empty placeholder; the method symbol is registered via
+  // move_symbol_to_context below.
   exprt dummy;
   code_typet method_type;
   typet inner_type;

@@ -116,8 +116,6 @@ public:
     unsigned int simplified_claims;
   };
 
-  // Macros
-  //
   /**
    *  Return identifier for goto guards.
    *  These guards are symbolic names for the truth of a guard on a GOTO jump.
@@ -189,7 +187,8 @@ protected:
    *  being jumps where the guards are nondeterministic, it's that we have to
    *  handle editing the unwind bound when these things occur, and set up state
    *  merges in the future to handle each path thats taken.
-   *  @param old_guard Renamed guard on this jump occuring.
+   *  @param old_guard Branch guard, dereferenced but not yet L2-renamed
+   *                   (symex_goto renames it itself).
    */
   virtual void symex_goto(const expr2tc &old_guard);
 
@@ -227,7 +226,7 @@ protected:
    *  Interpret an OTHER instruction.
    *  These can take many forms; memory management functions are OTHERs for
    *  example (ideally they should be intrinsics...), but also printf and
-   *  variable declarations are handled here.
+   *  inline asm are handled here.
    */
   void symex_other(const expr2tc &code);
 
@@ -262,7 +261,9 @@ protected:
    *  Perform incremental SMT solving for assert and assume statements.
    *  @param expr Expression that must be checked.
    *  @param msg Textual message explaining assertion.
-   *  @return Return whether verification succeeded.
+   *  @return True if incremental solving conclusively resolved the claim
+   *          (held, or refuted with a counterexample recorded); false if
+   *          the result was unknown.
    */
   bool check_incremental(const expr2tc &expr, const std::string &msg);
 
@@ -322,7 +323,6 @@ protected:
    *  See merge_gotos - when we're merging states together due to previous
    *  jumps, this function implements the merging of pointer tracking data.
    *  @param merge_state Previously recorded merge snapshot to be merged in.
-   *  @param dest Thread state for previous jump to be merged into.
    */
   void merge_value_sets(const statet::merge_statet &merge_state);
 
@@ -416,10 +416,10 @@ protected:
   virtual void symex_function_call_deref(const expr2tc &call);
 
   /**
-   *  Handle function call to fixed function
-   *  Like symex_function_call_code, but minus an assertion and location
-   *  recording.
-   *  @param code Function code to actually call
+   *  Handle a call to a statically-known function: checks recursion
+   *  bounds, sets up the new frame, assigns arguments, and jumps to the
+   *  body.
+   *  @param call Function call to interpret.
    */
   virtual void symex_function_call_code(const expr2tc &call);
 
@@ -550,13 +550,13 @@ protected:
     const code_function_call2t &func_call);
 
   /**
-   * @brief Intrinsic call for C memset function call
-   * 
+   * @brief Intrinsic call for C memcpy function call
+   *
    * This will either invoke our operational model (at string.c)
    * or try to compute the resulting value directly
-   * 
-   * @param art 
-   * @param func_call memset function call
+   *
+   * @param art
+   * @param func_call memcpy function call
    */
   void intrinsic_memcpy(
     reachability_treet &art,
@@ -904,8 +904,8 @@ protected:
    *  equivalent uses of WITH, or byte_update, and so forth. The end result is
    *  a single new value to be bound to a new symbol.
    *  @param code Code to assign; with lhs and rhs.
-   *  @param type Assignment type, visible by default
-   *  @param kind The step kind, by default is plain BMC
+   *  @param hidden Whether the resulting SSA steps are marked hidden
+   *                (default visible)
    *  @param guard A guard for the assignment, true by default
    */
   virtual void symex_assign(

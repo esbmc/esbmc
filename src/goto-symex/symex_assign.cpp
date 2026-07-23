@@ -221,7 +221,6 @@ void goto_symext::do_simplify(expr2tc &expr)
     simplify(expr);
 }
 
-// Handle side effects
 void goto_symext::handle_sideeffect(
   const expr2tc &lhs,
   const sideeffect2t &effect,
@@ -278,7 +277,6 @@ void goto_symext::handle_sideeffect(
   }
 }
 
-// Handle conditional expressions (if2t)
 bool goto_symext::handle_conditional(
   const expr2tc &lhs,
   const if2t &if_effect,
@@ -344,12 +342,6 @@ void goto_symext::symex_assign(
   // actually true (e.g. linked-list traversals where every
   // dereference goes through the same pointer chain).
   //
-  // Snapshot p's pre-havoc value-set here, then re-assert it as a
-  // SAME-OBJECT disjunction *after* the assignment lands. This pins
-  // the freshly-nondet p to the set of dynamic objects the
-  // symex-time value-set analysis has accumulated so far (e.g. the
-  // chain of `dynamic_N_value` symbols allocated by prior loop
-  // iterations).
   // Snapshot p's pre-havoc value-set entry before symex_assign_rec
   // overwrites it with {unknown}. The k-induction `make_nondet_assign`
   // pass emits one `ASSIGN p = nondet()` per modified-loop variable
@@ -382,14 +374,14 @@ void goto_symext::symex_assign(
         cur_state->value_set.get_entry(is_ptr_havoc_l1_name, "").object_map;
 
       // Rewrite the nondet RHS to the pre-havoc value of the pointer,
-      // mirroring master's behaviour on these benchmarks: master
-      // skips pointer havocs entirely under --add-symex-value-sets,
-      // leaving p bound to whatever SSA value it had before the
-      // (would-be) havoc. The pre-havoc value either resolves
-      // statically to a concrete object address (singleton case —
-      // matches the `p = a` pattern master sees) or to an ITE chain
-      // through prior loop iterations (multi-candidate case — matches
-      // master's SSA chain through `p = p->n` updates). Either way
+      // matching the behaviour these benchmarks relied on before this
+      // pass existed: pointer havocs were skipped entirely under
+      // --add-symex-value-sets, leaving p bound to whatever SSA value
+      // it had before the (would-be) havoc. The pre-havoc value either
+      // resolves statically to a concrete object address (singleton
+      // case, the `p = a` pattern) or to an ITE chain through prior
+      // loop iterations (multi-candidate case, the SSA chain through
+      // `p = p->n` updates). Either way
       // the solver gets a concrete binding rather than a fresh
       // nondet pinned via SAME-OBJECT to one of N candidates, and
       // the inductive-step verdict matches the BC depth-k+1
@@ -548,18 +540,13 @@ void goto_symext::symex_assign(
     }
   }
 
-  // Restore the value-set entry to the pre-havoc set, replacing the
-  // {unknown} the symex assignment just wrote. The next dereference
-  // through this pointer (in `symex_dereference.cpp`) will read this
-  // restored set and synthesize an ITE chain over the actual
-  // candidate objects — without it, the deref-time assume can pin
-  // the resolved address but can't drive the value-load itself,
-  // because the load expression's value-set is {*}/invalid_object.
-  //
-  // We do this in addition to the assume() below: the assume
-  // constrains the solver, the value-set restore drives the deref
-  // ITE. Both are needed for IS to prove list traversals where the
-  // havoc would otherwise unbind p from the chain.
+  // Restore the value-set entry to the pre-havoc set after the
+  // assignment. The next dereference through this pointer (in
+  // `symex_dereference.cpp`) will read this restored set and
+  // synthesize an ITE chain over the actual candidate objects —
+  // without it, the deref-time assume can pin the resolved address
+  // but can't drive the value-load itself, because the load
+  // expression's value-set is {*}/invalid_object.
   if (!is_ptr_havoc_l1_name.empty() && !is_ptr_havoc_pre_object_map.empty())
   {
     // Drop unknown/invalid entries from the restored set. Their
@@ -584,12 +571,6 @@ void goto_symext::symex_assign(
         filtered;
   }
 
-  // Re-assert the pre-havoc points-to set on the freshly-nondet
-  // pointer. See the snapshot above for the rationale. The disjunct
-  // construction mirrors the per-dereference assume in
-  // symex_dereference.cpp: SAME-OBJECT for non-NULL candidates, a
-  // plain equality with NULL, and `unknown`/`invalid` entries abort
-  // the constraint (a partial set would be unsound).
   // Note: an earlier prototype also emitted an explicit
   // assume(SAME-OBJECT(p_new, &candidate_1) || ...) right here. With
   // the value-set restore above in place, that assume is redundant —

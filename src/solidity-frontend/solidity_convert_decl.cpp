@@ -47,7 +47,7 @@ bool solidity_convertert::get_non_function_decl(
   }
   case SolidityGrammar::ContractBodyElementT::StructDef:
   {
-    return get_struct_class(ast_node); // rule enum-definition
+    return get_struct_class(ast_node); // rule struct-definition
   }
   case SolidityGrammar::ContractBodyElementT::ModifierDef:
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
@@ -1484,7 +1484,7 @@ void solidity_convertert::get_error_definition_name(
   if (cname.empty())
     id = "sol:@" + name + "#" + std::to_string(id_num);
   else
-    // e.g. sol:@C@Base@F@error@1
+    // e.g. sol:@C@Base@F@errmsg#12
     id = "sol:@C@" + cname + "@F@" + name + "#" + std::to_string(id_num);
 }
 

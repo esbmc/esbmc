@@ -148,10 +148,6 @@ protected:
  * The branch uses std::list::splice() rather than insert_swap() so that
  * existing backward-GOTO targets (which point to original_loop_head) are
  * not disturbed.
- *
- * Loops whose bodies contain forward GOTOs that jump outside the loop are
- * skipped (too complex to copy safely); they fall back to the ASSUME-only
- * k-induction acceleration provided by goto_k_inductiont.
  */
 class goto_loop_invariant_combinedt : public goto_loopst
 {
@@ -175,10 +171,8 @@ private:
   /**
    * Copy the loop body instructions (from the instruction immediately after
    * @p loop_head up to, but not including, @p loop_exit) into @p out.
-   *
-   * Returns false and leaves @p out empty when the loop body contains a
-   * forward GOTO whose target is outside the loop body – such loops are too
-   * complex to inline safely and Branch 1 is skipped for them.
+   * Intra-loop jump targets are remapped to the copied instructions; targets
+   * outside the loop are left unchanged.
    */
   void copy_loop_body(
     goto_programt::targett loop_head,

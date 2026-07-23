@@ -41,14 +41,8 @@ void value_sett::output(std::ostream &out) const
     }
     else
     {
-#if 0
-      const symbolt &symbol=ns.lookup(e.identifier);
-      display_name=symbol.display_name()+e.suffix;
-      identifier=symbol.name;
-#else
       identifier = e.identifier;
       display_name = identifier + e.suffix;
-#endif
     }
 
     out << display_name;

@@ -97,17 +97,18 @@ smt_resultt mathsat_convt::dec_solve()
   return P_ERROR;
 }
 
-bool mathsat_convt::get_bool(smt_astt a)
+tvt mathsat_convt::get_bool(smt_astt a)
 {
   const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
   msat_term t = msat_get_model_value(env, mast->a);
   check_msat_error(t);
 
-  bool res;
+  // A default-constructed tvt holds an indeterminate value, not TV_UNKNOWN.
+  tvt res(tvt::TV_UNKNOWN);
   if (msat_term_is_true(env, t))
-    res = true;
+    res = tvt(true);
   else if (msat_term_is_false(env, t))
-    res = false;
+    res = tvt(false);
   else
   {
     log_error("Boolean model value is neither true or false");

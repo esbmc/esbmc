@@ -33,8 +33,7 @@ public:
     }
   };
 
-  // write to a variable - must be symbol
-  // the value is destroyed
+  // write to a variable - lhs must be a symbol
   virtual void assignment(
     const expr2tc &guard,
     const expr2tc &lhs,
@@ -60,7 +59,6 @@ public:
     const bool hidden,
     unsigned loop_number) = 0;
   // record an assumption
-  // cond is destroyed
   virtual void assumption(
     const expr2tc &guard,
     const expr2tc &cond,
@@ -68,7 +66,6 @@ public:
     unsigned loop_number) = 0;
 
   // record an assertion
-  // cond is destroyed
   virtual void assertion(
     const expr2tc &guard,
     const expr2tc &cond,

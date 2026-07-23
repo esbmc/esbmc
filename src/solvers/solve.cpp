@@ -58,8 +58,9 @@ static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
 #endif
 };
 
-// Order encodes default priority: first compiled-in entry (excluding smtlib)
-// is selected when no solver is explicitly requested.
+// Order encodes default priority: the first compiled-in entry that is not
+// smtlib, bitwuzllob or neurosym is selected when no solver is explicitly
+// requested (those three depend on external programs; see pick_default_solver).
 static const std::string all_solvers[] = {
   "smtlib",
   "bitwuzllob",

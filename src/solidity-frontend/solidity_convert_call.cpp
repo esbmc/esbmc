@@ -42,7 +42,6 @@ bool solidity_convertert::get_library_function_call(
 
 // library/error/event functions have no definition node
 // the key difference comparing to the `get_non_library_function_call` is that we do not need a this-object as the first argument for the function call
-// the key difference is that we do not add this pointer.
 bool solidity_convertert::get_library_function_call(
   const exprt &func,
   const typet &t,
@@ -338,8 +337,8 @@ void solidity_convertert::get_nondet_expr(const typet &t, exprt &new_expr)
   new_expr.statement("nondet");
 }
 
-// x._ESBMC_bind_cname = _ESBMC_get_nondet_cname();
-//                        ^^^^^^^^^^^^^^^^^^^^^^^^
+// x._ESBMC_bind_cname = _ESBMC_get_nondet_cont_name();
+//                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 // for high-level call, we bind the external calls with cname
 // e.g.
 // if(x.cname == Base)

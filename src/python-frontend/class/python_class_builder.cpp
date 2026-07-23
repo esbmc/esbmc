@@ -106,7 +106,7 @@ void python_class_builder::get_members(
       conv_.get_function_definition(n);
 
       std::string saved_func_for_lookup = conv_.current_func_name_;
-      conv_.current_func_name_ = mname; // Apenas o nome simples
+      conv_.current_func_name_ = mname;
       symbol_id method_sid = conv_.create_symbol_id();
       conv_.current_func_name_ = saved_func_for_lookup;
 

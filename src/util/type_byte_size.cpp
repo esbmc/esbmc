@@ -1,10 +1,13 @@
+#include <algorithm>
 #include <irep2/irep2_utils.h>
 #include <irep2/irep2_type.h>
 #include <util/arith_tools.h>
+#include <util/config.h>
 #include <util/c_types.h>
 #include <util/expr.h>
 #include <util/message.h>
 #include <util/message/format.h>
+#include <util/migrate.h>
 #include <util/std_types.h>
 #include <util/type_byte_size.h>
 
@@ -133,16 +136,14 @@ BigInt type_sizet::size_bits(const type2tc &type) const
 
   case type2t::struct_id:
   {
-    // Compute the size of all members of this struct, and add padding bytes
-    // so that they all start on wourd boundries. Also add any trailing bytes
-    // necessary to make arrays align properly if malloc'd, see C89 6.3.3.4.
+    // Sum the sizes of all members. Inter-member and trailing padding
+    // (for word-boundary and array-of-struct alignment; see C89 6.3.3.4) is
+    // inserted by the frontend as explicit padding members, so summing
+    // member sizes already accounts for it.
     BigInt accumulated_size = 0;
     for (auto const &it : to_struct_type(type).members)
       accumulated_size += size_bits(it);
 
-    // At the end of that, the tests above should have rounded accumulated size
-    // up to a size that contains the required trailing padding for array
-    // allocation alignment.
     return accumulated_size;
   }
 
@@ -241,9 +242,10 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
 
   case type2t::struct_id:
   {
-    // Compute the size of all members of this struct, and add padding bytes
-    // so that they all start on wourd boundries. Also add any trailing bytes
-    // necessary to make arrays align properly if malloc'd, see C89 6.3.3.4.
+    // Sum the sizes of all members. Inter-member and trailing padding
+    // (for word-boundary and array-of-struct alignment; see C89 6.3.3.4) is
+    // inserted by the frontend as explicit padding members, so summing
+    // member sizes already accounts for it.
     BigInt acc_cnst = 0;
     expr2tc acc_dyn;
     type2tc t = bitsize_type2();
@@ -257,10 +259,6 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
       else
         acc_dyn = s;
     }
-
-    // At the end of that, the tests above should have rounded accumulated size
-    // up to a size that contains the required trailing padding for array
-    // allocation alignment.
 
     if (!acc_dyn)
       return bitsize(acc_cnst);
@@ -454,4 +452,91 @@ const expr2tc &get_base_object(const expr2tc &expr)
     return get_base_object(to_dereference2t(expr).value);
 
   return expr;
+}
+
+std::size_t ext_int_representation_bytes(const typet &type)
+{
+  // We represent an ExtInt with the smallest integer type that can hold it
+  // TODO: This should be limited to a maximum of 8 bytes, but pointer analysis
+  // currently expects the fields to be aligned to the least power of 2 greater
+  // than the width in bytes
+  const std::size_t bits = string2integer(type.width().as_string()).to_uint64();
+
+  std::size_t result;
+  for (result = 1; bits > result * config.ansi_c.char_width; result *= 2)
+    ;
+
+  return result;
+}
+
+BigInt alignment(const typet &type, const namespacet &ns)
+{
+  // we need to consider a number of different cases:
+  // - alignment specified in the source, which will be recorded in
+  // "alignment"
+  // - alignment induced by packing ("The alignment of a member will
+  // be on a boundary that is either a multiple of n or a multiple of
+  // the size of the member, whichever is smaller."); both
+  // "alignment" and "packed" will be set
+  // - natural alignment, when neither "alignment" nor "packed"
+  // are set
+  // - dense packing with only "packed" set.
+
+  // is the alignment given?
+  const exprt &given_alignment =
+    static_cast<const exprt &>(type.find("alignment"));
+
+  BigInt a_int = 0;
+
+  // we trust it blindly, no matter how nonsensical
+  if (given_alignment.is_not_nil())
+    a_int = string2integer(given_alignment.cformat().as_string());
+
+  // alignment but no packing
+  if (a_int > 0 && !type.get_bool("packed"))
+    return a_int;
+  // no alignment, packing
+  else if (a_int == 0 && type.get_bool("packed"))
+    return 1;
+
+  // compute default
+  BigInt result = 0;
+
+  if (type.id() == typet::t_array)
+    result = alignment(type.subtype(), ns);
+  else if (type.id() == typet::t_struct || type.id() == typet::t_union)
+  {
+    result = 1;
+
+    // get the max
+    // (should really be the smallest common denominator)
+    for (const auto &c : to_struct_union_type(type).components())
+      result = std::max(result, alignment(c.type(), ns));
+  }
+  else if (type.get_bool("#bitfield"))
+  {
+    // we align these according to the 'underlying type'
+    result = alignment(type.subtype(), ns);
+  }
+  else if (type.get_bool("#extint"))
+    result = ext_int_representation_bytes(type);
+  else if (
+    type.id() == typet::t_unsignedbv || type.id() == typet::t_signedbv ||
+    type.id() == typet::t_fixedbv || type.id() == typet::t_floatbv ||
+    type.id() == typet::t_bool || type.id() == typet::t_pointer)
+  {
+    type2tc thetype = migrate_type(type);
+    result = type_byte_size(thetype);
+  }
+  else if (type.id() == typet::t_symbol)
+    result = alignment(ns.follow(type), ns);
+  else
+    result = 1;
+
+  // if an alignment had been provided and packing was requested, take
+  // the smallest alignment
+  if (a_int > 0 && a_int < result)
+    result = a_int;
+
+  return result;
 }

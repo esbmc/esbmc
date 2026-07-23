@@ -604,7 +604,6 @@ private:
    * assume(0). It will also search for the last loop in the program based
    * on location.
    * @param goto_functions goto program functions
-   * @param vector result from the contractor.
    */
   void insert_assume(goto_functionst goto_functions);
 

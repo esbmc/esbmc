@@ -457,7 +457,7 @@ bool solidity_convertert::get_new_mapping_index_access(
     get_aux_var(aux_name, aux_id);
     symbolt aux_sym;
     std::string debug_modulename = get_modulename_from_path(absolute_path);
-    typet aux_type = value_t; // struct *
+    typet aux_type = value_t; // struct value
     get_default_symbol(
       aux_sym, debug_modulename, aux_type, aux_name, aux_id, location);
     aux_sym.file_local = true;

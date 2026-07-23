@@ -407,7 +407,7 @@ printf_kindt printf_kind_from_name(const irep_idt &name)
 }
 
 /********************** Switch-based v2 dispatchers ***************************/
-// All 111 expr kinds now expose `fields`; every case uses the generic path.
+// Every expr kind exposes `fields`; every case uses the generic path.
 // `end_expr_id` is a sentinel never assigned to a live node; including it as
 // a switch case (with -Wswitch enabled) makes the compiler enforce per-kind
 // exhaustiveness via the X-macro — adding a new kind without wiring it into

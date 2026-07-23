@@ -113,6 +113,9 @@ and the symbol/function table layout.
 | Builtin-call rewrite for `__builtin_huge_val{,f,l}`/`__builtin_inf{,f,l}` FUNCTION_CALLs → +∞ floatbv constant (sign 0, exponent all ones, mantissa 0), width-generic incl. 128-bit long double (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Bit-reversal expression `bitreverse` (`__builtin_bitreverse{8,16,32,64}`) → SWAR reversal via `bitand`/`shl`/`lshr`/`bitor` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | `_Complex` support: `complex` type → subtype form; constructor/`complex_real`/`complex_imag`/real→complex `typecast`/`+ - * /`/`unary-` lowered to the native component-wise forms (§4.3 type + §4.4 exprs, Phases 2–3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type`, `fix_expression` |
+| Libc body bridge extended to `<ctype.h>` classifiers/case-mappers `isalnum`/`isalpha`/`isblank`/`iscntrl`/`isdigit`/`isgraph`/`islower`/`isprint`/`ispunct`/`isspace`/`isupper`/`isxdigit`/`tolower`/`toupper` (bodyless externals → ESBMC's ASCII operational-model bodies) (§4.8, Phase 2) | ✅ (PR #6157) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
+| Libc body bridge extended to `<stdlib.h>` string-to-integer parsers `atoi`/`atol`/`strtol` (byte-loop bodies, need `--unwind`; `atoll`/`strtoll` left bodyless — CBMC does not model them) (§4.8, Phase 2) | ✅ (PR #6158) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
+| Computed `goto` (GNU labels-as-values): `address_of(label)` → unique `(void *)K` constant so CBMC's lowered label-address equality chain resolves (§4.4, Phase 2) | ✅ (PR #6161) | `cbmc_adapter.cpp::fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -156,12 +159,55 @@ harness, not `main`, is the entry. This unblocks the `verify-rust-std`/Kani flow
 proof harnesses by name.
 
 ### 4.3 Type system: anonymous structs and wide constants (Phase 3)
-`cbmc_adapter.cpp::expand_anon_struct` aborts on CBMC's anonymous-aggregate naming
-(`tag-#anon#ST[...]`), which the contracts library uses heavily — this is why
-`mul_contract.goto` is rejected (identically to the reference). Needs an LL(k) parser for
-CBMC's `ST[...]`/`SYM`/`*{...}` type-name grammar (a skeleton exists in the original Rust
-`adapter.rs::Anon2Struct`). Separately, the hex→binary constant rewrite goes through
-`uint64_t`, so constants wider than 64 bits (e.g. 128-bit) are wrong.
+
+**Anonymous struct/union members — ✅ fixed (no grammar parser needed).** The problem was
+never that ESBMC lacks a parser for CBMC's anonymous-aggregate tag-name grammar
+(`tag-#anon#ST[...]`) — CBMC **serialises the anonymous aggregate's full layout as an ordinary
+type symbol**, so it resolves through the adapter's existing tag cache like any named
+struct/union. The real fault was **ordering**: CBMC emits an anonymous aggregate's type symbol
+*after* the struct that contains it (the aggregate tag encodes the container's own layout), so
+the first fix pass reached the container's anonymous member before that symbol was cached. A
+not-yet-seen *named* tag survives this — `fix_type` leaves it unresolved and the re-check pass
+in `adapt_cbmc_to_esbmc` (which runs with the full cache) resolves it — but an anonymous tag
+took a separate path in `expand_anon_struct` that `abort()`ed on the cache miss. Fixed by making
+`expand_anon_struct` a no-op: an unresolved anonymous tag now defers to the same re-check pass as
+a named one. Because the definition comes from CBMC's own serialised symbol (not a reconstruction
+from the tag name), it is byte-identical to the type the reader builds for the same member inside
+an instruction — which `with2t::assert_type_compat_for_with` compares by value, the check an
+earlier tag-name-parser attempt kept tripping. Verdict parity with CBMC, dual-solver
+(Bitwuzla + Z3), across union/array overlays, a doubly-nested anonymous struct-in-union-in-struct,
+an anonymous union with a **pointer** member, an array-of-struct union arm, and a function-local
+anonymous aggregate (`cbmc_anon_struct` SUCCESSFUL / `cbmc_anon_struct_fail` FAILED on a wrong
+overlay value). The tag-name grammar and the reason a from-scratch parser is unsound are
+recorded in the git history of the reverted attempt.
+
+Separately, the hex→binary constant rewrite goes through `uint64_t`, so constants wider than 64
+bits (e.g. 128-bit) are wrong.
+**Prior graceful-decline (PR #6160), now superseded.** Before the resolution fix above,
+`expand_anon_struct` was made to `throw` a clean error instead of `abort()`ing on an
+anonymous-aggregate tag it could not resolve (PR #6160, §4.7 malformed-input recovery). That
+was replaced here by actually resolving the tag; its `cbmc_anon_aggregate` fixture (the
+`tag-#anon#UN[SYM#0={ST[S32'a'|S32'b']}'$anon0'|ARR2{S32}'arr']` nested union) now verifies
+**SUCCESSFUL** rather than erroring, and its `test.desc` is updated accordingly.
+
+**Reproducible locally with `goto-cc` (grammar characterised).** Contrary to the earlier
+assumption that this needed the Kani/contracts corpus, plain C nested anonymous aggregates
+compiled with `goto-cc` reach the adapter as name-encoded tags. Samples:
+`UN[S8'c'|S16'h'|U32'u']` (flat scalars — CBMC actually inlines these, so they already work),
+`UN[*{S32}'p'|S64'v']` (pointer member), `UN[F64'd'|S64'l']`,
+`ST[SYM#0={ST[S32'a']}'$anon0'|S32'b']` (nested struct),
+`UN[SYM#0={ST[...]}'$anon0'|ARR2{S32}'arr']` (union of nested-struct + array). Grammar:
+`agg := ('ST'|'UN') '[' member ('|' member)* ']'`; `member := type "'" name "'"`;
+`type := 'S'N | 'U'N | 'F'N | '*' '{' type '}' | "ARR" N '{' type '}' | agg |
+"SYM" '#' N '=' '{' type '}'`. **The hard part, and why a naive parser is unsound:**
+`with2t::assert_type_compat_for_with` (`irep2_expr.cpp`) compares the aggregate member type
+*by value* against the type the reader independently builds for the same member inside an
+instruction — so a synthesised `array2t` must reproduce CBMC's exact array-**size** constant
+(type and value), and a synthesised nested `struct2t`/`union2t` its exact **tag**, or symex
+aborts on a `with`. A trial parser that synthesised these from the name string produced
+`array2t`/`struct2t` values that did not match the instruction side (a 2-member scalar union
+tripped the `with` assert where a 3-member one happened to pass), confirming the full fix must
+mirror the reader's type construction, not invent its own. Deferred as its own task.
 
 **Recursive struct/union types (linked lists) — ✅ fixed.** A plain linked-list program —
 `struct node { int value; struct node *next; }` with `a.next->next` read through a
@@ -577,6 +623,58 @@ float operand), `migrate` cannot tell them apart; `fix_expression` runs only on 
 perturbing native handling. `isinf` now matches CBMC's verdict exactly (reclassified
 `cbmc_isinf` KNOWNBUG→CORE; negative direction covered by `cbmc_isinf_fail`).
 
+**Variadic functions (`va_start`) — decline cleanly instead of `abort()` (✅ landed).**
+CBMC lowers `va_start(ap, last)` to a `side_effect` that points the `va_list` at the last
+named parameter and then walks the stack for each `va_arg` (which it lowers to a raw
+`*(T *)ap` dereference). ESBMC models variadic arguments as **discrete per-call symbols**
+(`<fn>::va_argN`, `symex_function.cpp`), not a contiguous stack, so CBMC's pointer walk cannot
+recover them — and `migrate_expr` `abort()`ed (SIGABRT/rc=134) on the unrecognised `va_start`
+statement. `fix_expression` now `throw`s a clean error the `create_goto_program` handler turns
+into a graceful exit (matching §4.7). Correct `<stdarg.h>` support on the `--binary` path needs
+a contiguous vararg layout and is future work. Pinned by `cbmc_va_start`. **Other deep,
+still-unsupported constructs found by the same construct sweep** (each declines/diverges, none
+a quick adapter rewrite): `setjmp`/`longjmp` (non-local control flow; ESBMC returns a spurious
+FAILED where CBMC proves SUCCESSFUL), and SIMD vector types (`__attribute__((vector_size))` —
+CBMC lowers element-wise but ESBMC's vector SMT encoding hangs in the solver).
+**CPROVER pointer/introspection intrinsics — swept 2026-07-18.** `__CPROVER_POINTER_OBJECT`,
+`__CPROVER_POINTER_OFFSET`, `__CPROVER_same_object`, `__CPROVER_r_ok`, and `__CPROVER_assume`
+already verify to CBMC parity. Four gaps remain, each recorded for future work:
+- **`__CPROVER_DYNAMIC_OBJECT` (`is_dynamic_object`) — declined cleanly (✅ landed).** No
+  `migrate_expr` handler → it `abort()`ed. ESBMC tracks the identical fact in its symex-managed
+  `c:@__ESBMC_is_dynamic` bool array (indexed by pointer object, set on `malloc` in
+  `symex_assign.cpp`), so the faithful rewrite is `__ESBMC_is_dynamic[pointer_object(p)]` — but
+  that needs the array **force-linked even when the binary never calls `malloc`** (otherwise
+  absent) with its `__ESBMC_inf_size` shape preserved, so it is deferred. Only an *explicit*
+  `__CPROVER_DYNAMIC_OBJECT` reaches the adapter (CBMC's `free`/dynamic checks live in library
+  bodies re-linked at analysis time, not the serialised binary — a `free`-using binary verifies
+  fine), so `fix_expression` now throws a clean error instead of aborting. Pinned by
+  `cbmc_dynamic_object`.
+- **`__CPROVER_OBJECT_SIZE` (`object_size`)** — migrates (`→ c:@F@__ESBMC_get_object_size`,
+  already in the wrap-set) but the SMT **encoding hangs in the solver** (same class as the SIMD
+  vector hang, §4.4) — a solver-performance item, not an adapter gap.
+- **`__CPROVER_array_set` / `__CPROVER_havoc_object`** — reach migrate as unhandled `code`
+  statements (`ERROR: code`); the array/havoc codet family, akin to the `ARRAY_COPY`/`ARRAY_SET`
+  memcpy handling of §4.8.
+
+**Computed `goto` (GNU labels-as-values) — ✅ landed.** A `goto *p` over
+`void *t[] = {&&a, &&b}` reached the adapter as `address_of(label{identifier})` expressions
+(the label operand is typed `empty`), which `migrate_type` has no case for — it `abort()`ed
+with `ERROR: label`. ESBMC's own C frontend rejects indirect gotos outright
+(`ESBMC currently does not support indirect gotos`), so there is no native representation to
+mirror. But **CBMC has already lowered the indirect jump** at `goto-cc` time into a concrete
+conditional chain — `IF t[k] == address_of(label "a") THEN GOTO …; IF … "b" …` — so no
+indirect-goto symex is needed: the label addresses are only ever *compared for equality*,
+never dereferenced. `fix_expression` therefore rewrites each `address_of(label X)` into a
+unique non-null `(void *)K` constant (a `typecast` of a per-label counter to the pointer
+type), so those equality comparisons resolve to CBMC's control flow. Same-named labels in
+different functions would share a `K`, but comparing label addresses across functions is
+undefined and cannot occur in a valid program. Scoped to the `--binary` path, so it never
+perturbs native handling. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), across a
+3-way dispatch table (concrete selectors 0/1/2 and a symbolic in-range selector) —
+`cbmc_computed_goto` SUCCESSFUL — and a wrong-branch negative (`cbmc_computed_goto_fail`:
+`goto *t[1]` asserted to land on label `a` ⇒ FAILED), confirming the jump really targets the
+selected label rather than a nondet branch.
+
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
 `static_lifetime`, `file_local`, `is_extern`).
@@ -604,10 +702,37 @@ when goto-cc linked the `.goto`; it could only matter if a later link stage (e.g
 additions boilerplate) overrode a weak definition, so the warning stays as a tripwire.
 `is_property` — CBMC-internal assertion bookkeeping, no ESBMC counterpart needed.
 
-### 4.6 Contracts subsystem (Phase 4)
+### 4.6 Contracts subsystem (Phase 4) — 🔶 loads & verifies; gap is the unserialised contract library
 `__CPROVER_contracts_*` (requires/ensures/assigns/frees, `is_fresh`, object/write sets) is a
-whole subsystem. ESBMC has its own contracts (`src/goto-programs/contracts/`); the work is
-to bridge CBMC's encoding onto it rather than re-implement.
+whole subsystem. ESBMC has its own contracts (`src/goto-programs/contracts/`, including native
+`is_fresh` handling — `contracts.cpp::is_fresh_function`); the work is to bridge CBMC's encoding
+onto it rather than re-implement.
+
+**Concrete state (probed 2026-07-18, `goto-instrument --enforce-contract` /
+`--replace-call-with-contract` on `goto-cc` C).** A contract-instrumented CBMC binary **loads
+and reaches a verdict on the `--binary` path without crashing** — the anonymous-aggregate
+resolution (§4.3) and the existing expression coverage carry it through. `requires`/`ensures`
+lower to `ASSUME`/`ASSERT` (`// Assume requires clause` / `// Check ensures clause`) and are
+executed; the only load-time noise is a benign `dropping 'property' on symbol contract::<fn>`
+(§4.5 — `is_property` has no ESBMC counterpart, harmless).
+
+**The concrete gap is the contract *library*, not the encoding.** CBMC does **not** serialise
+the bodies of its contract-runtime functions into the `.goto` — `__CPROVER_enforce_requires_is_fresh`,
+the `__CPROVER_contracts_*` helpers, and the object/write-set machinery are **re-linked from
+CBMC's own contracts library at analysis time** (verified: the function is *called* in the
+instrumented body and its body is visible under `cbmc --show-goto-functions`, but the reader
+finds **zero serialised instructions** for it — exactly the libm/libc situation of §4.8, one
+subsystem up). So ESBMC sees `__CPROVER_enforce_requires_is_fresh` as a **bodyless external
+returning nondet**: `is_fresh` in a `requires` becomes an unconstrained assumption. That is
+**sound but imprecise** (dropping an assumption only widens the checked behaviour), not a
+miss — but it defeats the point of an `is_fresh` precondition. The bridge is to synthesise or
+retarget these onto ESBMC's native `is_fresh`/contracts machinery (the additions-boilerplate
+mechanism of §4.8, or a direct `c:@F@__ESBMC_is_fresh` retarget like the `memcpy` family). Not
+yet attempted: a **local verdict oracle is missing** — bare `goto-instrument --enforce-contract`
+without the contracts-library link does not actually fire the `ensures` check (a deliberately
+violated `ensures` verifies SUCCESSFUL under *CBMC itself* in this setup), so contract-*enforcement*
+parity cannot be validated until the library is linked on both sides. Loadability and the
+`requires`/`ensures` → `ASSUME`/`ASSERT` lowering are the parts confirmed working.
 
 ### 4.7 Versioning & robustness (Phase 5) — 🔶 malformed-input recovery landed
 Only CBMC binary **version 6** is accepted (a wrong version, like a non-magic header, is
@@ -905,6 +1030,37 @@ pins all five classes — `FP_NORMAL`/`FP_ZERO`/`FP_INFINITE`/`FP_NAN`/`FP_SUBNO
 really evaluated. `signbit`/`isnan`/`isinf`/`isnormal` are handled at the expression level (§4.4),
 not here — `fpclassify` is the one classifier that lowers to a real libc call.
 
+**Extended to the `<ctype.h>` character classifiers and case-mappers:
+`isalnum`/`isalpha`/`isblank`/`iscntrl`/`isdigit`/`isgraph`/`islower`/`isprint`/`ispunct`/
+`isspace`/`isupper`/`isxdigit`/`tolower`/`toupper` (all 14).** A C program compiled with
+`goto-cc` — the general-interop consumer (§1.2), not the Kani front — that declares a ctype
+function by prototype emits a **bodyless external returning nondet** for it, so a valid
+`isdigit('5') != 0` reported a false `FAILED` where CBMC (which models the whole family)
+verifies `SUCCESSFUL`. Same `link_cbmc_libc_bodies` bridge, 14 more names in the list and the
+additions boilerplate: ESBMC's operational-model bodies (`ctype.c`) are straight-line ASCII
+range/comparison checks — **no loops, so no `--unwind`** — copied onto the bodyless
+declarations. ESBMC's ASCII-locale model agrees with CBMC's over the exercised inputs; the two
+could in principle diverge only on non-ASCII / locale-dependent bytes, which neither models
+distinctly. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3): `cbmc_ctype` exercises all
+14 (each classifier a member + non-member pair, `tolower`/`toupper` a mapped + unmapped pair,
+and a symbolic `tolower(toupper(c)) == c` round-trip over `c ∈ [a,z]`) `SUCCESSFUL`, and
+`cbmc_ctype_fail` (`toupper('a') == 'B'`) `FAILED`, confirming the mapping is really computed.
+The macOS-`goto-cc` `<ctype.h>` *macro* form (`__istype`/`__isctype` over a `_DefaultRuneLocale`
+rune table) is a distinct, locale-table shape neither tool models deterministically and is out of
+scope here — the prototype form is what a portable C source and a Linux-glibc binary emit.
+
+**Extended to the `<stdlib.h>` string-to-integer parsers: `atoi`/`atol`/`strtol`.** Same
+`link_cbmc_libc_bodies` bridge — three more names in the list and the additions boilerplate.
+CBMC emits these as **bodyless externals returning nondet**, so a valid `atoi("42") == 42`
+reported a false `FAILED` where CBMC verifies `SUCCESSFUL`. ESBMC's operational-model bodies
+(`stdlib.c`, a shared `ATOI_DEF`/`STRTOL_DEF` digit-accumulation loop) are **byte loops**, so a
+call needs an `--unwind` bound like the string.h family. Selective, like `strrchr`: CBMC 6.8.0
+models `atoi`/`atol`/`strtol` but **not** `atoll`/`strtoll` (those reach CBMC as `no body` and
+are left bodyless so their nondet-return verdict still matches CBMC, rather than bridged into a
+divergence). Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), `--unwind 8`: `cbmc_atoi`
+(`atoi` positive/negative/zero, `atol`, `strtol` base-10 and base-16 `"ff" == 255`) `SUCCESSFUL`,
+and `cbmc_atoi_fail` (`atoi("42") == 43`) `FAILED`, confirming the digits are really parsed.
+
 **Ruled out as an alternative fix** (for the remaining libm family, from the #5743
 diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
 boilerplate *call* `sqrtf` so ESBMC's normal C-frontend linking supplies a body doesn't
@@ -1090,14 +1246,16 @@ reproduce** (76/76 crashes, 3/3 mismatches), so the numbers below are not parall
 |---|---|---|
 | **Parses (GOTO built)** | **1375 / 1375 (100 %)** | reader → adapter → migrate never fails |
 | Matches CBMC — **Yes** | 1110 | **99.7 % of the 1113 both tools decided** |
-| Matches CBMC — **No** | 3 | all one root cause, all false alarms (see below) |
+| Matches CBMC — **No** | 3 | all one root cause (alignment), all false alarms — ✅ fixed 2026-07-17, PR #6138; the CBMC baseline behind this row does not reproduce, see below |
 | Matches CBMC — **Crashes** | 76 | 53 × rc=134 abort, 23 × rc=139 segfault |
 | N/A (either side timed out/errored) | 186 | ESBMC 140 timeouts; CBMC 35 timeouts + 68 errors |
 
 **The 87 % rc=139 parse-crash baseline is gone.** No binary fails to load: all 76 crashes
 occur *during verification*, after a GOTO program was built successfully. Where both tools
 reach a verdict they agree 1110/1113, and **there is not a single unsound miss in the corpus**
-— ESBMC never reports SUCCESSFUL where CBMC reports FAILED.
+— ESBMC never reports SUCCESSFUL where CBMC reports FAILED. (The 3 disagreements are since
+fixed — PR #6138 — so a re-sweep should show 1113/1113; all three were false alarms, i.e. in
+the safe direction, so the no-unsound-miss result is unaffected either way.)
 
 **Per module** (Yes / No / Crashes / N/A): `ptr` 323/3/19/31 · `intrinsics` 291/0/0/22 ·
 `convert` 190/0/0/0 · `num` 189/0/14/29 · `slice` 85/0/32/84 · `time` 20/0/0/4 ·

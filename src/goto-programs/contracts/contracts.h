@@ -94,7 +94,7 @@ public:
   ///   2. Havoc all potentially modified locations:
   ///      - Assigns clause targets (if specified)
   ///      - Static lifetime global variables (conservative)
-  ///      - Memory locations through pointer parameters (TODO)
+  ///      - Memory locations through pointer parameters
   ///   3. Assume ensures clause (assume postcondition)
   ///
   /// CRITICAL: We must havoc everything the function might modify,

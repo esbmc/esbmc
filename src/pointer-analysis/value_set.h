@@ -36,8 +36,8 @@
  *
  *  The only data element stored is a map from l1 variable names (as strings)
  *  to a record of what objects are stored. Data objects are numbered, with the
- *  mapping for that stored in a global variable, value_sett::object_numbering,
- *  (which will explode into multithreaded death cakes in the future). The
+ *  mapping for that stored in the thread-local static
+ *  value_sett::object_numbering. The
  *  primary interfaces to the value_sett object itself are the 'assign' method
  *  (for interpreting a variable assignment) and the get_value_set method, that
  *  takes a variable and returns the set of things it might point at.
@@ -74,7 +74,6 @@ public:
     xchg_name = ref.xchg_name;
     xchg_num = ref.xchg_num;
     // No need to copy ns, it should be the same in all contexts.
-    // Msg will not change as well
     return *this;
   }
 
@@ -121,7 +120,6 @@ public:
     {
       assert(offset_set);
       offset_alignment = 1;
-      // offset_set = offset_set;
     }
 
     /** Record of the explicit offset into the object. Only valid when
@@ -315,7 +313,9 @@ public:
     std::pair<object_mapt::iterator, bool> res =
       dest.insert(object_mapt::value_type(it->first, it->second));
 
-    // If element already existed, overwrite.
+    // An entry already present for this object number is left untouched:
+    // the assignment below runs only for freshly inserted elements, where
+    // it is a no-op.
     if (res.second)
       res.first->second = it->second;
   }
@@ -678,7 +678,8 @@ protected:
 
 public:
   //********************************** Members ***********************************
-  /** Some crazy static analysis tool. */
+  /** Location number of the instruction this value set is attached to;
+   *  used to identify allocation sites for dynamic objects. */
   unsigned location_number;
   /** Object to assign numbers to objects -- i.e., the numbers in the map of
    *  a @ref object_mapt.

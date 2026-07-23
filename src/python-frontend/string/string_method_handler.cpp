@@ -107,43 +107,6 @@ static char to_upper_char(char c)
   return static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
 }
 
-// Render a constant float as CPython's str() / empty-"{}" field does. A
-// whole-number float below 1e16 renders as its integer digits plus ".0"
-// (str(1.0) == "1.0", str(1000000.0) == "1000000.0").
-//
-// Every other float renders with the fewest significant digits that still read
-// back as the same double, which is exactly how CPython's repr chooses its
-// digits. The default ostream format instead prints 6 significant digits, so it
-// silently truncated str(1.23456789) to "1.23457" and folded the false
-// `"{}".format(1.23456789) == "1.23457"` to true.
-//
-// %g then picks fixed vs. exponential notation on the same rule CPython uses:
-// exponential iff the decimal exponent is < -4 or >= the significant-digit
-// count. The two agree here because a float that is not whole always needs more
-// significant digits than its exponent, and every whole float below 1e16 is
-// handled above; CPython's own cut-over at 1e16 is what the branch encodes.
-static std::string format_float_value(double d)
-{
-  if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 1e16)
-  {
-    std::string s = std::to_string(static_cast<long long>(d));
-    if (std::signbit(d) && s[0] != '-') // str(-0.0) == "-0.0"
-      s.insert(s.begin(), '-');
-    return s + ".0";
-  }
-
-  const round_to_nearest_guard guard;
-  char buf[40];
-  for (int precision = 1; precision < 17; ++precision)
-  {
-    std::snprintf(buf, sizeof(buf), "%.*g", precision, d);
-    if (std::strtod(buf, nullptr) == d)
-      return buf;
-  }
-  std::snprintf(buf, sizeof(buf), "%.17g", d);
-  return buf;
-}
-
 static std::string
 format_value_from_json(const nlohmann::json &arg, python_converter &converter)
 {
@@ -168,7 +131,7 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
     if (ov.is_boolean())
       return ov.get<bool>() ? "-1" : "0";
     if (ov.is_number_float())
-      return format_float_value(-ov.get<double>());
+      return string_handler::cpython_float_str(-ov.get<double>());
   }
   if (arg.contains("_type") && arg["_type"] == "Constant")
   {
@@ -187,7 +150,7 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
     if (arg["value"].is_number_integer())
       return std::to_string(arg["value"].get<long long>());
     if (arg["value"].is_number_float())
-      return format_float_value(arg["value"].get<double>());
+      return string_handler::cpython_float_str(arg["value"].get<double>());
     throw std::runtime_error("format() unsupported constant type");
   }
 

@@ -288,7 +288,7 @@ public:
 
   sexpr get_value(smt_astt a) const;
 
-  bool get_bool(smt_astt a) override;
+  tvt get_bool(smt_astt a) override;
   tvt l_get(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;
   expr2tc

@@ -47,8 +47,7 @@ void solidity_convertert::get_start_location_from_stmt(
   if (current_functionDecl)
     function_name = current_functionName;
 
-  // The src manager of Solidity AST JSON is too encryptic.
-  // For the time being we are setting it to "1".
+  // The line number is derived from the Solidity AST JSON source range.
   location.set_line(get_line_number(ast_node));
   location.set_file(
     absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
@@ -66,8 +65,7 @@ void solidity_convertert::get_final_location_from_stmt(
   if (current_functionDecl)
     function_name = current_functionName;
 
-  // The src manager of Solidity AST JSON is too encryptic.
-  // For the time being we are setting it to "1".
+  // The line number is derived from the Solidity AST JSON source range.
   location.set_line(get_line_number(ast_node, true));
   location.set_file(
     absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory

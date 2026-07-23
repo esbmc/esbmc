@@ -8,8 +8,42 @@
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
+#include <util/type_byte_size.h>
 #include <vector>
 #include <algorithm>
+
+// Component-name prefix the C++ frontend uses for nested base subobjects; see
+// base_subobject_name() in clang-c-frontend/clang_c_convert.h (#1866, #3894).
+static const std::string base_subobject_prefix = "@base@";
+
+// Collect the byte offsets of every (transitively) nested base subobject of
+// `t`, relative to the start of `t`.
+static void collect_base_subobject_offsets(
+  const type2tc &t,
+  const namespacet &ns,
+  const BigInt &base,
+  std::vector<BigInt> &out)
+{
+  if (is_nil_type(t))
+    return;
+
+  const type2tc ft = ns.follow(t);
+  if (!is_struct_type(ft))
+    return;
+
+  const struct_type2t &st = to_struct_type(ft);
+  for (std::size_t i = 0; i < st.members.size(); ++i)
+  {
+    const std::string name = st.member_names[i].as_string();
+    if (
+      name.compare(0, base_subobject_prefix.size(), base_subobject_prefix) != 0)
+      continue;
+
+    const BigInt off = base + member_offset(ft, st.member_names[i], &ns);
+    out.push_back(off);
+    collect_base_subobject_offsets(st.members[i], ns, off, out);
+  }
+}
 
 expr2tc goto_symext::symex_malloc(
   const expr2tc &lhs,
@@ -426,7 +460,6 @@ expr2tc goto_symext::symex_mem_inf(
   if (is_nil_expr(lhs))
     return expr2tc(); // ignore
 
-  // size
   type2tc type = base_type;
 
   assert(!is_nil_type(base_type));
@@ -740,6 +773,25 @@ void goto_symext::symex_free(const expr2tc &expr)
       // Check if the offset of the object being freed is zero
       expr2tc offset = item.offset;
       expr2tc eq = equality2tc(offset, gen_ulong(0));
+
+      // C++ permits `delete p` where p points at a *base subobject* of the
+      // complete object -- the deleting destructor adjusts back to the
+      // complete object before freeing. Under the nested base-subobject model
+      // such an upcast pointer legitimately carries a non-zero offset. The
+      // deallocation below keys on pointer_object(), so it already clears the
+      // right allocation; only this assertion needs to admit those offsets.
+      // Arbitrary interior pointers (delete (p+1), delete &arr[1]) are still
+      // rejected, and C free() is unaffected. See #1866, #3894.
+      if (is_code_cpp_delete2t(expr) || is_code_cpp_del_array2t(expr))
+      {
+        std::vector<BigInt> base_offsets;
+        collect_base_subobject_offsets(
+          item.object->type, ns, BigInt(0), base_offsets);
+        for (const BigInt &bo : base_offsets)
+          if (bo != 0)
+            eq = or2tc(eq, equality2tc(offset, gen_ulong(bo.to_uint64())));
+      }
+
       g.guard_expr(eq);
       if (options.get_bool_option("conv-assert-to-assume"))
         assume(eq);

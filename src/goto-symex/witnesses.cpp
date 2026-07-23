@@ -229,7 +229,6 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
     waypoint << YAML::EndMap;
   }
 
-  // location
   waypoint << YAML::Key << "location" << YAML::Value << YAML::BeginMap;
   waypoint << YAML::Key << "file_name" << YAML::Value << YAML::DoubleQuoted
            << wp.file;
@@ -749,7 +748,6 @@ void _create_yaml_metadata_emitter(
   metadata << YAML::Key << "format_version" << YAML::Value << YAML::DoubleQuoted
            << "2.0";
 
-  // Uuid
   std::string uuid =
     boost::uuids::to_string(boost::uuids::random_generator()());
   metadata << YAML::Key << "uuid" << YAML::Value << YAML::DoubleQuoted << uuid;
@@ -768,7 +766,6 @@ void _create_yaml_metadata_emitter(
   metadata << YAML::Key << "creation_time" << YAML::Value << YAML::DoubleQuoted
            << timestr;
 
-  // Producer
   metadata << YAML::Key << "producer" << YAML::BeginMap;
   std::string producer_str = options.get_option("witness-producer");
   if (producer_str.empty())
@@ -789,24 +786,19 @@ void _create_yaml_metadata_emitter(
            << ESBMC_VERSION;
   metadata << YAML::EndMap;
 
-  // Task
   metadata << YAML::Key << "task" << YAML::BeginMap;
 
-  // Input_files
   metadata << YAML::Key << "input_files" << YAML::BeginSeq;
   metadata << YAML::DoubleQuoted << verifiedfile;
   metadata << YAML::EndSeq;
 
-  // Input_file_hashes
   std::string file_hash;
-  // sha256
   generate_sha256_hash_for_file(verifiedfile.c_str(), file_hash);
   metadata << YAML::Key << "input_file_hashes" << YAML::BeginMap;
   metadata << YAML::Key << YAML::DoubleQuoted << verifiedfile << YAML::Value
            << YAML::DoubleQuoted << file_hash;
   metadata << YAML::EndMap;
 
-  // Specification
   std::string spec;
   if (options.get_bool_option("overflow-check"))
     spec = "G ! overflow";
@@ -888,9 +880,6 @@ void create_violation_yaml_emitter(
 
 void check_replace_invalid_assignment(std::string &assignment)
 {
-  /* replace: SAME-OBJECT(&var1, &var2) into &var1 == &var2 (XXX check if should stay) */
-  //std::regex e ("SAME-OBJECT\\((&([a-zA-Z_0-9]+)), (&([a-zA-Z_0-9]+))\\)");
-  //assignment = std::regex_replace(assignment, e ,"$1 == $3");
   std::smatch m;
   /* looking for undesired in the assignment */
   if (
@@ -1273,7 +1262,6 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
   std::vector<collected_nondet_value> results;
   std::unordered_set<std::string> seen_nondets;
 
-  // Use the EXACT same logic as generate_testcase
   for (auto const &SSA_step : target.SSA_steps)
   {
     if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
@@ -1299,7 +1287,7 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
         continue;
       }
 
-      // Deduplicate by symbol name (same as generate_testcase)
+      // Deduplicate by symbol name
       if (seen_nondets.count(sym.thename.as_string()))
       {
         continue;

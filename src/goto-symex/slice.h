@@ -26,9 +26,8 @@ protected:
 };
 
 /**
- * Naive slicer: slice every step after the last assertion
- * @param eq symex formula to be sliced
- * @return number of steps that were ignored
+ * Naive slicer: slice every step after the last assertion.
+ * The number of ignored steps is reported via ignored().
  */
 class simple_slice : public slicer
 {
@@ -93,9 +92,9 @@ public:
 
   /**
    * Iterate over all steps of the \eq in REVERSE order,
-   * getting symbol dependencies. If an
-   * assignment, renumber or assume does not contain one
-   * of the dependency symbols, then it will be ignored.
+   * getting symbol dependencies. Assignment and renumber steps whose lhs
+   * is untracked are ignored; assume steps additionally require
+   * --slice-assumes.
    *
    * @param eq symex formula to be sliced
    */
@@ -159,30 +158,6 @@ public:
 
   static expr2tc get_nondet_symbol(const expr2tc &expr);
 
-  /**
-   * Marks SSA_steps to be ignored which have no effects on the target equation,
-   * according to the options set in the `config`.
-   *
-   * Notably, this function depends on the global `config`:
-   *  - "no-slice" in `options` -> perform only simple slicing: ignore everything
-   *    after the final assertion
-   *  - "slice-assumes" in `options` -> also perform slicing of assumption steps
-   *  - `config.no_slice_names` and `config.no_slice_ids` -> suppress slicing of
-   *    particular symbols in non-simple slicing mode.
-   *
-   *    * Note 1: ASSERTS are not sliced, only their symbols are added
-   * into the #depends
-   *
-   *    * Note 2: Similar to ASSERTS, if 'slice-assumes' option is
-   * is not enabled. Then only its symbols are added into the
-   * #depends
-
-   *
-   * @param eq The target equation containing the SSA steps to perform program
-   *           slicing on.
-   * @return Whether any step was sliced away
-   */
-
 protected:
   /// whether assumes should be sliced
   const bool slice_assumes;
@@ -226,21 +201,10 @@ protected:
   bool depends_on_tracked(const expr2tc &expr);
 
   /**
-   * Remove unneeded assumes from the formula
+   * Asserts are never sliced: collect the step's guard/cond symbols into
+   * #depends and record their array reads.
    *
-   * Check if the Assume cond symbol is in the #depends, if
-   * it is not then mark the \SSA_Step as ignored.
-   *
-   * If the assume cond is in the #depends, then add its guards
-   * and cond into the #depends
-   *
-   * Note 1: All the conditions operands are going to be added
-   * into the #depends. This makes that the condition itself as
-   * a "reverse taint"
-   *
-   * TODO: What happens if the ASSUME would result in false?
-   *
-   * @param SSA_step an assume step
+   * @param SSA_step an assert step
    */
   void run_on_assert(symex_target_equationt::SSA_stept &SSA_step) override;
 
@@ -269,8 +233,8 @@ protected:
    * Check if the LHS symbol is in the #depends, if
    * it is not then mark the \SSA_Step as ignored.
    *
-   * If the assume cond is in the #depends, then add its guards
-   * and cond into the #depends
+   * If the LHS is tracked, collect the guard and rhs symbols into #depends
+   * (with dead array-store elision — see the implementation).
    *
    * @param SSA_step an assignment step
    */
@@ -281,11 +245,9 @@ protected:
    *
    * Check if the LHS symbol is in the #depends, if
    * it is not then mark the \SSA_Step as ignored.
+   * Renumber steps never contribute dependencies.
    *
-   * If the assume cond is in the #depends, then add its guards
-   * and cond into the #depends
-   *
-   * @param SSA_step an renumber step
+   * @param SSA_step a renumber step
    */
   void run_on_renumber(symex_target_equationt::SSA_stept &SSA_step) override;
 };

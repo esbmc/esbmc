@@ -64,7 +64,6 @@ void symex_dereference_statet::get_value_set(
     goto_symex.options.get_bool_option("add-symex-value-sets") &&
     goto_symex.options.get_bool_option("inductive-step"))
   {
-    // check whether we have a set of objects.
     if (value_set.empty())
       return;
 

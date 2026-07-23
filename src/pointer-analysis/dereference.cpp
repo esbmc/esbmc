@@ -172,8 +172,8 @@ void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
   case expr2t::index_id:
   case expr2t::member_id:
   {
-    // The result of this expression should be scalar: we're transitioning
-    // from a scalar result to a nonscalar result.
+    // Index/member ops applied on top of a dereference: resolve the chain
+    // to a single dereference at the accumulated offset.
 
     expr2tc res = dereference_expr_nonscalar(expr, guard, mode, expr);
 
@@ -211,7 +211,7 @@ void dereferencet::dereference_guard_expr(
     // circuit.
     assert(is_bool_type(expr));
 
-    // Take the current size of the guard, so that we can reset it later.
+    // Save the guard so we can restore it afterwards.
     guard2tc old_guards(guard);
 
     expr->Foreach_operand([this, &guard, &expr](expr2tc &op) {
@@ -360,8 +360,8 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 {
   if (is_dereference2t(expr))
   {
-    /* The first expression we're called with is index2t, member2t or non-scalar
-     * if2t. Thus, expr differs from base. */
+    /* The first expression we're called with is index2t or member2t.
+     * Thus, expr differs from base. */
     assert(expr != base);
 
     // Check that either the base type that these steps are applied to matches
@@ -462,7 +462,7 @@ expr2tc dereferencet::dereference(
 
   type2tc type = ns.follow(to_type);
 
-  // collect objects dest may point to
+  // collect objects src may point to
   value_setst::valuest points_to_set;
 
   dereference_callback.get_value_set(src, points_to_set);
@@ -534,7 +534,6 @@ expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)
 {
   type2tc the_type = out_type;
 
-  // else, do new symbol
   symbolt symbol;
   symbol.id = "symex::invalid_object" + i2string(invalid_counter++);
   symbol.name = "invalid_object";
@@ -641,7 +640,7 @@ void dereferencet::check_pointer_alignment(
 
   BigInt access_size_bits = type_byte_size_bits(type);
 
-  // Only check alignment for byte-aligned accesses
+  // Only check alignment for whole-byte-sized accesses (skip bit-fields)
   if (access_size_bits % 8 != 0)
     return;
 
@@ -898,7 +897,6 @@ enum target_flags
  * - note:
  *   - st = uses stitching via stitch_together_from_byte_array()
  *   - rec = recurses into build_reference_rec()
- *   - rec* = same as rec*, but also restricted recursion into itself or others
  *   - rec' = only restricted recursion into itself
  *
  * src and dst categories:
@@ -1605,7 +1603,6 @@ void dereferencet::construct_from_dyn_struct_offset(
       continue;
     }
 
-    // Round up to word size
     expr2tc field_offset = constant_int2tc(offset->type, offs);
     expr2tc field_top = constant_int2tc(offset->type, offs + field_size);
     expr2tc lower_bound = greaterthanequal2tc(bits_offset, field_offset);
@@ -1665,7 +1662,6 @@ void dereferencet::construct_from_dyn_offset(
 {
   expr2tc orig_value = value;
 
-  // Else, in the case of a scalar access at the bottom,
   assert(config.ansi_c.endianess != configt::ansi_ct::NO_ENDIANESS);
   assert(is_scalar_type(value));
 
@@ -1958,7 +1954,7 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
     accuml = or2tc(accuml, it->first);
   }
 
-  accuml = not2tc(accuml); // Creates a new 'not' expr. Doesn't copy construct.
+  accuml = not2tc(accuml);
   guard2tc tmp_guard = guard;
   tmp_guard.add(accuml);
   bad_base_type_failure(tmp_guard, "legal dynamic offset", "illegal offset");
@@ -2491,7 +2487,7 @@ void dereferencet::bounds_check(
      * Use capability_top2tc and capability_base2tc to get the upper and
      * lower bounds for the capability.
      *
-     * cheri_bounds assertion will be (addr < top && addr > base)
+     * cheri_bounds violation will be (addr >= top || addr < base)
      *
      */
     expr2tc addr = typecast2tc(ptraddr_type2(), deref);
@@ -2555,12 +2551,6 @@ void dereferencet::bounds_check(
   else
   {
     // Calculate size from type.
-
-    // Dance around getting the array type normalized.
-    type2tc new_string_type;
-
-    // XXX -- arrays were assigned names, but we're skipping that for the moment
-    // std::string name = array_name(ns, expr.source_value);
 
     // Firstly, bail if this is an infinite sized array. There are no bounds
     // checks to be performed.

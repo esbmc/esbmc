@@ -3,7 +3,7 @@
 ///
 /// Maps solc JSON AST node fields (type strings, operator tokens, node kinds)
 /// to the corresponding SolidityGrammar enums. Includes lookup tables for all
-/// uint/int bit-widths, operator precedence, and string-to-enum conversions.
+/// uint/int bit-widths, operator-token mapping, and string-to-enum conversions.
 
 #include <fmt/core.h>
 #include <solidity-frontend/solidity_convert.h>

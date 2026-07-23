@@ -1,4 +1,4 @@
-// Header to define some compmiler diagnostic tweaks for OMs
+// Compiler diagnostic tweaks and C++03/C++11 compatibility macros for OMs
 #pragma once
 
 #define DO_PRAGMA(x) _Pragma(#x)

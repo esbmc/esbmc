@@ -2014,8 +2014,19 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     const constant_floatbv2t &thereal = to_constant_floatbv2t(expr);
     if (int_encoding)
     {
-      if (thereal.value.is_zero() || thereal.value.is_NaN())
+      if (thereal.value.is_zero())
         return mk_smt_real("0");
+      if (thereal.value.is_NaN())
+      {
+        if (ir_ieee)
+        {
+          smt_astt nan_var =
+            mk_fresh(mk_real_sort(), "ir_ieee::nan_const::", nullptr);
+          ir_ieee_api->store_nan_pred(nan_var, mk_smt_bool(true));
+          return nan_var;
+        }
+        return mk_smt_real("0");
+      }
       if (thereal.value.is_infinity())
       {
         // Encode ±∞ as ±double_inf_sentinel (one above double max_normal) for
@@ -2024,7 +2035,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
         // float) produces the same value as a double IEEE_DIV(x,0) result.
         // The double sentinel exceeds both single and double max_normal, so
         // isinf/isfinite predicates work correctly for both precisions.
-        // NaN handling is deferred to the IEEE corner-case phase.
+        // NaN is handled above; infinity is encoded as a sentinel value here.
         smt_astt sentinel = get_double_inf_sentinel();
         if (thereal.value.get_sign())
           return mk_sub(get_zero_real(), sentinel);
@@ -2102,6 +2113,23 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     smt_astt sym_ast = mk_smt_symbol(name, sort);
 
     ir_ieee_api->assert_symbol_range(name, sym_ast, sym);
+
+    if (
+      ir_ieee && is_floatbv_type(sym.type) &&
+      name.rfind("nondet$symex::nondet", 0) == 0)
+    {
+      smt_astt nan_pred =
+        mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", nullptr);
+      ir_ieee_api->store_nan_pred(sym_ast, nan_pred);
+
+      // A nondet float is otherwise an unconstrained real. Without this,
+      // it can take a value strictly between 0 and the smallest subnormal
+      // (a magnitude no floating-point operation ever produces), which
+      // breaks identities like x+0==x now that mk_subnormal_flush()
+      // distinguishes that gap from zero.
+      const floatbv_type2t &fbv_type = to_floatbv_type(sym.type);
+      assert_ast(mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type)));
+    }
 
     return sym_ast;
   }
@@ -3087,12 +3115,18 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
     // we return it, without casting to the ternary if type.
     if2t i = to_if2t(res);
 
+    // c is null when the solver produced no value for the condition (e.g. it
+    // still contains a quantifier); fall through to the operand recursion
+    // below, which handles unresolved sub-expressions.
     expr2tc c = get(i.cond);
-    if (is_true(c))
-      return get(i.true_value);
+    if (c)
+    {
+      if (is_true(c))
+        return get(i.true_value);
 
-    if (is_false(c))
-      return get(i.false_value);
+      if (is_false(c))
+        return get(i.false_value);
+    }
   }
 
   default:;
@@ -3165,7 +3199,14 @@ expr2tc smt_solver_baset::get_by_ast(const type2tc &type, smt_astt a)
   switch (type->type_id)
   {
   case type2t::bool_id:
-    return get_bool(a) ? gen_true_expr() : gen_false_expr();
+  {
+    // A null expr2tc is the established "solver produced no value" signal; the
+    // get() callers already treat it as unresolved (see #6191).
+    tvt val = get_bool(a);
+    if (val.is_unknown())
+      return expr2tc();
+    return val.is_true() ? gen_true_expr() : gen_false_expr();
+  }
 
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
@@ -3856,7 +3897,7 @@ tvt smt_solver_baset::l_get(smt_astt a)
   auto it = l_get_cache.find(a);
   if (it != l_get_cache.end())
     return it->second;
-  tvt res = get_bool(a) ? tvt(true) : tvt(false);
+  tvt res = get_bool(a);
   l_get_cache.emplace(a, res);
   return res;
 }

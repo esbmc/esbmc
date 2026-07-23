@@ -435,7 +435,6 @@ html_report::html_report(
   const optionst &_options)
   : goto_trace(goto_trace), ns(ns), options(_options)
 {
-  // TODO: C++20 reverse view
   for (const goto_trace_stept &step : goto_trace.steps)
   {
     if (step.is_assert() && !step.guard)
@@ -529,7 +528,6 @@ const std::string html_report::generate_body() const
     std::unordered_set<size_t> relevant_lines;
     for (const auto &step : goto_trace.steps)
     {
-      // Only insert non-empty file paths
       std::string file_path = step.pc->location.get_file().as_string();
       if (!file_path.empty())
         files.insert(file_path);
@@ -547,7 +545,7 @@ const std::string html_report::generate_body() const
     body << clang_bug_report::counterexample_checkbox;
     body << clang_bug_report::keyboard_navigation_js;
   }
-  // Counter-Example and Arrows
+  // Per-file annotated source tables
   {
     for (const std::string &file : files)
     {
@@ -621,7 +619,6 @@ void html_report::print_file_table(
 
       comment[0] = toupper(comment[0]);
       oss << comment;
-      //oss << "\n" << from_expr(ns, "", step.pc->guard);
     }
     else if (step.pc->is_assign())
     {
@@ -648,7 +645,6 @@ void html_report::print_file_table(
       break;
   }
 
-  // Table begin
   os << fmt::format(R"(<table class="code" data-fileid="{}">)", file.second);
   for (size_t i = 0; i < lines.size(); i++)
   {
@@ -666,7 +662,6 @@ void html_report::print_file_table(
   }
 
   os << "</table><hr class=divider>";
-  // Table end
 }
 
 void html_report::output(std::ostream &oss) const
@@ -697,7 +692,6 @@ html_report::Language html_report::detect_language(const std::string &filepath)
   if (filepath.empty())
     return Language::Unknown;
 
-  // Check file extension
   size_t dot_pos = filepath.find_last_of('.');
   if (dot_pos == std::string::npos)
     return Language::Unknown;
@@ -716,7 +710,6 @@ html_report::Language html_report::detect_language(const std::string &filepath)
 
 std::string html_report::code_lines::to_html() const
 {
-  // TODO: C++23 has constexpr for regex
   // Use static regex objects for better performance
   static const std::regex cpp_keywords_regex(
     "\\b(auto|break|case|char|const|continue|default|do|double|else|enum|"
@@ -730,7 +723,6 @@ std::string html_report::code_lines::to_html() const
     "nonlocal|not|or|pass|raise|return|try|while|with|yield)"
     "\\b(?=[^\"]*(\"[^\"]*\"[^\"]*)*$)");
 
-  // Choose regex based on language
   const std::regex *keywords_regex;
   if (language == Language::Python)
     keywords_regex = &python_keywords_regex;
@@ -740,7 +732,6 @@ std::string html_report::code_lines::to_html() const
     // No highlighting for unknown languages
     return content;
 
-  // Single regex_replace instead of loop
   return std::regex_replace(
     content, *keywords_regex, "<span class='keyword'>$&</span>");
 }

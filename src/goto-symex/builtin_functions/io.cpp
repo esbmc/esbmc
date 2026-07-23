@@ -555,11 +555,12 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   }
 
   // Model *strp for asprintf/vasprintf: assign a fresh tracked heap allocation.
-  // The buffer size is modelled as 1 byte; exact sizing requires va_list
-  // recovery (G-C, not yet implemented). With --no-bounds-check this is
-  // sufficient to eliminate the false alarms while exact size analysis is
-  // deferred. Users running with --bounds-check should be aware of this
-  // limitation.
+  // The buffer size is modelled as 1 byte; exact sizing would need the
+  // recovered format length (va_list recovery exists — see
+  // recover_va_list_args — but is not yet wired into this allocation's size).
+  // With --no-bounds-check this is sufficient to eliminate the false alarms
+  // while exact size analysis is deferred. Users running with --bounds-check
+  // should be aware of this limitation.
   if (is_allocating && !is_nil_expr(strp) && is_pointer_type(strp->type))
   {
     // Derive char * from strp's declared type (char **) so the dereference

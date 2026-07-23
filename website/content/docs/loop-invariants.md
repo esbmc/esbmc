@@ -14,19 +14,41 @@ prohibitive or hit iteration limits.
 
 Like [function contracts](/docs/function-contracts), loop invariants are
 expressed with built-in constructs placed in the source. The core construct is
-`__ESBMC_loop_invariant(condition)`, placed within the loop body.
+`__ESBMC_loop_invariant(condition)`, placed **before the loop** as a statement
+ending with `;`.
+
+## Choosing a Mode
+
+ESBMC provides **two distinct modes**, and picking the wrong one is the most
+common reason a correct invariant appears not to help. The deciding question is
+**what your post-loop property needs in order to follow**:
+
+| Your property follows from…                                       | Use                      | Cost in the loop bound         |
+| ----------------------------------------------------------------- | ------------------------ | ------------------------------ |
+| the invariant **alone**                                            | `--loop-invariant`       | independent — closes at `k = 2` |
+| the invariant **together with the negated loop condition**         | `--loop-invariant-check` | independent — loop is cut      |
+
+The second row is easy to miss. An invariant like `i <= N && sum == i * 10`
+only yields `sum == N * 10` once you also know `!(i < N)`, i.e. `i == N` at
+exit. That final step is *exit reasoning*, and only `--loop-invariant-check`
+performs it. Under `--loop-invariant` such a property falls back to bounded
+unrolling and will report `VERIFICATION UNKNOWN` once the bound exceeds the
+k-induction step limit.
+
+Properties over an array filled by the loop — `__ESBMC_forall(&i, !(i < N) ||
+p[i] == 0)` and friends — are almost always in the second row, since they need
+`i == N` at exit.
 
 ## Verification Modes
 
-ESBMC provides **two distinct modes** for loop invariant verification.
+### `--loop-invariant` — Combined Mode
 
-### `--loop-invariant` — Combined Mode (Default, Recommended)
+Integrates invariant checking with k-induction. The invariant is used as an
+assumption that strengthens the inductive step, so whenever the property
+follows from the invariant alone, verification closes at a small `k`
+regardless of how large the loop bound is.
 
-This is the recommended mode. It integrates invariant checking with k-induction
-for robust analysis, eliminating the spurious counterexamples that the legacy
-mode could produce for correct-but-weak invariants.
-
-> **Note:** `--loop-invariant` now implicitly enables k-induction. No extra
+> **Note:** `--loop-invariant` implicitly enables k-induction. No extra
 > flags are required.
 
 **How it works — two-branch transformation:**
@@ -56,47 +78,107 @@ GOTO loop_head
 | Correct but weak      | Passes                                               | Proves property via forward condition |
 | Correct and strong    | Passes                                               | Closes at inductive step              |
 
-### `--loop-invariant-check` — Legacy Mode
+The last row holds when the property follows from the invariant alone. If it
+also needs the negated loop condition, the inductive step cannot close and
+k-induction falls back to unrolling — see [Choosing a Mode](#choosing-a-mode).
 
-The original three-part havoc abstraction is preserved under this flag for
-backward compatibility. It replaces the annotated loop with:
+### `--loop-invariant-check` — Havoc Abstraction Mode
+
+Applies the classic Hoare rule, replacing the annotated loop with:
 
 1. **Base-case assertion** — invariant holds on entry
 2. **Havoc + Assume** — abstracts the loop body nondeterministically
 3. **Inductive-step assertion** — invariant still holds after one iteration
 
-This mode avoids loop unrolling entirely, making it faster when the only goal is
-checking invariant inductivity without k-induction overhead. However, it **may
-produce spurious counterexamples** for invariants that are correct but weak,
-because the havoc step can assign values outside the expected program state
-without proper constraint propagation.
+The loop is then cut, so this mode **avoids loop unrolling entirely** and its
+cost does not grow with the loop bound. It is the only mode that performs exit
+reasoning (`invariant && !condition` at the loop exit), which makes it the
+required choice for the second row of [Choosing a Mode](#choosing-a-mode).
 
-> Use `--loop-invariant-check` only when speed is the priority and you
-> understand the false-positive risk.
+Two caveats:
 
-## Example: Basic Loop Invariant Usage
+- It **may produce spurious counterexamples** for invariants that are correct
+  but too weak, because the havoc step can assign values outside the expected
+  program state without proper constraint propagation. Strengthen the invariant
+  until it entails the property you are proving.
+- Cutting the loop establishes **partial correctness** only: termination is not
+  proved. Use `--termination` separately if you need it.
+
+## Example: Property Follows From the Invariant Alone
+
+`x == y` is exactly what the assertion needs, so the inductive step closes at
+`k = 2` and the loop bound is irrelevant — this verifies as quickly at `100000`
+as at `10`.
 
 ```c
-int main() {
-    int i = 0;
-    int sum = 0;
+#include <assert.h>
 
-    __ESBMC_loop_invariant(i >= 0 && i <= 1000 && sum == i * 10);
+int main(void) {
+    unsigned int x = 0;
+    unsigned int y = 0;
+
+    __ESBMC_loop_invariant(x == y);
+    while (x < 100000) {
+        x++;
+        y++;
+    }
+
+    assert(x == y);
+    return 0;
+}
+```
+
+```bash
+esbmc file.c --loop-invariant
+# VERIFICATION SUCCESSFUL — Solution found by the inductive step (k = 2)
+```
+
+## Example: Property Needs the Exit Condition
+
+Here `sum == 10000` follows only from `sum == i * 10` *and* `i == 1000`, and
+the latter needs `!(i < 1000)` at exit. This is the case that requires
+`--loop-invariant-check`; under `--loop-invariant` it reports
+`VERIFICATION UNKNOWN` because the bound exceeds the k-induction step limit.
+
+```c
+#include <assert.h>
+
+int main(void) {
+    unsigned int i = 0;
+    unsigned int sum = 0;
+
+    __ESBMC_loop_invariant(i <= 1000 && sum == i * 10);
     while (i < 1000) {
         sum += 10;
         i++;
     }
 
-    assert(sum == 10000);  // Successfully verified
+    assert(sum == 10000);
     return 0;
 }
 ```
 
-Verify with:
-
 ```bash
-esbmc file.c --loop-invariant
+esbmc file.c --loop-invariant-check
+# VERIFICATION SUCCESSFUL
 ```
+
+The same shape appears whenever a loop fills an array and the postcondition
+quantifies over it, which is why array contracts under `--enforce-contract`
+normally want `--loop-invariant-check`:
+
+```c
+__ESBMC_ensures(__ESBMC_forall(&i, !(i < N) || (a->e[i] >= 0 && a->e[i] < Q)));
+
+__ESBMC_loop_invariant(i <= N && __ESBMC_forall(&j, !(j < i) ||
+                       (a->e[j] >= 0 && a->e[j] < Q)));
+for (i = 0; i < N; i++)
+  a->e[i] = reduce(a->e[i]);
+```
+
+With `--loop-invariant-check` this discharges in a fraction of a second for any
+`N`, and `--unwind` only has to cover the rest of the function rather than the
+loop.
 
 ## Companion Options
 
@@ -122,17 +204,21 @@ incorrect invariant will lead to a failed base-case assertion in
 `--loop-invariant` mode, or potentially a spurious result in
 `--loop-invariant-check` mode.
 
-> **Note:** The integer overflow false-positive issue present in the legacy mode
-> (caused by unconstrained havoc operations) has been resolved in the new
-> `--loop-invariant` combined mode. If you observe such false positives, ensure
-> you are not using `--loop-invariant-check`.
+> **Note:** `--loop-invariant-check` havocs every loop-modified variable, so an
+> invariant that does not constrain them enough can yield a false positive
+> (commonly an integer-overflow report). `--loop-invariant` does not have this
+> failure mode. If you hit it, either strengthen the invariant or, when the
+> property follows from the invariant alone, switch to `--loop-invariant`.
 
-## Backward Compatibility
+## Mode Summary
 
-The `--loop-invariant` flag now routes to the new combined mode. The legacy
-behavior is accessible via `--loop-invariant-check`. Programs without loop
-invariant annotations continue to use the standard k-induction unwinding
-approach.
+|                          | Unrolls the loop | Exit reasoning | Weak invariant           |
+| ------------------------ | ---------------- | -------------- | ------------------------ |
+| `--loop-invariant`       | yes              | no             | falls back to unrolling  |
+| `--loop-invariant-check` | no               | yes            | may report false positive |
+
+Programs without loop invariant annotations continue to use the standard
+k-induction unwinding approach under either flag.
 
 ## Loop Frame Rule (`--loop-frame-rule`)
 

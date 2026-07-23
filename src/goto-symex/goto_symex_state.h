@@ -103,6 +103,8 @@ public:
     guard2tc guard;
     unsigned int thread_id;
     variable_name_sett local_variables;
+    std::shared_ptr<void>
+      interval_snapshot; // interval_domaint::interval_map; set in symex_goto.cpp
 
     explicit merge_statet(const goto_symex_statet &s)
       : num_instructions(s.num_instructions),
@@ -122,7 +124,8 @@ public:
         value_set(s.value_set),
         guard(s.guard),
         thread_id(s.thread_id),
-        local_variables(s.local_variables)
+        local_variables(s.local_variables),
+        interval_snapshot(s.interval_snapshot)
     {
     }
 
@@ -389,19 +392,18 @@ public:
   void get_original_name(expr2tc &expr) const;
 
   /**
-   *  Print stack trace of state to osstream.
+   *  Print stack trace of state to an output stream.
    *  Takes all the current function calls and produces an indented stack
-   *  trace, then prints it to stdout.
+   *  trace, written to the given stream.
    *  @param indent Number of spaces to indent contents by.
-   *  @param oss output stream to output
+   *  @param os Output stream to write to.
    */
   void print_stack_trace(unsigned int indent, std::ostream &os) const;
 
   /**
-   *  Generate set of strings making up a stack trace.
-   *  From the current thread state, produces a set of strings recording the
-   *  current function invocations on the stack, and returns them.
-   *  @return Vector of strings describing the current function calls in state.
+   *  Generate a stack trace as a vector of stack_framet, one per function
+   *  invocation on the current call stack.
+   *  @return Vector of stack frames.
    */
   std::vector<stack_framet> gen_stack_trace() const;
 

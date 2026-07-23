@@ -22,9 +22,10 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   bool new_guard_false = (is_false(new_guard) || cur_state->guard.is_false());
   bool new_guard_true = is_true(new_guard);
 
-  // new_guard_false = TRUE means that the guard is false,
-  // new_guard_true = TRUE means that the guard is true.
-  // And if both variables are not TRUE we need to ask the solver whether the guard holds.
+  // new_guard_false: the branch is provably not taken (guard simplifies to
+  // false, or the current path is already dead). new_guard_true: the guard
+  // simplifies to true. When neither is known and --smt-symex-guard is on,
+  // ask the solver.
   if (
     !new_guard_false && !new_guard_true &&
     options.get_bool_option("smt-symex-guard"))
@@ -220,6 +221,13 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
   merge_state_list.emplace_back(*cur_state);
   record_branch_sibling(new_state_pc, std::prev(merge_state_list.end()));
+
+  // Capture the interval domain at the if-branch end so phi_function can JOIN
+  // both branches.  Deep-copy so subsequent else-branch writes don't corrupt it.
+  if (interval_domain_state)
+    merge_state_list.back().interval_snapshot =
+      std::make_shared<interval_domaint::interval_map>(
+        *interval_domain_state->intervals);
 
   // adjust guards
   if (new_guard_true)
@@ -460,6 +468,18 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     cur_state->rename_type(new_lhs);
     cur_state->rename_type(rhs);
     cur_state->assignment(new_lhs, rhs);
+
+    // process_instruction never sees synthetic phi assignments; update the
+    // interval domain here using the if-branch snapshot so the JOIN is correct
+    // (both SSA names share the same base-name key in the domain).
+    if (
+      interval_domain_state && merge_state.interval_snapshot &&
+      !cur_state->guard.is_false() && !merge_state.guard.is_false())
+    {
+      auto snap = std::static_pointer_cast<interval_domaint::interval_map>(
+        merge_state.interval_snapshot);
+      interval_domain_state->phi_join_with_snapshot(new_lhs, snap);
+    }
 
     target->assignment(
       gen_true_expr(),

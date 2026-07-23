@@ -8,8 +8,10 @@
 // Each concrete kind exposes a `static constexpr auto fields` tuple of
 // member pointers covering its user-visible fields, plus a static
 // `field_names` array naming them in tuple order. The generic_*<K>
-// helpers below walk that tuple via std::apply to implement cmp/lt/hash/
-// tostring/clone/get_sub_expr/foreach_operand uniformly. The
+// helpers below walk that tuple via std::apply to implement cmp/lt/
+// tostring/get_sub_expr/foreach_operand uniformly (crc and clone are built
+// on the same `fields` tuple in irep2_crc.cpp and irep2_expr.cpp /
+// irep2_type.cpp). The
 // switch-on-id dispatchers on expr2t / type2t pick the right helper
 // per kind from the X-macro manifests (`expr_kinds.inc`,
 // `type_kinds.inc`).
@@ -26,7 +28,7 @@
 
 // ============================================================================
 // Per-field operations the generic dispatchers invoke on every K::fields
-// entry: pretty-printing, structural cmp/lt, SHA-1 ingestion, and
+// entry: pretty-printing, structural cmp/lt, crc/hash ingestion, and
 // sub-expression / delegate iteration. Primary templates cover trivially
 // comparable field types; explicit overloads handle BigInt,
 // std::vector<...>, and null-safe expr2tc/type2tc dispatch.

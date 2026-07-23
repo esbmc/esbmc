@@ -34,6 +34,12 @@ void clang_cpp_languaget::force_file_type(
   // Force clang see all files as .cpp
   compiler_args.push_back("-x");
   compiler_args.push_back("c++");
+
+  /* Clang gives std::addressof a BuiltinAttr and rewrites calls to it, which
+   * discards the operational model's definition and leaves symex a body-less
+   * function returning a nondet pointer (github #6063). We need the real
+   * body, so opt out of the builtin. */
+  compiler_args.emplace_back("-fno-builtin-std-addressof");
 }
 
 void clang_cpp_languaget::build_include_args(

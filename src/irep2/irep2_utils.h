@@ -200,7 +200,7 @@ inline bool is_true(const expr2tc &expr)
  *  then whether it's false-valued. If these are both true, return true,
  *  otherwise return false.
  *  @param expr Expression to check for false value.
- *  @return Whether or not expr is true-valued.
+ *  @return Whether or not expr is false-valued.
  */
 inline bool is_false(const expr2tc &expr)
 {

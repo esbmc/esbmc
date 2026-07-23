@@ -107,9 +107,6 @@ private:
 
   // ---- shared IEEE / complex arithmetic helpers ----
 
-  /// Builds a binary IEEE-754 operation node (e.g. ieee_add, ieee_mul).
-  static exprt ieee_binop(const irep_idt &id, const exprt &x, const exprt &y);
-
   /// Complex multiplication: (a+bi)(c+di) = (ac-bd)+(ad+bc)i.
   exprt complex_mul(const exprt &x, const exprt &y) const;
 

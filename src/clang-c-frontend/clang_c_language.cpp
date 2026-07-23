@@ -264,8 +264,8 @@ void clang_c_languaget::build_compiler_args(
   // Increase maximum bracket depth
   compiler_args.push_back("-fbracket-depth=1024");
 
-  // Add -Wunknown-attributes, preprocessed files with GCC generate a bunch
-  // of __leaf__ attributes that we don't care about
+  // Suppress -Wunknown-attributes: GCC-preprocessed files carry a bunch of
+  // __leaf__ etc. attributes that we don't care about
   compiler_args.emplace_back("-Wno-unknown-attributes");
 
   // Suppress incompatible-pointer-types universally; became a hard error in
@@ -458,10 +458,6 @@ void clang_c_languaget::show_parse(std::ostream &)
 
 bool clang_c_languaget::preprocess(const std::string &, std::ostream &)
 {
-// TODO: Check the preprocess situation.
-#if 0
-  return c_preprocess(path, outstream, false);
-#endif
   return false;
 }
 
@@ -604,7 +600,14 @@ _Noreturn void __ESBMC_unreachable();
  * int i = 0;
  * __ESBMC_forall(&i, i < 0);
  *
- * This will return false, because 'i' became a local variable i.e, it means "forall i \in [min(int), (max(int))] . i < 0" */
+ * This will return false, because 'i' became a local variable i.e, it means "forall i \in [min(int), (max(int))] . i < 0"
+ *
+ * The body may call functions built from local declarations, straight-line
+ * assignments, if/else, and loops with a statically constant trip count: such a
+ * callee is summarized (loops unrolled, branches muxed) into a single pure
+ * expression (GitHub #6154).  Functions with a data-dependent trip count,
+ * pointer/array writes, recursion, or other non-summarizable shapes are still
+ * rejected inside a quantifier. */
 
 _Bool __ESBMC_forall(void*, _Bool);
 _Bool __ESBMC_exists(void*, _Bool);

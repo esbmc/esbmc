@@ -68,7 +68,8 @@ void goto_symext::symex_decl(const expr2tc &code)
 
   const code_decl2t &decl_code = to_code_decl2t(code2);
 
-  // just do the L2 renaming to preserve locality
+  // allocate a fresh level-1 instance of the declared variable to preserve
+  // locality
   const irep_idt &identifier = decl_code.value;
 
   // Generate dummy symbol as a vehicle for renaming.
@@ -118,7 +119,8 @@ void goto_symext::symex_dead(const expr2tc &code)
 
   const code_dead2t &dead_code = to_code_dead2t(code2);
 
-  // just do the L2 renaming to preserve locality
+  // drop the variable's L1 identity from value-set tracking and the
+  // live-locals map
   const irep_idt &identifier = dead_code.value;
 
   // Generate dummy symbol as a vehicle for renaming.

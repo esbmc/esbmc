@@ -571,8 +571,6 @@ void execution_statet::restore_last_paths()
     new_gs.num_instructions = gs.num_instructions;
     new_gs.guard = gs.guard;
     assert(new_gs.thread_id == gs.thread_id);
-
-    // And that is it!
   }
 
   list.clear();
@@ -1196,8 +1194,9 @@ void execution_statet::switch_to_monitor()
 
   if (monitor_tid != get_active_state_number())
   {
-    // Don't call switch_to_thread -- it'll execute the thread guard, which is
-    // an extremely bad plan.
+    // Bypass switch_to_thread: a monitor switch must not be followed by
+    // update_after_switch_point/execute_guard, and must adopt the source
+    // thread's guard instead.
     last_active_thread = active_thread;
     active_thread = monitor_tid;
     cur_state = &threads_state[active_thread];
@@ -1223,8 +1222,9 @@ void execution_statet::switch_away_from_monitor()
     monitor_tid == active_thread &&
     "Must call switch_from_monitor from monitor thread\n");
 
-  // Don't call switch_to_thread -- it'll execute the thread guard, which is
-  // an extremely bad plan.
+  // Bypass switch_to_thread: a monitor switch must not be followed by
+  // update_after_switch_point/execute_guard, and must adopt the monitor
+  // thread's guard instead.
   last_active_thread = active_thread;
   active_thread = monitor_from_tid;
   cur_state = &threads_state[active_thread];

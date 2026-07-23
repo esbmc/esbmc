@@ -308,8 +308,9 @@ void symex_target_equationt::renumber(
 
 void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
 {
-  // Register address-taken objects first so int-to-ptr casts see the full
-  // set of candidate objects regardless of source-level declaration order.
+  // Pre-register address-of'd string/array literals so int-to-ptr casts see
+  // them regardless of source-level declaration order (see
+  // pre_register_addresses for scope).
   pre_register_addresses(smt_conv, SSA_steps.begin(), SSA_steps.end());
 
   equation_conversion_statet state;
@@ -562,12 +563,11 @@ void runtime_encoded_equationt::flush_latest_instructions()
       // There is in fact, nothing to do
       return;
     }
-
-    // Just roll on
   }
 
-  // Register address-taken objects first so int-to-ptr casts see the full
-  // set of candidate objects regardless of source-level declaration order.
+  // Pre-register address-of'd string/array literals so int-to-ptr casts see
+  // them regardless of source-level declaration order (see
+  // pre_register_addresses for scope).
   pre_register_addresses(conv, run_it, SSA_steps.end());
 
   // Now iterate from the start insn to convert, to the end of the list.

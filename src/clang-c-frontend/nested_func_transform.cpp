@@ -350,7 +350,8 @@ static bool is_non_func_keyword(const std::string &s)
 // Try to parse a function definition starting at toks[idx].
 // Returns true if successful, and fills the nested_func struct.
 // `enclosing_name` is the name of the function we're currently inside.
-// Only call this when brace_depth >= 1 (inside a function body).
+// Parses any function definition; find_nested_functions uses it at file
+// scope to locate enclosers and inside bodies to locate nested definitions.
 static bool try_parse_func_def(
   const std::vector<token> &toks,
   size_t idx,
@@ -1341,7 +1342,6 @@ static std::string capture_param_name(
 //  Identifier rewriting
 // -----------------------------------------------------------------------
 
-// Replace identifiers in `text` according to `replacements` map.
 // Replace identifiers in `text` according to `replacements`.  Scope-aware:
 // names listed in `scope_aware_names` are replaced only when no enclosing
 // scope on the walker's stack declares them (so inner-block declarations

@@ -449,6 +449,11 @@ public:
   smt_astt get_single_min_subnormal();
   // Returns SMT AST representing single precision maximum normal value (~3.4028234663852886e+38)
   smt_astt get_single_max_normal();
+  // Under --ir-ieee, returns ite(|r| < min_subnormal, 0, r) for single/double,
+  // modelling IEEE 754 flush-to-zero for results below the subnormal threshold.
+  // Returns r unchanged for unsupported formats.
+  smt_astt mk_subnormal_flush(smt_astt r, const floatbv_type2t &fbv_type);
+
   // Returns SMT AST for the integer-encoding sentinel for double +∞: max_normal+1
   smt_astt get_double_inf_sentinel();
   // Returns SMT AST for the integer-encoding sentinel for single +∞: max_normal+1
@@ -480,7 +485,6 @@ public:
    *  @param s the sort.
    *  @param theint Integer representation of the bitvector. Any excess bits
    *         in the stored integer should be ignored.
-   *  @param w Width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
   virtual smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) = 0;
 
@@ -551,8 +555,10 @@ public:
 
   /** Extract the assignment to a boolean variable from the SMT solver's model.
    *  @param a The AST whose value we wish to know.
-   *  @return Expression representation of a's value, as a constant_bool2tc */
-  virtual bool get_bool(smt_astt a) = 0;
+   *  @return a's value, or tvt::TV_UNKNOWN when the solver cannot reduce it to
+   *          a ground boolean. That is an expected outcome for terms that still
+   *          contain a quantifier: callers must not invent a value for it. */
+  virtual tvt get_bool(smt_astt a) = 0;
 
   /** Extract the assignment to a bitvector from the SMT solver's model.
    *  @param a The AST whose value we wish to know.
@@ -578,8 +584,9 @@ public:
    *  @name Integer overflow solver-converter API. */
 
   /** Detect integer arithmetic overflows. Takes an expression that is one of
-   *  add / sub / mul, and evaluates whether its operation applied to its
-   *  operands will result in an integer overflow or underflow.
+   *  add / sub / mul / div / modulus / shl, and evaluates whether its
+   *  operation applied to its operands will result in an integer overflow or
+   *  underflow.
    *  @param expr Expression to test for arithmetic overflows in.
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_arith(const expr2tc &expr);
