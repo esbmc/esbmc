@@ -4201,3 +4201,40 @@ helper is the natural next candidate.
 ### 87b. Everything else: unchanged disposition
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. The §5 priority order stands.
+
+## 88. 2026-07-22 re-validation (seventy-eighth sweep) & format() typeless float spec via the shared helper
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. §87b nominated wiring
+`py_format_number`'s default-typed float path to the shared shortest-repr helper; this sweep does it.
+(Stacked on §87 / PR #6247, which makes `cpython_float_str` public and total.)
+
+### 88a. Default-typed float format specs now fold instead of rejecting
+`py_format_number` (`src/python-frontend/function_call/str_conv.cpp`) renders a constant number under
+a `str.format`/`format()` spec. Its float branch **required an explicit presentation type**
+(`f`/`e`/`g`/`%`) and returned `nullopt` for a typeless spec, so `format(1.5, "10")`, `format(-1.5,
+"08")`, `format(1.5, "=+10")` — width/align/sign/zero-pad with no type — degraded to the sound
+`ERROR: format() spec ... is not supported` rejection (a nondet string), even though CPython renders
+them as `str()` then pads.
+
+**Fix**: accept `type == 0` and render the digits with `string_handler::cpython_float_str(ad)` (the
+§87 shared shortest-repr helper) on the magnitude, then reuse the existing sign/width/align/zero-pad
+machinery. The explicit-type path (snprintf with the spec's precision) is unchanged. The default-type
+combinations that are *not* modelled still return `nullopt` and reject cleanly: grouping
+(`format(1234.5, ",")` — needs the fill to participate in grouping) and default-type precision
+(`format(1.5, ".2")` — a distinct `g`-like fold). `#` was already rejected for floats.
+
+This is a **feature-completeness fix** with the soundness boundary intact (unsupported specs still get
+a clean `ERROR`, never a wrong fold). New regression pair
+`regression/python/format_default_float_spec{,_fail}` (CORE): the positive covers width/align/sign/
+zero-pad (`"10"`, `"<10"`, `"^10"`, `"08"`, `"=+10"`), inexact and exponential values (`0.3...004`,
+`1e-05`, `1e16`), and a whole-number float; the `_fail` pins `format(1.5, "10") == "1.5"` as `FAILED`.
+Every positive assertion was cross-checked against CPython `format`; declined specs (grouping,
+default-type precision) confirmed to still reject cleanly; all `format`/`str_format`/`percent`/`repr`
+regression tests pass (202-test format subset green).
+
+`format(x, ".2")`-style default-type precision (CPython's `g`-like fold with a decimal-point
+guarantee) and typeless-float grouping remain the next candidates.
+
+### 88b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.
