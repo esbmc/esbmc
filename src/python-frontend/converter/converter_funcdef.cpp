@@ -856,10 +856,8 @@ size_t python_converter::register_function_argument(
   std::string arg_name = element["arg"].get<std::string>();
   typet arg_type;
 
-  if (arg_name == "self")
+  if (arg_name == "self" || arg_name == "cls")
     arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
-  else if (arg_name == "cls")
-    arg_type = any_type();
   else
   {
     if (!element.contains("annotation") || element["annotation"].is_null())
