@@ -541,7 +541,7 @@ bool goto_convert_functionst::convert_native_rec(
     // runs an unwind-before-RETURN (C++ [stmt.return]: capture the value into a
     // temp, run the destructors, then return the temp; a constant value takes a
     // simpler sub-path). Reproducing that natively would allocate a
-    // return_value$ temp from the shared tmp_symbol counter -- the byte-identity
+    // $tmp::tmp$ temp from the shared tmp_symbol counter -- the byte-identity
     // hazard this dispatcher avoids -- so delegate the whole return statement to
     // the legacy convert()/convert_return rather than fall back the entire
     // function. convert_return leaves the destructor stack unchanged (its unwind
