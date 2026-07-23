@@ -371,8 +371,20 @@ void clang_cpp_convertert::add_thunk_method(
   symbolt &added_thunk_symbol =
     *context.move_symbol_to_context(thunk_func_symb);
 
+  // The thunk populates a slot in *this base's* vtable, so it must be keyed by
+  // the base method's virtual_name, not the derived method's. These coincide
+  // for single inheritance, but when the derived method overrides the same
+  // signature from several bases (e.g. every derived destructor, or C::f with
+  // A::f and B::f), get_ultimate_overridden_method() cannot pick a unique base
+  // and keys `component` by the derived method itself. Recover the correct key
+  // per overridden base here so each base's slot is actually overridden (#6198).
+  std::string base_virtual_name, base_virtual_id;
+  get_decl_name(
+    *get_ultimate_overridden_method(&md), base_virtual_name, base_virtual_id);
+
   // add thunk function as a `method` in the derived class' type
-  add_thunk_component_to_type(added_thunk_symbol, type, component);
+  add_thunk_component_to_type(
+    added_thunk_symbol, type, component, base_virtual_id);
 }
 
 void clang_cpp_convertert::set_thunk_name(
@@ -568,11 +580,13 @@ void clang_cpp_convertert::add_thunk_method_body_no_return(
 void clang_cpp_convertert::add_thunk_component_to_type(
   const symbolt &thunk_func_symb,
   struct_typet &type,
-  const struct_typet::componentt &comp)
+  const struct_typet::componentt &comp,
+  const irep_idt &virtual_name)
 {
   struct_typet::componentt new_compo = comp;
   new_compo.type() = thunk_func_symb.get_type();
   new_compo.set_name(thunk_func_symb.id);
+  new_compo.set("virtual_name", virtual_name);
   type.methods().push_back(new_compo);
 }
 
