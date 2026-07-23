@@ -441,16 +441,15 @@ bool goto_convert_functionst::convert_native_rec(
     if (s == nullptr)
       return false;
 
-    // convert_decl (goto_convert.cpp) has several paths this native handler
-    // does not reproduce; fall back on each so flag-on stays byte-identical:
+    // Fall back on the two convert_decl shapes this handler neither reproduces
+    // natively nor delegates, so flag-on stays byte-identical:
     //  - a static-lifetime or code-typed symbol is a no-op SKIP,
     //  - an array type may be a VLA needing rewrite_vla_decl / a dynamic-size
-    //    generator — exclude all arrays conservatively,
-    //  - a type with a destructor pushes a second stack entry and lowers a
-    //    FUNCTION_CALL at scope exit,
-    //  - a temporary_object or side-effect initializer is lowered.
-    // What remains is exactly convert_decl's plain path: a DECL, an optional
-    // side-effect-free ASSIGN, and one scope-exit code_dead.
+    //    generator — exclude all arrays conservatively.
+    // A destructible type or an initializer needing lowering is delegated to
+    // convert_decl just below; everything else is convert_decl's plain path
+    // (a DECL, an optional side-effect-free ASSIGN, and one scope-exit code_dead)
+    // reproduced natively after that.
     if (
       s->static_lifetime || s->get_type().is_code() || s->get_type().is_array())
       return false;
@@ -473,13 +472,14 @@ bool goto_convert_functionst::convert_native_rec(
     // initializer registers in `targets` are covered by convert_function's
     // snapshot/restore on a later fallback. Restore the initializer's
     // value-operand locations first, as the legacy body round-trip does.
+    // A top-level temporary_object is itself a side effect, so has_sideeffect
+    // already subsumes it (as the assign handler above relies on); only the
+    // side-effect-free top-level ternary needs the extra id() == "if" test.
     code_function_callt destructor;
     const bool needs_convert_decl =
       get_destructor(ns, s->get_type(), destructor) ||
       (initializer.is_not_nil() &&
-       (has_sideeffect(initializer) || initializer.id() == "if" ||
-        (initializer.id() == "sideeffect" &&
-         initializer.statement() == "temporary_object")));
+       (has_sideeffect(initializer) || initializer.id() == "if"));
     if (needs_convert_decl)
     {
       exprt op = migrate_expr_back(code2);
