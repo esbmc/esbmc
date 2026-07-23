@@ -2339,28 +2339,27 @@ bool function_call_expr::is_list_method_call() const
   }
 
   // append/insert/remove/extend/sort/reverse/appendleft/popleft are list-only
-  // mutators. Claim them *positively* — only when the receiver actually resolves
-  // to a list — mirroring the count/index/pop/copy/clear guards above. A
-  // non-list receiver (str, bytes, int, or a str/bytes reached through an
-  // attribute or subscript) then falls through to the general handler, which
-  // raises the correct AttributeError instead of being routed into the list
-  // model, where a char array is passed where a list pointer is expected and
-  // aborts GOTO conversion (#6264).
-  //
-  // A list *literal* / BinOp receiver (`[1, 2].append(x)`, `(a + b).append(x)`)
-  // has no symbol yet, so claim it directly. get_object_list_symbol resolves
-  // Name, Subscript, Attribute (via a $attr_list$ temp) and Call (via a
-  // $call_list$ temp) receivers, returning non-null only for list_type, so it
-  // covers self.items.append / nested[i].append / f().append while excluding
-  // str/bytes.
+  // mutators. The #6264 crash is specifically a *character array* (str/bytes)
+  // receiver routed into the list model, where __ESBMC_list_push is handed an
+  // array where it expects a PyListObject* and aborts GOTO conversion. Claim the
+  // call unless the receiver resolves to such an array type. Every other receiver
+  // is routed into the list model, matching the historical catch-all here:
+  //   - a genuine list is a PyListObject* (a pointer, not an array);
+  //   - a value the annotator can only type loosely still routes correctly —
+  //     e.g. `m = min([l]); m.append(x)`, where min() is typed int though it
+  //     returns the list itself (#5955). A pure `resolves-to-list_type` positive
+  //     check is unsound here: it drops that receiver (whose static type is int)
+  //     and regresses the test.
+  // str/bytes reached through a Name, an attribute, or a subscript all resolve to
+  // an array type, so this also excludes `self.s.append(...)` and
+  // `xs[0].append(...)` (#6264 review), which then fall through to the correct
+  // AttributeError path.
   {
     const std::string recv_type = call_["func"]["value"].value("_type", "");
     if (recv_type == "List" || recv_type == "BinOp" || recv_type == "ListComp")
       return true;
-    std::string dummy;
-    const symbolt *sym = get_object_list_symbol(dummy);
-    const typet list_type = type_handler_.get_list_type();
-    return sym != nullptr && sym->get_type() == list_type;
+    const exprt recv = converter_.get_expr(call_["func"]["value"]);
+    return !converter_.ns.follow(recv.type()).is_array();
   }
 }
 
