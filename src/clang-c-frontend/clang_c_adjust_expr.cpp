@@ -199,12 +199,8 @@ void clang_c_adjust::adjust_expr(exprt &expr)
       exprt func = expr.op1();
       code_typet &code_type = to_code_type(func.type().subtype());
       exprt arg0 = address_of_exprt(expr.op0());
-      // The implicit object (`this`) is the *first* parameter of the pointed-to
-      // member function, ahead of the explicit ones. Inserting its type at the
-      // front keeps the parameter list aligned with the call's argument list
-      // (this, arg1, ...); appending it at the back shifted every explicit
-      // argument by one and mismatched `this` for any member function taking
-      // parameters (#6293).
+      // `this` is the first parameter; appending its type at the back instead
+      // shifted every explicit argument by one (#6293).
       code_type.arguments().insert(
         code_type.arguments().begin(), code_typet::argumentt(arg0.type()));
       expr.swap(func);
