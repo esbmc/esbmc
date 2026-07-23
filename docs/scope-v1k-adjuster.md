@@ -3,10 +3,28 @@
 **Program:** Part V of `docs/irep2-migration.md` (IREP2-native frontend→goto, #4715).
 **Question this scopes:** is the whole-body "resolve-then-build" adjuster the right
 next step to close the V.3 residue, and if so, what exactly does it own?
-**Status:** Spike-1 executed 2026-07-03 — **adjuster ruled unnecessary** (§5.1);
-converter-construction 100% is a small inline task. **Owner:** TBD. **Refs:**
-#4715, #5055; sibling doc `docs/spike-v1k-w1loc.md` (the *other*, larger
-keystone — see §6).
+**Status (updated 2026-07-23):** §5.1's Spike-1 conclusion ("adjuster
+unnecessary; finish inline") held *for Goal A* — **converter-construction 100%
+is now complete**: every arithmetic/relational/member/index node the Python
+converter returns is built IREP2-native, the last legacy `plus_exprt` (pointer-
+source indexing) drained in PR #6323. So §5.1's Goal-A recommendation was
+carried out. But the adjuster was **not** retired: the §5a contingency was taken
+for a *different* reason than Goal A — the whole-body `python_adjust` pass
+(`--python-irep2-adjust`, default off) was built out (S1/S2 type+aggregate
+completion #5985/#5988, exception-id/finally/call-rewrite flip-prep
+#5992/#5995/#5996, S4 width reconcile #5999) toward the **flip** that replaces
+`clang_cpp_adjust` on the Python path (Goal B / §5a B.5), which the sibling
+W1-loc keystone (`docs/spike-v1k-w1loc.md`) does not cover. Remaining flip
+blockers: "bases" carriage, S3 member/index at scale, S5 arg casts (the
+adjust()-error-return blocker is discharged, `python_language.cpp:325`). **Owner:**
+TBD. **Refs:** #4715, #5055, #6323; sibling doc `docs/spike-v1k-w1loc.md`.
+
+> **Correction to §5.1 / §5a below.** The "adjuster is unnecessary — retire the
+> dead pass" wording in §5.1 is scoped to **Goal A only** and is now realised by
+> the inline drains completing (#6323). It must *not* be read as a
+> recommendation to delete `python_adjust.{h,cpp}`: that pass is live,
+> flag-gated infrastructure for the clang_cpp_adjust-replacement flip (§5a was
+> taken for that purpose). The "NOT taken" annotation on §5a is stale.
 
 ---
 
