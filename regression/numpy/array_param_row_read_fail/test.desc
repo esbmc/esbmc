@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: 'int' object is not subscriptable
+^ERROR: TypeError: returning a copied numpy view is not supported
