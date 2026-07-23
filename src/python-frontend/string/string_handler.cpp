@@ -32,6 +32,7 @@
 #include <cmath>
 #include <cctype>
 #include <climits>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iomanip>
@@ -708,46 +709,36 @@ std::string string_handler::float_to_string(
   return oss.str();
 }
 
-std::optional<std::string> string_handler::cpython_float_str(double d)
+std::string string_handler::cpython_float_str(double d)
 {
-  // std::to_string / setprecision(6) below honour the host FP rounding mode,
-  // which the pipeline can leave non-default; pin FE_TONEAREST so the decimal
-  // fold matches CPython regardless of the host's mode.
-  const round_to_nearest_guard rounding_guard;
+  // A whole value below 1e16 renders as its integer digits plus ".0"
+  // (str(1.0) == "1.0", str(1000000.0) == "1000000.0"); %g would drop the ".0".
+  if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 1e16)
+  {
+    std::string s = std::to_string(static_cast<long long>(d));
+    if (std::signbit(d) && s[0] != '-') // str(-0.0) == "-0.0"
+      s.insert(s.begin(), '-');
+    return s + ".0";
+  }
 
-  // CPython spells the non-finite floats "nan"/"inf"/"-inf"; the fixed-notation
-  // fold below cannot produce them.
-  if (std::isnan(d))
-    return "nan";
-  if (std::isinf(d))
-    return d < 0 ? "-inf" : "inf";
-
-  // CPython uses exponential notation outside [1e-4, 1e16); the fixed fold
-  // below cannot reproduce it, so refuse those ranges (str(1e-5) == "1e-05",
-  // str(1e16) == "1e+16", not the fixed spellings).
-  const double mag = std::fabs(d);
-  if (!(d == 0.0 || (mag >= 1e-4 && mag < 1e16)))
-    return std::nullopt;
-
-  std::ostringstream oss;
-  oss << std::fixed << std::setprecision(6) << d;
-  std::string s = oss.str();
-
-  // Match Python's str(float): drop trailing fractional zeros but keep at least
-  // one digit after the dot ("5.0", not "5.").
-  const auto dot = s.find('.');
-  const size_t last_nonzero = s.find_last_not_of('0');
-  if (last_nonzero == dot)
-    s.resize(dot + 2);
-  else
-    s.resize(last_nonzero + 1);
-
-  // The 6-decimal rendering is only CPython's repr when it loses no precision.
-  // If the string does not parse back to the exact same double, the value needs
-  // more digits than were emitted; refuse rather than fold a wrong constant.
-  if (std::strtod(s.c_str(), nullptr) != d)
-    return std::nullopt;
-  return s;
+  // Every other value (and nan/inf) renders with the fewest significant digits
+  // that read back as the same double, which is exactly how CPython's repr
+  // chooses its digits. %g picks fixed vs. exponential on CPython's rule too:
+  // exponential iff the decimal exponent is < -4 or >= the significant-digit
+  // count, which agrees with CPython's 1e16 cut-over because a non-whole float
+  // always needs more significant digits than its exponent. snprintf/strtod
+  // honour the host FP rounding mode; pin FE_TONEAREST so the fold matches
+  // CPython regardless of the host's mode.
+  const round_to_nearest_guard guard;
+  char buf[40];
+  for (int precision = 1; precision < 17; ++precision)
+  {
+    std::snprintf(buf, sizeof(buf), "%.*g", precision, d);
+    if (std::strtod(buf, nullptr) == d)
+      return buf;
+  }
+  std::snprintf(buf, sizeof(buf), "%.17g", d);
+  return buf;
 }
 
 // Parse the leading [[fill]align][0][width] portion of a Python format
@@ -1233,12 +1224,9 @@ exprt string_handler::convert_to_string(const exprt &expr)
     }
     else if (t.is_floatbv())
     {
-      // A fixed 6-decimal fold cannot faithfully reproduce CPython's shortest
-      // round-trip repr for every double (precision loss for values like 1/3,
-      // exponential notation outside [1e-4, 1e16)). cpython_float_str returns
-      // nullopt when it cannot produce the exact spelling; fall back to a sound
-      // nondet string rather than fold a wrong constant that could satisfy a
-      // false assertion.
+      // Fold to CPython's shortest round-trip repr. Only a 64-bit double with a
+      // concrete value is rendered; a 32-bit float or an empty (nondet) value
+      // stays a sound nondet string.
       std::optional<std::string> folded;
       if (!expr.value().empty() && bv_width(t) == 64)
       {

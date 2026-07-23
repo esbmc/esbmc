@@ -185,6 +185,12 @@ bool python_languaget::parse(const std::string &path)
     exit(1);
   }
 
+  // Parsed into a local tree first: with multiple positional Python files on
+  // the command line, this parse() runs once per file against a single
+  // python_languaget instance (github #6211), and each file's own tree must
+  // survive independently rather than clobbering the previous one via the
+  // `ast` data member.
+  nlohmann::json parsed_ast;
   try
   {
     // Parse under FE_TONEAREST: nlohmann converts float literals with the
@@ -192,7 +198,7 @@ bool python_languaget::parse(const std::string &path)
     // static init leaves FE_UPWARD on goto-contractor builds) would store a
     // double one ulp away from CPython's value for the same literal.
     const round_to_nearest_guard rounding_guard;
-    ast = nlohmann::json::parse(ast_json);
+    parsed_ast = nlohmann::json::parse(ast_json);
   }
   catch (const nlohmann::json::exception &e)
   {
@@ -207,7 +213,13 @@ bool python_languaget::parse(const std::string &path)
   }
 
   if (config.options.get_bool_option("parse-tree-only"))
+  {
+    // show_parse() only ever dumps the entry file's tree; keep that intact
+    // and just discard further files' trees rather than a partial merge.
+    if (ast.is_null())
+      ast = std::move(parsed_ast);
     return false;
+  }
 
   try
   {
@@ -215,10 +227,11 @@ bool python_languaget::parse(const std::string &path)
     // annotator derives element types from their annotations (GitHub #5936).
     // Callees in imported modules are retyped in python_converter::convert(),
     // where the import graph is available.
-    python_param_annotations::propagate_tuple_list_params({{&ast, &ast, ""}});
+    python_param_annotations::propagate_tuple_list_params(
+      {{&parsed_ast, &parsed_ast, ""}});
 
     // Add type information
-    python_annotation<nlohmann::json> ann(ast, global_scope_);
+    python_annotation<nlohmann::json> ann(parsed_ast, global_scope_);
     const std::string function = config.options.get_option("function");
     if (!function.empty())
       ann.add_type_annotation(function);
@@ -230,6 +243,11 @@ bool python_languaget::parse(const std::string &path)
     log_error("{}", e.what());
     exit(-1);
   }
+
+  if (ast.is_null())
+    ast = std::move(parsed_ast);
+  else
+    extra_asts.push_back(std::move(parsed_ast));
 
   return false;
 }
@@ -261,7 +279,7 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   try
   {
     // Generate symbol table
-    python_converter converter(context, &ast, global_scope_);
+    python_converter converter(context, &ast, global_scope_, &extra_asts);
     converter.convert();
   }
   catch (const std::runtime_error &e)

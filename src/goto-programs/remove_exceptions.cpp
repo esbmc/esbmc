@@ -1098,15 +1098,18 @@ private:
     return disj;
   }
 
-  /// A call to the installed std::unexpected handler — the set_unexpected
-  /// builtin records it as __ESBMC_unexpected — or nil when none is installed.
+  /// A call to the std::unexpected dispatcher (__ESBMC_run_unexpected), which
+  /// invokes the handler installed via std::set_unexpected or, when none is
+  /// installed, the default handler (which calls std::terminate). Nil when the
+  /// exception OM is not linked, in which case the caller falls back to an
+  /// immediate specification-violation.
   expr2tc make_unexpected_call()
   {
-    const symbolt *h = ns.lookup("c:@F@__ESBMC_unexpected");
+    const symbolt *h = ns.lookup("c:@F@__ESBMC_run_unexpected");
     if (!h)
       return expr2tc();
     code_function_callt fc;
-    fc.function() = h->get_value();
+    fc.function() = symbol_exprt(h->id, h->get_type());
     expr2tc call;
     migrate_expr(fc, call);
     return call;
@@ -1306,12 +1309,27 @@ private:
     if (!is_nil_expr(call))
     {
       // Clear `thrown` so the handler runs with no exception in flight; keep
-      // typeid/value so a bare `throw;` in the handler rethrows the original.
+      // typeid/value naming the original exception.
       auto clear = ins(fail);
       clear->make_assignment();
       clear->code = code_assign2tc(thrown, gen_false_expr());
 
+      // Make the original exception the "currently handled" one for the duration
+      // of the handler, so a bare `throw;` in it re-raises the original
+      // ([except.throw]/8, [except.unexpected]) via __ESBMC_rethrow_current
+      // rather than terminating on an empty handled stack.
+      expr2tc push = make_c_helper_call(exception_globals::push_handled_id);
+      if (!is_nil_expr(push))
+        ins(fail)->make_function_call(push);
+
       ins(fail)->make_function_call(call);
+
+      // Balance the handled stack. A throw out of the handler leaves `thrown`
+      // set, so pop preserves the newly in-flight exception; a normal return
+      // leaves it clear and we fall to the violation assert below regardless.
+      expr2tc pop = make_c_helper_call(exception_globals::pop_handled_id);
+      if (!is_nil_expr(pop))
+        ins(fail)->make_function_call(pop);
 
       // Handler returned without throwing -> the specification is violated.
       ins(fail)->make_goto(fail, not_thrown());
@@ -1328,11 +1346,61 @@ private:
         a_cnt->code = adjust_uncaught(-1);
       }
 
-      // Handler rethrew a permitted type -> let it propagate.
+      // Handler threw a permitted type -> let it propagate.
       ins(fail)->make_goto(ret, permitted());
+
+      // Handler threw a disallowed type: substitute std::bad_exception
+      // ([except.unexpected]/2). The substitute propagates when the spec lists
+      // bad_exception, and otherwise stays disallowed and falls through to the
+      // terminate assert — which reports the violation directly (FAILED) instead
+      // of routing through std::terminate(), whose custom handler could end the
+      // path and swallow it.
+      expr2tc bad_exc_obj = build_bad_exception_object();
+      if (!is_nil_expr(bad_exc_obj))
+      {
+        const unsigned bad_id = registry.id_of(bad_exception_name_);
+        auto a_tid = ins(fail);
+        a_tid->make_assignment();
+        a_tid->code = code_assign2tc(
+          type_id, constant_int2tc(type_id->type, BigInt(bad_id)));
+
+        auto a_val = ins(fail);
+        a_val->make_assignment();
+        a_val->code = code_assign2tc(
+          value,
+          typecast2tc(
+            value->type, address_of2tc(bad_exc_obj->type, bad_exc_obj)));
+
+        ins(fail)->make_goto(ret, permitted());
+      }
     }
     // Fall through to fail.
   }
+
+  /// A fresh static std::bad_exception object for the [except.unexpected]/2
+  /// substitution, or nil when the <exception> model's bad_exception is not in
+  /// the symbol table. As with build_bad_cast_throw the object's state is
+  /// irrelevant — only its type identity (recorded in bad_exception_name_ for
+  /// the caller's typeid) and address matter. Built at most once and reused.
+  expr2tc build_bad_exception_object()
+  {
+    if (!is_nil_expr(bad_exception_obj_))
+      return bad_exception_obj_;
+
+    const symbolt *sym = ns.lookup("tag-std::bad_exception");
+    if (!sym)
+      sym = ns.lookup("tag-class std::bad_exception");
+    if (!sym)
+      return expr2tc();
+
+    bad_exception_name_ =
+      irep_idt(id2string(sym->id).substr(4)); // strip "tag-"
+    bad_exception_obj_ = make_exception_storage(migrate_symbol_type(*sym));
+    return bad_exception_obj_;
+  }
+
+  expr2tc bad_exception_obj_;
+  irep_idt bad_exception_name_;
 
   /// Replace a throw with: arm the globals (or, for a rethrow, just re-raise
   /// the in-flight one) and branch to the enclosing dispatch / epilogue.

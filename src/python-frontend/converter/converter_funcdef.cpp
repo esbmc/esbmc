@@ -1100,9 +1100,10 @@ void python_converter::process_function_arguments(
 
   // Refine unannotated Any parameters to list model type when body usage
   // clearly matches list semantics (len(x), x[i], list mutator methods).
-  // Restrict this refinement to functions from the main source file to avoid
-  // affecting imported module internals.
-  if (location.get_file().as_string() == main_python_file)
+  // Restrict this refinement to the program's own files (the entry file or
+  // an extra positional command-line file, github #6211) to avoid affecting
+  // imported module internals.
+  if (is_program_file(location.get_file().as_string()))
   {
     for (auto &param_arg : type.arguments())
     {

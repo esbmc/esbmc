@@ -5,12 +5,15 @@ Working plan for the IREP2-native resolution keystone tracked in
 `feat/python-irep2-adjust-keystone` and is the execution roadmap; the
 canonical record stays in `irep2-migration.md`. Delete on merge.
 
-> **Status (2026-07-22).** Every W and D site in the ordered list below has
-> landed — task 4's "deferred, entangled" residue closed with
-> [#5725](https://github.com/esbmc/esbmc/pull/5725), and the retain boundary for
-> custom `isinstance`/`isnone` nodes is a finding, not outstanding work. The one
-> item still open is the **float residue** (task 6's last bullet), and its file
-> citations had gone stale — they are corrected in place below. Several paths
+> **Status (2026-07-22) — COMPLETE.** Every W and D site in the ordered list
+> below has landed. Task 4's "deferred, entangled" residue closed with
+> [#5725](https://github.com/esbmc/esbmc/pull/5725); the retain boundary for
+> custom `isinstance`/`isnone` nodes is a finding, not outstanding work; and the
+> last open item — the **float residue** (task 6's final bullet) — is now done
+> too, so the converter's expression surface is IREP2-native and the §"Done"
+> criterion at the foot of this file is met. What remains for Python is the
+> body-level work tracked in `spike-v1k-w1loc.md`, not the expression surface.
+> Several paths
 > named here also moved when `python-frontend` was split into subdirectories
 > (`python_math.cpp` → `math/`, `numpy_call_expr.cpp` → `numpy/`); the entries
 > keep their original wording with the current location noted, rather than being
@@ -128,14 +131,29 @@ matched-text parity over the affected regression suite, asserts build.
      `__getitem__` path) → `build_dereference` (commit a22a6486fe). The base is a
      pointer-to-tuple parameter; build_dereference handles #cpp_type + dyn-array
      fallback. github_4539 suite (9) + A/B parity.
-   - [TODO, risky] The float residue — `ieee_*` construction plus the
-     rounding-mode/`adjust_float_arith` path, still the known-fragile migration.
-     Originally cited as `numpy_call_expr.cpp:1607`; **that citation is stale**
-     (no `ieee_*` nodes remain in that file). What is left is the
-     `exprt("ieee_add"/"ieee_sub"/"ieee_mul"/"ieee_div")` dispatch in
-     `src/python-frontend/math/complex_handler.cpp`. Its sibling helpers
-     (`complex_mul`, `complex_div`, `complex_log`) are already IREP2, so this is
-     the last legacy float site on the converter's complex path.
+   - [DONE] The float residue — `ieee_*` construction plus the rounding-mode
+     path. Originally cited as `numpy_call_expr.cpp:1607`; **that citation was
+     stale** (no `ieee_*` nodes remain in that file), and the follow-up citation
+     to `complex_pow`'s operand dispatch was stale too: the legacy
+     `exprt("ieee_add"/"ieee_sub"/"ieee_mul"/"ieee_div")` family lived in
+     `promote_int_arith_to_double` (`math/complex_handler.cpp`), reached from
+     `normalize_numeric_expr`, not from `complex_pow`. Now builds
+     `ieee_{add,sub,mul,div}2tc` and back-migrates, like its already-IREP2
+     siblings `complex_mul`/`complex_div`/`complex_log`.
+
+     **The "known-fragile" label was wrong, and the reason is worth keeping.**
+     The hazard would be real if `migrate_expr_back` emitted the rounding mode
+     as a *third operand*: `migrate_expr`'s `ieee_add` arm bails to
+     `splice_expr` when `operands().size() > 2` (`migrate.cpp:1316`), so a
+     nested node inside this recursion would re-migrate down a different path
+     and the tree would diverge. It does not — it writes a `rounding_mode`
+     **attribute** (`migrate.cpp:3306`), which the same arm reads back via
+     `find_expr("rounding_mode")`. Per-level round-tripping is therefore
+     identity and the recursion needed no restructuring. Equally, building the
+     node with an explicit `__ESBMC_rounding_mode` symbol is not a behaviour
+     change: `migrate_expr` defaults a two-operand legacy `ieee_*` to that exact
+     symbol (`migrate.cpp:1326`), so the two constructions coincide by
+     definition rather than by luck.
 
 ## Verification protocol per commit
 
