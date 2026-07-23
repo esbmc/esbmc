@@ -1,8 +1,10 @@
 # github.com/esbmc/esbmc/issues/6242 (review finding #2)
-# Known limitation: `self.attr = self.method()` is typed by the enclosing
-# class's return type and ignores subclass overrides (no virtual dispatch), so
-# a valid polymorphic program is reported as a false VERIFICATION FAILED.
-# CPython: Derived().go() == 2 holds.
+# Characterization test for a missing capability: `self.attr = self.method()`
+# is typed by the enclosing class's return type and ignores subclass overrides
+# (no virtual dispatch), so this valid polymorphic program is reported as a
+# false VERIFICATION FAILED. CPython: Derived().go() == 2 holds, so the correct
+# result is SUCCESSFUL. Pinned as CORE-FAILED (not KNOWNBUG/FUTURE) so a crash
+# regression is caught and so the test breaks loudly if virtual dispatch lands.
 class P1:
     def val(self) -> int:
         return 1
