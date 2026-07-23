@@ -414,19 +414,20 @@ bool goto_convert_functionst::convert_native_rec(
     // codet("cpp-throw"), the only code shape that reaches here (migrate.cpp).
     // Reproduce that delegation for cpp-throw so a throw statement no longer
     // forces a whole-function fallback -- convert()'s convert_throw owns the
-    // C++ stack unwind and the throw-object side-effect lowering. The operand
-    // carries no location (IREP2 values do not), and convert_throw reads it for
-    // the THROW instruction, so stamp the statement location first exactly as
-    // restore_value_locations does on the legacy path. Any other code operand
-    // is unexpected here; fall back.
+    // C++ stack unwind and the throw-object side-effect lowering. The codet's
+    // own location already comes from migrate_expr_back (code_cpp_throw2t
+    // .location); what the round-trip drops is the location on its thrown-value
+    // operands, which convert_throw reads when lowering a thrown temporary.
+    // Run the same restore_value_locations pass the legacy path applies to the
+    // round-tripped body -- it pushes the enclosing statement location down onto
+    // those operands without touching the codet's own location. Any other code
+    // operand is unexpected here; fall back.
     if (op.is_code())
     {
       if (op.statement() != "cpp-throw")
         return false;
-      const locationt &stamp =
-        effective_location(expr_stmt.location, inherited);
-      if (!stamp.get_file().empty())
-        op.location() = stamp;
+      restore_value_locations(
+        op, effective_location(expr_stmt.location, inherited));
       convert(to_code(op), dest);
       return true;
     }
