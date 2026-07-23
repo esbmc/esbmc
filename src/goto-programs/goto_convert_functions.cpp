@@ -250,7 +250,9 @@ static const locationt &statement_location(const expr2tc &code2)
 // statement to a plain named symbol with a body and side-effect-free
 // arguments (a single FUNCTION_CALL; the return-unused requirement means
 // do_function_call's temp-symbol machinery is never entered, so this kind
-// carries no shared-counter byte-identity risk). Each reads its own
+// carries no shared-counter byte-identity risk), and a source-level try/catch
+// (code_cpp_catch2t), delegated to the legacy convert()/convert_catch so the
+// statements around it convert natively. Each reads its own
 // code_*2t fields directly (no legacy round-trip) and carries the
 // statement's own location, matching goto_convertt::convert() byte-for-byte
 // on this subset.
@@ -1276,6 +1278,31 @@ bool goto_convert_functionst::convert_native_rec(
     dest.destructive_append(tmp);
     targets.labels.insert({l.label, {target, targets.destructor_stack}});
     target->labels.push_front(l.label);
+    return true;
+  }
+
+  if (is_code_cpp_catch2t(code2))
+  {
+    const code_cpp_catch2t &c = to_code_cpp_catch2t(code2);
+
+    // A source-level try/catch (operands[0] is the try block, operands[1..N]
+    // the handlers). Delegate the whole statement to the legacy convert():
+    // convert_catch (goto_convert.cpp) owns the CATCH push/pop
+    // markers, the per-handler target weave, the end-target gotos and the
+    // throw_stack_size save/restore around the try body -- machinery this
+    // dispatcher does not reproduce natively. The only reason a try/catch
+    // reaches here at all (rather than forcing a whole-function fallback) is to
+    // let the statements around it convert natively. Any gotos/labels/cases the
+    // try body registers in `targets`, and any temp symbols it allocates, are
+    // covered by convert_function's snapshot/restore if a later statement forces
+    // a fallback. The round-trip drops the value-operand locations inside the
+    // blocks, so run the same restore_value_locations pass the legacy body gets.
+    // The bodyless CATCH marker form never appears in a function body (it is
+    // synthesised into the goto program by convert_catch), so operands are
+    // always present here; convert() handles either shape regardless.
+    exprt op = migrate_expr_back(code2);
+    restore_value_locations(op, effective_location(c.location, inherited));
+    convert(to_code(op), dest);
     return true;
   }
 
