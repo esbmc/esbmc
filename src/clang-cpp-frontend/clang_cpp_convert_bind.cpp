@@ -6,8 +6,10 @@
  *
  *  A clang::MemberExpr may be written with `->` or `.`. Both need dynamic
  *  binding when Clang reports the call performs virtual dispatch (e.g. a call
- *  through a reference or a dereferenced pointer, `(*x).F` / `ref.F`); only a
- *  call on a statically-typed complete object is devirtualised.
+ *  through a reference or a dereferenced pointer, `(*x).F` / `ref.F`). Only an
+ *  explicitly-qualified call (`obj.Base::F()`) is devirtualised; a plain
+ *  complete-object call still goes through the vtable, which resolves to the
+ *  object's own type.
  */
 
 #include <util/compiler_defs.h>
