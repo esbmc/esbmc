@@ -380,3 +380,33 @@ misleads — any future attempt must sweep the iostream-manipulator corpus
 (`ch12_*`, `ch20_*`) before trusting a green result. The `code_asm2t` /
 `code_printf2t` leaves are separately unreachable (see the asm/printf correction
 recorded on branch `docs/w1loc-asm-printf-unreachable`).
+end-of-full-expression rather than at block exit, #6177) and the C++-only kinds —
+`code_cpp_catch2t` / `code_cpp_throw2t` and the `try`/`catch` target machinery.
+
+**Correction — the `code_asm2t` / `code_printf2t` "leaves" are not reachable
+native kinds and are dropped from the ladder.** A native handler for either would
+be dead instrumentation (C-Live cannot be discharged), because neither reaches
+`convert_native_rec` as a body statement in the clang pipeline:
+
+- **`code_asm2t`.** The C frontend lowers every `GCCAsmStmt` / `MSAsmStmt` to a
+  `code_skipt()` (`clang_c_convert.cpp:3480`, "we ignore them"), so a function
+  body never carries an `asm` statement. `code_asm2t` is produced *only* by
+  `migrate_expr` on a legacy `codet("asm")` (`migrate.cpp:2272`), a node that
+  arises from reading an external CBMC goto-binary — a path that does not run
+  goto-conversion at all. A throwaway `void f(){int x=a; __asm__("nop"); x=x+b;}`
+  probe confirmed it: flag-on vs flag-off `--goto-functions-only` are
+  byte-identical and the body converts natively, but the `asm` never appears —
+  it was elided to a skip upstream, so the (implemented, then reverted) native
+  arm never fired.
+- **`code_printf2t`.** It is synthesised *during* goto-conversion by `do_printf`
+  (`builtin_functions.cpp:218`), reached through `do_function_call` when a
+  `printf`-family call is lowered. A `printf(...)` statement in a body is a
+  `code_expression2t` wrapping a `sideeffect2t(function_call)`, which the #6177
+  expression handler already converts natively — its `remove_sideeffects`
+  delegation calls `do_function_call` → `do_printf`, emitting the `OTHER PRINTF`
+  inline. Confirmed byte-identical on a `void f(int a){ printf("x=%d\n", a); g=a; }`
+  probe. So printf is *already* covered indirectly; a dedicated `code_printf2t`
+  statement handler would never be reached.
+
+The genuine remaining reachable slices are therefore `temporary_object` and the
+C++ throw/catch machinery; the next native-kind PR should target the former.
