@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
+Unsupported function 'publish' is reached
 ^VERIFICATION FAILED$
