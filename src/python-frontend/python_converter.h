@@ -18,6 +18,7 @@
 #include <set>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 class codet;
 class struct_typet;
@@ -47,7 +48,8 @@ public:
   python_converter(
     contextt &_context,
     const nlohmann::json *ast,
-    const global_scope &gs);
+    const global_scope &gs,
+    const std::vector<nlohmann::json> *extra_asts = nullptr);
 
   ~python_converter();
 
@@ -490,6 +492,13 @@ private:
 
   bool is_model_file(const nlohmann::json &node) const;
 
+  /// True when @p file is one of the program's own first-class source files
+  /// (the entry file or one of the extra positional command-line files,
+  /// github #6211) rather than an operational model or an `import`ed
+  /// module. Shared by every check that used to compare against
+  /// `main_python_file` alone before extra command-line files existed.
+  bool is_program_file(const std::string &file) const;
+
   exprt get_function_call(const nlohmann::json &ast_block);
 
   exprt get_block(
@@ -646,6 +655,18 @@ private:
   /// through an imported module fell through to the unsupported-function
   /// stub.
   void convert_module_imports(code_blockt &all_imports_block);
+
+  /// Converts one additional positional Python file passed on the command
+  /// line (github #6211) as an extra translation unit of the same program:
+  /// its own imports/globals/statements are converted with
+  /// `current_python_file` pointing at its own filename (so locations and
+  /// `__name__`/`__file__` attribute correctly), and its top-level code is
+  /// appended to `combined_user_code` so it actually executes, mirroring
+  /// how the C frontend merges multiple .c files into one program.
+  void convert_extra_translation_unit(
+    const nlohmann::json &extra_ast,
+    code_blockt &init_code,
+    code_blockt &combined_user_code);
 
   nlohmann::json build_dunder_call(
     const nlohmann::json &object,
@@ -1142,6 +1163,10 @@ private:
   /// so this retains a stable handle to the top-level module whose body holds
   /// the constructor call sites used by cross-module attribute-type inference.
   const nlohmann::json *entry_ast_;
+  /// Additional positional Python files passed on the command line
+  /// (github #6211), each a fully parsed and annotated module AST. May be
+  /// null (single-file invocations) or empty.
+  const std::vector<nlohmann::json> *extra_asts_;
   const global_scope &global_scope_;
   type_handler type_handler_;
   string_builder *string_builder_;

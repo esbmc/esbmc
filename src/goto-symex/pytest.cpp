@@ -14,6 +14,19 @@
 #include <algorithm>
 #include <unordered_set>
 
+// The entry Python file: the first positional file on the command line.
+// config.options.get_option("input-file") only ever holds the *last*
+// positional file (optionst's option_map is single-valued and each
+// positional arg overwrites the previous one), which named the wrong
+// module whenever more than one .py file was passed (github #6211).
+// config.args preserves the full, correctly ordered file list.
+static std::string entry_python_file()
+{
+  if (!config.args.empty())
+    return config.args.front();
+  return config.options.get_option("input-file");
+}
+
 std::string pytest_generator::extract_module_name(const std::string &input_file)
 {
   std::string module_name = input_file;
@@ -1060,7 +1073,7 @@ void pytest_generator::generate(const std::string &file_name) const
     log_status("Skipped {} duplicate test case(s).", skipped);
 
   // Extract module name from input file
-  std::string input_file = config.options.get_option("input-file");
+  std::string input_file = entry_python_file();
   std::string module_name = extract_module_name(input_file);
 
   // Generate pytest file
@@ -1098,7 +1111,7 @@ void pytest_generator::generate_single(
   (void)ns; // Suppress unused parameter warning
 
   // Extract original Python file name and module name
-  std::string original_file = config.options.get_option("input-file");
+  std::string original_file = entry_python_file();
   std::string module_name = extract_module_name(original_file);
 
   // Track nondet symbols we've seen to avoid duplicates
