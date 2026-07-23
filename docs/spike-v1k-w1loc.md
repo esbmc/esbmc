@@ -346,6 +346,40 @@ do/while, for, switch, break, continue, goto, label, assert, assume, call all
 convert natively, and with the side-effecting-condition row above every one of
 them accepts a side-effecting condition too. What remains is a
 `temporary_object` in an expression statement (its scope-exit entries die at
+end-of-full-expression rather than at block exit, #6177), the C++-only kinds —
+`code_cpp_catch2t` / `code_cpp_throw2t` and the `try`/`catch` target machinery —
+and the `code_asm2t` / `code_printf2t` leaves.
+
+**Investigation (2026-07-23) — the `temporary_object` slice is confirmed NOT a
+guard removal.** The `code_expression2t` handler currently falls back on
+`has_temporary_object(op)`. It is tempting to think later rows (#6178/#6179)
+matured the destructor-stack management enough that the guard is now dead: the
+handler already delegates to the same `remove_sideeffects(op, dest, false)`
+legacy `convert_expression` calls, and a *single, result-used* temporary
+(`g = use(T(a));`) does convert natively byte-identically — the used temporary's
+scope-exit entry rides `targets.destructor_stack` and the block handler unwinds
+it at block exit exactly as `convert_block` does. But that generalisation is
+**false**, proven by removing the guard and sweeping `regression/esbmc-cpp/cpp`:
+**14 tests regress** (`ch2_14`, `ch3_2`, `ch3_9`, `ch3_21`, `ch5_22`, `ch8_1`,
+`ch12_6`, `ch12_11`, `ch12_12`, `ch12_13`, `ch20_1`, `ch20_1-32`, `ch20_5`, and
+one more), each byte-identical on master flag-on-vs-flag-off and divergent only
+with the guard gone (the three genuinely pre-existing esbmc-cpp mismatches —
+`cpp_sum_class`, `cpp_sum_class_bug`, `github_4397_cstdlib_namespace` — were
+excluded by the master control run). The canonical trigger is a **chained
+by-value temporary**: a `std::cout << setw(w) << x << …` manipulator chain, where
+each `setw`/`setprecision` returns an `smanip` **by value**. The native path
+**drops the end-of-full-expression cleanup** the legacy path emits — the
+`~smanip(&return_value$_setw$N)` destructor calls and the `DEAD
+return_value$_operator<<$N` entries, all located at the statement line, vanish
+under `--irep2-native-body`. So the guard is **load-bearing**, not dead: the
+divergence is precisely the #6177 "destructor-stack interaction" and the real
+slice must reproduce it, not delete the check. The failure is specific to the
+*discarded / mid-chain* temporary (result-used-then-dropped), not the simple
+result-used single temporary, which is why a naive single-`T(a)` probe passes and
+misleads — any future attempt must sweep the iostream-manipulator corpus
+(`ch12_*`, `ch20_*`) before trusting a green result. The `code_asm2t` /
+`code_printf2t` leaves are separately unreachable (see the asm/printf correction
+recorded on branch `docs/w1loc-asm-printf-unreachable`).
 end-of-full-expression rather than at block exit, #6177) and the C++-only kinds —
 `code_cpp_catch2t` / `code_cpp_throw2t` and the `try`/`catch` target machinery.
 
