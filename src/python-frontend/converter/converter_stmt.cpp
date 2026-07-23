@@ -983,6 +983,30 @@ python_converter::root_name_from_subscript(const nlohmann::json &node) const
   return "";
 }
 
+static bool json_contains_slice_node(const nlohmann::json &node)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+
+  if (node.is_object())
+  {
+    if (node.value("_type", "") == "Slice")
+      return true;
+
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (json_contains_slice_node(it.value()))
+        return true;
+  }
+  else
+  {
+    for (const auto &elem : node)
+      if (json_contains_slice_node(elem))
+        return true;
+  }
+
+  return false;
+}
+
 bool python_converter::is_basic_numpy_view_subscript(
   const nlohmann::json &node) const
 {
@@ -1023,6 +1047,12 @@ bool python_converter::contains_copied_numpy_view_name(
         resolve_name_symbol_id(node["id"].get<std::string>());
       return !id.empty() && numpy_view_copy_sources_.count(id) != 0;
     }
+
+    if (
+      node.value("_type", "") == "Subscript" && node.contains("value") &&
+      node.contains("slice") && !json_contains_slice_node(node["slice"]) &&
+      contains_copied_numpy_view_name(node["value"]))
+      return contains_copied_numpy_view_name(node["slice"]);
 
     for (auto it = node.begin(); it != node.end(); ++it)
       if (contains_copied_numpy_view_name(it.value()))
