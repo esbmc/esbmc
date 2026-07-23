@@ -728,6 +728,16 @@ public:
     return buf[_size - 1];
   }
 
+  // Direct access to the underlying contiguous storage ([vector.data]).
+  pointer data()
+  {
+    return buf;
+  }
+  const_pointer data() const
+  {
+    return buf;
+  }
+
   // modifiers:
 
   void push_back(const T &x)
