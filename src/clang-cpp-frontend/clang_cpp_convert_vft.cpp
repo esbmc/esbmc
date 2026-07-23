@@ -122,6 +122,12 @@ static bool is_pure_virtual(const clang::CXXMethodDecl &md)
 #endif
 }
 
+// Defined further down; used by add_thunk_method to size the this-adjustment.
+static std::optional<uint64_t> offset_of_subobject(
+  const clang::ASTContext &ctx,
+  const clang::CXXRecordDecl *D,
+  const clang::CXXRecordDecl *S);
+
 /**
  * @brief Returns the ultimate overridden method for a given CXXMethodDecl.
  *
@@ -317,28 +323,17 @@ void clang_cpp_convertert::add_thunk_method(
   std::string base_class_id, base_class_name;
   get_decl_name(*md.getParent(), base_class_name, base_class_id);
 
-  // Compute the byte offset of the base class sub-object within the derived
-  // class. For non-first base classes in multiple inheritance this is non-zero,
-  // and the thunk must subtract it from its Base* this to recover Derived*.
-  // TODO: This loop only searches direct bases of derived_rd. If base_rd is
-  // an indirect base (e.g. Derived : Middle, Middle : B8), base_offset will
-  // incorrectly remain 0. A complete fix requires summing offsets along the
-  // full inheritance path using CXXBasePaths::isDerivedFrom or a recursive
-  // walk — to be addressed as a follow-up.
-  uint64_t base_offset = 0;
+  // Byte offset of the base sub-object within the derived class. For non-first
+  // base classes in multiple inheritance this is non-zero, and the thunk must
+  // subtract it from its Base* this to recover Derived*. offset_of_subobject
+  // sums the offset along the full inheritance path, so an *indirect* non-first
+  // base (e.g. Derived : Middle, Middle : First, B) gets its cumulative offset
+  // rather than 0 (#6288). A path crossing a virtual base yields nullopt (its
+  // dynamic offset cannot be statically subtracted); fall back to 0 there,
+  // unchanged from before (tracked separately, #940).
   const clang::CXXRecordDecl *base_rd = md.getParent();
-  const clang::ASTRecordLayout &layout =
-    ASTContext->getASTRecordLayout(&derived_rd);
-  for (const auto &base_spec : derived_rd.bases())
-  {
-    const clang::CXXRecordDecl *spec_rd =
-      base_spec.getType()->getAsCXXRecordDecl();
-    if (spec_rd == base_rd && !base_spec.isVirtual())
-    {
-      base_offset = layout.getBaseClassOffset(base_rd).getQuantity();
-      break;
-    }
-  }
+  const uint64_t base_offset =
+    offset_of_subobject(*ASTContext, &derived_rd, base_rd).value_or(0);
 
   // Create the thunk method symbol
   symbolt thunk_func_symb;
