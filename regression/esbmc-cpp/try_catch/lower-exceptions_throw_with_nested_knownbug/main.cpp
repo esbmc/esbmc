@@ -1,15 +1,18 @@
 // std::throw_with_nested(Outer) throws a type deriving from both Outer and
 // std::nested_exception, capturing the in-flight Inner via current_exception.
-// The outer handler catches it as Outer&, then std::rethrow_if_nested recovers
-// and re-raises the captured Inner.
+// The outer handler catches it as Outer&, then calls std::rethrow_if_nested(o).
 //
-// KNOWNBUG: the thrown combined type is multiple-inheritance (Outer +
-// polymorphic nested_exception). When a non-polymorphic base precedes the
-// polymorphic one, the catch-by-base binding reads the base subobject at the
-// wrong offset, so `o.w` reads garbage and the assertion spuriously fails. This
-// is a pre-existing base-subobject offset bug (construction vs catch) in the
-// C++ frontend/lowering, independent of throw_with_nested itself. Once the MI
-// base-offset handling is fixed this verifies SUCCESSFUL and can move to CORE.
+// `Outer` here is NON-polymorphic. Per [except.nested]/6, rethrow_if_nested is a
+// no-op unless the *static* type of its argument is a polymorphic class (the
+// underlying dynamic_cast<nested_exception*> is otherwise ill-formed, so the
+// library selects the empty overload — see __is_polymorphic in <exception>).
+// So the captured Inner is NOT re-raised, the inner catch(Inner&) never fires,
+// and the trailing assert(0) is reachable. This matches real C++: g++/clang++
+// compile and run this program to that assert(0) (abort). ESBMC is thus
+// correct to report VERIFICATION FAILED; the previous SUCCESSFUL expectation and
+// its "base-offset bug" note were wrong (`o.w == 2` passes -- Outer is the first
+// base, at offset 0). A positive recovery test needs a *polymorphic* Outer, which
+// exercises the MI dynamic_cast cross-cast handled separately.
 #include <exception>
 #include <cassert>
 
