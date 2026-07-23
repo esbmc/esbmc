@@ -42,6 +42,15 @@ int main()
   assert(cm.find(1) != cm.end()); // const find/end
   assert(cm.find(9) == cm.end());
 
+  // const reverse iteration
+  int rsum = 0;
+  for (std::map<int, int>::const_reverse_iterator it = cm.rbegin();
+       it != cm.rend();
+       ++it)
+    rsum += it->first;
+  assert(rsum == 3);
+  assert(cm.rbegin()->first == 2); // largest key
+
   std::multimap<int, int> mm;
   mm.insert({1, 10});
   mm.insert({1, 20});
