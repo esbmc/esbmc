@@ -121,10 +121,10 @@ bool python_adjust::adjust()
     // constant_struct2t type may survive as a transient symbol_type2t, and a
     // resolved-struct literal must carry one operand per component. Pre-S2
     // this fired on every flag-on run (the OM exception literals,
-    // docs/irep2-migration.md "S1 outcome" finding 2); S2's aggregate-literal
-    // completion drained those, so a firing now means a node shape the
-    // remaining S-steps (S3+) must resolve — the per-node detail below is
-    // that work-list.
+    // docs/roadmap/irep2-migration.md "S1 outcome" finding 2); S2's
+    // aggregate-literal completion drained those, so a firing now means a node
+    // shape the remaining S-steps (S3+) must resolve — the per-node detail
+    // below is that work-list.
     std::vector<std::string> unresolved;
     collect_unresolved_sources(value, unresolved);
     if (!unresolved.empty())
@@ -224,11 +224,12 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // Python element access `s[i]` over a char*-like source (chr()'s result is
     // the canonical case). clang_cpp_adjust resolves the read type to the
     // pointee; do the same so symex does not get_width() an empty deref target
-    // (the S3 symbolic_type_excp root, docs/scope-v1k-adjuster round-4). Only
-    // when the pointee is non-empty -- a void*-like empty pointee is left for
-    // the exit invariant, exactly as clang leaves a void deref empty. An array
-    // operand (clang's `*a` -> `a[0]` rewrite) does not occur on the Python
-    // path (subscripts lower to index2t). dereference2t is immutable, rebuild.
+    // (the S3 symbolic_type_excp root, docs/roadmap/scope-v1k-adjuster
+    // round-4). Only when the pointee is non-empty -- a void*-like empty
+    // pointee is left for the exit invariant, exactly as clang leaves a void
+    // deref empty. An array operand (clang's `*a` -> `a[0]` rewrite) does not
+    // occur on the Python path (subscripts lower to index2t). dereference2t is
+    // immutable, rebuild.
     const dereference2t &d = to_dereference2t(expr);
     if (is_pointer_type(d.value->type))
     {
@@ -246,11 +247,11 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // requires the resolved type on the node, so this arm resolves eagerly
     // (the RV-adj6 divergence, understood and deliberate). On today's
     // pipeline the by-name survivors are the OM exception literals
-    // (raise IndexError(...) et al., docs/irep2-migration.md "S1 outcome"
-    // finding 2): their operands were already padded by the legacy pass, so
-    // only the retype fires; the padding-operand insertion below completes a
-    // converter-built literal once the flip makes this pass the sole
-    // resolver.
+    // (raise IndexError(...) et al., docs/roadmap/irep2-migration.md "S1
+    // outcome" finding 2): their operands were already padded by the legacy
+    // pass, so only the retype fires; the padding-operand insertion below
+    // completes a converter-built literal once the flip makes this pass the
+    // sole resolver.
     // Guard the follow: ns.follow asserts on an unknown tag, but an
     // unresolvable literal must instead survive to the exit invariant
     // (mirrors the top-level-symbol no-abort deviation in adjust_type).
@@ -310,17 +311,16 @@ void python_adjust::adjust_expr(expr2tc &expr)
   }
   else if (is_code_cpp_throw2t(expr))
   {
-    // Flip blocker #1 (docs/irep2-migration.md, "Flip-probe census"): the
-    // exception-id chain is derived only by clang_cpp_adjust today
-    // (adjust_side_effect_throw); once that hop is gone, every
-    // operand-carrying THROW reaches remove_exceptions with an empty
-    // exception_list and crashes its unguarded front(). Complete an empty
-    // list here from the operand's class type. A list the legacy pass
-    // already filled is left untouched, so this arm is inert until the flip;
-    // a bare re-raise (nil operand) keeps its empty list, as legacy does.
-    // The operand was already recursed above, so under S2 its type may be
-    // the resolved struct rather than the by-name tag — both derive the same
-    // chain.
+    // Flip blocker #1 (docs/roadmap/irep2-migration.md, "Flip-probe census"):
+    // the exception-id chain is derived only by clang_cpp_adjust today
+    // (adjust_side_effect_throw); once that hop is gone, every operand-carrying
+    // THROW reaches remove_exceptions with an empty exception_list and crashes
+    // its unguarded front(). Complete an empty list here from the operand's
+    // class type. A list the legacy pass already filled is left untouched, so
+    // this arm is inert until the flip; a bare re-raise (nil operand) keeps its
+    // empty list, as legacy does. The operand was already recursed above, so
+    // under S2 its type may be the resolved struct rather than the by-name tag
+    // — both derive the same chain.
     const code_cpp_throw2t &t = to_code_cpp_throw2t(expr);
     if (t.exception_list.empty() && !is_nil_expr(t.operand))
     {

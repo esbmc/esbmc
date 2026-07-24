@@ -107,9 +107,10 @@ tools/
     └── main.cpp               # ld-verify CLI entry point
 
 docs/
-├── safe-ld-implementation-plan.md   # this document
-├── safe-ld-property-format.md       # YAML property spec (WP1 / T1.3)
-└── safe-ld-sos-semantics.md         # SOS specification (WP1 / T1.2)
+├── roadmap/
+│   └── safe-ld-implementation-plan.md   # this document
+├── safe-ld-property-format.md           # YAML property spec (WP1 / T1.3)
+└── safe-ld-sos-semantics.md             # SOS specification (WP1 / T1.2)
 
 regression/
 └── ld/                        # driver-level LD regression tests (one dir each)
