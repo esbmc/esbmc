@@ -3,7 +3,7 @@
 
 #include <irep2/irep2.h>
 #include <util/migrate.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/type.h>
 #include <util/union_find.h>
 

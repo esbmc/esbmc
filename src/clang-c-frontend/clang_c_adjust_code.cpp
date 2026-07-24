@@ -2,7 +2,7 @@
 #include <clang-c-frontend/typecast.h>
 #include <util/bitvector.h>
 #include <util/c_types.h>
-#include <util/cprover_prefix.h>
+#include <util/symtab/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/prefix.h>
 #include <util/std_code.h>

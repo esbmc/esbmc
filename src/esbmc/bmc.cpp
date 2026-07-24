@@ -38,7 +38,7 @@
 #include <util/location.h>
 
 #include <util/migrate.h>
-#include <util/show_symbol_table.h>
+#include <util/symtab/show_symbol_table.h>
 #include <util/time_stopping.h>
 #include <util/ssa/cache.h>
 #include <atomic>

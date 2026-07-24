@@ -8,7 +8,7 @@
 #include <util/message/message.h>
 #include <util/prefix.h>
 #include <util/std_code.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 #include <algorithm>
 #include <iostream>
 #include <map>

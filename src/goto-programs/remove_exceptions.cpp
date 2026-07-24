@@ -3,9 +3,9 @@
 #include <goto-programs/exception_globals.h>
 #include <goto-programs/goto_functions.h>
 
-#include <util/namespace.h>
-#include <util/context.h>
-#include <util/symbol.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/symbol.h>
 #include <util/migrate.h>
 #include <util/expr_util.h>
 #include <util/std_types.h>

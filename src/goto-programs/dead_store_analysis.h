@@ -4,7 +4,7 @@
 
 #include <goto-programs/dead_store_advisory.h>
 #include <util/ssa/algorithms.h>
-#include <util/context.h>
+#include <util/symtab/context.h>
 
 /// Intra-procedural dead-store detector (CWE-563). Runs a backward
 /// live-variable analysis over each function's GOTO control-flow graph and

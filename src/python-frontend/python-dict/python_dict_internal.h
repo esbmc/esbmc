@@ -16,7 +16,7 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>

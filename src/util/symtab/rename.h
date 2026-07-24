@@ -2,7 +2,7 @@
 // automated variable renaming
 //
 
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 
 void get_new_name(symbolt &symbol, const namespacet &ns);
 

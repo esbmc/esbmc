@@ -7,11 +7,11 @@
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_types.h>
-#include <util/cprover_prefix.h>
+#include <util/symtab/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/prefix.h>
-#include <util/pretty.h>
+#include <util/symtab/pretty.h>
 #include <util/python_types.h>
 #include <util/std_expr.h>
 

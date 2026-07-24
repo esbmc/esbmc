@@ -1,7 +1,7 @@
 #include <goto-programs/exception_globals.h>
 
-#include <util/context.h>
-#include <util/symbol.h>
+#include <util/symtab/context.h>
+#include <util/symtab/symbol.h>
 #include <util/c_types.h>
 #include <util/std_types.h>
 #include <util/expr_util.h>

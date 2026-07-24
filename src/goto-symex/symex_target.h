@@ -5,7 +5,7 @@
 #include <util/expr.h>
 #include <irep2/irep2_guard.h>
 #include <irep2/irep2.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 #include <vector>
 
 class stack_framet;

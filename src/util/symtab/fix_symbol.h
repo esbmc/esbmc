@@ -1,5 +1,5 @@
-#include <util/context.h>
-#include <util/replace_symbol.h>
+#include <util/symtab/context.h>
+#include <util/symtab/replace_symbol.h>
 
 class fix_symbolt : public replace_symbolt
 {

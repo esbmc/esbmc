@@ -1,7 +1,7 @@
 #include <cassert>
 #include <util/cpp_expr2string.h>
 #include <util/std_types.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 #include <util/message/message.h>
 #include <unordered_set>
 

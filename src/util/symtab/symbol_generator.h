@@ -1,7 +1,7 @@
 #ifndef ESBMC_UTIL_SYMBOL_GENERATOR_H
 #define ESBMC_UTIL_SYMBOL_GENERATOR_H
 
-#include <util/context.h>
+#include <util/symtab/context.h>
 
 class symbol_generator
 {

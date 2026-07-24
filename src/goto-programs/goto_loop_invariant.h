@@ -4,7 +4,7 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_loops.h>
 #include <irep2/irep2_guard.h>
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <irep2/irep2_expr.h>
 #include <set>
 #include <unordered_set>

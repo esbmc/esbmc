@@ -4,8 +4,8 @@
 #include <langapi/mode.h>
 #include <util/base_type.h>
 #include <util/irep_serialization.h>
-#include <util/namespace.h>
-#include <util/symbol_serialization.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/symbol_serialization.h>
 
 #define BINARY_VERSION 1
 

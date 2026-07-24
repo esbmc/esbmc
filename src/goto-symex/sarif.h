@@ -3,7 +3,7 @@
 
 #include <goto-programs/dead_store_advisory.h>
 #include <goto-symex/goto_trace.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/config/options.h>
 #include <vector>
 

@@ -9,7 +9,7 @@
 #include <boost/multi_index_container.hpp>
 
 #include <util/config/config.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 #include <util/type.h>
 
 /* Symbol table.

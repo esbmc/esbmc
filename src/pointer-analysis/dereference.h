@@ -5,7 +5,7 @@
 #include <set>
 #include <util/expr.h>
 #include <irep2/irep2_guard.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/config/options.h>
 
 /** @file dereference.h

@@ -7,7 +7,7 @@
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
 #include <util/config/config.h>
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <util/c_types.h>
 #include <util/message/message.h>
 #include <util/migrate.h>

@@ -2,7 +2,7 @@
 #define ESBMC_JIMPLE_AST_H
 
 #include <util/expr.h>
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <util/std_types.h>
 #include <util/c_types.h>
 #include <util/message/message.h>

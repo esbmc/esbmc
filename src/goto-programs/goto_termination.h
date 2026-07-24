@@ -2,7 +2,7 @@
 #define GOTO_PROGRAMS_GOTO_TERMINATION_H_
 
 #include <goto-programs/goto_functions.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/config/options.h>
 
 /// Reduce non-termination to a reachability safety property.

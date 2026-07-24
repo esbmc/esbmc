@@ -1,7 +1,7 @@
 #ifndef CLANG_C_FRONTEND_CLANG_C_MAIN_H_
 #define CLANG_C_FRONTEND_CLANG_C_MAIN_H_
 
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <util/message/message.h>
 #include <util/std_code.h>
 

@@ -4,7 +4,7 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>
 

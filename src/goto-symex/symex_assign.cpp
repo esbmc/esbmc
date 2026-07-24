@@ -4,7 +4,7 @@
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <util/c_types.h>
-#include <util/cprover_prefix.h>
+#include <util/symtab/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/message/message.h>

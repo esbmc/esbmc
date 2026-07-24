@@ -8,7 +8,7 @@
 #include <util/migrate.h>
 #include <util/message/message.h>
 #include <util/std_expr.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>

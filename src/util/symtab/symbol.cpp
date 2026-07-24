@@ -1,7 +1,7 @@
 #include <util/location.h>
 #include <util/message/message.h>
 #include <util/migrate.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 
 symbolt::symbolt()
 {

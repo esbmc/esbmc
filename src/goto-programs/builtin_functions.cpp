@@ -7,7 +7,7 @@
 #include <regex>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/cprover_prefix.h>
+#include <util/symtab/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/location.h>

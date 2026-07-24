@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ld-frontend/property/yaml_property_parser.h>
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <string>

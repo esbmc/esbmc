@@ -1,6 +1,6 @@
 #include <util/expr.h>
 #include <util/std_types.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 
 //
 // WARNING: The following functions are depreciated, and will

@@ -1,5 +1,5 @@
 #include <util/i2string.h>
-#include <util/symbol_generator.h>
+#include <util/symtab/symbol_generator.h>
 
 symbolt &symbol_generator::new_symbol(
   contextt &context,

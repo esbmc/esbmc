@@ -4,7 +4,7 @@
 #include <util/config/config.h>
 #include <util/expr_util.h>
 #include <util/message/message.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <clang-c-frontend/clang_c_main.h>

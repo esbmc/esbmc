@@ -17,23 +17,23 @@ add_library(string_pool string_pool.cpp)
 add_library(usr_utils usr_utils.cpp)
 
 add_library(util_esbmc xml_irep.cpp xml.cpp
-        arith_tools.cpp base_type.cpp config/cmdline.cpp config/config.cpp config/config_file.cpp context.cpp
+        arith_tools.cpp base_type.cpp config/cmdline.cpp config/config.cpp config/config_file.cpp symtab/context.cpp
         cwe_mapping.cpp
         fallible_calls.cpp
         expr_util.cpp i2string.cpp location.cpp
-        mp_arith.cpp namespace.cpp config/parseoptions.cpp rename.cpp
-        threeval.cpp typecheck.cpp bitvector.cpp parser.cpp replace_symbol.cpp
+        mp_arith.cpp symtab/namespace.cpp config/parseoptions.cpp symtab/rename.cpp
+        threeval.cpp typecheck.cpp bitvector.cpp parser.cpp symtab/replace_symbol.cpp
         string_pool.cpp config/options.cpp c_misc.cpp
         expr_simplifier.cpp expr_reassociate.cpp
-        string2array.cpp array2string.cpp time_stopping.cpp symbol.cpp
-        symbol_generator.cpp symbolic_types.cpp
+        string2array.cpp array2string.cpp time_stopping.cpp symtab/symbol.cpp
+        symtab/symbol_generator.cpp symbolic_types.cpp
         array_name.cpp union_find.cpp
         std_types.cpp std_code.cpp format_constant.cpp
-        irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp
-        signal_catcher.cpp migrate.cpp show_symbol_table.cpp
+        irep_serialization.cpp symtab/symbol_serialization.cpp fixedbv.cpp
+        signal_catcher.cpp migrate.cpp symtab/show_symbol_table.cpp
         type_byte_size.cpp ssa/goto_expr_factory.cpp
         string_constant.cpp c_types.cpp python_types.cpp ieee_float.cpp c_qualifiers.cpp
-        c_sizeof.cpp c_link.cpp c_typecast.cpp fix_symbol.cpp
+        c_sizeof.cpp c_link.cpp c_typecast.cpp symtab/fix_symbol.cpp
         c_expr2string.cpp cpp_expr2string.cpp type2name.cpp
         exception_specification.cpp
         message/message.cpp encoding.cpp expr.cpp irep.cpp type.cpp yaml_parser.cpp

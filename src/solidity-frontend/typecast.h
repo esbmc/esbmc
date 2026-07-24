@@ -8,7 +8,7 @@
 #ifndef SOLIDITY_TYPECAST_H_
 #define SOLIDITY_TYPECAST_H_
 
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/std_expr.h>
 
 extern void

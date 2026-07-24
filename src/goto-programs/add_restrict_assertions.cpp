@@ -4,7 +4,7 @@
 #include <util/c_types.h>
 #include <util/config/config.h>
 #include <util/migrate.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/std_types.h>
 #include <util/type_byte_size.h>
 

@@ -3,8 +3,8 @@
 
 #include <cstdio>
 #include <set>
-#include <util/context.h>
-#include <util/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
 
 enum class presentationt
 {

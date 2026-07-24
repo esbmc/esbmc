@@ -1,6 +1,6 @@
 #include <algorithm>
 #include <util/i2string.h>
-#include <util/rename.h>
+#include <util/symtab/rename.h>
 
 void get_new_name(symbolt &symbol, const namespacet &ns)
 {

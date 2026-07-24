@@ -1,6 +1,6 @@
 #include <cassert>
 #include <cstring>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/message/message.h>
 
 unsigned namespacet::get_max(const std::string &prefix) const

@@ -16,7 +16,7 @@
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
-#include <util/pretty.h>
+#include <util/symtab/pretty.h>
 #include <util/std_expr.h>
 #include <util/time_stopping.h>
 #include <util/type_byte_size.h>

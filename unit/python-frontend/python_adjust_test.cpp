@@ -2,8 +2,8 @@
 #include <catch2/catch.hpp>
 
 #include <python-frontend/python_adjust.h>
-#include <util/context.h>
-#include <util/symbol.h>
+#include <util/symtab/context.h>
+#include <util/symtab/symbol.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
 #include <util/migrate.h>

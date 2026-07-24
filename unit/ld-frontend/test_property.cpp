@@ -3,7 +3,7 @@
 
 #include <ld-frontend/property/property_encoder.h>
 #include <ld-frontend/property/yaml_property_parser.h>
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <util/std_expr.h>
 #include <util/type.h>
 

@@ -2,13 +2,13 @@
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/cprover_prefix.h>
+#include <util/symtab/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
 #include <util/migrate.h>
-#include <util/rename.h>
+#include <util/symtab/rename.h>
 #include <util/std_expr.h>
 
 /// Recursively flatten a (possibly nested) binary && expression into a flat

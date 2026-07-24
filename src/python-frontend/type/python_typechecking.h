@@ -7,7 +7,7 @@
 #include <util/std_code.h>
 #include <util/std_types.h>
 #include <util/type.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 #include <util/python_types.h>
 
 #include <string>

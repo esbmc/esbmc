@@ -24,7 +24,7 @@
 #include <util/std_expr.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 #include <util/type.h>
 
 #include <boost/algorithm/string/predicate.hpp>

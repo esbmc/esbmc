@@ -13,7 +13,7 @@
 #include <solvers/smt/smt_result.h>
 #include <irep2/irep2_utils.h>
 #include <util/message/message.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/threeval.h>
 
 /** @file smt_conv.h

@@ -4,7 +4,7 @@
 #include <pointer-analysis/value_sets.h>
 #include <util/expr_util.h>
 #include <irep2/irep2_guard.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/std_code.h>
 #include <unordered_set>
 

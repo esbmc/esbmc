@@ -17,7 +17,7 @@
 #include <python-frontend/type/type_utils.h>
 #include <util/expr.h>
 #include <util/type.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 #include <util/expr_util.h>
 #include <util/arith_tools.h>
 #include <python-frontend/python_frontend_limits.h>

@@ -2,7 +2,7 @@
 #define GOTO_PROGRAMS_GOTO_K_INDUCTION_H_
 
 #include <goto-programs/goto_functions.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 
 /// Per-loop k-induction transformation: havoc each loop's modified
 /// variables and inject an ASSUME of the loop entry condition right

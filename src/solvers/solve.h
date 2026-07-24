@@ -3,7 +3,7 @@
 
 #include <string>
 #include <util/config/config.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/message/message.h>
 
 class array_iface;

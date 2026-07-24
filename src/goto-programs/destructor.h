@@ -1,7 +1,7 @@
 #ifndef CPROVER_GOTO_PROGRAMS_DESTRUCTOR_H
 #define CPROVER_GOTO_PROGRAMS_DESTRUCTOR_H
 
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/std_code.h>
 #include <util/std_types.h>
 

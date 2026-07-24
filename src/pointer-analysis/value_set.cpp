@@ -5,7 +5,7 @@
 #include <util/base_type.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>

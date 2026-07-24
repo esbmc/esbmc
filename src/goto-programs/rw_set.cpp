@@ -2,7 +2,7 @@
 #include <pointer-analysis/goto_program_dereference.h>
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/std_expr.h>
 
 // Follow pointer arithmetic and typecasts down to the root pointer/array/object

@@ -1,4 +1,4 @@
-#include <util/replace_symbol.h>
+#include <util/symtab/replace_symbol.h>
 #include <util/std_types.h>
 
 bool replace_symbolt::replace(exprt &dest)

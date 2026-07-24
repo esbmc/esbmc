@@ -1,7 +1,7 @@
 #ifndef CPROVER_NAMESPACE_H
 #define CPROVER_NAMESPACE_H
 
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_type.h>
 #include <util/migrate.h>

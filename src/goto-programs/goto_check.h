@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_program.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/config/options.h>
 
 // to invoke "get_base_object" for input overflow checks

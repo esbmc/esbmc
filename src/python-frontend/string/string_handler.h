@@ -5,7 +5,7 @@
 #include <util/std_types.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <util/message/message.h>
 #include <nlohmann/json.hpp>
 #include <optional>

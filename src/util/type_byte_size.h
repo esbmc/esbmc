@@ -4,7 +4,7 @@
 #include <util/expr.h>
 #include <irep2/irep2.h>
 #include <util/mp_arith.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/std_types.h>
 
 BigInt member_offset_bits(

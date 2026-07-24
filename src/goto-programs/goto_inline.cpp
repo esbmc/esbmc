@@ -3,7 +3,7 @@
 #include <goto-programs/remove_no_op.h>
 #include <langapi/language_util.h>
 #include <util/base_type.h>
-#include <util/cprover_prefix.h>
+#include <util/symtab/cprover_prefix.h>
 #include <util/prefix.h>
 
 /// Returns true if the formal parameter type and the actual argument type are

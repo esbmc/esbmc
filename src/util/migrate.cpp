@@ -6,7 +6,7 @@
 #include <irep2/irep2_utils.h>
 #include <util/message/format.h>
 #include <util/migrate.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/prefix.h>
 #include <util/string_constant.h>
 #include <util/type_byte_size.h>

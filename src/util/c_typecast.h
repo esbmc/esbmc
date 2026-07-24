@@ -2,7 +2,7 @@
 #define CPROVER_C_TYPECAST_H
 
 #include <util/expr.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 
 // try a type cast from expr.type() to type
 //

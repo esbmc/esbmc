@@ -3,7 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <util/type.h>
 #include <util/expr.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 #include <set>
 #include <utility>
 

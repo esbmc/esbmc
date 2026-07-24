@@ -4,7 +4,7 @@
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message/message.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 #include <map>
 #include <stdexcept>
 

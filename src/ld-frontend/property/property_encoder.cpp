@@ -2,7 +2,7 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 #include <cctype>
 #include <stdexcept>
 

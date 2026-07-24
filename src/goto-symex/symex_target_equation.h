@@ -12,7 +12,7 @@
 #include <memory>
 #include <util/config/config.h>
 #include <irep2/irep2.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/threeval.h>
 #include <vector>
 

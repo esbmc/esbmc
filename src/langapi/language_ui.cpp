@@ -4,7 +4,7 @@
 #include <memory>
 #include <util/i2string.h>
 #include <util/message/message.h>
-#include <util/show_symbol_table.h>
+#include <util/symtab/show_symbol_table.h>
 
 language_uit::language_uit() : ns(context)
 {

@@ -40,8 +40,8 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/frame_enforcer.h>
-#include <util/context.h>
-#include <util/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
 #include <map>
 #include <set>
 #include <string>

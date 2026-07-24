@@ -5,13 +5,13 @@
 #include <goto-programs/remove_no_op.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/cprover_prefix.h>
+#include <util/symtab/cprover_prefix.h>
 #include <util/i2string.h>
 #include <irep2/irep2_utils.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
 #include <util/prefix.h>
-#include <util/replace_symbol.h>
+#include <util/symtab/replace_symbol.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 

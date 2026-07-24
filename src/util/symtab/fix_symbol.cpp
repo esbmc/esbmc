@@ -1,4 +1,4 @@
-#include <util/fix_symbol.h>
+#include <util/symtab/fix_symbol.h>
 
 void fix_symbolt::fix_symbol(symbolt &symbol)
 {

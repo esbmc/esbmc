@@ -1,5 +1,5 @@
 #include <util/irep_serialization.h>
-#include <util/symbol_serialization.h>
+#include <util/symtab/symbol_serialization.h>
 
 void symbol_serializationt::convert(const symbolt &sym, std::ostream &out)
 {

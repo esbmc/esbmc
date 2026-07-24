@@ -16,8 +16,8 @@
 #include <vector>
 #include <map>
 #include <queue>
-#include <util/context.h>
-#include <util/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
 #include <util/std_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>

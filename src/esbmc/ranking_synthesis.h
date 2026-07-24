@@ -2,7 +2,7 @@
 #define ESBMC_RANKING_SYNTHESIS_H
 
 #include <goto-programs/goto_functions.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/config/options.h>
 #include <util/threeval.h>
 

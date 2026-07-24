@@ -57,7 +57,7 @@
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
 #include <pointer-analysis/value_set_analysis.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 #include <util/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
 #include <langapi/language_util.h>

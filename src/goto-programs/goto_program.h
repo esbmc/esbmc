@@ -9,7 +9,7 @@
 #include <vector>
 #include <irep2/irep2_utils.h>
 #include <util/location.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/std_code.h>
 
 #define forall_goto_program_instructions(it, program)                          \

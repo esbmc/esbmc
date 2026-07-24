@@ -1,4 +1,4 @@
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
 #include <cassert>

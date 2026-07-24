@@ -17,7 +17,7 @@ Module: Unit tests for symbolt -- specifically the legacy / IREP2
 #include <util/arith_tools.h>
 #include <util/migrate.h>
 #include <util/std_code.h>
-#include <util/symbol.h>
+#include <util/symtab/symbol.h>
 
 SCENARIO(
   "Constructed symbol validity checks",

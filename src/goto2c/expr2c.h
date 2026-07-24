@@ -5,7 +5,7 @@
 #include <set>
 #include <util/c_qualifiers.h>
 #include <util/expr.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <util/std_code.h>
 #include <util/c_expr2string.h>
 

@@ -7,7 +7,7 @@
 #define ESBMC_SYMBOLIC_TYPES_H
 
 #include <util/std_types.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 
 // Replaces the symbolic struct type with the complete struct type.
 typet get_complete_type(typet type, const namespacet &ns);
