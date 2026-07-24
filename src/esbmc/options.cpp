@@ -710,8 +710,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<int>()->implicit_value(1048576)->value_name(
        "bytes"),
      "Enable check for allocations (malloc/calloc/realloc/new[]) whose size "
-     "can exceed K bytes; give the bound attached as --excessive-alloc-check=K "
-     "(default 1 MiB) (CWE-789)"},
+     "can exceed K bytes; attach the bound with '=' as "
+     "--excessive-alloc-check=K "
+     "(a space-separated value is treated as an input file), default 1 MiB "
+     "(CWE-789)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(
