@@ -1,4 +1,5 @@
 CORE
 main.py
 --unwind 1
+Unsupported function 'publish' is reached
 ^VERIFICATION FAILED$
