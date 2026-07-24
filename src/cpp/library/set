@@ -672,6 +672,13 @@ public:
     return counter;
   }
 
+#if __cplusplus >= 202002L
+  bool contains(const key_type &x) const
+  {
+    return this->count(x) > 0;
+  }
+#endif
+
   // lower_bound returns iterator to first element >= x
   iterator lower_bound(const key_type &x)
   {
@@ -1386,6 +1393,13 @@ public:
     }
     return counter;
   }
+
+#if __cplusplus >= 202002L
+  bool contains(const key_type &x) const
+  {
+    return this->count(x) > 0;
+  }
+#endif
 
   // lower_bound returns iterator to first element >= x
   iterator lower_bound(const key_type &x)
