@@ -131,7 +131,7 @@ public:
   public:
   public:
     int pos;
-    key_type *base;
+    const key_type *base;
 
     const_iterator(const const_iterator &i)
     {
@@ -145,7 +145,7 @@ public:
       base = i.base;
     }
 
-    const_iterator(key_type *bbase, int ppos)
+    const_iterator(const key_type *bbase, int ppos)
     {
       __ESBMC_assert(bbase != NULL, "Invalid null pointer");
       pos = ppos;
@@ -162,12 +162,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    const value_type *operator->()
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    const value_type &operator*()
     {
       return base[pos];
     }
@@ -306,7 +306,7 @@ public:
   {
   public:
     int pos;
-    key_type *base;
+    const key_type *base;
 
     const_reverse_iterator(const const_reverse_iterator &i)
     {
@@ -314,7 +314,7 @@ public:
       base = i.base;
     }
 
-    const_reverse_iterator(key_type *bbase, int ppos)
+    const_reverse_iterator(const key_type *bbase, int ppos)
     {
       __ESBMC_assert(bbase != NULL, "Invalid null pointer");
       pos = ppos;
@@ -331,12 +331,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    const value_type *operator->()
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    const value_type &operator*()
     {
       return base[pos];
     }
@@ -854,7 +854,7 @@ public:
   public:
   public:
     int pos;
-    key_type *base;
+    const key_type *base;
 
     const_iterator(const const_iterator &i)
     {
@@ -868,7 +868,7 @@ public:
       base = i.base;
     }
 
-    const_iterator(key_type *bbase, int ppos)
+    const_iterator(const key_type *bbase, int ppos)
     {
       __ESBMC_assert(bbase != NULL, "Invalid null pointer");
       pos = ppos;
@@ -885,12 +885,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    const value_type *operator->()
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    const value_type &operator*()
     {
       return base[pos];
     }
@@ -1028,7 +1028,7 @@ public:
   {
   public:
     int pos;
-    key_type *base;
+    const key_type *base;
 
     const_reverse_iterator(const const_reverse_iterator &i)
     {
@@ -1036,7 +1036,7 @@ public:
       base = i.base;
     }
 
-    const_reverse_iterator(key_type *bbase, int ppos)
+    const_reverse_iterator(const key_type *bbase, int ppos)
     {
       __ESBMC_assert(bbase != NULL, "Invalid null pointer");
       pos = ppos;
@@ -1053,12 +1053,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    const value_type *operator->()
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    const value_type &operator*()
     {
       return base[pos];
     }

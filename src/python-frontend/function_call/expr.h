@@ -585,6 +585,15 @@ private:
   std::optional<exprt> try_handle_round(bool is_user_imported);
 
   /*
+   * Inlines a call to a user function whose entire body is `return <param>`
+   * when that parameter resolves to an array/array-pointer type: arrays
+   * aren't a valid by-value return type yet, so the call is replaced with
+   * the caller's own argument expression for this exact identity pattern.
+   * Returns nullopt for any other function shape or non-array parameter.
+   */
+  std::optional<exprt> try_fold_identity_array_return();
+
+  /*
    * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the
    * _float/_str/_default suffix to actual_func_name based on element type, and
    * may early-return the inline comparison for a mixed int/float min/max list.
