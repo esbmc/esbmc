@@ -2438,7 +2438,29 @@ bool function_call_expr::is_list_method_call() const
     return sym != nullptr && sym->get_type() == list_type;
   }
 
-  return true;
+  // append/insert/remove/extend/sort/reverse/appendleft/popleft are list-only
+  // mutators. The #6264 crash is specifically a *character array* (str/bytes)
+  // receiver routed into the list model, where __ESBMC_list_push is handed an
+  // array where it expects a PyListObject* and aborts GOTO conversion. Claim the
+  // call unless the receiver resolves to such an array type. Every other receiver
+  // is routed into the list model, matching the historical catch-all here:
+  //   - a genuine list is a PyListObject* (a pointer, not an array);
+  //   - a value the annotator can only type loosely still routes correctly —
+  //     e.g. `m = min([l]); m.append(x)`, where min() is typed int though it
+  //     returns the list itself (#5955). A pure `resolves-to-list_type` positive
+  //     check is unsound here: it drops that receiver (whose static type is int)
+  //     and regresses the test.
+  // str/bytes reached through a Name, an attribute, or a subscript all resolve to
+  // an array type, so this also excludes `self.s.append(...)` and
+  // `xs[0].append(...)` (#6264 review), which then fall through to the correct
+  // AttributeError path.
+  {
+    const std::string recv_type = call_["func"]["value"].value("_type", "");
+    if (recv_type == "List" || recv_type == "BinOp" || recv_type == "ListComp")
+      return true;
+    const exprt recv = converter_.get_expr(call_["func"]["value"]);
+    return !converter_.ns.follow(recv.type()).is_array();
+  }
 }
 
 exprt function_call_expr::handle_list_method() const
@@ -4339,40 +4361,17 @@ std::optional<exprt> function_call_expr::fold_sorted_symbolic_tuples(
 
 std::optional<exprt> function_call_expr::try_fold_identity_array_return()
 {
-  if (call_["func"].value("_type", "") != "Name")
+  std::optional<nlohmann::json> ret_val =
+    converter_.select_return_value_for_call(call_);
+  if (!ret_val)
+    return std::nullopt;
+  if (!converter_.return_value_uses_call_argument(*ret_val, call_))
     return std::nullopt;
 
-  const std::string &func_name = function_id_.get_function();
-  const nlohmann::json func_node =
-    json_utils::try_find_function(converter_.ast()["body"], func_name);
-  if (func_node.empty() || !func_node.contains("body"))
-    return std::nullopt;
-
-  const nlohmann::json &body = func_node["body"];
-  if (body.size() != 1 || body[0].value("_type", "") != "Return")
-    return std::nullopt;
-
-  const nlohmann::json &ret_val = body[0].value("value", nlohmann::json());
-  if (ret_val.is_null() || ret_val.value("_type", "") != "Name")
-    return std::nullopt;
-
-  const std::string returned_name = ret_val["id"].get<std::string>();
-  const nlohmann::json &params = func_node["args"]["args"];
-
-  // Restrict to the exact `def f(a): return a` shape: one parameter, one
-  // positional argument, no keywords. A function with more parameters, or a
-  // call with extra positional/keyword arguments, would have those other
-  // arguments' evaluation and type-checking silently skipped by substituting
-  // only the returned one.
-  if (params.size() != 1 || params[0].value("arg", "") != returned_name)
-    return std::nullopt;
-  if (
-    call_["args"].size() != 1 ||
-    (call_.contains("keywords") && !call_["keywords"].empty()))
-    return std::nullopt;
-
-  exprt arg_expr = converter_.get_expr(call_["args"][0]);
-  const typet &arg_type = converter_.ns.follow(arg_expr.type());
+  nlohmann::json substituted =
+    converter_.substitute_call_arguments(*ret_val, call_);
+  exprt ret_expr = converter_.get_expr(substituted);
+  const typet &arg_type = converter_.ns.follow(ret_expr.type());
   typet element_candidate;
   if (arg_type.is_array())
     element_candidate = arg_type;
@@ -4392,7 +4391,7 @@ std::optional<exprt> function_call_expr::try_fold_identity_array_return()
   if (innermost == char_type())
     return std::nullopt;
 
-  return arg_expr;
+  return ret_expr;
 }
 
 std::optional<exprt> function_call_expr::try_handle_round(bool is_user_imported)
