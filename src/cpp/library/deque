@@ -73,11 +73,15 @@ public:
     }
     iterator &operator--()
     {
-      return iterator(--pointer, --pos, vec_pos);
+      --pointer;
+      --pos;
+      return *this;
     }
     iterator operator--(int b)
     {
-      return iterator(pointer--, pos--, vec_pos);
+      iterator temp = *this;
+      --(*this);
+      return temp;
     }
 
     bool operator==(const iterator &i) const
@@ -126,20 +130,24 @@ public:
 
     iterator &operator+=(int n)
     {
-      return iterator(pointer += n, pos += n, vec_pos);
+      pointer += n;
+      pos += n;
+      return *this;
     }
     iterator &operator-=(int n)
     {
-      return iterator(pointer -= n, pos -= n, vec_pos);
+      pointer -= n;
+      pos -= n;
+      return *this;
     }
   };
 
   class const_iterator
   {
   public:
-    T *pointer;
+    const T *pointer;
     int pos;
-    T *vec_pos;
+    const T *vec_pos;
 
     const_iterator(const const_iterator &i)
     {
@@ -150,11 +158,11 @@ public:
     const_iterator()
     {
     }
-    const_iterator(T *p)
+    const_iterator(const T *p)
     {
       pointer = p;
     }
-    const_iterator(T *ppointer, int ppos, T *pvec_pos)
+    const_iterator(const T *ppointer, int ppos, const T *pvec_pos)
     {
       pointer = ppointer;
       pos = ppos;
@@ -168,29 +176,37 @@ public:
       return *this;
     }
 
-    T *operator->();
+    const T *operator->();
 
-    T &operator*()
+    const T &operator*()
     {
       return vec_pos[pos];
     }
 
     const_iterator &operator++()
     {
-      return const_iterator(++pointer, ++pos, vec_pos);
+      ++pointer;
+      ++pos;
+      return *this;
     }
     const_iterator operator++(int b)
     {
-      return const_iterator(pointer++, pos++, vec_pos);
+      const_iterator temp = *this;
+      ++(*this);
+      return temp;
     }
 
     const_iterator &operator--()
     {
-      return const_iterator(--pointer, --pos, vec_pos);
+      --pointer;
+      --pos;
+      return *this;
     }
     const_iterator operator--(int b)
     {
-      return const_iterator(pointer--, pos--, vec_pos);
+      const_iterator temp = *this;
+      --(*this);
+      return temp;
     }
 
     bool operator==(const const_iterator &i) const
@@ -226,11 +242,15 @@ public:
 
     const_iterator &operator+=(int n)
     {
-      return const_iterator(pointer += n, pos += n, vec_pos);
+      pointer += n;
+      pos += n;
+      return *this;
     }
     const_iterator &operator-=(int n)
     {
-      return const_iterator(pointer -= n, pos -= n, vec_pos);
+      pointer -= n;
+      pos -= n;
+      return *this;
     }
   };
 
@@ -542,7 +562,6 @@ public:
   const_iterator end() const
   {
     int n = _size + 1;
-    buf[n] = T();
     const_iterator buffer(buf + n, n, buf);
     return buffer;
   }
