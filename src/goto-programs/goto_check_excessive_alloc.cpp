@@ -47,7 +47,7 @@ expr2tc alloc_byte_size(const sideeffect2t &se, const namespacet &ns)
   if (size->type != size_type2())
     size = typecast2tc(size_type2(), size);
 
-  // A char/unknown element type is already a byte count: no scaling needed.
+  // An unknown (nil/empty) element type is already a byte count: no scaling.
   if (is_nil_type(se.alloctype) || is_empty_type(se.alloctype))
     return size;
 
@@ -57,35 +57,14 @@ expr2tc alloc_byte_size(const sideeffect2t &se, const namespacet &ns)
     // uses to model the allocation. A count near 2^64 can wrap the product to
     // a small value and slip under K — a false negative, never a false
     // positive; it mirrors the model rather than contradicting it.
-    BigInt elem_bytes = type_byte_size(se.alloctype, &ns);
-    if (elem_bytes == 1)
-      return size; // sizeof(char)-equivalent: avoid a redundant `* 1`
-    return mul2tc(
-      size_type2(), size, constant_int2tc(size_type2(), elem_bytes));
-  }
-  catch (const array_type2t::dyn_sized_array_excp &)
-  {
-    // A dynamically-sized (VLA) element type, e.g. malloc(sizeof(int[n])):
-    // the frontend records size == 1 with a VLA alloctype, so the byte size
-    // is symbolic but still computable. type_byte_size_expr handles dyn-sized
-    // arrays (unlike the BigInt type_byte_size above, which throws), so scale
-    // by the symbolic element size rather than skipping — otherwise a large
-    // runtime n slips under the bound unchecked.
-    try
-    {
-      expr2tc elem_bytes = type_byte_size_expr(se.alloctype, &ns);
-      if (elem_bytes->type != size_type2())
-        elem_bytes = typecast2tc(size_type2(), elem_bytes);
-      return mul2tc(size_type2(), size, elem_bytes);
-    }
-    catch (const array_type2t::array_size_excp &)
-    {
-      return expr2tc(); // nested element size still unknown — skip
-    }
+    // type_byte_size_expr folds a fixed element type to a constant and returns
+    // a symbolic size for a VLA element (e.g. malloc(sizeof(int[n]))), so this
+    // one path covers both.
+    return mul2tc(size_type2(), size, type_byte_size_expr(se.alloctype, &ns));
   }
   catch (const array_type2t::array_size_excp &)
   {
-    // Element type has no size at all (flexible/incomplete array member).
+    // Element type has no finite size (flexible/incomplete array member).
     return expr2tc();
   }
 }
@@ -130,22 +109,15 @@ void collect_allocs(
   if (is_if2t(e))
   {
     const if2t &i = to_if2t(e);
-    const expr2tc not_cond = not2tc(i.cond);
-    collect_allocs(
-      i.true_value,
-      is_nil_expr(guard) ? i.cond : and2tc(guard, i.cond),
-      ns,
-      out);
-    collect_allocs(
-      i.false_value,
-      is_nil_expr(guard) ? not_cond : and2tc(guard, not_cond),
-      ns,
-      out);
+    auto extend = [&](const expr2tc &c)
+    { return is_nil_expr(guard) ? c : and2tc(guard, c); };
+    collect_allocs(i.true_value, extend(i.cond), ns, out);
+    collect_allocs(i.false_value, extend(not2tc(i.cond)), ns, out);
     return;
   }
 
-  e->foreach_operand(
-    [&](const expr2tc &op) { collect_allocs(op, guard, ns, out); });
+  e->foreach_operand([&](const expr2tc &op)
+                     { collect_allocs(op, guard, ns, out); });
 }
 } // namespace
 
@@ -189,8 +161,10 @@ bool goto_check_excessive_alloc::runOnFunction(
       work.emplace_back(it, std::move(sites));
   }
 
+  if (work.empty())
+    return false;
+
   const expr2tc bound = constant_int2tc(size_type2(), max_alloc_bytes);
-  bool changed = false;
   for (auto &[it, sites] : work)
   {
     // Snapshot before inserting: each insert_swap splices a new ASSERT into
@@ -204,7 +178,7 @@ bool goto_check_excessive_alloc::runOnFunction(
       // conditional so a not-taken branch cannot raise a false witness.
       expr2tc cond = lessthanequal2tc(site.byte_size, bound);
       if (!is_nil_expr(site.guard))
-        cond = or2tc(not2tc(site.guard), cond);
+        cond = implies2tc(site.guard, cond);
 
       goto_programt new_code;
       goto_programt::targett t = new_code.add_instruction(ASSERT);
@@ -215,8 +189,7 @@ bool goto_check_excessive_alloc::runOnFunction(
       t->function = fn;
       body.insert_swap(it, new_code.instructions.front());
     }
-    changed = true;
   }
 
-  return changed;
+  return true;
 }
