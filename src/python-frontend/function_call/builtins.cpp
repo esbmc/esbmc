@@ -22,10 +22,10 @@
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/lang/python_types.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <util/expr/string_constant.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 #include <algorithm>
 #include <cmath>

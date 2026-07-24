@@ -3,7 +3,7 @@
 
 #include <irep2/irep2.h>
 #include <util/lang/language.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
 #include <util/symtab/symbol.h>
 

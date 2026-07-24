@@ -6,7 +6,7 @@
 #include <util/lang/c_types.h>
 #include <util/lang/exception_specification.h>
 #include <util/message/message.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 
 void clang_cpp_adjust::convert_expression_to_code(exprt &expr)
 {

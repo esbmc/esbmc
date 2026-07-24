@@ -10,7 +10,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 
 #include <algorithm>
 #include <functional>

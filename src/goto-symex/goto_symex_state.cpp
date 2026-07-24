@@ -8,7 +8,7 @@
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 goto_symex_statet::goto_symex_statet(
   renaming::level2t &l2,

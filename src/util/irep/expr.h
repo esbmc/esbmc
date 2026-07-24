@@ -1,8 +1,8 @@
 #ifndef CPROVER_EXPR_H
 #define CPROVER_EXPR_H
 
-#include <util/location.h>
-#include <util/type.h>
+#include <util/irep/location.h>
+#include <util/irep/type.h>
 
 #define forall_operands(it, expr)                                              \
   if ((expr).has_operands())                                                   \

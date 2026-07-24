@@ -7,7 +7,7 @@
 #include <python-frontend/module/global_scope.h>
 #include <util/config/config.h>
 #include <util/symtab/context.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/lang/c_types.h>
 #include <util/lang/python_types.h>
 #include <util/arith/arith_tools.h>

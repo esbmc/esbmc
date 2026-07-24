@@ -39,8 +39,8 @@
 #include <type_traits>
 #include <utility>
 #include <util/base/compiler_defs.h>
-#include <util/irep_idt.h>
-#include <util/irep.h>
+#include <util/irep/irep_idt.h>
+#include <util/irep/irep.h>
 
 // The list of irep2 expression kinds lives in expr_kinds.inc; the
 // list of type kinds lives in type_kinds.inc. Every consumer (the

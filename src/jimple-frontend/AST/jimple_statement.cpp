@@ -1,6 +1,6 @@
-#include <util/std_code.h>
-#include <util/std_expr.h>
-#include <util/std_types.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_types.h>
 #include <jimple-frontend/AST/jimple_statement.h>
 #include <util/arith/arith_tools.h>
 #include "util/lang/c_typecast.h"

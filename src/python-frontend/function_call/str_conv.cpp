@@ -11,8 +11,8 @@
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 
 #include <algorithm>
 #include <cctype>

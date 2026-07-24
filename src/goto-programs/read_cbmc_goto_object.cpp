@@ -5,9 +5,9 @@
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/expr/expr_util.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/message/message.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <util/symtab/symbol.h>
 #include <cassert>
 #include <cstdint>

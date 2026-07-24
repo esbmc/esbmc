@@ -3,7 +3,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/expr/expr_util.h>
 #include <util/symtab/namespace.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 
 // Follow pointer arithmetic and typecasts down to the root pointer/array/object
 // symbol of an address expression (`A + i` -> A, `(T *)p` -> p), or return null

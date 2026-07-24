@@ -8,9 +8,9 @@
 #include <set>
 #include <vector>
 #include <irep2/irep2_utils.h>
-#include <util/location.h>
+#include <util/irep/location.h>
 #include <util/symtab/namespace.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 
 #define forall_goto_program_instructions(it, program)                          \
   for (goto_programt::instructionst::const_iterator it =                       \

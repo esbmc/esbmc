@@ -4,8 +4,8 @@
 #include <ld-frontend/property/property_encoder.h>
 #include <ld-frontend/property/yaml_property_parser.h>
 #include <util/symtab/context.h>
-#include <util/std_expr.h>
-#include <util/type.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/type.h>
 
 #ifndef FIXTURE_DIR
 #  define FIXTURE_DIR "."

@@ -1,4 +1,4 @@
-#include <util/type.h>
+#include <util/irep/type.h>
 
 void typet::move_to_subtypes(typet &type)
 {

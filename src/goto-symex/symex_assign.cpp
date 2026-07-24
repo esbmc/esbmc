@@ -10,8 +10,8 @@
 #include <util/message/message.h>
 #include <util/base/usr_utils.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 
 goto_symext::goto_symext(
   const namespacet &_ns,

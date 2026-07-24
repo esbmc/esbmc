@@ -19,7 +19,7 @@
  */
 
 #include <clang-c-frontend/typecast.h>
-#include <util/type.h>
+#include <util/irep/type.h>
 #include <util/expr/expr_util.h>
 #include "../testing-utils/util_irep.h"
 #include <sstream>

@@ -3,8 +3,8 @@
 #include <util/config/config.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
-#include <util/std_expr.h>
-#include <util/std_types.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_types.h>
 #include <util/expr/string_constant.h>
 
 #include <cuchar>

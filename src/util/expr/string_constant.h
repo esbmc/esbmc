@@ -1,7 +1,7 @@
 #ifndef CPROVER_ANSI_C_EXPR_H
 #define CPROVER_ANSI_C_EXPR_H
 
-#include <util/expr.h>
+#include <util/irep/expr.h>
 
 class string_constantt : public exprt
 {

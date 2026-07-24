@@ -9,7 +9,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <python-frontend/python_expr_builder.h>
 
 #include <boost/algorithm/string/predicate.hpp>

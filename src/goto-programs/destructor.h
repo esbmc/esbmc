@@ -2,8 +2,8 @@
 #define CPROVER_GOTO_PROGRAMS_DESTRUCTOR_H
 
 #include <util/symtab/namespace.h>
-#include <util/std_code.h>
-#include <util/std_types.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_types.h>
 
 /// Follows \p type to the authoritative class type symbol, or nullptr when it
 /// does not resolve to a struct.

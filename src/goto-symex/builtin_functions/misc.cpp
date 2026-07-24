@@ -6,8 +6,8 @@
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <util/message/message.h>
-#include <util/migrate.h>
-#include <util/std_types.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_types.h>
 
 void goto_symext::replace_races_check(expr2tc &expr)
 {

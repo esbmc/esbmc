@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/expr/type2name.h>
 #include <cctype>
 #include <util/base/i2string.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 #include <util/message/message.h>
 
 std::string type2name(const typet &type)

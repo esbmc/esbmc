@@ -2,7 +2,7 @@
 #define ESBMC_JIMPLE_TYPE_H
 
 #include <jimple-frontend/AST/jimple_ast.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 

@@ -1,6 +1,6 @@
 #include <cassert>
 #include <cstdlib>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <util/arith/fixedbv.h>
 #include <util/arith/ieee_float.h>
 #include <util/arith/mp_arith.h>

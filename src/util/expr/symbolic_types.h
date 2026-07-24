@@ -6,7 +6,7 @@
 #ifndef ESBMC_SYMBOLIC_TYPES_H
 #define ESBMC_SYMBOLIC_TYPES_H
 
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 #include <util/symtab/namespace.h>
 
 // Replaces the symbolic struct type with the complete struct type.

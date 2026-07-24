@@ -3,10 +3,10 @@
 #include <goto-programs/rw_set.h>
 #include <pointer-analysis/value_sets.h>
 #include <util/expr/expr_util.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <irep2/irep2_guard.h>
 #include <util/base/prefix.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <map>
 #include <set>
 

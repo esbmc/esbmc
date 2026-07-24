@@ -7,6 +7,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <string>
-#include <util/type.h>
+#include <util/irep/type.h>
 
 std::string type2name(const typet &type);

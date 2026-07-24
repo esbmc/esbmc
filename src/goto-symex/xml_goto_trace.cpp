@@ -3,7 +3,7 @@
 #include <goto-symex/xml_goto_trace.h>
 #include <langapi/language_util.h>
 #include <util/base/i2string.h>
-#include <util/xml_irep.h>
+#include <util/irep/xml_irep.h>
 
 void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
 {

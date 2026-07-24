@@ -1,4 +1,4 @@
-#include <util/location.h>
+#include <util/irep/location.h>
 
 std::string locationt::as_string() const
 {

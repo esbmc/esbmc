@@ -35,7 +35,7 @@
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <util/config/options.h>
 #include <irep2/irep2_utils.h>
 #include <functional>

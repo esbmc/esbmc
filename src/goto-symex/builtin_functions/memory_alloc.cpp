@@ -7,8 +7,8 @@
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/std_types.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_types.h>
 #include <util/expr/type_byte_size.h>
 #include <utility>
 #include <vector>

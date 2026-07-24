@@ -1,9 +1,9 @@
 #ifndef ESBMC_JIMPLE_AST_H
 #define ESBMC_JIMPLE_AST_H
 
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <util/symtab/context.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
 #include <nlohmann/json.hpp>

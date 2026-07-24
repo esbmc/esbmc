@@ -18,8 +18,8 @@
 #include <queue>
 #include <util/symtab/context.h>
 #include <util/symtab/namespace.h>
-#include <util/std_types.h>
-#include <util/std_code.h>
+#include <util/irep/std_types.h>
+#include <util/irep/std_code.h>
 #include <util/expr/string_constant.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>

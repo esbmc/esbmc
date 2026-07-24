@@ -2,7 +2,7 @@
 #include <jimple-frontend/AST/jimple_declaration.h>
 #include <jimple-frontend/AST/jimple_statement.h>
 #include <memory>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 #include <util/expr/expr_util.h>
 
 exprt jimple_full_method_body::to_exprt(

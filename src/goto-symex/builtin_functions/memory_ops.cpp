@@ -9,9 +9,9 @@
 #include <irep2/irep2.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/base/prefix.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 #include <algorithm>
 
 // Computes the equivalent object value when considering a memset operation on it

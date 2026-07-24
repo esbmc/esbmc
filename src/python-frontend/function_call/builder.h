@@ -1,7 +1,7 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 
 class python_converter;
 class symbol_id;

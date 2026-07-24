@@ -5,8 +5,8 @@
 #include <vector>
 #include <irep2/irep2.h>
 #include <util/config/config.h>
-#include <util/expr.h>
-#include <util/location.h>
+#include <util/irep/expr.h>
+#include <util/irep/location.h>
 
 class symbolt
 {

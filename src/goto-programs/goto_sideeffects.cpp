@@ -7,9 +7,9 @@
 #include <util/base/i2string.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/symtab/rename.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 
 /// Recursively flatten a (possibly nested) binary && expression into a flat
 /// list of conjuncts.  Clang represents A && B && C as and(and(A,B),C).

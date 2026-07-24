@@ -18,13 +18,13 @@
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/lang/python_types.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 
 #include <functional>
 #include <map>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <algorithm>
 #include <cctype>
 #include <cfenv>

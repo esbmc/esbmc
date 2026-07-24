@@ -67,7 +67,7 @@ extern "C"
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
-#include <util/irep.h>
+#include <util/irep/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <memory>

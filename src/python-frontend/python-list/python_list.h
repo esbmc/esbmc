@@ -1,8 +1,8 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
-#include <util/type.h>
-#include <util/expr.h>
+#include <util/irep/type.h>
+#include <util/irep/expr.h>
 #include <util/symtab/symbol.h>
 #include <set>
 #include <utility>

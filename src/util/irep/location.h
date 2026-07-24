@@ -1,7 +1,7 @@
 #ifndef CPROVER_LOCATION_H
 #define CPROVER_LOCATION_H
 
-#include <util/irep.h>
+#include <util/irep/irep.h>
 
 class locationt : public irept
 {

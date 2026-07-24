@@ -1,4 +1,4 @@
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 
 code_blockt &codet::make_block()
 {

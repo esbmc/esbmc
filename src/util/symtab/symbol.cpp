@@ -1,6 +1,6 @@
-#include <util/location.h>
+#include <util/irep/location.h>
 #include <util/message/message.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/symtab/symbol.h>
 
 symbolt::symbolt()

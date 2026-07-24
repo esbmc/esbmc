@@ -3,7 +3,7 @@
 #include <goto-programs/read_bin_goto_object.h>
 #include <langapi/mode.h>
 #include <util/expr/base_type.h>
-#include <util/irep_serialization.h>
+#include <util/irep/irep_serialization.h>
 #include <util/symtab/namespace.h>
 #include <util/symtab/symbol_serialization.h>
 

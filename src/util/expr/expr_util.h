@@ -1,5 +1,5 @@
-#include <util/expr.h>
-#include <util/std_types.h>
+#include <util/irep/expr.h>
+#include <util/irep/std_types.h>
 #include <util/symtab/symbol.h>
 
 //

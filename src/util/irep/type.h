@@ -2,8 +2,8 @@
 #define CPROVER_TYPE_H
 
 #include <list>
-#include <util/irep.h>
-#include <util/location.h>
+#include <util/irep/irep.h>
+#include <util/irep/location.h>
 
 class typet : public irept
 {

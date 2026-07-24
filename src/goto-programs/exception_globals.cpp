@@ -3,7 +3,7 @@
 #include <util/symtab/context.h>
 #include <util/symtab/symbol.h>
 #include <util/lang/c_types.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 #include <util/expr/expr_util.h>
 
 namespace

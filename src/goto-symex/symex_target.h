@@ -2,7 +2,7 @@
 #define CPROVER_GOTO_SYMEX_SYMEX_TARGET_H
 
 #include <goto-programs/goto_program.h>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <irep2/irep2_guard.h>
 #include <irep2/irep2.h>
 #include <util/symtab/symbol.h>

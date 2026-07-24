@@ -3,7 +3,7 @@
 
 #include <list>
 #include <string>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <util/arith/mp_arith.h>
 
 class format_tokent

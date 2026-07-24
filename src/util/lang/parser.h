@@ -2,7 +2,7 @@
 #define CPROVER_PARSER_H
 
 #include <string>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <util/message/message.h>
 #include <vector>
 #include <istream>

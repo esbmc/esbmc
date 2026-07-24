@@ -35,9 +35,9 @@
 #include <sstream>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/location.h>
+#include <util/irep/location.h>
 
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/symtab/show_symbol_table.h>
 #include <util/base/time_stopping.h>
 #include <util/ssa/cache.h>

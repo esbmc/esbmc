@@ -16,7 +16,7 @@
 #include <goto-programs/goto_program.h>
 #include <util/config/config.h>
 #include <util/symtab/context.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
 
 #include <fstream>

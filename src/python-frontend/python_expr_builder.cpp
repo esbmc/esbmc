@@ -1,10 +1,10 @@
 #include <python-frontend/python_expr_builder.h>
 
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
-#include <util/std_types.h>
-#include <util/std_code.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_types.h>
+#include <util/irep/std_code.h>
 #include <util/expr/expr_util.h>
 
 namespace python_expr

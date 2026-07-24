@@ -2,9 +2,9 @@
 #define CPROVER_BASE_TYPE_H
 
 #include <irep2/irep2.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
-#include <util/type.h>
+#include <util/irep/type.h>
 #include <util/base/union_find.h>
 
 void base_type(type2tc &type, const namespacet &ns);

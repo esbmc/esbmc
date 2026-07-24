@@ -5,7 +5,7 @@
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <string>
 
 // Component-name prefix the C++ frontend uses for nested base subobjects; see

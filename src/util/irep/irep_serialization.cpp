@@ -1,5 +1,5 @@
 #include <sstream>
-#include <util/irep_serialization.h>
+#include <util/irep/irep_serialization.h>
 
 void irep_serializationt::write_irep(std::ostream &out, const irept &irep)
 {

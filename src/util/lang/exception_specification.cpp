@@ -1,5 +1,5 @@
 #include <util/lang/exception_specification.h>
-#include <util/type.h>
+#include <util/irep/type.h>
 
 exception_specificationt exception_specificationt::from_type(const typet &type)
 {

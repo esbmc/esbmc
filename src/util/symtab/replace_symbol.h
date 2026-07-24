@@ -6,7 +6,7 @@
 // false: replaced something
 //
 
-#include <util/expr.h>
+#include <util/irep/expr.h>
 
 class replace_symbolt
 {

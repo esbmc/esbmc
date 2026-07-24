@@ -11,7 +11,7 @@
 #include <util/message/message.h>
 #include <util/message/format.h>
 #include <util/base/prefix.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 #include <util/expr/type_byte_size.h>
 #include <util/expr/type2name.h>
 

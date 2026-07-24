@@ -7,9 +7,9 @@
 #include <solvers/smtlib/smtlib_conv.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/base/prefix.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 
 void goto_symext::symex_goto(const expr2tc &old_guard)
 {

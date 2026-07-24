@@ -4,8 +4,8 @@
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/std_types.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_types.h>
 
 /* Peel array decay, casts and field/element selection off a va_list
  * expression to reach the underlying object's symbol. On e.g. x86-64

@@ -1,9 +1,9 @@
 #include <pointer-analysis/goto_program_dereference.h>
 #include <util/expr/base_type.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/base/prefix.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 
 bool goto_program_dereferencet::has_failed_symbol(
   const expr2tc &expr,

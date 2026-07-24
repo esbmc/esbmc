@@ -6,8 +6,8 @@
 // There's a full mapping in both directions.
 
 #include <irep2/irep2.h>
-#include <util/std_expr.h>
-#include <util/std_types.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_types.h>
 
 // Don't ask
 class namespacet;

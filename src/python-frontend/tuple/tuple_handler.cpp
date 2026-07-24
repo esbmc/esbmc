@@ -7,8 +7,8 @@
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <util/lang/python_types.h>
 
 using namespace python_expr;

@@ -1,7 +1,7 @@
 #ifndef UTIL_EXCEPTION_SPECIFICATION_H
 #define UTIL_EXCEPTION_SPECIFICATION_H
 
-#include <util/irep.h>
+#include <util/irep/irep.h>
 #include <vector>
 
 class typet;

@@ -6,7 +6,7 @@
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <util/message/message.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 
 reachability_treet::reachability_treet(
   goto_functionst &goto_functions,

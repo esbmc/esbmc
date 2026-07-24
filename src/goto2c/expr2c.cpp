@@ -7,8 +7,8 @@
 #include <util/base/i2string.h>
 #include <util/arith/ieee_float.h>
 #include <util/base/prefix.h>
-#include <util/std_code.h>
-#include <util/std_types.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_types.h>
 #include <util/expr/base_type.h>
 #include <util/expr/type_byte_size.h>
 #include <irep2/irep2_utils.h>

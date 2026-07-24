@@ -15,12 +15,12 @@
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/lang/python_types.h>
-#include <util/std_expr.h>
-#include <util/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_code.h>
 #include <util/expr/string_constant.h>
-#include <util/type.h>
+#include <util/irep/type.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <algorithm>

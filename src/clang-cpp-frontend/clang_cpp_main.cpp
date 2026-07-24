@@ -4,7 +4,7 @@
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/symtab/namespace.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <util/expr/symbolic_types.h>
 
 clang_cpp_maint::clang_cpp_maint(contextt &_context) : clang_c_maint(_context)

@@ -6,10 +6,10 @@
 #include <util/symtab/namespace.h>
 #include <util/symtab/context.h>
 #include <util/symtab/symbol.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/expr/expr_util.h>
-#include <util/std_types.h>
-#include <util/std_expr.h>
+#include <util/irep/std_types.h>
+#include <util/irep/std_expr.h>
 #include <util/message/message.h>
 #include <util/expr/type_byte_size.h>
 #include <util/lang/c_types.h>

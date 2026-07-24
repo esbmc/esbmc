@@ -2,8 +2,8 @@
 #define CPROVER_PYTHON_FRONTEND_PYTHON_MATH_H
 
 #include <util/arith/arith_tools.h>
-#include <util/expr.h>
-#include <util/std_code.h>
+#include <util/irep/expr.h>
+#include <util/irep/std_code.h>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>

@@ -6,8 +6,8 @@
 
 #include <util/symtab/context.h>
 #include <util/symtab/namespace.h>
-#include <util/std_code.h>
-#include <util/std_types.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_types.h>
 #include <util/symtab/symbol_generator.h>
 
 // Forward dec, to avoid bringing in clang headers

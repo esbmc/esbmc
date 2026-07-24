@@ -12,8 +12,8 @@
 #include <util/message/message.h>
 #include <util/message/format.h>
 #include <util/base/prefix.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <util/expr/type_byte_size.h>
 
 thread_local object_numberingt value_sett::object_numbering;

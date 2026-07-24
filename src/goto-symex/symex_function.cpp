@@ -13,7 +13,7 @@
 #include <util/base/prefix.h>
 #include <util/symtab/pretty.h>
 #include <util/lang/python_types.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 
 bool goto_symex_utils::is_alloca_return_value_name(const std::string &name)
 {

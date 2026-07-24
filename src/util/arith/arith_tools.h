@@ -1,7 +1,7 @@
 #ifndef CPROVER_ARITH_TOOLS_H
 #define CPROVER_ARITH_TOOLS_H
 
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <irep2/irep2.h>
 #include <util/arith/mp_arith.h>
 

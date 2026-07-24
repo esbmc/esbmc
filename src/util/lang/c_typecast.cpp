@@ -6,8 +6,8 @@
 #include <util/config/config.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 #include <util/expr/string2array.h>
 
 // In this file, all functions and methods are replicated with irept and irep2

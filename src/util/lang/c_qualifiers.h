@@ -1,7 +1,7 @@
 #ifndef CPROVER_ANSI_C_C_QUALIFIERS_H
 #define CPROVER_ANSI_C_C_QUALIFIERS_H
 
-#include <util/expr.h>
+#include <util/irep/expr.h>
 
 class c_qualifierst
 {

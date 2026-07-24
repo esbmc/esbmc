@@ -5,7 +5,7 @@
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/lang/python_types.h>
 
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)

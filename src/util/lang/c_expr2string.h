@@ -5,9 +5,9 @@
 #include <optional>
 #include <set>
 #include <util/lang/c_qualifiers.h>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <util/symtab/namespace.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 
 std::string
 c_expr2string(const exprt &expr, const namespacet &ns, unsigned flags = 0);

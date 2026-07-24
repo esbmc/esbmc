@@ -8,7 +8,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <util/expr/type_byte_size.h>
 
 static struct_typet::componentst::iterator pad_bit_field(

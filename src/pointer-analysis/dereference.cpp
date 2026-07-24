@@ -13,11 +13,11 @@
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <util/message/format.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/base/prefix.h>
 #include <util/symtab/pretty.h>
 #include <util/symtab/rename.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <util/expr/type_byte_size.h>
 
 thread_local unsigned int dereferencet::invalid_counter = 0;

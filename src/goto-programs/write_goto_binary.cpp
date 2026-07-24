@@ -1,7 +1,7 @@
 #include <fstream>
 #include <goto-programs/goto_function_serialization.h>
 #include <goto-programs/write_goto_binary.h>
-#include <util/irep_serialization.h>
+#include <util/irep/irep_serialization.h>
 #include <util/message/message.h>
 #include <util/symtab/symbol_serialization.h>
 

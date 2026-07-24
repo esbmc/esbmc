@@ -5,8 +5,8 @@
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/symtab/namespace.h>
-#include <util/std_expr.h>
-#include <util/std_types.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_types.h>
 
 TEST_CASE("for a division expression...", "[unit][util][std_expr]")
 {

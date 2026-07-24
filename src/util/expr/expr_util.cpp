@@ -2,8 +2,8 @@
 #include <util/expr/expr_util.h>
 #include <util/arith/fixedbv.h>
 #include <util/arith/ieee_float.h>
-#include <util/std_expr.h>
-#include <util/std_types.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_types.h>
 
 exprt gen_zero(const typet &type)
 {

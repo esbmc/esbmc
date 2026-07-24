@@ -2,7 +2,7 @@
 #include <pointer-analysis/value_set_analysis.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/base/prefix.h>
-#include <util/xml_irep.h>
+#include <util/irep/xml_irep.h>
 
 void value_set_analysist::initialize(const goto_programt &goto_program)
 {

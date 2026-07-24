@@ -7,7 +7,7 @@
 
 #include <map>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/config/cmdline.h>
 #include <vector>
 #include <string_view>

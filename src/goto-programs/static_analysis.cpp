@@ -3,8 +3,8 @@
 #include <goto-programs/static_analysis.h>
 #include <memory>
 #include <util/expr/expr_util.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 
 expr2tc abstract_domain_baset::get_guard(locationt from, locationt to) const
 {

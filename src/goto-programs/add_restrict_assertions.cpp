@@ -3,9 +3,9 @@
 #include <irep2/irep2_utils.h>
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 #include <util/expr/type_byte_size.h>
 
 // A restrict-qualified pointer parameter, reduced to the data the entry

@@ -1,8 +1,8 @@
 #ifndef PYTHON_FRONTEND_STRING_HANDLER_H
 #define PYTHON_FRONTEND_STRING_HANDLER_H
 
-#include <util/expr.h>
-#include <util/std_types.h>
+#include <util/irep/expr.h>
+#include <util/irep/std_types.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/context.h>

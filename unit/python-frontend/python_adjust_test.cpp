@@ -6,7 +6,7 @@
 #include <util/symtab/symbol.h>
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <irep2/irep2_utils.h>
 #include <string>
 #include <vector>

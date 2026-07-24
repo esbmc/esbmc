@@ -1,6 +1,6 @@
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 #include <irep2/irep2_utils.h>
 
 typet build_float_type(unsigned width)

@@ -1,9 +1,9 @@
 #pragma once
 
 #include <util/lang/c_types.h>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <util/expr/expr_util.h>
-#include <util/type.h>
+#include <util/irep/type.h>
 
 #include <nlohmann/json.hpp>
 

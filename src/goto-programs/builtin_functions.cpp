@@ -10,12 +10,12 @@
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
-#include <util/location.h>
+#include <util/irep/location.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
 #include <util/base/prefix.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <util/expr/string_constant.h>
 #include <util/expr/type_byte_size.h>
 

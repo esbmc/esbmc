@@ -1,11 +1,11 @@
 #ifndef CPROVER_POINTER_OFFSET_SIZE_H
 #define CPROVER_POINTER_OFFSET_SIZE_H
 
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <irep2/irep2.h>
 #include <util/arith/mp_arith.h>
 #include <util/symtab/namespace.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 
 BigInt member_offset_bits(
   const type2tc &type,

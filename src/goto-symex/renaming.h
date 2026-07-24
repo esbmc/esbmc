@@ -7,7 +7,7 @@
 #include <irep2/irep2_guard.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2_expr.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 
 class namespacet;
 

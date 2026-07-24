@@ -3,8 +3,8 @@
 
 #include <cassert>
 #include <util/arith/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/type.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/type.h>
 
 class bool_typet : public typet
 {

@@ -2,8 +2,8 @@
 
 #include <ld-frontend/ir/ld_ir.h>
 #include <util/symtab/context.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <string>
 
 // ld_converter translates LdIR into ESBMC's GOTO IR (irep2 / contextt).

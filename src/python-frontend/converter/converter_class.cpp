@@ -10,9 +10,9 @@
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/lang/python_types.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 
 #include <functional>
 #include <set>

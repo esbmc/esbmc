@@ -2,7 +2,7 @@
 #include <limits>
 #include <util/arith/arith_tools.h>
 #include <util/arith/ieee_float.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 #include <goto-programs/abstract-interpretation/interval_template.h>
 
 BigInt ieee_float_spect::bias() const

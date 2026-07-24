@@ -11,7 +11,7 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/loopst.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 #include <ibex.h>
 #include <ibex/ibex_Interval.h>
 #include <ibex/ibex_Expr.h>

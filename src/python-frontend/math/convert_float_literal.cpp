@@ -5,7 +5,7 @@
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/arith/ieee_float.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 
 void convert_float_literal(const std::string &src, exprt &dest)
 {

@@ -2,7 +2,7 @@
 #define CPROVER_STD_CODE_H
 
 #include <cassert>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 
 class codet : public exprt
 {

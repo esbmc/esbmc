@@ -1,7 +1,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <util/base/i2string.h>
-#include <util/irep.h>
+#include <util/irep/irep.h>
 #include <util/message/message.h>
 
 irept nil_rep_storage;

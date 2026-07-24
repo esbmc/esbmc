@@ -26,8 +26,8 @@ CC_DIAGNOSTIC_POP()
 #include <util/base/i2string.h>
 #include <util/message/message.h>
 #include <util/arith/mp_arith.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <util/expr/symbolic_types.h>
 
 #include <boost/algorithm/string/replace.hpp>

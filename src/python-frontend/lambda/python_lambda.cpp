@@ -4,7 +4,7 @@
 #include <python-frontend/type/type_handler.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 
 using namespace python_expr;
 

@@ -10,7 +10,7 @@
 #include <irep2/irep2_dispatch.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 /*************************** Base type2t definitions **************************/
 

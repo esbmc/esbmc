@@ -1,7 +1,7 @@
 #ifndef CPROVER_TYPECHECK_H
 #define CPROVER_TYPECHECK_H
 
-#include <util/expr.h>
+#include <util/irep/expr.h>
 
 class typecheckt
 {

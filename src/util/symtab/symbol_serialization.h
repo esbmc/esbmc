@@ -1,7 +1,7 @@
 #ifndef SYMBOL_SERIALIZATION_H_
 #define SYMBOL_SERIALIZATION_H_
 
-#include <util/irep_serialization.h>
+#include <util/irep/irep_serialization.h>
 #include <util/symtab/symbol.h>
 
 class symbol_serializationt

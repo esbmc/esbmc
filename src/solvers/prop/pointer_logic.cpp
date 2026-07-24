@@ -5,7 +5,7 @@
 #include <util/base/i2string.h>
 #include <irep2/irep2_utils.h>
 #include <util/base/prefix.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <util/expr/type_byte_size.h>
 
 unsigned pointer_logict::add_object(const expr2tc &expr)

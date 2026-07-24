@@ -1,11 +1,11 @@
 #include "goto-programs/goto_binary_reader.h"
 #include "irep2/irep2_expr.h"
 #include <util/lang/c_types.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>
 #include <util/message/format.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
 #include <util/base/prefix.h>
 #include <util/expr/string_constant.h>

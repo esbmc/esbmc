@@ -1,6 +1,6 @@
 #include <util/arith/arith_tools.h>
 #include <util/arith/fixedbv.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 
 fixedbv_spect::fixedbv_spect(const fixedbv_typet &type)
 {

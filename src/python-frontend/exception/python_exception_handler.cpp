@@ -11,7 +11,7 @@
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/lang/python_types.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 #include <util/expr/string_constant.h>
 #include <python-frontend/python_expr_builder.h>
 

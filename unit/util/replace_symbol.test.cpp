@@ -10,8 +10,8 @@ Author: Michael Tautschnig
 #include <catch2/catch.hpp>
 
 #include <util/symtab/replace_symbol.h>
-#include <util/std_expr.h>
-#include <util/std_types.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_types.h>
 
 TEST_CASE("Replace all symbols in expression", "[core][util][replace_symbol]")
 {

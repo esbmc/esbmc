@@ -3,8 +3,8 @@
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 
 void jimple_constant::from_json(const json &j)
 {

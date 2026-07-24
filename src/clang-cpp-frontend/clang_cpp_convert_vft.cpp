@@ -32,8 +32,8 @@ CC_DIAGNOSTIC_POP()
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 
 #include <functional>
 #include <optional>

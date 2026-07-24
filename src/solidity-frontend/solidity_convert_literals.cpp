@@ -13,7 +13,7 @@
 #include <util/expr/expr_util.h>
 #include <util/arith/ieee_float.h>
 #include <util/expr/string_constant.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 
 // Integer literal
 bool solidity_convertert::convert_integer_literal(

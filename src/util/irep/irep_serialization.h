@@ -2,7 +2,7 @@
 #define IREP_SERIALIZATION_H_
 
 #include <map>
-#include <util/irep.h>
+#include <util/irep/irep.h>
 
 void write_long(std::ostream &, unsigned);
 void write_string(std::ostream &, const std::string &);

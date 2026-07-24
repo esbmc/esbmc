@@ -10,7 +10,7 @@
 
 #include <util/config/config.h>
 #include <util/symtab/symbol.h>
-#include <util/type.h>
+#include <util/irep/type.h>
 
 /* Symbol table.
  *

@@ -4,7 +4,7 @@
 #include <util/symtab/context.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_type.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 class namespacet
 {

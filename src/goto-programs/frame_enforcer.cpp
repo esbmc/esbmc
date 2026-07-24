@@ -5,8 +5,8 @@
 /// mechanism. See frame_enforcer.h for detailed documentation.
 
 #include "frame_enforcer.h"
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 #include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
 

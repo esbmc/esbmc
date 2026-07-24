@@ -4,11 +4,11 @@
 #include <util/arith/arith_tools.h>
 #include <util/config/config.h>
 #include <util/lang/c_types.h>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/migrate.h>
-#include <util/std_types.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_types.h>
 #include <util/expr/type_byte_size.h>
 
 namespace

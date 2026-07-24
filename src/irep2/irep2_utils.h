@@ -4,7 +4,7 @@
 #include <util/lang/c_types.h>
 
 #include <irep2/irep2_expr.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/message/message.h>
 
 std::string indent_str_irep2(unsigned int indent);

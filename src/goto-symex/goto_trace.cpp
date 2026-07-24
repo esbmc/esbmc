@@ -9,7 +9,7 @@
 #include <langapi/languages.h>
 #include <util/arith/arith_tools.h>
 #include <util/base/cwe_mapping.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 #include <ostream>
 
 void goto_tracet::output(const class namespacet &ns, std::ostream &out) const

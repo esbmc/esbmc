@@ -8,8 +8,8 @@
 #include <util/base/i2string.h>
 #include <util/arith/ieee_float.h>
 #include <util/base/prefix.h>
-#include <util/std_code.h>
-#include <util/std_types.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_types.h>
 
 std::string c_expr2stringt::id_shorthand(const exprt &expr) const
 {

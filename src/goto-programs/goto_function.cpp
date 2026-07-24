@@ -5,7 +5,7 @@
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
-#include <util/location.h>
+#include <util/irep/location.h>
 #include <util/base/prefix.h>
 
 void goto_convertt::convert_function_call(

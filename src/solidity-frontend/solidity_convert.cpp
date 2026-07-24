@@ -14,7 +14,7 @@
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <util/arith/mp_arith.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <util/message/message.h>
 #include <regex>
 #include <optional>

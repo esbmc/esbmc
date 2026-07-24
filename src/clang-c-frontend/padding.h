@@ -4,7 +4,7 @@
 #ifndef CPROVER_ANSI_C_PADDING_H
 #define CPROVER_ANSI_C_PADDING_H
 
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 #include <util/symtab/namespace.h>
 #include <util/arith/mp_arith.h>
 

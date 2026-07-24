@@ -2,7 +2,7 @@
 #include <fstream>
 #include <jimple-frontend/AST/jimple_file.h>
 
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 #include <util/expr/expr_util.h>
 
 // (De)-Serialization helpers (from jimple_ast.h)

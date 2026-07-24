@@ -12,7 +12,7 @@
 #include <catch2/catch.hpp>
 #include "../testing-utils/goto_factory.h"
 #include <goto-programs/goto_convert_class.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 #include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
 

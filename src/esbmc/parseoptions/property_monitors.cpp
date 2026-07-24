@@ -4,10 +4,10 @@
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/expr/expr_util.h>
-#include <util/irep.h>
+#include <util/irep/irep.h>
 #include <util/message/message.h>
 #include <util/base/prefix.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 #include <util/symtab/symbol.h>
 #include <algorithm>
 #include <iostream>

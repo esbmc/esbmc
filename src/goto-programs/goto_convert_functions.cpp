@@ -8,8 +8,8 @@
 #include <util/lang/c_types.h>
 #include <util/base/i2string.h>
 #include <util/base/prefix.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <util/expr/type_byte_size.h>
 
 goto_convert_functionst::goto_convert_functionst(

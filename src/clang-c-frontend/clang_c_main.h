@@ -3,7 +3,7 @@
 
 #include <util/symtab/context.h>
 #include <util/message/message.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 
 class clang_c_maint
 {

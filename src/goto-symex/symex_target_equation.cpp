@@ -9,8 +9,8 @@
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 
 namespace
 {

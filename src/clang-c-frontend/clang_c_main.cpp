@@ -5,8 +5,8 @@
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/symtab/namespace.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <clang-c-frontend/clang_c_main.h>
 
 void clang_c_maint::init_variable(codet &dest, const symbolt &sym)

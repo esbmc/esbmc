@@ -1,7 +1,7 @@
 #ifndef CPROVER_C_TYPES_H
 #define CPROVER_C_TYPES_H
 
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <irep2/irep2.h>
 
 typet index_type();

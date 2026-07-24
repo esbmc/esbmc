@@ -6,7 +6,7 @@
 #include <util/lang/c_link.h>
 #include <util/symtab/fix_symbol.h>
 #include <util/base/i2string.h>
-#include <util/location.h>
+#include <util/irep/location.h>
 #include <util/message/format.h>
 #include <util/symtab/namespace.h>
 #include <util/lang/typecheck.h>

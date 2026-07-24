@@ -13,9 +13,9 @@
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/arith/ieee_float.h>
-#include <util/migrate.h>
-#include <util/std_code.h>
-#include <util/std_types.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_types.h>
 #include <util/lang/python_types.h>
 #include <util/message/message.h>
 

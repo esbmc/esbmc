@@ -11,7 +11,7 @@
 #include <util/symtab/namespace.h>
 #include <util/config/options.h>
 #include <util/symtab/symbol_generator.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 
 class goto_convertt
 {

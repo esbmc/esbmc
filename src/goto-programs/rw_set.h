@@ -5,7 +5,7 @@
 #include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>
 #include <util/symtab/namespace.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 #include <unordered_set>
 
 class rw_sett

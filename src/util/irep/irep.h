@@ -10,7 +10,7 @@
 
 #define SHARING
 
-#include <util/irep_idt.h>
+#include <util/irep/irep_idt.h>
 
 typedef std::hash<irep_idt> irep_id_hash;
 
