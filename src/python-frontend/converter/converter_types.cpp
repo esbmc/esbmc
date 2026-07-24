@@ -5,7 +5,7 @@
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/c_types.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/migrate.h>
 #include <util/python_types.h>
 

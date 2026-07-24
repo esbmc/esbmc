@@ -8,7 +8,7 @@
 #include <util/cprover_prefix.h>
 #include <util/i2string.h>
 #include <irep2/irep2_utils.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
 #include <util/prefix.h>
 #include <util/replace_symbol.h>

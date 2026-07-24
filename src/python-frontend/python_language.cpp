@@ -6,7 +6,7 @@
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/param_annotations.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/filesystem.h>
 #include <util/c_expr2string.h>
 #include <c2goto/cprover_library.h>

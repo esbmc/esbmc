@@ -1,6 +1,6 @@
 #include <util/i2string.h>
 #include <util/parser.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 #ifdef _WIN32
 int isatty(int f)

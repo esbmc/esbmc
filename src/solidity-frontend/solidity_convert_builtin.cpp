@@ -16,7 +16,7 @@
 #include <util/i2string.h>
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::is_low_level_call(const std::string &name)

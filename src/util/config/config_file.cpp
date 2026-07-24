@@ -5,7 +5,7 @@
 #include <string>
 #include <set>
 #include <fmt/core.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/compiler_defs.h>
 
 // toml++ is a vendored third-party header; silence its deprecated literal

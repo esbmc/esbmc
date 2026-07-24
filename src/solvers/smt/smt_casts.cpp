@@ -2,7 +2,7 @@
 #include <sstream>
 #include <util/base_type.h>
 #include <util/expr_util.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
 
 smt_astt smt_solver_baset::convert_typecast_to_bool(const typecast2t &cast)

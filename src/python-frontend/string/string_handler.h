@@ -6,7 +6,7 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/context.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>

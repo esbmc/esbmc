@@ -9,7 +9,7 @@
 #include <goto-programs/goto_binary_reader.h>
 #include <goto-programs/goto_functions.h>
 #include <util/context.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/c_link.h>
 #include <util/config/config.h>
 #include <util/language.h>

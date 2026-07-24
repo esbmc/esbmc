@@ -5,7 +5,7 @@
 #include <goto-programs/loopst.h>
 #include <goto-programs/goto_loops.h>
 #include <goto-symex/symex_target_equation.h>
-#include <util/message.h>
+#include <util/message/message.h>
 /**
  * @brief Base interface to run an algorithm in esbmc
  */

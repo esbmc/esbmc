@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <util/context.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <vector>
 #include <string>
 

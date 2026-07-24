@@ -9,7 +9,7 @@
 #include <set>
 #include <string>
 #include <util/cwe_mapping.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 using json = nlohmann::json;
 

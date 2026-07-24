@@ -4,7 +4,7 @@
 #include <string>
 #include <util/config/config.h>
 #include <util/namespace.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 class array_iface;
 class fp_convt;

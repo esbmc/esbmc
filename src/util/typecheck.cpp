@@ -1,5 +1,5 @@
 #include <util/typecheck.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 bool typecheckt::typecheck_main()
 {

@@ -2,7 +2,7 @@
 
 #include <util/ssa/algorithms.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 /**
  * @brief This will look over non-initialized local declarations

@@ -15,7 +15,7 @@
 #include <util/i2string.h>
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)

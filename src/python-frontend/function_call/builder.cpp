@@ -8,7 +8,7 @@
 #include <python-frontend/type/type_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/std_expr.h>
 #include <python-frontend/python_expr_builder.h>
 

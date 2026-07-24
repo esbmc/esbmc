@@ -37,7 +37,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include <util/message.h>
+#include <util/message/message.h>
 
 using namespace python_expr;
 

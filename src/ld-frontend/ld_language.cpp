@@ -7,7 +7,7 @@
 #include <ld-frontend/property/property_encoder.h>
 #include <util/c_expr2string.h>
 #include <util/config/config.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <iostream>
 
 languaget *new_ld_language()

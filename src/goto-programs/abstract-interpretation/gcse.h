@@ -2,7 +2,7 @@
 
 // GCSE - Global Common Subexpression Elimination
 
-#include <util/message.h>
+#include <util/message/message.h>
 #include <goto-programs/abstract-interpretation/ai.h>
 #include <pointer-analysis/value_set_analysis.h>
 /**

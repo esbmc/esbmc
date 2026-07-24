@@ -5,7 +5,7 @@
 #include <util/config/config.h>
 #include <util/c_types.h>
 #include <util/expr.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
 #include <util/migrate.h>
 #include <util/std_types.h>

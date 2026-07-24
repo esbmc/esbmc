@@ -2,7 +2,7 @@
 
 #include <clang-c-frontend/padding.h>
 #include <irep2/irep2_utils.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <vector>

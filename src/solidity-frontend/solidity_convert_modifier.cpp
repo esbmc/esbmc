@@ -15,7 +15,7 @@
 #include <util/i2string.h>
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::get_function_definition(

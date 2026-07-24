@@ -5,7 +5,7 @@
 #include <util/config/config.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/std_expr.h>
 
 reachability_treet::reachability_treet(

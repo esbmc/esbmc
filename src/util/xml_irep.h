@@ -3,7 +3,7 @@
 
 #include <util/irep.h>
 #include <util/xml.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 void convert(const irept &irep, xmlt &xml);
 

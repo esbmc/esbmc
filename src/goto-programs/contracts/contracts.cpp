@@ -12,7 +12,7 @@
 #include <util/symbol.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/config/options.h>
 
 /// Determine whether a contract clause instruction (ASSERT or ASSUME) should be

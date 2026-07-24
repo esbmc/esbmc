@@ -5,7 +5,7 @@
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
 

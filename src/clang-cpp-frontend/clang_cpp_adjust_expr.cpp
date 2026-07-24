@@ -4,7 +4,7 @@
 #include <util/c_types.h>
 #include <goto-programs/destructor.h>
 #include <util/expr_util.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)

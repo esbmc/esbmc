@@ -5,7 +5,7 @@
 #include <util/ssa/goto_expr_factory.h>
 #include <goto-programs/goto_functions.h>
 #include <util/ssa/algorithms.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/remove_no_op.h>
 #include <goto-programs/goto_functions.h>

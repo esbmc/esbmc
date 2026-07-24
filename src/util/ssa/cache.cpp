@@ -1,5 +1,5 @@
 #include <util/ssa/cache.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <utility>
 
 void assertion_cache::run_on_assert(symex_target_equationt::SSA_stept &step)

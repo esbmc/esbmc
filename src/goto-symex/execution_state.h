@@ -14,7 +14,7 @@
 #include <optional>
 #include <set>
 #include <irep2/irep2.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/std_expr.h>
 
 class reachability_treet;

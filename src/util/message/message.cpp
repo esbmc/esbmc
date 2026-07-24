@@ -1,6 +1,6 @@
 
 #include <util/config/config.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 void messaget::statet::println(
   FILE *f,

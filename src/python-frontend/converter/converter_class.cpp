@@ -9,7 +9,7 @@
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>

@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include <string>
 #include <util/config/cmdline.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/config/config_file.h>
 
 #ifdef _WIN32

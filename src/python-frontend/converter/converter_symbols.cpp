@@ -2,7 +2,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 #include <regex>
 

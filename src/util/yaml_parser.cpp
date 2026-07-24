@@ -2,7 +2,7 @@
 #include <fstream>
 #include <unordered_map>
 #include <sstream>
-#include <util/message.h>
+#include <util/message/message.h>
 
 std::vector<invariant> yaml_parser::read_invariants(const std::string &path)
 {

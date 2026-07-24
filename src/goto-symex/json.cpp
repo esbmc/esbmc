@@ -1,4 +1,4 @@
-#include <util/message.h>
+#include <util/message/message.h>
 #include <goto-symex/goto_trace.h>
 #include <util/cwe_mapping.h>
 #include <util/language.h>

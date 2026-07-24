@@ -17,7 +17,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <llvm/Support/MemoryBuffer.h>
 CC_DIAGNOSTIC_POP()
 
-#include <util/message.h>
+#include <util/message/message.h>
 
 #include <algorithm>
 #include <cassert>

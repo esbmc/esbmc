@@ -2,7 +2,7 @@
 #define CPROVER_C_LINK_H
 
 #include <util/context.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 bool c_link(
   contextt &context,

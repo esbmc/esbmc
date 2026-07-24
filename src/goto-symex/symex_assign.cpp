@@ -7,7 +7,7 @@
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/usr_utils.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>

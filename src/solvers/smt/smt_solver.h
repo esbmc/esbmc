@@ -12,7 +12,7 @@
 #include <solvers/prop/pointer_logic.h>
 #include <solvers/smt/smt_result.h>
 #include <irep2/irep2_utils.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/namespace.h>
 #include <util/threeval.h>
 

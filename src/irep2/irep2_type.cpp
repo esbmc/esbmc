@@ -8,7 +8,7 @@
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
 #include <irep2/irep2_dispatch.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
 #include <util/migrate.h>
 

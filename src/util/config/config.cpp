@@ -2,7 +2,7 @@
 #include <regex>
 
 #include <util/config/config.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <ac_config.h>
 
 configt config;

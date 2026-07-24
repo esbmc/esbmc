@@ -17,7 +17,7 @@
 #include <util/std_code.h>
 #include <util/std_types.h>
 #include <util/python_types.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 #include <cmath>
 #include <limits>

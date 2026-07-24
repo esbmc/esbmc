@@ -3,7 +3,7 @@
 #include <util/ssa/algorithms.h>
 #include <util/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 /**
  * @brief To make the counterexample trace complete in "--function" mode

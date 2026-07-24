@@ -5,7 +5,7 @@
 
 #include <goto-programs/cbmc_adapter.h>
 #include <util/c_types.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 #include <algorithm>
 #include <cstdlib>

@@ -1,5 +1,5 @@
 #include <util/location.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/migrate.h>
 #include <util/symbol.h>
 

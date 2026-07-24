@@ -22,7 +22,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <util/expr_util.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <fmt/core.h>

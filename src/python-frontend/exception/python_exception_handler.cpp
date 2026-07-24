@@ -9,7 +9,7 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>

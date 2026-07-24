@@ -15,7 +15,7 @@
 #include <util/i2string.h>
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <fstream>
 
 void solidity_convertert::get_mapping_inf_arr_name(

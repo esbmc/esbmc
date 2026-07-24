@@ -10,7 +10,7 @@
 #include <util/expr_util.h>
 #include <util/std_types.h>
 #include <util/std_expr.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/type_byte_size.h>
 #include <util/c_types.h>
 #include <irep2/irep2_utils.h>

@@ -2,7 +2,7 @@
 #define ESBMC_GOTO_ALGORITHMS_H
 
 #include <util/ssa/algorithms.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <unordered_set>
 
 /**

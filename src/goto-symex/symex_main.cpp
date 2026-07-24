@@ -20,7 +20,7 @@
 #include <util/std_expr.h>
 #include <util/time_stopping.h>
 #include <util/type_byte_size.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 #include <vector>
 

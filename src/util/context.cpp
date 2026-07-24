@@ -1,5 +1,5 @@
 #include <util/context.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
 #include <cassert>
 #include <vector>

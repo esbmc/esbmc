@@ -25,7 +25,7 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/clang_c_lexer.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 struct clang_c_lexert::LexerContext
 {

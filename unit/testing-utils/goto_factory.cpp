@@ -9,7 +9,7 @@
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_no_op.h>
 #include <util/config/cmdline.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/filesystem.h>
 
 const mode_table_et mode_table[] = {

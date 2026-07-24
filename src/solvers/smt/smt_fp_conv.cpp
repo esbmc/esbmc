@@ -4,7 +4,7 @@
 #include <solvers/smt/fp/ir_ieee_conv.h>
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
 
 // Floating-point specific SMT conversion code extracted from smt_conv.cpp.

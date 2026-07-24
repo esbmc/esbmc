@@ -4,7 +4,7 @@
 
 #include <string>
 #include <util/config/cmdline.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <boost/filesystem.hpp>
 
 class parseoptions_baset
