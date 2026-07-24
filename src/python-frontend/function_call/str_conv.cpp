@@ -979,13 +979,14 @@ py_format_number(bool is_int, long long ival, double dval, const std::string &s)
   {
     // Float value. An explicit presentation type renders with snprintf and the
     // spec's precision; the default (no type) is CPython's str()/repr()
-    // shortest form via the shared helper. Grouping, '#', and default-type
-    // precision (a 'g'-like fold) are not modelled.
+    // shortest form via the shared helper. '#' and default-type precision
+    // (a 'g'-like fold) are not modelled; grouping is modelled for the default
+    // type only.
     if (
       type != 0 && type != 'f' && type != 'F' && type != 'e' && type != 'E' &&
       type != 'g' && type != 'G' && type != '%')
       return std::nullopt;
-    if (grouping != 0 || alt)
+    if (alt)
       return std::nullopt;
 
     double d = dval;
@@ -1000,9 +1001,25 @@ py_format_number(bool is_int, long long ival, double dval, const std::string &s)
       if (prec >= 0)
         return std::nullopt; // default-type precision not modelled
       digits = string_handler::cpython_float_str(ad);
+      if (grouping != 0)
+      {
+        // CPython groups only the integer part of fixed notation by 3; an
+        // exponential/inf/nan repr (its head is not all digits) is left as-is.
+        const size_t dot = digits.find('.');
+        const std::string head =
+          digits.substr(0, dot == std::string::npos ? digits.size() : dot);
+        if (std::all_of(head.begin(), head.end(), [](unsigned char c) {
+              return std::isdigit(c) != 0;
+            }))
+          digits =
+            group_digits(head, grouping, 3) +
+            (dot == std::string::npos ? std::string() : digits.substr(dot));
+      }
     }
     else
     {
+      if (grouping != 0)
+        return std::nullopt; // grouping + explicit float type: not modelled
       const int p = prec >= 0 ? prec : 6;
       const char conv =
         percent
