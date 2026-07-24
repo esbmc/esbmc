@@ -38,7 +38,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
   if (this->options.get_bool_option("ir-ieee"))
   {
     auto weak_enclosure_return =
-      [this, &real_result, &fbv_type](const char *reason) -> smt_astt {
+      [this, &real_result, &fbv_type, &rounding_mode](
+        const char *reason) -> smt_astt {
       log_warning(
         "using weak IEEE754 enclosure ({}), exp={}, frac={}",
         reason,
@@ -50,7 +51,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       assert_ast(mk_le(ra_lo, real_result));
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
-      return mk_subnormal_flush(real_result, fbv_type);
+      return mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     };
 
     auto select_nearest_eps =
@@ -161,7 +162,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
 
-      return mk_subnormal_flush(real_result, fbv_type);
+      return mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     }
     else if (smt_fp_rounding_utils::is_round_to_plus_inf(rounding_mode))
     {
@@ -204,7 +205,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
 
-      return mk_subnormal_flush(real_result, fbv_type);
+      return mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     }
     else if (smt_fp_rounding_utils::is_round_to_minus_inf(rounding_mode))
     {
@@ -249,7 +250,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
 
-      return mk_subnormal_flush(real_result, fbv_type);
+      return mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     }
     else if (smt_fp_rounding_utils::is_round_to_zero(rounding_mode))
     {
@@ -307,7 +308,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
 
-      return mk_subnormal_flush(real_result, fbv_type);
+      return mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     }
     else if (smt_fp_rounding_utils::is_round_to_away(rounding_mode))
     {
@@ -363,7 +364,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
 
-      return mk_subnormal_flush(real_result, fbv_type);
+      return mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     }
     else
     {
@@ -509,8 +510,10 @@ smt_astt smt_solver_baset::get_single_max_normal()
   return mk_smt_real(val);
 }
 
-smt_astt
-smt_solver_baset::mk_subnormal_flush(smt_astt r, const floatbv_type2t &fbv_type)
+smt_astt smt_solver_baset::mk_subnormal_flush(
+  smt_astt r,
+  const floatbv_type2t &fbv_type,
+  const expr2tc &rounding_mode)
 {
   const auto double_spec = ieee_float_spect::double_precision();
   const auto single_spec = ieee_float_spect::single_precision();
@@ -529,9 +532,45 @@ smt_solver_baset::mk_subnormal_flush(smt_astt r, const floatbv_type2t &fbv_type)
     min_sub = mk_smt_real("1/" + integer2string(power(2, 149)));
   else
     return r;
+
   smt_astt zero = get_zero_real();
   smt_astt abs_r = mk_ite(mk_lt(r, zero), mk_sub(zero, r), r);
-  return mk_ite(mk_lt(abs_r, min_sub), zero, r);
+
+  // This helper models only whether an exact result is collapsed to real
+  // zero. When IEEE 754 would round the result to +/-min_sub, this
+  // approximation leaves r unchanged because signed zero and exact
+  // subnormal-grid quantization are not represented by IR-IEEE.
+  //
+  // The flush boundary is still rounding-mode dependent:
+  //   RNE (ties-to-even): flushes at/below the half boundary, where the
+  //     tie resolves to zero (the "even" candidate).
+  //   RNA (ties-away):    flushes strictly below the half boundary; the
+  //     tie itself rounds away from zero, to +-min_sub.
+  //   RTZ: truncates toward zero for both signs, so the full threshold
+  //     applies regardless of sign.
+  //   RUP: rounds toward +infinity, so a strictly positive result is
+  //     always rounded up and away from zero -- only a negative result
+  //     can flush to zero.
+  //   RDN: mirror of RUP -- only a strictly positive result can flush.
+  //   Unrecognised/symbolic mode: fall back to the magnitude-only
+  //   threshold (may over-flush relative to the true mode, but keeps the
+  //   existing conservative behaviour for this fallback path).
+  smt_astt half_min_sub = mk_div(min_sub, mk_smt_real("2.0"));
+  smt_astt flush;
+  if (smt_fp_rounding_utils::is_nearest_rounding_mode(rounding_mode))
+    flush = mk_le(abs_r, half_min_sub);
+  else if (smt_fp_rounding_utils::is_round_to_away(rounding_mode))
+    flush = mk_lt(abs_r, half_min_sub);
+  else if (smt_fp_rounding_utils::is_round_to_zero(rounding_mode))
+    flush = mk_lt(abs_r, min_sub);
+  else if (smt_fp_rounding_utils::is_round_to_plus_inf(rounding_mode))
+    flush = mk_and(mk_lt(r, zero), mk_lt(abs_r, min_sub));
+  else if (smt_fp_rounding_utils::is_round_to_minus_inf(rounding_mode))
+    flush = mk_and(mk_gt(r, zero), mk_lt(abs_r, min_sub));
+  else
+    flush = mk_lt(abs_r, min_sub);
+
+  return mk_ite(flush, zero, r);
 }
 
 smt_astt smt_solver_baset::get_double_inf_sentinel()

@@ -2126,9 +2126,13 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
       // it can take a value strictly between 0 and the smallest subnormal
       // (a magnitude no floating-point operation ever produces), which
       // breaks identities like x+0==x now that mk_subnormal_flush()
-      // distinguishes that gap from zero.
+      // distinguishes that gap from zero. Representability doesn't depend
+      // on a rounding mode, so pass a nil expr2tc: mk_subnormal_flush falls
+      // back to its magnitude-only threshold, which is the correct (not
+      // merely conservative) check here.
       const floatbv_type2t &fbv_type = to_floatbv_type(sym.type);
-      assert_ast(mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type)));
+      assert_ast(
+        mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
     }
 
     return sym_ast;

@@ -449,10 +449,15 @@ public:
   smt_astt get_single_min_subnormal();
   // Returns SMT AST representing single precision maximum normal value (~3.4028234663852886e+38)
   smt_astt get_single_max_normal();
-  // Under --ir-ieee, returns ite(|r| < min_subnormal, 0, r) for single/double,
-  // modelling IEEE 754 flush-to-zero for results below the subnormal threshold.
-  // Returns r unchanged for unsupported formats.
-  smt_astt mk_subnormal_flush(smt_astt r, const floatbv_type2t &fbv_type);
+  // Under --ir-ieee, returns real zero when r lies in the region that
+  // rounds to zero under the selected rounding mode; otherwise returns r
+  // unchanged. This models only the zero/nonzero underflow boundary:
+  // signed zero and subnormal-grid quantization are not represented.
+  // Returns r unchanged for unsupported float formats.
+  smt_astt mk_subnormal_flush(
+    smt_astt r,
+    const floatbv_type2t &fbv_type,
+    const expr2tc &rounding_mode);
 
   // Returns SMT AST for the integer-encoding sentinel for double +∞: max_normal+1
   smt_astt get_double_inf_sentinel();
