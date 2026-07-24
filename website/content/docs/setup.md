@@ -3,7 +3,20 @@ title: Setup
 weight: 1
 ---
 
-To install ESBMC, download the latest binary for Linux, Windows or macOS from
+## Homebrew (macOS and Linux)
+
+On macOS or Linux with [Homebrew](https://brew.sh), install ESBMC with:
+
+```sh
+brew install esbmc
+```
+
+This pulls in the bundled SMT solvers (Z3, Bitwuzla) and puts `esbmc` on your
+`PATH`.
+
+## Prebuilt binaries
+
+Alternatively, download the latest binary for Linux, Windows or macOS from
 [GitHub](https://github.com/esbmc/esbmc/releases), then save and unzip it on your
 disk.
 

@@ -79,6 +79,16 @@ sudo apt install esbmc
 
 This method is recommended for general users and supports Ubuntu 22.04 (Jammy) and 24.04 (Noble).
 
+### Homebrew (macOS and Linux)
+
+ESBMC is available in [homebrew-core](https://github.com/Homebrew/homebrew-core/blob/HEAD/Formula/e/esbmc.rb):
+
+```
+brew install esbmc
+```
+
+This installs `esbmc` together with its bundled SMT solvers (Z3, Bitwuzla).
+
 ### GitHub Release
 
 You can also download the latest ESBMC binary for Ubuntu and Windows from the [releases page](https://github.com/esbmc/esbmc/releases).
