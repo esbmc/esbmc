@@ -489,7 +489,8 @@ protected:
   void add_thunk_component_to_type(
     const symbolt &thunk_func_symb,
     struct_typet &type,
-    const struct_typet::componentt &comp);
+    const struct_typet::componentt &comp,
+    const irep_idt &virtual_name);
   /*
    * Set an intuitive name to thunk function
    */
