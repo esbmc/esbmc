@@ -1473,6 +1473,62 @@ static auto create_list(const std::vector<T> &vector)
   return list;
 }
 
+static typet build_ndarray_type(
+  const type_handler &type_handler,
+  const typet &elem_type,
+  long long dim)
+{
+  if (dim > std::numeric_limits<int>::max())
+    throw std::runtime_error(
+      "ValueError: array size overflows during creation");
+  return type_handler.build_array(elem_type, static_cast<int>(dim));
+}
+
+static typet build_ndarray_type(
+  const type_handler &type_handler,
+  const typet &elem_type,
+  const std::vector<long long> &dims,
+  std::size_t dim_idx)
+{
+  if (dim_idx == dims.size() - 1)
+    return build_ndarray_type(type_handler, elem_type, dims[dim_idx]);
+
+  typet child_type =
+    build_ndarray_type(type_handler, elem_type, dims, dim_idx + 1);
+  return build_ndarray_type(type_handler, child_type, dims[dim_idx]);
+}
+
+static exprt make_nondet_ndarray(
+  const type_handler &type_handler,
+  const typet &elem_type,
+  const std::vector<long long> &dims,
+  std::size_t dim_idx,
+  const locationt &location)
+{
+  typet array_type = build_ndarray_type(type_handler, elem_type, dims, dim_idx);
+  exprt result = gen_zero(array_type);
+  auto &operands = result.operands();
+  operands.clear();
+
+  for (long long i = 0; i < dims[dim_idx]; ++i)
+  {
+    if (dim_idx == dims.size() - 1)
+    {
+      exprt elem("sideeffect", elem_type);
+      elem.statement("nondet");
+      elem.location() = location;
+      operands.push_back(elem);
+    }
+    else
+    {
+      operands.push_back(make_nondet_ndarray(
+        type_handler, elem_type, dims, dim_idx + 1, location));
+    }
+  }
+
+  return result;
+}
+
 template <typename T>
 static auto create_binary_op(
   const std::string &op,
@@ -4407,6 +4463,91 @@ exprt numpy_call_expr::get()
 
   static const std::unordered_map<std::string, float> array_creation_funcs = {
     {"zeros", 0.0}, {"ones", 1.0}};
+
+  if (function == "empty")
+  {
+    if (call_["args"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.empty() expects a shape argument");
+
+    const std::string dtype = get_dtype();
+    if (is_numpy_complex_dtype(dtype))
+      throw std::runtime_error(
+        "TypeError: complex dtype is not supported in NumPy constructors yet");
+
+    typet elem_type =
+      dtype.empty() ? cached_double_type() : get_typet_from_dtype();
+    if (elem_type.is_nil() || elem_type.id().empty())
+      get_dtype_size();
+
+    nlohmann::json shape_arg = call_["args"][0];
+    if (
+      shape_arg.is_object() && shape_arg.contains("_type") &&
+      shape_arg["_type"] == "Name")
+    {
+      nlohmann::json resolved = json_utils::find_var_decl(
+        shape_arg["id"], converter_.current_function_name(), converter_.ast());
+      if (
+        resolved.contains("value") && resolved["value"].is_object() &&
+        resolved["value"].contains("_type"))
+      {
+        shape_arg = resolved["value"];
+      }
+    }
+
+    std::vector<long long> dims;
+    const std::string arg_type = shape_arg["_type"];
+    if (arg_type == "Constant" || arg_type == "UnaryOp")
+    {
+      numeric_value shape_numeric;
+      if (
+        try_extract_numeric_constant(shape_arg, shape_numeric) &&
+        shape_numeric.is_int)
+      {
+        dims.push_back(shape_numeric.int_value);
+      }
+    }
+    else if (arg_type == "Tuple" || arg_type == "List")
+    {
+      const auto &elts = shape_arg["elts"];
+      if (elts.empty())
+        throw std::runtime_error(
+          "TypeError: empty() shape tuple must be non-empty");
+      if (elts.size() > 8)
+        throw std::runtime_error(
+          "ESBMC does not support arrays with more than 8 dimensions. Found " +
+          std::to_string(elts.size()) + "D array creation in empty().");
+
+      for (const auto &e : elts)
+      {
+        numeric_value dim;
+        if (!try_extract_numeric_constant(e, dim) || !dim.is_int)
+        {
+          dims.clear();
+          break;
+        }
+        dims.push_back(dim.int_value);
+      }
+    }
+
+    if (dims.empty())
+      throw std::runtime_error(
+        "TypeError: empty() argument must be int or tuple of ints");
+
+    validate_ndarray_shape(dims);
+    exprt expr = make_nondet_ndarray(
+      type_handler_,
+      elem_type,
+      dims,
+      0,
+      converter_.get_location_from_decl(call_));
+    if (converter_.current_lhs)
+    {
+      converter_.current_lhs->type() = expr.type();
+      converter_.update_symbol(*converter_.current_lhs);
+    }
+    return expr;
+  }
 
   // Create array from numpy.zeros() or numpy.ones()
   auto it = array_creation_funcs.find(function);

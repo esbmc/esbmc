@@ -26,6 +26,11 @@ def ones(shape: int) -> list[float]:
     return result
 
 
+def empty(shape: int) -> list[float]:
+    result: list[float] = [nondet_float()]
+    return result
+
+
 def add(a: int, b: int) -> float:
     x: float = a + b
     return x
