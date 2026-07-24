@@ -557,7 +557,8 @@ bool goto_convert_functionst::convert_native_rec(
       if (d.get_statement() == "function_call")
       {
         exprt op = migrate_expr_back(code2);
-        restore_value_locations(op, effective_location(ret.location, inherited));
+        restore_value_locations(
+          op, effective_location(ret.location, inherited));
         convert(to_code(op), dest);
         return true;
       }
