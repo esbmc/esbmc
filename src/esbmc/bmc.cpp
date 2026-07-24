@@ -803,37 +803,33 @@ static void report_dead_code(
     findings.push_back(std::move(f));
   }
 
-  const std::string cwes = format_cwe_list(dead_code_cwe_rule().cwes);
-
   log_success("\n[Dead code]\n");
   if (findings.empty())
-  {
     log_result("No provably-dead code found.");
-    // Still emit a well-formed SARIF run with an empty results array so a
-    // clean --sarif-output run is not a missing document (issue #4495).
-    sarif_dead_code(options, findings);
-    return;
-  }
-
-  // Soundness is bounded by the unwinding depth, like every BMC result: a
-  // branch reachable only beyond the explored bound is reported here too.
-  // Scope the advisory accordingly so it is not read as an absolute proof
-  // (increase --unwind for programs with loops).
-  log_status(
-    "The following branches are unreachable up to the current unwinding "
-    "bound:");
-
-  for (const auto &f : findings)
+  else
   {
-    if (f.line > 0)
-      log_result("{}:{}: {}", f.file, f.line, f.message);
-    else
-      log_result("{}", f.message);
-    if (!cwes.empty())
+    // Soundness is bounded by the unwinding depth, like every BMC result: a
+    // branch reachable only beyond the explored bound is reported here too.
+    // Scope the advisory accordingly so it is not read as an absolute proof
+    // (increase --unwind for programs with loops).
+    log_status(
+      "The following branches are unreachable up to the current unwinding "
+      "bound:");
+
+    const std::string cwes = format_cwe_list(dead_code_cwe_rule().cwes);
+    for (const auto &f : findings)
+    {
+      if (f.line > 0)
+        log_result("{}:{}: {}", f.file, f.line, f.message);
+      else
+        log_result("{}", f.message);
       log_result("  CWE: {}", cwes);
+    }
   }
 
-  // Mirror the findings into SARIF at note level when requested.
+  // Mirror the findings into SARIF when requested. A clean run still emits a
+  // well-formed document with an empty results array, so --sarif-output never
+  // yields a missing file (issue #4495).
   sarif_dead_code(options, findings);
 }
 
@@ -2492,7 +2488,7 @@ smt_resultt bmct::multi_property_check(
   // show summary (skipped for --dead-code-check: its live-branch probes are
   // counted as "failed" here, which contradicts both the [Dead code] report
   // and the advisory's SUCCESSFUL verdict)
-  if (!options.get_bool_option("dead-code-check"))
+  if (!is_dead_code)
     report_simple_summary(summary);
 
   // For coverage with fixed bound unwinding

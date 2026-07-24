@@ -87,6 +87,55 @@ json cwe_taxa_refs(const std::vector<unsigned> &cwes)
   return taxa_refs;
 }
 
+// A reportingDescriptor (a tool.driver.rules[] entry): stable id, the
+// human-readable shortDescription, and the CWE ids exposed as
+// `external/cwe/cwe-N` tags. SARIF §3.49.7 reserves reportingDescriptor.name
+// for a `simpleName` (letters/digits/period/underscore); the human-readable
+// text goes in shortDescription and we omit `name` since `id` is already the
+// stable identifier.
+json sarif_rule(
+  const std::string &id,
+  const std::string &short_description,
+  const std::vector<unsigned> &cwes)
+{
+  json rule;
+  rule["id"] = id;
+  rule["shortDescription"]["text"] = short_description;
+  json tags = json::array();
+  for (unsigned cwe : cwes)
+    tags.push_back("external/cwe/cwe-" + std::to_string(cwe));
+  if (!tags.empty())
+    rule["properties"]["tags"] = tags;
+  return rule;
+}
+
+// A single SARIF result: rule id, level ("error" / "note"), message, physical
+// location, and the per-result CWE taxa references.
+json sarif_result(
+  const std::string &rule_id,
+  const std::string &level,
+  const std::string &message,
+  const std::string &file,
+  unsigned line,
+  const std::vector<unsigned> &cwes)
+{
+  json result;
+  result["ruleId"] = rule_id;
+  result["level"] = level;
+  result["message"]["text"] = message;
+
+  json loc;
+  loc["physicalLocation"]["artifactLocation"]["uri"] = file;
+  if (line > 0)
+    loc["physicalLocation"]["region"]["startLine"] = line;
+  result["locations"] = json::array({loc});
+
+  if (!cwes.empty())
+    result["taxa"] = cwe_taxa_refs(cwes);
+
+  return result;
+}
+
 // Wrap `run` in a SARIF 2.1.0 document and write it to `out_path` ("-" is
 // stdout). Shared serialisation so the schema URI lives in one place.
 void write_sarif_document(const std::string &out_path, json run)
@@ -186,23 +235,9 @@ void sarif_goto_trace(
   // Build SARIF 2.1.0 document from shared scaffolding.
   json run = new_sarif_run();
 
-  // SARIF §3.49.7: reportingDescriptor.name is a `simpleName` (no spaces,
-  // letters/digits/period/underscore only). The human-readable text goes in
-  // shortDescription; we omit `name` entirely because the stable identifier
-  // is already `id`.
   json rules = json::array();
   for (const auto &[id, desc] : rule_descs)
-  {
-    json rule;
-    rule["id"] = id;
-    rule["shortDescription"]["text"] = desc;
-    json tags = json::array();
-    for (unsigned cwe : rule_cwes[id])
-      tags.push_back("external/cwe/cwe-" + std::to_string(cwe));
-    if (!tags.empty())
-      rule["properties"]["tags"] = tags;
-    rules.push_back(rule);
-  }
+    rules.push_back(sarif_rule(id, desc, rule_cwes[id]));
   run["tool"]["driver"]["rules"] = rules;
 
   if (json taxonomy = cwe_taxonomy(all_cwes); !taxonomy.is_null())
@@ -210,23 +245,8 @@ void sarif_goto_trace(
 
   json results_json = json::array();
   for (const auto &r : results)
-  {
-    json result;
-    result["ruleId"] = r.rule_id;
-    result["level"] = r.level;
-    result["message"]["text"] = r.message;
-
-    json loc;
-    loc["physicalLocation"]["artifactLocation"]["uri"] = r.file;
-    if (r.line > 0)
-      loc["physicalLocation"]["region"]["startLine"] = r.line;
-    result["locations"] = json::array({loc});
-
-    if (!r.cwes.empty())
-      result["taxa"] = cwe_taxa_refs(r.cwes);
-
-    results_json.push_back(result);
-  }
+    results_json.push_back(
+      sarif_result(r.rule_id, r.level, r.message, r.file, r.line, r.cwes));
   run["results"] = results_json;
 
   write_sarif_document(out_path, std::move(run));
@@ -250,43 +270,24 @@ void sarif_dead_code(
 
   json run = new_sarif_run();
 
-  json sarif_rule;
-  sarif_rule["id"] = rule.sarif_id;
-  sarif_rule["shortDescription"]["text"] = rule.short_description;
-  {
-    json tags = json::array();
-    for (unsigned cwe : rule.cwes)
-      tags.push_back("external/cwe/cwe-" + std::to_string(cwe));
-    if (!tags.empty())
-      sarif_rule["properties"]["tags"] = tags;
-  }
-  run["tool"]["driver"]["rules"] = json::array({sarif_rule});
+  run["tool"]["driver"]["rules"] =
+    json::array({sarif_rule(rule.sarif_id, rule.short_description, rule.cwes)});
 
   const std::set<unsigned> cwes(rule.cwes.begin(), rule.cwes.end());
   if (json taxonomy = cwe_taxonomy(cwes); !taxonomy.is_null())
     run["taxonomies"] = json::array({std::move(taxonomy)});
 
+  // Advisory findings are emitted at "note" level: the dead-code verdict never
+  // flips a run to FAILED (issue #4495).
   json results_json = json::array();
   for (const auto &f : findings)
-  {
-    json result;
-    result["ruleId"] = rule.sarif_id;
-    // Advisory finding: "note", not "error" — the dead-code verdict never
-    // flips a run to FAILED (issue #4495).
-    result["level"] = "note";
-    result["message"]["text"] = f.message.empty() ? "Dead code" : f.message;
-
-    json loc;
-    loc["physicalLocation"]["artifactLocation"]["uri"] = f.file;
-    if (f.line > 0)
-      loc["physicalLocation"]["region"]["startLine"] = f.line;
-    result["locations"] = json::array({loc});
-
-    if (!rule.cwes.empty())
-      result["taxa"] = cwe_taxa_refs(rule.cwes);
-
-    results_json.push_back(result);
-  }
+    results_json.push_back(sarif_result(
+      rule.sarif_id,
+      "note",
+      f.message.empty() ? "Dead code" : f.message,
+      f.file,
+      f.line,
+      rule.cwes));
   run["results"] = results_json;
 
   write_sarif_document(out_path, std::move(run));
