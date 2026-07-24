@@ -1255,6 +1255,73 @@ static bool try_extract_numeric_2d_list(
   return true;
 }
 
+static bool is_json_none_literal(const nlohmann::json &node)
+{
+  return node.is_object() && node.contains("_type") &&
+         node["_type"] == "Constant" && node.contains("value") &&
+         node["value"].is_null();
+}
+
+static bool is_finite_numeric_value(const numeric_value &value)
+{
+  return value.is_int || std::isfinite(value.double_value);
+}
+
+static double numeric_to_sort_key(const nlohmann::json &node)
+{
+  numeric_value value;
+  if (
+    !try_extract_numeric_constant(node, value) ||
+    !is_finite_numeric_value(value))
+    throw std::runtime_error(
+      "TypeError: numpy.sort() currently supports only finite numeric arrays");
+  return to_double(value);
+}
+
+static nlohmann::json
+make_sorted_numeric_list(std::vector<nlohmann::json> elements)
+{
+  std::stable_sort(
+    elements.begin(),
+    elements.end(),
+    [](const nlohmann::json &lhs, const nlohmann::json &rhs) {
+      return numeric_to_sort_key(lhs) < numeric_to_sort_key(rhs);
+    });
+
+  nlohmann::json result;
+  result["_type"] = "List";
+  result["elts"] = std::move(elements);
+  return result;
+}
+
+static std::optional<nlohmann::json>
+get_literal_numpy_array_arg(const nlohmann::json &node)
+{
+  if (!node.is_object() || !node.contains("_type"))
+    return std::nullopt;
+
+  if (node["_type"] == "List")
+    return node;
+
+  if (
+    node["_type"] != "Call" || !node.contains("func") ||
+    !node["func"].is_object() || !node["func"].contains("_type") ||
+    node["func"]["_type"] != "Attribute" || !node["func"].contains("attr") ||
+    node["func"]["attr"] != "array" || !node["func"].contains("value") ||
+    !node["func"]["value"].is_object() ||
+    node["func"]["value"].value("_type", std::string()) != "Name" ||
+    node["func"]["value"].value("id", std::string()) != "np" ||
+    !node.contains("args") || node["args"].empty())
+  {
+    return std::nullopt;
+  }
+
+  nlohmann::json literal = node["args"][0];
+  if (literal.is_object() && literal.value("_type", std::string()) == "List")
+    return literal;
+  return std::nullopt;
+}
+
 static bool is_supported_numpy_unary_math(const std::string &function)
 {
   return function == "sin" || function == "cos" || function == "exp" ||
@@ -4829,6 +4896,97 @@ exprt numpy_call_expr::get()
       }
     }
   };
+
+  if (function == "sort")
+  {
+    if (call_["args"].empty() || call_["args"].size() > 2)
+      throw std::runtime_error(
+        "TypeError: numpy.sort() expects 1 or 2 positional arguments");
+
+    bool flatten = false;
+    long long axis = -1;
+    auto parse_axis = [&](const nlohmann::json &axis_node) {
+      if (is_json_none_literal(axis_node))
+      {
+        flatten = true;
+        return;
+      }
+
+      numeric_value axis_value;
+      if (
+        !try_extract_numeric_constant(axis_node, axis_value) ||
+        !axis_value.is_int)
+      {
+        throw std::runtime_error(
+          "TypeError: numpy.sort() axis must be a literal integer or None");
+      }
+      axis = axis_value.int_value;
+    };
+
+    if (call_["args"].size() == 2)
+      parse_axis(call_["args"][1]);
+
+    if (call_.contains("keywords"))
+    {
+      for (const auto &kw : call_["keywords"])
+      {
+        if (kw["_type"] != "keyword" || kw["arg"].is_null())
+          continue;
+
+        const std::string arg = kw["arg"].get<std::string>();
+        if (arg == "axis")
+        {
+          if (call_["args"].size() == 2)
+            throw std::runtime_error(
+              "TypeError: numpy.sort() got multiple values for axis");
+          parse_axis(kw["value"]);
+          continue;
+        }
+
+        throw std::runtime_error(
+          "TypeError: numpy.sort() keyword '" + arg + "' is not supported");
+      }
+    }
+
+    nlohmann::json arr_arg = call_["args"][0];
+    if (arr_arg.value("_type", std::string()) == "Name")
+    {
+      nlohmann::json resolved = json_utils::find_var_decl(
+        arr_arg["id"], converter_.current_function_name(), converter_.ast());
+      if (resolved.contains("value") && resolved["value"].is_object())
+        arr_arg = resolved["value"];
+    }
+
+    auto literal_arg = get_literal_numpy_array_arg(arr_arg);
+    if (!literal_arg.has_value())
+      throw std::runtime_error(
+        "TypeError: numpy.sort() currently supports only literal numpy.array "
+        "inputs");
+    arr_arg = std::move(*literal_arg);
+
+    std::vector<std::size_t> shape;
+    if (!get_literal_shape(arr_arg, shape) || shape.empty())
+      throw std::runtime_error(
+        "TypeError: numpy.sort() currently supports only constant arrays");
+
+    std::vector<nlohmann::json> elements;
+    if (flatten)
+    {
+      flatten_json_list(arr_arg, elements);
+    }
+    else
+    {
+      if (shape.size() != 1 || (axis != 0 && axis != -1))
+      {
+        throw std::runtime_error(
+          "TypeError: numpy.sort() axis " + std::to_string(axis) +
+          " is not supported");
+      }
+      elements = arr_arg["elts"].get<std::vector<nlohmann::json>>();
+    }
+
+    return converter_.get_expr(make_sorted_numeric_list(std::move(elements)));
+  }
 
   if (function == "reshape")
   {
