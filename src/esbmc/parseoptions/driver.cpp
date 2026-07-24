@@ -163,7 +163,15 @@ int esbmc_parseoptionst::doit()
           // --forward-condition / --inductive-step would exit SUCCESSFUL
           // without ever printing the [Dead code] findings.
           "forward-condition",
-          "inductive-step"})
+          "inductive-step",
+          // Claim filtering marks every unselected assertion SKIP but leaves it
+          // in goto_coveraget::all_claims, so its probe never solves and the
+          // reporter would flag live branches as dead. SMT-formula emission
+          // (P_SMTLIB) likewise leaves every probe unsolved. Both would produce
+          // spurious CWE-561 findings, so reject them (issue #4495 / #5934).
+          "claim",
+          "smt-formula-only",
+          "smt-formula-too"})
       if (cmdline.isset(incompatible))
       {
         log_error(
