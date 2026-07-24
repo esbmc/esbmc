@@ -19,7 +19,7 @@ __ESBMC_HIDE:;
   // ESBMC does not support shared memory at the moment
   // we ignore the __pshared for now
   __ESBMC_assert(__value <= INT_MAX, "Value has exceeded the maximum");
-  __ESBMC_sem_lock_field(*__sem) = 0;
+  __ESBMC_sem_lock_field(*__sem) = (__value == 0);
   __ESBMC_sem_count_field(*__sem) = __value;
   __ESBMC_sem_init_field(*__sem) = 1;
   __ESBMC_atomic_end();

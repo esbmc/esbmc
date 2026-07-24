@@ -5,9 +5,8 @@ on:
   push:
     branches: [master]
     paths:
-      - 'src/goto-programs/plcopen_xml_parser.cpp'
-      - 'src/goto-programs/plcopen_xml_parser.h'
-      - 'src/frontends/ld/**'
+      - 'src/ld-frontend/**'
+      - '.github/workflows/plcplus-linux-binary.yml'
 
 jobs:
   build-linux-amd64:
