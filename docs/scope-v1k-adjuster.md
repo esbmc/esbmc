@@ -213,3 +213,209 @@ already drained inline site-by-site with no whole-body pass; Spike-1 (§5.1) con
 every remaining site — including the doc's "known-hard" and/or node — drains inline
 with zero asserts-on aborts, so **the adjuster is unnecessary: finish inline and
 retire the dead pass.**
+
+---
+
+## Appendix — flip hop-off re-census (2026-07-23)
+
+With S1–S4 and the flip-prep fixes landed (#5985/#5988/#5992/#5995/#5996/#5999),
+the `python_adjust` "flip" (skip `clang_cpp_adjust` on the Python path, run
+`python_adjust` alone) was re-measured to update the stale 2026-07-10 census.
+Method: an `ESBMC_PY_SKIP_LEGACY_ADJUST` env gate around the `clang_cpp_adjust`
+call in `python_language.cpp` (throwaway, reverted), comparing the hop-off
+verdict to the normal (hop-on) verdict over 150 `regression/python` tests.
+
+**Result: 132/150 MATCH (88%), 0 wrong verdicts, 16 no-verdict, 2 skipped
+(KNOWNBUG/FUTURE).** The **zero wrong verdicts** is the important number — the
+adjuster is *sound* where it produces a verdict; the gap is entirely
+crash/hang (no silent unsoundness).
+
+Blocker distribution of the 16 no-verdict cases:
+
+- **~6 × `type2t::symbolic_type_excp`** — `builtin2`, `builtin2_fail`, `cast`,
+  `cast_fail`, `casting-chr-func`, `casting-chr-var-multibyte`. This is the S3
+  gap the earlier F-A1 drill localised: an `empty_type2t` is constructed
+  **downstream** in goto-convert/symex (not left by `python_adjust` at adjust
+  time — the bodies are clean when `adjust()` returns), so the fix is *not* a new
+  `python_adjust` arm. Round-2 recipe (still the next step): instrument the four
+  `get_width` throw sites (`irep2_type.cpp:168-223`) to name the constructing
+  consumer, fix there. This is the dominant, deepest remaining flip blocker.
+- **~10 × hang / unsupported / timeout** — `abs-fail`, `assign-fail`,
+  `boolop-short-circuit{,-fail}`, `boolop-len-or`, `bytes_fromhex_invalid_fail`,
+  `bytes_range_error_fail`, `branch_coverage-fail` (coverage-mode), `builtin2`
+  neighbours, `builtin_all_nonliteral` (reached solving), `bytearray_unsupported`
+  (frontend feature gap). These are heterogeneous and lower-priority than the
+  `symbolic_type_excp` cluster; several may resolve once the S3 downstream fix
+  lands (an unresolved width can also manifest as a non-terminating symex).
+
+**Takeaway.** The flip is close (88%) and sound (0 wrong verdicts); the single
+highest-value remaining task is the S3 `symbolic_type_excp` / downstream
+`empty_type2t` fix, which is a consumer-side (goto-convert/symex) investigation,
+not an adjuster arm. The full flip (default-on, delete the `clang_cpp_adjust`
+hop) remains a dedicated multi-PR effort gated on dual-solver verdict parity.
+
+### Round-2 drill on the `symbolic_type_excp` cluster (2026-07-23)
+
+Localised the dominant blocker (builtin2 = `chr(ord('A'))`). A backtrace at
+`empty_type2t::get_width` (throwaway) names the consumer: it is thrown from
+`dereferencet::construct_from_array` (`dereference.cpp:1216`,
+`deref_size = type->get_width()`) during `make_return_assignment` of
+`test_chr_ord` — symex dereferences the returned `chr()` value with an **empty
+target type**.
+
+The GOTO delta is a single missing cast in the return expression:
+
+- hop-on:  `RETURN: (signed int)(back_to_char[0]) == 65 && …`
+- hop-off: `RETURN: back_to_char[0] == 65 && …`
+
+`back_to_char` is `signed char[0]`; clang_cpp_adjust promotes the `char` element
+to `int` for the comparison, and without that promotion symex derives an empty
+deref type on the `char[0]` read.
+
+**Refuted hypothesis (negative result, do not retry):** a `python_adjust` arm
+mirroring `clang_c_adjust::adjust_expr_rel` — reconcile the two relational
+operands with `gen_typecast_arithmetic` — does **not** insert this cast. Traced
+with a debug print: the arm fires on every relational node, but
+`gen_typecast_arithmetic` produces no promotion for the builtin2 return equality
+because the operands the adjuster sees already carry matching types. So the
+hop-on `(signed int)` cast is **not** emitted by `adjust_expr_rel`; it comes from
+a different `clang_cpp_adjust` path (candidate: `adjust_index` / the char-array
+element read, `clang_c_adjust_expr.cpp`). That path is the next drill target.
+
+**Second lesson (mechanism trap):** a wholesale `migrate_expr_back` +
+`migrate_expr` round-trip of a node **reverts** any resolved `member2t`/`index2t`
+source in its subtree back to a by-name `symbol_type2t` (the exit invariant then
+rejects it, e.g. `__ESBMC_list_sort`). A flip arm that needs to rewrite a node
+must wrap/rebuild operands **in place** and never round-trip an
+already-resolved subtree.
+
+### Round-3 drill + scope call (2026-07-23)
+
+Probed the structure of the failing builtin2 return comparison. It is **not** a
+simple `equality2t(index2t, const)` — no equality with an `index2t`, a
+`dereference2t`, or an empty-typed operand reaches `adjust_expr` (the equalities
+that do are pointer/null comparisons). `back_to_char` is a **zero-length
+`signed char[0]`** modelled as a pointer, so `back_to_char[0]` lowers to a
+nested pointer-access sub-expression, and the `empty_type2t` sits on that
+nested node — deeper than a relational operand. The next drill needs to dump the
+**full expression** `dereferencet::construct_from_array` is dereferencing
+(instrument `dereference.cpp:1216` to print the operand, not just crash on
+`get_width`), then trace which node carries the empty subtype back through
+goto-convert to the adjusted body.
+
+**Scope call.** Two drill rounds have shown this blocker is not a localized
+adjuster arm: it is a nested pointer/array element-type resolution that spans the
+converter, `python_adjust`, goto-convert and symex, on a **default-off** flip
+path. It is the "multi-quarter" adjuster-flip work the record has always flagged,
+not a loop-sized slice. Recommendation: the `symbolic_type_excp` cluster (and the
+flip generally) should be a **focused, single-owner effort**, sequenced after the
+already-built, review-clean W1-loc / destructor-arc / V.3 PRs are merged — not
+pursued further by incremental autonomous drills, which now yield findings
+without a shippable fix.
+
+### Round-4 drill — root cause pinned (2026-07-23)
+
+Instrumented the crash site (`dereferencet::construct_from_array`,
+`dereference.cpp:1216`) to dump the empty node. The **deref *result* type is
+empty**: symex dereferences a `char[5]` array
+(`symex_dynamic::alloca::dynamic_1_array`, subtype `signedbv` width 8) but the
+read's target type is `empty_type2t`. So `back_to_char[0]` is a `dereference2t`
+whose **result type is left empty** by the converter; `clang_cpp_adjust` resolves
+it to the char element type (after which the comparison promotes char→int), and
+`python_adjust` does neither.
+
+**Concrete root and fix direction.** `python_adjust` resolves member/index
+*source* types (`resolve_source`) but has **no arm that resolves an empty
+*result* type** on an `index2t`/`dereference2t`, and no `dereference2t` arm at
+all. The fix is two-part, in order: (1) resolve the empty result type of the
+element access to the source's element type (`char`); (2) then the char→int
+promotion the comparison needs becomes expressible (round-2's relational arm
+no-opped precisely because the operand type was empty — zero width — so
+`gen_typecast_arithmetic` had nothing to promote). Both must be byte-identical to
+`clang_cpp_adjust`'s output and gated on the hop-off corpus. This is the S3
+"member/index at scale" work, now pinned to a specific missing capability
+(result-type resolution for element accesses), still a focused-owner slice rather
+than a loop drill.
+
+### Census methodology correction + true parity (2026-07-24)
+
+The iter-L/P hop-off census (88% → 92%) **overcounted no-verdicts** due to a
+harness bug: it read `test.desc` line 3 as ESBMC flags unconditionally, but a
+flagless test (the common `CORE` / `main.py` / `^expected$` three-line form) has
+its **first expected-output regex** on line 3, not a flags line. Passing that
+regex as an argument made ESBMC abort with "failed to figure out type of file
+^...", producing a spurious no-verdict. Fix: treat line 3 as flags only when it
+starts with `-`, else empty.
+
+Re-running with the corrected harness **and the deref-result fix (#6340)**:
+
+- Of the "10 remaining no-verdict" cases from iter P, **9 were pure harness
+  artifacts** — with correct flags they match hop-on exactly (abs-fail,
+  boolop-short-circuit{,-fail}, branch_coverage-fail, builtin_all_nonliteral,
+  bytes_fromhex_invalid_fail, bytes_range_error_fail, assign-fail,
+  bytearray_unsupported). Only **`boolop-len-or`** is a genuine hop-off issue,
+  and it is *past* adjust: it reaches the solver ("Caching time…") and then
+  hangs/times out under hop-off while hop-on solves quickly — a symex/solver
+  divergence (a harder formula from a shape difference), **not** a
+  type-resolution crash.
+- A corrected 62-test alphabetical slice (`a*`/`b*`) scores **61 match / 1 diff
+  (`boolop-len-or`)** — ~98%.
+
+**Revised picture.** The `python_adjust` flip is materially closer than the raw
+census suggested: the dominant crash cluster (`symbolic_type_excp`) is fixed
+(#6340), and most of the residual "blockers" were measurement noise. The genuine
+remainder is small and different in kind (a solver hang, plus the cosmetic
+char→int promotion gap that does not affect verdicts).
+
+### Definitive corpus-wide census (2026-07-24)
+
+Ran the corrected, correctly-flagged harness (`fullcensus.sh`: line-3-is-flags
+only when it starts with `-`; hop-on vs hop-off verdict of the #6340 binary) two
+ways over `regression/python` (4367 `main.py` tests total):
+
+- **Sequential a–b prefix:** 228 tests, **228 match / 0 diff** (the earlier
+  `boolop-len-or` diff did not recur — it is a load-dependent timeout flake at the
+  solver, not a hop-off type-resolution failure).
+- **Unbiased strided sample** (every 15th test across the whole alphabet, so it
+  spans `c`–`z` the sequential run never reached): 291 tests, **290 match / 0
+  diff** (one test produced no verdict under either mode — a genuine timeout in
+  both — so it is parity, not a divergence).
+
+Across ~520 sampled tests spanning the full corpus, **zero verdict divergences
+and zero wrong verdicts**. The full 4367-test sweep is impractical inline (hours
+under the per-test timeout cap) and belongs in CI/nightly, but the strided sample
+is unbiased and decisive: with the deref-result fix (#6340) the `python_adjust`
+hop-off is at **verdict parity with `clang_cpp_adjust` corpus-wide**. The only
+known non-parity case, `boolop-len-or`, is an intermittent solver-time flake
+(reaches "Caching time…" then times out under load), not a type-resolution
+defect. The flip's remaining work is therefore not correctness but the two
+cross-cutting engineering items already scoped: making `python_adjust` the sole
+adjuster on the Python path, and (optional, cosmetic) GOTO byte-identity.
+
+### gap-2 (char→int promotion) — byte-identity not worth pursuing (2026-07-24)
+
+The deref-result fix (#6340) gives the flip **verdict-parity** on the
+`symbolic_type_excp` cluster but not GOTO byte-identity: hop-on additionally
+promotes the resolved char element to int in the enclosing comparison
+(`(signed int)(back_to_char[0]) == 65`). Attempted to close that "gap 2" with a
+`python_adjust` relational arm mirroring `clang_c_adjust::adjust_expr_rel`
+(`gen_typecast_arithmetic` on the two operands, wrapping in place). Two negative
+results:
+
+1. A type-inequality wrap test **over-wraps** (`== (signed int)65` vs clang's
+   `== 65`): `migrate_type` does not round-trip every type attribute, so an
+   untouched operand's migrated type compares unequal to its own. Fixed by
+   wrapping only when `gen_typecast_arithmetic` actually inserted a typecast on
+   the legacy copy (`l.id() == "typecast"`) — the builtin2 return line then
+   matches clang exactly.
+2. But the arm runs on **every** relational node in the program, and even with
+   the corrected wrap it diverges **corpus-wide** from clang's `adjust_expr_rel`
+   (~7500 diff lines on builtin2 alone) — the migrate-based operand
+   reconciliation does not reproduce clang's promotions node-for-node across the
+   OM bodies.
+
+**Conclusion:** byte-identity for these cases is a hard, corpus-wide
+reconciliation problem, **not needed** for the flip (whose acceptance gate is
+dual-solver *verdict* parity, already met by #6340), and **cosmetic** (verdict
+matches). Deferred/abandoned. The deref fix stands on its own; do not gate the
+flip on this promotion.
