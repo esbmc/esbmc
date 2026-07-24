@@ -117,6 +117,27 @@ witness format has no CWE field, so it is unaffected.) Unwinding-assertion
 failures remain intentionally unmapped — they signal an insufficient k-bound,
 not a weakness.
 
+### Excessive allocation size (CWE-789)
+
+The `excessive allocation size` row is produced only by the opt-in
+`--excessive-alloc-check[=K]` flag, which inserts an
+`ASSERT(size <= K)` before every `malloc`/`calloc`/`realloc`/`operator new[]`
+(default `K` = 1 MiB). The bound `K` is a **policy** choice, not a soundness
+property: a violation proves "a path reaches an allocation with size > K", not
+"memory can be exhausted" (undecidable in general). The assertion precedes the
+allocation, so an excessive size is still reported under
+`--force-malloc-success`. CWE-770 is the class-level entry for unbounded
+allocation; ESBMC maps to the CWE-789 variant.
+
+A typed request such as `malloc(sizeof(T))` is lowered to an element count of
+one with element type `T`, so the check scales by `sizeof(T)`; a byte-count
+request (`malloc(n)`, `malloc(n * sizeof(T))`) keeps a `char` element type and
+is compared directly. `calloc` and other allocators modelled by an operational
+model (e.g. `strdup`) are covered by instrumenting their model bodies, so a
+violation there is reported at the model's internal `malloc` site rather than
+the user call site, and a library routine that allocates an input-sized buffer
+can raise a genuine but library-located CWE-789.
+
 ## Advisories
 
 Some CWEs describe code-quality signals rather than property violations. ESBMC
@@ -157,24 +178,6 @@ the CFG and a value read only in a `catch` would be misreported. Reporting is
 restricted to user source (system-header and operational-model locations are
 excluded by a best-effort path heuristic). Inter-procedural dead-store
 detection is a future extension.
-The `excessive allocation size` row is produced only by the opt-in
-`--excessive-alloc-check[=K]` flag, which inserts an
-`ASSERT(size <= K)` before every `malloc`/`calloc`/`realloc`/`operator new[]`
-(default `K` = 1 MiB). The bound `K` is a **policy** choice, not a soundness
-property: a violation proves "a path reaches an allocation with size > K", not
-"memory can be exhausted" (undecidable in general). The assertion precedes the
-allocation, so an excessive size is still reported under
-`--force-malloc-success`. CWE-770 is the class-level entry for unbounded
-allocation; ESBMC maps to the CWE-789 variant.
-
-A typed request such as `malloc(sizeof(T))` is lowered to an element count of
-one with element type `T`, so the check scales by `sizeof(T)`; a byte-count
-request (`malloc(n)`, `malloc(n * sizeof(T))`) keeps a `char` element type and
-is compared directly. `calloc` and other allocators modelled by an operational
-model (e.g. `strdup`) are covered by instrumenting their model bodies, so a
-violation there is reported at the model's internal `malloc` site rather than
-the user call site, and a library routine that allocates an input-sized buffer
-can raise a genuine but library-located CWE-789.
 
 ## Ids dropped vs. published mappings
 

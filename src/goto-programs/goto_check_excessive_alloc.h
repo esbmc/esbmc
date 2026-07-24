@@ -15,8 +15,9 @@
 /// symex finds a model with `byte_size > K`, that is a CWE-789 witness.
 ///
 /// `byte_size` is the total request in bytes: `malloc`/`realloc` already carry
-/// a byte size; `operator new[n]` carries an element count, so the pass scales
-/// it by `sizeof(element)`.
+/// a byte size; `operator new[n]` is pre-scaled to bytes by the Clang frontend
+/// (`do_cpp_new` multiplies the element count by `sizeof(element)` before
+/// setting `cmt_size`), so the pass compares it directly.
 ///
 /// The bound K is a policy choice, not a soundness property: the pass proves
 /// "no path reaches an allocation with size > K", not "no path can exhaust
