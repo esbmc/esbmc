@@ -8,9 +8,11 @@ maintainer must do to get a formula accepted and keep it current.
 
 > [!NOTE]
 >
-> Status: ESBMC is **not yet in `homebrew/core`**. This is a how-to and a
-> reading list for adding and maintaining a formula, not a description of an
-> existing one.
+> Status: ESBMC is **now in `homebrew/core`** — install it with
+> `brew install esbmc`. The
+> [`esbmc` formula](https://github.com/Homebrew/homebrew-core/blob/HEAD/Formula/e/esbmc.rb)
+> is the canonical example for the workflow below; this guide remains the
+> reference for keeping it current.
 
 ## Overview
 
