@@ -230,14 +230,28 @@ void python_converter::create_builtin_symbols()
   add_string_builtin("__file__", current_python_file);
 }
 
+// Module name for an Import/ImportFrom AST node. For a relative import with no
+// module name (`from . import X` / `from .. import X`), ImportFrom.module is
+// null; return "" so the import is treated as unresolved rather than crashing on
+// a null-to-std::string conversion (nlohmann type_error, #6281). A relative
+// import that names a module (`from ..pkg import X`) carries the plain name and
+// is handled as before.
+static std::string import_module_name(const nlohmann::json &node)
+{
+  if (node["_type"] == "ImportFrom")
+  {
+    const nlohmann::json &m = node["module"];
+    return m.is_null() ? std::string() : m.get<std::string>();
+  }
+  return node["names"][0]["name"].get<std::string>();
+}
+
 bool python_converter::import_module_into_block(
   const nlohmann::json &import_node,
   module_locator &locator,
   code_blockt &block)
 {
-  const std::string &module_name = (import_node["_type"] == "ImportFrom")
-                                     ? import_node["module"]
-                                     : import_node["names"][0]["name"];
+  const std::string module_name = import_module_name(import_node);
 
   if (imported_modules.find(module_name) != imported_modules.end())
     return true;
@@ -315,9 +329,7 @@ void python_converter::pre_collect_module_asts(
       return;
     if (node.value("module_not_found", false))
       return;
-    const std::string module_name = (node["_type"] == "ImportFrom")
-                                      ? node["module"]
-                                      : node["names"][0]["name"];
+    const std::string module_name = import_module_name(node);
     if (module_ast_pool_.count(module_name))
       return;
     std::ifstream f = locator.open_module_file(module_name);
@@ -377,18 +389,21 @@ void python_converter::convert_module_imports(code_blockt &all_imports_block)
     {
       if (elem.value("module_not_found", false))
       {
-        const std::string module_name = (elem["_type"] == "ImportFrom")
-                                          ? elem["module"]
-                                          : elem["names"][0]["name"];
+        const std::string module_name = import_module_name(elem);
         log_warning("skipping unresolvable import: {}", module_name);
         continue;
       }
       is_importing_module = true;
       if (!import_module_into_block(elem, locator, all_imports_block))
       {
-        const std::string &module_name = (elem["_type"] == "ImportFrom")
-                                           ? elem["module"]
-                                           : elem["names"][0]["name"];
+        const std::string module_name = import_module_name(elem);
+        // Relative import with no module name (`from . import X`): there is no
+        // module file to open. Treat it as unresolved and continue (#6281).
+        if (module_name.empty())
+        {
+          log_warning("skipping relative import with no module name");
+          continue;
+        }
         throw std::runtime_error(
           "Cannot open file: " + locator.module_path(module_name));
       }
@@ -411,9 +426,14 @@ void python_converter::convert_module_imports(code_blockt &all_imports_block)
       is_importing_module = true;
       if (!import_module_into_block(stmt, locator, all_imports_block))
       {
-        const std::string &module_name = (stmt["_type"] == "ImportFrom")
-                                           ? stmt["module"]
-                                           : stmt["names"][0]["name"];
+        const std::string module_name = import_module_name(stmt);
+        // Relative import with no module name (`from . import X`): nothing to
+        // open — treat as unresolved and continue (#6281).
+        if (module_name.empty())
+        {
+          log_warning("skipping relative import with no module name");
+          continue;
+        }
         throw std::runtime_error(
           "Cannot open file: " + locator.module_path(module_name));
       }
