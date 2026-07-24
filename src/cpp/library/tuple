@@ -110,6 +110,30 @@ get(const tuple<Types...> &t) noexcept
     return get<I - 1>(t.tail);
 }
 
+// Rvalue overloads. A by-value structured binding (auto [a, b] = t) binds each
+// name to get<i>(e) where the holder e is an xvalue ([dcl.struct.bind]/4), so
+// without these overloads only the const-lvalue get is viable and the binding
+// fails with a "drops const qualifier" error.
+template <std::size_t I, typename... Types>
+constexpr typename tuple_element<I, tuple<Types...>>::type &&
+get(tuple<Types...> &&t) noexcept
+{
+  if constexpr (I == 0)
+    return std::move(t.head);
+  else
+    return get<I - 1>(std::move(t.tail));
+}
+
+template <std::size_t I, typename... Types>
+constexpr const typename tuple_element<I, tuple<Types...>>::type &&
+get(const tuple<Types...> &&t) noexcept
+{
+  if constexpr (I == 0)
+    return std::move(t.head);
+  else
+    return get<I - 1>(std::move(t.tail));
+}
+
 // operator==
 template <typename... T1, typename... T2>
 constexpr bool operator==(const tuple<T1...> &lhs, const tuple<T2...> &rhs)
@@ -216,15 +240,8 @@ constexpr // since C++14
 }
 
 #  if __cplusplus >= 201703L
-// apply / make_from_tuple: this file's get() has only lvalue and
-// const-lvalue overloads (no tuple&& overload), so forwarding an rvalue
-// tuple below still binds the const-lvalue get() and copies each element
-// rather than moving it. Harmless for copyable element types (the only
-// kind this OM's tuple constructor accepts today - see the copy-only
-// tuple(const Head&, const Tail&...) ctor above); revisit alongside move
-// support for tuple itself. std::invoke() above is a simplified model that
-// only calls plain callables, so member-function/member-data-pointer
-// callables are not supported here either.
+// std::invoke() below is a simplified model that only calls plain callables, so
+// member-function/member-data-pointer callables are not supported here.
 namespace __apply_detail
 {
 template <class F, class Tuple, std::size_t... I>
