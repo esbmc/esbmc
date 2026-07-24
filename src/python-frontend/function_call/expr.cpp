@@ -3871,6 +3871,12 @@ exprt function_call_expr::handle_general_function_call()
   if (std::optional<exprt> folded = try_fold_sorted())
     return *folded;
 
+  // A pure `def f(a): return a` over an array-shaped parameter is inlined
+  // to the caller's own argument (see try_fold_identity_array_return):
+  // arrays aren't a valid by-value return type yet.
+  if (std::optional<exprt> identity = try_fold_identity_array_return())
+    return *identity;
+
   // Skip builtin dispatch if the user imported a function with the same name
   // e.g. "from other import sum" defines a user sum that shadows the builtin
   bool is_user_imported =
@@ -4329,6 +4335,64 @@ std::optional<exprt> function_call_expr::fold_sorted_symbolic_tuples(
     }
   }
   return std::nullopt;
+}
+
+std::optional<exprt> function_call_expr::try_fold_identity_array_return()
+{
+  if (call_["func"].value("_type", "") != "Name")
+    return std::nullopt;
+
+  const std::string &func_name = function_id_.get_function();
+  const nlohmann::json func_node =
+    json_utils::try_find_function(converter_.ast()["body"], func_name);
+  if (func_node.empty() || !func_node.contains("body"))
+    return std::nullopt;
+
+  const nlohmann::json &body = func_node["body"];
+  if (body.size() != 1 || body[0].value("_type", "") != "Return")
+    return std::nullopt;
+
+  const nlohmann::json &ret_val = body[0].value("value", nlohmann::json());
+  if (ret_val.is_null() || ret_val.value("_type", "") != "Name")
+    return std::nullopt;
+
+  const std::string returned_name = ret_val["id"].get<std::string>();
+  const nlohmann::json &params = func_node["args"]["args"];
+
+  // Restrict to the exact `def f(a): return a` shape: one parameter, one
+  // positional argument, no keywords. A function with more parameters, or a
+  // call with extra positional/keyword arguments, would have those other
+  // arguments' evaluation and type-checking silently skipped by substituting
+  // only the returned one.
+  if (params.size() != 1 || params[0].value("arg", "") != returned_name)
+    return std::nullopt;
+  if (
+    call_["args"].size() != 1 ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    return std::nullopt;
+
+  exprt arg_expr = converter_.get_expr(call_["args"][0]);
+  const typet &arg_type = converter_.ns.follow(arg_expr.type());
+  typet element_candidate;
+  if (arg_type.is_array())
+    element_candidate = arg_type;
+  else if (arg_type.is_pointer())
+    element_candidate = converter_.ns.follow(arg_type.subtype());
+
+  if (!element_candidate.is_array())
+    return std::nullopt;
+
+  // Strings are also modelled as char arrays in this codebase; restrict this
+  // fold to numpy-shaped (non-char) arrays so plain `def f(s): return s`
+  // string passthroughs -- already handled correctly elsewhere -- are left
+  // to their existing path.
+  typet innermost = converter_.ns.follow(element_candidate);
+  while (innermost.is_array())
+    innermost = converter_.ns.follow(to_array_type(innermost).subtype());
+  if (innermost == char_type())
+    return std::nullopt;
+
+  return arg_expr;
 }
 
 std::optional<exprt> function_call_expr::try_handle_round(bool is_user_imported)
@@ -4973,15 +5037,25 @@ size_t function_call_expr::bind_call_receiver(
       // the class type, so the object is sized symbolically by the struct at
       // symex time — robust to the class struct still gaining fields after this
       // construction (which a byte-sized allocation cannot handle).
-      // If the lvalue is `object`/Any (a pointer to void/empty), the
-      // new_object interception cannot size the allocation — the pointee type
-      // has no width. Retype the lvalue (and its symbol) to the class being
-      // constructed; a `void*`/Any slot legitimately holds the resulting
-      // `Class*` pointer. Without this, `t: object = Box()` aborts in symex.
+      // If the lvalue is `object`/Any (a pointer to void/empty) or a `None`
+      // placeholder (a prior `g = None` binding, pointer-to-bool per
+      // none_type()), the new_object interception cannot size the allocation
+      // correctly — the pointee type has no width, or the wrong (bool)
+      // width. Retype the lvalue (and its symbol) to the class being
+      // constructed; a `void*`/Any or `None` slot legitimately holds the
+      // resulting `Class*` pointer once rebound. Without this, `t: object =
+      // Box()` aborts in symex (#4773), and `g = None; g = Box()` allocates
+      // a bool-sized object and overruns it as soon as the constructor
+      // writes a real field (#6243). The none_type() check is a structural
+      // match on pointer-to-bool: this frontend reserves that shape
+      // exclusively for the None sentinel (see util/python_types.cpp), so
+      // it cannot collide with a real user-level bool pointer (Python
+      // exposes no raw pointers).
       if (
         converter_.current_lhs->type().is_pointer() &&
         (converter_.current_lhs->type().subtype().id() == "empty" ||
-         converter_.current_lhs->type().subtype().id().empty()))
+         converter_.current_lhs->type().subtype().id().empty() ||
+         converter_.current_lhs->type() == none_type()))
       {
         const typet class_ptr = gen_pointer_type(call.type());
         converter_.current_lhs->type() = class_ptr;

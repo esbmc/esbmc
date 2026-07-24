@@ -122,6 +122,12 @@ static bool is_pure_virtual(const clang::CXXMethodDecl &md)
 #endif
 }
 
+// Defined further down; used by add_thunk_method to size the this-adjustment.
+static std::optional<uint64_t> offset_of_subobject(
+  const clang::ASTContext &ctx,
+  const clang::CXXRecordDecl *D,
+  const clang::CXXRecordDecl *S);
+
 /**
  * @brief Returns the ultimate overridden method for a given CXXMethodDecl.
  *
@@ -317,28 +323,17 @@ void clang_cpp_convertert::add_thunk_method(
   std::string base_class_id, base_class_name;
   get_decl_name(*md.getParent(), base_class_name, base_class_id);
 
-  // Compute the byte offset of the base class sub-object within the derived
-  // class. For non-first base classes in multiple inheritance this is non-zero,
-  // and the thunk must subtract it from its Base* this to recover Derived*.
-  // TODO: This loop only searches direct bases of derived_rd. If base_rd is
-  // an indirect base (e.g. Derived : Middle, Middle : B8), base_offset will
-  // incorrectly remain 0. A complete fix requires summing offsets along the
-  // full inheritance path using CXXBasePaths::isDerivedFrom or a recursive
-  // walk — to be addressed as a follow-up.
-  uint64_t base_offset = 0;
+  // Byte offset of the base sub-object within the derived class. For non-first
+  // base classes in multiple inheritance this is non-zero, and the thunk must
+  // subtract it from its Base* this to recover Derived*. offset_of_subobject
+  // sums the offset along the full inheritance path, so an *indirect* non-first
+  // base (e.g. Derived : Middle, Middle : First, B) gets its cumulative offset
+  // rather than 0 (#6288). A path crossing a virtual base yields nullopt (its
+  // dynamic offset cannot be statically subtracted); fall back to 0 there,
+  // unchanged from before (tracked separately, #940).
   const clang::CXXRecordDecl *base_rd = md.getParent();
-  const clang::ASTRecordLayout &layout =
-    ASTContext->getASTRecordLayout(&derived_rd);
-  for (const auto &base_spec : derived_rd.bases())
-  {
-    const clang::CXXRecordDecl *spec_rd =
-      base_spec.getType()->getAsCXXRecordDecl();
-    if (spec_rd == base_rd && !base_spec.isVirtual())
-    {
-      base_offset = layout.getBaseClassOffset(base_rd).getQuantity();
-      break;
-    }
-  }
+  const uint64_t base_offset =
+    offset_of_subobject(*ASTContext, &derived_rd, base_rd).value_or(0);
 
   // Create the thunk method symbol
   symbolt thunk_func_symb;
@@ -371,8 +366,20 @@ void clang_cpp_convertert::add_thunk_method(
   symbolt &added_thunk_symbol =
     *context.move_symbol_to_context(thunk_func_symb);
 
+  // The thunk populates a slot in *this base's* vtable, so it must be keyed by
+  // the base method's virtual_name, not the derived method's. These coincide
+  // for single inheritance, but when the derived method overrides the same
+  // signature from several bases (e.g. every derived destructor, or C::f with
+  // A::f and B::f), get_ultimate_overridden_method() cannot pick a unique base
+  // and keys `component` by the derived method itself. Recover the correct key
+  // per overridden base here so each base's slot is actually overridden (#6198).
+  std::string base_virtual_name, base_virtual_id;
+  get_decl_name(
+    *get_ultimate_overridden_method(&md), base_virtual_name, base_virtual_id);
+
   // add thunk function as a `method` in the derived class' type
-  add_thunk_component_to_type(added_thunk_symbol, type, component);
+  add_thunk_component_to_type(
+    added_thunk_symbol, type, component, base_virtual_id);
 }
 
 void clang_cpp_convertert::set_thunk_name(
@@ -568,11 +575,13 @@ void clang_cpp_convertert::add_thunk_method_body_no_return(
 void clang_cpp_convertert::add_thunk_component_to_type(
   const symbolt &thunk_func_symb,
   struct_typet &type,
-  const struct_typet::componentt &comp)
+  const struct_typet::componentt &comp,
+  const irep_idt &virtual_name)
 {
   struct_typet::componentt new_compo = comp;
   new_compo.type() = thunk_func_symb.get_type();
   new_compo.set_name(thunk_func_symb.id);
+  new_compo.set("virtual_name", virtual_name);
   type.methods().push_back(new_compo);
 }
 
