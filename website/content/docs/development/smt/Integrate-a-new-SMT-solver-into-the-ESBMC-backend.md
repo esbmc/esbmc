@@ -184,7 +184,6 @@ build/src/esbmc/esbmc --list-solvers   # expect "newsolver" listed
   signed/unsigned or FP encoding (see §3).
 - Add at least **two regression tests** (one passing `CORE`, one failing) whose
   `test.desc` flag line uses `--newsolver`.
-- Clean the per-test temp dirs afterwards: `rm -rf /tmp/esbmc-headers-*`.
 
 ## 11. Maintainability notes
 
