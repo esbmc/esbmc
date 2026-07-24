@@ -721,7 +721,7 @@ public:
     }
   }
 
-  size_type count(key_type &x)
+  size_type count(const key_type &x) const
   {
     if (this->_size != 0)
     {
