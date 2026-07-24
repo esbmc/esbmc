@@ -435,7 +435,7 @@ old vague "F-A" buckets:
 
 | Family | Count (in sample) | Reproduced signature | Root cause | Tractability |
 |---|---|---|---|---|
-| **S3 unresolved-by-name** | 7 | `python_adjust: symbol '…' retains N unresolved by-name (symbol_type2t) node(s) after adjust (V.1k post-adjust invariant violated)` | dict/Optional value nodes whose key/element type clang resolves but `python_adjust` leaves as a transient `symbol_type2t` — needs the dict-key-type infra (the long-standing S3 work-list) | **hard** (multi-step, own infra) |
+| **S3 unresolved-by-name** | 7 | `python_adjust: symbol '…' retains N unresolved by-name (symbol_type2t) node(s) after adjust` | **✅ 6/7 fixed, #6369.** The root cause was *not* symbol_type sources / dict-key-type infra as framed — it was the operand-count invariant: an Optional (`int \| None` = struct `{is_none, anon_pad$, value}`) built resolved-but-underpadded. The S2 padding arm only fired on by-name literals; these arrive already `struct_type`, so nothing padded them. Fixed by padding a resolved-struct literal with an operand/component mismatch. The 7th (optional5) advances to a separate downstream fn-arg struct mismatch. | ~~hard~~ **one arm** |
 | **index-over-pointer** | 3 | `std::runtime_error: Unexpected index type in computer_pointer_offset` (type_byte_size.cpp:338) | an `index2t` whose `source_value` is a `char*` (a Python string / decayed-array parameter). `clang_c_adjust::adjust_index` rewrites `p[i]` → `*(p+i)`; `python_adjust` does not. A naive mirror (`dereference2tc(elem, add2tc(ptr, idx))` — the exact `build_dereference` shape) removes this crash but surfaces a **deeper** `irep2_cast_error` in `goto_symex_statet::fixup_renamed_type` (a function-argument rename where `orig_type` is pointer but the renamed value is not), so the fix needs symex-side type-tracking care, not just the adjust arm. | **hard** (symex rename interaction) |
 | **wrong/absent verdict** | ~4–6 | legacy `SUCCESSFUL` → hop-off `FAILED` (sqrt3, math_gamma_noninteger, github_3690, github_6258) or hop-off no-verdict (complex_pow_float_exponent, div6, jpl, list25, string18, ternary_operator4 — several are the crashes above manifesting as an empty verdict) | SMT-level: mostly the two crash families above surfacing as no-verdict; the true wrong-verdicts cluster on math/complex functions and need per-case triage | **mixed** |
 
@@ -484,9 +484,13 @@ Census: MATCH 520 → 525 (the 3 index-over-pointer cases plus `string18` and
 pair added. So of the three residual families above, **index-over-pointer is
 resolved**; S3 unresolved-by-name and the math/complex verdicts remain.
 
-**Direction.** The two low-hanging arms (deref #6340, if2t #6348) are landed and
-the hop-off is at ~95% verdict parity. The remaining gaps are *not* one-arm
-fixes: index-over-pointer is really the array→pointer decay gap above (an
-assignment-seam fix, not an index arm), and the S3 unresolved-by-name family
-needs the dict-key-type infrastructure. Both are their own scoped efforts;
-neither should be forced as a mechanical adjuster arm.
+**Direction — update.** Every gap in this map that was framed as "hard / needs
+its own infra" has, on inspection, turned out to be a one- or two-arm mirror of
+what `clang_c_adjust` already does: the deref-result (#6340), the `if2t` bool
+cast (#6348), the array→pointer decay + pointer indexing (#6363), and now the
+resolved-struct padding (#6369, 6/7 of the S3 family). The lesson is to **drill
+the actual invariant/error before believing the "hard" label** — the census
+signatures over-abstract the cause. What genuinely remains is smaller than the
+map first suggested: optional5's downstream function-argument struct mismatch
+(padded-vs-unpadded), and the handful of math/complex wrong-verdicts, which are
+the only truly SMT-level items left.
