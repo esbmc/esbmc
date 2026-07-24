@@ -1267,79 +1267,39 @@ surface than the per-umbrella framing suggests:
 
 | Root cause | Count | Where | Family |
 |---|---|---|---|
-| `ERROR: Can't construct rvalue reference to array type during dereference` (rc=134) | **41** | `slice` 32, `ptr` 7, `num` 2 | `align_offset`, `align_to`, `align_to_mut` |
+| `ERROR: Can't construct rvalue reference to array type during dereference` (rc=134) — ✅ **fixed 2026-07-20, PR #6204** | **41** | `slice` 32, `ptr` 7, `num` 2 | `align_offset`, `align_to`, `align_to_mut` |
 | `ERROR: Bitwuzla error encountered` (rc=134) | 12 | `ptr` 12 | `non_null_check_write_unaligned_*` |
 | silent segfault, no diagnostic (rc=139) | 23 | `num` 12, `other` 8, `char` 2, `collections` 1 | `nonzero_check_cmp_for_*`, `check_vecdeque_swap` |
 
-**The 3 mismatches were one bug — object base-address alignment — and it is ✅ fixed
-(2026-07-17, PR #6138).** `check_cast` / `check_as_ref` / `check_as_mut` (`ptr::non_null`)
-reported a false alarm on
+**The 41-crash array-rvalue cluster is ✅ fixed (2026-07-20, PR #6204).**
+`build_reference_rec` aborted whenever the dereference *target* type was an array. C never
+produces one (arrays decay to pointers), but Rust's first-class array values do — a whole
+`[u8; N] = *ptr` load arrives as an array-typed dereference target. Added `construct_array_ref`
+(`dereference.cpp`): a fast path returns the source unchanged for a whole-object load at
+offset 0 with matching layout, and a general path reads the array element-wise and assembles
+a `constant_array` (handling array/struct/scalar-reinterpret/union sources and nested arrays).
+Swept the whole `align_offset`/`align_to`/`align_to_mut` family (139 harnesses): **zero
+rvalue aborts remain** — each now reaches a verdict or a solver timeout — and verdicts match
+CBMC 6.10.0 where both decide (e.g. `check_align_offset_u32`, and the element-wise reinterpret
+`align_to [u8]→[u16]`, both FAILED on reachability markers). Pinned by
+`regression/goto-transcoder/cbmc_deref_array` (the `check_align_offset_u32` Kani binary; `_u8`
+does not reach the new path). The residual `ptr`/`slice` crashes are now the 12 Bitwuzla
+aborts and the 23 silent segfaults; solver-performance timeouts dominate `slice` (axis 3).
+
+**The 3 mismatches are one bug, and it is a false alarm (safe direction).**
+`check_cast` / `check_as_ref` / `check_as_mut` (`ptr::non_null`): ESBMC reports **FAILED**
+where CBMC proves **SUCCESSFUL** (`0 of 2826 failed`), on
 `misaligned pointer to reference cast: address must be a multiple of its type's alignment`
 — `(unsigned long int)var_12 % 4 == 0` at `core/src/ptr/non_null.rs:469`, inside
 `NonNull::<T>::as_ref`. The pointer derives from a real `u32`/`i32` object, so it is
-inherently 4-byte aligned, but ESBMC left the object's base address unconstrained, making
-`addr % 4` free and the assertion satisfiably-false. Precision-losing, never unsound.
-
-**The root cause was broader than "the `--binary` path".** `smt_memspace.cpp::init_pointer_obj`
-already constrained `start % alignment == 0`, but only for types carrying an explicit
-`"alignment"` irep attribute — which only the clang frontend sets, for aggregates (via
-`padding.cpp`) and explicit `alignas`. **Scalars were never constrained on any path**: on
-master, `int x; assert((uintptr_t)&x % 4 == 0)` reports `VERIFICATION FAILED` through the
-plain C frontend. The `--binary` path merely made it universal, since `padding.cpp` never
-runs there. The fix constrains every object to its type's alignment (natural alignment when
-no attribute is present; packed types keep alignment 1 and stay unconstrained), which
-required moving `alignment()` from `clang-c-frontend/padding.cpp` into `util/` beside
-`type_byte_size()` — the solver must not depend on a frontend.
-
-**Post-fix parity is per-property, not just verdict.** On each of the three, `esbmc --binary
---multi-property` now reports *exactly* CBMC's failing set, and the substantive alignment
-assertion passes in both:
-
-| Harness | ESBMC now | CBMC 6.10.0 |
-|---|---|---|
-| `non_null_check_cast` | 1 failed — `core_0` marker | `1 of 85 failed` — same marker |
-| `non_null_check_as_ref` | 4 failed — `core_0..3` markers | `4 of 123 failed` — same markers |
-| `non_null_check_as_mut` | 4 failed — `core_0..3` markers | `4 of 123 failed` — same markers |
-
-⚠️ **Ground-truth correction — the recorded CBMC figure does not reproduce.** This section
-previously recorded CBMC *proving* these three `SUCCESSFUL` at `0 of 2826 failed`. Re-run
-today with the documented command (`cbmc <file>.out --function <symbol>`, CBMC 6.10.0), CBMC
-reports **`VERIFICATION FAILED`** on all three, with the property counts in the table above —
-all failures being Kani `reachability_check` markers. Neither the verdict nor the 2826 count
-reproduces, and the discrepancy is unexplained (a different flag set or a transcription slip
-in the original sweep are both plausible). **The sweep's "Matches CBMC — No: 3" row therefore
-rests on an unreproducible CBMC baseline and must be re-measured on the next sweep** — if
-CBMC does report FAILED, both tools agreed on the verdict all along and the corpus had *zero*
-verdict mismatches. What is certain either way: ESBMC failed an alignment check that CBMC
-passes, and no longer does.
-
-❌ **Alignment does *not* explain the 41-crash `align_offset`/`align_to` cluster** — the
-earlier claim that it did, and that alignment modelling was therefore "the single
-highest-leverage gap in the corpus", is **disproven**. On the fix branch
-`check_align_offset_u32` still aborts with `ERROR: Can't construct rvalue reference to array
-type during dereference` (`dereference.cpp:988`). That cluster is an independent ESBMC
-dereference limitation and is now the largest single item in the corpus; see UMBRELLA #3.
-
-**✅ Fixed 2026-07-18 (reproduced with plain C, no Kani corpus needed).**
-`int x; assert((unsigned long)&x % 4 == 0)` compiled with `goto-cc` reproduced the mismatch at
-minimal size — CBMC SUCCESSFUL, ESBMC FAILED. Diagnosis: ESBMC's SMT layer (`smt_memspace.cpp`)
-already asserts `base % alignment == 0` **when the object type carries an `"alignment"`
-attribute**, and the C-frontend padding pass sets it on aggregates — but a plain scalar
-(`int x;`) has none, so its base was unconstrained and `&x % 4` was satisfiable-false.
-(Native ESBMC via `__ESBMC_assert` reports the same FAILED, so this was never
-`--binary`-specific; `malloc`'d objects already verified aligned because the allocation path
-supplies alignment — only DECL'd scalars/objects were missing it.) Fixed in the CBMC reader
-(`read_cbmc_goto_object.cpp::set_object_alignment`): every loaded object symbol whose type
-lacks an `"alignment"` gets `config.ansi_c.max_alignment()` — `≥` the natural alignment of
-every scalar, a power of two (so trivially placeable, no UNSAT), and matching CBMC's own
-over-aligned object bases (empirically CBMC aligns every object to `≥32`). Scoped to the CBMC
-reader, so native frontends are untouched. Verdict parity with CBMC, dual-solver, across
-`int`/`long` stack vars, array elements, struct fields, globals, and pointer-cast checks
-(`cbmc_alignment` SUCCESSFUL / `cbmc_alignment_fail` — `&x % 4 == 1` — FAILED); the full
-`goto-transcoder` suite and reader unit tests still pass. This closes the 3 corpus mismatches
-(`check_cast`/`check_as_ref`/`check_as_mut`); the 41-crash `align_offset`/`align_to` cluster is
-the *separate* `rvalue reference to array` dereference limitation, not this. Precision (never
-soundness) — ESBMC only ever over-reported.
+inherently 4-byte aligned; CBMC's memory model constrains an object's base address to its
+natural alignment, ESBMC's leaves it unconstrained on the `--binary` path, so `addr % 4` is
+free and the alignment assertion is satisfiable-false. Precision-losing, never unsound.
+**Object base-address alignment underlies all 3 mismatches** (alignment modelling, not
+arithmetic, is what those need). It does **not**, however, explain the 41-crash
+`align_offset`/`align_to` cluster — that was an independent ESBMC dereference limitation
+(building a reference to a whole-array rvalue), fixed by PR #6204 without touching alignment;
+see the note under the root-cause table above.
 
 **Axis 3 (solver performance)** is now the largest non-crash bucket: 140 ESBMC timeouts at a
 40 s cap versus CBMC's 35, concentrated in `slice` (84 N/A).
@@ -1567,35 +1527,33 @@ _RNvNtNtCsfemxtvIyyHd_4core3num6verify15widening_mul_u8
 
 ## UMBRELLA #3: Pointer Operations Crash
 
-**Status**: 🟠 PARTIAL — parses 100 %, 323/346 decided harnesses match CBMC; the 3 false alarms are ✅ fixed (alignment, PR #6138), residual = **19 crashes**, led by the `rvalue reference to array` dereference limitation (see the global sweep above)
+**Status**: 🟠 PARTIAL — parses 100 %, 323/346 decided harnesses match CBMC; the 41-crash `align_offset`/`align_to` array-rvalue cluster is ✅ fixed (PR #6204) and the 3 false alarms are alignment-related (PR #6138); residual = the 12 Bitwuzla aborts + the silent segfaults (see the global sweep above)
 **Impact**: ~60+ tests
 **Severity**: 🔴 CRITICAL
-**Exit Codes**: rc=139 → now **rc=134** for the `align_offset` family (clean abort, not a segfault); no parse-phase crash remains
+**Exit Codes**: rc=139 → rc=134 (2026-07-16 sweep) → now **rc=0, reaches a verdict** for the `align_offset`/`align_to` family (PR #6204); no parse-phase crash remains
 
 **Description**:
 ESBMC segfaults on pointer manipulation intrinsics (align_offset, read, offset_from, etc.). Crashes occur during C generation phase in the lowering layer, indicating fundamental issues in pointer semantics translation from Rust to C.
 
 **Re-scoped by the 2026-07-16 global sweep.** The original description is superseded: there
 is **no parse/lowering crash** — all 375 `ptr` harnesses build a GOTO program, and 323 match
-CBMC. The reproducer `check_align_offset_u8` is crash-free (as the 2026-07-14 reassessment
-recorded), but **that is the only width that works**: `check_align_offset_{u16,u32,u64,u128,
-4096,5}` and the `align_to`/`align_to_mut` family abort with `ERROR: Can't construct rvalue
-reference to array type during dereference` — an ESBMC **dereference** limitation, not
-pointer-semantics translation. Umbrella #3 was therefore declared crash-free on the one
-width that happens to pass. What remains is three concrete items:
-1. **`rvalue reference to array` dereference — now the top item** (41 crashes corpus-wide:
-   `slice` 32, `ptr` 7, `num` 2). `dereference.cpp:988` cannot build an rvalue reference to
-   an array-typed object, which is what the whole `align_offset`/`align_to`/`align_to_mut`
-   family needs. This is an ESBMC dereference limitation, unrelated to alignment modelling
-   (see below) — and it is the largest single crash cluster left in the corpus.
-2. **`Bitwuzla error encountered`** on `non_null_check_write_unaligned_*` (12, all `ptr`).
-3. **Alignment modelling — ✅ done (2026-07-17, PR #6138).** ESBMC left object base addresses
-   unconstrained; it now constrains them to the type's alignment, which resolved all 3
-   corpus-wide false alarms (`check_cast`/`check_as_ref`/`check_as_mut`) to per-property
-   parity with CBMC. Note this was **not** `--binary`-specific — scalars were unconstrained
-   on every path, including the plain C frontend. It also did **not** fix the
-   `align_offset`/`align_to` cluster, contrary to this section's earlier claim: the two are
-   independent, and item 1 above is what that family actually needs. See the global sweep.
+CBMC. At sweep time only `check_align_offset_u8` was crash-free while
+`check_align_offset_{u16,u32,u64,u128,4096,5}` and the `align_to`/`align_to_mut` family
+aborted with `ERROR: Can't construct rvalue reference to array type during dereference` — an
+ESBMC **dereference** limitation, not pointer-semantics translation. **That limitation is now
+fixed (PR #6204), so every width reaches a verdict.** What remains is three concrete items:
+1. **`rvalue reference to array` dereference — ✅ fixed (2026-07-20, PR #6204).** Was 41
+   crashes corpus-wide (7 in `ptr`): `build_reference_rec` aborted on an array-typed
+   dereference target. `construct_array_ref` now builds the whole-array value (see the
+   root-cause-table note above). This resolved the entire `align_offset`/`align_to`/
+   `align_to_mut` family — every width now reaches a verdict, not just `_u8`.
+2. **Alignment modelling.** ESBMC does not constrain an object's base address to its natural
+   alignment; CBMC does. This causes the 3 corpus-wide false alarms
+   (`check_cast`/`check_as_ref`/`check_as_mut`, `non_null.rs:469`). It does **not** underlie
+   the `align_offset`/`align_to` cluster (item 1 disproved that — the fix was in the
+   dereference layer, with no alignment change).
+3. **`Bitwuzla error encountered`** on `non_null_check_write_unaligned_*` (12, all `ptr`) —
+   now the leading residual `ptr` crash.
 
 **Affected Operations**:
 - `*const T::read()` / `*mut T::read()` - unsafe pointer dereference
