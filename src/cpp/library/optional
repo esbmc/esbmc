@@ -1,6 +1,7 @@
 #pragma once
 
 #include "utility"
+#include "type_traits"
 
 namespace std
 {
@@ -93,7 +94,31 @@ public:
   {
     engaged_ = false;
   }
+
+  template <class... Args>
+  T &emplace(Args &&...args)
+  {
+    value_ = T(std::forward<Args>(args)...);
+    engaged_ = true;
+    return value_;
+  }
+
+  void swap(optional &other)
+  {
+    T tmp_value = value_;
+    bool tmp_engaged = engaged_;
+    value_ = other.value_;
+    engaged_ = other.engaged_;
+    other.value_ = tmp_value;
+    other.engaged_ = tmp_engaged;
+  }
 };
+
+template <class T>
+constexpr optional<typename std::decay<T>::type> make_optional(T &&v)
+{
+  return optional<typename std::decay<T>::type>(std::forward<T>(v));
+}
 
 template <class T>
 constexpr bool operator==(const optional<T> &o, nullopt_t) noexcept
