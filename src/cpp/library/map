@@ -114,23 +114,15 @@ public:
 
     bool operator==(const iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      // Two iterators are equal iff they denote the same position in the same
+      // container. Comparing the cached it_pair is unsound: end() fills it from
+      // an uninitialised backing slot, so the previous pair-based operators made
+      // find(k) != end() unreliable for the not-found case (github #6354).
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -251,23 +243,11 @@ public:
 
     bool operator==(const reverse_iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const reverse_iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -969,23 +949,15 @@ public:
 
     bool operator==(const iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      // Two iterators are equal iff they denote the same position in the same
+      // container. Comparing the cached it_pair is unsound: end() fills it from
+      // an uninitialised backing slot, so the previous pair-based operators made
+      // find(k) != end() unreliable for the not-found case (github #6354).
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -1106,23 +1078,11 @@ public:
 
     bool operator==(const reverse_iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const reverse_iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
