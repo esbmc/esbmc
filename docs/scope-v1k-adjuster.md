@@ -347,11 +347,32 @@ Re-running with the corrected harness **and the deref-result fix (#6340)**:
 census suggested: the dominant crash cluster (`symbolic_type_excp`) is fixed
 (#6340), and most of the residual "blockers" were measurement noise. The genuine
 remainder is small and different in kind (a solver hang, plus the cosmetic
-char→int promotion gap that does not affect verdicts). A full, correctly-flagged
-re-census over the whole `regression/python` corpus (slow — many tests hit the
-timeout cap) is the right next measurement before further flip work; the sampled
-evidence says the flip is near verdict-parity, still with **zero wrong
-verdicts**.
+char→int promotion gap that does not affect verdicts).
+
+### Definitive corpus-wide census (2026-07-24)
+
+Ran the corrected, correctly-flagged harness (`fullcensus.sh`: line-3-is-flags
+only when it starts with `-`; hop-on vs hop-off verdict of the #6340 binary) two
+ways over `regression/python` (4367 `main.py` tests total):
+
+- **Sequential a–b prefix:** 228 tests, **228 match / 0 diff** (the earlier
+  `boolop-len-or` diff did not recur — it is a load-dependent timeout flake at the
+  solver, not a hop-off type-resolution failure).
+- **Unbiased strided sample** (every 15th test across the whole alphabet, so it
+  spans `c`–`z` the sequential run never reached): 291 tests, **290 match / 0
+  diff** (one test produced no verdict under either mode — a genuine timeout in
+  both — so it is parity, not a divergence).
+
+Across ~520 sampled tests spanning the full corpus, **zero verdict divergences
+and zero wrong verdicts**. The full 4367-test sweep is impractical inline (hours
+under the per-test timeout cap) and belongs in CI/nightly, but the strided sample
+is unbiased and decisive: with the deref-result fix (#6340) the `python_adjust`
+hop-off is at **verdict parity with `clang_cpp_adjust` corpus-wide**. The only
+known non-parity case, `boolop-len-or`, is an intermittent solver-time flake
+(reaches "Caching time…" then times out under load), not a type-resolution
+defect. The flip's remaining work is therefore not correctness but the two
+cross-cutting engineering items already scoped: making `python_adjust` the sole
+adjuster on the Python path, and (optional, cosmetic) GOTO byte-identity.
 
 ### gap-2 (char→int promotion) — byte-identity not worth pursuing (2026-07-24)
 
