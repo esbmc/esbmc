@@ -120,3 +120,13 @@ exception_typeidt::concrete_subtype_ids(const irep_idt &caught) const
       ids.insert(id);
   return ids;
 }
+
+std::vector<std::pair<irep_idt, unsigned>>
+exception_typeidt::concrete_subtypes(const irep_idt &caught) const
+{
+  std::vector<std::pair<irep_idt, unsigned>> out;
+  for (const auto &[name, id] : name_to_id)
+    if (is_subtype(name, caught))
+      out.emplace_back(name, id);
+  return out;
+}

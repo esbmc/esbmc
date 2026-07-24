@@ -97,6 +97,27 @@ if(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
         message(STATUS "Found Flex keg installed by Homebrew at ${BREW_FLEX_PREFIX}")
         set(FLEX_EXECUTABLE "${BREW_FLEX_PREFIX}/bin/flex")
     endif()
+
+    # Homebrew's static Boost.Iostreams injects bare -l names for its
+    # compression/ICU backends (zstd + icu{data,i18n,uc}) with no search path,
+    # so the static link fails with "library 'zstd' not found" (esbmc/esbmc#6234).
+    # zstd is symlinked into $(brew --prefix)/lib; icu4c is keg-only. Add both as
+    # link dirs — CMAKE_PREFIX_PATH cannot help, the names bypass find_library.
+    if(BUILD_STATIC)
+        foreach(brew_keg "" icu4c)
+            execute_process(
+                COMMAND brew --prefix ${brew_keg}
+                RESULT_VARIABLE BREW_KEG_RESULT
+                OUTPUT_VARIABLE BREW_KEG_PREFIX
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET
+            )
+            if(BREW_KEG_RESULT EQUAL 0 AND IS_DIRECTORY "${BREW_KEG_PREFIX}/lib")
+                message(STATUS "Adding Homebrew link directory ${BREW_KEG_PREFIX}/lib")
+                link_directories("${BREW_KEG_PREFIX}/lib")
+            endif()
+        endforeach()
+    endif()
 endif()
 
 

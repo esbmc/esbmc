@@ -28,11 +28,11 @@ int main()
 {
   A *p = new C();
   delete p;
-  // Expected 111. ~C overrides two base destructors, so
-  // get_ultimate_overridden_method() (clang_cpp_convert_vft.cpp) stops at its
-  // `size_overridden_methods() == 1` guard and keys the vtable slot by ~C's
-  // own id instead of ~A's, leaving the slot bound to ~A. Tracked by #1866 /
-  // #3894 alongside the other multiple-inheritance layout defects.
+  // Expected 111: ~C runs (100) and chains to both base destructors ~A (1) and
+  // ~B (10). ~C overrides two base destructors, so get_ultimate_overridden_
+  // method() cannot pick a unique base; each per-base thunk is now re-keyed by
+  // that base's own virtual_name so both base vtable slots dispatch to ~C's
+  // deleting destructor (#6198).
   assert(n == 111);
   return 0;
 }

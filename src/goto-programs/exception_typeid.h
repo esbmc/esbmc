@@ -72,6 +72,13 @@ public:
   /// right-hand side of the catch-match guard.
   std::set<unsigned> concrete_subtype_ids(const irep_idt &caught) const;
 
+  /// { (T, id_of(T)) : T <: caught } over all *registered* program types.
+  /// Like concrete_subtype_ids but keeps the names, so a caller can recover
+  /// each dynamic type's struct (e.g. to compute a base-subobject offset for
+  /// catch-by-base binding).
+  std::vector<std::pair<irep_idt, unsigned>>
+  concrete_subtypes(const irep_idt &caught) const;
+
   /// Number of registered program types (excludes lazily-added unknowns).
   std::size_t size() const
   {
