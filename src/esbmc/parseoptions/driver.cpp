@@ -185,6 +185,9 @@ int esbmc_parseoptionst::doit()
     // implicit 1 MiB default (see options.cpp).
     if (cmdline.isset("excessive-alloc-check"))
     {
+      // boost's value<int> already validated this as an int at parse time (as
+      // --unwind / --k-path-coverage do), so atoi only reads it back and never
+      // sees the non-numeric input that would make it silently yield 0.
       int k = atoi(cmdline.getval("excessive-alloc-check"));
       if (k <= 0)
       {
