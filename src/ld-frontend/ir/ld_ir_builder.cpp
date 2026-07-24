@@ -12,9 +12,14 @@ LdIRNode LdIRBuilder::lower_element(const RungElement &elem)
     node.variable = elem.contact.variable;
     node.contact_kind = elem.contact.kind;
     node.contact_edge = elem.contact.edge;
-    node.rule = (elem.contact.kind == ContactKind::NormallyOpen)
-                  ? SosRule::NO_Contact_True
-                  : SosRule::NC_Contact_True;
+    if (elem.contact.edge == ContactEdge::Rising)
+      node.rule = SosRule::Rising_Contact;
+    else if (elem.contact.edge == ContactEdge::Falling)
+      node.rule = SosRule::Falling_Contact;
+    else
+      node.rule = (elem.contact.kind == ContactKind::NormallyOpen)
+                    ? SosRule::NO_Contact_True
+                    : SosRule::NC_Contact_True;
     break;
 
   case RungElementKind::Coil:
