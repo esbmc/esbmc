@@ -423,8 +423,7 @@ static expr2tc inline_temporary_variables(
       // temporary), so we must rebuild the whole conditional — picking <value>
       // alone silently drops them (issue #6298).
       expr2tc value;
-      goto_programt::const_targett value_loc =
-        function_body.instructions.end();
+      goto_programt::const_targett value_loc = function_body.instructions.end();
       expr2tc fallback;
       goto_programt::const_targett fallback_loc =
         function_body.instructions.end();
