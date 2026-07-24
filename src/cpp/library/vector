@@ -754,6 +754,19 @@ public:
     _size--;
   }
 
+  template <class... Args>
+  reference emplace_back(Args &&...args)
+  {
+    push_back(T(std::forward<Args>(args)...));
+    return buf[_size - 1];
+  }
+
+  // Non-binding request to reduce capacity; leaving the buffer as-is is a
+  // conforming implementation and keeps capacity() >= size().
+  void shrink_to_fit()
+  {
+  }
+
   iterator insert(iterator position, const T &x)
   {
     size_type at = position - buf;
