@@ -3854,7 +3854,14 @@ void code_contractst::generate_replacement_at_call(
         continue;
 
       const pointer_type2t &ptr_type = to_pointer_type(param_type);
-      type2tc pointee_type = ptr_type.subtype;
+      // Resolve a struct/union "tag" pointee (symbol_type2t) to its concrete
+      // type. A pointer to a named struct migrates with an unresolved symbol
+      // subtype; leaving it unresolved makes the dereference2tc / gen_nondet
+      // below propagate a symbol type all the way to SMT sort conversion, which
+      // aborts with "Unexpected type ID symbol reached SMT conversion" (#6356).
+      // The other pointer-havoc paths already apply this ns.follow() step; this
+      // one was missing it. ns.follow() is a no-op for non-symbol types.
+      type2tc pointee_type = ns.follow(ptr_type.subtype);
 
       // Skip void*, function pointers, and unknown/nil pointed-to types
       if (
