@@ -285,8 +285,8 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // a.target->type, matching clang's c_typecast (address_of2tc(ptr.subtype,
     // index)), not pointer(pointer(elem)).
     const type2tc &pointee = to_pointer_type(a.target->type).subtype;
-    expr2tc decayed = address_of2tc(
-      pointee, index2tc(elem, a.source, gen_zero(index_type2())));
+    expr2tc decayed =
+      address_of2tc(pointee, index2tc(elem, a.source, gen_zero(index_type2())));
     expr = code_assign2tc(a.target, decayed, a.location);
   }
   else if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
@@ -644,6 +644,11 @@ void python_adjust::collect_unresolved_sources(
       to_symbol_type(to_index2t(expr).source_value->type)
         .symbol_name.as_string() +
       "'");
+  // A pointer source is transient too (the index arm rewrites `p[i]` to
+  // `*(p+i)`); one surviving here means the rewrite was skipped, so symex would
+  // see an index over a pointer — flag it before it escapes.
+  if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value->type))
+    out.push_back("index over unresolved pointer source");
   // A constant_struct2t is the third relaxed construction assert (irep2_expr.h):
   // its own type may be a transient by-name symbol_type2t until the aggregate is
   // followed. Post-adjust it must be a resolved struct too.

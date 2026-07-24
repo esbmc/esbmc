@@ -1638,12 +1638,16 @@ public:
   index2t(const type2tc &type, const expr2tc &source, const expr2tc &idx)
     : expr2t(type, index_id), source_value(source), index(idx)
   {
-    /* A `symbol_id` source is permitted only as a transient pre-resolution
-       state (V.1k two-phase source invariant, see member2t above); the
-       IREP2-native adjuster resolves it to an array/vector before symex. */
+    /* A `symbol_id` or `pointer_id` source is permitted only as a transient
+       pre-resolution state (V.1k two-phase source invariant, see member2t
+       above); the IREP2-native adjuster resolves a symbol source to an
+       array/vector and rewrites a pointer source `p[i]` to `*(p+i)` before
+       symex. A pointer source arises when a legacy `index` over a decayed
+       array (a Python string, char*) is migrated via get_value2(). */
     assert(
       is_array_type(source) || is_vector_type(source) ||
-      source->type->type_id == type2t::symbol_id);
+      source->type->type_id == type2t::symbol_id ||
+      source->type->type_id == type2t::pointer_id);
   }
   index2t(const index2t &ref) = default;
 
