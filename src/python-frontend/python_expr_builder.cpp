@@ -121,11 +121,14 @@ exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
   // A pointer source (e.g. a numpy-array function parameter, decayed the
   // same way a C array parameter decays to a pointer to its element type)
   // indexes like plain C pointer arithmetic: `arr[idx]` is `*(arr + idx)`,
-  // not a direct array index over the pointer itself.
+  // not a direct array index over the pointer itself. Build the `arr + idx`
+  // natively in IREP2: add2t over a pointer lhs is exactly the round-trip of
+  // the legacy plus_exprt whose result type was the pointer type (the pointer
+  // operand short-circuits the mismatched-width consistency check, so no
+  // reconciliation is needed).
   if (is_pointer_type(arr2->type))
   {
-    plus_exprt ptr_plus_idx(arr, idx);
-    ptr_plus_idx.type() = arr.type();
+    exprt ptr_plus_idx = migrate_expr_back(add2tc(arr2->type, arr2, idx2));
     return build_dereference(ptr_plus_idx, t);
   }
   return index_exprt(arr, idx, t);
