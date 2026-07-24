@@ -175,8 +175,7 @@ pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops)
 {
   for (size_t i = 0; i < st.members.size(); i++)
     if (
-      is_padding_member_name(st.member_names[i].as_string()) &&
-      i <= ops.size())
+      i <= ops.size() && is_padding_member_name(st.member_names[i].as_string()))
       ops.insert(ops.begin() + i, gen_zero(st.members[i]));
   return ops;
 }
