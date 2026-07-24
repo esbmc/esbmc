@@ -2,6 +2,7 @@
 
 #include <clang-c-frontend/padding.h>
 #include <irep2/irep2_utils.h>
+#include <util/c_types.h>
 #include <util/message.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
@@ -214,9 +215,21 @@ void python_adjust::adjust_expr(expr2tc &expr)
   else if (is_index2t(expr))
   {
     const index2t &i = to_index2t(expr);
-    expr2tc source = i.source_value;
-    if (resolve_source(source))
-      expr = index2tc(i.type, source, i.index);
+    if (is_pointer_type(i.source_value->type))
+    {
+      // clang_c_adjust::adjust_index rewrites p[i] -> *(p+i) when the base is a
+      // pointer (a Python string / decayed-array source). Requires the
+      // array→pointer decay arm below so the pointer source actually holds a
+      // pointer value at symex rename, not a bare array.
+      expr = dereference2tc(
+        i.type, add2tc(i.source_value->type, i.source_value, i.index));
+    }
+    else
+    {
+      expr2tc source = i.source_value;
+      if (resolve_source(source))
+        expr = index2tc(i.type, source, i.index);
+    }
   }
   else if (is_dereference2t(expr) && is_empty_type(expr->type))
   {
@@ -236,6 +249,42 @@ void python_adjust::adjust_expr(expr2tc &expr)
       if (!is_empty_type(pointee))
         expr = dereference2tc(pointee, d.value);
     }
+  }
+  else if (is_if2t(expr) && !is_bool_type(to_if2t(expr).cond->type))
+  {
+    // A ternary whose condition is not boolean -- a non-boolean short-circuit
+    // `and`/`or` select builds `cond ? a : b` with the raw integer operand as
+    // the condition (get_truthy_condition returns a non-list value unchanged,
+    // e.g. `len(s)` in `len(s) or len(t)`). clang_c_adjust::adjust_if casts the
+    // condition to bool (gen_typecast(ns, op0, bool_type())); mirror it so
+    // goto_sideeffects' is_boolean() check on the lowered IF condition holds
+    // (otherwise "first argument of `if' must be boolean"). if2t is immutable.
+    const if2t &i = to_if2t(expr);
+    expr = if2tc(
+      i.type, typecast2tc(get_bool_type(), i.cond), i.true_value, i.false_value);
+  }
+  else if (
+    is_code_assign2t(expr) &&
+    is_pointer_type(to_code_assign2t(expr).target->type) &&
+    is_array_type(to_code_assign2t(expr).source->type))
+  {
+    // Array→pointer decay at the assignment seam: a `char*` target assigned a
+    // bare array value (a Python string literal, e.g. `word = ""` where `""` is
+    // a constant_array) must decay to `&array[0]`, exactly as clang_c_adjust
+    // lowers it (`ASSIGN word = &{0}[0]`). Without it the pointer variable
+    // carries an array value and any pointer use of it (indexing, arithmetic)
+    // trips a pointer-vs-array mismatch at symex rename (irep2_cast_error in
+    // fixup_renamed_type). code_assign2t is immutable, rebuild.
+    const code_assign2t &a = to_code_assign2t(expr);
+    const type2tc &elem = to_array_type(a.source->type).subtype;
+    // address_of2t's type is pointer-to-<subtype>, so pass the target's pointee
+    // (not the full pointer type) — the rebuilt value is then exactly
+    // a.target->type, matching clang's c_typecast (address_of2tc(ptr.subtype,
+    // index)), not pointer(pointer(elem)).
+    const type2tc &pointee = to_pointer_type(a.target->type).subtype;
+    expr2tc decayed = address_of2tc(
+      pointee, index2tc(elem, a.source, gen_zero(index_type2())));
+    expr = code_assign2tc(a.target, decayed, a.location);
   }
   else if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
   {
