@@ -795,6 +795,31 @@ public:
     return value_compare(Compare());
   }
 
+#if __cplusplus >= 201703L
+  // Unlike emplace, the mapped value is only constructed when the key is
+  // absent, and the key is passed separately ([map.modifiers]). find() sets
+  // it_pos == _size when the key is not present; comparing it_pos directly
+  // avoids the iterator operator!=, whose end() operand reads an
+  // uninitialised slot and is unreliable for the not-found case.
+  template <class... Args>
+  pair<iterator, bool> try_emplace(const key_type &k, Args &&...args)
+  {
+    iterator it = this->find(k);
+    if (it.it_pos != this->_size)
+      return pair<iterator, bool>(it, false);
+    return this->insert(
+      value_type(k, mapped_type(std::forward<Args>(args)...)));
+  }
+
+  template <class M>
+  pair<iterator, bool> insert_or_assign(const key_type &k, M &&obj)
+  {
+    bool inserted = (this->find(k).it_pos == this->_size);
+    (*this)[k] = std::forward<M>(obj);
+    return pair<iterator, bool>(this->find(k), inserted);
+  }
+#endif
+
   iterator lower_bound(const key_type &x)
   {
     unsigned int s = this->_size;
