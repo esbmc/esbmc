@@ -528,6 +528,14 @@ public:
     x = tmp;
   }
 
+#if __cplusplus >= 201103L
+  template <class... Args>
+  pair<iterator, bool> emplace(Args &&...args)
+  {
+    return insert(value_type(std::forward<Args>(args)...));
+  }
+#endif
+
   pair<iterator, bool> insert(const value_type &val)
   {
     unsigned int s = this->_size;
@@ -1175,6 +1183,14 @@ public:
     }
     return *this;
   }
+
+#if __cplusplus >= 201103L
+  template <class... Args>
+  iterator emplace(Args &&...args)
+  {
+    return insert(value_type(std::forward<Args>(args)...));
+  }
+#endif
 
   iterator insert(const value_type &val)
   {
