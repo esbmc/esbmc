@@ -352,3 +352,31 @@ re-census over the whole `regression/python` corpus (slow — many tests hit the
 timeout cap) is the right next measurement before further flip work; the sampled
 evidence says the flip is near verdict-parity, still with **zero wrong
 verdicts**.
+
+### gap-2 (char→int promotion) — byte-identity not worth pursuing (2026-07-24)
+
+The deref-result fix (#6340) gives the flip **verdict-parity** on the
+`symbolic_type_excp` cluster but not GOTO byte-identity: hop-on additionally
+promotes the resolved char element to int in the enclosing comparison
+(`(signed int)(back_to_char[0]) == 65`). Attempted to close that "gap 2" with a
+`python_adjust` relational arm mirroring `clang_c_adjust::adjust_expr_rel`
+(`gen_typecast_arithmetic` on the two operands, wrapping in place). Two negative
+results:
+
+1. A type-inequality wrap test **over-wraps** (`== (signed int)65` vs clang's
+   `== 65`): `migrate_type` does not round-trip every type attribute, so an
+   untouched operand's migrated type compares unequal to its own. Fixed by
+   wrapping only when `gen_typecast_arithmetic` actually inserted a typecast on
+   the legacy copy (`l.id() == "typecast"`) — the builtin2 return line then
+   matches clang exactly.
+2. But the arm runs on **every** relational node in the program, and even with
+   the corrected wrap it diverges **corpus-wide** from clang's `adjust_expr_rel`
+   (~7500 diff lines on builtin2 alone) — the migrate-based operand
+   reconciliation does not reproduce clang's promotions node-for-node across the
+   OM bodies.
+
+**Conclusion:** byte-identity for these cases is a hard, corpus-wide
+reconciliation problem, **not needed** for the flip (whose acceptance gate is
+dual-solver *verdict* parity, already met by #6340), and **cosmetic** (verdict
+matches). Deferred/abandoned. The deref fix stands on its own; do not gate the
+flip on this promotion.
