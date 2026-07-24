@@ -212,7 +212,10 @@ static const locationt &statement_location(const expr2tc &code2)
 // the structural leaves (block/skip), the single-instruction value statements
 // (assign/expression) that reduce to one ASSIGN/OTHER with nothing to lower,
 // trivial-type declarations (DECL + optional side-effect-free ASSIGN + scope-exit
-// DEAD, the block managing the destructor stack as convert_block does), a value
+// DEAD, the block managing the destructor stack as convert_block does; a
+// declaration whose type has a destructor or whose initializer needs lowering
+// is instead delegated to convert_decl via convert(), so a local object no
+// longer forces a whole-function fallback), a value
 // return (RETURN + unconditional GOTO to the function's end), a
 // side-effect-free `if`/`if-else` whose branches convert natively (the
 // general, unfolded branch shape only — see the assert-fold guard below), a
@@ -440,36 +443,52 @@ bool goto_convert_functionst::convert_native_rec(
     if (s == nullptr)
       return false;
 
-    // convert_decl (goto_convert.cpp) has several paths this native handler
-    // does not reproduce; fall back on each so flag-on stays byte-identical:
+    // Fall back on the two convert_decl shapes this handler neither reproduces
+    // natively nor delegates, so flag-on stays byte-identical:
     //  - a static-lifetime or code-typed symbol is a no-op SKIP,
     //  - an array type may be a VLA needing rewrite_vla_decl / a dynamic-size
-    //    generator — exclude all arrays conservatively,
-    //  - a type with a destructor pushes a second stack entry and lowers a
-    //    FUNCTION_CALL at scope exit,
-    //  - a temporary_object or side-effect initializer is lowered.
-    // What remains is exactly convert_decl's plain path: a DECL, an optional
-    // side-effect-free ASSIGN, and one scope-exit code_dead.
+    //    generator — exclude all arrays conservatively.
+    // A destructible type or an initializer needing lowering is delegated to
+    // convert_decl just below; everything else is convert_decl's plain path
+    // (a DECL, an optional side-effect-free ASSIGN, and one scope-exit code_dead)
+    // reproduced natively after that.
     if (
       s->static_lifetime || s->get_type().is_code() || s->get_type().is_array())
       return false;
 
-    code_function_callt destructor;
-    if (get_destructor(ns, s->get_type(), destructor))
-      return false;
-
     exprt initializer = is_nil_expr(decl.init) ? static_cast<exprt>(nil_exprt())
                                                : migrate_expr_back(decl.init);
-    // A top-level ternary initializer is side-effect-free yet still lowered to a
-    // DECL/IF/GOTO branch by remove_sideeffects under --validate-violation-witness
-    // (goto_sideeffects.cpp), which a single ASSIGN would not reproduce —
-    // mirror the same guard the assign handler carries.
-    if (
-      initializer.is_not_nil() &&
-      (has_sideeffect(initializer) || initializer.id() == "if" ||
-       (initializer.id() == "sideeffect" &&
-        initializer.statement() == "temporary_object")))
-      return false;
+
+    // convert_decl handles two shapes the plain native path below does not: a
+    // type with a destructor (it pushes a scope-exit destructor FUNCTION_CALL in
+    // addition to the code_dead) and an initializer it lowers specially -- a
+    // temporary_object constructing in place / a call returning by value, plus
+    // any side effect and its full-expression temporary drain, and a top-level
+    // ternary (which remove_sideeffects lowers to a DECL/IF/GOTO branch under
+    // --validate-violation-witness). Delegate those to the legacy convert()
+    // rather than fall back the whole function: convert_decl emits the DECL,
+    // lowers the initializer and pushes the scope-exit entries (code_dead, and
+    // the destructor for a destructible type) onto targets.destructor_stack,
+    // which the native block handler unwinds at scope exit exactly as
+    // convert_block does. Any temps it allocates and any gotos/labels an
+    // initializer registers in `targets` are covered by convert_function's
+    // snapshot/restore on a later fallback. Restore the initializer's
+    // value-operand locations first, as the legacy body round-trip does.
+    // A top-level temporary_object is itself a side effect, so has_sideeffect
+    // already subsumes it (as the assign handler above relies on); only the
+    // side-effect-free top-level ternary needs the extra id() == "if" test.
+    code_function_callt destructor;
+    const bool needs_convert_decl =
+      get_destructor(ns, s->get_type(), destructor) ||
+      (initializer.is_not_nil() &&
+       (has_sideeffect(initializer) || initializer.id() == "if"));
+    if (needs_convert_decl)
+    {
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(decl.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    }
 
     // Emit exactly as convert_decl does: copy() migrates the freshly-built
     // legacy node, so the DECL/ASSIGN instructions match byte-for-byte. Build the
