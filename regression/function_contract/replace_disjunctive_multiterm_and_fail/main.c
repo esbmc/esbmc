@@ -1,8 +1,8 @@
 /* replace_disjunctive_multiterm_and_fail (issue #6298):
- * Negative counterpart of replace_disjunctive_multiterm_and_pass. The ensures
- * pins a to its old value (5) when trigger != 1, so asserting a == 99 must
- * fail. This guards against the fix over-correcting into a vacuously-true
- * ASSUME that would accept any post-state.
+ * Negative counterpart of replace_disjunctive_multiterm_and_pass, exercising
+ * the *other* (trigger==1) disjunct: the ensures pins both fields to 99, so
+ * asserting b == 7 after the call must fail. Guards that the taken disjunct's
+ * constraints are actually applied (not dropped or vacuously assumed).
  *
  * Expected: VERIFICATION FAILED
  */
@@ -33,10 +33,10 @@ void f(S *s)
 int main(void)
 {
   S s;
-  s.trigger = 0;
+  s.trigger = 1;
   s.a = 5;
   s.b = 7;
   f(&s);
-  __ESBMC_assert(s.a == 99, "a must NOT be 99 when trigger != 1");
+  __ESBMC_assert(s.b == 7, "b must be 99 when trigger == 1");
   return 0;
 }

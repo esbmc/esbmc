@@ -1,4 +1,4 @@
 CORE
 main.c
---replace-call-with-contract f --unwind 5
+--replace-call-with-contract f
 ^VERIFICATION FAILED$

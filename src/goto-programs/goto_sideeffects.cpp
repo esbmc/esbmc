@@ -1167,6 +1167,47 @@ bool goto_convertt::has_sideeffect(const expr2tc &expr)
   return found;
 }
 
+/// Recursively flatten a (possibly nested) &&/|| tree forming a contract
+/// clause, hoisting side effects (e.g. __ESBMC_old()) at the leaves while
+/// preserving the boolean structure.
+///
+/// The earlier path processed only the *top-level* && or || chain, calling
+/// remove_sideeffects() on each part. For a disjunctive clause whose disjuncts
+/// are themselves && chains containing __ESBMC_old(), that lowered a whole
+/// nested && at once and silently dropped its leading conjuncts (#6298).
+/// Recursing so remove_sideeffects() only ever sees a leaf keeps every conjunct
+/// and still snapshots __ESBMC_old() unconditionally at function entry.
+void goto_convertt::flatten_contract_clause(exprt &clause, goto_programt &dest)
+{
+  // Look through an implicit typecast Clang inserts around a boolean && / ||.
+  exprt *inner = &clause;
+  if (
+    inner->id() == "typecast" && inner->operands().size() == 1 &&
+    (inner->op0().is_and() || inner->op0().id() == "or"))
+    inner = &inner->op0();
+
+  if (inner->is_and())
+  {
+    exprt::operandst parts;
+    collect_and_conjuncts(*inner, parts);
+    for (auto &p : parts)
+      flatten_contract_clause(p, dest);
+    clause = rebuild_and_chain(parts, 0);
+    return;
+  }
+  if (inner->id() == "or")
+  {
+    exprt::operandst parts;
+    collect_or_disjuncts(*inner, parts);
+    for (auto &p : parts)
+      flatten_contract_clause(p, dest);
+    clause = rebuild_or_chain(parts, 0);
+    return;
+  }
+
+  remove_sideeffects(clause, dest);
+}
+
 void goto_convertt::remove_sideeffects(
   exprt &expr,
   goto_programt &dest,
@@ -1508,7 +1549,6 @@ void goto_convertt::remove_sideeffects(
         (fsym->name == "__ESBMC_ensures" || fsym->name == "__ESBMC_requires"))
       {
         exprt::operandst &args = expr.op1().operands();
-        bool rewrote = false;
         if (args.size() == 1 && has_sideeffect(args.front()))
         {
           exprt *inner = &args.front();
@@ -1517,29 +1557,15 @@ void goto_convertt::remove_sideeffects(
             (inner->op0().is_and() || inner->op0().id() == "or"))
             inner = &inner->op0();
 
-          if (inner->is_and())
+          // Recurse through the full &&/|| tree so a side effect nested inside a
+          // disjunct's && chain is hoisted at the leaf rather than lowering the
+          // whole nested chain at once (which dropped leading conjuncts, #6298).
+          if (inner->is_and() || inner->id() == "or")
           {
-            exprt::operandst parts;
-            collect_and_conjuncts(*inner, parts);
-            for (auto &p : parts)
-              remove_sideeffects(p, dest);
-            args.front() = rebuild_and_chain(parts, 0);
-            rewrote = true;
+            flatten_contract_clause(args.front(), dest);
+            remove_function_call(expr, dest, result_is_used);
+            return;
           }
-          else if (inner->id() == "or")
-          {
-            exprt::operandst parts;
-            collect_or_disjuncts(*inner, parts);
-            for (auto &p : parts)
-              remove_sideeffects(p, dest);
-            args.front() = rebuild_or_chain(parts, 0);
-            rewrote = true;
-          }
-        }
-        if (rewrote)
-        {
-          remove_function_call(expr, dest, result_is_used);
-          return;
         }
       }
 
