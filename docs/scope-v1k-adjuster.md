@@ -522,3 +522,25 @@ assignment seam changes the stored value. The assignment conversion is therefore
 only sound **coupled with** operand-level arithmetic reconciliation (the S4
 width-reconcile work) — they must land together, and a missed bug is worse than a
 false alarm, so neither half should be shipped alone.
+
+**Sizing the coupled fix.** The operand half is not a thin
+`gen_typecast_arithmetic` call. `clang_c_adjust::adjust_expr_binary_arithmetic`
+(`clang_c_adjust_expr.cpp:428`) is ~114 lines and additionally performs
+complex-number promotion (`{val, 0}` for a non-complex operand), maps `+`/`-`/`*`
+to `ieee_add`/`ieee_sub`/`ieee_mul` for `floatbv` element types, and binds
+side-effecting operands into a `code_blockt` before reconciling. Mirroring it
+faithfully in `python_adjust` — which is what soundness requires, per the trap
+above — is a **multi-PR effort in its own right**, not an adjuster arm. It should
+be scoped and sequenced deliberately (operand reconciliation first, with its own
+parity gate, then the assignment conversion on top), not attempted as a
+single slice. Until then `precedence2` stays a known, documented false alarm.
+
+**State of the hop-off after this round.** ~97.5% verdict parity on a 365-test
+strided sample with **zero crashes**. Everything that was a *structural* gap has
+landed (#6340, #6348, #6363, #6369, #6372, #6373). What remains is one coupled
+arithmetic-conversion effort (above) plus six pre-existing per-case divergences —
+two false alarms (`cmath_polar_rect_semantics_success_07`, `github_3690`) and
+four no-verdict cases (`github_3012_3_fail`, `higher-order3`,
+`int_to_bytes_kwargs_fail`, `ternary_string_fail`,
+`github_4796_object_handle_eq_fail`) — each needing its own triage rather than a
+shared mechanism.
