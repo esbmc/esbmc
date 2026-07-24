@@ -318,3 +318,37 @@ no-opped precisely because the operand type was empty — zero width — so
 "member/index at scale" work, now pinned to a specific missing capability
 (result-type resolution for element accesses), still a focused-owner slice rather
 than a loop drill.
+
+### Census methodology correction + true parity (2026-07-24)
+
+The iter-L/P hop-off census (88% → 92%) **overcounted no-verdicts** due to a
+harness bug: it read `test.desc` line 3 as ESBMC flags unconditionally, but a
+flagless test (the common `CORE` / `main.py` / `^expected$` three-line form) has
+its **first expected-output regex** on line 3, not a flags line. Passing that
+regex as an argument made ESBMC abort with "failed to figure out type of file
+^...", producing a spurious no-verdict. Fix: treat line 3 as flags only when it
+starts with `-`, else empty.
+
+Re-running with the corrected harness **and the deref-result fix (#6340)**:
+
+- Of the "10 remaining no-verdict" cases from iter P, **9 were pure harness
+  artifacts** — with correct flags they match hop-on exactly (abs-fail,
+  boolop-short-circuit{,-fail}, branch_coverage-fail, builtin_all_nonliteral,
+  bytes_fromhex_invalid_fail, bytes_range_error_fail, assign-fail,
+  bytearray_unsupported). Only **`boolop-len-or`** is a genuine hop-off issue,
+  and it is *past* adjust: it reaches the solver ("Caching time…") and then
+  hangs/times out under hop-off while hop-on solves quickly — a symex/solver
+  divergence (a harder formula from a shape difference), **not** a
+  type-resolution crash.
+- A corrected 62-test alphabetical slice (`a*`/`b*`) scores **61 match / 1 diff
+  (`boolop-len-or`)** — ~98%.
+
+**Revised picture.** The `python_adjust` flip is materially closer than the raw
+census suggested: the dominant crash cluster (`symbolic_type_excp`) is fixed
+(#6340), and most of the residual "blockers" were measurement noise. The genuine
+remainder is small and different in kind (a solver hang, plus the cosmetic
+char→int promotion gap that does not affect verdicts). A full, correctly-flagged
+re-census over the whole `regression/python` corpus (slow — many tests hit the
+timeout cap) is the right next measurement before further flip work; the sampled
+evidence says the flip is near verdict-parity, still with **zero wrong
+verdicts**.
