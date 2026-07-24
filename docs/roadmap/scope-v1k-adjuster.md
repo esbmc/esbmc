@@ -1,6 +1,6 @@
 # Scope — the V.1k (b) IREP2-native Python adjuster
 
-**Program:** Part V of `docs/irep2-migration.md` (IREP2-native frontend→goto, #4715).
+**Program:** Part V of `docs/roadmap/irep2-migration.md` (IREP2-native frontend→goto, #4715).
 **Question this scopes:** is the whole-body "resolve-then-build" adjuster the right
 next step to close the V.3 residue, and if so, what exactly does it own?
 **Status (updated 2026-07-23):** §5.1's Spike-1 conclusion ("adjuster
@@ -14,10 +14,10 @@ for a *different* reason than Goal A — the whole-body `python_adjust` pass
 completion #5985/#5988, exception-id/finally/call-rewrite flip-prep
 #5992/#5995/#5996, S4 width reconcile #5999) toward the **flip** that replaces
 `clang_cpp_adjust` on the Python path (Goal B / §5a B.5), which the sibling
-W1-loc keystone (`docs/spike-v1k-w1loc.md`) does not cover. Remaining flip
+W1-loc keystone (`docs/roadmap/spike-v1k-w1loc.md`) does not cover. Remaining flip
 blockers: "bases" carriage, S3 member/index at scale, S5 arg casts (the
 adjust()-error-return blocker is discharged, `python_language.cpp:325`). **Owner:**
-TBD. **Refs:** #4715, #5055, #6323; sibling doc `docs/spike-v1k-w1loc.md`.
+TBD. **Refs:** #4715, #5055, #6323; sibling doc `docs/roadmap/spike-v1k-w1loc.md`.
 
 > **Correction to §5.1 / §5a below.** The "adjuster is unnecessary — retire the
 > dead pass" wording in §5.1 is scoped to **Goal A only** and is now realised by
