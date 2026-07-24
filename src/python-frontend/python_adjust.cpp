@@ -175,8 +175,7 @@ pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops)
 {
   for (size_t i = 0; i < st.members.size(); i++)
     if (
-      is_padding_member_name(st.member_names[i].as_string()) &&
-      i <= ops.size())
+      is_padding_member_name(st.member_names[i].as_string()) && i <= ops.size())
       ops.insert(ops.begin() + i, gen_zero(st.members[i]));
   return ops;
 }
@@ -275,7 +274,10 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // (otherwise "first argument of `if' must be boolean"). if2t is immutable.
     const if2t &i = to_if2t(expr);
     expr = if2tc(
-      i.type, typecast2tc(get_bool_type(), i.cond), i.true_value, i.false_value);
+      i.type,
+      typecast2tc(get_bool_type(), i.cond),
+      i.true_value,
+      i.false_value);
   }
   else if (
     is_code_assign2t(expr) &&
@@ -296,8 +298,8 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // a.target->type, matching clang's c_typecast (address_of2tc(ptr.subtype,
     // index)), not pointer(pointer(elem)).
     const type2tc &pointee = to_pointer_type(a.target->type).subtype;
-    expr2tc decayed = address_of2tc(
-      pointee, index2tc(elem, a.source, gen_zero(index_type2())));
+    expr2tc decayed =
+      address_of2tc(pointee, index2tc(elem, a.source, gen_zero(index_type2())));
     expr = code_assign2tc(a.target, decayed, a.location);
   }
   else if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
@@ -332,8 +334,8 @@ void python_adjust::adjust_expr(expr2tc &expr)
       // operands when the literal doesn't have them yet, then rebuild only when
       // the operand count matches; a residual mismatch is left by-name for the
       // exit invariant to flag.
-      std::vector<expr2tc> ops = pad_struct_operands(
-        st, to_constant_struct2t(expr).datatype_members);
+      std::vector<expr2tc> ops =
+        pad_struct_operands(st, to_constant_struct2t(expr).datatype_members);
       if (ops.size() == st.members.size())
         expr = constant_struct2tc(resolved, ops);
     }
@@ -657,6 +659,11 @@ void python_adjust::collect_unresolved_sources(
       to_symbol_type(to_index2t(expr).source_value->type)
         .symbol_name.as_string() +
       "'");
+  // A pointer source is transient too (the index arm rewrites `p[i]` to
+  // `*(p+i)`); one surviving here means the rewrite was skipped, so symex would
+  // see an index over a pointer — flag it before it escapes.
+  if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value->type))
+    out.push_back("index over unresolved pointer source");
   // A constant_struct2t is the third relaxed construction assert (irep2_expr.h):
   // its own type may be a transient by-name symbol_type2t until the aggregate is
   // followed. Post-adjust it must be a resolved struct too.
