@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <util/namespace.h>
-#include <util/options.h>
+#include <util/config/options.h>
 
 /// Reduce non-termination to a reachability safety property.
 ///

@@ -12,7 +12,7 @@
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/filesystem.h>
 #include <csignal>
 #include <cstdlib>

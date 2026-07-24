@@ -10,7 +10,7 @@
 #include <list>
 #include <map>
 #include <memory>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <irep2/irep2.h>
 #include <util/namespace.h>
 #include <util/threeval.h>

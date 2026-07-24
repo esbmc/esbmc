@@ -8,7 +8,7 @@
 #include <boost/multi_index/sequenced_index.hpp>
 #include <boost/multi_index_container.hpp>
 
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/symbol.h>
 #include <util/type.h>
 

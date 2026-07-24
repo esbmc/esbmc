@@ -1,7 +1,7 @@
 #include "util_irep.h"
 
 #include <util/c_types.h>
-#include <util/config.h>
+#include <util/config/config.h>
 
 void gen_builtin_type(typet &new_type, Builtin_Type bt)
 {

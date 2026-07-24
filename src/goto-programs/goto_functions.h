@@ -15,7 +15,7 @@
 
 #include <goto-programs/goto_program.h>
 #include <util/std_types.h>
-#include <util/options.h>
+#include <util/config/options.h>
 #include <util/exception_specification.h>
 
 class goto_functiont

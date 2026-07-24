@@ -11,7 +11,7 @@
 #include <util/context.h>
 #include <util/message.h>
 #include <util/c_link.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/language.h>
 
 #ifdef ENABLE_PYTHON_FRONTEND

@@ -7,7 +7,7 @@
 #include <solvers/smt/smt_conv.h>
 #include <util/c_types.h>
 #include <util/message.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <filesystem>
 #include <fstream>

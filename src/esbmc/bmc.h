@@ -14,9 +14,9 @@
 #include <map>
 #include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
-#include <util/options.h>
+#include <util/config/options.h>
 #include <util/ssa/algorithms.h>
-#include <util/cmdline.h>
+#include <util/config/cmdline.h>
 #include <atomic>
 
 class bmct

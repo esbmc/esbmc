@@ -2,7 +2,7 @@
 #include <goto2c/expr2c.h>
 #include <util/expr_util.h>
 #include <util/c_sizeof.h>
-#include <util/config.h>
+#include <util/config/config.h>
 
 // This translates the given GOTO program (aka list of GOTO functions)
 std::string goto2ct::translate()

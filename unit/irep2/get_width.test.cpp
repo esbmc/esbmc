@@ -13,7 +13,7 @@
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_utils.h>
 #include <util/c_types.h>
-#include <util/config.h>
+#include <util/config/config.h>
 
 namespace
 {

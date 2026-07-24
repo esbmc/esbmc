@@ -3,7 +3,7 @@
 #define DBOX_PARSEOPTIONS_H
 
 #include <string>
-#include <util/cmdline.h>
+#include <util/config/cmdline.h>
 #include <util/message.h>
 #include <boost/filesystem.hpp>
 

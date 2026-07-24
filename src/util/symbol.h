@@ -4,7 +4,7 @@
 #include <list>
 #include <vector>
 #include <irep2/irep2.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/expr.h>
 #include <util/location.h>
 

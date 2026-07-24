@@ -17,13 +17,13 @@ add_library(string_pool string_pool.cpp)
 add_library(usr_utils usr_utils.cpp)
 
 add_library(util_esbmc xml_irep.cpp xml.cpp
-        arith_tools.cpp base_type.cpp cmdline.cpp config.cpp config_file.cpp context.cpp
+        arith_tools.cpp base_type.cpp config/cmdline.cpp config/config.cpp config/config_file.cpp context.cpp
         cwe_mapping.cpp
         fallible_calls.cpp
         expr_util.cpp i2string.cpp location.cpp
-        mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp
+        mp_arith.cpp namespace.cpp config/parseoptions.cpp rename.cpp
         threeval.cpp typecheck.cpp bitvector.cpp parser.cpp replace_symbol.cpp
-        string_pool.cpp options.cpp c_misc.cpp
+        string_pool.cpp config/options.cpp c_misc.cpp
         expr_simplifier.cpp expr_reassociate.cpp
         string2array.cpp array2string.cpp time_stopping.cpp symbol.cpp
         symbol_generator.cpp symbolic_types.cpp

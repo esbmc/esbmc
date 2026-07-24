@@ -2,8 +2,8 @@
 #define CPROVER_UTIL_CONFIG_H
 
 #include <unordered_set>
-#include <util/cmdline.h>
-#include <util/options.h>
+#include <util/config/cmdline.h>
+#include <util/config/options.h>
 #include <langapi/mode.h>
 #include <util/compiler_defs.h>
 #include <util/ssa/cache_defs.h>

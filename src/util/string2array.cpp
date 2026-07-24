@@ -1,7 +1,7 @@
 #include <irep2/irep2_expr.h>
 
 #include <util/arith_tools.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
 #include <util/string2array.h>

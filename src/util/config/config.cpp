@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <regex>
 
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/message.h>
 #include <ac_config.h>
 

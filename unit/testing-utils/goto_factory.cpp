@@ -8,7 +8,7 @@
 #include <goto-programs/goto_check.h>
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_no_op.h>
-#include <util/cmdline.h>
+#include <util/config/cmdline.h>
 #include <util/message.h>
 #include <util/filesystem.h>
 

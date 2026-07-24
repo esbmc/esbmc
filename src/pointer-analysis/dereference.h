@@ -6,7 +6,7 @@
 #include <util/expr.h>
 #include <irep2/irep2_guard.h>
 #include <util/namespace.h>
-#include <util/options.h>
+#include <util/config/options.h>
 
 /** @file dereference.h
  *  The dereferencing code's purpose is to take a symbol with pointer type that

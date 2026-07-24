@@ -5,8 +5,8 @@
 #  include <sysexits.h>
 #endif
 
-#include <util/cmdline.h>
-#include <util/parseoptions.h>
+#include <util/config/cmdline.h>
+#include <util/config/parseoptions.h>
 #include <util/signal_catcher.h>
 #include <boost/program_options.hpp>
 

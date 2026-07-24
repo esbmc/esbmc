@@ -1,7 +1,7 @@
 #include <solvers/smtlib/oneshot_process.h>
 #include <util/filesystem.h>
 #include <util/message.h>
-#include <util/options.h>
+#include <util/config/options.h>
 
 #include <cctype>
 #include <cerrno>

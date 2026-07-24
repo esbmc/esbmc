@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <util/namespace.h>
-#include <util/options.h>
+#include <util/config/options.h>
 #include <util/threeval.h>
 
 /// Period-1 fixpoint non-termination check, restricted to the eca-

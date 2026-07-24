@@ -2,7 +2,7 @@
 
 #include <esbmc/esbmc_parseoptions.h>
 #include <util/c_types.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/expr_util.h>
 #include <util/irep.h>
 #include <util/message.h>

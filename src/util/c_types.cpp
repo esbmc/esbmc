@@ -1,5 +1,5 @@
 #include <util/c_types.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/std_types.h>
 #include <irep2/irep2_utils.h>
 

@@ -2,7 +2,7 @@
 #include "irep2/irep2_expr.h"
 #include <util/c_types.h>
 #include <util/std_code.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <irep2/irep2_utils.h>
 #include <util/message/format.h>
 #include <util/migrate.h>

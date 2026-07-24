@@ -2,7 +2,7 @@
 #define _ESBMC_SOLVERS_SOLVE_H_
 
 #include <string>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/namespace.h>
 #include <util/message.h>
 

@@ -5,7 +5,7 @@
 #include <goto-programs/goto_program.h>
 #include <irep2/irep2_expr.h>
 #include <util/c_types.h>
-#include <util/options.h>
+#include <util/config/options.h>
 
 // Reset all static flags to known defaults before each test.
 static void reset_interval_flags()

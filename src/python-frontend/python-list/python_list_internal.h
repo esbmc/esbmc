@@ -26,7 +26,7 @@
 #include <util/mp_arith.h>
 #include <util/python_types.h>
 #include <util/symbolic_types.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/type_byte_size.h>

@@ -5,7 +5,7 @@
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/module/global_scope.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/context.h>
 #include <util/migrate.h>
 #include <util/c_types.h>

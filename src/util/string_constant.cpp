@@ -1,6 +1,6 @@
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/c_types.h>
 #include <util/message.h>
 #include <util/std_expr.h>

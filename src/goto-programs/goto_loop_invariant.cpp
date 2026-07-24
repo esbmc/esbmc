@@ -36,7 +36,7 @@
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/std_expr.h>
-#include <util/options.h>
+#include <util/config/options.h>
 #include <irep2/irep2_utils.h>
 #include <functional>
 #include <map>

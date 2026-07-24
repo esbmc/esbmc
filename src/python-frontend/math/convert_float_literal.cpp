@@ -3,7 +3,7 @@
 #include <python-frontend/type/type_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/ieee_float.h>
 #include <util/std_types.h>
 

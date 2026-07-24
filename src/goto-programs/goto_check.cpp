@@ -5,7 +5,7 @@
 #include <util/arith_tools.h>
 #include <util/array_name.h>
 #include <util/base_type.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/expr_util.h>
 #include <irep2/irep2_guard.h>
 #include <util/i2string.h>

@@ -4,7 +4,7 @@
 #include <list>
 #include <map>
 #include <string>
-#include <util/cmdline.h>
+#include <util/config/cmdline.h>
 
 class optionst
 {

@@ -1,5 +1,5 @@
 
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/message.h>
 
 void messaget::statet::println(

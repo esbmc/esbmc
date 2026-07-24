@@ -4,7 +4,7 @@
 #include <goto-symex/symex_target_equation.h>
 #include <util/time_stopping.h>
 #include <util/ssa/algorithms.h>
-#include <util/options.h>
+#include <util/config/options.h>
 #include <boost/range/adaptor/reversed.hpp>
 #include <langapi/language_util.h>
 

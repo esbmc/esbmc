@@ -2,7 +2,7 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
 #include <irep2/irep2_expr.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/message.h>

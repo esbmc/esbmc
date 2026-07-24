@@ -9,7 +9,7 @@
 #include <util/expr_util.h>
 #include <irep2/irep2_guard.h>
 #include <util/namespace.h>
-#include <util/options.h>
+#include <util/config/options.h>
 #include <util/symbol_generator.h>
 #include <util/std_code.h>
 

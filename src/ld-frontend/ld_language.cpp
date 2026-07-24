@@ -6,7 +6,7 @@
 #include <ld-frontend/property/yaml_property_parser.h>
 #include <ld-frontend/property/property_encoder.h>
 #include <util/c_expr2string.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/message.h>
 #include <iostream>
 

@@ -8,9 +8,9 @@
 
 #include <stdexcept>
 #include <string>
-#include <util/cmdline.h>
+#include <util/config/cmdline.h>
 #include <util/message.h>
-#include <util/config_file.h>
+#include <util/config/config_file.h>
 
 #ifdef _WIN32
 #  define HOME_ENV_NAME "USERPROFILE"

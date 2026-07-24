@@ -7,7 +7,7 @@
 #include <util/base_type.h>
 #include <util/c_misc.h>
 #include <util/c_types.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>

@@ -13,7 +13,7 @@
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
 #include <util/message.h>
-#include <util/options.h>
+#include <util/config/options.h>
 
 /// Determine whether a contract clause instruction (ASSERT or ASSUME) should be
 /// emitted for the given clause expression.

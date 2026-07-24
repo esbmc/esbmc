@@ -1,7 +1,7 @@
 #include <cassert>
 #include <pointer_logic.h>
 #include <util/arith_tools.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <util/i2string.h>
 #include <irep2/irep2_utils.h>
 #include <util/prefix.h>
