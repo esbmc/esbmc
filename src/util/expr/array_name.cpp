@@ -1,4 +1,4 @@
-#include <util/array_name.h>
+#include <util/expr/array_name.h>
 #include <irep2/irep2_expr.h>
 
 std::string array_name(const namespacet &ns, const expr2tc &expr)

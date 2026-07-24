@@ -6,7 +6,7 @@
 #include <util/migrate.h>
 #include <util/symtab/namespace.h>
 #include <util/std_types.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 // A restrict-qualified pointer parameter, reduced to the data the entry
 // assertion needs: the pointer value (as a level-0 symbol) and the byte size of

@@ -2,7 +2,7 @@
 #include <cassert>
 #include <goto-programs/static_analysis.h>
 #include <memory>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 

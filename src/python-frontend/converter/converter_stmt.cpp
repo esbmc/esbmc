@@ -20,20 +20,20 @@
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
-#include <util/base_type.h>
+#include <util/expr/base_type.h>
 #include <util/bitvector.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
 #include <util/base/encoding.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/irep.h>
 #include <util/message/message.h>
 #include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
-#include <util/string_constant.h>
-#include <util/symbolic_types.h>
+#include <util/expr/string_constant.h>
+#include <util/expr/symbolic_types.h>
 
 #include <algorithm>
 #include <stdexcept>

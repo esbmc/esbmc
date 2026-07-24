@@ -2,7 +2,7 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/symtab/namespace.h>
 #include <util/std_code.h>

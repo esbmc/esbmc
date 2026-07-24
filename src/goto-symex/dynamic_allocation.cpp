@@ -3,7 +3,7 @@
 #include <goto-symex/goto_symex.h>
 #include <util/c_types.h>
 #include <util/symtab/cprover_prefix.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 #include <util/std_expr.h>
 #include <string>

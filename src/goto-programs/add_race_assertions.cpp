@@ -2,7 +2,7 @@
 #include <goto-programs/remove_no_op.h>
 #include <goto-programs/rw_set.h>
 #include <pointer-analysis/value_sets.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/migrate.h>
 #include <irep2/irep2_guard.h>
 #include <util/base/prefix.h>

@@ -1,14 +1,14 @@
 #include <cassert>
-#include <util/base_type.h>
+#include <util/expr/base_type.h>
 #include <util/c_qualifiers.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/std_expr.h>
-#include <util/string2array.h>
+#include <util/expr/string2array.h>
 
 // In this file, all functions and methods are replicated with irept and irep2
 // copies, because it's unclear to me what the overall algorithm is, therefore

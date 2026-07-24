@@ -1,4 +1,4 @@
-#include <util/array2string.h>
+#include <util/expr/array2string.h>
 #include <util/bitvector.h>
 
 bool array2string(const symbolt &src, exprt &dest)

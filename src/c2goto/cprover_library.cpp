@@ -1,6 +1,6 @@
 #include <c2goto/cprover_library.h>
 
-#include "util/symbolic_types.h"
+#include "util/expr/symbolic_types.h"
 
 #include <ac_config.h>
 #include <boost/filesystem.hpp>

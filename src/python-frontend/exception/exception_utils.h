@@ -6,7 +6,7 @@
 #include <util/location.h>
 #include <util/message/message.h>
 #include <util/std_expr.h>
-#include <util/string_constant.h>
+#include <util/expr/string_constant.h>
 
 #include <string>
 

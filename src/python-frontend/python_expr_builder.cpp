@@ -5,7 +5,7 @@
 #include <util/std_expr.h>
 #include <util/std_types.h>
 #include <util/std_code.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 
 namespace python_expr
 {

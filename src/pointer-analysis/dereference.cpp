@@ -4,12 +4,12 @@
 #include <pointer-analysis/value_set.h>
 #include <sstream>
 #include <util/arith_tools.h>
-#include <util/base_type.h>
+#include <util/expr/base_type.h>
 #include <util/c_misc.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
 #include <util/symtab/cprover_prefix.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <util/message/format.h>
@@ -18,7 +18,7 @@
 #include <util/symtab/pretty.h>
 #include <util/symtab/rename.h>
 #include <util/std_expr.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 thread_local unsigned int dereferencet::invalid_counter = 0;
 

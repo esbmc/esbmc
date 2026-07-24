@@ -4,7 +4,7 @@
 #include <sstream>
 #include <string>
 #include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 
 static const char *mathsat_config =
   "preprocessor.toplevel_propagation = true\n"

@@ -3,7 +3,7 @@
 #include <python-frontend/type/type_utils.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/python_types.h>

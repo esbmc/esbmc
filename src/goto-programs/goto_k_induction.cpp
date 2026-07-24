@@ -7,7 +7,7 @@
 #include <pointer-analysis/value_set.h>
 #include <pointer-analysis/value_set_analysis.h>
 #include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <util/std_expr.h>
 #include <memory>

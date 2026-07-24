@@ -17,7 +17,7 @@
 #include <ibex/ibex_Expr.h>
 #include <ibex/ibex_Ctc.h>
 #include <irep2/irep2.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <limits>
 #include <chrono>

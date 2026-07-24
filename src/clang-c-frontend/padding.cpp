@@ -9,7 +9,7 @@
 #include <util/c_types.h>
 #include <util/config/config.h>
 #include <util/std_expr.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 static struct_typet::componentst::iterator pad_bit_field(
   struct_typet::componentst &components,

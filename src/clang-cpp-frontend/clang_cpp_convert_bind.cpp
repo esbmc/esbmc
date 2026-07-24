@@ -31,7 +31,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 
 bool clang_cpp_convertert::perform_virtual_dispatch(
   const clang::MemberExpr &member)

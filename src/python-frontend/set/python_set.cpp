@@ -4,9 +4,9 @@
 #include <python-frontend/python-list/python_list.h>
 #include <c2goto/library/python/python_types.h>
 #include <util/arith_tools.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/python_types.h>
-#include <util/string_constant.h>
+#include <util/expr/string_constant.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <irep2/irep2_utils.h>

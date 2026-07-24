@@ -5,7 +5,7 @@
 #include <goto-symex/reachability_tree.h>
 #include <map>
 #include <sstream>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>

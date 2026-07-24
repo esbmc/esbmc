@@ -2,7 +2,7 @@
 #include <ld-frontend/ir_gen/st_fb_translator.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/symtab/symbol.h>
 #include <map>

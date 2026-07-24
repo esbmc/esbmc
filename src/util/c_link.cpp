@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cctype>
 #include <unordered_set>
-#include <util/base_type.h>
+#include <util/expr/base_type.h>
 #include <util/c_link.h>
 #include <util/symtab/fix_symbol.h>
 #include <util/base/i2string.h>

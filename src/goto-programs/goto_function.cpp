@@ -3,7 +3,7 @@
 #include <goto-programs/goto_functions.h>
 #include <util/c_types.h>
 #include <util/symtab/cprover_prefix.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <util/location.h>
 #include <util/base/prefix.h>

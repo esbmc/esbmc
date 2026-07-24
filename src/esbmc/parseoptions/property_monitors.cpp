@@ -3,7 +3,7 @@
 #include <esbmc/esbmc_parseoptions.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/irep.h>
 #include <util/message/message.h>
 #include <util/base/prefix.h>

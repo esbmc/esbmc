@@ -3,7 +3,7 @@
 #include <jimple-frontend/AST/jimple_file.h>
 
 #include <util/std_code.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 
 // (De)-Serialization helpers (from jimple_ast.h)
 void to_json(json &, const jimple_ast &)

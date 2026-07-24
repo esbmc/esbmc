@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <util/type2name.h>
+#include <util/expr/type2name.h>
 #include <cctype>
 #include <util/base/i2string.h>
 #include <util/std_types.h>

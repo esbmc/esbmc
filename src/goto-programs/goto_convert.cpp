@@ -13,7 +13,7 @@
 #include <util/base/prefix.h>
 #include <util/symtab/replace_symbol.h>
 #include <util/std_expr.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 static bool is_empty(const goto_programt &goto_program)
 {

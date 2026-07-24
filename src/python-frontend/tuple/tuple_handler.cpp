@@ -5,7 +5,7 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/function_call/expr.h>
 #include <util/arith_tools.h>
-#include <util/base_type.h>
+#include <util/expr/base_type.h>
 #include <util/c_types.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>

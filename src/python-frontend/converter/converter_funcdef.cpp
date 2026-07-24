@@ -15,12 +15,12 @@
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
-#include <util/symbolic_types.h>
+#include <util/expr/symbolic_types.h>
 
 #include <functional>
 #include <set>

@@ -21,7 +21,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
@@ -30,7 +30,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/exception_specification.h>
-#include <util/string_constant.h>
+#include <util/expr/string_constant.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,

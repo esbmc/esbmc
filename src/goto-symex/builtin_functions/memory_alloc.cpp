@@ -4,12 +4,12 @@
 #include <string>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 #include <utility>
 #include <vector>
 #include <algorithm>

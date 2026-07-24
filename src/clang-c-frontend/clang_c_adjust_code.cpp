@@ -3,7 +3,7 @@
 #include <util/bitvector.h>
 #include <util/c_types.h>
 #include <util/symtab/cprover_prefix.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/base/prefix.h>
 #include <util/std_code.h>
 

@@ -2,11 +2,11 @@
 #include <langapi/language_util.h>
 #include <pointer-analysis/value_set.h>
 #include <util/arith_tools.h>
-#include <util/base_type.h>
+#include <util/expr/base_type.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
 #include <util/symtab/context.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <util/message/message.h>
@@ -14,7 +14,7 @@
 #include <util/base/prefix.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 thread_local object_numberingt value_sett::object_numbering;
 thread_local object_number_numberingt value_sett::obj_numbering_refset;

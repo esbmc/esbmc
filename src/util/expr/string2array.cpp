@@ -4,7 +4,7 @@
 #include <util/config/config.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
-#include <util/string2array.h>
+#include <util/expr/string2array.h>
 
 void string2array(const exprt &src, exprt &dest)
 {

@@ -9,7 +9,7 @@
 #include <util/message/format.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 namespace
 {

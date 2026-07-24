@@ -1,7 +1,7 @@
 #include "irep2/irep2_utils.h"
 #include <goto-programs/goto_loops.h>
 #include <util/config/config.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 
 // True iff `expr` denotes storage reached through a pointer: a dereference,
 // or an index/member off pointer-reached storage, or a pointer-typed

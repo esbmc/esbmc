@@ -9,8 +9,8 @@
 #include <util/base/prefix.h>
 #include <util/std_code.h>
 #include <util/std_types.h>
-#include <util/base_type.h>
-#include <util/type_byte_size.h>
+#include <util/expr/base_type.h>
+#include <util/expr/type_byte_size.h>
 #include <irep2/irep2_utils.h>
 #include <algorithm>
 #include <regex>

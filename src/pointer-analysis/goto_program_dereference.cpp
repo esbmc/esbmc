@@ -1,5 +1,5 @@
 #include <pointer-analysis/goto_program_dereference.h>
-#include <util/base_type.h>
+#include <util/expr/base_type.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/base/prefix.h>

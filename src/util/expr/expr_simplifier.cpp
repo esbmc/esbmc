@@ -1,13 +1,13 @@
 #include <limits>
 
 #include <util/arith_tools.h>
-#include <util/base_type.h>
+#include <util/expr/base_type.h>
 #include <util/c_types.h>
-#include <util/expr_reassociate.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_reassociate.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 expr2tc expr2t::do_simplify() const
 {

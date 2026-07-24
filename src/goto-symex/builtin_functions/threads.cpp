@@ -4,10 +4,10 @@
 #include <goto-symex/reachability_tree.h>
 #include <string>
 #include <util/arith_tools.h>
-#include <util/base_type.h>
+#include <util/expr/base_type.h>
 #include <util/c_types.h>
 #include <util/symtab/context.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 #include <util/message/message.h>
 #include <util/migrate.h>

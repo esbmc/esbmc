@@ -5,7 +5,7 @@
 #include <util/message/message.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>
-#include <util/string_constant.h>
+#include <util/expr/string_constant.h>
 
 #include <cuchar>
 #include <cwchar>

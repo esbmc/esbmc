@@ -4,7 +4,7 @@
 #include <goto-programs/goto_program_irep.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/migrate.h>
 #include <util/message/message.h>
 #include <util/std_expr.h>

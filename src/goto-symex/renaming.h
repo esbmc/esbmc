@@ -3,7 +3,7 @@
 
 #include <set>
 #include <goto-symex/level1_map.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2_expr.h>

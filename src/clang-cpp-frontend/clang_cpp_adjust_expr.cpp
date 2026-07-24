@@ -3,7 +3,7 @@
 #include <util/c_sizeof.h>
 #include <util/c_types.h>
 #include <goto-programs/destructor.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/message/message.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)

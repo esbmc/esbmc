@@ -6,7 +6,7 @@
 #include <queue>
 #include <set>
 #include <stack>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>
 #include <util/symtab/namespace.h>
 #include <util/config/options.h>

@@ -1,6 +1,6 @@
 #include <jimple-frontend/AST/jimple_class_member.h>
 #include <util/std_code.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 
 exprt jimple_class_field::to_exprt(
   contextt &ctx,

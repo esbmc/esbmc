@@ -1,7 +1,7 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/witnesses.h>
 #include <util/arith_tools.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/base/prefix.h>
 #include <irep2/irep2.h>

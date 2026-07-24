@@ -8,8 +8,8 @@
 #include <util/migrate.h>
 #include <util/symtab/namespace.h>
 #include <util/base/prefix.h>
-#include <util/string_constant.h>
-#include <util/type_byte_size.h>
+#include <util/expr/string_constant.h>
+#include <util/expr/type_byte_size.h>
 
 inline code_function_callt invoke_intrinsic(
   const std::string &name,

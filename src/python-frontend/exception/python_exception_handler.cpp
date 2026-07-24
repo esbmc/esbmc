@@ -8,11 +8,11 @@
 #include <python-frontend/type/type_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
-#include <util/string_constant.h>
+#include <util/expr/string_constant.h>
 #include <python-frontend/python_expr_builder.h>
 
 using namespace python_expr;

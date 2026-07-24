@@ -3,7 +3,7 @@
 #include <util/c_types.h>
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 exprt c_sizeof(const typet &src, const namespacet &ns)
 {

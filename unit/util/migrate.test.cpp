@@ -23,7 +23,7 @@
 #include <util/migrate.h>
 #include <util/symtab/namespace.h>
 #include <util/symtab/context.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/c_types.h>

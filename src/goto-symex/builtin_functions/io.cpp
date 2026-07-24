@@ -5,7 +5,7 @@
 #include <string>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 #include <util/message/message.h>
 #include <util/migrate.h>
@@ -13,7 +13,7 @@
 #include <vector>
 #include <algorithm>
 #include <functional>
-#include <util/array2string.h>
+#include <util/expr/array2string.h>
 
 bool goto_symext::recover_va_list_args(
   const code_printf2t &call,

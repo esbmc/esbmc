@@ -6,7 +6,7 @@
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type/type_utils.h>
 #include <util/std_expr.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/irep.h>
 #include <util/python_types.h>
 #include <util/std_code.h>

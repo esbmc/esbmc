@@ -7,7 +7,7 @@
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/migrate.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>

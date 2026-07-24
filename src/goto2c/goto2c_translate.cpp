@@ -1,6 +1,6 @@
 #include <goto2c/goto2c.h>
 #include <goto2c/expr2c.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/c_sizeof.h>
 #include <util/config/config.h>
 

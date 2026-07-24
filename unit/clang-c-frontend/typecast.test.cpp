@@ -16,7 +16,7 @@
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/type.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 
 // ******************** TESTS ********************
 

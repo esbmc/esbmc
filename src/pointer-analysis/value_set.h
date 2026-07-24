@@ -7,7 +7,7 @@
 #include <util/mp_arith.h>
 #include <util/symtab/namespace.h>
 #include <util/base/numbering.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 /** Code for tracking "value sets" across assignments in ESBMC.
  *

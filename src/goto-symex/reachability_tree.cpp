@@ -3,7 +3,7 @@
 #include <goto-symex/reachability_tree.h>
 #include <irep2/irep2_expr.h>
 #include <util/config/config.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <util/message/message.h>
 #include <util/std_expr.h>

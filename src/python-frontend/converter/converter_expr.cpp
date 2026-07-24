@@ -23,12 +23,12 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/base/encoding.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
-#include <util/string_constant.h>
+#include <util/expr/string_constant.h>
 
 using namespace json_utils;
 

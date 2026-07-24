@@ -1,7 +1,7 @@
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_array_ast.h>
 #include <sstream>
-#include <util/base_type.h>
+#include <util/expr/base_type.h>
 #include <util/c_types.h>
 
 smt_astt array_sym_smt_ast::ite(

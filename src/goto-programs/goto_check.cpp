@@ -3,10 +3,10 @@
 #include <util/c_expr2string.h>
 #include <langapi/language_util.h>
 #include <util/arith_tools.h>
-#include <util/array_name.h>
-#include <util/base_type.h>
+#include <util/expr/array_name.h>
+#include <util/expr/base_type.h>
 #include <util/config/config.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>
 #include <util/base/i2string.h>
 #include <util/location.h>

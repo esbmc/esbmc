@@ -1,7 +1,7 @@
 #include <solvers/smt/smt_solver.h>
 #include <sstream>
-#include <util/base_type.h>
-#include <util/expr_util.h>
+#include <util/expr/base_type.h>
+#include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
 
