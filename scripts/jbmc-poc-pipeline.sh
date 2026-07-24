@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Run the JBMC -> goto-binary -> ESBMC pipeline described in
-# docs/jbmc-goto-binary-poc-plan.md §2.2, and record everything a later reader
+# docs/roadmap/jbmc-goto-binary-poc-plan.md §2.2, and record everything a later reader
 # needs to reproduce the result.
 #
 #   scripts/jbmc-poc-pipeline.sh --class java.lang.Integer

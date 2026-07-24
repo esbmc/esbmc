@@ -2,7 +2,7 @@
 """Regenerate cbmc_unknown_type.goto.
 
 The fixture pins ESBMC's graceful decline of a type id migrate_type0 has no
-case for -- the abort site docs/jbmc-goto-binary-poc-plan.md 2.3.1 identified
+case for -- the abort site docs/roadmap/jbmc-goto-binary-poc-plan.md 2.3.1 identified
 as JBMC's real first blocker.
 
 It uses a deliberately synthetic id rather than a real one because every
