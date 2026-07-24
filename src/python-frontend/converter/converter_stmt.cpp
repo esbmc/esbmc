@@ -954,6 +954,394 @@ exprt python_converter::get_rhs_with_dict_resolution(
     dict_expr, ast_node["value"]["slice"], target_type);
 }
 
+std::string python_converter::resolve_name_symbol_id(const std::string &name)
+{
+  symbol_id sid = create_symbol_id();
+  sid.set_object(name);
+  if (symbol_table_.find_symbol(sid.to_string()) != nullptr)
+    return sid.to_string();
+
+  sid.set_function("");
+  if (symbol_table_.find_symbol(sid.to_string()) != nullptr)
+    return sid.to_string();
+
+  return "";
+}
+
+std::string
+python_converter::root_name_from_subscript(const nlohmann::json &node) const
+{
+  if (!node.is_object() || !node.contains("_type"))
+    return "";
+
+  if (node["_type"] == "Name" && node.contains("id"))
+    return node["id"].get<std::string>();
+
+  if (node["_type"] == "Subscript" && node.contains("value"))
+    return root_name_from_subscript(node["value"]);
+
+  return "";
+}
+
+static bool json_contains_slice_node(const nlohmann::json &node)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+
+  if (node.is_object())
+  {
+    if (node.value("_type", "") == "Slice")
+      return true;
+
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (json_contains_slice_node(it.value()))
+        return true;
+  }
+  else
+  {
+    for (const auto &elem : node)
+      if (json_contains_slice_node(elem))
+        return true;
+  }
+
+  return false;
+}
+
+bool python_converter::is_basic_numpy_view_subscript(
+  const nlohmann::json &node) const
+{
+  if (
+    !node.is_object() || node.value("_type", "") != "Subscript" ||
+    !node.contains("value") || !node.contains("slice"))
+    return false;
+
+  auto is_basic_index = [&](const nlohmann::json &idx) {
+    const std::string type = idx.value("_type", "");
+    return type == "Constant" || type == "UnaryOp" || type == "Name" ||
+           type == "Slice";
+  };
+
+  const nlohmann::json &slice = node["slice"];
+  if (slice.value("_type", "") == "Tuple" && slice.contains("elts"))
+  {
+    for (const auto &idx : slice["elts"])
+      if (!is_basic_index(idx))
+        return false;
+    return true;
+  }
+
+  return is_basic_index(slice);
+}
+
+bool python_converter::contains_copied_numpy_view_name(
+  const nlohmann::json &node)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+
+  if (node.is_object())
+  {
+    if (node.value("_type", "") == "Name" && node.contains("id"))
+    {
+      const std::string id =
+        resolve_name_symbol_id(node["id"].get<std::string>());
+      return !id.empty() && numpy_view_copy_sources_.count(id) != 0;
+    }
+
+    if (
+      node.value("_type", "") == "Subscript" && node.contains("value") &&
+      node.contains("slice") && !json_contains_slice_node(node["slice"]) &&
+      contains_copied_numpy_view_name(node["value"]))
+      return contains_copied_numpy_view_name(node["slice"]);
+
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (contains_copied_numpy_view_name(it.value()))
+        return true;
+  }
+  else
+  {
+    for (const auto &elem : node)
+      if (contains_copied_numpy_view_name(elem))
+        return true;
+  }
+
+  return false;
+}
+
+std::optional<nlohmann::json> python_converter::select_return_value_for_call(
+  const nlohmann::json &call_node) const
+{
+  if (
+    !call_node.is_object() || call_node.value("_type", "") != "Call" ||
+    !call_node.contains("func") ||
+    call_node["func"].value("_type", "") != "Name" ||
+    !call_node.contains("args") || !call_node["args"].is_array() ||
+    (call_node.contains("keywords") && !call_node["keywords"].empty()))
+    return std::nullopt;
+
+  const std::string func_name = call_node["func"]["id"].get<std::string>();
+  const nlohmann::json func_node =
+    json_utils::try_find_function((*ast_json)["body"], func_name);
+  if (
+    func_node.empty() || !func_node.contains("body") ||
+    !func_node["body"].is_array() || !func_node.contains("args") ||
+    !func_node["args"].contains("args") ||
+    !func_node["args"]["args"].is_array())
+    return std::nullopt;
+
+  const nlohmann::json &params = func_node["args"]["args"];
+  if (params.size() != call_node["args"].size())
+    return std::nullopt;
+
+  auto is_trivial_arg = [](const nlohmann::json &node) {
+    return node.value("_type", "") == "Name" ||
+           node.value("_type", "") == "Constant";
+  };
+  for (const auto &arg : call_node["args"])
+    if (!is_trivial_arg(arg))
+      return std::nullopt;
+
+  auto param_index =
+    [&](const std::string &name) -> std::optional<std::size_t> {
+    for (std::size_t i = 0; i < params.size(); ++i)
+      if (params[i].value("arg", "") == name)
+        return i;
+    return std::nullopt;
+  };
+
+  auto bool_constant = [&](const nlohmann::json &node) -> std::optional<bool> {
+    if (
+      node.value("_type", "") == "Constant" && node.contains("value") &&
+      node["value"].is_boolean())
+      return node["value"].get<bool>();
+
+    if (node.value("_type", "") == "Name" && node.contains("id"))
+    {
+      std::optional<std::size_t> idx =
+        param_index(node["id"].get<std::string>());
+      if (!idx)
+        return std::nullopt;
+      const nlohmann::json &arg = call_node["args"][*idx];
+      if (
+        arg.value("_type", "") == "Constant" && arg.contains("value") &&
+        arg["value"].is_boolean())
+        return arg["value"].get<bool>();
+    }
+
+    return std::nullopt;
+  };
+
+  struct return_scan_result
+  {
+    bool invalid = false;
+    bool found = false;
+    nlohmann::json value;
+  };
+
+  std::function<return_scan_result(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &body) -> return_scan_result {
+    for (const auto &stmt : body)
+    {
+      if (stmt.value("_type", "") == "Return")
+      {
+        if (!stmt.contains("value") || stmt["value"].is_null())
+          return {true, false, nlohmann::json()};
+        return {false, true, stmt["value"]};
+      }
+
+      if (stmt.value("_type", "") == "If")
+      {
+        std::optional<bool> test_value = bool_constant(stmt["test"]);
+        if (!test_value)
+          return {true, false, nlohmann::json()};
+
+        const nlohmann::json &chosen =
+          *test_value ? stmt["body"] : stmt["orelse"];
+        if (chosen.is_array())
+        {
+          return_scan_result ret = scan(chosen);
+          if (ret.invalid || ret.found)
+            return ret;
+        }
+        continue;
+      }
+
+      return {true, false, nlohmann::json()};
+    }
+
+    return {};
+  };
+
+  return_scan_result result = scan(func_node["body"]);
+  if (result.invalid || !result.found)
+    return std::nullopt;
+  return result.value;
+}
+
+nlohmann::json python_converter::substitute_call_arguments(
+  const nlohmann::json &node,
+  const nlohmann::json &call_node) const
+{
+  if (
+    !call_node.is_object() || call_node.value("_type", "") != "Call" ||
+    !call_node.contains("func") ||
+    call_node["func"].value("_type", "") != "Name" ||
+    !call_node.contains("args") || !call_node["args"].is_array())
+    return node;
+
+  const std::string func_name = call_node["func"]["id"].get<std::string>();
+  const nlohmann::json func_node =
+    json_utils::try_find_function((*ast_json)["body"], func_name);
+  if (
+    func_node.empty() || !func_node.contains("args") ||
+    !func_node["args"].contains("args") ||
+    !func_node["args"]["args"].is_array())
+    return node;
+
+  const nlohmann::json &params = func_node["args"]["args"];
+  if (node.is_object())
+  {
+    if (node.value("_type", "") == "Name" && node.contains("id"))
+    {
+      const std::string name = node["id"].get<std::string>();
+      for (std::size_t i = 0; i < params.size() && i < call_node["args"].size();
+           ++i)
+        if (params[i].value("arg", "") == name)
+          return call_node["args"][i];
+    }
+
+    nlohmann::json out = node;
+    for (auto it = out.begin(); it != out.end(); ++it)
+      it.value() = substitute_call_arguments(it.value(), call_node);
+    return out;
+  }
+
+  if (node.is_array())
+  {
+    nlohmann::json out = nlohmann::json::array();
+    for (const auto &elem : node)
+      out.push_back(substitute_call_arguments(elem, call_node));
+    return out;
+  }
+
+  return node;
+}
+
+bool python_converter::return_value_uses_call_argument(
+  const nlohmann::json &return_value,
+  const nlohmann::json &call_node) const
+{
+  if (
+    !call_node.is_object() || call_node.value("_type", "") != "Call" ||
+    !call_node.contains("func") ||
+    call_node["func"].value("_type", "") != "Name")
+    return false;
+
+  const std::string func_name = call_node["func"]["id"].get<std::string>();
+  const nlohmann::json func_node =
+    json_utils::try_find_function((*ast_json)["body"], func_name);
+  if (
+    func_node.empty() || !func_node.contains("args") ||
+    !func_node["args"].contains("args") ||
+    !func_node["args"]["args"].is_array())
+    return false;
+
+  auto is_param_name = [&](const nlohmann::json &node) {
+    if (node.value("_type", "") != "Name" || !node.contains("id"))
+      return false;
+    const std::string name = node["id"].get<std::string>();
+    for (const auto &param : func_node["args"]["args"])
+      if (param.value("arg", "") == name)
+        return true;
+    return false;
+  };
+
+  if (is_param_name(return_value))
+    return true;
+
+  return return_value.value("_type", "") == "Subscript" &&
+         return_value.contains("value") && is_param_name(return_value["value"]);
+}
+
+void python_converter::reject_unsafe_numpy_view_target(
+  const nlohmann::json &target)
+{
+  if (!target.is_object() || target.value("_type", "") != "Subscript")
+    return;
+
+  const std::string root_name = root_name_from_subscript(target);
+  if (root_name.empty())
+    return;
+
+  const std::string root_id = resolve_name_symbol_id(root_name);
+  if (root_id.empty())
+    return;
+
+  if (numpy_view_copy_sources_.count(root_id) != 0)
+    throw std::runtime_error(
+      "TypeError: writing through a copied numpy view is not supported");
+
+  for (const auto &entry : numpy_view_copy_sources_)
+    if (entry.second == root_id)
+      throw std::runtime_error(
+        "TypeError: writing to a numpy array with a live copied view is not "
+        "supported");
+}
+
+void python_converter::record_numpy_view_copy(
+  const exprt &lhs,
+  const nlohmann::json &rhs_node)
+{
+  if (!lhs.is_symbol())
+    return;
+
+  nlohmann::json view_node = rhs_node;
+  if (rhs_node.value("_type", "") == "Call")
+  {
+    std::optional<nlohmann::json> ret_val =
+      select_return_value_for_call(rhs_node);
+    if (!ret_val)
+    {
+      clear_numpy_view_copy(lhs);
+      return;
+    }
+    if (!return_value_uses_call_argument(*ret_val, rhs_node))
+    {
+      clear_numpy_view_copy(lhs);
+      return;
+    }
+    view_node = substitute_call_arguments(*ret_val, rhs_node);
+  }
+
+  if (!is_basic_numpy_view_subscript(view_node))
+  {
+    clear_numpy_view_copy(lhs);
+    return;
+  }
+
+  const std::string root_name = root_name_from_subscript(view_node["value"]);
+  if (root_name.empty())
+  {
+    clear_numpy_view_copy(lhs);
+    return;
+  }
+
+  const std::string source_id = resolve_name_symbol_id(root_name);
+  if (source_id.empty())
+  {
+    clear_numpy_view_copy(lhs);
+    return;
+  }
+
+  numpy_view_copy_sources_[lhs.identifier().as_string()] = source_id;
+}
+
+void python_converter::clear_numpy_view_copy(const exprt &lhs)
+{
+  if (lhs.is_symbol())
+    numpy_view_copy_sources_.erase(lhs.identifier().as_string());
+}
+
 std::string python_converter::infer_type_from_any_annotation(
   const nlohmann::json &ast_node,
   const std::string &lhs_type)
@@ -1074,20 +1462,40 @@ typet python_converter::resolve_any_subscript_array_type(
       };
       return absent("lower") && absent("upper") && absent("step");
     };
+    auto is_literal_int = [](const nlohmann::json &node) {
+      if (
+        node.value("_type", "") == "Constant" && node.contains("value") &&
+        node["value"].is_number_integer())
+        return true;
+      return node.value("_type", "") == "UnaryOp" && node.contains("op") &&
+             node["op"].value("_type", "") == "USub" &&
+             node.contains("operand") &&
+             node["operand"].value("_type", "") == "Constant" &&
+             node["operand"].contains("value") &&
+             node["operand"]["value"].is_number_integer();
+    };
+    auto is_supported_slice = [&](const nlohmann::json &node) {
+      if (is_full_slice(node))
+        return true;
+      for (const char *key : {"lower", "upper", "step"})
+        if (
+          node.contains(key) && !node[key].is_null() &&
+          !is_literal_int(node[key]))
+          return false;
+      return true;
+    };
 
-    std::size_t full_slice_count = 0;
-    bool has_partial_slice = false;
+    std::size_t slice_count = 0;
+    bool all_slices_supported = true;
     for (const auto &elt : ast_node["value"]["slice"]["elts"])
     {
       if (elt.value("_type", "") != "Slice")
         continue;
-      if (is_full_slice(elt))
-        ++full_slice_count;
-      else
-        has_partial_slice = true;
+      ++slice_count;
+      if (!is_supported_slice(elt))
+        all_slices_supported = false;
     }
-    is_supported_mixed_slice_tuple =
-      full_slice_count == 1 && !has_partial_slice;
+    is_supported_mixed_slice_tuple = slice_count != 0 && all_slices_supported;
   }
 
   // Reject a source array of more than 2 dimensions: n-D indexing is out of
@@ -1132,6 +1540,44 @@ typet python_converter::resolve_any_subscript_array_type(
   // Reuse this exact conversion as the RHS later instead of converting the
   // same Subscript node again from scratch.
   cached_any_subscript_rhs_ = subscript_probe;
+  has_cached_any_subscript_rhs_ = true;
+
+  return probed_type;
+}
+
+typet python_converter::resolve_call_argument_array_type(
+  const nlohmann::json &ast_node,
+  const typet &current_type)
+{
+  if (
+    ast_node["value"].is_null() ||
+    ast_node["value"].value("_type", std::string()) != "Call")
+    return current_type;
+
+  typet followed_current_type = ns.follow(current_type);
+  if (followed_current_type.is_array())
+    return current_type;
+
+  const nlohmann::json &call_node = ast_node["value"];
+  std::optional<nlohmann::json> ret_val =
+    select_return_value_for_call(call_node);
+  if (!ret_val || !return_value_uses_call_argument(*ret_val, call_node))
+    return current_type;
+
+  nlohmann::json substituted = substitute_call_arguments(*ret_val, call_node);
+  exprt call_probe = get_expr(substituted);
+  if (contains_cpp_throw(call_probe))
+    return current_type;
+
+  typet probed_type = ns.follow(call_probe.type());
+  if (probed_type.is_pointer())
+    probed_type = ns.follow(probed_type.subtype());
+
+  if (!probed_type.is_array())
+    return current_type;
+
+  any_subscript_array_needs_copy_ = !call_probe.is_symbol();
+  cached_any_subscript_rhs_ = call_probe;
   has_cached_any_subscript_rhs_ = true;
 
   return probed_type;
@@ -2097,6 +2543,8 @@ void python_converter::get_var_assign(
 
   if (target.contains("_type") && target["_type"] == "Subscript")
   {
+    reject_unsafe_numpy_view_target(target);
+
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
 
@@ -2250,6 +2698,8 @@ void python_converter::get_var_assign(
 
     current_element_type =
       resolve_any_subscript_array_type(ast_node, current_element_type);
+    current_element_type =
+      resolve_call_argument_array_type(ast_node, current_element_type);
 
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);
@@ -2415,6 +2865,8 @@ void python_converter::get_var_assign(
       {
         current_element_type =
           resolve_any_subscript_array_type(ast_node, current_element_type);
+        current_element_type =
+          resolve_call_argument_array_type(ast_node, current_element_type);
 
         std::string module_name = location_begin.get_file().as_string();
         symbolt symbol = create_symbol(
@@ -2477,6 +2929,18 @@ void python_converter::get_var_assign(
   bool is_ctor_call = type_handler_.is_constructor_call(ast_node["value"]);
   current_lhs = &lhs;
   is_converting_lhs = false;
+
+  if (
+    ast_node.contains("value") && ast_node["value"].is_object() &&
+    (ast_node["value"].value("_type", "") == "List" ||
+     ast_node["value"].value("_type", "") == "Tuple" ||
+     ast_node["value"].value("_type", "") == "Dict") &&
+    contains_copied_numpy_view_name(ast_node["value"]))
+  {
+    throw std::runtime_error(
+      "TypeError: storing a copied numpy view in a container is not "
+      "supported");
+  }
 
   // Get RHS
   exprt rhs;
@@ -2949,10 +3413,19 @@ void python_converter::get_var_assign(
           annotated_name,
           annotation_location,
           target_block);
+      record_numpy_view_copy(lhs, ast_node["value"]);
       current_lhs = nullptr;
       return;
     }
 
+    if (
+      ast_node.contains("value") && ast_node["value"].is_object() &&
+      (ast_node["value"].value("_type", "") == "Subscript" ||
+       ast_node["value"].value("_type", "") == "Call") &&
+      lhs.type().is_array())
+      record_numpy_view_copy(lhs, ast_node["value"]);
+    else
+      clear_numpy_view_copy(lhs);
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
@@ -3988,6 +4461,10 @@ void python_converter::get_return_statements(
     target_block.copy_to_operands(return_code);
     return;
   }
+
+  if (contains_copied_numpy_view_name(ast_node["value"]))
+    throw std::runtime_error(
+      "TypeError: returning a copied numpy view is not supported");
 
   exprt return_value = get_expr(ast_node["value"]);
   locationt location = get_location_from_decl(ast_node);
