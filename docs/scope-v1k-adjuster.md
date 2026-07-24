@@ -459,9 +459,23 @@ with the same `Unexpected index type in computer_pointer_offset` — the offendi
 `index2t` reaches `python_adjust` from a site *other* than `build_index` (a
 survived string-element read), so a converter-side fix does not cover it.
 
+**Root cause pinned — a missing array→pointer decay, not an index problem.**
+Instrumenting `goto_symex_statet::fixup_renamed_type` at the deeper
+`irep2_cast_error` (the crash the naive index arm trades into) shows the node
+with `orig_type = pointer` but a renamed value of `constant_array` (a `signedbv[8]`
+of size 1 — the empty string `""`). So a `char*` variable (e.g. `word`) holds a
+**bare array value that was never decayed to `address_of(array)`**. `clang_c_adjust`
+performs this array→pointer decay when an array value meets a pointer context;
+`python_adjust` does not, so the pointer variable carries an array value and any
+pointer use of it (the `*(p+i)` the index arm builds, but also plain pointer
+arithmetic) mismatches at symex rename. The index-over-pointer crash is therefore
+a *symptom*: the real gap is the missing decay, which is broader than indexing and
+must be fixed at the assignment/typecast seam (where `word = ""` should become
+`word = &""[0]`-style), mirroring clang, before the index arm can be sound.
+
 **Direction.** The two low-hanging arms (deref #6340, if2t #6348) are landed and
 the hop-off is at ~95% verdict parity. The remaining gaps are *not* one-arm
-fixes: index-over-pointer needs symex-side type-tracking work beyond the adjust
-arm, and the S3 unresolved-by-name family needs the dict-key-type infrastructure.
-Both are their own scoped efforts; neither should be forced as a mechanical
-adjuster arm.
+fixes: index-over-pointer is really the array→pointer decay gap above (an
+assignment-seam fix, not an index arm), and the S3 unresolved-by-name family
+needs the dict-key-type infrastructure. Both are their own scoped efforts;
+neither should be forced as a mechanical adjuster arm.
