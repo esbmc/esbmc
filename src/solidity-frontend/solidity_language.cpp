@@ -19,7 +19,7 @@ CC_DIAGNOSTIC_POP()
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <c2goto/cprover_library.h>
 #include <util/c_link.h>
-#include "filesystem.h"
+#include <util/filesystem.h>
 #include <unordered_set>
 #include <unordered_map>
 #include <cstdlib>
