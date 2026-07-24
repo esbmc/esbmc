@@ -435,7 +435,7 @@ old vague "F-A" buckets:
 
 | Family | Count (in sample) | Reproduced signature | Root cause | Tractability |
 |---|---|---|---|---|
-| **S3 unresolved-by-name** | 7 | `python_adjust: symbol '…' retains N unresolved by-name (symbol_type2t) node(s) after adjust (V.1k post-adjust invariant violated)` | dict/Optional value nodes whose key/element type clang resolves but `python_adjust` leaves as a transient `symbol_type2t` — needs the dict-key-type infra (the long-standing S3 work-list) | **hard** (multi-step, own infra) |
+| **S3 unresolved-by-name** | 7 | `python_adjust: symbol '…' retains N unresolved by-name (symbol_type2t) node(s) after adjust` | **✅ 7/7 fixed (#6369, #6372).** Not the dict-key-type infra this row first assumed — the firing check was the *operand-count* invariant: an Optional (`int \| None` = `{is_none, anon_pad$, value}`) built resolved-but-underpadded. #6369 pads a resolved-struct literal (6/7); the last case then hit an argument struct mismatch because `adjust_type` had no `code_type` arm, so a struct embedded in a function signature was never padded — #6372 recurses into `code_type`. | ~~hard~~ **two arms** |
 | **index-over-pointer** | 3 | `std::runtime_error: Unexpected index type in computer_pointer_offset` (type_byte_size.cpp:338) | an `index2t` whose `source_value` is a `char*` (a Python string / decayed-array parameter). `clang_c_adjust::adjust_index` rewrites `p[i]` → `*(p+i)`; `python_adjust` does not. A naive mirror (`dereference2tc(elem, add2tc(ptr, idx))` — the exact `build_dereference` shape) removes this crash but surfaces a **deeper** `irep2_cast_error` in `goto_symex_statet::fixup_renamed_type` (a function-argument rename where `orig_type` is pointer but the renamed value is not), so the fix needs symex-side type-tracking care, not just the adjust arm. | **hard** (symex rename interaction) |
 | **wrong/absent verdict** | ~4–6 | legacy `SUCCESSFUL` → hop-off `FAILED` (sqrt3, math_gamma_noninteger, github_3690, github_6258) or hop-off no-verdict (complex_pow_float_exponent, div6, jpl, list25, string18, ternary_operator4 — several are the crashes above manifesting as an empty verdict) | SMT-level: mostly the two crash families above surfacing as no-verdict; the true wrong-verdicts cluster on math/complex functions and need per-case triage | **mixed** |
 
@@ -484,9 +484,41 @@ Census: MATCH 520 → 525 (the 3 index-over-pointer cases plus `string18` and
 pair added. So of the three residual families above, **index-over-pointer is
 resolved**; S3 unresolved-by-name and the math/complex verdicts remain.
 
-**Direction.** The two low-hanging arms (deref #6340, if2t #6348) are landed and
-the hop-off is at ~95% verdict parity. The remaining gaps are *not* one-arm
-fixes: index-over-pointer is really the array→pointer decay gap above (an
-assignment-seam fix, not an index arm), and the S3 unresolved-by-name family
-needs the dict-key-type infrastructure. Both are their own scoped efforts;
-neither should be forced as a mechanical adjuster arm.
+**Direction — update.** Every family in this map that was first labelled "hard /
+needs its own infra" turned out, on inspection, to be a one- or two-arm mirror of
+what `clang_c_adjust` already does: the deref-result (#6340), the `if2t` bool cast
+(#6348), the array→pointer decay + pointer indexing (#6363), the resolved-struct
+padding (#6369), the `code_type` signature padding (#6372), and the index
+typecast (#6373). **Drill the actual invariant or error before believing the
+label** — the census signatures over-abstract the cause. The hop-off is now at
+~97.5% parity with zero crashes in sample.
+
+### The assignment-conversion trap — do not mirror `adjust_assign` alone (2026-07-24)
+
+The one remaining false alarm worth naming is `precedence2` (legacy SUCCESSFUL,
+hop-off FAILED). Its violated property is `assert x == 7` where `x` is *double*
+(Python retyped it at an earlier `x /= 3`), so `x |= 7` is a bitwise op on a
+double. Two things differ from legacy:
+
+1. the index typecast — fixed in #6373;
+2. the assignment conversion: legacy emits `x = (double)((signed long)((signed
+   int)x) | 7)`, the hop-off emits the integer result with no conversion back to
+   the target's type.
+
+`clang_c_adjust::adjust_assign` (`clang_c_adjust_code.cpp`) is exactly
+`gen_typecast(ns, code.op1(), code.op0().type())`, so mirroring it in
+`python_adjust` looks like a two-line fix. **It is not, and it is unsafe.** Both a
+blanket `typecast2tc(target->type, source)` *and* a faithful `gen_typecast` call
+on the legacy view fix `precedence2` — and both make `neural-net_fail`
+(`--fixedbv`) report **SUCCESSFUL where the legacy path correctly reports
+FAILED**, i.e. they *mask a real bug*. Isolated by removing the arm and
+re-testing.
+
+The reason is *where*, not *how*: `adjust_assign` runs **after
+`adjust_operands(code)`**, which recursively applies `gen_typecast_arithmetic` to
+the right-hand side's binary operations. `python_adjust`'s recursion does not do
+that operand-level arithmetic reconciliation, so converting only at the
+assignment seam changes the stored value. The assignment conversion is therefore
+only sound **coupled with** operand-level arithmetic reconciliation (the S4
+width-reconcile work) — they must land together, and a missed bug is worse than a
+false alarm, so neither half should be shipped alone.
