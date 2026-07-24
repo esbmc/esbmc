@@ -706,6 +706,23 @@ public:
     it.it_pair.second = T();
     return it;
   }
+
+  const_iterator cbegin() const
+  {
+    return begin();
+  }
+  const_iterator cend() const
+  {
+    return end();
+  }
+  const_reverse_iterator crbegin() const
+  {
+    return rbegin();
+  }
+  const_reverse_iterator crend() const
+  {
+    return rend();
+  }
   mapped_type &at(const Key &x)
   {
     unsigned int s = this->_size;
@@ -1931,6 +1948,23 @@ public:
     it.it_pair.first = Key();
     it.it_pair.second = T();
     return it;
+  }
+
+  const_iterator cbegin() const
+  {
+    return begin();
+  }
+  const_iterator cend() const
+  {
+    return end();
+  }
+  const_reverse_iterator crbegin() const
+  {
+    return rbegin();
+  }
+  const_reverse_iterator crend() const
+  {
+    return rend();
   }
 
   iterator find(const key_type &x)
