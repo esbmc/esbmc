@@ -2282,6 +2282,42 @@ void python_converter::get_var_assign(
       bool symbol_created = (lhs_symbol == nullptr);
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
 
+      // move_symbol_to_context() only overwrites an existing symbol's type
+      // when completing a forward declaration (a code/type/extern symbol
+      // gaining its real definition) — a plain variable rebound to a new
+      // value keeps its old, stale type otherwise. When that stale type is
+      // a non-class placeholder (None, a scalar literal, Any) being rebound
+      // to a fresh class-pointer binding — e.g. `g = None` or `g = 0`
+      // followed by `g = Service(...)` — retype it explicitly: otherwise
+      // the self-allocation in function_call_expr sizes the new instance
+      // from the stale type and overruns it as soon as the constructor
+      // writes a field (#6243).
+      //
+      // This must be an ALLOWLIST of safe placeholder types, not a denylist
+      // of unsafe ones: any struct-shaped existing type (tuple, dict, a
+      // migrated class instance, ...) is excluded even when its class
+      // differs from the new one, because an earlier statement may already
+      // have built an expression against that struct's layout (e.g.
+      // `x = t[0]` after `t = (1, 2)`), and retyping the symbol in place
+      // here without fixing up that expression corrupts it — confirmed to
+      // abort GOTO conversion (member2t) for a tuple/dict placeholder
+      // followed by a constructor rebind. A first version of this fix
+      // instead denylisted only existing class pointers (to protect the
+      // flow-sensitive class scanner, #4772, which deliberately drops its
+      // own tracking on `n1 = A(1); n1 = B()` — github_4117_attr_shadow)
+      // and missed this broader case.
+      const typet &existing_type = lhs_symbol->get_type();
+      const bool existing_is_safe_placeholder =
+        existing_type == none_type() ||
+        (existing_type.is_pointer() &&
+         existing_type.subtype().id() == "empty") ||
+        existing_type.is_signedbv() || existing_type.is_unsignedbv() ||
+        existing_type.is_floatbv() || existing_type.is_bool();
+      if (
+        !symbol_created && is_user_class_pointer(current_element_type) &&
+        existing_is_safe_placeholder && existing_type != current_element_type)
+        lhs_symbol->set_type(current_element_type);
+
       // Add declaration statement ONLY for newly created local variables
       if (symbol_created && !current_func_name_.empty() && !is_global)
       {

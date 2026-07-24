@@ -349,3 +349,64 @@ them accepts a side-effecting condition too. What remains is a
 end-of-full-expression rather than at block exit, #6177), the C++-only kinds —
 `code_cpp_catch2t` / `code_cpp_throw2t` and the `try`/`catch` target machinery —
 and the `code_asm2t` / `code_printf2t` leaves.
+
+**Investigation (2026-07-23) — the `temporary_object` slice is confirmed NOT a
+guard removal.** The `code_expression2t` handler currently falls back on
+`has_temporary_object(op)`. It is tempting to think later rows (#6178/#6179)
+matured the destructor-stack management enough that the guard is now dead: the
+handler already delegates to the same `remove_sideeffects(op, dest, false)`
+legacy `convert_expression` calls, and a *single, result-used* temporary
+(`g = use(T(a));`) does convert natively byte-identically — the used temporary's
+scope-exit entry rides `targets.destructor_stack` and the block handler unwinds
+it at block exit exactly as `convert_block` does. But that generalisation is
+**false**, proven by removing the guard and sweeping `regression/esbmc-cpp/cpp`:
+**14 tests regress** (`ch2_14`, `ch3_2`, `ch3_9`, `ch3_21`, `ch5_22`, `ch8_1`,
+`ch12_6`, `ch12_11`, `ch12_12`, `ch12_13`, `ch20_1`, `ch20_1-32`, `ch20_5`, and
+one more), each byte-identical on master flag-on-vs-flag-off and divergent only
+with the guard gone (the three genuinely pre-existing esbmc-cpp mismatches —
+`cpp_sum_class`, `cpp_sum_class_bug`, `github_4397_cstdlib_namespace` — were
+excluded by the master control run). The canonical trigger is a **chained
+by-value temporary**: a `std::cout << setw(w) << x << …` manipulator chain, where
+each `setw`/`setprecision` returns an `smanip` **by value**. The native path
+**drops the end-of-full-expression cleanup** the legacy path emits — the
+`~smanip(&return_value$_setw$N)` destructor calls and the `DEAD
+return_value$_operator<<$N` entries, all located at the statement line, vanish
+under `--irep2-native-body`. So the guard is **load-bearing**, not dead: the
+divergence is precisely the #6177 "destructor-stack interaction" and the real
+slice must reproduce it, not delete the check. The failure is specific to the
+*discarded / mid-chain* temporary (result-used-then-dropped), not the simple
+result-used single temporary, which is why a naive single-`T(a)` probe passes and
+misleads — any future attempt must sweep the iostream-manipulator corpus
+(`ch12_*`, `ch20_*`) before trusting a green result. The `code_asm2t` /
+`code_printf2t` leaves are separately unreachable (see the asm/printf correction
+recorded on branch `docs/w1loc-asm-printf-unreachable`).
+end-of-full-expression rather than at block exit, #6177) and the C++-only kinds —
+`code_cpp_catch2t` / `code_cpp_throw2t` and the `try`/`catch` target machinery.
+
+**Correction — the `code_asm2t` / `code_printf2t` "leaves" are not reachable
+native kinds and are dropped from the ladder.** A native handler for either would
+be dead instrumentation (C-Live cannot be discharged), because neither reaches
+`convert_native_rec` as a body statement in the clang pipeline:
+
+- **`code_asm2t`.** The C frontend lowers every `GCCAsmStmt` / `MSAsmStmt` to a
+  `code_skipt()` (`clang_c_convert.cpp:3480`, "we ignore them"), so a function
+  body never carries an `asm` statement. `code_asm2t` is produced *only* by
+  `migrate_expr` on a legacy `codet("asm")` (`migrate.cpp:2272`), a node that
+  arises from reading an external CBMC goto-binary — a path that does not run
+  goto-conversion at all. A throwaway `void f(){int x=a; __asm__("nop"); x=x+b;}`
+  probe confirmed it: flag-on vs flag-off `--goto-functions-only` are
+  byte-identical and the body converts natively, but the `asm` never appears —
+  it was elided to a skip upstream, so the (implemented, then reverted) native
+  arm never fired.
+- **`code_printf2t`.** It is synthesised *during* goto-conversion by `do_printf`
+  (`builtin_functions.cpp:218`), reached through `do_function_call` when a
+  `printf`-family call is lowered. A `printf(...)` statement in a body is a
+  `code_expression2t` wrapping a `sideeffect2t(function_call)`, which the #6177
+  expression handler already converts natively — its `remove_sideeffects`
+  delegation calls `do_function_call` → `do_printf`, emitting the `OTHER PRINTF`
+  inline. Confirmed byte-identical on a `void f(int a){ printf("x=%d\n", a); g=a; }`
+  probe. So printf is *already* covered indirectly; a dedicated `code_printf2t`
+  statement handler would never be reached.
+
+The genuine remaining reachable slices are therefore `temporary_object` and the
+C++ throw/catch machinery; the next native-kind PR should target the former.
