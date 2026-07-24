@@ -199,7 +199,10 @@ void clang_c_adjust::adjust_expr(exprt &expr)
       exprt func = expr.op1();
       code_typet &code_type = to_code_type(func.type().subtype());
       exprt arg0 = address_of_exprt(expr.op0());
-      code_type.arguments().push_back(arg0.type());
+      // `this` is the first parameter; appending its type at the back instead
+      // shifted every explicit argument by one (#6293).
+      code_type.arguments().insert(
+        code_type.arguments().begin(), code_typet::argumentt(arg0.type()));
       expr.swap(func);
     }
   }
