@@ -81,8 +81,6 @@ This method is recommended for general users and supports Ubuntu 22.04 (Jammy) a
 
 ### Homebrew (macOS and Linux)
 
-ESBMC is available in [homebrew-core](https://github.com/Homebrew/homebrew-core/blob/HEAD/Formula/e/esbmc.rb):
-
 ```
 brew install esbmc
 ```
