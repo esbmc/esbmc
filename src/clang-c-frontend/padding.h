@@ -6,7 +6,7 @@
 
 #include <util/std_types.h>
 #include <util/symtab/namespace.h>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 
 void add_padding(typet &type, const namespacet &ns);
 

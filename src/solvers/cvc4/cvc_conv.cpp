@@ -1,5 +1,5 @@
 #include <util/c_types.h>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 #include <cvc_conv.h>
 
 #define new_ast new_solver_ast<cvc_smt_ast>

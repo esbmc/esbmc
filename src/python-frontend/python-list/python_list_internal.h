@@ -19,11 +19,11 @@
 #include <util/type.h>
 #include <util/symtab/symbol.h>
 #include <util/expr/expr_util.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <python-frontend/python_frontend_limits.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 #include <util/python_types.h>
 #include <util/expr/symbolic_types.h>
 #include <util/config/config.h>

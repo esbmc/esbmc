@@ -3,7 +3,7 @@
 
 #include <util/expr.h>
 #include <util/std_types.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/c_types.h>
 #include <util/symtab/context.h>
 #include <util/message/message.h>

@@ -4,7 +4,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/c_types.h>
 #include <util/migrate.h>
 #include <util/python_types.h>

@@ -4,7 +4,7 @@
 #include <list>
 #include <string>
 #include <util/expr.h>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 
 class format_tokent
 {

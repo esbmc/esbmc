@@ -4,7 +4,7 @@
 #include <pointer-analysis/value_sets.h>
 #include <set>
 #include <irep2/irep2.h>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 #include <util/symtab/namespace.h>
 #include <util/base/numbering.h>
 #include <util/expr/type_byte_size.h>

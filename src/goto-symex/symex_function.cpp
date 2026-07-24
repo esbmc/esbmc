@@ -4,7 +4,7 @@
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <langapi/language_util.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
 #include <util/c_types.h>
 #include <util/symtab/cprover_prefix.h>

@@ -3,8 +3,8 @@
 #include <cstdlib>
 #include <limits>
 #include <sstream>
-#include <util/arith_tools.h>
-#include <util/mp_arith.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/mp_arith.h>
 
 BigInt operator>>(const BigInt &a, const BigInt &b)
 {

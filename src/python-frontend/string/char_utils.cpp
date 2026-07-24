@@ -1,7 +1,7 @@
 #include "char_utils.h"
 
 #include <python-frontend/python_expr_builder.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/c_types.h>
 #include <util/std_types.h>
 #include <util/std_expr.h>

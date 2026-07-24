@@ -1,6 +1,6 @@
 #include <limits>
 
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
 #include <util/c_types.h>
 #include <util/expr/expr_reassociate.h>

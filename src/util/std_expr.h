@@ -2,9 +2,9 @@
 #define CPROVER_STD_EXPR_H
 
 #include <cassert>
-#include <util/bitvector.h>
+#include <util/arith/bitvector.h>
 #include <util/expr.h>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 
 class transt : public exprt
 {

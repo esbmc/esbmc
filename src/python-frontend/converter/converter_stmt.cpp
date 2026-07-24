@@ -19,9 +19,9 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
-#include <util/bitvector.h>
+#include <util/arith/bitvector.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/config/config.h>

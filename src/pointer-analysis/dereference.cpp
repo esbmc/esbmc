@@ -3,7 +3,7 @@
 #include <pointer-analysis/dereference.h>
 #include <pointer-analysis/value_set.h>
 #include <sstream>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
 #include <util/c_misc.h>
 #include <util/c_types.h>

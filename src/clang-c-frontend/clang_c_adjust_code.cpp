@@ -1,6 +1,6 @@
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/typecast.h>
-#include <util/bitvector.h>
+#include <util/arith/bitvector.h>
 #include <util/c_types.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>

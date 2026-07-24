@@ -2,7 +2,7 @@
 #include <util/std_expr.h>
 #include <util/std_types.h>
 #include <jimple-frontend/AST/jimple_statement.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include "util/c_typecast.h"
 
 void jimple_identity::from_json(const json &j)

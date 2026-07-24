@@ -23,7 +23,7 @@
 #include <irep2/irep2_utils.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
-#include <util/format_constant.h>
+#include <util/arith/format_constant.h>
 
 namespace
 {

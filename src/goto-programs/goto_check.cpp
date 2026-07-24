@@ -2,7 +2,7 @@
 #include <cctype>
 #include <util/c_expr2string.h>
 #include <langapi/language_util.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/expr/array_name.h>
 #include <util/expr/base_type.h>
 #include <util/config/config.h>
@@ -11,7 +11,7 @@
 #include <util/base/i2string.h>
 #include <util/location.h>
 #include <util/migrate.h>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 #include <util/python_types.h>
 #include <util/std_types.h>
 

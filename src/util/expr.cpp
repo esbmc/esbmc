@@ -1,9 +1,9 @@
 #include <cassert>
 #include <cstdlib>
 #include <util/expr.h>
-#include <util/fixedbv.h>
-#include <util/ieee_float.h>
-#include <util/mp_arith.h>
+#include <util/arith/fixedbv.h>
+#include <util/arith/ieee_float.h>
+#include <util/arith/mp_arith.h>
 
 void exprt::move_to_operands(exprt &expr)
 {

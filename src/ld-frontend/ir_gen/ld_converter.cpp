@@ -1,6 +1,6 @@
 #include <ld-frontend/ir_gen/ld_converter.h>
 #include <ld-frontend/ir_gen/st_fb_translator.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>

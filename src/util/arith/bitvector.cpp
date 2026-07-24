@@ -1,5 +1,5 @@
 #include <cstdlib>
-#include <util/bitvector.h>
+#include <util/arith/bitvector.h>
 
 unsigned bv_width(const typet &type)
 {

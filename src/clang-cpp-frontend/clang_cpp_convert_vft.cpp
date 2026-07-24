@@ -28,7 +28,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>

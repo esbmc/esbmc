@@ -1,6 +1,6 @@
 #include <goto-symex/goto_symex.h>
 #include <string>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>

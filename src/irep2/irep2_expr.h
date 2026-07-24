@@ -3,8 +3,8 @@
 
 #include <util/config/config.h>
 #include <util/c_types.h>
-#include <util/fixedbv.h>
-#include <util/ieee_float.h>
+#include <util/arith/fixedbv.h>
+#include <util/arith/ieee_float.h>
 #include <util/location.h>
 #include <irep2/irep2_type.h>
 

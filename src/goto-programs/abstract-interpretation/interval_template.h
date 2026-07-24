@@ -6,7 +6,7 @@
 #include <util/base/threeval.h>
 #include <util/message/message.h>
 #include <sstream>
-#include <util/ieee_float.h>
+#include <util/arith/ieee_float.h>
 #include <optional>
 /**
  * @brief This class is used to store intervals

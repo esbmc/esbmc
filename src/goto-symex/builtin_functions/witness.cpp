@@ -1,6 +1,6 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/witnesses.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/base/prefix.h>

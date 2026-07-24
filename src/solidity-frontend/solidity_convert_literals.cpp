@@ -7,11 +7,11 @@
 /// representation with appropriate typing.
 
 #include <solidity-frontend/solidity_convert.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
 #include <util/c_types.h>
 #include <util/expr/expr_util.h>
-#include <util/ieee_float.h>
+#include <util/arith/ieee_float.h>
 #include <util/expr/string_constant.h>
 #include <util/std_expr.h>
 

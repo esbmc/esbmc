@@ -1,6 +1,6 @@
 #include <goto-programs/rw_set.h>
 #include <pointer-analysis/goto_program_dereference.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/expr/expr_util.h>
 #include <util/symtab/namespace.h>
 #include <util/std_expr.h>

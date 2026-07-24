@@ -1,7 +1,7 @@
-#include <util/bitvector.h>
+#include <util/arith/bitvector.h>
 #include <util/expr/expr_util.h>
-#include <util/fixedbv.h>
-#include <util/ieee_float.h>
+#include <util/arith/fixedbv.h>
+#include <util/arith/ieee_float.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>
 

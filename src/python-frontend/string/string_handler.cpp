@@ -15,10 +15,10 @@
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/symbol_id.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr/expr_util.h>
-#include <util/ieee_float.h>
+#include <util/arith/ieee_float.h>
 #include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_expr.h>

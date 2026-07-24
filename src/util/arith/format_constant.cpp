@@ -1,8 +1,8 @@
-#include <util/fixedbv.h>
-#include <util/format_constant.h>
-#include <util/ieee_float.h>
+#include <util/arith/fixedbv.h>
+#include <util/arith/format_constant.h>
+#include <util/arith/ieee_float.h>
 #include <irep2/irep2_utils.h>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 
 std::string format_constantt::operator()(const expr2tc &expr)
 {

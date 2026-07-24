@@ -1,5 +1,5 @@
 #include <jimple-frontend/AST/jimple_expr.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/expr/expr_util.h>

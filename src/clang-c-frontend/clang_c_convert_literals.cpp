@@ -6,11 +6,11 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-c-frontend/clang_c_convert.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
 #include <util/c_types.h>
 #include <util/expr/expr_util.h>
-#include <util/ieee_float.h>
+#include <util/arith/ieee_float.h>
 #include <util/expr/string_constant.h>
 
 bool clang_c_convertert::convert_character_literal(

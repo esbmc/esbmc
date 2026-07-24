@@ -1,5 +1,5 @@
 #include <util/expr/array2string.h>
-#include <util/bitvector.h>
+#include <util/arith/bitvector.h>
 
 bool array2string(const symbolt &src, exprt &dest)
 {

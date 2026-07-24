@@ -3,7 +3,7 @@
 #include <util/c_types.h>
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>
-#include <util/format_constant.h>
+#include <util/arith/format_constant.h>
 #include <util/expr/type_byte_size.h>
 
 const expr2tc

@@ -1,12 +1,12 @@
 
 #include <util/c_expr2string.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/c_misc.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
-#include <util/fixedbv.h>
+#include <util/arith/fixedbv.h>
 #include <util/base/i2string.h>
-#include <util/ieee_float.h>
+#include <util/arith/ieee_float.h>
 #include <util/base/prefix.h>
 #include <util/std_code.h>
 #include <util/std_types.h>

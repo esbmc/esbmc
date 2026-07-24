@@ -10,7 +10,7 @@
 #include <util/migrate.h>
 #include <util/c_types.h>
 #include <util/python_types.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 
 // Phase 4.0 equivalence harness for the Python frontend → IREP2 migration
 // (docs/roadmap/irep2-migration.md Part IV §7 Phase 4.0, item 2).

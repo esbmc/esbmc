@@ -1,9 +1,9 @@
 #ifndef CPROVER_FIXEDBV_UTIL_H
 #define CPROVER_FIXEDBV_UTIL_H
 
-#include <util/format_spec.h>
+#include <util/arith/format_spec.h>
 #include <irep2/irep2_type.h>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>
 

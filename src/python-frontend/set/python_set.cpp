@@ -3,7 +3,7 @@
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python-list/python_list.h>
 #include <c2goto/library/python/python_types.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/expr/expr_util.h>
 #include <util/python_types.h>
 #include <util/expr/string_constant.h>

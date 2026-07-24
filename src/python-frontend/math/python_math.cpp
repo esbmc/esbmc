@@ -8,11 +8,11 @@
 #include <python-frontend/python_expr_builder.h>
 #include <util/c_typecast.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
-#include <util/ieee_float.h>
+#include <util/arith/ieee_float.h>
 #include <util/migrate.h>
 #include <util/std_code.h>
 #include <util/std_types.h>

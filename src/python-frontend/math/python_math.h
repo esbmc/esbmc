@@ -1,7 +1,7 @@
 #ifndef CPROVER_PYTHON_FRONTEND_PYTHON_MATH_H
 #define CPROVER_PYTHON_FRONTEND_PYTHON_MATH_H
 
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/expr.h>
 #include <util/std_code.h>
 #include <nlohmann/json.hpp>

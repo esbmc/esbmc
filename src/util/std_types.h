@@ -2,7 +2,7 @@
 #define CPROVER_STD_TYPES_H
 
 #include <cassert>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/type.h>
 

@@ -1,4 +1,4 @@
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/c_sizeof.h>
 #include <util/c_types.h>
 #include <irep2/irep2_utils.h>

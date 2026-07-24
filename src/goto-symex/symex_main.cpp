@@ -9,7 +9,7 @@
 
 #include <pointer-analysis/value_set_analysis.h>
 
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
 #include <util/expr/expr_util.h>

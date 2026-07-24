@@ -3,7 +3,7 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
 #include <string>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
 #include <util/c_types.h>
 #include <util/symtab/context.h>

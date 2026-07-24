@@ -1,7 +1,7 @@
 #include <cassert>
 #include <limits>
-#include <util/arith_tools.h>
-#include <util/ieee_float.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/ieee_float.h>
 #include <util/std_types.h>
 #include <goto-programs/abstract-interpretation/interval_template.h>
 

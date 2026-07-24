@@ -1,7 +1,7 @@
 #include <util/expr/expr_reassociate.h>
 
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <util/c_types.h>
 
 #include <optional>

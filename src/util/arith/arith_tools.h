@@ -3,7 +3,7 @@
 
 #include <util/expr.h>
 #include <irep2/irep2.h>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 
 bool to_integer(const exprt &expr, BigInt &int_value);
 
