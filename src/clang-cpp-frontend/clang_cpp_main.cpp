@@ -1,7 +1,7 @@
 #include <functional>
 #include <clang-cpp-frontend/clang_cpp_main.h>
 #include <util/arith/arith_tools.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/symtab/namespace.h>
 #include <util/std_expr.h>

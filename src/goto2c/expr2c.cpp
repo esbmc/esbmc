@@ -1,7 +1,7 @@
 #include <goto2c/expr2c.h>
 #include <util/arith/arith_tools.h>
-#include <util/c_misc.h>
-#include <util/c_types.h>
+#include <util/lang/c_misc.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/arith/fixedbv.h>
 #include <util/base/i2string.h>

@@ -3,7 +3,7 @@
 #include <mathsat_conv.h>
 #include <sstream>
 #include <string>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 
 static const char *mathsat_config =

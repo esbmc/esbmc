@@ -1,6 +1,6 @@
 #include <ld-frontend/ir_gen/st_fb_translator.h>
 #include <util/arith/arith_tools.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <cctype>
 #include <stdexcept>

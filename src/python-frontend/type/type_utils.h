@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/expr.h>
 #include <util/expr/expr_util.h>
 #include <util/type.h>

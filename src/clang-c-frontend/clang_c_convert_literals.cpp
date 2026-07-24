@@ -8,7 +8,7 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/clang_c_convert.h>
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/arith/ieee_float.h>
 #include <util/expr/string_constant.h>

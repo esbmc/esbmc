@@ -1,7 +1,7 @@
 #include <goto-programs/add_restrict_assertions.h>
 
 #include <irep2/irep2_utils.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/migrate.h>
 #include <util/symtab/namespace.h>

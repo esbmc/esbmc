@@ -2,7 +2,7 @@
 #include <solvers/smt/tuple/smt_tuple_array_ast.h>
 #include <sstream>
 #include <util/expr/base_type.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 
 smt_astt array_sym_smt_ast::ite(
   smt_solver_baset *ctx,

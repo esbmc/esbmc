@@ -3,7 +3,7 @@
 #include <irep2/irep2_type.h>
 #include <util/arith/arith_tools.h>
 #include <util/config/config.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/expr.h>
 #include <util/message/message.h>
 #include <util/message/format.h>

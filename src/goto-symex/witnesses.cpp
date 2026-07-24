@@ -1125,7 +1125,7 @@ bool find_nondet_in_expr(const expr2tc &expr)
 }
 
 #include <util/base/prefix.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
 #include <cassert>
 #include <goto-symex/slice.h>

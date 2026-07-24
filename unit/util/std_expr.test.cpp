@@ -2,7 +2,7 @@
 #include <catch2/catch.hpp>
 
 #include <util/arith/arith_tools.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/symtab/namespace.h>
 #include <util/std_expr.h>

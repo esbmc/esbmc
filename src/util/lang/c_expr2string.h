@@ -4,7 +4,7 @@
 #include <map>
 #include <optional>
 #include <set>
-#include <util/c_qualifiers.h>
+#include <util/lang/c_qualifiers.h>
 #include <util/expr.h>
 #include <util/symtab/namespace.h>
 #include <util/std_code.h>

@@ -12,7 +12,7 @@
 #include <util/std_expr.h>
 #include <util/message/message.h>
 #include <util/expr/type_byte_size.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
 
 #include <optional>

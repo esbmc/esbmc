@@ -28,8 +28,8 @@ CC_DIAGNOSTIC_POP()
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith/arith_tools.h>
-#include <util/c_types.h>
-#include <util/exception_specification.h>
+#include <util/lang/c_types.h>
+#include <util/lang/exception_specification.h>
 #include <util/expr/string_constant.h>
 
 clang_cpp_convertert::clang_cpp_convertert(

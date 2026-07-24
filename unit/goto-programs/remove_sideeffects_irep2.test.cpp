@@ -13,7 +13,7 @@
 #include "../testing-utils/goto_factory.h"
 #include <goto-programs/goto_convert_class.h>
 #include <util/migrate.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
 
 namespace

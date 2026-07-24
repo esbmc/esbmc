@@ -8,7 +8,7 @@
 #include <util/std_types.h>
 #include <util/type.h>
 #include <util/symtab/symbol.h>
-#include <util/python_types.h>
+#include <util/lang/python_types.h>
 
 #include <string>
 #include <unordered_map>

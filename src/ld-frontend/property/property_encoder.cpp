@@ -1,6 +1,6 @@
 #include <ld-frontend/property/property_encoder.h>
 #include <util/arith/arith_tools.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/symtab/symbol.h>
 #include <cctype>

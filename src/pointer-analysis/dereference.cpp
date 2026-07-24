@@ -5,8 +5,8 @@
 #include <sstream>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
-#include <util/c_misc.h>
-#include <util/c_types.h>
+#include <util/lang/c_misc.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>

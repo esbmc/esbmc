@@ -6,7 +6,7 @@
 #include <algorithm>
 
 #include <util/arith/arith_tools.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/std_expr.h>
 #include <util/expr/type_byte_size.h>

@@ -2,7 +2,7 @@
 
 #include <util/symtab/context.h>
 #include <util/symtab/symbol.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/std_types.h>
 #include <util/expr/expr_util.h>
 

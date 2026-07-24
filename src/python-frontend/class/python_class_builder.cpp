@@ -8,7 +8,7 @@
 #include <util/std_expr.h>
 #include <util/expr/expr_util.h>
 #include <util/irep.h>
-#include <util/python_types.h>
+#include <util/lang/python_types.h>
 #include <util/std_code.h>
 #include <util/symtab/symbol.h>
 

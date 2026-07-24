@@ -1,6 +1,6 @@
 #include "goto-programs/goto_binary_reader.h"
 #include "irep2/irep2_expr.h"
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/std_code.h>
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>

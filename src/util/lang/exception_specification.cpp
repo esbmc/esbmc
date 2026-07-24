@@ -1,4 +1,4 @@
-#include <util/exception_specification.h>
+#include <util/lang/exception_specification.h>
 #include <util/type.h>
 
 exception_specificationt exception_specificationt::from_type(const typet &type)

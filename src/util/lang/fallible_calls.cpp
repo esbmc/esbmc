@@ -1,4 +1,4 @@
-#include <util/fallible_calls.h>
+#include <util/lang/fallible_calls.h>
 
 #include <cassert>
 #include <irep2/irep2_utils.h>

@@ -3,7 +3,7 @@
 
 #include <jimple-frontend/AST/jimple_ast.h>
 #include <util/std_code.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 
 // TODO: Specialize this class

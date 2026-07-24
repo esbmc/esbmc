@@ -1,15 +1,15 @@
-#include <util/c_expr2string.h>
+#include <util/lang/c_expr2string.h>
 #include <algorithm>
 #include <cctype>
 #include <unordered_set>
 #include <util/expr/base_type.h>
-#include <util/c_link.h>
+#include <util/lang/c_link.h>
 #include <util/symtab/fix_symbol.h>
 #include <util/base/i2string.h>
 #include <util/location.h>
 #include <util/message/format.h>
 #include <util/symtab/namespace.h>
-#include <util/typecheck.h>
+#include <util/lang/typecheck.h>
 
 namespace
 {

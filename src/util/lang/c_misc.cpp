@@ -1,5 +1,5 @@
 #include <cstdio>
-#include <util/c_misc.h>
+#include <util/lang/c_misc.h>
 
 void MetaChar(std::string &out, char c, bool inString)
 {

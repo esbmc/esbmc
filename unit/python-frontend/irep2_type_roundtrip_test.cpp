@@ -8,8 +8,8 @@
 #include <util/config/config.h>
 #include <util/symtab/context.h>
 #include <util/migrate.h>
-#include <util/c_types.h>
-#include <util/python_types.h>
+#include <util/lang/c_types.h>
+#include <util/lang/python_types.h>
 #include <util/arith/arith_tools.h>
 
 // Phase 4.0 equivalence harness for the Python frontend → IREP2 migration

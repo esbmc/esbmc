@@ -5,13 +5,13 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Frontend/ASTUnit.h>
 CC_DIAGNOSTIC_POP()
 
-#include <util/c_link.h>
+#include <util/lang/c_link.h>
 #include <c2goto/cprover_library.h>
 #include <clang-cpp-frontend/clang_cpp_main.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <clang-cpp-frontend/clang_cpp_language.h>
-#include <util/cpp_expr2string.h>
+#include <util/lang/cpp_expr2string.h>
 #include <clang-cpp-frontend/esbmc_internal_cpp.h>
 #include <regex>
 #include <util/base/filesystem.h>

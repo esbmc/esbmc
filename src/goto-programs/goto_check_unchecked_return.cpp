@@ -1,6 +1,6 @@
 #include <goto-programs/goto_check_unchecked_return.h>
 
-#include <util/fallible_calls.h>
+#include <util/lang/fallible_calls.h>
 #include <util/base/prefix.h>
 
 namespace

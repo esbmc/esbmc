@@ -19,11 +19,11 @@ add_library(usr_utils base/usr_utils.cpp)
 add_library(util_esbmc xml_irep.cpp base/xml.cpp
         arith/arith_tools.cpp expr/base_type.cpp config/cmdline.cpp config/config.cpp config/config_file.cpp symtab/context.cpp
         base/cwe_mapping.cpp
-        fallible_calls.cpp
+        lang/fallible_calls.cpp
         expr/expr_util.cpp base/i2string.cpp location.cpp
         arith/mp_arith.cpp symtab/namespace.cpp config/parseoptions.cpp symtab/rename.cpp
-        base/threeval.cpp typecheck.cpp arith/bitvector.cpp parser.cpp symtab/replace_symbol.cpp
-        base/string_pool.cpp config/options.cpp c_misc.cpp
+        base/threeval.cpp lang/typecheck.cpp arith/bitvector.cpp lang/parser.cpp symtab/replace_symbol.cpp
+        base/string_pool.cpp config/options.cpp lang/c_misc.cpp
         expr/expr_simplifier.cpp expr/expr_reassociate.cpp
         expr/string2array.cpp expr/array2string.cpp base/time_stopping.cpp symtab/symbol.cpp
         symtab/symbol_generator.cpp expr/symbolic_types.cpp
@@ -32,10 +32,10 @@ add_library(util_esbmc xml_irep.cpp base/xml.cpp
         irep_serialization.cpp symtab/symbol_serialization.cpp arith/fixedbv.cpp
         base/signal_catcher.cpp migrate.cpp symtab/show_symbol_table.cpp
         expr/type_byte_size.cpp ssa/goto_expr_factory.cpp
-        expr/string_constant.cpp c_types.cpp python_types.cpp arith/ieee_float.cpp c_qualifiers.cpp
-        c_sizeof.cpp c_link.cpp c_typecast.cpp symtab/fix_symbol.cpp
-        c_expr2string.cpp cpp_expr2string.cpp expr/type2name.cpp
-        exception_specification.cpp
+        expr/string_constant.cpp lang/c_types.cpp lang/python_types.cpp arith/ieee_float.cpp lang/c_qualifiers.cpp
+        lang/c_sizeof.cpp lang/c_link.cpp lang/c_typecast.cpp symtab/fix_symbol.cpp
+        lang/c_expr2string.cpp lang/cpp_expr2string.cpp expr/type2name.cpp
+        lang/exception_specification.cpp
         message/message.cpp base/encoding.cpp expr.cpp irep.cpp type.cpp base/yaml_parser.cpp
         )
 

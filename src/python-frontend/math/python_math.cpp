@@ -6,17 +6,17 @@
 #include <python-frontend/math/math_guard_utils.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/python_expr_builder.h>
-#include <util/c_typecast.h>
+#include <util/lang/c_typecast.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/arith/ieee_float.h>
 #include <util/migrate.h>
 #include <util/std_code.h>
 #include <util/std_types.h>
-#include <util/python_types.h>
+#include <util/lang/python_types.h>
 #include <util/message/message.h>
 
 #include <cmath>

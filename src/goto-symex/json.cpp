@@ -1,7 +1,7 @@
 #include <util/message/message.h>
 #include <goto-symex/goto_trace.h>
 #include <util/base/cwe_mapping.h>
-#include <util/language.h>
+#include <util/lang/language.h>
 #include <langapi/language_util.h>
 #include <nlohmann/json.hpp>
 #include <filesystem>

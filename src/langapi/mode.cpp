@@ -2,7 +2,7 @@
 #include <cstring>
 #include <langapi/mode.h>
 #include <util/config/config.h>
-#include <util/language.h>
+#include <util/lang/language.h>
 
 namespace
 {

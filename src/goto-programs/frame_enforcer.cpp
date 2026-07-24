@@ -7,7 +7,7 @@
 #include "frame_enforcer.h"
 #include <util/migrate.h>
 #include <util/std_expr.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
 
 frame_enforcert::frame_enforcert(contextt &_context)

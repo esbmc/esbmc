@@ -1,6 +1,6 @@
 #include <memory>
 
-#include <util/language.h>
+#include <util/lang/language.h>
 #include <langapi/mode.h>
 #include <langapi/language_util.h>
 

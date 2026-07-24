@@ -3,7 +3,7 @@
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 
 TEST_CASE(
   "Interval templates base functions are working for int",

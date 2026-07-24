@@ -22,7 +22,7 @@
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
 #include <util/expr/base_type.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/symtab/namespace.h>
 #include <util/symtab/symbol.h>
 

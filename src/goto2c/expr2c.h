@@ -3,11 +3,11 @@
 
 #include <map>
 #include <set>
-#include <util/c_qualifiers.h>
+#include <util/lang/c_qualifiers.h>
 #include <util/expr.h>
 #include <util/symtab/namespace.h>
 #include <util/std_code.h>
-#include <util/c_expr2string.h>
+#include <util/lang/c_expr2string.h>
 
 std::string expr2c(const exprt &expr, const namespacet &ns, unsigned flags = 0);
 std::string type2c(const typet &type, const namespacet &ns, unsigned flags = 0);

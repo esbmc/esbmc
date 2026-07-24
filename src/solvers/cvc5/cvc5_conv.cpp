@@ -1,5 +1,5 @@
 #include <cstdint>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/arith/mp_arith.h>
 #include <cvc5_conv.h>
 

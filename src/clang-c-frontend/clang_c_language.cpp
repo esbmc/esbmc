@@ -12,9 +12,9 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-c-frontend/clang_c_main.h>
-#include <util/c_expr2string.h>
+#include <util/lang/c_expr2string.h>
 #include <sstream>
-#include <util/c_link.h>
+#include <util/lang/c_link.h>
 
 #include <util/base/filesystem.h>
 #include <clang-c-frontend/nested_func_transform.h>

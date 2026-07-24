@@ -32,7 +32,7 @@
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/frame_enforcer.h>
 #include <goto-programs/remove_no_op.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <util/std_expr.h>

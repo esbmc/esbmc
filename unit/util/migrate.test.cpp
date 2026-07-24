@@ -26,7 +26,7 @@
 #include <util/expr/expr_util.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/arith/arith_tools.h>
 
 namespace

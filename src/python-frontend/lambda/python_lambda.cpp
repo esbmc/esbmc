@@ -3,7 +3,7 @@
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type/type_handler.h>
 #include <util/arith/arith_tools.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/std_code.h>
 
 using namespace python_expr;

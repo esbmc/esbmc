@@ -2,7 +2,7 @@
 #define IREP2_EXPR_H_
 
 #include <util/config/config.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/arith/fixedbv.h>
 #include <util/arith/ieee_float.h>
 #include <util/location.h>

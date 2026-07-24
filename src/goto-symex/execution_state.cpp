@@ -6,7 +6,7 @@
 #include <sstream>
 #include <string>
 #include <util/base/breakpoint.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>

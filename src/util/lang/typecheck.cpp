@@ -1,4 +1,4 @@
-#include <util/typecheck.h>
+#include <util/lang/typecheck.h>
 #include <util/message/message.h>
 
 bool typecheckt::typecheck_main()

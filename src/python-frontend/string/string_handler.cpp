@@ -16,11 +16,11 @@
 #include <python-frontend/symbol_id.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/arith/ieee_float.h>
 #include <util/migrate.h>
-#include <util/python_types.h>
+#include <util/lang/python_types.h>
 #include <util/std_expr.h>
 #include <util/std_code.h>
 #include <util/expr/string_constant.h>

@@ -1,7 +1,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
 #include <util/config/config.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/message/message.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>

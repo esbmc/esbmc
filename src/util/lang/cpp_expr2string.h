@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include <util/c_expr2string.h>
+#include <util/lang/c_expr2string.h>
 
 std::string
 cpp_expr2string(const exprt &expr, const namespacet &ns, unsigned flags = 0);

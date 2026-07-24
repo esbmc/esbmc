@@ -2,7 +2,7 @@
 #include <goto-programs/cbmc_adapter.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_program_irep.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/expr/expr_util.h>
 #include <util/migrate.h>

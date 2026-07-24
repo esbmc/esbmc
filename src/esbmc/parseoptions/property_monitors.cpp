@@ -1,7 +1,7 @@
 #include <ac_config.h>
 
 #include <esbmc/esbmc_parseoptions.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/expr/expr_util.h>
 #include <util/irep.h>

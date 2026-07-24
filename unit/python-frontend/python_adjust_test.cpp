@@ -4,7 +4,7 @@
 #include <python-frontend/python_adjust.h>
 #include <util/symtab/context.h>
 #include <util/symtab/symbol.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/migrate.h>
 #include <irep2/irep2_utils.h>

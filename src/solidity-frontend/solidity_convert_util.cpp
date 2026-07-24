@@ -10,8 +10,8 @@
 #include <solidity-frontend/typecast.h>
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
-#include <util/c_sizeof.h>
-#include <util/c_types.h>
+#include <util/lang/c_sizeof.h>
+#include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <util/arith/mp_arith.h>

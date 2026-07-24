@@ -3,7 +3,7 @@
 #include <pointer-analysis/value_set.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/symtab/context.h>
 #include <util/expr/expr_util.h>

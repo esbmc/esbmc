@@ -7,7 +7,7 @@
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/tuple/tuple_handler.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/type/type_handler.h>
@@ -24,7 +24,7 @@
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/arith/mp_arith.h>
-#include <util/python_types.h>
+#include <util/lang/python_types.h>
 #include <util/expr/symbolic_types.h>
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>

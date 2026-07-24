@@ -8,7 +8,7 @@
 #include <python-frontend/symbol_id.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/expr.h>
 #include <util/expr/expr_util.h>

@@ -4,7 +4,7 @@
 #include <solvers/smt/tuple/smt_tuple_sym_ast.h>
 #include <sstream>
 #include <util/expr/base_type.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 
 /** @file smt_tuple.cpp
  * So, the SMT-encoding-with-no-tuple-support. SMT itself doesn't support

@@ -2,7 +2,7 @@
 #include <python-frontend/math/parse_float.h>
 #include <python-frontend/type/type_utils.h>
 #include <util/arith/arith_tools.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/arith/ieee_float.h>
 #include <util/std_types.h>
