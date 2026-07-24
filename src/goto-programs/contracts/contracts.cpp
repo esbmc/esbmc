@@ -3916,11 +3916,18 @@ void code_contractst::generate_replacement_at_call(
   add_contract_clause(
     ensures_guard, ASSUME, "contract ensures", "contract ensures");
 
-  // Replace call with replacement code
-  // Insert replacement code before the call instruction
-  // destructive_insert inserts BEFORE the target (unlike insert_swap which inserts AFTER)
-
-  // Debug: log replacement code generation
+  // Replace the call with the replacement code.
+  //
+  // The replacement must take over the call's slot so that any GOTO or label
+  // targeting the call lands on the replacement. destructive_insert() splices
+  // the replacement *before* the call and leaves the call's iterator identity
+  // unchanged, so a call at a branch-target position (e.g. the first
+  // instruction of an `else` branch) kept incoming jumps pointing at the
+  // post-replacement (now SKIP) call — the whole replacement was skipped on
+  // that path, silently dropping the contract (#6364). insert_swap() moves the
+  // replacement's first instruction into the call's slot (preserving jumps to
+  // it) and relocates the original instruction after it; for a call that is not
+  // a jump target the two are equivalent.
   size_t replacement_size = replacement.instructions.size();
   log_debug(
     "contracts",
@@ -3929,19 +3936,12 @@ void code_contractst::generate_replacement_at_call(
 
   if (!replacement.instructions.empty())
   {
-    // Debug: log what we're inserting
-    log_debug(
-      "contracts",
-      "Inserting {} instructions before call instruction",
-      replacement_size);
-
-    caller_body.destructive_insert(call_instruction, replacement);
-
-    // Debug: verify insertion
-    log_debug(
-      "contracts",
-      "Call instruction after insertion: type={}",
-      (int)call_instruction->type);
+    // Turn the original call into a SKIP first so that, once insert_swap moves
+    // it after the replacement, it is inert. call_instruction then points at
+    // the replacement's first instruction, which is exactly what incoming
+    // jumps should reach.
+    call_instruction->make_skip();
+    caller_body.insert_swap(call_instruction, replacement);
   }
   else
   {
@@ -3949,16 +3949,8 @@ void code_contractst::generate_replacement_at_call(
       "contracts",
       "No replacement code generated for function {}",
       id2string(function_symbol.name));
+    call_instruction->make_skip();
   }
-
-  // Mark the original call as SKIP
-  call_instruction->make_skip();
-
-  // Debug: verify skip
-  log_debug(
-    "contracts",
-    "Call instruction marked as SKIP: type={}",
-    (int)call_instruction->type);
 }
 
 // ========== Pointer validity assumptions support ==========
