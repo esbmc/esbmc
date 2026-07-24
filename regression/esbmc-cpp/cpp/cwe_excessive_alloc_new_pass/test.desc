@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--excessive-alloc-check --incremental-bmc
+^VERIFICATION SUCCESSFUL$

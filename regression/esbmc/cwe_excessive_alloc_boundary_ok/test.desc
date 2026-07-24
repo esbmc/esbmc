@@ -1,0 +1,4 @@
+CORE
+main.c
+--excessive-alloc-check=100 --incremental-bmc
+^VERIFICATION SUCCESSFUL$
