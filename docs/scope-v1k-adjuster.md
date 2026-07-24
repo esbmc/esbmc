@@ -473,6 +473,17 @@ a *symptom*: the real gap is the missing decay, which is broader than indexing a
 must be fixed at the assignment/typecast seam (where `word = ""` should become
 `word = &""[0]`-style), mirroring clang, before the index arm can be sound.
 
+**✅ FIXED — PR #6363.** Both arms landed together in `python_adjust::adjust_expr`:
+(1) an array→pointer decay on a `code_assign2t` with a pointer target and array
+source (`word = ""` → `word = &array[0]`, with the `address_of` subtype the
+target *pointee* so the value is exactly the target type), and (2) the
+`p[i]`→`*(p+i)` index rewrite. The decay is the load-bearing half — with `word`
+now holding a real pointer, the index arm renames cleanly (no `irep2_cast_error`).
+Census: MATCH 520 → 525 (the 3 index-over-pointer cases plus `string18` and
+`string22_fail`), zero regressions; C-Live on both arms; a matched hop-off test
+pair added. So of the three residual families above, **index-over-pointer is
+resolved**; S3 unresolved-by-name and the math/complex verdicts remain.
+
 **Direction.** The two low-hanging arms (deref #6340, if2t #6348) are landed and
 the hop-off is at ~95% verdict parity. The remaining gaps are *not* one-arm
 fixes: index-over-pointer is really the array→pointer decay gap above (an
