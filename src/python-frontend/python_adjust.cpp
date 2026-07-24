@@ -248,7 +248,10 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // (otherwise "first argument of `if' must be boolean"). if2t is immutable.
     const if2t &i = to_if2t(expr);
     expr = if2tc(
-      i.type, typecast2tc(get_bool_type(), i.cond), i.true_value, i.false_value);
+      i.type,
+      typecast2tc(get_bool_type(), i.cond),
+      i.true_value,
+      i.false_value);
   }
   else if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
   {
