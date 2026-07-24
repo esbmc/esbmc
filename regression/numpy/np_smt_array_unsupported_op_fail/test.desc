@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: Unsupported NumPy function call: sort
+^ERROR: TypeError: numpy.sort\(\) axis -1 is not supported$
