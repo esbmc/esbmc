@@ -352,6 +352,15 @@ public:
     return it;
   }
 
+  const_iterator cbegin() const
+  {
+    return begin();
+  }
+  const_iterator cend() const
+  {
+    return end();
+  }
+
   reverse_iterator rbegin()
   {
     return reverse_iterator(this, _sentinel_prev);
