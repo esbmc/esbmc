@@ -15,7 +15,7 @@
 #include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
 #include <util/options.h>
-#include <util/algorithms.h>
+#include <util/ssa/algorithms.h>
 #include <util/cmdline.h>
 #include <atomic>
 

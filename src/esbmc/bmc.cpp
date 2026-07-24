@@ -40,7 +40,7 @@
 #include <util/migrate.h>
 #include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
-#include <util/cache.h>
+#include <util/ssa/cache.h>
 #include <atomic>
 #include <vector>
 #include <nlohmann/json.hpp>

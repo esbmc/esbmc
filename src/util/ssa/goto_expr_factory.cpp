@@ -1,4 +1,4 @@
-#include <util/goto_expr_factory.h>
+#include <util/ssa/goto_expr_factory.h>
 
 expr2tc create_value_expr(int value, const type2tc &type)
 {

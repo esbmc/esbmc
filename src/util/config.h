@@ -6,7 +6,7 @@
 #include <util/options.h>
 #include <langapi/mode.h>
 #include <util/compiler_defs.h>
-#include <util/cache_defs.h>
+#include <util/ssa/cache_defs.h>
 
 /// C standard version, ordered so that comparisons work naturally.
 enum class c_stdt

@@ -7,7 +7,7 @@
 #include <util/cmdline.h>
 #include <util/options.h>
 #include <util/parseoptions.h>
-#include <util/algorithms.h>
+#include <util/ssa/algorithms.h>
 #include <util/threeval.h>
 #include <string_view>
 

@@ -2,9 +2,9 @@
 
 #include <unordered_set>
 
-#include <util/algorithms.h>
+#include <util/ssa/algorithms.h>
 #include <util/time_stopping.h>
-#include <util/cache_defs.h>
+#include <util/ssa/cache_defs.h>
 
 /**
  * @Brief This class stores all asserts conditions and guards

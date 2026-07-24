@@ -112,7 +112,7 @@ public:
   static std::shared_ptr<value_set_analysist> vsa;
 };
 
-#include <util/algorithms.h>
+#include <util/ssa/algorithms.h>
 /**
  * @brief Global Common Subexpression Elimination algorithm
  *
