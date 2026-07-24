@@ -1003,8 +1003,8 @@ void expand_anon_struct(const irept &)
 // has no string type -- migrate_type's fall-through logs a bare type dump,
 // which is why the failure reads as the unhelpful "ERROR: string".
 // Representing it means first deciding how class tags are modelled
-// (docs/jbmc-goto-binary-poc-plan.md §2.3.1 records the evidence), so decline
-// rather than guess at a mapping.
+// (docs/roadmap/jbmc-goto-binary-poc-plan.md §2.3.1 records the evidence), so
+// decline rather than guess at a mapping.
 //
 // This must only fire in a *type* position. fix_type walks whole symbols and
 // whole function bodies, so it also visits identifier nodes, whose id() is the

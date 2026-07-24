@@ -1,14 +1,14 @@
 # Scope — V.5 / W4: the IREP2-native counterexample printer
 
-**Program:** Part V of `docs/irep2-migration.md` (IREP2-native frontend→goto, #4715).
+**Program:** Part V of `docs/roadmap/irep2-migration.md` (IREP2-native frontend→goto, #4715).
 **Question this scopes:** should the counterexample expression printer
 (`c_expr2string` / `cpp_expr2string`, reached via `from_expr`) be migrated to
 consume `expr2tc` natively, and if so, how is it sliced?
 **Status (2026-07-23):** scoped; **provisional recommendation: DEFER** — the
 migration is all-or-nothing in value and strict-byte-identity in cost, so it is a
 poor fit for incremental work and low priority relative to the adjuster flip.
-**Refs:** #4715; sibling keystones `docs/spike-v1k-w1loc.md` (W1-loc, native
-goto-convert — largely drained) and `docs/scope-v1k-adjuster.md` (the
+**Refs:** #4715; sibling keystones `docs/roadmap/spike-v1k-w1loc.md` (W1-loc, native
+goto-convert — largely drained) and `docs/roadmap/scope-v1k-adjuster.md` (the
 `python_adjust` flip).
 
 ---

@@ -1,6 +1,6 @@
 # Python Object Model & Class-Handling — Design Note (2026-06-12)
 
-Design pass for §5 #1 of `python-issues-triage-report-2026-06-02.md` (umbrella **#3067**,
+Design pass for §5 #1 of `docs/roadmap/python-issues-triage-report-2026-06-02.md` (umbrella **#3067**,
 with the concrete blockers **#4773/#4117** and **#4796**). This note records the diagnosis,
 an evidence-backed design, and a staged plan. **No implementation has started** — this is the
 check-in artefact before the build.
