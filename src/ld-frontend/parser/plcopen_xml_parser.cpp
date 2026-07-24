@@ -95,6 +95,8 @@ CoilKind PlcopenXmlParser::coil_kind_from_string(const std::string &s)
 }
 
 static FBKind fb_kind_of(const std::string &s);
+static bool
+literal_to_ticks(const std::string &text, unsigned interval_ms, long long &out);
 
 FBKind PlcopenXmlParser::fb_kind_from_string(const std::string &s)
 {
@@ -122,6 +124,25 @@ VarDecl PlcopenXmlParser::parse_var_decl(const void *node_ptr)
     type_str = "BOOL";
   v.kind = var_kind_from_string(type_str);
   v.loc = loc_from_node(n, source_file_);
+
+  // <initialValue><simpleValue value="2"/></initialValue>. Without this a
+  // declared timer preset reads as zero, which makes TON fire immediately and
+  // TOF never hold — a silently wrong model rather than a diagnosable one.
+  if (auto init = n.child("initialValue").child("simpleValue"))
+  {
+    const std::string text = init.attribute("value").as_string("");
+    long long value = 0;
+    if (text == "TRUE" || text == "true")
+      v.init_value = 1;
+    else if (text == "FALSE" || text == "false")
+      v.init_value = 0;
+    else if (literal_to_ticks(text, scan_interval_ms_, value))
+      v.init_value = value;
+    else if (!text.empty())
+      std::cerr << "warning: LD: variable '" << v.name
+                << "' has an unrecognised initial value '" << text
+                << "'; using 0.\n";
+  }
 
   // OpenPLC / CONTROLLINO export all variables as <localVars> with hardware
   // addresses: %IX... = physical input, %QX... = physical output.

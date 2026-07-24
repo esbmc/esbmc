@@ -90,7 +90,7 @@ symbol_exprt ld_converter::declare_variable(const VarDecl &v)
   switch (v.kind)
   {
   case VarKind::BOOL:
-    sym.set_value(false_exprt());
+    sym.set_value(v.init_value ? exprt(true_exprt()) : exprt(false_exprt()));
     break;
   case VarKind::REAL:
     sym.set_value(
