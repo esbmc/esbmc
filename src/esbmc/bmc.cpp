@@ -719,7 +719,10 @@ static std::string prettify_solidity_expr(const std::string &expr)
   return s;
 }
 
-// Parse location string "file X line Y column Z function F" into components
+// Parse location string "file X line Y column Z function F" into components.
+// A file path may contain spaces (util/location.cpp does not quote it), so a
+// string-valued field is the run of words up to the next keyword rather than a
+// single whitespace-delimited token.
 static nlohmann::json parse_claim_location(const std::string &loc)
 {
   nlohmann::json j;
@@ -728,34 +731,32 @@ static nlohmann::json parse_claim_location(const std::string &loc)
   j["column"] = 0;
   j["function"] = "";
 
-  std::istringstream iss(loc);
-  std::string token;
-  while (iss >> token)
+  std::vector<std::string> words;
   {
-    if (token == "file")
+    std::istringstream iss(loc);
+    std::string w;
+    while (iss >> w)
+      words.push_back(std::move(w));
+  }
+
+  auto is_key = [](const std::string &w) {
+    return w == "file" || w == "line" || w == "column" || w == "function";
+  };
+
+  for (size_t i = 0; i < words.size();)
+  {
+    const std::string key = words[i++];
+    std::string val;
+    while (i < words.size() && !is_key(words[i]))
     {
-      std::string val;
-      iss >> val;
-      j["file"] = val;
+      if (!val.empty())
+        val += " ";
+      val += words[i++];
     }
-    else if (token == "line")
-    {
-      int val = 0;
-      iss >> val;
-      j["line"] = val;
-    }
-    else if (token == "column")
-    {
-      int val = 0;
-      iss >> val;
-      j["column"] = val;
-    }
-    else if (token == "function")
-    {
-      std::string val;
-      iss >> val;
-      j["function"] = val;
-    }
+    if (key == "line" || key == "column")
+      j[key] = atoi(val.c_str());
+    else if (key == "file" || key == "function")
+      j[key] = val;
   }
   return j;
 }
@@ -2488,8 +2489,11 @@ smt_resultt bmct::multi_property_check(
   else
     std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
-  // show summary
-  report_simple_summary(summary);
+  // show summary (skipped for --dead-code-check: its live-branch probes are
+  // counted as "failed" here, which contradicts both the [Dead code] report
+  // and the advisory's SUCCESSFUL verdict)
+  if (!options.get_bool_option("dead-code-check"))
+    report_simple_summary(summary);
 
   // For coverage with fixed bound unwinding
   if (

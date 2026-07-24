@@ -171,7 +171,32 @@ int esbmc_parseoptionst::doit()
           // spurious CWE-561 findings, so reject them (issue #4495 / #5934).
           "claim",
           "smt-formula-only",
-          "smt-formula-too"})
+          "smt-formula-too",
+          // Other coverage modes reuse the same goto_coveraget::all_claims and
+          // multi_property_check routing: assertion coverage diverts solved
+          // probes into reached_mul_claims (leaving reached_claims empty), and
+          // the branch-function / k-path passes overwrite all_claims after the
+          // dead-code instrumentation runs. Either way the reporter would mark
+          // live branches as dead, so reject them (issue #4495).
+          "assertion-coverage",
+          "assertion-coverage-claims",
+          "condition-coverage",
+          "condition-coverage-claims",
+          "condition-coverage-rm",
+          "condition-coverage-claims-rm",
+          "branch-function-coverage",
+          "branch-function-coverage-claims",
+          "k-path-coverage",
+          "k-path-coverage-claims",
+          // Safety checks injected during symex (after the coverage
+          // instrumentation) surface as genuine SAT claims that are not in
+          // all_claims. The advisory forces a SUCCESSFUL verdict, so such a
+          // real violation would be silently masked; reject these so a leak /
+          // deadlock / race is never hidden behind a dead-code run (issue
+          // #4495).
+          "memory-leak-check",
+          "deadlock-check",
+          "data-races-check"})
       if (cmdline.isset(incompatible))
       {
         log_error(

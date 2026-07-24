@@ -557,9 +557,16 @@ bool esbmc_parseoptionst::process_goto_program(
       temp.remove_sideeffect();
     }
 
+    // --dead-code-check reuses the branch-coverage instrumentation: each
+    // conditional branch gets `assert(guard)` and `assert(!guard)` reachability
+    // probes, and a probe proven UNSAT means that branch direction is
+    // unreachable under all inputs — i.e. dead code. report_dead_code() reports
+    // those as CWE-561 note-level advisories without flipping the verdict (see
+    // bmc.cpp).
     if (
       cmdline.isset("branch-coverage") ||
-      cmdline.isset("branch-coverage-claims"))
+      cmdline.isset("branch-coverage-claims") ||
+      cmdline.isset("dead-code-check"))
     {
       // for multi-property
       options.set_option("base-case", true);
@@ -574,31 +581,6 @@ bool esbmc_parseoptionst::process_goto_program(
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
       // for function mode
-      if (cmdline.isset("function"))
-        tmp.set_target(cmdline.getval("function"));
-      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
-      tmp.branch_coverage();
-    }
-
-    // Dead-code detection (CWE-561, advisory). Reuses the branch-coverage
-    // instrumentation: each conditional branch gets `assert(guard)` and
-    // `assert(!guard)` reachability probes. A probe that is never violated
-    // (proven UNSAT) means that branch direction is unreachable under all
-    // inputs — i.e. dead code. report_dead_code() reports those as note-level
-    // advisories without flipping the verdict (see bmc.cpp).
-    if (cmdline.isset("dead-code-check"))
-    {
-      options.set_option("base-case", true);
-      options.set_option("multi-property", true);
-      options.set_option("keep-verified-claims", false);
-      options.set_option("no-pointer-check", true);
-
-      // enable '--no-unwinding-assertions' if '--unwind' is enabled
-      if (cmdline.isset("unwind"))
-        options.set_option("no-unwinding-assertions", true);
-
-      std::string filename = cmdline.args[0];
-      goto_coveraget tmp(ns, goto_functions, filename);
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
       tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
