@@ -1529,6 +1529,40 @@ static exprt make_nondet_ndarray(
   return result;
 }
 
+static exprt make_filled_ndarray(
+  const type_handler &type_handler,
+  const typet &elem_type,
+  const std::vector<long long> &dims,
+  std::size_t dim_idx,
+  const exprt &fill)
+{
+  typet array_type = build_ndarray_type(type_handler, elem_type, dims, dim_idx);
+  exprt result = gen_zero(array_type);
+  auto &operands = result.operands();
+  operands.clear();
+
+  for (long long i = 0; i < dims[dim_idx]; ++i)
+  {
+    if (dim_idx == dims.size() - 1)
+      operands.push_back(
+        fill.type() == elem_type ? fill : np_typecast(fill, elem_type));
+    else
+      operands.push_back(
+        make_filled_ndarray(type_handler, elem_type, dims, dim_idx + 1, fill));
+  }
+
+  return result;
+}
+
+static exprt make_numpy_one(const typet &type)
+{
+  if (type.is_bool())
+    return migrate_expr_back(gen_true_expr());
+  if (type.is_floatbv())
+    return from_double(1.0, type);
+  return from_integer(1, type);
+}
+
 template <typename T>
 static auto create_binary_op(
   const std::string &op,
@@ -4463,6 +4497,97 @@ exprt numpy_call_expr::get()
 
   static const std::unordered_map<std::string, float> array_creation_funcs = {
     {"zeros", 0.0}, {"ones", 1.0}};
+
+  if (
+    function == "empty_like" || function == "zeros_like" ||
+    function == "ones_like" || function == "full_like")
+  {
+    if (
+      call_["args"].empty() || call_["args"].size() > 2 ||
+      (function != "full_like" && call_["args"].size() != 1))
+    {
+      throw std::runtime_error(
+        "TypeError: numpy." + function + "() expects " +
+        (function == "full_like" ? "1 or 2 arguments" : "1 argument"));
+    }
+
+    std::optional<nlohmann::json> fill_kwarg;
+    if (call_.contains("keywords"))
+    {
+      for (const auto &kw : call_["keywords"])
+      {
+        if (kw["_type"] != "keyword" || kw["arg"].is_null())
+          continue;
+        const std::string arg = kw["arg"].get<std::string>();
+        if (function == "full_like" && arg == "fill_value")
+        {
+          fill_kwarg = kw["value"];
+          continue;
+        }
+        throw std::runtime_error(
+          "TypeError: numpy." + function + "() keyword '" + arg +
+          "' is not supported");
+      }
+    }
+
+    if (
+      function == "full_like" &&
+      ((call_["args"].size() == 2) == fill_kwarg.has_value()))
+    {
+      throw std::runtime_error(
+        "TypeError: numpy.full_like() expects exactly one fill_value");
+    }
+
+    exprt base_expr = converter_.get_expr(call_["args"][0]);
+    typet base_type = base_expr.type();
+    if (base_type.is_pointer() && base_type.subtype().is_array())
+      base_type = base_type.subtype();
+    if (!base_type.is_array())
+      throw std::runtime_error(
+        "TypeError: numpy." + function + "() requires a numpy array input");
+
+    std::vector<int> shape = type_handler_.get_array_type_shape(base_type);
+    if (shape.empty())
+      throw std::runtime_error(
+        "TypeError: numpy." + function + "() requires a concrete array shape");
+
+    std::vector<long long> dims(shape.begin(), shape.end());
+    validate_ndarray_shape(dims);
+
+    typet elem_type = get_array_scalar_type(base_type);
+    if (is_complex_type(elem_type))
+      throw std::runtime_error(
+        "TypeError: complex dtype is not supported in NumPy constructors yet");
+
+    exprt expr;
+    if (function == "empty_like")
+    {
+      expr = make_nondet_ndarray(
+        type_handler_,
+        elem_type,
+        dims,
+        0,
+        converter_.get_location_from_decl(call_));
+    }
+    else
+    {
+      exprt fill = gen_zero(elem_type);
+      if (function == "ones_like")
+        fill = make_numpy_one(elem_type);
+      else if (function == "full_like")
+        fill = converter_.get_expr(
+          fill_kwarg.has_value() ? *fill_kwarg : call_["args"][1]);
+
+      expr = make_filled_ndarray(type_handler_, elem_type, dims, 0, fill);
+    }
+
+    if (converter_.current_lhs)
+    {
+      converter_.current_lhs->type() = expr.type();
+      converter_.update_symbol(*converter_.current_lhs);
+    }
+    return expr;
+  }
 
   if (function == "empty")
   {

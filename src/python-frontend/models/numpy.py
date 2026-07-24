@@ -31,6 +31,42 @@ def empty(shape: int) -> list[float]:
     return result
 
 
+def empty_like(a: list) -> list:
+    out: list[Any] = []
+    i: int = 0
+    while i < len(a):
+        out = out + [nondet_float()]
+        i = i + 1
+    return out
+
+
+def zeros_like(a: list) -> list:
+    out: list[int] = []
+    i: int = 0
+    while i < len(a):
+        out = out + [0]
+        i = i + 1
+    return out
+
+
+def ones_like(a: list) -> list:
+    out: list[int] = []
+    i: int = 0
+    while i < len(a):
+        out = out + [1]
+        i = i + 1
+    return out
+
+
+def full_like(a: list, fill_value: Any) -> list:
+    out: list[Any] = []
+    i: int = 0
+    while i < len(a):
+        out = out + [fill_value]
+        i = i + 1
+    return out
+
+
 def add(a: int, b: int) -> float:
     x: float = a + b
     return x
