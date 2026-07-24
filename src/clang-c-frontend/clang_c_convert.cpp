@@ -1935,6 +1935,15 @@ bool clang_c_convertert::get_bitfield_type(
     return true;
 
   new_type = orig_type;
+  // A `bool` bitfield migrates to unsignedbv[N] (a bool has no fixed width the
+  // narrowing can key on), but its legacy id stays "bool", so gen_typecast_bool
+  // treats a read as already-bool and skips the cast -- leaving a non-bool
+  // operand in an &&/||/if that trips a goto-check type assertion. Base the
+  // bitfield on an unsigned bitvector, as integer bitfields already are, so the
+  // boolean-context coercion inserts the cast; the migrated type is unchanged
+  // (#6304).
+  if (new_type.id() == "bool")
+    new_type.id("unsignedbv");
   new_type.width(result.Val.getInt().getSExtValue());
   new_type.set("#bitfield", true);
   new_type.subtype() = orig_type;

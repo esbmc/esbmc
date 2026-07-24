@@ -476,6 +476,20 @@ public:
     }
   }
 
+  // const overload: std::map::at performs no insertion and throws
+  // std::out_of_range when the key is absent ([map.access]). Required so
+  // `at` is usable on a const map / through a const reference.
+  const mapped_type &at(const Key &x) const
+  {
+    unsigned int s = this->_size;
+    for (unsigned int i = 0; i < s; i++)
+    {
+      if (this->_key[i] == x)
+        return this->_value[i];
+    }
+    throw std::out_of_range();
+  }
+
   bool empty() const
   {
     if (this->_size == 0)
@@ -721,7 +735,7 @@ public:
     }
   }
 
-  size_type count(key_type &x)
+  size_type count(const key_type &x) const
   {
     if (this->_size != 0)
     {

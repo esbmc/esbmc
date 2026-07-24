@@ -1,16 +1,21 @@
 # ESBMC-PLC Implementation Plan: SMT-Based Formal Verification of Ladder Diagram Programs
 
-**Status:** PLANNING — WP2 partially implemented (skeleton #5280, pipeline #5289)  
+**Status:** PLANNING — WP2 largely implemented (skeleton #5280, property pipeline #5289, ld-verify runner + fault injection #5294, industrial benchmarks #5427, user-FB/REAL/watchdog #5620)  
 **Project:** APP113435 — ESBMC-PLC (EPSRC Standard Research Grant)  
 **Tracking:** umbrella issue TBD  
-**Date:** 2026-06-09
+**Date:** 2026-06-09 (status refreshed 2026-07-23)
 
-> **Implementation note.** The boolean/combinational Tier-1 subset and the
+> **Implementation note.** The boolean/combinational Tier-1 subset, the
 > integer-arithmetic constructs (TON/TOF/TP timers, CTU/CTD counters, and the
-> `response` property) now lower to GOTO IR and verify end-to-end (see §10). The
-> verdicts for the curated `conveyor_sequencing` / `emergency_shutdown`
-> benchmarks have not yet been validated against an intended ground truth, so
-> those two are not yet wired as passing regression tests.
+> `response` property), and — beyond the original Tier-1 scope — user-defined
+> function-block bodies, REAL/analog process variables, and an optional
+> scan-watchdog all now lower to GOTO IR and verify end-to-end (see §10). The
+> suite under `regression/ld/` has grown to 19 CTest cases. The curated
+> `conveyor_sequencing` / `emergency_shutdown` benchmarks still lower and verify
+> but their verdicts have not been validated against an intended ground truth, so
+> those two remain a dataset (`regression/ld/benchmarks/`) rather than wired
+> regression tests; two other CONTROLLINO benchmarks (`stairs_light`,
+> `water_control`) were validated and promoted to passing tests.
 
 ---
 
@@ -547,10 +552,10 @@ all 20 programs pass semantic review; spec reviewed against IEC 61508 §7.
 
 | Task | Subtasks | Milestone | Status |
 |---|---|---|---|
-| T2.1 Parser & Semantic Analyser | PLCopen XML parser; AST; type checker; SOS consistency check | M3 (Month 6): parser handles all WP1 SOS constructs | skeleton landed (#5280) |
-| T2.2 GOTO IR Generator & Property Encoder | LdIR; `ld_converter` (irep2); YAML parser; property encoder (`code_assertt`) | M4 (Month 9): IR generator correct on all benchmark programs | boolean subset + timers/counters/`response` all lower and verify (#5289); per-benchmark verdict validation outstanding (§10) |
-| T2.3 ESBMC Integration & ld-verify | `ld_languaget`; CMake wiring; ld-verify CLI; JSON report | M5 (Month 12): end-to-end pipeline ready | `--ld-props` wired, `ld-verify` runner + JSON report implemented (#5289) |
-| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 2 driver regression tests; `ld-verify` runner not yet covered |
+| T2.1 Parser & Semantic Analyser | PLCopen XML parser; AST; type checker; SOS consistency check | M3 (Month 6): parser handles all WP1 SOS constructs | skeleton landed (#5280); extended with user-FB-body and REAL/analog parsing (#5620) |
+| T2.2 GOTO IR Generator & Property Encoder | LdIR; `ld_converter` (irep2); YAML parser; property encoder (`code_assertt`) | M4 (Month 9): IR generator correct on all benchmark programs | boolean subset + timers/counters/`response` all lower and verify (#5289); ST→`codet` FB-body translator + numeric↔Boolean coercion (#5620); per-benchmark verdict validation for `conveyor`/`emergency` still outstanding (§10) |
+| T2.3 ESBMC Integration & ld-verify | `ld_languaget`; CMake wiring; ld-verify CLI; JSON report | M5 (Month 12): end-to-end pipeline ready | `--ld-props` wired + JSON report (#5289); `ld-verify` runner implemented, driving `esbmc` (#5294); `--ld-fault-injection`, `--ld-sound-mode`, `--ld-scan-watchdog`/`--ld-scan-budget` driver flags added (#5294, #5620) |
+| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 19 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic); `ld-verify` runner binary still not covered by a CTest case; line-coverage target not yet measured |
 
 **Success criteria (WP2):**
 - **Correctness:** ≥95% of benchmark programs translated to GOTO IR with semantic
@@ -706,7 +711,7 @@ prose in §3 is not mistaken for delivered functionality.
   parser, type checker, LdIR + builder, `ld_converter`, YAML property parser,
   property encoder, `ld-verify` tool, CMake wiring behind `ENABLE_LD_FRONTEND`
   (default `OFF`), and unit tests.
-- **Property pipeline + ld-verify runner (#5289).**
+- **Property pipeline (#5289).**
   - `--ld-props <file>` option on the `esbmc` driver; `ld_languaget::parse()`
     reads it (an explicit `set_props_path` from `ld-verify` still wins). Before
     this, the property file was never loaded and every program verified
@@ -715,8 +720,6 @@ prose in §3 is not mistaken for delivered functionality.
     nondeterministically at the top of every scan iteration. Before this, inputs
     were frozen at their initial value, so verification was vacuous even with
     properties loaded.
-  - `LdVerifyRunner::run()` implemented end-to-end (see §3.6) with the verdict
-    set `{SAFE, VIOLATION, INCOMPLETE, UNKNOWN, ERROR}`.
   - **Typed arithmetic IR.** `plus_exprt`/`mult_exprt` leave their result type
     unset (the C frontend fills it in during its `adjust` pass; the LD frontend
     builds final IR directly and has none), so the timer/counter/`response`
@@ -724,41 +727,76 @@ prose in §3 is not mistaken for delivered functionality.
     generation with `assert_arith_2ops_consistency` (`irep2_expr.cpp`). The
     arithmetic nodes are now built with an explicit result type, so TON/TOF/TP
     timers, CTU/CTD counters, and the `response` property lower and verify.
-  - Regression suite `regression/ld/` registered (guarded by
-    `ENABLE_LD_FRONTEND`, excluding the `benchmarks/` dataset):
-    `motor_interlock` (SAFE), `missing_interlock_fail` (mutual-exclusion
-    VIOLATION), `response_direct` (response SAFE — coil tracks the trigger in
-    the same scan), and `response_blocked_fail` (response VIOLATION — a gated
-    coil leaves the trigger unanswered past `max_scans`).
+- **`ld-verify` runner + fault injection (#5294).** `LdVerifyRunner::run()`
+  implemented end-to-end (see §3.6) with the verdict set
+  `{SAFE, VIOLATION, INCOMPLETE, UNKNOWN, ERROR}`, `.xml`→`.ld` staging, and the
+  JSON report. Fault injection is now exposed on the `esbmc` driver as
+  `--ld-fault-injection` (previously only a `ld_converter` internal), with
+  `fault_injection_safe`/`fault_injection_unsafe` regression tests.
+- **Industrial benchmarks (#5322, #5360, #5427).** Real-world CONTROLLINO/OpenPLC
+  programs added under `regression/ld/benchmarks/` (`stairs_light`,
+  `water_control`), each with a README documenting its safety properties and
+  expected verdict. (The NuXmv comparison referenced in #5427's title is not
+  present in the merged tree; §3/§7 still list nuXmv as the WP3 comparator.)
+- **User-defined FB bodies, REAL/analog types, scan-watchdog (#5620) — beyond
+  Tier 1.** An ST→`codet` translator (`ir_gen/st_fb_translator.{h,cpp}`) compiles
+  user-defined function-block bodies (assignments, `IF`, `WHILE`, comparisons,
+  arithmetic), executed once per scan; FB output pins are wired back to program
+  variables; `VarKind::REAL` (→ `double_type`) plus non-Boolean coils/contacts via
+  numeric↔Boolean coercion; and an optional bounded scan-watchdog
+  (`--ld-scan-watchdog` / `--ld-scan-budget`) that asserts each rung loop stays
+  within budget. A `--ld-sound-mode` flag toggles the sound-vs-tolerant default
+  for user-FB handling. Exercised by the `function_blocks_*`, `userfb_*`, and
+  `arithmetic_div_unsafe` regression tests.
+- **Regression suite `regression/ld/`** now holds **19 CTest cases** (guarded by
+  `ENABLE_LD_FRONTEND`, with the `benchmarks/` dataset excluded from CTest —
+  `regression/CMakeLists.txt`), covering all five property kinds plus
+  fault-injection, user-FB, watchdog, REAL-arithmetic, and the `stairs_light` /
+  `water_control` industrial cases.
 
 ### Working end-to-end
 
 Contacts and coils (`--( )--`, `--( S )--`, `--( R )--`), TON/TOF/TP timers,
 CTU/CTD counters, and all five property kinds — `mutual_exclusion`, `invariant`,
-`absence`, `reachability`, `response`. These lower to GOTO IR and verify under
-both k-induction and bounded BMC.
+`absence`, `reachability`, `response` — plus user-defined function-block bodies,
+REAL/analog process variables, and the optional scan-watchdog. These lower to
+GOTO IR and verify under both k-induction and bounded BMC.
+
+### CI status
+
+A dedicated workflow, `.github/workflows/plcplus-linux-binary.yml`, builds
+`esbmc` with `-DENABLE_LD_FRONTEND=On` (Z3-only, all other frontends off) and
+smoke-tests that the binary advertises `--ld-props`, publishing the binary as an
+artifact. It does **not** run `regression/ld/` (it configures with
+`BUILD_TESTING=Off` / `ENABLE_REGRESSION=Off`), so the LD regression suite is
+still not exercised by upstream CI.
 
 ### Known limitations / not yet validated
 
 - **Benchmark verdicts not validated.** `conveyor_sequencing` and
-  `emergency_shutdown` now lower and verify (no crash) but currently report
+  `emergency_shutdown` lower and verify (no crash) but currently report
   VIOLATION; whether that is the intended verdict is a WP3 benchmark-design /
-  SOS-correctness question, so neither is yet wired as a passing regression test.
-- **`ld-verify` runner has no automated test.** The regression tests drive the
-  `esbmc` driver directly; the runner (process spawning, `.xml` staging, verdict
-  mapping) is exercised manually only.
-- **Fault-injection mode** exists on `ld_converter` but is not exposed through
-  the `esbmc` driver or `ld-verify`.
+  SOS-correctness question, so neither is wired as a passing regression test —
+  they remain a dataset under `regression/ld/benchmarks/`.
+- **`ld-verify` runner binary has no automated test.** The regression tests drive
+  the `esbmc` driver directly; the runner (process spawning, `.xml` staging,
+  verdict mapping) is exercised manually only.
 - **WRITE_OUTPUTS** is not modelled as a distinct step; output coils are plain
   variable assignments (sufficient for the current property checks).
 - **Timer/counter integer width.** The arithmetic uses `int_type()` with no
   overflow guard; very long-running counters could wrap. Not exercised by the
   current bounded tests.
+- **WP1 formal deliverable missing.** `docs/safe-ld-sos-semantics.md` (the T1.2
+  SOS specification referenced by the M1 gate and by the correctness theorem in
+  §3.7) has not yet been written; the SOS rules exist only as code in
+  `semantics/` and as the informal tables in §3.
 
 ### Suggested next increments
 
 1. Validate the `conveyor_sequencing` / `emergency_shutdown` benchmark verdicts
    against their intended SOS semantics and promote them to regression tests.
-2. Enable `-DENABLE_LD_FRONTEND=On` in a CI job so `regression/ld/` actually
-   runs upstream (the suite is skipped on a default build).
-3. Add coverage for the `ld-verify` runner itself.
+2. Extend the CI job (or add a second one) to actually run `regression/ld/` —
+   the current `plcplus-linux-binary.yml` only builds and smoke-tests the binary.
+3. Add coverage for the `ld-verify` runner binary itself.
+4. Write the WP1 SOS specification (`docs/safe-ld-sos-semantics.md`) to discharge
+   the M1 gate and ground §3.7's semantic-preservation theorem.
