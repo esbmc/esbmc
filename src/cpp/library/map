@@ -134,7 +134,103 @@ public:
     }
   };
 
-  typedef iterator const_iterator;
+  class const_iterator
+  {
+  public:
+    const key_type *it_key;
+    const mapped_type *it_value;
+    value_type it_pair;
+    int it_pos;
+
+    const_iterator(const const_iterator &x)
+    {
+      this->it_key = x.it_key;
+      this->it_pos = x.it_pos;
+      this->it_value = x.it_value;
+      this->it_pair = x.it_pair;
+    }
+    // Convert a (mutable) iterator to a const_iterator.
+    const_iterator(const iterator &x)
+    {
+      this->it_key = x.it_key;
+      this->it_pos = x.it_pos;
+      this->it_value = x.it_value;
+      this->it_pair = x.it_pair;
+    }
+    const_iterator()
+    {
+      this->it_pos = -1;
+    }
+    const_iterator &operator=(const const_iterator &x)
+    {
+      this->it_key = x.it_key;
+      this->it_pos = x.it_pos;
+      this->it_value = x.it_value;
+      this->it_pair = x.it_pair;
+      return *this;
+    }
+
+    const value_type *operator->()
+    {
+      return &(this->it_pair);
+    }
+
+    const value_type &operator*()
+    {
+      return this->it_pair;
+    }
+
+    const_iterator &operator++()
+    {
+      this->it_pos++;
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+    const_iterator operator++(int)
+    {
+      this->it_pos++;
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+
+    const_iterator &operator--()
+    {
+      this->it_pos--;
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+    const_iterator operator--(int)
+    {
+      this->it_pos--;
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+
+    bool operator==(const const_iterator &it) const
+    {
+      if (this->it_pos == it.it_pos)
+        return true;
+      if (
+        (this->it_pair.first == it.it_pair.first) &&
+        (this->it_pair.second == it.it_pair.second))
+        return true;
+      return false;
+    }
+    bool operator!=(const const_iterator &it) const
+    {
+      if (this->it_pos != it.it_pos)
+        return true;
+      if (
+        (this->it_pair.first != it.it_pair.first) &&
+        (this->it_pair.second != it.it_pair.second))
+        return true;
+      return false;
+    }
+  };
 
   class reverse_iterator
   {
@@ -260,6 +356,150 @@ public:
       return false;
     }
     bool operator!=(const reverse_iterator &it) const
+    {
+      if (this->it_pos != it.it_pos)
+        return true;
+      if (
+        (this->it_pair.first != it.it_pair.first) &&
+        (this->it_pair.second != it.it_pair.second))
+        return true;
+      return false;
+    }
+  };
+
+  class const_reverse_iterator
+  {
+  public:
+    const key_type *it_key;
+    const mapped_type *it_value;
+    value_type it_pair;
+    int it_pos;
+    const int *it_size;
+
+    const_reverse_iterator(const const_reverse_iterator &x)
+    {
+      this->it_key = x.it_key;
+      this->it_pos = x.it_pos;
+      this->it_value = x.it_value;
+      this->it_pair = x.it_pair;
+      this->it_size = x.it_size;
+    }
+    // Convert a (mutable) reverse_iterator to a const_reverse_iterator.
+    const_reverse_iterator(const reverse_iterator &x)
+    {
+      this->it_key = x.it_key;
+      this->it_pos = x.it_pos;
+      this->it_value = x.it_value;
+      this->it_pair = x.it_pair;
+      this->it_size = x.it_size;
+    }
+    const_reverse_iterator()
+    {
+      this->it_pos = -1;
+    }
+    const_reverse_iterator &operator=(const const_reverse_iterator &x)
+    {
+      this->it_key = x.it_key;
+      this->it_pos = x.it_pos;
+      this->it_value = x.it_value;
+      this->it_pair = x.it_pair;
+      this->it_size = x.it_size;
+      return *this;
+    }
+
+    const value_type *operator->()
+    {
+      return &(this->it_pair);
+    }
+
+    const value_type &operator*()
+    {
+      return this->it_pair;
+    }
+
+    const_reverse_iterator &operator++()
+    {
+      if (this->it_pos == 0)
+      {
+        this->it_pos--;
+        this->it_pair.first = Key();
+        this->it_pair.second = T();
+        return *this;
+      }
+      if (this->it_pos == -1)
+      {
+        this->it_pos = *(this->it_size) - 1;
+      }
+      else
+      {
+        this->it_pos--;
+      }
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+    const_reverse_iterator operator++(int)
+    {
+      if (this->it_pos == 0)
+      {
+        this->it_pos--;
+        this->it_pair.first = Key();
+        this->it_pair.second = T();
+        return *this;
+      }
+      if (this->it_pos == -1)
+      {
+        this->it_pos = *(this->it_size) - 1;
+      }
+      else
+      {
+        this->it_pos--;
+      }
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+
+    const_reverse_iterator &operator--()
+    {
+      if (this->it_pos == *(this->it_size))
+      {
+        this->it_pos = 0;
+      }
+      else
+      {
+        this->it_pos++;
+      }
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+    const_reverse_iterator operator--(int)
+    {
+      if (this->it_pos == *(this->it_size))
+      {
+        this->it_pos = 0;
+      }
+      else
+      {
+        this->it_pos++;
+      }
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+
+    bool operator==(const const_reverse_iterator &it) const
+    {
+      if (this->it_pos == it.it_pos)
+        return true;
+      if (
+        (this->it_pair.first == it.it_pair.first) &&
+        (this->it_pair.second == it.it_pair.second))
+        return true;
+      return false;
+    }
+    bool operator!=(const const_reverse_iterator &it) const
     {
       if (this->it_pos != it.it_pos)
         return true;
@@ -402,6 +642,26 @@ public:
     it.it_pair.second = this->_value[it.it_pos];
     return it;
   }
+  const_iterator begin() const
+  {
+    const_iterator it;
+    it.it_key = this->_key;
+    it.it_value = this->_value;
+    it.it_pos = 0;
+    it.it_pair.first = this->_key[0];
+    it.it_pair.second = this->_value[0];
+    return it;
+  }
+  const_iterator end() const
+  {
+    const_iterator it;
+    it.it_key = this->_key;
+    it.it_value = this->_value;
+    it.it_pos = this->_size;
+    it.it_pair.first = this->_key[it.it_pos];
+    it.it_pair.second = this->_value[it.it_pos];
+    return it;
+  }
   reverse_iterator rbegin()
   {
     reverse_iterator it;
@@ -416,6 +676,28 @@ public:
   reverse_iterator rend()
   {
     reverse_iterator it;
+    it.it_key = this->_key;
+    it.it_value = this->_value;
+    it.it_size = &(this->_size);
+    it.it_pos = -1;
+    it.it_pair.first = Key();
+    it.it_pair.second = T();
+    return it;
+  }
+  const_reverse_iterator rbegin() const
+  {
+    const_reverse_iterator it;
+    it.it_key = this->_key;
+    it.it_value = this->_value;
+    it.it_size = &(this->_size);
+    it.it_pos = this->_size - 1;
+    it.it_pair.first = this->_key[it.it_pos];
+    it.it_pair.second = this->_value[it.it_pos];
+    return it;
+  }
+  const_reverse_iterator rend() const
+  {
+    const_reverse_iterator it;
     it.it_key = this->_key;
     it.it_value = this->_value;
     it.it_size = &(this->_size);
@@ -474,6 +756,20 @@ public:
       this->_key[this->_size + 1] = Key();
       return this->_value[s];
     }
+  }
+
+  // const overload: std::map::at performs no insertion and throws
+  // std::out_of_range when the key is absent ([map.access]). Required so
+  // `at` is usable on a const map / through a const reference.
+  const mapped_type &at(const Key &x) const
+  {
+    unsigned int s = this->_size;
+    for (unsigned int i = 0; i < s; i++)
+    {
+      if (this->_key[i] == x)
+        return this->_value[i];
+    }
+    throw std::out_of_range();
   }
 
   bool empty() const
@@ -721,7 +1017,7 @@ public:
     }
   }
 
-  size_type count(key_type &x)
+  size_type count(const key_type &x) const
   {
     if (this->_size != 0)
     {
@@ -763,9 +1059,9 @@ public:
     return end_it;
   }
 
-  // const_iterator is a typedef for iterator in this model, so the const
-  // overload the standard requires (github #6063) delegates to the
-  // non-const one; find never writes through the backing arrays.
+  // The const overload the standard requires (github #6063) delegates to the
+  // non-const find (which never writes through the backing arrays); its
+  // iterator result converts to const_iterator via the converting constructor.
   const_iterator find(const key_type &x) const
   {
     return const_cast<map *>(this)->find(x);
@@ -989,7 +1285,103 @@ public:
     }
   };
 
-  typedef iterator const_iterator;
+  class const_iterator
+  {
+  public:
+    const key_type *it_key;
+    const mapped_type *it_value;
+    value_type it_pair;
+    int it_pos;
+
+    const_iterator(const const_iterator &x)
+    {
+      this->it_key = x.it_key;
+      this->it_pos = x.it_pos;
+      this->it_value = x.it_value;
+      this->it_pair = x.it_pair;
+    }
+    // Convert a (mutable) iterator to a const_iterator.
+    const_iterator(const iterator &x)
+    {
+      this->it_key = x.it_key;
+      this->it_pos = x.it_pos;
+      this->it_value = x.it_value;
+      this->it_pair = x.it_pair;
+    }
+    const_iterator()
+    {
+      this->it_pos = -1;
+    }
+    const_iterator &operator=(const const_iterator &x)
+    {
+      this->it_key = x.it_key;
+      this->it_pos = x.it_pos;
+      this->it_value = x.it_value;
+      this->it_pair = x.it_pair;
+      return *this;
+    }
+
+    const value_type *operator->()
+    {
+      return &(this->it_pair);
+    }
+
+    const value_type &operator*()
+    {
+      return this->it_pair;
+    }
+
+    const_iterator &operator++()
+    {
+      this->it_pos++;
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+    const_iterator operator++(int)
+    {
+      this->it_pos++;
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+
+    const_iterator &operator--()
+    {
+      this->it_pos--;
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+    const_iterator operator--(int)
+    {
+      this->it_pos--;
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+
+    bool operator==(const const_iterator &it) const
+    {
+      if (this->it_pos == it.it_pos)
+        return true;
+      if (
+        (this->it_pair.first == it.it_pair.first) &&
+        (this->it_pair.second == it.it_pair.second))
+        return true;
+      return false;
+    }
+    bool operator!=(const const_iterator &it) const
+    {
+      if (this->it_pos != it.it_pos)
+        return true;
+      if (
+        (this->it_pair.first != it.it_pair.first) &&
+        (this->it_pair.second != it.it_pair.second))
+        return true;
+      return false;
+    }
+  };
 
   class reverse_iterator
   {
@@ -1115,6 +1507,150 @@ public:
       return false;
     }
     bool operator!=(const reverse_iterator &it) const
+    {
+      if (this->it_pos != it.it_pos)
+        return true;
+      if (
+        (this->it_pair.first != it.it_pair.first) &&
+        (this->it_pair.second != it.it_pair.second))
+        return true;
+      return false;
+    }
+  };
+
+  class const_reverse_iterator
+  {
+  public:
+    const key_type *it_key;
+    const mapped_type *it_value;
+    value_type it_pair;
+    int it_pos;
+    const int *it_size;
+
+    const_reverse_iterator(const const_reverse_iterator &x)
+    {
+      this->it_key = x.it_key;
+      this->it_pos = x.it_pos;
+      this->it_value = x.it_value;
+      this->it_pair = x.it_pair;
+      this->it_size = x.it_size;
+    }
+    // Convert a (mutable) reverse_iterator to a const_reverse_iterator.
+    const_reverse_iterator(const reverse_iterator &x)
+    {
+      this->it_key = x.it_key;
+      this->it_pos = x.it_pos;
+      this->it_value = x.it_value;
+      this->it_pair = x.it_pair;
+      this->it_size = x.it_size;
+    }
+    const_reverse_iterator()
+    {
+      this->it_pos = -1;
+    }
+    const_reverse_iterator &operator=(const const_reverse_iterator &x)
+    {
+      this->it_key = x.it_key;
+      this->it_pos = x.it_pos;
+      this->it_value = x.it_value;
+      this->it_pair = x.it_pair;
+      this->it_size = x.it_size;
+      return *this;
+    }
+
+    const value_type *operator->()
+    {
+      return &(this->it_pair);
+    }
+
+    const value_type &operator*()
+    {
+      return this->it_pair;
+    }
+
+    const_reverse_iterator &operator++()
+    {
+      if (this->it_pos == 0)
+      {
+        this->it_pos--;
+        this->it_pair.first = Key();
+        this->it_pair.second = T();
+        return *this;
+      }
+      if (this->it_pos == -1)
+      {
+        this->it_pos = *(this->it_size) - 1;
+      }
+      else
+      {
+        this->it_pos--;
+      }
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+    const_reverse_iterator operator++(int)
+    {
+      if (this->it_pos == 0)
+      {
+        this->it_pos--;
+        this->it_pair.first = Key();
+        this->it_pair.second = T();
+        return *this;
+      }
+      if (this->it_pos == -1)
+      {
+        this->it_pos = *(this->it_size) - 1;
+      }
+      else
+      {
+        this->it_pos--;
+      }
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+
+    const_reverse_iterator &operator--()
+    {
+      if (this->it_pos == *(this->it_size))
+      {
+        this->it_pos = 0;
+      }
+      else
+      {
+        this->it_pos++;
+      }
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+    const_reverse_iterator operator--(int)
+    {
+      if (this->it_pos == *(this->it_size))
+      {
+        this->it_pos = 0;
+      }
+      else
+      {
+        this->it_pos++;
+      }
+      this->it_pair.first = this->it_key[this->it_pos];
+      this->it_pair.second = this->it_value[this->it_pos];
+      return *this;
+    }
+
+    bool operator==(const const_reverse_iterator &it) const
+    {
+      if (this->it_pos == it.it_pos)
+        return true;
+      if (
+        (this->it_pair.first == it.it_pair.first) &&
+        (this->it_pair.second == it.it_pair.second))
+        return true;
+      return false;
+    }
+    bool operator!=(const const_reverse_iterator &it) const
     {
       if (this->it_pos != it.it_pos)
         return true;
@@ -1331,6 +1867,26 @@ public:
     it.it_pair.second = this->_value[it.it_pos];
     return it;
   }
+  const_iterator begin() const
+  {
+    const_iterator it;
+    it.it_key = this->_key;
+    it.it_value = this->_value;
+    it.it_pos = 0;
+    it.it_pair.first = this->_key[0];
+    it.it_pair.second = this->_value[0];
+    return it;
+  }
+  const_iterator end() const
+  {
+    const_iterator it;
+    it.it_key = this->_key;
+    it.it_value = this->_value;
+    it.it_pos = this->_size;
+    it.it_pair.first = this->_key[it.it_pos];
+    it.it_pair.second = this->_value[it.it_pos];
+    return it;
+  }
 
   reverse_iterator rbegin()
   {
@@ -1346,6 +1902,28 @@ public:
   reverse_iterator rend()
   {
     reverse_iterator it;
+    it.it_key = this->_key;
+    it.it_value = this->_value;
+    it.it_size = &(this->_size);
+    it.it_pos = -1;
+    it.it_pair.first = Key();
+    it.it_pair.second = T();
+    return it;
+  }
+  const_reverse_iterator rbegin() const
+  {
+    const_reverse_iterator it;
+    it.it_key = this->_key;
+    it.it_value = this->_value;
+    it.it_size = &(this->_size);
+    it.it_pos = this->_size - 1;
+    it.it_pair.first = this->_key[it.it_pos];
+    it.it_pair.second = this->_value[it.it_pos];
+    return it;
+  }
+  const_reverse_iterator rend() const
+  {
+    const_reverse_iterator it;
     it.it_key = this->_key;
     it.it_value = this->_value;
     it.it_size = &(this->_size);

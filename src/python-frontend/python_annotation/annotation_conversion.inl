@@ -1408,6 +1408,11 @@ std::string python_annotation<Json>::get_function_return_type(
     {
       const auto &import_node =
         json_utils::find_imported_function(ast_, func_name);
+      // Relative imports (`from . import helper`) carry a null module name;
+      // fall through to the wildcard/builtin probes instead of feeding null
+      // to get_module (which would raise an uncatchable nlohmann type_error).
+      if (!import_node.contains("module") || import_node["module"].is_null())
+        throw std::runtime_error("import has no resolvable module name");
       auto module = module_manager_->get_module(import_node["module"]);
 
       if (!module)
@@ -3394,7 +3399,8 @@ std::string python_annotation<Json>::resolve_wildcard_import_func(
   {
     if (
       !node.contains("_type") || node["_type"] != "ImportFrom" ||
-      !node.contains("names") || !node.contains("module"))
+      !node.contains("names") || !node.contains("module") ||
+      node["module"].is_null())
       continue;
     bool is_star = false;
     for (const auto &name : node["names"])

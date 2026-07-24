@@ -2438,7 +2438,29 @@ bool function_call_expr::is_list_method_call() const
     return sym != nullptr && sym->get_type() == list_type;
   }
 
-  return true;
+  // append/insert/remove/extend/sort/reverse/appendleft/popleft are list-only
+  // mutators. The #6264 crash is specifically a *character array* (str/bytes)
+  // receiver routed into the list model, where __ESBMC_list_push is handed an
+  // array where it expects a PyListObject* and aborts GOTO conversion. Claim the
+  // call unless the receiver resolves to such an array type. Every other receiver
+  // is routed into the list model, matching the historical catch-all here:
+  //   - a genuine list is a PyListObject* (a pointer, not an array);
+  //   - a value the annotator can only type loosely still routes correctly —
+  //     e.g. `m = min([l]); m.append(x)`, where min() is typed int though it
+  //     returns the list itself (#5955). A pure `resolves-to-list_type` positive
+  //     check is unsound here: it drops that receiver (whose static type is int)
+  //     and regresses the test.
+  // str/bytes reached through a Name, an attribute, or a subscript all resolve to
+  // an array type, so this also excludes `self.s.append(...)` and
+  // `xs[0].append(...)` (#6264 review), which then fall through to the correct
+  // AttributeError path.
+  {
+    const std::string recv_type = call_["func"]["value"].value("_type", "");
+    if (recv_type == "List" || recv_type == "BinOp" || recv_type == "ListComp")
+      return true;
+    const exprt recv = converter_.get_expr(call_["func"]["value"]);
+    return !converter_.ns.follow(recv.type()).is_array();
+  }
 }
 
 exprt function_call_expr::handle_list_method() const
@@ -3871,6 +3893,12 @@ exprt function_call_expr::handle_general_function_call()
   if (std::optional<exprt> folded = try_fold_sorted())
     return *folded;
 
+  // A pure `def f(a): return a` over an array-shaped parameter is inlined
+  // to the caller's own argument (see try_fold_identity_array_return):
+  // arrays aren't a valid by-value return type yet.
+  if (std::optional<exprt> identity = try_fold_identity_array_return())
+    return *identity;
+
   // Skip builtin dispatch if the user imported a function with the same name
   // e.g. "from other import sum" defines a user sum that shadows the builtin
   bool is_user_imported =
@@ -4329,6 +4357,41 @@ std::optional<exprt> function_call_expr::fold_sorted_symbolic_tuples(
     }
   }
   return std::nullopt;
+}
+
+std::optional<exprt> function_call_expr::try_fold_identity_array_return()
+{
+  std::optional<nlohmann::json> ret_val =
+    converter_.select_return_value_for_call(call_);
+  if (!ret_val)
+    return std::nullopt;
+  if (!converter_.return_value_uses_call_argument(*ret_val, call_))
+    return std::nullopt;
+
+  nlohmann::json substituted =
+    converter_.substitute_call_arguments(*ret_val, call_);
+  exprt ret_expr = converter_.get_expr(substituted);
+  const typet &arg_type = converter_.ns.follow(ret_expr.type());
+  typet element_candidate;
+  if (arg_type.is_array())
+    element_candidate = arg_type;
+  else if (arg_type.is_pointer())
+    element_candidate = converter_.ns.follow(arg_type.subtype());
+
+  if (!element_candidate.is_array())
+    return std::nullopt;
+
+  // Strings are also modelled as char arrays in this codebase; restrict this
+  // fold to numpy-shaped (non-char) arrays so plain `def f(s): return s`
+  // string passthroughs -- already handled correctly elsewhere -- are left
+  // to their existing path.
+  typet innermost = converter_.ns.follow(element_candidate);
+  while (innermost.is_array())
+    innermost = converter_.ns.follow(to_array_type(innermost).subtype());
+  if (innermost == char_type())
+    return std::nullopt;
+
+  return ret_expr;
 }
 
 std::optional<exprt> function_call_expr::try_handle_round(bool is_user_imported)
@@ -4973,15 +5036,25 @@ size_t function_call_expr::bind_call_receiver(
       // the class type, so the object is sized symbolically by the struct at
       // symex time — robust to the class struct still gaining fields after this
       // construction (which a byte-sized allocation cannot handle).
-      // If the lvalue is `object`/Any (a pointer to void/empty), the
-      // new_object interception cannot size the allocation — the pointee type
-      // has no width. Retype the lvalue (and its symbol) to the class being
-      // constructed; a `void*`/Any slot legitimately holds the resulting
-      // `Class*` pointer. Without this, `t: object = Box()` aborts in symex.
+      // If the lvalue is `object`/Any (a pointer to void/empty) or a `None`
+      // placeholder (a prior `g = None` binding, pointer-to-bool per
+      // none_type()), the new_object interception cannot size the allocation
+      // correctly — the pointee type has no width, or the wrong (bool)
+      // width. Retype the lvalue (and its symbol) to the class being
+      // constructed; a `void*`/Any or `None` slot legitimately holds the
+      // resulting `Class*` pointer once rebound. Without this, `t: object =
+      // Box()` aborts in symex (#4773), and `g = None; g = Box()` allocates
+      // a bool-sized object and overruns it as soon as the constructor
+      // writes a real field (#6243). The none_type() check is a structural
+      // match on pointer-to-bool: this frontend reserves that shape
+      // exclusively for the None sentinel (see util/python_types.cpp), so
+      // it cannot collide with a real user-level bool pointer (Python
+      // exposes no raw pointers).
       if (
         converter_.current_lhs->type().is_pointer() &&
         (converter_.current_lhs->type().subtype().id() == "empty" ||
-         converter_.current_lhs->type().subtype().id().empty()))
+         converter_.current_lhs->type().subtype().id().empty() ||
+         converter_.current_lhs->type() == none_type()))
       {
         const typet class_ptr = gen_pointer_type(call.type());
         converter_.current_lhs->type() = class_ptr;

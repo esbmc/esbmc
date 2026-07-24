@@ -362,6 +362,24 @@ public:
     return reverse_iterator(this, SENTINEL);
   }
 
+  // Const overloads, matching the const begin()/end() pattern above: the
+  // node-based iterator keeps a non-const owner to resolve the sentinel
+  // boundary; cast away const on the receiver, the iterator does not mutate.
+  const_reverse_iterator rbegin() const
+  {
+    const_reverse_iterator it;
+    it.owner = const_cast<list<T> *>(this);
+    it.idx = _sentinel_prev;
+    return it;
+  }
+  const_reverse_iterator rend() const
+  {
+    const_reverse_iterator it;
+    it.owner = const_cast<list<T> *>(this);
+    it.idx = SENTINEL;
+    return it;
+  }
+
   size_type size() const
   {
     return _size;
@@ -381,8 +399,16 @@ public:
   {
     return _pool[_sentinel_next].data;
   }
+  const_reference front() const
+  {
+    return _pool[_sentinel_next].data;
+  }
 
   reference back()
+  {
+    return _pool[_sentinel_prev].data;
+  }
+  const_reference back() const
   {
     return _pool[_sentinel_prev].data;
   }
