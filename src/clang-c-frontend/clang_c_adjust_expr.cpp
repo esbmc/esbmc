@@ -690,6 +690,36 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
 
   exprt &op = expr.op0();
 
+  // &(cond ? a : b) is (cond ? &a : &b). In C++ a conditional whose arms are
+  // lvalues of the same type is itself an lvalue ([expr.cond]), so its address
+  // may be taken or a reference bound to it. Distributing the address-of over
+  // the branches lets the resulting pointer alias the selected operand; left
+  // as address_of(if(...)) the pointer analysis fails to resolve either arm
+  // (#6291). Clang only emits address_of(if) for a genuine lvalue conditional,
+  // whose arms already share a type (adjust_if has also typecast them to the
+  // conditional's type by now); the equal-type check is a defensive guard so a
+  // hypothetical mismatched if never yields an if with divergent pointer arms.
+  if (
+    op.id() == "if" && op.operands().size() == 3 &&
+    op.op1().type() == op.op2().type())
+  {
+    exprt addr_true("address_of");
+    addr_true.copy_to_operands(op.op1());
+    addr_true.location() = expr.location();
+    adjust_address_of(addr_true);
+
+    exprt addr_false("address_of");
+    addr_false.copy_to_operands(op.op2());
+    addr_false.location() = expr.location();
+    adjust_address_of(addr_false);
+
+    exprt new_if("if", addr_true.type());
+    new_if.copy_to_operands(op.op0(), addr_true, addr_false);
+    new_if.location() = expr.location();
+    expr.swap(new_if);
+    return;
+  }
+
   // special case: address of function designator
   // ANSI-C 99 section 6.3.2.1 paragraph 4
 
