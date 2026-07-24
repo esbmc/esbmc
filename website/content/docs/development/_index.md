@@ -30,6 +30,8 @@ start with the [Build Guide](/docs/development/building) and the
 {{< cards >}}
   {{< card link="/docs/development/releases" title="Releases" subtitle="How to prepare and publish a new ESBMC release." >}}
   {{< card link="/docs/development/ppa-maintenance" title="PPA Maintenance" subtitle="Maintaining the Ubuntu PPA packages." >}}
+  {{< card link="/docs/development/debian-packaging" title="Debian Packaging" subtitle="Packaging ESBMC for the official Debian archive." >}}
+  {{< card link="/docs/development/homebrew-packaging" title="Homebrew Packaging" subtitle="Adding and maintaining a Homebrew formula." >}}
   {{< card link="/docs/development/benchexec" title="Benchexec" subtitle="Running ESBMC under BenchExec for reproducible benchmarking." >}}
   {{< card link="/docs/development/sv-comp-and-test-comp-faq" title="SV-COMP and Test-COMP" subtitle="FAQ for the competition configurations." >}}
 {{< /cards >}}
