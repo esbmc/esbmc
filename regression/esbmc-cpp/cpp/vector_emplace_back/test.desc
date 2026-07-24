@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std=c++17 --unwind 6 --incremental-bmc
+^VERIFICATION SUCCESSFUL$
+^EXIT=0$
