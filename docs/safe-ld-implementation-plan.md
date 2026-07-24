@@ -1,21 +1,20 @@
 # ESBMC-PLC Implementation Plan: SMT-Based Formal Verification of Ladder Diagram Programs
 
-**Status:** PLANNING — WP2 largely implemented (skeleton #5280, property pipeline #5289, ld-verify runner + fault injection #5294, industrial benchmarks #5427, user-FB/REAL/watchdog #5620)  
+**Status:** PLANNING — WP2 largely implemented (skeleton #5280, property pipeline #5289, ld-verify runner + fault injection #5294, industrial benchmarks #5427, user-FB/REAL/watchdog #5620, graphical-LD soundness fixes + WP1 SOS spec)  
 **Project:** APP113435 — ESBMC-PLC (EPSRC Standard Research Grant)  
 **Tracking:** umbrella issue TBD  
-**Date:** 2026-06-09 (status refreshed 2026-07-23)
+**Date:** 2026-06-09 (status refreshed 2026-07-24)
 
 > **Implementation note.** The boolean/combinational Tier-1 subset, the
 > integer-arithmetic constructs (TON/TOF/TP timers, CTU/CTD counters, and the
 > `response` property), and — beyond the original Tier-1 scope — user-defined
 > function-block bodies, REAL/analog process variables, and an optional
 > scan-watchdog all now lower to GOTO IR and verify end-to-end (see §10). The
-> suite under `regression/ld/` has grown to 19 CTest cases. The curated
-> `conveyor_sequencing` / `emergency_shutdown` benchmarks still lower and verify
-> but their verdicts have not been validated against an intended ground truth, so
-> those two remain a dataset (`regression/ld/benchmarks/`) rather than wired
-> regression tests; two other CONTROLLINO benchmarks (`stairs_light`,
-> `water_control`) were validated and promoted to passing tests.
+> suite under `regression/ld/` has grown to 23 CTest cases, plus 10 for the
+> `ld-verify` runner, and CI now actually runs them. All four curated
+> benchmarks have validated verdicts and are wired as regression tests. The WP1
+> SOS specification exists as `docs/safe-ld-sos-semantics.md`; its independent
+> M1 review is still outstanding.
 
 ---
 
@@ -82,11 +81,15 @@ src/
     │
     ├── ir/                    # WP2 / T2.2
     │   ├── ld_ir.h                  # LdIR node types (cyclic control-flow model)
-    │   └── ld_ir.cpp
+    │   ├── ld_ir.cpp
+    │   ├── ld_ir_builder.h          # LdAst → LdIR lowering
+    │   └── ld_ir_builder.cpp
     │
     ├── ir_gen/                # WP2 / T2.2
     │   ├── ld_converter.h
-    │   └── ld_converter.cpp         # LdIR → GOTO IR (irep2 symbolt / code_blockt)
+    │   ├── ld_converter.cpp         # LdIR → GOTO IR (irep2 symbolt / code_blockt)
+    │   ├── st_fb_translator.h       # Structured Text FB bodies → codet
+    │   └── st_fb_translator.cpp
     │
     ├── property/              # WP1 / T1.3 + WP2 / T2.2
     │   ├── yaml_property_parser.h
@@ -105,21 +108,25 @@ tools/
 
 docs/
 ├── safe-ld-implementation-plan.md   # this document
-└── safe-ld-property-format.md       # YAML property spec (added in WP1)
+├── safe-ld-property-format.md       # YAML property spec (WP1 / T1.3)
+└── safe-ld-sos-semantics.md         # SOS specification (WP1 / T1.2)
 
 regression/
-└── ld/                        # all LD regression tests
+└── ld/                        # driver-level LD regression tests (one dir each)
     ├── CMakeLists.txt
-    ├── benchmarks/            # WP3 benchmark suite (≥50 programs)
-    │   ├── motor_interlock/   # CS1
-    │   ├── conveyor_sequencing/ # CS2
-    │   └── emergency_shutdown/  # CS3
-    └── unit/                  # unit tests for each pipeline stage
-        ├── parser/
-        ├── semantics/
-        ├── codegen/
-        ├── ir_gen/
-        └── property/
+    └── benchmarks/            # WP3 benchmark dataset, excluded from CTest
+        ├── motor_interlock/     # CS1
+        ├── conveyor_sequencing/ # CS2
+        ├── emergency_shutdown/  # CS3
+        ├── stairs_light/        # CONTROLLINO / OpenPLC, graphical
+        └── water_control/       # CONTROLLINO / OpenPLC, graphical
+
+unit/
+└── ld-frontend/               # Catch2 unit tests per pipeline stage
+    ├── test_parser.cpp
+    ├── test_property.cpp
+    ├── test_ir_gen.cpp
+    └── fixtures/
 ```
 
 ---
@@ -234,8 +241,13 @@ following the SOS state-transition rules:
 | Output coil `--( )--` | `code_assignt(symbol_exprt(var), pf)` |
 | Set coil `--( S )--` | `code_ifthenelset(pf, code_assignt(var, true_exprt()))` |
 | Reset coil `--( R )--` | `code_ifthenelset(pf, code_assignt(var, false_exprt()))` |
-| TON timer *(fixed-tick model)* | `code_ifthenelset(IN, code_assignt(ET, plus_exprt(ET, one)))` to increment `ET`; `code_assignt(Q, geq_exprt(ET, PT))` for output — fires deterministically after exactly `PT` scan ticks; full SOS step function in T1.2 |
+| Rising-edge contact `--[P]--` | `and_exprt(pf_in, and_exprt(var, not_exprt(prev)))`, with `prev` latched in the scan epilogue |
+| TON timer *(fixed-tick model)* | `code_ifthenelset(IN, ET := ET+1, ET := 0)`; `code_assignt(Q, and_exprt(IN, geq_exprt(ET, PT)))` — fires deterministically after exactly `PT` scan ticks |
+| TOF timer *(fixed-tick model)* | `code_ifthenelset(IN, {ET := 0; Q := true}, code_ifthenelset(Q, {ET := ET+1; Q := ET < PT}))` — holds `Q` for `PT` ticks after `IN` drops, and stays off until first enabled |
 | CTU counter *(per-scan step)* | `code_ifthenelset` on rising edge → increment `CV`; `code_assignt` of `Q = (CV >= PV)` |
+
+The full step functions, and the rules for graphical-network resolution and
+feedback variables, are specified in `docs/safe-ld-sos-semantics.md` (T1.2).
 
 **Fault injection mode.** An optional converter flag negates selected contact polarities
 or skips coil assignments to produce known-faulty GOTO programs. Used in WP1 validation
@@ -323,17 +335,21 @@ control passes straight to symex.
   and removes the copy afterwards.
 - Locates the `esbmc` binary via `$ESBMC`, else `$PATH`.
 - Maps `--strategy`: `k-induction` → `--k-induction --unlimited-k-steps`;
-  `bmc` → `--unwind <N> --no-unwinding-assertions` (the `--no-unwinding-assertions`
-  flag is required because the scan loop is `while(true)` — otherwise the
-  unwinding assertion fires at the bound and is indistinguishable from a property
-  violation). `portfolio` currently aliases `k-induction`; an unrecognised
-  strategy is rejected as `ERROR`.
+  `bmc` → `--incremental-bmc --unwind <N>`. Only those two are accepted;
+  anything else — including `portfolio` and `abstract-timers`, which §7 lists
+  as intended fallbacks but which are not implemented — is rejected as
+  `ERROR`.
 - Passes the YAML file through as `--ld-props <file>`.
 - Parses the verdict and emits the JSON report, with the verdict set
-  `{SAFE, VIOLATION, INCOMPLETE, UNKNOWN, ERROR}`. A `k-induction` success is
-  reported as `SAFE`; a `bmc` success is reported as `INCOMPLETE` (bounded — it
-  proves nothing beyond the unwind depth, §3.7); a non-zero exit with no verdict
-  token is reported as `ERROR` rather than silently as `UNKNOWN`.
+  `{SAFE, VIOLATION, INCOMPLETE, UNKNOWN, ERROR}`. `VERIFICATION SUCCESSFUL`
+  maps to `SAFE` and `VERIFICATION FAILED` to `VIOLATION`; `VERIFICATION
+  UNKNOWN` maps to `INCOMPLETE` under `bmc` and to `UNKNOWN` under
+  `k-induction`, where it means the proof did not converge. Output with no
+  verdict line at all is reported as `ERROR` rather than silently as
+  `UNKNOWN`. Note that `bmc` cannot in practice yield `SAFE`: the scan loop is
+  `while(true)`, so incremental BMC never fully unwinds it and stops at the
+  bound with `UNKNOWN` — which is what keeps the bounded-completeness caveat
+  of §3.7 from being violated by the mapping.
 
 The same `--ld-props` option is available on bare `esbmc` (e.g.
 `esbmc program.ld --ld-props props.yaml --k-induction`), which is what the
@@ -538,7 +554,7 @@ target_link_libraries(ldfrontend PUBLIC pugixml::static util irep2)
 | Task | Output | Milestone |
 |---|---|---|
 | T1.1 Systematic Literature Review (PRISMA) | SLR report | — |
-| T1.2 SOS specification of IEC 61131-3 LD | `docs/safe-ld-sos-semantics.md` + LaTeX formalisation | M1 (Month 3): SOS spec v1 complete |
+| T1.2 SOS specification of IEC 61131-3 LD | `docs/safe-ld-sos-semantics.md` + LaTeX formalisation | M1 (Month 3): SOS spec v1 complete — **document written**; two-reviewer validation outstanding |
 | T1.3 Property taxonomy & YAML format | `docs/safe-ld-property-format.md`; 20 synthetic validation programs | M2 (Month 6): property format validated |
 
 **M1 gate:** SOS spec covers contacts, coils, TON/TOF/TP timers, CTU/CTD counters,
@@ -553,9 +569,9 @@ all 20 programs pass semantic review; spec reviewed against IEC 61508 §7.
 | Task | Subtasks | Milestone | Status |
 |---|---|---|---|
 | T2.1 Parser & Semantic Analyser | PLCopen XML parser; AST; type checker; SOS consistency check | M3 (Month 6): parser handles all WP1 SOS constructs | skeleton landed (#5280); extended with user-FB-body and REAL/analog parsing (#5620) |
-| T2.2 GOTO IR Generator & Property Encoder | LdIR; `ld_converter` (irep2); YAML parser; property encoder (`code_assertt`) | M4 (Month 9): IR generator correct on all benchmark programs | boolean subset + timers/counters/`response` all lower and verify (#5289); ST→`codet` FB-body translator + numeric↔Boolean coercion (#5620); per-benchmark verdict validation for `conveyor`/`emergency` still outstanding (§10) |
+| T2.2 GOTO IR Generator & Property Encoder | LdIR; `ld_converter` (irep2); YAML parser; property encoder (`code_assertt`) | M4 (Month 9): IR generator correct on all benchmark programs | boolean subset + timers/counters/`response` all lower and verify (#5289); ST→`codet` FB-body translator + numeric↔Boolean coercion (#5620); graphical resolver now models FB blocks, edge contacts, parallel-path OR and network feedback; all four benchmark verdicts validated (§10) |
 | T2.3 ESBMC Integration & ld-verify | `ld_languaget`; CMake wiring; ld-verify CLI; JSON report | M5 (Month 12): end-to-end pipeline ready | `--ld-props` wired + JSON report (#5289); `ld-verify` runner implemented, driving `esbmc` (#5294); `--ld-fault-injection`, `--ld-sound-mode`, `--ld-scan-watchdog`/`--ld-scan-budget` driver flags added (#5294, #5620) |
-| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 19 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic); `ld-verify` runner binary still not covered by a CTest case; line-coverage target not yet measured |
+| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 23 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic) + 10 `ld-verify` runner tests, all run by CI; line-coverage target not yet measured |
 
 **Success criteria (WP2):**
 - **Correctness:** ≥95% of benchmark programs translated to GOTO IR with semantic
@@ -636,7 +652,7 @@ both the translation and the verifier on real semantic errors, not just syntacti
 | Risk | Mitigation | Implementation note |
 |---|---|---|
 | PLCopen XML schema variation between vendors | Schema normalisation layer in `parser/` | Tested against TIA Portal, Codesys, and Rockwell exports in WP1; vendor-specific test programs kept in `regression/ld/` |
-| k-induction non-termination on timer-heavy programs | TON/TOF/TP timer state abstraction: `Q` modelled as nondet bool constrained by `__ESBMC_assume` to SOS timer invariants, reducing required induction depth to O(1); full concrete encoding retained as an option | Fallback exposed as `ld-verify --strategy bmc\|k-induction\|portfolio\|abstract-timers`; portfolio mode applies per-program timeout (default 60 s) and reports `INCOMPLETE` rather than hanging |
+| k-induction non-termination on timer-heavy programs | TON/TOF/TP timer state abstraction: `Q` modelled as nondet bool constrained by `__ESBMC_assume` to SOS timer invariants, reducing required induction depth to O(1); full concrete encoding retained as an option | **Not implemented.** `ld-verify --strategy` accepts only `bmc` and `k-induction`; `portfolio` and `abstract-timers` are rejected as unsupported (§3.6). No per-program timeout is applied |
 | Solver timeout cascade in benchmark runs | Per-program timeout in `ld-verify` (default: 60 s); aggregate benchmark runner collects partial results and reports coverage fraction | `TIMEOUT` verdict treated as `UNKNOWN` in benchmark statistics; not counted as false positive or false negative |
 | Unsupported LD constructs accumulation | Tiered support plan: **Tier 1** (WP2 scope) — contacts, coils, TON/TOF/TP, CTU/CTD, arithmetic FBs; **Tier 2** (post-project) — advanced FBs, structured text inline, arrays; **Tier 3** — vendor-specific extensions. Each unsupported construct emits a structured `UnsupportedConstruct(name, tier)` error, not a silent failure. | WP1 property taxonomy explicitly fixes the Tier 1 boundary; any Tier 2+ construct encountered in WP3 case studies is recorded as a known limitation in the paper |
 | Incomplete PLCopen XML exports (missing FB declarations, partial networks) | Strict schema validation at parse time with diagnostic messages naming the missing element and the expected schema location | A library of known-valid exports from each vendor is maintained in `regression/ld/`; WP3 programs validated against the library before industrial use |
@@ -748,11 +764,37 @@ prose in §3 is not mistaken for delivered functionality.
   within budget. A `--ld-sound-mode` flag toggles the sound-vs-tolerant default
   for user-FB handling. Exercised by the `function_blocks_*`, `userfb_*`, and
   `arithmetic_div_unsafe` regression tests.
-- **Regression suite `regression/ld/`** now holds **19 CTest cases** (guarded by
+- **Graphical-LD soundness fixes.** The tc6_0201 resolver dropped any
+  rail-to-coil path containing a function block, ignored the `edge` attribute
+  on contacts, and let parallel paths to one coil overwrite each other instead
+  of OR-ing — so `stairs_light` was verifying against a model with no timer, no
+  edge detection and only its last branch. Blocks now resolve into synthesised
+  `<instance>__<pin>` variables with presets converted to ticks via the declared
+  task period, edges are sensed against a previous-scan shadow, parallel paths
+  are OR-combined through a scratch accumulator, and a variable read and written
+  in one network is snapshotted on entry per IEC 61131-3 §4.1.3. TOF and TP were
+  also re-encoded so that `Q` starts false rather than reading an un-run timer's
+  `ET` as an expired interval. PLCopen `<initialValue>` is now parsed; before,
+  every declared preset silently read as zero.
+- **Benchmark verdicts validated.** `conveyor_sequencing` and
+  `emergency_shutdown` are wired as regression tests. The ESD violation proved
+  to be a true positive — its reset rung does not gate on the manual trip being
+  released, so a reset reopens the valve with the trip still asserted — and is
+  pinned as `esd_manual_reset_fail`, with the corrected program as
+  `emergency_shutdown_safe`. The conveyor's failure was a `response` property
+  whose bound ignored a free `Stop_Button` input, plus the unparsed preset.
+- **Regression suite `regression/ld/`** now holds **23 CTest cases** (guarded by
   `ENABLE_LD_FRONTEND`, with the `benchmarks/` dataset excluded from CTest —
   `regression/CMakeLists.txt`), covering all five property kinds plus
   fault-injection, user-FB, watchdog, REAL-arithmetic, and the `stairs_light` /
-  `water_control` industrial cases.
+  `water_control` / `conveyor_sequencing` / `emergency_shutdown` industrial
+  cases. The `ld-verify` runner has **10** further cases under the `ld-verify`
+  label.
+- **WP1 SOS specification (`docs/safe-ld-sos-semantics.md`).** The T1.2
+  deliverable referenced by the M1 gate and by §3.7's theorem. Specifies the
+  state space, the cyclic scan, contacts, coils, timers, counters, arithmetic
+  blocks, graphical network resolution and the feedback rule, and gives the
+  rule-to-GOTO-IR correspondence the theorem quantifies over.
 
 ### Working end-to-end
 
@@ -764,39 +806,45 @@ GOTO IR and verify under both k-induction and bounded BMC.
 
 ### CI status
 
-A dedicated workflow, `.github/workflows/plcplus-linux-binary.yml`, builds
-`esbmc` with `-DENABLE_LD_FRONTEND=On` (Z3-only, all other frontends off) and
-smoke-tests that the binary advertises `--ld-props`, publishing the binary as an
-artifact. It does **not** run `regression/ld/` (it configures with
-`BUILD_TESTING=Off` / `ENABLE_REGRESSION=Off`), so the LD regression suite is
-still not exercised by upstream CI.
+`.github/workflows/plcplus-linux-binary.yml` carries two jobs and fires on pull
+requests as well as pushes touching `src/ld-frontend/`, `tools/ld-verify/`,
+`regression/ld/` or `unit/ld-frontend/`:
+
+- `regression-ld` builds with `BUILD_TESTING=On` / `ENABLE_REGRESSION=On` and
+  runs `regression/ld/` (23 cases), the `ld-verify` runner suite (10 cases) and
+  the three LD unit binaries.
+- `build-linux-amd64` builds the release binary, smoke-tests that it advertises
+  `--ld-props`, and publishes it as an artifact.
+
+The main PR matrix still does not enable `ENABLE_LD_FRONTEND`, so this workflow
+is the only gate on the front-end.
 
 ### Known limitations / not yet validated
 
-- **Benchmark verdicts not validated.** `conveyor_sequencing` and
-  `emergency_shutdown` lower and verify (no crash) but currently report
-  VIOLATION; whether that is the intended verdict is a WP3 benchmark-design /
-  SOS-correctness question, so neither is wired as a passing regression test —
-  they remain a dataset under `regression/ld/benchmarks/`.
-- **`ld-verify` runner binary has no automated test.** The regression tests drive
-  the `esbmc` driver directly; the runner (process spawning, `.xml` staging,
-  verdict mapping) is exercised manually only.
+- **M1 review outstanding.** `docs/safe-ld-sos-semantics.md` now exists, but the
+  M1 gate also requires validation by two independent reviewers against
+  IEC 61131-3 §2. That review has not been carried out; §10 of the SOS document
+  lists three specific points to raise in it (edge/polarity ordering, counter
+  reset dominance, and the scope of the feedback rule).
 - **WRITE_OUTPUTS** is not modelled as a distinct step; output coils are plain
   variable assignments (sufficient for the current property checks).
 - **Timer/counter integer width.** The arithmetic uses `int_type()` with no
   overflow guard; very long-running counters could wrap. Not exercised by the
   current bounded tests.
-- **WP1 formal deliverable missing.** `docs/safe-ld-sos-semantics.md` (the T1.2
-  SOS specification referenced by the M1 gate and by the correctness theorem in
-  §3.7) has not yet been written; the SOS rules exist only as code in
-  `semantics/` and as the informal tables in §3.
+- **Graphical path enumeration is exponential.** The resolver enumerates every
+  simple rail-to-sink path; a vendor export with many parallel branches would
+  blow up. No path-count guard yet.
+- **Arithmetic and unknown blocks on a rung path** are still diagnosed and
+  dropped rather than modelled, so a program using one verifies over strictly
+  less behaviour. Only timers and counters are resolved on graphical paths.
+- **Counter reset from a contact chain** is diagnosed and left unconnected;
+  only a reset pin wired to a variable is modelled.
 
 ### Suggested next increments
 
-1. Validate the `conveyor_sequencing` / `emergency_shutdown` benchmark verdicts
-   against their intended SOS semantics and promote them to regression tests.
-2. Extend the CI job (or add a second one) to actually run `regression/ld/` —
-   the current `plcplus-linux-binary.yml` only builds and smoke-tests the binary.
-3. Add coverage for the `ld-verify` runner binary itself.
-4. Write the WP1 SOS specification (`docs/safe-ld-sos-semantics.md`) to discharge
-   the M1 gate and ground §3.7's semantic-preservation theorem.
+1. Run the M1 review of `docs/safe-ld-sos-semantics.md` and close its §10 items.
+2. Model arithmetic/unknown blocks on graphical rung paths, or make the
+   diagnostic an error rather than a dropped path, so a silently weaker model
+   is not possible.
+3. Add a path-count guard to the graphical resolver.
+4. Widen or guard the timer/counter integer arithmetic.
