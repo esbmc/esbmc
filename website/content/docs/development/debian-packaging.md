@@ -259,17 +259,29 @@ understanding — that, not the files, is what earns the upload.
 
 ## Working with AI Assistance
 
-Using an LLM to draft packaging is acceptable, but the maintainer — not the
-tool — is accountable for the result. The practical rules are the same ones
-Homebrew states explicitly in its
-[Responsible AI Usage](https://docs.brew.sh/Responsible-AI-Usage) policy and
-that Debian reviewers expect informally:
+Debian has **no formal policy** on AI-assisted contributions. A draft general
+resolution proposed by Lucas Nussbaum in February 2026 debated whether and how
+to allow LLM-generated work, but the discussion subsided without a vote — Debian
+[decided not to decide](https://lwn.net/Articles/1015143/), and such
+contributions are handled case-by-case under existing policy. The developers had
+not even converged on a shared definition of an "AI-generated contribution."
 
-- Read, run, and test every change yourself before asking a human to review it.
-- Be able to explain and defend **every** field in `debian/` in your own words.
+What the discussion *did* make clear is the operative principle: the
+maintainer — not the tool — is accountable for everything uploaded to the
+archive. The draft GR's own conditions are a sound conservative guide, and they
+echo Homebrew's explicit
+[Responsible AI Usage](https://docs.brew.sh/Responsible-AI-Usage) policy:
+
+- Read, build, and test every change yourself before asking a human to review it.
+- Be able to explain and defend **every** field in `debian/` in your own words —
+  you vouch for its technical merit, security, and license compliance.
+- Disclose AI assistance when a significant portion of a contribution comes from
+  a tool with little manual modification.
 - LLM training data goes stale — verify current practice against a clean `sid`
   build and the online Policy/lintian, not the model's memory.
 - Be able to address every review comment yourself, even when the tool cannot.
+- Never feed non-public or sensitive project material (private lists, embargoed
+  security reports) to a generative-AI service.
 
 ## Common Issues
 
