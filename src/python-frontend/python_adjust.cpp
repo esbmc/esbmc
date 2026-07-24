@@ -291,9 +291,12 @@ void python_adjust::adjust_expr(expr2tc &expr)
       {
         for (size_t i = 0; i < st.members.size(); i++)
         {
-          const bool is_pad =
-            is_padding_member_name(st.member_names[i].as_string());
-          if (is_pad && i <= ops.size())
+          // Test the insert-position bound first so it short-circuits ahead of
+          // the indexing below: an index use that precedes its limits check
+          // trips static analysis (Codacy/cppcheck).
+          if (
+            i <= ops.size() &&
+            is_padding_member_name(st.member_names[i].as_string()))
             ops.insert(ops.begin() + i, gen_zero(st.members[i]));
         }
       }
