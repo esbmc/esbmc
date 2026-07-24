@@ -1025,7 +1025,7 @@ public:
   size_t copy(char *s, size_t n, size_t pos = 0) const;
   const char *data() const;
 
-  basic_string<CharT, Traits, Alloc> substr(size_t pos, size_t n)
+  basic_string<CharT, Traits, Alloc> substr(size_t pos, size_t n) const
   {
   __ESBMC_HIDE:
     __ESBMC_assert(pos >= 0, "The first parameter must be greater than zero");
