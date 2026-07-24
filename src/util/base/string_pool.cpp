@@ -1,4 +1,4 @@
-#include <util/string_pool.h>
+#include <util/base/string_pool.h>
 
 #include <cassert>
 #include <mutex>

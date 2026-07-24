@@ -5,7 +5,7 @@
 #include <util/migrate.h>
 #include <util/symtab/namespace.h>
 #include <util/type.h>
-#include <util/union_find.h>
+#include <util/base/union_find.h>
 
 void base_type(type2tc &type, const namespacet &ns);
 void base_type(expr2tc &expr, const namespacet &ns);

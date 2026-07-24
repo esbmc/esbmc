@@ -22,7 +22,7 @@
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/encoding.h>
+#include <util/base/encoding.h>
 #include <util/expr_util.h>
 #include <util/message/message.h>
 #include <util/migrate.h>

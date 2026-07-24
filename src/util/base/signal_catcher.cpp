@@ -5,8 +5,8 @@
 #  include <cstdlib>
 #endif
 
-#include <util/filesystem.h>
-#include <util/signal_catcher.h>
+#include <util/base/filesystem.h>
+#include <util/base/signal_catcher.h>
 
 void install_signal_catcher()
 {

@@ -2,7 +2,7 @@
 #define CPROVER_GOTO_SYMEX_SLICE_H
 
 #include <goto-symex/symex_target_equation.h>
-#include <util/time_stopping.h>
+#include <util/base/time_stopping.h>
 #include <util/ssa/algorithms.h>
 #include <util/config/options.h>
 #include <boost/range/adaptor/reversed.hpp>

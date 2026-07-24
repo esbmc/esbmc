@@ -4,7 +4,7 @@
 #include <util/expr.h>
 #include <irep2/irep2.h>
 #include <util/mp_arith.h>
-#include <util/numbering.h>
+#include <util/base/numbering.h>
 
 class pointer_logict
 {

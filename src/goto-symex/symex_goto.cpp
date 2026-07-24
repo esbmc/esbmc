@@ -8,7 +8,7 @@
 #include <util/expr_util.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <util/std_expr.h>
 
 void goto_symext::symex_goto(const expr2tc &old_guard)

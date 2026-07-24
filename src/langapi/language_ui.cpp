@@ -2,7 +2,7 @@
 #include <langapi/language_ui.h>
 #include <langapi/mode.h>
 #include <memory>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/message/message.h>
 #include <util/symtab/show_symbol_table.h>
 

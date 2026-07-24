@@ -6,7 +6,7 @@
 #include <util/expr_util.h>
 #include <util/irep.h>
 #include <util/message/message.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <util/std_code.h>
 #include <util/symtab/symbol.h>
 #include <algorithm>

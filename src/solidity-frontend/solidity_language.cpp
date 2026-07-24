@@ -5,7 +5,7 @@
 /// import flattening, and the parse/typecheck/final pipeline that converts
 /// Solidity source files into ESBMC's GOTO program representation.
 
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
@@ -19,7 +19,7 @@ CC_DIAGNOSTIC_POP()
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <c2goto/cprover_library.h>
 #include <util/c_link.h>
-#include <util/filesystem.h>
+#include <util/base/filesystem.h>
 #include <unordered_set>
 #include <unordered_map>
 #include <cstdlib>

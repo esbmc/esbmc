@@ -3,7 +3,7 @@
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
 #include <util/message/message.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <irep2/irep2.h>
 
 static void substitute_result(expr2tc &e, const expr2tc &ret_val)

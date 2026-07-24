@@ -1,6 +1,6 @@
 #include <clang-c-frontend/nested_func_transform.h>
 
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Basic/Diagnostic.h>

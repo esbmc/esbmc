@@ -5,7 +5,7 @@
 #include <util/base_type.h>
 #include <util/c_link.h>
 #include <util/symtab/fix_symbol.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/location.h>
 #include <util/message/format.h>
 #include <util/symtab/namespace.h>

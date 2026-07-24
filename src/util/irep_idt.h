@@ -3,8 +3,8 @@
 
 #include <algorithm>
 #include <functional>
-#include <util/string_pool.h>
-#include <util/prefix.h>
+#include <util/base/string_pool.h>
+#include <util/base/prefix.h>
 
 // A 4-byte handle into a global string interning pool. Equality and hashing
 // are O(1) (integer compare); the underlying string is fetched on demand.

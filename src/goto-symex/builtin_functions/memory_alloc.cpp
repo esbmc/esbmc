@@ -5,7 +5,7 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/std_types.h>

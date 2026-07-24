@@ -1,4 +1,4 @@
-#include <util/cwe_mapping.h>
+#include <util/base/cwe_mapping.h>
 
 #include <algorithm>
 #include <map>

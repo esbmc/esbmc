@@ -1,4 +1,4 @@
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
@@ -23,7 +23,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/bitvector.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/message/message.h>
 #include <util/mp_arith.h>
 #include <util/std_code.h>

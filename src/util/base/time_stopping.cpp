@@ -7,7 +7,7 @@
 
 #include <iomanip>
 #include <sstream>
-#include <util/time_stopping.h>
+#include <util/base/time_stopping.h>
 
 #if defined(_WIN32) && !defined(__MINGW32__)
 struct timezone

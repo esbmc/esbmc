@@ -2,7 +2,7 @@
 #define CPROVER_UNION_FIND_H
 
 #include <cassert>
-#include <util/numbering.h>
+#include <util/base/numbering.h>
 #include <vector>
 
 class unsigned_union_find

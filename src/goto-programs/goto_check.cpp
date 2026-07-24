@@ -8,7 +8,7 @@
 #include <util/config/config.h>
 #include <util/expr_util.h>
 #include <irep2/irep2_guard.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/location.h>
 #include <util/migrate.h>
 #include <util/mp_arith.h>

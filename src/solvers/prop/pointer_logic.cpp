@@ -2,9 +2,9 @@
 #include <pointer_logic.h>
 #include <util/arith_tools.h>
 #include <util/config/config.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2_utils.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 

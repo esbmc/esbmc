@@ -11,7 +11,7 @@
 #include <util/ieee_float.h>
 #include <irep2/irep2_utils.h>
 #include <util/mp_arith.h>
-#include <util/threeval.h>
+#include <util/base/threeval.h>
 #include <boost/multiprecision/cpp_bin_float.hpp>
 #include <variant>
 

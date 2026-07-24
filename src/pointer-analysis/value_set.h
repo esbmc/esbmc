@@ -6,7 +6,7 @@
 #include <irep2/irep2.h>
 #include <util/mp_arith.h>
 #include <util/symtab/namespace.h>
-#include <util/numbering.h>
+#include <util/base/numbering.h>
 #include <util/type_byte_size.h>
 
 /** Code for tracking "value sets" across assignments in ESBMC.

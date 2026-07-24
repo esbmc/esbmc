@@ -8,7 +8,7 @@
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <util/arith_tools.h>
-#include <util/cwe_mapping.h>
+#include <util/base/cwe_mapping.h>
 #include <util/std_types.h>
 #include <ostream>
 

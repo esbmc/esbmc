@@ -5,7 +5,7 @@
 #include <vector>
 #include <util/c_types.h>
 #include <util/migrate.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <util/symtab/symbol_generator.h>
 
 namespace

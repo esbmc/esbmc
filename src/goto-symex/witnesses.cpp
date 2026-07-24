@@ -6,7 +6,7 @@
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
 #include <solvers/smt/smt_conv.h>
-#include <util/picosha2.h>
+#include <util/base/picosha2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include <boost/version.hpp>
@@ -1124,7 +1124,7 @@ bool find_nondet_in_expr(const expr2tc &expr)
   return false;
 }
 
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <util/c_types.h>
 #include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
 #include <cassert>

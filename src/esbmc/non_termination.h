@@ -4,7 +4,7 @@
 #include <goto-programs/goto_functions.h>
 #include <util/symtab/namespace.h>
 #include <util/config/options.h>
-#include <util/threeval.h>
+#include <util/base/threeval.h>
 
 /// Period-1 fixpoint non-termination check, restricted to the eca-
 /// rers2012 main-loop shape.

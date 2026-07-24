@@ -10,11 +10,11 @@
 #include <util/config/config.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <util/message/format.h>
 #include <util/migrate.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <util/symtab/pretty.h>
 #include <util/symtab/rename.h>
 #include <util/std_expr.h>

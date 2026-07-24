@@ -38,7 +38,7 @@
 #include <thread>
 #include <type_traits>
 #include <utility>
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 #include <util/irep_idt.h>
 #include <util/irep.h>
 

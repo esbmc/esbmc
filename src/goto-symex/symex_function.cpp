@@ -9,8 +9,8 @@
 #include <util/c_types.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/prefix.h>
+#include <util/base/i2string.h>
+#include <util/base/prefix.h>
 #include <util/symtab/pretty.h>
 #include <util/python_types.h>
 #include <util/std_expr.h>

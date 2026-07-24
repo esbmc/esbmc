@@ -1,4 +1,4 @@
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
@@ -14,7 +14,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/cpp_expr2string.h>
 #include <clang-cpp-frontend/esbmc_internal_cpp.h>
 #include <regex>
-#include <util/filesystem.h>
+#include <util/base/filesystem.h>
 #include <fstream>
 
 languaget *new_clang_cpp_language()

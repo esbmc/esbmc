@@ -3,7 +3,7 @@
 
 #include <algorithm>
 #include <iosfwd>
-#include <util/threeval.h>
+#include <util/base/threeval.h>
 #include <util/message/message.h>
 #include <sstream>
 #include <util/ieee_float.h>

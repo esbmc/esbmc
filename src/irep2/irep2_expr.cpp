@@ -2,7 +2,7 @@
 #include <charconv>
 #include <unordered_map>
 #include <util/fixedbv.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/ieee_float.h>
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_expr.h>

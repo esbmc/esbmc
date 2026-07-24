@@ -7,7 +7,7 @@
 
 #include <util/config/cmdline.h>
 #include <util/config/parseoptions.h>
-#include <util/signal_catcher.h>
+#include <util/base/signal_catcher.h>
 #include <boost/program_options.hpp>
 
 parseoptions_baset::parseoptions_baset(

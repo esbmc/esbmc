@@ -19,7 +19,7 @@
 #include <tuple>
 #include <type_traits>
 #include <util/fixedbv.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/ieee_float.h>
 #include <util/migrate.h>
 #include <irep2/irep2_type.h>

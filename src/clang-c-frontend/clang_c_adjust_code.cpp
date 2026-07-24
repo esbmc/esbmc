@@ -4,7 +4,7 @@
 #include <util/c_types.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr_util.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <util/std_code.h>
 
 void clang_c_adjust::adjust_code(codet &code)

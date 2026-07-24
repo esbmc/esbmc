@@ -6,7 +6,7 @@
 #include <langapi/language_util.h>
 #include <solvers/smt/smt_conv.h>
 #include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>

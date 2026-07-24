@@ -6,7 +6,7 @@
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/type/python_typechecking.h>
-#include <util/encoding.h>
+#include <util/base/encoding.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple/tuple_handler.h>

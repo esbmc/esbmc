@@ -5,7 +5,7 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/sarif.h>
-#include <util/cwe_mapping.h>
+#include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
@@ -13,7 +13,7 @@
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config/config.h>
-#include <util/filesystem.h>
+#include <util/base/filesystem.h>
 #include <csignal>
 #include <cstdlib>
 #include <limits>
@@ -58,7 +58,7 @@
 #include <pointer-analysis/show_value_sets.h>
 #include <pointer-analysis/value_set_analysis.h>
 #include <util/symtab/symbol.h>
-#include <util/time_stopping.h>
+#include <util/base/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
 #include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>

@@ -4,9 +4,9 @@
 #include <util/c_types.h>
 #include <util/config/config.h>
 #include <util/fixedbv.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/ieee_float.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <util/std_code.h>
 #include <util/std_types.h>
 #include <util/base_type.h>

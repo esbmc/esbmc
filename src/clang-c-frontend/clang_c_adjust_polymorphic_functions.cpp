@@ -1,7 +1,7 @@
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 
 exprt clang_c_adjust::is_gcc_polymorphic_builtin(
   const irep_idt &identifier,

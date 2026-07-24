@@ -8,7 +8,7 @@
 #include <pointer-analysis/value_set_analysis.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/std_expr.h>
 #include <memory>
 #include <unordered_map>

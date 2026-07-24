@@ -5,7 +5,7 @@
 #include <util/config/cmdline.h>
 #include <util/config/options.h>
 #include <langapi/mode.h>
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 #include <util/ssa/cache_defs.h>
 
 /// C standard version, ordered so that comparisons work naturally.

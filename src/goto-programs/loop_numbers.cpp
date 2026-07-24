@@ -1,8 +1,8 @@
 #include <goto-programs/loop_numbers.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/usr_utils.h>
+#include <util/base/usr_utils.h>
 
 void show_loop_numbers(
   const goto_programt &goto_program,

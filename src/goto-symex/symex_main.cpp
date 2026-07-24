@@ -15,10 +15,10 @@
 #include <util/expr_util.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <util/symtab/pretty.h>
 #include <util/std_expr.h>
-#include <util/time_stopping.h>
+#include <util/base/time_stopping.h>
 #include <util/type_byte_size.h>
 #include <util/message/message.h>
 

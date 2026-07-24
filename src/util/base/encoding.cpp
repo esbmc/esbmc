@@ -1,4 +1,4 @@
-#include <util/encoding.h>
+#include <util/base/encoding.h>
 #include <stdexcept>
 
 std::vector<uint8_t> base64_decode(const std::string &encoded_string)

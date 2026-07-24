@@ -13,7 +13,7 @@
 #include <util/config/config.h>
 #include <irep2/irep2.h>
 #include <util/symtab/namespace.h>
-#include <util/threeval.h>
+#include <util/base/threeval.h>
 #include <vector>
 
 class smt_convt;

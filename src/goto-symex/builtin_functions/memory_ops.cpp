@@ -10,7 +10,7 @@
 #include <util/message/message.h>
 #include <util/message/format.h>
 #include <util/migrate.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <util/std_types.h>
 #include <algorithm>
 

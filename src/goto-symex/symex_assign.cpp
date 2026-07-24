@@ -6,9 +6,9 @@
 #include <util/c_types.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/message/message.h>
-#include <util/usr_utils.h>
+#include <util/base/usr_utils.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/std_expr.h>

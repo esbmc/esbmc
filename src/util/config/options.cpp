@@ -1,5 +1,5 @@
 #include <cstdlib>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/config/options.h>
 
 void optionst::set_option(const std::string &option, const std::string &value)

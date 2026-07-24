@@ -18,7 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstring>
 #include <fstream>
 #include <util/config/config.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <clang-cpp-frontend/esbmc_internal_cpp.h>
 extern "C"
 {

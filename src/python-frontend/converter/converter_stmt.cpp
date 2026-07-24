@@ -25,7 +25,7 @@
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/config/config.h>
-#include <util/encoding.h>
+#include <util/base/encoding.h>
 #include <util/expr_util.h>
 #include <util/irep.h>
 #include <util/message/message.h>

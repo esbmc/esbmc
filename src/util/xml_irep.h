@@ -2,7 +2,7 @@
 #define XML_IREP_H
 
 #include <util/irep.h>
-#include <util/xml.h>
+#include <util/base/xml.h>
 #include <util/message/message.h>
 
 void convert(const irept &irep, xmlt &xml);

@@ -7,7 +7,7 @@
 #include <util/base_type.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/std_expr.h>
 #include <util/symtab/symbol.h>
 #include <irep2/irep2_expr.h>

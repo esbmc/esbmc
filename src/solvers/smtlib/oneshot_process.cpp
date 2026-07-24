@@ -1,5 +1,5 @@
 #include <solvers/smtlib/oneshot_process.h>
-#include <util/filesystem.h>
+#include <util/base/filesystem.h>
 #include <util/message/message.h>
 #include <util/config/options.h>
 

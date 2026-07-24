@@ -3,7 +3,7 @@
 #include <unordered_set>
 
 #include <util/ssa/algorithms.h>
-#include <util/time_stopping.h>
+#include <util/base/time_stopping.h>
 #include <util/ssa/cache_defs.h>
 
 /**

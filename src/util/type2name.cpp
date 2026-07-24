@@ -8,7 +8,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <util/type2name.h>
 #include <cctype>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/std_types.h>
 #include <util/message/message.h>
 

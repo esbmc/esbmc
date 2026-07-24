@@ -5,7 +5,7 @@
 #include <util/expr_util.h>
 #include <util/migrate.h>
 #include <irep2/irep2_guard.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <util/std_expr.h>
 #include <map>
 #include <set>

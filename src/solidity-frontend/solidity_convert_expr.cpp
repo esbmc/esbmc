@@ -12,7 +12,7 @@
 #include <util/bitvector.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/message/message.h>

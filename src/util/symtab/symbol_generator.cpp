@@ -1,4 +1,4 @@
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/symtab/symbol_generator.h>
 
 symbolt &symbol_generator::new_symbol(

@@ -33,13 +33,13 @@
 #include <langapi/mode.h>
 #include <solvers/smt/smt_conv.h>
 #include <sstream>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <util/location.h>
 
 #include <util/migrate.h>
 #include <util/symtab/show_symbol_table.h>
-#include <util/time_stopping.h>
+#include <util/base/time_stopping.h>
 #include <util/ssa/cache.h>
 #include <atomic>
 #include <vector>

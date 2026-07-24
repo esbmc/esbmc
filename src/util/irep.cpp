@@ -1,6 +1,6 @@
 #include <cassert>
 #include <cstdlib>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/irep.h>
 #include <util/message/message.h>
 

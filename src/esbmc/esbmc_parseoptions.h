@@ -8,7 +8,7 @@
 #include <util/config/options.h>
 #include <util/config/parseoptions.h>
 #include <util/ssa/algorithms.h>
-#include <util/threeval.h>
+#include <util/base/threeval.h>
 #include <string_view>
 
 // Macro to determine if color output should be enabled

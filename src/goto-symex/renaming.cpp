@@ -4,7 +4,7 @@
 #include <util/message/message.h>
 #include <util/migrate.h>
 #include <util/symtab/namespace.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <util/symtab/symbol.h>
 
 namespace
