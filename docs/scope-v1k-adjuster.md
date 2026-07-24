@@ -419,3 +419,49 @@ reconciliation problem, **not needed** for the flip (whose acceptance gate is
 dual-solver *verdict* parity, already met by #6340), and **cosmetic** (verdict
 matches). Deferred/abandoned. The deref fix stands on its own; do not gate the
 flip on this promotion.
+
+### Remaining hop-off gaps — precise map (2026-07-24, post-#6340 + #6348)
+
+With the deref-result arm (#6340), the `if2t` bool-cast arm (#6348), and the
+`--python-irep2-adjust-only` flag in place, a clean census (mypy noise and
+expected uncaught-exceptions filtered out; genuine ESBMC-error signatures only)
+over a 546-test strided sample (every 8th `regression/python` test) gives:
+
+- **520 / 546 verdict-and-error parity (~95%)** between hop-off and the legacy
+  `clang_cpp_adjust` path.
+
+The residual ~5% is now categorised precisely — reproduced signatures, not the
+old vague "F-A" buckets:
+
+| Family | Count (in sample) | Reproduced signature | Root cause | Tractability |
+|---|---|---|---|---|
+| **S3 unresolved-by-name** | 7 | `python_adjust: symbol '…' retains N unresolved by-name (symbol_type2t) node(s) after adjust (V.1k post-adjust invariant violated)` | dict/Optional value nodes whose key/element type clang resolves but `python_adjust` leaves as a transient `symbol_type2t` — needs the dict-key-type infra (the long-standing S3 work-list) | **hard** (multi-step, own infra) |
+| **index-over-pointer** | 3 | `std::runtime_error: Unexpected index type in computer_pointer_offset` (type_byte_size.cpp:338) | an `index2t` whose `source_value` is a `char*` (a Python string / decayed-array parameter). `clang_c_adjust::adjust_index` rewrites `p[i]` → `*(p+i)`; `python_adjust` does not. A naive mirror (`dereference2tc(elem, add2tc(ptr, idx))` — the exact `build_dereference` shape) removes this crash but surfaces a **deeper** `irep2_cast_error` in `goto_symex_statet::fixup_renamed_type` (a function-argument rename where `orig_type` is pointer but the renamed value is not), so the fix needs symex-side type-tracking care, not just the adjust arm. | **hard** (symex rename interaction) |
+| **wrong/absent verdict** | ~4–6 | legacy `SUCCESSFUL` → hop-off `FAILED` (sqrt3, math_gamma_noninteger, github_3690, github_6258) or hop-off no-verdict (complex_pow_float_exponent, div6, jpl, list25, string18, ternary_operator4 — several are the crashes above manifesting as an empty verdict) | SMT-level: mostly the two crash families above surfacing as no-verdict; the true wrong-verdicts cluster on math/complex functions and need per-case triage | **mixed** |
+
+**Notes.**
+- The heterogeneous ternary case the earlier reviewer flagged (`"a" or 0`,
+  pointer-vs-int operands) is **at parity** — both paths report the same verdict
+  (a shared pre-existing mixed-type BoolOp imprecision, not a hop-off gap).
+- `string22_fail` is hop-off-*better*: legacy gives no verdict, hop-off reports
+  `FAILED` correctly.
+- Method reminder (recurring trap): the raw census over-counts by ~40× if mypy
+  `error: … [tag]` lines and expected `uncaught exception: …` in `*_fail` tests
+  are not filtered — grep the genuine ESBMC signatures (`must be boolean`,
+  `terminating due to`, `symbolic_type_excp`, `retains … unresolved by-name`,
+  `Unexpected index type`) present in hop-off **but not** legacy.
+
+**#6323 does not address index-over-pointer.** #6323 ("Build pointer-source
+index arithmetic natively in IREP2") changed the *converter*'s `build_index`
+pointer branch (`plus_exprt` → `add2tc`, `python_expr_builder.cpp`). Re-checked
+after it merged: the three index-over-pointer cases still crash under hop-off
+with the same `Unexpected index type in computer_pointer_offset` — the offending
+`index2t` reaches `python_adjust` from a site *other* than `build_index` (a
+survived string-element read), so a converter-side fix does not cover it.
+
+**Direction.** The two low-hanging arms (deref #6340, if2t #6348) are landed and
+the hop-off is at ~95% verdict parity. The remaining gaps are *not* one-arm
+fixes: index-over-pointer needs symex-side type-tracking work beyond the adjust
+arm, and the S3 unresolved-by-name family needs the dict-key-type infrastructure.
+Both are their own scoped efforts; neither should be forced as a mechanical
+adjuster arm.
