@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <set>
 #include <solvers/smt/array_conv.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <utility>
 
 static inline bool array_indexes_are_same(

@@ -4,8 +4,8 @@
 // mirror the Rust to keep the two implementations easy to diff.
 
 #include <goto-programs/cbmc_adapter.h>
-#include <util/c_types.h>
-#include <util/message.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
 
 #include <algorithm>
 #include <cstdlib>

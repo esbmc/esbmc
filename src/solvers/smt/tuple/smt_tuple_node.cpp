@@ -3,8 +3,8 @@
 #include <solvers/smt/tuple/smt_tuple_node_ast.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <sstream>
-#include <util/base_type.h>
-#include <util/c_types.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
 
 smt_astt smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
 {

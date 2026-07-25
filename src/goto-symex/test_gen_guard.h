@@ -1,7 +1,7 @@
 #ifndef CPROVER_GOTO_SYMEX_TEST_GEN_GUARD_H
 #define CPROVER_GOTO_SYMEX_TEST_GEN_GUARD_H
 
-#include <util/message.h>
+#include <util/message/message.h>
 
 #include <filesystem>
 #include <fstream>

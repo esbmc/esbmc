@@ -14,18 +14,18 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_expr_builder.h>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_typecast.h>
-#include <util/expr_util.h>
-#include <util/ieee_float.h>
-#include <util/message.h>
-#include <util/python_types.h>
-#include <util/std_expr.h>
-#include <util/c_sizeof.h>
-#include <util/string_constant.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_typecast.h>
+#include <util/expr/expr_util.h>
+#include <util/arith/ieee_float.h>
+#include <util/message/message.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_expr.h>
+#include <util/lang/c_sizeof.h>
+#include <util/expr/string_constant.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 #include <algorithm>
 #include <cctype>
@@ -57,6 +57,29 @@ std::string node_type_of(const nlohmann::json &node)
     throw std::runtime_error("Missing or invalid _type field in AST node");
   }
   return node["_type"].get<std::string>();
+}
+
+/// True when the AST subtree rooted at \p node contains a call.
+bool contains_call(const nlohmann::json &node)
+{
+  if (!node.is_object())
+    return false;
+
+  if (node.contains("_type") && node["_type"] == "Call")
+    return true;
+
+  for (const auto &[key, value] : node.items())
+  {
+    if (value.is_array())
+    {
+      for (const auto &item : value)
+        if (contains_call(item))
+          return true;
+    }
+    else if (value.is_object() && contains_call(value))
+      return true;
+  }
+  return false;
 }
 
 } // namespace
@@ -2457,6 +2480,12 @@ bool function_call_expr::is_list_method_call() const
   {
     const std::string recv_type = call_["func"]["value"].value("_type", "");
     if (recv_type == "List" || recv_type == "BinOp" || recv_type == "ListComp")
+      return true;
+    // Converting a receiver that contains a call would re-emit that call: a
+    // discriminator must stay free of IR side effects (see
+    // materialize_list_symbol). Such a receiver is materialised exactly once by
+    // get_object_list_symbol() in the handler, so claim it without converting.
+    if (contains_call(call_["func"]["value"]))
       return true;
     const exprt recv = converter_.get_expr(call_["func"]["value"]);
     return !converter_.ns.follow(recv.type()).is_array();
