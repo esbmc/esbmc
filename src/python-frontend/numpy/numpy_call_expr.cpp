@@ -1471,6 +1471,50 @@ static std::size_t searchsorted_position(
   return elements.size();
 }
 
+enum class norm_order
+{
+  l2,
+  l1,
+  positive_inf,
+  negative_inf
+};
+
+static bool is_numpy_inf_attr(const nlohmann::json &node)
+{
+  return node.is_object() &&
+         node.value("_type", std::string()) == "Attribute" &&
+         node.value("attr", std::string()) == "inf" && node.contains("value") &&
+         node["value"].is_object() &&
+         node["value"].value("_type", std::string()) == "Name" &&
+         node["value"].value("id", std::string()) == "np";
+}
+
+static norm_order parse_norm_order(const nlohmann::json &node)
+{
+  numeric_value value;
+  if (try_extract_numeric_constant(node, value))
+  {
+    const double order = to_double(value);
+    if (order == 1.0)
+      return norm_order::l1;
+    if (order == 2.0)
+      return norm_order::l2;
+  }
+
+  if (is_numpy_inf_attr(node))
+    return norm_order::positive_inf;
+
+  if (
+    node.is_object() && node.value("_type", std::string()) == "UnaryOp" &&
+    node.contains("op") && node["op"].is_object() &&
+    node["op"].value("_type", std::string()) == "USub" &&
+    node.contains("operand") && is_numpy_inf_attr(node["operand"]))
+    return norm_order::negative_inf;
+
+  throw std::runtime_error(
+    "TypeError: numpy.linalg.norm order is not supported");
+}
+
 static bool is_supported_numpy_unary_math(const std::string &function)
 {
   return function == "sin" || function == "cos" || function == "exp" ||
@@ -2597,7 +2641,7 @@ exprt numpy_call_expr::create_expr_from_call()
   }
 
   // Unary operations
-  if (call_["args"].size() == 1)
+  if (call_["args"].size() == 1 || function_id_.get_function() == "norm")
   {
     const std::string &function = function_id_.get_function();
     if (function == "det")
@@ -2711,6 +2755,36 @@ exprt numpy_call_expr::create_expr_from_call()
 
     if (function == "norm")
     {
+      if (call_["args"].empty() || call_["args"].size() > 2)
+        throw std::runtime_error(
+          "TypeError: numpy.linalg.norm expects an array and optional order");
+
+      norm_order order = norm_order::l2;
+      if (call_["args"].size() == 2)
+        order = parse_norm_order(call_["args"][1]);
+
+      if (call_.contains("keywords"))
+      {
+        for (const auto &kw : call_["keywords"])
+        {
+          if (kw["_type"] != "keyword" || kw["arg"].is_null())
+            continue;
+
+          const std::string arg = kw["arg"].get<std::string>();
+          if (arg == "axis")
+            throw std::runtime_error(
+              "TypeError: numpy.linalg.norm axis is not supported");
+          if (arg == "ord")
+          {
+            order = parse_norm_order(kw["value"]);
+            continue;
+          }
+          throw std::runtime_error(
+            "TypeError: numpy.linalg.norm keyword '" + arg +
+            "' is not supported");
+        }
+      }
+
       nlohmann::json arg = call_["args"][0];
       unwrap_np_array_arg(arg);
 
@@ -2719,20 +2793,42 @@ exprt numpy_call_expr::create_expr_from_call()
 
       if (try_extract_scalar_1d_list(arg, values_1d))
       {
+        if (values_1d.empty())
+          return converter_.get_expr(to_json_constant(make_real_scalar(0.0)));
+
         double sum_sq = 0.0;
+        double sum_abs = 0.0;
+        double max_abs = 0.0;
+        double min_abs = std::numeric_limits<double>::infinity();
         for (const auto &v : values_1d)
         {
           if (v.is_complex)
             throw std::runtime_error(
               "TypeError: numpy.linalg.norm does not support complex values");
-          sum_sq += v.value.real() * v.value.real();
+          const double abs_value = std::abs(v.value.real());
+          sum_sq += abs_value * abs_value;
+          sum_abs += abs_value;
+          max_abs = std::max(max_abs, abs_value);
+          min_abs = std::min(min_abs, abs_value);
         }
-        return converter_.get_expr(
-          to_json_constant(make_real_scalar(std::sqrt(sum_sq))));
+
+        double result = std::sqrt(sum_sq);
+        if (order == norm_order::l1)
+          result = sum_abs;
+        else if (order == norm_order::positive_inf)
+          result = max_abs;
+        else if (order == norm_order::negative_inf)
+          result = min_abs;
+
+        return converter_.get_expr(to_json_constant(make_real_scalar(result)));
       }
 
       if (try_extract_scalar_2d_list(arg, values_2d))
       {
+        if (order != norm_order::l2)
+          throw std::runtime_error(
+            "TypeError: numpy.linalg.norm matrix order is not supported");
+
         double sum_sq = 0.0;
         for (const auto &row : values_2d)
         {
