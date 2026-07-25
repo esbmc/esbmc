@@ -1,7 +1,7 @@
 # V.1k keystone — implementation plan (feature branch)
 
 Working plan for the IREP2-native resolution keystone tracked in
-`docs/irep2-migration.md` (V.1k / V.3 residual). This file lives on
+`docs/roadmap/irep2-migration.md` (V.1k / V.3 residual). This file lives on
 `feat/python-irep2-adjust-keystone` and is the execution roadmap; the
 canonical record stays in `irep2-migration.md`. Delete on merge.
 

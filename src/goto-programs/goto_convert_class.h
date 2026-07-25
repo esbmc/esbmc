@@ -70,6 +70,11 @@ protected:
     goto_programt &dest,
     bool result_is_used = true);
 
+  // Recursively flatten a (possibly nested) &&/|| contract clause
+  // (__ESBMC_requires / __ESBMC_ensures), hoisting side effects (e.g.
+  // __ESBMC_old()) only at the leaves so no conjunct is dropped (#6298).
+  void flatten_contract_clause(exprt &clause, goto_programt &dest);
+
   void address_of_replace_objects(exprt &expr, goto_programt &dest);
 
   bool rewrite_vla_decl(typet &var_type, goto_programt &dest);

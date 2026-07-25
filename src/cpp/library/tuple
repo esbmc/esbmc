@@ -57,6 +57,17 @@ public:
     return *this;
   }
 
+  // Element-wise assignment from a tuple of convertible (possibly differently
+  // typed) elements. Required by std::tie, where the left-hand tuple holds
+  // references: `head = other.head` then assigns through each reference.
+  template <typename UHead, typename... UTail>
+  tuple &operator=(const tuple<UHead, UTail...> &other)
+  {
+    head = other.head;
+    tail = other.tail;
+    return *this;
+  }
+
   void swap(tuple &other)
   {
     Head temp = this->head;
@@ -214,6 +225,28 @@ constexpr // since C++14
 {
   return tuple<unwrap_decay_t<Types>...>(std::forward<Types>(args)...);
 }
+
+// std::tie builds a tuple of lvalue references; assigning another tuple to it
+// writes through those references, which is what makes the common
+// `std::tie(a, b) = f();` unpacking idiom work.
+template <class... Types>
+constexpr tuple<Types &...> tie(Types &...args) noexcept
+{
+  return tuple<Types &...>(args...);
+}
+
+// Placeholder for std::tie: assigning to it discards the value. The operator=
+// is const so it works on the const object referenced by the tie'd tuple.
+struct __ignore_type
+{
+  template <class T>
+  constexpr const __ignore_type &operator=(const T &) const noexcept
+  {
+    return *this;
+  }
+};
+
+constexpr __ignore_type ignore;
 
 #  if __cplusplus >= 201703L
 // apply / make_from_tuple: this file's get() has only lvalue and

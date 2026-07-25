@@ -20,11 +20,12 @@
 #include <util/type_byte_size.h>
 
 // Simplify a legacy exprt via the IREP2 simplifier. The legacy CBMC
-// simplifier (util/simplify_expr) is being retired (docs/irep2-migration.md
-// Part II Phase 2.2); these alloc-size sites still operate on exprt, so they
-// round-trip through migrate. Behaviour-equivalent for the constant /
-// typecast-of-constant folds these sites need (typecast2t::do_simplify folds
-// (size_t)C to a constant exactly as the legacy simplifier did).
+// simplifier (util/simplify_expr) is being retired
+// (docs/roadmap/irep2-migration.md Part II Phase 2.2); these alloc-size sites
+// still operate on exprt, so they round-trip through migrate.
+// Behaviour-equivalent for the constant / typecast-of-constant folds these
+// sites need (typecast2t::do_simplify folds (size_t)C to a constant exactly as
+// the legacy simplifier did).
 static void simplify_via_irep2(exprt &e)
 {
   expr2tc tmp;

@@ -22,7 +22,7 @@
 /// path is dead-but-tested, mirroring the "add the machinery, prove it inert,
 /// wire it later" pattern (esbmc/esbmc#5265). `#cpp_type`/`#member_name`
 /// carriage and dropping the legacy hop remain later phases (B.4/B.5). See
-/// `docs/irep2-migration.md`, section "V.1k (b)-adjuster".
+/// `docs/roadmap/irep2-migration.md`, section "V.1k (b)-adjuster".
 class python_adjust
 {
 public:
@@ -108,7 +108,7 @@ protected:
   /// type-id fallback so the result is never empty (remove_exceptions
   /// dereferences front()). Used by adjust_expr to complete an empty
   /// `code_cpp_throw2t::exception_list` — flip blocker #1
-  /// (docs/irep2-migration.md, "Flip-probe census").
+  /// (docs/roadmap/irep2-migration.md, "Flip-probe census").
   std::vector<irep_idt> derive_exception_ids(const type2tc &type) const;
 
   /// Recursive worker for derive_exception_ids, threading the legacy `_ptr`
