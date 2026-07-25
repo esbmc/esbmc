@@ -1355,6 +1355,31 @@ static double median_of_numeric_elements(
          2.0;
 }
 
+static double percentile_of_numeric_elements(
+  std::vector<nlohmann::json> elements,
+  double q,
+  const std::string &diagnostic)
+{
+  if (elements.empty())
+    throw std::runtime_error(
+      "ValueError: numpy.percentile() input array must be non-empty");
+
+  std::stable_sort(
+    elements.begin(),
+    elements.end(),
+    [&](const nlohmann::json &lhs, const nlohmann::json &rhs) {
+      return numeric_to_key(lhs, diagnostic) < numeric_to_key(rhs, diagnostic);
+    });
+
+  const double rank = (q / 100.0) * static_cast<double>(elements.size() - 1);
+  const std::size_t lower = static_cast<std::size_t>(std::floor(rank));
+  const std::size_t upper = static_cast<std::size_t>(std::ceil(rank));
+  const double fraction = rank - static_cast<double>(lower);
+  const double lower_value = numeric_to_key(elements[lower], diagnostic);
+  const double upper_value = numeric_to_key(elements[upper], diagnostic);
+  return lower_value + ((upper_value - lower_value) * fraction);
+}
+
 static nlohmann::json make_integer_list(const std::vector<std::size_t> &values)
 {
   nlohmann::json result;
@@ -5092,6 +5117,60 @@ exprt numpy_call_expr::get()
     result["value"] = median_of_numeric_elements(
       std::move(elements),
       "TypeError: numpy.median() array must contain finite numeric values");
+    return converter_.get_expr(result);
+  }
+
+  if (function == "percentile")
+  {
+    if (call_["args"].size() != 2)
+      throw std::runtime_error(
+        "TypeError: numpy.percentile() expects array and q arguments");
+
+    if (call_.contains("keywords"))
+    {
+      for (const auto &kw : call_["keywords"])
+      {
+        if (kw["_type"] != "keyword" || kw["arg"].is_null())
+          continue;
+
+        throw std::runtime_error(
+          "TypeError: numpy.percentile() keyword '" +
+          kw["arg"].get<std::string>() + "' is not supported");
+      }
+    }
+
+    numeric_value q_value;
+    if (
+      !try_extract_numeric_constant(call_["args"][1], q_value) ||
+      !is_finite_numeric_value(q_value))
+      throw std::runtime_error(
+        "TypeError: numpy.percentile() q must be a concrete scalar");
+
+    const double q = to_double(q_value);
+    if (q < 0.0 || q > 100.0)
+      throw std::runtime_error(
+        "ValueError: numpy.percentile() q must be in [0, 100]");
+
+    nlohmann::json arr_arg =
+      resolve_literal_numpy_array_input(call_["args"][0], function, true);
+
+    std::vector<std::size_t> shape;
+    if (!get_literal_shape(arr_arg, shape))
+      throw std::runtime_error(
+        "TypeError: numpy.percentile() array must contain finite numeric "
+        "values");
+
+    if (shape.size() != 1)
+      throw std::runtime_error(
+        "TypeError: numpy.percentile() currently supports only 1-D arrays");
+
+    nlohmann::json result;
+    result["_type"] = "Constant";
+    result["value"] = percentile_of_numeric_elements(
+      arr_arg["elts"].get<std::vector<nlohmann::json>>(),
+      q,
+      "TypeError: numpy.percentile() array must contain finite numeric "
+      "values");
     return converter_.get_expr(result);
   }
 
