@@ -167,11 +167,15 @@ int esbmc_parseoptionst::doit()
           // Claim filtering marks every unselected assertion SKIP but leaves it
           // in goto_coveraget::all_claims, so its probe never solves and the
           // reporter would flag live branches as dead. SMT-formula emission
-          // (P_SMTLIB) likewise leaves every probe unsolved. Both would produce
-          // spurious CWE-561 findings, so reject them (issue #4495 / #5934).
+          // (P_SMTLIB) likewise leaves every probe unsolved. --no-assertions
+          // drops the probes outright: goto_coveraget::insert_assert marks them
+          // user_provided(true), which is just what symex_assert discards, so
+          // every branch would be reported dead. All produce spurious CWE-561
+          // findings, so reject them (issue #4495 / #5934).
           "claim",
           "smt-formula-only",
           "smt-formula-too",
+          "no-assertions",
           // Other coverage modes reuse the same goto_coveraget::all_claims and
           // multi_property_check routing: assertion coverage diverts solved
           // probes into reached_mul_claims (leaving reached_claims empty), and
@@ -193,10 +197,13 @@ int esbmc_parseoptionst::doit()
           // all_claims. The advisory forces a SUCCESSFUL verdict, so such a
           // real violation would be silently masked; reject these so a leak /
           // deadlock / race is never hidden behind a dead-code run (issue
-          // #4495).
+          // #4495). Both race spellings must be listed: process_goto_program
+          // treats --data-races-check-only as a request to add race assertions
+          // too.
           "memory-leak-check",
           "deadlock-check",
-          "data-races-check"})
+          "data-races-check",
+          "data-races-check-only"})
       if (cmdline.isset(incompatible))
       {
         log_error(
