@@ -3,12 +3,12 @@
 #include <python-frontend/symbol_id.h>
 
 #include <nlohmann/json.hpp>
-#include <util/expr.h>
-#include <util/std_code.h>
-#include <util/std_types.h>
-#include <util/type.h>
-#include <util/symbol.h>
-#include <util/python_types.h>
+#include <util/irep/expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_types.h>
+#include <util/irep/type.h>
+#include <util/symtab/symbol.h>
+#include <util/lang/python_types.h>
 
 #include <string>
 #include <unordered_map>

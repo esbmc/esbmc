@@ -1,12 +1,12 @@
 #include <cassert>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/namespace.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <clang-c-frontend/clang_c_main.h>
 
 void clang_c_maint::init_variable(codet &dest, const symbolt &sym)

@@ -10,8 +10,8 @@
 
 #include <unordered_map>
 #include <unordered_set>
-#include <util/message.h>
-#include <util/options.h>
+#include <util/message/message.h>
+#include <util/config/options.h>
 
 /** White-list of ESBMC internal symbol names that must never be treated as
  *  race-eligible user globals. */

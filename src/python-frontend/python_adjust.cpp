@@ -2,9 +2,9 @@
 
 #include <clang-c-frontend/padding.h>
 #include <irep2/irep2_utils.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/prefix.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/base/prefix.h>
 #include <vector>
 
 python_adjust::python_adjust(contextt &_context)

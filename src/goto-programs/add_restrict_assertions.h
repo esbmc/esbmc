@@ -2,7 +2,7 @@
 #define CPROVER_GOTO_PROGRAMS_ADD_RESTRICT_ASSERTIONS_H
 
 #include <goto-programs/goto_functions.h>
-#include <util/context.h>
+#include <util/symtab/context.h>
 
 /// Instrument every function that has two or more `restrict`-qualified pointer
 /// parameters with an entry assertion that the objects they point at do not
