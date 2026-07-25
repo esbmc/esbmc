@@ -2,9 +2,9 @@
 #include "python_converter.h"
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/python_expr_builder.h>
-#include <util/arith_tools.h>
-#include <util/std_code.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/irep/std_code.h>
+#include <util/expr/expr_util.h>
 #include <python-frontend/python_frontend_limits.h>
 #include <optional>
 #include <stdexcept>

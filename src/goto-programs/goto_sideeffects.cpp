@@ -1,15 +1,15 @@
 #include <goto-programs/goto_convert_class.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/migrate.h>
-#include <util/rename.h>
-#include <util/std_expr.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/rename.h>
+#include <util/irep/std_expr.h>
 
 /// Recursively flatten a (possibly nested) binary && expression into a flat
 /// list of conjuncts.  Clang represents A && B && C as and(and(A,B),C).

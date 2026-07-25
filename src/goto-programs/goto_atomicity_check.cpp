@@ -1,8 +1,8 @@
 #include <goto-programs/goto_atomicity_check.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
-#include <util/symbol_generator.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/symbol_generator.h>
 
 class goto_atomicity_checkt
 {

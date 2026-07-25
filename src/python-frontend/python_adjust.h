@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/context.h>
-#include <util/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
 #include <irep2/irep2.h>
 #include <string>
 #include <vector>

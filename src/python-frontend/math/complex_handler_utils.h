@@ -2,7 +2,7 @@
 #define PYTHON_FRONTEND_COMPLEX_HANDLER_UTILS_H
 
 #include <string>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 
 class python_converter;
 

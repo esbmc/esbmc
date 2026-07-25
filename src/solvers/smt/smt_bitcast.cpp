@@ -1,5 +1,5 @@
 #include <solvers/smt/smt_solver.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 /**
  * Constructs the tree-like concatenation of expressions from a sequence.
