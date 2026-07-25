@@ -4,7 +4,7 @@
 #include <map>
 #include <string>
 #include <vector>
-#include <util/irep.h>
+#include <util/irep/irep.h>
 
 class contextt;
 class goto_functionst;

@@ -1,5 +1,5 @@
 #include <goto-programs/loop_unroll.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 
 bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
 {

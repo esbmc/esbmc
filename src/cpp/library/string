@@ -583,6 +583,58 @@ public:
   size_t find(const char *s, size_t pos = 0) const;
   size_t find(const char *s, size_t pos, size_t n) const;
   size_t find(char c, size_t pos = 0) const;
+
+#if __cplusplus >= 202002L
+  bool starts_with(const basic_string<CharT, Traits, Alloc> &x) const
+  {
+    if (x._size > this->_size)
+      return false;
+    for (int i = 0; i < x._size; i++)
+      if (this->str[i] != x.str[i])
+        return false;
+    return true;
+  }
+  bool starts_with(CharT c) const
+  {
+    return this->_size > 0 && this->str[0] == c;
+  }
+  bool starts_with(const CharT *s) const
+  {
+    for (int i = 0; s[i] != '\0'; i++)
+      if (i >= this->_size || this->str[i] != s[i])
+        return false;
+    return true;
+  }
+
+  bool ends_with(const basic_string<CharT, Traits, Alloc> &x) const
+  {
+    if (x._size > this->_size)
+      return false;
+    int off = this->_size - x._size;
+    for (int i = 0; i < x._size; i++)
+      if (this->str[off + i] != x.str[i])
+        return false;
+    return true;
+  }
+  bool ends_with(CharT c) const
+  {
+    return this->_size > 0 && this->str[this->_size - 1] == c;
+  }
+  bool ends_with(const CharT *s) const
+  {
+    int n = 0;
+    while (s[n] != '\0')
+      n++;
+    if (n > this->_size)
+      return false;
+    int off = this->_size - n;
+    for (int i = 0; i < n; i++)
+      if (this->str[off + i] != s[i])
+        return false;
+    return true;
+  }
+#endif
+
   basic_string<CharT, Traits, Alloc> &
   assign(basic_string<CharT, Traits, Alloc> &s);
   basic_string<CharT, Traits, Alloc> &assign(const char *s, size_t n);

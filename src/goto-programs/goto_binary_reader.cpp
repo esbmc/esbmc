@@ -2,7 +2,7 @@
 #include <goto-programs/read_bin_goto_object.h>
 #include <goto-programs/read_cbmc_goto_object.h>
 #include <goto-programs/goto_functions.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <fstream>
 #include <boost/iostreams/device/array.hpp>
 #include <boost/iostreams/stream.hpp>

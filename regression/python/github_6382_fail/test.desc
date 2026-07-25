@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 1 --no-library-assertions
+^VERIFICATION FAILED$
+halve requires an even argument
+unsupported for Python
