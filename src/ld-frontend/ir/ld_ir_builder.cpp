@@ -11,9 +11,15 @@ LdIRNode LdIRBuilder::lower_element(const RungElement &elem)
     node.kind = LdIRNodeKind::ContactEval;
     node.variable = elem.contact.variable;
     node.contact_kind = elem.contact.kind;
-    node.rule = (elem.contact.kind == ContactKind::NormallyOpen)
-                  ? SosRule::NO_Contact_True
-                  : SosRule::NC_Contact_True;
+    node.contact_edge = elem.contact.edge;
+    if (elem.contact.edge == ContactEdge::Rising)
+      node.rule = SosRule::Rising_Contact;
+    else if (elem.contact.edge == ContactEdge::Falling)
+      node.rule = SosRule::Falling_Contact;
+    else
+      node.rule = (elem.contact.kind == ContactKind::NormallyOpen)
+                    ? SosRule::NO_Contact_True
+                    : SosRule::NC_Contact_True;
     break;
 
   case RungElementKind::Coil:
@@ -37,6 +43,7 @@ LdIRNode LdIRBuilder::lower_element(const RungElement &elem)
   case RungElementKind::TimerFB:
     node.kind = LdIRNodeKind::TimerStep;
     node.timer_kind = elem.timer_fb.kind;
+    node.timer_instance = elem.timer_fb.instance_name;
     node.timer_IN = elem.timer_fb.IN_var;
     node.timer_ET = elem.timer_fb.ET_var;
     node.timer_PT = elem.timer_fb.PT_var;

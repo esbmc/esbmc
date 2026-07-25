@@ -3,7 +3,7 @@
 #include <fstream>
 #include <limits>
 #include <solvers/solver_config.h>
-#include <util/cmdline.h>
+#include <util/config/cmdline.h>
 
 const struct group_opt_templ all_cmd_options[] = {
   {"Main Usage",

@@ -2,7 +2,7 @@
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/smt_fp_rounding_utils.h>
 #include <irep2/irep2_type.h>
-#include <util/ieee_float.h>
+#include <util/arith/ieee_float.h>
 
 ir_ieee_convt::ir_ieee_convt(smt_solver_baset *ctx) : ctx(ctx)
 {

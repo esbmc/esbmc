@@ -4,8 +4,8 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/type/type_handler.h>
-#include <util/config.h>
-#include <util/context.h>
+#include <util/config/config.h>
+#include <util/symtab/context.h>
 
 TEST_CASE("complex type helpers", "[python-frontend][complex]")
 {

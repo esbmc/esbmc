@@ -3,16 +3,16 @@
 #include <goto-programs/exception_globals.h>
 #include <goto-programs/goto_functions.h>
 
-#include <util/namespace.h>
-#include <util/context.h>
-#include <util/symbol.h>
-#include <util/migrate.h>
-#include <util/expr_util.h>
-#include <util/std_types.h>
-#include <util/std_expr.h>
-#include <util/message.h>
-#include <util/type_byte_size.h>
-#include <util/c_types.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/symbol.h>
+#include <util/irep/migrate.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/std_types.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
+#include <util/expr/type_byte_size.h>
+#include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
 
 #include <optional>

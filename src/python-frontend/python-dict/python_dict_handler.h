@@ -75,9 +75,9 @@
 
 #include <python-frontend/symbol_id.h>
 
-#include <util/std_types.h>
-#include <util/std_code.h>
-#include <util/expr.h>
+#include <util/irep/std_types.h>
+#include <util/irep/std_code.h>
+#include <util/irep/expr.h>
 #include <nlohmann/json.hpp>
 
 #include <optional>

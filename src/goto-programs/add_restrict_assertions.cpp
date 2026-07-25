@@ -1,12 +1,12 @@
 #include <goto-programs/add_restrict_assertions.h>
 
 #include <irep2/irep2_utils.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/migrate.h>
-#include <util/namespace.h>
-#include <util/std_types.h>
-#include <util/type_byte_size.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_types.h>
+#include <util/expr/type_byte_size.h>
 
 // A restrict-qualified pointer parameter, reduced to the data the entry
 // assertion needs: the pointer value (as a level-0 symbol) and the byte size of

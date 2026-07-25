@@ -4,7 +4,7 @@
 #include <jimple-frontend/AST/jimple_ast.h>
 #include <jimple-frontend/AST/jimple_modifiers.h>
 #include <jimple-frontend/AST/jimple_class_member.h>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 
 /**
  * @brief Main AST for Class/Interface

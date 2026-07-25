@@ -6,7 +6,7 @@
 #endif
 
 // location Specialization
-#include <util/location.h>
+#include <util/irep/location.h>
 template <>
 struct fmt::formatter<locationt>
 {

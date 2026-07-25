@@ -4,7 +4,7 @@
 #include <cstdio>
 #include <solvers/smt/smt_solver.h>
 #include <irep2/irep2.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 
 extern "C"
 {
