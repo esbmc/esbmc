@@ -673,3 +673,55 @@ math/float (`math13`, `math_edge_frexp_success`, `sqrt5`,
 `cmath_polar_rect_semantics_success_07`), which points at the parked S4
 arithmetic-conversion work rather than at six independent causes — but that is a
 hypothesis from the names, not a triaged finding.
+
+### Per-case triage round 4 — the math cluster was `sqrt`, not S4 (2026-07-25)
+
+The round-3 hypothesis above was **wrong**: the math/float cluster has nothing to
+do with arithmetic conversion. `sqrt5`'s counterexample shows `result = -NAN`,
+and the GOTO diff isolates it to one instruction:
+
+```
+legacy:  ASSIGN result = ieee_sqrt((double)x, __ESBMC_rounding_mode)
+hop-off: FUNCTION_CALL: result = sqrt((double)x)
+```
+
+`python_math::handle_sqrt` emits a call to `c:@F@sqrt` whenever the argument is
+not a foldable constant; `clang_c_adjust` rewrites that call to the `ieee_sqrt`
+intrinsic (`clang_c_adjust_expr.cpp:1414-1423`), and `python_adjust` did not, so
+the hop-off ran the library model, which returns NaN. Fixed by mirroring the
+lowering — closing `sqrt5`, `math13`, and
+`cmath_polar_rect_semantics_success_07`, the last of which this document had
+recorded as a standing *false alarm*. It was not; it was this.
+
+**Method note — match the field the legacy guard matches.** A first attempt
+compared `symbol2t::thename` (the full identifier, `c:@F@sqrt`) against
+`"sqrt"`, and the arm silently never fired. The legacy guard uses the symbol's
+**base** name (`to_symbol_expr(f_op).name()`) and applies the `py:` exclusion to
+the *identifier*. IREP2's `symbol2t` carries only the identifier, so the base
+name must be recovered (segment after the last `@`). A non-firing arm looks
+exactly like a wrong hypothesis — check the arm fires before discarding the
+theory.
+
+**Also landed: `&array` → `&array[0]` at the node level.** `clang_c_adjust::adjust_address_of`
+(`clang_c_adjust_expr.cpp:743-754`) decays unconditionally; #6363 added only the
+assignment-seam form, which never reaches an `address_of` nested inside an
+aggregate literal. The OM raise sites build `{ .message = &"math domain error" }`
+with a `char*` member, so the literal carried a `char(*)[N]`. **This flips no
+verdict in the sampled corpus** — it closes a structural parity gap (the hop-off
+GOTO now matches legacy byte-for-byte at those sites), and is recorded as such
+rather than as a divergence fix.
+
+**Remaining after round 4** — a stride-12 census (366 tests) leaves five genuine
+divergences: `github_3078_fail`, `github_4784_isnone_short_circuit_fail` (no
+verdict), `github_3690`, `math_edge_frexp_success`,
+`github_4745_pep604_class_attr` (legacy SUCCESSFUL → hop-off FAILED), plus
+`ternary_string_fail`, `github_2934_2`, `none3`, `optional6` from the wider
+stride-6 run. `math_edge_frexp_success` is `frexp`, so the "one missing intrinsic
+lowering per math builtin" shape may repeat — check `clang_c_adjust`'s builtin
+list before assuming anything deeper.
+
+**Census artifact, restated.** Any test whose own `test.desc` already carries
+`--python-irep2-adjust-only` (`python_irep2_adjust_only_*`) appears as a
+divergence in this census, because both of its columns are hop-off runs and the
+40 s cap bites under 12-way parallelism. They pass under `ctest`. Filter them
+out before counting.
