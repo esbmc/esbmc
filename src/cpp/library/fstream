@@ -58,11 +58,27 @@ class fstream : public istream, public ostream
 public:
   fstream();
   explicit fstream(const char *filename, openmode mode = in | out);
+#if __cplusplus >= 201103L
+  // [fstream.cons]: the std::string overloads are C++11; they also use
+  // delegating constructors, which do not parse under --std c++03.
+  explicit fstream(const string &filename, openmode mode = in | out)
+    : fstream(filename.c_str(), mode)
+  {
+  }
+#endif
   filebuf *rdbuf() const;
   bool is_open();
   void open(
     const char *filename,
     ios_base::openmode mode = ios_base::in | ios_base::out);
+#if __cplusplus >= 201103L
+  void open(
+    const string &filename,
+    ios_base::openmode mode = ios_base::in | ios_base::out)
+  {
+    open(filename.c_str(), mode);
+  }
+#endif
   void close();
 
   //private:
@@ -77,9 +93,23 @@ public:
   explicit ofstream(
     const char *filename,
     ios_base::openmode mode = ios_base::out);
+#if __cplusplus >= 201103L
+  explicit ofstream(
+    const string &filename,
+    ios_base::openmode mode = ios_base::out)
+    : ofstream(filename.c_str(), mode)
+  {
+  }
+#endif
   filebuf *rdbuf() const;
   bool is_open();
   void open(const char *filename, ios_base::openmode mode = ios_base::out);
+#if __cplusplus >= 201103L
+  void open(const string &filename, ios_base::openmode mode = ios_base::out)
+  {
+    open(filename.c_str(), mode);
+  }
+#endif
   void close();
 
   //private:
@@ -94,9 +124,23 @@ public:
   explicit ifstream(
     const char *filename,
     ios_base::openmode mode = ios_base::in);
+#if __cplusplus >= 201103L
+  explicit ifstream(
+    const string &filename,
+    ios_base::openmode mode = ios_base::in)
+    : ifstream(filename.c_str(), mode)
+  {
+  }
+#endif
   filebuf *rdbuf() const;
   bool is_open();
   void open(const char *filename, ios_base::openmode mode = ios_base::in);
+#if __cplusplus >= 201103L
+  void open(const string &filename, ios_base::openmode mode = ios_base::in)
+  {
+    open(filename.c_str(), mode);
+  }
+#endif
   void close();
 
   inline bool operator&&(bool other);
