@@ -1331,6 +1331,30 @@ static nlohmann::json make_unique_numeric_list(
   return result;
 }
 
+static double median_of_numeric_elements(
+  std::vector<nlohmann::json> elements,
+  const std::string &diagnostic)
+{
+  if (elements.empty())
+    throw std::runtime_error(
+      "ValueError: numpy.median() input array must be non-empty");
+
+  std::stable_sort(
+    elements.begin(),
+    elements.end(),
+    [&](const nlohmann::json &lhs, const nlohmann::json &rhs) {
+      return numeric_to_key(lhs, diagnostic) < numeric_to_key(rhs, diagnostic);
+    });
+
+  const std::size_t mid = elements.size() / 2;
+  if (elements.size() % 2 == 1)
+    return numeric_to_key(elements[mid], diagnostic);
+
+  return (numeric_to_key(elements[mid - 1], diagnostic) +
+          numeric_to_key(elements[mid], diagnostic)) /
+         2.0;
+}
+
 static nlohmann::json make_integer_list(const std::vector<std::size_t> &values)
 {
   nlohmann::json result;
@@ -5016,6 +5040,60 @@ exprt numpy_call_expr::get()
         (inline_only ? "inline literal" : "literal") + " numpy.array inputs");
     return std::move(*literal_arg);
   };
+
+  if (function == "median")
+  {
+    if (call_["args"].size() != 1)
+      throw std::runtime_error(
+        "TypeError: numpy.median() expects 1 positional argument");
+
+    bool flatten = false;
+    if (call_.contains("keywords"))
+    {
+      for (const auto &kw : call_["keywords"])
+      {
+        if (kw["_type"] != "keyword" || kw["arg"].is_null())
+          continue;
+
+        const std::string arg = kw["arg"].get<std::string>();
+        if (arg == "axis")
+        {
+          if (!is_json_none_literal(kw["value"]))
+            throw std::runtime_error(
+              "TypeError: numpy.median() axis is not supported");
+          flatten = true;
+          continue;
+        }
+
+        throw std::runtime_error(
+          "TypeError: numpy.median() keyword '" + arg + "' is not supported");
+      }
+    }
+
+    nlohmann::json arr_arg =
+      resolve_literal_numpy_array_input(call_["args"][0], function, true);
+
+    std::vector<std::size_t> shape;
+    if (!get_literal_shape(arr_arg, shape))
+      throw std::runtime_error(
+        "TypeError: numpy.median() array must contain finite numeric values");
+
+    std::vector<nlohmann::json> elements;
+    if (shape.size() == 1)
+      elements = arr_arg["elts"].get<std::vector<nlohmann::json>>();
+    else if (shape.size() == 2 && flatten)
+      flatten_json_list(arr_arg, elements);
+    else
+      throw std::runtime_error(
+        "TypeError: numpy.median() axis is not supported");
+
+    nlohmann::json result;
+    result["_type"] = "Constant";
+    result["value"] = median_of_numeric_elements(
+      std::move(elements),
+      "TypeError: numpy.median() array must contain finite numeric values");
+    return converter_.get_expr(result);
+  }
 
   if (function == "unique")
   {
