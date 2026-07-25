@@ -13,7 +13,7 @@
 #include <util/arith_tools.h>
 
 // Phase 4.0 equivalence harness for the Python frontend → IREP2 migration
-// (docs/irep2-migration.md Part IV §7 Phase 4.0, item 2).
+// (docs/roadmap/irep2-migration.md Part IV §7 Phase 4.0, item 2).
 //
 // This is the *durable contract regression* that Phases 4.3/4.4 validate
 // against: it pins that every typet the Python frontend builds today survives

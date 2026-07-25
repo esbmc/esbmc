@@ -6,7 +6,7 @@
 D1 ruled out; W1-loc refuted as a *fidelity* wall** (the barrier is native-
 dispatcher implementation cost, not location correctness). Phase C prototype is
 the next step. See Appendices A & B. **Refs:** #4715, Part V of
-`docs/irep2-migration.md`.
+`docs/roadmap/irep2-migration.md`.
 
 ---
 
