@@ -1301,6 +1301,36 @@ make_sorted_numeric_list(std::vector<nlohmann::json> elements)
   return result;
 }
 
+static nlohmann::json make_unique_numeric_list(
+  std::vector<nlohmann::json> elements,
+  const std::string &diagnostic)
+{
+  std::stable_sort(
+    elements.begin(),
+    elements.end(),
+    [&](const nlohmann::json &lhs, const nlohmann::json &rhs) {
+      return numeric_to_key(lhs, diagnostic) < numeric_to_key(rhs, diagnostic);
+    });
+
+  std::vector<nlohmann::json> unique_elements;
+  for (const auto &element : elements)
+  {
+    numeric_to_key(element, diagnostic);
+    if (
+      unique_elements.empty() ||
+      numeric_to_key(unique_elements.back(), diagnostic) !=
+        numeric_to_key(element, diagnostic))
+    {
+      unique_elements.push_back(element);
+    }
+  }
+
+  nlohmann::json result;
+  result["_type"] = "List";
+  result["elts"] = std::move(unique_elements);
+  return result;
+}
+
 static nlohmann::json make_integer_list(const std::vector<std::size_t> &values)
 {
   nlohmann::json result;
@@ -1354,6 +1384,18 @@ static bool is_sorted_numeric_list(
     if (
       numeric_to_key(elements[i], diagnostic) <
       numeric_to_key(elements[i - 1], diagnostic))
+      return false;
+  }
+  return true;
+}
+
+static bool is_1d_json_list(const nlohmann::json &list)
+{
+  if (!is_list_node(list))
+    return false;
+  for (const auto &element : list["elts"])
+  {
+    if (is_list_node(element))
       return false;
   }
   return true;
@@ -4974,6 +5016,37 @@ exprt numpy_call_expr::get()
         (inline_only ? "inline literal" : "literal") + " numpy.array inputs");
     return std::move(*literal_arg);
   };
+
+  if (function == "unique")
+  {
+    if (call_["args"].size() != 1)
+      throw std::runtime_error(
+        "TypeError: numpy.unique() expects 1 positional argument");
+
+    if (call_.contains("keywords"))
+    {
+      for (const auto &kw : call_["keywords"])
+      {
+        if (kw["_type"] != "keyword" || kw["arg"].is_null())
+          continue;
+
+        const std::string arg = kw["arg"].get<std::string>();
+        throw std::runtime_error(
+          "TypeError: numpy.unique() keyword '" + arg + "' is not supported");
+      }
+    }
+
+    nlohmann::json arr_arg =
+      resolve_literal_numpy_array_input(call_["args"][0], function, true);
+
+    if (!is_1d_json_list(arr_arg))
+      throw std::runtime_error(
+        "TypeError: numpy.unique() currently supports only 1-D arrays");
+
+    return converter_.get_expr(make_unique_numeric_list(
+      arr_arg["elts"].get<std::vector<nlohmann::json>>(),
+      "TypeError: numpy.unique() array must contain finite numeric values"));
+  }
 
   if (function == "argsort")
   {
