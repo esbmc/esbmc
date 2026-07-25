@@ -5509,14 +5509,42 @@ exprt numpy_call_expr::get()
     return converter_.get_expr(result);
   }
 
-  if (function == "ravel" || function == "flatten")
+  if (function == "ravel" || function == "flatten" || function == "nditer")
   {
     if (call_["args"].empty())
       throw std::runtime_error(
         "TypeError: numpy." + function + "() requires an array argument");
 
+    if (function == "nditer" && call_.contains("keywords"))
+    {
+      for (const auto &kw : call_["keywords"])
+      {
+        if (kw["_type"] != "keyword" || kw["arg"].is_null())
+          continue;
+
+        if (kw["arg"] == "op_flags")
+          throw std::runtime_error(
+            "TypeError: numpy.nditer() op_flags are not supported");
+
+        throw std::runtime_error(
+          "TypeError: numpy.nditer() keyword '" + kw["arg"].get<std::string>() +
+          "' is not supported");
+      }
+    }
+
     nlohmann::json arr_arg = call_["args"][0];
-    resolve_numpy_var(arr_arg);
+    if (function == "nditer")
+    {
+      auto literal_arg = get_literal_numpy_array_arg(arr_arg);
+      if (literal_arg.has_value())
+        arr_arg = std::move(*literal_arg);
+      else
+        resolve_numpy_var(arr_arg);
+    }
+    else
+    {
+      resolve_numpy_var(arr_arg);
+    }
 
     std::vector<std::size_t> old_shape;
     if (!get_literal_shape(arr_arg, old_shape))
