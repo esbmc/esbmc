@@ -274,7 +274,10 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // (otherwise "first argument of `if' must be boolean"). if2t is immutable.
     const if2t &i = to_if2t(expr);
     expr = if2tc(
-      i.type, typecast2tc(get_bool_type(), i.cond), i.true_value, i.false_value);
+      i.type,
+      typecast2tc(get_bool_type(), i.cond),
+      i.true_value,
+      i.false_value);
   }
   else if (
     is_code_assign2t(expr) &&
@@ -295,8 +298,8 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // a.target->type, matching clang's c_typecast (address_of2tc(ptr.subtype,
     // index)), not pointer(pointer(elem)).
     const type2tc &pointee = to_pointer_type(a.target->type).subtype;
-    expr2tc decayed = address_of2tc(
-      pointee, index2tc(elem, a.source, gen_zero(index_type2())));
+    expr2tc decayed =
+      address_of2tc(pointee, index2tc(elem, a.source, gen_zero(index_type2())));
     expr = code_assign2tc(a.target, decayed, a.location);
   }
   else if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
@@ -331,8 +334,8 @@ void python_adjust::adjust_expr(expr2tc &expr)
       // operands when the literal doesn't have them yet, then rebuild only when
       // the operand count matches; a residual mismatch is left by-name for the
       // exit invariant to flag.
-      std::vector<expr2tc> ops = pad_struct_operands(
-        st, to_constant_struct2t(expr).datatype_members);
+      std::vector<expr2tc> ops =
+        pad_struct_operands(st, to_constant_struct2t(expr).datatype_members);
       if (ops.size() == st.members.size())
         expr = constant_struct2tc(resolved, ops);
     }
