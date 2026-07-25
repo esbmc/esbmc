@@ -1,6 +1,6 @@
 #include <solvers/neurosym/neurosym_conv.h>
 #include <solvers/smtlib/oneshot_process.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 #include <cstdio>
 

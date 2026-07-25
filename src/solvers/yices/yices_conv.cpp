@@ -2,7 +2,7 @@
 #include <cstdarg>
 #include <cstdint>
 #include <sstream>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 #include <yices_conv.h>
 #include <assert.h>
 

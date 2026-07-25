@@ -2,7 +2,7 @@
 #define CPROVER_GOTO_SYMEX_CTEST_H
 
 #include <goto-symex/symex_target_equation.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <string>
 #include <vector>
 #include <mutex>

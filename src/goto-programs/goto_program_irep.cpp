@@ -1,5 +1,5 @@
 #include <goto-programs/goto_program_irep.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 
 void convert(const goto_programt::instructiont &instruction, irept &irep)
 {

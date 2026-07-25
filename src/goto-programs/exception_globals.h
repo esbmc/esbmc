@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/irep.h>
+#include <util/irep/irep.h>
 
 class contextt;
 

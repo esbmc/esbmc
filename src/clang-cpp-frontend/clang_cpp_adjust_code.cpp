@@ -2,11 +2,11 @@
 
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-c-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/exception_specification.h>
-#include <util/message.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/lang/exception_specification.h>
+#include <util/message/message.h>
+#include <util/irep/std_expr.h>
 
 void clang_cpp_adjust::convert_expression_to_code(exprt &expr)
 {

@@ -44,7 +44,7 @@ There are few algorithms that could be turned into explicit algorithms. However,
 
 # SSA Algorithms
 
-ESBMC uses a modular algorithm system for processing SSA (Static Single Assignment) steps during verification. The core architecture is built around the `ssa_step_algorithm` base class defined in `src/util/algorithms.h`.
+ESBMC uses a modular algorithm system for processing SSA (Static Single Assignment) steps during verification. The core architecture is built around the `ssa_step_algorithm` base class defined in `src/util/ssa/algorithms.h`.
 
 ## Algorithm Architecture
 

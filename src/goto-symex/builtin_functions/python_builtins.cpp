@@ -1,12 +1,12 @@
 #include <goto-symex/goto_symex.h>
 #include <string>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/std_types.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_types.h>
 #include <algorithm>
 
 void goto_symext::simplify_python_builtins(expr2tc &expr)
