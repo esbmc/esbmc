@@ -3363,7 +3363,6 @@ exprt numpy_call_expr::create_expr_from_call()
             transposed["elts"] = nlohmann::json::array();
 
             bool all_numeric_constants = true;
-            bool has_float_literal = false;
             for (std::size_t c = 0; c < col_count && all_numeric_constants; ++c)
             {
               nlohmann::json out_row;
@@ -3378,7 +3377,6 @@ exprt numpy_call_expr::create_expr_from_call()
                   all_numeric_constants = false;
                   break;
                 }
-                has_float_literal = has_float_literal || !value.is_int;
 
                 nlohmann::json elem;
                 elem["_type"] = "Constant";
@@ -3392,7 +3390,7 @@ exprt numpy_call_expr::create_expr_from_call()
                 transposed["elts"].push_back(out_row);
             }
 
-            if (all_numeric_constants && has_float_literal)
+            if (all_numeric_constants)
             {
               exprt folded = converter_.get_expr(transposed);
               if (converter_.current_lhs)
