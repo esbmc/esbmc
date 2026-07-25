@@ -1267,15 +1267,22 @@ static bool is_finite_numeric_value(const numeric_value &value)
   return value.is_int || std::isfinite(value.double_value);
 }
 
-static double numeric_to_sort_key(const nlohmann::json &node)
+static double
+numeric_to_key(const nlohmann::json &node, const std::string &diagnostic)
 {
   numeric_value value;
   if (
     !try_extract_numeric_constant(node, value) ||
     !is_finite_numeric_value(value))
-    throw std::runtime_error(
-      "TypeError: numpy.sort() currently supports only finite numeric arrays");
+    throw std::runtime_error(diagnostic);
   return to_double(value);
+}
+
+static double numeric_to_sort_key(const nlohmann::json &node)
+{
+  return numeric_to_key(
+    node,
+    "TypeError: numpy.sort() currently supports only finite numeric arrays");
 }
 
 static nlohmann::json
@@ -1291,6 +1298,21 @@ make_sorted_numeric_list(std::vector<nlohmann::json> elements)
   nlohmann::json result;
   result["_type"] = "List";
   result["elts"] = std::move(elements);
+  return result;
+}
+
+static nlohmann::json make_integer_list(const std::vector<std::size_t> &values)
+{
+  nlohmann::json result;
+  result["_type"] = "List";
+  result["elts"] = nlohmann::json::array();
+  for (std::size_t value : values)
+  {
+    nlohmann::json elem;
+    elem["_type"] = "Constant";
+    elem["value"] = value;
+    result["elts"].push_back(elem);
+  }
   return result;
 }
 
@@ -1320,6 +1342,42 @@ get_literal_numpy_array_arg(const nlohmann::json &node)
   if (literal.is_object() && literal.value("_type", std::string()) == "List")
     return literal;
   return std::nullopt;
+}
+
+static bool is_sorted_numeric_list(
+  const nlohmann::json &list,
+  const std::string &diagnostic)
+{
+  const auto &elements = list["elts"];
+  for (std::size_t i = 1; i < elements.size(); ++i)
+  {
+    if (
+      numeric_to_key(elements[i], diagnostic) <
+      numeric_to_key(elements[i - 1], diagnostic))
+      return false;
+  }
+  return true;
+}
+
+static std::size_t searchsorted_position(
+  const nlohmann::json &list,
+  const nlohmann::json &value_node,
+  bool right)
+{
+  const double value = numeric_to_key(
+    value_node,
+    "TypeError: numpy.searchsorted() value must be a finite numeric literal");
+  const auto &elements = list["elts"];
+  for (std::size_t i = 0; i < elements.size(); ++i)
+  {
+    const double current = numeric_to_key(
+      elements[i],
+      "TypeError: numpy.searchsorted() array must contain finite numeric "
+      "values");
+    if (right ? value < current : value <= current)
+      return i;
+  }
+  return elements.size();
 }
 
 static bool is_supported_numpy_unary_math(const std::string &function)
@@ -4896,6 +4954,133 @@ exprt numpy_call_expr::get()
       }
     }
   };
+
+  auto resolve_literal_numpy_array_input = [this](
+                                             nlohmann::json arr_arg,
+                                             const std::string &function_name,
+                                             bool inline_only = false) {
+    if (!inline_only && arr_arg.value("_type", std::string()) == "Name")
+    {
+      nlohmann::json resolved = json_utils::find_var_decl(
+        arr_arg["id"], converter_.current_function_name(), converter_.ast());
+      if (resolved.contains("value") && resolved["value"].is_object())
+        arr_arg = resolved["value"];
+    }
+
+    auto literal_arg = get_literal_numpy_array_arg(arr_arg);
+    if (!literal_arg.has_value())
+      throw std::runtime_error(
+        "TypeError: numpy." + function_name + "() currently supports only " +
+        (inline_only ? "inline literal" : "literal") + " numpy.array inputs");
+    return std::move(*literal_arg);
+  };
+
+  if (function == "argsort")
+  {
+    if (call_["args"].size() != 1)
+      throw std::runtime_error(
+        "TypeError: numpy.argsort() expects 1 positional argument");
+
+    if (call_.contains("keywords") && !call_["keywords"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.argsort() keywords are not supported");
+
+    nlohmann::json arr_arg =
+      resolve_literal_numpy_array_input(call_["args"][0], function, true);
+
+    std::vector<std::size_t> shape;
+    if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
+      throw std::runtime_error(
+        "TypeError: numpy.argsort() currently supports only 1-D arrays");
+
+    const auto &elements = arr_arg["elts"];
+    std::vector<std::size_t> indices(elements.size());
+    for (std::size_t i = 0; i < indices.size(); ++i)
+      indices[i] = i;
+
+    std::stable_sort(
+      indices.begin(), indices.end(), [&](std::size_t lhs, std::size_t rhs) {
+        return numeric_to_key(
+                 elements[lhs],
+                 "TypeError: numpy.argsort() array must contain finite numeric "
+                 "values") <
+               numeric_to_key(
+                 elements[rhs],
+                 "TypeError: numpy.argsort() array must contain finite numeric "
+                 "values");
+      });
+
+    return converter_.get_expr(make_integer_list(indices));
+  }
+
+  if (function == "searchsorted")
+  {
+    if (call_["args"].size() != 2)
+      throw std::runtime_error(
+        "TypeError: numpy.searchsorted() expects array and value arguments");
+
+    bool right = false;
+    if (call_.contains("keywords"))
+    {
+      for (const auto &kw : call_["keywords"])
+      {
+        if (kw["_type"] != "keyword" || kw["arg"].is_null())
+          continue;
+
+        const std::string arg = kw["arg"].get<std::string>();
+        if (arg == "side")
+        {
+          const auto &value = kw["value"];
+          if (
+            !value.is_object() ||
+            value.value("_type", std::string()) != "Constant" ||
+            !value.contains("value") || !value["value"].is_string())
+          {
+            throw std::runtime_error(
+              "TypeError: numpy.searchsorted() side must be 'left' or 'right'");
+          }
+          const std::string side = value["value"].get<std::string>();
+          if (side == "left")
+            right = false;
+          else if (side == "right")
+            right = true;
+          else
+            throw std::runtime_error(
+              "TypeError: numpy.searchsorted() side must be 'left' or 'right'");
+          continue;
+        }
+
+        throw std::runtime_error(
+          "TypeError: numpy.searchsorted() keyword '" + arg +
+          "' is not supported");
+      }
+    }
+
+    nlohmann::json arr_arg =
+      resolve_literal_numpy_array_input(call_["args"][0], function, true);
+
+    std::vector<std::size_t> shape;
+    if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
+      throw std::runtime_error(
+        "TypeError: numpy.searchsorted() currently supports only 1-D arrays");
+
+    if (!is_sorted_numeric_list(
+          arr_arg,
+          "TypeError: numpy.searchsorted() array must contain finite numeric "
+          "values"))
+      throw std::runtime_error(
+        "TypeError: numpy.searchsorted() requires a sorted 1-D array");
+
+    nlohmann::json position;
+    position["_type"] = "Constant";
+    nlohmann::json value_arg = call_["args"][1];
+    numeric_to_key(
+      value_arg,
+      "TypeError: numpy.searchsorted() value must be a finite numeric literal");
+    position["value"] =
+      static_cast<int64_t>(searchsorted_position(arr_arg, value_arg, right));
+    return converter_.get_expr(position);
+  }
 
   if (function == "sort")
   {
