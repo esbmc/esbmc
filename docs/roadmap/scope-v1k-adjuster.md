@@ -643,17 +643,33 @@ no-verdict for this same reason. The "wrong/absent verdict — needs per-case
 triage, mixed tractability" row in the table above was therefore substantially
 **one missing mirror**, not a set of independent SMT-level oddities.
 
-**The parity figure in the section above was optimistic.** A stride-6 census
-(733 of 4 401 `regression/python` tests, run in parallel against a pinned binary)
-found **11 divergences in the first 453** compared — well below the "~97.5% on a
-365-test strided sample" recorded earlier, which sampled too coarsely to see
-them. After this arm, 4 of those 11 are fixed. Do not quote the older figure;
-re-measure with a stride ≤ 6 before making a parity claim.
+**A wider census confirms the recorded parity figure.** A stride-6 run (733 of
+4 401 `regression/python` tests, executed 12-way parallel against a *pinned
+binary snapshot* so concurrent rebuilds cannot perturb it) found **18
+divergences — 97.5% parity**, matching the "~97.5% on a 365-test strided sample"
+recorded above. The wider sample did not move the *rate*; what it changed is the
+**composition**, by naming the full divergence set rather than a handful.
 
-**Still open after round 3:** `ternary_string_fail`, `github_2934_2`,
-`github_3078_fail`, `github_3337_2_fail`,
-`github_4784_isnone_short_circuit_fail` (no verdict); `github_4745_pep604_class_attr`,
-`cmath_polar_rect_semantics_success_07`, `github_3690` (legacy SUCCESSFUL →
-hop-off FAILED). The wrong-verdict trio is the higher-risk group — a hop-off
-`FAILED` against a legacy `SUCCESSFUL` is either a false alarm or a real bug the
-legacy path masks, and only per-case triage distinguishes them.
+Two of the 18 are method artifacts: `python_irep2_adjust_only_boolop_or` and
+`python_irep2_adjust_only_optional` already carry `--python-irep2-adjust-only` in
+their own `test.desc`, so both census columns are hop-off runs and the empty cell
+is the known load-dependent solver timeout — they pass under `ctest`. Twelve are
+genuine.
+
+After this arm, parity on the same sample is **98.1%** (14 divergences), and the
+whole "no verdict because the guard was a bitvector" family is gone.
+
+**Still open after round 3** (excluding the two artifacts):
+
+| Kind | Cases |
+|---|---|
+| no verdict | `ternary_string_fail`, `github_2934_2`, `github_3078_fail`, `github_3337_2_fail`, `github_4784_isnone_short_circuit_fail`, `none3`, `optional6` |
+| legacy SUCCESSFUL → hop-off FAILED | `cmath_polar_rect_semantics_success_07`, `github_3690`, `github_4745_pep604_class_attr`, `math13`, `math_edge_frexp_success`, `sqrt5` |
+
+The wrong-verdict group is the higher-risk one — a hop-off `FAILED` against a
+legacy `SUCCESSFUL` is either a false alarm or a real bug the legacy path masks,
+and only per-case triage distinguishes them. Note it now clusters visibly on
+math/float (`math13`, `math_edge_frexp_success`, `sqrt5`,
+`cmath_polar_rect_semantics_success_07`), which points at the parked S4
+arithmetic-conversion work rather than at six independent causes — but that is a
+hypothesis from the names, not a triaged finding.
