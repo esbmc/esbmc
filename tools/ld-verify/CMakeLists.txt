@@ -53,4 +53,23 @@ if(BUILD_TESTING)
     --strategy bmc --unwind 2 --fault-injection)
   add_ld_verify_test(unsupported-strategy "unsupported strategy"
     ${_ld_reg}/motor_interlock/motor_interlock.ld --strategy portfolio)
+
+  # Graphical PLCopen through the runner: resolving blocks, edge contacts,
+  # parallel paths and feedback all have to survive the staging path too.
+  add_ld_verify_test(graphical "\"result\": \"SAFE\""
+    ${_ld_reg}/stairs_light_safe/stairs_light.ld
+    --props ${_ld_reg}/stairs_light_safe/props.yaml)
+
+  # The violated property must reach the report by name, which is what makes
+  # the JSON readable without the raw counterexample.
+  add_ld_verify_test(violation-named
+    "\"description\": \"ESD valve must be closed when manual ESD is triggered\""
+    ${_ld_reg}/esd_manual_reset_fail/esd.ld
+    --props ${_ld_reg}/esd_manual_reset_fail/props.yaml)
+
+  # An input esbmc cannot parse yields no verdict line; that must surface as
+  # ERROR rather than being folded into UNKNOWN.
+  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/malformed.ld "not a plcopen document")
+  add_ld_verify_test(error-no-verdict "\"result\": \"ERROR\""
+    ${CMAKE_CURRENT_BINARY_DIR}/malformed.ld)
 endif()

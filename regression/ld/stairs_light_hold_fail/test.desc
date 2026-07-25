@@ -1,0 +1,5 @@
+CORE
+stairs_light.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^VERIFICATION FAILED$
+^.*Light must not be on without PIR detection or button activation.*$
