@@ -70,7 +70,7 @@ def full_like(a: list, fill_value: Any) -> list:
 def random(size: int = None) -> Any:
     if size is None:
         value: float = nondet_float()
-        __ESBMC_assume(value >= 0.0 and value < 1.0)
+        __ESBMC_assume(0.0 <= value < 1.0)
         return value
 
     if size < 0:
@@ -80,7 +80,7 @@ def random(size: int = None) -> Any:
     i: int = 0
     while i < size:
         value: float = nondet_float()
-        __ESBMC_assume(value >= 0.0 and value < 1.0)
+        __ESBMC_assume(0.0 <= value < 1.0)
         out = out + [value]
         i = i + 1
     return out
@@ -89,7 +89,7 @@ def random(size: int = None) -> Any:
 def rand(d0: int = None, d1: int = None) -> Any:
     if d0 is None:
         value: float = nondet_float()
-        __ESBMC_assume(value >= 0.0 and value < 1.0)
+        __ESBMC_assume(0.0 <= value < 1.0)
         return value
 
     if d1 is not None:
@@ -102,7 +102,7 @@ def rand(d0: int = None, d1: int = None) -> Any:
     i: int = 0
     while i < d0:
         value: float = nondet_float()
-        __ESBMC_assume(value >= 0.0 and value < 1.0)
+        __ESBMC_assume(0.0 <= value < 1.0)
         out = out + [value]
         i = i + 1
     return out
@@ -120,7 +120,7 @@ def randint(low: int, high: int = None, size: int = None) -> Any:
 
     if size is None:
         value: int = nondet_int()
-        __ESBMC_assume(value >= start and value < stop)
+        __ESBMC_assume(start <= value < stop)
         return value
 
     if size < 0:
@@ -130,7 +130,7 @@ def randint(low: int, high: int = None, size: int = None) -> Any:
     i: int = 0
     while i < size:
         value: int = nondet_int()
-        __ESBMC_assume(value >= start and value < stop)
+        __ESBMC_assume(start <= value < stop)
         out = out + [value]
         i = i + 1
     return out
@@ -142,9 +142,9 @@ def uniform(low: float = 0.0, high: float = 1.0) -> float:
 
     value: float = nondet_float()
     if low < high:
-        __ESBMC_assume(value >= low and value <= high)
+        __ESBMC_assume(low <= value <= high)
     else:
-        __ESBMC_assume(value >= high and value <= low)
+        __ESBMC_assume(high <= value <= low)
     return value
 
 
@@ -170,7 +170,7 @@ def choice(a: list[int],
         raise TypeError("numpy.random.choice() size is not supported")
 
     index: int = nondet_int()
-    __ESBMC_assume(index >= 0 and index < n)
+    __ESBMC_assume(0 <= index < n)
     return a[index]
 
 
