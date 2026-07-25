@@ -12,7 +12,7 @@
 #include <vector>
 
 // Dead-but-tested gate for the V.1k (b) IREP2-native Python adjuster
-// (docs/irep2-migration.md, "V.1k (b)-adjuster", phases B.0/B.1).
+// (docs/roadmap/irep2-migration.md, "V.1k (b)-adjuster", phases B.0/B.1).
 //
 // B.0 pins the inert baseline: a non-member/index expression is byte-identical
 // after a walk. B.1 adds the resolution behaviour: a transient symbol_type2t
