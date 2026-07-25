@@ -646,6 +646,15 @@ protected:
    */
   void make_temporary(exprt &expr);
 
+  /* Lower a class-typed conditional operator to a single temporary_object whose
+   * initializer branches, so both constructors target one object (guaranteed
+   * elision). Sets `elided` when it applied; leaves it false for shapes that
+   * keep the generic if_exprt lowering. Returns true on conversion error. */
+  bool get_conditional_class_prvalue(
+    const clang::ConditionalOperator &ternary,
+    exprt &new_expr,
+    bool &elided);
+
   bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr) override;
 };
 
