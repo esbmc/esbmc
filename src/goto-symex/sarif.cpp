@@ -8,8 +8,8 @@
 #include <nlohmann/json.hpp>
 #include <set>
 #include <string>
-#include <util/cwe_mapping.h>
-#include <util/message.h>
+#include <util/base/cwe_mapping.h>
+#include <util/message/message.h>
 
 using json = nlohmann::json;
 

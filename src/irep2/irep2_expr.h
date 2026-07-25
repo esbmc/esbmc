@@ -1,11 +1,11 @@
 #ifndef IREP2_EXPR_H_
 #define IREP2_EXPR_H_
 
-#include <util/config.h>
-#include <util/c_types.h>
-#include <util/fixedbv.h>
-#include <util/ieee_float.h>
-#include <util/location.h>
+#include <util/config/config.h>
+#include <util/lang/c_types.h>
+#include <util/arith/fixedbv.h>
+#include <util/arith/ieee_float.h>
+#include <util/irep/location.h>
 #include <irep2/irep2_type.h>
 
 // So - make some type definitions for the different types we're going to be

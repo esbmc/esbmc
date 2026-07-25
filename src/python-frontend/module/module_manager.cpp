@@ -2,7 +2,7 @@
 #include <python-frontend/module/module.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math/round_to_nearest_guard.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 #include <nlohmann/json.hpp>
 

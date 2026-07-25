@@ -7,16 +7,16 @@
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/expr.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
-#include <util/std_code.h>
-#include <util/std_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/irep/expr.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_types.h>
 
 #include <algorithm>
 #include <cmath>

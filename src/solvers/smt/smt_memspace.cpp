@@ -3,7 +3,7 @@
 #include <utility>
 #include <solvers/smt/smt_solver.h>
 #include <util/message/format.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 /** @file smt_memspace.cpp
  *  Modelling the memory address space of C isn't something that is handled

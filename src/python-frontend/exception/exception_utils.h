@@ -3,10 +3,10 @@
 
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
-#include <util/location.h>
-#include <util/message.h>
-#include <util/std_expr.h>
-#include <util/string_constant.h>
+#include <util/irep/location.h>
+#include <util/message/message.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/string_constant.h>
 
 #include <string>
 

@@ -1,8 +1,8 @@
 #ifndef ESBMC_GOTO_ALGORITHMS_H
 #define ESBMC_GOTO_ALGORITHMS_H
 
-#include <util/algorithms.h>
-#include <util/message.h>
+#include <util/ssa/algorithms.h>
+#include <util/message/message.h>
 #include <unordered_set>
 
 /**

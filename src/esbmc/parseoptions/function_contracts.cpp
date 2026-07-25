@@ -2,8 +2,8 @@
 
 #include <esbmc/esbmc_parseoptions.h>
 #include <goto-programs/contracts/contracts.h>
-#include <util/irep.h>
-#include <util/symbol.h>
+#include <util/irep/irep.h>
+#include <util/symtab/symbol.h>
 #include <list>
 #include <set>
 #include <string>

@@ -1,0 +1,25 @@
+properties:
+  - id: P8
+    kind: invariant
+    expression: "ESD_Valve_Closed || !High_Pressure_Alarm"
+    description: "ESD valve must be closed when high-pressure alarm is active (SIL-2 immediacy)"
+
+  - id: P9
+    kind: invariant
+    expression: "ESD_Valve_Closed || !High_Temp_Alarm"
+    description: "ESD valve must be closed when high-temperature alarm is active"
+
+  - id: P10
+    kind: invariant
+    expression: "ESD_Valve_Closed || !Manual_ESD"
+    description: "ESD valve must be closed when manual ESD is triggered"
+
+  - id: P11
+    kind: invariant
+    expression: "Process_Shutdown || !ESD_Latch"
+    description: "Process must be shut down whenever the ESD latch is set (persistence)"
+
+  - id: P12
+    kind: absence
+    expression: "High_Pressure_Alarm && !ESD_Valve_Closed"
+    description: "High-pressure alarm must never occur without valve closure (safe state)"

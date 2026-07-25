@@ -4,16 +4,16 @@
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <langapi/language_util.h>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/prefix.h>
-#include <util/pretty.h>
-#include <util/python_types.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/base/prefix.h>
+#include <util/symtab/pretty.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_expr.h>
 
 bool goto_symex_utils::is_alloca_return_value_name(const std::string &name)
 {

@@ -7,12 +7,12 @@
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
 
 #include <functional>
 #include <set>
