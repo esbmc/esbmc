@@ -615,3 +615,45 @@ hop-off abort is now **closed**, not merely sampled.
 
 Two of five triaged; `github_3012_3_fail` (bitwuzla sort), `ternary_string_fail`
 and `github_4796_object_handle_eq_fail` (silent) remain.
+
+### Per-case triage round 3 — the branch/loop condition was never cast to bool (2026-07-25)
+
+`github_3012_3_fail`'s `bitwuzla: … term with unexpected sort at index 0` is
+again not what the message suggests. Its hop-off and legacy VCCs are nearly
+identical; the one structural difference is the guard:
+
+```
+legacy:  {-4} goto_symex::guard…#1 == (x&0#1 != 0)   {-5} !goto_symex::guard…#1
+hop-off: {-4} !x&0#1                                  {1} … => x&0#1
+```
+
+The hop-off applies `!` and `=>` to a **signedbv**. `clang_c_adjust` casts every
+branch and loop condition (`adjust_ifthenelse`, `adjust_while`, `adjust_for` —
+all `gen_typecast_bool`, `clang_c_adjust_code.cpp:106-128`); `python_adjust` had
+only the `if2t` *ternary-expression* arm (#6348), never the statement-level ones.
+Python's `if n:` on a plain int is the common case, so the raw bitvector reached
+the solver. Fixed by mirroring all four (`code_ifthenelse2t`, `code_while2t`,
+`code_dowhile2t`, `code_for2t`).
+
+**This one arm closed six divergences, not one.** Besides `github_3012_3_fail`
+it fixed `github_4796_object_handle_eq_fail` (the last of the round-1 "silent"
+pair but one) and four cases the earlier census had filed under *wrong/absent
+verdict* — `div6`, `filter_loop`, `github_3841_6`, `jpl` — all of which were
+no-verdict for this same reason. The "wrong/absent verdict — needs per-case
+triage, mixed tractability" row in the table above was therefore substantially
+**one missing mirror**, not a set of independent SMT-level oddities.
+
+**The parity figure in the section above was optimistic.** A stride-6 census
+(733 of 4 401 `regression/python` tests, run in parallel against a pinned binary)
+found **11 divergences in the first 453** compared — well below the "~97.5% on a
+365-test strided sample" recorded earlier, which sampled too coarsely to see
+them. After this arm, 4 of those 11 are fixed. Do not quote the older figure;
+re-measure with a stride ≤ 6 before making a parity claim.
+
+**Still open after round 3:** `ternary_string_fail`, `github_2934_2`,
+`github_3078_fail`, `github_3337_2_fail`,
+`github_4784_isnone_short_circuit_fail` (no verdict); `github_4745_pep604_class_attr`,
+`cmath_polar_rect_semantics_success_07`, `github_3690` (legacy SUCCESSFUL →
+hop-off FAILED). The wrong-verdict trio is the higher-risk group — a hop-off
+`FAILED` against a legacy `SUCCESSFUL` is either a false alarm or a real bug the
+legacy path masks, and only per-case triage distinguishes them.

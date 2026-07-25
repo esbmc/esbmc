@@ -304,6 +304,58 @@ void python_adjust::adjust_expr(expr2tc &expr)
     expr = code_assign2tc(a.target, decayed, a.location);
   }
   else if (
+    is_code_ifthenelse2t(expr) &&
+    !is_bool_type(to_code_ifthenelse2t(expr).cond->type))
+  {
+    // Branch/loop conditions must be boolean before the solver sees them. Python
+    // writes `if x:` on a plain int, and the converter keeps the raw signedbv;
+    // clang_c_adjust casts it (adjust_ifthenelse/adjust_while/adjust_for all call
+    // gen_typecast_bool). Without the cast the guard reaches the SMT layer as a
+    // bitvector where a Boolean is required -- bitwuzla rejects it with "term
+    // with unexpected sort at index 0". This is the statement-level counterpart
+    // of the if2t (ternary) arm above.
+    const code_ifthenelse2t &i = to_code_ifthenelse2t(expr);
+    expr = code_ifthenelse2tc(
+      typecast2tc(get_bool_type(), i.cond),
+      i.then_case,
+      i.else_case,
+      i.location);
+  }
+  else if (
+    is_code_while2t(expr) && !is_bool_type(to_code_while2t(expr).cond->type))
+  {
+    const code_while2t &w = to_code_while2t(expr);
+    expr = code_while2tc(
+      typecast2tc(get_bool_type(), w.cond),
+      w.body,
+      w.location,
+      w.pragma_unroll_count);
+  }
+  else if (
+    is_code_dowhile2t(expr) &&
+    !is_bool_type(to_code_dowhile2t(expr).cond->type))
+  {
+    const code_dowhile2t &d = to_code_dowhile2t(expr);
+    expr = code_dowhile2tc(
+      typecast2tc(get_bool_type(), d.cond),
+      d.body,
+      d.location,
+      d.pragma_unroll_count);
+  }
+  else if (
+    is_code_for2t(expr) && !is_nil_expr(to_code_for2t(expr).cond) &&
+    !is_bool_type(to_code_for2t(expr).cond->type))
+  {
+    const code_for2t &f = to_code_for2t(expr);
+    expr = code_for2tc(
+      f.init,
+      typecast2tc(get_bool_type(), f.cond),
+      f.iter,
+      f.body,
+      f.location,
+      f.pragma_unroll_count);
+  }
+  else if (
     is_code_return2t(expr) && !is_nil_expr(to_code_return2t(expr).operand) &&
     is_code_type(to_code_return2t(expr).operand->type))
   {
