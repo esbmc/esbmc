@@ -170,9 +170,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // Must precede inlining: goto_inlinet relabels a hidden function's
     // instructions with the call site, after which the models' assertions
     // can no longer be told apart from the user's (discussion #6382).
-    if (
-      cmdline.isset("no-library-assertions") ||
-      options.get_bool_option("no-library-assertions"))
+    if (options.get_bool_option("no-library-assertions"))
       remove_library_assertions(goto_functions);
 
     // Start by removing all no-op instructions and unreachable code
