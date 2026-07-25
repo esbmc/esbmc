@@ -2574,6 +2574,15 @@ bool clang_cpp_convertert::get_decl_ref(
   case clang::Decl::Binding:
   {
     const auto &bd = static_cast<const clang::BindingDecl &>(decl);
+    // Tuple-like case ([dcl.struct.bind]/4): clang synthesises a holding
+    // variable initialised to get<i>(e) and getBinding() refers to it. That
+    // holding var is never emitted, so resolve directly to its initializer
+    // (the get<i>(e) call) — mirroring how the array/member cases substitute
+    // the holder sub-expression. Re-evaluating get<i>(e) is side-effect free
+    // and yields an lvalue into the holder, so reads and writes are correct.
+    if (const clang::VarDecl *hv = bd.getHoldingVar())
+      if (const clang::Expr *init = hv->getInit())
+        return get_expr(*init, new_expr);
     if (const clang::Expr *e = bd.getBinding())
       return get_expr(*e, new_expr);
     break;
