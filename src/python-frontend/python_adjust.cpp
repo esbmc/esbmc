@@ -281,6 +281,22 @@ void python_adjust::adjust_expr(expr2tc &expr)
       i.false_value);
   }
   else if (
+    is_address_of2t(expr) && is_array_type(to_address_of2t(expr).ptr_obj->type))
+  {
+    // `&array` decays to `&array[0]`, exactly as clang_c_adjust::adjust_address_of
+    // does (clang_c_adjust_expr.cpp:743-754). This is the node-level counterpart
+    // of the assignment-seam decay below: the operand need not be near an
+    // assignment at all -- the OM raise sites build a struct literal
+    // `{ .message = &"math domain error" }` whose member is a `char*`, so
+    // without the decay the literal carries a `char(*)[N]` and the member type
+    // silently disagrees with its initialiser. Idempotent: the rewritten operand
+    // is an index2t of element type, so the arm cannot re-fire.
+    const address_of2t &a = to_address_of2t(expr);
+    const type2tc &elem = to_array_type(a.ptr_obj->type).subtype;
+    expr =
+      address_of2tc(elem, index2tc(elem, a.ptr_obj, gen_zero(index_type2())));
+  }
+  else if (
     is_code_assign2t(expr) &&
     is_pointer_type(to_code_assign2t(expr).target->type) &&
     is_array_type(to_code_assign2t(expr).source->type))
