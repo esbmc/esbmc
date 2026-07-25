@@ -5073,7 +5073,7 @@ migration. Re-opening it requires either an IREP2-native location-carriage
 design (a large, separate initiative) or a decision that location fidelity may
 degrade (it may not — it is `test.desc`- and witness-visible).
 
-> **2026-07-05 update — the W1-loc spike (`docs/spike-v1k-w1loc.md`, Phases A–B)
+> **2026-07-05 update — the W1-loc spike (`docs/roadmap/spike-v1k-w1loc.md`, Phases A–B)
 > refutes the fidelity premise above; W1-loc is reclassified.** The Conclusion
 > rests on "the pipeline consumes per-node source locations and fidelity depends
 > on it." Measured, that premise is false at the consumption sites. Phase A's

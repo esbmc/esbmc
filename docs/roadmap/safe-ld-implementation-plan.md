@@ -104,8 +104,9 @@ tools/
     └── main.cpp               # ld-verify CLI entry point
 
 docs/
-├── safe-ld-implementation-plan.md   # this document
-└── safe-ld-property-format.md       # YAML property spec (added in WP1)
+├── roadmap/
+│   └── safe-ld-implementation-plan.md   # this document
+└── safe-ld-property-format.md           # YAML property spec (added in WP1)
 
 regression/
 └── ld/                        # all LD regression tests
