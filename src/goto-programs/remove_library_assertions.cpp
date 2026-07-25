@@ -1,7 +1,7 @@
 #include <goto-programs/remove_library_assertions.h>
 #include <langapi/mode.h>
-#include <util/config.h>
-#include <util/message.h>
+#include <util/config/config.h>
+#include <util/message/message.h>
 
 void remove_library_assertions(goto_functionst &goto_functions)
 {
