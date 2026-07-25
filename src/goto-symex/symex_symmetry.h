@@ -2,7 +2,7 @@
 #define CPROVER_GOTO_SYMEX_SYMEX_SYMMETRY_H
 
 #include <goto-symex/symex_target_equation.h>
-#include <util/algorithms.h>
+#include <util/ssa/algorithms.h>
 
 /// SSA transformation pass that recognises `lhs = ite(cond, t, e)` max/min
 /// idioms in the equation and injects the redundant bounds they imply

@@ -1,11 +1,11 @@
 #ifndef CLANG_C_FRONTEND_CLANG_C_ADJUST_H_
 #define CLANG_C_FRONTEND_CLANG_C_ADJUST_H_
 
-#include <util/context.h>
-#include <util/namespace.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
-#include <util/symbol_generator.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/symtab/symbol_generator.h>
 
 /**
  * clang C adjuster class for:

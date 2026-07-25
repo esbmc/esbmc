@@ -2,8 +2,8 @@
 #define ESBMC_PYTHON_LAMBDA_H
 
 #include <python-frontend/python_converter.h>
-#include <util/expr.h>
-#include <util/std_code.h>
+#include <util/irep/expr.h>
+#include <util/irep/std_code.h>
 #include <nlohmann/json.hpp>
 
 class python_converter;

@@ -6,7 +6,7 @@ Author: Franz Brauße
 
 #define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch.hpp>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 
 TEST_CASE("signed binary2integer leading one matters", "[core][util][bin2int]")
 {

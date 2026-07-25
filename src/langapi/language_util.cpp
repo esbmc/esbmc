@@ -1,7 +1,7 @@
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 static language_idt language_id_from_mode(irep_idt mode)
 {

@@ -2,10 +2,10 @@
 #define CPROVER_LANGUAGE_UTIL_H
 
 #include <irep2/irep2.h>
-#include <util/language.h>
-#include <util/migrate.h>
-#include <util/namespace.h>
-#include <util/symbol.h>
+#include <util/lang/language.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/symbol.h>
 
 std::unique_ptr<languaget> language_from_symbol(const symbolt &symbol);
 

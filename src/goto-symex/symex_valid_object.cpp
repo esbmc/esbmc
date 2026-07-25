@@ -1,6 +1,6 @@
 #include <goto-symex/dynamic_allocation.h>
 #include <goto-symex/goto_symex.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 
 static const expr2tc *get_object(const expr2tc &expr)
 {
