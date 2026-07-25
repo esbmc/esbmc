@@ -1,5 +1,5 @@
 #include <solvers/smt/smt_solver.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 
 smt_astt smt_solver_baset::convert_byte_extract(const expr2tc &expr)
 {

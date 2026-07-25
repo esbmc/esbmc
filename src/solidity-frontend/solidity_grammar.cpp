@@ -9,7 +9,7 @@
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/solidity_grammar.h>
 #include <set>
-#include <util/message.h>
+#include <util/message/message.h>
 
 #define ENUM_TO_STR(s)                                                         \
   case s:                                                                      \

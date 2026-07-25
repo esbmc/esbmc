@@ -1,6 +1,6 @@
 #include <cstdint>
-#include <util/c_types.h>
-#include <util/mp_arith.h>
+#include <util/lang/c_types.h>
+#include <util/arith/mp_arith.h>
 #include <cvc5_conv.h>
 
 #define new_ast new_solver_ast<cvc5_smt_ast>

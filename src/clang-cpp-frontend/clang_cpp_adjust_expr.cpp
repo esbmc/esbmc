@@ -1,10 +1,10 @@
 #include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
-#include <util/c_sizeof.h>
-#include <util/c_types.h>
+#include <util/lang/c_sizeof.h>
+#include <util/lang/c_types.h>
 #include <goto-programs/destructor.h>
-#include <util/expr_util.h>
-#include <util/message.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)

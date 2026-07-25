@@ -6,12 +6,12 @@
 #include <queue>
 #include <set>
 #include <stack>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>
-#include <util/namespace.h>
-#include <util/options.h>
-#include <util/symbol_generator.h>
-#include <util/std_code.h>
+#include <util/symtab/namespace.h>
+#include <util/config/options.h>
+#include <util/symtab/symbol_generator.h>
+#include <util/irep/std_code.h>
 
 class goto_convertt
 {

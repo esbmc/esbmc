@@ -1,7 +1,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 #include <cmath>
-#include <util/ieee_float.h>
+#include <util/arith/ieee_float.h>
 
 TEST_CASE("ieee float can handle 1", "[core][util][ieee_floatt]")
 {

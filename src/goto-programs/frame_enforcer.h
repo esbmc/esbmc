@@ -21,7 +21,7 @@
 #define GOTO_PROGRAMS_FRAME_ENFORCER_H
 
 #include <goto-programs/goto_program.h>
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <irep2/irep2_expr.h>
 #include <map>
 #include <set>

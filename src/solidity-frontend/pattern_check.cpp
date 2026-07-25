@@ -6,7 +6,7 @@
 /// execution. Further patterns are not yet implemented.
 
 #include <solidity-frontend/pattern_check.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <stdlib.h>
 
 pattern_checker::pattern_checker(
