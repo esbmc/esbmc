@@ -2,7 +2,7 @@
 
 **Status:** PROPOSED (plan only — no implementation yet)
 **Date:** 2026-07-18 (revised after technical review, 2026-07-18)
-**Related:** [`docs/cprover-support-roadmap.md`](cprover-support-roadmap.md) (the CBMC
+**Related:** [`docs/roadmap/cprover-support-roadmap.md`](cprover-support-roadmap.md) (the CBMC
 goto-binary ingestion effort this builds on), `src/jimple-frontend/` (an unrelated,
 pre-existing Java route)
 

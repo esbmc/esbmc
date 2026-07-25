@@ -2,7 +2,7 @@
 """Regenerate cbmc_class_id_intern{,_fail}.goto.
 
 Pins the *semantics* of @class_identifier interning, not merely that it does
-not crash (docs/jbmc-goto-binary-poc-plan.md 4.1.1). The adapter maps CPROVER's
+not crash (docs/roadmap/jbmc-goto-binary-poc-plan.md 4.1.1). The adapter maps CPROVER's
 bare `string` type to an integer tag and interns each distinct class-name
 literal to a distinct value, which is faithful only if the map is injective and
 program-wide:

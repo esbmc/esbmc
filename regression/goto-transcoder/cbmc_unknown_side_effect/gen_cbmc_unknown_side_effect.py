@@ -5,7 +5,7 @@ The fixture pins ESBMC's graceful decline of a side-effect statement it has no
 case for.
 
 It originally used `allocate`, the real blocker from
-docs/jbmc-goto-binary-poc-plan.md 2.6, and served as the negative test that
+docs/roadmap/jbmc-goto-binary-poc-plan.md 2.6, and served as the negative test that
 Phase 2 would have to update. Phase 2 has since implemented `allocate`, so the
 statement here is a synthetic id instead: the contract under test is the
 graceful decline itself, which must keep working for whatever construct is
