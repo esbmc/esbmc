@@ -67,13 +67,48 @@ def full_like(a: list, fill_value: Any) -> list:
     return out
 
 
-def random() -> float:
-    value: float = nondet_float()
-    __ESBMC_assume(value >= 0.0 and value < 1.0)
-    return value
+def random(size: int = None) -> Any:
+    if size is None:
+        value: float = nondet_float()
+        __ESBMC_assume(value >= 0.0 and value < 1.0)
+        return value
+
+    if size < 0:
+        raise ValueError("negative dimensions are not allowed")
+
+    out: list[float] = []
+    i: int = 0
+    while i < size:
+        value: float = nondet_float()
+        __ESBMC_assume(value >= 0.0 and value < 1.0)
+        out = out + [value]
+        i = i + 1
+    return out
 
 
-def randint(low: int, high: int = None) -> int:
+def rand(d0: int = None, d1: int = None) -> Any:
+    if d0 is None:
+        value: float = nondet_float()
+        __ESBMC_assume(value >= 0.0 and value < 1.0)
+        return value
+
+    if d1 is not None:
+        raise TypeError("numpy.random.rand() currently supports only 1-D output")
+
+    if d0 < 0:
+        raise ValueError("negative dimensions are not allowed")
+
+    out: list[float] = []
+    i: int = 0
+    while i < d0:
+        value: float = nondet_float()
+        __ESBMC_assume(value >= 0.0 and value < 1.0)
+        out = out + [value]
+        i = i + 1
+    return out
+
+
+def randint(low: int, high: int = None, size: int = None) -> Any:
     start: int = 0
     stop: int = low
     if high is not None:
@@ -83,9 +118,22 @@ def randint(low: int, high: int = None) -> int:
     if start >= stop:
         raise ValueError("low >= high")
 
-    value: int = nondet_int()
-    __ESBMC_assume(value >= start and value < stop)
-    return value
+    if size is None:
+        value: int = nondet_int()
+        __ESBMC_assume(value >= start and value < stop)
+        return value
+
+    if size < 0:
+        raise ValueError("negative dimensions are not allowed")
+
+    out: list[int] = []
+    i: int = 0
+    while i < size:
+        value: int = nondet_int()
+        __ESBMC_assume(value >= start and value < stop)
+        out = out + [value]
+        i = i + 1
+    return out
 
 
 def uniform(low: float = 0.0, high: float = 1.0) -> float:
@@ -102,6 +150,28 @@ def uniform(low: float = 0.0, high: float = 1.0) -> float:
 
 def seed(seed: int = None) -> None:
     raise TypeError("numpy.random.seed() is not supported")
+
+
+def choice(a: list[int],
+           size: int = None,
+           replace: bool = True,
+           p: Any = None) -> Any:
+    if p is not None:
+        raise TypeError("numpy.random.choice() probabilities are not supported")
+
+    if not replace:
+        raise TypeError("numpy.random.choice() replace=False is not supported")
+
+    n: int = len(a)
+    if n <= 0:
+        raise ValueError("a cannot be empty unless no samples are taken")
+
+    if size is not None:
+        raise TypeError("numpy.random.choice() size is not supported")
+
+    index: int = nondet_int()
+    __ESBMC_assume(index >= 0 and index < n)
+    return a[index]
 
 
 def add(a: int, b: int) -> float:
