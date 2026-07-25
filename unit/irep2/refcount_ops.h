@@ -12,7 +12,7 @@
 #include <irep2/irep2.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
-#include <util/config.h>
+#include <util/config/config.h>
 
 namespace irep2_refcount_fuzz
 {

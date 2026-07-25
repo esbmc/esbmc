@@ -1,19 +1,19 @@
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/c_sizeof.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/ieee_float.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/lang/c_sizeof.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/arith/ieee_float.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/prefix.h>
-#include <util/std_code.h>
-#include <util/type_byte_size.h>
-#include <util/type2name.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_code.h>
+#include <util/expr/type_byte_size.h>
+#include <util/expr/type2name.h>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))

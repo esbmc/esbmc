@@ -1,12 +1,12 @@
 #ifndef PYTHON_FRONTEND_STRING_HANDLER_H
 #define PYTHON_FRONTEND_STRING_HANDLER_H
 
-#include <util/expr.h>
-#include <util/std_types.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/context.h>
-#include <util/message.h>
+#include <util/irep/expr.h>
+#include <util/irep/std_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/context.h>
+#include <util/message/message.h>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>

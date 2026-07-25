@@ -50,4 +50,14 @@ private:
   NetworkNode parse_network(const void *xml_node);
 
   std::string source_file_;
+
+  // Variables the graphical resolver has to invent: function-block pins and
+  // the accumulators that OR parallel paths together. Appended to the AST's
+  // declarations once every network has been resolved.
+  std::vector<VarDecl> synth_vars_;
+
+  // Cyclic task period in milliseconds, used to convert IEC duration literals
+  // into the scan ticks the fixed-tick timer model counts. Zero means the
+  // program declares no task, in which case one tick is taken to be one ms.
+  unsigned scan_interval_ms_ = 0;
 };

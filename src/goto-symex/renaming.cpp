@@ -1,11 +1,11 @@
 #include <goto-symex/renaming.h>
 #include <langapi/language_util.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/namespace.h>
-#include <util/prefix.h>
-#include <util/symbol.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/namespace.h>
+#include <util/base/prefix.h>
+#include <util/symtab/symbol.h>
 
 namespace
 {
