@@ -67,6 +67,43 @@ def full_like(a: list, fill_value: Any) -> list:
     return out
 
 
+def random() -> float:
+    value: float = nondet_float()
+    __ESBMC_assume(value >= 0.0 and value < 1.0)
+    return value
+
+
+def randint(low: int, high: int = None) -> int:
+    start: int = 0
+    stop: int = low
+    if high is not None:
+        start = low
+        stop = high
+
+    if start >= stop:
+        raise ValueError("low >= high")
+
+    value: int = nondet_int()
+    __ESBMC_assume(value >= start and value < stop)
+    return value
+
+
+def uniform(low: float = 0.0, high: float = 1.0) -> float:
+    if low == high:
+        return low
+
+    value: float = nondet_float()
+    if low < high:
+        __ESBMC_assume(value >= low and value <= high)
+    else:
+        __ESBMC_assume(value >= high and value <= low)
+    return value
+
+
+def seed(seed: int = None) -> None:
+    raise TypeError("numpy.random.seed() is not supported")
+
+
 def add(a: int, b: int) -> float:
     x: float = a + b
     return x
