@@ -736,7 +736,11 @@ const struct group_opt_templ all_cmd_options[] = {
      "branch "
      "directions only: statements after an unconditional return/abort and "
      "unreferenced functions are not analysed. Findings are bounded by the "
-     "unwinding depth (use --unwind for programs with loops)"},
+     "unwinding depth (use --unwind for programs with loops). The SUCCESSFUL "
+     "verdict of a dead-code run is not a safety verdict: the coverage "
+     "instrumentation neutralises pre-existing assertions, including the "
+     "default bounds and division-by-zero checks, so run this alongside a "
+     "normal verification run rather than instead of one"},
     {"conv-assert-to-assume",
      NULL,
      "Convert assertions for bounds and pointer checks into assumptions"},

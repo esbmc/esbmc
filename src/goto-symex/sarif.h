@@ -14,8 +14,8 @@
 // `options["sarif-output"]`. Writes to stdout when the option value is "-".
 // Violations are emitted as `result.level = "error"`; advisories as
 // `result.level = "note"`. Includes the matching CWE ids (per
-// util/cwe_mapping.h) as both per-rule tags and per-result taxa references into
-// a "CWE" taxonomy pinned to CWE 4.20.
+// util/base/cwe_mapping.h) as both per-rule tags and per-result taxa references
+// into a "CWE" taxonomy pinned to CWE 4.20.
 //
 // `goto_trace` may be empty (e.g. on VERIFICATION SUCCESSFUL) so that a run
 // with only advisories still produces a document.

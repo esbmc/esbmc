@@ -229,6 +229,18 @@ VERIFICATION SUCCESSFUL
   not a false SUCCESSFUL). A per-claim `--timeout`, however, leaves a probe
   unsolved and that branch would then be listed as dead; do not pair
   `--dead-code-check` with a per-claim timeout if the finding set must be exact.
+- **The verdict is not a safety verdict.** The branch-coverage instrumentation
+  this mode reuses replaces every pre-existing assertion with `assert(true)`
+  before symbolic execution, so ESBMC's ordinary checks — including the bounds
+  and division-by-zero checks that are on by default — are neutralised. A
+  program with a real array-bounds violation reports `VERIFICATION SUCCESSFUL`
+  and exits 0 under `--dead-code-check`, where a plain run reports
+  `VERIFICATION FAILED`. This is inherited from the coverage modes
+  (`--branch-coverage` behaves identically). Run `--dead-code-check` as a
+  separate advisory pass, never as a substitute for a verification run. The
+  combinations that would instead inject *new* claims during symbolic execution
+  (`--memory-leak-check`, `--deadlock-check`, `--data-races-check[-only]`) are
+  rejected up front rather than silently masked.
 
 ## Ids dropped vs. published mappings
 
