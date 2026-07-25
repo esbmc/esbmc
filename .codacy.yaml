@@ -49,15 +49,15 @@ engines:
       # Flawfinder's name-based check produces only false positives on
       # these files; renaming the API would churn thousands of call sites
       # across every downstream fork. The wider files surrounding the
-      # call sites in src/util/c_expr2string.cpp,
-      # src/util/cpp_expr2string.cpp, and src/goto2c/expr2c.cpp are
+      # call sites in src/util/lang/c_expr2string.cpp,
+      # src/util/lang/cpp_expr2string.cpp, and src/goto2c/expr2c.cpp are
       # intentionally NOT excluded — those files contain code unrelated
       # to the read() call and remain in scope for flawfinder.
-      - 'src/util/irep.h'
-      - 'src/util/irep.cpp'
-      - 'src/util/parser.h'
-      - 'src/util/c_qualifiers.h'
-      - 'src/util/c_qualifiers.cpp'
+      - 'src/util/irep/irep.h'
+      - 'src/util/irep/irep.cpp'
+      - 'src/util/lang/parser.h'
+      - 'src/util/lang/c_qualifiers.h'
+      - 'src/util/lang/c_qualifiers.cpp'
 
   bandit:
     enabled: true

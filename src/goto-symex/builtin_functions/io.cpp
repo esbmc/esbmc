@@ -3,17 +3,17 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/printf_formatter.h>
 #include <string>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/std_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_types.h>
 #include <vector>
 #include <algorithm>
 #include <functional>
-#include <util/array2string.h>
+#include <util/expr/array2string.h>
 
 bool goto_symext::recover_va_list_args(
   const code_printf2t &call,

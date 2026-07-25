@@ -18,10 +18,10 @@
 
 #include <tuple>
 #include <type_traits>
-#include <util/fixedbv.h>
-#include <util/i2string.h>
-#include <util/ieee_float.h>
-#include <util/migrate.h>
+#include <util/arith/fixedbv.h>
+#include <util/base/i2string.h>
+#include <util/arith/ieee_float.h>
+#include <util/irep/migrate.h>
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>

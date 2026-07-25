@@ -2,12 +2,12 @@
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
 #include <pointer-analysis/value_set_analysis.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <ostream>
 #include <sstream>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <fmt/format.h>
 // TODO: Do an points-to abstract interpreter
 std::shared_ptr<value_set_analysist> cse_domaint::vsa = nullptr;

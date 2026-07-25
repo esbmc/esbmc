@@ -4,7 +4,7 @@ Module: Unit tests for util/cwe_mapping.h
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
-#include <util/cwe_mapping.h>
+#include <util/base/cwe_mapping.h>
 
 TEST_CASE("cwe_for matches NULL pointer deref", "[util][cwe_mapping]")
 {

@@ -8,10 +8,10 @@
 #include <goto-programs/abstract-interpretation/interval_template.h>
 #include <goto-programs/abstract-interpretation/wrapped_interval.h>
 #include <boost/serialization/nvp.hpp>
-#include <util/ieee_float.h>
+#include <util/arith/ieee_float.h>
 #include <irep2/irep2_utils.h>
-#include <util/mp_arith.h>
-#include <util/threeval.h>
+#include <util/arith/mp_arith.h>
+#include <util/base/threeval.h>
 #include <boost/multiprecision/cpp_bin_float.hpp>
 #include <variant>
 

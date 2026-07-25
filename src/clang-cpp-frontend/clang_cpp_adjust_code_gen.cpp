@@ -1,5 +1,5 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <functional>
 
 void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)

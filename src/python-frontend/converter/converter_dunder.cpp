@@ -3,9 +3,9 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/json_utils.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/python_types.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/lang/python_types.h>
 
 #include <map>
 
