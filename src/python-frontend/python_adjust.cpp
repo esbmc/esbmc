@@ -2,6 +2,7 @@
 
 #include <clang-c-frontend/padding.h>
 #include <irep2/irep2_utils.h>
+#include <util/lang/c_types.h>
 #include <util/message/message.h>
 #include <util/irep/migrate.h>
 #include <util/base/prefix.h>
@@ -214,9 +215,21 @@ void python_adjust::adjust_expr(expr2tc &expr)
   else if (is_index2t(expr))
   {
     const index2t &i = to_index2t(expr);
-    expr2tc source = i.source_value;
-    if (resolve_source(source))
-      expr = index2tc(i.type, source, i.index);
+    if (is_pointer_type(i.source_value->type))
+    {
+      // clang_c_adjust::adjust_index rewrites p[i] -> *(p+i) when the base is a
+      // pointer (a Python string / decayed-array source). Requires the
+      // array→pointer decay arm below so the pointer source actually holds a
+      // pointer value at symex rename, not a bare array.
+      expr = dereference2tc(
+        i.type, add2tc(i.source_value->type, i.source_value, i.index));
+    }
+    else
+    {
+      expr2tc source = i.source_value;
+      if (resolve_source(source))
+        expr = index2tc(i.type, source, i.index);
+    }
   }
   else if (is_dereference2t(expr) && is_empty_type(expr->type))
   {
@@ -253,6 +266,29 @@ void python_adjust::adjust_expr(expr2tc &expr)
       typecast2tc(get_bool_type(), i.cond),
       i.true_value,
       i.false_value);
+  }
+  else if (
+    is_code_assign2t(expr) &&
+    is_pointer_type(to_code_assign2t(expr).target->type) &&
+    is_array_type(to_code_assign2t(expr).source->type))
+  {
+    // Array→pointer decay at the assignment seam: a `char*` target assigned a
+    // bare array value (a Python string literal, e.g. `word = ""` where `""` is
+    // a constant_array) must decay to `&array[0]`, exactly as clang_c_adjust
+    // lowers it (`ASSIGN word = &{0}[0]`). Without it the pointer variable
+    // carries an array value and any pointer use of it (indexing, arithmetic)
+    // trips a pointer-vs-array mismatch at symex rename (irep2_cast_error in
+    // fixup_renamed_type). code_assign2t is immutable, rebuild.
+    const code_assign2t &a = to_code_assign2t(expr);
+    const type2tc &elem = to_array_type(a.source->type).subtype;
+    // address_of2t's type is pointer-to-<subtype>, so pass the target's pointee
+    // (not the full pointer type) — the rebuilt value is then exactly
+    // a.target->type, matching clang's c_typecast (address_of2tc(ptr.subtype,
+    // index)), not pointer(pointer(elem)).
+    const type2tc &pointee = to_pointer_type(a.target->type).subtype;
+    expr2tc decayed =
+      address_of2tc(pointee, index2tc(elem, a.source, gen_zero(index_type2())));
+    expr = code_assign2tc(a.target, decayed, a.location);
   }
   else if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
   {
@@ -608,6 +644,11 @@ void python_adjust::collect_unresolved_sources(
       to_symbol_type(to_index2t(expr).source_value->type)
         .symbol_name.as_string() +
       "'");
+  // A pointer source is transient too (the index arm rewrites `p[i]` to
+  // `*(p+i)`); one surviving here means the rewrite was skipped, so symex would
+  // see an index over a pointer — flag it before it escapes.
+  if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value->type))
+    out.push_back("index over unresolved pointer source");
   // A constant_struct2t is the third relaxed construction assert (irep2_expr.h):
   // its own type may be a transient by-name symbol_type2t until the aggregate is
   // followed. Post-adjust it must be a resolved struct too.
