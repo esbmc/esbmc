@@ -9,8 +9,8 @@
 #include <memory>
 #include <goto-programs/abstract-interpretation/ai_domain.h>
 #include <goto-programs/goto_functions.h>
-#include <util/xml.h>
-#include <util/expr.h>
+#include <util/base/xml.h>
+#include <util/irep/expr.h>
 
 /**
  * This is the basic interface of the abstract interpreter with default

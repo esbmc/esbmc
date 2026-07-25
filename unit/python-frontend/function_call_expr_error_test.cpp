@@ -10,10 +10,10 @@
 #include <python-frontend/function_call/cache.h>
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/symbol_id.h>
-#include <util/config.h>
-#include <util/context.h>
-#include <util/python_types.h>
-#include <util/std_expr.h>
+#include <util/config/config.h>
+#include <util/symtab/context.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_expr.h>
 
 using json = nlohmann::json;
 

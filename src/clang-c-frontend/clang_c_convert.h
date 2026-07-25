@@ -4,11 +4,11 @@
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
-#include <util/context.h>
-#include <util/namespace.h>
-#include <util/std_code.h>
-#include <util/std_types.h>
-#include <util/symbol_generator.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_types.h>
+#include <util/symtab/symbol_generator.h>
 
 // Forward dec, to avoid bringing in clang headers
 namespace clang

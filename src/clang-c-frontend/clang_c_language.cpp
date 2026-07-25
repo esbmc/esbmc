@@ -1,4 +1,4 @@
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Frontend/ASTUnit.h>
@@ -12,14 +12,14 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-c-frontend/clang_c_main.h>
-#include <util/c_expr2string.h>
+#include <util/lang/c_expr2string.h>
 #include <sstream>
-#include <util/c_link.h>
+#include <util/lang/c_link.h>
 
-#include <util/filesystem.h>
+#include <util/base/filesystem.h>
 #include <clang-c-frontend/nested_func_transform.h>
 #include <clang-c-frontend/clang_c_lexer.h>
-#include <util/yaml_parser.h>
+#include <util/base/yaml_parser.h>
 
 #include <ac_config.h>
 
