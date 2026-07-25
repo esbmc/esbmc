@@ -687,6 +687,11 @@ void python_adjust::collect_unresolved_sources(
       to_symbol_type(to_index2t(expr).source_value->type)
         .symbol_name.as_string() +
       "'");
+  // A pointer source is transient too (the index arm rewrites `p[i]` to
+  // `*(p+i)`); one surviving here means the rewrite was skipped, so symex would
+  // see an index over a pointer — flag it before it escapes.
+  if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value->type))
+    out.push_back("index over unresolved pointer source");
   // A constant_struct2t is the third relaxed construction assert (irep2_expr.h):
   // its own type may be a transient by-name symbol_type2t until the aggregate is
   // followed. Post-adjust it must be a resolved struct too.
