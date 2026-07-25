@@ -10,7 +10,7 @@ two differ only in `assert s.area() == 25` versus `== 24`, so a verdict flip is
 attributable to that assertion and nothing else. The counterexample names
 `T4VirtualFail.java` line 19.
 
-Background and measurements: `docs/jbmc-goto-binary-poc-plan.md`.
+Background and measurements: `docs/roadmap/jbmc-goto-binary-poc-plan.md`.
 
 ## Why a checked-in binary
 
@@ -18,7 +18,7 @@ Regenerating needs a JDK, `core-models.jar`, and a `jbmc` patched with
 `--write-goto-binary` (`scripts/jbmc-write-goto-binary.patch`), which is not
 upstream — so reproducing the pipeline in CI would mean building CBMC from
 source on every run. Checking in the lowered binary is what
-`docs/jbmc-goto-binary-poc-plan.md` §4.2 prescribes, and matches the 130-odd
+`docs/roadmap/jbmc-goto-binary-poc-plan.md` §4.2 prescribes, and matches the 130-odd
 existing `cbmc_*` fixtures here.
 
 ## Regenerating
