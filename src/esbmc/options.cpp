@@ -644,6 +644,13 @@ const struct group_opt_templ all_cmd_options[] = {
      "Verify satisfiability of all claims of the current bound"},
     {"no-standard-checks", NULL, "Disable default checks"},
     {"no-assertions", NULL, "Ignore assertions"},
+    {"no-library-assertions",
+     NULL,
+     "Ignore assertions stated by ESBMC's operational models (e.g. \"Sem is "
+     "not initialized\"), keeping the ones in the program under verification. "
+     "Warning: hides genuine API misuse the models report. Leaves the checks "
+     "ESBMC generates inside model code (see --no-standard-checks), renumbers "
+     "--claim, and is unsupported for Python"},
     {"no-bounds-check", NULL, "Do not do array bounds check"},
     {"no-div-by-zero-check", NULL, "Do not do division by zero check"},
     {"no-pointer-check", NULL, "Do not do pointer check"},
