@@ -614,6 +614,162 @@ static nlohmann::json vector_to_json(const std::vector<scalar_value> &v)
   return list;
 }
 
+static bool literal_list_contains_bool(const nlohmann::json &node)
+{
+  if (!node.is_object())
+    return false;
+  if (
+    node.value("_type", std::string()) == "Constant" &&
+    node.contains("value") && node["value"].is_boolean())
+  {
+    return true;
+  }
+  if (
+    node.value("_type", std::string()) != "List" || !node.contains("elts") ||
+    !node["elts"].is_array())
+  {
+    return false;
+  }
+  for (const auto &elem : node["elts"])
+  {
+    if (literal_list_contains_bool(elem))
+      return true;
+  }
+  return false;
+}
+
+static scalar_value dot_product_value(
+  const std::vector<scalar_value> &lhs,
+  const std::vector<scalar_value> &rhs)
+{
+  scalar_value out = make_real_scalar(0.0);
+  for (std::size_t i = 0; i < lhs.size(); ++i)
+  {
+    out.is_complex = out.is_complex || lhs[i].is_complex || rhs[i].is_complex;
+    out.value += lhs[i].value * rhs[i].value;
+  }
+  return out;
+}
+
+static bool fold_literal_dot(
+  const nlohmann::json &lhs,
+  const nlohmann::json &rhs,
+  nlohmann::json &out)
+{
+  std::vector<scalar_value> lhs_1d;
+  std::vector<scalar_value> rhs_1d;
+  if (
+    try_extract_scalar_1d_list(lhs, lhs_1d) &&
+    try_extract_scalar_1d_list(rhs, rhs_1d))
+  {
+    if (lhs_1d.empty() || rhs_1d.empty())
+      throw std::runtime_error(
+        "TypeError: numpy.dot does not support empty operands");
+    if (lhs_1d.size() != rhs_1d.size())
+      throw std::runtime_error("Incompatible shapes for dot product");
+    out = to_json_constant(dot_product_value(lhs_1d, rhs_1d));
+    return true;
+  }
+
+  std::vector<std::vector<scalar_value>> lhs_2d;
+  std::vector<std::vector<scalar_value>> rhs_2d;
+  if (
+    try_extract_scalar_2d_list(lhs, lhs_2d) &&
+    try_extract_scalar_2d_list(rhs, rhs_2d))
+  {
+    if (lhs_2d.empty() || rhs_2d.empty() || lhs_2d[0].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.dot does not support empty operands");
+    const std::size_t n = lhs_2d[0].size();
+    const std::size_t p = rhs_2d[0].size();
+    if (p == 0)
+      throw std::runtime_error(
+        "TypeError: numpy.dot does not support empty operands");
+    if (n != rhs_2d.size())
+      throw std::runtime_error("Incompatible shapes for dot product");
+
+    out["_type"] = "List";
+    out["elts"] = nlohmann::json::array();
+    for (const auto &lhs_row : lhs_2d)
+    {
+      if (lhs_row.size() != n)
+        return false;
+      nlohmann::json out_row;
+      out_row["_type"] = "List";
+      out_row["elts"] = nlohmann::json::array();
+      for (std::size_t col = 0; col < p; ++col)
+      {
+        std::vector<scalar_value> rhs_col;
+        rhs_col.reserve(rhs_2d.size());
+        for (const auto &rhs_row : rhs_2d)
+        {
+          if (rhs_row.size() != p)
+            return false;
+          rhs_col.push_back(rhs_row[col]);
+        }
+        out_row["elts"].push_back(
+          to_json_constant(dot_product_value(lhs_row, rhs_col)));
+      }
+      out["elts"].push_back(out_row);
+    }
+    return true;
+  }
+
+  if (
+    try_extract_scalar_1d_list(lhs, lhs_1d) &&
+    try_extract_scalar_2d_list(rhs, rhs_2d))
+  {
+    if (lhs_1d.empty() || rhs_2d.empty() || rhs_2d[0].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.dot does not support empty operands");
+    const std::size_t p = rhs_2d[0].size();
+    if (lhs_1d.size() != rhs_2d.size())
+      throw std::runtime_error("Incompatible shapes for dot product");
+
+    out["_type"] = "List";
+    out["elts"] = nlohmann::json::array();
+    for (std::size_t col = 0; col < p; ++col)
+    {
+      std::vector<scalar_value> rhs_col;
+      rhs_col.reserve(rhs_2d.size());
+      for (const auto &rhs_row : rhs_2d)
+      {
+        if (rhs_row.size() != p)
+          return false;
+        rhs_col.push_back(rhs_row[col]);
+      }
+      out["elts"].push_back(
+        to_json_constant(dot_product_value(lhs_1d, rhs_col)));
+    }
+    return true;
+  }
+
+  if (
+    try_extract_scalar_2d_list(lhs, lhs_2d) &&
+    try_extract_scalar_1d_list(rhs, rhs_1d))
+  {
+    if (lhs_2d.empty() || lhs_2d[0].empty() || rhs_1d.empty())
+      throw std::runtime_error(
+        "TypeError: numpy.dot does not support empty operands");
+    const std::size_t n = lhs_2d[0].size();
+    if (n != rhs_1d.size())
+      throw std::runtime_error("Incompatible shapes for dot product");
+
+    out["_type"] = "List";
+    out["elts"] = nlohmann::json::array();
+    for (const auto &lhs_row : lhs_2d)
+    {
+      if (lhs_row.size() != n)
+        return false;
+      out["elts"].push_back(
+        to_json_constant(dot_product_value(lhs_row, rhs_1d)));
+    }
+    return true;
+  }
+
+  return false;
+}
+
 static bool is_complex_function(const std::string &function)
 {
   return function == "real" || function == "imag" || function == "conj" ||
@@ -3542,6 +3698,8 @@ exprt numpy_call_expr::create_expr_from_call()
     const std::string &function = function_id_.get_function();
     auto lhs = call_["args"][0];
     auto rhs = call_["args"][1];
+    auto original_lhs = lhs;
+    auto original_rhs = rhs;
 
     resolve_var(lhs);
     resolve_var(rhs);
@@ -3924,6 +4082,32 @@ exprt numpy_call_expr::create_expr_from_call()
 
       if (operation == "dot" || operation == "matmul")
       {
+        if (
+          lhs.contains("elts") && rhs.contains("elts") &&
+          lhs["elts"].is_array() && rhs["elts"].is_array() &&
+          (lhs["elts"].empty() || rhs["elts"].empty()))
+        {
+          throw std::runtime_error(
+            "TypeError: numpy.dot does not support empty operands");
+        }
+
+        if (
+          operation == "dot" &&
+          (literal_list_contains_bool(lhs) || literal_list_contains_bool(rhs)))
+        {
+          nlohmann::json folded;
+          if (fold_literal_dot(lhs, rhs, folded))
+          {
+            exprt folded_expr = converter_.get_expr(folded);
+            if (converter_.current_lhs)
+            {
+              converter_.current_lhs->type() = folded_expr.type();
+              converter_.update_symbol(*converter_.current_lhs);
+            }
+            return folded_expr;
+          }
+        }
+
         // Determine dimensionality of both operands
         bool lhs_is_2d = type_handler_.is_2d_array(lhs);
         bool rhs_is_2d = type_handler_.is_2d_array(rhs);
@@ -4210,6 +4394,123 @@ exprt numpy_call_expr::create_expr_from_call()
         return function_call_expr::get();
 
       throw std::runtime_error("Unsupported operation: " + operation);
+    }
+    else if (function == "dot" || function == "matmul")
+    {
+      if (!converter_.current_lhs)
+        throw std::runtime_error("Unsupported Numpy call: " + function);
+
+      exprt lhs_arg = converter_.get_expr(original_lhs);
+      exprt rhs_arg = converter_.get_expr(original_rhs);
+      std::vector<int> lhs_shape =
+        type_handler_.get_array_type_shape(lhs_arg.type());
+      std::vector<int> rhs_shape =
+        type_handler_.get_array_type_shape(rhs_arg.type());
+
+      if (
+        lhs_shape.empty() || rhs_shape.empty() || lhs_shape.size() > 2 ||
+        rhs_shape.size() > 2)
+      {
+        throw std::runtime_error("Unsupported Numpy call: " + function);
+      }
+
+      if (lhs_shape[0] == 0 || rhs_shape[0] == 0)
+        throw std::runtime_error(
+          "TypeError: numpy.dot does not support empty operands");
+
+      bool result_is_scalar = false;
+      bool result_is_1d = false;
+      std::size_t m = 0;
+      std::size_t n = 0;
+      std::size_t p = 0;
+
+      if (lhs_shape.size() == 1 && rhs_shape.size() == 1)
+      {
+        if (lhs_shape[0] != rhs_shape[0])
+          throw std::runtime_error("Incompatible shapes for dot product");
+        m = 1;
+        n = static_cast<std::size_t>(lhs_shape[0]);
+        p = 1;
+        converter_.current_lhs->type() = get_array_scalar_type(lhs_arg.type());
+        result_is_scalar = true;
+      }
+      else if (lhs_shape.size() == 1 && rhs_shape.size() == 2)
+      {
+        if (lhs_shape[0] != rhs_shape[0])
+          throw std::runtime_error("Incompatible shapes for dot product");
+        m = 1;
+        n = static_cast<std::size_t>(lhs_shape[0]);
+        p = static_cast<std::size_t>(rhs_shape[1]);
+        typet base_type = get_array_scalar_type(rhs_arg.type());
+        converter_.current_lhs->type() =
+          type_handler_.build_array(base_type, p);
+        result_is_1d = true;
+      }
+      else if (lhs_shape.size() == 2 && rhs_shape.size() == 1)
+      {
+        if (lhs_shape[1] != rhs_shape[0])
+          throw std::runtime_error("Incompatible shapes for dot product");
+        m = static_cast<std::size_t>(lhs_shape[0]);
+        n = static_cast<std::size_t>(lhs_shape[1]);
+        p = 1;
+        typet base_type = get_array_scalar_type(lhs_arg.type());
+        converter_.current_lhs->type() =
+          type_handler_.build_array(base_type, m);
+        result_is_1d = true;
+      }
+      else
+      {
+        if (lhs_shape[1] != rhs_shape[0])
+          throw std::runtime_error("Incompatible shapes for dot product");
+        m = static_cast<std::size_t>(lhs_shape[0]);
+        n = static_cast<std::size_t>(lhs_shape[1]);
+        p = static_cast<std::size_t>(rhs_shape[1]);
+        typet base_type = get_array_scalar_type(lhs_arg.type());
+        typet row_type = type_handler_.build_array(base_type, p);
+        converter_.current_lhs->type() = type_handler_.build_array(row_type, m);
+      }
+
+      typet base_type = get_array_scalar_type(lhs_arg.type());
+      const bool is_float = base_type.is_floatbv();
+      unsigned dtype_bits = 64;
+      if (!is_float && (base_type.is_signedbv() || base_type.is_unsignedbv()))
+        dtype_bits = static_cast<const bv_typet &>(base_type).get_width();
+      function_id_.set_function(is_float ? "dot_double" : "dot");
+      converter_.update_symbol(*converter_.current_lhs);
+
+      code_function_callt call =
+        to_code_function_call(to_code(function_call_expr::get()));
+      typet flat_ptr_type =
+        pointer_typet(is_float ? base_type : long_long_int_type());
+      auto &args = call.arguments();
+      if (args.size() >= 2)
+      {
+        args[0] = np_typecast(args[0], flat_ptr_type);
+        args[1] = np_typecast(args[1], flat_ptr_type);
+      }
+
+      exprt result_ptr;
+      if (result_is_scalar || result_is_1d)
+      {
+        result_ptr = np_address_of(*converter_.current_lhs);
+      }
+      else
+      {
+        exprt row0 = np_index(
+          *converter_.current_lhs,
+          from_integer(0, size_type()),
+          converter_.current_lhs->type().subtype());
+        exprt elem00 = np_index(row0, from_integer(0, size_type()), base_type);
+        result_ptr = np_address_of(elem00);
+      }
+      args.push_back(np_typecast(result_ptr, flat_ptr_type));
+      args.push_back(from_integer(m, long_long_int_type()));
+      args.push_back(from_integer(n, long_long_int_type()));
+      args.push_back(from_integer(p, long_long_int_type()));
+      if (!is_float)
+        args.push_back(from_integer(dtype_bits, long_long_int_type()));
+
+      return call;
     }
   }
 
