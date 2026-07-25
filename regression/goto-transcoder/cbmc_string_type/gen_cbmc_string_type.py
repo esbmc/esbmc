@@ -3,7 +3,7 @@
 
 The fixture pins ESBMC's graceful decline of CPROVER's symbolic `string` type,
 which reaches the adapter from every JBMC binary via java.lang.Object's
-@class_identifier component (docs/jbmc-goto-binary-poc-plan.md §2.3.1).
+@class_identifier component (docs/roadmap/jbmc-goto-binary-poc-plan.md §2.3.1).
 
 A real JBMC binary would be ~768 KiB and need a JDK to produce. Emitting the
 symbol table directly keeps the fixture at ~550 bytes and regenerable from any

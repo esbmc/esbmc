@@ -1,6 +1,6 @@
 #include <goto-symex/slice.h>
 
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 static bool no_slice(const symbol2t &sym)
 {
   return config.no_slice_names.count(sym.thename.as_string()) ||

@@ -1,10 +1,10 @@
 #ifndef CPROVER_POINTER_LOGIC_H
 #define CPROVER_POINTER_LOGIC_H
 
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <irep2/irep2.h>
-#include <util/mp_arith.h>
-#include <util/numbering.h>
+#include <util/arith/mp_arith.h>
+#include <util/base/numbering.h>
 
 class pointer_logict
 {

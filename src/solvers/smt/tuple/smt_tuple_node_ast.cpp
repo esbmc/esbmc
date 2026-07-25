@@ -3,8 +3,8 @@
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_node_ast.h>
 #include <sstream>
-#include <util/base_type.h>
-#include <util/c_types.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
 
 /* An optimization of the tuple flattening technique found in smt_tuple_sym.cpp,
  * where we separate out tuple elements into their own variables without any

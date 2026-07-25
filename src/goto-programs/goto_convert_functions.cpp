@@ -3,14 +3,14 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/remove_no_op.h>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_types.h>
-#include <util/i2string.h>
-#include <util/prefix.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
-#include <util/type_byte_size.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
+#include <util/base/i2string.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/type_byte_size.h>
 
 goto_convert_functionst::goto_convert_functionst(
   contextt &_context,
@@ -323,12 +323,12 @@ bool goto_convert_functionst::convert_native_rec(
     // legacy itself doesn't apply one here. Delegate to the real
     // do_function_call() (not a reimplementation) so `has_next =
     // ESBMC_range_has_next_(...)` — the statement a desugared Python `for`
-    // loop's preprocessor hoists the call into (see docs/spike-v1k-w1loc.md)
-    // — converts natively. Narrow slice: callee and arguments must be
-    // side-effect-free, so do_function_call's own remove_sideeffects() calls
-    // on them are no-ops we can skip issuing; convert_function's
-    // tmp_symbol/context rollback (above) still protects the temp
-    // do_function_call allocates if a later statement in this body is
+    // loop's preprocessor hoists the call into (see
+    // docs/roadmap/spike-v1k-w1loc.md) — converts natively. Narrow slice:
+    // callee and arguments must be side-effect-free, so do_function_call's own
+    // remove_sideeffects() calls on them are no-ops we can skip issuing;
+    // convert_function's tmp_symbol/context rollback (above) still protects the
+    // temp do_function_call allocates if a later statement in this body is
     // unsupported and forces a fallback.
     if (
       is_sideeffect2t(assign.source) &&
@@ -768,8 +768,8 @@ bool goto_convert_functionst::convert_native_rec(
       // desugared Python `for`/`while <call>` loop produces: the
       // preprocessor always rewrites those into an explicit `while True: if
       // not <call>(): break` before goto_convert ever sees them (confirmed
-      // empirically — see docs/spike-v1k-w1loc.md), so this path is reached
-      // by a C/C++ `while` whose condition is directly a call.
+      // empirically — see docs/roadmap/spike-v1k-w1loc.md), so this path is
+      // reached by a C/C++ `while` whose condition is directly a call.
       // generate_conditional_branch/remove_sideeffects read the location for
       // each instruction they emit off the *operand* being lowered, not off the
       // statement. IREP2 value expressions carry no location, so the

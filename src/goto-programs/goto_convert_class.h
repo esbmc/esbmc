@@ -6,12 +6,12 @@
 #include <queue>
 #include <set>
 #include <stack>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>
-#include <util/namespace.h>
-#include <util/options.h>
-#include <util/symbol_generator.h>
-#include <util/std_code.h>
+#include <util/symtab/namespace.h>
+#include <util/config/options.h>
+#include <util/symtab/symbol_generator.h>
+#include <util/irep/std_code.h>
 
 class goto_convertt
 {
@@ -69,6 +69,11 @@ protected:
     expr2tc &expr,
     goto_programt &dest,
     bool result_is_used = true);
+
+  // Recursively flatten a (possibly nested) &&/|| contract clause
+  // (__ESBMC_requires / __ESBMC_ensures), hoisting side effects (e.g.
+  // __ESBMC_old()) only at the leaves so no conjunct is dropped (#6298).
+  void flatten_contract_clause(exprt &clause, goto_programt &dest);
 
   void address_of_replace_objects(exprt &expr, goto_programt &dest);
 

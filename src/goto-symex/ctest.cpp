@@ -4,7 +4,7 @@
 #include <ac_config.h>
 #include <langapi/mode.h>
 #include <solvers/smt/smt_conv.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <util/message/format.h>
 #include <irep2/irep2_expr.h>
 #include <boost/date_time/posix_time/posix_time.hpp>

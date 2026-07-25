@@ -2,22 +2,22 @@
 #define ESBMC_GOTO_CONTRACTOR_H
 
 #include <iostream>
-#include <util/goto_expr_factory.h>
+#include <util/ssa/goto_expr_factory.h>
 #include <goto-programs/goto_functions.h>
-#include <util/algorithms.h>
-#include <util/message.h>
+#include <util/ssa/algorithms.h>
+#include <util/message/message.h>
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/remove_no_op.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/loopst.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 #include <ibex.h>
 #include <ibex/ibex_Interval.h>
 #include <ibex/ibex_Expr.h>
 #include <ibex/ibex_Ctc.h>
 #include <irep2/irep2.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <limits>
 #include <chrono>
