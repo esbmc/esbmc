@@ -303,6 +303,22 @@ void python_adjust::adjust_expr(expr2tc &expr)
       address_of2tc(pointee, index2tc(elem, a.source, gen_zero(index_type2())));
     expr = code_assign2tc(a.target, decayed, a.location);
   }
+  else if (
+    is_code_return2t(expr) && !is_nil_expr(to_code_return2t(expr).operand) &&
+    is_code_type(to_code_return2t(expr).operand->type))
+  {
+    // Function→pointer decay at the return seam (C11 6.3.2.1p4): a closure
+    // factory (`def make(k): def mul(x): ...; return mul`) returns a bare
+    // code-typed designator, but the caller stores it in a function pointer.
+    // clang_c_adjust decays every code-typed symbol reference to `&f`
+    // (adjust_symbol_expr, "sugar for &f"); mirror it at the one seam Python
+    // reaches it from. Without it symex sees `typecast(mul, void(*)())` and
+    // aborts at SMT encoding ("Unexpected type in int/ptr typecast"), and the
+    // indirect call has no resolvable target.
+    const code_return2t &r = to_code_return2t(expr);
+    expr =
+      code_return2tc(address_of2tc(r.operand->type, r.operand), r.location);
+  }
   else if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
   {
     // S2: aggregate-literal completion — the third relaxed construction
