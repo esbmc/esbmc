@@ -1,11 +1,11 @@
 #include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/math/parse_float.h>
 #include <python-frontend/type/type_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/ieee_float.h>
-#include <util/std_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/arith/ieee_float.h>
+#include <util/irep/std_types.h>
 
 void convert_float_literal(const std::string &src, exprt &dest)
 {

@@ -1,10 +1,10 @@
 #include <goto-programs/exception_globals.h>
 
-#include <util/context.h>
-#include <util/symbol.h>
-#include <util/c_types.h>
-#include <util/std_types.h>
-#include <util/expr_util.h>
+#include <util/symtab/context.h>
+#include <util/symtab/symbol.h>
+#include <util/lang/c_types.h>
+#include <util/irep/std_types.h>
+#include <util/expr/expr_util.h>
 
 namespace
 {

@@ -8,11 +8,11 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/type/type_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 
 #include <algorithm>
 #include <cctype>

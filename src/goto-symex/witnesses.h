@@ -2,7 +2,7 @@
 #define CPROVER_GOTO_SYMEX_WITNESSES_H
 
 #include <boost/property_tree/xml_parser.hpp>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <irep2/irep2.h>
 #include <langapi/language_util.h>
 #include <goto-symex/goto_trace.h>

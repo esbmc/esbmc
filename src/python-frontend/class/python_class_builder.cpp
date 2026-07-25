@@ -5,12 +5,12 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type/type_utils.h>
-#include <util/std_expr.h>
-#include <util/expr_util.h>
-#include <util/irep.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
-#include <util/symbol.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/irep.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
+#include <util/symtab/symbol.h>
 
 using namespace python_expr;
 

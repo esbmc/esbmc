@@ -3,7 +3,7 @@
 
 #include <solvers/smt/array_conv.h>
 #include <solvers/smt/smt_solver.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 
 class tuple_node_smt_ast;
 typedef const tuple_node_smt_ast *tuple_node_smt_astt;
