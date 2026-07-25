@@ -1,7 +1,7 @@
 #include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/loopst.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <unordered_set>
 
 namespace

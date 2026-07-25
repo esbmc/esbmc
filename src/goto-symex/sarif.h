@@ -3,8 +3,8 @@
 
 #include <goto-programs/dead_store_advisory.h>
 #include <goto-symex/goto_trace.h>
-#include <util/namespace.h>
-#include <util/options.h>
+#include <util/symtab/namespace.h>
+#include <util/config/options.h>
 #include <vector>
 
 // Writes the violation reported in `goto_trace`, plus any dead-store advisories

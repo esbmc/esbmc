@@ -14,7 +14,7 @@
 #include <string>
 #include <unordered_set>
 #include <irep2/irep2_guard.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <memory>
 #include <vector>
