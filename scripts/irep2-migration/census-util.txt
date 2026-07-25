@@ -17,7 +17,7 @@
 #   Phase 2.3 commit 14 (drop legacy c_sizeof(typet)) is BLOCKED: its 3
 #     callers are 2 frontends + goto2c (frontend boundary), not dead.
 #
-# Primary metric (docs/irep2-migration.md Part II §10): seam call sites
+# Primary metric (docs/roadmap/irep2-migration.md Part II §10): seam call sites
 # decreasing. FWD = all - back (can read negative); the back-arm coverage
 # in migrate.cpp cannot shrink (pinned by symbolt's lazy legacy cache).
 #

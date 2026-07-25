@@ -169,8 +169,8 @@ public:
   // pretty-printers and goto2c; "#member_name" by the shared clang-cpp pass
   // — so they must stay on the legacy node at the migrate seam. Funnelling
   // every raw .set/.get("#…") through one seam each is the Phase 4.1
-  // hardening step of the IREP2 migration (docs/irep2-migration.md Part IV,
-  // F-P5 / §15). Keep the keys and values byte-identical: this is a
+  // hardening step of the IREP2 migration (docs/roadmap/irep2-migration.md Part
+  // IV, F-P5 / §15). Keep the keys and values byte-identical: this is a
   // behaviour-preserving relocation, not a semantic change.
   static void set_cpp_type(typet &t, const irep_idt &value)
   {
