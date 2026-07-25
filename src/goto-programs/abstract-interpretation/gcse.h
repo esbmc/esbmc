@@ -2,7 +2,7 @@
 
 // GCSE - Global Common Subexpression Elimination
 
-#include <util/message.h>
+#include <util/message/message.h>
 #include <goto-programs/abstract-interpretation/ai.h>
 #include <pointer-analysis/value_set_analysis.h>
 /**
@@ -112,7 +112,7 @@ public:
   static std::shared_ptr<value_set_analysist> vsa;
 };
 
-#include <util/algorithms.h>
+#include <util/ssa/algorithms.h>
 /**
  * @brief Global Common Subexpression Elimination algorithm
  *

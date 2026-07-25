@@ -1,7 +1,7 @@
 #pragma once
 
 #include <langapi/mode.h>
-#include <util/language.h>
+#include <util/lang/language.h>
 #include <jimple-frontend/AST/jimple_file.h>
 
 class jimple_languaget : public languaget

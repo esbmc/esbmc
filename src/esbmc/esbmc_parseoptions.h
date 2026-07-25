@@ -4,11 +4,11 @@
 #include <esbmc/bmc.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <langapi/language_ui.h>
-#include <util/cmdline.h>
-#include <util/options.h>
-#include <util/parseoptions.h>
-#include <util/algorithms.h>
-#include <util/threeval.h>
+#include <util/config/cmdline.h>
+#include <util/config/options.h>
+#include <util/config/parseoptions.h>
+#include <util/ssa/algorithms.h>
+#include <util/base/threeval.h>
 #include <string_view>
 
 // Macro to determine if color output should be enabled

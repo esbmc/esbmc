@@ -2,9 +2,10 @@
 
 #include <clang-c-frontend/padding.h>
 #include <irep2/irep2_utils.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/prefix.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/base/prefix.h>
 #include <vector>
 
 python_adjust::python_adjust(contextt &_context)
@@ -121,10 +122,10 @@ bool python_adjust::adjust()
     // constant_struct2t type may survive as a transient symbol_type2t, and a
     // resolved-struct literal must carry one operand per component. Pre-S2
     // this fired on every flag-on run (the OM exception literals,
-    // docs/irep2-migration.md "S1 outcome" finding 2); S2's aggregate-literal
-    // completion drained those, so a firing now means a node shape the
-    // remaining S-steps (S3+) must resolve — the per-node detail below is
-    // that work-list.
+    // docs/roadmap/irep2-migration.md "S1 outcome" finding 2); S2's
+    // aggregate-literal completion drained those, so a firing now means a node
+    // shape the remaining S-steps (S3+) must resolve — the per-node detail
+    // below is that work-list.
     std::vector<std::string> unresolved;
     collect_unresolved_sources(value, unresolved);
     if (!unresolved.empty())
@@ -164,6 +165,19 @@ bool is_padding_member_name(const std::string &name)
   return has_prefix(name, "anon_pad$") ||
          has_prefix(name, "anon_bit_field_pad$") ||
          has_prefix(name, "ext_int_pad$") || name == "$pad";
+}
+
+// Insert a gen_zero operand at each reserved padding-member position so the
+// literal's operand list matches the struct's component list, exactly as the
+// legacy adjust_struct insertion loop does. Idempotent when already padded.
+std::vector<expr2tc>
+pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops)
+{
+  for (size_t i = 0; i < st.members.size(); i++)
+    if (
+      i <= ops.size() && is_padding_member_name(st.member_names[i].as_string()))
+      ops.insert(ops.begin() + i, gen_zero(st.members[i]));
+  return ops;
 }
 } // namespace
 
@@ -214,9 +228,21 @@ void python_adjust::adjust_expr(expr2tc &expr)
   else if (is_index2t(expr))
   {
     const index2t &i = to_index2t(expr);
-    expr2tc source = i.source_value;
-    if (resolve_source(source))
-      expr = index2tc(i.type, source, i.index);
+    if (is_pointer_type(i.source_value->type))
+    {
+      // clang_c_adjust::adjust_index rewrites p[i] -> *(p+i) when the base is a
+      // pointer (a Python string / decayed-array source). Requires the
+      // array→pointer decay arm below so the pointer source actually holds a
+      // pointer value at symex rename, not a bare array.
+      expr = dereference2tc(
+        i.type, add2tc(i.source_value->type, i.source_value, i.index));
+    }
+    else
+    {
+      expr2tc source = i.source_value;
+      if (resolve_source(source))
+        expr = index2tc(i.type, source, i.index);
+    }
   }
   else if (is_dereference2t(expr) && is_empty_type(expr->type))
   {
@@ -224,11 +250,12 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // Python element access `s[i]` over a char*-like source (chr()'s result is
     // the canonical case). clang_cpp_adjust resolves the read type to the
     // pointee; do the same so symex does not get_width() an empty deref target
-    // (the S3 symbolic_type_excp root, docs/scope-v1k-adjuster round-4). Only
-    // when the pointee is non-empty -- a void*-like empty pointee is left for
-    // the exit invariant, exactly as clang leaves a void deref empty. An array
-    // operand (clang's `*a` -> `a[0]` rewrite) does not occur on the Python
-    // path (subscripts lower to index2t). dereference2t is immutable, rebuild.
+    // (the S3 symbolic_type_excp root, docs/roadmap/scope-v1k-adjuster
+    // round-4). Only when the pointee is non-empty -- a void*-like empty
+    // pointee is left for the exit invariant, exactly as clang leaves a void
+    // deref empty. An array operand (clang's `*a` -> `a[0]` rewrite) does not
+    // occur on the Python path (subscripts lower to index2t). dereference2t is
+    // immutable, rebuild.
     const dereference2t &d = to_dereference2t(expr);
     if (is_pointer_type(d.value->type))
     {
@@ -236,6 +263,45 @@ void python_adjust::adjust_expr(expr2tc &expr)
       if (!is_empty_type(pointee))
         expr = dereference2tc(pointee, d.value);
     }
+  }
+  else if (is_if2t(expr) && !is_bool_type(to_if2t(expr).cond->type))
+  {
+    // A ternary whose condition is not boolean -- a non-boolean short-circuit
+    // `and`/`or` select builds `cond ? a : b` with the raw integer operand as
+    // the condition (get_truthy_condition returns a non-list value unchanged,
+    // e.g. `len(s)` in `len(s) or len(t)`). clang_c_adjust::adjust_if casts the
+    // condition to bool (gen_typecast(ns, op0, bool_type())); mirror it so
+    // goto_sideeffects' is_boolean() check on the lowered IF condition holds
+    // (otherwise "first argument of `if' must be boolean"). if2t is immutable.
+    const if2t &i = to_if2t(expr);
+    expr = if2tc(
+      i.type,
+      typecast2tc(get_bool_type(), i.cond),
+      i.true_value,
+      i.false_value);
+  }
+  else if (
+    is_code_assign2t(expr) &&
+    is_pointer_type(to_code_assign2t(expr).target->type) &&
+    is_array_type(to_code_assign2t(expr).source->type))
+  {
+    // Array→pointer decay at the assignment seam: a `char*` target assigned a
+    // bare array value (a Python string literal, e.g. `word = ""` where `""` is
+    // a constant_array) must decay to `&array[0]`, exactly as clang_c_adjust
+    // lowers it (`ASSIGN word = &{0}[0]`). Without it the pointer variable
+    // carries an array value and any pointer use of it (indexing, arithmetic)
+    // trips a pointer-vs-array mismatch at symex rename (irep2_cast_error in
+    // fixup_renamed_type). code_assign2t is immutable, rebuild.
+    const code_assign2t &a = to_code_assign2t(expr);
+    const type2tc &elem = to_array_type(a.source->type).subtype;
+    // address_of2t's type is pointer-to-<subtype>, so pass the target's pointee
+    // (not the full pointer type) — the rebuilt value is then exactly
+    // a.target->type, matching clang's c_typecast (address_of2tc(ptr.subtype,
+    // index)), not pointer(pointer(elem)).
+    const type2tc &pointee = to_pointer_type(a.target->type).subtype;
+    expr2tc decayed =
+      address_of2tc(pointee, index2tc(elem, a.source, gen_zero(index_type2())));
+    expr = code_assign2tc(a.target, decayed, a.location);
   }
   else if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
   {
@@ -246,11 +312,11 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // requires the resolved type on the node, so this arm resolves eagerly
     // (the RV-adj6 divergence, understood and deliberate). On today's
     // pipeline the by-name survivors are the OM exception literals
-    // (raise IndexError(...) et al., docs/irep2-migration.md "S1 outcome"
-    // finding 2): their operands were already padded by the legacy pass, so
-    // only the retype fires; the padding-operand insertion below completes a
-    // converter-built literal once the flip makes this pass the sole
-    // resolver.
+    // (raise IndexError(...) et al., docs/roadmap/irep2-migration.md "S1
+    // outcome" finding 2): their operands were already padded by the legacy
+    // pass, so only the retype fires; the padding-operand insertion below
+    // completes a converter-built literal once the flip makes this pass the
+    // sole resolver.
     // Guard the follow: ns.follow asserts on an unknown tag, but an
     // unresolvable literal must instead survive to the exit invariant
     // (mirrors the top-level-symbol no-abort deviation in adjust_type).
@@ -265,27 +331,34 @@ void python_adjust::adjust_expr(expr2tc &expr)
       // the final component list. Idempotent when already padded (S1).
       adjust_type(resolved);
       const struct_type2t &st = to_struct_type(resolved);
-      std::vector<expr2tc> ops = to_constant_struct2t(expr).datatype_members;
       // Mirror the legacy already-padded heuristic: only insert padding
-      // operands when the literal doesn't have them yet. Pad members are
-      // recognised by the reserved `$` names (see the re-derivation in
-      // adjust_type); inserting at component position i keeps the remaining
-      // value operands aligned, exactly like the legacy insertion loop.
+      // operands when the literal doesn't have them yet. pad_struct_operands
+      // is not idempotent, so the size guard must gate the call.
+      std::vector<expr2tc> ops = to_constant_struct2t(expr).datatype_members;
       if (ops.size() != st.members.size())
-      {
-        for (size_t i = 0; i < st.members.size(); i++)
-        {
-          const bool is_pad =
-            is_padding_member_name(st.member_names[i].as_string());
-          if (is_pad && i <= ops.size())
-            ops.insert(ops.begin() + i, gen_zero(st.members[i]));
-        }
-      }
+        ops = pad_struct_operands(st, ops);
       // Rebuild only when the literal is structurally consistent; a residual
       // mismatch is left by-name for the exit invariant to flag.
       if (ops.size() == st.members.size())
         expr = constant_struct2tc(resolved, ops);
     }
+  }
+  else if (
+    is_constant_struct2t(expr) && is_struct_type(expr->type) &&
+    to_constant_struct2t(expr).datatype_members.size() !=
+      to_struct_type(expr->type).members.size())
+  {
+    // A literal already retyped to a resolved struct but left with fewer
+    // operands than components — the converter built an Optional/union literal
+    // (e.g. `int | None`: `{ is_none, anon_pad$, value }`) without its padding
+    // operand, and no legacy adjust_struct ran to insert it. Pad it the same
+    // way as the by-name S2 arm above; the type is already resolved so no
+    // follow is needed. A residual mismatch is left for the exit invariant.
+    const struct_type2t &st = to_struct_type(expr->type);
+    std::vector<expr2tc> ops =
+      pad_struct_operands(st, to_constant_struct2t(expr).datatype_members);
+    if (ops.size() == st.members.size())
+      expr = constant_struct2tc(expr->type, ops);
   }
   else if (is_code_function_call2t(expr))
   {
@@ -310,17 +383,16 @@ void python_adjust::adjust_expr(expr2tc &expr)
   }
   else if (is_code_cpp_throw2t(expr))
   {
-    // Flip blocker #1 (docs/irep2-migration.md, "Flip-probe census"): the
-    // exception-id chain is derived only by clang_cpp_adjust today
-    // (adjust_side_effect_throw); once that hop is gone, every
-    // operand-carrying THROW reaches remove_exceptions with an empty
-    // exception_list and crashes its unguarded front(). Complete an empty
-    // list here from the operand's class type. A list the legacy pass
-    // already filled is left untouched, so this arm is inert until the flip;
-    // a bare re-raise (nil operand) keeps its empty list, as legacy does.
-    // The operand was already recursed above, so under S2 its type may be
-    // the resolved struct rather than the by-name tag — both derive the same
-    // chain.
+    // Flip blocker #1 (docs/roadmap/irep2-migration.md, "Flip-probe census"):
+    // the exception-id chain is derived only by clang_cpp_adjust today
+    // (adjust_side_effect_throw); once that hop is gone, every operand-carrying
+    // THROW reaches remove_exceptions with an empty exception_list and crashes
+    // its unguarded front(). Complete an empty list here from the operand's
+    // class type. A list the legacy pass already filled is left untouched, so
+    // this arm is inert until the flip; a bare re-raise (nil operand) keeps its
+    // empty list, as legacy does. The operand was already recursed above, so
+    // under S2 its type may be the resolved struct rather than the by-name tag
+    // — both derive the same chain.
     const code_cpp_throw2t &t = to_code_cpp_throw2t(expr);
     if (t.exception_list.empty() && !is_nil_expr(t.operand))
     {
@@ -589,6 +661,11 @@ void python_adjust::collect_unresolved_sources(
       to_symbol_type(to_index2t(expr).source_value->type)
         .symbol_name.as_string() +
       "'");
+  // A pointer source is transient too (the index arm rewrites `p[i]` to
+  // `*(p+i)`); one surviving here means the rewrite was skipped, so symex would
+  // see an index over a pointer — flag it before it escapes.
+  if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value->type))
+    out.push_back("index over unresolved pointer source");
   // A constant_struct2t is the third relaxed construction assert (irep2_expr.h):
   // its own type may be a transient by-name symbol_type2t until the aggregate is
   // followed. Post-adjust it must be a resolved struct too.

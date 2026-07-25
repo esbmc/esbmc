@@ -1,4 +1,4 @@
-# Exercises the --python-irep2-adjust deref-result-type arm (docs/scope-v1k-adjuster
+# Exercises the --python-irep2-adjust deref-result-type arm (docs/roadmap/scope-v1k-adjuster
 # round-4): a char-array element access chr(c)[0] produces a dereference whose
 # result type the converter leaves empty. Under the flag, clang_cpp_adjust runs
 # first and resolves it, so the pass stays inert and the verdict matches the

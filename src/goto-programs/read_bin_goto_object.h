@@ -2,8 +2,8 @@
 #define READ_BIN_GOTO_OBJECT_H_
 
 #include <goto-programs/goto_functions.h>
-#include <util/context.h>
-#include <util/message.h>
+#include <util/symtab/context.h>
+#include <util/message/message.h>
 #include <vector>
 #include <string>
 

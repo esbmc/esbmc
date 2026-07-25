@@ -3,7 +3,7 @@
 #include <langapi/language_util.h>
 #include <pointer-analysis/dereference.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 void symex_dereference_statet::dereference_failure(
   const std::string &property [[maybe_unused]],

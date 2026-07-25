@@ -5,7 +5,7 @@ internal representation for **expressions** (`expr2t`) and **types**
 (`type2t`). It is the data structure every frontend lowers to, every
 transformation rewrites, and every backend (symex, SMT, goto2c) consumes.
 It replaces the older "stringy" `irept` for the verification pipeline;
-conversions live in `util/migrate.{h,cpp}`.
+conversions live in `util/irep/migrate.{h,cpp}`.
 
 ## Design at a glance
 
@@ -149,18 +149,18 @@ Notes:
 3. Add the `field_names` table for the kind in `irep2_expr.cpp` /
    `irep2_type.cpp` — one string per `fields` entry, in tuple order.
 4. If the node has semantics worth modelling, teach `do_simplify`
-   (defined out-of-line in `src/util/expr_simplifier.cpp` for
+   (defined out-of-line in `src/util/expr/expr_simplifier.cpp` for
    non-trivial nodes) and the relevant lowering passes (symex, SMT
    conversion in `src/solvers/`, `goto2c`) about it.
 
 ## Related code
 
-- `util/migrate.{h,cpp}` — bidirectional conversion between legacy
+- `util/irep/migrate.{h,cpp}` — bidirectional conversion between legacy
   string-based `irept`/`exprt` and `irep2tc`/`expr2tc`. Frontends emit
   legacy ireps that get migrated before symex.
 - `src/goto-symex/`, `src/solvers/` — primary consumers; expect to walk
   `expr2tc` trees via `foreach_operand` and the `is_*` / `to_*` accessors.
-- `src/util/std_expr.h`, `src/util/std_types.h` — legacy counterparts on the
+- `src/util/irep/std_expr.h`, `src/util/irep/std_types.h` — legacy counterparts on the
   string-irep side.
 
 ## Abstract grammar

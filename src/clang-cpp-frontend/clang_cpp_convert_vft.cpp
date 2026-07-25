@@ -5,7 +5,7 @@
  *  - generate VFT variable symbols
  *  - generate thunk functions for overriding methods
  */
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
@@ -28,12 +28,12 @@ CC_DIAGNOSTIC_POP()
 
 #include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 
 #include <functional>
 #include <optional>

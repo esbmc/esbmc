@@ -6,9 +6,9 @@
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/param_annotations.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
-#include <util/message.h>
-#include <util/filesystem.h>
-#include <util/c_expr2string.h>
+#include <util/message/message.h>
+#include <util/base/filesystem.h>
+#include <util/lang/c_expr2string.h>
 #include <c2goto/cprover_library.h>
 
 #include <cstdlib>
@@ -286,6 +286,20 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   {
     log_error("{}", e.what());
     exit(-2);
+  }
+
+  // V.4 hop-off: with --python-irep2-adjust-only the IREP2-native adjuster
+  // *replaces* clang_cpp_adjust on the Python path (the B.5 "sole adjuster"
+  // milestone, gated behind a default-off flag). A 2026-07-24 corrected census
+  // over regression/python (228/228 on the a-b prefix, 290/291 on an unbiased
+  // strided whole-corpus sample) showed verdict parity with the legacy pass and
+  // zero wrong verdicts; docs/scope-v1k-adjuster.md records the method. The one
+  // known non-parity case (boolop-len-or) is a load-dependent solver-time
+  // timeout, not a type-resolution defect, so the hop-off stays experimental.
+  if (config.options.get_bool_option("python-irep2-adjust-only"))
+  {
+    python_adjust py_adjuster(context);
+    return py_adjuster.adjust();
   }
 
   clang_cpp_adjust adjuster(context);

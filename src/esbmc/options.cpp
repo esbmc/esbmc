@@ -3,7 +3,7 @@
 #include <fstream>
 #include <limits>
 #include <solvers/solver_config.h>
-#include <util/cmdline.h>
+#include <util/config/cmdline.h>
 
 const struct group_opt_templ all_cmd_options[] = {
   {"Main Usage",
@@ -211,6 +211,10 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Run the IREP2-native Python adjuster alongside the legacy adjust pass "
       "(V.4 migration; experimental, default off)"},
+     {"python-irep2-adjust-only",
+      NULL,
+      "Use the IREP2-native Python adjuster instead of the legacy clang_cpp "
+      "adjust pass (V.4 migration hop-off; experimental, default off)"},
    }},
 #endif
 #ifdef ENABLE_LD_FRONTEND
@@ -640,6 +644,13 @@ const struct group_opt_templ all_cmd_options[] = {
      "Verify satisfiability of all claims of the current bound"},
     {"no-standard-checks", NULL, "Disable default checks"},
     {"no-assertions", NULL, "Ignore assertions"},
+    {"no-library-assertions",
+     NULL,
+     "Ignore assertions stated by ESBMC's operational models (e.g. \"Sem is "
+     "not initialized\"), keeping the ones in the program under verification. "
+     "Warning: hides genuine API misuse the models report. Leaves the checks "
+     "ESBMC generates inside model code (see --no-standard-checks), renumbers "
+     "--claim, and is unsupported for Python"},
     {"no-bounds-check", NULL, "Do not do array bounds check"},
     {"no-div-by-zero-check", NULL, "Do not do division by zero check"},
     {"no-pointer-check", NULL, "Do not do pointer check"},

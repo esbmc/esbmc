@@ -1,7 +1,7 @@
 # JBMC PoC corpus
 
 Ten small Java programs in five tiers, used to measure how far ESBMC gets on
-JBMC-produced GOTO binaries. See `docs/jbmc-goto-binary-poc-plan.md`.
+JBMC-produced GOTO binaries. See `docs/roadmap/jbmc-goto-binary-poc-plan.md`.
 
 | Tier | Programs | Exercises |
 |---|---|---|
