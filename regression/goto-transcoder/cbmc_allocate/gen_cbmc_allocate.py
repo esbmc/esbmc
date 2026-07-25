@@ -2,7 +2,7 @@
 """Regenerate cbmc_allocate{,_fail}.goto.
 
 Pins ESBMC's mapping of CBMC's generic `allocate` side effect onto malloc
-(docs/jbmc-goto-binary-poc-plan.md 2.6). `allocate` is what remove_java_new
+(docs/roadmap/jbmc-goto-binary-poc-plan.md 2.6). `allocate` is what remove_java_new
 lowers java_new into, but it is ordinary CPROVER vocabulary that any
 goto-instrument-lowered binary may carry, so it is worth pinning on its own.
 
