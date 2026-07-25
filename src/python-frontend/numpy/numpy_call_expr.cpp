@@ -3577,6 +3577,10 @@ exprt numpy_call_expr::create_expr_from_call()
         throw std::runtime_error(
           "TypeError: numpy.linalg.solve requires a square matrix");
 
+      if (n != 2 && n != 3)
+        throw std::runtime_error(
+          "TypeError: numpy.linalg.solve supports only 2x2 and 3x3 matrices");
+
       std::vector<scalar_value> b;
       if (!try_extract_scalar_1d_list(rhs, b))
         throw std::runtime_error(
