@@ -166,6 +166,19 @@ bool is_padding_member_name(const std::string &name)
          has_prefix(name, "anon_bit_field_pad$") ||
          has_prefix(name, "ext_int_pad$") || name == "$pad";
 }
+
+// Insert a gen_zero operand at each reserved padding-member position so the
+// literal's operand list matches the struct's component list, exactly as the
+// legacy adjust_struct insertion loop does. Idempotent when already padded.
+std::vector<expr2tc>
+pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops)
+{
+  for (size_t i = 0; i < st.members.size(); i++)
+    if (
+      i <= ops.size() && is_padding_member_name(st.member_names[i].as_string()))
+      ops.insert(ops.begin() + i, gen_zero(st.members[i]));
+  return ops;
+}
 } // namespace
 
 void python_adjust::adjust_expr(expr2tc &expr)
@@ -318,30 +331,34 @@ void python_adjust::adjust_expr(expr2tc &expr)
       // the final component list. Idempotent when already padded (S1).
       adjust_type(resolved);
       const struct_type2t &st = to_struct_type(resolved);
-      std::vector<expr2tc> ops = to_constant_struct2t(expr).datatype_members;
       // Mirror the legacy already-padded heuristic: only insert padding
-      // operands when the literal doesn't have them yet. Pad members are
-      // recognised by the reserved `$` names (see the re-derivation in
-      // adjust_type); inserting at component position i keeps the remaining
-      // value operands aligned, exactly like the legacy insertion loop.
+      // operands when the literal doesn't have them yet. pad_struct_operands
+      // is not idempotent, so the size guard must gate the call.
+      std::vector<expr2tc> ops = to_constant_struct2t(expr).datatype_members;
       if (ops.size() != st.members.size())
-      {
-        for (size_t i = 0; i < st.members.size(); i++)
-        {
-          // Test the insert-position bound first so it short-circuits ahead of
-          // the indexing below: an index use that precedes its limits check
-          // trips static analysis (Codacy/cppcheck).
-          if (
-            i <= ops.size() &&
-            is_padding_member_name(st.member_names[i].as_string()))
-            ops.insert(ops.begin() + i, gen_zero(st.members[i]));
-        }
-      }
+        ops = pad_struct_operands(st, ops);
       // Rebuild only when the literal is structurally consistent; a residual
       // mismatch is left by-name for the exit invariant to flag.
       if (ops.size() == st.members.size())
         expr = constant_struct2tc(resolved, ops);
     }
+  }
+  else if (
+    is_constant_struct2t(expr) && is_struct_type(expr->type) &&
+    to_constant_struct2t(expr).datatype_members.size() !=
+      to_struct_type(expr->type).members.size())
+  {
+    // A literal already retyped to a resolved struct but left with fewer
+    // operands than components — the converter built an Optional/union literal
+    // (e.g. `int | None`: `{ is_none, anon_pad$, value }`) without its padding
+    // operand, and no legacy adjust_struct ran to insert it. Pad it the same
+    // way as the by-name S2 arm above; the type is already resolved so no
+    // follow is needed. A residual mismatch is left for the exit invariant.
+    const struct_type2t &st = to_struct_type(expr->type);
+    std::vector<expr2tc> ops =
+      pad_struct_operands(st, to_constant_struct2t(expr).datatype_members);
+    if (ops.size() == st.members.size())
+      expr = constant_struct2tc(expr->type, ops);
   }
   else if (is_code_function_call2t(expr))
   {
