@@ -238,6 +238,22 @@ void python_adjust::adjust_expr(expr2tc &expr)
         expr = dereference2tc(pointee, d.value);
     }
   }
+  else if (is_if2t(expr) && !is_bool_type(to_if2t(expr).cond->type))
+  {
+    // A ternary whose condition is not boolean -- a non-boolean short-circuit
+    // `and`/`or` select builds `cond ? a : b` with the raw integer operand as
+    // the condition (get_truthy_condition returns a non-list value unchanged,
+    // e.g. `len(s)` in `len(s) or len(t)`). clang_c_adjust::adjust_if casts the
+    // condition to bool (gen_typecast(ns, op0, bool_type())); mirror it so
+    // goto_sideeffects' is_boolean() check on the lowered IF condition holds
+    // (otherwise "first argument of `if' must be boolean"). if2t is immutable.
+    const if2t &i = to_if2t(expr);
+    expr = if2tc(
+      i.type,
+      typecast2tc(get_bool_type(), i.cond),
+      i.true_value,
+      i.false_value);
+  }
   else if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
   {
     // S2: aggregate-literal completion — the third relaxed construction
@@ -276,9 +292,12 @@ void python_adjust::adjust_expr(expr2tc &expr)
       {
         for (size_t i = 0; i < st.members.size(); i++)
         {
-          const bool is_pad =
-            is_padding_member_name(st.member_names[i].as_string());
-          if (is_pad && i <= ops.size())
+          // Test the insert-position bound first so it short-circuits ahead of
+          // the indexing below: an index use that precedes its limits check
+          // trips static analysis (Codacy/cppcheck).
+          if (
+            i <= ops.size() &&
+            is_padding_member_name(st.member_names[i].as_string()))
             ops.insert(ops.begin() + i, gen_zero(st.members[i]));
         }
       }
