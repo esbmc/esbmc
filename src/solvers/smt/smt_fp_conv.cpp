@@ -570,7 +570,17 @@ smt_astt smt_solver_baset::mk_subnormal_flush(
   else
     flush = mk_lt(abs_r, min_sub);
 
-  return mk_ite(flush, zero, r);
+  smt_astt result = mk_ite(flush, zero, r);
+
+  // Track when this flush produced IEEE 754 -0.0 rather than +0.0, so that
+  // sign-sensitive consumers (signbit, division by zero) can recover the
+  // sign that the bare real value 0 can no longer represent. This is
+  // recorded on `result` itself -- the term callers actually receive --
+  // not on the temporary `zero`/`flush` subterms, so it survives lookups
+  // keyed on the returned AST.
+  ir_ieee_api->store_neg_zero_pred(result, mk_and(flush, mk_lt(r, zero)));
+
+  return result;
 }
 
 smt_astt smt_solver_baset::get_double_inf_sentinel()
@@ -817,6 +827,13 @@ smt_astt smt_solver_baset::convert_signbit(const expr2tc &expr)
     // In integer/real encoding mode, floating-point values are represented as reals
     // We can't extract bits, so check the sign mathematically
     is_neg = mk_lt(value, mk_smt_real("0"));
+
+    // A value flushed to zero from a negative subnormal-range result is
+    // IEEE 754 -0.0, but the real zero it collapsed to carries no sign of
+    // its own; consult the tracked negative-zero predicate to recover it.
+    smt_astt neg_zero_pred = ir_ieee_api->get_neg_zero_pred(value);
+    if (neg_zero_pred)
+      is_neg = mk_or(is_neg, neg_zero_pred);
   }
   else
   {
