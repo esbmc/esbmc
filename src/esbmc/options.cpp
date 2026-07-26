@@ -644,6 +644,13 @@ const struct group_opt_templ all_cmd_options[] = {
      "Verify satisfiability of all claims of the current bound"},
     {"no-standard-checks", NULL, "Disable default checks"},
     {"no-assertions", NULL, "Ignore assertions"},
+    {"no-library-assertions",
+     NULL,
+     "Ignore assertions stated by ESBMC's operational models (e.g. \"Sem is "
+     "not initialized\"), keeping the ones in the program under verification. "
+     "Warning: hides genuine API misuse the models report. Leaves the checks "
+     "ESBMC generates inside model code (see --no-standard-checks), renumbers "
+     "--claim, and is unsupported for Python"},
     {"no-bounds-check", NULL, "Do not do array bounds check"},
     {"no-div-by-zero-check", NULL, "Do not do division by zero check"},
     {"no-pointer-check", NULL, "Do not do pointer check"},
@@ -705,6 +712,19 @@ const struct group_opt_templ all_cmd_options[] = {
     {"dead-store-check",
      NULL,
      "Emit advisory notes for dead stores / assignments never read (CWE-563)"},
+    {"excessive-alloc-check",
+     // Optional bound: bare flag uses the implicit 1 MiB (1048576-byte)
+     // default; --excessive-alloc-check=K sets the byte bound to K. `int`
+     // (not a wider type) because cmdlinet only stringifies int / string /
+     // vector<int> values; the 2 GiB ceiling is far past any meaningful
+     // "excessive" threshold.
+     boost::program_options::value<int>()->implicit_value(1048576)->value_name(
+       "bytes"),
+     "Enable check for allocations (malloc/calloc/realloc/new[]) whose size "
+     "can exceed K bytes; attach the bound with '=' as "
+     "--excessive-alloc-check=K "
+     "(a space-separated value is treated as an input file), default 1 MiB "
+     "(CWE-789)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(

@@ -2,6 +2,7 @@
 
 #include <clang-c-frontend/padding.h>
 #include <irep2/irep2_utils.h>
+#include <util/lang/c_types.h>
 #include <util/message/message.h>
 #include <util/irep/migrate.h>
 #include <util/base/prefix.h>
@@ -165,6 +166,19 @@ bool is_padding_member_name(const std::string &name)
          has_prefix(name, "anon_bit_field_pad$") ||
          has_prefix(name, "ext_int_pad$") || name == "$pad";
 }
+
+// Insert a gen_zero operand at each reserved padding-member position so the
+// literal's operand list matches the struct's component list, exactly as the
+// legacy adjust_struct insertion loop does. Idempotent when already padded.
+std::vector<expr2tc>
+pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops)
+{
+  for (size_t i = 0; i < st.members.size(); i++)
+    if (
+      i <= ops.size() && is_padding_member_name(st.member_names[i].as_string()))
+      ops.insert(ops.begin() + i, gen_zero(st.members[i]));
+  return ops;
+}
 } // namespace
 
 void python_adjust::adjust_expr(expr2tc &expr)
@@ -214,9 +228,32 @@ void python_adjust::adjust_expr(expr2tc &expr)
   else if (is_index2t(expr))
   {
     const index2t &i = to_index2t(expr);
-    expr2tc source = i.source_value;
-    if (resolve_source(source))
-      expr = index2tc(i.type, source, i.index);
+    // clang_c_adjust::adjust_index casts the index to index_type() before using
+    // it (clang_c_adjust_expr.cpp:591). Without it an index of a different width
+    // or signedness reaches the element computation unconverted — e.g.
+    // `float_buf[obj->float_idx]` where legacy emits
+    // `float_buf[(signed long int)obj->float_idx]` — which changes the value read
+    // and can flip a verdict.
+    expr2tc idx = i.index;
+    if (idx->type != index_type2())
+      idx = typecast2tc(index_type2(), idx);
+
+    if (is_pointer_type(i.source_value->type))
+    {
+      // clang_c_adjust::adjust_index rewrites p[i] -> *(p+i) when the base is a
+      // pointer (a Python string / decayed-array source). Requires the
+      // array→pointer decay arm below so the pointer source actually holds a
+      // pointer value at symex rename, not a bare array.
+      expr = dereference2tc(
+        i.type, add2tc(i.source_value->type, i.source_value, idx));
+    }
+    else
+    {
+      expr2tc source = i.source_value;
+      const bool source_resolved = resolve_source(source);
+      if (source_resolved || idx != i.index)
+        expr = index2tc(i.type, source, idx);
+    }
   }
   else if (is_dereference2t(expr) && is_empty_type(expr->type))
   {
@@ -254,6 +291,45 @@ void python_adjust::adjust_expr(expr2tc &expr)
       i.true_value,
       i.false_value);
   }
+  else if (
+    is_code_assign2t(expr) &&
+    is_pointer_type(to_code_assign2t(expr).target->type) &&
+    is_array_type(to_code_assign2t(expr).source->type))
+  {
+    // Array→pointer decay at the assignment seam: a `char*` target assigned a
+    // bare array value (a Python string literal, e.g. `word = ""` where `""` is
+    // a constant_array) must decay to `&array[0]`, exactly as clang_c_adjust
+    // lowers it (`ASSIGN word = &{0}[0]`). Without it the pointer variable
+    // carries an array value and any pointer use of it (indexing, arithmetic)
+    // trips a pointer-vs-array mismatch at symex rename (irep2_cast_error in
+    // fixup_renamed_type). code_assign2t is immutable, rebuild.
+    const code_assign2t &a = to_code_assign2t(expr);
+    const type2tc &elem = to_array_type(a.source->type).subtype;
+    // address_of2t's type is pointer-to-<subtype>, so pass the target's pointee
+    // (not the full pointer type) — the rebuilt value is then exactly
+    // a.target->type, matching clang's c_typecast (address_of2tc(ptr.subtype,
+    // index)), not pointer(pointer(elem)).
+    const type2tc &pointee = to_pointer_type(a.target->type).subtype;
+    expr2tc decayed =
+      address_of2tc(pointee, index2tc(elem, a.source, gen_zero(index_type2())));
+    expr = code_assign2tc(a.target, decayed, a.location);
+  }
+  else if (
+    is_code_return2t(expr) && !is_nil_expr(to_code_return2t(expr).operand) &&
+    is_code_type(to_code_return2t(expr).operand->type))
+  {
+    // Function→pointer decay at the return seam (C11 6.3.2.1p4): a closure
+    // factory (`def make(k): def mul(x): ...; return mul`) returns a bare
+    // code-typed designator, but the caller stores it in a function pointer.
+    // clang_c_adjust decays every code-typed symbol reference to `&f`
+    // (adjust_symbol_expr, "sugar for &f"); mirror it at the one seam Python
+    // reaches it from. Without it symex sees `typecast(mul, void(*)())` and
+    // aborts at SMT encoding ("Unexpected type in int/ptr typecast"), and the
+    // indirect call has no resolvable target.
+    const code_return2t &r = to_code_return2t(expr);
+    expr =
+      code_return2tc(address_of2tc(r.operand->type, r.operand), r.location);
+  }
   else if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
   {
     // S2: aggregate-literal completion — the third relaxed construction
@@ -282,30 +358,34 @@ void python_adjust::adjust_expr(expr2tc &expr)
       // the final component list. Idempotent when already padded (S1).
       adjust_type(resolved);
       const struct_type2t &st = to_struct_type(resolved);
-      std::vector<expr2tc> ops = to_constant_struct2t(expr).datatype_members;
       // Mirror the legacy already-padded heuristic: only insert padding
-      // operands when the literal doesn't have them yet. Pad members are
-      // recognised by the reserved `$` names (see the re-derivation in
-      // adjust_type); inserting at component position i keeps the remaining
-      // value operands aligned, exactly like the legacy insertion loop.
+      // operands when the literal doesn't have them yet. pad_struct_operands
+      // is not idempotent, so the size guard must gate the call.
+      std::vector<expr2tc> ops = to_constant_struct2t(expr).datatype_members;
       if (ops.size() != st.members.size())
-      {
-        for (size_t i = 0; i < st.members.size(); i++)
-        {
-          // Test the insert-position bound first so it short-circuits ahead of
-          // the indexing below: an index use that precedes its limits check
-          // trips static analysis (Codacy/cppcheck).
-          if (
-            i <= ops.size() &&
-            is_padding_member_name(st.member_names[i].as_string()))
-            ops.insert(ops.begin() + i, gen_zero(st.members[i]));
-        }
-      }
+        ops = pad_struct_operands(st, ops);
       // Rebuild only when the literal is structurally consistent; a residual
       // mismatch is left by-name for the exit invariant to flag.
       if (ops.size() == st.members.size())
         expr = constant_struct2tc(resolved, ops);
     }
+  }
+  else if (
+    is_constant_struct2t(expr) && is_struct_type(expr->type) &&
+    to_constant_struct2t(expr).datatype_members.size() !=
+      to_struct_type(expr->type).members.size())
+  {
+    // A literal already retyped to a resolved struct but left with fewer
+    // operands than components — the converter built an Optional/union literal
+    // (e.g. `int | None`: `{ is_none, anon_pad$, value }`) without its padding
+    // operand, and no legacy adjust_struct ran to insert it. Pad it the same
+    // way as the by-name S2 arm above; the type is already resolved so no
+    // follow is needed. A residual mismatch is left for the exit invariant.
+    const struct_type2t &st = to_struct_type(expr->type);
+    std::vector<expr2tc> ops =
+      pad_struct_operands(st, to_constant_struct2t(expr).datatype_members);
+    if (ops.size() == st.members.size())
+      expr = constant_struct2tc(expr->type, ops);
   }
   else if (is_code_function_call2t(expr))
   {
@@ -505,6 +585,32 @@ void python_adjust::adjust_type(type2tc &type)
     return;
   }
 
+  if (is_code_type(type))
+  {
+    // Pad any struct/union embedded in the function signature (argument and
+    // return types), so a function argument's Optional/union type matches the
+    // padded value literal at the call site — otherwise symex_function's
+    // base_type_eq rejects a padded argument against an unpadded parameter
+    // ("argument type mismatch: got struct, expected struct"). Inert on a
+    // signature that carries only scalars.
+    const code_type2t &ct = to_code_type(type);
+    std::vector<type2tc> args = ct.arguments;
+    type2tc ret = ct.ret_type;
+    bool changed = false;
+    for (type2tc &a : args)
+    {
+      const type2tc before = a;
+      adjust_type(a);
+      changed |= a != before;
+    }
+    const type2tc ret_before = ret;
+    adjust_type(ret);
+    changed |= ret != ret_before;
+    if (changed)
+      type = code_type2tc(args, ret, ct.argument_names, ct.ellipsis);
+    return;
+  }
+
   if (is_struct_type(type) || is_union_type(type))
   {
     // Complete the aggregate (legacy struct/union arm): recurse the member
@@ -608,6 +714,11 @@ void python_adjust::collect_unresolved_sources(
       to_symbol_type(to_index2t(expr).source_value->type)
         .symbol_name.as_string() +
       "'");
+  // A pointer source is transient too (the index arm rewrites `p[i]` to
+  // `*(p+i)`); one surviving here means the rewrite was skipped, so symex would
+  // see an index over a pointer — flag it before it escapes.
+  if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value->type))
+    out.push_back("index over unresolved pointer source");
   // A constant_struct2t is the third relaxed construction assert (irep2_expr.h):
   // its own type may be a transient by-name symbol_type2t until the aggregate is
   // followed. Post-adjust it must be a resolved struct too.

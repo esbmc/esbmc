@@ -1,0 +1,7 @@
+CORE
+main.c
+--multi-property --unwind 11 --context-bound 2 --no-standard-checks
+^VERIFICATION SUCCESSFUL$
+PASSED: 'Sem is not initialized' at file .*semaphore_lib\.c
+PASSED: 'assert data equal at file .*main\.c line \d+
+\A(?![\s\S]*library assertion)[\s\S]*\Z

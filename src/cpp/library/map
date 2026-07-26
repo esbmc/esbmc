@@ -114,23 +114,15 @@ public:
 
     bool operator==(const iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      // Two iterators are equal iff they denote the same position in the same
+      // container. Comparing the cached it_pair is unsound: end() fills it from
+      // an uninitialised backing slot, so the previous pair-based operators made
+      // find(k) != end() unreliable for the not-found case (github #6354).
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -347,23 +339,11 @@ public:
 
     bool operator==(const reverse_iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const reverse_iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -705,6 +685,23 @@ public:
     it.it_pair.first = Key();
     it.it_pair.second = T();
     return it;
+  }
+
+  const_iterator cbegin() const
+  {
+    return begin();
+  }
+  const_iterator cend() const
+  {
+    return end();
+  }
+  const_reverse_iterator crbegin() const
+  {
+    return rbegin();
+  }
+  const_reverse_iterator crend() const
+  {
+    return rend();
   }
   mapped_type &at(const Key &x)
   {
@@ -1075,6 +1072,15 @@ public:
     return const_cast<map *>(this)->find(x);
   }
 
+#if __cplusplus >= 202002L
+  // find() sets it_pos == _size when the key is absent; checking it_pos is
+  // robust regardless of the iterator operator== (github #6354).
+  bool contains(const key_type &x) const
+  {
+    return this->find(x).it_pos != this->_size;
+  }
+#endif
+
   key_compare key_comp() const
   {
     return key_compare();
@@ -1084,6 +1090,31 @@ public:
   {
     return value_compare(Compare());
   }
+
+#if __cplusplus >= 201703L
+  // Unlike emplace, the mapped value is only constructed when the key is
+  // absent, and the key is passed separately ([map.modifiers]). find() sets
+  // it_pos == _size when the key is not present; comparing it_pos directly
+  // avoids the iterator operator!=, whose end() operand reads an
+  // uninitialised slot and is unreliable for the not-found case.
+  template <class... Args>
+  pair<iterator, bool> try_emplace(const key_type &k, Args &&...args)
+  {
+    iterator it = this->find(k);
+    if (it.it_pos != this->_size)
+      return pair<iterator, bool>(it, false);
+    return this->insert(
+      value_type(k, mapped_type(std::forward<Args>(args)...)));
+  }
+
+  template <class M>
+  pair<iterator, bool> insert_or_assign(const key_type &k, M &&obj)
+  {
+    bool inserted = (this->find(k).it_pos == this->_size);
+    (*this)[k] = std::forward<M>(obj);
+    return pair<iterator, bool>(this->find(k), inserted);
+  }
+#endif
 
   iterator lower_bound(const key_type &x)
   {
@@ -1273,23 +1304,15 @@ public:
 
     bool operator==(const iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      // Two iterators are equal iff they denote the same position in the same
+      // container. Comparing the cached it_pair is unsound: end() fills it from
+      // an uninitialised backing slot, so the previous pair-based operators made
+      // find(k) != end() unreliable for the not-found case (github #6354).
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -1506,23 +1529,11 @@ public:
 
     bool operator==(const reverse_iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const reverse_iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -1949,6 +1960,23 @@ public:
     return it;
   }
 
+  const_iterator cbegin() const
+  {
+    return begin();
+  }
+  const_iterator cend() const
+  {
+    return end();
+  }
+  const_reverse_iterator crbegin() const
+  {
+    return rbegin();
+  }
+  const_reverse_iterator crend() const
+  {
+    return rend();
+  }
+
   iterator find(const key_type &x)
   {
     size_type s = this->_size;
@@ -2189,6 +2217,13 @@ public:
     }
     return 0;
   }
+
+#if __cplusplus >= 202002L
+  bool contains(const key_type &x) const
+  {
+    return this->count(x) > 0;
+  }
+#endif
 
   bool operator==(multimap &y)
   {

@@ -40,6 +40,7 @@
 #include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_no_op.h>
 #include <goto-programs/remove_unreachable.h>
+#include <goto-programs/remove_library_assertions.h>
 #include <goto-programs/remove_exceptions.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
@@ -166,6 +167,12 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("no-align-check", true);
       options.set_option("no-bounds-check", true);
     }
+
+    // Must precede inlining: goto_inlinet relabels a hidden function's
+    // instructions with the call site, after which the models' assertions
+    // can no longer be told apart from the user's (discussion #6382).
+    if (options.get_bool_option("no-library-assertions"))
+      remove_library_assertions(goto_functions);
 
     // Start by removing all no-op instructions and unreachable code
     if (!(cmdline.isset("no-remove-no-op")))
