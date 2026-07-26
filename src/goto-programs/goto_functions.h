@@ -18,6 +18,8 @@
 #include <util/irep/std_types.h>
 #include <util/config/options.h>
 #include <util/lang/exception_specification.h>
+#include <atomic>
+#include <set>
 
 class goto_functiont
 {

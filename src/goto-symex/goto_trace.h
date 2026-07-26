@@ -115,10 +115,16 @@ void show_goto_trace_gui(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
+/// \param reachability_trace when true the closing ASSERT step is rendered as
+///   a reached location rather than a violated property. Coverage runs use
+///   this: their assertions are probes whose falsifiability means "reachable",
+///   so labelling the trace a violation would be a false statement about the
+///   program (issue #6387).
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
-  const goto_tracet &goto_trace);
+  const goto_tracet &goto_trace,
+  bool reachability_trace = false);
 
 bool input_file_check(const locationt &l);
 

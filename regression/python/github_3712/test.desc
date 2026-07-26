@@ -5,4 +5,4 @@ main.py
 ^Reached : 11
 ^Branch Coverage: 100%
 ^.*function entry:.*validate_start_with_letter.*$
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$
