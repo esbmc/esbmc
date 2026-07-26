@@ -152,10 +152,7 @@ def seed(seed: int = None) -> None:
     raise TypeError("numpy.random.seed() is not supported")
 
 
-def choice(a: list[int],
-           size: int = None,
-           replace: bool = True,
-           p: Any = None) -> Any:
+def choice(a: list[int], size: int = None, replace: bool = True, p: Any = None) -> Any:
     if p is not None:
         raise TypeError("numpy.random.choice() probabilities are not supported")
 
