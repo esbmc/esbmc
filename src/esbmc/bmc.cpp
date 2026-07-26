@@ -657,7 +657,7 @@ void bmct::report_multi_property_trace(
     oss << "  │  Trace  :\n";
     {
       std::ostringstream tr;
-      show_goto_trace(tr, ns, w.trace);
+      show_goto_trace(tr, ns, w.trace, reachability_trace);
       // Indent the trace under the box.
       std::string s = tr.str();
       std::string indented;
@@ -675,7 +675,9 @@ void bmct::report_multi_property_trace(
   }
 
   oss << "Summary: " << witnesses.size()
-      << " distinct input tuples violate this property (enumeration stopped: ";
+      << (reachability_trace ? " distinct input tuples reach this goal"
+                             : " distinct input tuples violate this property")
+      << " (enumeration stopped: ";
   switch (stop_reason)
   {
   case enumeration_stop_reasont::Unsat:
@@ -696,7 +698,10 @@ void bmct::report_multi_property_trace(
   }
   oss << ")\n";
 
-  log_fail("\n[Counterexample]\n");
+  if (reachability_trace)
+    log_success("\n[Reachability]\n");
+  else
+    log_fail("\n[Counterexample]\n");
   log_result("{}", oss.str());
 }
 
@@ -2393,6 +2398,20 @@ smt_resultt bmct::multi_property_check(
         }
       }
     }
+    else if (is_goto_cov && solver_result == P_SATISFIABLE)
+    {
+      // A violated claim that the coverage pass did not instrument — symex
+      // creates these after instrumentation, so an unwinding assertion is
+      // the usual case. It bounds how much of the program was explored, so
+      // the goals behind it were never even emitted and the percentages are
+      // lower bounds. Reporting it as a verification failure would be wrong
+      // (a coverage run verifies nothing), but dropping it silently would
+      // present a truncated exploration as a complete measurement.
+      note_cov_incomplete(fmt::format(
+        "a claim outside the coverage instrumentation was violated, so the "
+        "program was not fully explored: {}",
+        claim.claim_msg));
+    }
 
     solver_stats.total_time_ms.fetch_add(solve_stop - solve_start);
 
@@ -2403,8 +2422,11 @@ smt_resultt bmct::multi_property_check(
       // counterexample — skip trace generation and return early.
       if (is)
       {
-        std::lock_guard lock(result_mutex);
-        final_result = solver_result;
+        if (!is_goto_cov)
+        {
+          std::lock_guard lock(result_mutex);
+          final_result = solver_result;
+        }
         return;
       }
 
@@ -2427,25 +2449,27 @@ smt_resultt bmct::multi_property_check(
                   : enumeration_stop_reasont::Disabled;
 
       // Cache option lookups so the per-witness loop body is cheap.
-      // A reached coverage goal is not a violation. The SV-COMP witness
-      // formats can only say "this program violates its specification", and
-      // the HTML / JSON reports are violation reports, so emitting them for a
-      // probe would fabricate a defect; they are suppressed. The textual
-      // trace and the test-input generators stay on — which values drive
-      // execution to a goal is exactly what a coverage run is asked for —
-      // with the trace rendered as reachability evidence (issue #6387).
-      const std::string cex_output = options.get_option("cex-output");
+      // A coverage run reports no violations, so it emits no violation
+      // artifact for any of its claims: the SV-COMP witness formats can only
+      // say "this program violates its specification", and the HTML / JSON
+      // reports are violation reports, so either would fabricate a defect.
+      // The textual trace and the test-input generators stay on for coverage
+      // goals — which values drive execution to a goal is exactly what a
+      // coverage run is asked for — rendered as reachability evidence
+      // (issue #6387).
+      const std::string cex_output =
+        (is_cov_goal || !is_goto_cov) ? options.get_option("cex-output") : "";
       const std::string graphml_path =
-        is_cov_goal ? "" : options.get_option("witness-output-graphml");
+        is_goto_cov ? "" : options.get_option("witness-output-graphml");
       const std::string yaml_path =
-        is_cov_goal ? "" : options.get_option("witness-output-yaml");
+        is_goto_cov ? "" : options.get_option("witness-output-yaml");
       const bool want_graphml = !graphml_path.empty();
       const bool want_yaml = !yaml_path.empty();
       const bool want_testcase = options.get_bool_option("generate-testcase");
       const bool want_html =
-        !is_cov_goal && options.get_bool_option("generate-html-report");
+        !is_goto_cov && options.get_bool_option("generate-html-report");
       const bool want_json =
-        !is_cov_goal && options.get_bool_option("generate-json-report");
+        !is_goto_cov && options.get_bool_option("generate-json-report");
       const bool want_pytest =
         options.get_bool_option("generate-pytest-testcase");
       const bool want_ctest =
@@ -2612,9 +2636,9 @@ smt_resultt bmct::multi_property_check(
           P_SATISFIABLE, witnesses, stop_reason, claim.claim_msg, is_cov_goal);
       }
 
-      // A reached coverage goal must not drive the run's verdict: the
-      // program was never checked against the assertion it replaced.
-      if (!is_cov_goal)
+      // No claim of a coverage run drives a verdict: the program was never
+      // checked against the assertions the instrumentation replaced.
+      if (!is_goto_cov)
       {
         std::lock_guard lock(result_mutex);
         final_result = solver_result;
