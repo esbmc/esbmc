@@ -18,17 +18,11 @@ struct Room : Base
   ~Room() { dtor_calls++; }
 };
 
-struct House
-{
-  Room *rm;
-  House() { rm = new Room(); }
-};
-
 int main()
 {
-  House h;
-  // The temporary built for `new Room()` is destroyed after the copy, running
-  // ~Room then ~Base -> dtor_calls == 2. Without the fix both were dropped.
+  // The discarded temporary is destroyed at the end of the full expression,
+  // running ~Room then ~Base -> dtor_calls == 2.
+  Room();
   __ESBMC_assert(dtor_calls == 2, "dtor count");
   return 0;
 }

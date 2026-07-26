@@ -3,15 +3,21 @@
 #include <goto-programs/exception_globals.h>
 #include <goto-programs/goto_functions.h>
 
-#include <util/namespace.h>
-#include <util/context.h>
-#include <util/symbol.h>
-#include <util/migrate.h>
-#include <util/expr_util.h>
-#include <util/std_types.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/symbol.h>
+#include <util/irep/migrate.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/std_types.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
+#include <util/expr/type_byte_size.h>
+#include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
+
+#include <optional>
+
+#include <algorithm>
 
 namespace
 {
@@ -129,7 +135,18 @@ public:
         {
           const code_cpp_throw2t &t = to_code_cpp_throw2t(ins.code);
           if (!is_nil_expr(t.operand))
+          {
             registry.register_chain(t.exception_list);
+            // Record the dynamic type (front) for the typed uncaught-exception
+            // partition; dedup while preserving first-seen order.
+            const irep_idt &dyn = t.exception_list.front();
+            if (
+              std::find(
+                thrown_dynamic_types_.begin(),
+                thrown_dynamic_types_.end(),
+                dyn) == thrown_dynamic_types_.end())
+              thrown_dynamic_types_.push_back(dyn);
+          }
         }
         else if (ins.type == FUNCTION_CALL)
         {
@@ -384,6 +401,13 @@ private:
   // it silently.
   bool thread_entry_unresolved = false;
   unsigned storage_counter = 0;
+  // Dynamic types of every real (operand-carrying) throw in the program, in
+  // first-seen order. Used to partition the entry-epilogue uncaught-exception
+  // property by type so the verdict names the escaping exception. This is the
+  // small, exact set of types that can be in flight — unlike the registry's
+  // name_to_id, which the exception_typeidt constructor seeds from *every* type
+  // symbol, not just exception types.
+  std::vector<irep_idt> thrown_dynamic_types_;
 
   expr2tc mk_global(const char *id)
   {
@@ -899,16 +923,19 @@ private:
 
     if (spec.kind == exception_specificationt::kindt::dynamic)
       build_dynamic_spec_check(body, epilogue, spec.allowed_types, is_entry);
-    else if (
-      is_entry || spec.kind == exception_specificationt::kindt::non_throwing)
+    else if (is_entry)
+      // Any escape at the whole-program entry is uncaught; partition the
+      // property by the escaping type so the verdict names it.
+      emit_uncaught_checks(
+        body, std::next(epilogue), epilogue->location, epilogue->function);
+    else if (spec.kind == exception_specificationt::kindt::non_throwing)
       emit_terminate(
         body,
         std::next(epilogue),
         equality2tc(thrown, gen_false_expr()),
         epilogue->location,
         epilogue->function,
-        is_entry ? exception_globals::terminate_reason_uncaught
-                 : exception_globals::terminate_reason_noexcept);
+        exception_globals::terminate_reason_noexcept);
 
     body.update();
   }
@@ -970,6 +997,63 @@ private:
     }
   }
 
+  /// Byte offset of the *direct* base subobject of class @p target_tag inside
+  /// struct @p st, or nullopt when @p st has no such direct base. Only direct
+  /// bases are resolved: a transitive or absent base returns nullopt, so the
+  /// caller keeps the plain (unadjusted) cast rather than ever emitting a wrong
+  /// offset.
+  std::optional<BigInt>
+  direct_base_offset(const type2tc &st, const irep_idt &target_tag)
+  {
+    if (!is_struct_type(st))
+      return std::nullopt;
+    const struct_type2t &s = to_struct_type(st);
+    const std::string want = "@base@" + id2string(target_tag);
+    for (const irep_idt &m : s.member_names)
+      if (m.as_string() == want)
+        return member_offset(st, m, &ns);
+    return std::nullopt;
+  }
+
+  /// The `catch_ptr_type` view of the stored thrown object for a catch of class
+  /// @p catch_type. `value` points at the *most-derived* object, so when the
+  /// caught type is a base sitting at a non-zero offset inside the dynamic type
+  /// (multiple inheritance), the pointer is re-based per the runtime type_id:
+  ///   type_id == id(D) ? (T*)((char*)value + off(T in D)) : (T*)value
+  /// Only non-zero-offset bases add an arm, so a single-inheritance / exact /
+  /// first-base catch keeps exactly the plain `(T*)value` it had.
+  expr2tc catch_object_pointer(
+    const type2tc &catch_ptr_type,
+    const irep_idt &catch_type)
+  {
+    expr2tc result = typecast2tc(catch_ptr_type, value);
+
+    const irep_idt target_tag = "tag-" + id2string(catch_type);
+    const type2tc char_ptr = pointer_type2tc(get_uint8_type());
+    for (const auto &[dname, id] : registry.concrete_subtypes(catch_type))
+    {
+      const symbolt *dsym = ns.lookup(irep_idt("tag-" + id2string(dname)));
+      if (!dsym)
+        continue;
+      std::optional<BigInt> off =
+        direct_base_offset(migrate_type(dsym->get_type()), target_tag);
+      if (!off || *off == 0)
+        continue;
+      expr2tc rebased = typecast2tc(
+        catch_ptr_type,
+        add2tc(
+          char_ptr,
+          typecast2tc(char_ptr, value),
+          constant_int2tc(index_type2(), *off)));
+      result = if2tc(
+        catch_ptr_type,
+        equality2tc(type_id, constant_int2tc(type_id->type, BigInt(id))),
+        rebased,
+        result);
+    }
+    return result;
+  }
+
   /// Insert `__ESBMC_exc_thrown = false` before a handler and rewrite its
   /// `var = NONDET` binding to read the thrown object via __ESBMC_exc_value:
   ///   catch (T &v): v is a T* — bind the address      v = (T*)value
@@ -988,7 +1072,13 @@ private:
     // for a typed catch. The decrement of the uncaught count goes there, so it
     // happens once the exception has entered its handler ([except.uncaught]) and
     // after the catch-parameter is bound (§5.5).
-    auto before_body = h.target;
+    // Anchor the handler prologue (uncaught decrement, handled-stack push) so
+    // it precedes the handler body. A typed catch reassigns this to its binding
+    // instruction below; a catch-all has no binding, and its `h.target` is the
+    // body's first instruction, so anchoring on `landing` keeps the push ahead
+    // of a bare `throw;` (otherwise it landed after the rethrow, leaving the
+    // handled stack empty so the re-raise found no exception -- #6297).
+    auto before_body = landing;
     if (h.type != ellipsis_id)
     {
       auto bind = std::next(h.target);
@@ -998,11 +1088,13 @@ private:
       // the stored object/pointer out: var = *(decltype(var)*)value. The two
       // pointer-typed forms are told apart by the catch type's `_ptr` suffix.
       bool ref_catch = is_pointer_type(var->type) && !is_pointer_catch(h.type);
-      expr2tc src =
-        ref_catch
-          ? typecast2tc(var->type, value)
-          : dereference2tc(
-              var->type, typecast2tc(pointer_type2tc(var->type), value));
+      // View the stored object as the caught class, re-basing to the correct
+      // base subobject when the catch is by a non-zero-offset base of a
+      // multiple-inheritance dynamic type (else a plain cast).
+      type2tc catch_ptr_type =
+        ref_catch ? var->type : pointer_type2tc(var->type);
+      expr2tc obj_ptr = catch_object_pointer(catch_ptr_type, h.type);
+      expr2tc src = ref_catch ? obj_ptr : dereference2tc(var->type, obj_ptr);
       bind->code = code_assign2tc(var, src);
       before_body = bind;
     }
@@ -1075,15 +1167,18 @@ private:
     return disj;
   }
 
-  /// A call to the installed std::unexpected handler — the set_unexpected
-  /// builtin records it as __ESBMC_unexpected — or nil when none is installed.
+  /// A call to the std::unexpected dispatcher (__ESBMC_run_unexpected), which
+  /// invokes the handler installed via std::set_unexpected or, when none is
+  /// installed, the default handler (which calls std::terminate). Nil when the
+  /// exception OM is not linked, in which case the caller falls back to an
+  /// immediate specification-violation.
   expr2tc make_unexpected_call()
   {
-    const symbolt *h = ns.lookup("c:@F@__ESBMC_unexpected");
+    const symbolt *h = ns.lookup("c:@F@__ESBMC_run_unexpected");
     if (!h)
       return expr2tc();
     code_function_callt fc;
-    fc.function() = h->get_value();
+    fc.function() = symbol_exprt(h->id, h->get_type());
     expr2tc call;
     migrate_expr(fc, call);
     return call;
@@ -1107,15 +1202,18 @@ private:
   /// and is unaffected. @p skip_cond is the condition under which execution
   /// continues past the point without terminating (nil = always terminate); the
   /// assertion is assert(skip_cond), or assert(false) when skip_cond is nil. @p
-  /// reason selects the diagnostic comment. Returns the inserted instruction so
-  /// callers can target it with a goto.
+  /// reason selects the diagnostic comment, unless @p comment_override is
+  /// non-empty, in which case it is used verbatim (used by the typed
+  /// uncaught-exception partition to name the escaping type). Returns the
+  /// inserted instruction so callers can target it with a goto.
   goto_programt::targett emit_terminate(
     goto_programt &body,
     goto_programt::targett before,
     const expr2tc &skip_cond,
     const locationt &loc,
     const irep_idt &fn,
-    exception_globals::terminate_reasont reason)
+    exception_globals::terminate_reasont reason,
+    const std::string &comment_override = {})
   {
     auto setmeta = [&](goto_programt::targett n) {
       n->location = loc;
@@ -1138,6 +1236,11 @@ private:
       is_nil_expr(skip_cond) ? gen_false_expr() : skip_cond);
     setmeta(first);
     first->location.property("exception");
+    if (!comment_override.empty())
+    {
+      first->location.comment(comment_override);
+      return first;
+    }
     switch (reason)
     {
     case exception_globals::terminate_reason_uncaught:
@@ -1157,6 +1260,65 @@ private:
       break;
     }
     return first;
+  }
+
+  /// The uncaught-exception check at a program-entry epilogue, partitioned by
+  /// the escaping exception's dynamic type. Each throwable type T gets its own
+  /// property `assert(!(thrown && typeid == id(T)))` with a comment naming T, so
+  /// a distinct verdict ("uncaught exception: IndexError") surfaces per family.
+  /// A final residual property covers any in-flight typeid outside that set,
+  /// keeping the partition complete: the conjunction of all skip-conditions is
+  /// exactly `thrown == false`, identical to the single generic assert it
+  /// replaces. The properties are inserted before @p before in program order;
+  /// returns the head (first property), so a caller can target it with a goto.
+  goto_programt::targett emit_uncaught_checks(
+    goto_programt &body,
+    goto_programt::targett before,
+    const locationt &loc,
+    const irep_idt &fn)
+  {
+    auto typeid_eq = [&](const irep_idt &name) {
+      return equality2tc(
+        type_id, constant_int2tc(type_id->type, BigInt(registry.id_of(name))));
+    };
+
+    // Residual guard: typeid matches one of the known throwable types. A state
+    // with no known type in flight fails only the residual "uncaught exception".
+    expr2tc known_disj;
+    goto_programt::targett head = before;
+    bool have_head = false;
+    for (const irep_idt &name : thrown_dynamic_types_)
+    {
+      expr2tc eq = typeid_eq(name);
+      known_disj = is_nil_expr(known_disj) ? eq : or2tc(known_disj, eq);
+
+      // assert(!(thrown && typeid == id(T))) — fires iff T escapes uncaught.
+      auto t = emit_terminate(
+        body,
+        before,
+        not2tc(and2tc(thrown, eq)),
+        loc,
+        fn,
+        exception_globals::terminate_reason_uncaught,
+        "uncaught exception: " + name.as_string());
+      if (!have_head)
+      {
+        head = t;
+        have_head = true;
+      }
+    }
+
+    // Residual: assert(thrown == false || typeid ∈ known). With no known types
+    // this degrades to the original assert(thrown == false).
+    expr2tc not_thrown = equality2tc(thrown, gen_false_expr());
+    auto residual = emit_terminate(
+      body,
+      before,
+      is_nil_expr(known_disj) ? not_thrown : or2tc(not_thrown, known_disj),
+      loc,
+      fn,
+      exception_globals::terminate_reason_uncaught);
+    return have_head ? head : residual;
   }
 
   /// Enforce a dynamic exception specification throw(allowed...) (including the
@@ -1194,13 +1356,7 @@ private:
     // of returning it to a (non-existent) caller.
     goto_programt::targett ret = last;
     if (is_entry)
-      ret = emit_terminate(
-        body,
-        last,
-        not_thrown(),
-        loc,
-        fn,
-        exception_globals::terminate_reason_uncaught);
+      ret = emit_uncaught_checks(body, last, loc, fn);
 
     // The violation point: always terminate (reached only on a genuine
     // disallowed escape, including the handler returning without throwing).
@@ -1222,12 +1378,27 @@ private:
     if (!is_nil_expr(call))
     {
       // Clear `thrown` so the handler runs with no exception in flight; keep
-      // typeid/value so a bare `throw;` in the handler rethrows the original.
+      // typeid/value naming the original exception.
       auto clear = ins(fail);
       clear->make_assignment();
       clear->code = code_assign2tc(thrown, gen_false_expr());
 
+      // Make the original exception the "currently handled" one for the duration
+      // of the handler, so a bare `throw;` in it re-raises the original
+      // ([except.throw]/8, [except.unexpected]) via __ESBMC_rethrow_current
+      // rather than terminating on an empty handled stack.
+      expr2tc push = make_c_helper_call(exception_globals::push_handled_id);
+      if (!is_nil_expr(push))
+        ins(fail)->make_function_call(push);
+
       ins(fail)->make_function_call(call);
+
+      // Balance the handled stack. A throw out of the handler leaves `thrown`
+      // set, so pop preserves the newly in-flight exception; a normal return
+      // leaves it clear and we fall to the violation assert below regardless.
+      expr2tc pop = make_c_helper_call(exception_globals::pop_handled_id);
+      if (!is_nil_expr(pop))
+        ins(fail)->make_function_call(pop);
 
       // Handler returned without throwing -> the specification is violated.
       ins(fail)->make_goto(fail, not_thrown());
@@ -1244,11 +1415,61 @@ private:
         a_cnt->code = adjust_uncaught(-1);
       }
 
-      // Handler rethrew a permitted type -> let it propagate.
+      // Handler threw a permitted type -> let it propagate.
       ins(fail)->make_goto(ret, permitted());
+
+      // Handler threw a disallowed type: substitute std::bad_exception
+      // ([except.unexpected]/2). The substitute propagates when the spec lists
+      // bad_exception, and otherwise stays disallowed and falls through to the
+      // terminate assert — which reports the violation directly (FAILED) instead
+      // of routing through std::terminate(), whose custom handler could end the
+      // path and swallow it.
+      expr2tc bad_exc_obj = build_bad_exception_object();
+      if (!is_nil_expr(bad_exc_obj))
+      {
+        const unsigned bad_id = registry.id_of(bad_exception_name_);
+        auto a_tid = ins(fail);
+        a_tid->make_assignment();
+        a_tid->code = code_assign2tc(
+          type_id, constant_int2tc(type_id->type, BigInt(bad_id)));
+
+        auto a_val = ins(fail);
+        a_val->make_assignment();
+        a_val->code = code_assign2tc(
+          value,
+          typecast2tc(
+            value->type, address_of2tc(bad_exc_obj->type, bad_exc_obj)));
+
+        ins(fail)->make_goto(ret, permitted());
+      }
     }
     // Fall through to fail.
   }
+
+  /// A fresh static std::bad_exception object for the [except.unexpected]/2
+  /// substitution, or nil when the <exception> model's bad_exception is not in
+  /// the symbol table. As with build_bad_cast_throw the object's state is
+  /// irrelevant — only its type identity (recorded in bad_exception_name_ for
+  /// the caller's typeid) and address matter. Built at most once and reused.
+  expr2tc build_bad_exception_object()
+  {
+    if (!is_nil_expr(bad_exception_obj_))
+      return bad_exception_obj_;
+
+    const symbolt *sym = ns.lookup("tag-std::bad_exception");
+    if (!sym)
+      sym = ns.lookup("tag-class std::bad_exception");
+    if (!sym)
+      return expr2tc();
+
+    bad_exception_name_ =
+      irep_idt(id2string(sym->id).substr(4)); // strip "tag-"
+    bad_exception_obj_ = make_exception_storage(migrate_symbol_type(*sym));
+    return bad_exception_obj_;
+  }
+
+  expr2tc bad_exception_obj_;
+  irep_idt bad_exception_name_;
 
   /// Replace a throw with: arm the globals (or, for a rethrow, just re-raise
   /// the in-flight one) and branch to the enclosing dispatch / epilogue.

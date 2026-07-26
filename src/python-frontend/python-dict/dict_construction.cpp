@@ -609,6 +609,41 @@ exprt python_dict_handler::create_dict_from_literal(
       exprt push_value = list_handler.build_push_list_call(
         values_list, element, value_expr, all_values_float);
       converter_.add_instruction(push_value);
+      // Record the value's type under a dedicated key so
+      // has_mixed_numeric_types() can detect a heterogeneous int/float dict at
+      // the subscript read site (where a single static value type otherwise
+      // misreads the other type's bits). It must NOT be recorded under the
+      // values-list's own id: that would flip the .values()/.items() list read
+      // onto the generic mixed-list path, which reads dict value storage
+      // incorrectly (github_3719_4).
+      list_handler.add_type_info(
+        dict_value_types_key(values_list.id.as_string()),
+        std::string(),
+        value_expr.type());
+
+      // A list value: record its uniform element type so a later d[k] list
+      // read can type the inner elements (e.g. a list-of-tuples value, which
+      // otherwise dereferences to void and aborts the dereference layer).
+      if (value_expr.type() == list_type && value_expr.is_symbol())
+      {
+        auto it =
+          python_list::list_type_map.find(value_expr.identifier().as_string());
+        if (it != python_list::list_type_map.end() && !it->second.empty())
+        {
+          const typet &first = it->second.front().second;
+          const bool uniform = std::all_of(
+            it->second.begin(),
+            it->second.end(),
+            [&first](const std::pair<std::string, typet> &e) {
+              return e.second == first;
+            });
+          if (uniform)
+            list_handler.add_type_info(
+              dict_value_list_elems_key(values_list.id.as_string()),
+              std::string(),
+              first);
+        }
+      }
     }
   }
 

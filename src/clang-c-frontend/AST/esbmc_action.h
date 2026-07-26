@@ -1,8 +1,8 @@
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 #ifndef CLANG_C_FRONTEND_AST_ESBMC_ACTION_H_
 #  define CLANG_C_FRONTEND_AST_ESBMC_ACTION_H_
 
-#  include <util/compiler_defs.h>
+#  include <util/base/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
@@ -26,7 +26,19 @@ public:
     clang::Preprocessor &PP = CI.getPreprocessor();
 
     std::string s = PP.getPredefines();
-    s += intrinsics;
+
+    /* clang appends each -include / --include-file as an `#include` line at the
+     * end of the predefines buffer. Such a header can transitively reach ESBMC's
+     * own models, which use nondet_* / __ESBMC_*, so appending the intrinsics
+     * after it leaves them undeclared at that point. Put them before the first
+     * forced include instead -- still after the builtin #defines the intrinsics
+     * rely on (github #5868). */
+    const std::string first_include = "\n#include ";
+    size_t pos = s.find(first_include);
+    if (pos == std::string::npos)
+      s += intrinsics;
+    else
+      s.insert(pos + 1, intrinsics + "\n");
     PP.setPredefines(s);
 
     return true;

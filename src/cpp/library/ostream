@@ -123,6 +123,17 @@ inline ostream &operator<<(ostream &o, const smanip &val)
   return o;
 }
 
+#if __cplusplus >= 201103L
+// The model's streams are plain classes; expose the standard's template
+// names as alias templates so declarations mentioning
+// std::basic_ostream<CharT, Traits> parse (github #6063). Only the char
+// instantiation is meaningful.
+template <class charT>
+struct char_traits;
+template <class CharT, class Traits = char_traits<CharT>>
+using basic_ostream = ostream;
+#endif
+
 } // namespace std
 
 namespace std

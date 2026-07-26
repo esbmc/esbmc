@@ -2,26 +2,29 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_dict_handler.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/python_math.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/python_expr_builder.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/math/python_math.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/string/string_handler.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_typecast.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
 
 #include <functional>
 #include <map>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <algorithm>
 #include <cctype>
 #include <cfenv>
@@ -241,27 +244,10 @@ std::string py_percent_format(
 
     // Two-pass snprintf with a literal format (stays -Wformat-nonliteral-safe).
     auto fmt_double = [](char conv, int p, double d) -> std::string {
-      // printf rounds %f/%e/%g per the host FP rounding mode, and the
-      // surrounding pipeline can leave the host in a non-default mode; under
-      // FE_UPWARD, e.g. "%.2f" % 3.14159 would render "3.15" instead of "3.14"
-      // (observed on the Linux CI, where the host was left rounding upward).
-      // CPython formats with round-half-to-even, i.e. FE_TONEAREST, so pin that
-      // mode for both snprintf passes and restore it, keeping the fold correct
-      // regardless of the host's mode. The guard restores on every return path.
-      struct round_guard
-      {
-        int saved;
-        round_guard() : saved(std::fegetround())
-        {
-          if (saved != FE_TONEAREST)
-            std::fesetround(FE_TONEAREST);
-        }
-        ~round_guard()
-        {
-          if (saved >= 0 && saved != FE_TONEAREST)
-            std::fesetround(saved);
-        }
-      } guard;
+      // printf rounds %f/%e/%g per the host FP rounding mode, which the
+      // pipeline can leave non-default; pin FE_TONEAREST across both snprintf
+      // passes so the fold matches CPython's round-half-to-even.
+      const round_to_nearest_guard guard;
       std::string b;
       int n = 0;
       if (conv == 'f' || conv == 'F')
@@ -483,13 +469,34 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   if (logical_expr.operands().size() == 1)
     return logical_expr.operands().front();
 
+  // V.3: build the boolean `and`/`or` as the left-nested IREP2 and2t/or2t
+  // chain that migrate splices the legacy n-ary node into (cf.
+  // handle_chained_comparisons_logic), then back-migrate once. goto_convert's
+  // mandatory IREP2 body round-trip normalises both forms identically, so
+  // this is byte-identical. Operands are >= 2 here (the size()==1 degenerate
+  // case returned above), so the loop always yields a binary node.
+  auto build_boolean_chain = [](const exprt &e) -> exprt {
+    expr2tc acc;
+    migrate_expr(e.operands().front(), acc);
+    for (std::size_t i = 1; i < e.operands().size(); ++i)
+    {
+      expr2tc op2;
+      migrate_expr(e.operands()[i], op2);
+      if (e.is_and())
+        acc = and2tc(acc, op2);
+      else
+        acc = or2tc(acc, op2);
+    }
+    return migrate_expr_back(acc);
+  };
+
   // Shockingly enough, a BoolOp may not return a boolean.
   if (contains_non_boolean)
   {
     typet t = extract_type_from_boolean_op(logical_expr).type();
     // Are we dealing with an actual bool expression?
     if (t.is_bool())
-      return logical_expr;
+      return build_boolean_chain(logical_expr);
     // Result expression starts from last operand as default else branch.
     const type2tc t2 = migrate_type(t);
     exprt result_expr = logical_expr.operands().back();
@@ -527,15 +534,8 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     }
     return result_expr;
   }
-  return logical_expr;
+  return build_boolean_chain(logical_expr);
 }
-inline bool is_ieee_op(const exprt &expr)
-{
-  const std::string &id = expr.id().as_string();
-  return id == "ieee_add" || id == "ieee_mul" || id == "ieee_sub" ||
-         id == "ieee_div";
-}
-
 // Attach source location from symbol table if expr is a symbol
 static void attach_symbol_location(exprt &expr, contextt &symbol_table)
 {
@@ -692,6 +692,25 @@ exprt python_converter::handle_chained_comparisons_logic(
     }
     else
     {
+      // Reconcile a pointer operand against an integer one before building the
+      // comparison, mirroring the first comparison (bin_expr). An unannotated
+      // param is typed as a pointer but holds an integer value round-tripped as
+      // (int*)n; building `ptr <= int` raw here aborts in the SMT backend
+      // (convert_ptr_cmp). Cast the pointer to the integer operand's type,
+      // exactly as the reconciled first comparison does for an integer bound
+      // (get_binary_operator_expr, "cast void* to integer"). Restricted to
+      // integers: a float bound is reconciled differently there (the float is
+      // bitcast to the pointer type), so folding it in here would make the two
+      // conjuncts of `a <= x <= b` reconstruct x inconsistently. A float-bounded
+      // chained comparison over an unannotated param stays a pre-existing
+      // crash, unchanged by this patch.
+      auto is_integer = [](const typet &t) {
+        return t.is_signedbv() || t.is_unsignedbv();
+      };
+      if (op1.type().is_pointer() && is_integer(op2.type()))
+        op1 = typecast_exprt(op1, op2.type());
+      else if (op2.type().is_pointer() && is_integer(op1.type()))
+        op2 = typecast_exprt(op2, op1.type());
       exprt logical_expr(
         python_frontend::map_operator(op, bool_type()), bool_type());
       logical_expr.copy_to_operands(op1, op2);
@@ -733,6 +752,17 @@ exprt python_converter::handle_membership_operator(
     const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
     const irep_idt kind = python_aggregate_kind(struct_type);
 
+    // A function-returned aggregate arrives as a raw code_function_callt (or a
+    // side-effect), not an addressable value. Both the dict and tuple handlers
+    // build member accesses over it (`.keys`, `.element_i`) and migrate them to
+    // IREP2, which trips the member2t struct assertion (#5893). Materialise it
+    // into a temporary struct lvalue first, exactly as the unpacking/subscript
+    // paths do. prepare_rhs_for_unpacking is type-agnostic — it materialises a
+    // side-effect into a temp of rhs.type() — so it serves both branches.
+    if ((rhs.is_function_call() || rhs.id() == "sideeffect") && current_block)
+      rhs =
+        tuple_handler_->prepare_rhs_for_unpacking(element, rhs, *current_block);
+
     // Recognise a dict by its struct tag as well as its aggregate-kind marker.
     // The kind irep can be dropped while a dict value flows through type
     // inference (e.g. a dict comprehension result), but the `__python_dict__`
@@ -748,6 +778,52 @@ exprt python_converter::handle_membership_operator(
       // `x in (a, b, c)` is element-wise equality, with string elements
       // compared by content. handle_tuple_membership builds the OR chain.
       return tuple_handler_->handle_tuple_membership(lhs, rhs, invert, element);
+    }
+  }
+
+  // A user class defining __contains__: `x in obj` dispatches to
+  // obj.__contains__(x). Under the object model an instance is a Class*
+  // pointer, so check the pointee struct as well as a by-value struct.
+  // Without this a class instance falls through to the string-membership path
+  // below (a pointer) and yields a wrong result.
+  if (
+    is_user_class_pointer(rhs_resolved_type) ||
+    is_user_class_struct_type(rhs_resolved_type))
+  {
+    typet struct_t = rhs_resolved_type.is_pointer()
+                       ? rhs_resolved_type.subtype()
+                       : rhs_resolved_type;
+    // is_user_class_* accepts an as-yet-unbuilt tag-<Class> symbol (and even an
+    // imported-module class), so resolve the struct non-fatally rather than via
+    // the asserting ns.follow. If the struct is not registered in this TU, fall
+    // through to the native list/string paths below instead of aborting.
+    if (struct_t.id() == "symbol")
+    {
+      const symbolt *s =
+        symbol_table_.find_symbol(to_symbol_type(struct_t).get_identifier());
+      if (s && s->get_type().is_struct())
+        struct_t = s->get_type();
+    }
+    symbolt *method = struct_t.is_struct()
+                        ? find_dunder_method(
+                            extract_class_name_from_tag(
+                              to_struct_type(struct_t).tag().as_string()),
+                            "__contains__")
+                        : nullptr;
+    if (method)
+    {
+      const code_typet &method_type = to_code_type(method->get_type());
+      // A migrated instance is already a Class* self argument (pass it
+      // through); a by-value struct operand needs its address taken.
+      exprt self_arg = rhs.type().is_pointer() ? rhs : gen_address_of(rhs);
+      exprt call = python_expr::build_call_expr(
+        *method, method_type.return_type(), {self_arg, lhs});
+      call.location() = get_location_from_decl(element);
+      if (!invert)
+        return call;
+      expr2tc c2;
+      migrate_expr(call, c2);
+      return migrate_expr_back(not2tc(c2));
     }
   }
 
@@ -1441,6 +1517,62 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         "values");
   }
 
+  // Python raises a *catchable* ZeroDivisionError when the divisor of /, //, or
+  // % is zero (for both int and float operands, unlike C/IEEE). Model it as a
+  // guarded exception raise — the same mechanism list indexing uses for
+  // IndexError — so that `try: x / 0 except ZeroDivisionError: ...` is treated
+  // as SAFE while a bare division by zero propagates and fails. The built-in
+  // C-level div-by-zero assertion cannot express this: it fires regardless of
+  // the surrounding try/except, so caught divisions were wrongly reported.
+  if (
+    (op == "Div" || op == "FloorDiv" || op == "Mod") &&
+    (rhs.type().is_signedbv() || rhs.type().is_unsignedbv() ||
+     rhs.type().is_floatbv()) &&
+    !converting_lambda_body_ && !in_rhs_type_probe_)
+  {
+    // The divisor is referenced by both the zero-check guard and the division
+    // itself. If it carries a side effect (a call, or a nondet) it would be
+    // evaluated twice -- `x / f()` calling f twice, and `x / nondet()` guarding
+    // a different value than the one divided by. Hoist a side-effecting divisor
+    // into a temporary so it is evaluated exactly once.
+    std::function<bool(const exprt &)> has_side_effect =
+      [&](const exprt &e) -> bool {
+      if (e.id() == "sideeffect")
+        return true;
+      for (const exprt &sub : e.operands())
+        if (has_side_effect(sub))
+          return true;
+      return false;
+    };
+
+    locationt div_loc = get_location_from_decl(element);
+    if (has_side_effect(rhs))
+    {
+      symbolt &tmp =
+        create_tmp_symbol(element, "$div_rhs$", rhs.type(), exprt());
+      code_declt decl(symbol_expr(tmp));
+      decl.location() = div_loc;
+      add_instruction(decl);
+      code_assignt assign(symbol_expr(tmp), rhs);
+      assign.location() = div_loc;
+      add_instruction(assign);
+      rhs = symbol_expr(tmp);
+    }
+
+    exprt is_zero("=", bool_type());
+    is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
+
+    exprt raise = get_exception_handler().gen_exception_raise(
+      "ZeroDivisionError", "division by zero");
+    code_expressiont throw_code(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = is_zero;
+    guard.then_case() = throw_code;
+    guard.location() = div_loc;
+    add_instruction(guard);
+  }
+
   // Build the binary expression
   exprt bin_expr = build_binary_expression(op, lhs, rhs);
 
@@ -1459,9 +1591,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     op == "Mod" && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
     (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
     return math_handler_.handle_int_modulo(lhs, rhs, bin_expr);
-
-  // Promote operands for IEEE operations
-  promote_ieee_operands(bin_expr, lhs, rhs);
 
   // Handle chained comparisons
   if (element.contains("comparators") && element["comparators"].size() > 1)
@@ -1726,6 +1855,28 @@ exprt python_converter::handle_array_operations(
         msg << " at " << loc.get_file() << ":" << loc.get_line();
       throw std::runtime_error(msg.str());
     }
+    // `str + <non-str>` (e.g. `1 + "s"`) is a Python TypeError. The
+    // concatenation promotion below is only valid when the non-array operand is
+    // itself a character (a 1-char string from indexing/chr(), which
+    // get_python_type_category tags "string"); a genuine number is a type
+    // error. Raise a catchable TypeError so it can escape main() or be caught,
+    // instead of falling into string concatenation, which crashes reading the
+    // numeric operand's AST value as a string (issue #5904).
+    if (lhs_char != rhs_char)
+    {
+      const exprt &other = lhs_char ? rhs : lhs;
+      const std::string cat = get_python_type_category(other.type());
+      // Only raise for a *definitively* non-string operand (numeric, list,
+      // bytes). An empty category is an unannotated any_type (void*) whose real
+      // type is unknown here — a genuinely-str value flows through the
+      // concatenation path fine, so do not misfire a TypeError on it.
+      if (cat != "string" && !cat.empty())
+        return get_exception_handler().gen_exception_raise(
+          "TypeError",
+          "unsupported operand type(s) for +: '" +
+            type_handler_.get_python_type_name(lhs.type()) + "' and '" +
+            type_handler_.get_python_type_name(rhs.type()) + "'");
+    }
     return string_handler_.handle_string_concatenation_with_promotion(
       lhs, rhs, left, right);
   }
@@ -1758,17 +1909,25 @@ exprt python_converter::handle_tuple_operations(
     struct_typet new_type =
       tuple_handler_->create_tuple_struct_type(element_types);
 
-    struct_exprt result(new_type);
-    // V.3: IREP2 tuple-component access (exact round-trip of member_exprt).
+    // V.3: build the concatenated tuple value in IREP2. Each component is the
+    // exact round-trip of a member_exprt over the migrated operand; the struct
+    // literal is assembled via constant_struct2tc and back-migrated once, then
+    // the full struct type is re-attached -- migrate_type drops the frontend-only
+    // aggregate-kind marker the `in`/membership/subscript dispatch reads with no
+    // tag fallback (mirrors tuple_handler::get_tuple_expr).
     expr2tc lhs2, rhs2;
     migrate_expr(lhs, lhs2);
     migrate_expr(rhs, rhs2);
+    std::vector<expr2tc> members;
+    members.reserve(lhs_components.size() + rhs_components.size());
     for (const auto &c : lhs_components)
-      result.copy_to_operands(migrate_expr_back(
-        member2tc(migrate_type(c.type()), lhs2, c.get_name())));
+      members.push_back(member2tc(migrate_type(c.type()), lhs2, c.get_name()));
     for (const auto &c : rhs_components)
-      result.copy_to_operands(migrate_expr_back(
-        member2tc(migrate_type(c.type()), rhs2, c.get_name())));
+      members.push_back(member2tc(migrate_type(c.type()), rhs2, c.get_name()));
+
+    exprt result =
+      migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
+    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
@@ -1804,14 +1963,19 @@ exprt python_converter::handle_tuple_operations(
     struct_typet new_type =
       tuple_handler_->create_tuple_struct_type(element_types);
 
-    struct_exprt result(new_type);
-    // V.3: IREP2 tuple-component access (exact round-trip of member_exprt).
+    // V.3: build the repeated tuple value in IREP2 (see the concat path above).
     expr2tc tuple2;
     migrate_expr(tuple, tuple2);
+    std::vector<expr2tc> members;
+    members.reserve(components.size() * n);
     for (size_t i = 0; i < n; ++i)
       for (const auto &c : components)
-        result.copy_to_operands(migrate_expr_back(
-          member2tc(migrate_type(c.type()), tuple2, c.get_name())));
+        members.push_back(
+          member2tc(migrate_type(c.type()), tuple2, c.get_name()));
+
+    exprt result =
+      migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
+    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
@@ -1920,6 +2084,92 @@ exprt python_converter::handle_tuple_operations(
     return result;
   }
 
+  // Equality, lowered element-wise so string members compare by content
+  // (strcmp): tuples store their strings as char* (#5571), and the native
+  // struct equality the comparison would otherwise fall through to compares
+  // those members by pointer identity. Members of unrelated types make the
+  // pair unequal, as in Python; differing arity likewise.
+  if (lhs_is_tuple && rhs_is_tuple && (op == "Eq" || op == "NotEq"))
+  {
+    const struct_typet &lt = to_struct_type(lhs.type());
+    const struct_typet &rt = to_struct_type(rhs.type());
+    const bool negate = op == "NotEq";
+
+    auto constant_bool = [&](bool holds) -> exprt {
+      exprt result =
+        migrate_expr_back(holds != negate ? gen_true_expr() : gen_false_expr());
+      result.location() = get_location_from_decl(element);
+      return result;
+    };
+
+    if (lt.components().size() != rt.components().size())
+      return constant_bool(false);
+
+    auto is_num = [](const typet &t) {
+      return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+             t == bool_type();
+    };
+
+    expr2tc result2 = gen_true_expr();
+    for (size_t i = 0; i < lt.components().size(); i++)
+    {
+      exprt li = tuple_handler_->get_tuple_element(lhs, lt, i);
+      exprt ri = tuple_handler_->get_tuple_element(rhs, rt, i);
+
+      expr2tc eq2;
+      if (
+        type_utils::is_string_type(li.type()) &&
+        type_utils::is_string_type(ri.type()))
+      {
+        // String content equality via the shared comparison machinery, which
+        // either folds to a boolean or sets up a strcmp(...) == 0 expression
+        // (signalled by a nil return — assemble it like the binop caller does).
+        exprt equality = handle_string_comparison("Eq", li, ri, element);
+        if (equality.is_nil())
+        {
+          expr2tc l2, r2;
+          migrate_expr(li, l2);
+          migrate_expr(ri, r2);
+          eq2 = equality2tc(l2, r2);
+        }
+        else
+          migrate_expr(equality, eq2);
+      }
+      else if (is_num(li.type()) && is_num(ri.type()))
+      {
+        // Promote a mixed int/float pair to double (Python int->float).
+        // Ints >= 2^53 conflate with nearby floats under this promotion —
+        // the same documented limitation as __ESBMC_list_eq (PR #5207).
+        if (li.type() != ri.type())
+        {
+          li = typecast_exprt(li, double_type());
+          ri = typecast_exprt(ri, double_type());
+        }
+        expr2tc l2, r2;
+        migrate_expr(li, l2);
+        migrate_expr(ri, r2);
+        eq2 = equality2tc(l2, r2);
+      }
+      else if (li.type() == ri.type())
+      {
+        expr2tc l2, r2;
+        migrate_expr(li, l2);
+        migrate_expr(ri, r2);
+        eq2 = equality2tc(l2, r2);
+      }
+      else
+        return constant_bool(false);
+
+      result2 = and2tc(result2, eq2);
+    }
+
+    if (negate)
+      result2 = not2tc(result2);
+    exprt result = migrate_expr_back(result2);
+    result.location() = get_location_from_decl(element);
+    return result;
+  }
+
   return nil_exprt();
 }
 
@@ -2002,6 +2252,24 @@ exprt python_converter::handle_list_operations(
       rhs = typecast_exprt(rhs, list_type);
     python_list list(*this, element);
     return list.build_concat_list_call(lhs, rhs, element);
+  }
+
+  // list + <definitely-non-list> is a Python TypeError ("can only concatenate
+  // list ... to list") — only list + list concatenates. The concat case above
+  // already consumed list and any-typed (void*) right operands, so raise a
+  // catchable TypeError (uncaught -> VERIFICATION FAILED) for a definite
+  // scalar/string right operand. Unknown/other types are left untouched to
+  // avoid misfiring on imprecise frontend typing (#6265).
+  if (lhs.type() == list_type && op == "Add")
+  {
+    const typet &rt = rhs.type();
+    if (
+      rt.is_signedbv() || rt.is_unsignedbv() || rt.is_floatbv() ||
+      type_utils::is_string_type(rt))
+      return get_exception_handler().gen_exception_raise(
+        "TypeError",
+        "can only concatenate list (not \"" +
+          type_handler_.get_python_type_name(rt) + "\") to list");
   }
 
   // List repetition
@@ -2194,6 +2462,32 @@ exprt python_converter::build_binary_expression(
       return 1;
     return static_cast<const bv_typet &>(t).get_width();
   };
+
+  // Reconcile the int/float and float/float-width mixes the arms below do
+  // not cover, following the C usual arithmetic conversions (CPython agrees
+  // for the shapes Python emits): the integer side converts to the float
+  // type, the narrower float widens to the wider. Bitwise operands were
+  // already coerced to int above, so no float reaches a bitwise op.
+  {
+    const bool lhs_float = lhs.type().is_floatbv();
+    const bool rhs_float = rhs.type().is_floatbv();
+    if (lhs_float && is_bv_or_bool(rhs.type()))
+      rhs = typecast_exprt(rhs, lhs.type());
+    else if (rhs_float && is_bv_or_bool(lhs.type()))
+      lhs = typecast_exprt(lhs, rhs.type());
+    else if (lhs_float && rhs_float && lhs.type() != rhs.type())
+    {
+      // Distinct float types differ in width today (float16/32/64 only); an
+      // equal-width different-format pair would fall through unreconciled.
+      const unsigned lw = bit_width(lhs.type());
+      const unsigned rw = bit_width(rhs.type());
+      if (lw < rw)
+        lhs = typecast_exprt(lhs, rhs.type());
+      else if (rw < lw)
+        rhs = typecast_exprt(rhs, lhs.type());
+    }
+  }
+
   // Adjust types for non-relational operations
   if (!type_utils::is_relational_op(op))
   {
@@ -2273,20 +2567,4 @@ exprt python_converter::build_binary_expression(
   bin_expr.copy_to_operands(lhs, rhs);
 
   return bin_expr;
-}
-
-void python_converter::promote_ieee_operands(
-  exprt &bin_expr,
-  const exprt &lhs,
-  const exprt &rhs)
-{
-  if (!is_ieee_op(bin_expr))
-    return;
-
-  const typet &target_type = lhs.type().is_floatbv() ? lhs.type() : rhs.type();
-
-  if (!lhs.type().is_floatbv())
-    bin_expr.op0() = typecast_exprt(lhs, target_type);
-  if (!rhs.type().is_floatbv())
-    bin_expr.op1() = typecast_exprt(rhs, target_type);
 }

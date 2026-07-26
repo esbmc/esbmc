@@ -1,0 +1,4 @@
+CORE
+main.c
+--irep2-native-body --goto-functions-only
+DECL union [^\n]*compound-literal\$1;\n\s+// \d+ \n\s+ASSIGN

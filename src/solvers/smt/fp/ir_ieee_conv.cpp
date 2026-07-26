@@ -2,7 +2,7 @@
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/smt_fp_rounding_utils.h>
 #include <irep2/irep2_type.h>
-#include <util/ieee_float.h>
+#include <util/arith/ieee_float.h>
 
 ir_ieee_convt::ir_ieee_convt(smt_solver_baset *ctx) : ctx(ctx)
 {
@@ -90,6 +90,35 @@ void ir_ieee_convt::store_combined_nan_pred(
   smt_astt nan_p = combine_nan_preds(get_nan_pred(s1), get_nan_pred(s2));
   if (nan_p)
     store_nan_pred(result, nan_p);
+}
+
+smt_astt
+ir_ieee_convt::get_max_normal_real(const floatbv_type2t &fbv_type) const
+{
+  const auto single_spec = ieee_float_spect::single_precision();
+  return (fbv_type.exponent == single_spec.e &&
+          fbv_type.fraction == single_spec.f)
+           ? ctx->get_single_max_normal()
+           : ctx->get_double_max_normal();
+}
+
+smt_astt
+ir_ieee_convt::is_pos_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const
+{
+  return ctx->mk_gt(x, get_max_normal_real(fbv_type));
+}
+
+smt_astt
+ir_ieee_convt::is_neg_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const
+{
+  smt_astt max_normal = get_max_normal_real(fbv_type);
+  return ctx->mk_lt(x, ctx->mk_sub(ctx->get_zero_real(), max_normal));
+}
+
+smt_astt
+ir_ieee_convt::is_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const
+{
+  return ctx->mk_or(is_pos_inf_real(x, fbv_type), is_neg_inf_real(x, fbv_type));
 }
 
 smt_astt
@@ -381,6 +410,15 @@ std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rtz_enclosure(
   return {ra_lo, ra_hi};
 }
 
+std::pair<smt_astt, smt_astt>
+ir_ieee_convt::widen_for_flush(smt_astt lo, smt_astt hi)
+{
+  smt_astt zero_r = ctx->get_zero_real();
+  return {
+    ctx->mk_ite(ctx->mk_lt(lo, zero_r), lo, zero_r),
+    ctx->mk_ite(ctx->mk_lt(zero_r, hi), hi, zero_r)};
+}
+
 std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_enclosure(
   smt_astt real_result,
   smt_astt lo_r,
@@ -436,9 +474,23 @@ smt_astt ir_ieee_convt::encode_ieee_add(const expr2tc &expr)
     smt_astt hi_r = ctx->mk_add(iv1.hi, iv2.hi);
     auto bounds =
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
-    store_interval(real_result, bounds.first, bounds.second);
-    store_combined_nan_pred(real_result, side1, side2);
-    return real_result;
+
+    // +∞ + (−∞) and (−∞) + (+∞) are invalid operations that produce NaN.
+    smt_astt invalid_op_nan = ctx->mk_or(
+      ctx->mk_and(
+        is_pos_inf_real(side1, fbv_type), is_neg_inf_real(side2, fbv_type)),
+      ctx->mk_and(
+        is_neg_inf_real(side1, fbv_type), is_pos_inf_real(side2, fbv_type)));
+    smt_astt nan_p = combine_nan_preds(
+      combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
+      invalid_op_nan);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
+    auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
+    store_interval(flushed, lo_w, hi_w);
+    if (nan_p)
+      store_nan_pred(flushed, nan_p);
+    return flushed;
   }
   return ctx->apply_ieee754_semantics(
     real_result, fbv_type, nullptr, rounding_mode);
@@ -462,9 +514,23 @@ smt_astt ir_ieee_convt::encode_ieee_sub(const expr2tc &expr)
     smt_astt hi_r = ctx->mk_sub(iv1.hi, iv2.lo);
     auto bounds =
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
-    store_interval(real_result, bounds.first, bounds.second);
-    store_combined_nan_pred(real_result, side1, side2);
-    return real_result;
+
+    // +∞ − (+∞) and (−∞) − (−∞) are invalid operations that produce NaN.
+    smt_astt invalid_op_nan = ctx->mk_or(
+      ctx->mk_and(
+        is_pos_inf_real(side1, fbv_type), is_pos_inf_real(side2, fbv_type)),
+      ctx->mk_and(
+        is_neg_inf_real(side1, fbv_type), is_neg_inf_real(side2, fbv_type)));
+    smt_astt nan_p = combine_nan_preds(
+      combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
+      invalid_op_nan);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
+    auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
+    store_interval(flushed, lo_w, hi_w);
+    if (nan_p)
+      store_nan_pred(flushed, nan_p);
+    return flushed;
   }
   return ctx->apply_ieee754_semantics(
     real_result, fbv_type, nullptr, rounding_mode);
@@ -513,9 +579,31 @@ smt_astt ir_ieee_convt::encode_ieee_mul(const expr2tc &expr)
         ctx->mk_ite(ctx->mk_le(p4, p3), p3, p4)));
     auto bounds =
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
-    store_interval(real_result, bounds.first, bounds.second);
-    store_combined_nan_pred(real_result, side1, side2);
-    return real_result;
+
+    // 0 × ±∞ and ±∞ × 0 are invalid operations that produce NaN.
+    // When both operands are the same value it can be neither zero nor
+    // infinite at once, so the term is unsatisfiable; skipping it also avoids
+    // feeding the huge max-normal constant into Z3's nonlinear reasoning.
+    smt_astt invalid_op_nan = nullptr;
+    if (side1 != side2)
+    {
+      smt_astt s1_inf = is_inf_real(side1, fbv_type);
+      smt_astt s2_inf = is_inf_real(side2, fbv_type);
+      smt_astt s1_zero = ctx->mk_eq(side1, zero);
+      smt_astt s2_zero = ctx->mk_eq(side2, zero);
+      invalid_op_nan =
+        ctx->mk_or(ctx->mk_and(s1_zero, s2_inf), ctx->mk_and(s1_inf, s2_zero));
+    }
+    smt_astt nan_p = combine_nan_preds(
+      combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
+      invalid_op_nan);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
+    auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
+    store_interval(flushed, lo_w, hi_w);
+    if (nan_p)
+      store_nan_pred(flushed, nan_p);
+    return flushed;
   }
   return ctx->apply_ieee754_semantics(
     real_result, fbv_type, operand_is_zero, rounding_mode);
@@ -593,15 +681,26 @@ smt_astt ir_ieee_convt::encode_ieee_div(const expr2tc &expr)
 
     auto bounds =
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
-    smt_astt a = ctx->mk_ite(div_by_zero, inf_result, real_result);
-    store_interval(a, bounds.first, bounds.second);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
+    smt_astt a = ctx->mk_ite(div_by_zero, inf_result, flushed);
+    // When div_by_zero fires (denominator flushed to zero), the result is
+    // ±sentinel (infinity).  Widen to [−sentinel, sentinel] in that branch;
+    // otherwise widen to include zero for the subnormal-flush case.
+    auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
+    smt_astt lo_a = ctx->mk_ite(div_by_zero, ctx->mk_sub(zero, sentinel), lo_w);
+    smt_astt hi_a = ctx->mk_ite(div_by_zero, sentinel, hi_w);
+    store_interval(a, lo_a, hi_a);
     smt_astt zero_div_zero_nan =
       ctx->mk_and(ctx->mk_eq(side1, zero), div_by_zero);
+    // ±∞ / ±∞ is an invalid operation that produces NaN.
+    smt_astt inf_div_inf_nan =
+      ctx->mk_and(is_inf_real(side1, fbv_type), is_inf_real(side2, fbv_type));
     store_nan_pred(
       a,
       combine_nan_preds(
         combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
-        zero_div_zero_nan));
+        combine_nan_preds(zero_div_zero_nan, inf_div_inf_nan)));
     return a;
   }
 
@@ -661,13 +760,46 @@ smt_astt ir_ieee_convt::encode_ieee_fma(const expr2tc &expr)
 
     auto bounds =
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
-    store_interval(real_result, bounds.first, bounds.second);
+
+    // 0 × ±∞ in the multiply sub-step is an invalid operation.
+    smt_astt zero = ctx->get_zero_real();
+    smt_astt mul_nan = ctx->mk_or(
+      ctx->mk_and(ctx->mk_eq(val1, zero), is_inf_real(val2, fbv_type)),
+      ctx->mk_and(is_inf_real(val1, fbv_type), ctx->mk_eq(val2, zero)));
+
+    // An infinite product combined with an opposite-signed infinite addend is
+    // an invalid operation.  In IEEE 754 FMA the intermediate product is
+    // computed at infinite precision, so it is infinite only when a factor is
+    // infinite — a pair of large finite values whose product merely overflows
+    // is NOT an invalid operation.  We therefore check factor infiniteness
+    // rather than the magnitude of the intermediate product.
+    smt_astt v1_pos = ctx->mk_gt(val1, zero);
+    smt_astt v1_neg = ctx->mk_lt(val1, zero);
+    smt_astt v2_pos = ctx->mk_gt(val2, zero);
+    smt_astt v2_neg = ctx->mk_lt(val2, zero);
+    smt_astt same_sign =
+      ctx->mk_or(ctx->mk_and(v1_pos, v2_pos), ctx->mk_and(v1_neg, v2_neg));
+    smt_astt opp_sign =
+      ctx->mk_or(ctx->mk_and(v1_pos, v2_neg), ctx->mk_and(v1_neg, v2_pos));
+    smt_astt either_factor_inf =
+      ctx->mk_or(is_inf_real(val1, fbv_type), is_inf_real(val2, fbv_type));
+    smt_astt add_nan = ctx->mk_and(
+      either_factor_inf,
+      ctx->mk_or(
+        ctx->mk_and(same_sign, is_neg_inf_real(val3, fbv_type)),
+        ctx->mk_and(opp_sign, is_pos_inf_real(val3, fbv_type))));
+
     smt_astt nan_p = combine_nan_preds(
       combine_nan_preds(get_nan_pred(val1), get_nan_pred(val2)),
-      get_nan_pred(val3));
+      combine_nan_preds(
+        get_nan_pred(val3), combine_nan_preds(mul_nan, add_nan)));
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
+    auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
+    store_interval(flushed, lo_w, hi_w);
     if (nan_p)
-      store_nan_pred(real_result, nan_p);
-    return real_result;
+      store_nan_pred(flushed, nan_p);
+    return flushed;
   }
 
   return ctx->apply_ieee754_semantics(

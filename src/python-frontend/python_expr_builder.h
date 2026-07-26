@@ -1,8 +1,8 @@
 #pragma once
 
-#include <util/expr.h>
-#include <util/type.h>
-#include <util/symbol.h>
+#include <util/irep/expr.h>
+#include <util/irep/type.h>
+#include <util/symtab/symbol.h>
 #include <vector>
 
 // Shared IREP2 expression-construction helpers for the Python frontend (V.3).

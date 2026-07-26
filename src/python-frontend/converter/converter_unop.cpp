@@ -1,12 +1,12 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/type_utils.h>
-#include <util/c_typecast.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
+#include <python-frontend/type/type_utils.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
 
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 {

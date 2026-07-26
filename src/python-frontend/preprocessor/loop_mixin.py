@@ -1097,8 +1097,14 @@ class LoopMixin:
         self.ensure_all_locations(loop_var_init, node)
         ast.fix_missing_locations(loop_var_init)
 
-        # Create the body of the while loop, including updating the start and has_next variables
-        while_body = ([loop_var_init] + transformed_body + [
+        # Create the body of the while loop. The loop variable is snapshotted
+        # from the counter, then the counter and has_next are advanced *before*
+        # the loop body — not after — so that a `continue` in the body (which
+        # jumps straight to the while condition) does not skip the advance and
+        # spin forever. This mirrors the index-increment-before-body layout used
+        # by the items/iterable while-lowerings.
+        while_body = ([
+            loop_var_init,
             ast.Assign(
                 targets=[ast.Name(id=start_var, ctx=ast.Store())],
                 value=ast.Call(
@@ -1115,7 +1121,7 @@ class LoopMixin:
                     keywords=[],
                 ),
             ),
-        ])
+        ] + transformed_body)
 
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=while_body, orelse=[])
@@ -1394,6 +1400,35 @@ class LoopMixin:
         return (isinstance(ann_node, ast.Subscript)
                 and self._get_base_type_name(ann_node) in ("tuple", "Tuple"))
 
+    def _full_tuple_annotation_node(self, iterable_node):
+        """Return the full tuple[A, B, ...] element annotation of a
+        list[tuple[...]]-annotated Name iterable, or None if unavailable.
+
+        `_get_element_type_from_container` collapses a list[tuple[str, str]]
+        element type down to the bare string "tuple" (it only ever returns a
+        base-type name), which is enough for a scalar loop target but loses
+        the tuple's concrete member types for a tuple-unpacking target
+        (`for u, v in <list[tuple[...]]>`). This mirrors that lookup but keeps
+        the full annotation node so the per-index element assignment stays
+        typed as tuple[str, str] instead of eroding to bare tuple, whose
+        element_0/element_1 members the C++ converter cannot size (#5444).
+        """
+        if not (isinstance(iterable_node, ast.Name) and hasattr(self, "variable_annotations")):
+            return None
+        annotation = self.variable_annotations.get(iterable_node.id)
+        if not isinstance(annotation, ast.Subscript):
+            return None
+        element_annotation = annotation.slice
+        # Iterating a dict yields its keys: for a dict[K, V] annotation the
+        # slice is an ast.Tuple of (K, V), so the element is K, not the slice
+        # itself (`for u, v in g` over dict[tuple[str, str], int] unpacks a
+        # tuple[str, str] key).
+        if (self._get_base_type_name(annotation) in ("dict", "Dict")
+                and isinstance(element_annotation, ast.Tuple)
+                and len(element_annotation.elts) == 2):
+            element_annotation = element_annotation.elts[0]
+        return element_annotation if self._is_concrete_tuple_ann(element_annotation) else None
+
     def _get_base_type_name(self, ann_node):
         """Return the base type name string from an annotation node.
 
@@ -1516,6 +1551,11 @@ class LoopMixin:
             value=subscript,
             simple=1,
         )
+        # ast2json serializes non-underscore attributes, so the converter can
+        # tell this synthesized annotation apart from a user-written one
+        # (an explicit `v: Any` must keep Any semantics; a synthesized one
+        # must not override the rhs element type).
+        assign.esbmc_synthesized = True
         self.ensure_all_locations(assign, node)
         return assign
 
@@ -1842,6 +1882,15 @@ class LoopMixin:
         # Get element type for proper annotation
         element_type = self._get_element_type_from_container(annotation_id, node.iter)
 
+        # A tuple-unpacking target over a list[tuple[...]] iterable (e.g. the
+        # ESBMC_keys_N materialized just below, or any other list[tuple[...]]
+        # variable) needs the full tuple[A, B, ...] annotation, not the bare
+        # "tuple" name element_type collapses to -- otherwise the per-index
+        # element assignment can't size element_0/element_1 (#5444).
+        full_element_ann = None
+        if isinstance(node.target, (ast.Tuple, ast.List)) and element_type in ("tuple", "Tuple"):
+            full_element_ann = self._full_tuple_annotation_node(node.iter)
+
         # Tuple-unpacking iteration over a dict's keys (for u, v in d): the keys
         # are tuples, so materialize d.keys() into an annotated
         # list[<key_ann>] intermediate first. That lets the C++ list subscript
@@ -1913,7 +1962,7 @@ class LoopMixin:
 
         # Create loop body with unique variable names
         transformed_body = self._create_loop_body(node, target_var_name, iter_var_name, index_var,
-                                                  element_type)
+                                                  element_type, full_element_ann)
 
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=transformed_body, orelse=[])
@@ -2022,8 +2071,16 @@ class LoopMixin:
         iter_var_name,
         index_var,
         element_type,
+        full_element_ann=None,
     ):
-        """Create the body of the while loop with proper type annotations."""
+        """Create the body of the while loop with proper type annotations.
+
+        ``full_element_ann``, when given, is the full tuple[A, B, ...]
+        annotation node for the per-index element and takes precedence over
+        the bare ``element_type`` name -- needed so a tuple-unpacking target
+        keeps its concrete member types instead of eroding to bare tuple
+        (#5444).
+        """
         # Current iterable element expression: iter_var[index]
         current_item = ast.Subscript(
             value=ast.Name(id=iter_var_name, ctx=ast.Load()),
@@ -2036,22 +2093,39 @@ class LoopMixin:
         # Support tuple/list unpacking targets in for-loops:
         # for a, b in items: ...
         if isinstance(node.target, (ast.Tuple, ast.List)):
-            for i, elt in enumerate(node.target.elts):
-                if not isinstance(elt, ast.Name):
-                    continue
+            all_names = all(isinstance(elt, ast.Name) for elt in node.target.elts)
+            if full_element_ann is not None and all_names:
+                # Concrete tuple[A, B, ...] element: unpack with a real tuple
+                # assignment (u, v = ESBMC_loop_var) so the C++ tuple_handler's
+                # member-access unpacking (temp.element_i, sized from the
+                # tuple struct components) is used instead of a per-index
+                # constant Subscript read (ESBMC_loop_var[0]), which the
+                # tuple-subscript path cannot size and erases to void (#5444).
                 unpack_assign = ast.Assign(
-                    targets=[ast.Name(id=elt.id, ctx=ast.Store())],
-                    value=ast.Subscript(
-                        value=ast.Name(id=target_var_name, ctx=ast.Load()),
-                        slice=ast.Constant(value=i),
-                        ctx=ast.Load(),
-                    ),
+                    targets=[node.target],
+                    value=ast.Name(id=target_var_name, ctx=ast.Load()),
                 )
                 self.ensure_all_locations(unpack_assign, node)
                 unpack_assigns.append(unpack_assign)
+            else:
+                for i, elt in enumerate(node.target.elts):
+                    if not isinstance(elt, ast.Name):
+                        continue
+                    unpack_assign = ast.Assign(
+                        targets=[ast.Name(id=elt.id, ctx=ast.Store())],
+                        value=ast.Subscript(
+                            value=ast.Name(id=target_var_name, ctx=ast.Load()),
+                            slice=ast.Constant(value=i),
+                            ctx=ast.Load(),
+                        ),
+                    )
+                    self.ensure_all_locations(unpack_assign, node)
+                    unpack_assigns.append(unpack_assign)
 
         # Create target variable annotation
-        if element_type and element_type != "Any":
+        if full_element_ann is not None:
+            target_annotation = full_element_ann
+        elif element_type and element_type != "Any":
             target_annotation = ast.Name(id=element_type, ctx=ast.Load())
         else:
             target_annotation = ast.Name(id="Any", ctx=ast.Load())
@@ -2377,29 +2451,47 @@ class LoopMixin:
         func_name = call.func.id
         loc = source_node
 
-        # Parse arguments
-        max_size_node = ast.Constant(value=8)
-        if call.args:
-            max_size_node = call.args[0]
-
         # Determine nondet type functions
         def _get_nondet_func(call_arg):
-            """Extract function name'nondet_bool' from a Call node."""
+            """Extract a nondet generator function name from either a Call node
+            (nondet_bool()) or a bare function reference (nondet_bool). A bare
+            Name only counts as a generator when it is nondet-prefixed, so a
+            plain variable/size argument is never mistaken for one."""
             if isinstance(call_arg, ast.Call) and isinstance(call_arg.func, ast.Name):
                 return call_arg.func.id
+            if isinstance(call_arg, ast.Name) and (call_arg.id.startswith("nondet_")
+                                                   or call_arg.id.startswith("__VERIFIER_nondet_")):
+                return call_arg.id
             return None
 
         def _get_type_name(call_arg):
-            """Extract type name'bool' from nondet_bool() Call node."""
+            """Extract type name 'bool' from a nondet_bool generator ref."""
             fn = _get_nondet_func(call_arg)
-            if fn and fn.startswith("nondet_"):
-                return fn[len("nondet_"):]
+            if fn:
+                for prefix in ("__VERIFIER_nondet_", "nondet_"):
+                    if fn.startswith(prefix):
+                        return fn[len(prefix):]
             return "int"
+
+        # Parse arguments. Two calling conventions are supported:
+        #   ESBMC-native:  nondet_list(max_size, nondet_bool()) + keywords
+        #   SV-COMP:       nondet_list(nondet_int) / nondet_dict(nondet_k,
+        #                  nondet_v) -- the element/key/value generator is
+        #                  passed as a leading positional function reference.
+        # A leading positional generator is not a size, so keep the default.
+        first_is_generator = bool(call.args) and _get_nondet_func(call.args[0]) is not None
+
+        max_size_node = ast.Constant(value=8)
+        if call.args and not first_is_generator:
+            max_size_node = call.args[0]
 
         if func_name == "nondet_list":
             elem_func = "nondet_int"
             elem_type_name = "int"
-            if len(call.args) >= 2:
+            if first_is_generator:
+                elem_func = _get_nondet_func(call.args[0])
+                elem_type_name = _get_type_name(call.args[0])
+            elif len(call.args) >= 2:
                 fn = _get_nondet_func(call.args[1])
                 if fn:
                     elem_func = fn
@@ -2414,6 +2506,11 @@ class LoopMixin:
             val_func = "nondet_int"
             key_type_name = "int"
             val_type_name = "int"
+            if first_is_generator:
+                key_type_name = _get_type_name(call.args[0])
+                if len(call.args) >= 2 and _get_nondet_func(call.args[1]):
+                    val_func = _get_nondet_func(call.args[1])
+                    val_type_name = _get_type_name(call.args[1])
             for kw in call.keywords:
                 if kw.arg == "key_type":
                     fn = _get_nondet_func(kw.value)

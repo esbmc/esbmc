@@ -1,11 +1,11 @@
 #include <python-frontend/python_expr_builder.h>
 
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
-#include <util/std_types.h>
-#include <util/std_code.h>
-#include <util/expr_util.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/expr_util.h>
 
 namespace python_expr
 {
@@ -117,6 +117,19 @@ exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
     exprt result = migrate_expr_back(index2tc(migrate_type(t), arr2, idx2));
     result.type() = t;
     return result;
+  }
+  // A pointer source (e.g. a numpy-array function parameter, decayed the
+  // same way a C array parameter decays to a pointer to its element type)
+  // indexes like plain C pointer arithmetic: `arr[idx]` is `*(arr + idx)`,
+  // not a direct array index over the pointer itself. Build the `arr + idx`
+  // natively in IREP2: add2t over a pointer lhs is exactly the round-trip of
+  // the legacy plus_exprt whose result type was the pointer type (the pointer
+  // operand short-circuits the mismatched-width consistency check, so no
+  // reconciliation is needed).
+  if (is_pointer_type(arr2->type))
+  {
+    exprt ptr_plus_idx = migrate_expr_back(add2tc(arr2->type, arr2, idx2));
+    return build_dereference(ptr_plus_idx, t);
   }
   return index_exprt(arr, idx, t);
 }

@@ -10,8 +10,19 @@
 
 #include <unordered_map>
 #include <unordered_set>
-#include <util/message.h>
-#include <util/options.h>
+#include <util/message/message.h>
+#include <util/config/options.h>
+
+/** White-list of ESBMC internal symbol names that must never be treated as
+ *  race-eligible user globals. */
+inline bool is_esbmc_internal_symbol(const std::string &n)
+{
+  return n == "c:@__ESBMC_alloc" || n == "c:@__ESBMC_alloc_size" ||
+         n == "c:@__ESBMC_is_dynamic" ||
+         n == "c:@__ESBMC_blocked_threads_count" ||
+         n == "c:@__ESBMC_rounding_mode" ||
+         n.find("c:pthread_lib") != std::string::npos;
+}
 
 /**
  *  Class to explore states reachable through threading.
@@ -44,8 +55,7 @@
  *  There are various scheduling possibilities. The default is depth-first
  *  search, where we just follow the algorithm above and return all the
  *  traces to the caller. The "schedule" way combines all paths into one
- *  trace, which is then solved once. Round-robin switches to the next
- *  thread in the set of threads when a context-switch point occurs.
+ *  trace, which is then solved once.
  *
  *  Some kind of scheduling interface/api would be good for the future.
  */
@@ -124,9 +134,10 @@ public:
 
   /**
    *  Determine if a thread can be run.
-   *  Checks that the thread hasn't ended, has an empty stack, is blocked by
-   *  POR and so forth etc. Potentially prints a comment as to why the thread
-   *  is blocked, for user feedback from get_ileave_direction_from_user
+   *  Checks that the thread has not already been explored from this frame,
+   *  has not ended, has a non-empty call stack, and is not the monitor
+   *  thread. Potentially prints a comment as to why the thread is blocked,
+   *  for user feedback from get_ileave_direction_from_user
    *  @param tid Thread ID to switch to
    *  @param quiet If false, will print to stdout why this thread is blocked
    *  @return True if thread is viable; false otherwise.
@@ -168,16 +179,16 @@ public:
    *  to prevent switching with inconsistent state. This method causes that
    *  context switch, which has been decided upon, to actually be taken.
    *  As referred to in the reachability_treet algorithm, this makes up steps
-   *  four and five.
+   *  five and six.
    */
   void create_next_state();
 
   /**
    *  Force a context switch, and take it.
-   *  This causes an analyse_* routine to be called, followed by
-   *  create_new_state. The upshot of this is that if there is a context switch
-   *  that could be taken, we find and take it. This implements steps 3-7 of
-   *  the reachability_treet algorithm.
+   *  Calls decide_ileave_direction, then create_next_state. The upshot of
+   *  this is that if there is a context switch that could be taken, we find
+   *  and take it. This implements steps 4-6 of the reachability_treet
+   *  algorithm.
    *  @return True if context switch was generated and taken
    */
   bool step_next_state();
@@ -296,9 +307,8 @@ protected:
    *  until step_next_state finds an unexplored switch (or the stack
    *  empties). If add_leak_checks is true, add memory-leak checks on
    *  the very last remaining frame before erasing it. On return,
-   *  cur_frame_it points at the parent of the unexplored switch when
-   *  exploration_frames is non-empty; the caller is expected to
-   *  advance cur_frame_it onto the new top. */
+   *  cur_frame_it points at the newly pushed top frame (the unexplored
+   *  switch) when exploration_frames is non-empty. */
   void drain_to_unexplored(bool add_leak_checks);
 
   /** Stack of exploration frames representing the current interleaving.
@@ -319,7 +329,7 @@ protected:
   std::shared_ptr<symex_targett> target_template;
   /** Limit on context switches; -1 for no limit */
   int CS_bound;
-  /** Limit on timeslices (--round-robin) */
+  /** Timeslice limit read from the "time-slice" option; currently unused. */
   int TS_slice;
   /** Number of claims in current --schedule exploration */
   unsigned int schedule_total_claims;
@@ -331,8 +341,11 @@ protected:
   unsigned int next_thread_id;
   /** Whether partial-order-reduction is enabled */
   bool por;
-  /** Set of state hashes we've discovered */
-  std::set<std::size_t> hit_hashes;
+  /** State hashes discovered, mapped to the smallest context-switch count at
+   *  which each was seen. A collision prunes only when the recorded cswitch is
+   *  no greater than the current state's; pruning a state with more remaining
+   *  budget would be unsound under --context-bound. */
+  std::unordered_map<std::size_t, int> hit_hashes;
   /** Flag as to whether we're picking interleaving directions explicitly.
    *  Corresponds to the --interactive-ileaves option. */
   bool interactive_ileaves;
@@ -347,6 +360,48 @@ protected:
   /* associative container that contains global writes in */
   std::unordered_set<expr2tc, irep2_hash> is_global;
 
+  /** Static over-approximation of globals that may be written anywhere in
+   *  the program. Populated once at construction by scan_program_writes().
+   *  Used to skip context switches on variables that are only read across
+   *  all threads. */
+  std::unordered_set<irep_idt, irep_id_hash> ever_written_globals;
+
+  /** Globals whose address is taken anywhere in the program (including the
+   *  global initialisers in __ESBMC_main). ESBMC normalises every array/
+   *  function decay into an explicit address_of, so a global that never
+   *  appears under an address_of can never enter any pointer's value set and
+   *  therefore can never be the target of a write through a pointer. */
+  std::unordered_set<irep_idt, irep_id_hash> address_taken_globals;
+
+  /** Set when the static scan sees a write through a pointer it cannot
+   *  resolve. On its own this no longer disables the optimisation globally:
+   *  an unresolved write can only land on a global whose address escaped, so
+   *  may_be_written() gates this flag on address_taken_globals. */
+  bool any_indirect_write = false;
+
+  /** Master switch; wired to --cswitch-skip-readonly-globals. */
+  bool readonly_global_opt = false;
+
+  /** Walk all goto instructions once and collect the names of every global
+   *  that may be written. */
+  void scan_program_writes();
+
+public:
+  /** True if `name` may be written by some thread somewhere in the program.
+   *  Conservatively returns true when the optimisation is disabled. */
+  bool may_be_written(const irep_idt &name) const
+  {
+    if (!readonly_global_opt)
+      return true;
+    // A direct, named write somewhere in the program.
+    if (ever_written_globals.count(name) != 0)
+      return true;
+    // A write through an unresolved pointer can only target a global whose
+    // address has escaped; a never-address-taken global stays read-only.
+    return any_indirect_write && address_taken_globals.count(name) != 0;
+  }
+
+protected:
   friend class execution_statet;
   friend void build_goto_symex_classes();
 };

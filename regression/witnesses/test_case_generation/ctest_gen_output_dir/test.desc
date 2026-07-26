@@ -1,0 +1,8 @@
+CORE
+main.c
+--generate-ctest-testcase --ctest-output-dir custom-out/nested/dir
+^Generated CTest test case\: test_case\.c$
+^VERIFICATION FAILED$
+CHECK_FILE custom-out/nested/dir/CMakeLists.txt contains project\(ESBMCGeneratedTest C\)
+CHECK_FILE custom-out/nested/dir/test_case.c contains __VERIFIER_nondet_int
+CHECK_FILE custom-out/nested/dir/esbmc_verifier.h contains __VERIFIER_assume

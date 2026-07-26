@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwind 4 --irep2-native-body
+^VERIFICATION SUCCESSFUL$

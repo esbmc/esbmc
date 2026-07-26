@@ -66,6 +66,35 @@ Violated property:
   Coils A and B must never be simultaneously energised
 ```
 
+## User function-block translation
+
+When a program contains user-defined function blocks with Structured Text (ST)
+bodies, the frontend translates and inlines them into the scan. Two flags tune
+this:
+
+- `--ld-sound-mode` — translate ST bodies in sound Boolean/integer mode:
+  constructs the translator cannot lower (function calls, member access) make
+  the block body fall back to a **no-op** instead of an over-approximated
+  nondeterministic result. This removes over-approximation and yields zero false
+  positives, at the cost of not modelling the unsupported construct's effect.
+
+## Scan-overrun watchdog
+
+An optional watchdog models a PLC scan overrun by bounding the iterations of
+`WHILE` loops inside user function-block bodies:
+
+- `--ld-scan-watchdog` — instrument those loops with an assertion that fails once
+  a loop exceeds the budget. This **changes the verified model**, so enable it
+  only when you want to check for scan overruns.
+- `--ld-scan-budget=N` — tolerated iterations before the watchdog assertion fails
+  (default `8`). Keep `N` at or below the BMC `--unwind` so the assertion stays
+  reachable.
+
+```sh
+esbmc loop.ld --ld-props props.yaml --ld-scan-watchdog --ld-scan-budget 8 \
+  --k-induction --unlimited-k-steps --unwind 11
+```
+
 ## Reading the result
 
 | ESBMC output | Strategy | Meaning |

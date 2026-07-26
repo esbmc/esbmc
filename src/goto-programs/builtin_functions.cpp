@@ -5,26 +5,27 @@
 #include <cassert>
 #include <goto-programs/goto_convert_class.h>
 #include <regex>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/location.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/irep/location.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/prefix.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
-#include <util/string_constant.h>
-#include <util/type_byte_size.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/string_constant.h>
+#include <util/expr/type_byte_size.h>
 
 // Simplify a legacy exprt via the IREP2 simplifier. The legacy CBMC
-// simplifier (util/simplify_expr) is being retired (docs/irep2-migration.md
-// Part II Phase 2.2); these alloc-size sites still operate on exprt, so they
-// round-trip through migrate. Behaviour-equivalent for the constant /
-// typecast-of-constant folds these sites need (typecast2t::do_simplify folds
-// (size_t)C to a constant exactly as the legacy simplifier did).
+// simplifier (util/simplify_expr) is being retired
+// (docs/roadmap/irep2-migration.md Part II Phase 2.2); these alloc-size sites
+// still operate on exprt, so they round-trip through migrate.
+// Behaviour-equivalent for the constant / typecast-of-constant folds these
+// sites need (typecast2t::do_simplify folds (size_t)C to a constant exactly as
+// the legacy simplifier did).
 static void simplify_via_irep2(exprt &e)
 {
   expr2tc tmp;
@@ -523,7 +524,16 @@ void goto_convertt::cpp_new_initializer(
       exprt deref_new("dereference", rhs.type().subtype());
       deref_new.copy_to_operands(lhs);
       replace_new_object(deref_new, initializer);
+
+      // A class-typed initializer may lower to a stack temporary copied into
+      // the heap object (`*new_ptr = tmp`). That temporary is a transfer
+      // slot, not a C++ object: the heap object owns the constructed state
+      // and is destructed via delete, so drop the scope-exit entries this
+      // conversion pushes -- destructing the slot would double-count
+      // (github #6075).
+      std::size_t stack_size = targets.destructor_stack.size();
       convert(to_code(initializer), dest);
+      targets.destructor_stack.resize(stack_size);
     }
     else
       assert(0);
@@ -586,6 +596,23 @@ exprt make_va_list(const exprt &expr)
     return expr.op0();
 
   return expr;
+}
+
+// Keep a va_start/va_copy call in the GOTO program (with no lhs) so symex
+// can track which va_lists have been initialised. run_builtin intercepts
+// the call; no actual function body is ever looked up.
+static void emit_va_marker_call(
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  code_function_callt call;
+  call.location() = function.location();
+  call.function() = function;
+  call.arguments() = arguments;
+  goto_programt::targett t = dest.add_instruction(FUNCTION_CALL);
+  migrate_expr(call, t->code);
+  t->location = function.location();
 }
 
 void goto_convertt::do_function_call_symbol(
@@ -673,8 +700,9 @@ void goto_convertt::do_function_call_symbol(
       !is_loop_invariant && !is_requires && !is_ensures)
       return;
 
-    // Rafael's invariant merging: combine consecutive __invariant() calls
-    // into a single LOOP_INVARIANT instruction for efficiency
+    // Rafael's invariant merging: combine consecutive
+    // __ESBMC_loop_invariant() calls into a single LOOP_INVARIANT
+    // instruction for efficiency
     // not tested yet, but should be correct
     goto_programt::targett t;
     expr2tc guard;
@@ -1258,8 +1286,11 @@ void goto_convertt::do_function_call_symbol(
 
     if (lhs.is_not_nil())
     {
+      // Carry the va_list lvalue as the operand so symex can flag a va_arg
+      // on a va_list that was never initialised by va_start; the argument's
+      // value plays no role in resolving the vararg itself.
       side_effect_exprt rhs("va_arg", lhs.type());
-      rhs.copy_to_operands(gen_zero(lhs.type()));
+      rhs.copy_to_operands(make_va_list(arguments[0]));
       rhs.location() = function.location();
       goto_programt::targett t2 = dest.add_instruction(ASSIGN);
       exprt assign_expr = code_assignt(lhs, rhs);
@@ -1351,6 +1382,8 @@ void goto_convertt::do_function_call_symbol(
       log_error("va_start argument expected to be lvalue");
       abort();
     }
+
+    emit_va_marker_call(function, arguments, dest);
   }
   else if (base_name == "__builtin_va_end")
   {
@@ -1367,8 +1400,13 @@ void goto_convertt::do_function_call_symbol(
   else if (base_name == "__builtin_va_copy")
   {
     // For Clang frontend, goto_symex tracks VA args via va_index in the
-    // call frame; no assignment is needed. Emitting an ASSIGN crashes the
-    // pointer analysis on Linux/Windows where va_list is a struct array.
+    // call frame, so va_arg needs no assignment here. Emitting an ASSIGN
+    // crashes the pointer analysis on Linux/Windows where va_list is a
+    // struct array, so those targets keep the erased form. Where va_list is
+    // a plain pointer, emit the real copy: symex_printf's va_list recovery
+    // must be able to see that the destination now aliases another va_list
+    // (an erased copy would let a foreign va_list masquerade as a fresh
+    // local, defeating the recovery's provenance gate).
     exprt dest_expr = make_va_list(arguments[0]);
 
     if (!is_lvalue(dest_expr))
@@ -1376,6 +1414,19 @@ void goto_convertt::do_function_call_symbol(
       log_error("va_copy argument expected to be lvalue");
       abort();
     }
+
+    if (arguments.size() >= 2 && ns.follow(dest_expr.type()).is_pointer())
+    {
+      exprt src_expr =
+        typecast_exprt(make_va_list(arguments[1]), dest_expr.type());
+      goto_programt::targett t = dest.add_instruction(ASSIGN);
+      exprt assign_expr = code_assignt(dest_expr, src_expr);
+      migrate_expr(assign_expr, t->code);
+      t->location = function.location();
+    }
+
+    if (arguments.size() >= 2)
+      emit_va_marker_call(function, arguments, dest);
   }
   // Nontemporal means "do not cache please" (https://lwn.net/Articles/255364/)
   else if (base_name == "__builtin_nontemporal_load")

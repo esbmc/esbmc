@@ -1,7 +1,7 @@
 #pragma once
 
 #include <unordered_set>
-#include <util/algorithms.h>
+#include <util/ssa/algorithms.h>
 #include <goto-symex/symex_target_equation.h>
 
 enum class SSA_FEATURES

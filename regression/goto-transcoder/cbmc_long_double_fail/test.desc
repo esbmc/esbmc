@@ -1,0 +1,4 @@
+CORE
+cbmc_long_double_fail.goto
+--binary
+^VERIFICATION FAILED$

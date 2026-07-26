@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <vector>
 #include <string>
 

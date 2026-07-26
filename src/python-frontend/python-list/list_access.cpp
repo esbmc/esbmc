@@ -139,12 +139,15 @@ exprt python_list::build_list_at_call(
 
   if (!config.options.get_bool_option("no-bounds-check"))
   {
-    // Runtime guard only for negative-index normalization. This prevents
-    // underflowed indices (e.g., [] [-1]) from reaching the backend while
-    // preserving legacy behavior for non-negative accesses.
-    // negative_oob = is_negative && (converted_index >= size) (V.3: IREP2).
-    expr2tc negative_oob =
-      and2tc(is_negative, greaterthanequal2tc(converted_index2, size_var2));
+    // Runtime guard for any out-of-bounds normalized index -- both an
+    // underflowed negative index (e.g. `[][-1]`) and a too-large non-negative
+    // index. Raising a catchable IndexError here (rather than letting the read
+    // trip __ESBMC_list_at's hard assert) lets `try/except IndexError` observe
+    // the error, matching CPython and the negative-index path. This path is
+    // only reached for signed indices; provably-non-negative unsigned indices
+    // (loop counters) early-return above without a bounds call, so the hot path
+    // is unaffected. oob = converted_index >= size (V.3: IREP2).
+    expr2tc oob = greaterthanequal2tc(converted_index2, size_var2);
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
       "IndexError", "list index out of range");
@@ -152,7 +155,7 @@ exprt python_list::build_list_at_call(
     throw_code.operands().push_back(raise);
 
     code_ifthenelset guard;
-    guard.cond() = migrate_expr_back(negative_oob);
+    guard.cond() = migrate_expr_back(oob);
     guard.then_case() = throw_code;
     guard.location() = location;
     converter_.add_instruction(guard);
@@ -213,21 +216,16 @@ exprt python_list::build_bool_mask_index(
   const locationt location = converter_.get_location_from_decl(element);
   const typet elem_type = array_type.subtype();
 
-  // Whole-row selection (mask over the outer axis of an n-D array) would
-  // need to push an array-typed element into the runtime list model, which
-  // is not supported by the list element encoding yet (mirrors the same gap
-  // for list comprehensions over n-D arrays). Reject explicitly rather than
-  // emitting IR the solver back end cannot encode.
+  // Whole-row selection (mask over the outer axis of an n-D array) cannot
+  // reuse the runtime-list path below: pushing an array-typed element into
+  // the PyListObject model produces a bit-vector/array sort mismatch at the
+  // solver backend (confirmed empirically: "Sorts (_ BitVec N) and (Array
+  // ...) are incompatible"), matching the encoding gap already flagged for
+  // list comprehensions over n-D arrays. Route it through
+  // build_bool_mask_row_select instead, which selects rows into a
+  // fixed-size array result the same way build_column_select does.
   if (elem_type.is_array())
-  {
-    std::ostringstream msg;
-    msg << "TypeError: boolean-mask indexing of a multi-dimensional array "
-           "(whole-row selection) is not supported; mask must select "
-           "scalar elements";
-    if (!location.is_nil())
-      msg << " at " << location.get_file() << ":" << location.get_line();
-    throw std::runtime_error(msg.str());
-  }
+    return build_bool_mask_row_select(array, mask, element);
 
   symbolt &result_list = create_list();
   const std::string result_list_id = result_list.id.as_string();
@@ -285,6 +283,941 @@ exprt python_list::build_bool_mask_index(
   add_type_info_entry(result_list_id, "", elem_type);
 
   return build_symbol(result_list);
+}
+
+exprt python_list::build_bool_mask_row_select(
+  const exprt &array,
+  const exprt &mask,
+  const nlohmann::json &element)
+{
+  const namespacet ns(converter_.symbol_table());
+  const array_typet &outer_type =
+    static_cast<const array_typet &>(ns.follow(array.type()));
+  const typet row_type = outer_type.subtype();
+  const BigInt num_rows =
+    binary2integer(outer_type.size().value().c_str(), false);
+  const locationt location = converter_.get_location_from_decl(element);
+
+  const array_typet &mask_type =
+    static_cast<const array_typet &>(ns.follow(mask.type()));
+  const BigInt mask_len =
+    binary2integer(mask_type.size().value().c_str(), false);
+  if (mask_len != num_rows)
+  {
+    std::ostringstream msg;
+    msg << "IndexError: boolean index did not match indexed array; mask "
+           "length "
+        << mask_len << " does not match array length " << num_rows;
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  auto reject = [&](const std::string &reason) -> exprt {
+    std::ostringstream msg;
+    msg << "TypeError: boolean-mask row selection (a[mask]) " << reason;
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  };
+
+  if (
+    !element.contains("slice") ||
+    element["slice"].value("_type", "") != "Name" ||
+    !element["slice"].contains("id"))
+    return reject(
+      "requires a mask variable whose value is a concrete boolean literal");
+
+  const std::string mask_name = element["slice"]["id"].get<std::string>();
+
+  // find_var_decl returns the first textual assignment to mask_name in
+  // scope, not the one that actually reaches this use site. A reassigned
+  // mask can't be trusted via that first declaration for the literal
+  // fast path below, but build_bool_mask_row_select_symbolic reads the
+  // mask's live runtime value directly (not its AST declaration), so
+  // reassignment is sound there.
+  if (json_utils::has_multiple_assignments_in_scope(
+        mask_name, converter_.current_function_name(), converter_.ast()))
+    return build_bool_mask_row_select_symbolic(array, mask, element);
+
+  const nlohmann::json mask_decl = json_utils::find_var_decl(
+    mask_name, converter_.current_function_name(), converter_.ast());
+
+  // No local declaration is found for a mask that is itself a function
+  // parameter: there is no AST assignment to resolve a literal from, so
+  // read its runtime value instead, same as the
+  // reassigned-mask case above.
+  if (
+    mask_decl.is_null() || !mask_decl.contains("value") ||
+    mask_decl["value"].value("_type", "") != "Call" ||
+    !mask_decl["value"].contains("args") ||
+    mask_decl["value"]["args"].empty() ||
+    mask_decl["value"]["args"][0].value("_type", "") != "List")
+    return build_bool_mask_row_select_symbolic(array, mask, element);
+
+  const nlohmann::json &mask_elts = mask_decl["value"]["args"][0]["elts"];
+
+  // Every element a literal bool takes the compile-time-sized fast path
+  // below; any other element (nondet, a computed value, ...) means the
+  // mask is symbolic, which build_bool_mask_row_select_symbolic handles by
+  // reading the mask's runtime value in a bounded loop instead.
+  std::vector<bool> mask_values;
+  mask_values.reserve(mask_elts.size());
+  for (const auto &elt : mask_elts)
+  {
+    if (
+      elt.value("_type", "") != "Constant" || !elt.contains("value") ||
+      !elt["value"].is_boolean())
+      return build_bool_mask_row_select_symbolic(array, mask, element);
+    mask_values.push_back(elt["value"].get<bool>());
+  }
+
+  if (BigInt(mask_values.size()) != num_rows)
+    return reject(
+      "requires the mask literal's element count to match the mask's "
+      "declared array length");
+
+  BigInt selected_count = 0;
+  for (bool v : mask_values)
+    if (v)
+      ++selected_count;
+
+  const array_typet result_type(
+    row_type, from_integer(selected_count, size_type()));
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$bool_mask_rows$", result_type, exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  // Whole-array assignment (`dst[k] = src[i]` where both sides are
+  // themselves arrays) is not valid C and is unsupported by the backend --
+  // confirmed empirically, ESBMC's C frontend itself rejects `b[0]=a[0]` as
+  // "array type ... is not assignable" -- so each row is copied column by
+  // column instead, mirroring build_column_select's element-wise copy.
+  const array_typet &row_array_type = to_array_type(ns.follow(row_type));
+  const typet elem_type = ns.follow(row_array_type.subtype());
+  if (elem_type.is_array())
+    return reject(
+      "currently supports only 2-D arrays; 3-D+ rows are not modelled");
+  const BigInt num_cols =
+    binary2integer(row_array_type.size().value().c_str(), false);
+
+  BigInt dst_row = 0;
+  for (BigInt src_row = 0; src_row < num_rows; ++src_row)
+  {
+    if (!mask_values[src_row.to_uint64()])
+      continue;
+
+    exprt src_row_expr =
+      build_index(array, from_integer(src_row, size_type()), row_type);
+    exprt dst_row_expr = build_index(
+      build_symbol(result), from_integer(dst_row, size_type()), row_type);
+
+    for (BigInt col = 0; col < num_cols; ++col)
+    {
+      exprt src_elem =
+        build_index(src_row_expr, from_integer(col, size_type()), elem_type);
+      exprt dst_elem =
+        build_index(dst_row_expr, from_integer(col, size_type()), elem_type);
+      code_assignt assign(dst_elem, src_elem);
+      assign.location() = location;
+      converter_.add_instruction(assign);
+    }
+    ++dst_row;
+  }
+
+  return build_symbol(result);
+}
+
+bool python_list::is_bool_mask_rows_type(const typet &type)
+{
+  if (!type.is_struct())
+    return false;
+  return to_struct_type(type).tag().as_string().find(
+           "tag-numpy_bool_mask_rows") == 0;
+}
+
+exprt python_list::build_bool_mask_row_select_symbolic(
+  const exprt &array,
+  const exprt &mask,
+  const nlohmann::json &element)
+{
+  const namespacet ns(converter_.symbol_table());
+  const array_typet &outer_type =
+    static_cast<const array_typet &>(ns.follow(array.type()));
+  const typet row_type = outer_type.subtype();
+  const BigInt num_rows =
+    binary2integer(outer_type.size().value().c_str(), false);
+  const locationt location = converter_.get_location_from_decl(element);
+
+  const array_typet &row_array_type = to_array_type(ns.follow(row_type));
+  const typet elem_type = ns.follow(row_array_type.subtype());
+  if (elem_type.is_array())
+  {
+    std::ostringstream msg;
+    msg << "TypeError: boolean-mask row selection (a[mask]) currently "
+           "supports only 2-D arrays; 3-D+ rows are not modelled";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+  const BigInt num_cols =
+    binary2integer(row_array_type.size().value().c_str(), false);
+
+  // Canonical bounded descriptor result: a `rows` buffer sized
+  // at the worst case (every row selected) plus a `count` member holding
+  // the number of rows actually selected, so the logical row count is part
+  // of the modelled value instead of a detached counter.
+  const array_typet rows_buffer_type(
+    row_type, from_integer(num_rows, size_type()));
+  struct_typet result_type;
+  result_type.components().push_back(
+    struct_typet::componentt("rows", "rows", rows_buffer_type));
+  result_type.components().push_back(
+    struct_typet::componentt("count", "count", size_type()));
+  result_type.tag(
+    "tag-numpy_bool_mask_rows_" + row_type.to_string() + "_" +
+    integer2string(num_rows));
+
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$bool_mask_rows$", result_type, exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  exprt rows_member =
+    build_member(build_symbol(result), "rows", rows_buffer_type);
+  exprt count_member = build_member(build_symbol(result), "count", size_type());
+
+  code_assignt count_init(count_member, gen_zero(size_type()));
+  count_init.location() = location;
+  converter_.add_instruction(count_init);
+
+  symbolt &index_var = converter_.create_tmp_symbol(
+    element, "$mask_row_i$", size_type(), gen_zero(size_type()));
+  code_declt index_decl(build_symbol(index_var));
+  index_decl.location() = location;
+  converter_.add_instruction(index_decl);
+  code_assignt index_init(build_symbol(index_var), gen_zero(size_type()));
+  index_init.location() = location;
+  converter_.add_instruction(index_init);
+
+  code_blockt loop_body;
+
+  // Redirect current_block so every statement built below (the per-column
+  // copy and the count increment) lands inside the loop body instead of
+  // being hoisted once before the loop runs (mirrors build_bool_mask_index).
+  code_blockt *saved_block = converter_.current_block;
+  converter_.current_block = &loop_body;
+
+  exprt mask_elem = build_index(mask, build_symbol(index_var), bool_type());
+  exprt src_row_expr = build_index(array, build_symbol(index_var), row_type);
+  exprt dst_row_expr = build_index(rows_member, count_member, row_type);
+
+  code_blockt then_block;
+  for (BigInt col = 0; col < num_cols; ++col)
+  {
+    exprt src_elem =
+      build_index(src_row_expr, from_integer(col, size_type()), elem_type);
+    exprt dst_elem =
+      build_index(dst_row_expr, from_integer(col, size_type()), elem_type);
+    code_assignt assign(dst_elem, src_elem);
+    assign.location() = location;
+    then_block.copy_to_operands(assign);
+  }
+  exprt count_increment =
+    build_add(count_member, gen_one(size_type()), size_type());
+  code_assignt count_inc_stmt(count_member, count_increment);
+  count_inc_stmt.location() = location;
+  then_block.copy_to_operands(count_inc_stmt);
+
+  codet if_stmt;
+  if_stmt.set_statement("ifthenelse");
+  if_stmt.copy_to_operands(mask_elem, then_block);
+  if_stmt.location() = location;
+  loop_body.copy_to_operands(if_stmt);
+
+  exprt index_increment =
+    build_add(build_symbol(index_var), gen_one(size_type()), size_type());
+  code_assignt index_inc_stmt(build_symbol(index_var), index_increment);
+  index_inc_stmt.location() = location;
+  loop_body.copy_to_operands(index_inc_stmt);
+
+  converter_.current_block = saved_block;
+
+  exprt loop_condition =
+    build_less_than(build_symbol(index_var), outer_type.size());
+
+  codet while_stmt;
+  while_stmt.set_statement("while");
+  while_stmt.copy_to_operands(loop_condition, loop_body);
+  while_stmt.location() = location;
+  converter_.add_instruction(while_stmt);
+
+  return build_symbol(result);
+}
+
+exprt python_list::index_bool_mask_rows(
+  const exprt &array,
+  const nlohmann::json &slice_node,
+  const nlohmann::json &element)
+{
+  const locationt location = converter_.get_location_from_decl(element);
+
+  if (slice_node.value("_type", "") == "Slice")
+  {
+    std::ostringstream msg;
+    msg << "TypeError: slicing a boolean-mask row-selection result is not "
+           "supported yet";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  const namespacet ns(converter_.symbol_table());
+  const struct_typet &result_type = to_struct_type(ns.follow(array.type()));
+  const array_typet &rows_array_type =
+    to_array_type(ns.follow(result_type.components()[0].type()));
+  const typet row_type = rows_array_type.subtype();
+
+  exprt index = converter_.get_expr(slice_node);
+  index = converter_.unwrap_optional_if_needed(index);
+
+  exprt rows_member = build_member(array, "rows", rows_array_type);
+  exprt count_member = build_member(array, "count", size_type());
+  exprt index_as_size = build_typecast(index, size_type());
+
+  // actual_index = (index < 0) ? (count + index) : index, normalized
+  // against the logical row count rather than the buffer's physical
+  // capacity (mirrors build_list_at_call's negative-index handling).
+  const type2tc size_t2 = migrate_type(size_type());
+  expr2tc index2, index_as_size2, count2;
+  migrate_expr(index, index2);
+  migrate_expr(index_as_size, index_as_size2);
+  migrate_expr(count_member, count2);
+
+  expr2tc is_negative = lessthan2tc(index2, gen_zero(index2->type));
+  expr2tc positive_index = add2tc(size_t2, count2, index_as_size2);
+  expr2tc converted_index2 =
+    if2tc(size_t2, is_negative, positive_index, index_as_size2);
+  exprt converted_index = migrate_expr_back(converted_index2);
+
+  if (!config.options.get_bool_option("no-bounds-check"))
+  {
+    expr2tc oob = greaterthanequal2tc(converted_index2, count2);
+
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "IndexError", "index out of range for boolean-mask row selection");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = migrate_expr_back(oob);
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    converter_.add_instruction(guard);
+  }
+
+  return build_index(rows_member, converted_index, row_type);
+}
+
+namespace
+{
+// Recognizes a literal integer index node: a plain Constant, or a negated
+// Constant (UnaryOp USub), and extracts its signed value. Used to resolve
+// 2-D column/row indices and fancy-index entries entirely at conversion
+// time, without needing a runtime representation for the index list.
+bool try_get_literal_int(const nlohmann::json &node, BigInt &out)
+{
+  // Booleans are deliberately excluded: NumPy treats an all-bool literal
+  // list (`a[[True, False]]`) as a boolean mask, not positional indices, so
+  // accepting them here would silently compute the wrong result instead of
+  // rejecting it. Let callers fail with a clear TypeError instead.
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_number_integer())
+  {
+    out = BigInt(node["value"].get<long long>());
+    return true;
+  }
+  if (
+    node.contains("_type") && node["_type"] == "UnaryOp" &&
+    node.contains("op") && node["op"]["_type"] == "USub" &&
+    node.contains("operand") && node["operand"]["_type"] == "Constant" &&
+    node["operand"].contains("value") &&
+    node["operand"]["value"].is_number_integer())
+  {
+    out = -BigInt(node["operand"]["value"].get<long long>());
+    return true;
+  }
+  return false;
+}
+} // namespace
+
+exprt python_list::resolve_fixed_axis_index(
+  const nlohmann::json &idx_node,
+  const BigInt &axis_len,
+  unsigned axis,
+  const nlohmann::json &element)
+{
+  const locationt location = converter_.get_location_from_decl(element);
+
+  BigInt literal_value;
+  if (try_get_literal_int(idx_node, literal_value))
+  {
+    BigInt normalized = literal_value;
+    if (normalized < 0)
+      normalized += axis_len;
+
+    if (normalized < 0 || normalized >= axis_len)
+    {
+      std::ostringstream msg;
+      msg << "IndexError: index " << literal_value
+          << " is out of bounds for axis " << axis << " with size " << axis_len;
+      if (!location.is_nil())
+        msg << " at " << location.get_file() << ":" << location.get_line();
+      throw std::runtime_error(msg.str());
+    }
+
+    return from_integer(normalized, size_type());
+  }
+
+  // Runtime (non-constant) index: normalize negative values against the
+  // compile-time-known axis length and guard with an in-model IndexError,
+  // mirroring build_list_at_call's negative-index normalization.
+  exprt idx_expr = converter_.get_expr(idx_node);
+  const typet signed_t = signed_size_type();
+  exprt idx_signed = build_typecast(idx_expr, signed_t);
+  exprt len_signed = from_integer(axis_len, signed_t);
+
+  const type2tc signed_t2 = migrate_type(signed_t);
+  expr2tc idx2, len2;
+  migrate_expr(idx_signed, idx2);
+  migrate_expr(len_signed, len2);
+
+  expr2tc is_negative = lessthan2tc(idx2, gen_zero(signed_t2));
+  expr2tc positive_index = add2tc(signed_t2, len2, idx2);
+  expr2tc normalized2 = if2tc(signed_t2, is_negative, positive_index, idx2);
+  exprt normalized = migrate_expr_back(normalized2);
+
+  if (!config.options.get_bool_option("no-bounds-check"))
+  {
+    expr2tc norm2;
+    migrate_expr(normalized, norm2);
+    expr2tc oob = or2tc(
+      lessthan2tc(norm2, gen_zero(signed_t2)),
+      greaterthanequal2tc(norm2, len2));
+
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "IndexError", "index is out of bounds for axis " + std::to_string(axis));
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = migrate_expr_back(oob);
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    converter_.add_instruction(guard);
+  }
+
+  return build_typecast(normalized, size_type());
+}
+
+exprt python_list::build_column_select(
+  const exprt &array,
+  const nlohmann::json &col_index_node,
+  const nlohmann::json &element)
+{
+  const namespacet ns(converter_.symbol_table());
+  const typet resolved_array_type = ns.follow(array.type());
+  const locationt location = converter_.get_location_from_decl(element);
+
+  if (!resolved_array_type.is_array())
+  {
+    std::ostringstream msg;
+    msg << "TypeError: 2-D column slicing (a[:, j]) requires a fixed-shape "
+           "2-D array";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  const array_typet &outer_type = to_array_type(resolved_array_type);
+  const typet row_type = ns.follow(outer_type.subtype());
+  if (!row_type.is_array())
+  {
+    std::ostringstream msg;
+    msg << "TypeError: multi-dimensional indexing (a[i, j, ...]) is not "
+           "supported; numpy arrays are modelled as 1D lists";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  const array_typet &row_array_type = to_array_type(row_type);
+  const typet elem_type = ns.follow(row_array_type.subtype());
+  if (elem_type.is_array())
+  {
+    std::ostringstream msg;
+    msg << "TypeError: 2-D column slicing (a[:, j]) currently supports only "
+           "2-D arrays; 3-D+ arrays are not modelled";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+  const BigInt num_rows =
+    binary2integer(outer_type.size().value().c_str(), false);
+  const BigInt num_cols =
+    binary2integer(row_array_type.size().value().c_str(), false);
+
+  exprt col_idx =
+    resolve_fixed_axis_index(col_index_node, num_cols, 1, element);
+
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$col_slice$", array_typet(elem_type, outer_type.size()), exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  for (BigInt row = 0; row < num_rows; ++row)
+  {
+    exprt row_expr =
+      build_index(array, from_integer(row, size_type()), row_type);
+    exprt src_elem = build_index(row_expr, col_idx, elem_type);
+    exprt dst_elem = build_index(
+      build_symbol(result), from_integer(row, size_type()), elem_type);
+    code_assignt assign(dst_elem, src_elem);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+  }
+
+  return build_symbol(result);
+}
+
+exprt python_list::build_strided_column_select(
+  const exprt &array,
+  const nlohmann::json &col_slice_node,
+  const nlohmann::json &element)
+{
+  const namespacet ns(converter_.symbol_table());
+  const typet resolved_array_type = ns.follow(array.type());
+  const locationt location = converter_.get_location_from_decl(element);
+
+  auto reject = [&](const std::string &reason) -> exprt {
+    std::ostringstream msg;
+    msg << "TypeError: strided column slicing (a[:, ::step]) " << reason;
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  };
+
+  if (!resolved_array_type.is_array())
+    return reject("requires a fixed-shape 2-D array");
+  const array_typet &outer_type = to_array_type(resolved_array_type);
+  const typet row_type = ns.follow(outer_type.subtype());
+  if (!row_type.is_array())
+    return reject("requires a fixed-shape 2-D array");
+  const array_typet &row_array_type = to_array_type(row_type);
+  const typet elem_type = ns.follow(row_array_type.subtype());
+  if (elem_type.is_array())
+    return reject(
+      "currently supports only 2-D arrays; 3-D+ arrays are not modelled");
+
+  const BigInt num_rows =
+    binary2integer(outer_type.size().value().c_str(), false);
+  const BigInt num_cols =
+    binary2integer(row_array_type.size().value().c_str(), false);
+
+  BigInt step_val = 1;
+  if (col_slice_node.contains("step") && !col_slice_node["step"].is_null())
+  {
+    if (!try_get_literal_int(col_slice_node["step"], step_val))
+      return reject("requires a literal step");
+    if (step_val == 0)
+      return reject("step cannot be zero");
+  }
+
+  const bool has_lower =
+    col_slice_node.contains("lower") && !col_slice_node["lower"].is_null();
+  const bool has_upper =
+    col_slice_node.contains("upper") && !col_slice_node["upper"].is_null();
+
+  if (!has_lower && !has_upper && step_val < 0 && step_val != -1)
+    return reject("currently supports only step=-1 for negative steps");
+
+  auto resolve_bound = [&](const std::string &name, bool is_lower) -> BigInt {
+    const bool present =
+      col_slice_node.contains(name) && !col_slice_node[name].is_null();
+    if (!present)
+    {
+      if (step_val > 0)
+        return is_lower ? BigInt(0) : num_cols;
+      return is_lower ? num_cols - 1 : BigInt(-1);
+    }
+
+    BigInt value;
+    if (!try_get_literal_int(col_slice_node[name], value))
+      return reject("requires literal bounds"), BigInt(0);
+
+    if (value < 0)
+      value += num_cols;
+
+    if (step_val > 0)
+    {
+      if (value < 0)
+        return BigInt(0);
+      if (value > num_cols)
+        return num_cols;
+      return value;
+    }
+
+    if (value < 0)
+      return BigInt(-1);
+    if (value >= num_cols)
+      return num_cols - 1;
+    return value;
+  };
+
+  const BigInt start = resolve_bound("lower", true);
+  const BigInt stop = resolve_bound("upper", false);
+  std::vector<BigInt> selected_cols;
+  if (step_val > 0)
+  {
+    for (BigInt col = start; col < stop; col += step_val)
+      selected_cols.push_back(col);
+  }
+  else
+  {
+    for (BigInt col = start; col > stop; col += step_val)
+      selected_cols.push_back(col);
+  }
+
+  const BigInt result_cols = BigInt(selected_cols.size());
+
+  const array_typet new_row_type(
+    elem_type, from_integer(result_cols, size_type()));
+  const array_typet result_type(
+    new_row_type, from_integer(num_rows, size_type()));
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$strided_col_slice$", result_type, exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  for (BigInt row = 0; row < num_rows; ++row)
+  {
+    exprt row_expr =
+      build_index(array, from_integer(row, size_type()), row_type);
+    exprt dst_row = build_index(
+      build_symbol(result), from_integer(row, size_type()), new_row_type);
+
+    for (std::size_t col = 0; col < selected_cols.size(); ++col)
+    {
+      exprt src_elem = build_index(
+        row_expr, from_integer(selected_cols[col], size_type()), elem_type);
+      exprt dst_elem =
+        build_index(dst_row, from_integer(BigInt(col), size_type()), elem_type);
+      code_assignt assign(dst_elem, src_elem);
+      assign.location() = location;
+      converter_.add_instruction(assign);
+    }
+  }
+
+  return build_symbol(result);
+}
+
+exprt python_list::build_mixed_slice_tuple_select(
+  const exprt &array,
+  const std::vector<nlohmann::json> &idx_nodes,
+  const nlohmann::json &element)
+{
+  const namespacet ns(converter_.symbol_table());
+  const locationt location = converter_.get_location_from_decl(element);
+
+  auto reject = [&](const std::string &reason) -> void {
+    std::ostringstream msg;
+    msg << "TypeError: mixed slice/index tuple indexing " << reason;
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  };
+
+  // Walk one nested array dimension per idx_nodes entry, collecting each
+  // axis's extent and the type reached after indexing it. A dimension count
+  // shorter than idx_nodes means the tuple has more entries than the array
+  // has axes.
+  std::vector<BigInt> axis_sizes(idx_nodes.size());
+  std::vector<typet> types_after(idx_nodes.size());
+  typet current_type = ns.follow(array.type());
+  for (std::size_t axis = 0; axis < idx_nodes.size(); ++axis)
+  {
+    if (!current_type.is_array())
+    {
+      std::ostringstream msg;
+      msg << "IndexError: too many indices for array: array has fewer "
+             "dimensions than the "
+          << idx_nodes.size() << " indices given";
+      if (!location.is_nil())
+        msg << " at " << location.get_file() << ":" << location.get_line();
+      throw std::runtime_error(msg.str());
+    }
+
+    const array_typet &at = to_array_type(current_type);
+    axis_sizes[axis] = binary2integer(at.size().value().c_str(), false);
+    current_type = ns.follow(at.subtype());
+    types_after[axis] = current_type;
+  }
+
+  auto resolve_slice_indices = [&](
+                                 const nlohmann::json &slice_node,
+                                 std::size_t axis) -> std::vector<BigInt> {
+    BigInt step_val = 1;
+    if (slice_node.contains("step") && !slice_node["step"].is_null())
+    {
+      if (!try_get_literal_int(slice_node["step"], step_val))
+        reject("requires literal slice bounds");
+      if (step_val == 0)
+        reject("slice step cannot be zero");
+    }
+
+    const BigInt axis_len = axis_sizes[axis];
+    auto resolve_bound = [&](const std::string &name, bool is_lower) -> BigInt {
+      const bool present =
+        slice_node.contains(name) && !slice_node[name].is_null();
+      if (!present)
+      {
+        if (step_val > 0)
+          return is_lower ? BigInt(0) : axis_len;
+        return is_lower ? axis_len - 1 : BigInt(-1);
+      }
+
+      BigInt value;
+      if (!try_get_literal_int(slice_node[name], value))
+        reject("requires literal slice bounds");
+
+      if (value < 0)
+        value += axis_len;
+
+      if (step_val > 0)
+      {
+        if (value < 0)
+          return BigInt(0);
+        if (value > axis_len)
+          return axis_len;
+        return value;
+      }
+
+      if (value < 0)
+        return BigInt(-1);
+      if (value >= axis_len)
+        return axis_len - 1;
+      return value;
+    };
+
+    const BigInt start = resolve_bound("lower", true);
+    const BigInt stop = resolve_bound("upper", false);
+    std::vector<BigInt> indices;
+    if (step_val > 0)
+    {
+      for (BigInt idx = start; idx < stop; idx += step_val)
+        indices.push_back(idx);
+    }
+    else
+    {
+      for (BigInt idx = start; idx > stop; idx += step_val)
+        indices.push_back(idx);
+    }
+    return indices;
+  };
+
+  std::vector<std::vector<BigInt>> slice_indices(idx_nodes.size());
+  std::vector<exprt> fixed_idx(idx_nodes.size());
+  std::vector<std::size_t> slice_axes;
+  for (std::size_t axis = 0; axis < idx_nodes.size(); ++axis)
+  {
+    if (idx_nodes[axis].value("_type", "") == "Slice")
+    {
+      slice_axes.push_back(axis);
+      slice_indices[axis] = resolve_slice_indices(idx_nodes[axis], axis);
+    }
+    else
+    {
+      fixed_idx[axis] = resolve_fixed_axis_index(
+        idx_nodes[axis],
+        axis_sizes[axis],
+        static_cast<unsigned>(axis),
+        element);
+    }
+  }
+
+  if (slice_axes.empty())
+    reject("requires at least one slice axis");
+
+  const typet result_elem_type = types_after.back();
+  if (result_elem_type.is_array())
+    reject("currently supports only fully-indexed trailing axes");
+
+  typet result_type = result_elem_type;
+  for (auto it = slice_axes.rbegin(); it != slice_axes.rend(); ++it)
+  {
+    const BigInt len = BigInt(slice_indices[*it].size());
+    result_type = array_typet(result_type, from_integer(len, size_type()));
+  }
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$tuple_mixed_slice$", result_type, exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  std::function<void(std::size_t, const exprt &, const exprt &)> copy_axis =
+    [&](std::size_t axis, const exprt &src, const exprt &dst) {
+      if (axis == idx_nodes.size())
+      {
+        code_assignt assign(dst, src);
+        assign.location() = location;
+        converter_.add_instruction(assign);
+        return;
+      }
+
+      if (idx_nodes[axis].value("_type", "") != "Slice")
+      {
+        exprt src_next = build_index(src, fixed_idx[axis], types_after[axis]);
+        copy_axis(axis + 1, src_next, dst);
+        return;
+      }
+
+      for (std::size_t pos = 0; pos < slice_indices[axis].size(); ++pos)
+      {
+        exprt src_next = build_index(
+          src,
+          from_integer(slice_indices[axis][pos], size_type()),
+          types_after[axis]);
+        const array_typet &dst_array_type =
+          to_array_type(ns.follow(dst.type()));
+        const typet dst_elem_type = ns.follow(dst_array_type.subtype());
+        exprt dst_next = build_index(
+          dst, from_integer(BigInt(pos), size_type()), dst_elem_type);
+        copy_axis(axis + 1, src_next, dst_next);
+      }
+    };
+
+  copy_axis(0, array, build_symbol(result));
+
+  return build_symbol(result);
+}
+
+exprt python_list::build_fancy_index(
+  const exprt &array,
+  const std::vector<nlohmann::json> &indices,
+  const nlohmann::json &element)
+{
+  const namespacet ns(converter_.symbol_table());
+  const typet resolved_array_type = ns.follow(array.type());
+  const locationt location = converter_.get_location_from_decl(element);
+
+  if (!resolved_array_type.is_array())
+  {
+    std::ostringstream msg;
+    msg << "TypeError: fancy indexing (a[[i, j, ...]]) requires a "
+           "fixed-shape array";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  const array_typet &array_type = to_array_type(resolved_array_type);
+  const typet elem_type = ns.follow(array_type.subtype());
+
+  const BigInt array_len =
+    binary2integer(array_type.size().value().c_str(), false);
+
+  // Every requested index must be a concrete literal integer: fancy indexing
+  // is restricted here to compile-time-known selections, so each index is
+  // resolved and bounds-checked up front, before any IR for the result.
+  std::vector<exprt> resolved_indices;
+  resolved_indices.reserve(indices.size());
+  for (const auto &idx_node : indices)
+  {
+    BigInt literal_value;
+    if (!try_get_literal_int(idx_node, literal_value))
+    {
+      std::ostringstream msg;
+      msg << "TypeError: fancy indexing only supports concrete integer "
+             "indices";
+      if (!location.is_nil())
+        msg << " at " << location.get_file() << ":" << location.get_line();
+      throw std::runtime_error(msg.str());
+    }
+    resolved_indices.push_back(
+      resolve_fixed_axis_index(idx_node, array_len, 0, element));
+  }
+
+  const array_typet result_type(
+    array_type.subtype(),
+    from_integer(BigInt(resolved_indices.size()), size_type()));
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$fancy_index$", result_type, exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  // Whole-array assignment (`dst[k] = src[i]` where both sides are arrays)
+  // is not valid C and is unsupported by the backend -- confirmed
+  // empirically, ESBMC's C frontend itself rejects `b[0]=a[0]` as "array
+  // type ... is not assignable" -- so a row selection (2-D fancy indexing)
+  // is copied column by column instead of via a single assignment.
+  if (elem_type.is_array())
+  {
+    const array_typet &row_array_type = to_array_type(elem_type);
+    const typet row_elem_type = ns.follow(row_array_type.subtype());
+    if (row_elem_type.is_array())
+    {
+      std::ostringstream msg;
+      msg << "TypeError: fancy indexing currently supports only up to 2-D "
+             "arrays; 3-D+ arrays are not modelled";
+      if (!location.is_nil())
+        msg << " at " << location.get_file() << ":" << location.get_line();
+      throw std::runtime_error(msg.str());
+    }
+    const BigInt num_cols =
+      binary2integer(row_array_type.size().value().c_str(), false);
+
+    for (std::size_t k = 0; k < resolved_indices.size(); ++k)
+    {
+      exprt src_row = build_index(array, resolved_indices[k], elem_type);
+      exprt dst_row = build_index(
+        build_symbol(result), from_integer(BigInt(k), size_type()), elem_type);
+
+      for (BigInt col = 0; col < num_cols; ++col)
+      {
+        exprt src_elem =
+          build_index(src_row, from_integer(col, size_type()), row_elem_type);
+        exprt dst_elem =
+          build_index(dst_row, from_integer(col, size_type()), row_elem_type);
+        code_assignt assign(dst_elem, src_elem);
+        assign.location() = location;
+        converter_.add_instruction(assign);
+      }
+    }
+
+    return build_symbol(result);
+  }
+
+  for (std::size_t k = 0; k < resolved_indices.size(); ++k)
+  {
+    exprt src_elem =
+      build_index(array, resolved_indices[k], array_type.subtype());
+    exprt dst_elem = build_index(
+      build_symbol(result),
+      from_integer(BigInt(k), size_type()),
+      array_type.subtype());
+    code_assignt assign(dst_elem, src_elem);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+  }
+
+  return build_symbol(result);
 }
 
 exprt python_list::remove_function_calls_recursive(
@@ -377,18 +1310,18 @@ exprt python_list::handle_range_slice(
       step_val = 1; // continue with valid value to keep IR consistent
     }
   }
-  // Python raises ValueError on step==0; emit a failing assertion so
-  // verification reports it rather than silently producing a slice.
-  // code_assertt does not insert assume(false), so the rest of the slice
-  // IR still runs with step_val==1 — that is harmless: the violation is
-  // already reported by the checker.
+  // Python raises ValueError on step==0. Raise it from the frontend (a
+  // cpp-throw) so try/except ValueError can catch it — a code_assert would be
+  // an uncatchable property violation. The raise diverts control, so the rest
+  // of the slice IR (kept consistent with step_val==1) is a dead path.
   if (literal_zero_step)
   {
-    // V.3: build the always-fail assert condition in IREP2.
-    code_assertt step_assert(migrate_expr_back(gen_false_expr()));
-    step_assert.location() = converter_.get_location_from_decl(slice_node);
-    step_assert.location().comment("ValueError: slice step cannot be zero");
-    converter_.add_instruction(step_assert);
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "ValueError", "slice step cannot be zero");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+    throw_code.location() = converter_.get_location_from_decl(slice_node);
+    converter_.add_instruction(throw_code);
   }
   bool negative_step = (step_val < 0);
 
@@ -645,8 +1578,45 @@ exprt python_list::handle_range_slice(
 
     exprt src = build_index(array, src_idx, elem_type);
     exprt dst = build_index(build_symbol(result), build_symbol(idx), elem_type);
-    code_assignt assign(dst, src);
-    body.copy_to_operands(assign);
+
+    // Whole-row assignment (`dst[k] = src[i]` where both sides are
+    // themselves arrays, i.e. this is the outer axis of a 2-D array being
+    // sliced with a step) is not valid C and is unsupported by the backend,
+    // same as build_bool_mask_row_select/build_column_select - copy each
+    // row column by column instead. The column count is fixed at
+    // conversion time even though the row position is only known at
+    // runtime, so the inner copy can be unrolled.
+    const typet resolved_elem_type = ns.follow(elem_type);
+    if (resolved_elem_type.is_array())
+    {
+      const array_typet &row_type = to_array_type(resolved_elem_type);
+      const typet col_elem_type = ns.follow(row_type.subtype());
+      if (col_elem_type.is_array())
+      {
+        std::ostringstream msg;
+        msg << "TypeError: strided slicing currently supports only 2-D "
+               "arrays; 3-D+ arrays are not modelled";
+        if (!location.is_nil())
+          msg << " at " << location.get_file() << ":" << location.get_line();
+        throw std::runtime_error(msg.str());
+      }
+      const BigInt num_cols =
+        binary2integer(row_type.size().value().c_str(), false);
+      for (BigInt col = 0; col < num_cols; ++col)
+      {
+        exprt src_elem =
+          build_index(src, from_integer(col, size_type()), col_elem_type);
+        exprt dst_elem =
+          build_index(dst, from_integer(col, size_type()), col_elem_type);
+        code_assignt col_assign(dst_elem, src_elem);
+        body.copy_to_operands(col_assign);
+      }
+    }
+    else
+    {
+      code_assignt assign(dst, src);
+      body.copy_to_operands(assign);
+    }
 
     // i++ (V.3: synthetic size_type increment, built in IREP2)
     exprt incr =
@@ -700,15 +1670,23 @@ exprt python_list::handle_range_slice(
   // for the common step==1 case.
   const typet signed_t = signed_size_type();
   const typet counter_type = negative_step ? signed_t : size_type();
+  // V.3: build the slice-bound arithmetic natively in IREP2. Every call site
+  // passes operands uniformly at signed_t (size_signed/val_signed via
+  // build_typecast, one_s via from_integer), so add2t/sub2t with an explicit
+  // signed_t2 result is the exact round-trip of the legacy plus/minus whose
+  // result type was overridden to signed_t.
+  const type2tc signed_t2 = migrate_type(signed_t);
   auto signed_add = [&](const exprt &lhs, const exprt &rhs) -> exprt {
-    plus_exprt out(lhs, rhs);
-    out.type() = signed_t;
-    return out;
+    expr2tc lhs2, rhs2;
+    migrate_expr(lhs, lhs2);
+    migrate_expr(rhs, rhs2);
+    return migrate_expr_back(add2tc(signed_t2, lhs2, rhs2));
   };
   auto signed_sub = [&](const exprt &lhs, const exprt &rhs) -> exprt {
-    minus_exprt out(lhs, rhs);
-    out.type() = signed_t;
-    return out;
+    expr2tc lhs2, rhs2;
+    migrate_expr(lhs, lhs2);
+    migrate_expr(rhs, rhs2);
+    return migrate_expr_back(sub2tc(signed_t2, lhs2, rhs2));
   };
 
   // Resolve a slice bound following CPython's slice.indices(len) semantics.
@@ -719,7 +1697,6 @@ exprt python_list::handle_range_slice(
     const exprt size_signed = build_typecast(build_symbol(size_sym), signed_t);
     const exprt zero_s = from_integer(0, signed_t);
     const exprt one_s = from_integer(1, signed_t);
-    const type2tc signed_t2 = migrate_type(signed_t); // V.3: for IREP2 selects
 
     // Step 1: produce a signed `resolved` value.
     //   - missing bound → step-direction default
@@ -1570,12 +2547,14 @@ exprt python_list::handle_index_access(
                 {
                   const auto &key_node = list_node["value"]["slice"];
 
-                  // Handle constant string key
+                  // Handle a constant key of any JSON scalar type
+                  // (string, int, bool); comparing the JSON values directly
+                  // avoids get<std::string>() throwing on an int key (d[1]).
                   if (
                     key_node["_type"] == "Constant" &&
                     key_node.contains("value"))
                   {
-                    std::string key = key_node["value"].get<std::string>();
+                    const auto &key_val = key_node["value"];
 
                     // For dict literals, get the corresponding value
                     if (
@@ -1591,7 +2570,8 @@ exprt python_list::handle_index_access(
                       {
                         if (
                           keys[i]["_type"] == "Constant" &&
-                          keys[i]["value"].get<std::string>() == key)
+                          keys[i].contains("value") &&
+                          keys[i]["value"] == key_val)
                         {
                           // Found the value: now get its element type
                           // (promotion-aware, see infer_literal_element_type).
@@ -1852,7 +2832,13 @@ exprt python_list::handle_index_access(
             it->second.size() == list_node["value"]["elts"].size();
         }
 
-        if (has_const_index && !is_slice_derived_var && is_stable_list_literal)
+        // A list that escaped into a function/method call may have been grown
+        // by the callee, which this static length does not reflect; skip the
+        // convert-time bounds check so the runtime __ESBMC_list_at path handles
+        // it (GitHub #5991).
+        if (
+          has_const_index && !is_slice_derived_var && is_stable_list_literal &&
+          !converter_.is_list_call_escaped(list_name))
         {
           const size_t known_size = it->second.size();
           const bool oob = negative_index ? (index_abs > known_size)

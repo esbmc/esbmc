@@ -1,100 +1,15 @@
 /// \file
-/// C++ Language Type Checking
+/// Struct/union padding and alignment computation
 
 #include "padding.h"
 
 #include <algorithm>
 
-#include <util/arith_tools.h>
-#include <util/config.h>
-#include <util/type_byte_size.h>
-
-static std::size_t ext_int_representation_bytes(const typet &type)
-{
-  // We represent an ExtInt with the smallest integer type that can hold it
-  // TODO: This should be limited to a maximum of 8 bytes, but pointer analysis
-  // currently expects the fields to be aligned to the least power of 2 greater
-  // than the width in bytes
-  const std::size_t bits = string2integer(type.width().as_string()).to_uint64();
-
-  std::size_t result;
-  for (result = 1; bits > result * config.ansi_c.char_width; result *= 2)
-    ;
-
-  return result;
-}
-
-BigInt alignment(const typet &type, const namespacet &ns)
-{
-  // we need to consider a number of different cases:
-  // - alignment specified in the source, which will be recorded in
-  // "alignment"
-  // - alignment induced by packing ("The alignment of a member will
-  // be on a boundary that is either a multiple of n or a multiple of
-  // the size of the member, whichever is smaller."); both
-  // "alignment" and "packed" will be set
-  // - natural alignment, when neither "alignment" nor "packed"
-  // are set
-  // - dense packing with only "packed" set.
-
-  // is the alignment given?
-  const exprt &given_alignment =
-    static_cast<const exprt &>(type.find("alignment"));
-
-  BigInt a_int = 0;
-
-  // we trust it blindly, no matter how nonsensical
-  if (given_alignment.is_not_nil())
-    a_int = string2integer(given_alignment.cformat().as_string());
-
-  // alignment but no packing
-  if (a_int > 0 && !type.get_bool("packed"))
-    return a_int;
-  // no alignment, packing
-  else if (a_int == 0 && type.get_bool("packed"))
-    return 1;
-
-  // compute default
-  BigInt result = 0;
-
-  if (type.id() == typet::t_array)
-    result = alignment(type.subtype(), ns);
-  else if (type.id() == typet::t_struct || type.id() == typet::t_union)
-  {
-    result = 1;
-
-    // get the max
-    // (should really be the smallest common denominator)
-    for (const auto &c : to_struct_union_type(type).components())
-      result = std::max(result, alignment(c.type(), ns));
-  }
-  else if (type.get_bool("#bitfield"))
-  {
-    // we align these according to the 'underlying type'
-    result = alignment(type.subtype(), ns);
-  }
-  else if (type.get_bool("#extint"))
-    result = ext_int_representation_bytes(type);
-  else if (
-    type.id() == typet::t_unsignedbv || type.id() == typet::t_signedbv ||
-    type.id() == typet::t_fixedbv || type.id() == typet::t_floatbv ||
-    type.id() == typet::t_bool || type.id() == typet::t_pointer)
-  {
-    type2tc thetype = migrate_type(type);
-    result = type_byte_size(thetype);
-  }
-  else if (type.id() == typet::t_symbol)
-    result = alignment(ns.follow(type), ns);
-  else
-    result = 1;
-
-  // if an alignment had been provided and packing was requested, take
-  // the smallest alignment
-  if (a_int > 0 && a_int < result)
-    result = a_int;
-
-  return result;
-}
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/type_byte_size.h>
 
 static struct_typet::componentst::iterator pad_bit_field(
   struct_typet::componentst &components,
@@ -336,15 +251,46 @@ static void add_padding(struct_typet &type, const namespacet &ns)
   // We use 'max_alignment'.
   if (max_alignment > 1)
   {
-    // we may need to align it
-    BigInt displacement = offset % max_alignment;
-    if (displacement != 0)
+    // An over-aligned empty struct (e.g. `struct alignas(16) {}`) has no
+    // members, so offset is 0 and the multiple-of-alignment rule below adds
+    // nothing -- leaving a zero-byte layout while sizeof reports `alignment`.
+    // Pad it up to its alignment so byte-wise access (memcmp, aligned storage)
+    // stays in bounds. Plain empty structs have no explicit alignment, so
+    // max_alignment is 0 here and they are left unchanged (their C++ single
+    // byte, if any, is added elsewhere in the frontend).
+    if (offset == 0)
     {
-      BigInt pad_bytes = max_alignment - displacement;
-      std::size_t pad_bits = (pad_bytes * config.ansi_c.char_width).to_uint64();
+      std::size_t pad_bits =
+        (max_alignment * config.ansi_c.char_width).to_uint64();
       pad(components, components.end(), pad_bits);
     }
+    else
+    {
+      // we may need to align it
+      BigInt displacement = offset % max_alignment;
+      if (displacement != 0)
+      {
+        BigInt pad_bytes = max_alignment - displacement;
+        std::size_t pad_bits =
+          (pad_bytes * config.ansi_c.char_width).to_uint64();
+        pad(components, components.end(), pad_bits);
+      }
+    }
   }
+
+  // Record the struct's effective alignment so the solver can constrain the
+  // base address of objects of this type: an object's address is always a
+  // multiple of its type's alignment ([basic.align], C11 6.2.8). Only types
+  // carrying an "alignment" attribute are constrained in smt_memspace, and so
+  // far that attribute was set only for an explicit struct-level `alignas`.
+  // Aggregates that are merely naturally aligned (e.g. through an over-aligned
+  // member) had no attribute, so `(uintptr_t)&obj % alignof(T) == 0` produced
+  // a spurious counterexample. Packed structs are excluded on purpose (their
+  // alignment is not checked, see the `packed-3` regression test).
+  if (
+    max_alignment > 1 && !type.get_bool("packed") &&
+    type.find("alignment").is_nil())
+    type.set("alignment", constant_exprt(max_alignment, size_type()));
 }
 
 static void add_padding(union_typet &type, const namespacet &ns)
@@ -383,6 +329,15 @@ static void add_padding(union_typet &type, const namespacet &ns)
     component.set_is_padding(true);
 
     type.components().push_back(component);
+  }
+
+  // Record the union's effective alignment for base-address constraints, as
+  // for structs above (see the comment there).
+  if (!type.get_bool("packed") && type.find("alignment").is_nil())
+  {
+    const BigInt a = alignment(type, ns);
+    if (a > 1)
+      type.set("alignment", constant_exprt(a, size_type()));
   }
 }
 

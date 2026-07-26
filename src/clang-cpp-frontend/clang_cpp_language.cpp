@@ -1,20 +1,20 @@
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Frontend/ASTUnit.h>
 CC_DIAGNOSTIC_POP()
 
-#include <util/c_link.h>
+#include <util/lang/c_link.h>
 #include <c2goto/cprover_library.h>
 #include <clang-cpp-frontend/clang_cpp_main.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <clang-cpp-frontend/clang_cpp_language.h>
-#include <util/cpp_expr2string.h>
+#include <util/lang/cpp_expr2string.h>
 #include <clang-cpp-frontend/esbmc_internal_cpp.h>
 #include <regex>
-#include <util/filesystem.h>
+#include <util/base/filesystem.h>
 #include <fstream>
 
 languaget *new_clang_cpp_language()
@@ -34,6 +34,12 @@ void clang_cpp_languaget::force_file_type(
   // Force clang see all files as .cpp
   compiler_args.push_back("-x");
   compiler_args.push_back("c++");
+
+  /* Clang gives std::addressof a BuiltinAttr and rewrites calls to it, which
+   * discards the operational model's definition and leaves symex a body-less
+   * function returning a nondet pointer (github #6063). We need the real
+   * body, so opt out of the builtin. */
+  compiler_args.emplace_back("-fno-builtin-std-addressof");
 }
 
 void clang_cpp_languaget::build_include_args(
@@ -42,6 +48,12 @@ void clang_cpp_languaget::build_include_args(
   std::string cppinc;
   bool do_inc = !config.options.get_bool_option("no-abstracted-cpp-includes") &&
                 !config.options.get_bool_option("no-library");
+
+  if (!do_inc && config.options.get_bool_option("mix-cpp-host-headers"))
+    log_warning(
+      "--mix-cpp-host-headers has no effect: the abstracted C++ includes "
+      "are already disabled via --no-abstracted-cpp-includes or "
+      "--no-library, so only the host headers are used");
 
   if (do_inc)
   {
@@ -57,8 +69,12 @@ void clang_cpp_languaget::build_include_args(
     // OMs define names in namespace std while the host headers put them in
     // an inline namespace (std::__1 on libc++, std:: on libstdc++ but with
     // different ODR identity).
-    // Users who need the host headers can pass --no-abstracted-cpp-includes.
-    compiler_args.push_back("-nostdinc++");
+    // Users who need only the host headers can pass
+    // --no-abstracted-cpp-includes; users who want both side by side (e.g.
+    // to reach a system header the bundled OMs don't cover, accepting the
+    // ambiguous-name risk above) can pass --mix-cpp-host-headers instead.
+    if (!config.options.get_bool_option("mix-cpp-host-headers"))
+      compiler_args.push_back("-nostdinc++");
   }
 
   clang_c_languaget::build_include_args(compiler_args);

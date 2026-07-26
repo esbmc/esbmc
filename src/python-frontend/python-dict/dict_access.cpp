@@ -216,7 +216,7 @@ exprt python_dict_handler::handle_dict_subscript(
         {
           std::string func_name =
             var_decl["value"]["func"]["id"].get<std::string>();
-          nlohmann::json func_def = json_utils::find_function(
+          nlohmann::json func_def = json_utils::try_find_function(
             converter_.get_ast_json()["body"], func_name);
 
           if (
@@ -249,7 +249,87 @@ exprt python_dict_handler::handle_dict_subscript(
       }
     }
 
+    // Fallback: element type recorded at construction (literal dict whose
+    // values are lists with a uniform element type).
+    if (
+      python_list::get_list_type_map_size(list_result.id.as_string()) == 0 &&
+      dict_expr.is_symbol())
+    {
+      const std::string &vals_id =
+        get_internal_list_id(dict_expr.identifier().as_string(), false);
+      if (!vals_id.empty())
+      {
+        auto it =
+          python_list::list_type_map.find(dict_value_list_elems_key(vals_id));
+        if (it != python_list::list_type_map.end() && !it->second.empty())
+        {
+          const typet &first = it->second.front().second;
+          const bool uniform = std::all_of(
+            it->second.begin(),
+            it->second.end(),
+            [&first](const std::pair<std::string, typet> &e) {
+              return e.second == first;
+            });
+          if (uniform)
+            python_list::list_type_map[list_result.id.as_string()].push_back(
+              std::make_pair(std::string(), first));
+        }
+      }
+    }
+
     return build_symbol(list_result);
+  }
+
+  // A heterogeneous int/float dict stores each value inline with its own
+  // type_id and native bit pattern (the float path is disabled for mixed
+  // dicts — see dict_construction.cpp — so there is no float_buf indirection).
+  // A single static resolved_type misreads whichever value carries the other
+  // type: {0: 1, 1: 2.5} resolves to int and reads 2.5's bits through the int
+  // path, and symmetrically {0: 2.5, 1: 1} misreads the int. Read by the
+  // value's runtime type_id instead, yielding a double either way (int values
+  // widen; value equality still holds), mirroring how .values()/dict_eq read a
+  // mixed dict. Only literal-built dicts have a values-list in the map; a dict
+  // parameter returns an empty id and falls through to the static paths below.
+  if (
+    resolved_type.is_signedbv() || resolved_type.is_unsignedbv() ||
+    resolved_type.is_floatbv())
+  {
+    const std::string dict_id = dict_expr.is_symbol()
+                                  ? dict_expr.identifier().as_string()
+                                  : std::string();
+    const std::string vals_id =
+      dict_id.empty() ? std::string() : get_internal_list_id(dict_id, false);
+    if (
+      !vals_id.empty() &&
+      python_list::has_mixed_numeric_types(dict_value_types_key(vals_id)))
+    {
+      const size_t float_type_id =
+        std::hash<std::string>{}(type_handler_.type_to_string(
+          type_handler_.get_typet(std::string("float"))));
+      // Python int values are stored as long_long (64-bit) and read as int64_t
+      // by the model (list.c), so recover them at that width — not
+      // config.ansi_c.long_int_width, which is 32 under LLP64/ILP32. (Bignum
+      // --int-encoding stores ints wider than 8 bytes and is out of scope here,
+      // matching list.c's own size==8-gated numeric path.)
+      const typet long_t = long_long_int_type();
+
+      exprt tid = build_member(deref_obj, "type_id", size_type());
+      exprt is_float =
+        equality_exprt(tid, from_integer(float_type_id, size_type()));
+
+      exprt as_double = build_dereference(
+        build_typecast(obj_value, pointer_typet(double_type())), double_type());
+      as_double.type() = double_type();
+
+      exprt as_int = build_dereference(
+        build_typecast(obj_value, pointer_typet(long_t)), long_t);
+      as_int.type() = long_t;
+
+      exprt result =
+        if_exprt(is_float, as_double, build_typecast(as_int, double_type()));
+      result.type() = double_type();
+      return result;
+    }
   }
 
   // Handle float types
@@ -355,6 +435,19 @@ void python_dict_handler::handle_dict_subscript_assign(
       "__ESBMC_list_set_at not found - add it to list.c model");
 
   python_list list_handler(converter_, node);
+
+  // Record the assigned value's type so a later subscript read can detect a
+  // heterogeneous int/float dict: a value assigned via d[k]=v reaches the same
+  // misread path as a mixed literal (see handle_dict_subscript). Only
+  // literal-built dicts (including `{}` then assigned) have a values-list id.
+  if (dict_expr.is_symbol())
+  {
+    const std::string vals_id =
+      get_internal_list_id(dict_expr.identifier().as_string(), false);
+    if (!vals_id.empty())
+      list_handler.add_type_info(
+        dict_value_types_key(vals_id), std::string(), value.type());
+  }
 
   symbolt &index_var = converter_.create_tmp_symbol(
     node, "$dict_update_idx$", size_type(), gen_zero(size_type()));

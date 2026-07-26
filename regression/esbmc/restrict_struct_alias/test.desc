@@ -1,0 +1,5 @@
+CORE
+main.c
+--restrict-check
+^VERIFICATION FAILED$
+^\s*restrict pointer aliasing$

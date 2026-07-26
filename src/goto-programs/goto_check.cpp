@@ -1,19 +1,19 @@
 #include <goto-programs/goto_check.h>
 #include <cctype>
-#include <util/c_expr2string.h>
+#include <util/lang/c_expr2string.h>
 #include <langapi/language_util.h>
-#include <util/arith_tools.h>
-#include <util/array_name.h>
-#include <util/base_type.h>
-#include <util/config.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/array_name.h>
+#include <util/expr/base_type.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>
-#include <util/i2string.h>
-#include <util/location.h>
-#include <util/migrate.h>
-#include <util/mp_arith.h>
-#include <util/python_types.h>
-#include <util/std_types.h>
+#include <util/base/i2string.h>
+#include <util/irep/location.h>
+#include <util/irep/migrate.h>
+#include <util/arith/mp_arith.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_types.h>
 
 class goto_checkt
 {
@@ -628,7 +628,7 @@ void goto_checkt::input_overflow_check(
         "Unsupported type {}, skip overflow checking", type_id.as_string());
   }
 
-  if (buf_overflow) // FIX ME! add assert(0) to output the error msg
+  if (buf_overflow)
   {
     goto_programt::targett t = new_code.add_instruction(ASSERT);
     t->guard = gen_false_expr();
@@ -940,13 +940,20 @@ void goto_checkt::pointer_rel_check(
     is_pointer_type(*expr->get_sub_expr(0)) &&
     is_pointer_type(*expr->get_sub_expr(1)))
   {
-    // add same-object subgoal
+    // Relational comparison is only well-defined when both operands point
+    // into the same array object (or one past its end); otherwise it is
+    // undefined behaviour (C11 6.5.8p5).
     expr2tc side_1 = *expr->get_sub_expr(0);
     expr2tc side_2 = *expr->get_sub_expr(1);
 
     expr2tc same_object = same_object2tc(side_1, side_2);
     add_guarded_claim(
-      same_object, "Same object violation", "pointer", loc, guard);
+      same_object,
+      "Relational comparison between pointers is only valid for pointers "
+      "to the same object",
+      "pointer",
+      loc,
+      guard);
   }
 }
 
@@ -1019,7 +1026,7 @@ void goto_checkt::bounds_check(
     "array bounds violated: " + array_name(ns, ind.source_value);
   const expr2tc &the_index = ind.index;
 
-  // Lower bound access should be greater than zero
+  // Lower bound: index must be non-negative (>= 0)
   expr2tc zero = gen_zero(the_index->type);
   assert(!is_nil_expr(zero));
 
@@ -1158,6 +1165,17 @@ void goto_checkt::check_rec(
 
     return;
   }
+
+  case expr2t::forall_id:
+  case expr2t::exists_id:
+    // A quantifier binds a fresh logical variable ranging over its whole type;
+    // its body is a pure predicate, not executed code. Runtime safety checks
+    // (bounds, overflow, div-by-zero) over the bound variable are meaningless --
+    // e.g. a[i] inside `forall i . (0 <= i < n) ==> a[i] == 0` is not a real
+    // out-of-bounds access, since i is universally quantified, not a concrete
+    // index. CBMC likewise emits no such checks inside a quantifier body. Skip
+    // the whole node so the array theory (not goto_check) models the body.
+    return;
 
   default:
     break;

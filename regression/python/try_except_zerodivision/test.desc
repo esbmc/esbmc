@@ -1,0 +1,4 @@
+CORE
+main.py
+--no-div-by-zero-check
+^VERIFICATION SUCCESSFUL$

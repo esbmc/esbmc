@@ -1,4 +1,4 @@
-// Header to define some compmiler diagnostic tweaks for OMs
+// Compiler diagnostic tweaks and C++03/C++11 compatibility macros for OMs
 #pragma once
 
 #define DO_PRAGMA(x) _Pragma(#x)
@@ -12,7 +12,9 @@
 #if __cplusplus >= 201103L
 #  define OM_CONSTEXPR constexpr
 #  define OM_NOEXCEPT noexcept
+#  define OM_NULLPTR nullptr
 #else
 #  define OM_CONSTEXPR
 #  define OM_NOEXCEPT
+#  define OM_NULLPTR 0
 #endif

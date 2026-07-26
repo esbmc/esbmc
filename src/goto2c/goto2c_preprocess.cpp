@@ -1,7 +1,7 @@
 #include <goto2c/goto2c.h>
 #include <goto2c/expr2c.h>
-#include <util/expr_util.h>
-#include <util/c_sizeof.h>
+#include <util/expr/expr_util.h>
+#include <util/lang/c_sizeof.h>
 
 // Here we apply a sequence of preprocessing procedures
 // to prepare the given GOTO program for translation
@@ -190,7 +190,7 @@ void goto2ct::extract_symbol_tables()
 //
 // is converted to:
 //
-//  const static int a = 10;
+//  const static int tmp = 10;
 //  const static int b = 10;
 //
 // This will not resolve chains with 3 and more initializers,
@@ -475,7 +475,7 @@ void goto2ct::remove_unsupported_instructions(goto_programt &goto_program)
     if (it->type == ASSIGN)
     {
       const code_assign2t &assign = to_code_assign2t(it->code);
-      // Removing assignments to "dynamic_type2t"
+      // Removing assignments to "dynamic_size2t"
       if (is_dynamic_size2t(assign.target))
         it = goto_program.instructions.erase(it);
     }

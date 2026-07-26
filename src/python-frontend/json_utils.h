@@ -111,7 +111,11 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   {
     if (obj["_type"] == "ImportFrom")
     {
-      if (load_and_check(obj["module"].template get<std::string>()))
+      // `from . import X` (relative, no module name) has module == null; skip
+      // it rather than crashing on a null-to-string conversion (#6281).
+      if (
+        !obj["module"].is_null() &&
+        load_and_check(obj["module"].template get<std::string>()))
         return true;
     }
     else if (obj["_type"] == "Import")
@@ -148,8 +152,9 @@ bool is_module(const std::string &module_name, const JsonType &ast)
   return result;
 }
 
+/// Returns an empty JsonType on a miss. Never throws.
 template <typename JsonType>
-JsonType find_function(const JsonType &json, const std::string &func_name)
+JsonType try_find_function(const JsonType &json, const std::string &func_name)
 {
   for (const auto &elem : json)
   {
@@ -159,8 +164,9 @@ JsonType find_function(const JsonType &json, const std::string &func_name)
   return JsonType();
 }
 
+/// Throws std::runtime_error on a miss.
 template <typename JsonType>
-JsonType &find_function(JsonType &json, const std::string &func_name)
+JsonType &find_function_or_throw(JsonType &json, const std::string &func_name)
 {
   for (auto &elem : json)
   {
@@ -168,6 +174,28 @@ JsonType &find_function(JsonType &json, const std::string &func_name)
       return elem;
   }
   throw std::runtime_error("Function " + func_name + " not found\n");
+}
+
+/// True when `from <module> import <entity>` appears at the AST top level.
+template <typename JsonType>
+bool is_imported_from(
+  const JsonType &ast,
+  const std::string &module,
+  const std::string &entity)
+{
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      stmt.contains("_type") && stmt["_type"] == "ImportFrom" &&
+      stmt.contains("module") && stmt["module"] == module &&
+      stmt.contains("names"))
+    {
+      for (const auto &name : stmt["names"])
+        if (name.contains("name") && name["name"] == entity)
+          return true;
+    }
+  }
+  return false;
 }
 
 template <typename JsonType>

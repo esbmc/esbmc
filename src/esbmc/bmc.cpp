@@ -15,6 +15,7 @@
 #  undef small
 #endif
 
+#include <filesystem>
 #include <fmt/format.h>
 #include <regex>
 #include <ac_config.h>
@@ -25,22 +26,36 @@
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/features.h>
 #include <goto-symex/sarif.h>
+#include <goto-symex/symex_symmetry.h>
 #include <goto-symex/xml_goto_trace.h>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <solvers/smt/smt_conv.h>
 #include <sstream>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/location.h>
+#include <util/irep/location.h>
 
-#include <util/migrate.h>
-#include <util/show_symbol_table.h>
-#include <util/time_stopping.h>
-#include <util/cache.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/show_symbol_table.h>
+#include <util/base/time_stopping.h>
+#include <util/ssa/cache.h>
 #include <atomic>
+#include <vector>
 #include <nlohmann/json.hpp>
+
+static std::string ctest_output_dir(const optionst &options)
+{
+  std::string dir = options.get_option("ctest-output-dir");
+  return dir.empty() ? ctest_generator::default_output_dir : dir;
+}
+
+static std::string pytest_output_dir(const optionst &options)
+{
+  std::string dir = options.get_option("pytest-output-dir");
+  return dir.empty() ? pytest_generator::default_output_dir : dir;
+}
 
 std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
@@ -75,6 +90,11 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       algorithms.emplace_back(std::make_unique<simple_slice>());
     else
       algorithms.emplace_back(std::make_unique<symex_slicet>(options));
+
+    // Runs after slicing so it only decorates surviving max/min folds and
+    // cannot resurrect assignments the slicer dropped.
+    if (!opts.get_bool_option("no-symmetry-breaking"))
+      algorithms.emplace_back(std::make_unique<symmetry_breakingt>());
 
     if (opts.get_bool_option("ssa-features-dump"))
       algorithms.emplace_back(std::make_unique<ssa_features>());
@@ -114,13 +134,22 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
   std::string witness_yaml_output = options.get_option("witness-output-yaml");
 
   goto_tracet goto_trace;
-  // correctness witness, why did goto trace ignore it in the past?
-  // build_successful_goto_trace(eq, ns, goto_trace);
   if (witness_graphml_output != "")
     correctness_graphml_goto_trace(options, ns, goto_trace);
 
   if (witness_yaml_output != "")
     correctness_yaml_goto_trace(options, ns, goto_trace);
+
+  // On a successful verification there is no error trace, but dead-store
+  // advisories (CWE-563) are still valid and must reach SARIF. Emit an
+  // advisory-only document; guarded so flag-off runs write nothing new.
+  if (
+    !dead_store_advisories.empty() &&
+    !options.get_option("sarif-output").empty())
+  {
+    sarif_goto_trace(options, ns, goto_trace, dead_store_advisories);
+    dead_store_sarif_written = true;
+  }
 }
 
 void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
@@ -150,7 +179,10 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     violation_yaml_goto_trace(options, ns, goto_trace);
 
   if (!options.get_option("sarif-output").empty())
-    sarif_goto_trace(options, ns, goto_trace);
+  {
+    sarif_goto_trace(options, ns, goto_trace, dead_store_advisories);
+    dead_store_sarif_written = true;
+  }
 
   if (options.get_bool_option("generate-testcase"))
   {
@@ -165,12 +197,13 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     std::string module_name = pytest_generator::extract_module_name(input_file);
     std::string pytest_filename =
       pytest_generator::generate_pytest_filename(module_name);
-    pytest_gen.generate_single(pytest_filename, eq, smt_conv, ns);
+    pytest_gen.generate_single(
+      pytest_output_dir(options), pytest_filename, eq, smt_conv, ns);
   }
 
   if (options.get_bool_option("generate-ctest-testcase"))
   {
-    ctest_gen.generate_single(".", eq, smt_conv, ns);
+    ctest_gen.generate_single(ctest_output_dir(options), eq, smt_conv, ns);
   }
 
   if (options.get_bool_option("generate-html-report"))
@@ -768,9 +801,23 @@ void report_coverage(
     const int tracked_instance = reached_mul_claims.size();
     const int total_instance = goto_coveraget::total_assert_ins;
 
+    // Assertions never observed during symbolic execution: either their
+    // branch was pruned by a constant guard, or their path guard is
+    // unsatisfiable so the claim is vacuously valid (discussion #5745).
+    std::vector<std::string> unreached_claims;
+    for (const auto &[claim_msg, claim_loc] : goto_coveraget::all_claims)
+    {
+      const std::string claim_sig = claim_msg + "\t" + claim_loc;
+      if (reached_mul_claims.count(claim_sig) == 0)
+        unreached_claims.push_back(claim_sig);
+    }
+
     log_success("\n[Coverage]\n");
     // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
+    // "Total/Unreached Asserts" count static claims; the "Instances" lines
+    // count their goto-unwound copies.
     log_result("Total Asserts: {}", total);
+    log_result("Unreached Asserts: {}", unreached_claims.size());
     if (total_instance >= tracked_instance)
       log_result("Total Assertion Instances: {}", total_instance);
     else
@@ -786,7 +833,12 @@ void report_coverage(
       // reached claims:
       for (const auto &claim : reached_mul_claims)
       {
-        log_status("  {}", prettify_solidity_expr(claim));
+        log_status("  {} : REACHED", prettify_solidity_expr(claim));
+      }
+      // unreached claims:
+      for (const auto &claim : unreached_claims)
+      {
+        log_status("  {} : UNREACHED", prettify_solidity_expr(claim));
       }
     }
 
@@ -1100,13 +1152,13 @@ void report_coverage(
     std::string module_name = pytest_generator::extract_module_name(input_file);
     std::string pytest_filename =
       pytest_generator::generate_pytest_filename(module_name);
-    pytest_gen.generate(pytest_filename);
+    pytest_gen.generate(pytest_output_dir(options), pytest_filename);
   }
 
   // Generate CTest test cases from collected data (for coverage mode)
   if (options.get_bool_option("generate-ctest-testcase"))
   {
-    ctest_gen.generate();
+    ctest_gen.generate(ctest_output_dir(options));
   }
 }
 
@@ -1298,9 +1350,8 @@ void bmct::report_result(smt_resultt &res)
     }
     break;
 
-    // Return failure if we didn't actually check anything, we just emitted the
-    // test information to an SMTLIB formatted file. Causes esbmc to quit
-    // immediately (with no error reported)
+    // SMTLIB-only emission: nothing was actually checked, so return without
+    // reporting any verdict.
   case P_SMTLIB:
     return;
 
@@ -1324,6 +1375,21 @@ smt_resultt bmct::start_bmc()
     // multi-property traces are output during the run(eq)
     report_trace(res, *eq);
   report_result(res);
+
+  // Dead-store advisories are verdict-independent, but the trace paths that
+  // emit them (successful_trace / error_trace) do not run on every verdict —
+  // e.g. a FAILED run under --no-cex / --result-only, or an SMTLIB-only
+  // emission. Emit an advisory-only SARIF document here if none was written
+  // with a trace, so the advisory is not silently dropped (the textual
+  // advisory prints unconditionally in the driver).
+  if (
+    !dead_store_sarif_written && !dead_store_advisories.empty() &&
+    !options.get_option("sarif-output").empty())
+  {
+    goto_tracet empty_trace;
+    sarif_goto_trace(options, ns, empty_trace, dead_store_advisories);
+    dead_store_sarif_written = true;
+  }
   return res;
 }
 
@@ -1809,10 +1875,10 @@ smt_resultt bmct::multi_property_check(
   bool is_branch_func_cov =
     options.get_bool_option("branch-function-coverage") ||
     options.get_bool_option("branch-function-coverage-claims");
-  // "k-Path Cov" — keyed off the dedicated boolean (see line ~717
-  // comment); needed in the is_goto_cov disjunction so the
-  // claim_slicer reads the witness comment, matching the form stored
-  // in goto_coveraget::all_claims.
+  // "k-Path Cov" — keyed off the dedicated k-path-coverage-enabled
+  // boolean (see the note where it is set above); needed in the
+  // is_goto_cov disjunction so the claim_slicer reads the witness
+  // comment, matching the form stored in goto_coveraget::all_claims.
   bool is_k_path_cov = options.get_bool_option("k-path-coverage-enabled");
 
   // is_vb: enable verbose output coverage info if the option "--verbosity coverage:N" is set, where N should larger than 0
@@ -1896,7 +1962,7 @@ smt_resultt bmct::multi_property_check(
     // text we stored in insert_assert); otherwise it reads the negated
     // assertion expression. k-path goals are stored the same way as
     // branch / condition goals, so they must be in this disjunction —
-    // otherwise the claim_sig built at line ~1751 disagrees with the
+    // otherwise the claim_sig built just below disagrees with the
     // form in goto_coveraget::all_claims and every JSON entry shows up
     // as uncovered even when reached_claims has the matching reached
     // signature (PR #4330 review).
@@ -2105,6 +2171,16 @@ smt_resultt bmct::multi_property_check(
       const bool want_ctest =
         options.get_bool_option("generate-ctest-testcase");
 
+      // A bare "{index}-" prefix collides across k-induction phases/k-steps,
+      // since ce_counter restarts at zero on every multi_property_check call
+      // (discussion #6070); tag with phase and k too. Inductive-step and
+      // diagnose runs return early at the `if (is) return` guard above, so
+      // the ternary only needs base/fwd/bmc.
+      const std::string run_phase = bs ? "base" : (fc ? "fwd" : "bmc");
+      std::string run_kval = options.get_option("unwind");
+      if (run_kval.empty())
+        run_kval = "0";
+
       // Emit testcase metadata once per claim (not once per witness).
       if (want_testcase)
         generate_testcase_metadata();
@@ -2129,12 +2205,23 @@ smt_resultt bmct::multi_property_check(
           w.nondet_inputs = collect_nondet_values(local_eq, *solver_ptr);
         w.ce_index = ce_counter++;
 
+        const std::string witness_id =
+          fmt::format("{}-k{}-{}", run_phase, run_kval, w.ce_index);
+
+        // Prefix only the basename, keeping any directory the user gave
+        // (e.g. "cex/out" -> "cex/{id}-out").
+        auto tag_artifact = [&witness_id](const std::string &path) {
+          std::filesystem::path p(path);
+          return (p.parent_path() / (witness_id + "-" + p.filename().string()))
+            .string();
+        };
+
         // Emit machine-readable artifacts NOW, while this witness's solver
         // model is still live. After the next dec_solve(), the model is
         // either gone (UNSAT) or replaced by the next witness's values.
         if (!cex_output.empty())
         {
-          std::ofstream out(fmt::format("{}-{}", w.ce_index, cex_output));
+          std::ofstream out(tag_artifact(cex_output));
           show_goto_trace(out, ns, w.trace);
         }
         // For graphml/yaml the writer reads the path from `options`;
@@ -2142,23 +2229,17 @@ smt_resultt bmct::multi_property_check(
         // same file (and so it's safe under --parallel-solving).
         if (want_graphml)
           violation_graphml_goto_trace(
-            options,
-            ns,
-            w.trace,
-            fmt::format("{}-{}", w.ce_index, graphml_path));
+            options, ns, w.trace, tag_artifact(graphml_path));
         if (want_yaml)
           violation_yaml_goto_trace(
-            options, ns, w.trace, fmt::format("{}-{}", w.ce_index, yaml_path));
+            options, ns, w.trace, tag_artifact(yaml_path));
         if (want_testcase)
           generate_testcase(
-            "testcase-" + std::to_string(w.ce_index) + ".xml",
-            local_eq,
-            *solver_ptr);
+            "testcase-" + witness_id + ".xml", local_eq, *solver_ptr);
         if (want_html)
-          generate_html_report(
-            std::to_string(w.ce_index), ns, w.trace, options);
+          generate_html_report(witness_id, ns, w.trace, options);
         if (want_json)
-          generate_json_report(std::to_string(w.ce_index), ns, w.trace);
+          generate_json_report(witness_id, ns, w.trace);
         if (want_pytest)
           pytest_gen.collect(local_eq, *solver_ptr);
         if (want_ctest)

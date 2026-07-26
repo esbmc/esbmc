@@ -1,15 +1,77 @@
 #include <cassert>
+#include <goto-programs/destructor.h>
 #include <goto-symex/goto_symex.h>
 #include <string>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/std_types.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_types.h>
+#include <util/expr/type_byte_size.h>
+#include <utility>
 #include <vector>
 #include <algorithm>
+
+// Component-name prefix the C++ frontend uses for nested base subobjects; see
+// base_subobject_name() in clang-c-frontend/clang_c_convert.h (#1866, #3894).
+static const std::string base_subobject_prefix = "@base@";
+
+// Collect the byte offset and class type of every (transitively) nested base
+// subobject of `t`, relative to the start of `t`.
+static void collect_base_subobject_offsets(
+  const type2tc &t,
+  const namespacet &ns,
+  const BigInt &base,
+  std::vector<std::pair<BigInt, type2tc>> &out)
+{
+  if (is_nil_type(t))
+    return;
+
+  const type2tc ft = ns.follow(t);
+  if (!is_struct_type(ft))
+    return;
+
+  const struct_type2t &st = to_struct_type(ft);
+  for (std::size_t i = 0; i < st.members.size(); ++i)
+  {
+    const std::string name = st.member_names[i].as_string();
+    if (
+      name.compare(0, base_subobject_prefix.size(), base_subobject_prefix) != 0)
+      continue;
+
+    const BigInt off = base + member_offset(ft, st.member_names[i], &ns);
+    out.emplace_back(off, st.members[i]);
+    collect_base_subobject_offsets(st.members[i], ns, off, out);
+  }
+}
+
+// True iff the class `t` (a base-subobject type) has a virtual destructor.
+// Deleting through a base pointer is only well-defined ([expr.delete]p3) when
+// the pointer's static (base) type has a virtual destructor: only then does the
+// virtual deleting destructor adjust an interior subobject pointer back to the
+// complete object before calling operator delete. Absent one the destructor is
+// statically bound and operator delete receives the unadjusted subobject
+// pointer -- a genuine bad-free -- so that offset must not be admitted.
+static bool base_has_virtual_destructor(const type2tc &t, const namespacet &ns)
+{
+  const type2tc ft = ns.follow(t);
+  if (!is_struct_type(ft))
+    return false;
+
+  const irep_idt &tag = to_struct_type(ft).name;
+  if (tag.empty())
+    return false;
+
+  const symbolt *sym = ns.lookup("tag-" + id2string(tag));
+  if (sym == nullptr || sym->get_type().id() != "struct")
+    return false;
+
+  const struct_typet::componentt *dtor =
+    get_destructor_component(ns, to_struct_type(sym->get_type()));
+  return dtor != nullptr && dtor->get_bool("is_virtual");
+}
 
 expr2tc goto_symext::symex_malloc(
   const expr2tc &lhs,
@@ -426,7 +488,6 @@ expr2tc goto_symext::symex_mem_inf(
   if (is_nil_expr(lhs))
     return expr2tc(); // ignore
 
-  // size
   type2tc type = base_type;
 
   assert(!is_nil_type(base_type));
@@ -740,6 +801,30 @@ void goto_symext::symex_free(const expr2tc &expr)
       // Check if the offset of the object being freed is zero
       expr2tc offset = item.offset;
       expr2tc eq = equality2tc(offset, gen_ulong(0));
+
+      // C++ permits `delete p` where p points at a *base subobject* of the
+      // complete object *only when that base has a virtual destructor* -- the
+      // virtual deleting destructor adjusts the interior pointer back to the
+      // complete object before freeing. Under the nested base-subobject model
+      // such an upcast pointer legitimately carries a non-zero offset. The
+      // deallocation below keys on pointer_object(), so it already clears the
+      // right allocation; only this assertion needs to admit those offsets.
+      // A base with no virtual destructor is statically bound: operator delete
+      // then receives the unadjusted subobject pointer, a genuine bad-free
+      // ([expr.delete]p3), so its offset stays rejected. Arbitrary interior
+      // pointers (delete (p+1), delete &arr[1]) are also still rejected, and C
+      // free() is unaffected. See #1866, #3894, #6263.
+      if (is_code_cpp_delete2t(expr) || is_code_cpp_del_array2t(expr))
+      {
+        std::vector<std::pair<BigInt, type2tc>> base_offsets;
+        collect_base_subobject_offsets(
+          item.object->type, ns, BigInt(0), base_offsets);
+        for (const auto &bo : base_offsets)
+          if (bo.first != 0 && base_has_virtual_destructor(bo.second, ns))
+            eq =
+              or2tc(eq, equality2tc(offset, gen_ulong(bo.first.to_uint64())));
+      }
+
       g.guard_expr(eq);
       if (options.get_bool_option("conv-assert-to-assume"))
         assume(eq);

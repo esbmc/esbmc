@@ -14,8 +14,8 @@
 #include <optional>
 #include <set>
 #include <irep2/irep2.h>
-#include <util/message.h>
-#include <util/std_expr.h>
+#include <util/message/message.h>
+#include <util/irep/std_expr.h>
 
 class reachability_treet;
 
@@ -240,8 +240,8 @@ public:
    *  also passes the assignment to a reachability_treet analysis function to
    *  see whether the assignment should be generating a context switch.
    *  @param code Code representing assignment we're making.
-   *  @param guard A guard for the assignment, true by default
-   *  @param type Assignment type, visible by default
+   *  @param hidden Whether the assignment is hidden from the trace.
+   *  @param guard A guard for the assignment.
    */
   void symex_assign(
     const expr2tc &code,
@@ -323,7 +323,8 @@ public:
   /**
    *  Perform a context switch to thread ID i.
    *  Essentially this just updates the counter indicating which thread is
-   *  currently active. It also causes the execution guard to be reexecuted.
+   *  currently active. Callers taking a scheduling switch must follow this
+   *  with update_after_switch_point(), which re-executes the execution guard.
    *  @see execute_guard.
    *  @param i Thread ID to switch to.
    */
@@ -423,16 +424,29 @@ public:
    */
   void analyze_read(const expr2tc &expr);
 
+  /** Kind of memory access, used by get_expr_globals to decide whether a
+   *  read-only global can be filtered out of cswitch-triggering sets. */
+  enum class access_kindt
+  {
+    READ,
+    WRITE
+  };
+
   /**
    *  Get list of globals accessed by expr.
+   *  Reads of globals that are provably never written anywhere in the program
+   *  are filtered out — they cannot participate in data races and should not
+   *  force a context switch.
    *  @param ns Namespace to work under.
-   *  @expr Expression to count global writes in.
-   *  @return Number of global refs in this expression.
+   *  @param expr Expression to count global refs in.
+   *  @param global_list Output set of global refs.
+   *  @param kind Whether this access is a READ or a WRITE.
    */
   void get_expr_globals(
     const namespacet &ns,
     const expr2tc &expr,
-    std::set<expr2tc> &global_list);
+    std::set<expr2tc> &global_list,
+    access_kindt kind);
 
   /**
    *  Check for scheduling dependencies. Whether it exists between the variables
@@ -450,8 +464,7 @@ public:
    */
   void calculate_mpor_constraints();
 
-  /** Accessor method for mpor_schedulable. Ensures its access is within bounds
-   *  and is read-only. */
+  /** Read-only accessor for mpor_says_no. */
   bool is_transition_blocked_by_mpor() const
   {
     return mpor_says_no;
@@ -465,7 +478,7 @@ public:
 
   /**
    *  Has a context switch point occurred.
-   *  Four things can justify this:
+   *  Two things can justify this:
    *   1. cswitch forced by atomic end or yield.
    *   2. Global data read/written.
    *  @return True if context switch is now triggered
@@ -643,13 +656,10 @@ public:
 };
 
 /**
- *  Class for performing a DFS thread exploration.
- *  On the whole, just uses the same functionality provided by execution_statet
- *  but with the only modification that this class resets a portion of the
- *  global string pool when it destructs, to prevent string pool inflation.
- *  Specifically; names that have been generated in execution states that are
- *  generated later in execution that this one will all be no longer used after
- *  this one is destructed. So no need to keep their names around.
+ *  Execution state for DFS thread exploration.
+ *  On the whole, just uses the same functionality provided by execution_statet;
+ *  clone() duplicates the target equation (or pushes a solver context under
+ *  --smt-during-symex), and the destructor pops that context again.
  */
 
 class dfs_execution_statet : public execution_statet

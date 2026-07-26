@@ -404,8 +404,8 @@ cudaError_t cudaSetDevice(int device)
     if (auxDevice->id == device)
     { //Checks if the device
       if (auxDevice->active == 1)
-      {                                     //Verifies that the device is active
-        return cudaErrorDeviceAlreadyInUse; //cudaErrorDeviceAlreadyInUse
+      { //Verifies that the device is active
+        return cudaErrorDeviceAlreadyInUse;
         lastError = cudaErrorDeviceAlreadyInUse;
       }
       auxDevice->active = 1;

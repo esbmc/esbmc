@@ -2,12 +2,12 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
 
 namespace
 {
@@ -335,17 +335,20 @@ exprt python_converter::handle_string_comparison(
         return index2tc(migrate_type(char_type()), expr2, index2);
       }
 
-      // Pointer path: reproduce the legacy dereference node verbatim — its
-      // two-arg constructor takes char_type().subtype() (nil), not char_type(),
-      // as the result type — then migrate it forward for a uniform expr2tc.
+      // Pointer path: build the pointer-plus-index arithmetic and the
+      // dereference natively in IREP2 (V.1k arith site). The legacy two-arg
+      // dereference_exprt(op, tp) ctor sets the result type to tp.subtype()
+      // (nil, since char_type() is not a pointer type) rather than tp
+      // itself; migrate_type(char_type().subtype()) reproduces that exact
+      // quirk byte-for-byte.
       exprt ptr = expr;
       if (!ptr.type().is_pointer())
         ptr = address_of_exprt(expr);
-      plus_exprt ptr_plus(ptr, index);
-      ptr_plus.type() = ptr.type();
-      expr2tc deref2;
-      migrate_expr(dereference_exprt(ptr_plus, char_type()), deref2);
-      return deref2;
+      expr2tc ptr2, index2;
+      migrate_expr(ptr, ptr2);
+      migrate_expr(index, index2);
+      expr2tc ptr_plus2 = add2tc(ptr2->type, ptr2, index2);
+      return dereference2tc(migrate_type(char_type().subtype()), ptr_plus2);
     };
 
     char literal_char = 0;
@@ -518,10 +521,15 @@ exprt python_converter::handle_none_comparison(
     }
   }
 
-  // Create isnone expression with unwrapped operands
-  exprt isnone_expr("isnone", typet("bool"));
-  isnone_expr.copy_to_operands(lhs);
-  isnone_expr.copy_to_operands(rhs);
+  // Create isnone expression with unwrapped operands.
+  // V.3: build the isnone node in IREP2. isnone2t is a 2-operand custom kind
+  // with forward/back migrate arms (since #3289), so migrating the operands,
+  // building, and back-migrating once is the exact round-trip of the legacy
+  // node. Spike-1 confirmed the operands are already resolved at this site.
+  expr2tc lhs2, rhs2;
+  migrate_expr(lhs, lhs2);
+  migrate_expr(rhs, rhs2);
+  exprt isnone_expr = migrate_expr_back(isnone2tc(lhs2, rhs2));
 
   // If checking inequality, wrap with not
   if (!is_eq)
@@ -622,11 +630,25 @@ exprt python_converter::handle_type_identity_check(
   if (op != "Is" && op != "IsNot")
     return nil_exprt();
 
-  // Resolve type identifiers from either direct names or symbol values
+  // Resolve type identifiers from direct names, symbol values, or a type()
+  // call, whose value is the compile-time name of its argument's type
   auto resolve_type_identifier = [&](
                                    const nlohmann::json &node,
                                    const exprt &expr,
                                    std::string &out_name) -> bool {
+    // type(x) is T (GitHub #5936). An unrecognised name leaves this side
+    // unresolved, so the fold below stays as conservative as it was.
+    if (
+      node["_type"] == "Call" && node["func"]["_type"] == "Name" &&
+      node["func"]["id"] == "type" && expr.is_constant())
+    {
+      const std::string name = expr.get_string("value");
+      if (!type_utils::is_type_identifier(name))
+        return false;
+      out_name = name;
+      return true;
+    }
+
     if (node["_type"] == "Name" && node.contains("id"))
     {
       std::string name = node["id"].get<std::string>();

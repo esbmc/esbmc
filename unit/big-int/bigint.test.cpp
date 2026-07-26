@@ -331,3 +331,61 @@ TEST_CASE("arbitrary precision integers", "[core][big-int][bigint]")
     }
   }
 }
+
+// Regression: BigInt::div with a dividend that exceeds 64 bits and a
+// single-digit divisor (< 2^32) hit a branch that seeded the quotient from
+// the divisor instead of the dividend, returning quotient 1, remainder 0 for
+// any such dividend. See BigInt::div's `y.length == 1` branch.
+SCENARIO(
+  "bigint div handles a large dividend with a single-digit divisor",
+  "[bigint]")
+{
+  auto pow2 = [](unsigned n) {
+    BigInt v(1);
+    for (unsigned i = 0; i < n; ++i)
+      v *= 2;
+    return v;
+  };
+
+  // (dividend = 2^n, single-digit divisor) pairs that all take the
+  // large-dividend / single-limb-divisor path.
+  struct
+  {
+    unsigned n;
+    int divisor;
+  } cases[] = {{100, 3}, {70, 7}, {128, 9}, {200, 2}};
+
+  for (auto &c : cases)
+  {
+    GIVEN("2^" + std::to_string(c.n) + " / " + std::to_string(c.divisor))
+    {
+      BigInt x = pow2(c.n);
+      BigInt y(c.divisor);
+      BigInt q, r;
+      BigInt::div(x, y, q, r);
+
+      THEN("the division invariant q*y + r == x holds with 0 <= r < y")
+      {
+        REQUIRE((q * y + r).compare(x) == 0);
+        REQUIRE(r.compare(0) >= 0);
+        REQUIRE(r.compare(y) < 0);
+        // The old bug produced quotient 1, remainder 0 regardless of x.
+        bool bug_signature = q.compare(1) == 0 && r.compare(0) == 0;
+        REQUIRE_FALSE(bug_signature);
+      }
+    }
+  }
+
+  // 2^100 mod 3 == 1 (2 ≡ -1 mod 3, so 2^100 ≡ 1), a concrete spot-check.
+  GIVEN("2^100 / 3 exact remainder")
+  {
+    BigInt x = pow2(100);
+    BigInt y(3);
+    BigInt q, r;
+    BigInt::div(x, y, q, r);
+    THEN("the remainder is 1")
+    {
+      REQUIRE(r.compare(1) == 0);
+    }
+  }
+}

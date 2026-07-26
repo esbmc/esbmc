@@ -1,0 +1,5 @@
+CORE
+cbmc_free_fail.goto
+--binary
+^VERIFICATION FAILED$
+invalidated dynamic object

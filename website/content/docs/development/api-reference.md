@@ -15,14 +15,14 @@ automatically on every push to `master`.
 ## Build it locally
 
 Install `doxygen` and `graphviz`, then generate the HTML from the repository
-root. Both methods share the single `.doxygen` Doxyfile, so they produce the
+root. Both methods share the single `.config/Doxyfile`, so they produce the
 same output as the published reference.
 
 {{< tabs >}}
 
 {{< tab name="Doxygen directly" >}}
 ```sh
-doxygen .doxygen
+doxygen .config/Doxyfile
 ```
 The output is written to `docs/html`; open `docs/html/index.html`.
 {{< /tab >}}
@@ -32,7 +32,7 @@ The output is written to `docs/html`; open `docs/html/index.html`.
 cmake -Bbuild -S. -DBUILD_DOC=On
 ninja -C build docs
 ```
-This runs the same `.doxygen` configuration and writes to `docs/html`.
+This runs the same `.config/Doxyfile` configuration and writes to `docs/html`.
 {{< /tab >}}
 
 {{< /tabs >}}

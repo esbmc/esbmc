@@ -1,26 +1,26 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_annotation.h>
+#include <python-frontend/python_annotation/python_annotation.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_lambda.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/python_typechecking.h>
-#include <util/encoding.h>
+#include <python-frontend/lambda/python_lambda.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/type/python_typechecking.h>
+#include <util/base/encoding.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
-#include <util/symbolic_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/symbolic_types.h>
 
 #include <functional>
 #include <set>
@@ -165,6 +165,44 @@ bool python_converter::function_has_missing_return_paths(
   }
 
   return true; // No explicit return found
+}
+
+bool python_converter::function_is_generator(
+  const nlohmann::json &function_node)
+{
+  // A function is a generator iff its own body contains a `yield` / `yield from`
+  // expression. Recurse through nested statement bodies but stop at nested
+  // function/lambda scopes: a yield inside those belongs to the inner
+  // generator, not this one.
+  std::function<bool(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &node) -> bool {
+    if (node.is_object())
+    {
+      auto it = node.find("_type");
+      if (it != node.end() && it->is_string())
+      {
+        const std::string &kind = it->get_ref<const std::string &>();
+        if (kind == "Yield" || kind == "YieldFrom")
+          return true;
+        if (
+          kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
+          kind == "Lambda")
+          return false;
+      }
+      for (const auto &child : node.items())
+        if (scan(child.value()))
+          return true;
+    }
+    else if (node.is_array())
+    {
+      for (const auto &child : node)
+        if (scan(child))
+          return true;
+    }
+    return false;
+  };
+
+  return scan(function_node["body"]);
 }
 
 TypeFlags
@@ -607,6 +645,228 @@ static bool param_is_list_like_in_body(
   return false;
 }
 
+// True for a `np.array([...])` call node with a literal list argument whose
+// shape `type_handler::get_typet` can already resolve.
+static bool is_numpy_array_literal_call(const nlohmann::json &node)
+{
+  if (!node.is_object() || node.value("_type", "") != "Call")
+    return false;
+
+  const auto &func = node["func"];
+  if (
+    func.value("_type", "") != "Attribute" ||
+    func.value("attr", "") != "array" || !func.contains("value") ||
+    func["value"].value("id", "") != "np")
+    return false;
+
+  return node.contains("args") && node["args"].is_array() &&
+         !node["args"].empty() && node["args"][0].value("_type", "") == "List";
+}
+
+// One `Call` node together with the name of the function whose body it
+// textually appears in (empty for a module-level call).
+struct numpy_param_call_site
+{
+  const nlohmann::json *call;
+  std::string enclosing_function;
+};
+
+static void collect_call_sites(
+  const nlohmann::json &node,
+  const std::string &enclosing_function,
+  std::vector<numpy_param_call_site> &out)
+{
+  if (node.is_array())
+  {
+    for (const auto &elem : node)
+      collect_call_sites(elem, enclosing_function, out);
+    return;
+  }
+
+  if (!node.is_object())
+    return;
+
+  if (node.value("_type", "") == "Call")
+    out.push_back({&node, enclosing_function});
+
+  std::string next_enclosing = enclosing_function;
+  if (node.value("_type", "") == "FunctionDef" && node.contains("name"))
+    next_enclosing = node["name"].get<std::string>();
+
+  for (auto it = node.begin(); it != node.end(); ++it)
+  {
+    if (it.value().is_object() || it.value().is_array())
+      collect_call_sites(it.value(), next_enclosing, out);
+  }
+}
+
+// Finds a module-level `FunctionDef` node named `name`.
+static const nlohmann::json *
+find_function_def(const nlohmann::json &module_body, const std::string &name)
+{
+  for (const auto &stmt : module_body)
+  {
+    if (
+      stmt.value("_type", "") == "FunctionDef" &&
+      stmt.value("name", "") == name)
+      return &stmt;
+  }
+  return nullptr;
+}
+
+// True when `param_name` is ever the *base* or the (bare-variable) *index*
+// of a Subscript node anywhere in `node` -- i.e. it plays either role in an
+// `a[mask]` pattern (fancy/boolean-mask indexing).
+// Ordinary C-style array-to-pointer decay (pointer-to-element, or
+// pointer-to-row for a 2-D array) erases enough shape information that a
+// mask array is indistinguishable from a scalar pointer, so a parameter
+// flagged here decays to pointer-to-*whole-array* instead (see
+// register_function_argument), preserving its length/rank for the
+// SUBSCRIPT converter to recognize.
+static bool param_used_in_variable_index_subscript(
+  const std::string &param_name,
+  const nlohmann::json &node)
+{
+  if (node.is_array())
+  {
+    for (const auto &elem : node)
+      if (param_used_in_variable_index_subscript(param_name, elem))
+        return true;
+    return false;
+  }
+
+  if (!node.is_object())
+    return false;
+
+  if (
+    node.value("_type", "") == "Subscript" && node.contains("value") &&
+    node["value"].value("_type", "") == "Name" && node.contains("slice") &&
+    node["slice"].value("_type", "") == "Name" &&
+    (node["value"].value("id", "") == param_name ||
+     node["slice"].value("id", "") == param_name))
+    return true;
+
+  for (auto it = node.begin(); it != node.end(); ++it)
+  {
+    if (it.value().is_object() || it.value().is_array())
+      if (param_used_in_variable_index_subscript(param_name, it.value()))
+        return true;
+  }
+  return false;
+}
+
+bool python_converter::try_infer_numpy_param_type(
+  const std::string &func_name,
+  size_t param_index,
+  typet &out,
+  std::set<std::string> &visiting) const
+{
+  const std::string key = func_name + "#" + std::to_string(param_index);
+  if (!visiting.insert(key).second)
+    return false;
+
+  const nlohmann::json &module_body = (*ast_json)["body"];
+
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+
+  // Every call site that resolves an array shape for this parameter must
+  // agree: silently keeping only the first-found shape would let a later,
+  // differently-shaped call site pass its full array through a parameter
+  // typed for a smaller one -- unnoticed, not just truncated.
+  bool found = false;
+  typet resolved_type;
+  auto record = [&](const typet &candidate) {
+    if (found && resolved_type != candidate)
+      throw std::runtime_error(
+        "TypeError: conflicting array shapes inferred for parameter " +
+        std::to_string(param_index) + " of " + func_name +
+        "() across call sites");
+    resolved_type = candidate;
+    found = true;
+  };
+
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      call.value("func", nlohmann::json::object()).value("_type", "") !=
+        "Name" ||
+      call["func"].value("id", "") != func_name || !call.contains("args") ||
+      call["args"].size() <= param_index)
+      continue;
+
+    const nlohmann::json &arg = call["args"][param_index];
+
+    if (is_numpy_array_literal_call(arg))
+    {
+      record(type_handler_.get_typet(arg["args"][0]));
+      continue;
+    }
+
+    if (arg.value("_type", "") != "Name")
+      continue;
+
+    const std::string arg_name = arg.value("id", "");
+
+    if (site.enclosing_function.empty())
+    {
+      // Argument is a module-level variable: look for its defining
+      // `Assign`/`AnnAssign` among the module's top-level statements. The
+      // typechecking pre-pass rewrites plain `Assign` nodes to `AnnAssign`
+      // once it infers a type, so both forms need to be recognised.
+      for (const auto &stmt : module_body)
+      {
+        const std::string stmt_type = stmt.value("_type", "");
+        std::string target_name;
+        if (
+          stmt_type == "Assign" && stmt.contains("targets") &&
+          !stmt["targets"].empty())
+          target_name = stmt["targets"][0].value("id", "");
+        else if (stmt_type == "AnnAssign" && stmt.contains("target"))
+          target_name = stmt["target"].value("id", "");
+
+        if (
+          target_name == arg_name &&
+          is_numpy_array_literal_call(stmt.value("value", nlohmann::json())))
+        {
+          record(type_handler_.get_typet(stmt["value"]["args"][0]));
+          break;
+        }
+      }
+      continue;
+    }
+
+    // Argument is a name local to the caller: if it is itself one of the
+    // caller's own parameters, resolve that parameter recursively (the
+    // "forwarded through an intermediate function" case).
+    const nlohmann::json *enclosing_def =
+      find_function_def(module_body, site.enclosing_function);
+    if (enclosing_def == nullptr)
+      continue;
+
+    const nlohmann::json &enclosing_params = (*enclosing_def)["args"]["args"];
+    for (size_t i = 0; i < enclosing_params.size(); i++)
+    {
+      if (enclosing_params[i].value("arg", "") == arg_name)
+      {
+        typet forwarded_type;
+        if (try_infer_numpy_param_type(
+              site.enclosing_function, i, forwarded_type, visiting))
+          record(forwarded_type);
+        break;
+      }
+    }
+  }
+
+  if (found)
+  {
+    out = resolved_type;
+    return true;
+  }
+  return false;
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -621,10 +881,8 @@ size_t python_converter::register_function_argument(
   std::string arg_name = element["arg"].get<std::string>();
   typet arg_type;
 
-  if (arg_name == "self")
+  if (arg_name == "self" || arg_name == "cls")
     arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
-  else if (arg_name == "cls")
-    arg_type = any_type();
   else
   {
     if (!element.contains("annotation") || element["annotation"].is_null())
@@ -637,10 +895,61 @@ size_t python_converter::register_function_argument(
       arg_type = get_type_from_annotation(element["annotation"], element);
   }
 
+  // An unannotated (or bare `list`) parameter defaults to Any/PyListObject*,
+  // which numpy arrays cannot pass through without an unsound reinterpret of
+  // their raw bytes. If a call site resolvable from the AST feeds this
+  // parameter a numpy array of a known shape, keep that concrete array type
+  // instead so the parameter stays usable inside the callee (other call
+  // sites are not cross-checked for consistency and may still be rejected
+  // at the boundary if they mismatch).
+  bool numpy_array_param = false;
+  if (
+    arg_name != "self" && arg_name != "cls" &&
+    (arg_type == any_type() || arg_type == type_handler_.get_list_type()))
+  {
+    typet inferred_array_type;
+    std::set<std::string> visiting;
+    if (try_infer_numpy_param_type(
+          id.get_function(),
+          type.arguments().size(),
+          inferred_array_type,
+          visiting))
+    {
+      arg_type = inferred_array_type;
+      numpy_array_param = true;
+    }
+  }
+
   // Arrays are converted to pointers so that the backend receives the same
-  // representation regardless of how the parameter is declared.
+  // representation regardless of how the parameter is declared: normally
+  // pointer-to-element (or pointer-to-row for a 2-D array), matching C decay.
+  // A numpy-inferred parameter playing either role in an `a[mask]` pattern
+  // keeps pointer-to-*whole-array* instead: 1-D decay otherwise
+  // erases the array length entirely (bool* looks identical to "pointer to
+  // one bool"), and even for `a` itself, row-only decay would make a single
+  // dereference yield one row instead of the full array the row-selection
+  // model expects. This whole-array decay only applies to parameters typed
+  // via the numpy inference above -- an array parameter typed some other way
+  // (e.g. a `str` argument, itself a char array) must keep ordinary C decay,
+  // since a bare-variable subscript of it (e.g. `s[i]` in a loop) is a
+  // completely unrelated, extremely common pattern that must not be
+  // mistaken for numpy mask indexing.
   if (arg_type.is_array())
-    arg_type = gen_pointer_type(arg_type.subtype());
+  {
+    bool used_in_variable_index_subscript = false;
+    if (numpy_array_param)
+    {
+      const nlohmann::json *owning_function =
+        find_function_def((*ast_json)["body"], id.get_function());
+      used_in_variable_index_subscript =
+        owning_function != nullptr && param_used_in_variable_index_subscript(
+                                        arg_name, (*owning_function)["body"]);
+    }
+
+    arg_type = used_in_variable_index_subscript
+                 ? gen_pointer_type(arg_type)
+                 : gen_pointer_type(arg_type.subtype());
+  }
 
   // Object-model migration (#3067/#4773): a class-typed parameter receives a
   // migrated `Class*` instance, and Python passes objects by reference. Type
@@ -835,9 +1144,10 @@ void python_converter::process_function_arguments(
 
   // Refine unannotated Any parameters to list model type when body usage
   // clearly matches list semantics (len(x), x[i], list mutator methods).
-  // Restrict this refinement to functions from the main source file to avoid
-  // affecting imported module internals.
-  if (location.get_file().as_string() == main_python_file)
+  // Restrict this refinement to the program's own files (the entry file or
+  // an extra positional command-line file, github #6211) to avoid affecting
+  // imported module internals.
+  if (is_program_file(location.get_file().as_string()))
   {
     for (auto &param_arg : type.arguments())
     {
@@ -932,10 +1242,13 @@ void python_converter::validate_return_paths(
   const code_typet &type,
   exprt &function_body)
 {
-  // Skip validation for void returns and constructors
+  // Skip validation for void/None returns and constructors. A None-returning
+  // function (none_type()) implicitly returns None when it falls off the end,
+  // so a "missing" return path is correct Python, not a defect.
   if (
     type.return_type().is_empty() ||
     type.return_type().id() == typet::t_empty ||
+    type.return_type() == none_type() ||
     type.return_type().id() == "constructor" ||
     !function_has_missing_return_paths(function_node))
   {
@@ -1346,11 +1659,65 @@ void python_converter::get_function_definition(
   typet saved_func_return_type = current_func_return_type_;
   current_func_return_type_ = type.return_type();
 
-  // Process function body. Mark it as a function body (not a conditional one)
-  // so straight-line retyping (#4770/#4774) is permitted on the function's own
-  // unconditional statements — see the retype gate in get_var_assign.
-  exprt function_body =
-    get_block(function_node["body"], /*is_function_body=*/true);
+  // Nondet stub functions (nondet_int/char/bool/float/str/complex and their
+  // __VERIFIER_nondet_* aliases) are intercepted at their call sites by
+  // function_call_expr::build_nondet_call(), so a direct call never runs this
+  // body. Some reference stubs — notably SV-COMP's _sv_verifier.py — implement
+  // them with constructs the frontend cannot model (a function-local
+  // `import sys`, sys.float_info, generator expressions); converting those
+  // bodies used to abort() in converter_expr (a core dump) as soon as the
+  // module was imported. Return the stub's type suffix (e.g. "int") so we can
+  // synthesise a safe body instead of converting the real one; "" otherwise.
+  auto nondet_stub_suffix = [](const std::string &name) -> std::string {
+    for (const std::string_view prefix : {"__VERIFIER_nondet_", "nondet_"})
+    {
+      if (name.rfind(prefix, 0) == 0)
+      {
+        const std::string suffix = name.substr(prefix.size());
+        if (
+          suffix == "int" || suffix == "char" || suffix == "bool" ||
+          suffix == "float" || suffix == "str" || suffix == "complex")
+          return suffix;
+      }
+    }
+    return "";
+  };
+
+  const std::string nondet_suffix = nondet_stub_suffix(func_name);
+
+  exprt function_body;
+  if (!nondet_suffix.empty())
+  {
+    // The stub can be passed as a first-class value and called indirectly
+    // through a function pointer (SV-COMP's `nondet_list(nondet_int)` /
+    // `nondet_dict(...)`); in that case symex resolves the pointer to this
+    // symbol and needs a real, pointable body. An empty body makes
+    // function-pointer resolution dereference an incomplete callee and crash.
+    // Synthesise `return NONDET(natural_type)` and pin the declared return
+    // type to match, mirroring build_nondet_call's per-type value.
+    typet natural_type =
+      (nondet_suffix == "str")    ? gen_pointer_type(char_type())
+      : (nondet_suffix == "char") ? char_type()
+                                  : type_handler_.get_typet(nondet_suffix);
+
+    type.return_type() = natural_type;
+    added_symbol->set_type(type);
+
+    exprt nondet_value("sideeffect", natural_type);
+    nondet_value.statement("nondet");
+    code_returnt return_stmt;
+    return_stmt.return_value() = nondet_value;
+    code_blockt block;
+    block.copy_to_operands(return_stmt);
+    function_body = block;
+  }
+  else
+  {
+    // Process function body. Mark it as a function body (not a conditional one)
+    // so straight-line retyping (#4770/#4774) is permitted on the function's
+    // own unconditional statements — see the retype gate in get_var_assign.
+    function_body = get_block(function_node["body"], /*is_function_body=*/true);
+  }
 
   // Restore saved function return type (for nested function defs)
   current_func_return_type_ = saved_func_return_type;
@@ -1426,6 +1793,28 @@ void python_converter::get_function_definition(
   if (type_assertions_enabled())
     get_typechecker().inject_parameter_type_assertions(
       function_node, id, type, function_body);
+
+  // Python semantics: a user function with no value-returning path implicitly
+  // returns None. Model such a function as returning none_type() and append an
+  // explicit `return None`, so a caller that binds the result (`x = f()`) gets
+  // a defined None value rather than a nondet slot — matching the already-
+  // correct `return None` path (issue #5914). Constructors ("constructor"
+  // return type) and library/import models, whose void calls exist only for
+  // side effects, are left as-is. Generators (functions containing `yield`)
+  // also have an empty return type here but do NOT implicitly return None —
+  // calling one yields a generator object — so they must not be promoted.
+  if (
+    type.return_type().is_empty() && !is_loading_models &&
+    !is_importing_module && !function_is_generator(function_node))
+  {
+    type.return_type() = none_type();
+    added_symbol->set_type(type);
+
+    code_returnt implicit_none;
+    implicit_none.return_value() = gen_zero(none_type());
+    implicit_none.location() = get_location_from_decl(function_node);
+    function_body.copy_to_operands(implicit_none);
+  }
 
   // Add ESBMC_Hide label for models/imports
   if (is_loading_models || is_importing_module)
