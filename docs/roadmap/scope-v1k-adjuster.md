@@ -814,3 +814,38 @@ the Python path — probes with `ord(s[0]) if b else 300`, `s[0] if b else 300`,
 types or routed to the frontend's nondet ternary-result fallback. The mirror
 stays out under the C-Live bar, not because the case is unreachable in
 principle; the fix this round needed belongs at the cast node anyway.
+
+### Per-case triage round 7 — the instance-pointer pair (2026-07-26)
+
+`github_4784_isnone_short_circuit_fail` (hop-off: `irep2_cast_error:
+to_pointer_type() called on type whose type_id is struct`) needed **two**
+mirrors, and neither alone is enough — measured, by disabling each in turn:
+
+```
+legacy:  ASSIGN cur=&(*head);           ASSIGN …=ISNONE(cur->nxt, 0);
+hop-off: ASSIGN cur=*head;              ASSIGN …=ISNONE(<raw member irep>, 0);
+```
+
+1. **`member2t` over a pointer source.** `clang_c_adjust::adjust_member`
+   (`clang_c_adjust_expr.cpp:307-313`) wraps a pointer base in a dereference, so
+   `p.field` becomes `p->field`. `python_adjust` resolved a *symbol-typed*
+   source but left a *pointer* source alone, so symex read a member off a
+   pointer and the expression printer fell back to dumping the raw irep.
+2. **struct value assigned to a pointer target.** Binding an instance parameter
+   (`cur = head`, `head` a `pointer→tag-Node`) lowers to `cur = *head` — a
+   struct value. `c_typecastt::implicit_typecast_followed`'s struct arm
+   (`c_typecast.cpp:729-740`) takes its address; legacy emits `cur = &(*head)`.
+   This is the struct sibling of the array→pointer decay (#6363) at the same
+   seam.
+
+With only (1), the run still aborts — the same crash, one layer down; with only
+(2), it aborts differently (`struct_union_member_names() called on incompatible
+type (type_id = pointer)`) and the member node stays malformed. **Do not accept
+the first arm that changes the error message as the fix**; re-run with each half
+disabled to establish which are load-bearing.
+
+The `adjust_member` *array*-base arm (`base.type().is_array()` → `base[0]`) is
+**not** mirrored. None of the shapes triaged here produced an array-typed member
+base — Python attribute access is over a class instance, i.e. a symbol or an
+instance pointer — and adding the arm without first proving it reachable would
+be dead instrumentation. Probe before adding it, not after.
