@@ -558,6 +558,32 @@ void python_adjust::adjust_type(type2tc &type)
     return;
   }
 
+  if (is_code_type(type))
+  {
+    // Pad any struct/union embedded in the function signature (argument and
+    // return types), so a function argument's Optional/union type matches the
+    // padded value literal at the call site — otherwise symex_function's
+    // base_type_eq rejects a padded argument against an unpadded parameter
+    // ("argument type mismatch: got struct, expected struct"). Inert on a
+    // signature that carries only scalars.
+    const code_type2t &ct = to_code_type(type);
+    std::vector<type2tc> args = ct.arguments;
+    type2tc ret = ct.ret_type;
+    bool changed = false;
+    for (type2tc &a : args)
+    {
+      const type2tc before = a;
+      adjust_type(a);
+      changed |= a != before;
+    }
+    const type2tc ret_before = ret;
+    adjust_type(ret);
+    changed |= ret != ret_before;
+    if (changed)
+      type = code_type2tc(args, ret, ct.argument_names, ct.ellipsis);
+    return;
+  }
+
   if (is_struct_type(type) || is_union_type(type))
   {
     // Complete the aggregate (legacy struct/union arm): recurse the member
