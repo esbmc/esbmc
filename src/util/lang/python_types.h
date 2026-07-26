@@ -37,6 +37,13 @@ typet any_type();
 // code path that reconstructs one of these structs by hand must re-stamp it.
 #define PYTHON_AGGREGATE_ATTR "#python_aggregate"
 
+// Marks the null void* the frontend returns for a method call it could not
+// resolve to a class. The value is only a placeholder: reading it as a
+// truthiness test would prove `not call()` from an inference gap, so the `not`
+// arm replaces a tagged operand with a nondet bool. Every other use keeps the
+// constant, whose folding is what stops method-heavy programs from blowing up.
+#define PYTHON_UNRESOLVED_CALL_ATTR "#python_unresolved_call"
+
 // Stamp a Python internal-aggregate kind ("tuple", "dict", "optional") onto a
 // freshly created struct type.
 void set_python_aggregate_kind(typet &type, const irep_idt &kind);

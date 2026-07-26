@@ -27,6 +27,20 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   // Get the operand expression
   exprt unary_sub = get_expr(element["operand"]);
 
+  // An unresolved method call yields a placeholder null (see
+  // PYTHON_UNRESOLVED_CALL_ATTR). Reading that null as False would let
+  // `not obj.unresolved()` be proved from an inference gap, so this is the one
+  // context where the result has to be unknown rather than constant.
+  if (
+    element["op"]["_type"] == "Not" &&
+    unary_sub.get_bool(PYTHON_UNRESOLVED_CALL_ATTR))
+  {
+    side_effect_expr_nondett unknown_truth(bool_type());
+    unknown_truth.location() = get_location_from_decl(element);
+    unknown_truth.location().user_provided(true);
+    return unknown_truth;
+  }
+
   // Use operand's exact type to preserve metadata
   if (!unary_sub.type().is_nil() && !unary_sub.type().is_empty())
   {
