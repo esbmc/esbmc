@@ -109,15 +109,16 @@ void collect_allocs(
   if (is_if2t(e))
   {
     const if2t &i = to_if2t(e);
-    auto extend = [&](const expr2tc &c)
-    { return is_nil_expr(guard) ? c : and2tc(guard, c); };
+    auto extend = [&](const expr2tc &c) {
+      return is_nil_expr(guard) ? c : and2tc(guard, c);
+    };
     collect_allocs(i.true_value, extend(i.cond), ns, out);
     collect_allocs(i.false_value, extend(not2tc(i.cond)), ns, out);
     return;
   }
 
-  e->foreach_operand([&](const expr2tc &op)
-                     { collect_allocs(op, guard, ns, out); });
+  e->foreach_operand(
+    [&](const expr2tc &op) { collect_allocs(op, guard, ns, out); });
 }
 } // namespace
 
