@@ -292,6 +292,22 @@ void python_adjust::adjust_expr(expr2tc &expr)
       i.false_value);
   }
   else if (
+    is_address_of2t(expr) && is_array_type(to_address_of2t(expr).ptr_obj->type))
+  {
+    // `&array` decays to `&array[0]`, exactly as clang_c_adjust::adjust_address_of
+    // does (clang_c_adjust_expr.cpp:743-754). This is the node-level counterpart
+    // of the assignment-seam decay below: the operand need not be near an
+    // assignment at all -- the OM raise sites build a struct literal
+    // `{ .message = &"math domain error" }` whose member is a `char*`, so
+    // without the decay the literal carries a `char(*)[N]` and the member type
+    // silently disagrees with its initialiser. Idempotent: the rewritten operand
+    // is an index2t of element type, so the arm cannot re-fire.
+    const address_of2t &a = to_address_of2t(expr);
+    const type2tc &elem = to_array_type(a.ptr_obj->type).subtype;
+    expr =
+      address_of2tc(elem, index2tc(elem, a.ptr_obj, gen_zero(index_type2())));
+  }
+  else if (
     is_code_assign2t(expr) &&
     is_pointer_type(to_code_assign2t(expr).target->type) &&
     is_array_type(to_code_assign2t(expr).source->type))
@@ -313,6 +329,58 @@ void python_adjust::adjust_expr(expr2tc &expr)
     expr2tc decayed =
       address_of2tc(pointee, index2tc(elem, a.source, gen_zero(index_type2())));
     expr = code_assign2tc(a.target, decayed, a.location);
+  }
+  else if (
+    is_code_ifthenelse2t(expr) &&
+    !is_bool_type(to_code_ifthenelse2t(expr).cond->type))
+  {
+    // Branch/loop conditions must be boolean before the solver sees them. Python
+    // writes `if x:` on a plain int, and the converter keeps the raw signedbv;
+    // clang_c_adjust casts it (adjust_ifthenelse/adjust_while/adjust_for all call
+    // gen_typecast_bool). Without the cast the guard reaches the SMT layer as a
+    // bitvector where a Boolean is required -- bitwuzla rejects it with "term
+    // with unexpected sort at index 0". This is the statement-level counterpart
+    // of the if2t (ternary) arm above.
+    const code_ifthenelse2t &i = to_code_ifthenelse2t(expr);
+    expr = code_ifthenelse2tc(
+      typecast2tc(get_bool_type(), i.cond),
+      i.then_case,
+      i.else_case,
+      i.location);
+  }
+  else if (
+    is_code_while2t(expr) && !is_bool_type(to_code_while2t(expr).cond->type))
+  {
+    const code_while2t &w = to_code_while2t(expr);
+    expr = code_while2tc(
+      typecast2tc(get_bool_type(), w.cond),
+      w.body,
+      w.location,
+      w.pragma_unroll_count);
+  }
+  else if (
+    is_code_dowhile2t(expr) &&
+    !is_bool_type(to_code_dowhile2t(expr).cond->type))
+  {
+    const code_dowhile2t &d = to_code_dowhile2t(expr);
+    expr = code_dowhile2tc(
+      typecast2tc(get_bool_type(), d.cond),
+      d.body,
+      d.location,
+      d.pragma_unroll_count);
+  }
+  else if (
+    is_code_for2t(expr) && !is_nil_expr(to_code_for2t(expr).cond) &&
+    !is_bool_type(to_code_for2t(expr).cond->type))
+  {
+    const code_for2t &f = to_code_for2t(expr);
+    expr = code_for2tc(
+      f.init,
+      typecast2tc(get_bool_type(), f.cond),
+      f.iter,
+      f.body,
+      f.location,
+      f.pragma_unroll_count);
   }
   else if (
     is_code_return2t(expr) && !is_nil_expr(to_code_return2t(expr).operand) &&
@@ -403,6 +471,51 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // Expression-form call (e.g. `assert f(3) == 6`): the callee is the
     // sideeffect operand.
     const sideeffect2t &s = to_sideeffect2t(expr);
+
+    // A C-library math call lowers to its SMT intrinsic instead of executing
+    // the model, mirroring clang_c_adjust (`sqrt` at
+    // clang_c_adjust_expr.cpp:1414-1423, `fabs` at :1239-1245). math.sqrt /
+    // math.fabs build calls to `c:@F@sqrt` / `c:@F@fabs`
+    // (python_math::handle_sqrt, build_unary_c_math_call); without the lowering
+    // the hop-off runs the library model -- for sqrt that yields NaN, so
+    // `math.sqrt(9) == 3.0` reports a spurious violation.
+    //
+    // These two are the whole intersection of the names Python emits as
+    // `c:@F@` calls with the names clang_c_adjust lowers (its other eleven --
+    // finite/fma/huge_val/inf/isfinite/isinf/isnan/isnormal/nan/nearbyint/
+    // signbit -- are never reached as calls from this frontend), so a further
+    // arm here would be dead instrumentation.
+    //
+    // The legacy guard matches the symbol's *base* name and excludes `py:` user
+    // functions; symbol2t carries only the full identifier, so take the segment
+    // after the last '@'. ieee_sqrt's rounding mode matches migrate_expr's
+    // default for a legacy node with no explicit mode (migrate.cpp:1437).
+    if (is_symbol2t(s.operand) && s.arguments.size() == 1)
+    {
+      const std::string id = to_symbol2t(s.operand).thename.as_string();
+      const std::string base = id.substr(id.find_last_of('@') + 1);
+      const auto is_float_variant = [&base](const std::string &n) {
+        return base == n || base == n + "f" || base == n + "d" ||
+               base == n + "l";
+      };
+      if (!has_prefix(id, "py:"))
+      {
+        if (is_float_variant("sqrt"))
+        {
+          expr = ieee_sqrt2tc(
+            s.type,
+            s.arguments[0],
+            symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"));
+          return;
+        }
+        if (is_float_variant("fabs"))
+        {
+          expr = abs2tc(s.type, s.arguments[0]);
+          return;
+        }
+      }
+    }
+
     expr2tc fn = s.operand;
     std::vector<expr2tc> args = s.arguments;
     if (wrap_function_pointer_callee(fn, args))
