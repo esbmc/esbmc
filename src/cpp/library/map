@@ -686,6 +686,23 @@ public:
     it.it_pair.second = T();
     return it;
   }
+
+  const_iterator cbegin() const
+  {
+    return begin();
+  }
+  const_iterator cend() const
+  {
+    return end();
+  }
+  const_reverse_iterator crbegin() const
+  {
+    return rbegin();
+  }
+  const_reverse_iterator crend() const
+  {
+    return rend();
+  }
   mapped_type &at(const Key &x)
   {
     unsigned int s = this->_size;
@@ -1054,6 +1071,15 @@ public:
   {
     return const_cast<map *>(this)->find(x);
   }
+
+#if __cplusplus >= 202002L
+  // find() sets it_pos == _size when the key is absent; checking it_pos is
+  // robust regardless of the iterator operator== (github #6354).
+  bool contains(const key_type &x) const
+  {
+    return this->find(x).it_pos != this->_size;
+  }
+#endif
 
   key_compare key_comp() const
   {
@@ -1934,6 +1960,23 @@ public:
     return it;
   }
 
+  const_iterator cbegin() const
+  {
+    return begin();
+  }
+  const_iterator cend() const
+  {
+    return end();
+  }
+  const_reverse_iterator crbegin() const
+  {
+    return rbegin();
+  }
+  const_reverse_iterator crend() const
+  {
+    return rend();
+  }
+
   iterator find(const key_type &x)
   {
     size_type s = this->_size;
@@ -2174,6 +2217,13 @@ public:
     }
     return 0;
   }
+
+#if __cplusplus >= 202002L
+  bool contains(const key_type &x) const
+  {
+    return this->count(x) > 0;
+  }
+#endif
 
   bool operator==(multimap &y)
   {

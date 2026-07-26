@@ -1221,44 +1221,38 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     std::string type_name;
     // For a polymorphic glvalue operand, [expr.typeid]/2 requires the operand
-    // to be evaluated (the dynamic type is read from the object's vtable). We
-    // model that by reading the operand's vtable pointer, so a typeid applied
-    // to `*p` with a null `p` faults on the dereference — the standard mandates
-    // std::bad_typeid there. `vtable_read` holds that read when applicable.
+    // to be evaluated: the answer is the *dynamic* type, which is only
+    // reachable through the object's vtable. `vtable_read` holds that read when
+    // applicable; it also faults on a null `*p`, as std::bad_typeid mandates.
     exprt vtable_read = nil_exprt();
+    // Name of the vtable component holding the dynamic type's printed name,
+    // empty unless the operand is a polymorphic glvalue.
+    irep_idt dynamic_name_comp;
     if (cxxtid.isTypeOperand())
     {
       const clang::QualType qtype = cxxtid.getTypeOperand(*ASTContext);
-      type_name = qtype.getAsString();
+      type_name = rtti_type_name(qtype);
     }
     else
     {
       const clang::QualType qtype = cxxtid.getExprOperand()->getType();
-      type_name = qtype.getAsString();
+      type_name = rtti_type_name(qtype);
 
       const clang::CXXRecordDecl *rd = qtype->getAsCXXRecordDecl();
-      // [expr.typeid]/2 singles out the case where the operand is obtained by
-      // dereferencing a pointer: a null pointer there yields std::bad_typeid.
-      // Detect that `*p` form at the AST level so a plain lvalue operand (which
-      // cannot be null) keeps its existing handling untouched.
-      const auto *unary = llvm::dyn_cast<clang::UnaryOperator>(
-        cxxtid.getExprOperand()->IgnoreParenImpCasts());
-      const bool is_deref_operand =
-        unary && unary->getOpcode() == clang::UO_Deref;
-      if (
-        !cxxtid.isMostDerived(*ASTContext) && rd && rd->isPolymorphic() &&
-        is_deref_operand)
+      if (!cxxtid.isMostDerived(*ASTContext) && rd && rd->isPolymorphic())
       {
         exprt operand;
         if (get_expr(*cxxtid.getExprOperand(), operand))
           return true;
 
         const typet &op_type = ns.follow(operand.type());
-        if (operand.id() == "dereference" && op_type.is_struct())
+        if (op_type.is_struct())
           for (const auto &comp : to_struct_type(op_type).components())
             if (comp.get_bool("is_vtptr"))
             {
               vtable_read = member_exprt(operand, comp.name(), comp.type());
+              dynamic_name_comp = rtti_name_component_id(
+                to_pointer_type(comp.type()).subtype().identifier());
               break;
             }
       }
@@ -1277,9 +1271,21 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // assigned to the temporary object
     // tmp = { .__name=&"int"[0], .std::type_info@vtable_pointer=0 }
     // const std::type_info& = &tmp
-    // Front end can't account for polymorphism
+    // type_info identity is the __name pointer, so for a polymorphic glvalue
+    // __name is taken from the vtable the object actually points at rather than
+    // from the operand's static type -- that is what makes the result reflect
+    // the dynamic type (#6310).
+    exprt name = address_of_exprt(string_name);
+    if (!dynamic_name_comp.empty())
+    {
+      name = member_exprt(
+        dereference_exprt(vtable_read, vtable_read.type()),
+        dynamic_name_comp,
+        pointer_typet(char_type()));
+    }
+
     exprt sym("struct", t);
-    sym.copy_to_operands(address_of_exprt(string_name));
+    sym.copy_to_operands(name);
     if (vtable_read.is_not_nil())
     {
       // Reading the vtable pointer dereferences the operand, so a null operand
