@@ -4787,19 +4787,25 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
 
         if (!method_exists && !is_in_same_class)
         {
-          // In dynamic/untyped flows we may only have fallback class guesses.
-          // Do not inject a hard failure from uncertain inference — but the
-          // result must be nondet, not null: a null void* is falsy, so
-          // `assert not obj.unresolved()` was *proved* instead of left unknown.
+          // In dynamic/untyped flows we may only have fallback class guesses,
+          // so do not inject a hard failure from uncertain inference. Keep the
+          // null void*: it is a constant, and the folding it enables is what
+          // keeps method-heavy programs tractable (making it nondet here takes
+          // regression/python/jpl from 300 to 2173 VCCs and ~0.01s to >120s of
+          // solving). Its one unsound use is truthiness -- a null reads as
+          // False, so `assert not obj.unresolved()` was *proved* rather than
+          // left unknown -- so tag it and let the `not` arm nondet just that.
           // Every method on a container literal lands here, since a literal
           // receiver never resolves to a class (`{1}.isdisjoint({2})`).
           if (inferred_classes_from_fallback)
           {
             locationt location = converter_.get_location_from_decl(call_);
-            side_effect_expr_nondett unknown_result(any_type());
-            unknown_result.location() = location;
-            unknown_result.location().user_provided(true);
-            return unknown_result;
+            exprt zero_fallback =
+              migrate_expr_back(gen_zero(migrate_type(any_type())));
+            zero_fallback.set(PYTHON_UNRESOLVED_CALL_ATTR, true);
+            zero_fallback.location() = location;
+            zero_fallback.location().user_provided(true);
+            return zero_fallback;
           }
 
           // Generate AttributeError for concrete class information.
