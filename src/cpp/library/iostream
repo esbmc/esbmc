@@ -27,9 +27,16 @@ public:
 };
 
 // Declaration of standard input/output streams
-extern istream cin;
-extern ostream cout;
-extern ostream cerr;
+/* The standard stream objects were only ever *declared* here: their
+ * definitions live in libstl.cpp, which is mangled into the binary but never
+ * reaches the verified program, so cin/cout/cerr had nondeterministic storage
+ * and e.g. `std::cout.good()` satisfied neither itself nor its negation.
+ * Define them here so a program that touches stream state gets a determinate
+ * answer; the include guard keeps it to one definition per translation unit. */
+static istream cin;
+static ostream cout;
+static ostream cerr;
+static ostream clog;
 
 // Definition of standard end-of-line character
 const char endl = '\n';
