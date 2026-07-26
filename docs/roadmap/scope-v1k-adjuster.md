@@ -789,7 +789,7 @@ assignment-seam (#6363) arms already perform, now at the cast node itself.
 round fixed something the converter emitted and `clang_c_adjust` then rewrote.
 Here the raw cast is synthesised *during migration*: `migrate_expr`'s ternary arm
 coerces a branch whose type id diverges from the result type
-(`migrate.cpp:1002`), and the Python converter's ternary genuinely has array
+(`migrate.cpp:1001`), and the Python converter's ternary genuinely has array
 branches under a `char*` result type. On the legacy path `adjust_if` decays the
 branches *before* migration, so that arm never fires and the cast never exists.
 **Consequence for future triage: a hop-off-only node may have been built by
@@ -799,7 +799,18 @@ converter site.**
 **Negative result — do not mirror `adjust_if`'s branch conversion.** The obvious
 fix is the other half of `clang_c_adjust::adjust_if`
 (`clang_c_adjust_expr.cpp:1689-1693`): convert both branches to the result type.
-It is **dead code** in `python_adjust` — probed with a stderr marker over 40
-ternary-bearing tests, **0 firings** — precisely because `migrate_expr` has
-already equalised the branch types by the time the pass runs. The mirror belongs
-at the cast node, not at the ternary.
+It is **dead code** in `python_adjust` today — probed with a stderr marker over
+40 ternary-bearing tests, **0 firings**.
+
+*Be precise about why, because the obvious explanation is wrong.* `migrate_expr`
+coerces on **`type_id` inequality only** (`migrate.cpp:1001`) — exactly what
+`if2t`'s constructor asserts (`irep2_expr.h:809-810`) — whereas `adjust_if`
+tests **full type inequality**. Migration therefore does *not* equalise the
+branch types in general: a same-kind/different-width pair (`signedbv 8` vs
+`signedbv 64`) is coerced by neither, and would reach the SMT backend as an
+`ite` over differently-sorted terms. That residual class is simply unobserved on
+the Python path — probes with `ord(s[0]) if b else 300`, `s[0] if b else 300`,
+`5 if b else len("foo")` and an untyped `5 if b else "foo"` all either matched
+types or routed to the frontend's nondet ternary-result fallback. The mirror
+stays out under the C-Live bar, not because the case is unreachable in
+principle; the fix this round needed belongs at the cast node anyway.

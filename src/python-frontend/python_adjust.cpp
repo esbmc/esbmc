@@ -284,9 +284,12 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // condition to bool (gen_typecast(ns, op0, bool_type())); mirror it so
     // goto_sideeffects' is_boolean() check on the lowered IF condition holds
     // (otherwise "first argument of `if' must be boolean"). Its sibling half --
-    // converting a branch whose type differs from the result type -- needs no
-    // mirror: migrate_expr's ternary arm has already coerced any such branch
-    // (migrate.cpp:1002) by the time this pass runs. if2t is immutable.
+    // converting a branch whose type differs from the result type -- is not
+    // mirrored: migrate_expr's ternary arm coerces every branch whose type
+    // *kind* diverges (migrate.cpp:1001, exactly what if2t's assert demands),
+    // and the residual same-kind/different-width case is unobserved on the
+    // Python path (0 firings across 40 ternary-bearing tests), so the mirror
+    // would be dead instrumentation today. if2t is immutable.
     const if2t &i = to_if2t(expr);
     expr = if2tc(
       i.type,
@@ -301,9 +304,13 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // A cast of an array value to a pointer decays: `(char *)arr` is
     // `&arr[0]`. clang never builds the raw cast -- every conversion it emits
     // goes through c_typecastt::do_typecast, whose array case decays
-    // (c_typecast.cpp:877-905). On the Python path the raw cast is synthesised
+    // (c_typecast.cpp:926-944, the expr2tc overload this reimplements rather
+    // than calls: the pass deliberately keeps legacy c_typecastt off the
+    // IREP2-native path). Restricted to a pointer destination, the only shape
+    // migrate_expr's coercion produces here; do_typecast decays for any
+    // destination. On the Python path the raw cast is synthesised
     // by migrate_expr's ternary arm, which coerces a branch whose type id
-    // diverges from the result type (migrate.cpp:1002): `s = "" if b else
+    // diverges from the result type (migrate.cpp:1001): `s = "" if b else
     // "foo"` builds a char*-typed if over two array literals, so both branches
     // arrive here as `(char *){ ... }`. The SMT layer then rejects the
     // pointer-typed array constant ("Unexpected type in int/ptr typecast").
