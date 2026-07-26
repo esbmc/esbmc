@@ -228,6 +228,16 @@ void python_adjust::adjust_expr(expr2tc &expr)
   else if (is_index2t(expr))
   {
     const index2t &i = to_index2t(expr);
+    // clang_c_adjust::adjust_index casts the index to index_type() before using
+    // it (clang_c_adjust_expr.cpp:591). Without it an index of a different width
+    // or signedness reaches the element computation unconverted — e.g.
+    // `float_buf[obj->float_idx]` where legacy emits
+    // `float_buf[(signed long int)obj->float_idx]` — which changes the value read
+    // and can flip a verdict.
+    expr2tc idx = i.index;
+    if (idx->type != index_type2())
+      idx = typecast2tc(index_type2(), idx);
+
     if (is_pointer_type(i.source_value->type))
     {
       // clang_c_adjust::adjust_index rewrites p[i] -> *(p+i) when the base is a
@@ -235,13 +245,14 @@ void python_adjust::adjust_expr(expr2tc &expr)
       // array→pointer decay arm below so the pointer source actually holds a
       // pointer value at symex rename, not a bare array.
       expr = dereference2tc(
-        i.type, add2tc(i.source_value->type, i.source_value, i.index));
+        i.type, add2tc(i.source_value->type, i.source_value, idx));
     }
     else
     {
       expr2tc source = i.source_value;
-      if (resolve_source(source))
-        expr = index2tc(i.type, source, i.index);
+      const bool source_resolved = resolve_source(source);
+      if (source_resolved || idx != i.index)
+        expr = index2tc(i.type, source, idx);
     }
   }
   else if (is_dereference2t(expr) && is_empty_type(expr->type))
