@@ -544,3 +544,74 @@ four no-verdict cases (`github_3012_3_fail`, `higher-order3`,
 `int_to_bytes_kwargs_fail`, `ternary_string_fail`,
 `github_4796_object_handle_eq_fail`) — each needing its own triage rather than a
 shared mechanism.
+
+### Per-case triage round 1 — `higher-order3` was a missing function→pointer decay (2026-07-25)
+
+Triaging the no-verdict list one case at a time immediately paid off: three of
+the five turned out to have *distinct* signatures, and the first is another
+one-arm structural mirror, not a per-case oddity.
+
+| Case | Reproduced signature under hop-off |
+|---|---|
+| `higher-order3` | `ERROR: Unexpected type in int/ptr typecast` (`smt_casts.cpp:228`), plus `No target candidate for function call *times3` |
+| `github_3012_3_fail` | `bitwuzla: … term with unexpected sort at index 0` |
+| `int_to_bytes_kwargs_fail` | `ERROR: shr` |
+| `ternary_string_fail`, `github_4796_object_handle_eq_fail` | silent no-verdict |
+
+**✅ FIXED — `higher-order3`.** The GOTO diff against legacy pins it in one line:
+legacy emits `RETURN: &make_multiplier@F@mul`, the hop-off emits
+`RETURN: make_multiplier@F@mul` — a bare code-typed *function designator*. The
+caller then holds `typecast(mul, double (*)(void *))`, which
+`convert_typecast_to_ints` cannot encode (its `from` is neither sbv/ubv/fbv/fpbv
+nor bool) and which symex cannot resolve to a call target.
+`clang_c_adjust::adjust_symbol_expr` (`clang_c_adjust_expr.cpp:246-253`) decays
+*every* code-typed symbol reference to an implicit `&f` ("special case: this is
+sugar for &f", C11 6.3.2.1p4); `python_adjust` did not. The fix is a
+`code_return2t` arm mirroring it at the one seam Python reaches this from —
+deliberately narrower than clang's universal symbol decay, because the callee
+position of a call is already owned by `wrap_function_pointer_callee` and a
+blanket decay would fight it. Same family as the array→pointer decay (#6363):
+**the third "per-case" bucket entry to dissolve into a missing clang mirror.**
+
+**Note on closure capture.** The matched test pair deliberately returns a
+*non-capturing* nested `def`. `higher-order3`'s own `make_multiplier(3)` /
+`times3(4)` free-variable capture is wrong on **both** paths (an
+`assert times3(4) == 12` fails under legacy too) — a pre-existing frontend gap,
+at parity, and out of scope here.
+
+**Direction, restated.** The per-case list is not a homogeneous bucket. Reproduce
+each signature separately before assuming a shared cause: two of the five are
+solver-level (`bitwuzla` sort, `shr`) and two are still silent. The remaining
+four are the next slices.
+
+### Per-case triage round 2 — `int_to_bytes_kwargs_fail` was an unmigrable `shr` (2026-07-25)
+
+`ERROR: shr` is **not** solver-level, as round 1 guessed from the message
+prefix — the full output ends `migrate expr failed`. The Python frontend builds
+the `int.to_bytes()` byte-extraction shift as a legacy `exprt("shr", …)`
+(`str_conv.cpp:486`), but `shr` is a **pre-adjust placeholder**:
+`clang_c_adjust::adjust_expr_shifts` (`clang_c_adjust_expr.cpp:325-360`) resolves
+it to `lshr`/`ashr` on op0's signedness (C11 6.5.7), and `migrate_expr` only has
+arms for the *resolved* forms (`migrate.cpp:3240`, `:3392`). With
+`clang_cpp_adjust` gone, the raw `shr` reaches migration and aborts before any
+verdict.
+
+Unlike round 1's fix this is **converter-side**, so it changes the default path
+too — and `lshr` skips `adjust_expr_shifts` entirely (it is gated on `shl`/`shr`
+at `clang_c_adjust_expr.cpp:139`), losing the `gen_typecast_arithmetic` that
+would have run on both operands. That is only safe if the promotion was a no-op.
+It was, and this was **measured, not argued**: the default-path
+`--goto-functions-only` output over all 14 `to_bytes`/`from_bytes` tests is
+byte-identical pre- and post-patch (modulo timing lines), because `value` is
+unsignedbv-by-construction at that point and both operands already share its
+type.
+
+**Census sweep — `shr` was the only such id.** Enumerating every legacy `exprt`
+id the Python frontend constructs and checking each against `migrate.cpp` gives
+one genuine gap. `if` / `not` / `typecast` are handled via the `exprt::` id
+constants (a literal-string grep misses them) and `_init_undefined` is an
+already-guarded sentinel (`python_exception_handler.cpp:317`). So this class of
+hop-off abort is now **closed**, not merely sampled.
+
+Two of five triaged; `github_3012_3_fail` (bitwuzla sort), `ternary_string_fail`
+and `github_4796_object_handle_eq_fail` (silent) remain.

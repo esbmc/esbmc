@@ -484,7 +484,8 @@ smt_astt ir_ieee_convt::encode_ieee_add(const expr2tc &expr)
     smt_astt nan_p = combine_nan_preds(
       combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
       invalid_op_nan);
-    smt_astt flushed = ctx->mk_subnormal_flush(real_result, fbv_type);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
     store_interval(flushed, lo_w, hi_w);
     if (nan_p)
@@ -523,7 +524,8 @@ smt_astt ir_ieee_convt::encode_ieee_sub(const expr2tc &expr)
     smt_astt nan_p = combine_nan_preds(
       combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
       invalid_op_nan);
-    smt_astt flushed = ctx->mk_subnormal_flush(real_result, fbv_type);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
     store_interval(flushed, lo_w, hi_w);
     if (nan_p)
@@ -595,7 +597,8 @@ smt_astt ir_ieee_convt::encode_ieee_mul(const expr2tc &expr)
     smt_astt nan_p = combine_nan_preds(
       combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
       invalid_op_nan);
-    smt_astt flushed = ctx->mk_subnormal_flush(real_result, fbv_type);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
     store_interval(flushed, lo_w, hi_w);
     if (nan_p)
@@ -678,7 +681,8 @@ smt_astt ir_ieee_convt::encode_ieee_div(const expr2tc &expr)
 
     auto bounds =
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
-    smt_astt flushed = ctx->mk_subnormal_flush(real_result, fbv_type);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     smt_astt a = ctx->mk_ite(div_by_zero, inf_result, flushed);
     // When div_by_zero fires (denominator flushed to zero), the result is
     // ±sentinel (infinity).  Widen to [−sentinel, sentinel] in that branch;
@@ -789,7 +793,8 @@ smt_astt ir_ieee_convt::encode_ieee_fma(const expr2tc &expr)
       combine_nan_preds(get_nan_pred(val1), get_nan_pred(val2)),
       combine_nan_preds(
         get_nan_pred(val3), combine_nan_preds(mul_nan, add_nan)));
-    smt_astt flushed = ctx->mk_subnormal_flush(real_result, fbv_type);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
     store_interval(flushed, lo_w, hi_w);
     if (nan_p)

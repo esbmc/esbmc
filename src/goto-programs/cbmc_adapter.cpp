@@ -1066,9 +1066,8 @@ void fix_type(
     // aborts on it ("ERROR: c_bit_field") -- and instead represents a bitfield
     // exactly as its native C frontend does (clang_c_convert.cpp::
     // get_bitfield_type): the underlying bv kind narrowed to the bitfield width
-    // N, tagged #bitfield, carrying the full underlying type as its subtype.
-    // migrate_type then reads width N and yields an N-bit bv (get_uint_type(N)
-    // for the bool case, signedbv/unsignedbv of N bits otherwise).
+    // N, tagged #bitfield, carrying the underlying type as its subtype.
+    // migrate_type then reads width N and yields an N-bit signedbv/unsignedbv.
     if (self.get_sub().empty())
     {
       // CBMC always emits the underlying integer type as sub[0]; a c_bit_field
@@ -1078,19 +1077,22 @@ void fix_type(
       abort();
     }
     irept underlying = self.get_sub()[0];
-    // A _Bool bitfield must stay boolean: ESBMC's migrate reads a #bitfield
-    // bool as an *unsigned* N-bit value (get_uint_type), whereas fix_type maps
-    // CBMC's c_bool to signedbv -- a 1-bit signedbv would read value 1 as -1.
-    // Detect the bool underlying before that rewrite and keep the result "bool".
+    // A _Bool bitfield must not become signed: migrate reads a #bitfield bool
+    // as an *unsigned* N-bit value, whereas fix_type maps CBMC's c_bool to
+    // signedbv -- a 1-bit signedbv would read value 1 as -1. Detect the bool
+    // underlying before that rewrite and base the bitfield on unsignedbv, as
+    // get_bitfield_type does: spelling the id "bool" migrates to the same
+    // unsignedbv[N] but makes gen_typecast_bool skip the boolean-context
+    // coercion, leaving a non-bool operand in an &&/||/if (#6304).
     const bool bool_underlying =
       underlying.id() == "bool" || underlying.id() == "c_bool";
     fix_type(underlying, cache, expanding, true);
     const irep_idt bf_width = self.find("width").id();
-    self.id(bool_underlying ? irep_idt("bool") : underlying.id());
+    self.id(bool_underlying ? irep_idt("unsignedbv") : underlying.id());
     self.get_sub().clear();
     self.set("width", bf_width);
     self.set("#bitfield", true);
-    self.add("subtype") = underlying;
+    self.add("subtype") = bool_underlying ? mk("bool") : underlying;
     return;
   }
 
