@@ -92,6 +92,21 @@ struct tuple_element<I, tuple<Head, Tail...>>
   using type = typename tuple_element<I - 1, tuple<Tail...>>::type;
 };
 
+// std::pair is a 2-tuple for tuple_element purposes ([pair.astuple]).
+template <typename T1, typename T2>
+struct tuple_element<0, std::pair<T1, T2>>
+{
+  using type = T1;
+};
+template <typename T1, typename T2>
+struct tuple_element<1, std::pair<T1, T2>>
+{
+  using type = T2;
+};
+
+template <std::size_t I, typename Tuple>
+using tuple_element_t = typename tuple_element<I, Tuple>::type;
+
 template <typename Tuple>
 struct tuple_size;
 

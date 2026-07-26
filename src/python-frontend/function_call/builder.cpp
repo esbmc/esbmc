@@ -96,7 +96,9 @@ bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
   const std::string &function = function_id.get_function();
   if (
     type_utils::is_builtin_type(function) || function == "isinstance" ||
-    function == "hasattr")
+    function == "hasattr" ||
+    boost::algorithm::starts_with(function, "nondet_") ||
+    boost::algorithm::starts_with(function, "__VERIFIER_nondet_"))
     return false;
 
   const std::string &filename = function_id.get_filename();
