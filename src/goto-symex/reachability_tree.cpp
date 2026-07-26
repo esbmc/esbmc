@@ -78,11 +78,15 @@ void reachability_treet::setup_for_new_explore()
 
 execution_statet &reachability_treet::get_cur_state()
 {
+  assert(
+    !exploration_frames.empty() && cur_frame_it != exploration_frames.end());
   return *cur_frame_it->state;
 }
 
 const execution_statet &reachability_treet::get_cur_state() const
 {
+  assert(
+    !exploration_frames.empty() && cur_frame_it != exploration_frames.end());
   return *cur_frame_it->state;
 }
 
@@ -123,12 +127,16 @@ void reachability_treet::scheduler_framet::mark_explored(unsigned int tid)
 reachability_treet::scheduler_framet &
 reachability_treet::get_cur_scheduler_frame()
 {
+  assert(
+    !exploration_frames.empty() && cur_frame_it != exploration_frames.end());
   return cur_frame_it->scheduler;
 }
 
 const reachability_treet::scheduler_framet &
 reachability_treet::get_cur_scheduler_frame() const
 {
+  assert(
+    !exploration_frames.empty() && cur_frame_it != exploration_frames.end());
   return cur_frame_it->scheduler;
 }
 

@@ -86,6 +86,11 @@ public:
   /**
    *  Return current execution_statet being explored / symex'd.
    *  @return Current execution_statet being explored.
+   *  Only valid while exploration_frames is non-empty. generate_schedule_formula()
+   *  drains exploration_frames completely before returning, leaving cur_frame_it
+   *  at exploration_frames.end() — do not call this (or get_cur_scheduler_frame())
+   *  after that point without first re-establishing a frame via
+   *  setup_for_new_explore().
    */
   execution_statet &get_cur_state();
   const execution_statet &get_cur_state() const;
