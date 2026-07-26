@@ -281,6 +281,22 @@ void python_adjust::adjust_expr(expr2tc &expr)
       i.false_value);
   }
   else if (
+    is_address_of2t(expr) && is_array_type(to_address_of2t(expr).ptr_obj->type))
+  {
+    // `&array` decays to `&array[0]`, exactly as clang_c_adjust::adjust_address_of
+    // does (clang_c_adjust_expr.cpp:743-754). This is the node-level counterpart
+    // of the assignment-seam decay below: the operand need not be near an
+    // assignment at all -- the OM raise sites build a struct literal
+    // `{ .message = &"math domain error" }` whose member is a `char*`, so
+    // without the decay the literal carries a `char(*)[N]` and the member type
+    // silently disagrees with its initialiser. Idempotent: the rewritten operand
+    // is an index2t of element type, so the arm cannot re-fire.
+    const address_of2t &a = to_address_of2t(expr);
+    const type2tc &elem = to_array_type(a.ptr_obj->type).subtype;
+    expr =
+      address_of2tc(elem, index2tc(elem, a.ptr_obj, gen_zero(index_type2())));
+  }
+  else if (
     is_code_assign2t(expr) &&
     is_pointer_type(to_code_assign2t(expr).target->type) &&
     is_array_type(to_code_assign2t(expr).source->type))
@@ -444,6 +460,33 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // Expression-form call (e.g. `assert f(3) == 6`): the callee is the
     // sideeffect operand.
     const sideeffect2t &s = to_sideeffect2t(expr);
+
+    // A C-library sqrt call lowers to the ieee_sqrt intrinsic instead of
+    // executing the model, mirroring clang_c_adjust
+    // (clang_c_adjust_expr.cpp:1414-1423). math.sqrt builds a call to
+    // `c:@F@sqrt` (python_math::handle_sqrt), and without the lowering the
+    // hop-off runs the library model, which yields NaN -- so
+    // `math.sqrt(9) == 3.0` reports a spurious violation. The legacy guard
+    // matches the symbol's *base* name and excludes `py:` user functions; in
+    // IREP2 symbol2t carries only the full identifier, so take the segment
+    // after the last '@'. The rounding mode matches migrate_expr's default for
+    // a legacy ieee_sqrt with no explicit mode (migrate.cpp:1437).
+    if (is_symbol2t(s.operand) && s.arguments.size() == 1)
+    {
+      const std::string id = to_symbol2t(s.operand).thename.as_string();
+      const std::string base = id.substr(id.find_last_of('@') + 1);
+      if (
+        !has_prefix(id, "py:") && (base == "sqrt" || base == "sqrtf" ||
+                                   base == "sqrtd" || base == "sqrtl"))
+      {
+        expr = ieee_sqrt2tc(
+          s.type,
+          s.arguments[0],
+          symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"));
+        return;
+      }
+    }
+
     expr2tc fn = s.operand;
     std::vector<expr2tc> args = s.arguments;
     if (wrap_function_pointer_callee(fn, args))
