@@ -45,7 +45,15 @@ public:
 
   // Element access
   const char &operator[](size_t pos) const { return str[pos]; }
-  const char &at(size_t pos) const;
+  const char &at(size_t pos) const
+  {
+    /* [string.view.access]: at() throws out_of_range for pos >= size(). The
+     * exception is not modelled here (see #6338 for why <string> cannot throw
+     * either), so the precondition is asserted instead -- which at least
+     * reports the violation rather than reading out of bounds. */
+    __ESBMC_assert(pos < len, "string_view::at: pos out of range");
+    return str[pos];
+  }
   const char &front() const { return *str; }
   const char &back() const { return str[len-1]; }
   const char *data() const noexcept { return str; }
@@ -82,11 +90,59 @@ public:
       return +1;
     return 0;
   }
-  bool starts_with(string_view sv) const;
-  bool ends_with(string_view sv) const;
-  size_t find(string_view sv, size_t pos = 0) const;
-  size_t find_first_of(string_view sv, size_t pos = 0) const;
-  size_t find_first_not_of(string_view sv, size_t pos = 0) const;
+  /* These five were declared and never defined. A declaration-only member is
+   * converted as a call returning a nondeterministic value, so
+   * `sv.starts_with(x)` satisfied neither the property nor its negation --
+   * a silent wrong answer rather than a diagnostic. */
+  bool starts_with(string_view sv) const
+  {
+    if (sv.len > len)
+      return false;
+    return memcmp(str, sv.str, sv.len) == 0;
+  }
+
+  bool ends_with(string_view sv) const
+  {
+    if (sv.len > len)
+      return false;
+    return memcmp(str + (len - sv.len), sv.str, sv.len) == 0;
+  }
+
+  size_t find(string_view sv, size_t pos = 0) const
+  {
+    if (sv.len > len)
+      return npos;
+    for (size_t i = pos; i + sv.len <= len; ++i)
+      if (memcmp(str + i, sv.str, sv.len) == 0)
+        return i;
+    return npos;
+  }
+
+  size_t find_first_of(string_view sv, size_t pos = 0) const
+  {
+    for (size_t i = pos; i < len; ++i)
+      for (size_t j = 0; j < sv.len; ++j)
+        if (str[i] == sv.str[j])
+          return i;
+    return npos;
+  }
+
+  size_t find_first_not_of(string_view sv, size_t pos = 0) const
+  {
+    for (size_t i = pos; i < len; ++i)
+    {
+      bool found = false;
+      for (size_t j = 0; j < sv.len; ++j)
+        if (str[i] == sv.str[j])
+        {
+          found = true;
+          break;
+        }
+      if (!found)
+        return i;
+    }
+    return npos;
+  }
 
   // Non-member functions
   friend bool operator==(string_view lhs, string_view rhs) { return lhs.compare(rhs) == 0; }
