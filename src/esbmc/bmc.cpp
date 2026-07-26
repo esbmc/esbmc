@@ -1477,7 +1477,15 @@ smt_resultt bmct::start_bmc()
   // probe reached by any of them. Emitting before report_result keeps the
   // [Dead code] section above the verdict, and routing the dead-store advisories
   // through the same call keeps both sets in one SARIF document (issue #4495).
-  if (options.get_bool_option("dead-code-check"))
+  // Only a run that actually solved the probes can say anything about dead
+  // code. --show-vcc returns P_SMTLIB from run_thread before
+  // multi_property_check ever runs, and a solver failure gives P_ERROR; either
+  // way reached_claims is empty while all_claims is full, so every branch would
+  // be reported dead. report_result already declines to claim success over those
+  // two results — stay silent here for the same reason.
+  if (
+    options.get_bool_option("dead-code-check") && res != P_SMTLIB &&
+    res != P_ERROR)
   {
     report_dead_code(
       options, goto_functionst::reached_claims, dead_store_advisories);
