@@ -1391,6 +1391,7 @@ TEST_CASE(
   // The OM raise shape end-to-end: the throw operand is a by-name struct
   // literal; operand recursion (S2) retypes it to the resolved struct first,
   // and the throw arm must derive the chain from that resolved shape.
+  config.ansi_c.set_data_model(configt::LP64);
   contextt ctx;
   add_class_with_base(ctx, "E", "Exception");
 
