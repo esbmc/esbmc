@@ -1,7 +1,7 @@
-// KNOWNBUG: the same over-destruction turns into a double free once the class
-// owns a resource. This is why ~unique_ptr is disabled in src/cpp/library/memory
-// ("TODO: fix remove goto sideeffect"): re-enabling it makes ESBMC report a
-// false `invalid pointer freed` on
+// The same over-destruction used to become a double free once the class owns a
+// resource. That is why ~unique_ptr is still disabled in src/cpp/library/memory
+// ("TODO: fix remove goto sideeffect"): before this fix, re-enabling it made
+// ESBMC report a false `invalid pointer freed` on
 //   std::unique_ptr<T> p = cond ? std::unique_ptr<T>(new T) : nullptr;
 // which is the aws-sdk-cpp shape the nullptr_t constructor there exists for.
 //

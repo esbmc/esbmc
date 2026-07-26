@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--std c++11 --force-malloc-success
+^VERIFICATION SUCCESSFUL$

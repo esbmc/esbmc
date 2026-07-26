@@ -1,11 +1,32 @@
 #ifndef STL_IOSFWD
 #define STL_IOSFWD
 
-// The operational model's stream classes (ios, istream, ostream) are plain
-// classes, not the standard's basic_* templates, so they cannot be
-// forward-declared with the standard <iosfwd> signatures. Pull in the model
-// headers instead; they are small, and code including <iosfwd> only needs
-// the stream names to be usable in declarations (github #6063).
-#include "iostream"
+// Forward declarations for ESBMC's C++ stream operational models.
+//
+// ESBMC forces -nostdinc++ and resolves #include <...> only against this
+// bundled OM tree, so <iosfwd> must exist here for TUs that include it to
+// parse.  The stream OMs define *concrete* (non-template) classes rather than
+// the standard basic_*<charT> templates with typedefs, so these forward
+// declarations name those concrete classes directly.  Using the standard
+// "template <...> class basic_ostream; typedef basic_ostream<char> ostream;"
+// form would redefine e.g. ostream and break <ostream>.
+
+namespace std
+{
+class ios_base;
+class ios;
+class streambuf;
+class istream;
+class ostream;
+class iostream;
+class filebuf;
+class ifstream;
+class ofstream;
+class fstream;
+class stringbuf;
+class istringstream;
+class ostringstream;
+class stringstream;
+} // namespace std
 
 #endif

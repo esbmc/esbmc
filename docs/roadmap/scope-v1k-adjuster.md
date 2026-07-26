@@ -615,3 +615,153 @@ hop-off abort is now **closed**, not merely sampled.
 
 Two of five triaged; `github_3012_3_fail` (bitwuzla sort), `ternary_string_fail`
 and `github_4796_object_handle_eq_fail` (silent) remain.
+
+### Per-case triage round 3 — the branch/loop condition was never cast to bool (2026-07-25)
+
+`github_3012_3_fail`'s `bitwuzla: … term with unexpected sort at index 0` is
+again not what the message suggests. Its hop-off and legacy VCCs are nearly
+identical; the one structural difference is the guard:
+
+```
+legacy:  {-4} goto_symex::guard…#1 == (x&0#1 != 0)   {-5} !goto_symex::guard…#1
+hop-off: {-4} !x&0#1                                  {1} … => x&0#1
+```
+
+The hop-off applies `!` and `=>` to a **signedbv**. `clang_c_adjust` casts every
+branch and loop condition (`adjust_ifthenelse`, `adjust_while`, `adjust_for` —
+all `gen_typecast_bool`, `clang_c_adjust_code.cpp:106-128`); `python_adjust` had
+only the `if2t` *ternary-expression* arm (#6348), never the statement-level ones.
+Python's `if n:` on a plain int is the common case, so the raw bitvector reached
+the solver. Fixed by mirroring all four (`code_ifthenelse2t`, `code_while2t`,
+`code_dowhile2t`, `code_for2t`).
+
+**This one arm closed six divergences, not one.** Besides `github_3012_3_fail`
+it fixed `github_4796_object_handle_eq_fail` (the last of the round-1 "silent"
+pair but one) and four cases the earlier census had filed under *wrong/absent
+verdict* — `div6`, `filter_loop`, `github_3841_6`, `jpl` — all of which were
+no-verdict for this same reason. The "wrong/absent verdict — needs per-case
+triage, mixed tractability" row in the table above was therefore substantially
+**one missing mirror**, not a set of independent SMT-level oddities.
+
+**A wider census confirms the recorded parity figure.** A stride-6 run (733 of
+4 401 `regression/python` tests, executed 12-way parallel against a *pinned
+binary snapshot* so concurrent rebuilds cannot perturb it) found **18
+divergences — 97.5% parity**, matching the "~97.5% on a 365-test strided sample"
+recorded above. The wider sample did not move the *rate*; what it changed is the
+**composition**, by naming the full divergence set rather than a handful.
+
+Two of the 18 are method artifacts: `python_irep2_adjust_only_boolop_or` and
+`python_irep2_adjust_only_optional` already carry `--python-irep2-adjust-only` in
+their own `test.desc`, so both census columns are hop-off runs and the empty cell
+is the known load-dependent solver timeout — they pass under `ctest`. Twelve are
+genuine.
+
+After this arm, parity on the same sample is **98.1%** (14 divergences), and the
+whole "no verdict because the guard was a bitvector" family is gone.
+
+**Still open after round 3** (excluding the two artifacts):
+
+| Kind | Cases |
+|---|---|
+| no verdict | `ternary_string_fail`, `github_2934_2`, `github_3078_fail`, `github_3337_2_fail`, `github_4784_isnone_short_circuit_fail`, `none3`, `optional6` |
+| legacy SUCCESSFUL → hop-off FAILED | `cmath_polar_rect_semantics_success_07`, `github_3690`, `github_4745_pep604_class_attr`, `math13`, `math_edge_frexp_success`, `sqrt5` |
+
+The wrong-verdict group is the higher-risk one — a hop-off `FAILED` against a
+legacy `SUCCESSFUL` is either a false alarm or a real bug the legacy path masks,
+and only per-case triage distinguishes them. Note it now clusters visibly on
+math/float (`math13`, `math_edge_frexp_success`, `sqrt5`,
+`cmath_polar_rect_semantics_success_07`), which points at the parked S4
+arithmetic-conversion work rather than at six independent causes — but that is a
+hypothesis from the names, not a triaged finding.
+
+### Per-case triage round 4 — the math cluster was `sqrt`, not S4 (2026-07-25)
+
+The round-3 hypothesis above was **wrong**: the math/float cluster has nothing to
+do with arithmetic conversion. `sqrt5`'s counterexample shows `result = -NAN`,
+and the GOTO diff isolates it to one instruction:
+
+```
+legacy:  ASSIGN result = ieee_sqrt((double)x, __ESBMC_rounding_mode)
+hop-off: FUNCTION_CALL: result = sqrt((double)x)
+```
+
+`python_math::handle_sqrt` emits a call to `c:@F@sqrt` whenever the argument is
+not a foldable constant; `clang_c_adjust` rewrites that call to the `ieee_sqrt`
+intrinsic (`clang_c_adjust_expr.cpp:1414-1423`), and `python_adjust` did not, so
+the hop-off ran the library model, which returns NaN. Fixed by mirroring the
+lowering — closing `sqrt5`, `math13`, and
+`cmath_polar_rect_semantics_success_07`, the last of which this document had
+recorded as a standing *false alarm*. It was not; it was this.
+
+**Method note — match the field the legacy guard matches.** A first attempt
+compared `symbol2t::thename` (the full identifier, `c:@F@sqrt`) against
+`"sqrt"`, and the arm silently never fired. The legacy guard uses the symbol's
+**base** name (`to_symbol_expr(f_op).name()`) and applies the `py:` exclusion to
+the *identifier*. IREP2's `symbol2t` carries only the identifier, so the base
+name must be recovered (segment after the last `@`). A non-firing arm looks
+exactly like a wrong hypothesis — check the arm fires before discarding the
+theory.
+
+**Also landed: `&array` → `&array[0]` at the node level.** `clang_c_adjust::adjust_address_of`
+(`clang_c_adjust_expr.cpp:743-754`) decays unconditionally; #6363 added only the
+assignment-seam form, which never reaches an `address_of` nested inside an
+aggregate literal. The OM raise sites build `{ .message = &"math domain error" }`
+with a `char*` member, so the literal carried a `char(*)[N]`. **This flips no
+verdict in the sampled corpus** — it closes a structural parity gap (the hop-off
+GOTO now matches legacy byte-for-byte at those sites), and is recorded as such
+rather than as a divergence fix.
+
+**Remaining after round 4** — a stride-12 census (366 tests) leaves five genuine
+divergences: `github_3078_fail`, `github_4784_isnone_short_circuit_fail` (no
+verdict), `github_3690`, `math_edge_frexp_success`,
+`github_4745_pep604_class_attr` (legacy SUCCESSFUL → hop-off FAILED), plus
+`ternary_string_fail`, `github_2934_2`, `none3`, `optional6` from the wider
+stride-6 run. `math_edge_frexp_success` is `frexp`, so the "one missing intrinsic
+lowering per math builtin" shape may repeat — check `clang_c_adjust`'s builtin
+list before assuming anything deeper.
+
+**Census artifact, restated.** Any test whose own `test.desc` already carries
+`--python-irep2-adjust-only` (`python_irep2_adjust_only_*`) appears as a
+divergence in this census, because both of its columns are hop-off runs and the
+40 s cap bites under 12-way parallelism. They pass under `ctest`. Filter them
+out before counting.
+
+### Per-case triage round 5 — the intrinsic-lowering class is closed; frexp is S4 (2026-07-25)
+
+Rather than triage the remaining math cases one at a time, enumerate the class.
+`clang_c_adjust` lowers exactly thirteen library calls to SMT intrinsics —
+`fabs`, `finite`, `fma`, `huge_val`, `inf`, `isfinite`, `isinf`, `isnan`,
+`isnormal`, `nan`, `nearbyint`, `signbit`, `sqrt`. Intersect that with the names
+the Python frontend actually emits as `c:@F@…` calls (`acos … tanh`, `trunc`,
+plus the `__python_*` string helpers) and the answer is **two**: `sqrt` (round 4)
+and `fabs`. The other eleven are never reached as calls from this frontend, so
+an arm for any of them would be dead instrumentation.
+
+**`fabs` landed.** `clang_c_adjust_expr.cpp:1239-1245` rewrites it to the `abs`
+intrinsic; a probe shows legacy `RETURN: abs(x)` against hop-off
+`FUNCTION_CALL: fabs(x)`. Verdicts happened to agree (the `fabs` model is
+faithful, unlike `sqrt`'s), so this is a **parity** fix with the divergence risk
+removed rather than a verdict flip. With it, **the intrinsic-lowering class is
+closed** — not sampled.
+
+**`math_edge_frexp_success` is not an intrinsic gap at all.** `frexp` appears in
+neither list. Its GOTO diff is one instruction:
+
+```
+legacy:  ASSIGN e = (double)ESBMC_unpack_temp….element_1;
+hop-off: ASSIGN e =         ESBMC_unpack_temp….element_1;
+```
+
+`e` is a `double` tuple-unpack target and `element_1` is the integer exponent, so
+this is precisely `clang_c_adjust::adjust_assign`'s conversion — **the
+assignment-conversion trap documented above**. It must *not* be fixed with a
+standalone `adjust_assign` mirror: both the blanket and the faithful
+`gen_typecast` version make `neural-net_fail` report SUCCESSFUL where legacy
+correctly reports FAILED, i.e. they mask a real bug. It is S4 work, and it is now
+pinned to a concrete second reproducer (`precedence2` was the first).
+
+**Round-3's hypothesis, settled.** The guess that the math/float cluster pointed
+at S4 was *partly* right and mostly wrong: `sqrt5`, `math13` and
+`cmath_polar_rect_semantics_success_07` were a missing intrinsic lowering, while
+`math_edge_frexp_success` genuinely is S4. The lesson stands — the cluster's
+*name* carried no information; only the per-case GOTO diff did.
