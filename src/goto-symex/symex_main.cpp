@@ -81,11 +81,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   {
     if (options.get_bool_option("multi-property"))
     {
-      // Log that this assertion was trivially verified
-      log_success(
-        "✓ PASSED: '{}' at {}",
-        msg,
-        cur_state->source.pc->location.as_string());
+      record_property_verdict(msg, property_verdictt::Passed);
 
       // Track trivially verified claims
       ++simplified_claims;
@@ -111,10 +107,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   {
     if (options.get_bool_option("multi-property"))
     {
-      log_success(
-        "✓ PASSED (interval): '{}' at {}",
-        msg,
-        cur_state->source.pc->location.as_string());
+      record_property_verdict(msg, property_verdictt::Passed, "interval");
       ++simplified_claims;
     }
 
@@ -147,6 +140,15 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
       return;
     }
   }
+}
+
+void goto_symext::record_property_verdict(
+  const std::string &msg,
+  property_verdictt verdict,
+  const std::string &note)
+{
+  goto_functionst::property_verdicts.record(
+    msg + " at " + cur_state->source.pc->location.as_string(), verdict, note);
 }
 
 void goto_symext::assertion(

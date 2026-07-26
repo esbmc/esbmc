@@ -161,20 +161,40 @@ protected:
     const std::unordered_multiset<std::string> &reached_mul_claims);
 
 private:
-  struct SimpleSummary
+  /// Report each property checked during the run once, with the verdict that
+  /// dominates across every thread interleaving explored, followed by a
+  /// summary.
+  void report_property_verdicts() const;
+
+  static constexpr size_t default_barren_interleaving_budget = 100;
+
+  /// How many consecutive thread interleavings may reach a verdict on nothing
+  /// new before exploration stops after a violation
+  /// (--multi-property-interleavings). Aborts on a non-positive value.
+  size_t barren_interleaving_budget() const;
+
+  /// Solver time and name accumulated across every interleaving of the run.
+  /// Atomic because multi_property_check writes from parallel job threads.
+  struct SolverStats
   {
-    std::atomic<size_t> total_properties = 0;
-    std::atomic<size_t> passed_properties = 0;
-    std::atomic<size_t> skipped_properties = 0;
-    std::atomic<size_t> simplified_properties = 0;
-    std::atomic<size_t> failed_properties = 0;
-    std::atomic<size_t> unknown_properties = 0;
-    std::atomic<double> total_time_s = 0.0;
-    std::string solver_name;
-    std::once_flag solver_name_flag;
+    std::atomic<double> total_time_ms = 0.0;
+    std::string name;
+    std::once_flag name_flag;
   };
 
-  void report_simple_summary(const SimpleSummary &summary) const;
+  SolverStats solver_stats;
+
+  /// Counterexample file numbering. Run-scoped, not per-interleaving: two
+  /// interleavings of one run share a phase and k, so a per-interleaving
+  /// counter would make them overwrite each other's artifacts.
+  std::atomic<size_t> ce_counter{0};
+
+  /// Set when the run stopped before reaching a verdict on every property --
+  /// exploration cut short after a violation, or claims skipped by
+  /// --multi-fail-fast. The summary counts only what was checked, so without
+  /// this the report would read as a complete account of the program.
+  /// Atomic because multi_property_check sets it from parallel job threads.
+  std::atomic<bool> report_incomplete{false};
 };
 
 void report_coverage(
