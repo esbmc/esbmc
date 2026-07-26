@@ -583,3 +583,35 @@ at parity, and out of scope here.
 each signature separately before assuming a shared cause: two of the five are
 solver-level (`bitwuzla` sort, `shr`) and two are still silent. The remaining
 four are the next slices.
+
+### Per-case triage round 2 — `int_to_bytes_kwargs_fail` was an unmigrable `shr` (2026-07-25)
+
+`ERROR: shr` is **not** solver-level, as round 1 guessed from the message
+prefix — the full output ends `migrate expr failed`. The Python frontend builds
+the `int.to_bytes()` byte-extraction shift as a legacy `exprt("shr", …)`
+(`str_conv.cpp:486`), but `shr` is a **pre-adjust placeholder**:
+`clang_c_adjust::adjust_expr_shifts` (`clang_c_adjust_expr.cpp:325-360`) resolves
+it to `lshr`/`ashr` on op0's signedness (C11 6.5.7), and `migrate_expr` only has
+arms for the *resolved* forms (`migrate.cpp:3240`, `:3392`). With
+`clang_cpp_adjust` gone, the raw `shr` reaches migration and aborts before any
+verdict.
+
+Unlike round 1's fix this is **converter-side**, so it changes the default path
+too — and `lshr` skips `adjust_expr_shifts` entirely (it is gated on `shl`/`shr`
+at `clang_c_adjust_expr.cpp:139`), losing the `gen_typecast_arithmetic` that
+would have run on both operands. That is only safe if the promotion was a no-op.
+It was, and this was **measured, not argued**: the default-path
+`--goto-functions-only` output over all 14 `to_bytes`/`from_bytes` tests is
+byte-identical pre- and post-patch (modulo timing lines), because `value` is
+unsignedbv-by-construction at that point and both operands already share its
+type.
+
+**Census sweep — `shr` was the only such id.** Enumerating every legacy `exprt`
+id the Python frontend constructs and checking each against `migrate.cpp` gives
+one genuine gap. `if` / `not` / `typecast` are handled via the `exprt::` id
+constants (a literal-string grep misses them) and `_init_undefined` is an
+already-guarded sentinel (`python_exception_handler.cpp:317`). So this class of
+hop-off abort is now **closed**, not merely sampled.
+
+Two of five triaged; `github_3012_3_fail` (bitwuzla sort), `ternary_string_fail`
+and `github_4796_object_handle_eq_fail` (silent) remain.
