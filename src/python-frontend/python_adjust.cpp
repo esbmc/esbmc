@@ -472,29 +472,47 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // sideeffect operand.
     const sideeffect2t &s = to_sideeffect2t(expr);
 
-    // A C-library sqrt call lowers to the ieee_sqrt intrinsic instead of
-    // executing the model, mirroring clang_c_adjust
-    // (clang_c_adjust_expr.cpp:1414-1423). math.sqrt builds a call to
-    // `c:@F@sqrt` (python_math::handle_sqrt), and without the lowering the
-    // hop-off runs the library model, which yields NaN -- so
-    // `math.sqrt(9) == 3.0` reports a spurious violation. The legacy guard
-    // matches the symbol's *base* name and excludes `py:` user functions; in
-    // IREP2 symbol2t carries only the full identifier, so take the segment
-    // after the last '@'. The rounding mode matches migrate_expr's default for
-    // a legacy ieee_sqrt with no explicit mode (migrate.cpp:1437).
+    // A C-library math call lowers to its SMT intrinsic instead of executing
+    // the model, mirroring clang_c_adjust (`sqrt` at
+    // clang_c_adjust_expr.cpp:1414-1423, `fabs` at :1239-1245). math.sqrt /
+    // math.fabs build calls to `c:@F@sqrt` / `c:@F@fabs`
+    // (python_math::handle_sqrt, build_unary_c_math_call); without the lowering
+    // the hop-off runs the library model -- for sqrt that yields NaN, so
+    // `math.sqrt(9) == 3.0` reports a spurious violation.
+    //
+    // These two are the whole intersection of the names Python emits as
+    // `c:@F@` calls with the names clang_c_adjust lowers (its other eleven --
+    // finite/fma/huge_val/inf/isfinite/isinf/isnan/isnormal/nan/nearbyint/
+    // signbit -- are never reached as calls from this frontend), so a further
+    // arm here would be dead instrumentation.
+    //
+    // The legacy guard matches the symbol's *base* name and excludes `py:` user
+    // functions; symbol2t carries only the full identifier, so take the segment
+    // after the last '@'. ieee_sqrt's rounding mode matches migrate_expr's
+    // default for a legacy node with no explicit mode (migrate.cpp:1437).
     if (is_symbol2t(s.operand) && s.arguments.size() == 1)
     {
       const std::string id = to_symbol2t(s.operand).thename.as_string();
       const std::string base = id.substr(id.find_last_of('@') + 1);
-      if (
-        !has_prefix(id, "py:") && (base == "sqrt" || base == "sqrtf" ||
-                                   base == "sqrtd" || base == "sqrtl"))
+      const auto is_float_variant = [&base](const std::string &n) {
+        return base == n || base == n + "f" || base == n + "d" ||
+               base == n + "l";
+      };
+      if (!has_prefix(id, "py:"))
       {
-        expr = ieee_sqrt2tc(
-          s.type,
-          s.arguments[0],
-          symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"));
-        return;
+        if (is_float_variant("sqrt"))
+        {
+          expr = ieee_sqrt2tc(
+            s.type,
+            s.arguments[0],
+            symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"));
+          return;
+        }
+        if (is_float_variant("fabs"))
+        {
+          expr = abs2tc(s.type, s.arguments[0]);
+          return;
+        }
       }
     }
 

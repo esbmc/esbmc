@@ -725,3 +725,43 @@ list before assuming anything deeper.
 divergence in this census, because both of its columns are hop-off runs and the
 40 s cap bites under 12-way parallelism. They pass under `ctest`. Filter them
 out before counting.
+
+### Per-case triage round 5 — the intrinsic-lowering class is closed; frexp is S4 (2026-07-25)
+
+Rather than triage the remaining math cases one at a time, enumerate the class.
+`clang_c_adjust` lowers exactly thirteen library calls to SMT intrinsics —
+`fabs`, `finite`, `fma`, `huge_val`, `inf`, `isfinite`, `isinf`, `isnan`,
+`isnormal`, `nan`, `nearbyint`, `signbit`, `sqrt`. Intersect that with the names
+the Python frontend actually emits as `c:@F@…` calls (`acos … tanh`, `trunc`,
+plus the `__python_*` string helpers) and the answer is **two**: `sqrt` (round 4)
+and `fabs`. The other eleven are never reached as calls from this frontend, so
+an arm for any of them would be dead instrumentation.
+
+**`fabs` landed.** `clang_c_adjust_expr.cpp:1239-1245` rewrites it to the `abs`
+intrinsic; a probe shows legacy `RETURN: abs(x)` against hop-off
+`FUNCTION_CALL: fabs(x)`. Verdicts happened to agree (the `fabs` model is
+faithful, unlike `sqrt`'s), so this is a **parity** fix with the divergence risk
+removed rather than a verdict flip. With it, **the intrinsic-lowering class is
+closed** — not sampled.
+
+**`math_edge_frexp_success` is not an intrinsic gap at all.** `frexp` appears in
+neither list. Its GOTO diff is one instruction:
+
+```
+legacy:  ASSIGN e = (double)ESBMC_unpack_temp….element_1;
+hop-off: ASSIGN e =         ESBMC_unpack_temp….element_1;
+```
+
+`e` is a `double` tuple-unpack target and `element_1` is the integer exponent, so
+this is precisely `clang_c_adjust::adjust_assign`'s conversion — **the
+assignment-conversion trap documented above**. It must *not* be fixed with a
+standalone `adjust_assign` mirror: both the blanket and the faithful
+`gen_typecast` version make `neural-net_fail` report SUCCESSFUL where legacy
+correctly reports FAILED, i.e. they mask a real bug. It is S4 work, and it is now
+pinned to a concrete second reproducer (`precedence2` was the first).
+
+**Round-3's hypothesis, settled.** The guess that the math/float cluster pointed
+at S4 was *partly* right and mostly wrong: `sqrt5`, `math13` and
+`cmath_polar_rect_semantics_success_07` were a missing intrinsic lowering, while
+`math_edge_frexp_success` genuinely is S4. The lesson stands — the cluster's
+*name* carried no information; only the per-case GOTO diff did.
