@@ -6,3 +6,4 @@ main.c
 ^Reached Assertion Instances: 4
 ^Assertion Instances Coverage Unknown
 ^COVERAGE ANALYSIS INCOMPLETE
+reason: the total number of assertion instances could not be determined
