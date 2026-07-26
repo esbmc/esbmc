@@ -283,13 +283,38 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // e.g. `len(s)` in `len(s) or len(t)`). clang_c_adjust::adjust_if casts the
     // condition to bool (gen_typecast(ns, op0, bool_type())); mirror it so
     // goto_sideeffects' is_boolean() check on the lowered IF condition holds
-    // (otherwise "first argument of `if' must be boolean"). if2t is immutable.
+    // (otherwise "first argument of `if' must be boolean"). Its sibling half --
+    // converting a branch whose type differs from the result type -- needs no
+    // mirror: migrate_expr's ternary arm has already coerced any such branch
+    // (migrate.cpp:1002) by the time this pass runs. if2t is immutable.
     const if2t &i = to_if2t(expr);
     expr = if2tc(
       i.type,
       typecast2tc(get_bool_type(), i.cond),
       i.true_value,
       i.false_value);
+  }
+  else if (
+    is_typecast2t(expr) && is_pointer_type(expr->type) &&
+    is_array_type(to_typecast2t(expr).from->type))
+  {
+    // A cast of an array value to a pointer decays: `(char *)arr` is
+    // `&arr[0]`. clang never builds the raw cast -- every conversion it emits
+    // goes through c_typecastt::do_typecast, whose array case decays
+    // (c_typecast.cpp:877-905). On the Python path the raw cast is synthesised
+    // by migrate_expr's ternary arm, which coerces a branch whose type id
+    // diverges from the result type (migrate.cpp:1002): `s = "" if b else
+    // "foo"` builds a char*-typed if over two array literals, so both branches
+    // arrive here as `(char *){ ... }`. The SMT layer then rejects the
+    // pointer-typed array constant ("Unexpected type in int/ptr typecast").
+    // Idempotent: the rewritten node is an address_of, not an array.
+    const typecast2t &t = to_typecast2t(expr);
+    const type2tc &elem = to_array_type(t.from->type).subtype;
+    expr2tc decayed =
+      address_of2tc(elem, index2tc(elem, t.from, gen_zero(index_type2())));
+    expr = (ns.follow(decayed->type) == ns.follow(expr->type))
+             ? decayed
+             : typecast2tc(expr->type, decayed);
   }
   else if (
     is_address_of2t(expr) && is_array_type(to_address_of2t(expr).ptr_obj->type))
