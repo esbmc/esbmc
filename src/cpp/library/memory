@@ -298,13 +298,15 @@ public:
     return *this;
   }
 
-#if 0
-  // TODO: fix remove goto sideeffect
+  /* Disabled until the class-typed conditional operator elided its temporaries:
+   * with a destructor present, the old lowering destroyed every branch
+   * temporary, so `cond ? unique_ptr<T>(new T) : nullptr` reported a false
+   * double free. Without one the model never frees, which reports a spurious
+   * leak on correct RAII and misses a real use-after-free. */
   ~unique_ptr()
   {
     deleter(ptr);
   }
-#endif
 
   T *operator->() const
   {
@@ -423,6 +425,11 @@ public:
     ptr = other.release();
     deleter = std::move(other.get_deleter());
     return *this;
+  }
+
+  ~unique_ptr()
+  {
+    deleter(ptr);
   }
 
   T &operator[](size_t i) const
