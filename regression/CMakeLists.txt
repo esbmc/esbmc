@@ -614,26 +614,3 @@ foreach(_t IN LISTS _very_slow_regression_tests)
         )
     endif()
 endforeach()
-
-# testing_tool caps each test with setrlimit(RLIMIT_AS) -- a *virtual* address
-# space limit, which for a solver runs well above its resident set. Linux only:
-# macOS rejects RLIMIT_AS, so these tests only hit the ceiling on the Linux
-# runners. Raise the ceiling for the few tests that legitimately map more than
-# the default, rather than lifting the global budget and losing the signal on
-# every other test.
-math(EXPR ESBMC_REGRESS_MEMORY_LIMIT_HIGH "${ESBMC_REGRESS_MEMORY_LIMIT} * 2")
-set(_memory_hungry_regression_tests
-    # queue.Queue is list-backed, so get() unwinds __ESBMC_list_pop and the
-    # bit-vector query Bitwuzla builds maps past the 8 GiB default while its
-    # resident set stays near 4.3 GiB. Reproduced on ubuntu-24.04 across six
-    # unrelated PRs, always within 0.1% of the same figure -- the signature of a
-    # fixed ceiling being hit, not of a machine running out of memory.
-    "regression/python/harness_queue_fifo"
-)
-foreach(_t IN LISTS _memory_hungry_regression_tests)
-    if(TEST ${_t})
-        set_tests_properties(${_t} PROPERTIES
-          ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT_HIGH}"
-        )
-    endif()
-endforeach()
