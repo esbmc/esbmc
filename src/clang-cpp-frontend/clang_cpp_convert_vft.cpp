@@ -31,6 +31,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
+#include <util/expr/string_constant.h>
 #include <util/message/message.h>
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
@@ -175,6 +176,52 @@ symbolt *clang_cpp_convertert::check_vtable_type_symbol_existence(
   return context.find_symbol(vt_name);
 }
 
+/* typeid identity is the address of the printed type name, so every spelling of
+ * one type must print identically. Route record types through the record decl
+ * so that sugar (typedefs, elaborated `struct X`) cannot make the same class
+ * print two ways -- which is also what [expr.typeid]/1 requires, the operand's
+ * cv-qualifiers and typedefs being irrelevant. */
+std::string clang_cpp_convertert::rtti_type_name(const clang::QualType &qtype)
+{
+  if (const clang::CXXRecordDecl *rd = qtype->getAsCXXRecordDecl())
+    return rtti_type_name(*rd);
+  return qtype.getUnqualifiedType().getAsString();
+}
+
+std::string clang_cpp_convertert::rtti_type_name(const clang::CXXRecordDecl &rd)
+{
+#if CLANG_VERSION_MAJOR >= 22
+  const clang::QualType qtype = rd.getASTContext().getCanonicalTagType(&rd);
+#else
+  const clang::QualType qtype = rd.getASTContext().getRecordType(&rd);
+#endif
+  // The canonical type prints with the tag keyword ("struct B"); an operand's
+  // sugared type does not. Suppress it so both spellings agree and name() keeps
+  // reading as it did before.
+  clang::PrintingPolicy pp = rd.getASTContext().getPrintingPolicy();
+  pp.SuppressTagKeyword = true;
+  return qtype.getAsString(pp);
+}
+
+irep_idt
+clang_cpp_convertert::rtti_name_component_id(const irep_idt &vtable_type_id)
+{
+  return vtable_type_id.as_string() + "::@rtti_name";
+}
+
+struct_typet::componentt
+clang_cpp_convertert::rtti_name_component(const irep_idt &vtable_type_id)
+{
+  struct_typet::componentt c;
+  c.type() = pointer_typet(char_type());
+  c.set_name(rtti_name_component_id(vtable_type_id));
+  c.set("base_name", "@rtti_name");
+  c.set("pretty_name", "@rtti_name");
+  c.set("access", "public");
+  c.set("is_rtti_name", true);
+  return c;
+}
+
 symbolt *clang_cpp_convertert::add_vtable_type_symbol(
   const struct_typet::componentt &comp,
   struct_typet &type)
@@ -199,6 +246,11 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
   {
     struct_typet st;
     st.set("name", vt_type_symb.id);
+    // Every vtable leads with the most-derived type's name, the way a real
+    // Itanium-ABI vtable leads with a type_info pointer. `typeid` on a
+    // polymorphic glvalue reads it through the object's vptr, which is the only
+    // way the dynamic type is available at a use site typed by a base (#6310).
+    st.components().push_back(rtti_name_component(vt_name));
     vt_type_symb.set_type(std::move(st));
   }
   vt_type_symb.is_type = true;
@@ -695,6 +747,16 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     exprt values("struct", symbol_typet(vt_symb_type->id));
     for (const auto &compo : vt_type.components())
     {
+      if (compo.get_bool("is_rtti_name"))
+      {
+        // The vtable belongs to the most-derived class cxxrd, whatever base
+        // class' vptr selects it, so this is where the dynamic type is pinned.
+        exprt name = address_of_exprt(string_constantt(rtti_type_name(cxxrd)));
+        gen_typecast(ns, name, compo.type());
+        values.operands().push_back(name);
+        continue;
+      }
+
       std::map<irep_idt, exprt>::const_iterator cit2 =
         switch_map.find(compo.get("virtual_name").as_string());
       assert(cit2 != switch_map.end());

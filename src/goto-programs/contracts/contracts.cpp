@@ -1520,8 +1520,8 @@ goto_programt code_contractst::generate_checking_wrapper(
 
     // Replace is_fresh temp vars with verification: valid_object(ptr) && is_dynamic[ptr]
     if (!is_fresh_mappings.empty())
-      ensures_guard =
-        replace_is_fresh_in_ensures_expr(ensures_guard, is_fresh_mappings);
+      ensures_guard = replace_is_fresh_temps(
+        ensures_guard, is_fresh_mappings, /*require_dynamic=*/true);
   }
 
   // Extract struct member accesses to temporary variables before ASSERT
@@ -1950,9 +1950,10 @@ code_contractst::extract_is_fresh_mappings_from_body(
   return mappings;
 }
 
-expr2tc code_contractst::replace_is_fresh_in_ensures_expr(
+expr2tc code_contractst::replace_is_fresh_temps(
   const expr2tc &expr,
-  const std::vector<is_fresh_mapping_t> &mappings) const
+  const std::vector<is_fresh_mapping_t> &mappings,
+  bool require_dynamic) const
 {
   if (is_nil_expr(expr))
     return expr;
@@ -1964,8 +1965,25 @@ expr2tc code_contractst::replace_is_fresh_in_ensures_expr(
     {
       if (sym.thename == mapping.temp_var_name)
       {
-        // Replace with: valid_object(ptr) && is_dynamic[POINTER_OBJECT(ptr)]
+        // Lower is_fresh(p) to a concrete predicate on the pointed-to object.
+        //
+        // ensures side (require_dynamic == true):
+        //   valid_object(p) && is_dynamic[POINTER_OBJECT(p)] -- the
+        //   postcondition promises a freshly heap-allocated object.
+        //
+        // requires side at a --replace-call-with-contract call site
+        // (require_dynamic == false):
+        //   valid_object(p) only. The precondition is *asserted* against the
+        //   caller's argument here, and a real caller legitimately passes a
+        //   live stack object or an interior sub-object (e.g. &v->vec[k] of a
+        //   fresh vector) -- valid, but not heap-dynamic. Requiring is_dynamic
+        //   would reject every such caller and make is_fresh unusable under
+        //   contract replacement; the frame guarantee is carried by the
+        //   callee's assigns clause, not by heap-freshness. (#6380)
         expr2tc valid_obj = valid_object2tc(mapping.ptr_expr);
+        if (!require_dynamic)
+          return valid_obj;
+
         expr2tc ptr_obj = pointer_object2tc(pointer_type2(), mapping.ptr_expr);
 
         const symbolt *dyn_sym = ns.lookup("c:@__ESBMC_is_dynamic");
@@ -1984,8 +2002,8 @@ expr2tc code_contractst::replace_is_fresh_in_ensures_expr(
   }
 
   expr2tc new_expr = expr;
-  new_expr->Foreach_operand([this, &mappings](expr2tc &op) {
-    op = replace_is_fresh_in_ensures_expr(op, mappings);
+  new_expr->Foreach_operand([this, &mappings, require_dynamic](expr2tc &op) {
+    op = replace_is_fresh_temps(op, mappings, require_dynamic);
   });
 
   return new_expr;
@@ -3738,6 +3756,65 @@ void code_contractst::generate_replacement_at_call(
   };
 
   // 1. Assert requires clause (check precondition at call site)
+  //
+  // Lower any __ESBMC_is_fresh(p, n) in the requires clause to a concrete,
+  // dischargeable predicate before asserting it. On the assume/enforce side
+  // is_fresh is realised by allocation (section 0 of generate_checking_wrapper);
+  // here the precondition is *checked* against the caller's argument, so the
+  // raw is_fresh() intrinsic -- whose return-value temp is never defined in the
+  // caller -- would be asserted against an undefined value and fail vacuously
+  // (#6380). We build the temp -> pointer mapping from the *actual* argument at
+  // this call site (with its real pointee type, so we never dereference through
+  // the frontend's void* cast), then replace_is_fresh_temps rewrites the temp
+  // to valid_object() on the pointed-to object.
+  if (!is_nil_expr(requires_clause) && function_symbol.get_type().is_code())
+  {
+    const code_typet &code_type = to_code_type(function_symbol.get_type());
+    const code_typet::argumentst &params = code_type.arguments();
+
+    std::vector<is_fresh_mapping_t> req_is_fresh;
+    forall_goto_program_instructions (it, function_body)
+    {
+      if (!it->is_function_call() || !is_code_function_call2t(it->code))
+        continue;
+      const code_function_call2t &c = to_code_function_call2t(it->code);
+      if (
+        !is_symbol2t(c.function) ||
+        !is_fresh_function(to_symbol2t(c.function).thename.as_string()) ||
+        c.operands.size() < 2 || is_nil_expr(c.ret) || !is_symbol2t(c.ret))
+        continue;
+
+      // Recover the guarded pointer, stripping the void* cast the frontend
+      // inserts, then rebind the callee's formal parameter to the actual
+      // argument passed at this call site.
+      expr2tc ptr = c.operands[0];
+      while (is_typecast2t(ptr))
+        ptr = to_typecast2t(ptr).from;
+      for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
+      {
+        expr2tc param_expr =
+          symbol2tc(migrate_type(params[i].type()), params[i].get_identifier());
+        ptr = replace_symbol_in_expr(ptr, param_expr, actual_args[i]);
+      }
+      if (!is_pointer_type(ptr->type))
+        continue;
+
+      // valid_object() takes a pointer operand (cf. the canonical
+      // valid_object2tc(address_of(obj)) in dereference.cpp), so pass the
+      // argument pointer directly -- do not dereference it, which would both
+      // add a spurious bounds check and (through the frontend's void* cast)
+      // build an ill-typed array-select.
+      is_fresh_mapping_t m;
+      m.temp_var_name = to_symbol2t(c.ret).thename;
+      m.ptr_expr = ptr;
+      req_is_fresh.push_back(m);
+    }
+
+    if (!req_is_fresh.empty())
+      requires_clause = replace_is_fresh_temps(
+        requires_clause, req_is_fresh, /*require_dynamic=*/false);
+  }
+
   add_contract_clause(
     requires_clause, ASSERT, "contract requires", "contract requires");
 
