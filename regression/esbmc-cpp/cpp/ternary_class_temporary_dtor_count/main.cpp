@@ -1,4 +1,4 @@
-// KNOWNBUG: a conditional operator with class-typed operands over-destroys.
+// A conditional operator with class-typed operands used to over-destroy.
 //
 // In C++17 `cond ? C(1) : C(2)` is a prvalue and `a` is initialised directly
 // from it ([dcl.init]/17.6.1, guaranteed elision), so exactly one C object
