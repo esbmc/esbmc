@@ -30,9 +30,10 @@ public:
   // the driver before verification; surfaced in SARIF as note-level results
   // on both the success and failure paths.
   std::vector<dead_store_advisoryt> dead_store_advisories;
-  // True once a SARIF document carrying the advisories has been written from a
-  // trace path, so start_bmc() does not also emit a duplicate advisory-only
-  // document.
+  // True once a SARIF document carrying the advisories has been written — from a
+  // trace path, or from the --dead-code-check advisory that folds them into its
+  // own document — so start_bmc() does not write a second one. There is a single
+  // SARIF output path, so a second write would truncate the first.
   bool dead_store_sarif_written = false;
   enum ltl_res
   {

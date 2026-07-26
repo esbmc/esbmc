@@ -33,15 +33,21 @@ struct dead_code_finding_t
   unsigned line = 0; // 0 means "unknown", omitted from SARIF
 };
 
-// Writes the dead-code advisory `findings` to the SARIF 2.1.0 document at
-// `options["sarif-output"]` (stdout when "-"). Findings are emitted with
-// `result.level = "note"` (advisory, not an error) and taxa referencing
-// CWE-561 in the same "CWE" taxonomy used by sarif_goto_trace. Does nothing
-// when no SARIF output path is configured; when a path is set but `findings`
-// is empty it still writes a well-formed document with an empty `results`
-// array, so a clean run yields a valid report rather than a missing file.
+// Writes the dead-code advisory `findings`, plus any dead-store advisories
+// (CWE-563), to the SARIF 2.1.0 document at `options["sarif-output"]` (stdout
+// when "-"). Findings are emitted with `result.level = "note"` (advisory, not an
+// error) and taxa referencing CWE-561 in the same "CWE" taxonomy used by
+// sarif_goto_trace. Does nothing when no SARIF output path is configured; when a
+// path is set but `findings` is empty it still writes a well-formed document
+// with an empty `results` array, so a clean run yields a valid report rather
+// than a missing file.
+//
+// `advisories` must be passed whenever --dead-store-check is also active: both
+// advisory sets share the one output path, so they have to land in the same
+// document (issue #4495).
 void sarif_dead_code(
   const optionst &options,
-  const std::vector<dead_code_finding_t> &findings);
+  const std::vector<dead_code_finding_t> &findings,
+  const std::vector<dead_store_advisoryt> &advisories = {});
 
 #endif

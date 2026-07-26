@@ -136,6 +136,89 @@ json sarif_result(
   return result;
 }
 
+// One finding destined for a SARIF result, carrying the rule metadata it needs.
+struct sarif_finding_t
+{
+  std::string rule_id;
+  std::string rule_desc;
+  std::string level;
+  std::string message;
+  std::string file;
+  unsigned line = 0;
+  std::vector<unsigned> cwes;
+};
+
+// Assemble one complete `run` from `findings`: the de-duplicated rule table,
+// the CWE taxonomy covering every id referenced, and the results in order.
+// `declared_rules` are advertised in tool.driver.rules (and the taxonomy) even
+// when they produced no finding, so a clean advisory run still describes what
+// it looked for.
+//
+// Every emitter funnels through here, so a run carrying more than one advisory
+// kind is a single well-formed document instead of two documents racing for the
+// same output path (issue #4495).
+json build_sarif_run(
+  const std::vector<sarif_finding_t> &findings,
+  const std::vector<const cwe_rule_t *> &declared_rules = {})
+{
+  std::map<std::string, std::string> rule_descs;          // id -> description
+  std::map<std::string, std::vector<unsigned>> rule_cwes; // id -> CWE ids
+  std::set<unsigned> all_cwes;
+
+  auto record_rule = [&](
+                       const std::string &id,
+                       const std::string &desc,
+                       const std::vector<unsigned> &cwes) {
+    rule_descs[id] = desc;
+    rule_cwes[id] = cwes;
+    all_cwes.insert(cwes.begin(), cwes.end());
+  };
+
+  for (const cwe_rule_t *rule : declared_rules)
+    record_rule(rule->sarif_id, rule->short_description, rule->cwes);
+  for (const auto &f : findings)
+    record_rule(f.rule_id, f.rule_desc, f.cwes);
+
+  json run = new_sarif_run();
+
+  json rules = json::array();
+  for (const auto &[id, desc] : rule_descs)
+    rules.push_back(sarif_rule(id, desc, rule_cwes[id]));
+  run["tool"]["driver"]["rules"] = rules;
+
+  if (json taxonomy = cwe_taxonomy(all_cwes); !taxonomy.is_null())
+    run["taxonomies"] = json::array({std::move(taxonomy)});
+
+  json results = json::array();
+  for (const auto &f : findings)
+    results.push_back(
+      sarif_result(f.rule_id, f.level, f.message, f.file, f.line, f.cwes));
+  run["results"] = results;
+
+  return run;
+}
+
+// Dead-store advisories (CWE-563) as note-level findings. They never affect the
+// verdict, and they can accompany either a violation trace or a dead-code run,
+// so both emitters share this.
+void append_dead_store_findings(
+  const std::vector<dead_store_advisoryt> &advisories,
+  std::vector<sarif_finding_t> &out)
+{
+  for (const auto &adv : advisories)
+  {
+    const cwe_rule_t &rule = cwe_rule_for(adv.comment);
+    out.push_back(
+      {rule.sarif_id,
+       rule.short_description,
+       "note",
+       adv.comment,
+       adv.file,
+       adv.line,
+       rule.cwes});
+  }
+}
+
 // Wrap `run` in a SARIF 2.1.0 document and write it to `out_path` ("-" is
 // stdout). Shared serialisation so the schema URI lives in one place.
 void write_sarif_document(const std::string &out_path, json run)
@@ -177,26 +260,7 @@ void sarif_goto_trace(
   // Collect violation steps and the rules / CWE ids they exercise. The
   // substring-to-rule mapping comes from util/cwe_mapping — single source of
   // truth shared with the textual / JSON / GraphML outputs.
-  struct result_t
-  {
-    std::string rule_id;
-    std::string level = "error";
-    std::string message;
-    std::string file;
-    unsigned line = 0;
-    std::vector<unsigned> cwes;
-  };
-  std::vector<result_t> results;
-  std::map<std::string, std::string> rule_descs; // id -> short description
-  std::map<std::string, std::vector<unsigned>> rule_cwes; // id -> ids
-  std::set<unsigned> all_cwes;
-
-  auto record_rule = [&](const result_t &r, const cwe_rule_t &rule) {
-    rule_descs[r.rule_id] = rule.short_description;
-    rule_cwes[r.rule_id] = r.cwes;
-    for (unsigned id : r.cwes)
-      all_cwes.insert(id);
-  };
+  std::vector<sarif_finding_t> findings;
 
   for (const auto &step : goto_trace.steps)
   {
@@ -204,57 +268,25 @@ void sarif_goto_trace(
       continue;
 
     const cwe_rule_t &rule = cwe_rule_for(step.comment);
-    result_t r;
-    r.rule_id = rule.sarif_id;
-    r.message = step.comment.empty() ? "Assertion check" : step.comment;
-    r.file = step.pc->location.get_file().as_string();
-    r.line = parse_line(step.pc->location.get_line().as_string());
-    r.cwes = rule.cwes;
-
-    record_rule(r, rule);
-    results.push_back(std::move(r));
+    findings.push_back(
+      {rule.sarif_id,
+       rule.short_description,
+       "error",
+       step.comment.empty() ? "Assertion check" : step.comment,
+       step.pc->location.get_file().as_string(),
+       parse_line(step.pc->location.get_line().as_string()),
+       rule.cwes});
   }
 
-  // Dead-store advisories (CWE-563) are emitted as note-level results and do
-  // not affect the verdict.
-  for (const auto &adv : advisories)
-  {
-    const cwe_rule_t &rule = cwe_rule_for(adv.comment);
-    result_t r;
-    r.rule_id = rule.sarif_id;
-    r.level = "note";
-    r.message = adv.comment;
-    r.file = adv.file;
-    r.line = adv.line;
-    r.cwes = rule.cwes;
+  append_dead_store_findings(advisories, findings);
 
-    record_rule(r, rule);
-    results.push_back(std::move(r));
-  }
-
-  // Build SARIF 2.1.0 document from shared scaffolding.
-  json run = new_sarif_run();
-
-  json rules = json::array();
-  for (const auto &[id, desc] : rule_descs)
-    rules.push_back(sarif_rule(id, desc, rule_cwes[id]));
-  run["tool"]["driver"]["rules"] = rules;
-
-  if (json taxonomy = cwe_taxonomy(all_cwes); !taxonomy.is_null())
-    run["taxonomies"] = json::array({std::move(taxonomy)});
-
-  json results_json = json::array();
-  for (const auto &r : results)
-    results_json.push_back(
-      sarif_result(r.rule_id, r.level, r.message, r.file, r.line, r.cwes));
-  run["results"] = results_json;
-
-  write_sarif_document(out_path, std::move(run));
+  write_sarif_document(out_path, build_sarif_run(findings));
 }
 
 void sarif_dead_code(
   const optionst &options,
-  const std::vector<dead_code_finding_t> &findings)
+  const std::vector<dead_code_finding_t> &findings,
+  const std::vector<dead_store_advisoryt> &advisories)
 {
   const std::string out_path = options.get_option("sarif-output");
   if (out_path.empty())
@@ -268,27 +300,23 @@ void sarif_dead_code(
   // leaks into ordinary violation mapping (issue #4495).
   const cwe_rule_t &rule = dead_code_cwe_rule();
 
-  json run = new_sarif_run();
-
-  run["tool"]["driver"]["rules"] =
-    json::array({sarif_rule(rule.sarif_id, rule.short_description, rule.cwes)});
-
-  const std::set<unsigned> cwes(rule.cwes.begin(), rule.cwes.end());
-  if (json taxonomy = cwe_taxonomy(cwes); !taxonomy.is_null())
-    run["taxonomies"] = json::array({std::move(taxonomy)});
-
   // Advisory findings are emitted at "note" level: the dead-code verdict never
   // flips a run to FAILED (issue #4495).
-  json results_json = json::array();
+  std::vector<sarif_finding_t> all;
   for (const auto &f : findings)
-    results_json.push_back(sarif_result(
-      rule.sarif_id,
-      "note",
-      f.message.empty() ? "Dead code" : f.message,
-      f.file,
-      f.line,
-      rule.cwes));
-  run["results"] = results_json;
+    all.push_back(
+      {rule.sarif_id,
+       rule.short_description,
+       "note",
+       f.message.empty() ? "Dead code" : f.message,
+       f.file,
+       f.line,
+       rule.cwes});
 
-  write_sarif_document(out_path, std::move(run));
+  // A dead-code run may also carry CWE-563 dead-store advisories. Both sets
+  // belong in this one document: emitting them separately would have the second
+  // write truncate the first (or concatenate two JSON documents on stdout).
+  append_dead_store_findings(advisories, all);
+
+  write_sarif_document(out_path, build_sarif_run(all, {&rule}));
 }

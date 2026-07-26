@@ -251,6 +251,14 @@ VERIFICATION SUCCESSFUL
   not a false SUCCESSFUL). A per-claim `--timeout`, however, leaves a probe
   unsolved and that branch would then be listed as dead; do not pair
   `--dead-code-check` with a per-claim timeout if the finding set must be exact.
+- **Concurrent programs are explored exhaustively.** A branch can be reachable
+  under one thread interleaving and not another, so on concurrent input the mode
+  explores *every* interleaving before reporting, rather than stopping at the
+  first one as a normal run does. Probe reachability accumulates across them and
+  a single advisory is emitted at the end. This is what keeps a branch that only
+  a later ordering reaches from being reported as dead, but it does mean a
+  `--dead-code-check` run on a heavily concurrent program costs considerably more
+  than a plain verification run.
 - **The verdict is not a safety verdict.** The branch-coverage instrumentation
   this mode reuses replaces every pre-existing assertion with `assert(true)`
   before symbolic execution, so ESBMC's ordinary checks — including the bounds

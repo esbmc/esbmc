@@ -783,7 +783,8 @@ static bool is_kpath_maximal(const std::string &claim_sig)
 // SARIF note level. They never flip the verdict (see report_result).
 static void report_dead_code(
   const optionst &options,
-  const std::unordered_set<std::string> &reached_claims)
+  const std::unordered_set<std::string> &reached_claims,
+  const std::vector<dead_store_advisoryt> &dead_stores)
 {
   std::vector<dead_code_finding_t> findings;
 
@@ -829,8 +830,10 @@ static void report_dead_code(
 
   // Mirror the findings into SARIF when requested. A clean run still emits a
   // well-formed document with an empty results array, so --sarif-output never
-  // yields a missing file (issue #4495).
-  sarif_dead_code(options, findings);
+  // yields a missing file (issue #4495). Dead-store advisories go into the same
+  // document: they share the one output path, so a second write would truncate
+  // these findings away.
+  sarif_dead_code(options, findings, dead_stores);
 }
 
 void report_coverage(
@@ -842,11 +845,15 @@ void report_coverage(
 {
   // --dead-code-check reuses the coverage machinery for instrumentation but
   // reports its results as CWE-561 advisories rather than a coverage summary.
+  //
+  // The advisory is *not* emitted here: report_coverage runs inside
+  // multi_property_check, i.e. once per thread interleaving, so a branch
+  // reachable only under a later ordering would be called dead on the strength
+  // of the first interleaving alone. bmct::start_bmc emits it once, after
+  // exploration finishes and probe reachability has accumulated across every
+  // interleaving (issue #4495).
   if (options.get_bool_option("dead-code-check"))
-  {
-    report_dead_code(options, reached_claims);
     return;
-  }
 
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
@@ -1461,6 +1468,22 @@ smt_resultt bmct::start_bmc()
 {
   std::shared_ptr<symex_target_equationt> eq;
   smt_resultt res = run(eq);
+
+  // The dead-code advisory is emitted here, once, rather than from
+  // report_coverage inside multi_property_check: that runs per thread
+  // interleaving, and reporting there called a branch dead on the strength of
+  // the first interleaving alone. goto_functionst::reached_claims is a static
+  // that is never cleared between interleavings, so by this point it holds every
+  // probe reached by any of them. Emitting before report_result keeps the
+  // [Dead code] section above the verdict, and routing the dead-store advisories
+  // through the same call keeps both sets in one SARIF document (issue #4495).
+  if (options.get_bool_option("dead-code-check"))
+  {
+    report_dead_code(
+      options, goto_functionst::reached_claims, dead_store_advisories);
+    dead_store_sarif_written = true;
+  }
+
   if (!options.get_bool_option("multi-property"))
     // multi-property traces are output during the run(eq)
     report_trace(res, *eq);
@@ -1519,7 +1542,18 @@ smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
       if (res == P_SATISFIABLE)
         ++interleaving_failed;
 
-      if (!options.get_bool_option("all-runs"))
+      // --dead-code-check has to see every interleaving before it can call a
+      // branch dead: each *live* probe comes back SAT, so stopping here would
+      // leave every branch that is only reachable under a later thread ordering
+      // looking unreached, and report it as CWE-561. There is no
+      // early-exit-on-bug to preserve for this mode — the verdict is forced
+      // SUCCESSFUL regardless (issue #4495). A solver error or an SMT-formula
+      // emission still stops immediately: those are not "live probe" results and
+      // must propagate.
+      const bool keep_exploring_for_dead_code =
+        options.get_bool_option("dead-code-check") && res == P_SATISFIABLE;
+
+      if (!options.get_bool_option("all-runs") && !keep_exploring_for_dead_code)
         return res;
     }
     fine_timet bmc_stop = current_time();
