@@ -11,6 +11,7 @@
 #  include <cstdint> // for uint32_t, uint64_t
 #  include <cmath>   // for INFINITY
 #  include <string>  // for std::string
+#  include <string_view> // for std::string_view
 #endif
 
 namespace std
@@ -449,6 +450,28 @@ struct hash<::std::string>
     // Use c_str() to access characters in a const-compatible way
     const char *str = key.c_str();
     for (size_t i = 0; i < key.length(); ++i)
+    {
+      hash_value = hash_value * prime +
+                   static_cast<size_t>(static_cast<unsigned char>(str[i]));
+    }
+
+    return __esbmc_deterministic_hash(hash_value);
+  }
+};
+
+// Specialization for std::string_view. [string.view.hash] requires the hash of
+// a string view to equal the hash of the corresponding string, so this must use
+// the same scheme as hash<std::string> above.
+template <>
+struct hash<::std::string_view>
+{
+  size_t operator()(::std::string_view key) const
+  {
+    size_t hash_value = 0;
+    const size_t prime = 31;
+
+    const char *str = key.data();
+    for (size_t i = 0; i < key.size(); ++i)
     {
       hash_value = hash_value * prime +
                    static_cast<size_t>(static_cast<unsigned char>(str[i]));

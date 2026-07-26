@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-07-22.
+**Updated:** 2026-07-25.
 
 This file tracks what is **not yet implemented or broken** in the NumPy
 module. Completed items are in the git history and `regression/numpy/`.
@@ -96,13 +96,13 @@ Architectural decisions that gate specific pendencies here (referenced as
   above) is a separate, still-unsupported case — see "Missing indexing /
   slicing" below. See `regression/numpy/numpy_param_array_*` and
   `array_param_*`.
-- **Mixing a slice with integer indices in one tuple index** (`a[:, 0, 0]`,
-  `a[0, :, 0]`) — an N-D tuple subscript with exactly one full-slice axis
-  (`:`) and every other axis a literal/resolvable integer now lowers to a
-  bounded copy along the slice axis, generalizing the existing 2-D
-  column-select path. A bounded/partial slice (`a[0:2, 0, 0]`) or more than
-  one slice axis (`a[:, :, 0]`) in the same tuple stays rejected explicitly.
-  See `regression/numpy/numpy_tuple_mixed_slice_*`.
+- **Mixing one literal slice with integer indices in one tuple index**
+  (`a[:, 0, 0]`, `a[0, :, 0]`, `a[0:2, 0, 0]`) — an N-D tuple subscript
+  with exactly one literal slice axis and every other axis a
+  literal/resolvable integer now lowers to a bounded copy along the slice
+  axis, generalizing the existing 2-D column-select path. More than one
+  slice axis (`a[:, :, 0]`) or symbolic slice bounds stay rejected
+  explicitly. See `regression/numpy/numpy_tuple_mixed_slice_*`.
 - **Strided slicing (`a[::2]`, `a[1::2]`, `a[::-1]`)** — confirmed already
   supported and now covered by regression tests for 1-D arrays (the
   existing slice model already implemented `step`). Extended to 2-D:
@@ -110,6 +110,19 @@ Architectural decisions that gate specific pendencies here (referenced as
   selection, bare step only — see "Missing indexing / slicing"). `step=0`
   continues to raise `ValueError` at runtime. See
   `regression/numpy/numpy_strided_slice_*`.
+- **NumPy API expansion PR** — added or promoted focused support for:
+  `np.empty`; `empty_like`/`zeros_like`/`ones_like`/`full_like`;
+  concrete `sort`, `argsort`, `searchsorted`, `unique`, `median` and
+  `percentile`; scalar and bounded-array `np.random.random`, `rand`,
+  `randint`, `uniform`, `choice`, plus explicit `seed` handling; `.flat`
+  and readonly `np.nditer`; vector `np.linalg.norm` (`ord` default/2, 1,
+  `np.inf`, `-np.inf`) and explicit `solve` size limits; boolean and
+  chained `np.dot`; and integer literal `np.transpose` cases that used to
+  fall through to an unsafe runtime shape. See the corresponding
+  regressions under `regression/numpy/` with prefixes such as `empty_`,
+  `like_creation_`, `sort_`, `argsort_`, `searchsorted_`, `unique_`,
+  `median_`, `percentile_`, `random_`, `flat`, `nditer`, `norm_`,
+  `np_linalg_boundary_`, `dot`, and `transpose`.
 
 ---
 
@@ -118,8 +131,8 @@ Architectural decisions that gate specific pendencies here (referenced as
 | Feature | Status | Notes |
 |---|---|---|
 | Returning a numpy array *out* of a function by value (general case: a sub-array, e.g. `def f(a): return a[0]`, or any non-trivial body) | Missing | Arrays aren't valid by-value return types in the current GOTO model. Only the narrow *identity*-return case is fixed (see "Recently completed") — the general case was attempted twice this round and reverted both times after hitting the same structural wall: **(1)** inlining the substituted return expression at every call site works for the eligibility check but the two-pass assignment machinery (`create_symbol_for_unannotated_assign` type-probes the RHS once, then `get_var_assign` converts it again "for real") evaluates a `Subscript` return expression twice, duplicating the bounds-check GOTO code it emits and corrupting the result (confirmed via `--goto-functions-only`: the second, discarded evaluation's DECLs still land in the block); a cross-call-node cache (keyed by the AST node's address, confirmed to see the same `current_block` on both hits) prevented the double-conversion but did *not* fix the wrong result, meaning the bug is elsewhere in that pipeline. **(2)** A single-member wrapper-struct return type (`struct { value: array_type }`, unwrapped right after a real, once-only function call via the existing `store_call_result` helper — mirroring how a returned tuple already works today) also hit a variant of the same issue: while building it, a separate pre-existing bug was found and fixed (a static Python-level pre-pass injects a wrong `-> Any` return annotation for `return a[0]`, decided *before* parameters are processed, which pre-empted the array-shape detection with a `double` default — now deferred to the post-body GOTO scan, which sees real converted types), but the wrapped struct still isn't reliably unwrapped before a variable's type is decided elsewhere in the same assignment pipeline, causing a segfault (`build_index` dereferencing a struct's `.subtype()`). Both attempts point at the same root cause: `y = f(...)`'s type is decided by more than one code path in `get_var_assign`/`create_symbol_for_unannotated_assign`, not uniformly from what `get_expr` returns. A real fix needs to understand and consolidate that pipeline first, not just work around it at the call site. |
-| Strided column slice combined with explicit bounds (`a[:, 1:3:2]`) | Missing | `build_strided_column_select` only models the bare-step form (`a[:, ::step]`); combining a column step with explicit bounds is rejected explicitly, since the result width would then need to be resolved from runtime bounds instead of the array's static shape. |
-| Bounded/partial slice or more than one slice axis mixed with integer indices in one tuple (`a[0:2, 0, 0]`, `a[:, :, 0]`) | Missing | Rejected explicitly (`TypeError: multi-dimensional indexing ... numpy arrays are modelled as 1D lists`); the single-full-slice-axis case (`a[:, 0, 0]`) is supported — see "Recently completed". |
+| View aliasing for basic indexing and transpose-like views | Missing | The frontend still uses conservative copies for many basic-indexing/view-like operations. Some unsafe view-copy/source-write cases are now guarded, but a general shared-buffer descriptor model is not wired into indexing and assignment yet. |
+| Higher-dimensional or symbolic slice bounds beyond the supported literal-copy cases | Missing | Bounded 2-D column slices and one-slice-axis mixed tuple indexing are supported for literal/fixed-shape cases. Multiple slice axes, symbolic slice bounds, and broader stride combinations remain rejected explicitly rather than silently approximated. |
 
 ---
 
@@ -127,14 +140,14 @@ Architectural decisions that gate specific pendencies here (referenced as
 
 | Category | Missing items |
 |---|---|
-| Array creation | `empty`; `empty_like`/`zeros_like`/`ones_like`/`full_like` |
-| Sorting / searching | `sort`, `argsort`, `searchsorted`, `unique` |
-| Statistics | `median`, `percentile` |
-| Linear algebra | `inv`/`solve` limited to ≤3×3; `norm` limited to Frobenius; `eig`/`svd` limited to ≤3×3 concrete matrices |
-| Random | `np.random.*` (all) |
+| Array creation | Advanced dtype forms (`object`, structured/record dtypes, custom dtype objects) and broad NumPy constructor parity |
+| Sorting / searching | Axis-aware and stable-kind variants, `sort`/`argsort` kwargs beyond the supported concrete 1-D recut, and symbolic arrays |
+| Statistics | Axis/keepdims/out/overwrite/nan-policy style variants beyond concrete flattened/literal `median` and `percentile` |
+| Linear algebra | `inv`/`solve` limited to 2×2/3×3; `norm` limited to vectors and Frobenius matrices; `eig`/`svd` limited to small concrete matrices |
+| Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes |
 | Structured arrays | Record dtypes |
 | Views / strides | No aliasing model — all ops copy; see "Soundness concerns" #4, this is a confirmed unsound gap, not just a missing feature |
-| Iteration | `nditer`, `flat` |
+| Iteration | Writable `nditer`, advanced `op_flags`, multi-operand iteration, and mutation through `flat` |
 
 ---
 
@@ -176,8 +189,9 @@ Architectural decisions that gate specific pendencies here (referenced as
 
 ## KNOWNBUG tests
 
-`dot6` (bool), `dot7`, `transpose2`, `transpose7` — silent wrong results.
-Either model correctly or downgrade to explicit "unsupported".
+No remaining KNOWNBUG in the targeted `dot6`/`dot7`/`transpose2`/
+`transpose7` set. `dot6`/`dot7` and `transpose7` are now CORE regressions;
+`transpose2` was already CORE and remains covered.
 
 ---
 
@@ -212,15 +226,35 @@ Either model correctly or downgrade to explicit "unsupported".
    currently rejected explicitly; the bare-step form (`a[:, ::step]`) is
    supported. Would need the result width resolved from runtime bounds
    instead of the array's static shape.
-4. **Bounded/partial slice or multiple slice axes mixed with integer
-   indices in one tuple** (`a[0:2, 0, 0]`, `a[:, :, 0]`) — currently
-   rejected explicitly; the single-full-slice-axis case is supported.
-5. **`np.empty`, sorting/searching (`sort`/`argsort`/`searchsorted`/
-   `unique`), statistics (`median`/`percentile`), `np.random.*`, `flat`/
-   `nditer`, and the `dot6`/`dot7`/`transpose2`/`transpose7` KNOWNBUGs** —
-   entirely untouched this round; see "Missing API surface" and "KNOWNBUG
-   tests" above. `np.random.*` needs ADR-NP-002 (accepted, implementation
-   pending).
+4. **Multiple slice axes or symbolic bounds mixed with integer indices in
+   one tuple** (`a[:, :, 0]`, `a[i:j, 0, 0]`) — literal bounded one-axis
+   mixed tuple slices are supported; broader symbolic/multi-axis forms stay
+   rejected explicitly.
+5. **Advanced dtype and constructor parity** — object/structured/custom
+   dtype support remains intentionally rejected in the new creation helpers.
+6. **Random and iterator follow-up** — extend beyond the initial nondet
+   random/choice recut to probability vectors, replacement semantics,
+   additional distributions, writable `nditer`, and mutation through `flat`.
+7. **Linear algebra breadth** — larger matrices, symbolic matrix entries,
+   additional `norm` axes/orders, and more faithful `eig`/`svd` semantics.
+
+## Suggested next PRs
+
+1. **View aliasing and descriptor wiring** — connect `ndarray_descriptor`
+   buffer/offset/stride metadata to basic indexing, transpose, assignment,
+   and escape checks so supported views alias correctly and unsupported view
+   mutation is rejected consistently.
+2. **General array returns** — consolidate the assignment/type inference
+   pipeline so user functions can return non-trivial NumPy arrays and
+   sub-arrays without double conversion or wrapper-type confusion.
+3. **Advanced dtype and constructors** — structured/object dtype policy,
+   constructor diagnostics, and dtype propagation for creation/sort/stat
+   helpers.
+4. **Random and iteration depth** — PRNG-state decisions, remaining
+   distributions, probability/replacement `choice`, writable `nditer`, and
+   `flat` assignment semantics.
+5. **Linear algebra expansion** — matrix-size strategy, symbolic-entry
+   policy, and additional `norm`/`eig`/`svd` coverage.
 
 ### Out of scope
 - True SMT-array scalability — `array_typet` already lowers to SMT
