@@ -34,7 +34,14 @@ public:
 
   constexpr any() noexcept = default;
 
-  template <class T>
+  /* [any.cons]/6: this constructor participates only when decay_t<T> is not
+   * any itself. Unconstrained it is a better match than any(const any&) for a
+   * non-const lvalue, so `any b = a;` stored an any inside the any instead of
+   * copying the held object. */
+  template <
+    class T,
+    class = typename enable_if<!is_same<typename decay<T>::type, any>::value>::
+      type>
   any(T &&v)
   {
     using D = typename decay<T>::type;
