@@ -129,20 +129,49 @@ class TypeInferenceMixin:
         """Merge cls into mapping[name], collapsing to None on any conflict."""
         mapping[name] = cls if mapping.get(name, cls) == cls else None
 
+    def _homogeneous_list_class(self, list_node, class_names, var_classes):
+        """Single class shared by every element of a non-empty list literal
+        (all elements instances of the same user class), else None."""
+        if not list_node.elts:
+            return None
+        cls = None
+        for elt in list_node.elts:
+            c = self._list_element_class(elt, class_names, var_classes)
+            if c is None or (cls is not None and c != cls):
+                return None
+            cls = c
+        return cls
+
     def _collect_list_literal_classes(self, module, class_names, var_classes, list_classes):
         """Pass 1: `v = [instances of one class]` -> list_classes[v] = class."""
         for n in ast.walk(module):
-            if not (isinstance(n, ast.Assign) and isinstance(n.value, ast.List) and n.value.elts):
+            if not (isinstance(n, ast.Assign) and isinstance(n.value, ast.List)):
                 continue
-            cls = None
-            ok = True
-            for elt in n.value.elts:
-                c = self._list_element_class(elt, class_names, var_classes)
-                if c is None or (cls is not None and c != cls):
-                    ok = False
-                    break
-                cls = c
-            if not (ok and cls):
+            cls = self._homogeneous_list_class(n.value, class_names, var_classes)
+            if not cls:
+                continue
+            for t in n.targets:
+                if isinstance(t, ast.Name):
+                    self._record_single_class(list_classes, t.id, cls)
+
+    def _collect_list_repetition_classes(self, module, class_names, var_classes, list_classes):
+        """Pass 1b: `v = [instance] * n` / `v = n * [instance]` -> list_classes[v] = class.
+
+        A list built by repetition (a common way to pre-size a list of objects,
+        e.g. `pts = [Point(0)] * n`) is an ``ast.BinOp(Mult)``, not an
+        ``ast.List``, so Pass 1 misses it. Without the element class recorded,
+        a `for p in pts` target falls back to ``Any`` (void*) and a method call
+        on p resolves to a nonexistent global, crashing GOTO generation."""
+        for n in ast.walk(module):
+            if not (isinstance(n, ast.Assign) and isinstance(n.value, ast.BinOp)
+                    and isinstance(n.value.op, ast.Mult)):
+                continue
+            operands = (n.value.left, n.value.right)
+            list_node = next((o for o in operands if isinstance(o, ast.List)), None)
+            if list_node is None:
+                continue
+            cls = self._homogeneous_list_class(list_node, class_names, var_classes)
+            if not cls:
                 continue
             for t in n.targets:
                 if isinstance(t, ast.Name):
@@ -193,6 +222,7 @@ class TypeInferenceMixin:
         class_names, var_classes = self._build_var_class_map(module)
         list_classes = {}
         self._collect_list_literal_classes(module, class_names, var_classes, list_classes)
+        self._collect_list_repetition_classes(module, class_names, var_classes, list_classes)
         self._propagate_comprehension_classes(module, list_classes)
         return {name: cls for name, cls in list_classes.items() if cls}
 

@@ -3,17 +3,17 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/printf_formatter.h>
 #include <string>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/std_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_types.h>
 #include <vector>
 #include <algorithm>
 #include <functional>
-#include <util/array2string.h>
+#include <util/expr/array2string.h>
 
 bool goto_symext::recover_va_list_args(
   const code_printf2t &call,
@@ -119,6 +119,23 @@ bool goto_symext::recover_va_list_args(
   {
     if (is_nil_expr(insn.code))
       continue;
+    // Skip the va_start/va_copy markers this analysis itself relies on: they
+    // reference &ap by construction, but starting (or copying into) a va_list
+    // is not the address-laundering the scan below guards against. va_copy's
+    // laundering, where it matters, is carried by the separate ASSIGN it emits
+    // on pointer-va_list targets, which the scan still inspects.
+    if (is_code_function_call2t(insn.code))
+    {
+      const expr2tc &fn = to_code_function_call2t(insn.code).function;
+      if (is_symbol2t(fn))
+      {
+        const irep_idt &fn_name = to_symbol2t(fn).thename;
+        if (
+          fn_name == "c:@F@__builtin_va_start" ||
+          fn_name == "c:@F@__builtin_va_copy")
+          continue;
+      }
+    }
     if (is_code_assign2t(insn.code))
     {
       const code_assign2t &assign = to_code_assign2t(insn.code);
@@ -538,11 +555,12 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   }
 
   // Model *strp for asprintf/vasprintf: assign a fresh tracked heap allocation.
-  // The buffer size is modelled as 1 byte; exact sizing requires va_list
-  // recovery (G-C, not yet implemented). With --no-bounds-check this is
-  // sufficient to eliminate the false alarms while exact size analysis is
-  // deferred. Users running with --bounds-check should be aware of this
-  // limitation.
+  // The buffer size is modelled as 1 byte; exact sizing would need the
+  // recovered format length (va_list recovery exists — see
+  // recover_va_list_args — but is not yet wired into this allocation's size).
+  // With --no-bounds-check this is sufficient to eliminate the false alarms
+  // while exact size analysis is deferred. Users running with --bounds-check
+  // should be aware of this limitation.
   if (is_allocating && !is_nil_expr(strp) && is_pointer_type(strp->type))
   {
     // Derive char * from strp's declared type (char **) so the dereference

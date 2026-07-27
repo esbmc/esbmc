@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 3 --compact-trace
+^VERIFICATION FAILED$
+loop_idx_vfy = 3

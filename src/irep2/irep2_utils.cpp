@@ -1,6 +1,6 @@
 #include <irep2/irep2_utils.h>
 #include <irep2/irep2_dispatch.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 
 void make_not(expr2tc &expr)
 {
@@ -306,7 +306,7 @@ void get_symbols(
 }
 
 // Field-overload catalogue for the generic switch dispatchers in
-// irep2_dispatch.h: pretty-printing, cmp/lt, SHA-1 ingestion,
+// irep2_dispatch.h: pretty-printing, cmp/lt, crc/hash ingestion,
 // sub-expression iteration, and delegate calling, specialised for each
 // field type that needs non-default behaviour. Primary templates live in
 // irep2_dispatch.h alongside the dispatchers themselves.

@@ -1,36 +1,39 @@
 #include <python-frontend/string/char_utils.h>
-#include <python-frontend/exception_utils.h>
+#include <python-frontend/exception/exception_utils.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_int_overflow.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/round_to_nearest_guard.h>
+#include <python-frontend/math/python_int_overflow.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_builder.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <python-frontend/symbol_id.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_expr.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
-#include <util/symbol.h>
-#include <util/type.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/arith/ieee_float.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
+#include <util/symtab/symbol.h>
+#include <util/irep/type.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <array>
 #include <cmath>
 #include <cctype>
 #include <climits>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iomanip>
 #include <limits>
@@ -511,7 +514,7 @@ bool string_handler::try_extract_const_string_expr(
           if (!path.empty())
           {
             nlohmann::json func_scope =
-              json_utils::find_function(ast["body"], path.back());
+              json_utils::try_find_function(ast["body"], path.back());
             if (
               !func_scope.empty() && try_const_string_from_single_assignment(
                                        bare_name, func_scope, out))
@@ -706,6 +709,38 @@ std::string string_handler::float_to_string(
   return oss.str();
 }
 
+std::string string_handler::cpython_float_str(double d)
+{
+  // A whole value below 1e16 renders as its integer digits plus ".0"
+  // (str(1.0) == "1.0", str(1000000.0) == "1000000.0"); %g would drop the ".0".
+  if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 1e16)
+  {
+    std::string s = std::to_string(static_cast<long long>(d));
+    if (std::signbit(d) && s[0] != '-') // str(-0.0) == "-0.0"
+      s.insert(s.begin(), '-');
+    return s + ".0";
+  }
+
+  // Every other value (and nan/inf) renders with the fewest significant digits
+  // that read back as the same double, which is exactly how CPython's repr
+  // chooses its digits. %g picks fixed vs. exponential on CPython's rule too:
+  // exponential iff the decimal exponent is < -4 or >= the significant-digit
+  // count, which agrees with CPython's 1e16 cut-over because a non-whole float
+  // always needs more significant digits than its exponent. snprintf/strtod
+  // honour the host FP rounding mode; pin FE_TONEAREST so the fold matches
+  // CPython regardless of the host's mode.
+  const round_to_nearest_guard guard;
+  char buf[40];
+  for (int precision = 1; precision < 17; ++precision)
+  {
+    std::snprintf(buf, sizeof(buf), "%.*g", precision, d);
+    if (std::strtod(buf, nullptr) == d)
+      return buf;
+  }
+  std::snprintf(buf, sizeof(buf), "%.17g", d);
+  return buf;
+}
+
 // Parse the leading [[fill]align][0][width] portion of a Python format
 // spec. Returns true if any padding parameters were extracted; on success,
 // *rest is set to the remainder of the spec (precision/type) for further
@@ -774,7 +809,7 @@ static bool parse_format_padding(
 }
 
 // Apply fill/align/width padding to a literal string per Python's
-// format-spec mini-language. Returns padded as a fresh char_array expr.
+// format-spec mini-language. Returns the padded string.
 static std::string
 apply_padding(const std::string &input, char fill, char align, int width)
 {
@@ -958,6 +993,31 @@ exprt string_handler::apply_format_specification(
   // and string 's'.
   if (format == "d" || format == "i" || format == "s")
     return convert_to_string(expr);
+
+  // The 'c' type renders an integer as the character with that code point.
+  // Fold only 1-127 (printable-through-DEL ASCII) for a constant integer:
+  // code point 0 embeds a NUL (unreliable in the null-terminated string model)
+  // and > 127 is multi-byte UTF-8, so those fall through to the nondet handling.
+  if (
+    format == "c" && (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+  {
+    exprt v = expr;
+    if (v.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+      if (sym && !sym->get_value().is_nil())
+        v = sym->get_value();
+    }
+    BigInt n;
+    if (v.is_constant() && !to_integer(v, n) && n >= 1 && n <= 127)
+    {
+      std::vector<unsigned char> chars{
+        static_cast<unsigned char>(n.to_uint64()), '\0'};
+      return make_char_array_expr(
+        chars, type_handler_.build_array(char_type(), 2));
+    }
+  }
 
   // Integer base presentations: 'x'/'X' (hex), 'o' (octal), 'b' (binary), for a
   // constant integer value (resolving a symbol's constant value and a negative
@@ -1164,30 +1224,22 @@ exprt string_handler::convert_to_string(const exprt &expr)
     }
     else if (t.is_floatbv())
     {
-      std::string str_value = "0.0";
-      if (expr.is_constant() && !expr.value().empty())
+      // Fold to CPython's shortest round-trip repr. Only a 64-bit double with a
+      // concrete value is rendered; a 32-bit float or an empty (nondet) value
+      // stays a sound nondet string.
+      std::optional<std::string> folded;
+      if (!expr.value().empty() && bv_width(t) == 64)
       {
-        const std::string &float_bits = expr.value().as_string();
-        if (t.is_floatbv() && bv_width(t) == 64 && float_bits.length() == 64)
-        {
-          str_value = float_to_string(float_bits, 64, 6);
-          // Match Python's str(float): drop trailing fractional zeros, keep
-          // at least one digit after the dot ("5.0" rather than "5.").
-          auto dot = str_value.find('.');
-          if (dot != std::string::npos)
-          {
-            size_t last_nonzero = str_value.find_last_not_of('0');
-            if (last_nonzero == dot)
-              str_value.resize(dot + 2);
-            else
-              str_value.resize(last_nonzero + 1);
-          }
-        }
+        ieee_floatt f;
+        f.from_expr(to_constant_expr(expr));
+        folded = cpython_float_str(f.to_double());
       }
+      if (!folded)
+        return build_nondet_string_fallback(expr.location());
 
       typet string_type =
-        type_handler_.build_array(char_type(), str_value.size() + 1);
-      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+        type_handler_.build_array(char_type(), folded->size() + 1);
+      std::vector<unsigned char> chars(folded->begin(), folded->end());
       chars.push_back('\0');
 
       return make_char_array_expr(chars, string_type);
@@ -3244,8 +3296,9 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
       const std::string &scope_func = converter_.get_current_func_name();
       const nlohmann::json &ast = converter_.get_ast_json();
       const nlohmann::json func_node =
-        scope_func.empty() ? nlohmann::json()
-                           : json_utils::find_function(ast["body"], scope_func);
+        scope_func.empty()
+          ? nlohmann::json()
+          : json_utils::try_find_function(ast["body"], scope_func);
       const nlohmann::json &scan_body =
         func_node.contains("body") ? func_node["body"] : ast["body"];
       if (list_var_is_mutated(scan_body, var_name))

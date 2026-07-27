@@ -11,6 +11,7 @@
 #  include <cstdint> // for uint32_t, uint64_t
 #  include <cmath>   // for INFINITY
 #  include <string>  // for std::string
+#  include <string_view> // for std::string_view
 #endif
 
 namespace std
@@ -458,6 +459,28 @@ struct hash<::std::string>
   }
 };
 
+// Specialization for std::string_view. [string.view.hash] requires the hash of
+// a string view to equal the hash of the corresponding string, so this must use
+// the same scheme as hash<std::string> above.
+template <>
+struct hash<::std::string_view>
+{
+  size_t operator()(::std::string_view key) const
+  {
+    size_t hash_value = 0;
+    const size_t prime = 31;
+
+    const char *str = key.data();
+    for (size_t i = 0; i < key.size(); ++i)
+    {
+      hash_value = hash_value * prime +
+                   static_cast<size_t>(static_cast<unsigned char>(str[i]));
+    }
+
+    return __esbmc_deterministic_hash(hash_value);
+  }
+};
+
 #endif // __cplusplus >= 201103L
 
 // Legacy binary_function class template (typedef-based — valid in C++03 too)
@@ -645,9 +668,12 @@ struct bit_not
 };
 
 #if __cplusplus >= 201103L
-// Simplified std::invoke model
+// Simplified std::invoke model.
+// The trailing return type deduces exactly as decltype(auto) would here, but
+// keeps this declaration parseable in C++11: decltype(auto) is C++14.
 template <typename Func, typename... Args>
-decltype(auto) invoke(Func &&f, Args &&...args)
+auto invoke(Func &&f, Args &&...args)
+  -> decltype(::std::forward<Func>(f)(::std::forward<Args>(args)...))
 {
   return ::std::forward<Func>(f)(::std::forward<Args>(args)...);
 }

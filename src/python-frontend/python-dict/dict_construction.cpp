@@ -620,6 +620,30 @@ exprt python_dict_handler::create_dict_from_literal(
         dict_value_types_key(values_list.id.as_string()),
         std::string(),
         value_expr.type());
+
+      // A list value: record its uniform element type so a later d[k] list
+      // read can type the inner elements (e.g. a list-of-tuples value, which
+      // otherwise dereferences to void and aborts the dereference layer).
+      if (value_expr.type() == list_type && value_expr.is_symbol())
+      {
+        auto it =
+          python_list::list_type_map.find(value_expr.identifier().as_string());
+        if (it != python_list::list_type_map.end() && !it->second.empty())
+        {
+          const typet &first = it->second.front().second;
+          const bool uniform = std::all_of(
+            it->second.begin(),
+            it->second.end(),
+            [&first](const std::pair<std::string, typet> &e) {
+              return e.second == first;
+            });
+          if (uniform)
+            list_handler.add_type_info(
+              dict_value_list_elems_key(values_list.id.as_string()),
+              std::string(),
+              first);
+        }
+      }
     }
   }
 

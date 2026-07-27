@@ -915,8 +915,8 @@ exprt python_list::build_index_range_list_call(
   // model returns SIZE_MAX when the element is absent in l[start:end]; raise a
   // ValueError from the frontend on that path so try/except ValueError can
   // catch it, mirroring the dict KeyError and list.remove ValueError lowerings.
-  symbolt &idx = converter_.create_tmp_symbol(
-    op, "index_range_ret", size_type(), exprt());
+  symbolt &idx =
+    converter_.create_tmp_symbol(op, "index_range_ret", size_type(), exprt());
   code_declt idx_decl(build_symbol(idx));
   idx_decl.location() = elem_info.location;
   converter_.add_instruction(idx_decl);

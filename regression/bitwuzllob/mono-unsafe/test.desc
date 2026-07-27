@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzllob --bitwuzllob-prog fake-mallob.sh --bitwuzllob-model-prog "z3 -in"
+^\[Counterexample\]$
+^VERIFICATION FAILED$

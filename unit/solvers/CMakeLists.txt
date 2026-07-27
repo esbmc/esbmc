@@ -16,3 +16,11 @@ if(ENABLE_Z3)
   target_include_directories(z3_bigint_test
     PRIVATE ${Z3_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src/solvers/z3)
 endif()
+
+if(ENABLE_SMTLIB)
+  # Verdict scanner shared by the one-shot subprocess backends (bitwuzllob,
+  # neurosym); lives in the smtlib library. util_esbmc supplies the logging
+  # and filesystem symbols the rest of the translation unit pulls in.
+  new_unit_test(oneshot_verdict_test "oneshot_verdict.test.cpp"
+                "smtlib;filesystem;util_esbmc;fmt::fmt")
+endif()

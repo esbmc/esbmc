@@ -1,0 +1,4 @@
+CORE
+cbmc_array_set.goto
+--binary
+^ERROR: CBMC adapter: 'array_set' whole-object operations are not yet supported

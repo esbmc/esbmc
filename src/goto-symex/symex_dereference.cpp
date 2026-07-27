@@ -3,7 +3,7 @@
 #include <langapi/language_util.h>
 #include <pointer-analysis/dereference.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 void symex_dereference_statet::dereference_failure(
   const std::string &property [[maybe_unused]],
@@ -64,7 +64,6 @@ void symex_dereference_statet::get_value_set(
     goto_symex.options.get_bool_option("add-symex-value-sets") &&
     goto_symex.options.get_bool_option("inductive-step"))
   {
-    // check whether we have a set of objects.
     if (value_set.empty())
       return;
 

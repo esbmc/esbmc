@@ -85,23 +85,29 @@ Push the tag to origin:
 git push --tags
 ```
 
-### Creating the Release Artifacts
+> [!IMPORTANT]
+>
+> Pushing a `v*` tag automatically triggers the
+> [Release](https://github.com/esbmc/esbmc/actions/workflows/release.yml)
+> workflow ("Upload Release Asset"). It builds every platform and creates a
+> **draft** GitHub release named after the tag (e.g. `ESBMC v8.1`), with the
+> canonical `esbmc-linux.zip`, `esbmc-windows.zip`, `esbmc-macos.zip` and
+> `esbmc.info` assets already attached. You do **not** need to run the workflow
+> manually, create the release by hand, or upload any artifacts yourself.
 
-You need to get the build artifacts that will be uploaded. Run a new
-[Release](https://github.com/esbmc/esbmc/actions/workflows/release.yml) job on
-the `master` branch. Download the artifacts and prepare to upload them in the
-next step.
+### Publish the Draft Release
 
-### Creating the Release on GitHub
+Wait for the Release workflow to finish, then open the repository’s
+[Releases](https://github.com/esbmc/esbmc/releases) page and find the draft
+release the workflow created for your tag.
 
-After pushing the tag, GitHub will allow you to create the official release
-associated with that tag through the repository’s Releases page.
-
-1. Select the tag you created and title the release according to your version
-   "Release 8.1" (note the missing v, for consistency with past releases).
-2. Write the release description, which should just be a markdown version of the
-   content written in `/scripts/release-notes.txt` from earlier.
-3. You will need to upload the release artifacts created in the last step.
+1. Confirm the attached assets are present: `esbmc-linux.zip`,
+   `esbmc-windows.zip`, `esbmc-macos.zip` and `esbmc.info`.
+2. Adjust the title if needed — the draft is created as `ESBMC v8.1`; past
+   releases use "Release 8.1" (note the missing v).
+3. Replace the placeholder description with a markdown version of the content
+   written in `/scripts/release-notes.txt` from earlier.
+4. Publish the release.
 
 > [!TIP]
 >

@@ -1414,26 +1414,31 @@ FwdIt lower_bound(FwdIt first, FwdIt last, const Ty &val)
 template <class FwdIt, class Ty, class Pr>
 FwdIt lower_bound(FwdIt first, FwdIt last, const Ty &val, Pr pred)
 {
+  /* [lower.bound]: the first it with !comp(*it, val). The previous form,
+   * comp(val, *it) || val == *it, also required Ty to have operator==, which
+   * the standard does not — a comparator-only type would not compile. */
   while (first != last)
   {
-    if (pred(val, *first) || val == *first)
+    if (!pred(*first, val))
       return first;
-    else
-      first++;
+    ++first;
   }
-  return first;
+  return last;
 }
 
 template <class FwdIt, class Ty>
 FwdIt upper_bound(FwdIt first, FwdIt last, const Ty &val)
 {
-  last--;
+  /* [upper.bound]: the FIRST iterator it in [first, last) with val < *it.
+   * The previous version scanned BACKWARDS from last-1 and returned the last
+   * position satisfying val <= *it, so on a sorted {1,2,3,4,5,6} it answered
+   * upper_bound(3) == &6 instead of &4 -- deterministically wrong rather than
+   * nondeterministic, which is why it looked plausible. */
   while (first != last)
   {
-    if (val <= *last)
-      return last;
-    else
-      last--;
+    if (val < *first)
+      return first;
+    ++first;
   }
   return last;
 }
@@ -1441,14 +1446,12 @@ FwdIt upper_bound(FwdIt first, FwdIt last, const Ty &val)
 template <class FwdIt, class Ty, class Pr>
 FwdIt upper_bound(FwdIt first, FwdIt last, const Ty &val, Pr pred)
 {
-  last--;
+  // [upper.bound]: the first it with comp(val, *it).
   while (first != last)
   {
-    // Return the iterator _before_ the predicate becomes true.
-    if (!pred(val, *last))
-      return ++last;
-    else
-      last--;
+    if (pred(val, *first))
+      return first;
+    ++first;
   }
   return last;
 }
@@ -2738,6 +2741,125 @@ bool prev_permutation(BidIt *first, BidIt *last)
 
 template <class BidIt, class Pr>
 bool prev_permutation(BidIt first, BidIt last, Pr pred);
+
+/* The C++11 additions to <algorithm>. Naming any of these was a parse error;
+ * they are all linear, matching the style of the algorithms already here. */
+#if __cplusplus >= 201103L
+template <class InIt, class Pr>
+bool all_of(InIt first, InIt last, Pr pred)
+{
+  for (; first != last; ++first)
+    if (!pred(*first))
+      return false;
+  return true;
+}
+
+template <class InIt, class Pr>
+bool any_of(InIt first, InIt last, Pr pred)
+{
+  for (; first != last; ++first)
+    if (pred(*first))
+      return true;
+  return false;
+}
+
+template <class InIt, class Pr>
+bool none_of(InIt first, InIt last, Pr pred)
+{
+  for (; first != last; ++first)
+    if (pred(*first))
+      return false;
+  return true;
+}
+
+template <class InIt, class Pr>
+InIt find_if_not(InIt first, InIt last, Pr pred)
+{
+  for (; first != last; ++first)
+    if (!pred(*first))
+      return first;
+  return last;
+}
+
+template <class InIt, class OutIt, class Pr>
+OutIt copy_if(InIt first, InIt last, OutIt dest, Pr pred)
+{
+  for (; first != last; ++first)
+    if (pred(*first))
+    {
+      *dest = *first;
+      ++dest;
+    }
+  return dest;
+}
+
+// [alg.partitions]: true for an empty range, and once the predicate fails no
+// later element may satisfy it.
+template <class InIt, class Pr>
+bool is_partitioned(InIt first, InIt last, Pr pred)
+{
+  for (; first != last; ++first)
+    if (!pred(*first))
+      break;
+  for (; first != last; ++first)
+    if (pred(*first))
+      return false;
+  return true;
+}
+
+template <class FwdIt, class Pr>
+FwdIt partition_point(FwdIt first, FwdIt last, Pr pred)
+{
+  for (; first != last; ++first)
+    if (!pred(*first))
+      return first;
+  return last;
+}
+
+// [alg.min.max]: minmax returns (b, a) when b < a, so the pair is stable for
+// equivalent values.
+template <class Ty>
+pair<const Ty &, const Ty &> minmax(const Ty &a, const Ty &b)
+{
+  return b < a ? pair<const Ty &, const Ty &>(b, a)
+               : pair<const Ty &, const Ty &>(a, b);
+}
+
+/* minmax_element: the first smallest but the LAST largest element, per
+ * [alg.min.max] -- hence the strict `<` for the minimum and the non-strict
+ * `>=` comparison for the maximum. */
+template <class FwdIt>
+pair<FwdIt, FwdIt> minmax_element(FwdIt first, FwdIt last)
+{
+  FwdIt mn = first, mx = first;
+  if (first == last)
+    return pair<FwdIt, FwdIt>(first, last);
+  for (FwdIt it = first; it != last; ++it)
+  {
+    if (*it < *mn)
+      mn = it;
+    if (!(*it < *mx))
+      mx = it;
+  }
+  return pair<FwdIt, FwdIt>(mn, mx);
+}
+
+template <class RanIt>
+RanIt is_heap_until(RanIt first, RanIt last)
+{
+  typename iterator_traits<RanIt>::difference_type n = last - first;
+  for (typename iterator_traits<RanIt>::difference_type i = 1; i < n; ++i)
+    if (first[(i - 1) / 2] < first[i])
+      return first + i;
+  return last;
+}
+
+template <class RanIt>
+bool is_heap(RanIt first, RanIt last)
+{
+  return is_heap_until(first, last) == last;
+}
+#endif // __cplusplus >= 201103L
 
 } // namespace std
 

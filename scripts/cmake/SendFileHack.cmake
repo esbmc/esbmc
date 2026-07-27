@@ -1,5 +1,5 @@
 
-# Configure if sendfile exists (used on ./esbmc/esbmc_parseoptions.cpp)
+# Configure if sendfile exists (used on ./esbmc/parseoptions/bmc_strategy.cpp)
 
 include(CheckSymbolExists)
 check_symbol_exists(sendfile /usr/include/sys/sendfile.h HAVE_SENDFILE)

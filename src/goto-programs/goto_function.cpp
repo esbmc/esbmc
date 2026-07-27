@@ -1,12 +1,12 @@
 #include <cassert>
 #include <goto-programs/goto_convert_class.h>
 #include <goto-programs/goto_functions.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/location.h>
-#include <util/prefix.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/irep/location.h>
+#include <util/base/prefix.h>
 
 void goto_convertt::convert_function_call(
   const code_function_callt &function_call,
@@ -63,10 +63,35 @@ void goto_convertt::do_function_call(
   else if (new_function.id() == "NULL-object")
   {
   }
+  else if (new_function.id() == "typecast")
+  {
+    // A pointer-to-function value used directly as a callee. This shows up
+    // when an indirect call through a function-pointer variable/parameter is
+    // nested directly as an argument to another call, before the frontend has
+    // inserted the implicit dereference (e.g. Python's `outer(fp())`). Mirror
+    // clang_c_adjust_expr's handling of a pointer-typed callee: dereference the
+    // pointer-to-code value and dispatch through the dereference path.
+    if (
+      new_function.type().is_pointer() &&
+      new_function.type().subtype().is_code())
+    {
+      // dereference_exprt(op, tp) types the result as tp.subtype(), so passing
+      // the pointer type yields the pointed-to code type.
+      dereference_exprt deref(new_function, new_function.type());
+      deref.location() = new_function.location();
+      do_function_call_dereference(new_lhs, deref, new_arguments, dest);
+    }
+    else
+    {
+      throw "do_function_call: typecast callee is not a pointer-to-code "
+            "value (type id: " +
+        new_function.type().id_string() + ")";
+    }
+  }
   else
   {
-    log_error("unexpected function argument: {}", new_function.id_string());
-    abort();
+    throw "do_function_call: unexpected callee expression (id: " +
+      new_function.id_string() + ")";
   }
 }
 

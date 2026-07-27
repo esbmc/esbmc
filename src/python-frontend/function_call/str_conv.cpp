@@ -1,18 +1,18 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <irep2/irep2_utils.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
-#include <python-frontend/round_to_nearest_guard.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/round_to_nearest_guard.h>
-#include <python-frontend/type_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
+#include <python-frontend/type/type_utils.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 
 #include <algorithm>
 #include <cctype>
@@ -83,6 +83,38 @@ static std::string utf8_encode(unsigned int int_value)
     throw std::out_of_range(oss.str());
   }
   return char_out;
+}
+
+// Render a double as CPython's str()/repr() does for the modelled subset:
+// std::to_string's %f (six fractional digits) with trailing zeros stripped, and
+// a ".0" restored for whole numbers (str(1.0) == "1.0"). Shared by
+// handle_float_to_str (str()/repr()) and handle_format's empty-spec float path
+// so format(x) folds identically to str(x); it therefore inherits the same known
+// gap (values needing more than six fractional digits, e.g. str(1/3), or
+// scientific notation, e.g. str(1e16)) — pre-existing in str(), not new here.
+std::string py_str_from_double(double d)
+{
+  // std::to_string uses %f, which honours the host rounding mode; an earlier
+  // symex step can leave the FPU in FE_UPWARD, folding str(0.1) to "0.100001".
+  // Pin FE_TONEAREST (CPython's round-half-to-even) for the conversion.
+  const round_to_nearest_guard rounding_guard;
+  std::string str_val = std::to_string(d);
+
+  // Remove unnecessary trailing zeros and dot (to match Python str): "5.500000"
+  // -> "5.5".
+  str_val.erase(str_val.find_last_not_of('0') + 1, std::string::npos);
+  if (str_val.back() == '.')
+    str_val.pop_back();
+
+  // A whole-number float keeps its ".0" (str(1.0) == "1.0", not "1"); re-append
+  // it when the strip above removed the fractional part entirely. Guard on a
+  // trailing digit so non-numeric spellings (inf/nan) are left untouched.
+  if (
+    str_val.find('.') == std::string::npos && !str_val.empty() &&
+    std::isdigit(static_cast<unsigned char>(str_val.back())))
+    str_val += ".0";
+
+  return str_val;
 }
 } // namespace
 
@@ -450,8 +482,13 @@ exprt function_call_expr::handle_int_to_bytes() const
     const std::size_t byte_index = big_endian ? (length - 1 - i) : i;
 
     // Shift the selected byte down to the low 8 bits and mask everything else out.
+    // `lshr`, not the `shr` placeholder: `shr` is only ever resolved by
+    // clang_c_adjust::adjust_expr_shifts (to lshr/ashr on op0's signedness), and
+    // migrate_expr has no `shr` arm — so a surviving `shr` aborts with "migrate
+    // expr failed". `value` is unsignedbv by construction above, which is the
+    // branch adjust_expr_shifts would take anyway.
     const exprt shift_amount = from_integer(byte_index * 8, value.type());
-    exprt shifted("shr", value.type());
+    exprt shifted("lshr", value.type());
     shifted.copy_to_operands(value, shift_amount);
 
     exprt masked("bitand", value.type());
@@ -465,30 +502,15 @@ exprt function_call_expr::handle_int_to_bytes() const
 
 exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
 {
-  // std::to_string uses %f, which honours the host rounding mode; an earlier
-  // symex step can leave the FPU in FE_UPWARD, folding str(0.1) to "0.100001".
-  // Pin FE_TONEAREST (CPython's round-half-to-even) for the conversion.
-  const round_to_nearest_guard rounding_guard;
-  std::string str_val = std::to_string(arg["value"].get<double>());
-
-  // Remove unnecessary trailing zeros and dot if needed (to match Python str behavior)
-  // Example: "5.500000" → "5.5"
-  str_val.erase(str_val.find_last_not_of('0') + 1, std::string::npos);
-  if (str_val.back() == '.')
-    str_val.pop_back();
-
-  // CPython's str()/repr() of a whole-number float keeps a ".0" suffix
-  // (str(1.0) == "1.0", not "1"); re-append it when the strip above removed the
-  // fractional part entirely. Guard on a trailing digit so non-numeric spellings
-  // (inf/nan) are left untouched.
-  if (
-    str_val.find('.') == std::string::npos && !str_val.empty() &&
-    std::isdigit(static_cast<unsigned char>(str_val.back())))
-    str_val += ".0";
-
-  typet t = type_handler_.get_typet("str", str_val.size() + 1);
-  return converter_.make_char_array_expr(
-    std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
+  // Fold the constant float through the shared string handler. It renders
+  // CPython's repr only when it can prove the 6-decimal spelling exact and
+  // emits a sound nondet string otherwise: a fixed %f fold here cannot
+  // reproduce CPython's shortest round-trip repr for every double (precision
+  // loss for str(0.1234567), exponential notation outside [1e-4, 1e16)) and
+  // would materialise a wrong constant that could verify a false assertion.
+  // Delegating also keeps this literal path in sync with the variable path.
+  return converter_.get_string_handler().convert_to_string(
+    converter_.get_expr(arg));
 }
 
 exprt function_call_expr::handle_complex_to_str() const
@@ -960,13 +982,16 @@ py_format_number(bool is_int, long long ival, double dval, const std::string &s)
   }
   else
   {
-    // Float value: require an explicit float presentation type. The default
-    // (repr-like) float format, grouping and '#' are not modelled.
+    // Float value. An explicit presentation type renders with snprintf and the
+    // spec's precision; the default (no type) is CPython's str()/repr()
+    // shortest form via the shared helper. '#' and default-type precision
+    // (a 'g'-like fold) are not modelled; grouping is modelled for the default
+    // type only.
     if (
-      type != 'f' && type != 'F' && type != 'e' && type != 'E' && type != 'g' &&
-      type != 'G' && type != '%')
+      type != 0 && type != 'f' && type != 'F' && type != 'e' && type != 'E' &&
+      type != 'g' && type != 'G' && type != '%')
       return std::nullopt;
-    if (grouping != 0 || alt)
+    if (alt)
       return std::nullopt;
 
     double d = dval;
@@ -975,26 +1000,51 @@ py_format_number(bool is_int, long long ival, double dval, const std::string &s)
       d *= 100.0;
     negative = std::signbit(d) && !std::isnan(d);
     const double ad = negative ? -d : d;
-    const int p = prec >= 0 ? prec : 6;
 
-    const char conv =
-      percent
-        ? 'f'
-        : static_cast<char>(std::tolower(static_cast<unsigned char>(type)));
-    const char *f = (conv == 'f') ? "%.*f" : (conv == 'e') ? "%.*e" : "%.*g";
+    if (type == 0)
     {
-      const round_to_nearest_guard guard;
-      const int n = std::snprintf(nullptr, 0, f, p, ad);
-      if (n < 0)
-        return std::nullopt;
-      digits.resize(static_cast<size_t>(n));
-      std::snprintf(&digits[0], static_cast<size_t>(n) + 1, f, p, ad);
+      if (prec >= 0)
+        return std::nullopt; // default-type precision not modelled
+      digits = string_handler::cpython_float_str(ad);
+      if (grouping != 0)
+      {
+        // CPython groups only the integer part of fixed notation by 3; an
+        // exponential/inf/nan repr (its head is not all digits) is left as-is.
+        const size_t dot = digits.find('.');
+        const std::string head =
+          digits.substr(0, dot == std::string::npos ? digits.size() : dot);
+        if (std::all_of(head.begin(), head.end(), [](unsigned char c) {
+              return std::isdigit(c) != 0;
+            }))
+          digits =
+            group_digits(head, grouping, 3) +
+            (dot == std::string::npos ? std::string() : digits.substr(dot));
+      }
     }
-    if (type == 'F' || type == 'E' || type == 'G')
-      for (char &ch : digits)
-        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-    if (percent)
-      digits.push_back('%');
+    else
+    {
+      if (grouping != 0)
+        return std::nullopt; // grouping + explicit float type: not modelled
+      const int p = prec >= 0 ? prec : 6;
+      const char conv =
+        percent
+          ? 'f'
+          : static_cast<char>(std::tolower(static_cast<unsigned char>(type)));
+      const char *f = (conv == 'f') ? "%.*f" : (conv == 'e') ? "%.*e" : "%.*g";
+      {
+        const round_to_nearest_guard guard;
+        const int n = std::snprintf(nullptr, 0, f, p, ad);
+        if (n < 0)
+          return std::nullopt;
+        digits.resize(static_cast<size_t>(n));
+        std::snprintf(&digits[0], static_cast<size_t>(n) + 1, f, p, ad);
+      }
+      if (type == 'F' || type == 'E' || type == 'G')
+        for (char &ch : digits)
+          ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+      if (percent)
+        digits.push_back('%');
+    }
   }
 
   const std::string sign_str =
@@ -1064,6 +1114,16 @@ exprt function_call_expr::handle_format() const
     if (folded)
       return converter_.get_string_builder().build_string_literal(*folded);
   }
+
+  // format(value) / format(value, "") on a float is str(value): the default
+  // float.__format__ with an empty spec (format(1.0) == "1.0", format(-1.0) ==
+  // "-1.0"). py_format_number models only explicit float presentation types, so
+  // the repr-like default lands here. Folds identically to str()/repr() via the
+  // shared renderer (dval already carries the UnaryOp sign for negative
+  // literals), so it introduces no divergence beyond str()'s known gap.
+  if (spec.empty() && is_float)
+    return converter_.get_string_builder().build_string_literal(
+      py_str_from_double(dval));
 
   // format(value) / format(value, "") on a constant string is the string
   // itself (the default str.__format__ with an empty spec).

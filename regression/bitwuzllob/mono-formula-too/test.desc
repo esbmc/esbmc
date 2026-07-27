@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzllob --bitwuzllob-prog fake-mallob.sh --smt-formula-too
+SMT formula written to
+^VERIFICATION SUCCESSFUL$

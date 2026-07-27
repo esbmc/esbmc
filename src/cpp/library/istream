@@ -318,6 +318,13 @@ ios::streampos istream::tellg()
 {
   return _filepos;
 }
+#if __cplusplus >= 201103L
+template <class charT>
+struct char_traits;
+template <class CharT, class Traits = char_traits<CharT>>
+using basic_istream = istream;
+#endif
+
 } // namespace std
 
 namespace std

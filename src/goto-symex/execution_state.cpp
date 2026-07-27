@@ -5,16 +5,16 @@
 #include <langapi/mode.h>
 #include <sstream>
 #include <string>
-#include <util/breakpoint.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/base/breakpoint.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 #include <vector>
-#include <util/yaml_parser.h>
+#include <util/base/yaml_parser.h>
 
 thread_local unsigned int execution_statet::node_count = 0;
 thread_local unsigned int execution_statet::dynamic_counter = 0;
@@ -267,7 +267,12 @@ void execution_statet::symex_step(reachability_treet &art)
     {
       expr2tc thecode = instruction.code, assign;
       if (make_return_assignment(assign, thecode))
-        goto_symext::symex_assign(assign, true);
+      {
+        auto saved_source = cur_state->source;
+        cur_state->source = cur_state->top().calling_location;
+        goto_symext::symex_assign(assign);
+        cur_state->source = saved_source;
+      }
       symex_return(thecode);
       analyze_assign(assign);
     }
@@ -571,8 +576,6 @@ void execution_statet::restore_last_paths()
     new_gs.num_instructions = gs.num_instructions;
     new_gs.guard = gs.guard;
     assert(new_gs.thread_id == gs.thread_id);
-
-    // And that is it!
   }
 
   list.clear();
@@ -787,9 +790,7 @@ void execution_statet::get_expr_globals(
     // dependency.
     expr2tc p = expr;
     bool point_to_global = false;
-    if (
-      symbol->get_type().is_pointer() && symbol->name != "invalid_object" &&
-      !symbol->static_lifetime)
+    if (symbol->get_type().is_pointer() && symbol->name != "invalid_object")
     {
       expr2tc tmp = expr;
       /* Rename it so that it can be dereferenced in current state */
@@ -1198,8 +1199,9 @@ void execution_statet::switch_to_monitor()
 
   if (monitor_tid != get_active_state_number())
   {
-    // Don't call switch_to_thread -- it'll execute the thread guard, which is
-    // an extremely bad plan.
+    // Bypass switch_to_thread: a monitor switch must not be followed by
+    // update_after_switch_point/execute_guard, and must adopt the source
+    // thread's guard instead.
     last_active_thread = active_thread;
     active_thread = monitor_tid;
     cur_state = &threads_state[active_thread];
@@ -1225,8 +1227,9 @@ void execution_statet::switch_away_from_monitor()
     monitor_tid == active_thread &&
     "Must call switch_from_monitor from monitor thread\n");
 
-  // Don't call switch_to_thread -- it'll execute the thread guard, which is
-  // an extremely bad plan.
+  // Bypass switch_to_thread: a monitor switch must not be followed by
+  // update_after_switch_point/execute_guard, and must adopt the monitor
+  // thread's guard instead.
   last_active_thread = active_thread;
   active_thread = monitor_from_tid;
   cur_state = &threads_state[active_thread];

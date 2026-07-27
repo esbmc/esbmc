@@ -286,7 +286,7 @@ The `--strict-types` flag enables type compatibility validation for function arg
 ## Module System
 
 - **`__name__`**: Set to `"__main__"` when run directly; set to the module name when imported. Enables `if __name__ == "__main__":` idioms.
-- **Imports**: Standard `import` and `from ... import ...` styles validated at verification time
+- **Imports**: Standard `import` and `from ... import ...` styles validated at verification time. Module-level and function-local imports are also processed when verifying a single function with `--function`, so calls through imported modules (including operational models such as `math` and `random`) resolve there too
 - **Local bindings shadow imported modules**: When a name is both an imported module and a local binding (e.g. a parameter `node` while `from node import Node` is in scope), attribute access such as `node.value` resolves to the local binding, following Python's LEGB rule, rather than to a module member.
 - **Selective imports preserve module-level constants**: `from M import f, C` retains plain `Assign` bindings such as `INT_BOUND = 1024` in addition to `AnnAssign` ones. Tuple-unpacking targets are treated atomically.
 - **Parser package layout**: The Python parser ships as a package under `src/python-frontend/parser/` (entrypoint `parser/__main__.py`, public facade `parser/__init__.py`, import resolution in `parser/import_resolver.py`). The resolver emits deterministic, review-friendly diagnostics for missing modules, cyclic imports, and relative-import rewrites.

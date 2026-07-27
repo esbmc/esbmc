@@ -1,14 +1,14 @@
 #include <cassert>
 #include <goto-symex/goto_symex.h>
 #include <string>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/prefix.h>
-#include <util/std_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_types.h>
 #include <algorithm>
 
 void goto_symext::bump_call(
@@ -141,6 +141,23 @@ bool goto_symext::run_builtin(
     if (!is_nil_expr(ret))
       symex_assign(code_assign2tc(ret, typecast2tc(ret->type, count)));
 
+    return true;
+  }
+
+  // va_start/va_copy are kept in the GOTO program purely so that symex can
+  // track which va_lists have been initialised; a va_arg on an unstarted
+  // va_list is then flagged in symex_va_arg. The vararg values themselves
+  // are resolved positionally via the frame's va_cursor.
+  if (symname == "c:@F@__builtin_va_start" && !func_call.operands.empty())
+  {
+    va_list_mark_started(func_call.operands[0], true);
+    return true;
+  }
+
+  if (symname == "c:@F@__builtin_va_copy" && func_call.operands.size() == 2)
+  {
+    va_list_mark_started(
+      func_call.operands[0], va_list_is_started(func_call.operands[1]));
     return true;
   }
 

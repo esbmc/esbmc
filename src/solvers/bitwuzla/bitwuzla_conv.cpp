@@ -696,7 +696,7 @@ smt_astt bitwuzla_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
     t->sort);
 }
 
-bool bitwuzla_convt::get_bool(smt_astt a)
+tvt bitwuzla_convt::get_bool(smt_astt a)
 {
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
 
@@ -705,18 +705,13 @@ bool bitwuzla_convt::get_bool(smt_astt a)
 
   assert(result != NULL && "Bitwuzla returned null bv value string");
 
-  bool res;
   if (!strcmp(result, "true"))
-    res = true;
-  else if (!strcmp(result, "false"))
-    res = false;
-  else
-  {
-    log_error("Can't get boolean value from Bitwuzla: {}", result);
-    abort();
-  }
+    return tvt(true);
+  if (!strcmp(result, "false"))
+    return tvt(false);
 
-  return res;
+  log_error("Can't get boolean value from Bitwuzla: {}", result);
+  abort();
 }
 
 BigInt bitwuzla_convt::get_bv(smt_astt a, bool is_signed)

@@ -1,28 +1,106 @@
 #include <python-frontend/function_call/builder.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_consteval.h>
+#include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
-#include <python-frontend/python_lambda.h>
-#include <python-frontend/python_list.h>
+#include <python-frontend/lambda/python_lambda.h>
+#include <python-frontend/python-list/python_list.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_typecast.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
+
+#include <optional>
 
 using namespace json_utils;
+
+namespace
+{
+std::optional<std::size_t>
+get_nonnegative_literal_size(const nlohmann::json &node)
+{
+  if (
+    !node.is_object() || node.value("_type", std::string()) != "Constant" ||
+    !node.contains("value"))
+    return std::nullopt;
+
+  const auto &value = node["value"];
+  if (value.is_number_unsigned())
+    return value.get<std::size_t>();
+
+  if (value.is_number_integer())
+  {
+    const auto signed_value = value.get<long long>();
+    if (signed_value >= 0)
+      return static_cast<std::size_t>(signed_value);
+  }
+
+  return std::nullopt;
+}
+
+std::optional<std::size_t> get_keyword_literal_size(
+  const nlohmann::json &call,
+  const std::string &keyword_name)
+{
+  if (!call.contains("keywords"))
+    return std::nullopt;
+
+  for (const auto &kw : call["keywords"])
+  {
+    if (
+      kw.is_object() && kw.value("_type", std::string()) == "keyword" &&
+      !kw["arg"].is_null() && kw["arg"] == keyword_name)
+      return get_nonnegative_literal_size(kw["value"]);
+  }
+
+  return std::nullopt;
+}
+
+bool is_numpy_random_attr(const nlohmann::json &func, const std::string &name)
+{
+  if (
+    !func.is_object() || func.value("_type", std::string()) != "Attribute" ||
+    func.value("attr", std::string()) != name || !func.contains("value") ||
+    !func["value"].is_object() ||
+    func["value"].value("_type", std::string()) != "Attribute" ||
+    func["value"].value("attr", std::string()) != "random" ||
+    !func["value"].contains("value") || !func["value"]["value"].is_object())
+    return false;
+
+  const auto &base = func["value"]["value"];
+  return base.value("_type", std::string()) == "Name" &&
+         base.value("id", std::string()) == "np";
+}
+
+nlohmann::json
+make_list_from_repeated_call(const nlohmann::json &call, std::size_t size)
+{
+  nlohmann::json list_node;
+  list_node["_type"] = "List";
+  list_node["elts"] = nlohmann::json::array();
+  for (const char *key :
+       {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (call.contains(key))
+      list_node[key] = call[key];
+
+  for (std::size_t i = 0; i < size; ++i)
+    list_node["elts"].push_back(call);
+
+  return list_node;
+}
+} // namespace
 
 // Resolve symbol values to constants
 exprt python_converter::get_resolved_value(const exprt &expr)
@@ -257,6 +335,77 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (!element.contains("func") || element["_type"] != "Call")
     throw std::runtime_error("Invalid function call");
 
+  // A callable instance: `c(args)` where c is an object whose class defines
+  // __call__. Calling the instance directly treats it as a function and aborts
+  // in to_code_type (the receiver's type is a class struct, not code). Rewrite
+  // it to `c.__call__(args)`, which dispatches as an ordinary instance method.
+  if (
+    element["func"]["_type"] == "Name" && element["func"].contains("id") &&
+    !is_class(element["func"]["id"].get<std::string>(), *ast_json) &&
+    has_dunder_method(element["func"], "__call__"))
+  {
+    // Copy the whole Call node and replace only `func`, preserving `args` and
+    // `keywords` — a callable may be invoked with keyword arguments. (This is
+    // why build_dunder_call is not reused here: it drops keyword arguments.)
+    nlohmann::json call_node = element;
+    nlohmann::json attr;
+    attr["_type"] = "Attribute";
+    attr["value"] = element["func"];
+    attr["attr"] = "__call__";
+    for (const char *f :
+         {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+      if (element["func"].contains(f))
+        attr[f] = element["func"][f];
+    call_node["func"] = attr;
+    return get_function_call(call_node);
+  }
+
+  if (
+    is_numpy_random_attr(element["func"], "random") &&
+    element.contains("args") && element["args"].size() == 1)
+  {
+    if (auto size = get_nonnegative_literal_size(element["args"][0]))
+    {
+      nlohmann::json scalar_call = element;
+      scalar_call["args"] = nlohmann::json::array();
+      return get_expr(make_list_from_repeated_call(scalar_call, *size));
+    }
+  }
+
+  if (
+    is_numpy_random_attr(element["func"], "rand") && element.contains("args") &&
+    element["args"].size() == 1)
+  {
+    if (auto size = get_nonnegative_literal_size(element["args"][0]))
+    {
+      nlohmann::json scalar_call = element;
+      scalar_call["args"] = nlohmann::json::array();
+      return get_expr(make_list_from_repeated_call(scalar_call, *size));
+    }
+  }
+
+  if (is_numpy_random_attr(element["func"], "randint"))
+  {
+    if (auto size = get_keyword_literal_size(element, "size"))
+    {
+      nlohmann::json scalar_call = element;
+      nlohmann::json keywords = nlohmann::json::array();
+      if (scalar_call.contains("keywords"))
+      {
+        for (const auto &kw : scalar_call["keywords"])
+        {
+          if (
+            kw.is_object() && kw.value("_type", std::string()) == "keyword" &&
+            !kw["arg"].is_null() && kw["arg"] == "size")
+            continue;
+          keywords.push_back(kw);
+        }
+      }
+      scalar_call["keywords"] = std::move(keywords);
+      return get_expr(make_list_from_repeated_call(scalar_call, *size));
+    }
+  }
+
   // Handle direct range(...) calls by converting to list
   if (element["func"]["_type"] == "Name" && element["func"]["id"] == "range")
   {
@@ -454,7 +603,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     nlohmann::json func_node;
     if (can_fold)
     {
-      func_node = find_function((*ast_json)["body"], "parse_nested_parens");
+      func_node = try_find_function((*ast_json)["body"], "parse_nested_parens");
       if (func_node.empty())
         can_fold = false;
     }
@@ -726,9 +875,15 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       !type_utils::is_python_model_func(func_name) &&
       !is_class(func_name, *ast_json))
     {
-      const auto &func_node = find_function((*ast_json)["body"], func_name);
-      assert(!func_node.empty());
-      get_function_definition(func_node);
+      // A call into an unrecognised module (e.g. itertools.islice) has no
+      // definition in the AST, so try_find_function returns an empty node. Skip
+      // loading here and let the call fall through to the "Undefined function
+      // - replacing with assert(false)" fallback instead of feeding an empty
+      // node to get_function_definition, which would dereference missing
+      // fields and abort (issue #5898).
+      const auto &func_node = try_find_function((*ast_json)["body"], func_name);
+      if (!func_node.empty())
+        get_function_definition(func_node);
     }
   }
 
@@ -750,9 +905,6 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     if (!current_func_name_.empty())
     {
       // Walk the function nesting path (split on "@F@").
-      // Use const ref so the non-throwing find_function overload
-      // (returns empty JSON on miss) is selected instead of the
-      // mutable-ref overload that throws.
       const nlohmann::json &ast_body = (*ast_json)["body"];
       nlohmann::json cur_body = ast_body;
       std::string remaining = current_func_name_;
@@ -770,8 +922,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           part = remaining;
           remaining.clear();
         }
-        auto fn =
-          find_function(static_cast<const nlohmann::json &>(cur_body), part);
+        auto fn = try_find_function(cur_body, part);
         if (fn.empty() || !fn.contains("body") || !fn["body"].is_array())
           break;
         for (const auto &stmt : fn["body"])
@@ -792,7 +943,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     if (
       !locally_shadowed && !type_utils::is_builtin_type(callee) &&
       !type_utils::is_python_model_func(callee) &&
-      !find_function((*ast_json)["body"], callee).empty())
+      !try_find_function((*ast_json)["body"], callee).empty())
     {
       // Collect constant arguments
       bool all_const = true;

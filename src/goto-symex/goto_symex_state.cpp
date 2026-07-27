@@ -5,10 +5,10 @@
 #include <goto-symex/reachability_tree.h>
 #include <map>
 #include <sstream>
-#include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 goto_symex_statet::goto_symex_statet(
   renaming::level2t &l2,
@@ -66,6 +66,33 @@ void goto_symex_statet::initialize(
   source.prog = prog;
   top().end_of_function = end;
   top().calling_location = symex_targett::sourcet(top().end_of_function, prog);
+}
+
+// True when 'type' and every array nested in it has a statically constant
+// size. Propagating an aggregate field update is only sound when fixed-size: a
+// concrete-size value inlined into a symbolic-size field yields a
+// size-mismatched array typecast the SMT backend cannot lower.
+static bool type_has_constant_size(const type2tc &type)
+{
+  if (is_array_type(type))
+  {
+    const array_type2t &a = to_array_type(type);
+    if (
+      a.size_is_infinite || is_nil_expr(a.array_size) ||
+      !is_constant_int2t(a.array_size))
+      return false;
+    return type_has_constant_size(a.subtype);
+  }
+  if (is_struct_type(type) || is_union_type(type))
+  {
+    const std::vector<type2tc> &members = is_struct_type(type)
+                                            ? to_struct_type(type).members
+                                            : to_union_type(type).members;
+    for (const type2tc &m : members)
+      if (!type_has_constant_size(m))
+        return false;
+  }
+  return true;
 }
 
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
@@ -161,25 +188,34 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // fields stay symbolic, exploding the path space
       // (try_catch/nec_ex5-recursive).
       //
-      // Restrict to scalar- and pointer-typed field updates, though. Inlining
-      // an aggregate update value (array / struct / union / nested with) would
-      // store a value whose concrete size can differ from the field's declared
-      // (often symbolic) size, producing a size-mismatched array-to-array
-      // typecast the SMT backend cannot soundly lower without reinterpreting
-      // the array at a different length -- a char-array member of a std::map
-      // node triggered "Typecast for unexpected type". nec_ex5-recursive only
-      // needs int/pointer fields to fold.
+      // Aggregate (struct/array/union) fields propagate too, but only when
+      // statically fixed-size (see type_has_constant_size). This keeps the
+      // link/index scalars of container nodes (e.g. std::list<std::string>
+      // node.next_idx) concrete so pool loops fold instead of unrolling to
+      // capacity.
       bool all_constant_updates = true;
       expr2tc current = expr;
+
+      // Inlining an aggregate value is only sound when the whole enclosing
+      // struct is fixed-size. A fixed-size aggregate written into a struct that
+      // also carries a dynamic/infinite-sized member (e.g. a Solidity `bytes`
+      // field) leaves that member in the propagated constant, and computing its
+      // byte size downstream throws array_type2t::inf_sized_array_excp. Scalar
+      // updates stay unrestricted, matching pre-aggregate-propagation behaviour.
+      const bool struct_is_fixed_size = type_has_constant_size(expr->type);
 
       while (is_with2t(current))
       {
         const with2t &w = to_with2t(current);
         const expr2tc &uv = w.update_value;
-        if (
-          !(is_number_type(uv->type) || is_bool_type(uv->type) ||
-            is_pointer_type(uv->type)) ||
-          !constant_propagation(uv))
+        const bool scalar_update = is_number_type(uv->type) ||
+                                   is_bool_type(uv->type) ||
+                                   is_pointer_type(uv->type);
+        const bool aggregate_update =
+          (is_struct_type(uv->type) || is_array_type(uv->type) ||
+           is_union_type(uv->type)) &&
+          type_has_constant_size(uv->type) && struct_is_fixed_size;
+        if (!(scalar_update || aggregate_update) || !constant_propagation(uv))
         {
           all_constant_updates = false;
           break;
@@ -192,7 +228,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
         return true;
     }
 
-    // Handle WITH chains for structs where all updates are constants
+    // Handle WITH chains for arrays where all updates are constants
     if (is_array_type(expr->type))
     {
       // Check if this is a chain of WITHs with all constant updates
@@ -210,7 +246,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
         current = w.source_value;
       }
 
-      // If we reached a symbol and all updates were constants, propagate
+      // If all updates in the chain were constants, propagate
       if (all_constant_updates)
         return true;
     }
@@ -402,7 +438,7 @@ void goto_symex_statet::rename(expr2tc &expr)
 
 void goto_symex_statet::rename_address(expr2tc &expr)
 {
-  // rename all the symbols with their last known value
+  // rename symbols to their l1 storage names only (no value substitution)
 
   if (is_nil_expr(expr))
   {
@@ -572,8 +608,7 @@ std::vector<stack_framet> goto_symex_statet::gen_stack_trace() const
   call_stackt::const_reverse_iterator it;
   symex_targett::sourcet src;
 
-  // Format is a vector of strings, each recording a particular function
-  // invocation.
+  // Each stack_framet records one function invocation (name + call source).
 
   for (it = call_stack.rbegin(); it != call_stack.rend(); ++it)
   {

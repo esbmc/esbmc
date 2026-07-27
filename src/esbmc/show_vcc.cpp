@@ -5,7 +5,7 @@
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 void bmct::show_vcc(std::ostream &out, const symex_target_equationt &eq)
 {

@@ -2,10 +2,10 @@
 #include <goto-programs/goto_program_irep.h>
 #include <goto-programs/read_bin_goto_object.h>
 #include <langapi/mode.h>
-#include <util/base_type.h>
-#include <util/irep_serialization.h>
-#include <util/namespace.h>
-#include <util/symbol_serialization.h>
+#include <util/expr/base_type.h>
+#include <util/irep/irep_serialization.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/symbol_serialization.h>
 
 #define BINARY_VERSION 1
 
@@ -41,7 +41,7 @@ bool read_bin_goto_object(
             << "\n";
 
       log_error("{}", str.str());
-      abort();
+      return true;
     }
   }
 
@@ -58,7 +58,7 @@ bool read_bin_goto_object(
       str << "The input was compiled with a different version of "
           << "goto-cc, please recompile";
       log_error("{}", str.str());
-      abort();
+      return true;
     }
   }
 

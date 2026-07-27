@@ -5,11 +5,82 @@ on:
   push:
     branches: [master]
     paths:
-      - 'src/goto-programs/plcopen_xml_parser.cpp'
-      - 'src/goto-programs/plcopen_xml_parser.h'
-      - 'src/frontends/ld/**'
+      - 'src/ld-frontend/**'
+      - 'tools/ld-verify/**'
+      - 'regression/ld/**'
+      - 'unit/ld-frontend/**'
+      - '.github/workflows/plcplus-linux-binary.yml'
+  pull_request:
+    paths:
+      - 'src/ld-frontend/**'
+      - 'tools/ld-verify/**'
+      - 'regression/ld/**'
+      - 'unit/ld-frontend/**'
+      - '.github/workflows/plcplus-linux-binary.yml'
 
 jobs:
+  # The LD suites are invisible to the main PR matrix, which never enables
+  # ENABLE_LD_FRONTEND. Without this job the front-end's only gate is that it
+  # compiles — which is how the graphical resolver came to drop every rung path
+  # containing a function block without a single test going red.
+  regression-ld:
+    name: Run regression/ld and ld-verify
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            build-essential cmake ninja-build git wget curl \
+            gcc-12 g++-12 g++-multilib libc6-dev-i386 \
+            libboost-all-dev libgmp-dev libssl-dev \
+            bison flex python3
+
+      - name: Configure CMake (LD front-end with tests)
+        run: |
+          cmake -S . -B build \
+            -GNinja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_COMPILER=gcc-12 \
+            -DCMAKE_CXX_COMPILER=g++-12 \
+            -DDOWNLOAD_DEPENDENCIES=On \
+            -DENABLE_BOOLECTOR=Off \
+            -DENABLE_YICES=Off \
+            -DENABLE_BITWUZLA=Off \
+            -DENABLE_GOTO_CONTRACTOR=Off \
+            -DENABLE_SOLIDITY_FRONTEND=Off \
+            -DENABLE_JIMPLE_FRONTEND=Off \
+            -DENABLE_PYTHON_FRONTEND=Off \
+            -DENABLE_CSMITH=Off \
+            -DENABLE_LD_FRONTEND=On \
+            -DENABLE_Z3=On \
+            -DBUILD_TESTING=On \
+            -DENABLE_REGRESSION=On
+
+      - name: Build esbmc, ld-verify and the LD unit tests
+        run: |
+          cmake --build build -j$(nproc) --target \
+            esbmc ld-verify ld_parser_test ld_property_test ld_ir_gen_test
+
+      # Catch2 registers unit tests by test-case name, so there is no label to
+      # select the LD ones by; run their binaries directly.
+      - name: Run LD front-end unit tests
+        run: |
+          for t in ld_parser_test ld_property_test ld_ir_gen_test; do
+            ./build/unit/ld-frontend/"$t"
+          done
+
+      - name: Run regression/ld
+        working-directory: build
+        run: ctest -j4 --output-on-failure --progress -L 'ld/'
+
+      - name: Run ld-verify runner tests
+        working-directory: build
+        run: ctest -j4 --output-on-failure --progress -L ld-verify
+
   build-linux-amd64:
     runs-on: ubuntu-22.04
     timeout-minutes: 120

@@ -1,11 +1,11 @@
 #include <goto-symex/renaming.h>
 #include <langapi/language_util.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/namespace.h>
-#include <util/prefix.h>
-#include <util/symbol.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/namespace.h>
+#include <util/base/prefix.h>
+#include <util/symtab/symbol.h>
 
 namespace
 {
@@ -95,7 +95,7 @@ void renaming::level2t::get_ident_name(expr2tc &sym) const
 
 void renaming::level1t::rename(expr2tc &expr)
 {
-  // rename all the symbols with their last known value
+  // rename symbols to their l1 activation-record names (no value substitution)
 
   if (is_nil_expr(expr))
     return;

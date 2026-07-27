@@ -1,11 +1,11 @@
 #ifndef UTIL_IREP2_UTILS_H_
 #define UTIL_IREP2_UTILS_H_
 
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 
 #include <irep2/irep2_expr.h>
-#include <util/migrate.h>
-#include <util/message.h>
+#include <util/irep/migrate.h>
+#include <util/message/message.h>
 
 std::string indent_str_irep2(unsigned int indent);
 
@@ -200,7 +200,7 @@ inline bool is_true(const expr2tc &expr)
  *  then whether it's false-valued. If these are both true, return true,
  *  otherwise return false.
  *  @param expr Expression to check for false value.
- *  @return Whether or not expr is true-valued.
+ *  @return Whether or not expr is false-valued.
  */
 inline bool is_false(const expr2tc &expr)
 {
