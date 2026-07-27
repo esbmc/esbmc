@@ -318,6 +318,15 @@ void python_adjust::adjust_expr(expr2tc &expr)
       i.true_value,
       i.false_value);
   }
+  else if (is_not2t(expr) && !is_bool_type(to_not2t(expr).value->type))
+  {
+    // clang_c_adjust::adjust_expr_unary_boolean casts `not`'s operand to bool
+    // (clang_c_adjust_expr.cpp:1530-1538). Python's `not x` over a non-boolean
+    // value -- `not (x and True)` where `x` is None, so the short-circuit select
+    // has pointer type -- otherwise reaches the SMT layer as a negation of a
+    // non-boolean sort and trips bitwuzla's mk_not assert. not2t is immutable.
+    expr = not2tc(typecast2tc(get_bool_type(), to_not2t(expr).value));
+  }
   else if (
     is_typecast2t(expr) && is_pointer_type(expr->type) &&
     is_array_type(to_typecast2t(expr).from->type))
