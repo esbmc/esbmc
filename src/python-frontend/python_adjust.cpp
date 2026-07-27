@@ -167,6 +167,29 @@ bool is_padding_member_name(const std::string &name)
          has_prefix(name, "ext_int_pad$") || name == "$pad";
 }
 
+// Re-flag every pad member in the whole legacy type tree. add_padding recurses
+// into component types (padding.cpp:71), so a nested aggregate that is already
+// padded is re-padded unless *its* pad members carry #is_padding too — flagging
+// only the top-level components leaves the inner ones looking like real fields.
+void restore_padding_flags(typet &type)
+{
+  if (type.is_array())
+  {
+    restore_padding_flags(type.subtype());
+    return;
+  }
+
+  if (!type.is_struct() && !type.is_union())
+    return;
+
+  for (auto &comp : to_struct_union_type(type).components())
+  {
+    if (is_padding_member_name(comp.get_name().as_string()))
+      comp.set_is_padding(true);
+    restore_padding_flags(comp.type());
+  }
+}
+
 // Insert a gen_zero operand at each reserved padding-member position so the
 // literal's operand list matches the struct's component list, exactly as the
 // legacy adjust_struct insertion loop does. Idempotent when already padded.
@@ -850,10 +873,11 @@ void python_adjust::adjust_type(type2tc &type)
     // identifier, so only add_padding's own members match. (The #bitfield/
     // #extint type flags are likewise dropped by the round-trip, but the
     // Python frontend never emits either, so only #is_padding needs
-    // restoring.)
-    for (auto &comp : to_struct_union_type(legacy).components())
-      if (is_padding_member_name(comp.get_name().as_string()))
-        comp.set_is_padding(true);
+    // restoring.) The walk must be recursive: add_padding pads component types
+    // before the enclosing one, so an already-padded nested aggregate (an
+    // `int | None` attribute inside its class struct) is re-padded unless its
+    // own pad members are flagged too.
+    restore_padding_flags(legacy);
     add_padding(legacy, ns);
     type2tc padded = migrate_type(legacy);
     if (padded != type)

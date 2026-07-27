@@ -921,3 +921,35 @@ believing a zero.
 
 `github_3690` (a dict-of-lambda call returning `1.0000000000000002` instead of
 `1.0`) is the other open case and is unrelated.
+
+### Per-case triage round 9 — the `#is_padding` restore was shallow (2026-07-27)
+
+**✅ FIXED — `github_4745_pep604_class_attr`.** Round 8 placed the second pad
+"downstream of `python_adjust`"; it is in fact the *same* arm, one level of
+recursion down. `add_padding` pads **component types before the enclosing one**
+(`padding.cpp:71`), so one top-level call walks the whole aggregate tree. The
+`#is_padding` re-derivation the arm performs beforehand only flagged the
+**top-level** components, so when `add_padding(Box)` descended into the
+already-padded `int | None` attribute, that struct's pad member looked like an
+ordinary 7-byte field and was aligned as one — `1 → +6 → 7` for the inserted
+`_ExtInt(48)`, then `value` at `14 → +2 → 16` for the `short`. Fixed by making
+the restore recursive over struct/union components and array subtypes.
+
+This also explains round 8's confusing probe reading. The arm was observed
+receiving `{is_none, value}` (unpadded) five times and correctly emitting
+`{is_none, anon_pad$1, value}` each time — all true, and all irrelevant: the
+damage was done by the **`Box`** firing, whose own components (`x`, `flag`) carry
+no pad name, so the shallow loop had nothing to flag and the nested re-pad was
+invisible at that print site. **A probe that prints only the node it is attached
+to cannot see a defect in what that node's callee recurses into.**
+
+The hop-off `tag-Optional_signedbv` now matches legacy byte-for-byte. Control run
+(patch stashed, rebuilt): the two divergences a 70-test strided census reports —
+`div6_fail` (`mk_not` on a non-Boolean, the round-8 defect) and
+`github_3034_split-dot-valid-zero_fail` (`Assertion failed:
+(is_signedbv_type(lt.side_1) && is_signedbv_type(lt.side_2))`,
+`smt_solver.cpp:1512` — a `lessthan2t` over mismatched operand kinds) — reproduce
+identically **without** this patch, so neither is caused by it. `div6_fail` is
+closed by round 8, which confirms that arm reaches past `none3`;
+`github_3034_split-dot-valid-zero_fail` is a new, distinct signature and is the
+next case.
