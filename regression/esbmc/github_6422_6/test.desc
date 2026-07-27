@@ -1,5 +1,4 @@
 CORE
 main.c
 --multi-property --schedule
-^Properties: 2 verified ✓ 1 passed, ✗ 1 failed$
 ^VERIFICATION FAILED$
