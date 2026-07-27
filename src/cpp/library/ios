@@ -188,8 +188,17 @@ public:
   locale imbue(const locale &loc);
   streambuf *rdbuf() const;
   streambuf *rdbuf(streambuf *sb);
-  char narrow(char c, char dfault) const;
-  char widen(char c) const;
+  /* [basic.ios.members]: for a char stream both are the identity. They were
+   * declared and never defined, so widen(c) returned a nondeterministic char --
+   * neither `== c` nor `!= c` held. */
+  char narrow(char c, char) const
+  {
+    return c;
+  }
+  char widen(char c) const
+  {
+    return c;
+  }
 };
 
 ios_base::ios_base()
