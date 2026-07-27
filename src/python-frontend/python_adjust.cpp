@@ -222,7 +222,28 @@ void python_adjust::adjust_expr(expr2tc &expr)
   {
     const member2t &m = to_member2t(expr);
     expr2tc source = m.source_value;
+    bool rebuild = false;
+
+    if (is_pointer_type(source->type))
+    {
+      // clang_c_adjust::adjust_member wraps a pointer base in a dereference
+      // (clang_c_adjust_expr.cpp:307-313), so `p.field` becomes `p->field`.
+      // The converter emits the unwrapped form for a class attribute reached
+      // through an instance pointer (`cur.nxt` where `cur` is a `Node`
+      // parameter), and without the wrap the member's source stays a pointer:
+      // symex then reads a member off a pointer value and aborts
+      // ("to_pointer_type() called on type whose type_id is struct"), and the
+      // expression printer falls back to dumping the raw irep.
+      source = dereference2tc(to_pointer_type(source->type).subtype, source);
+      rebuild = true;
+    }
+
+    // The wrapped source carries the pointee, which is the same transient
+    // symbol_type2t a plain instance source would be -- resolve either shape.
     if (resolve_source(source))
+      rebuild = true;
+
+    if (rebuild)
       expr = member2tc(m.type, source, m.member);
   }
   else if (is_index2t(expr))
@@ -361,6 +382,26 @@ void python_adjust::adjust_expr(expr2tc &expr)
     expr2tc decayed =
       address_of2tc(pointee, index2tc(elem, a.source, gen_zero(index_type2())));
     expr = code_assign2tc(a.target, decayed, a.location);
+  }
+  else if (
+    is_code_assign2t(expr) &&
+    is_pointer_type(to_code_assign2t(expr).target->type) &&
+    is_struct_type(ns.follow(to_code_assign2t(expr).source->type)))
+  {
+    // The struct sibling of the decay above: a pointer target assigned an
+    // aggregate *value* takes its address. c_typecastt::implicit_typecast_
+    // followed does this for a struct or union source (c_typecast.cpp:729-740,
+    // the `address_of_exprt base_ptr` arm). The Python converter binds an
+    // instance parameter this way -- `cur = head` where `head` is a
+    // `pointer→tag-Node` parameter lowers to `cur = *head`, a struct value --
+    // and legacy emits `cur = &(*head)`. Without the address-of, symex reads a
+    // struct where the pointer's type says pointer and aborts
+    // ("to_pointer_type() called on type whose type_id is struct").
+    // Idempotent: the rebuilt source is an address_of, not a struct.
+    const code_assign2t &a = to_code_assign2t(expr);
+    const type2tc &pointee = to_pointer_type(a.target->type).subtype;
+    expr =
+      code_assign2tc(a.target, address_of2tc(pointee, a.source), a.location);
   }
   else if (
     is_code_ifthenelse2t(expr) &&
