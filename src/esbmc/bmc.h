@@ -105,6 +105,7 @@ protected:
   smt_resultt multi_property_check(
     const symex_target_equationt &eq,
     size_t remaining_claims,
+    size_t simplified_claims,
     smt_convt &runtime_solver);
 
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;

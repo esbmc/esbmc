@@ -1841,7 +1841,10 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
        (options.get_bool_option("inductive-step") &&
         options.get_bool_option("loop-invariant"))))
       return multi_property_check(
-        *eq, solver_result.remaining_claims, *runtime_solver);
+        *eq,
+        solver_result.remaining_claims,
+        solver_result.simplified_claims,
+        *runtime_solver);
 
     smt_resultt result = run_decision_procedure(*runtime_solver, *eq);
 
@@ -1971,6 +1974,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
 smt_resultt bmct::multi_property_check(
   const symex_target_equationt &eq,
   size_t remaining_claims,
+  size_t simplified_claims,
   smt_convt &runtime_solver)
 {
   // Initial values
@@ -1981,7 +1985,10 @@ smt_resultt bmct::multi_property_check(
 
   // Add summary tracking
   SimpleSummary summary;
-  summary.simplified_properties = symex->get_cur_state().simplified_claims;
+  // Taken from the caller's symex_resultt rather than symex->get_cur_state():
+  // under --schedule, generate_schedule_formula() drains exploration_frames
+  // completely before returning, leaving cur_frame_it invalid.
+  summary.simplified_properties = simplified_claims;
   summary.total_properties = remaining_claims + summary.simplified_properties;
   summary.passed_properties =
     summary.passed_properties + summary.simplified_properties;
