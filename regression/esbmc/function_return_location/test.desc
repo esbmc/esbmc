@@ -1,0 +1,6 @@
+CORE
+main.c
+--no-div-by-zero-check
+^VERIFICATION FAILED$
+State [0-9]+ file \S+main\.c line 10 column 3 function main thread 0\n-+\n  M_z =
+(?s)\A(?!.*line 4 column 3 function Foo.*\n.*\n.*M_z =)
