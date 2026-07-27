@@ -849,3 +849,75 @@ The `adjust_member` *array*-base arm (`base.type().is_array()` → `base[0]`) is
 base — Python attribute access is over a class instance, i.e. a symbol or an
 instance pointer — and adding the arm without first proving it reachable would
 be dead instrumentation. Probe before adding it, not after.
+
+### Per-case triage round 8 — `not` over a non-Boolean operand (2026-07-27)
+
+Re-running the round-3 open list against the round-7 binary shrinks it from nine
+cases to three: `github_3078_fail`, `github_2934_2` and `optional6` came to
+parity with the instance-pointer mirrors (#6428) without being triaged
+individually — a reminder to **re-measure the list before triaging it**, since a
+structural mirror routinely closes cases filed under unrelated headings.
+
+**✅ FIXED — `none3`.** Its hop-off run aborted at
+`Assertion failed: (a->sort->id == SMT_SORT_BOOL), function mk_not`. The
+`python_user_main` diff is two instructions, both a missing outer cast:
+
+```
+legacy:  ASSERT !((_Bool)((_Bool)x ? (_Bool *)1 : x))
+hop-off: ASSERT !(        (_Bool)x ? (_Bool *)1 : x )
+```
+
+`x` is `None`, so `x and True` lowers to a pointer-typed short-circuit select and
+`not (…)` negates a non-Boolean. `clang_c_adjust::adjust_expr_unary_boolean`
+(`clang_c_adjust_expr.cpp:1530-1538`) casts `not`'s operand with
+`gen_typecast_bool`; `python_adjust` had the *statement*-level condition casts
+(round 3) and the `if2t` ternary cast (#6348) but nothing for `not2t`. Fixed by
+mirroring the unary arm.
+
+**The binary half of that clang arm stays out — measured, not assumed.**
+`adjust_expr_binary_boolean` casts both operands of `and`/`or`
+(`clang_c_adjust_expr.cpp:1540-1548`). A probe firing on any `and2t`/`or2t` with
+a non-Boolean operand recorded **0 firings across 40 boolean-op-bearing
+`regression/python` tests**: Python's `and`/`or` desugars to a ternary select
+(the `if2t` #6348 already covers), and the `and2t`/`or2t` nodes the frontend does
+build come from comparisons, which are Boolean by construction. Mirroring it
+would be dead instrumentation under the C-Live bar.
+
+**`github_4745_pep604_class_attr` is a padding bug, and it is *not* a re-pad by
+`adjust_type`.** Its hop-off `dereference failure: Object accessed with illegal
+offset` traces to one type in the GOTO dump — the `int | None` attribute's
+`tag-Optional_signedbv` is padded **twice**:
+
+```
+legacy:  { _Bool is_none; unsigned _ExtInt(56) anon_pad$1; signed long int value; }
+hop-off: { _Bool is_none; unsigned _ExtInt(48) anon_pad$1;
+           unsigned _ExtInt(56) anon_pad$1; unsigned short int anon_pad$3;
+           signed long int value; }
+```
+
+The offsets are exactly what re-running `add_padding` over an already-padded
+struct whose pad member has lost its `#is_padding` flag produces (the 56-bit pad
+aligned as a real 7-byte field: `1 → +6 → 7`, then `value` at `14 → +2 → 16`).
+That makes `adjust_type`'s struct arm the obvious suspect — but instrumenting its
+`add_padding` call **acquits it**: over this test the arm fires 322 times, and
+every one of the 5 firings on `tag-Optional_signedbv` reads `{is_none, value}`
+(both unpadded) and writes `{is_none, anon_pad$1, value}`. It never once receives
+an already-padded struct, so it cannot be the second pad. `Box` itself is padded
+once, `{x, flag}` → unchanged.
+
+Two consequences for the next drill. (1) The second pad is applied **downstream
+of `python_adjust`** — find that site before touching the adjuster. (2) The five
+separate firings are themselves a finding: the type-symbol write-back is not
+making the padded form visible to later sites, so each one re-pads its own copy
+from scratch. That is the likely mechanism by which one copy reaches a
+downstream padding pass with `#is_padding` already lost.
+
+**Method warning — this negative result was wrong once.** An earlier run of the
+same probe reported *zero* firings and was recorded here as "not this arm". The
+binary was stale: the `make esbmc` that was supposed to build the probe inherited
+a `cd` to the source root and failed silently. Re-check that a probe binary
+actually contains the probe (a non-zero firing count on *some* input) before
+believing a zero.
+
+`github_3690` (a dict-of-lambda call returning `1.0000000000000002` instead of
+`1.0`) is the other open case and is unrelated.
