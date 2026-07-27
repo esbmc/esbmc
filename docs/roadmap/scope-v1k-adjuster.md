@@ -1009,3 +1009,39 @@ the arm a plain `n = len(xs)` emits `FUNCTION_CALL: n=list_size(xs)` into a
 `signed long`; with it, the temporary and cast match legacy exactly. The census on
 this branch is 69/70, the one divergence being `github_3034` itself (`div6_fail`
 was closed by round 8).
+
+### Per-case triage round 11 — a pointer callee that is not a symbol (2026-07-27)
+
+**✅ FIXED — `github_3690`** (legacy SUCCESSFUL → hop-off FAILED, the counterexample
+showing `result = 1.0000000000000002` where `1.0` was asserted). The GOTO diff
+puts it in the call itself, not the value:
+
+```
+legacy:  FUNCTION_CALL: return_value$=*(*(void (*)() *)…dict_val_obj->value)()
+hop-off: FUNCTION_CALL: return_value$= *(void (*)() *)…dict_val_obj->value ()
+```
+
+`clang_c_adjust::adjust_side_effect_function_call` wraps **any** pointer-typed
+callee in an implicit dereference. `python_adjust`'s `wrap_function_pointer_callee`
+only handled a callee that is a plain `symbol2t` whose *table* type is
+pointer-to-code — the lambda-alias shape (`op = lambda …; op(3)`) it was written
+for. `{'+': lambda: 1.0}[x]()` reads the lambda back out of a container, so the
+callee is a **typecast of a member read**, the wrapper returned false, and
+goto-convert called through the pointer value itself. The result was then read
+under the wrong signature, which is why the failure surfaced as a corrupted
+double rather than an outright crash. Generalised: when the callee is not a
+table pointer-to-code symbol but its own type is pointer-to-code, dereference it.
+Argument casting stays on the symbol path, which needs the table entry.
+
+**A rejected first hypothesis, recorded so it is not re-tried.** The same diff
+also shows `ASSIGN …list_elem$175=(double (*)())(&lam1)` against a bare `&lam1`,
+i.e. a missing conversion where the lambda's address is *stored*. That looks like
+the more obvious cause and it is not the cause: an arm converting an
+`address_of` of a code object at the assignment seam **never fired** on this test
+(the shape reaching `code_assign2t` is not that), and the case still failed. The
+arm was removed rather than kept as dead instrumentation. Fix the call, not the
+store.
+
+Census after this round: **69/70** on the strided sample, the single divergence
+being `github_3034_split-dot-valid-zero_fail`, which is the parked S4 work
+(round 10).

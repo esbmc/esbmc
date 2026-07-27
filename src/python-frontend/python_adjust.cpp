@@ -685,16 +685,35 @@ bool python_adjust::wrap_function_pointer_callee(
   // adjust_symbol + implicit-deref + adjust_function_call_arguments trio.
   // Inert on the default pipeline (legacy rewrites these calls before
   // migration, so the callee already arrives as a dereference).
-  if (is_nil_expr(fn) || !is_symbol2t(fn))
+  if (is_nil_expr(fn))
     return false;
-  const irep_idt &name = to_symbol2t(fn).thename;
-  const symbolt *fs = context.find_symbol(name);
+
+  const symbolt *fs =
+    is_symbol2t(fn) ? context.find_symbol(to_symbol2t(fn).thename) : nullptr;
+
+  // Any other pointer-to-code callee -- a lambda read back out of a container,
+  // `{'+': lambda: 1.0}[x]()`, whose callee is a typecast of a member read, not
+  // a symbol. clang_c_adjust::adjust_side_effect_function_call dereferences
+  // *any* pointer-typed callee (clang_c_adjust_expr.cpp, the implicit-deref
+  // arm); without it goto-convert calls through the pointer value itself and
+  // the result is read under the wrong signature. Argument casting needs the
+  // table symbol, so it stays on the symbol path above.
   if (fs == nullptr || !is_pointer_type(fs->get_type2()))
-    return false;
+  {
+    if (!is_pointer_type(fn->type))
+      return false;
+    const type2tc &pointee = to_pointer_type(fn->type).subtype;
+    if (!is_code_type(pointee))
+      return false;
+    fn = dereference2tc(pointee, fn);
+    return true;
+  }
+
   // Python points directly at the code type (no typedefs to follow).
   const type2tc &pointee = to_pointer_type(fs->get_type2()).subtype;
   if (!is_code_type(pointee))
     return false;
+  const irep_idt &name = to_symbol2t(fn).thename;
 
   // Cast only scalar/pointer argument kinds; an aggregate arg from an
   // upstream typing bug keeps symex's own per-argument diagnostic rather
