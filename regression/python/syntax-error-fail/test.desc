@@ -1,3 +1,5 @@
 CORE
 main.py
-TypeError: '<' not supported between instances of 'NoneType' and 'int'
+
+^  Missing return statement detected in function 'absolute'$
+^VERIFICATION FAILED$
