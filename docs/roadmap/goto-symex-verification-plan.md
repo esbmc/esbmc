@@ -6,7 +6,7 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0 complete, M1 partial** (§15 verdict log); M2–M8 not yet
+**Status:** **M0 and M1 complete** (§15 verdict log); M2–M8 not yet
 executed. §6.4 records the tier-ordering rule M1 produced. Except
 where §15 records a discharged result, every harness below is a *proposal* and
 nothing here asserts a proof. Findings R1–R12 remain *hypotheses with cited
@@ -678,7 +678,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R4** | **Medium (crash → no verdict)** | **Eight unchecked `*ns.lookup(...)` dereferences.** `namespacet::lookup` returns `nullptr` on miss (as `renaming.cpp:15-21` itself demonstrates by checking). A miss ⇒ null deref ⇒ SIGSEGV mid-verification. `phi_function`'s site is the most exposed: it filters only `goto_symex::guard!` and `symex::invalid_object` before looking up an arbitrary merged variable's base name. | `symex_goto.cpp:433`; `symex_function.cpp:159`; `symex_valid_object.cpp:47`; `dynamic_allocation.cpp:66,92,105,118,143` | H-A10 | Add checked lookups with a diagnostic (`log_error` + controlled abort) or prove the precondition per site and record it as a cited comment. |
 | **R5** | **Medium (soundness detector disabled)** | `check_for_duplicate_assigns` — the *only* in-tree checker for the core SSA invariant I10 — merely `log_status`es duplicates and then reports "Checked N insns". It never fails, and nothing calls it in a normal run. | `symex_target_equationt::check_for_duplicate_assigns`, `symex_target_equation.cpp` | H-B1 | Turn it into a validator returning a bool; run it under a debug/CI flag over the whole regression corpus. |
 | **R6** | **Medium (unsound pruning, opt-in flag)** | `state_hashing_level2t::make_assignment` keys `current_hashes` by the **L0** original name, acknowledged in-code ("XXX — consider whether to use l1 names instead. Recursion, reentrancy."). Two states that differ only in the L1 activation of a recursive local therefore fingerprint identically ⇒ `hit_hashes` prunes a genuinely different state ⇒ missed interleaving. Severity is bounded by `--state-hashing` being opt-in. | `execution_state.cpp:~1342-1378`; `reachability_treet::hit_hashes`, `reachability_tree.h:352` | H-A8-style model + **H-C4** | Key by the L1 name record; H-C4 parity sweep quantifies the current gap. |
-| **R7** | **Low–Medium (UB)** | `previous_frame()` computes `*(--(--call_stack.end()))` with no size check — UB when `call_stack.size() < 2`, and it returns a reference to a `framet` that a subsequent `pop_frame` invalidates. | `goto_symex_statet::previous_frame`, `goto_symex_state.h:319` | H-A7 | Add a size precondition (release-checked) or return `std::optional`. |
+| **R7** | **Low–Medium (UB) — refined, §15 M1** | `previous_frame()` computes `*(--(--call_stack.end()))` with no size check. `call_stackt` is a `std::vector<framet>`, so at size 1 this evaluates `--begin()`, forming a pointer before the start of the array — undefined by [expr.add]/4 **whether or not it is dereferenced**, not merely a bad read. The second clause of the original finding ("returns a reference a subsequent `pop_frame` invalidates") does **not** hold: `pop_back` invalidates only the reference to the erased last element, and `previous_frame` returns the second-to-last. The precondition holds today by construction — the sole call site does `new_frame(...)` on the preceding line — but nothing states it in the shipped binary (R1). | `goto_symex_statet::previous_frame`; sole caller `goto_symext::symex_function_call_code`; [expr.add]/4 | `unit/goto-symex/frame_lifecycle.test.cpp` (Tier B, discharged) | Add a release-checked precondition **as part of R1's `SYMEX_INVARIANT` work in M3**, so the macro lands once with its cost measured; index (`call_stack[size() - 2]`) rather than decrementing an iterator. |
 | **R8** | **Medium (documented model gap)** | `is_valid_object` returns `false` for **every** non-static, non-dynamic symbol: the stack-scope branch is `#if 0`'d out with "XXX re-enable to be able to check for stack-var-out-of-scope problems". Stack-object validity is therefore not modelled, and `dynamic_allocation.cpp` compensates by *assuming* `invalid_pointer` applies only to dynamic objects ("we never update `__ESBMC_alloc` for stack ptrs"). Net effect on stack-lifetime bugs (use-after-scope) is a **missed-bug** direction. | `goto_symext::is_valid_object`, `symex_valid_object.cpp:85-118`; `dynamic_allocation.cpp:110-116` | H-A10 + a targeted `regression/esbmc` use-after-scope corpus | Quantify with a dedicated corpus before attempting a fix; the fix is a model change, not a patch. |
 | **R9** | **Low–Medium (approximation direction unproven)** | Three documented "sound over-approximation" claims are unproven: value-set filtering after a pointer havoc (`symex_assign.cpp:~550-570`), the non-scalar uninterpreted-function fallback (`symex_function.cpp:~410-430`), and the function-pointer target enumeration over an over-approximated value set (`symex_function.cpp:~766`). Each *argues* the direction in a comment; none is checked. | cited lines | H-B6 + H-C1/H-C3 | For each, state the claim as a checkable predicate and add a Tier-B assertion (e.g. filtered set ⊆ original **and** the dropped entries are `unknown`/`invalid` only). |
 | **R10** | **Low (latent UB)** | `renaming::level2t::name_record`'s `name_record() = default` leaves `lev`, `l1_num`, `t_num` **and the derived `hash`** indeterminate (contrast `level1t::name_record`, which initialises `base_name("")`). No current default-construction site was found, but a future one (`std::optional`, map default-insert, array of records) would read indeterminate memory in `compare`/`hash`. | `renaming.h:143-214` | MSan (Tier D) + a `static_assert`-style unit check | Add default member initialisers; near-zero cost. |
@@ -715,8 +715,9 @@ tractability** — see §15 and the rule it produced in §6.4. I1/I10/P11 are
 instead discharged against the *real* `goto_symext` by H-B1
 (`unit/goto-symex/ssa_wellformed.test.cpp`), and I1/I2 against the real
 `renaming::level2t` by `unit/goto-symex/renaming.test.cpp`, which also produces
-the **R3 verdict** (re-characterised: soundness, not memory safety). H-A7
-remains open and is the last M1 item.
+the **R3 verdict** (re-characterised: soundness, not memory safety). H-A7's
+I16/R7 obligation is discharged by `unit/goto-symex/frame_lifecycle.test.cpp`
+plus a call-site argument. **M1 closed.**
 
 **M2 — Isolated core algorithms: merging and bounding (1.5 wk).**
 H-A2 (the highest-value harness), H-A3, H-A5. Dual-solver mandatory.
@@ -1197,14 +1198,69 @@ and its `_fail` twin would have passed the §11.3 gate while demonstrating
 nothing real. A second, sharper instance of §6.4 — a stub encodes the author's
 belief about the real type, and that belief is exactly what needed checking.
 
-**Still open.** H-A7 (I16/R7, `previous_frame` on a stack of size < 2) is
-unstarted. Its single call site,
-`symex_function.cpp::goto_symext::symex_function_call_code`, does `new_frame(...)`
-immediately before `previous_frame()`, so the precondition holds — but only via
-an `assert` that is a no-op in release (R1), and `call_stackt` is a
-`std::vector<framet>`, so `*(--(--call_stack.end()))` at size 1 forms
-`begin() - 1`, which is UB by [expr.add], not merely a bad read. Also still open
-from M0: WI-1, WI-2, D12.
+### M1 (cont.) — R7 verdict, M1 closed
+
+**Result: I16 discharged by construction plus a Tier-B frame-balance pin; R7
+survives as a latent hazard with a corrected severity basis.**
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `unit/goto-symex/frame_lifecycle.test.cpp` | real symex over nested calls, recursion, calls through a function pointer, and calls inside an unwound loop | 5 cases, 17 assertions, **pass** |
+
+**The precondition holds, by construction, at the only call site.**
+`previous_frame()` has exactly one caller —
+`goto_symext::symex_function_call_code` (`symex_function.cpp`) — and it reads:
+
+```cpp
+assert(!cur_state->call_stack.empty());
+goto_symex_statet::framet &frame = cur_state->new_frame(...);
+frame.level1 = cur_state->previous_frame().level1;
+```
+
+`new_frame` pushes unconditionally on the line before, so `size() >= 2` at the
+call. The engine starts at depth 1 (`goto_symex_statet::initialize` →
+`new_frame`), which the first test pins.
+
+**The severity basis in R7 was understated.** `call_stackt` is
+`std::vector<framet>`, so `*(--(--call_stack.end()))` at size 1 evaluates
+`--begin()` — forming a pointer before the start of the array, which is
+undefined by [expr.add]/4 regardless of whether it is dereferenced. The
+"returns a reference a subsequent `pop_frame` invalidates" clause does **not**
+apply: `pop_back` invalidates only the reference to the erased last element,
+and `previous_frame` returns the second-to-last.
+
+**What the tests pin.** The engine's residual call-stack depth after symex is a
+constant of the entry sequence (`__ESBMC_main`'s frame plus `main`'s, whose
+`END_FUNCTION` is the last instruction) and **not** a function of call nesting.
+The discriminating case runs the same recursive program at depth 1 and depth 3
+and requires equal residual depth: if `pop_frame` did not match `new_frame`, the
+deeper program would end with more frames standing, and the size-1 precondition
+would stop being a structural property. Recursion is additionally required to
+produce more than one L1 activation of the callee's local — which is what
+`previous_frame().level1` exists to seed.
+
+**A held-`framet&` audit, since `call_stack` is a vector.** `emplace_back` can
+reallocate and invalidate every outstanding reference into it, so every
+`framet &` in `src/goto-symex` was checked against the one push site
+(`symex_function_call_code`). Six sites hold one: `symex_function.cpp:599, 908,
+955, 1008`, `symex_other.cpp:79`, `symex_goto.cpp:328`. None is used after a
+call that can push a frame. The closest is `run_next_function_ptr_target`, where
+`cur_frame` is live across `symex_function_call_code(state_call)` but has no use
+after it. **No live defect; the pattern is fragile rather than broken**, and is
+the kind of thing a `SYMEX_INVARIANT` on frame identity would pin in M3.
+
+**Action for R7 unchanged in substance, sharpened in wording:** the fix belongs
+with R1/M3 — a release-checked precondition. It is deliberately not applied here
+so that `SYMEX_INVARIANT` lands once, in one place, with its cost measured.
+
+**M1 is closed.** Its three harnesses are discharged at Tier B — H-A1's property
+by `ssa_wellformed.test.cpp`, H-A9/R3 by `renaming.test.cpp`, H-A7/R7 by
+`frame_lifecycle.test.cpp` — with the Tier-A forms of H-A1 and H-A9 rejected on
+tractability and on modelling fidelity respectively (§6.4). Still open from M0:
+WI-1, WI-2, D12. Next is **M2** (H-A2 merge-guard soundness, H-A3 merge-queue
+conservation, H-A5), which §6.4 requires be scoped Tier-B-first: `phi_function`
+and `merge_state_guards` are observable in the produced equation through phi
+assignment counts and step guards.
 ---
 
 ## Appendix A — Methodological basis
