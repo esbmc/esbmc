@@ -222,12 +222,43 @@ void python_adjust::adjust_expr(expr2tc &expr)
   {
     const member2t &m = to_member2t(expr);
     expr2tc source = m.source_value;
+    bool rebuild = false;
+
+    if (is_pointer_type(source->type))
+    {
+      // clang_c_adjust::adjust_member wraps a pointer base in a dereference
+      // (clang_c_adjust_expr.cpp:307-313), so `p.field` becomes `p->field`.
+      // The converter emits the unwrapped form for a class attribute reached
+      // through an instance pointer (`cur.nxt` where `cur` is a `Node`
+      // parameter), and without the wrap the member's source stays a pointer:
+      // symex then reads a member off a pointer value and aborts
+      // ("to_pointer_type() called on type whose type_id is struct"), and the
+      // expression printer falls back to dumping the raw irep.
+      source = dereference2tc(to_pointer_type(source->type).subtype, source);
+      rebuild = true;
+    }
+
+    // The wrapped source carries the pointee, which is the same transient
+    // symbol_type2t a plain instance source would be -- resolve either shape.
     if (resolve_source(source))
+      rebuild = true;
+
+    if (rebuild)
       expr = member2tc(m.type, source, m.member);
   }
   else if (is_index2t(expr))
   {
     const index2t &i = to_index2t(expr);
+    // clang_c_adjust::adjust_index casts the index to index_type() before using
+    // it (clang_c_adjust_expr.cpp:591). Without it an index of a different width
+    // or signedness reaches the element computation unconverted — e.g.
+    // `float_buf[obj->float_idx]` where legacy emits
+    // `float_buf[(signed long int)obj->float_idx]` — which changes the value read
+    // and can flip a verdict.
+    expr2tc idx = i.index;
+    if (idx->type != index_type2())
+      idx = typecast2tc(index_type2(), idx);
+
     if (is_pointer_type(i.source_value->type))
     {
       // clang_c_adjust::adjust_index rewrites p[i] -> *(p+i) when the base is a
@@ -235,13 +266,14 @@ void python_adjust::adjust_expr(expr2tc &expr)
       // array→pointer decay arm below so the pointer source actually holds a
       // pointer value at symex rename, not a bare array.
       expr = dereference2tc(
-        i.type, add2tc(i.source_value->type, i.source_value, i.index));
+        i.type, add2tc(i.source_value->type, i.source_value, idx));
     }
     else
     {
       expr2tc source = i.source_value;
-      if (resolve_source(source))
-        expr = index2tc(i.type, source, i.index);
+      const bool source_resolved = resolve_source(source);
+      if (source_resolved || idx != i.index)
+        expr = index2tc(i.type, source, idx);
     }
   }
   else if (is_dereference2t(expr) && is_empty_type(expr->type))
@@ -272,13 +304,61 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // e.g. `len(s)` in `len(s) or len(t)`). clang_c_adjust::adjust_if casts the
     // condition to bool (gen_typecast(ns, op0, bool_type())); mirror it so
     // goto_sideeffects' is_boolean() check on the lowered IF condition holds
-    // (otherwise "first argument of `if' must be boolean"). if2t is immutable.
+    // (otherwise "first argument of `if' must be boolean"). Its sibling half --
+    // converting a branch whose type differs from the result type -- is not
+    // mirrored: migrate_expr's ternary arm coerces every branch whose type
+    // *kind* diverges (migrate.cpp:1001, exactly what if2t's assert demands),
+    // and the residual same-kind/different-width case is unobserved on the
+    // Python path (0 firings across 40 ternary-bearing tests), so the mirror
+    // would be dead instrumentation today. if2t is immutable.
     const if2t &i = to_if2t(expr);
     expr = if2tc(
       i.type,
       typecast2tc(get_bool_type(), i.cond),
       i.true_value,
       i.false_value);
+  }
+  else if (
+    is_typecast2t(expr) && is_pointer_type(expr->type) &&
+    is_array_type(to_typecast2t(expr).from->type))
+  {
+    // A cast of an array value to a pointer decays: `(char *)arr` is
+    // `&arr[0]`. clang never builds the raw cast -- every conversion it emits
+    // goes through c_typecastt::do_typecast, whose array case decays
+    // (c_typecast.cpp:926-944, the expr2tc overload this reimplements rather
+    // than calls: the pass deliberately keeps legacy c_typecastt off the
+    // IREP2-native path). Restricted to a pointer destination, the only shape
+    // migrate_expr's coercion produces here; do_typecast decays for any
+    // destination. On the Python path the raw cast is synthesised
+    // by migrate_expr's ternary arm, which coerces a branch whose type id
+    // diverges from the result type (migrate.cpp:1001): `s = "" if b else
+    // "foo"` builds a char*-typed if over two array literals, so both branches
+    // arrive here as `(char *){ ... }`. The SMT layer then rejects the
+    // pointer-typed array constant ("Unexpected type in int/ptr typecast").
+    // Idempotent: the rewritten node is an address_of, not an array.
+    const typecast2t &t = to_typecast2t(expr);
+    const type2tc &elem = to_array_type(t.from->type).subtype;
+    expr2tc decayed =
+      address_of2tc(elem, index2tc(elem, t.from, gen_zero(index_type2())));
+    expr = (ns.follow(decayed->type) == ns.follow(expr->type))
+             ? decayed
+             : typecast2tc(expr->type, decayed);
+  }
+  else if (
+    is_address_of2t(expr) && is_array_type(to_address_of2t(expr).ptr_obj->type))
+  {
+    // `&array` decays to `&array[0]`, exactly as clang_c_adjust::adjust_address_of
+    // does (clang_c_adjust_expr.cpp:743-754). This is the node-level counterpart
+    // of the assignment-seam decay below: the operand need not be near an
+    // assignment at all -- the OM raise sites build a struct literal
+    // `{ .message = &"math domain error" }` whose member is a `char*`, so
+    // without the decay the literal carries a `char(*)[N]` and the member type
+    // silently disagrees with its initialiser. Idempotent: the rewritten operand
+    // is an index2t of element type, so the arm cannot re-fire.
+    const address_of2t &a = to_address_of2t(expr);
+    const type2tc &elem = to_array_type(a.ptr_obj->type).subtype;
+    expr =
+      address_of2tc(elem, index2tc(elem, a.ptr_obj, gen_zero(index_type2())));
   }
   else if (
     is_code_assign2t(expr) &&
@@ -302,6 +382,94 @@ void python_adjust::adjust_expr(expr2tc &expr)
     expr2tc decayed =
       address_of2tc(pointee, index2tc(elem, a.source, gen_zero(index_type2())));
     expr = code_assign2tc(a.target, decayed, a.location);
+  }
+  else if (
+    is_code_assign2t(expr) &&
+    is_pointer_type(to_code_assign2t(expr).target->type) &&
+    is_struct_type(ns.follow(to_code_assign2t(expr).source->type)))
+  {
+    // The struct sibling of the decay above: a pointer target assigned an
+    // aggregate *value* takes its address. c_typecastt::implicit_typecast_
+    // followed does this for a struct or union source (c_typecast.cpp:729-740,
+    // the `address_of_exprt base_ptr` arm). The Python converter binds an
+    // instance parameter this way -- `cur = head` where `head` is a
+    // `pointer→tag-Node` parameter lowers to `cur = *head`, a struct value --
+    // and legacy emits `cur = &(*head)`. Without the address-of, symex reads a
+    // struct where the pointer's type says pointer and aborts
+    // ("to_pointer_type() called on type whose type_id is struct").
+    // Idempotent: the rebuilt source is an address_of, not a struct.
+    const code_assign2t &a = to_code_assign2t(expr);
+    const type2tc &pointee = to_pointer_type(a.target->type).subtype;
+    expr =
+      code_assign2tc(a.target, address_of2tc(pointee, a.source), a.location);
+  }
+  else if (
+    is_code_ifthenelse2t(expr) &&
+    !is_bool_type(to_code_ifthenelse2t(expr).cond->type))
+  {
+    // Branch/loop conditions must be boolean before the solver sees them. Python
+    // writes `if x:` on a plain int, and the converter keeps the raw signedbv;
+    // clang_c_adjust casts it (adjust_ifthenelse/adjust_while/adjust_for all call
+    // gen_typecast_bool). Without the cast the guard reaches the SMT layer as a
+    // bitvector where a Boolean is required -- bitwuzla rejects it with "term
+    // with unexpected sort at index 0". This is the statement-level counterpart
+    // of the if2t (ternary) arm above.
+    const code_ifthenelse2t &i = to_code_ifthenelse2t(expr);
+    expr = code_ifthenelse2tc(
+      typecast2tc(get_bool_type(), i.cond),
+      i.then_case,
+      i.else_case,
+      i.location);
+  }
+  else if (
+    is_code_while2t(expr) && !is_bool_type(to_code_while2t(expr).cond->type))
+  {
+    const code_while2t &w = to_code_while2t(expr);
+    expr = code_while2tc(
+      typecast2tc(get_bool_type(), w.cond),
+      w.body,
+      w.location,
+      w.pragma_unroll_count);
+  }
+  else if (
+    is_code_dowhile2t(expr) &&
+    !is_bool_type(to_code_dowhile2t(expr).cond->type))
+  {
+    const code_dowhile2t &d = to_code_dowhile2t(expr);
+    expr = code_dowhile2tc(
+      typecast2tc(get_bool_type(), d.cond),
+      d.body,
+      d.location,
+      d.pragma_unroll_count);
+  }
+  else if (
+    is_code_for2t(expr) && !is_nil_expr(to_code_for2t(expr).cond) &&
+    !is_bool_type(to_code_for2t(expr).cond->type))
+  {
+    const code_for2t &f = to_code_for2t(expr);
+    expr = code_for2tc(
+      f.init,
+      typecast2tc(get_bool_type(), f.cond),
+      f.iter,
+      f.body,
+      f.location,
+      f.pragma_unroll_count);
+  }
+  else if (
+    is_code_return2t(expr) && !is_nil_expr(to_code_return2t(expr).operand) &&
+    is_code_type(to_code_return2t(expr).operand->type))
+  {
+    // Function→pointer decay at the return seam (C11 6.3.2.1p4): a closure
+    // factory (`def make(k): def mul(x): ...; return mul`) returns a bare
+    // code-typed designator, but the caller stores it in a function pointer.
+    // clang_c_adjust decays every code-typed symbol reference to `&f`
+    // (adjust_symbol_expr, "sugar for &f"); mirror it at the one seam Python
+    // reaches it from. Without it symex sees `typecast(mul, void(*)())` and
+    // aborts at SMT encoding ("Unexpected type in int/ptr typecast"), and the
+    // indirect call has no resolvable target.
+    const code_return2t &r = to_code_return2t(expr);
+    expr =
+      code_return2tc(address_of2tc(r.operand->type, r.operand), r.location);
   }
   else if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
   {
@@ -376,6 +544,51 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // Expression-form call (e.g. `assert f(3) == 6`): the callee is the
     // sideeffect operand.
     const sideeffect2t &s = to_sideeffect2t(expr);
+
+    // A C-library math call lowers to its SMT intrinsic instead of executing
+    // the model, mirroring clang_c_adjust (`sqrt` at
+    // clang_c_adjust_expr.cpp:1414-1423, `fabs` at :1239-1245). math.sqrt /
+    // math.fabs build calls to `c:@F@sqrt` / `c:@F@fabs`
+    // (python_math::handle_sqrt, build_unary_c_math_call); without the lowering
+    // the hop-off runs the library model -- for sqrt that yields NaN, so
+    // `math.sqrt(9) == 3.0` reports a spurious violation.
+    //
+    // These two are the whole intersection of the names Python emits as
+    // `c:@F@` calls with the names clang_c_adjust lowers (its other eleven --
+    // finite/fma/huge_val/inf/isfinite/isinf/isnan/isnormal/nan/nearbyint/
+    // signbit -- are never reached as calls from this frontend), so a further
+    // arm here would be dead instrumentation.
+    //
+    // The legacy guard matches the symbol's *base* name and excludes `py:` user
+    // functions; symbol2t carries only the full identifier, so take the segment
+    // after the last '@'. ieee_sqrt's rounding mode matches migrate_expr's
+    // default for a legacy node with no explicit mode (migrate.cpp:1437).
+    if (is_symbol2t(s.operand) && s.arguments.size() == 1)
+    {
+      const std::string id = to_symbol2t(s.operand).thename.as_string();
+      const std::string base = id.substr(id.find_last_of('@') + 1);
+      const auto is_float_variant = [&base](const std::string &n) {
+        return base == n || base == n + "f" || base == n + "d" ||
+               base == n + "l";
+      };
+      if (!has_prefix(id, "py:"))
+      {
+        if (is_float_variant("sqrt"))
+        {
+          expr = ieee_sqrt2tc(
+            s.type,
+            s.arguments[0],
+            symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"));
+          return;
+        }
+        if (is_float_variant("fabs"))
+        {
+          expr = abs2tc(s.type, s.arguments[0]);
+          return;
+        }
+      }
+    }
+
     expr2tc fn = s.operand;
     std::vector<expr2tc> args = s.arguments;
     if (wrap_function_pointer_callee(fn, args))
@@ -555,6 +768,32 @@ void python_adjust::adjust_type(type2tc &type)
       adjust_expr(size);
     if (subtype != arr.subtype || size != arr.array_size)
       type = array_type2tc(subtype, size, arr.size_is_infinite);
+    return;
+  }
+
+  if (is_code_type(type))
+  {
+    // Pad any struct/union embedded in the function signature (argument and
+    // return types), so a function argument's Optional/union type matches the
+    // padded value literal at the call site — otherwise symex_function's
+    // base_type_eq rejects a padded argument against an unpadded parameter
+    // ("argument type mismatch: got struct, expected struct"). Inert on a
+    // signature that carries only scalars.
+    const code_type2t &ct = to_code_type(type);
+    std::vector<type2tc> args = ct.arguments;
+    type2tc ret = ct.ret_type;
+    bool changed = false;
+    for (type2tc &a : args)
+    {
+      const type2tc before = a;
+      adjust_type(a);
+      changed |= a != before;
+    }
+    const type2tc ret_before = ret;
+    adjust_type(ret);
+    changed |= ret != ret_before;
+    if (changed)
+      type = code_type2tc(args, ret, ct.argument_names, ct.ellipsis);
     return;
   }
 

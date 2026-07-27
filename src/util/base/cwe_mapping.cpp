@@ -115,6 +115,13 @@ const std::vector<entry_t> &rules_table()
       // Unchecked return value of fallible call (CWE-252).
       {"unchecked return value",
        {"unchecked-return-value", "Unchecked return value", {252}}},
+      // Attacker-controlled allocation size above the --excessive-alloc-check
+      // bound (CWE-789). CWE-770 is the class entry; 789 is the variant we
+      // map to.
+      {"excessive allocation size",
+       {"excessive-allocation",
+        "Memory allocation with excessive size",
+        {789}}},
       // Reachability.
       {"unreachable code reached",
        {"reachable-error", "Reachable error/assertion", {617}}},
@@ -174,6 +181,7 @@ const std::map<unsigned, std::string_view> &names_map()
     {457, "Use of Uninitialized Variable"},
     {469, "Use of Pointer Subtraction to Determine Size"},
     {476, "NULL Pointer Dereference"},
+    {561, "Dead Code"},
     {562, "Return of Stack Variable Address"},
     {563, "Assignment to Variable without Use"},
     {590, "Free of Memory not on the Heap"},
@@ -182,6 +190,7 @@ const std::map<unsigned, std::string_view> &names_map()
     {681, "Incorrect Conversion between Numeric Types"},
     {761, "Free of Pointer not at Start of Buffer"},
     {787, "Out-of-bounds Write"},
+    {789, "Memory Allocation with Excessive Size Value"},
     {822, "Untrusted Pointer Dereference"},
     {823, "Use of Out-of-range Pointer Offset"},
     {824, "Access of Uninitialized Pointer"},
@@ -208,6 +217,17 @@ const cwe_rule_t &cwe_rule_for(std::string_view comment)
 std::vector<unsigned> cwe_for(std::string_view comment)
 {
   return cwe_rule_for(comment).cwes;
+}
+
+const cwe_rule_t &dead_code_cwe_rule()
+{
+  // Dead code (CWE-561) is advisory and emitted only by the --dead-code-check
+  // reporter, so it is intentionally kept OUT of the cwe_rule_for() substring
+  // table: a global "dead code" key would mislabel any ordinary violation
+  // whose comment happens to contain that text (e.g. a user assertion message)
+  // as CWE-561. See issue #4495.
+  static const cwe_rule_t rule{"dead-code", "Dead code", {561}};
+  return rule;
 }
 
 std::string format_cwe_list(const std::vector<unsigned> &ids)

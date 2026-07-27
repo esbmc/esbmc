@@ -544,3 +544,308 @@ four no-verdict cases (`github_3012_3_fail`, `higher-order3`,
 `int_to_bytes_kwargs_fail`, `ternary_string_fail`,
 `github_4796_object_handle_eq_fail`) — each needing its own triage rather than a
 shared mechanism.
+
+### Per-case triage round 1 — `higher-order3` was a missing function→pointer decay (2026-07-25)
+
+Triaging the no-verdict list one case at a time immediately paid off: three of
+the five turned out to have *distinct* signatures, and the first is another
+one-arm structural mirror, not a per-case oddity.
+
+| Case | Reproduced signature under hop-off |
+|---|---|
+| `higher-order3` | `ERROR: Unexpected type in int/ptr typecast` (`smt_casts.cpp:228`), plus `No target candidate for function call *times3` |
+| `github_3012_3_fail` | `bitwuzla: … term with unexpected sort at index 0` |
+| `int_to_bytes_kwargs_fail` | `ERROR: shr` |
+| `ternary_string_fail`, `github_4796_object_handle_eq_fail` | silent no-verdict |
+
+**✅ FIXED — `higher-order3`.** The GOTO diff against legacy pins it in one line:
+legacy emits `RETURN: &make_multiplier@F@mul`, the hop-off emits
+`RETURN: make_multiplier@F@mul` — a bare code-typed *function designator*. The
+caller then holds `typecast(mul, double (*)(void *))`, which
+`convert_typecast_to_ints` cannot encode (its `from` is neither sbv/ubv/fbv/fpbv
+nor bool) and which symex cannot resolve to a call target.
+`clang_c_adjust::adjust_symbol_expr` (`clang_c_adjust_expr.cpp:246-253`) decays
+*every* code-typed symbol reference to an implicit `&f` ("special case: this is
+sugar for &f", C11 6.3.2.1p4); `python_adjust` did not. The fix is a
+`code_return2t` arm mirroring it at the one seam Python reaches this from —
+deliberately narrower than clang's universal symbol decay, because the callee
+position of a call is already owned by `wrap_function_pointer_callee` and a
+blanket decay would fight it. Same family as the array→pointer decay (#6363):
+**the third "per-case" bucket entry to dissolve into a missing clang mirror.**
+
+**Note on closure capture.** The matched test pair deliberately returns a
+*non-capturing* nested `def`. `higher-order3`'s own `make_multiplier(3)` /
+`times3(4)` free-variable capture is wrong on **both** paths (an
+`assert times3(4) == 12` fails under legacy too) — a pre-existing frontend gap,
+at parity, and out of scope here.
+
+**Direction, restated.** The per-case list is not a homogeneous bucket. Reproduce
+each signature separately before assuming a shared cause: two of the five are
+solver-level (`bitwuzla` sort, `shr`) and two are still silent. The remaining
+four are the next slices.
+
+### Per-case triage round 2 — `int_to_bytes_kwargs_fail` was an unmigrable `shr` (2026-07-25)
+
+`ERROR: shr` is **not** solver-level, as round 1 guessed from the message
+prefix — the full output ends `migrate expr failed`. The Python frontend builds
+the `int.to_bytes()` byte-extraction shift as a legacy `exprt("shr", …)`
+(`str_conv.cpp:486`), but `shr` is a **pre-adjust placeholder**:
+`clang_c_adjust::adjust_expr_shifts` (`clang_c_adjust_expr.cpp:325-360`) resolves
+it to `lshr`/`ashr` on op0's signedness (C11 6.5.7), and `migrate_expr` only has
+arms for the *resolved* forms (`migrate.cpp:3240`, `:3392`). With
+`clang_cpp_adjust` gone, the raw `shr` reaches migration and aborts before any
+verdict.
+
+Unlike round 1's fix this is **converter-side**, so it changes the default path
+too — and `lshr` skips `adjust_expr_shifts` entirely (it is gated on `shl`/`shr`
+at `clang_c_adjust_expr.cpp:139`), losing the `gen_typecast_arithmetic` that
+would have run on both operands. That is only safe if the promotion was a no-op.
+It was, and this was **measured, not argued**: the default-path
+`--goto-functions-only` output over all 14 `to_bytes`/`from_bytes` tests is
+byte-identical pre- and post-patch (modulo timing lines), because `value` is
+unsignedbv-by-construction at that point and both operands already share its
+type.
+
+**Census sweep — `shr` was the only such id.** Enumerating every legacy `exprt`
+id the Python frontend constructs and checking each against `migrate.cpp` gives
+one genuine gap. `if` / `not` / `typecast` are handled via the `exprt::` id
+constants (a literal-string grep misses them) and `_init_undefined` is an
+already-guarded sentinel (`python_exception_handler.cpp:317`). So this class of
+hop-off abort is now **closed**, not merely sampled.
+
+Two of five triaged; `github_3012_3_fail` (bitwuzla sort), `ternary_string_fail`
+and `github_4796_object_handle_eq_fail` (silent) remain.
+
+### Per-case triage round 3 — the branch/loop condition was never cast to bool (2026-07-25)
+
+`github_3012_3_fail`'s `bitwuzla: … term with unexpected sort at index 0` is
+again not what the message suggests. Its hop-off and legacy VCCs are nearly
+identical; the one structural difference is the guard:
+
+```
+legacy:  {-4} goto_symex::guard…#1 == (x&0#1 != 0)   {-5} !goto_symex::guard…#1
+hop-off: {-4} !x&0#1                                  {1} … => x&0#1
+```
+
+The hop-off applies `!` and `=>` to a **signedbv**. `clang_c_adjust` casts every
+branch and loop condition (`adjust_ifthenelse`, `adjust_while`, `adjust_for` —
+all `gen_typecast_bool`, `clang_c_adjust_code.cpp:106-128`); `python_adjust` had
+only the `if2t` *ternary-expression* arm (#6348), never the statement-level ones.
+Python's `if n:` on a plain int is the common case, so the raw bitvector reached
+the solver. Fixed by mirroring all four (`code_ifthenelse2t`, `code_while2t`,
+`code_dowhile2t`, `code_for2t`).
+
+**This one arm closed six divergences, not one.** Besides `github_3012_3_fail`
+it fixed `github_4796_object_handle_eq_fail` (the last of the round-1 "silent"
+pair but one) and four cases the earlier census had filed under *wrong/absent
+verdict* — `div6`, `filter_loop`, `github_3841_6`, `jpl` — all of which were
+no-verdict for this same reason. The "wrong/absent verdict — needs per-case
+triage, mixed tractability" row in the table above was therefore substantially
+**one missing mirror**, not a set of independent SMT-level oddities.
+
+**A wider census confirms the recorded parity figure.** A stride-6 run (733 of
+4 401 `regression/python` tests, executed 12-way parallel against a *pinned
+binary snapshot* so concurrent rebuilds cannot perturb it) found **18
+divergences — 97.5% parity**, matching the "~97.5% on a 365-test strided sample"
+recorded above. The wider sample did not move the *rate*; what it changed is the
+**composition**, by naming the full divergence set rather than a handful.
+
+Two of the 18 are method artifacts: `python_irep2_adjust_only_boolop_or` and
+`python_irep2_adjust_only_optional` already carry `--python-irep2-adjust-only` in
+their own `test.desc`, so both census columns are hop-off runs and the empty cell
+is the known load-dependent solver timeout — they pass under `ctest`. Twelve are
+genuine.
+
+After this arm, parity on the same sample is **98.1%** (14 divergences), and the
+whole "no verdict because the guard was a bitvector" family is gone.
+
+**Still open after round 3** (excluding the two artifacts):
+
+| Kind | Cases |
+|---|---|
+| no verdict | `ternary_string_fail`, `github_2934_2`, `github_3078_fail`, `github_3337_2_fail`, `github_4784_isnone_short_circuit_fail`, `none3`, `optional6` |
+| legacy SUCCESSFUL → hop-off FAILED | `cmath_polar_rect_semantics_success_07`, `github_3690`, `github_4745_pep604_class_attr`, `math13`, `math_edge_frexp_success`, `sqrt5` |
+
+The wrong-verdict group is the higher-risk one — a hop-off `FAILED` against a
+legacy `SUCCESSFUL` is either a false alarm or a real bug the legacy path masks,
+and only per-case triage distinguishes them. Note it now clusters visibly on
+math/float (`math13`, `math_edge_frexp_success`, `sqrt5`,
+`cmath_polar_rect_semantics_success_07`), which points at the parked S4
+arithmetic-conversion work rather than at six independent causes — but that is a
+hypothesis from the names, not a triaged finding.
+
+### Per-case triage round 4 — the math cluster was `sqrt`, not S4 (2026-07-25)
+
+The round-3 hypothesis above was **wrong**: the math/float cluster has nothing to
+do with arithmetic conversion. `sqrt5`'s counterexample shows `result = -NAN`,
+and the GOTO diff isolates it to one instruction:
+
+```
+legacy:  ASSIGN result = ieee_sqrt((double)x, __ESBMC_rounding_mode)
+hop-off: FUNCTION_CALL: result = sqrt((double)x)
+```
+
+`python_math::handle_sqrt` emits a call to `c:@F@sqrt` whenever the argument is
+not a foldable constant; `clang_c_adjust` rewrites that call to the `ieee_sqrt`
+intrinsic (`clang_c_adjust_expr.cpp:1414-1423`), and `python_adjust` did not, so
+the hop-off ran the library model, which returns NaN. Fixed by mirroring the
+lowering — closing `sqrt5`, `math13`, and
+`cmath_polar_rect_semantics_success_07`, the last of which this document had
+recorded as a standing *false alarm*. It was not; it was this.
+
+**Method note — match the field the legacy guard matches.** A first attempt
+compared `symbol2t::thename` (the full identifier, `c:@F@sqrt`) against
+`"sqrt"`, and the arm silently never fired. The legacy guard uses the symbol's
+**base** name (`to_symbol_expr(f_op).name()`) and applies the `py:` exclusion to
+the *identifier*. IREP2's `symbol2t` carries only the identifier, so the base
+name must be recovered (segment after the last `@`). A non-firing arm looks
+exactly like a wrong hypothesis — check the arm fires before discarding the
+theory.
+
+**Also landed: `&array` → `&array[0]` at the node level.** `clang_c_adjust::adjust_address_of`
+(`clang_c_adjust_expr.cpp:743-754`) decays unconditionally; #6363 added only the
+assignment-seam form, which never reaches an `address_of` nested inside an
+aggregate literal. The OM raise sites build `{ .message = &"math domain error" }`
+with a `char*` member, so the literal carried a `char(*)[N]`. **This flips no
+verdict in the sampled corpus** — it closes a structural parity gap (the hop-off
+GOTO now matches legacy byte-for-byte at those sites), and is recorded as such
+rather than as a divergence fix.
+
+**Remaining after round 4** — a stride-12 census (366 tests) leaves five genuine
+divergences: `github_3078_fail`, `github_4784_isnone_short_circuit_fail` (no
+verdict), `github_3690`, `math_edge_frexp_success`,
+`github_4745_pep604_class_attr` (legacy SUCCESSFUL → hop-off FAILED), plus
+`ternary_string_fail`, `github_2934_2`, `none3`, `optional6` from the wider
+stride-6 run. `math_edge_frexp_success` is `frexp`, so the "one missing intrinsic
+lowering per math builtin" shape may repeat — check `clang_c_adjust`'s builtin
+list before assuming anything deeper.
+
+**Census artifact, restated.** Any test whose own `test.desc` already carries
+`--python-irep2-adjust-only` (`python_irep2_adjust_only_*`) appears as a
+divergence in this census, because both of its columns are hop-off runs and the
+40 s cap bites under 12-way parallelism. They pass under `ctest`. Filter them
+out before counting.
+
+### Per-case triage round 5 — the intrinsic-lowering class is closed; frexp is S4 (2026-07-25)
+
+Rather than triage the remaining math cases one at a time, enumerate the class.
+`clang_c_adjust` lowers exactly thirteen library calls to SMT intrinsics —
+`fabs`, `finite`, `fma`, `huge_val`, `inf`, `isfinite`, `isinf`, `isnan`,
+`isnormal`, `nan`, `nearbyint`, `signbit`, `sqrt`. Intersect that with the names
+the Python frontend actually emits as `c:@F@…` calls (`acos … tanh`, `trunc`,
+plus the `__python_*` string helpers) and the answer is **two**: `sqrt` (round 4)
+and `fabs`. The other eleven are never reached as calls from this frontend, so
+an arm for any of them would be dead instrumentation.
+
+**`fabs` landed.** `clang_c_adjust_expr.cpp:1239-1245` rewrites it to the `abs`
+intrinsic; a probe shows legacy `RETURN: abs(x)` against hop-off
+`FUNCTION_CALL: fabs(x)`. Verdicts happened to agree (the `fabs` model is
+faithful, unlike `sqrt`'s), so this is a **parity** fix with the divergence risk
+removed rather than a verdict flip. With it, **the intrinsic-lowering class is
+closed** — not sampled.
+
+**`math_edge_frexp_success` is not an intrinsic gap at all.** `frexp` appears in
+neither list. Its GOTO diff is one instruction:
+
+```
+legacy:  ASSIGN e = (double)ESBMC_unpack_temp….element_1;
+hop-off: ASSIGN e =         ESBMC_unpack_temp….element_1;
+```
+
+`e` is a `double` tuple-unpack target and `element_1` is the integer exponent, so
+this is precisely `clang_c_adjust::adjust_assign`'s conversion — **the
+assignment-conversion trap documented above**. It must *not* be fixed with a
+standalone `adjust_assign` mirror: both the blanket and the faithful
+`gen_typecast` version make `neural-net_fail` report SUCCESSFUL where legacy
+correctly reports FAILED, i.e. they mask a real bug. It is S4 work, and it is now
+pinned to a concrete second reproducer (`precedence2` was the first).
+
+**Round-3's hypothesis, settled.** The guess that the math/float cluster pointed
+at S4 was *partly* right and mostly wrong: `sqrt5`, `math13` and
+`cmath_polar_rect_semantics_success_07` were a missing intrinsic lowering, while
+`math_edge_frexp_success` genuinely is S4. The lesson stands — the cluster's
+*name* carried no information; only the per-case GOTO diff did.
+
+### Per-case triage round 6 — the ternary pair was a *migrate-synthesised* cast (2026-07-26)
+
+The last two no-verdict cases from round 3's table, `ternary_string_fail` and
+`github_3337_2_fail`, are one cause. Both assign a string-valued ternary
+(`s: str = "" if b else "foo"`), and the GOTO diff is one instruction:
+
+```
+legacy:  ASSIGN s = b ? &{ 0 }[0] : &{ 102, 111, 111, 0 }[0];
+hop-off: ASSIGN s = b ? (signed char *){ 0 } : (signed char *){ 102, 111, 111, 0 };
+```
+
+A pointer-typed array constant, which the SMT layer rejects
+(`ERROR: Unexpected type in int/ptr typecast`); `ternary_string_fail` instead
+runs `strcmp` off the end of the bogus pointer and unwinds until the heap is
+exhausted. Fixed by an `is_typecast2t` arm that decays an array operand to
+`&arr[0]`, mirroring `c_typecastt::do_typecast`'s array case
+(`c_typecast.cpp:877-905`) — the same decay the `address_of` (#6395) and
+assignment-seam (#6363) arms already perform, now at the cast node itself.
+
+**The novel part: the offending node has no converter site.** Every earlier
+round fixed something the converter emitted and `clang_c_adjust` then rewrote.
+Here the raw cast is synthesised *during migration*: `migrate_expr`'s ternary arm
+coerces a branch whose type id diverges from the result type
+(`migrate.cpp:1001`), and the Python converter's ternary genuinely has array
+branches under a `char*` result type. On the legacy path `adjust_if` decays the
+branches *before* migration, so that arm never fires and the cast never exists.
+**Consequence for future triage: a hop-off-only node may have been built by
+`migrate_expr`, not by the converter — grep migrate before hunting for a
+converter site.**
+
+**Negative result — do not mirror `adjust_if`'s branch conversion.** The obvious
+fix is the other half of `clang_c_adjust::adjust_if`
+(`clang_c_adjust_expr.cpp:1689-1693`): convert both branches to the result type.
+It is **dead code** in `python_adjust` today — probed with a stderr marker over
+40 ternary-bearing tests, **0 firings**.
+
+*Be precise about why, because the obvious explanation is wrong.* `migrate_expr`
+coerces on **`type_id` inequality only** (`migrate.cpp:1001`) — exactly what
+`if2t`'s constructor asserts (`irep2_expr.h:809-810`) — whereas `adjust_if`
+tests **full type inequality**. Migration therefore does *not* equalise the
+branch types in general: a same-kind/different-width pair (`signedbv 8` vs
+`signedbv 64`) is coerced by neither, and would reach the SMT backend as an
+`ite` over differently-sorted terms. That residual class is simply unobserved on
+the Python path — probes with `ord(s[0]) if b else 300`, `s[0] if b else 300`,
+`5 if b else len("foo")` and an untyped `5 if b else "foo"` all either matched
+types or routed to the frontend's nondet ternary-result fallback. The mirror
+stays out under the C-Live bar, not because the case is unreachable in
+principle; the fix this round needed belongs at the cast node anyway.
+
+### Per-case triage round 7 — the instance-pointer pair (2026-07-26)
+
+`github_4784_isnone_short_circuit_fail` (hop-off: `irep2_cast_error:
+to_pointer_type() called on type whose type_id is struct`) needed **two**
+mirrors, and neither alone is enough — measured, by disabling each in turn:
+
+```
+legacy:  ASSIGN cur=&(*head);           ASSIGN …=ISNONE(cur->nxt, 0);
+hop-off: ASSIGN cur=*head;              ASSIGN …=ISNONE(<raw member irep>, 0);
+```
+
+1. **`member2t` over a pointer source.** `clang_c_adjust::adjust_member`
+   (`clang_c_adjust_expr.cpp:307-313`) wraps a pointer base in a dereference, so
+   `p.field` becomes `p->field`. `python_adjust` resolved a *symbol-typed*
+   source but left a *pointer* source alone, so symex read a member off a
+   pointer and the expression printer fell back to dumping the raw irep.
+2. **struct value assigned to a pointer target.** Binding an instance parameter
+   (`cur = head`, `head` a `pointer→tag-Node`) lowers to `cur = *head` — a
+   struct value. `c_typecastt::implicit_typecast_followed`'s struct arm
+   (`c_typecast.cpp:729-740`) takes its address; legacy emits `cur = &(*head)`.
+   This is the struct sibling of the array→pointer decay (#6363) at the same
+   seam.
+
+With only (1), the run still aborts — the same crash, one layer down; with only
+(2), it aborts differently (`struct_union_member_names() called on incompatible
+type (type_id = pointer)`) and the member node stays malformed. **Do not accept
+the first arm that changes the error message as the fix**; re-run with each half
+disabled to establish which are load-bearing.
+
+The `adjust_member` *array*-base arm (`base.type().is_array()` → `base[0]`) is
+**not** mirrored. None of the shapes triaged here produced an array-typed member
+base — Python attribute access is over a class instance, i.e. a symbol or an
+instance pointer — and adding the arm without first proving it reachable would
+be dead instrumentation. Probe before adding it, not after.

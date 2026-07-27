@@ -345,6 +345,15 @@ protected:
    */
   std::string vtable_type_prefix = "virtual_table::";
   std::string vtable_ptr_suffix = "@vtable_pointer";
+  /* Leading component of every vtable type: a pointer to the printed name of
+   * the most-derived class the vtable belongs to. Reading it through an
+   * object's vptr is how `typeid` recovers the dynamic type (#6310). */
+  static irep_idt rtti_name_component_id(const irep_idt &vtable_type_id);
+  static struct_typet::componentt
+  rtti_name_component(const irep_idt &vtable_type_id);
+  /* The single spelling of a type used as typeid identity; see #6310. */
+  static std::string rtti_type_name(const clang::QualType &qtype);
+  static std::string rtti_type_name(const clang::CXXRecordDecl &rd);
   // if a class/struct has vptr component, it needs to be initialized in ctor
   bool has_vptr_component = false;
   std::string thunk_prefix = "thunk::";
@@ -645,6 +654,15 @@ protected:
    *  expr: ESBMC IR to represent Function call
    */
   void make_temporary(exprt &expr);
+
+  /* Lower a class-typed conditional operator to a single temporary_object whose
+   * initializer branches, so both constructors target one object (guaranteed
+   * elision). Sets `elided` when it applied; leaves it false for shapes that
+   * keep the generic if_exprt lowering. Returns true on conversion error. */
+  bool get_conditional_class_prvalue(
+    const clang::ConditionalOperator &ternary,
+    exprt &new_expr,
+    bool &elided);
 
   bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr) override;
 };

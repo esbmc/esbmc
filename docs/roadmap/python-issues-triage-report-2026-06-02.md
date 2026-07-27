@@ -4352,3 +4352,56 @@ catalogue is drained. `2 ** 0.5` / fractional float `**` stays KNOWNBUG (root ca
 `__ESBMC_pow`/libm intrinsic, all-frontend — not a Python fold — like #4796). The §3 design-level
 blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib` case
 all stand. The §5 priority order stands.
+
+## 93. 2026-07-25 re-validation (eighty-third sweep) & the unresolved-method false proof
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. This sweep takes the
+**soundness** defect that the §92 probe run turned up. Independent, fresh branch off `master` (a
+different file from §92; only this report's tail is shared, and the maintainer orders the appended
+sections on merge as with §90).
+
+> **Numbering.** §92 is in flight on its own branch and not yet on `master`; this section is numbered
+> §93 so it does not collide.
+
+### 93a. New isolated, soundly-fixable defect found & fixed — a false proof
+**An unresolvable method call returned a null `void*`, which reads as `False`, so asserting its
+negation was *proved*.** When a method call's symbol is missing and the receiver's class could only be
+*guessed* (`inferred_classes_from_fallback`), `resolve_missing_function_symbol()` deliberately avoids
+raising `AttributeError` — sound, since the inference is uncertain — but returned
+`gen_zero(any_type())` as the call's value. A null pointer is falsy, so:
+
+```python
+assert not {1}.isdisjoint({2})   # pre-patch: VERIFICATION SUCCESSFUL. CPython: AssertionError
+assert {1}.isdisjoint({2})       # pre-patch: VERIFICATION FAILED.     CPython: passes
+```
+
+Both verdicts are wrong, and the first is a **false proof** — the worst failure mode ESBMC has. Any
+method on a **container literal** hits this, because a literal receiver never resolves to a class:
+confirmed for `set`, `list`, `dict` and `tuple` literals, and for a method that does not exist at all
+(`assert not {1}.foobar()` was proved). `str` and `int` literals were already correct (they have real
+models), so this was invisible from the receiver shapes the suite exercises. A **named** set receiver
+was always correct in both directions, which is why `set.isdisjoint` looked modelled.
+
+**Fix**: return a `side_effect_expr_nondett(any_type())` instead of the null constant. An unresolved
+call is *unknown*, so neither direction may be proved: both spellings above now report `FAILED`, and
+no assertion over an unresolved method can be discharged. This deliberately trades the spurious
+`FAILED` in the second line for soundness — the §89 policy (an unsound fold is worse than an
+unsupported stub) applied to a value fallback rather than a fold. Making `isdisjoint` on a literal
+receiver actually *correct* means routing a `Set`-literal receiver into `is_set_method_call()`, which
+is a separate, purely-completeness change — see §93b.
+
+New regression pair `regression/python/unresolved_method_fallback{,_fail}` (CORE): the `_fail` pins
+the former false proof as `FAILED` (CPython raises `AssertionError` on the same file), and the
+positive pins that a *resolvable* receiver keeps its exact set semantics
+(`isdisjoint`/`issubset`/`issuperset` in both directions) so the nondet fallback cannot leak into the
+working path. clang-format 11 clean.
+
+### 93b. Everything else: unchanged disposition
+Now that no false proof is on the table, the completeness follow-ups from §92b stand, re-ranked:
+**`Set`/`List`/`Dict`/`Tuple`-literal receivers are not routed to their container-method handlers** —
+`is_set_method_call()` accepts only a `set()`/`frozenset()` call receiver or a symbol whose
+`sym->is_set` holds, so `{1}.isdisjoint({2})` is now correctly *unknown* rather than wrong; extending
+the discriminator to literal receivers is the natural next sweep. Then `int.from_bytes()` reading out
+of bounds *inside* its model, and unmodeled `float.conjugate()` (the int receiver already folds via
+`models/int.py`). The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand. The §5 priority order stands.

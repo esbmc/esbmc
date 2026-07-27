@@ -1,0 +1,4 @@
+CORE
+main.c
+--dead-code-check --no-assertions
+^ERROR: --dead-code-check cannot be combined with --no-assertions$
