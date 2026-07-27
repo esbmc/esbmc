@@ -6,7 +6,7 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0 and M1 complete** (§15 verdict log); M2–M8 not yet
+**Status:** **M0 and M1 complete, M2 partial** (§15 verdict log); M3–M8 not yet
 executed. §6.4 records the tier-ordering rule M1 produced. Except
 where §15 records a discharged result, every harness below is a *proposal* and
 nothing here asserts a proof. Findings R1–R12 remain *hypotheses with cited
@@ -722,6 +722,11 @@ plus a call-site argument. **M1 closed.**
 **M2 — Isolated core algorithms: merging and bounding (1.5 wk).**
 H-A2 (the highest-value harness), H-A3, H-A5. Dual-solver mandatory.
 *Artefact:* merge-soundness proof at arity 2 **and** 3; R2 `SYMEX_INVARIANT` PR.
+**Revised, §15 M2.** H-A2's and H-A3's obligations (I8, I6) are observable in the
+produced equation, so both are discharged at Tier B by
+`unit/goto-symex/merge.test.cpp` per §6.4 — no transcription, no dual-solver gate
+needed because no SMT query is involved. H-A5 is unstarted; R2's
+`SYMEX_INVARIANT` remains M3.
 
 **M3 — Release-mode enforcement (0.5 wk).** R1: introduce `SYMEX_INVARIANT`,
 promote the ~10 load-bearing asserts, measure the runtime cost on
@@ -1261,6 +1266,54 @@ WI-1, WI-2, D12. Next is **M2** (H-A2 merge-guard soundness, H-A3 merge-queue
 conservation, H-A5), which §6.4 requires be scoped Tier-B-first: `phi_function`
 and `merge_state_guards` are observable in the produced equation through phi
 assignment counts and step guards.
+### M2 (partial) — 2026-07-27
+
+**Result: I8 and I6 pinned against the real engine; R2's failure mode confirmed
+as unobserved on every shape tried.**
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `unit/goto-symex/merge.test.cpp` (H-A2 + H-A3) | real symex over two-armed, one-armed, nested, in-callee, early-return and in-loop branches | 7 cases, 31 assertions, **pass** |
+
+§4.3 ranks the merge machinery P0 — a lost path is a missed bug with no
+diagnostic — and both of its unenforced invariants turned out to be visible in
+the produced equation, so neither needed a transcription (§6.4).
+
+- **I8, emission** — a two-armed branch over nondet values produces exactly one
+  `ite` definition for the merged variable; a variable untouched in both arms
+  produces none; nested branches produce one per join; a branch in a 3×-unwound
+  loop produces at least one per iteration.
+- **I8, freshness** — the phi's L2 index is strictly greater than every index
+  previously defined for that key. A phi that reused one of its own inputs would
+  alias two distinct values under one SSA name, which is the I1/I10 violation
+  R3's stale-count scenario also produces.
+- **I8, one-armed merge** — for `if (c) x = …;` with no `else`, the emitted ite's
+  arms are distinct. This is the lost-behaviour direction: if the *pre-branch*
+  value were not one of the arms, the not-taken path would simply vanish from
+  the formula.
+- **I6 / R2** — after symex, every live frame's `merge_state_map` is empty. The
+  cases are chosen for where a snapshot could be orphaned: a branch inside a
+  callee (so the join and the `pop_frame` belong to the same frame), an early
+  `return` that jumps past a join, and a branch inside an unwound loop.
+
+Non-vacuity: the pending-merge count `REQUIRE`s a non-empty call stack before
+summing, so a zero cannot come from having examined nothing. Arm values are
+`nondet_int()` throughout — with constant arms, `simplify` folds the ite and the
+phi disappears, which would have made every emission assertion vacuous.
+
+**R2 is not retired by this.** These tests show the invariant holding on the
+shapes tried; R2 is that *nothing enforces it in the shipped binary*, since
+`pop_frame`'s `assert(merge_state_map.size() == 0)` is a no-op under NDEBUG.
+That remains true and remains M3's `SYMEX_INVARIANT` work. What the tests add is
+a durable regression: if a future change starts orphaning snapshots on any of
+these six shapes, this fails rather than silently dropping paths.
+
+**Still open in M2.** H-A5 (unwind bounding, `get_unwind` /
+`loop_bound_exceeded`) is unstarted. Note §11.3 and R12 both forbid pairing
+`--no-unwinding-assertions` with any reachability claim, so H-A5's Tier-C form
+(H-C6, unwind monotonicity: `FAILED` at `--unwind k` ⇒ `FAILED` at every
+`k' > k`) is the safer first cut and needs no oracle. Also still open from M0:
+WI-1, WI-2, D12.
 ---
 
 ## Appendix A — Methodological basis
