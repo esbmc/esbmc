@@ -158,7 +158,7 @@ public:
   typedef int streampos;
   typedef int streamoff;
 
-  ios() : __exception_mask(ios_base::goodbit)
+  ios()
   {
     ios_base();
   }
@@ -167,10 +167,6 @@ public:
   }
   mutable char __fill;
   streambuf *__streambuf;
-  /* Exception mask storage. exceptions() was declared and never defined, so it
-   * returned a nondeterministic iostate: `os.exceptions(failbit);
-   * os.exceptions() == failbit` satisfied neither itself nor its negation. */
-  iostate __exception_mask;
   bool operator!() const;
   operator void *() const;
   void clear(iostate state = ios_base::goodbit);
@@ -183,32 +179,12 @@ public:
   iostate rdstate() const;
   void setstate(iostate state);
 
-  // [basic.ios.members]: copies the formatting state, not the stream buffer or
-  // the error state.
-  ios &copyfmt(const ios &rhs)
-  {
-    __fill = rhs.__fill;
-    __exception_mask = rhs.__exception_mask;
-    ios_base::flags(rhs.flags());
-    ios_base::precision(rhs.precision());
-    ios_base::width(rhs.width());
-    return *this;
-  }
+  ios &copyfmt(const ios &rhs);
   char fill() const;
   char fill(char fillch);
 
-  /* Storage and accessor only: [ios.base] also has exceptions(mask) throw when
-   * the current state already matches the mask, which this model does not do --
-   * OM code cannot throw a catchable exception (see #6338). The mask itself is
-   * now determinate rather than nondeterministic. */
-  iostate exceptions() const
-  {
-    return __exception_mask;
-  }
-  void exceptions(iostate except)
-  {
-    __exception_mask = except;
-  }
+  iostate exceptions() const;
+  void exceptions(iostate except);
   locale imbue(const locale &loc);
   streambuf *rdbuf() const;
   streambuf *rdbuf(streambuf *sb);
@@ -219,6 +195,7 @@ public:
 ios_base::ios_base()
 {
   __streambuf_state = goodbit;
+  __exception = goodbit;
 }
 
 ios_base::fmtflags ios_base::flags() const
@@ -285,6 +262,39 @@ ios::iostate ios::rdstate() const
 void ios::setstate(ios::iostate state)
 {
   clear(__streambuf_state |= state);
+}
+
+/* Storage and accessor only: [ios.base] also has exceptions(mask) throw when
+ * the current state already matches the mask, which this model does not do --
+ * OM code cannot throw a catchable exception (see #6338). The mask itself is
+ * determinate rather than nondeterministic.
+ *
+ * The mask lives in ios_base::__exception rather than in an ios member, even
+ * though [basic.ios] puts it in basic_ios: an ios-level member of a stream
+ * built through the virtual ios base resolves to the wrong offset (#6430),
+ * which lands the write inside the vtable pointer and turns every access into
+ * byte-level pointer surgery -- Bitwuzla then needs gigabytes on what should
+ * be two trivial VCCs. */
+ios::iostate ios::exceptions() const
+{
+  return __exception;
+}
+
+void ios::exceptions(ios::iostate except)
+{
+  __exception = except;
+}
+
+// [basic.ios.members]: copies the formatting state, not the stream buffer or
+// the error state.
+ios &ios::copyfmt(const ios &rhs)
+{
+  __fill = rhs.__fill;
+  __exception = rhs.__exception;
+  flags(rhs.flags());
+  precision(rhs.precision());
+  width(rhs.width());
+  return *this;
 }
 
 bool ios::operator!() const

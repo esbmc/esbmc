@@ -12,6 +12,8 @@
 int main()
 {
   std::ostringstream os;
+  // [ios.base.cons]: a new stream starts with an empty exception mask
+  assert(os.exceptions() == std::ios_base::goodbit);
   os.exceptions(std::ios_base::failbit);
   assert(os.exceptions() == std::ios_base::failbit);
   os.exceptions(std::ios_base::badbit);
