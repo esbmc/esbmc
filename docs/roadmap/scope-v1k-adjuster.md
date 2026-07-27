@@ -898,11 +898,26 @@ hop-off: { _Bool is_none; unsigned _ExtInt(48) anon_pad$1;
 The offsets are exactly what re-running `add_padding` over an already-padded
 struct whose pad member has lost its `#is_padding` flag produces (the 56-bit pad
 aligned as a real 7-byte field: `1 → +6 → 7`, then `value` at `14 → +2 → 16`).
-That makes `adjust_type`'s struct arm the obvious suspect and it is the **wrong**
-one: an instrumented run over this test shows the arm's `add_padding` call
-firing **zero times**, so the second pad is applied somewhere else entirely.
-Both the pre-existing `#is_padding` re-derivation and the pad names in the output
-are consistent with that — the duplicate `anon_pad$1` is a *fresh* pad at index
-1, not a re-flagged old one. The next drill must find the actual second padding
-site before any fix; `github_3690` (a dict-of-lambda call returning
-`1.0000000000000002` instead of `1.0`) is the other open case and is unrelated.
+That makes `adjust_type`'s struct arm the obvious suspect — but instrumenting its
+`add_padding` call **acquits it**: over this test the arm fires 322 times, and
+every one of the 5 firings on `tag-Optional_signedbv` reads `{is_none, value}`
+(both unpadded) and writes `{is_none, anon_pad$1, value}`. It never once receives
+an already-padded struct, so it cannot be the second pad. `Box` itself is padded
+once, `{x, flag}` → unchanged.
+
+Two consequences for the next drill. (1) The second pad is applied **downstream
+of `python_adjust`** — find that site before touching the adjuster. (2) The five
+separate firings are themselves a finding: the type-symbol write-back is not
+making the padded form visible to later sites, so each one re-pads its own copy
+from scratch. That is the likely mechanism by which one copy reaches a
+downstream padding pass with `#is_padding` already lost.
+
+**Method warning — this negative result was wrong once.** An earlier run of the
+same probe reported *zero* firings and was recorded here as "not this arm". The
+binary was stale: the `make esbmc` that was supposed to build the probe inherited
+a `cd` to the source root and failed silently. Re-check that a probe binary
+actually contains the probe (a non-zero firing count on *some* input) before
+believing a zero.
+
+`github_3690` (a dict-of-lambda call returning `1.0000000000000002` instead of
+`1.0`) is the other open case and is unrelated.
