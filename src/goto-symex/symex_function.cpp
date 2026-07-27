@@ -606,19 +606,21 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.calling_location = cur_state->source;
   frame.entry_guard = cur_state->guard;
 
-  // assign arguments (goto_function.type is already IREP2)
-  frame.va_index = argument_assignments(
-    identifier, to_code_type(goto_function.type), arguments);
-  frame.va_cursor = frame.va_index;
-
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = ret_value;
   frame.function_identifier = identifier;
   frame.hidden = goto_function.body.hide;
 
+  // Switch source into the callee before assigning arguments so that formal
+  // parameter assignments are attributed to the callee, not the call site.
   cur_state->source.is_set = true;
   cur_state->source.pc = goto_function.body.instructions.begin();
   cur_state->source.prog = &goto_function.body;
+
+  // assign arguments (goto_function.type is already IREP2)
+  frame.va_index = argument_assignments(
+    identifier, to_code_type(goto_function.type), arguments);
+  frame.va_cursor = frame.va_index;
 }
 
 // True if a function of type `candidate` may be called through a function
