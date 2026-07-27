@@ -1414,26 +1414,31 @@ FwdIt lower_bound(FwdIt first, FwdIt last, const Ty &val)
 template <class FwdIt, class Ty, class Pr>
 FwdIt lower_bound(FwdIt first, FwdIt last, const Ty &val, Pr pred)
 {
+  /* [lower.bound]: the first it with !comp(*it, val). The previous form,
+   * comp(val, *it) || val == *it, also required Ty to have operator==, which
+   * the standard does not — a comparator-only type would not compile. */
   while (first != last)
   {
-    if (pred(val, *first) || val == *first)
+    if (!pred(*first, val))
       return first;
-    else
-      first++;
+    ++first;
   }
-  return first;
+  return last;
 }
 
 template <class FwdIt, class Ty>
 FwdIt upper_bound(FwdIt first, FwdIt last, const Ty &val)
 {
-  last--;
+  /* [upper.bound]: the FIRST iterator it in [first, last) with val < *it.
+   * The previous version scanned BACKWARDS from last-1 and returned the last
+   * position satisfying val <= *it, so on a sorted {1,2,3,4,5,6} it answered
+   * upper_bound(3) == &6 instead of &4 -- deterministically wrong rather than
+   * nondeterministic, which is why it looked plausible. */
   while (first != last)
   {
-    if (val <= *last)
-      return last;
-    else
-      last--;
+    if (val < *first)
+      return first;
+    ++first;
   }
   return last;
 }
@@ -1441,14 +1446,12 @@ FwdIt upper_bound(FwdIt first, FwdIt last, const Ty &val)
 template <class FwdIt, class Ty, class Pr>
 FwdIt upper_bound(FwdIt first, FwdIt last, const Ty &val, Pr pred)
 {
-  last--;
+  // [upper.bound]: the first it with comp(val, *it).
   while (first != last)
   {
-    // Return the iterator _before_ the predicate becomes true.
-    if (!pred(val, *last))
-      return ++last;
-    else
-      last--;
+    if (pred(val, *first))
+      return first;
+    ++first;
   }
   return last;
 }
