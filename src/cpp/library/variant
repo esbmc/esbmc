@@ -79,6 +79,11 @@ struct __at_or_char<3, T0, T1, T2, T3, Ts...>
   using type = T3;
 };
 
+template <class>
+struct __dependent_false : false_type
+{
+};
+
 } // namespace __variant_detail
 
 template <class... Types>
@@ -101,13 +106,26 @@ public:
   {
   }
 
-  template <class T>
+  /* [variant.ctor]/13 and [variant.assign]/11: the converting constructor and
+   * assignment shall not participate in overload resolution when the argument
+   * is the variant itself. Unconstrained, they are a better match than the
+   * implicit copy operations for a non-const lvalue, so `variant w = v;` went
+   * through __assign, matched no alternative, and left w with index 0 and an
+   * empty slot -- a silent wrong answer rather than a diagnostic. Constrained
+   * out, the implicit copy/move operations do the correct memberwise copy. */
+  template <
+    class T,
+    class = typename enable_if<
+      !is_same<typename decay<T>::type, variant>::value>::type>
   constexpr variant(T &&v) : __idx_(0), __s0_(), __s1_(), __s2_(), __s3_()
   {
     __assign(std::forward<T>(v));
   }
 
-  template <class T>
+  template <
+    class T,
+    class = typename enable_if<
+      !is_same<typename decay<T>::type, variant>::value>::type>
   variant &operator=(T &&v)
   {
     __assign(std::forward<T>(v));
@@ -155,6 +173,14 @@ private:
     {
       __idx_ = 3;
       __s3_ = std::forward<T>(v);
+    }
+    else
+    {
+      // Falling through used to leave the variant silently untouched.
+      static_assert(
+        __variant_detail::__dependent_false<D>::value,
+        "this <variant> OM requires the assigned type to match an alternative "
+        "exactly; no converting selection is modelled");
     }
   }
 };

@@ -131,7 +131,7 @@ public:
   public:
   public:
     int pos;
-    key_type *base;
+    const key_type *base;
 
     const_iterator(const const_iterator &i)
     {
@@ -145,7 +145,7 @@ public:
       base = i.base;
     }
 
-    const_iterator(key_type *bbase, int ppos)
+    const_iterator(const key_type *bbase, int ppos)
     {
       __ESBMC_assert(bbase != NULL, "Invalid null pointer");
       pos = ppos;
@@ -162,12 +162,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    const value_type *operator->()
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    const value_type &operator*()
     {
       return base[pos];
     }
@@ -306,7 +306,7 @@ public:
   {
   public:
     int pos;
-    key_type *base;
+    const key_type *base;
 
     const_reverse_iterator(const const_reverse_iterator &i)
     {
@@ -314,7 +314,7 @@ public:
       base = i.base;
     }
 
-    const_reverse_iterator(key_type *bbase, int ppos)
+    const_reverse_iterator(const key_type *bbase, int ppos)
     {
       __ESBMC_assert(bbase != NULL, "Invalid null pointer");
       pos = ppos;
@@ -331,12 +331,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    const value_type *operator->()
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    const value_type &operator*()
     {
       return base[pos];
     }
@@ -505,6 +505,23 @@ public:
     return const_reverse_iterator(buf, 0);
   }
 
+  const_iterator cbegin() const
+  {
+    return begin();
+  }
+  const_iterator cend() const
+  {
+    return end();
+  }
+  const_reverse_iterator crbegin() const
+  {
+    return rbegin();
+  }
+  const_reverse_iterator crend() const
+  {
+    return rend();
+  }
+
   // capacity:
   bool empty() const
   {
@@ -531,6 +548,14 @@ public:
   }
 
   // modifiers:
+#if __cplusplus >= 201103L
+  template <class... Args>
+  iterator emplace(Args &&...args)
+  {
+    return insert(value_type(std::forward<Args>(args)...));
+  }
+#endif
+
   // multiset insert should maintain sorted order and allow duplicates.
   // Returns iterator (not pair<iterator,bool>): the bool would be meaningless
   // for multiset since duplicates are always inserted (C++ standard).
@@ -671,6 +696,13 @@ public:
     }
     return counter;
   }
+
+#if __cplusplus >= 202002L
+  bool contains(const key_type &x) const
+  {
+    return this->count(x) > 0;
+  }
+#endif
 
   // lower_bound returns iterator to first element >= x
   iterator lower_bound(const key_type &x)
@@ -847,7 +879,7 @@ public:
   public:
   public:
     int pos;
-    key_type *base;
+    const key_type *base;
 
     const_iterator(const const_iterator &i)
     {
@@ -861,7 +893,7 @@ public:
       base = i.base;
     }
 
-    const_iterator(key_type *bbase, int ppos)
+    const_iterator(const key_type *bbase, int ppos)
     {
       __ESBMC_assert(bbase != NULL, "Invalid null pointer");
       pos = ppos;
@@ -878,12 +910,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    const value_type *operator->()
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    const value_type &operator*()
     {
       return base[pos];
     }
@@ -1021,7 +1053,7 @@ public:
   {
   public:
     int pos;
-    key_type *base;
+    const key_type *base;
 
     const_reverse_iterator(const const_reverse_iterator &i)
     {
@@ -1029,7 +1061,7 @@ public:
       base = i.base;
     }
 
-    const_reverse_iterator(key_type *bbase, int ppos)
+    const_reverse_iterator(const key_type *bbase, int ppos)
     {
       __ESBMC_assert(bbase != NULL, "Invalid null pointer");
       pos = ppos;
@@ -1046,12 +1078,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    const value_type *operator->()
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    const value_type &operator*()
     {
       return base[pos];
     }
@@ -1215,6 +1247,23 @@ public:
     return const_reverse_iterator(buf, 0);
   }
 
+  const_iterator cbegin() const
+  {
+    return begin();
+  }
+  const_iterator cend() const
+  {
+    return end();
+  }
+  const_reverse_iterator crbegin() const
+  {
+    return rbegin();
+  }
+  const_reverse_iterator crend() const
+  {
+    return rend();
+  }
+
   // capacity:
   bool empty() const
   {
@@ -1242,6 +1291,14 @@ public:
 
   // modifiers:
   // set insert should maintain sorted order and reject duplicates
+#if __cplusplus >= 201103L
+  template <class... Args>
+  pair<iterator, bool> emplace(Args &&...args)
+  {
+    return insert(value_type(std::forward<Args>(args)...));
+  }
+#endif
+
   pair<iterator, bool> insert(const value_type &x)
   {
     // Check if element already exists (for set, duplicates not allowed)
@@ -1386,6 +1443,13 @@ public:
     }
     return counter;
   }
+
+#if __cplusplus >= 202002L
+  bool contains(const key_type &x) const
+  {
+    return this->count(x) > 0;
+  }
+#endif
 
   // lower_bound returns iterator to first element >= x
   iterator lower_bound(const key_type &x)

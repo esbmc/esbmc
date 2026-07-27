@@ -3,11 +3,11 @@
 
 #include <set>
 #include <goto-symex/level1_map.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2_expr.h>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 
 class namespacet;
 
@@ -208,7 +208,8 @@ public:
     unsigned int l1_num;
     unsigned int t_num;
 
-    // Not a part of comparisons etc,
+    // Derived from the fields above; used as the fast-path primary key in
+    // compare() and by name_rec_hash.
     size_t hash;
   };
 

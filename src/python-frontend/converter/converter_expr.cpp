@@ -12,6 +12,7 @@
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/math/python_math.h>
+#include <python-frontend/numpy/ndarray_descriptor.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
@@ -19,15 +20,15 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/encoding.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/base/encoding.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
 
 using namespace json_utils;
 
@@ -668,6 +669,61 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           }
         }
 
+        // `.ndim`: the rank of the canonical bounded ndarray descriptor
+        // (numpy-architecture-decisions.md). The runtime list model only
+        // ever backs a 1-D array, so its rank is always 1.
+        if (attr_name == "ndim")
+        {
+          if (base_type.is_array())
+          {
+            std::vector<int> dims =
+              type_handler_.get_array_type_shape(base_type);
+            ndarray_descriptor descriptor(
+              std::vector<long long>(dims.begin(), dims.end()), "", 0);
+            descriptor.validate();
+            return from_integer(descriptor.rank(), int_type());
+          }
+
+          const typet list_type = type_handler_.get_list_type();
+          if (
+            base_type == list_type || (base_expr.type().is_pointer() &&
+                                       base_expr.type().subtype() == list_type))
+            return from_integer(1, int_type());
+        }
+
+        // `.shape`/`.ndim` on a boolean-mask row-selection result
+        // (build_bool_mask_row_select_symbolic): shape is `(count, cols)`,
+        // reading the struct's runtime logical row count rather than the
+        // `rows` buffer's physical (worst-case) capacity; rank is always 2
+        // (row selection is only modelled for 2-D arrays).
+        if (
+          (attr_name == "shape" || attr_name == "ndim") &&
+          python_list::is_bool_mask_rows_type(base_type))
+        {
+          if (attr_name == "ndim")
+            return from_integer(2, int_type());
+
+          const struct_typet &result_type = to_struct_type(base_type);
+          const array_typet &rows_type =
+            to_array_type(ns.follow(result_type.components()[0].type()));
+          const BigInt num_cols = binary2integer(
+            to_array_type(ns.follow(rows_type.subtype()))
+              .size()
+              .value()
+              .c_str(),
+            false);
+
+          exprt count_member = python_expr::build_member(
+            base_expr, "count", result_type.components()[1].type());
+          expr2tc count2;
+          migrate_expr(count_member, count2);
+          exprt count_as_int =
+            migrate_expr_back(typecast2tc(migrate_type(int_type()), count2));
+
+          return build_shape_tuple_expr(
+            *this, {count_as_int, from_integer(num_cols, int_type())});
+        }
+
         if (base_type.is_struct())
         {
           const struct_typet &struct_type = to_struct_type(base_type);
@@ -1063,6 +1119,67 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           expr = build_shape_tuple_expr(*this, {list_len});
           break;
         }
+      }
+
+      // `.ndim`: mirrors the `.shape` block above (see the general
+      // attribute-access path for the descriptor-backed rank computation).
+      if (attr_name == "ndim")
+      {
+        typet sym_type = symbol->get_type();
+        if (sym_type.is_pointer())
+          sym_type = sym_type.subtype();
+        if (sym_type.id() == "symbol")
+          sym_type = ns.follow(sym_type);
+
+        if (sym_type.is_array())
+        {
+          std::vector<int> dims = type_handler_.get_array_type_shape(sym_type);
+          ndarray_descriptor descriptor(
+            std::vector<long long>(dims.begin(), dims.end()), "", 0);
+          descriptor.validate();
+          expr = from_integer(descriptor.rank(), int_type());
+          break;
+        }
+
+        const typet list_type = type_handler_.get_list_type();
+        if (
+          sym_type == list_type || (symbol->get_type().is_pointer() &&
+                                    symbol->get_type().subtype() == list_type))
+        {
+          expr = from_integer(1, int_type());
+          break;
+        }
+      }
+
+      // `.shape`/`.ndim` on a boolean-mask row-selection result: mirrors the
+      // general attribute-access path above.
+      if (
+        (attr_name == "shape" || attr_name == "ndim") &&
+        python_list::is_bool_mask_rows_type(symbol->get_type()))
+      {
+        if (attr_name == "ndim")
+        {
+          expr = from_integer(2, int_type());
+          break;
+        }
+
+        const struct_typet &result_type = to_struct_type(symbol->get_type());
+        const array_typet &rows_type =
+          to_array_type(ns.follow(result_type.components()[0].type()));
+        const BigInt num_cols = binary2integer(
+          to_array_type(ns.follow(rows_type.subtype())).size().value().c_str(),
+          false);
+
+        exprt count_member = python_expr::build_member(
+          expr, "count", result_type.components()[1].type());
+        expr2tc count2;
+        migrate_expr(count_member, count2);
+        exprt count_as_int =
+          migrate_expr_back(typecast2tc(migrate_type(int_type()), count2));
+
+        expr = build_shape_tuple_expr(
+          *this, {count_as_int, from_integer(num_cols, int_type())});
+        break;
       }
 
       // Delegate complex attribute access (.real, .imag) to the handler.
@@ -1493,9 +1610,33 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         array_type = pointed;
       }
     }
+    // Unwrap Optional[tuple] (e.g. `v = d.get(k); v[0]`): subscripting
+    // implies the payload is present (None would be a TypeError), so read
+    // the value field before dispatching to the tuple handler.
+    if (
+      array_type.is_struct() &&
+      to_struct_type(array_type).tag().as_string().starts_with("tag-Optional_"))
+    {
+      exprt unwrapped = unwrap_optional_if_needed(array, element);
+      if (tuple_handler_->is_tuple_type(unwrapped.type()))
+      {
+        array = unwrapped;
+        array_type = unwrapped.type();
+      }
+    }
     if (tuple_handler_->is_tuple_type(array_type))
     {
       expr = tuple_handler_->handle_tuple_subscript(array, slice, element);
+      break;
+    }
+
+    // Boolean-mask row-selection result (build_bool_mask_row_select_symbolic):
+    // a struct, not an array_typet, so it needs its own dispatch ahead of
+    // the array/list handling below.
+    if (python_list::is_bool_mask_rows_type(array_type))
+    {
+      python_list list(*this, element);
+      expr = list.index_bool_mask_rows(array, slice, element);
       break;
     }
 
@@ -1526,7 +1667,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     const bool array_is_runtime_list =
       array_type == list_type ||
       (array_type.is_pointer() && ns.follow(array_type.subtype()) == list_type);
-    const bool array_is_builtin_array = array_type.is_array();
+    // A parameter used in an `a[mask]` pattern decays to pointer-to-whole-
+    // array (see register_function_argument), so recognizing it here needs
+    // the same pointer unwrap already used for the dict/tuple cases above.
+    const bool array_is_builtin_array =
+      array_type.is_array() ||
+      (array_type.is_pointer() && ns.follow(array_type.subtype()).is_array());
     const bool tuple_index_targets_list_model =
       array_is_runtime_list || array_is_builtin_array;
 
@@ -1583,32 +1729,22 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             break;
           }
 
-          // N-D mixed slice/index tuple: exactly one full-slice axis (`:`)
-          // and every other axis a literal or resolvable-at-runtime integer,
-          // e.g. `a[:, 0, 0]` or `a[0, :, 0]`. A bounded/partial slice
-          // (`a[0:2, 0, 0]`) or more than one slice axis (`a[:, :, 0]`)
-          // stays unsupported.
+          // N-D mixed slice/index tuple: one or more bounded slice axes and
+          // fixed-index axes, e.g. `a[:, 0, 0]`, `a[0:2, 0, 0]`, or
+          // `a[:, :, 0]`.
           std::size_t slice_axis_count = 0;
-          std::size_t slice_axis = 0;
-          bool has_partial_slice = false;
           for (std::size_t i = 0; i < idx_nodes.size(); ++i)
           {
             if (idx_nodes[i].value("_type", "") != "Slice")
               continue;
-            if (is_full_slice_node(idx_nodes[i]))
-            {
-              ++slice_axis_count;
-              slice_axis = i;
-            }
-            else
-              has_partial_slice = true;
+            ++slice_axis_count;
           }
 
-          if (!has_partial_slice && slice_axis_count == 1)
+          if (slice_axis_count != 0)
           {
             python_list list(*this, element);
-            expr = list.build_mixed_slice_tuple_select(
-              array, idx_nodes, slice_axis, element);
+            expr =
+              list.build_mixed_slice_tuple_select(array, idx_nodes, element);
             break;
           }
 
@@ -1669,13 +1805,33 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       exprt mask_candidate = get_expr(slice);
       if (!contains_cpp_throw(mask_candidate))
       {
-        const typet mask_type = ns.follow(mask_candidate.type());
+        typet mask_type = ns.follow(mask_candidate.type());
+        // A mask parameter decays to pointer-to-whole-array
+        // unwrap it the same way `array` is unwrapped below.
+        if (mask_type.is_pointer())
+        {
+          typet pointed = ns.follow(mask_type.subtype());
+          if (pointed.is_array())
+          {
+            mask_candidate =
+              python_expr::build_dereference(mask_candidate, pointed);
+            mask_type = pointed;
+          }
+        }
         if (mask_type.is_array())
         {
           if (ns.follow(mask_type.subtype()).is_bool())
           {
+            exprt mask_array = array;
+            if (array_type.is_pointer())
+            {
+              typet pointed = ns.follow(array_type.subtype());
+              if (pointed.is_array())
+                mask_array = python_expr::build_dereference(array, pointed);
+            }
             python_list list(*this, element);
-            expr = list.build_bool_mask_index(array, mask_candidate, element);
+            expr =
+              list.build_bool_mask_index(mask_array, mask_candidate, element);
             break;
           }
 

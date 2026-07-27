@@ -201,15 +201,12 @@ prepare_platform_config() {
       if [[ -z "$STATIC" ]]; then
         STATIC=OFF
       fi
-      if [[ "$STATIC" == "ON" ]]; then
-        error "static macOS build is currently not supported"
-      fi
-      log "Configuring macOS build with llvm/clang ${CLANG_VERSION}"
+      log "Configuring macOS build with llvm/clang ${CLANG_VERSION} (static=$STATIC)"
 
       BASE_ARGS+=(
+        "-DBUILD_STATIC=$STATIC"
         "-DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION"
         "-DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION"
-        "-DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
       )
 
       SOLVER_FLAGS+=("-DENABLE_GOTO_CONTRACTOR=OFF" "-DENABLE_Z3=ON")

@@ -8,11 +8,11 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/type/type_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 
 #include <algorithm>
 #include <cctype>
@@ -482,8 +482,13 @@ exprt function_call_expr::handle_int_to_bytes() const
     const std::size_t byte_index = big_endian ? (length - 1 - i) : i;
 
     // Shift the selected byte down to the low 8 bits and mask everything else out.
+    // `lshr`, not the `shr` placeholder: `shr` is only ever resolved by
+    // clang_c_adjust::adjust_expr_shifts (to lshr/ashr on op0's signedness), and
+    // migrate_expr has no `shr` arm — so a surviving `shr` aborts with "migrate
+    // expr failed". `value` is unsignedbv by construction above, which is the
+    // branch adjust_expr_shifts would take anyway.
     const exprt shift_amount = from_integer(byte_index * 8, value.type());
-    exprt shifted("shr", value.type());
+    exprt shifted("lshr", value.type());
     shifted.copy_to_operands(value, shift_amount);
 
     exprt masked("bitand", value.type());
@@ -977,13 +982,16 @@ py_format_number(bool is_int, long long ival, double dval, const std::string &s)
   }
   else
   {
-    // Float value: require an explicit float presentation type. The default
-    // (repr-like) float format, grouping and '#' are not modelled.
+    // Float value. An explicit presentation type renders with snprintf and the
+    // spec's precision; the default (no type) is CPython's str()/repr()
+    // shortest form via the shared helper. '#' and default-type precision
+    // (a 'g'-like fold) are not modelled; grouping is modelled for the default
+    // type only.
     if (
-      type != 'f' && type != 'F' && type != 'e' && type != 'E' && type != 'g' &&
-      type != 'G' && type != '%')
+      type != 0 && type != 'f' && type != 'F' && type != 'e' && type != 'E' &&
+      type != 'g' && type != 'G' && type != '%')
       return std::nullopt;
-    if (grouping != 0 || alt)
+    if (alt)
       return std::nullopt;
 
     double d = dval;
@@ -992,26 +1000,51 @@ py_format_number(bool is_int, long long ival, double dval, const std::string &s)
       d *= 100.0;
     negative = std::signbit(d) && !std::isnan(d);
     const double ad = negative ? -d : d;
-    const int p = prec >= 0 ? prec : 6;
 
-    const char conv =
-      percent
-        ? 'f'
-        : static_cast<char>(std::tolower(static_cast<unsigned char>(type)));
-    const char *f = (conv == 'f') ? "%.*f" : (conv == 'e') ? "%.*e" : "%.*g";
+    if (type == 0)
     {
-      const round_to_nearest_guard guard;
-      const int n = std::snprintf(nullptr, 0, f, p, ad);
-      if (n < 0)
-        return std::nullopt;
-      digits.resize(static_cast<size_t>(n));
-      std::snprintf(&digits[0], static_cast<size_t>(n) + 1, f, p, ad);
+      if (prec >= 0)
+        return std::nullopt; // default-type precision not modelled
+      digits = string_handler::cpython_float_str(ad);
+      if (grouping != 0)
+      {
+        // CPython groups only the integer part of fixed notation by 3; an
+        // exponential/inf/nan repr (its head is not all digits) is left as-is.
+        const size_t dot = digits.find('.');
+        const std::string head =
+          digits.substr(0, dot == std::string::npos ? digits.size() : dot);
+        if (std::all_of(head.begin(), head.end(), [](unsigned char c) {
+              return std::isdigit(c) != 0;
+            }))
+          digits =
+            group_digits(head, grouping, 3) +
+            (dot == std::string::npos ? std::string() : digits.substr(dot));
+      }
     }
-    if (type == 'F' || type == 'E' || type == 'G')
-      for (char &ch : digits)
-        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-    if (percent)
-      digits.push_back('%');
+    else
+    {
+      if (grouping != 0)
+        return std::nullopt; // grouping + explicit float type: not modelled
+      const int p = prec >= 0 ? prec : 6;
+      const char conv =
+        percent
+          ? 'f'
+          : static_cast<char>(std::tolower(static_cast<unsigned char>(type)));
+      const char *f = (conv == 'f') ? "%.*f" : (conv == 'e') ? "%.*e" : "%.*g";
+      {
+        const round_to_nearest_guard guard;
+        const int n = std::snprintf(nullptr, 0, f, p, ad);
+        if (n < 0)
+          return std::nullopt;
+        digits.resize(static_cast<size_t>(n));
+        std::snprintf(&digits[0], static_cast<size_t>(n) + 1, f, p, ad);
+      }
+      if (type == 'F' || type == 'E' || type == 'G')
+        for (char &ch : digits)
+          ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+      if (percent)
+        digits.push_back('%');
+    }
   }
 
   const std::string sign_str =

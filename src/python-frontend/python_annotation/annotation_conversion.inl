@@ -1408,6 +1408,11 @@ std::string python_annotation<Json>::get_function_return_type(
     {
       const auto &import_node =
         json_utils::find_imported_function(ast_, func_name);
+      // Relative imports (`from . import helper`) carry a null module name;
+      // fall through to the wildcard/builtin probes instead of feeding null
+      // to get_module (which would raise an uncatchable nlohmann type_error).
+      if (!import_node.contains("module") || import_node["module"].is_null())
+        throw std::runtime_error("import has no resolvable module name");
       auto module = module_manager_->get_module(import_node["module"]);
 
       if (!module)
@@ -1810,6 +1815,26 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
 }
 
 template <class Json>
+std::string python_annotation<Json>::method_return_type(
+  const Json &member,
+  const std::string &method_name)
+{
+  if (member.contains("returns") && !member["returns"].is_null())
+  {
+    const Json &ret = member["returns"];
+    if (ret.contains("id"))
+      return ret["id"].template get<std::string>();
+    if (
+      ret.contains("_type") && ret["_type"] == "Subscript" &&
+      ret.contains("value") && ret["value"].contains("id"))
+      return ret["value"]["id"].template get<std::string>();
+  }
+  std::string inferred =
+    infer_from_return_statements(member["body"], method_name);
+  return inferred.empty() ? "Any" : inferred;
+}
+
+template <class Json>
 std::string python_annotation<Json>::get_type_from_method(const Json &call)
 {
   std::string type("");
@@ -1965,24 +1990,44 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
         {
           if (member["_type"] != "FunctionDef" || member["name"] != attr_name)
             continue;
-          if (member.contains("returns") && !member["returns"].is_null())
-          {
-            const Json &ret = member["returns"];
-            if (ret.contains("id"))
-              return ret["id"].template get<std::string>();
-            if (
-              ret.contains("_type") && ret["_type"] == "Subscript" &&
-              ret.contains("value") && ret["value"].contains("id"))
-              return ret["value"]["id"].template get<std::string>();
-          }
-          // attr_name == member["name"] by the loop invariant above
-          std::string inferred =
-            infer_from_return_statements(member["body"], attr_name);
-          return inferred.empty() ? "Any" : inferred;
+          return method_return_type(member, attr_name);
         }
       }
     }
     return "Any";
+  }
+
+  // Handle self.method() calls: resolve the method in the current class (or,
+  // failing that, along its base chain) and adopt its return type. Without
+  // this the `self` receiver is unresolved, so an unannotated
+  // `self.attr = self.method()` is left untyped and the attribute defaults to
+  // its enclosing class — which later emits a call to a nonexistent method on
+  // that attribute and aborts GOTO conversion (#6242).
+  if (obj == "self" && !attr_name.empty() && !current_class_name_.empty())
+  {
+    // `visited` guards against cyclic base declarations (e.g. class A(B) /
+    // class B(A)): these do not run in Python but ast.parse still accepts
+    // them, so the walk must not loop forever.
+    std::set<std::string> visited;
+    for (std::string cls = current_class_name_;
+         !cls.empty() && visited.insert(cls).second;)
+    {
+      Json class_node = json_utils::find_class(ast_["body"], cls);
+      if (class_node.empty() || !class_node.contains("body"))
+        break;
+      for (const Json &member : class_node["body"])
+      {
+        if (member["_type"] != "FunctionDef" || member["name"] != attr_name)
+          continue;
+        return method_return_type(member, attr_name);
+      }
+      // Not defined in this class — continue up the first base, as super() does.
+      cls.clear();
+      if (
+        class_node.contains("bases") && !class_node["bases"].empty() &&
+        class_node["bases"][0].contains("id"))
+        cls = class_node["bases"][0]["id"].template get<std::string>();
+    }
   }
 
   // Handle dict.keys() and dict.values()
@@ -2525,7 +2570,30 @@ InferResult python_annotation<Json>::infer_type(
     if (!stmt.contains("annotation") || stmt["annotation"].is_null())
       return InferResult::UNKNOWN;
 
-    if (stmt["annotation"].contains("value"))
+    // A forward-reference (string) annotation `node: 'Foo'` is a Constant whose
+    // value is the type-name string; a dotted annotation `node: mod.Robot` /
+    // `node: a.b.Robot` is an Attribute whose last component (attr) is the type
+    // name. Reading annotation["value"]["id"] blindly does operator[] on a JSON
+    // string / a null and aborts with nlohmann type_error (#6284), so dispatch
+    // on the node shape instead. The Attribute branch must precede the
+    // value.id branch: for a single-dot annotation the Attribute's value is a
+    // Name holding the module prefix (`mod`), so value.id would otherwise pick
+    // the prefix rather than the type name (`Robot`).
+    if (
+      stmt["annotation"].contains("_type") &&
+      stmt["annotation"]["_type"] == "Constant" &&
+      stmt["annotation"].contains("value") &&
+      stmt["annotation"]["value"].is_string())
+      inferred_type = stmt["annotation"]["value"].template get<std::string>();
+    else if (
+      stmt["annotation"].contains("_type") &&
+      stmt["annotation"]["_type"] == "Attribute" &&
+      stmt["annotation"].contains("attr"))
+      inferred_type = stmt["annotation"]["attr"].template get<std::string>();
+    else if (
+      stmt["annotation"].contains("value") &&
+      stmt["annotation"]["value"].is_object() &&
+      stmt["annotation"]["value"].contains("id"))
       inferred_type =
         stmt["annotation"]["value"]["id"].template get<std::string>();
     else if (stmt["annotation"].contains("id"))
@@ -3354,7 +3422,8 @@ std::string python_annotation<Json>::resolve_wildcard_import_func(
   {
     if (
       !node.contains("_type") || node["_type"] != "ImportFrom" ||
-      !node.contains("names") || !node.contains("module"))
+      !node.contains("names") || !node.contains("module") ||
+      node["module"].is_null())
       continue;
     bool is_star = false;
     for (const auto &name : node["names"])
@@ -4355,7 +4424,6 @@ void python_annotation<Json>::annotate_class(Json &class_element)
 {
   std::string saved_class_name = current_class_name_;
   std::string saved_context = current_func_name_context_;
-  //    current_func_name_context_ = ""; // Reset for class methods
 
   current_class_name_ = class_element["name"].template get<std::string>();
 

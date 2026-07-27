@@ -13,18 +13,18 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_typecast.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
 
 #include <functional>
 #include <map>
-#include <util/std_expr.h>
+#include <util/irep/std_expr.h>
 #include <algorithm>
 #include <cctype>
 #include <cfenv>
@@ -2252,6 +2252,24 @@ exprt python_converter::handle_list_operations(
       rhs = typecast_exprt(rhs, list_type);
     python_list list(*this, element);
     return list.build_concat_list_call(lhs, rhs, element);
+  }
+
+  // list + <definitely-non-list> is a Python TypeError ("can only concatenate
+  // list ... to list") — only list + list concatenates. The concat case above
+  // already consumed list and any-typed (void*) right operands, so raise a
+  // catchable TypeError (uncaught -> VERIFICATION FAILED) for a definite
+  // scalar/string right operand. Unknown/other types are left untouched to
+  // avoid misfiring on imprecise frontend typing (#6265).
+  if (lhs.type() == list_type && op == "Add")
+  {
+    const typet &rt = rhs.type();
+    if (
+      rt.is_signedbv() || rt.is_unsignedbv() || rt.is_floatbv() ||
+      type_utils::is_string_type(rt))
+      return get_exception_handler().gen_exception_raise(
+        "TypeError",
+        "can only concatenate list (not \"" +
+          type_handler_.get_python_type_name(rt) + "\") to list");
   }
 
   // List repetition

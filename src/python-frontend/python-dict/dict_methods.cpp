@@ -197,8 +197,26 @@ exprt python_dict_handler::handle_dict_get(
   }
   else
   {
-    exprt value_as_typed = build_typecast(obj_value, result_type);
-    retrieved_value = value_as_typed;
+    namespacet ns(symbol_table_);
+    typet underlying = result_type;
+    if (underlying.id() == "symbol")
+      underlying = ns.follow(underlying);
+    if (underlying.is_struct())
+    {
+      // A struct value (e.g. a tuple) is stored by address; casting the
+      // void* payload directly to the struct type builds an ill-formed
+      // scalar typecast that aborts the value-set walker. Cast to a struct
+      // pointer and dereference instead (mirrors handle_dict_subscript).
+      exprt value_as_struct_ptr =
+        build_typecast(obj_value, pointer_typet(underlying));
+      retrieved_value = build_dereference(value_as_struct_ptr, underlying);
+      retrieved_value.type() = underlying;
+    }
+    else
+    {
+      exprt value_as_typed = build_typecast(obj_value, result_type);
+      retrieved_value = value_as_typed;
+    }
   }
 
   exprt then_value =
@@ -431,8 +449,26 @@ exprt python_dict_handler::handle_dict_setdefault(
   }
   else
   {
-    exprt value_as_typed = build_typecast(obj_value, result_type);
-    retrieved_value = value_as_typed;
+    namespacet ns(symbol_table_);
+    typet underlying = result_type;
+    if (underlying.id() == "symbol")
+      underlying = ns.follow(underlying);
+    if (underlying.is_struct())
+    {
+      // A struct value (e.g. a tuple) is stored by address; casting the
+      // void* payload directly to the struct type builds an ill-formed
+      // scalar typecast that aborts the value-set walker. Cast to a struct
+      // pointer and dereference instead (mirrors handle_dict_subscript).
+      exprt value_as_struct_ptr =
+        build_typecast(obj_value, pointer_typet(underlying));
+      retrieved_value = build_dereference(value_as_struct_ptr, underlying);
+      retrieved_value.type() = underlying;
+    }
+    else
+    {
+      exprt value_as_typed = build_typecast(obj_value, result_type);
+      retrieved_value = value_as_typed;
+    }
   }
 
   code_assignt value_assign(build_symbol(result_var), retrieved_value);
@@ -1326,8 +1362,7 @@ exprt python_dict_handler::handle_dict_update(
   // CPython: dict.update([E], **F) — at most one positional iterable plus any
   // number of keyword pairs.
   if (args.size() > 1)
-    throw std::runtime_error(
-      "update() takes at most one positional argument");
+    throw std::runtime_error("update() takes at most one positional argument");
 
   // Apply each keyword argument as dict[name] = value. Runs after the optional
   // positional source so `d.update(other, k=v)` matches CPython's order.

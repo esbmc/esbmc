@@ -3,15 +3,15 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
 #include <string>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/migrate.h>
-#include <util/prefix.h>
-#include <util/std_types.h>
+#include <util/irep/migrate.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_types.h>
 #include <algorithm>
 
 // Computes the equivalent object value when considering a memset operation on it
@@ -260,7 +260,8 @@ static inline expr2tc gen_value_by_byte(
       expr2tc local_member =
         member2tc(to_struct_type(type).members[i], src, name);
 
-      // Since it is a symbol, lets start from the old value
+      // Pointer members keep their old value (memset over a pointer is not
+      // modelled byte-wise here)
       if (is_pointer_type(to_struct_type(type).members[i]))
         data.datatype_members[i] = local_member;
 
@@ -408,6 +409,127 @@ expr2tc goto_symex_utils::gen_byte_memcpy(
   return result;
 }
 
+// Walk @p root's type down to the sub-object that occupies exactly
+// [offset, offset+n) bytes and return it as an expression; the walk stops at
+// the shallowest match, so a member whose padded size equals n is preferred
+// over its own leading member. Null if the range straddles sub-objects.
+static expr2tc
+extract_subobject(const expr2tc &root, uint64_t offset, uint64_t n)
+{
+  try
+  {
+    if (offset == 0 && type_byte_size(root->type).to_uint64() == n)
+      return root;
+
+    if (is_struct_type(root->type))
+    {
+      const struct_type2t &st = to_struct_type(root->type);
+      for (size_t i = 0; i < st.members.size(); i++)
+      {
+        uint64_t moff =
+          member_offset(root->type, st.member_names[i]).to_uint64();
+        uint64_t msize = type_byte_size(st.members[i]).to_uint64();
+        if (offset >= moff && offset + n <= moff + msize)
+          return extract_subobject(
+            member2tc(st.members[i], root, st.member_names[i]),
+            offset - moff,
+            n);
+      }
+      return expr2tc();
+    }
+
+    if (is_array_type(root->type))
+    {
+      const array_type2t &at = to_array_type(root->type);
+      uint64_t esize = type_byte_size(at.subtype).to_uint64();
+      if (esize == 0)
+        return expr2tc();
+      uint64_t rel = offset % esize;
+      if (rel + n > esize)
+        return expr2tc();
+      return extract_subobject(
+        index2tc(at.subtype, root, gen_ulong(offset / esize)), rel, n);
+    }
+  }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+  }
+  return expr2tc();
+}
+
+// @p root with the sub-object at [offset, offset+n) replaced by @p value,
+// built as a chain of `with` updates; null when the range does not land on a
+// sub-object of value's type.
+static expr2tc replace_subobject(
+  const expr2tc &root,
+  uint64_t offset,
+  uint64_t n,
+  const expr2tc &value)
+{
+  try
+  {
+    if (offset == 0 && type_byte_size(root->type).to_uint64() == n)
+      return root->type == value->type ? value : expr2tc();
+
+    if (is_struct_type(root->type))
+    {
+      const struct_type2t &st = to_struct_type(root->type);
+      for (size_t i = 0; i < st.members.size(); i++)
+      {
+        uint64_t moff =
+          member_offset(root->type, st.member_names[i]).to_uint64();
+        uint64_t msize = type_byte_size(st.members[i]).to_uint64();
+        if (offset >= moff && offset + n <= moff + msize)
+        {
+          expr2tc updated = replace_subobject(
+            member2tc(st.members[i], root, st.member_names[i]),
+            offset - moff,
+            n,
+            value);
+          if (!updated)
+            return expr2tc();
+          const irep_idt &name = st.member_names[i];
+          type2tc str_type = array_type2tc(
+            get_uint8_type(), gen_ulong(name.as_string().size() + 1), false);
+          return with2tc(
+            root->type,
+            root,
+            constant_string2tc(str_type, name, constant_string_kindt::DEFAULT),
+            updated);
+        }
+      }
+      return expr2tc();
+    }
+
+    if (is_array_type(root->type))
+    {
+      const array_type2t &at = to_array_type(root->type);
+      uint64_t esize = type_byte_size(at.subtype).to_uint64();
+      if (esize == 0)
+        return expr2tc();
+      uint64_t rel = offset % esize;
+      if (rel + n > esize)
+        return expr2tc();
+      expr2tc idx = gen_ulong(offset / esize);
+      expr2tc updated =
+        replace_subobject(index2tc(at.subtype, root, idx), rel, n, value);
+      if (!updated)
+        return expr2tc();
+      return with2tc(root->type, root, idx, updated);
+    }
+  }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+  }
+  return expr2tc();
+}
+
 static inline expr2tc do_memcpy_expression(
   const expr2tc &dst,
   const size_t &dst_offset,
@@ -429,6 +551,24 @@ static inline expr2tc do_memcpy_expression(
     is_struct_type(dst->type) || is_union_type(dst->type) ||
     is_struct_type(src->type) || is_union_type(src->type))
   {
+    // An aggregate copy whose byte range corresponds exactly to a same-typed
+    // sub-object on both sides (the compiler-generated trivial-copy shape,
+    // github #4473) is a structural update: carve the source sub-object and
+    // graft it into the destination. This avoids __memcpy_impl's byte loop,
+    // which a low --unwind truncates into assume(false), vacuously passing
+    // every downstream assertion under --no-unwinding-assertions.
+    if (!is_union_type(dst->type) && !is_union_type(src->type))
+    {
+      expr2tc src_sub = extract_subobject(src, src_offset, num_of_bytes);
+      if (src_sub)
+      {
+        expr2tc updated =
+          replace_subobject(dst, dst_offset, num_of_bytes, src_sub);
+        if (updated)
+          return updated;
+      }
+    }
+
     log_debug("memcpy", "Only primitives are supported for now");
     return expr2tc();
   }
@@ -1259,10 +1399,8 @@ void goto_symext::intrinsic_memset(
 
     if (!is_constant_int2t(item_offset))
     {
-      /* If we reached here, item_offset is not symbolic
-       * and we don't know what the actual value of it is...
-       *
-       * For now bump_call, later we should expand our simplifier
+      /* item_offset did not simplify to a constant (symbolic or too
+       * complex); for now bump_call, later we should expand our simplifier
        */
       log_debug(
         "memset", "TODO: some simplifications are missing, bumping call");

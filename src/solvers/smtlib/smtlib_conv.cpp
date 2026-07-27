@@ -877,7 +877,11 @@ tvt smtlib_convt::l_get(smt_astt a)
 
   if (second.token == TOK_SIMPLESYM && second.data == "???")
   {
-    /* Yices sometimes returns '???', e.g. when using get-value of stores */
+    /* Yices sometimes returns '???', e.g. when using get-value of stores.
+     * That is an incomplete model rather than a quantified term, so log it:
+     * get_bool() no longer aborts here, and the two causes of TV_UNKNOWN
+     * would otherwise be indistinguishable in a bug report. */
+    log_debug("solver", "smtlib solver returned no boolean value (unknown)");
     return tvt(tvt::TV_UNKNOWN);
   }
 
@@ -891,16 +895,9 @@ tvt smtlib_convt::l_get(smt_astt a)
   abort();
 }
 
-bool smtlib_convt::get_bool(smt_astt a)
+tvt smtlib_convt::get_bool(smt_astt a)
 {
-  tvt tv = l_get(a);
-
-  if (tv.is_true())
-    return true;
-  if (tv.is_false())
-    return false;
-
-  abort();
+  return l_get(a);
 }
 
 const std::string smtlib_convt::solver_text()

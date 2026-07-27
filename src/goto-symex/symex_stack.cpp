@@ -1,6 +1,6 @@
 #include <cassert>
 #include <goto-symex/goto_symex.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 
 expr2tc goto_symex_statet::framet::process_stack_size(
@@ -16,7 +16,7 @@ expr2tc goto_symex_statet::framet::process_stack_size(
   expr2tc function_irep2 = constant_int2tc(get_uint64_type(), f_size);
   expr2tc limit_irep2 = constant_int2tc(get_uint64_type(), s_size);
 
-  // Ensure that the stack frame size is smaller than the stack limit.
+  // Claim that the stack frame size does not exceed the stack limit.
   return lessthanequal2tc(function_irep2, limit_irep2);
 }
 

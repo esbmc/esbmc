@@ -7,6 +7,10 @@
 
 namespace std
 {
+// <ios> declares std::streamsize; the model defines it globally in
+// definitions.h (github #6063).
+using ::streamsize;
+
 enum _Ios_Fmtflags
 {
   __boolalpha = 1L << 0,
@@ -184,13 +188,23 @@ public:
   locale imbue(const locale &loc);
   streambuf *rdbuf() const;
   streambuf *rdbuf(streambuf *sb);
-  char narrow(char c, char dfault) const;
-  char widen(char c) const;
+  /* [basic.ios.members]: for a char stream both are the identity. They were
+   * declared and never defined, so widen(c) returned a nondeterministic char --
+   * neither `== c` nor `!= c` held. */
+  char narrow(char c, char) const
+  {
+    return c;
+  }
+  char widen(char c) const
+  {
+    return c;
+  }
 };
 
 ios_base::ios_base()
 {
   __streambuf_state = goodbit;
+  __exception = goodbit;
 }
 
 ios_base::fmtflags ios_base::flags() const
@@ -257,6 +271,39 @@ ios::iostate ios::rdstate() const
 void ios::setstate(ios::iostate state)
 {
   clear(__streambuf_state |= state);
+}
+
+/* Storage and accessor only: [ios.base] also has exceptions(mask) throw when
+ * the current state already matches the mask, which this model does not do --
+ * OM code cannot throw a catchable exception (see #6338). The mask itself is
+ * determinate rather than nondeterministic.
+ *
+ * The mask lives in ios_base::__exception rather than in an ios member, even
+ * though [basic.ios] puts it in basic_ios: an ios-level member of a stream
+ * built through the virtual ios base resolves to the wrong offset (#6430),
+ * which lands the write inside the vtable pointer and turns every access into
+ * byte-level pointer surgery -- Bitwuzla then needs gigabytes on what should
+ * be two trivial VCCs. */
+ios::iostate ios::exceptions() const
+{
+  return __exception;
+}
+
+void ios::exceptions(ios::iostate except)
+{
+  __exception = except;
+}
+
+// [basic.ios.members]: copies the formatting state, not the stream buffer or
+// the error state.
+ios &ios::copyfmt(const ios &rhs)
+{
+  __fill = rhs.__fill;
+  __exception = rhs.__exception;
+  flags(rhs.flags());
+  precision(rhs.precision());
+  width(rhs.width());
+  return *this;
 }
 
 bool ios::operator!() const

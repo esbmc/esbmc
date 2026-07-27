@@ -249,6 +249,34 @@ exprt python_dict_handler::handle_dict_subscript(
       }
     }
 
+    // Fallback: element type recorded at construction (literal dict whose
+    // values are lists with a uniform element type).
+    if (
+      python_list::get_list_type_map_size(list_result.id.as_string()) == 0 &&
+      dict_expr.is_symbol())
+    {
+      const std::string &vals_id =
+        get_internal_list_id(dict_expr.identifier().as_string(), false);
+      if (!vals_id.empty())
+      {
+        auto it =
+          python_list::list_type_map.find(dict_value_list_elems_key(vals_id));
+        if (it != python_list::list_type_map.end() && !it->second.empty())
+        {
+          const typet &first = it->second.front().second;
+          const bool uniform = std::all_of(
+            it->second.begin(),
+            it->second.end(),
+            [&first](const std::pair<std::string, typet> &e) {
+              return e.second == first;
+            });
+          if (uniform)
+            python_list::list_type_map[list_result.id.as_string()].push_back(
+              std::make_pair(std::string(), first));
+        }
+      }
+    }
+
     return build_symbol(list_result);
   }
 

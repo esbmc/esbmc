@@ -4,7 +4,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <unordered_map>
 
 enum class FunctionType
@@ -192,6 +192,18 @@ private:
    */
   exprt handle_float_is_integer_literal() const;
 
+  /**
+   * @brief Fold (3.5).hex() on a constant float literal receiver to CPython's
+   *        hexadecimal string ("0x1.c000000000000p+1").
+   */
+  exprt handle_float_hex_literal() const;
+
+  /**
+   * @brief Fold float.fromhex("0x1.8p3") on a constant string to a double,
+   *        the inverse of float.hex().
+   */
+  exprt handle_float_fromhex() const;
+
   /*
    * Extracts a string representation from a symbol's constant value.
    * Handles both character arrays (e.g., ['6', '5']) and single-character
@@ -352,8 +364,8 @@ private:
 
   /*
    * Handles min() or max() function calls by generating conditional expressions.
-   * Currently supports exactly 2 arguments.
-   * @TODO: Support multiple arguments.
+   * Accepts a single iterable/tuple argument or two or more positional
+   * arguments, building a comparison chain.
    * For min(a, b), generates: a < b ? a : b
    * For max(a, b), generates: a > b ? a : b
    * Performs type compatibility checking with automatic int-to-float promotion.
@@ -518,6 +530,8 @@ private:
   bool is_int_literal_method_call() const;
   // float.is_integer() on a constant float-literal receiver.
   bool is_float_is_integer_literal_call() const;
+  // float.hex() on a constant float-literal receiver.
+  bool is_float_hex_literal_call() const;
   // __iter__ on a builtin iterable (range/list/tuple/str/set/...).
   bool is_iter_on_builtin_call() const;
   // x.__str__() with no args on a builtin scalar (int/float/bool/str).
@@ -569,6 +583,15 @@ private:
    * user-imported. Returns nullopt to leave round() to the typed dispatch.
    */
   std::optional<exprt> try_handle_round(bool is_user_imported);
+
+  /*
+   * Inlines a call to a user function whose entire body is `return <param>`
+   * when that parameter resolves to an array/array-pointer type: arrays
+   * aren't a valid by-value return type yet, so the call is replaced with
+   * the caller's own argument expression for this exact identity pattern.
+   * Returns nullopt for any other function shape or non-array parameter.
+   */
+  std::optional<exprt> try_fold_identity_array_return();
 
   /*
    * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the

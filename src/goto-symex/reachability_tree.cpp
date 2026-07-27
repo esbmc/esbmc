@@ -2,11 +2,11 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
 #include <irep2/irep2_expr.h>
-#include <util/config.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/message.h>
-#include <util/std_expr.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/message/message.h>
+#include <util/irep/std_expr.h>
 
 reachability_treet::reachability_treet(
   goto_functionst &goto_functions,
@@ -342,11 +342,15 @@ void reachability_treet::setup_for_new_explore()
 
 execution_statet &reachability_treet::get_cur_state()
 {
+  assert(
+    !exploration_frames.empty() && cur_frame_it != exploration_frames.end());
   return *cur_frame_it->state;
 }
 
 const execution_statet &reachability_treet::get_cur_state() const
 {
+  assert(
+    !exploration_frames.empty() && cur_frame_it != exploration_frames.end());
   return *cur_frame_it->state;
 }
 
@@ -387,12 +391,16 @@ void reachability_treet::scheduler_framet::mark_explored(unsigned int tid)
 reachability_treet::scheduler_framet &
 reachability_treet::get_cur_scheduler_frame()
 {
+  assert(
+    !exploration_frames.empty() && cur_frame_it != exploration_frames.end());
   return cur_frame_it->scheduler;
 }
 
 const reachability_treet::scheduler_framet &
 reachability_treet::get_cur_scheduler_frame() const
 {
+  assert(
+    !exploration_frames.empty() && cur_frame_it != exploration_frames.end());
   return cur_frame_it->scheduler;
 }
 
@@ -657,14 +665,6 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
       log_status("That thread has ended");
     return false;
   }
-
-#if 0
-  if (por && !ex.is_thread_mpor_schedulable(tid)) {
-    if (!quiet)
-      log_status("Thread unschedulable due to POR");
-    return false;
-  }
-#endif
 
   if (ex.tid_is_set && ex.monitor_tid == tid)
   {

@@ -1,19 +1,19 @@
 #include <goto-programs/goto_check.h>
 #include <cctype>
-#include <util/c_expr2string.h>
+#include <util/lang/c_expr2string.h>
 #include <langapi/language_util.h>
-#include <util/arith_tools.h>
-#include <util/array_name.h>
-#include <util/base_type.h>
-#include <util/config.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/array_name.h>
+#include <util/expr/base_type.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>
-#include <util/i2string.h>
-#include <util/location.h>
-#include <util/migrate.h>
-#include <util/mp_arith.h>
-#include <util/python_types.h>
-#include <util/std_types.h>
+#include <util/base/i2string.h>
+#include <util/irep/location.h>
+#include <util/irep/migrate.h>
+#include <util/arith/mp_arith.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_types.h>
 
 class goto_checkt
 {
@@ -628,7 +628,7 @@ void goto_checkt::input_overflow_check(
         "Unsupported type {}, skip overflow checking", type_id.as_string());
   }
 
-  if (buf_overflow) // FIX ME! add assert(0) to output the error msg
+  if (buf_overflow)
   {
     goto_programt::targett t = new_code.add_instruction(ASSERT);
     t->guard = gen_false_expr();
@@ -1026,7 +1026,7 @@ void goto_checkt::bounds_check(
     "array bounds violated: " + array_name(ns, ind.source_value);
   const expr2tc &the_index = ind.index;
 
-  // Lower bound access should be greater than zero
+  // Lower bound: index must be non-negative (>= 0)
   expr2tc zero = gen_zero(the_index->type);
   assert(!is_nil_expr(zero));
 

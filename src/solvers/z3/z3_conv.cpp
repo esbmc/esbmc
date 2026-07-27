@@ -1265,7 +1265,7 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
 
 // ***************************** 'get' api *******************************
 
-bool z3_convt::get_bool(smt_astt a)
+tvt z3_convt::get_bool(smt_astt a)
 {
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
   // Set the model_completion to TRUE.
@@ -1273,24 +1273,18 @@ bool z3_convt::get_bool(smt_astt a)
   // which are essentially don't cares.
   z3::expr e = solver.get_model().eval(za->a, true);
 
-  Z3_lbool result = Z3_get_bool_value(z3_ctx, e);
-
-  bool res;
-  switch (result)
+  switch (Z3_get_bool_value(z3_ctx, e))
   {
   case Z3_L_TRUE:
-    res = true;
-    break;
+    return tvt(true);
   case Z3_L_FALSE:
-    res = false;
-    break;
+    return tvt(false);
   default:
-    // Note: quantifiers may result in undefined values
-    log_warning("Can't get boolean value from Z3. Returning false");
-    res = false;
+    // Terms still containing a quantifier have no ground value; report the
+    // absence rather than inventing one (see #6191).
+    log_debug("solver", "Z3 returned no boolean value; term is unevaluatable");
+    return tvt(tvt::TV_UNKNOWN);
   }
-
-  return res;
 }
 
 BigInt z3_convt::get_bv(smt_astt a, bool is_signed)

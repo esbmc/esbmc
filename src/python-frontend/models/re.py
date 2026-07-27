@@ -247,7 +247,7 @@ def match(pattern: str, string: str) -> bool:
     """
     pattern_len: int = len(pattern)
 
-    # Empty pattern
+    # Empty or single-char pattern: treated as an unconditional match (over-approximation)
     if pattern_len <= 1:
         return True
 

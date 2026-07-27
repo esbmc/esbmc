@@ -73,7 +73,10 @@ protected:
   // walk and falls back to `goto_convert_rec`. A member so it can reuse the
   // inherited goto_convertt machinery (has_sideeffect / is_atomic_symbol /
   // has_atomic_read / ns) to gate the value-statement kinds.
-  bool convert_native_rec(const expr2tc &code2, goto_programt &dest);
+  bool convert_native_rec(
+    const expr2tc &code2,
+    goto_programt &dest,
+    const locationt &inherited);
 
   void wallop_type_impl(
     irep_idt name,

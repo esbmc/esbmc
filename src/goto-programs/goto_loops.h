@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/loopst.h>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 #include <unordered_map>
 
 /// True for symbols that name genuine user storage — excludes ESBMC

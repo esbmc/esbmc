@@ -1,0 +1,4 @@
+CORE
+main.c
+--irep2-native-body --goto-functions-only
+main\.c line 17 column 3 function countdown\n\s+IF t > 0 THEN GOTO

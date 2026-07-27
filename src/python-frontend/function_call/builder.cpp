@@ -6,10 +6,10 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/message.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
+#include <util/irep/std_expr.h>
 #include <python-frontend/python_expr_builder.h>
 
 #include <boost/algorithm/string/predicate.hpp>
@@ -96,7 +96,9 @@ bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
   const std::string &function = function_id.get_function();
   if (
     type_utils::is_builtin_type(function) || function == "isinstance" ||
-    function == "hasattr")
+    function == "hasattr" ||
+    boost::algorithm::starts_with(function, "nondet_") ||
+    boost::algorithm::starts_with(function, "__VERIFIER_nondet_"))
     return false;
 
   const std::string &filename = function_id.get_filename();
@@ -752,6 +754,10 @@ exprt function_call_builder::build() const
 
     if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
       return from_integer(1, long_long_int_type());
+
+    typet len_arg_type = converter_.ns.follow(arg_expr.type());
+    if (len_arg_type.is_array() && len_arg_type.subtype() != char_type())
+      return to_array_type(len_arg_type).size();
 
     // len() of a tuple-typed expression (e.g. an inline str.partition() result
     // that is not bound to a Name, so the __ESBMC_len_tuple routing above never

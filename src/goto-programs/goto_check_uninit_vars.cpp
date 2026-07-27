@@ -3,10 +3,10 @@
 #include <map>
 #include <set>
 #include <vector>
-#include <util/c_types.h>
-#include <util/migrate.h>
-#include <util/prefix.h>
-#include <util/symbol_generator.h>
+#include <util/lang/c_types.h>
+#include <util/irep/migrate.h>
+#include <util/base/prefix.h>
+#include <util/symtab/symbol_generator.h>
 
 namespace
 {

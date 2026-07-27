@@ -4,11 +4,11 @@
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
-#include <util/context.h>
-#include <util/namespace.h>
-#include <util/std_code.h>
-#include <util/std_types.h>
-#include <util/symbol_generator.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_types.h>
+#include <util/symtab/symbol_generator.h>
 
 // Forward dec, to avoid bringing in clang headers
 namespace clang
@@ -49,6 +49,16 @@ class InitListExpr;
 std::string
 getFullyQualifiedName(const clang::QualType &, const clang::ASTContext &);
 
+// Name of the nested base-subobject component added to a derived struct for a
+// direct base whose class_id is `class_id`. Inherited member access, upcasts
+// and base ctor/dtor `this` are routed through this component. Must agree
+// between the storage site (get_base_components_methods) and the
+// derived->base cast handler. See esbmc/esbmc#1866, #3894.
+inline std::string base_subobject_name(const std::string &class_id)
+{
+  return "@base@" + class_id;
+}
+
 class clang_c_convertert
 {
 public:
@@ -66,9 +76,9 @@ public:
  * The idea is to look for all components of the union and match
  * the type. If not found, throws an error
  *
+ * @param ns Namespace for looking up the union components
  * @param dest RHS dest
  * @param type Union type
- * @param msg  Message object
  */
   static void
   gen_typecast_to_union(const namespacet &ns, exprt &dest, const typet &type);
@@ -100,18 +110,14 @@ protected:
   // class symbol id prefix `tag-`
   std::string tag_prefix = "tag-";
 
-  // get_type() walks a clang type by native recursion (pointer/array/paren/...).
-  // A pathologically deep type — e.g. a long pointer chain `int ****…*p` — would
-  // recurse to the chain depth and overflow the call stack (SIGSEGV) instead of
-  // reporting an error. Track the current nesting depth and refuse once it
-  // exceeds a bound far above any real type but well below the stack limit, so
-  // adversarial/machine-generated input yields a clean diagnostic. The C++
-  // frontend's get_type override reuses the same guard. See #5048.
+  // get_type() walks a clang type by native recursion, so a long pointer chain
+  // `int ****…*p` overflowed the stack (SIGSEGV) instead of reporting an error.
+  // The bound sits far above any real type but well below the stack limit; the
+  // C++ frontend's get_type override reuses the same guard. See #5048.
   unsigned type_recursion_depth = 0;
   static constexpr unsigned max_type_recursion_depth = 256;
 
-  // RAII helper bumping type_recursion_depth for the lifetime of a get_type
-  // call; type_recursion_limit_reached() logs and signals when the bound is hit.
+  // Bumps type_recursion_depth for the lifetime of one get_type call.
   struct type_recursion_guardt
   {
     unsigned &depth;
@@ -170,7 +176,7 @@ protected:
   /**
    *  Parse function parameters
    *  This function simply contains a loop to populate the code argument list
-   *  and calls get_function_body to parse each individual parameter.
+   *  and calls get_function_param to parse each individual parameter.
    */
   virtual bool get_function_params(
     const clang::FunctionDecl &fd,

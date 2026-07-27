@@ -14,9 +14,9 @@
 #include <map>
 #include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
-#include <util/options.h>
-#include <util/algorithms.h>
-#include <util/cmdline.h>
+#include <util/config/options.h>
+#include <util/ssa/algorithms.h>
+#include <util/config/cmdline.h>
 #include <atomic>
 
 class bmct
@@ -30,9 +30,10 @@ public:
   // the driver before verification; surfaced in SARIF as note-level results
   // on both the success and failure paths.
   std::vector<dead_store_advisoryt> dead_store_advisories;
-  // True once a SARIF document carrying the advisories has been written from a
-  // trace path, so start_bmc() does not also emit a duplicate advisory-only
-  // document.
+  // True once a SARIF document carrying the advisories has been written — from a
+  // trace path, or from the --dead-code-check advisory that folds them into its
+  // own document — so start_bmc() does not write a second one. There is a single
+  // SARIF output path, so a second write would truncate the first.
   bool dead_store_sarif_written = false;
   enum ltl_res
   {
@@ -104,6 +105,7 @@ protected:
   smt_resultt multi_property_check(
     const symex_target_equationt &eq,
     size_t remaining_claims,
+    size_t simplified_claims,
     smt_convt &runtime_solver);
 
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;

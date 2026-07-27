@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 void solidity_convertert::get_mapping_inf_arr_name(
@@ -457,7 +457,7 @@ bool solidity_convertert::get_new_mapping_index_access(
     get_aux_var(aux_name, aux_id);
     symbolt aux_sym;
     std::string debug_modulename = get_modulename_from_path(absolute_path);
-    typet aux_type = value_t; // struct *
+    typet aux_type = value_t; // struct value
     get_default_symbol(
       aux_sym, debug_modulename, aux_type, aux_name, aux_id, location);
     aux_sym.file_local = true;

@@ -300,4 +300,6 @@ jobs:
         with:
           name: coverage-report
           path: coverage.info
-          retention-days: 5    
+          retention-days: 5
+      - name: Clean tmp files
+        run: rm -rf /tmp/esbmc*

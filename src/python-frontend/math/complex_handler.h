@@ -2,7 +2,7 @@
 #define PYTHON_FRONTEND_COMPLEX_HANDLER_H
 
 #include <nlohmann/json.hpp>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <string>
 #include <unordered_map>
 
@@ -106,9 +106,6 @@ private:
   const symbolt *find_cached_symbol(const std::string &id) const;
 
   // ---- shared IEEE / complex arithmetic helpers ----
-
-  /// Builds a binary IEEE-754 operation node (e.g. ieee_add, ieee_mul).
-  static exprt ieee_binop(const irep_idt &id, const exprt &x, const exprt &y);
 
   /// Complex multiplication: (a+bi)(c+di) = (ac-bd)+(ad+bc)i.
   exprt complex_mul(const exprt &x, const exprt &y) const;

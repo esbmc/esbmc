@@ -5,19 +5,19 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/sarif.h>
-#include <util/cwe_mapping.h>
+#include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
-#include <util/config.h>
-#include <util/filesystem.h>
+#include <util/config/config.h>
+#include <util/base/filesystem.h>
 #include <csignal>
 #include <cstdlib>
 #include <limits>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <iostream>
 #include <fstream>
 #include <goto-programs/add_race_assertions.h>
@@ -40,6 +40,7 @@
 #include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_no_op.h>
 #include <goto-programs/remove_unreachable.h>
+#include <goto-programs/remove_library_assertions.h>
 #include <goto-programs/remove_exceptions.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
@@ -50,15 +51,15 @@
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
-#include <util/irep.h>
+#include <util/irep/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <memory>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
 #include <pointer-analysis/value_set_analysis.h>
-#include <util/symbol.h>
-#include <util/time_stopping.h>
+#include <util/symtab/symbol.h>
+#include <util/base/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
 #include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
@@ -109,7 +110,8 @@ bool esbmc_parseoptionst::process_goto_program(
                   cmdline.isset("branch-function-coverage") ||
                   cmdline.isset("branch-function-coverage-claims") ||
                   cmdline.isset("k-path-coverage") ||
-                  cmdline.isset("k-path-coverage-claims");
+                  cmdline.isset("k-path-coverage-claims") ||
+                  cmdline.isset("dead-code-check");
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
@@ -165,6 +167,12 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("no-align-check", true);
       options.set_option("no-bounds-check", true);
     }
+
+    // Must precede inlining: goto_inlinet relabels a hidden function's
+    // instructions with the call site, after which the models' assertions
+    // can no longer be told apart from the user's (discussion #6382).
+    if (options.get_bool_option("no-library-assertions"))
+      remove_library_assertions(goto_functions);
 
     // Start by removing all no-op instructions and unreachable code
     if (!(cmdline.isset("no-remove-no-op")))
@@ -556,9 +564,16 @@ bool esbmc_parseoptionst::process_goto_program(
       temp.remove_sideeffect();
     }
 
+    // --dead-code-check reuses the branch-coverage instrumentation: each
+    // conditional branch gets `assert(guard)` and `assert(!guard)` reachability
+    // probes, and a probe proven UNSAT means that branch direction is
+    // unreachable under all inputs — i.e. dead code. report_dead_code() reports
+    // those as CWE-561 note-level advisories without flipping the verdict (see
+    // bmc.cpp).
     if (
       cmdline.isset("branch-coverage") ||
-      cmdline.isset("branch-coverage-claims"))
+      cmdline.isset("branch-coverage-claims") ||
+      cmdline.isset("dead-code-check"))
     {
       // for multi-property
       options.set_option("base-case", true);

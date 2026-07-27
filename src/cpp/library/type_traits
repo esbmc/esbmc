@@ -95,6 +95,42 @@ struct remove_cv<const volatile T>
   typedef T type;
 };
 
+// is_const / is_volatile
+template <class T>
+struct is_const : false_type
+{
+};
+template <class T>
+struct is_const<const T> : true_type
+{
+};
+template <class T>
+struct is_volatile : false_type
+{
+};
+template <class T>
+struct is_volatile<volatile T> : true_type
+{
+};
+
+// is_member_pointer
+namespace detail
+{
+template <class T>
+struct is_member_pointer_base : false_type
+{
+};
+template <class T, class U>
+struct is_member_pointer_base<T U::*> : true_type
+{
+};
+} // namespace detail
+template <class T>
+struct is_member_pointer
+  : detail::is_member_pointer_base<typename remove_cv<T>::type>
+{
+};
+
 // remove_pointer
 template <class T>
 struct remove_pointer
@@ -265,6 +301,56 @@ struct is_trivially_copyable
 {
 };
 
+// is_class
+template <class T>
+struct is_class : integral_constant<bool, __is_class(T)>
+{
+};
+
+// is_polymorphic
+template <class T>
+struct is_polymorphic : integral_constant<bool, __is_polymorphic(T)>
+{
+};
+
+// is_union
+template <class T>
+struct is_union : integral_constant<bool, __is_union(T)>
+{
+};
+
+// is_abstract
+template <class T>
+struct is_abstract : integral_constant<bool, __is_abstract(T)>
+{
+};
+
+// is_empty
+template <class T>
+struct is_empty : integral_constant<bool, __is_empty(T)>
+{
+};
+
+// is_final
+template <class T>
+struct is_final : integral_constant<bool, __is_final(T)>
+{
+};
+
+// is_trivially_default_constructible
+template <class T>
+struct is_trivially_default_constructible
+  : integral_constant<bool, __is_trivially_constructible(T)>
+{
+};
+
+// is_trivially_destructible
+template <class T>
+struct is_trivially_destructible
+  : integral_constant<bool, __is_trivially_destructible(T)>
+{
+};
+
 // is_array
 template <class T>
 struct is_array : false_type
@@ -338,6 +424,26 @@ template <class T>
 struct is_pointer<T *const volatile> : true_type
 {
 };
+
+// is_base_of (Clang builtin, also valid pre-C++11)
+template <class Base, class Derived>
+struct is_base_of : integral_constant<bool, __is_base_of(Base, Derived)>
+{
+};
+
+// is_function (Clang builtin, also valid pre-C++11)
+template <class T>
+struct is_function : integral_constant<bool, __is_function(T)>
+{
+};
+
+#if __cplusplus >= 201103L
+// alignment_of
+template <class T>
+struct alignment_of : integral_constant<size_t, alignof(T)>
+{
+};
+#endif
 
 // is_reference
 template <class T>
@@ -580,6 +686,18 @@ template <class T>
 using decay_t = typename decay<T>::type;
 
 template <class T>
+inline constexpr bool is_const_v = is_const<T>::value;
+template <class T>
+inline constexpr bool is_volatile_v = is_volatile<T>::value;
+template <class T>
+inline constexpr bool is_member_pointer_v = is_member_pointer<T>::value;
+template <class Base, class Derived>
+inline constexpr bool is_base_of_v = is_base_of<Base, Derived>::value;
+template <class T>
+inline constexpr bool is_function_v = is_function<T>::value;
+template <class T>
+inline constexpr size_t alignment_of_v = alignment_of<T>::value;
+template <class T>
 inline constexpr bool is_integral_v = is_integral<T>::value;
 template <class T>
 inline constexpr bool is_floating_point_v = is_floating_point<T>::value;
@@ -594,6 +712,16 @@ inline constexpr bool is_unsigned_v = is_unsigned<T>::value;
 template <class T>
 inline constexpr bool is_trivially_copyable_v =
   is_trivially_copyable<T>::value;
+template <class T>
+inline constexpr bool is_class_v = is_class<T>::value;
+template <class T>
+inline constexpr bool is_polymorphic_v = is_polymorphic<T>::value;
+template <class T>
+inline constexpr bool is_trivially_default_constructible_v =
+  is_trivially_default_constructible<T>::value;
+template <class T>
+inline constexpr bool is_trivially_destructible_v =
+  is_trivially_destructible<T>::value;
 template <class T>
 inline constexpr bool is_array_v = is_array<T>::value;
 template <class T>
@@ -612,6 +740,69 @@ template <class T, class... Args>
 inline constexpr bool is_constructible_v = is_constructible<T, Args...>::value;
 template <class From, class To>
 inline constexpr bool is_convertible_v = is_convertible<From, To>::value;
+
+// remove_volatile / add_const: the members of the cv family that were missing
+// next to their already-present siblings. add_lvalue_reference already comes
+// from <utility>, which this header includes.
+template <class T>
+struct remove_volatile
+{
+  typedef T type;
+};
+template <class T>
+struct remove_volatile<volatile T>
+{
+  typedef T type;
+};
+
+template <class T>
+struct add_const
+{
+  typedef const T type;
+};
+
+// common_type: enough of [meta.trans.other] for the two-type case TMP-heavy
+// headers use; the variadic form folds left as the standard specifies.
+template <class... T>
+struct common_type;
+
+template <class T>
+struct common_type<T>
+{
+  typedef typename decay<T>::type type;
+};
+
+template <class T, class U>
+struct common_type<T, U>
+{
+  typedef typename decay<decltype(
+    true ? declval<T>() : declval<U>())>::type type;
+};
+
+template <class T, class U, class... V>
+struct common_type<T, U, V...>
+{
+  typedef typename common_type<typename common_type<T, U>::type, V...>::type
+    type;
+};
+
+/* The C++14 _t aliases. These are compile-time only: they add no runtime
+ * semantics, they just let TMP-heavy headers name the transformations they
+ * already rely on (github #5868 gap 7). */
+template <class T>
+using remove_const_t = typename remove_const<T>::type;
+template <class T>
+using remove_volatile_t = typename remove_volatile<T>::type;
+template <class T>
+using remove_pointer_t = typename remove_pointer<T>::type;
+template <class T>
+using add_const_t = typename add_const<T>::type;
+template <class T>
+using add_pointer_t = typename add_pointer<T>::type;
+template <class T>
+using add_lvalue_reference_t = typename add_lvalue_reference<T>::type;
+template <class... T>
+using common_type_t = typename common_type<T...>::type;
 
 #endif // __cplusplus >= 201103L
 

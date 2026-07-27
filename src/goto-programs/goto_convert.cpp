@@ -3,17 +3,17 @@
 #include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>
 #include <goto-programs/remove_no_op.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/i2string.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2_utils.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/prefix.h>
-#include <util/replace_symbol.h>
-#include <util/std_expr.h>
-#include <util/type_byte_size.h>
+#include <util/base/prefix.h>
+#include <util/symtab/replace_symbol.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/type_byte_size.h>
 
 static bool is_empty(const goto_programt &goto_program)
 {
@@ -823,6 +823,8 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
     }
     else
     {
+      std::size_t stack_size = targets.destructor_stack.size();
+
       goto_programt sideeffects;
       // the side effect is not just removed. Actually, it's converted and removed.
       remove_sideeffects(initializer, sideeffects);
@@ -831,6 +833,34 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
       code_assignt assign(var, initializer);
       assign.location() = new_code.location();
       copy(assign, ASSIGN, dest);
+
+      // Temporaries materialized while lowering the initializer die at the
+      // end of the full expression (C++ [class.temporary]/4, github #6075):
+      // emit their pending scope-exit entries (destructor then DEAD) right
+      // after the assignment. A reference declaration extends its
+      // temporary's lifetime to the scope ([class.temporary]/6) and a
+      // destructor-free tail (plain DEADs of C-style temps) keeps
+      // block-level scope, so both retain the old shape.
+      if (!is_lvalue_or_rvalue_reference(s->get_type()))
+      {
+        bool have_destructor = false;
+        for (std::size_t i = stack_size; i < targets.destructor_stack.size();
+             i++)
+          if (targets.destructor_stack[i].get_statement() == "function_call")
+          {
+            have_destructor = true;
+            break;
+          }
+
+        if (have_destructor)
+          while (targets.destructor_stack.size() > stack_size)
+          {
+            codet d_code = targets.destructor_stack.back();
+            targets.destructor_stack.pop_back();
+            d_code.location() = new_code.location();
+            convert(d_code, dest);
+          }
+      }
     }
   }
 
@@ -1079,12 +1109,34 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
     }
     else if (code.statement() == "cpp_delete")
     {
-      exprt deref_op("dereference", tmp_op.type().subtype());
+      // Follow the pointee: a virtually-bound destructor reads the vtable
+      // pointer out of this dereference, and member2t needs a resolved struct
+      // source. This cannot move to the C++ adjuster, because the
+      // replace_new_object below substitutes the placeholder node wholesale,
+      // type included. Only the C++ frontend emits cpp_delete.
+      exprt deref_op("dereference", ns.follow(tmp_op.type().subtype()));
       deref_op.copy_to_operands(tmp_op);
 
       codet tmp_code = to_code(destructor);
       replace_new_object(deref_op, tmp_code);
-      convert(tmp_code, dest);
+
+      // C++ [expr.delete]/7: deleting a null pointer invokes no destructor.
+      goto_programt dtor_prog;
+      convert(tmp_code, dtor_prog);
+
+      goto_programt::targett t_skip = dtor_prog.add_instruction(SKIP);
+      t_skip->location = code.location();
+
+      goto_programt::targett t_null = dest.add_instruction();
+      t_null->make_goto(t_skip);
+      exprt is_null("not", typet("bool"));
+      exprt non_null("typecast", typet("bool"));
+      non_null.copy_to_operands(tmp_op);
+      is_null.move_to_operands(non_null);
+      migrate_expr(is_null, t_null->guard);
+      t_null->location = code.location();
+
+      dest.destructive_append(dtor_prog);
     }
     else
       assert(0);
@@ -1539,7 +1591,7 @@ void goto_convertt::convert_return(
     // code form codet("cpp-throw"). A throw has void type and cannot be used
     // as a return value; convert it as a statement and return early (the throw
     // is unconditional, so no RETURN instruction is needed).
-    // Mirrors the same guard in convert_expression (line ~475).
+    // Mirrors the `expr.is_code()` guard in convert_expression.
     if (
       new_code.return_value().is_code() &&
       to_code(new_code.return_value()).get_statement() == "cpp-throw")
@@ -1547,13 +1599,48 @@ void goto_convertt::convert_return(
       convert(to_code(new_code.return_value()), dest);
       return;
     }
+    // Scope-exit entries pushed while lowering the return value are dropped
+    // wholesale: a materialized return temporary (e.g. `return A(n);`) is the
+    // return slot itself and must survive both this return's unwind and the
+    // enclosing block's fall-through unwind. This also skips destructors of
+    // other full-expression temporaries (e.g. `return A(n).num;`), matching
+    // pre-existing behaviour (github #6075/#6076).
+    std::size_t value_stack_size = targets.destructor_stack.size();
     goto_programt sideeffects;
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
+    targets.destructor_stack.resize(value_stack_size);
   }
 
-  goto_programt dummy;
-  unwind_destructor_stack(code.location(), 0, dummy);
+  // C++ [stmt.return]: the return value is computed before the local
+  // objects' destructors run. When the scope holds an object with a
+  // non-trivial destructor, capture the value into a temporary, emit the
+  // unwind program, and return the temporary (a destructor may modify state
+  // the return expression reads, and symex treats RETURN as a jump, so the
+  // unwind cannot go after it). A destructor-free stack (plain C) keeps the
+  // old shape: scope exit is handled at block level (github #6077).
+  bool have_destructor = false;
+  for (const codet &d : targets.destructor_stack)
+    if (d.get_statement() == "function_call")
+    {
+      have_destructor = true;
+      break;
+    }
+
+  if (have_destructor)
+  {
+    if (
+      targets.has_return_value && new_code.has_return_value() &&
+      !new_code.return_value().is_constant())
+    {
+      std::size_t stack_size = targets.destructor_stack.size();
+      make_temp_symbol(new_code.return_value(), dest);
+      // The temporary is the return slot: it outlives the unwind, so drop
+      // the scope-exit entries convert_decl pushed for it.
+      targets.destructor_stack.resize(stack_size);
+    }
+    unwind_destructor_stack(code.location(), 0, dest);
+  }
 
   if (targets.has_return_value)
   {

@@ -2,17 +2,17 @@
 #include <catch2/catch.hpp>
 
 #include <python-frontend/python_adjust.h>
-#include <util/context.h>
-#include <util/symbol.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/migrate.h>
+#include <util/symtab/context.h>
+#include <util/symtab/symbol.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/irep/migrate.h>
 #include <irep2/irep2_utils.h>
 #include <string>
 #include <vector>
 
 // Dead-but-tested gate for the V.1k (b) IREP2-native Python adjuster
-// (docs/irep2-migration.md, "V.1k (b)-adjuster", phases B.0/B.1).
+// (docs/roadmap/irep2-migration.md, "V.1k (b)-adjuster", phases B.0/B.1).
 //
 // B.0 pins the inert baseline: a non-member/index expression is byte-identical
 // after a walk. B.1 adds the resolution behaviour: a transient symbol_type2t
@@ -1391,6 +1391,7 @@ TEST_CASE(
   // The OM raise shape end-to-end: the throw operand is a by-name struct
   // literal; operand recursion (S2) retypes it to the resolved struct first,
   // and the throw arm must derive the chain from that resolved shape.
+  config.ansi_c.set_data_model(configt::LP64);
   contextt ctx;
   add_class_with_base(ctx, "E", "Exception");
 

@@ -5,19 +5,19 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/sarif.h>
-#include <util/cwe_mapping.h>
+#include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
-#include <util/config.h>
-#include <util/filesystem.h>
+#include <util/config/config.h>
+#include <util/base/filesystem.h>
 #include <csignal>
 #include <cstdlib>
 #include <limits>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <iostream>
 #include <fstream>
 #include <goto-programs/add_race_assertions.h>
@@ -50,15 +50,15 @@
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
-#include <util/irep.h>
+#include <util/irep/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <memory>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
 #include <pointer-analysis/value_set_analysis.h>
-#include <util/symbol.h>
-#include <util/time_stopping.h>
+#include <util/symtab/symbol.h>
+#include <util/base/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
 #include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
@@ -306,7 +306,7 @@ bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
   {
     if (goto_reader.read_goto_binary(arg, context, goto_functions))
     {
-      log_error("Failed to open `{}'", arg);
+      log_error("Failed to read `{}'", arg);
       return true;
     }
   }
@@ -349,15 +349,18 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
 {
   static const char *const libc[] = {
-    "ceilf",         "ceil",         "ceill",     "floorf",   "floor",
-    "floorl",        "truncf",       "trunc",     "truncl",   "roundf",
-    "round",         "roundl",       "copysignf", "copysign", "copysignl",
-    "fminf",         "fmin",         "fminl",     "fmaxf",    "fmax",
-    "fmaxl",         "fdimf",        "fdim",      "fdiml",    "modff",
-    "modf",          "modfl",        "rintf",     "rint",     "rintl",
-    "strlen",        "strcmp",       "strncmp",   "strcpy",   "strncpy",
-    "strcat",        "strncat",      "strchr",    "strrchr",  "__fpclassifyf",
-    "__fpclassifyd", "__fpclassifyl"};
+    "ceilf",         "ceil",          "ceill",     "floorf",   "floor",
+    "floorl",        "truncf",        "trunc",     "truncl",   "roundf",
+    "round",         "roundl",        "copysignf", "copysign", "copysignl",
+    "fminf",         "fmin",          "fminl",     "fmaxf",    "fmax",
+    "fmaxl",         "fdimf",         "fdim",      "fdiml",    "modff",
+    "modf",          "modfl",         "rintf",     "rint",     "rintl",
+    "strlen",        "strcmp",        "strncmp",   "strcpy",   "strncpy",
+    "strcat",        "strncat",       "strchr",    "strrchr",  "__fpclassifyf",
+    "__fpclassifyd", "__fpclassifyl", "isalnum",   "isalpha",  "isblank",
+    "iscntrl",       "isdigit",       "isgraph",   "islower",  "isprint",
+    "ispunct",       "isspace",       "isupper",   "isxdigit", "tolower",
+    "toupper",       "atoi",          "atol",      "strtol"};
 
   for (const char *name : libc)
   {
@@ -405,10 +408,18 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
   // cbmc_adapter retargets CBMC's memcpy/memset/memmove/memcmp calls straight to
   // the c:@F@__ESBMC_* intrinsics, but those intrinsics still need the *_impl
   // bodies present for the bump path, so the boilerplate must link them here.
+  // The <ctype.h> classifiers/case-mappers (isdigit/toupper/...) are the same
+  // bodyless-external shape; their ctype.c bodies are straight-line (no unwind).
+  // The <stdlib.h> string-to-integer parsers atoi/atol/strtol likewise bridge
+  // to stdlib.c bodies -- these are byte loops, so they need `--unwind` like the
+  // string.h family. CBMC 6.8.0 models atoi/atol/strtol but not atoll/strtoll,
+  // which stay bodyless (their nondet return already matches CBMC's verdict).
   static const char boilerplate[] =
     "/* Auto-generated: bundle all ESBMC additions for CBMC gotos. */\n"
     "#include <math.h>\n"
     "#include <string.h>\n"
+    "#include <ctype.h>\n"
+    "#include <stdlib.h>\n"
     // CBMC's <math.h> lowers fpclassify(x) to __fpclassify{f,d,l}(x). Only
     // __fpclassifyd is new here -- glibc's <math.h> already declares
     // __fpclassifyf/__fpclassifyl (and macOS's declares all three), but none of
@@ -434,6 +445,12 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)strcpy,    (void *)strncpy,  (void *)strcat,\n"
     "  (void *)strncat,   (void *)strchr,   (void *)strrchr,\n"
     "  (void *)__fpclassifyf, (void *)__fpclassifyd, (void *)__fpclassifyl,\n"
+    "  (void *)isalnum,   (void *)isalpha,  (void *)isblank,\n"
+    "  (void *)iscntrl,   (void *)isdigit,  (void *)isgraph,\n"
+    "  (void *)islower,   (void *)isprint,  (void *)ispunct,\n"
+    "  (void *)isspace,   (void *)isupper,  (void *)isxdigit,\n"
+    "  (void *)tolower,   (void *)toupper,\n"
+    "  (void *)atoi,      (void *)atol,     (void *)strtol,\n"
     "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)

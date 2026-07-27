@@ -137,7 +137,7 @@ public:
 private:
   /** Data size of the sort.
    * For bitvectors and floating-points, this is the bit width,
-   * for arrays, the range BV bit width,
+   * for arrays, the domain (index) bit width,
    * For everything else, undefined */
   size_t data_width;
 

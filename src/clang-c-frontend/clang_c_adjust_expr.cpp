@@ -1,19 +1,19 @@
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/c_sizeof.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/ieee_float.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/lang/c_sizeof.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/arith/ieee_float.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/prefix.h>
-#include <util/std_code.h>
-#include <util/type_byte_size.h>
-#include <util/type2name.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_code.h>
+#include <util/expr/type_byte_size.h>
+#include <util/expr/type2name.h>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))
@@ -199,7 +199,10 @@ void clang_c_adjust::adjust_expr(exprt &expr)
       exprt func = expr.op1();
       code_typet &code_type = to_code_type(func.type().subtype());
       exprt arg0 = address_of_exprt(expr.op0());
-      code_type.arguments().push_back(arg0.type());
+      // `this` is the first parameter; appending its type at the back instead
+      // shifted every explicit argument by one (#6293).
+      code_type.arguments().insert(
+        code_type.arguments().begin(), code_typet::argumentt(arg0.type()));
       expr.swap(func);
     }
   }
@@ -357,6 +360,71 @@ void clang_c_adjust::adjust_expr_shifts(exprt &expr)
   }
 }
 
+static bool contains_sideeffect(const exprt &expr)
+{
+  if (expr.id() == "sideeffect")
+    return true;
+  forall_operands (it, expr)
+    if (contains_sideeffect(*it))
+      return true;
+  return false;
+}
+
+// The complex lowerings below copy each operand into several component
+// (member) accesses. A side-effectful operand (e.g. a function call) must not
+// be copied -- goto-convert hoists every copy separately, evaluating the
+// effect more than once, a wrong verdict on a valid program. Bind each such
+// operand to a fresh temporary declared in `block` and replace it with the
+// temporary; finish_complex_lowering then wraps the lowered result and the
+// bindings in a statement expression, whose goto conversion
+// (remove_statement_expression) evaluates the block exactly once and declares
+// the temporaries per frame (so recursion is safe too).
+void clang_c_adjust::bind_sideeffect_operands(exprt &expr, code_blockt &block)
+{
+  Forall_operands (it, expr)
+  {
+    exprt &op = *it;
+    if (!contains_sideeffect(op))
+      continue;
+    // Embed file:line in the name and mark the symbol file_local with a
+    // module, like the compound-literal symbols (clang_c_convert.cpp): each
+    // TU is adjusted in an isolated context and merged by c_link, which only
+    // renames clashing symbols that are file_local with a module -- a bare
+    // "complex$1" would collide across TUs.
+    const std::string path = op.location().file().as_string();
+    const std::string file = path.substr(path.find_last_of("/\\") + 1);
+    symbolt &tmp = tmp_symbol.new_symbol(
+      context,
+      op.type(),
+      path + ":" + op.location().get_line().as_string() + "$complex$");
+    tmp.mode = "C";
+    tmp.module = file.substr(0, file.find_last_of('.'));
+    tmp.file_local = true;
+    tmp.location = op.location();
+    code_declt decl(symbol_expr(tmp), op);
+    decl.location() = op.location();
+    block.operands().push_back(decl);
+    op = symbol_expr(tmp);
+  }
+}
+
+void clang_c_adjust::finish_complex_lowering(
+  exprt &expr,
+  exprt &result,
+  code_blockt &block)
+{
+  if (block.operands().empty())
+  {
+    expr.swap(result);
+    return;
+  }
+  block.operands().push_back(code_expressiont(result));
+  side_effect_exprt stmt_expr("statement_expression", result.type());
+  stmt_expr.copy_to_operands(block);
+  stmt_expr.location() = expr.location();
+  expr.swap(stmt_expr);
+}
+
 void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
 {
   adjust_operands(expr);
@@ -366,6 +434,9 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
 
   if (op0.type().id() == "complex" || op1.type().id() == "complex")
   {
+    code_blockt bind_block;
+    bind_sideeffect_operands(expr, bind_block);
+
     const typet &complex_t =
       op0.type().id() == "complex" ? op0.type() : op1.type();
     const typet &elem_t = to_complex_type(complex_t).base_type();
@@ -446,7 +517,7 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
     struct_exprt result(complex_t);
     result.operands().push_back(new_real);
     result.operands().push_back(new_imag);
-    expr.swap(result);
+    finish_complex_lowering(expr, result, bind_block);
     return;
   }
 
@@ -473,6 +544,9 @@ void clang_c_adjust::adjust_expr_unary_complex(exprt &expr)
 {
   adjust_operands(expr);
 
+  code_blockt bind_block;
+  bind_sideeffect_operands(expr, bind_block);
+
   // -z negates both components; ~z is GNU complex conjugation (negate the
   // imaginary part only). Lowered component-wise like the binary arithmetic
   // above -- there is no complex negation/conjugation in the SMT layer.
@@ -492,7 +566,7 @@ void clang_c_adjust::adjust_expr_unary_complex(exprt &expr)
   struct_exprt result(complex_t);
   result.operands().push_back(expr.id() == "unary-" ? negate(re) : re);
   result.operands().push_back(negate(member_exprt(op, "imag", elem_t)));
-  expr.swap(result);
+  finish_complex_lowering(expr, result, bind_block);
 }
 
 void clang_c_adjust::adjust_index(index_exprt &index)
@@ -569,7 +643,6 @@ void clang_c_adjust::adjust_expr_rel(exprt &expr)
 
 void clang_c_adjust::adjust_float_arith(exprt &expr)
 {
-  // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size() == 2);
   auto t = ns.follow(expr.type());
 
@@ -619,6 +692,36 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
   adjust_operands(expr);
 
   exprt &op = expr.op0();
+
+  // &(cond ? a : b) is (cond ? &a : &b). In C++ a conditional whose arms are
+  // lvalues of the same type is itself an lvalue ([expr.cond]), so its address
+  // may be taken or a reference bound to it. Distributing the address-of over
+  // the branches lets the resulting pointer alias the selected operand; left
+  // as address_of(if(...)) the pointer analysis fails to resolve either arm
+  // (#6291). Clang only emits address_of(if) for a genuine lvalue conditional,
+  // whose arms already share a type (adjust_if has also typecast them to the
+  // conditional's type by now); the equal-type check is a defensive guard so a
+  // hypothetical mismatched if never yields an if with divergent pointer arms.
+  if (
+    op.id() == "if" && op.operands().size() == 3 &&
+    op.op1().type() == op.op2().type())
+  {
+    exprt addr_true("address_of");
+    addr_true.copy_to_operands(op.op1());
+    addr_true.location() = expr.location();
+    adjust_address_of(addr_true);
+
+    exprt addr_false("address_of");
+    addr_false.copy_to_operands(op.op2());
+    addr_false.location() = expr.location();
+    adjust_address_of(addr_false);
+
+    exprt new_if("if", addr_true.type());
+    new_if.copy_to_operands(op.op0(), addr_true, addr_false);
+    new_if.location() = expr.location();
+    expr.swap(new_if);
+    return;
+  }
 
   // special case: address of function designator
   // ANSI-C 99 section 6.3.2.1 paragraph 4
@@ -1516,6 +1619,7 @@ void clang_c_adjust::adjust_comma(exprt &expr)
 {
   adjust_operands(expr);
 
+  assert(expr.operands().size() == 2);
   expr.type() = expr.op1().type();
 }
 

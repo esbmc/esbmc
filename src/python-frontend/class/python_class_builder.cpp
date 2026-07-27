@@ -5,12 +5,12 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type/type_utils.h>
-#include <util/std_expr.h>
-#include <util/expr_util.h>
-#include <util/irep.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
-#include <util/symbol.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/irep.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
+#include <util/symtab/symbol.h>
 
 using namespace python_expr;
 
@@ -106,7 +106,7 @@ void python_class_builder::get_members(
       conv_.get_function_definition(n);
 
       std::string saved_func_for_lookup = conv_.current_func_name_;
-      conv_.current_func_name_ = mname; // Apenas o nome simples
+      conv_.current_func_name_ = mname;
       symbol_id method_sid = conv_.create_symbol_id();
       conv_.current_func_name_ = saved_func_for_lookup;
 
