@@ -381,6 +381,7 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   // for compositional lifting.
   ir_ieee_api->propagate_interval(side1, side2);
   ir_ieee_api->propagate_nan_pred(side1, side2);
+  ir_ieee_api->propagate_neg_zero_pred(side1, side2);
 
   return side2;
 }
