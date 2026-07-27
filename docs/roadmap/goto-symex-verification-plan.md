@@ -6,9 +6,10 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** Plan / **not yet executed**. Every harness below is a *proposal*;
-nothing here asserts a proof has been discharged. Findings R1–R12 are
-*hypotheses with cited evidence*, not confirmed end-to-end bugs.
+**Status:** **M0 complete** (§15 verdict log); M1–M8 not yet executed. Except
+where §15 records a discharged result, every harness below is a *proposal* and
+nothing here asserts a proof. Findings R1–R12 remain *hypotheses with cited
+evidence*, not confirmed end-to-end bugs.
 **Audience:** An engineer who will implement the harnesses and run the
 verification tasks directly from this document.
 **Companion:** `docs/irep2-verification-plan.md` (branch
@@ -663,7 +664,7 @@ no milestone depends on a later one. The ESBMC extension work items (WI-1…WI-6
 §13.6) run **in parallel** with this track: no property claimed in §8 is blocked
 on them.
 
-**M0 — Infrastructure (0.5 wk).**
+**M0 — Infrastructure (0.5 wk). — DONE, see §15.**
 Re-enable `unit/goto-symex/CMakeLists.txt` (fix the `symex;solvers;
 gotoalgorithms;pointeranalysis;util_esbmc;langapi` link set). Stand up the
 `regression/esbmc/symex_*` harness skeleton + `test.desc` template. Land the
@@ -671,6 +672,8 @@ drift-check script. In parallel, start **WI-1** (`<shared_mutex>` operational
 model) and **WI-2** (`<type_traits>` completion), and file G1–G8 as issues (D12).
 *Artefact:* one green + one deliberately-red smoke harness proving the pipeline
 detects an injected bug; a building `unit/goto-symex` target; WI-1 merged.
+*Delivered:* the harness triple, the drift guard + its PR gate, and the
+`unit/goto-symex` target. WI-1/WI-2 and D12 remain open and move to M1.
 
 **M1 — Low-level kernels: SSA algebra (1 wk).** H-A1, H-A9, H-A7.
 Retires I1/I2/I16; produces the R3 and R7 verdicts. In parallel: **WI-3**
@@ -728,11 +731,12 @@ the plan and can be run opportunistically from M0.
 ### 11.1 Organisation and naming
 
 ```
-docs/roadmap/goto-symex-verification-plan.md  this document (+ verdict log, §9.2/§10)
-regression/esbmc/symex_<area>_<nn>/           Tier A, passing
+docs/roadmap/goto-symex-verification-plan.md  this document (+ verdict log, §15)
+regression/esbmc/symex_<area>_<nn>/           Tier A, passing — owns the kernel
     ├── symex_<area>_<nn>.c
     └── test.desc
-regression/esbmc/symex_<area>_<nn>_fail/      Tier A, anti-vacuity twin
+regression/esbmc/symex_<area>_<nn>_fail/      Tier A, anti-vacuity twin (§6.1 r5)
+regression/esbmc/symex_<area>_<nn>_probe/     Tier A, reachability probe (§6.1 r6)
 unit/goto-symex/<area>.test.cpp               Tier B  (wire in CMakeLists.txt)
 scripts/verification/symex/
     ├── oracle_slice_parity.sh                H-C1
@@ -745,7 +749,20 @@ scripts/verification/symex/
 ```
 
 `<area>` ∈ `{ssa, merge, mergequeue, slice, unwind, mpor, frame, eqctx,
-lookup, refalias}` — one area per harness family, matching §7.
+lookup, refalias}` — one area per harness family, matching §7. `<nn> = 00` is
+the M0 template.
+
+The `_fail` and `_probe` directories hold a one-line
+`#include "../symex_<area>_<nn>/symex_<area>_<nn>.c"` and select their variant
+with `-DSYMEX_HARNESS_PERTURB` / `-DSYMEX_HARNESS_PROBE` on `test.desc` line 3.
+The kernel therefore has exactly one copy: a twin cannot silently stop
+perturbing the code it is meant to perturb.
+
+Every harness citing `src/goto-symex` carries, in its header comment, one
+`SYMEX-HARNESS-TARGET: <path>::<symbol>` line per transcribed symbol and a
+`SYMEX-HARNESS-SHA256:` line holding the checksum of that symbol's definition.
+`drift_check.py` re-extracts and re-hashes each; `--update` refreshes them after
+a reviewed re-transcription.
 
 ### 11.2 CI integration
 
@@ -822,7 +839,7 @@ for what is claimed; a claim may not outlive its harness.
 | **D8** | Tier-C oracle scripts + scheduled workflow | `scripts/verification/symex/`, `.github/workflows/symex-oracles.yml` | M5, M7 |
 | **D9** | `SYMEX_INVARIANT` release-checked macro + promoted invariants + cost benchmark | `src/goto-symex/` | M3 |
 | **D10** | Fix PRs for confirmed findings (R2–R5, R7, R10 are tractable; R6/R8/R11 are investigations first) | code PRs, each with Mode-C proof where a branch changes | M1–M6 |
-| **D11** | Verdict log — per-harness result, ESBMC commit, solver versions, date — appended to this document | §9.2 / §10 | continuous |
+| **D11** | Verdict log — per-harness result, ESBMC commit, solver versions, date — appended to this document | §15 | continuous |
 | **D12** | Issues against ESBMC's C++ operational model, one per gap G1–G8 (§13.2), each with a reproducer and two regression tests | GitHub, label `clang-cpp-frontend` | M0 |
 | **D13** | ESBMC extension work items WI-1…WI-3 (`<shared_mutex>`, `<type_traits>` completion, `<compare>`/`std::unreachable`, `initializer_list`/`iterator_traits`/`this_thread`) | `src/cpp/library/`, `regression/esbmc-cpp*` | M0–M1 |
 | **D14** | Tier B′ pilot result (WI-4) — a harness including the real `renaming.h`, **or** a recorded negative result keeping Tier A | `unit/goto-symex/` or §13.3 | M4 |
@@ -994,6 +1011,46 @@ Stated plainly, to avoid over-claiming:
 7. **Absolute (unbounded) correctness of the engine.** Every Tier-A result is a
    proof at a bound, or a k-induction proof with convergence. Where convergence
    is not achieved, the result is reported as *bounded*, never as *proved*.
+
+---
+
+## 15. Verdict log (D11)
+
+Append-only. One row per discharged (or attempted) harness run, with the exact
+artefact it was run against. A row here is the *only* place this document claims
+a result; §7's harness descriptions remain proposals until they appear below.
+
+**Environment.** ESBMC 8.4.0, tree at `ecf26b5312`, `RelWithDebInfo` (`-DNDEBUG`
+present — see R1), Bitwuzla 0.9.0, Z3 4.13.3, Linux x86_64.
+
+### M0 — 2026-07-27
+
+| Artefact | Invocation | Verdict | Acceptance (§11.3) |
+|---|---|---|---|
+| `regression/esbmc/symex_ssa_00` | `--overflow-check --unsigned-overflow-check --memory-leak-check` | `VERIFICATION SUCCESSFUL` | 1 ✓ · 2 ✓ (45 of 163 VCCs remain) · 3 ✓ · 4 ✓ · 5 ✓ · 6 ✓ (Bitwuzla and Z3 agree) · 7 ✓ |
+| `regression/esbmc/symex_ssa_00_fail` | same + `-DSYMEX_HARNESS_PERTURB` | `VERIFICATION FAILED` at the `I1: L2 index advances by exactly one` claim | anti-vacuity twin for the row above |
+| `regression/esbmc/symex_ssa_00_probe` | same + `-DSYMEX_HARNESS_PROBE` | `VERIFICATION FAILED` at `reachability probe` | the harness body is reached |
+
+**Scope of the claim.** `symex_ssa_00` is the M0 *template*, not H-A1. It proves
+I1 for the counter algebra alone, over a 4-key map and a 4-assignment sequence,
+with the map modelled as a direct-indexed array. It does **not** yet model the
+`name_record` key, the `rename`-beneath-our-feet reference hazard (I2/R3), or
+node ids. H-A1 (M1) subsumes it.
+
+**Infrastructure delivered.**
+
+- `unit/goto-symex` builds and runs again (`intrinsic-utils-test`, 4 assertions).
+  The link failure was cvc5's exported target naming `cadical`/`picpoly`/
+  `picpolyxx` as bare `-l` flags with no search path: `src/esbmc/CMakeLists.txt`
+  carried a private `target_link_directories` workaround, so `esbmc` linked and
+  every other consumer of `solvers` did not. Moved onto `solvercvc5` as a
+  `PUBLIC` link directory, which fixes all consumers at once.
+- `scripts/verification/symex/drift_check.py` + a `pull_request.yml` gate.
+  Verified end-to-end: inserting one comment into `level2t::make_assignment`
+  turns the check red.
+
+**Carried into M1.** WI-1 (`<shared_mutex>`), WI-2 (`<type_traits>` completion)
+and D12 (issues G1–G8) were scheduled for M0 and are not started.
 
 ---
 
