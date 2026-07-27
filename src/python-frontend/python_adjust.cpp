@@ -436,6 +436,32 @@ void python_adjust::adjust_expr(expr2tc &expr)
       code_assign2tc(a.target, address_of2tc(pointee, a.source), a.location);
   }
   else if (
+    is_code_assign2t(expr) && is_sideeffect2t(to_code_assign2t(expr).source) &&
+    to_sideeffect2t(to_code_assign2t(expr).source).kind ==
+      sideeffect2t::allockind::function_call &&
+    to_code_assign2t(expr).source->type != to_code_assign2t(expr).target->type)
+  {
+    // Convert a call result to the target's type, the one shape of
+    // clang_c_adjust::adjust_assign's gen_typecast that is safe to mirror
+    // alone. `length = len(xs)` binds an `unsigned long` model return to a
+    // `signed long` variable; without the conversion convert_assign's
+    // call-valued-rhs special case (goto_convert.cpp) hands the lhs straight to
+    // do_function_call, so no temporary and no cast is emitted and the signed
+    // variable holds an unsigned value -- a later `i < length` then reaches the
+    // solver as a lessthan2t over mismatched operand kinds.
+    //
+    // The general assignment conversion stays parked (see the
+    // assignment-conversion trap in docs/roadmap/scope-v1k-adjuster.md): it is
+    // only sound coupled with operand-level arithmetic reconciliation, and
+    // shipping it alone masks a real bug in neural-net_fail. That coupling is
+    // about reconciling a *binary operation's* operands on the right-hand side,
+    // which a call source has none of -- so this shape carries none of that
+    // risk, and neural-net_fail was re-checked with this arm in place.
+    const code_assign2t &a = to_code_assign2t(expr);
+    expr = code_assign2tc(
+      a.target, typecast2tc(a.target->type, a.source), a.location);
+  }
+  else if (
     is_code_ifthenelse2t(expr) &&
     !is_bool_type(to_code_ifthenelse2t(expr).cond->type))
   {
