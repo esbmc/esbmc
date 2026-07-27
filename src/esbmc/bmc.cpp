@@ -65,6 +65,7 @@ std::mutex goto_functionst::reached_mul_claims_mutex;
 std::mutex goto_functionst::clear_claims_mutex;
 std::atomic<size_t> goto_functionst::undecided_cov_goals{0};
 std::set<std::string> goto_functionst::cov_incomplete_reasons;
+std::set<std::string> goto_functionst::cov_suppressed_violations;
 std::mutex goto_functionst::cov_incomplete_mutex;
 
 /* True when this run measures goto coverage rather than verifying the
@@ -102,6 +103,13 @@ void note_cov_incomplete(const std::string &reason)
 {
   std::lock_guard lock(goto_functionst::cov_incomplete_mutex);
   goto_functionst::cov_incomplete_reasons.insert(reason);
+}
+
+// Record a claim a coverage run proved violated but does not report.
+static void note_cov_suppressed_violation(const std::string &claim)
+{
+  std::lock_guard lock(goto_functionst::cov_incomplete_mutex);
+  goto_functionst::cov_suppressed_violations.insert(claim);
 }
 
 // As above, for a specific goal whose reachability was never decided.
@@ -1312,6 +1320,22 @@ void report_coverage(
 void report_coverage_completeness()
 {
   std::lock_guard lock(goto_functionst::cov_incomplete_mutex);
+
+  // A coverage run reports no violations. Anything it did refute would be
+  // lost without this, so name it: the user asked for a measurement, not for
+  // silence about a bug ESBMC happened to find on the way.
+  const auto &suppressed = goto_functionst::cov_suppressed_violations;
+  if (!suppressed.empty())
+  {
+    log_warning(
+      "\n{} claim(s) outside the coverage instrumentation were violated. A "
+      "coverage run does not verify the program, so these are not reported as "
+      "failures; re-run without the coverage flag to see them:",
+      suppressed.size());
+    for (const auto &claim : suppressed)
+      log_warning("  {}", claim);
+  }
+
   const auto &reasons = goto_functionst::cov_incomplete_reasons;
   if (reasons.empty())
   {
@@ -2400,17 +2424,13 @@ smt_resultt bmct::multi_property_check(
     }
     else if (is_goto_cov && solver_result == P_SATISFIABLE)
     {
-      // A violated claim that the coverage pass did not instrument — symex
-      // creates these after instrumentation, so an unwinding assertion is
-      // the usual case. It bounds how much of the program was explored, so
-      // the goals behind it were never even emitted and the percentages are
-      // lower bounds. Reporting it as a verification failure would be wrong
-      // (a coverage run verifies nothing), but dropping it silently would
-      // present a truncated exploration as a complete measurement.
-      note_cov_incomplete(fmt::format(
-        "a claim outside the coverage instrumentation was violated, so the "
-        "program was not fully explored: {}",
-        claim.claim_msg));
+      // A violated claim the coverage pass did not instrument: another
+      // function under --function, or a check symex injects afterwards. A
+      // coverage run reports no violations, so without this it would vanish
+      // entirely. It is not a completeness problem — whether it truncates
+      // exploration depends on the claim — so it is listed separately from
+      // the reasons the percentages may be lower bounds.
+      note_cov_suppressed_violation(claim.claim_msg);
     }
 
     solver_stats.total_time_ms.fetch_add(solve_stop - solve_start);

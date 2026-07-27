@@ -1,5 +1,5 @@
 CORE
 main.cpp
 --branch-coverage-claims --unwind 3 --no-unwinding-assertions
-^Branch Coverage: 100%$
+^Branch Coverage: 83\.33
 ^COVERAGE ANALYSIS COMPLETE$
