@@ -16,6 +16,11 @@ violation kinds**: CWE-120, 121, 122, 125, 129, 131, 190, 191, 193, 252, 362,
 *advisory* rather than a property violation; see [Advisories](#advisories)
 below.
 
+In addition, one **advisory** identifier — CWE-561 (Dead Code) — is emitted
+only under `--dead-code-check` (see [Dead code](#dead-code-cwe-561-advisory)
+below). Advisory findings are informational: they never flip the verdict to
+`FAILED`.
+
 The CWE ids appear in:
 
 - the textual counterexample, on a `CWE: CWE-476, CWE-125` line immediately
@@ -67,6 +72,12 @@ substring table ordered longest-substring-first.
 | `dead store` _(advisory; `--dead-store-check`)_              | 563                                         |
 | `uncontrolled recursion in <function>`                       | 674                                         |
 | `recursion unwinding assertion` / `unwinding assertion loop` | _(none — k-bound exceeded, not a weakness)_ |
+
+CWE-561 (Dead Code) is **not** in this substring table. It is advisory and
+emitted only by the `--dead-code-check` reporter through a dedicated rule
+(`dead_code_cwe_rule()`), so an ordinary violation whose comment happens to
+contain the text "dead code" is never mislabelled as CWE-561. See
+[Dead code](#dead-code-cwe-561-advisory) below.
 
 The last two rows distinguish two different recursion outcomes:
 
@@ -178,6 +189,88 @@ the CFG and a value read only in a `catch` would be misreported. Reporting is
 restricted to user source (system-header and operational-model locations are
 excluded by a best-effort path heuristic). Inter-procedural dead-store
 detection is a future extension.
+
+## Dead code (CWE-561, advisory)
+
+[CWE-561](https://cwe.mitre.org/data/definitions/561.html) (Dead Code) is
+`ALLOWED` for vulnerability mapping in CWE 4.20, but ESBMC treats it as an
+**advisory** rather than a violation: it is the dual of the CWE-617
+reachability check. Where CWE-617 reports that an error location *is* reachable,
+dead-code detection reports that a statement is provably *unreachable* under all
+inputs. Unlike a compiler's `-Wunreachable-code`, BMC-based detection is sound
+under non-trivial guards.
+
+Detection is off by default and enabled with `--dead-code-check`. It reuses the
+branch-coverage instrumentation: every conditional branch is probed with a
+reachability assertion, and any probe the solver proves unsatisfiable marks that
+branch direction as dead. Because it issues one solver query per branch probe,
+it can be slow on large programs — hence the default-off gate.
+
+Findings are reported as:
+
+- a `[Dead code]` section in the textual output, one `CWE: CWE-561` line per
+  dead branch;
+- SARIF results with `result.level == "note"` (advisory, not `error`) and a
+  `result.taxa[]` reference to CWE-561, under the same `CWE` taxonomy.
+
+The verdict is **not** affected: a run with `--dead-code-check` reports
+`VERIFICATION SUCCESSFUL` regardless of how many dead branches are found, so the
+`FALSE_*` / `TRUE` classification used by the SV-COMP wrapper is preserved.
+Soundness is bounded by the unwinding depth, as with all BMC results; use a
+sufficient `--unwind` for programs with loops. The mode is a standalone
+base-case analysis and cannot be combined with the k-induction / incremental
+strategies (`--k-induction`, `--incremental-bmc`, `--falsification`,
+`--termination`, `--loop-invariant`) or `--multi-fail-fast`. As with the other
+coverage modes, instrumentation is keyed off the source locations of the input
+translation units, so it has no effect on a pre-compiled `.goto` binary.
+
+```
+$ esbmc dead.c --dead-code-check
+
+[Dead code]
+
+dead.c:9: dead code: unreachable branch [guard: x > 5]
+  CWE: CWE-561
+
+VERIFICATION SUCCESSFUL
+```
+
+### Scope and limitations
+
+- **Branch directions only.** The analysis probes the two directions of each
+  `if`/loop guard. Canonical CWE-561 shapes with no branch guard — statements
+  after an unconditional `return`/`abort`, or entirely unreferenced functions —
+  are *not* detected; they simply report no dead code.
+- **Bounded, and beyond-bound branches read as dead.** A branch that becomes
+  reachable only past the unwinding bound is cut like any other beyond-bound
+  path and is therefore listed as unreachable — the report is explicitly scoped
+  "up to the current unwinding bound", not an absolute proof. Raise `--unwind`
+  for loop-bearing programs.
+- **Completeness depends on every probe solving.** A finding is "this branch's
+  probe was never satisfiable". A solver *error* aborts the run (non-zero exit,
+  not a false SUCCESSFUL). A per-claim `--timeout`, however, leaves a probe
+  unsolved and that branch would then be listed as dead; do not pair
+  `--dead-code-check` with a per-claim timeout if the finding set must be exact.
+- **Concurrent programs are explored exhaustively.** A branch can be reachable
+  under one thread interleaving and not another, so on concurrent input the mode
+  explores *every* interleaving before reporting, rather than stopping at the
+  first one as a normal run does. Probe reachability accumulates across them and
+  a single advisory is emitted at the end. This is what keeps a branch that only
+  a later ordering reaches from being reported as dead, but it does mean a
+  `--dead-code-check` run on a heavily concurrent program costs considerably more
+  than a plain verification run.
+- **The verdict is not a safety verdict.** The branch-coverage instrumentation
+  this mode reuses replaces every pre-existing assertion with `assert(true)`
+  before symbolic execution, so ESBMC's ordinary checks — including the bounds
+  and division-by-zero checks that are on by default — are neutralised. A
+  program with a real array-bounds violation reports `VERIFICATION SUCCESSFUL`
+  and exits 0 under `--dead-code-check`, where a plain run reports
+  `VERIFICATION FAILED`. This is inherited from the coverage modes
+  (`--branch-coverage` behaves identically). Run `--dead-code-check` as a
+  separate advisory pass, never as a substitute for a verification run. The
+  combinations that would instead inject *new* claims during symbolic execution
+  (`--memory-leak-check`, `--deadlock-check`, `--data-races-check[-only]`) are
+  rejected up front rather than silently masked.
 
 ## Ids dropped vs. published mappings
 

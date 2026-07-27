@@ -770,7 +770,11 @@ void goto_loop_simplify(
     options.get_bool_option("condition-coverage-rm") ||
     options.get_bool_option("condition-coverage-claims-rm") ||
     options.get_bool_option("k-path-coverage") ||
-    options.get_bool_option("k-path-coverage-claims"))
+    options.get_bool_option("k-path-coverage-claims") ||
+    // --dead-code-check reuses the branch-coverage instrumentation and runs
+    // it after this pass; erasing a simplifiable loop (empty body, constant
+    // counter) here would drop the very branch directions it must probe.
+    options.get_bool_option("dead-code-check"))
     return;
 
   Forall_goto_functions (it, goto_functions)

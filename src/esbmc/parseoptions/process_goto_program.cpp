@@ -110,7 +110,8 @@ bool esbmc_parseoptionst::process_goto_program(
                   cmdline.isset("branch-function-coverage") ||
                   cmdline.isset("branch-function-coverage-claims") ||
                   cmdline.isset("k-path-coverage") ||
-                  cmdline.isset("k-path-coverage-claims");
+                  cmdline.isset("k-path-coverage-claims") ||
+                  cmdline.isset("dead-code-check");
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
@@ -563,9 +564,16 @@ bool esbmc_parseoptionst::process_goto_program(
       temp.remove_sideeffect();
     }
 
+    // --dead-code-check reuses the branch-coverage instrumentation: each
+    // conditional branch gets `assert(guard)` and `assert(!guard)` reachability
+    // probes, and a probe proven UNSAT means that branch direction is
+    // unreachable under all inputs — i.e. dead code. report_dead_code() reports
+    // those as CWE-561 note-level advisories without flipping the verdict (see
+    // bmc.cpp).
     if (
       cmdline.isset("branch-coverage") ||
-      cmdline.isset("branch-coverage-claims"))
+      cmdline.isset("branch-coverage-claims") ||
+      cmdline.isset("dead-code-check"))
     {
       // for multi-property
       options.set_option("base-case", true);

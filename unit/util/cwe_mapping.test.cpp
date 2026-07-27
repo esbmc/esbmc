@@ -94,6 +94,30 @@ TEST_CASE("cwe_for matches reachability violation", "[util][cwe_mapping]")
   REQUIRE(cwe_for("unreachable code reached") == std::vector<unsigned>{617});
 }
 
+TEST_CASE(
+  "dead-code advisory uses a dedicated CWE-561 rule",
+  "[util][cwe_mapping]")
+{
+  // The dead-code advisory has its own accessor with the stable id, short
+  // description, and CWE-561.
+  REQUIRE(std::string(dead_code_cwe_rule().sarif_id) == "dead-code");
+  REQUIRE(std::string(dead_code_cwe_rule().short_description) == "Dead code");
+  REQUIRE(dead_code_cwe_rule().cwes == std::vector<unsigned>{561});
+
+  // Regression for issue #4495: "dead code" is deliberately NOT in the
+  // cwe_rule_for() substring table, so an ordinary violation whose comment
+  // merely contains that text is not mislabelled CWE-561 / ruleId dead-code.
+  REQUIRE(cwe_for("assertion failure: dead code should not happen").empty());
+  REQUIRE(
+    std::string(cwe_rule_for("dead code should not happen").sarif_id) ==
+    "esbmc-assertion");
+
+  // Dead code and the CWE-617 reachability check remain distinct rules.
+  REQUIRE(
+    std::string(dead_code_cwe_rule().sarif_id) !=
+    std::string(cwe_rule_for("unreachable code reached").sarif_id));
+}
+
 TEST_CASE("cwe_for matches data race", "[util][cwe_mapping]")
 {
   REQUIRE(cwe_for("data race on x") == std::vector<unsigned>{362, 366});
@@ -210,6 +234,7 @@ TEST_CASE("cwe_name resolves known ids", "[util][cwe_mapping]")
   REQUIRE(
     cwe_name(835) == "Loop with Unreachable Exit Condition ('Infinite Loop')");
   REQUIRE(cwe_name(789) == "Memory Allocation with Excessive Size Value");
+  REQUIRE(cwe_name(561) == "Dead Code");
   // Unknown id returns empty view.
   REQUIRE(cwe_name(0).empty());
   REQUIRE(cwe_name(99999).empty());

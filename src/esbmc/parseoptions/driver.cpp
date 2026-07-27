@@ -144,6 +144,74 @@ int esbmc_parseoptionst::doit()
     return 1;
   }
 
+  // --dead-code-check is a standalone base-case advisory analysis: it reuses
+  // the branch-coverage instrumentation and forces a SUCCESSFUL verdict. The
+  // k-induction / incremental strategies and early-stopping fail-fast drive
+  // paths it neither exercises nor can report soundly (a stopped fail-fast
+  // run leaves unsolved probes that would be misreported as dead), so reject
+  // those combinations up front (issue #4495).
+  if (cmdline.isset("dead-code-check"))
+    for (const char *incompatible :
+         {"k-induction",
+          "k-induction-parallel",
+          "incremental-bmc",
+          "falsification",
+          "termination",
+          "loop-invariant",
+          "multi-fail-fast",
+          // Standalone phase-only modes: the dead-code report is only emitted
+          // on the base-case pass (bmc.cpp `bs && !fc && !is`), so a run under
+          // --forward-condition / --inductive-step would exit SUCCESSFUL
+          // without ever printing the [Dead code] findings.
+          "forward-condition",
+          "inductive-step",
+          // Claim filtering marks every unselected assertion SKIP but leaves it
+          // in goto_coveraget::all_claims, so its probe never solves and the
+          // reporter would flag live branches as dead. SMT-formula emission
+          // (P_SMTLIB) likewise leaves every probe unsolved. --no-assertions
+          // drops the probes outright: goto_coveraget::insert_assert marks them
+          // user_provided(true), which is just what symex_assert discards, so
+          // every branch would be reported dead. All produce spurious CWE-561
+          // findings, so reject them (issue #4495 / #5934).
+          "claim",
+          "smt-formula-only",
+          "smt-formula-too",
+          "no-assertions",
+          // Other coverage modes reuse the same goto_coveraget::all_claims and
+          // multi_property_check routing: assertion coverage diverts solved
+          // probes into reached_mul_claims (leaving reached_claims empty), and
+          // the branch-function / k-path passes overwrite all_claims after the
+          // dead-code instrumentation runs. Either way the reporter would mark
+          // live branches as dead, so reject them (issue #4495).
+          "assertion-coverage",
+          "assertion-coverage-claims",
+          "condition-coverage",
+          "condition-coverage-claims",
+          "condition-coverage-rm",
+          "condition-coverage-claims-rm",
+          "branch-function-coverage",
+          "branch-function-coverage-claims",
+          "k-path-coverage",
+          "k-path-coverage-claims",
+          // Safety checks injected during symex (after the coverage
+          // instrumentation) surface as genuine SAT claims that are not in
+          // all_claims. The advisory forces a SUCCESSFUL verdict, so such a
+          // real violation would be silently masked; reject these so a leak /
+          // deadlock / race is never hidden behind a dead-code run (issue
+          // #4495). Both race spellings must be listed: process_goto_program
+          // treats --data-races-check-only as a request to add race assertions
+          // too.
+          "memory-leak-check",
+          "deadlock-check",
+          "data-races-check",
+          "data-races-check-only"})
+      if (cmdline.isset(incompatible))
+      {
+        log_error(
+          "--dead-code-check cannot be combined with --{}", incompatible);
+        return 1;
+      }
+
   // Preprocess the input program.
   // (This will not have any effect if OLD_FRONTEND is not enabled.)
   if (cmdline.isset("preprocess"))
@@ -332,7 +400,20 @@ int esbmc_parseoptionst::doit()
   // If no strategy is chosen, just rely on the simplifier
   // and the flags set through CMD
   bmct bmc(goto_functions, options, context);
-  return do_bmc(bmc);
+  int bmc_result = do_bmc(bmc);
+  // Dead-code analysis is advisory: its probes are SAT for every live branch,
+  // which do_bmc maps to a non-zero (FAILED) exit code. The findings are
+  // reported separately, so remap that to 0 — but only for a completed
+  // analysis. A solver error (P_ERROR) or an SMTLIB-only emission (P_SMTLIB)
+  // is not a finished advisory run, so propagate it rather than masking a
+  // crashed/incomplete analysis as success (issue #4495).
+  if (options.get_bool_option("dead-code-check"))
+  {
+    if (bmc_result == P_ERROR || bmc_result == P_SMTLIB)
+      return bmc_result;
+    return 0;
+  }
+  return bmc_result;
 }
 
 bool esbmc_parseoptionst::resolve_color_option() const

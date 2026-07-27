@@ -181,6 +181,7 @@ const std::map<unsigned, std::string_view> &names_map()
     {457, "Use of Uninitialized Variable"},
     {469, "Use of Pointer Subtraction to Determine Size"},
     {476, "NULL Pointer Dereference"},
+    {561, "Dead Code"},
     {562, "Return of Stack Variable Address"},
     {563, "Assignment to Variable without Use"},
     {590, "Free of Memory not on the Heap"},
@@ -216,6 +217,17 @@ const cwe_rule_t &cwe_rule_for(std::string_view comment)
 std::vector<unsigned> cwe_for(std::string_view comment)
 {
   return cwe_rule_for(comment).cwes;
+}
+
+const cwe_rule_t &dead_code_cwe_rule()
+{
+  // Dead code (CWE-561) is advisory and emitted only by the --dead-code-check
+  // reporter, so it is intentionally kept OUT of the cwe_rule_for() substring
+  // table: a global "dead code" key would mislabel any ordinary violation
+  // whose comment happens to contain that text (e.g. a user assertion message)
+  // as CWE-561. See issue #4495.
+  static const cwe_rule_t rule{"dead-code", "Dead code", {561}};
+  return rule;
 }
 
 std::string format_cwe_list(const std::vector<unsigned> &ids)

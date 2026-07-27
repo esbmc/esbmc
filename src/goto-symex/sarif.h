@@ -7,13 +7,15 @@
 #include <util/config/options.h>
 #include <vector>
 
+#include <string>
+
 // Writes the violation reported in `goto_trace`, plus any dead-store advisories
 // (CWE-563), to a SARIF 2.1.0 document at the path given by
 // `options["sarif-output"]`. Writes to stdout when the option value is "-".
 // Violations are emitted as `result.level = "error"`; advisories as
 // `result.level = "note"`. Includes the matching CWE ids (per
-// util/cwe_mapping.h) as both per-rule tags and per-result taxa references into
-// a "CWE" taxonomy pinned to CWE 4.20.
+// util/base/cwe_mapping.h) as both per-rule tags and per-result taxa references
+// into a "CWE" taxonomy pinned to CWE 4.20.
 //
 // `goto_trace` may be empty (e.g. on VERIFICATION SUCCESSFUL) so that a run
 // with only advisories still produces a document.
@@ -21,6 +23,31 @@ void sarif_goto_trace(
   const optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace,
+  const std::vector<dead_store_advisoryt> &advisories = {});
+
+// One provably-dead statement/branch found by --dead-code-check.
+struct dead_code_finding_t
+{
+  std::string message; // human-readable description (e.g. the branch guard)
+  std::string file;
+  unsigned line = 0; // 0 means "unknown", omitted from SARIF
+};
+
+// Writes the dead-code advisory `findings`, plus any dead-store advisories
+// (CWE-563), to the SARIF 2.1.0 document at `options["sarif-output"]` (stdout
+// when "-"). Findings are emitted with `result.level = "note"` (advisory, not an
+// error) and taxa referencing CWE-561 in the same "CWE" taxonomy used by
+// sarif_goto_trace. Does nothing when no SARIF output path is configured; when a
+// path is set but `findings` is empty it still writes a well-formed document
+// with an empty `results` array, so a clean run yields a valid report rather
+// than a missing file.
+//
+// `advisories` must be passed whenever --dead-store-check is also active: both
+// advisory sets share the one output path, so they have to land in the same
+// document (issue #4495).
+void sarif_dead_code(
+  const optionst &options,
+  const std::vector<dead_code_finding_t> &findings,
   const std::vector<dead_store_advisoryt> &advisories = {});
 
 #endif
