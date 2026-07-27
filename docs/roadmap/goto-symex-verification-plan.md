@@ -6,7 +6,8 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0 complete** (§15 verdict log); M1–M8 not yet executed. Except
+**Status:** **M0 complete, M1 partial** (§15 verdict log); M2–M8 not yet
+executed. §6.4 records the tier-ordering rule M1 produced. Except
 where §15 records a discharged result, every harness below is a *proposal* and
 nothing here asserts a proof. Findings R1–R12 remain *hypotheses with cited
 evidence*, not confirmed end-to-end bugs.
@@ -397,6 +398,35 @@ A forbidden-assumption list, enforced at review:
 - ✗ `assume(single thread)` in any harness whose property is claimed for
   concurrent runs.
 
+### 6.4 Tier B first — a rule learned from M1
+
+The tier table in §2.2 lists A before B, and M0/M1 read that as an ordering.
+It is not one. **Tier A proves things about a transcription; only Tier B and
+Tier C observe the shipped C++.** A Tier-A harness is therefore justified only
+when a property cannot be observed from outside the engine — and §15's M1 entry
+shows the cost of ignoring that: the moment H-A1's stub grew from an array index
+to the real `name_record` key behind a hash-probed map, it went from 163 VCCs
+and 4 s to 4371 VCCs and no verdict inside the plan's own 30 s budget. Fidelity
+to the real key and ESBMC-tractability pull in opposite directions, so a Tier-A
+harness faithful enough to be worth trusting is often one ESBMC cannot discharge.
+
+The rule for every remaining harness in §7:
+
+1. **Ask what the equation already shows.** Any property expressible over the
+   `symex_target_equationt` the engine actually produced — SSA well-formedness,
+   phi counts, slicer equisatisfiability, determinism — belongs in
+   `unit/goto-symex/`, with zero modelling and zero drift.
+2. **Then ask what a whole-tool oracle shows** (§7.4), for composition
+   properties over the 1400 `regression/esbmc` CORE inputs.
+3. **Only then write Tier A**, for internal decisions the equation does not
+   expose (the held-reference hazard of R3, a `previous_frame` precondition, an
+   MPOR independence relation), and keep the stub at the smallest fidelity the
+   property observes — a Tier-A harness that times out proves nothing at all.
+
+§11.3's acceptance criteria already say "timed out is never SUCCESSFUL". This
+section says the same thing one step earlier: prefer the tier that cannot time
+out, and cannot drift.
+
 ---
 
 ## 7. Proposed harnesses
@@ -680,6 +710,11 @@ Retires I1/I2/I16; produces the R3 and R7 verdicts. In parallel: **WI-3**
 (`initializer_list` / `iterator_traits` / `this_thread` / `aligned_storage`),
 which completes the parse path to `renaming.h`. *Artefact:* three Tier-A harness
 pairs + the R3 restructure PR if H-A9 confirms the hazard; WI-2/WI-3 merged.
+**Revised, §15 M1.** H-A1's Tier-A form was built and **rejected on
+tractability** — see §15 and the rule it produced in §6.4. I1/I10/P11 are
+instead discharged against the *real* `goto_symext` by H-B1
+(`unit/goto-symex/ssa_wellformed.test.cpp`). H-A9 and H-A7 remain open and are
+the next M1 work; both are re-scoped Tier-B-first per §6.4.
 
 **M2 — Isolated core algorithms: merging and bounding (1.5 wk).**
 H-A2 (the highest-value harness), H-A3, H-A5. Dual-solver mandatory.
@@ -737,7 +772,7 @@ regression/esbmc/symex_<area>_<nn>/           Tier A, passing — owns the kerne
     └── test.desc
 regression/esbmc/symex_<area>_<nn>_fail/      Tier A, anti-vacuity twin (§6.1 r5)
 regression/esbmc/symex_<area>_<nn>_probe/     Tier A, reachability probe (§6.1 r6)
-unit/goto-symex/<area>.test.cpp               Tier B  (wire in CMakeLists.txt)
+unit/goto-symex/<area>.test.cpp               Tier B — prefer this, see §6.4
 scripts/verification/symex/
     ├── oracle_slice_parity.sh                H-C1
     ├── oracle_simplify_parity.sh             H-C2
@@ -1052,6 +1087,70 @@ node ids. H-A1 (M1) subsumes it.
 **Carried into M1.** WI-1 (`<shared_mutex>`), WI-2 (`<type_traits>` completion)
 and D12 (issues G1–G8) were scheduled for M0 and are not started.
 
+### M1 — 2026-07-27
+
+**Result: I1, I10 and P11 discharged against the real engine.** Not by a
+transcription — by running the real `goto_symext` and validating the
+`symex_target_equationt` it produced.
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `unit/goto-symex/ssa_wellformed.test.cpp` (H-B1) | real `goto_factory` → real `reachability_treet` → real `goto_symext`, over straight-line, branching, nested-branch, unwound-loop, and call/recursion programs | 6 cases, 37 assertions, **pass**, 1.6 s |
+
+Properties checked on every produced equation:
+
+- **I1 / P8** — per `(base_name, l1_num, thread_num)`, the L2 index of each
+  definition strictly increases in equation order.
+- **I10 / P11** — no two assignment steps define the same SSA name. This is the
+  invariant `check_for_duplicate_assigns` exists for and never enforces (R5);
+  the validator is the enforcing version R5 asks for.
+- **P11** — no step reads an SSA name before the step defining it. A name never
+  defined in the equation is a free symbol and is correctly not a violation.
+
+Anti-vacuity: the last case takes an equation the engine produced, appends a
+copy of one of its own assignment steps, and requires the validator to report
+exactly one duplicate definition and one non-monotonic index. Without it the
+five passing cases would be indistinguishable from a validator that checks
+nothing.
+
+**One harness-side defect found and fixed, no engine defect.** The first run
+reported use-before-def on every first definition. Cause: for an assignment
+step, `symex_target_equationt::assignment` sets
+`SSA_step.cond = equality2tc(lhs, rhs)`, so reading `cond` on an assignment
+reports the definition as a use of itself. The reads of an assignment are in
+its `rhs`; `cond` is for assume/assert steps. Recorded because it is the exact
+failure mode a Tier-A transcription would have hidden — a stub has no `cond`
+field to get wrong.
+
+**Rejected: H-A1 as a Tier-A harness.** Built as specified in §7.1 — the full
+`name_record` key `(base_name, lev, l1_num, t_num)`, `hash` modelled as an
+arbitrary function of those fields so collisions stay possible, and a
+linear-probed map, at 3 assignments over a 16-key space. Measured:
+
+| Harness | VCCs | Wall | Verdict |
+|---|---|---|---|
+| `symex_ssa_00` (M0 template, array-indexed key) | 163 | 4 s | `SUCCESSFUL` |
+| H-A1 Tier-A (real `name_record` key, hash-probed map) | 4371 | **> 200 s** | none |
+| H-A1 `_fail` twin | 4368 | 108 s | `FAILED` |
+
+Rejected under §11.3 criterion 1 (no verdict) and the §11.2 budget (< 30 s per
+harness; the regression harness cap is a hard 120 s). Not committed. The green
+harness never returned, so it proves nothing — while the `_fail` twin returning
+`FAILED` in half the time is the shape you would expect: finding one violating
+trace is easy, proving none exists is not.
+
+The general lesson is written up as §6.4: raising a Tier-A stub's fidelity
+toward the real data structure raises its cost superlinearly, so the tier that
+verifies the shipped C++ is also the tier that scales. §6.4 reorders the
+remaining harness work accordingly.
+
+**Carried into the next M1 slice.** H-A9 (I2/R3, the `valuet &entry` reference
+held across `rename`) and H-A7 (I16/R7, `previous_frame` on a stack of size < 2)
+are unstarted and now Tier-B-first. R7's single call site,
+`symex_function.cpp::goto_symext::symex_function_call_code`, does
+`new_frame(...)` immediately before `previous_frame()`, so the precondition
+holds — but only because of an `assert` that is a no-op in release (R1). Also
+still open from M0: WI-1, WI-2, D12.
 ---
 
 ## Appendix A — Methodological basis
