@@ -765,3 +765,52 @@ at S4 was *partly* right and mostly wrong: `sqrt5`, `math13` and
 `cmath_polar_rect_semantics_success_07` were a missing intrinsic lowering, while
 `math_edge_frexp_success` genuinely is S4. The lesson stands — the cluster's
 *name* carried no information; only the per-case GOTO diff did.
+
+### Per-case triage round 6 — the ternary pair was a *migrate-synthesised* cast (2026-07-26)
+
+The last two no-verdict cases from round 3's table, `ternary_string_fail` and
+`github_3337_2_fail`, are one cause. Both assign a string-valued ternary
+(`s: str = "" if b else "foo"`), and the GOTO diff is one instruction:
+
+```
+legacy:  ASSIGN s = b ? &{ 0 }[0] : &{ 102, 111, 111, 0 }[0];
+hop-off: ASSIGN s = b ? (signed char *){ 0 } : (signed char *){ 102, 111, 111, 0 };
+```
+
+A pointer-typed array constant, which the SMT layer rejects
+(`ERROR: Unexpected type in int/ptr typecast`); `ternary_string_fail` instead
+runs `strcmp` off the end of the bogus pointer and unwinds until the heap is
+exhausted. Fixed by an `is_typecast2t` arm that decays an array operand to
+`&arr[0]`, mirroring `c_typecastt::do_typecast`'s array case
+(`c_typecast.cpp:877-905`) — the same decay the `address_of` (#6395) and
+assignment-seam (#6363) arms already perform, now at the cast node itself.
+
+**The novel part: the offending node has no converter site.** Every earlier
+round fixed something the converter emitted and `clang_c_adjust` then rewrote.
+Here the raw cast is synthesised *during migration*: `migrate_expr`'s ternary arm
+coerces a branch whose type id diverges from the result type
+(`migrate.cpp:1001`), and the Python converter's ternary genuinely has array
+branches under a `char*` result type. On the legacy path `adjust_if` decays the
+branches *before* migration, so that arm never fires and the cast never exists.
+**Consequence for future triage: a hop-off-only node may have been built by
+`migrate_expr`, not by the converter — grep migrate before hunting for a
+converter site.**
+
+**Negative result — do not mirror `adjust_if`'s branch conversion.** The obvious
+fix is the other half of `clang_c_adjust::adjust_if`
+(`clang_c_adjust_expr.cpp:1689-1693`): convert both branches to the result type.
+It is **dead code** in `python_adjust` today — probed with a stderr marker over
+40 ternary-bearing tests, **0 firings**.
+
+*Be precise about why, because the obvious explanation is wrong.* `migrate_expr`
+coerces on **`type_id` inequality only** (`migrate.cpp:1001`) — exactly what
+`if2t`'s constructor asserts (`irep2_expr.h:809-810`) — whereas `adjust_if`
+tests **full type inequality**. Migration therefore does *not* equalise the
+branch types in general: a same-kind/different-width pair (`signedbv 8` vs
+`signedbv 64`) is coerced by neither, and would reach the SMT backend as an
+`ite` over differently-sorted terms. That residual class is simply unobserved on
+the Python path — probes with `ord(s[0]) if b else 300`, `s[0] if b else 300`,
+`5 if b else len("foo")` and an untyped `5 if b else "foo"` all either matched
+types or routed to the frontend's nondet ternary-result fallback. The mirror
+stays out under the C-Live bar, not because the case is unreachable in
+principle; the fix this round needed belongs at the cast node anyway.
