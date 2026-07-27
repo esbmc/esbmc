@@ -953,3 +953,59 @@ identically **without** this patch, so neither is caused by it. `div6_fail` is
 closed by round 8, which confirms that arm reaches past `none3`;
 `github_3034_split-dot-valid-zero_fail` is a new, distinct signature and is the
 next case.
+
+### Per-case triage round 10 — the call-return seam; `github_3034` is S4 (2026-07-27)
+
+`github_3034_split-dot-valid-zero_fail` aborts under hop-off at
+`Assertion failed: (is_signedbv_type(lt.side_1) && is_signedbv_type(lt.side_2))`
+(`smt_solver.cpp:1512`) — a `lessthan2t` whose operands are a `signed long`
+variable and an `unsigned long` value. The GOTO diff shows two distinct sources
+for that mismatch, and only one of them is separable.
+
+**✅ Landed — the call-return seam.** `length = len(xs)` binds the list model's
+`unsigned long` return to a `signed long` variable. Legacy emits a temporary of
+the callee's return type and converts:
+
+```
+legacy:  DECL unsigned long int return_value$___ESBMC_list_size$1;
+         FUNCTION_CALL: return_value$___ESBMC_list_size$1=list_size(iterable)
+         ASSIGN length=(signed long int)return_value$___ESBMC_list_size$1;
+hop-off: FUNCTION_CALL: length=list_size(iterable)
+```
+
+The single instruction is not an optimisation — `convert_assign`'s
+call-valued-rhs special case hands the lhs straight to `do_function_call`, which
+emits no temporary and no cast, so the signed variable simply holds an unsigned
+value. On the legacy path that case is never taken, because `adjust_assign` has
+already wrapped the rhs in a typecast. Mirrored here **only for a
+`sideeffect2t(function_call)` source**.
+
+**Why this fragment of the parked assignment conversion is safe.** The trap
+documented above is that `adjust_assign` runs *after* `adjust_operands`, so
+converting at the assignment seam without operand-level arithmetic reconciliation
+changes the stored value. That coupling is about reconciling a **binary
+operation's** operands on the right-hand side — which a call source does not
+have. The general arm stays parked.
+
+**The S4 canary no longer works, and this must be fixed before S4 is attempted.**
+The record pins the danger on `neural-net_fail` reporting SUCCESSFUL where legacy
+reports FAILED. It no longer reports anything under hop-off: it aborts in
+`assert_arith_2ops_consistency` (`irep2_expr.cpp:678`) before any verdict, and a
+control run (this arm stashed and rebuilt) reproduces that abort identically, so
+the abort is pre-existing and unrelated. Whoever picks up S4 must re-establish a
+canary that actually produces a hop-off verdict first.
+
+**`github_3034` is not closed by this and stays open on S4.** With the call-return
+arm in, the residual hop-off diffs on that test are all the parked shape or its
+siblings: `i = (signed long)(list_size(...) - 1)` (an *arithmetic* rhs — the
+coupled case), `element = (_Bool)tmp$5`, `get_object_size((void *)bytes_data)` and
+`validate_no_empty_parts(&price[0])` (argument conversions, S5), and
+`(signed int)contains_tmp163 == 1` (relational promotion).
+
+**Effect measured.** No verdict moves in a 70-test strided census — like the
+`&array` decay (#6395) this closes a *structural* parity gap, and is recorded as
+such rather than as a divergence fix. A control build confirms the shape: without
+the arm a plain `n = len(xs)` emits `FUNCTION_CALL: n=list_size(xs)` into a
+`signed long`; with it, the temporary and cast match legacy exactly. The census on
+this branch is 69/70, the one divergence being `github_3034` itself (`div6_fail`
+was closed by round 8).
