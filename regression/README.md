@@ -58,3 +58,26 @@ CHECK_JSON cov-report.json $.summary.covered == 1
 CHECK_JSON cov-report.json $.summary.percentage == 12.5
 CHECK_JSON cov-report.json $.claims[13].status == "covered"
 ```
+
+## The flags line is mandatory, even when empty
+
+`test.desc` is positional: line 1 is the mode, line 2 the source, **line 3 the
+ESBMC flags**, and line 4 onwards the expected-output regexes. A test with no
+flags still needs line 3 — as an *empty line*. Omitting it is not benign:
+
+```
+CORE
+main.c
+^VERIFICATION SUCCESSFUL$      <-- read as FLAGS, not as a regex
+```
+
+The runner passes line 3 to ESBMC as arguments, so the regex is handed over as
+a filename (`ERROR: failed to figure out type of file ^VERIFICATION
+SUCCESSFUL$`), and the regex list is left **empty**. A test with no regexes
+asserts nothing — `matches_regex` starts `true` and the loop never runs, the
+exit status is not consulted, and the test passes whatever ESBMC does. A
+descriptor in this shape passes even if the program under test is
+`__ESBMC_assert(0, "")`.
+
+When adding a test, check that line 3 either starts with `-`, names another
+source file, or is empty.
