@@ -105,6 +105,12 @@ static std::string_view esbmc_version_string()
 void timeout_handler(int)
 {
   log_error("Timed out");
+  // Under --multi-property the run keeps exploring interleavings after a
+  // violation, to reach the properties only later schedules touch. A timeout
+  // landing in that tail must not discard a counterexample already found and
+  // printed: the verdict is settled once a property is violated.
+  if (goto_functionst::property_verdicts.has_violation())
+    log_fail("VERIFICATION FAILED");
   // Kill any external solver process groups first: they are in their own
   // groups, so they outlive this _exit() otherwise (e.g. an mpirun job).
   file_operations::kill_registered_pgroups();

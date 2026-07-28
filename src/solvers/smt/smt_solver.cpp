@@ -2522,9 +2522,11 @@ static unsigned long size_to_bit_width(unsigned long sz)
   uint64_t domwidth = 2;
   unsigned int dombits = 1;
 
-  // Shift domwidth up until it's either larger or equal to sz, or we risk
-  // overflowing.
-  while (domwidth != 0x8000000000000000ULL && domwidth < sz)
+  // Shift domwidth up until it is strictly larger than sz, or we risk
+  // overflowing. Strictly larger, not just equal: sz itself is the
+  // one-past-the-end index, a valid pointer value in C, and a domain that
+  // cannot represent it wraps it to 0 and aliases element 0 (#6399).
+  while (domwidth != 0x8000000000000000ULL && domwidth <= sz)
   {
     domwidth <<= 1;
     dombits++;

@@ -6,9 +6,11 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** Plan / **not yet executed**. Every harness below is a *proposal*;
-nothing here asserts a proof has been discharged. Findings R1–R12 are
-*hypotheses with cited evidence*, not confirmed end-to-end bugs.
+**Status:** **M0 and M1 complete, M2 partial** (§15 verdict log); M3–M8 not yet
+executed. §6.4 records the tier-ordering rule M1 produced. Except
+where §15 records a discharged result, every harness below is a *proposal* and
+nothing here asserts a proof. Findings R1–R12 remain *hypotheses with cited
+evidence*, not confirmed end-to-end bugs.
 **Audience:** An engineer who will implement the harnesses and run the
 verification tasks directly from this document.
 **Companion:** `docs/irep2-verification-plan.md` (branch
@@ -275,7 +277,7 @@ produced equation).
 | ID | Invariant | Established / relied on by | Enforcement **today** |
 |---|---|---|---|
 | **I1** | For a fixed `name_record`, `valuet::count` is strictly increasing across `make_assignment` calls; every published L2 index is used by exactly one defining step. | `level2t::make_assignment` | `assert(entry.count <= count)` in `coveredinbees` — **debug only** |
-| **I2** | An L2 `name_record` key is *stable* across the `rename(lhs,count)` call inside `make_assignment` — i.e. the callee's `current_names[...]` hits the same bucket, so the caller's `valuet &entry` reference stays valid. | `make_assignment` → `coveredinbees` | **unenforced**; comment "This'll update entry beneath our feet" (R3) |
+| **I2** | An L2 `name_record` key is *stable* across the `rename(lhs,count)` call inside `make_assignment` — i.e. the callee's `current_names[...]` resolves to the caller's entry, so the index `coveredinbees` stores is the one `entry.count` then publishes. | `make_assignment` → `coveredinbees` | **unenforced** in code; comment "This'll update entry beneath our feet" (R3). Pinned by `unit/goto-symex/renaming.test.cpp` (§15 M1) |
 | **I3** | `rename` is idempotent: a symbol already at `level2`/`level2_global` is returned unchanged. | `level2t::rename` early-return | by construction |
 | **I4** | `get_original_name` ∘ `rename` = identity on the L0 form; renaming level never decreases along a path. | `renaming_levelt::get_original_name` | **unenforced** |
 | **I5** | Constant propagation is semantics-preserving: substituting `valuet::constant` for the SSA symbol yields an equisatisfiable formula. | `level2t::rename` (`expr = it->second.constant`) | **unenforced** |
@@ -395,6 +397,35 @@ A forbidden-assumption list, enforced at review:
   `array_disqualified` path exists precisely for symbolic indices.
 - ✗ `assume(single thread)` in any harness whose property is claimed for
   concurrent runs.
+
+### 6.4 Tier B first — a rule learned from M1
+
+The tier table in §2.2 lists A before B, and M0/M1 read that as an ordering.
+It is not one. **Tier A proves things about a transcription; only Tier B and
+Tier C observe the shipped C++.** A Tier-A harness is therefore justified only
+when a property cannot be observed from outside the engine — and §15's M1 entry
+shows the cost of ignoring that: the moment H-A1's stub grew from an array index
+to the real `name_record` key behind a hash-probed map, it went from 163 VCCs
+and 4 s to 4371 VCCs and no verdict inside the plan's own 30 s budget. Fidelity
+to the real key and ESBMC-tractability pull in opposite directions, so a Tier-A
+harness faithful enough to be worth trusting is often one ESBMC cannot discharge.
+
+The rule for every remaining harness in §7:
+
+1. **Ask what the equation already shows.** Any property expressible over the
+   `symex_target_equationt` the engine actually produced — SSA well-formedness,
+   phi counts, slicer equisatisfiability, determinism — belongs in
+   `unit/goto-symex/`, with zero modelling and zero drift.
+2. **Then ask what a whole-tool oracle shows** (§7.4), for composition
+   properties over the 1400 `regression/esbmc` CORE inputs.
+3. **Only then write Tier A**, for internal decisions the equation does not
+   expose (the held-reference hazard of R3, a `previous_frame` precondition, an
+   MPOR independence relation), and keep the stub at the smallest fidelity the
+   property observes — a Tier-A harness that times out proves nothing at all.
+
+§11.3's acceptance criteria already say "timed out is never SUCCESSFUL". This
+section says the same thing one step earlier: prefer the tier that cannot time
+out, and cannot drift.
 
 ---
 
@@ -643,11 +674,11 @@ this document** — each is a prioritised target for the cited harness.
 |---|---|---|---|---|---|
 | **R1** | **High (systemic)** | **The shipped binary enforces none of goto-symex's invariants.** There are **113 `assert(...)` in `src/goto-symex/*.cpp` and 5 in the headers**, and **all 674 TUs in this build carry `-DNDEBUG`** (`build/compile_commands.json`, RelWithDebInfo). Every invariant in §4.2 marked "debug only" — including `pop_frame`'s merge-map emptiness (I6) and `coveredinbees`' monotonicity (I1) — is a **no-op in release**. A violation is silent and unbounded. | `grep -c 'assert(' src/goto-symex/*.cpp`; `-DNDEBUG` in all 674 compile commands | H-A1, H-A3 | Introduce a release-checked `SYMEX_INVARIANT(cond, msg)` (CBMC's `INVARIANT` pattern) and promote the ~10 load-bearing asserts (I1, I2, I6, I16) to it. Measure the cost; gate the rest behind an `--expensive-asserts` build option. |
 | **R2** | **High (soundness)** | `pop_frame` discards `merge_state_map` under a debug-only `assert`. In release, a frame popped with pending merges **silently drops those paths** ⇒ missed bug, no diagnostic. | `goto_symex_statet::pop_frame`, `goto_symex_state.h:310` | H-A3 | Promote to `SYMEX_INVARIANT`; add H-B1-adjacent runtime check counting pushed vs merged snapshots per frame. |
-| **R3** | **Medium–High (memory safety)** | `make_assignment` holds `valuet &entry` — a reference **into** `current_names` (`std::unordered_map`) — across the virtual call `rename(lhs_symbol, entry.count + 1)`, which reaches `coveredinbees` and performs `current_names[key]`. Today this is safe *only because* the recomputed key is identical (the symbol is still L1 at that point), so `operator[]` finds rather than inserts. **The invariant is unasserted**; any change that re-keys before the call ⇒ insert ⇒ possible rehash ⇒ **dangling `entry`**, then `entry.count = …; entry.constant = …` is a use-after-free. The code comment concedes the hazard. | `renaming::level2t::make_assignment` `renaming.cpp:344-369`; `::coveredinbees` `:230-246`; comment "This'll update entry beneath our feet" | H-A9 | Restructure to avoid the held reference (re-`find` after the call), or assert key stability. ASan/H-A9 pin the failure mode. |
+| **R3** | **Medium (soundness) — re-characterised, §15 M1** | `make_assignment` holds `valuet &entry` — a reference **into** `current_names` (`std::unordered_map`) — across the virtual call `rename(lhs_symbol, entry.count + 1)`, which reaches `coveredinbees` and performs `current_names[key]`. This is safe *only because* the recomputed key is identical (the symbol is still L1 at that point, as `make_assignment` sets `symbol.rlevel` only *after* the call), so `operator[]` finds rather than inserts. **The invariant is unasserted.** The originally-hypothesised consequence — rehash ⇒ dangling `entry` ⇒ use-after-free — **does not hold**: [unord.req.general]/9 states rehashing "does not invalidate pointers or references to elements", and only erasing an element invalidates references to it, which `coveredinbees` never does. The real consequence of a re-keying callee is a **correctness** one: `coveredinbees` would bump a different entry, `make_assignment` would then publish the caller's *stale* `entry.count`, and two distinct program values would share an SSA name — an I1/I10 violation, silently unsound. | `renaming::level2t::make_assignment`; `::coveredinbees`; comment "This'll update entry beneath our feet"; [unord.req.general]/9 | `unit/goto-symex/renaming.test.cpp` (Tier B, discharged) | Severity downgraded from memory safety to soundness. The invariant still deserves an assertion — promote to `SYMEX_INVARIANT` with R1 (M3). No restructure needed: re-`find`ing after the call would buy nothing the standard does not already give. |
 | **R4** | **Medium (crash → no verdict)** | **Eight unchecked `*ns.lookup(...)` dereferences.** `namespacet::lookup` returns `nullptr` on miss (as `renaming.cpp:15-21` itself demonstrates by checking). A miss ⇒ null deref ⇒ SIGSEGV mid-verification. `phi_function`'s site is the most exposed: it filters only `goto_symex::guard!` and `symex::invalid_object` before looking up an arbitrary merged variable's base name. | `symex_goto.cpp:433`; `symex_function.cpp:159`; `symex_valid_object.cpp:47`; `dynamic_allocation.cpp:66,92,105,118,143` | H-A10 | Add checked lookups with a diagnostic (`log_error` + controlled abort) or prove the precondition per site and record it as a cited comment. |
 | **R5** | **Medium (soundness detector disabled)** | `check_for_duplicate_assigns` — the *only* in-tree checker for the core SSA invariant I10 — merely `log_status`es duplicates and then reports "Checked N insns". It never fails, and nothing calls it in a normal run. | `symex_target_equationt::check_for_duplicate_assigns`, `symex_target_equation.cpp` | H-B1 | Turn it into a validator returning a bool; run it under a debug/CI flag over the whole regression corpus. |
 | **R6** | **Medium (unsound pruning, opt-in flag)** | `state_hashing_level2t::make_assignment` keys `current_hashes` by the **L0** original name, acknowledged in-code ("XXX — consider whether to use l1 names instead. Recursion, reentrancy."). Two states that differ only in the L1 activation of a recursive local therefore fingerprint identically ⇒ `hit_hashes` prunes a genuinely different state ⇒ missed interleaving. Severity is bounded by `--state-hashing` being opt-in. | `execution_state.cpp:~1342-1378`; `reachability_treet::hit_hashes`, `reachability_tree.h:352` | H-A8-style model + **H-C4** | Key by the L1 name record; H-C4 parity sweep quantifies the current gap. |
-| **R7** | **Low–Medium (UB)** | `previous_frame()` computes `*(--(--call_stack.end()))` with no size check — UB when `call_stack.size() < 2`, and it returns a reference to a `framet` that a subsequent `pop_frame` invalidates. | `goto_symex_statet::previous_frame`, `goto_symex_state.h:319` | H-A7 | Add a size precondition (release-checked) or return `std::optional`. |
+| **R7** | **Low–Medium (UB) — refined, §15 M1** | `previous_frame()` computes `*(--(--call_stack.end()))` with no size check. `call_stackt` is a `std::vector<framet>`, so at size 1 this evaluates `--begin()`, forming a pointer before the start of the array — undefined by [expr.add]/4 **whether or not it is dereferenced**, not merely a bad read. The second clause of the original finding ("returns a reference a subsequent `pop_frame` invalidates") does **not** hold: `pop_back` invalidates only the reference to the erased last element, and `previous_frame` returns the second-to-last. The precondition holds today by construction — the sole call site does `new_frame(...)` on the preceding line — but nothing states it in the shipped binary (R1). | `goto_symex_statet::previous_frame`; sole caller `goto_symext::symex_function_call_code`; [expr.add]/4 | `unit/goto-symex/frame_lifecycle.test.cpp` (Tier B, discharged) | Add a release-checked precondition **as part of R1's `SYMEX_INVARIANT` work in M3**, so the macro lands once with its cost measured; index (`call_stack[size() - 2]`) rather than decrementing an iterator. |
 | **R8** | **Medium (documented model gap)** | `is_valid_object` returns `false` for **every** non-static, non-dynamic symbol: the stack-scope branch is `#if 0`'d out with "XXX re-enable to be able to check for stack-var-out-of-scope problems". Stack-object validity is therefore not modelled, and `dynamic_allocation.cpp` compensates by *assuming* `invalid_pointer` applies only to dynamic objects ("we never update `__ESBMC_alloc` for stack ptrs"). Net effect on stack-lifetime bugs (use-after-scope) is a **missed-bug** direction. | `goto_symext::is_valid_object`, `symex_valid_object.cpp:85-118`; `dynamic_allocation.cpp:110-116` | H-A10 + a targeted `regression/esbmc` use-after-scope corpus | Quantify with a dedicated corpus before attempting a fix; the fix is a model change, not a patch. |
 | **R9** | **Low–Medium (approximation direction unproven)** | Three documented "sound over-approximation" claims are unproven: value-set filtering after a pointer havoc (`symex_assign.cpp:~550-570`), the non-scalar uninterpreted-function fallback (`symex_function.cpp:~410-430`), and the function-pointer target enumeration over an over-approximated value set (`symex_function.cpp:~766`). Each *argues* the direction in a comment; none is checked. | cited lines | H-B6 + H-C1/H-C3 | For each, state the claim as a checkable predicate and add a Tier-B assertion (e.g. filtered set ⊆ original **and** the dropped entries are `unknown`/`invalid` only). |
 | **R10** | **Low (latent UB)** | `renaming::level2t::name_record`'s `name_record() = default` leaves `lev`, `l1_num`, `t_num` **and the derived `hash`** indeterminate (contrast `level1t::name_record`, which initialises `base_name("")`). No current default-construction site was found, but a future one (`std::optional`, map default-insert, array of records) would read indeterminate memory in `compare`/`hash`. | `renaming.h:143-214` | MSan (Tier D) + a `static_assert`-style unit check | Add default member initialisers; near-zero cost. |
@@ -663,7 +694,7 @@ no milestone depends on a later one. The ESBMC extension work items (WI-1…WI-6
 §13.6) run **in parallel** with this track: no property claimed in §8 is blocked
 on them.
 
-**M0 — Infrastructure (0.5 wk).**
+**M0 — Infrastructure (0.5 wk). — DONE, see §15.**
 Re-enable `unit/goto-symex/CMakeLists.txt` (fix the `symex;solvers;
 gotoalgorithms;pointeranalysis;util_esbmc;langapi` link set). Stand up the
 `regression/esbmc/symex_*` harness skeleton + `test.desc` template. Land the
@@ -671,16 +702,31 @@ drift-check script. In parallel, start **WI-1** (`<shared_mutex>` operational
 model) and **WI-2** (`<type_traits>` completion), and file G1–G8 as issues (D12).
 *Artefact:* one green + one deliberately-red smoke harness proving the pipeline
 detects an injected bug; a building `unit/goto-symex` target; WI-1 merged.
+*Delivered:* the harness triple, the drift guard + its PR gate, and the
+`unit/goto-symex` target. WI-1/WI-2 and D12 remain open and move to M1.
 
 **M1 — Low-level kernels: SSA algebra (1 wk).** H-A1, H-A9, H-A7.
 Retires I1/I2/I16; produces the R3 and R7 verdicts. In parallel: **WI-3**
 (`initializer_list` / `iterator_traits` / `this_thread` / `aligned_storage`),
 which completes the parse path to `renaming.h`. *Artefact:* three Tier-A harness
 pairs + the R3 restructure PR if H-A9 confirms the hazard; WI-2/WI-3 merged.
+**Revised, §15 M1.** H-A1's Tier-A form was built and **rejected on
+tractability** — see §15 and the rule it produced in §6.4. I1/I10/P11 are
+instead discharged against the *real* `goto_symext` by H-B1
+(`unit/goto-symex/ssa_wellformed.test.cpp`), and I1/I2 against the real
+`renaming::level2t` by `unit/goto-symex/renaming.test.cpp`, which also produces
+the **R3 verdict** (re-characterised: soundness, not memory safety). H-A7's
+I16/R7 obligation is discharged by `unit/goto-symex/frame_lifecycle.test.cpp`
+plus a call-site argument. **M1 closed.**
 
 **M2 — Isolated core algorithms: merging and bounding (1.5 wk).**
 H-A2 (the highest-value harness), H-A3, H-A5. Dual-solver mandatory.
 *Artefact:* merge-soundness proof at arity 2 **and** 3; R2 `SYMEX_INVARIANT` PR.
+**Revised, §15 M2.** H-A2's and H-A3's obligations (I8, I6) are observable in the
+produced equation, so both are discharged at Tier B by
+`unit/goto-symex/merge.test.cpp` per §6.4 — no transcription, no dual-solver gate
+needed because no SMT query is involved. H-A5 is unstarted; R2's
+`SYMEX_INVARIANT` remains M3.
 
 **M3 — Release-mode enforcement (0.5 wk).** R1: introduce `SYMEX_INVARIANT`,
 promote the ~10 load-bearing asserts, measure the runtime cost on
@@ -728,12 +774,13 @@ the plan and can be run opportunistically from M0.
 ### 11.1 Organisation and naming
 
 ```
-docs/roadmap/goto-symex-verification-plan.md  this document (+ verdict log, §9.2/§10)
-regression/esbmc/symex_<area>_<nn>/           Tier A, passing
+docs/roadmap/goto-symex-verification-plan.md  this document (+ verdict log, §15)
+regression/esbmc/symex_<area>_<nn>/           Tier A, passing — owns the kernel
     ├── symex_<area>_<nn>.c
     └── test.desc
-regression/esbmc/symex_<area>_<nn>_fail/      Tier A, anti-vacuity twin
-unit/goto-symex/<area>.test.cpp               Tier B  (wire in CMakeLists.txt)
+regression/esbmc/symex_<area>_<nn>_fail/      Tier A, anti-vacuity twin (§6.1 r5)
+regression/esbmc/symex_<area>_<nn>_probe/     Tier A, reachability probe (§6.1 r6)
+unit/goto-symex/<area>.test.cpp               Tier B — prefer this, see §6.4
 scripts/verification/symex/
     ├── oracle_slice_parity.sh                H-C1
     ├── oracle_simplify_parity.sh             H-C2
@@ -745,7 +792,20 @@ scripts/verification/symex/
 ```
 
 `<area>` ∈ `{ssa, merge, mergequeue, slice, unwind, mpor, frame, eqctx,
-lookup, refalias}` — one area per harness family, matching §7.
+lookup, refalias}` — one area per harness family, matching §7. `<nn> = 00` is
+the M0 template.
+
+The `_fail` and `_probe` directories hold a one-line
+`#include "../symex_<area>_<nn>/symex_<area>_<nn>.c"` and select their variant
+with `-DSYMEX_HARNESS_PERTURB` / `-DSYMEX_HARNESS_PROBE` on `test.desc` line 3.
+The kernel therefore has exactly one copy: a twin cannot silently stop
+perturbing the code it is meant to perturb.
+
+Every harness citing `src/goto-symex` carries, in its header comment, one
+`SYMEX-HARNESS-TARGET: <path>::<symbol>` line per transcribed symbol and a
+`SYMEX-HARNESS-SHA256:` line holding the checksum of that symbol's definition.
+`drift_check.py` re-extracts and re-hashes each; `--update` refreshes them after
+a reviewed re-transcription.
 
 ### 11.2 CI integration
 
@@ -822,7 +882,7 @@ for what is claimed; a claim may not outlive its harness.
 | **D8** | Tier-C oracle scripts + scheduled workflow | `scripts/verification/symex/`, `.github/workflows/symex-oracles.yml` | M5, M7 |
 | **D9** | `SYMEX_INVARIANT` release-checked macro + promoted invariants + cost benchmark | `src/goto-symex/` | M3 |
 | **D10** | Fix PRs for confirmed findings (R2–R5, R7, R10 are tractable; R6/R8/R11 are investigations first) | code PRs, each with Mode-C proof where a branch changes | M1–M6 |
-| **D11** | Verdict log — per-harness result, ESBMC commit, solver versions, date — appended to this document | §9.2 / §10 | continuous |
+| **D11** | Verdict log — per-harness result, ESBMC commit, solver versions, date — appended to this document | §15 | continuous |
 | **D12** | Issues against ESBMC's C++ operational model, one per gap G1–G8 (§13.2), each with a reproducer and two regression tests | GitHub, label `clang-cpp-frontend` | M0 |
 | **D13** | ESBMC extension work items WI-1…WI-3 (`<shared_mutex>`, `<type_traits>` completion, `<compare>`/`std::unreachable`, `initializer_list`/`iterator_traits`/`this_thread`) | `src/cpp/library/`, `regression/esbmc-cpp*` | M0–M1 |
 | **D14** | Tier B′ pilot result (WI-4) — a harness including the real `renaming.h`, **or** a recorded negative result keeping Tier A | `unit/goto-symex/` or §13.3 | M4 |
@@ -995,6 +1055,265 @@ Stated plainly, to avoid over-claiming:
    proof at a bound, or a k-induction proof with convergence. Where convergence
    is not achieved, the result is reported as *bounded*, never as *proved*.
 
+---
+
+## 15. Verdict log (D11)
+
+Append-only. One row per discharged (or attempted) harness run, with the exact
+artefact it was run against. A row here is the *only* place this document claims
+a result; §7's harness descriptions remain proposals until they appear below.
+
+**Environment.** ESBMC 8.4.0, tree at `ecf26b5312`, `RelWithDebInfo` (`-DNDEBUG`
+present — see R1), Bitwuzla 0.9.0, Z3 4.13.3, Linux x86_64.
+
+### M0 — 2026-07-27
+
+| Artefact | Invocation | Verdict | Acceptance (§11.3) |
+|---|---|---|---|
+| `regression/esbmc/symex_ssa_00` | `--overflow-check --unsigned-overflow-check --memory-leak-check` | `VERIFICATION SUCCESSFUL` | 1 ✓ · 2 ✓ (45 of 163 VCCs remain) · 3 ✓ · 4 ✓ · 5 ✓ · 6 ✓ (Bitwuzla and Z3 agree) · 7 ✓ |
+| `regression/esbmc/symex_ssa_00_fail` | same + `-DSYMEX_HARNESS_PERTURB` | `VERIFICATION FAILED` at the `I1: L2 index advances by exactly one` claim | anti-vacuity twin for the row above |
+| `regression/esbmc/symex_ssa_00_probe` | same + `-DSYMEX_HARNESS_PROBE` | `VERIFICATION FAILED` at `reachability probe` | the harness body is reached |
+
+**Scope of the claim.** `symex_ssa_00` is the M0 *template*, not H-A1. It proves
+I1 for the counter algebra alone, over a 4-key map and a 4-assignment sequence,
+with the map modelled as a direct-indexed array. It does **not** yet model the
+`name_record` key, the `rename`-beneath-our-feet reference hazard (I2/R3), or
+node ids. H-A1 (M1) subsumes it.
+
+**Infrastructure delivered.**
+
+- `unit/goto-symex` builds and runs again (`intrinsic-utils-test`, 4 assertions).
+  The link failure was cvc5's exported target naming `cadical`/`picpoly`/
+  `picpolyxx` as bare `-l` flags with no search path: `src/esbmc/CMakeLists.txt`
+  carried a private `target_link_directories` workaround, so `esbmc` linked and
+  every other consumer of `solvers` did not. Moved onto `solvercvc5` as a
+  `PUBLIC` link directory, which fixes all consumers at once.
+- `scripts/verification/symex/drift_check.py` + a `pull_request.yml` gate.
+  Verified end-to-end: inserting one comment into `level2t::make_assignment`
+  turns the check red.
+
+**Carried into M1.** WI-1 (`<shared_mutex>`), WI-2 (`<type_traits>` completion)
+and D12 (issues G1–G8) were scheduled for M0 and are not started.
+
+### M1 — 2026-07-27
+
+**Result: I1, I10 and P11 discharged against the real engine.** Not by a
+transcription — by running the real `goto_symext` and validating the
+`symex_target_equationt` it produced.
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `unit/goto-symex/ssa_wellformed.test.cpp` (H-B1) | real `goto_factory` → real `reachability_treet` → real `goto_symext`, over straight-line, branching, nested-branch, unwound-loop, and call/recursion programs | 6 cases, 37 assertions, **pass**, 1.6 s |
+
+Properties checked on every produced equation:
+
+- **I1 / P8** — per `(base_name, l1_num, thread_num)`, the L2 index of each
+  definition strictly increases in equation order.
+- **I10 / P11** — no two assignment steps define the same SSA name. This is the
+  invariant `check_for_duplicate_assigns` exists for and never enforces (R5);
+  the validator is the enforcing version R5 asks for.
+- **P11** — no step reads an SSA name before the step defining it. A name never
+  defined in the equation is a free symbol and is correctly not a violation.
+
+Anti-vacuity: the last case takes an equation the engine produced, appends a
+copy of one of its own assignment steps, and requires the validator to report
+exactly one duplicate definition and one non-monotonic index. Without it the
+five passing cases would be indistinguishable from a validator that checks
+nothing.
+
+**One harness-side defect found and fixed, no engine defect.** The first run
+reported use-before-def on every first definition. Cause: for an assignment
+step, `symex_target_equationt::assignment` sets
+`SSA_step.cond = equality2tc(lhs, rhs)`, so reading `cond` on an assignment
+reports the definition as a use of itself. The reads of an assignment are in
+its `rhs`; `cond` is for assume/assert steps. Recorded because it is the exact
+failure mode a Tier-A transcription would have hidden — a stub has no `cond`
+field to get wrong.
+
+**Rejected: H-A1 as a Tier-A harness.** Built as specified in §7.1 — the full
+`name_record` key `(base_name, lev, l1_num, t_num)`, `hash` modelled as an
+arbitrary function of those fields so collisions stay possible, and a
+linear-probed map, at 3 assignments over a 16-key space. Measured:
+
+| Harness | VCCs | Wall | Verdict |
+|---|---|---|---|
+| `symex_ssa_00` (M0 template, array-indexed key) | 163 | 4 s | `SUCCESSFUL` |
+| H-A1 Tier-A (real `name_record` key, hash-probed map) | 4371 | **> 200 s** | none |
+| H-A1 `_fail` twin | 4368 | 108 s | `FAILED` |
+
+Rejected under §11.3 criterion 1 (no verdict) and the §11.2 budget (< 30 s per
+harness; the regression harness cap is a hard 120 s). Not committed. The green
+harness never returned, so it proves nothing — while the `_fail` twin returning
+`FAILED` in half the time is the shape you would expect: finding one violating
+trace is easy, proving none exists is not.
+
+The general lesson is written up as §6.4: raising a Tier-A stub's fidelity
+toward the real data structure raises its cost superlinearly, so the tier that
+verifies the shipped C++ is also the tier that scales. §6.4 reorders the
+remaining harness work accordingly.
+
+### M1 (cont.) — R3 verdict
+
+**Result: I1 and I2 discharged on the real `renaming::level2t`; R3
+re-characterised from memory safety to soundness.**
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `unit/goto-symex/renaming.test.cpp` | the `renaming::level2t` owned by a real `execution_statet`, its real `current_names`, and the real `make_assignment` → `rename` → `coveredinbees` chain | 4 cases, 28 assertions, **pass** |
+
+Only the input symbols are constructed; the class under test is the shipped one.
+
+- **I1** — five successive `make_assignment` calls on one key publish 1…5, and
+  `current_names.at(key).count` equals each published index.
+- **I2** — a first assignment to a fresh key grows `current_names` by exactly
+  one entry, and later assignments to it by none. A callee that recomputed a
+  *different* key would default-insert a second entry through the nested
+  `current_names[...]`, so this is I2's direct observable.
+- **non-aliasing** — keys differing in exactly one of `l1_num`, `t_num` or
+  `lev` keep independent counters.
+- **R3's memory-safety claim** — a `valuet *` taken into `current_names` is held
+  across 256 further insertions that provably rehash the table
+  (`bucket_count()` grows), then dereferenced.
+
+**R3 as written was wrong about the failure mode.** It hypothesised
+"insert ⇒ possible rehash ⇒ dangling `entry`, then `entry.count = …` is a
+use-after-free". `current_names` is a `std::unordered_map`, and
+[unord.req.general]/9 says rehashing "invalidates iterators, changes ordering
+between elements, and changes which buckets elements appear in, **but does not
+invalidate pointers or references to elements**"; only erasing an element
+invalidates references to it, and `coveredinbees` never erases. The test above
+confirms this empirically for the real container. There is no use-after-free
+here and no restructure to do.
+
+What survives is a **soundness** hazard, and it is the one worth asserting: if
+the key recomputed inside `coveredinbees` ever differed from the caller's, the
+callee would bump a *different* entry, `make_assignment` would then publish the
+caller's stale `entry.count`, and two distinct program values would share an SSA
+name — an I1/I10 violation with no diagnostic. Today the key is stable only
+because `make_assignment` sets `symbol.rlevel` *after* the `rename` call.
+Nothing enforces that ordering. §9.2's R3 row is updated; the action moves from
+"restructure to avoid the held reference" to "promote I2 to `SYMEX_INVARIANT`"
+alongside R1 in M3.
+
+**A note on the Tier-A form of H-A9.** §7.1 specifies its stub as "the `map_t`
+stub with an explicit rehash-on-insert that invalidates outstanding references
+(modelled as a generation counter)". That stub models a container `std::
+unordered_map` is not: it would have "proved" a hazard the standard rules out,
+and its `_fail` twin would have passed the §11.3 gate while demonstrating
+nothing real. A second, sharper instance of §6.4 — a stub encodes the author's
+belief about the real type, and that belief is exactly what needed checking.
+
+### M1 (cont.) — R7 verdict, M1 closed
+
+**Result: I16 discharged by construction plus a Tier-B frame-balance pin; R7
+survives as a latent hazard with a corrected severity basis.**
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `unit/goto-symex/frame_lifecycle.test.cpp` | real symex over nested calls, recursion, calls through a function pointer, and calls inside an unwound loop | 5 cases, 17 assertions, **pass** |
+
+**The precondition holds, by construction, at the only call site.**
+`previous_frame()` has exactly one caller —
+`goto_symext::symex_function_call_code` (`symex_function.cpp`) — and it reads:
+
+```cpp
+assert(!cur_state->call_stack.empty());
+goto_symex_statet::framet &frame = cur_state->new_frame(...);
+frame.level1 = cur_state->previous_frame().level1;
+```
+
+`new_frame` pushes unconditionally on the line before, so `size() >= 2` at the
+call. The engine starts at depth 1 (`goto_symex_statet::initialize` →
+`new_frame`), which the first test pins.
+
+**The severity basis in R7 was understated.** `call_stackt` is
+`std::vector<framet>`, so `*(--(--call_stack.end()))` at size 1 evaluates
+`--begin()` — forming a pointer before the start of the array, which is
+undefined by [expr.add]/4 regardless of whether it is dereferenced. The
+"returns a reference a subsequent `pop_frame` invalidates" clause does **not**
+apply: `pop_back` invalidates only the reference to the erased last element,
+and `previous_frame` returns the second-to-last.
+
+**What the tests pin.** The engine's residual call-stack depth after symex is a
+constant of the entry sequence (`__ESBMC_main`'s frame plus `main`'s, whose
+`END_FUNCTION` is the last instruction) and **not** a function of call nesting.
+The discriminating case runs the same recursive program at depth 1 and depth 3
+and requires equal residual depth: if `pop_frame` did not match `new_frame`, the
+deeper program would end with more frames standing, and the size-1 precondition
+would stop being a structural property. Recursion is additionally required to
+produce more than one L1 activation of the callee's local — which is what
+`previous_frame().level1` exists to seed.
+
+**A held-`framet&` audit, since `call_stack` is a vector.** `emplace_back` can
+reallocate and invalidate every outstanding reference into it, so every
+`framet &` in `src/goto-symex` was checked against the one push site
+(`symex_function_call_code`). Six sites hold one: `symex_function.cpp:599, 908,
+955, 1008`, `symex_other.cpp:79`, `symex_goto.cpp:328`. None is used after a
+call that can push a frame. The closest is `run_next_function_ptr_target`, where
+`cur_frame` is live across `symex_function_call_code(state_call)` but has no use
+after it. **No live defect; the pattern is fragile rather than broken**, and is
+the kind of thing a `SYMEX_INVARIANT` on frame identity would pin in M3.
+
+**Action for R7 unchanged in substance, sharpened in wording:** the fix belongs
+with R1/M3 — a release-checked precondition. It is deliberately not applied here
+so that `SYMEX_INVARIANT` lands once, in one place, with its cost measured.
+
+**M1 is closed.** Its three harnesses are discharged at Tier B — H-A1's property
+by `ssa_wellformed.test.cpp`, H-A9/R3 by `renaming.test.cpp`, H-A7/R7 by
+`frame_lifecycle.test.cpp` — with the Tier-A forms of H-A1 and H-A9 rejected on
+tractability and on modelling fidelity respectively (§6.4). Still open from M0:
+WI-1, WI-2, D12. Next is **M2** (H-A2 merge-guard soundness, H-A3 merge-queue
+conservation, H-A5), which §6.4 requires be scoped Tier-B-first: `phi_function`
+and `merge_state_guards` are observable in the produced equation through phi
+assignment counts and step guards.
+### M2 (partial) — 2026-07-27
+
+**Result: I8 and I6 pinned against the real engine; R2's failure mode confirmed
+as unobserved on every shape tried.**
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `unit/goto-symex/merge.test.cpp` (H-A2 + H-A3) | real symex over two-armed, one-armed, nested, in-callee, early-return and in-loop branches | 7 cases, 31 assertions, **pass** |
+
+§4.3 ranks the merge machinery P0 — a lost path is a missed bug with no
+diagnostic — and both of its unenforced invariants turned out to be visible in
+the produced equation, so neither needed a transcription (§6.4).
+
+- **I8, emission** — a two-armed branch over nondet values produces exactly one
+  `ite` definition for the merged variable; a variable untouched in both arms
+  produces none; nested branches produce one per join; a branch in a 3×-unwound
+  loop produces at least one per iteration.
+- **I8, freshness** — the phi's L2 index is strictly greater than every index
+  previously defined for that key. A phi that reused one of its own inputs would
+  alias two distinct values under one SSA name, which is the I1/I10 violation
+  R3's stale-count scenario also produces.
+- **I8, one-armed merge** — for `if (c) x = …;` with no `else`, the emitted ite's
+  arms are distinct. This is the lost-behaviour direction: if the *pre-branch*
+  value were not one of the arms, the not-taken path would simply vanish from
+  the formula.
+- **I6 / R2** — after symex, every live frame's `merge_state_map` is empty. The
+  cases are chosen for where a snapshot could be orphaned: a branch inside a
+  callee (so the join and the `pop_frame` belong to the same frame), an early
+  `return` that jumps past a join, and a branch inside an unwound loop.
+
+Non-vacuity: the pending-merge count `REQUIRE`s a non-empty call stack before
+summing, so a zero cannot come from having examined nothing. Arm values are
+`nondet_int()` throughout — with constant arms, `simplify` folds the ite and the
+phi disappears, which would have made every emission assertion vacuous.
+
+**R2 is not retired by this.** These tests show the invariant holding on the
+shapes tried; R2 is that *nothing enforces it in the shipped binary*, since
+`pop_frame`'s `assert(merge_state_map.size() == 0)` is a no-op under NDEBUG.
+That remains true and remains M3's `SYMEX_INVARIANT` work. What the tests add is
+a durable regression: if a future change starts orphaning snapshots on any of
+these six shapes, this fails rather than silently dropping paths.
+
+**Still open in M2.** H-A5 (unwind bounding, `get_unwind` /
+`loop_bound_exceeded`) is unstarted. Note §11.3 and R12 both forbid pairing
+`--no-unwinding-assertions` with any reachability claim, so H-A5's Tier-C form
+(H-C6, unwind monotonicity: `FAILED` at `--unwind k` ⇒ `FAILED` at every
+`k' > k`) is the safer first cut and needs no oracle. Also still open from M0:
+WI-1, WI-2, D12.
 ---
 
 ## Appendix A — Methodological basis
