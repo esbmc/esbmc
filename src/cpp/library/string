@@ -1189,6 +1189,12 @@ typedef basic_string<char> string;
 typedef basic_string<wchar_t> wstring;
 } // namespace std
 
+/* basic_string is complete from here on, so the exception hierarchy -- whose
+ * what_arg constructors take a const std::string & -- can be defined now. It
+ * must be in scope before the out-of-line member definitions below, because
+ * basic_string::at throws std::out_of_range ([string.access]). */
+#include "__stdexcept_base"
+
 namespace std
 {
 template <typename CharT, typename Traits, typename Alloc>
@@ -1542,12 +1548,15 @@ __ESBMC_HIDE:
 template <typename CharT, typename Traits, typename Alloc>
 char basic_string<CharT, Traits, Alloc>::at(size_t pos) const
 {
+  // [string.access]: at throws std::out_of_range when pos >= size(). The throw
+  // must stay lexically in this body -- ESBMC's exception lowering only marks a
+  // function as throwing when the throw is directly in it, so routing it
+  // through a helper would silently drop the landing pad at the call site.
+  // Message-less, as in vector::at: constructing a std::string what_arg would
+  // drag a malloc/strlen into every at() call, and a catch of out_of_range or
+  // of exception still matches.
   if (pos >= this->length())
-  {
-    // TODO: when we support try-catch, replace the assert with the throw statement below
-    //throw out_of_range();
-    __ESBMC_assert(0, "basic_string append failed, out_of_range");
-  }
+    throw std::out_of_range();
 
   return this->str[pos];
 }
