@@ -172,10 +172,12 @@ private:
     0; ///< Counter for unique array-element snapshot names (Phase 2B)
 
   /// Fallback element count for the Phase 2B array-element witness index when
-  /// the array's real extent is unknown (i.e. it is neither a harness-allocated
-  /// parameter nor an __ESBMC_is_fresh allocation, e.g. a global array).
-  /// Pointer parameters always have a known extent, so they never use this.
-  static constexpr size_t ARRAY_ALLOC_ELEMS = 100;
+  /// the array's real extent is unknown: a global array, or a parameter in a
+  /// run without --function, where the entry harness never allocates and so
+  /// records no extent. This can over-bound the witness index and produce the
+  /// spurious "array bounds violated" of #5314, so it is a fallback, not a
+  /// default: prefer a recorded extent whenever one exists.
+  static constexpr size_t WITNESS_IDX_FALLBACK_ELEMS = 100;
 
   /// \brief Find function symbol
   /// \param function_name Function name (can be full ID or simple name)
@@ -541,7 +543,6 @@ private:
   /// \param wrapper Destination goto program (wrapper body)
   /// \param func Function symbol
   /// \param location Location information
-  /// \param array_params Set of param IDs used as arrays by the assigns clause
   /// \param skip_params Set of param IDs already allocated by __ESBMC_is_fresh
   /// \param allocated_ptrs Output: pointer-typed lvalues that received a heap
   ///        allocation. Stack-backed struct params are not appended. Callers
@@ -555,26 +556,32 @@ private:
     goto_programt &wrapper,
     const symbolt &func,
     const locationt &location,
-    const std::set<irep_idt> &array_params,
     const std::set<irep_idt> &skip_params,
     std::vector<expr2tc> &allocated_ptrs,
     std::map<irep_idt, expr2tc> &param_extents);
 
+  /// \brief Back a struct/union pointer param with one stack-allocated element.
+  /// Kept off the nondet-extent heap path because a heap-backed struct silently
+  /// discharges __ESBMC_old-based ensures clauses (#6483); it also gives symex
+  /// proper SSA phi-nodes for conditional field writes.
+  void emit_struct_stack_backing(
+    goto_programt &wrapper,
+    const expr2tc &p,
+    const type2tc &pointee,
+    const symbolt &func,
+    const locationt &location);
+
   /// \brief Emit malloc + non-null ASSUME + tracking push for one pointer param.
-  /// Shared body of the array-param and primitive-pointer branches of
-  /// add_pointer_validity_assumptions. Allocates a nondet number of bytes,
-  /// assigns the result to \p p, assumes p != NULL, and records \p p in
-  /// \p allocated_ptrs so the caller can emit a matching free.
-  /// \param kind_label Short description used in the goto-instruction comment
-  ///        and the debug log (e.g. "array" or "primitive array").
+  /// Allocates a nondet number of bytes, assigns the result to \p p, assumes
+  /// p != NULL, and records \p p in \p allocated_ptrs so the caller can emit a
+  /// matching free.
   /// \return The byte-extent expression backing \p p.
   expr2tc emit_pointer_param_malloc(
     goto_programt &wrapper,
     const expr2tc &p,
-    const type2tc &param_type,
+    const symbolt &func,
     const locationt &location,
-    std::vector<expr2tc> &allocated_ptrs,
-    const char *kind_label);
+    std::vector<expr2tc> &allocated_ptrs);
 };
 
 #endif // ESBMC_CONTRACTS_H

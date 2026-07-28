@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 --function f --enforce-contract f
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION FAILED$

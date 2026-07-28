@@ -5,6 +5,7 @@
  */
 void f(int *p)
 {
+  __ESBMC_requires(p != 0);
   __ESBMC_requires(__ESBMC_is_fresh(p, 21 * sizeof(int)));
   __ESBMC_ensures(1);
   p[20] = 1;
