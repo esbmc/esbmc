@@ -159,6 +159,22 @@ ESBMC builds a checking harness:
 3. Runs the function body symbolically.
 4. **Asserts** the `ensures` clause and assigns compliance.
 
+Step 1 is unconstrained in the extent of pointer parameters too. A pointer
+parameter is backed by an object whose size is nondeterministic, so the body may
+only dereference it as far as the `requires` clause justifies. State the extent
+with [`__ESBMC_is_fresh`](#memory-freshness-__esbmc_is_fresh):
+
+```c
+void f(int *p) {
+    __ESBMC_requires(__ESBMC_is_fresh(p, 21 * sizeof(int)));
+    p[20] = 1;   // in bounds: the contract says p addresses 21 ints
+}
+```
+
+Without that clause, `p != NULL` alone says nothing about how many elements `p`
+addresses, so `p[20]` is reported as an out-of-bounds write. ESBMC emits a
+warning naming any pointer parameter whose extent the contract leaves unstated.
+
 If every path through the body satisfies the postcondition and the assigns
 frame, the result is `VERIFICATION SUCCESSFUL`. Otherwise, ESBMC reports a
 counterexample showing which input values and which execution path caused a
@@ -450,14 +466,13 @@ functions.
 The following cases are not yet fully supported. KNOWNBUG regression tests
 document each one explicitly.
 
-**Array assigns is bounded to 100 elements.** The nondet-witness approach used
-for `__ESBMC_assigns(arr[i])` ranges over indices 0 to 99
-(`ARRAY_ALLOC_ELEMS = 100`) for arrays allocated by the validity-assumption
-pass. If `i` can exceed 99, assigns compliance for out-of-range writes will not
-be detected. When the array pointer was allocated by `__ESBMC_is_fresh(a, n)`,
-the witness index is instead bounded by the real element count (`n /
-sizeof(elem)`), so an in-bounds element of a buffer smaller than 100 no longer
-reports a spurious bounds violation.
+**Struct pointer parameters assume one element.** A `struct S *` parameter is
+backed by a single stack-allocated `S`, so `s->field` is accepted even when the
+contract states no extent for `s`. This is the same unstated assumption that
+nondet extents remove for other pointer types, just narrowed to one element.
+Moving struct parameters onto the same nondet-extent allocation is blocked on
+[#6483](https://github.com/esbmc/esbmc/issues/6483): a heap-backed struct
+parameter silently discharges `__ESBMC_old`-based `ensures` clauses.
 
 **Global array element assigns is unsupported.** `__ESBMC_assigns(global[i])`
 does not work correctly for global arrays. Use `__ESBMC_assigns(global)` (the
