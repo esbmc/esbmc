@@ -277,7 +277,7 @@ produced equation).
 | ID | Invariant | Established / relied on by | Enforcement **today** |
 |---|---|---|---|
 | **I1** | For a fixed `name_record`, `valuet::count` is strictly increasing across `make_assignment` calls; every published L2 index is used by exactly one defining step. | `level2t::make_assignment` | `assert(entry.count <= count)` in `coveredinbees` — **debug only** |
-| **I2** | An L2 `name_record` key is *stable* across the `rename(lhs,count)` call inside `make_assignment` — i.e. the callee's `current_names[...]` hits the same bucket, so the caller's `valuet &entry` reference stays valid. | `make_assignment` → `coveredinbees` | **unenforced**; comment "This'll update entry beneath our feet" (R3) |
+| **I2** | An L2 `name_record` key is *stable* across the `rename(lhs,count)` call inside `make_assignment` — i.e. the callee's `current_names[...]` resolves to the caller's entry, so the index `coveredinbees` stores is the one `entry.count` then publishes. | `make_assignment` → `coveredinbees` | **unenforced** in code; comment "This'll update entry beneath our feet" (R3). Pinned by `unit/goto-symex/renaming.test.cpp` (§15 M1) |
 | **I3** | `rename` is idempotent: a symbol already at `level2`/`level2_global` is returned unchanged. | `level2t::rename` early-return | by construction |
 | **I4** | `get_original_name` ∘ `rename` = identity on the L0 form; renaming level never decreases along a path. | `renaming_levelt::get_original_name` | **unenforced** |
 | **I5** | Constant propagation is semantics-preserving: substituting `valuet::constant` for the SSA symbol yields an equisatisfiable formula. | `level2t::rename` (`expr = it->second.constant`) | **unenforced** |
@@ -674,7 +674,7 @@ this document** — each is a prioritised target for the cited harness.
 |---|---|---|---|---|---|
 | **R1** | **High (systemic)** | **The shipped binary enforces none of goto-symex's invariants.** There are **113 `assert(...)` in `src/goto-symex/*.cpp` and 5 in the headers**, and **all 674 TUs in this build carry `-DNDEBUG`** (`build/compile_commands.json`, RelWithDebInfo). Every invariant in §4.2 marked "debug only" — including `pop_frame`'s merge-map emptiness (I6) and `coveredinbees`' monotonicity (I1) — is a **no-op in release**. A violation is silent and unbounded. | `grep -c 'assert(' src/goto-symex/*.cpp`; `-DNDEBUG` in all 674 compile commands | H-A1, H-A3 | Introduce a release-checked `SYMEX_INVARIANT(cond, msg)` (CBMC's `INVARIANT` pattern) and promote the ~10 load-bearing asserts (I1, I2, I6, I16) to it. Measure the cost; gate the rest behind an `--expensive-asserts` build option. |
 | **R2** | **High (soundness)** | `pop_frame` discards `merge_state_map` under a debug-only `assert`. In release, a frame popped with pending merges **silently drops those paths** ⇒ missed bug, no diagnostic. | `goto_symex_statet::pop_frame`, `goto_symex_state.h:310` | H-A3 | Promote to `SYMEX_INVARIANT`; add H-B1-adjacent runtime check counting pushed vs merged snapshots per frame. |
-| **R3** | **Medium–High (memory safety)** | `make_assignment` holds `valuet &entry` — a reference **into** `current_names` (`std::unordered_map`) — across the virtual call `rename(lhs_symbol, entry.count + 1)`, which reaches `coveredinbees` and performs `current_names[key]`. Today this is safe *only because* the recomputed key is identical (the symbol is still L1 at that point), so `operator[]` finds rather than inserts. **The invariant is unasserted**; any change that re-keys before the call ⇒ insert ⇒ possible rehash ⇒ **dangling `entry`**, then `entry.count = …; entry.constant = …` is a use-after-free. The code comment concedes the hazard. | `renaming::level2t::make_assignment` `renaming.cpp:344-369`; `::coveredinbees` `:230-246`; comment "This'll update entry beneath our feet" | H-A9 | Restructure to avoid the held reference (re-`find` after the call), or assert key stability. ASan/H-A9 pin the failure mode. |
+| **R3** | **Medium (soundness) — re-characterised, §15 M1** | `make_assignment` holds `valuet &entry` — a reference **into** `current_names` (`std::unordered_map`) — across the virtual call `rename(lhs_symbol, entry.count + 1)`, which reaches `coveredinbees` and performs `current_names[key]`. This is safe *only because* the recomputed key is identical (the symbol is still L1 at that point, as `make_assignment` sets `symbol.rlevel` only *after* the call), so `operator[]` finds rather than inserts. **The invariant is unasserted.** The originally-hypothesised consequence — rehash ⇒ dangling `entry` ⇒ use-after-free — **does not hold**: [unord.req.general]/9 states rehashing "does not invalidate pointers or references to elements", and only erasing an element invalidates references to it, which `coveredinbees` never does. The real consequence of a re-keying callee is a **correctness** one: `coveredinbees` would bump a different entry, `make_assignment` would then publish the caller's *stale* `entry.count`, and two distinct program values would share an SSA name — an I1/I10 violation, silently unsound. | `renaming::level2t::make_assignment`; `::coveredinbees`; comment "This'll update entry beneath our feet"; [unord.req.general]/9 | `unit/goto-symex/renaming.test.cpp` (Tier B, discharged) | Severity downgraded from memory safety to soundness. The invariant still deserves an assertion — promote to `SYMEX_INVARIANT` with R1 (M3). No restructure needed: re-`find`ing after the call would buy nothing the standard does not already give. |
 | **R4** | **Medium (crash → no verdict)** | **Eight unchecked `*ns.lookup(...)` dereferences.** `namespacet::lookup` returns `nullptr` on miss (as `renaming.cpp:15-21` itself demonstrates by checking). A miss ⇒ null deref ⇒ SIGSEGV mid-verification. `phi_function`'s site is the most exposed: it filters only `goto_symex::guard!` and `symex::invalid_object` before looking up an arbitrary merged variable's base name. | `symex_goto.cpp:433`; `symex_function.cpp:159`; `symex_valid_object.cpp:47`; `dynamic_allocation.cpp:66,92,105,118,143` | H-A10 | Add checked lookups with a diagnostic (`log_error` + controlled abort) or prove the precondition per site and record it as a cited comment. |
 | **R5** | **Medium (soundness detector disabled)** | `check_for_duplicate_assigns` — the *only* in-tree checker for the core SSA invariant I10 — merely `log_status`es duplicates and then reports "Checked N insns". It never fails, and nothing calls it in a normal run. | `symex_target_equationt::check_for_duplicate_assigns`, `symex_target_equation.cpp` | H-B1 | Turn it into a validator returning a bool; run it under a debug/CI flag over the whole regression corpus. |
 | **R6** | **Medium (unsound pruning, opt-in flag)** | `state_hashing_level2t::make_assignment` keys `current_hashes` by the **L0** original name, acknowledged in-code ("XXX — consider whether to use l1 names instead. Recursion, reentrancy."). Two states that differ only in the L1 activation of a recursive local therefore fingerprint identically ⇒ `hit_hashes` prunes a genuinely different state ⇒ missed interleaving. Severity is bounded by `--state-hashing` being opt-in. | `execution_state.cpp:~1342-1378`; `reachability_treet::hit_hashes`, `reachability_tree.h:352` | H-A8-style model + **H-C4** | Key by the L1 name record; H-C4 parity sweep quantifies the current gap. |
@@ -713,8 +713,10 @@ pairs + the R3 restructure PR if H-A9 confirms the hazard; WI-2/WI-3 merged.
 **Revised, §15 M1.** H-A1's Tier-A form was built and **rejected on
 tractability** — see §15 and the rule it produced in §6.4. I1/I10/P11 are
 instead discharged against the *real* `goto_symext` by H-B1
-(`unit/goto-symex/ssa_wellformed.test.cpp`). H-A9 and H-A7 remain open and are
-the next M1 work; both are re-scoped Tier-B-first per §6.4.
+(`unit/goto-symex/ssa_wellformed.test.cpp`), and I1/I2 against the real
+`renaming::level2t` by `unit/goto-symex/renaming.test.cpp`, which also produces
+the **R3 verdict** (re-characterised: soundness, not memory safety). H-A7
+remains open and is the last M1 item.
 
 **M2 — Isolated core algorithms: merging and bounding (1.5 wk).**
 H-A2 (the highest-value harness), H-A3, H-A5. Dual-solver mandatory.
@@ -1144,13 +1146,65 @@ toward the real data structure raises its cost superlinearly, so the tier that
 verifies the shipped C++ is also the tier that scales. §6.4 reorders the
 remaining harness work accordingly.
 
-**Carried into the next M1 slice.** H-A9 (I2/R3, the `valuet &entry` reference
-held across `rename`) and H-A7 (I16/R7, `previous_frame` on a stack of size < 2)
-are unstarted and now Tier-B-first. R7's single call site,
-`symex_function.cpp::goto_symext::symex_function_call_code`, does
-`new_frame(...)` immediately before `previous_frame()`, so the precondition
-holds — but only because of an `assert` that is a no-op in release (R1). Also
-still open from M0: WI-1, WI-2, D12.
+### M1 (cont.) — R3 verdict
+
+**Result: I1 and I2 discharged on the real `renaming::level2t`; R3
+re-characterised from memory safety to soundness.**
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `unit/goto-symex/renaming.test.cpp` | the `renaming::level2t` owned by a real `execution_statet`, its real `current_names`, and the real `make_assignment` → `rename` → `coveredinbees` chain | 4 cases, 28 assertions, **pass** |
+
+Only the input symbols are constructed; the class under test is the shipped one.
+
+- **I1** — five successive `make_assignment` calls on one key publish 1…5, and
+  `current_names.at(key).count` equals each published index.
+- **I2** — a first assignment to a fresh key grows `current_names` by exactly
+  one entry, and later assignments to it by none. A callee that recomputed a
+  *different* key would default-insert a second entry through the nested
+  `current_names[...]`, so this is I2's direct observable.
+- **non-aliasing** — keys differing in exactly one of `l1_num`, `t_num` or
+  `lev` keep independent counters.
+- **R3's memory-safety claim** — a `valuet *` taken into `current_names` is held
+  across 256 further insertions that provably rehash the table
+  (`bucket_count()` grows), then dereferenced.
+
+**R3 as written was wrong about the failure mode.** It hypothesised
+"insert ⇒ possible rehash ⇒ dangling `entry`, then `entry.count = …` is a
+use-after-free". `current_names` is a `std::unordered_map`, and
+[unord.req.general]/9 says rehashing "invalidates iterators, changes ordering
+between elements, and changes which buckets elements appear in, **but does not
+invalidate pointers or references to elements**"; only erasing an element
+invalidates references to it, and `coveredinbees` never erases. The test above
+confirms this empirically for the real container. There is no use-after-free
+here and no restructure to do.
+
+What survives is a **soundness** hazard, and it is the one worth asserting: if
+the key recomputed inside `coveredinbees` ever differed from the caller's, the
+callee would bump a *different* entry, `make_assignment` would then publish the
+caller's stale `entry.count`, and two distinct program values would share an SSA
+name — an I1/I10 violation with no diagnostic. Today the key is stable only
+because `make_assignment` sets `symbol.rlevel` *after* the `rename` call.
+Nothing enforces that ordering. §9.2's R3 row is updated; the action moves from
+"restructure to avoid the held reference" to "promote I2 to `SYMEX_INVARIANT`"
+alongside R1 in M3.
+
+**A note on the Tier-A form of H-A9.** §7.1 specifies its stub as "the `map_t`
+stub with an explicit rehash-on-insert that invalidates outstanding references
+(modelled as a generation counter)". That stub models a container `std::
+unordered_map` is not: it would have "proved" a hazard the standard rules out,
+and its `_fail` twin would have passed the §11.3 gate while demonstrating
+nothing real. A second, sharper instance of §6.4 — a stub encodes the author's
+belief about the real type, and that belief is exactly what needed checking.
+
+**Still open.** H-A7 (I16/R7, `previous_frame` on a stack of size < 2) is
+unstarted. Its single call site,
+`symex_function.cpp::goto_symext::symex_function_call_code`, does `new_frame(...)`
+immediately before `previous_frame()`, so the precondition holds — but only via
+an `assert` that is a no-op in release (R1), and `call_stackt` is a
+`std::vector<framet>`, so `*(--(--call_stack.end()))` at size 1 forms
+`begin() - 1`, which is UB by [expr.add], not merely a bad read. Also still open
+from M0: WI-1, WI-2, D12.
 ---
 
 ## Appendix A — Methodological basis
