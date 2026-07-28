@@ -171,8 +171,10 @@ private:
   size_t arr_elem_snap_counter =
     0; ///< Counter for unique array-element snapshot names (Phase 2B)
 
-  /// Number of elements to allocate for pointer params that serve as arrays
-  /// (i.e., appear in array_elem_targets). Must match the ASSUME(j < N) bound.
+  /// Fallback element count for the Phase 2B array-element witness index when
+  /// the array's real extent is unknown (i.e. it is neither a harness-allocated
+  /// parameter nor an __ESBMC_is_fresh allocation, e.g. a global array).
+  /// Pointer parameters always have a known extent, so they never use this.
   static constexpr size_t ARRAY_ALLOC_ELEMS = 100;
 
   /// \brief Find function symbol
@@ -389,10 +391,10 @@ private:
   /// \param wrapper GOTO program to append snapshot instructions to
   /// \param location Source location
   /// \param func_name Function name for unique snapshot naming
-  /// \param is_fresh_sizes Maps each __ESBMC_is_fresh pointer symbol to its
-  ///        byte-size expression, so the array-element witness index is bounded
-  ///        by the real allocation (size/sizeof(elem)) rather than the default
-  ///        ARRAY_ALLOC_ELEMS used for validity-assumption allocations.
+  /// \param param_extents Maps each allocated pointer symbol to its byte-extent
+  ///        expression, so the array-element witness index is bounded by the
+  ///        real allocation (extent/sizeof(elem)) rather than a constant.
+  ///        Covers both __ESBMC_is_fresh sizes and harness nondet extents.
   /// \return Vector of snapshot records for use in emit_arr_elem_assertions
   std::vector<arr_elem_snapshot_t> materialize_arr_elem_snapshots(
     const frame_enforcert::classified_assignst &classified,
@@ -400,7 +402,7 @@ private:
     goto_programt &wrapper,
     const locationt &location,
     const std::string &func_name,
-    const std::map<irep_idt, expr2tc> &is_fresh_sizes);
+    const std::map<irep_idt, expr2tc> &param_extents);
 
   /// \brief Emit ASSERT instructions for array element assigns compliance.
   /// For each snapshot: asserts (j == declared_idx) || (arr[j] == snapshot).
@@ -530,36 +532,46 @@ private:
   /// \brief Allocate fresh malloc backing storage for all pointer parameters.
   /// Called in --function entry harness mode so that pointer params point to
   /// real heap objects instead of nil, enabling valid dereference in the body.
+  ///
+  /// The extent of each allocation is a fresh nondet value, so a parameter is
+  /// only dereferenceable as far as the contract itself justifies via
+  /// __ESBMC_is_fresh.  A fixed extent here would assume a buffer size the
+  /// contract does not state and mask out-of-bounds accesses in the body
+  /// (GitHub issue #6212).
   /// \param wrapper Destination goto program (wrapper body)
   /// \param func Function symbol
   /// \param location Location information
-  /// \param array_params Set of param IDs that need array allocation (ARRAY_ALLOC_ELEMS elements)
+  /// \param array_params Set of param IDs used as arrays by the assigns clause
   /// \param skip_params Set of param IDs already allocated by __ESBMC_is_fresh
   /// \param allocated_ptrs Output: pointer-typed lvalues that received a heap
   ///        allocation. Stack-backed struct params are not appended. Callers
   ///        use this to emit matching free() calls at wrapper exit so
   ///        --memory-leak-check does not blame the user's function for
   ///        wrapper-internal allocations (CWE-401).
+  /// \param param_extents Output: byte extent of each allocation, keyed by
+  ///        parameter symbol, so the Phase 2B witness index can be bounded by
+  ///        the real extent rather than a constant.
   void add_pointer_validity_assumptions(
     goto_programt &wrapper,
     const symbolt &func,
     const locationt &location,
     const std::set<irep_idt> &array_params,
     const std::set<irep_idt> &skip_params,
-    std::vector<expr2tc> &allocated_ptrs);
+    std::vector<expr2tc> &allocated_ptrs,
+    std::map<irep_idt, expr2tc> &param_extents);
 
   /// \brief Emit malloc + non-null ASSUME + tracking push for one pointer param.
   /// Shared body of the array-param and primitive-pointer branches of
-  /// add_pointer_validity_assumptions. Allocates ARRAY_ALLOC_ELEMS elements of
-  /// \p pointed_to_type, assigns the result to \p p, assumes p != NULL, and
-  /// records \p p in \p allocated_ptrs so the caller can emit a matching free.
+  /// add_pointer_validity_assumptions. Allocates a nondet number of bytes,
+  /// assigns the result to \p p, assumes p != NULL, and records \p p in
+  /// \p allocated_ptrs so the caller can emit a matching free.
   /// \param kind_label Short description used in the goto-instruction comment
   ///        and the debug log (e.g. "array" or "primitive array").
-  void emit_pointer_param_malloc(
+  /// \return The byte-extent expression backing \p p.
+  expr2tc emit_pointer_param_malloc(
     goto_programt &wrapper,
     const expr2tc &p,
     const type2tc &param_type,
-    const type2tc &pointed_to_type,
     const locationt &location,
     std::vector<expr2tc> &allocated_ptrs,
     const char *kind_label);
