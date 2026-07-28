@@ -174,7 +174,9 @@ private:
   /// Fallback element count for the Phase 2B array-element witness index when
   /// the array's real extent is unknown: a global array, or a parameter in a
   /// run without --function, where the entry harness never allocates and so
-  /// records no extent. This can over-bound the witness index and produce the
+  /// records no extent. Params whose extent the contract leaves unstated are
+  /// skipped rather than bounded by this, since bounding them would assume the
+  /// extent away (#6212). This can over-bound the witness index and produce the
   /// spurious "array bounds violated" of #5314, so it is a fallback, not a
   /// default: prefer a recorded extent whenever one exists.
   static constexpr size_t WITNESS_IDX_FALLBACK_ELEMS = 100;
@@ -404,7 +406,8 @@ private:
     goto_programt &wrapper,
     const locationt &location,
     const std::string &func_name,
-    const std::map<irep_idt, expr2tc> &param_extents);
+    const std::map<irep_idt, expr2tc> &param_extents,
+    const std::set<irep_idt> &unstated_extents);
 
   /// \brief Emit ASSERT instructions for array element assigns compliance.
   /// For each snapshot: asserts (j == declared_idx) || (arr[j] == snapshot).
@@ -558,12 +561,19 @@ private:
     const locationt &location,
     const std::set<irep_idt> &skip_params,
     std::vector<expr2tc> &allocated_ptrs,
-    std::map<irep_idt, expr2tc> &param_extents);
+    std::map<irep_idt, expr2tc> &param_extents,
+    std::set<irep_idt> &unstated_extents);
 
   /// \brief Back a struct/union pointer param with one stack-allocated element.
-  /// Kept off the nondet-extent heap path because a heap-backed struct silently
-  /// discharges __ESBMC_old-based ensures clauses (#6483); it also gives symex
-  /// proper SSA phi-nodes for conditional field writes.
+  ///
+  /// This is the normative statement of the #6483 carve-out; other sites point
+  /// here rather than restating it. One element is still an extent the contract
+  /// does not state (#6212), but the alternative is worse: a heap-backed struct
+  /// silently discharges __ESBMC_old-based ensures clauses (#6483), turning
+  /// every such contract into a false negative. Stack backing also gives symex
+  /// proper SSA phi-nodes for conditional field writes, which the heap path
+  /// loses. Route struct params through emit_pointer_param_malloc instead once
+  /// #6483 is fixed.
   void emit_struct_stack_backing(
     goto_programt &wrapper,
     const expr2tc &p,
@@ -575,8 +585,7 @@ private:
   /// Allocates a nondet number of bytes, assigns the result to \p p, assumes
   /// p != NULL, and records \p p in \p allocated_ptrs so the caller can emit a
   /// matching free.
-  /// \return The byte-extent expression backing \p p.
-  expr2tc emit_pointer_param_malloc(
+  void emit_pointer_param_malloc(
     goto_programt &wrapper,
     const expr2tc &p,
     const symbolt &func,

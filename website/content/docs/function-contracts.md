@@ -471,7 +471,7 @@ unknown.** For `__ESBMC_assigns(arr[i])` the nondet witness index is bounded by
 the array's real extent: `n / sizeof(elem)` when the pointer came from
 `__ESBMC_is_fresh(a, n)`, and the parameter's nondet extent in entry-harness
 mode. Where neither applies, such as a global array or a run without
-`--function`, the bound falls back to `ARRAY_ALLOC_ELEMS = 100`, which can
+`--function`, the bound falls back to `WITNESS_IDX_FALLBACK_ELEMS = 100`, which can
 over-bound the index and report a spurious bounds violation on a smaller array.
 
 **Struct pointer parameters assume one element.** A `struct S *` parameter is
