@@ -40,6 +40,10 @@ _Bool __ESBMC_pthread_thread_ended[1];
 __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_detach[1];
 
+/* Threads currently blocked in pthread_join waiting for thread[i] to end. */
+__attribute__((
+  annotate("__ESBMC_inf_size"))) unsigned int __ESBMC_pthread_join_waiters[1];
+
 __attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
 
@@ -226,6 +230,8 @@ __ESBMC_HIDE:;
   __ESBMC_pthread_end_values[threadid] = exit_val;
   __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
+  __ESBMC_release_blocked_threads(__ESBMC_pthread_join_waiters[threadid]);
+  __ESBMC_pthread_join_waiters[threadid] = 0;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
   // to the reader.
@@ -283,6 +289,8 @@ __ESBMC_HIDE:;
   __ESBMC_pthread_end_values[threadid] = retval;
   __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
+  __ESBMC_release_blocked_threads(__ESBMC_pthread_join_waiters[threadid]);
+  __ESBMC_pthread_join_waiters[threadid] = 0;
 
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
@@ -363,6 +371,7 @@ __ESBMC_HIDE:;
   _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
   if (!ended)
   {
+    __ESBMC_pthread_join_waiters[(int)thread]++;
     __ESBMC_blocked_threads_count++;
     // If there are now no more threads unblocked, croak.
     __ESBMC_assert(
