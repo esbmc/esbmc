@@ -49,6 +49,8 @@ typedef union pthread_attr_t
 typedef struct
 {
   int __lock;
+  /* Repurposed by the operational model as the number of threads currently
+     blocked on this mutex; see __ESBMC_mutex_waiters in pthread_lib.c. */
   unsigned int __count;
   int __owner;
 } pthread_mutex_t;

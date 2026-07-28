@@ -21,7 +21,7 @@ void __ESBMC_set_thread_internal_data(
   struct __pthread_start_data data);
 
 #define __ESBMC_mutex_lock_field(a) ((a).__lock)
-#define __ESBMC_mutex_count_field(a) ((a).__count)
+#define __ESBMC_mutex_waiters(a) ((a).__count)
 #define __ESBMC_mutex_owner_field(a) ((a).__owner)
 #define __ESBMC_cond_lock_field(a) ((a).__lock)
 #define __ESBMC_cond_futex_field(a) ((a).__futex)
@@ -51,6 +51,24 @@ static pthread_key_t __ESBMC_next_thread_key = 0;
 unsigned short int __ESBMC_num_total_threads = 0;
 unsigned short int __ESBMC_num_threads_running = 0;
 unsigned short int __ESBMC_blocked_threads_count = 0;
+
+/* Cancels the blocked-count contributions of every thread waiting on one
+ * object. Each was bumped together with that object's waiter count inside a
+ * single atomic region, so the two are guarded by the same condition and
+ * subtracting the count restores the global counter exactly.
+ *
+ * The clamp guards a modelling slip only: the pairing makes underflow
+ * unreachable, but an unsigned short wrap to 65535 would silently disable
+ * deadlock detection for the rest of the run, since 65535 is never equal to
+ * __ESBMC_num_threads_running. */
+void __ESBMC_release_blocked_threads(unsigned int waiters)
+{
+__ESBMC_HIDE:;
+  __ESBMC_blocked_threads_count =
+    (waiters >= (unsigned int)__ESBMC_blocked_threads_count)
+      ? 0
+      : (unsigned short int)(__ESBMC_blocked_threads_count - waiters);
+}
 
 /* Per-thread cancellation state. All default to 0:
  *   cancel_requested = false
@@ -393,7 +411,7 @@ int pthread_mutex_init(
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = 0;
-  __ESBMC_mutex_count_field(*mutex) = 0;
+  __ESBMC_mutex_waiters(*mutex) = 0;
   __ESBMC_mutex_owner_field(*mutex) = 0;
   __ESBMC_atomic_end();
   return 0;
@@ -471,6 +489,7 @@ __ESBMC_HIDE:;
   else
   {
     // Deadlock foo
+    __ESBMC_mutex_waiters(*mutex)++;
     __ESBMC_blocked_threads_count++;
     // No more threads to run -> croak.
     __ESBMC_assert(
@@ -494,6 +513,8 @@ __ESBMC_HIDE:;
   __ESBMC_assert(
     __ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
   __ESBMC_mutex_lock_field(*mutex) = 0;
+  __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
+  __ESBMC_mutex_waiters(*mutex) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -533,6 +554,8 @@ __ESBMC_HIDE:;
 
   // It shall be safe to destroy an initialized mutex that is unlocked
   __ESBMC_mutex_lock_field(*mutex) = -1;
+  __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
+  __ESBMC_mutex_waiters(*mutex) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -542,6 +565,8 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = -1;
+  __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
+  __ESBMC_mutex_waiters(*mutex) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -683,7 +708,11 @@ __ESBMC_HIDE:;
     _Bool _cancel = __ESBMC_pthread_cancel_requested[_ctid] &&
                     __ESBMC_pthread_cancelstate[_ctid] == PTHREAD_CANCEL_ENABLE;
     if (_cancel)
+    {
       __ESBMC_mutex_lock_field(*mutex) = 0;
+      __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
+      __ESBMC_mutex_waiters(*mutex) = 0;
+    }
     __ESBMC_atomic_end();
     if (_cancel)
       pthread_exit(PTHREAD_CANCELED);
@@ -697,6 +726,8 @@ __ESBMC_HIDE:;
 
   // Unlock mutex; register us as waiting on condvar; context switch
   __ESBMC_mutex_lock_field(*mutex) = 0;
+  __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
+  __ESBMC_mutex_waiters(*mutex) = 0;
   __ESBMC_cond_lock_field(*cond) = 1;
 
   // Technically in the gap below, we are blocked. So mark ourselves thus. If
