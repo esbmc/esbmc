@@ -2,3 +2,4 @@ new_unit_test(intrinsic-utils-test "intrinsic_utils.test.cpp" "mode_table_obj;sy
 new_unit_test(ssa-wellformed-test "ssa_wellformed.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
 new_unit_test(renaming-test "renaming.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
 new_unit_test(frame-lifecycle-test "frame_lifecycle.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(merge-test "merge.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
