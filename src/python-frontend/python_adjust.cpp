@@ -728,6 +728,7 @@ void python_adjust::adjust_expr(expr2tc &expr)
     expr2tc fn = s.operand;
     std::vector<expr2tc> args = s.arguments;
     bool changed = wrap_function_pointer_callee(fn, args);
+    changed |= decay_array_arguments(fn, args);
 
     // Argument conversion belongs to this form only. Legacy reaches
     // adjust_function_call_arguments exclusively via
@@ -811,6 +812,51 @@ bool python_adjust::wrap_function_pointer_callee(
   // wants a code-typed callee.
   fn = dereference2tc(pointee, symbol2tc(fs->get_type2(), name));
   return true;
+}
+
+bool python_adjust::decay_array_arguments(
+  const expr2tc &fn,
+  std::vector<expr2tc> &args)
+{
+  // clang_c_adjust::adjust_function_call_arguments converts each argument to
+  // its declared parameter type, and c_typecastt's array case decays rather
+  // than casts. `is_foo(a="foo")` passes the `char[4]` literal straight into a
+  // `char *` parameter, so without the decay symex aborts on the argument
+  // binding ("type mismatch: got array, expected pointer") and hop-off produces
+  // no verdict at all. The node-level `&array` and assignment-seam decays
+  // (#6395 and the code_assign2t arm above) do not reach this seam: the
+  // argument is neither an address_of nor an assignment source.
+  //
+  // Scoped to the array→pointer shape, which is a *structural* rewrite (the
+  // value is the same object, addressed differently), and — like
+  // convert_call_arguments (#6461) — to expression-form calls only. A
+  // statement-form wiring was tried and removed: 0 firings across 70 tests,
+  // because `e = f(...)` is a code_assign2t over a sideeffect2t at adjust time
+  // and only becomes a statement-form FUNCTION_CALL later in goto-convert.
+  if (is_nil_expr(fn))
+    return false;
+
+  const type2tc callee =
+    is_pointer_type(fn->type) ? to_pointer_type(fn->type).subtype : fn->type;
+  if (!is_code_type(callee))
+    return false;
+
+  const code_type2t &ct = to_code_type(callee);
+  bool changed = false;
+  for (size_t i = 0; i < args.size() && i < ct.arguments.size(); i++)
+  {
+    if (!is_array_type(args[i]->type) || !is_pointer_type(ct.arguments[i]))
+      continue;
+
+    // address_of2t's type is pointer-to-<subtype>, so pass the parameter's
+    // pointee, exactly as the assignment-seam decay does.
+    const type2tc &elem = to_array_type(args[i]->type).subtype;
+    const type2tc &pointee = to_pointer_type(ct.arguments[i]).subtype;
+    args[i] =
+      address_of2tc(pointee, index2tc(elem, args[i], gen_zero(index_type2())));
+    changed = true;
+  }
+  return changed;
 }
 
 std::vector<irep_idt>
