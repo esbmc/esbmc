@@ -190,6 +190,38 @@ void restore_padding_flags(typet &type)
   }
 }
 
+// Convert each argument to its declared parameter type, mirroring
+// clang_c_adjust::adjust_function_call_arguments (clang_c_adjust_expr.cpp:1069).
+// Callers decide which call forms reach it -- see adjust_expr.
+//
+// Cast only scalar/pointer kinds; an aggregate argument from an upstream typing
+// bug keeps symex's own per-argument diagnostic rather than an unencodable
+// typecast. Idempotent: a second pass sees `got == want` and rewrites nothing.
+bool convert_call_arguments(const type2tc &callee, std::vector<expr2tc> &args)
+{
+  if (!is_code_type(callee))
+    return false;
+
+  const auto is_castable_kind = [](const type2tc &t) {
+    return is_bv_type(t) || is_fixedbv_type(t) || is_floatbv_type(t) ||
+           is_bool_type(t) || is_pointer_type(t);
+  };
+
+  const code_type2t &ct = to_code_type(callee);
+  bool changed = false;
+  for (size_t i = 0; i < args.size() && i < ct.arguments.size(); i++)
+  {
+    const type2tc &want = ct.arguments[i];
+    const type2tc &got = args[i]->type;
+    if (is_castable_kind(want) && is_castable_kind(got) && got != want)
+    {
+      args[i] = typecast2tc(want, args[i]);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 // Insert a gen_zero operand at each reserved padding-member position so the
 // literal's operand list matches the struct's component list, exactly as the
 // legacy adjust_struct insertion loop does. Idempotent when already padded.
@@ -649,7 +681,19 @@ void python_adjust::adjust_expr(expr2tc &expr)
 
     expr2tc fn = s.operand;
     std::vector<expr2tc> args = s.arguments;
-    if (wrap_function_pointer_callee(fn, args))
+    bool changed = wrap_function_pointer_callee(fn, args);
+
+    // Argument conversion belongs to this form only. Legacy reaches
+    // adjust_function_call_arguments exclusively via
+    // adjust_side_effect_function_call; its statement-form arm
+    // (clang_c_adjust_code.cpp, `statement == "function_call"`) adjusts index
+    // expressions and nothing else, so a statement-form call keeps its
+    // arguments verbatim. Converting both forms is a measured parity
+    // regression -- it casts the list-model calls (`list_push(result,
+    // (void *)(&elem), ...)`) legacy leaves alone, trading one closed diff for
+    // roughly ten new ones.
+    changed |= convert_call_arguments(fn->type, args);
+    if (changed)
       expr = sideeffect2tc(s.type, fn, s.size, args, s.alloctype, s.kind);
   }
   else if (is_code_cpp_throw2t(expr))
@@ -696,8 +740,8 @@ bool python_adjust::wrap_function_pointer_callee(
   // a symbol. clang_c_adjust::adjust_side_effect_function_call dereferences
   // *any* pointer-typed callee (clang_c_adjust_expr.cpp, the implicit-deref
   // arm); without it goto-convert calls through the pointer value itself and
-  // the result is read under the wrong signature. Argument casting needs the
-  // table symbol, so it stays on the symbol path above.
+  // the result is read under the wrong signature. This path fixes the callee
+  // only -- argument conversion is the call site's job in adjust_expr.
   if (fs == nullptr || !is_pointer_type(fs->get_type2()))
   {
     if (!is_pointer_type(fn->type))
@@ -715,21 +759,7 @@ bool python_adjust::wrap_function_pointer_callee(
     return false;
   const irep_idt &name = to_symbol2t(fn).thename;
 
-  // Cast only scalar/pointer argument kinds; an aggregate arg from an
-  // upstream typing bug keeps symex's own per-argument diagnostic rather
-  // than an unencodable typecast.
-  const auto is_castable_kind = [](const type2tc &t) {
-    return is_bv_type(t) || is_fixedbv_type(t) || is_floatbv_type(t) ||
-           is_bool_type(t) || is_pointer_type(t);
-  };
-  const code_type2t &ct = to_code_type(pointee);
-  for (size_t i = 0; i < args.size() && i < ct.arguments.size(); i++)
-  {
-    const type2tc &want = ct.arguments[i];
-    const type2tc &got = args[i]->type;
-    if (is_castable_kind(want) && is_castable_kind(got) && got != want)
-      args[i] = typecast2tc(want, args[i]);
-  }
+  convert_call_arguments(pointee, args);
 
   // Build the dereference over the code type — goto-convert's dispatch
   // wants a code-typed callee.
