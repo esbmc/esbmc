@@ -507,7 +507,7 @@ __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 // - size: Size in bytes of the memory region
 // Returns: true when memory is successfully allocated (in contract enforcement mode)
 // Note: Used in requires clauses to specify fresh memory allocation requirements
-_Bool __ESBMC_is_fresh(void*, __SIZE_TYPE__);
+_Bool __ESBMC_is_fresh(const void*, __SIZE_TYPE__);
 
 _Bool __ESBMC_is_little_endian();
 
