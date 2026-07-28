@@ -167,6 +167,29 @@ bool is_padding_member_name(const std::string &name)
          has_prefix(name, "ext_int_pad$") || name == "$pad";
 }
 
+// Re-flag every pad member in the whole legacy type tree. add_padding recurses
+// into component types (padding.cpp:71), so a nested aggregate that is already
+// padded is re-padded unless *its* pad members carry #is_padding too — flagging
+// only the top-level components leaves the inner ones looking like real fields.
+void restore_padding_flags(typet &type)
+{
+  if (type.is_array())
+  {
+    restore_padding_flags(type.subtype());
+    return;
+  }
+
+  if (!type.is_struct() && !type.is_union())
+    return;
+
+  for (auto &comp : to_struct_union_type(type).components())
+  {
+    if (is_padding_member_name(comp.get_name().as_string()))
+      comp.set_is_padding(true);
+    restore_padding_flags(comp.type());
+  }
+}
+
 // Insert a gen_zero operand at each reserved padding-member position so the
 // literal's operand list matches the struct's component list, exactly as the
 // legacy adjust_struct insertion loop does. Idempotent when already padded.
@@ -413,6 +436,32 @@ void python_adjust::adjust_expr(expr2tc &expr)
       code_assign2tc(a.target, address_of2tc(pointee, a.source), a.location);
   }
   else if (
+    is_code_assign2t(expr) && is_sideeffect2t(to_code_assign2t(expr).source) &&
+    to_sideeffect2t(to_code_assign2t(expr).source).kind ==
+      sideeffect2t::allockind::function_call &&
+    to_code_assign2t(expr).source->type != to_code_assign2t(expr).target->type)
+  {
+    // Convert a call result to the target's type, the one shape of
+    // clang_c_adjust::adjust_assign's gen_typecast that is safe to mirror
+    // alone. `length = len(xs)` binds an `unsigned long` model return to a
+    // `signed long` variable; without the conversion convert_assign's
+    // call-valued-rhs special case (goto_convert.cpp) hands the lhs straight to
+    // do_function_call, so no temporary and no cast is emitted and the signed
+    // variable holds an unsigned value -- a later `i < length` then reaches the
+    // solver as a lessthan2t over mismatched operand kinds.
+    //
+    // The general assignment conversion stays parked (see the
+    // assignment-conversion trap in docs/roadmap/scope-v1k-adjuster.md): it is
+    // only sound coupled with operand-level arithmetic reconciliation, and
+    // shipping it alone masks a real bug in neural-net_fail. That coupling is
+    // about reconciling a *binary operation's* operands on the right-hand side,
+    // which a call source has none of -- so this shape carries none of that
+    // risk, and neural-net_fail was re-checked with this arm in place.
+    const code_assign2t &a = to_code_assign2t(expr);
+    expr = code_assign2tc(
+      a.target, typecast2tc(a.target->type, a.source), a.location);
+  }
+  else if (
     is_code_ifthenelse2t(expr) &&
     !is_bool_type(to_code_ifthenelse2t(expr).cond->type))
   {
@@ -636,16 +685,35 @@ bool python_adjust::wrap_function_pointer_callee(
   // adjust_symbol + implicit-deref + adjust_function_call_arguments trio.
   // Inert on the default pipeline (legacy rewrites these calls before
   // migration, so the callee already arrives as a dereference).
-  if (is_nil_expr(fn) || !is_symbol2t(fn))
+  if (is_nil_expr(fn))
     return false;
-  const irep_idt &name = to_symbol2t(fn).thename;
-  const symbolt *fs = context.find_symbol(name);
+
+  const symbolt *fs =
+    is_symbol2t(fn) ? context.find_symbol(to_symbol2t(fn).thename) : nullptr;
+
+  // Any other pointer-to-code callee -- a lambda read back out of a container,
+  // `{'+': lambda: 1.0}[x]()`, whose callee is a typecast of a member read, not
+  // a symbol. clang_c_adjust::adjust_side_effect_function_call dereferences
+  // *any* pointer-typed callee (clang_c_adjust_expr.cpp, the implicit-deref
+  // arm); without it goto-convert calls through the pointer value itself and
+  // the result is read under the wrong signature. Argument casting needs the
+  // table symbol, so it stays on the symbol path above.
   if (fs == nullptr || !is_pointer_type(fs->get_type2()))
-    return false;
+  {
+    if (!is_pointer_type(fn->type))
+      return false;
+    const type2tc &pointee = to_pointer_type(fn->type).subtype;
+    if (!is_code_type(pointee))
+      return false;
+    fn = dereference2tc(pointee, fn);
+    return true;
+  }
+
   // Python points directly at the code type (no typedefs to follow).
   const type2tc &pointee = to_pointer_type(fs->get_type2()).subtype;
   if (!is_code_type(pointee))
     return false;
+  const irep_idt &name = to_symbol2t(fn).thename;
 
   // Cast only scalar/pointer argument kinds; an aggregate arg from an
   // upstream typing bug keeps symex's own per-argument diagnostic rather
@@ -850,10 +918,11 @@ void python_adjust::adjust_type(type2tc &type)
     // identifier, so only add_padding's own members match. (The #bitfield/
     // #extint type flags are likewise dropped by the round-trip, but the
     // Python frontend never emits either, so only #is_padding needs
-    // restoring.)
-    for (auto &comp : to_struct_union_type(legacy).components())
-      if (is_padding_member_name(comp.get_name().as_string()))
-        comp.set_is_padding(true);
+    // restoring.) The walk must be recursive: add_padding pads component types
+    // before the enclosing one, so an already-padded nested aggregate (an
+    // `int | None` attribute inside its class struct) is re-padded unless its
+    // own pad members are flagged too.
+    restore_padding_flags(legacy);
     add_padding(legacy, ns);
     type2tc padded = migrate_type(legacy);
     if (padded != type)

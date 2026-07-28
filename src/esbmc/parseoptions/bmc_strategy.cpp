@@ -524,7 +524,11 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
     // via (get-value). Report a clean failure rather than let the exception
     // reach std::terminate.
     log_error("SMT solver process failed: {}", e.what());
-    res = P_ERROR;
+    // A violation already found and printed is not retracted by a later
+    // interleaving whose solver then died (--multi-property explores past the
+    // first violation).
+    res = goto_functionst::property_verdicts.has_violation() ? P_SATISFIABLE
+                                                             : P_ERROR;
   }
 
 #ifdef HAVE_SENDFILE_ESBMC
