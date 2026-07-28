@@ -2,9 +2,9 @@
  * Tier-A harness template — docs/roadmap/goto-symex-verification-plan.md, M0.
  *
  * SYMEX-HARNESS-TARGET: src/goto-symex/renaming.cpp::renaming::level2t::make_assignment
- * SYMEX-HARNESS-SHA256: ee23b753191f2cfbaab575c2d40aa016bea6752ac071792f8f53dc8069a5eecc
+ * SYMEX-HARNESS-SHA256: 498622841f15c52ffccc9e727471ddb09a7a092cde0b64ee69cdd61f3a6dc176
  * SYMEX-HARNESS-TARGET: src/goto-symex/renaming.cpp::renaming::level2t::coveredinbees
- * SYMEX-HARNESS-SHA256: a913ec311a854d4e6a99e6063d749c1e340a6c04a4156a106a6367262810c624
+ * SYMEX-HARNESS-SHA256: 517dfba7f965646e21dd94d32a4e2be51d110275a0e056ed5d98a7fb5a85bf78
  *
  * Discharges (partially, at the smoke level): I1 / P4 / P8 / P12 — the L2
  * counter published by make_assignment is fresh, strictly increasing per key,
@@ -17,8 +17,9 @@
  *     enumerates a bounded key space, per §6.1 rule 4 (bound the shape).
  *   before < UINT_MAX
  *     src/goto-symex/renaming.cpp::renaming::level2t::coveredinbees — its
- *     assert(entry.count <= count) is the engine-side statement that counts
- *     only ever grow. Discharged by Tier B (H-B1) rather than assumed there.
+ *     SYMEX_INVARIANT(entry.count <= count) is the engine-side statement that
+ *     counts only ever grow, checked in release builds since M3. Discharged by
+ *     Tier B (H-B1) rather than assumed there.
  *
  * Variants — one source, selected by -D on test.desc line 3, so the twins
  * cannot drift from the kernel they perturb:
