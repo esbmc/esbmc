@@ -131,14 +131,20 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
   const locationt &here =
     (own.is_not_nil() && !own.get_file().empty()) ? own : inherited;
 
-  if (here.get_file().empty())
-    return; // no location to propagate yet
+  // Keep descending even with nothing to propagate: a nested statement may
+  // carry its own location and govern its own subtree. __ESBMC_main's
+  // synthesised block is the case that matters -- static_lifetime_init builds
+  // an unlocated code_blockt whose child assignments are located from their
+  // symbols (clang_c_main.cpp:25), so returning here left every global
+  // initializer's value operands bare, and a side-effecting one
+  // (`int A = nondet_int();`) lowered to an unlocated ASSIGN.
+  const bool have_location = !here.get_file().empty();
 
   Forall_operands (it, code)
   {
     if (it->is_code())
       restore_value_locations(*it, here);
-    else
+    else if (have_location)
       stamp_value_locations(*it, here);
   }
 }
