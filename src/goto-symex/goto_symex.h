@@ -277,6 +277,20 @@ protected:
   virtual void claim(const expr2tc &expr, const std::string &msg);
 
   /**
+   *  Record a verdict for the claim being symbolically executed.
+   *  Used for claims symex discharges itself, so that they are reported once
+   *  per run alongside the ones the solver discharges, rather than once per
+   *  thread interleaving.
+   *  @param msg Textual message explaining the claim.
+   *  @param verdict Outcome to record.
+   *  @param note How the verdict was reached, when it needs qualifying.
+   */
+  void record_property_verdict(
+    const std::string &msg,
+    property_verdictt verdict,
+    const std::string &note = "");
+
+  /**
    *  Perform an assertion.
    *  Adds to target an assertion that must be checked.
    *  @param assertion Assertion that must be checked.

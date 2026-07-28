@@ -921,3 +921,127 @@ believing a zero.
 
 `github_3690` (a dict-of-lambda call returning `1.0000000000000002` instead of
 `1.0`) is the other open case and is unrelated.
+
+### Per-case triage round 9 — the `#is_padding` restore was shallow (2026-07-27)
+
+**✅ FIXED — `github_4745_pep604_class_attr`.** Round 8 placed the second pad
+"downstream of `python_adjust`"; it is in fact the *same* arm, one level of
+recursion down. `add_padding` pads **component types before the enclosing one**
+(`padding.cpp:71`), so one top-level call walks the whole aggregate tree. The
+`#is_padding` re-derivation the arm performs beforehand only flagged the
+**top-level** components, so when `add_padding(Box)` descended into the
+already-padded `int | None` attribute, that struct's pad member looked like an
+ordinary 7-byte field and was aligned as one — `1 → +6 → 7` for the inserted
+`_ExtInt(48)`, then `value` at `14 → +2 → 16` for the `short`. Fixed by making
+the restore recursive over struct/union components and array subtypes.
+
+This also explains round 8's confusing probe reading. The arm was observed
+receiving `{is_none, value}` (unpadded) five times and correctly emitting
+`{is_none, anon_pad$1, value}` each time — all true, and all irrelevant: the
+damage was done by the **`Box`** firing, whose own components (`x`, `flag`) carry
+no pad name, so the shallow loop had nothing to flag and the nested re-pad was
+invisible at that print site. **A probe that prints only the node it is attached
+to cannot see a defect in what that node's callee recurses into.**
+
+The hop-off `tag-Optional_signedbv` now matches legacy byte-for-byte. Control run
+(patch stashed, rebuilt): the two divergences a 70-test strided census reports —
+`div6_fail` (`mk_not` on a non-Boolean, the round-8 defect) and
+`github_3034_split-dot-valid-zero_fail` (`Assertion failed:
+(is_signedbv_type(lt.side_1) && is_signedbv_type(lt.side_2))`,
+`smt_solver.cpp:1512` — a `lessthan2t` over mismatched operand kinds) — reproduce
+identically **without** this patch, so neither is caused by it. `div6_fail` is
+closed by round 8, which confirms that arm reaches past `none3`;
+`github_3034_split-dot-valid-zero_fail` is a new, distinct signature and is the
+next case.
+
+### Per-case triage round 10 — the call-return seam; `github_3034` is S4 (2026-07-27)
+
+`github_3034_split-dot-valid-zero_fail` aborts under hop-off at
+`Assertion failed: (is_signedbv_type(lt.side_1) && is_signedbv_type(lt.side_2))`
+(`smt_solver.cpp:1512`) — a `lessthan2t` whose operands are a `signed long`
+variable and an `unsigned long` value. The GOTO diff shows two distinct sources
+for that mismatch, and only one of them is separable.
+
+**✅ Landed — the call-return seam.** `length = len(xs)` binds the list model's
+`unsigned long` return to a `signed long` variable. Legacy emits a temporary of
+the callee's return type and converts:
+
+```
+legacy:  DECL unsigned long int return_value$___ESBMC_list_size$1;
+         FUNCTION_CALL: return_value$___ESBMC_list_size$1=list_size(iterable)
+         ASSIGN length=(signed long int)return_value$___ESBMC_list_size$1;
+hop-off: FUNCTION_CALL: length=list_size(iterable)
+```
+
+The single instruction is not an optimisation — `convert_assign`'s
+call-valued-rhs special case hands the lhs straight to `do_function_call`, which
+emits no temporary and no cast, so the signed variable simply holds an unsigned
+value. On the legacy path that case is never taken, because `adjust_assign` has
+already wrapped the rhs in a typecast. Mirrored here **only for a
+`sideeffect2t(function_call)` source**.
+
+**Why this fragment of the parked assignment conversion is safe.** The trap
+documented above is that `adjust_assign` runs *after* `adjust_operands`, so
+converting at the assignment seam without operand-level arithmetic reconciliation
+changes the stored value. That coupling is about reconciling a **binary
+operation's** operands on the right-hand side — which a call source does not
+have. The general arm stays parked.
+
+**The S4 canary no longer works, and this must be fixed before S4 is attempted.**
+The record pins the danger on `neural-net_fail` reporting SUCCESSFUL where legacy
+reports FAILED. It no longer reports anything under hop-off: it aborts in
+`assert_arith_2ops_consistency` (`irep2_expr.cpp:678`) before any verdict, and a
+control run (this arm stashed and rebuilt) reproduces that abort identically, so
+the abort is pre-existing and unrelated. Whoever picks up S4 must re-establish a
+canary that actually produces a hop-off verdict first.
+
+**`github_3034` is not closed by this and stays open on S4.** With the call-return
+arm in, the residual hop-off diffs on that test are all the parked shape or its
+siblings: `i = (signed long)(list_size(...) - 1)` (an *arithmetic* rhs — the
+coupled case), `element = (_Bool)tmp$5`, `get_object_size((void *)bytes_data)` and
+`validate_no_empty_parts(&price[0])` (argument conversions, S5), and
+`(signed int)contains_tmp163 == 1` (relational promotion).
+
+**Effect measured.** No verdict moves in a 70-test strided census — like the
+`&array` decay (#6395) this closes a *structural* parity gap, and is recorded as
+such rather than as a divergence fix. A control build confirms the shape: without
+the arm a plain `n = len(xs)` emits `FUNCTION_CALL: n=list_size(xs)` into a
+`signed long`; with it, the temporary and cast match legacy exactly. The census on
+this branch is 69/70, the one divergence being `github_3034` itself (`div6_fail`
+was closed by round 8).
+
+### Per-case triage round 11 — a pointer callee that is not a symbol (2026-07-27)
+
+**✅ FIXED — `github_3690`** (legacy SUCCESSFUL → hop-off FAILED, the counterexample
+showing `result = 1.0000000000000002` where `1.0` was asserted). The GOTO diff
+puts it in the call itself, not the value:
+
+```
+legacy:  FUNCTION_CALL: return_value$=*(*(void (*)() *)…dict_val_obj->value)()
+hop-off: FUNCTION_CALL: return_value$= *(void (*)() *)…dict_val_obj->value ()
+```
+
+`clang_c_adjust::adjust_side_effect_function_call` wraps **any** pointer-typed
+callee in an implicit dereference. `python_adjust`'s `wrap_function_pointer_callee`
+only handled a callee that is a plain `symbol2t` whose *table* type is
+pointer-to-code — the lambda-alias shape (`op = lambda …; op(3)`) it was written
+for. `{'+': lambda: 1.0}[x]()` reads the lambda back out of a container, so the
+callee is a **typecast of a member read**, the wrapper returned false, and
+goto-convert called through the pointer value itself. The result was then read
+under the wrong signature, which is why the failure surfaced as a corrupted
+double rather than an outright crash. Generalised: when the callee is not a
+table pointer-to-code symbol but its own type is pointer-to-code, dereference it.
+Argument casting stays on the symbol path, which needs the table entry.
+
+**A rejected first hypothesis, recorded so it is not re-tried.** The same diff
+also shows `ASSIGN …list_elem$175=(double (*)())(&lam1)` against a bare `&lam1`,
+i.e. a missing conversion where the lambda's address is *stored*. That looks like
+the more obvious cause and it is not the cause: an arm converting an
+`address_of` of a code object at the assignment seam **never fired** on this test
+(the shape reaching `code_assign2t` is not that), and the case still failed. The
+arm was removed rather than kept as dead instrumentation. Fix the call, not the
+store.
+
+Census after this round: **69/70** on the strided sample, the single divergence
+being `github_3034_split-dot-valid-zero_fail`, which is the parked S4 work
+(round 10).
