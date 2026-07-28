@@ -215,7 +215,14 @@ bool convert_call_arguments(const type2tc &callee, std::vector<expr2tc> &args)
     const type2tc &got = args[i]->type;
     if (is_castable_kind(want) && is_castable_kind(got) && got != want)
     {
+      const bool fold = is_constant_expr(args[i]);
       args[i] = typecast2tc(want, args[i]);
+      // Legacy folds a cast over a constant into the literal
+      // (c_typecastt::do_typecast's exprt overload, c_typecast.cpp:911-922);
+      // its expr2tc overload does not, so mirroring only the wrap leaves
+      // `(signed long int)3` where legacy prints a bare `3`.
+      if (fold)
+        simplify(args[i]);
       changed = true;
     }
   }
