@@ -525,6 +525,7 @@ public:
     }
   }
 
+#if __cplusplus >= 201103L
   map(std::initializer_list<value_type> list)
   {
     this->_size = list.size();
@@ -535,6 +536,7 @@ public:
       this->_value[i] = (begin + i)->second;
     }
   }
+#endif
 
   T &operator[](const Key &x)
   {
