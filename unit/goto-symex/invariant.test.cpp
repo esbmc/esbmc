@@ -17,6 +17,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
+#include <array>
 #include <functional>
 #include <string>
 
@@ -108,9 +109,9 @@ void require_invariant_abort(
 
   close(pipe_fds[1]);
   std::string captured;
-  char buffer[512];
-  for (ssize_t n; (n = read(pipe_fds[0], buffer, sizeof(buffer))) > 0;)
-    captured.append(buffer, n);
+  std::array<char, 512> buffer;
+  for (ssize_t n; (n = read(pipe_fds[0], buffer.data(), buffer.size())) > 0;)
+    captured.append(buffer.data(), n);
   close(pipe_fds[0]);
 
   int status = 0;
