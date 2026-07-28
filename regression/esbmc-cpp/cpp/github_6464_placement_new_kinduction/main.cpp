@@ -1,5 +1,5 @@
-// github #6464 (control): the same program under plain BMC, the mode that was
-// always correct, so a fix cannot trade one mode for the other.
+// github #6464 (k-induction): the same program under the other mode the
+// defect hit; see github_6464_placement_new_incremental.
 #include <new>
 #include <cstdlib>
 

@@ -1,16 +1,7 @@
-// KNOWNBUG (github #6464): placement-new into malloc'd storage is reported as
-// an out-of-bounds heap write under --incremental-bmc and --k-induction, while
-// plain BMC (default, and every explicit --unwind N) proves the same program
-// safe. Clean under clang++ -std=c++17 -fsanitize=address,undefined.
-//
-// Two ingredients are needed, both bisected on the issue: the placement-new
-// itself (any plain assignment through the same address is fine, including via
-// a void* round-trip across a function boundary), and a second malloc on a
-// guarded path -- here grow(), which is never executed.
-//
-// This blocks #6368: constructing vector elements with placement-new is the
-// right fix there, but it would make every growable std::vector<T> report a
-// spurious failure in these two modes.
+// github #6464: placement-new into malloc'd storage was reported as an
+// out-of-bounds heap write under --incremental-bmc and --k-induction, but only
+// when a second malloc sits on a guarded path. Clean under clang++ -std=c++17
+// -fsanitize=address,undefined.
 #include <new>
 #include <cstdlib>
 
@@ -34,8 +25,8 @@ struct Holder
     cap = 10;
   }
 
-  // Never executed below (n is 0, cap is 10), but its presence is what makes
-  // the placement-new in add() report a spurious out-of-bounds heap write.
+  // Never executed (n is 0, cap is 10); its mere presence is what triggered
+  // the false positive.
   void grow()
   {
     Elem *nb = (Elem *)malloc(sizeof(Elem) * 20);

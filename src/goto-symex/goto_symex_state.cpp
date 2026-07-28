@@ -167,6 +167,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   {
     if (
       config.language.lid != language_idt::PYTHON &&
+      !is_struct_type(expr->type) &&
       (config.options.get_bool_option("incremental-bmc") ||
        config.options.get_bool_option("k-induction")))
       // When this option is enabled, the constant propagation
@@ -174,6 +175,11 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // More importantly, the use of incremental-BMC / k-induction does not heavily
       // rely on constants to determine the boundaries. Even if there is a known
       // loop size, esbmc starts unwinding from min k
+      //
+      // Structs are exempt: their pointer fields are what lets the value-set
+      // analysis resolve a later dereference to a single object, without which
+      // placement-new's `this` stays ambiguous and the bounds check reports a
+      // spurious heap out-of-bounds (#6464).
       return false;
 
     // Handle WITH chains for structs where all updates are constants
