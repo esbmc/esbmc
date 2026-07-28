@@ -1,6 +1,7 @@
 #include <python-frontend/python_adjust.h>
 
 #include <clang-c-frontend/padding.h>
+#include <util/lang/c_typecast.h>
 #include <irep2/irep2_utils.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
@@ -388,6 +389,44 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // has pointer type -- otherwise reaches the SMT layer as a negation of a
     // non-boolean sort and trips bitwuzla's mk_not assert. not2t is immutable.
     expr = not2tc(typecast2tc(get_bool_type(), to_not2t(expr).value));
+  }
+  else if (
+    is_lessthan2t(expr) || is_lessthanequal2t(expr) || is_greaterthan2t(expr) ||
+    is_greaterthanequal2t(expr))
+  {
+    // clang_c_adjust::adjust_expr_rel reconciles the two operands with
+    // gen_typecast_arithmetic (the usual arithmetic conversions). Mirrored only
+    // for the shape the SMT layer cannot encode: an ordering relation whose
+    // operands disagree in signedness, which smt_convt::convert_ast_node has no
+    // arm for and aborts on (smt_solver.cpp:1512 -- it dispatches on *both*
+    // sides being unsigned or *both* signed). `while i < len(parts)` is the
+    // canonical source: the loop variable is a Python int (signed long) and the
+    // list model returns unsigned long, so hop-off reaches the solver with
+    // `i < list_size(...)` unreconciled and never produces a verdict.
+    //
+    // Deliberately not the general relational mirror: running
+    // gen_typecast_arithmetic on *every* relational node was tried and rejected
+    // (docs/roadmap/scope-v1k-adjuster.md, "gap-2") because it diverges
+    // corpus-wide from clang's promotions over the OM bodies. The
+    // signedness-mismatch gate excludes that traffic -- a same-signedness
+    // width promotion (char vs int) is encodable and stays untouched -- and
+    // leaves only nodes that are otherwise a hard abort.
+    std::vector<expr2tc *> ops;
+    expr->Foreach_operand([&ops](expr2tc &op) { ops.push_back(&op); });
+
+    if (
+      ops.size() == 2 && is_bv_type((*ops[0])->type) &&
+      is_bv_type((*ops[1])->type) &&
+      is_signedbv_type((*ops[0])->type) != is_signedbv_type((*ops[1])->type))
+    {
+      // The expr2tc overload, not the legacy exprt one clang_c_adjust calls:
+      // same usual-arithmetic-conversion rule with no migrate round-trip, so an
+      // operand cannot pick up a spurious wrap from a type that fails to compare
+      // equal to itself after migration -- the first of the two "gap-2"
+      // negative results. Same helper python_math's floor-div/modulo width
+      // reconciliation uses (#5725).
+      c_implicit_typecast_arithmetic(*ops[0], *ops[1], ns);
+    }
   }
   else if (
     is_typecast2t(expr) && is_pointer_type(expr->type) &&

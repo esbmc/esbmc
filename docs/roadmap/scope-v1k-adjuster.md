@@ -1183,3 +1183,63 @@ and is at parity on the round-13 binary. Useful independent evidence that round
 13 closes more than its own repro.
 
 Tests: `regression/python/python_irep2_adjust_only_arg_decay{,_fail}`.
+### Per-case triage round 13 — the relational signedness abort (2026-07-28)
+
+**Re-measure first, as always.** Round 11's two open items shrank to one before any
+triage: `github_3690` is **closed** (legacy and hop-off both SUCCESSFUL, and its
+`_fail` sibling both FAILED) — #6445 did what it claimed and the entry was stale.
+
+**✅ FIXED — `github_3034_split-dot-valid-zero` and its `_fail` sibling.** These are
+the tests round 10 parked on S4, and **the recorded diagnosis was wrong**. The
+residual is not the list of promotions round 10 enumerated; hop-off does not reach
+a verdict at all. It aborts in the solver:
+
+```
+Assertion failed: (is_signedbv_type(lt.side_1) && is_signedbv_type(lt.side_2)),
+  function convert_ast_node, file smt_solver.cpp, line 1512.
+```
+
+`smt_convt::convert_ast_node`'s `lessthan` case dispatches on *both* sides being
+floatbv, *both* fixedbv, *both* unsignedbv, or — in the final `else` — *both*
+signedbv. An ordering relation whose operands disagree in signedness matches no
+arm and trips the assert. `while i < len(parts)` produces exactly that: the loop
+variable is a Python int (`signed long`) and the list model's `list_size` returns
+`unsigned long`. The whole GOTO diff for the enclosing function was **one cast**:
+
+```
+legacy:  IF !((unsigned long int)i < return_value$___ESBMC_list_size$1) THEN GOTO 3
+hop-off: IF !(i < return_value$___ESBMC_list_size$1) THEN GOTO 3
+```
+
+`clang_c_adjust::adjust_expr_rel` reconciles the two operands with
+`gen_typecast_arithmetic`; `python_adjust` had no relational arm at all, so the
+node reached the SMT layer unreconciled.
+
+**Why this is not the rejected "gap-2" arm.** Running `gen_typecast_arithmetic` on
+*every* relational node was tried in round 3 and rejected: it diverges corpus-wide
+from clang's promotions over the OM bodies (~7500 diff lines on `builtin2` alone),
+for a purely cosmetic gain. This arm is gated on the **signedness mismatch** — the
+one shape that is not encodable at all. A same-signedness width promotion
+(`char` vs `int`, gap-2's target) is encodable and stays untouched, so none of
+that traffic is re-admitted. The arm also calls
+`c_implicit_typecast_arithmetic`'s **`expr2tc` overload**, so there is no migrate
+round-trip and gap-2's first negative result — an operand picking up a spurious
+wrap because its migrated type does not compare equal to itself — cannot arise by
+construction. It is the same helper `python_math`'s floor-div/modulo
+reconciliation uses (#5725).
+
+**Relation to the parked S4 trap.** S4's danger is mirroring `adjust_assign`
+*without* operand-level arithmetic reconciliation, which makes `neural-net_fail`
+report SUCCESSFUL where legacy correctly FAILS. This arm is the reconciliation
+half, and only for relationals: it changes no stored value, it makes an otherwise
+unencodable node encodable, and its output is byte-identical to what legacy
+already emits. The masking direction is the assignment half, which stays parked.
+The S4 canary is still broken (round 10) and must still be re-established before
+the assignment half is attempted.
+
+**C-Live discharged by probe, not argument.** Both new tests *abort* on a control
+build with the arm reverted and rebuilt, and pass with it — the arm is live, not
+dead instrumentation. Idempotent: after one application both operands share a
+signedness, so the gate cannot re-fire.
+
+Tests: `regression/python/python_irep2_adjust_only_rel_signedness{,_fail}`.
