@@ -1,16 +1,10 @@
 /*******************************************************************
  Module: Release-mode enforcement of goto-symex's state invariants
 
- Tier B of docs/roadmap/goto-symex-verification-plan.md (R1, M3).
-
- M1 and M2 proved things about invariants that the *shipped* binary does not
- check: every ESBMC configuration compiles with -DNDEBUG, so the `assert`s
- documenting them are no-ops exactly where a violation would matter. M3 promotes
- the load-bearing ones to `SYMEX_INVARIANT`, and this file is the evidence that
- the promotion is real: each case violates one invariant on the real engine
- state and requires the process to die with *our* diagnostic. Matching the
- message is what distinguishes a live `SYMEX_INVARIANT` from a libc `assert`
- that NDEBUG has already removed.
+ Tier B of docs/roadmap/goto-symex-verification-plan.md (R1, M3). Each case
+ violates one invariant on the real engine state and requires the process to die
+ with our own diagnostic: matching the message is what distinguishes a live
+ SYMEX_INVARIANT from a libc `assert` that NDEBUG has already removed.
 
  \*******************************************************************/
 
@@ -21,8 +15,7 @@
 #include <functional>
 #include <string>
 
-// The death tests fork and wait on a POSIX child; guard the mechanism (and the
-// cases that use it) out on Windows, which has neither fork() nor <sys/wait.h>.
+// Windows lacks fork() and <sys/wait.h>, so the death tests are POSIX-only.
 #if !defined(_WIN32)
 #  include <csignal>
 #  include <sys/wait.h>
@@ -110,6 +103,8 @@ void require_invariant_abort(
   close(pipe_fds[1]);
   std::string captured;
   std::array<char, 512> buffer;
+  // Bounded by the destination's own size, and its result bounds the append.
+  // flawfinder: ignore
   for (ssize_t n; (n = read(pipe_fds[0], buffer.data(), buffer.size())) > 0;)
     captured.append(buffer.data(), n);
   close(pipe_fds[0]);
@@ -127,8 +122,7 @@ void require_invariant_abort(
 
 TEST_CASE("a well-formed run trips no invariant", "[symex][invariant]")
 {
-  // Non-vacuity for every case below: the promoted checks are on paths symex
-  // takes constantly, and none of them fires on a correct run.
+  // Non-vacuity: the promoted checks are on paths symex takes constantly.
   engine e;
   e.run();
   goto_symex_statet &state = e.state();
@@ -149,8 +143,7 @@ TEST_CASE("a well-formed run trips no invariant", "[symex][invariant]")
 #if !defined(_WIN32)
 TEST_CASE("previous_frame with no caller aborts (R7)", "[symex][invariant]")
 {
-  // Pre-M3 this formed `begin() - 1` on a std::vector and read it: undefined by
-  // [expr.add]/4, and silent. It is now a located diagnostic.
+  // Pre-M3 this formed `begin() - 1` and read it: undefined by [expr.add]/4.
   require_invariant_abort(
     []() {
       engine e;
@@ -166,8 +159,7 @@ TEST_CASE(
   "popping a frame with pending merges aborts (I6/R2)",
   "[symex][invariant]")
 {
-  // The frame's merge snapshots are the paths a join still owes. Dropping them
-  // loses those paths from the formula with no diagnostic — the R2 finding.
+  // The snapshots are paths a join still owes; dropping them was silent (R2).
   require_invariant_abort(
     []() {
       engine e;
@@ -180,8 +172,7 @@ TEST_CASE(
 
 TEST_CASE("an L2 counter moving backwards aborts (I1)", "[symex][invariant]")
 {
-  // Reissuing an index would let two distinct program values share one SSA
-  // name — the violation class M1's ssa_wellformed tests detect after the fact.
+  // Reissuing an index lets two program values share one SSA name.
   require_invariant_abort(
     []() {
       engine e;
@@ -196,8 +187,7 @@ TEST_CASE("an L2 counter moving backwards aborts (I1)", "[symex][invariant]")
 
 TEST_CASE("assigning to a non-L1 name aborts (I2)", "[symex][invariant]")
 {
-  // The L2 counter map is keyed by the L1 name record; an L0 lhs would key a
-  // different entry than the one the caller then publishes from.
+  // An L0 lhs keys a different entry than the one the caller publishes from.
   require_invariant_abort(
     []() {
       engine e;
