@@ -1138,8 +1138,20 @@ declared parameter type, and `c_typecastt`'s array case **decays** rather than
 casts. `python_adjust` had no argument conversion for a *direct* call at all:
 `wrap_function_pointer_callee` does cast arguments, but only on the
 pointer-to-code callee path, and its `is_castable_kind` list excludes arrays. New
-`decay_array_arguments`, wired into both call arms (statement-form
-`code_function_call2t` and expression-form `sideeffect2t`).
+`decay_array_arguments`, on the **expression-form** arm only — the same
+restriction round 12 (#6461) established for argument casting, reached here by
+probe rather than by inheriting the argument. A statement-form wiring was
+written first and removed: **0 firings across 70 tests**, against 1 for
+expression-form. `e = is_foo(...)` is a `code_assign2t` over a `sideeffect2t`
+at adjust time and only becomes a statement-form `FUNCTION_CALL` later in
+goto-convert, so the statement-form arm could never see it.
+
+**The `expr2tc` constant-fold gap round 12 flagged does not reach the relational
+arm.** #6461 warns that any arm mirroring a `gen_typecast` into IREP2 inherits
+`do_typecast`'s missing constant fold. Probed on round 13's relational arm with
+`len(s) < 5`: legacy itself emits `(unsigned long int)5` unfolded and hop-off is
+byte-identical. The fold lives on the `implicit_typecast` → `do_typecast`
+argument path, not in `implicit_typecast_arithmetic`. No fix needed there.
 
 Scoped to the array→pointer shape only, which is **structural** — the same object,
 addressed differently. The scalar width/signedness half of S5 changes stored

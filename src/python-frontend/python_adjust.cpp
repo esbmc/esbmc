@@ -631,9 +631,7 @@ void python_adjust::adjust_expr(expr2tc &expr)
     const code_function_call2t &c = to_code_function_call2t(expr);
     expr2tc fn = c.function;
     std::vector<expr2tc> args = c.operands;
-    bool changed = wrap_function_pointer_callee(fn, args);
-    changed = decay_array_arguments(fn, args) || changed;
-    if (changed)
+    if (wrap_function_pointer_callee(fn, args))
       expr = code_function_call2tc(c.ret, fn, args, c.location);
   }
   else if (
@@ -691,7 +689,7 @@ void python_adjust::adjust_expr(expr2tc &expr)
     expr2tc fn = s.operand;
     std::vector<expr2tc> args = s.arguments;
     bool changed = wrap_function_pointer_callee(fn, args);
-    changed = decay_array_arguments(fn, args) || changed;
+    changed |= decay_array_arguments(fn, args);
 
     // Argument conversion belongs to this form only. Legacy reaches
     // adjust_function_call_arguments exclusively via
@@ -791,8 +789,11 @@ bool python_adjust::decay_array_arguments(
   // argument is neither an address_of nor an assignment source.
   //
   // Scoped to the array→pointer shape, which is a *structural* rewrite (the
-  // value is the same object, addressed differently). The scalar
-  // width/signedness half of S5 changes stored values and stays out.
+  // value is the same object, addressed differently), and — like
+  // convert_call_arguments (#6461) — to expression-form calls only. A
+  // statement-form wiring was tried and removed: 0 firings across 70 tests,
+  // because `e = f(...)` is a code_assign2t over a sideeffect2t at adjust time
+  // and only becomes a statement-form FUNCTION_CALL later in goto-convert.
   if (is_nil_expr(fn))
     return false;
 
