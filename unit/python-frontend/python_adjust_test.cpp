@@ -1039,6 +1039,38 @@ TEST_CASE(
   REQUIRE(is_code_type(c.function->type));
   REQUIRE(is_pointer_type(to_dereference2t(c.function).value->type));
   REQUIRE(c.operands.size() == 1);
+  // The argument is a constant, so the conversion folds into the literal
+  // rather than wrapping it, matching c_typecastt::do_typecast's exprt
+  // overload (c_typecast.cpp:911-922).
+  REQUIRE(is_constant_int2t(c.operands[0]));
+  REQUIRE(c.operands[0]->type == get_int32_type());
+}
+
+TEST_CASE(
+  "python_adjust wraps a non-constant converted argument",
+  "[python-adjust]")
+{
+  // The other half of the fold: only a constant collapses into the literal,
+  // a symbol keeps a visible typecast.
+  contextt ctx;
+  const type2tc code_t = add_funcptr_var(ctx, "py_fptr_sym_arg");
+
+  symbolt arg_var;
+  arg_var.id = arg_var.name = "py_arg_u64";
+  arg_var.mode = "Python";
+  arg_var.set_type(get_uint64_type());
+  ctx.add(arg_var);
+
+  const expr2tc callee = symbol2tc(code_t, "py_fptr_sym_arg");
+  const expr2tc arg = symbol2tc(get_uint64_type(), "py_arg_u64");
+  expr2tc call = code_function_call2tc(
+    expr2tc(), callee, std::vector<expr2tc>{arg}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(call);
+
+  const code_function_call2t &c = to_code_function_call2t(call);
+  REQUIRE(c.operands.size() == 1);
   REQUIRE(is_typecast2t(c.operands[0]));
   REQUIRE(c.operands[0]->type == get_int32_type());
 }
