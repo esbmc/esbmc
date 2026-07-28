@@ -5,11 +5,11 @@
 
 #include <algorithm>
 
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/std_expr.h>
-#include <util/type_byte_size.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/type_byte_size.h>
 
 static struct_typet::componentst::iterator pad_bit_field(
   struct_typet::componentst &components,
@@ -59,6 +59,18 @@ static struct_typet::componentst::iterator pad(
   return std::next(components.insert(where, component));
 }
 
+/* add_padding() must be idempotent: clang_c_adjust::adjust_type() re-runs it
+ * over types that the frontend has already laid out, and re-inserting the
+ * _ExtInt pad would grow the struct on every call. */
+static bool follows_ext_int_padding(
+  struct_typet::componentst::const_iterator where,
+  const struct_typet::componentst &components)
+{
+  struct_typet::componentst::const_iterator next = std::next(where);
+  return next != components.end() && next->get_is_padding() &&
+         next->type().get_bool("#extint");
+}
+
 static void add_padding(struct_typet &type, const namespacet &ns)
 {
   /* components only exist for complete types */
@@ -106,7 +118,9 @@ static void add_padding(struct_typet &type, const namespacet &ns)
       }
 
       // Pad out extints that aren't in bitfields
-      if (is_extint && !is_bitfield)
+      if (
+        is_extint && !is_bitfield && !it->get_is_padding() &&
+        !follows_ext_int_padding(it, components))
       {
         assert(bit_field_bits == 0);
 

@@ -1,4 +1,4 @@
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
@@ -21,16 +21,16 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/exception_specification.h>
-#include <util/string_constant.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/lang/exception_specification.h>
+#include <util/expr/string_constant.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -956,6 +956,19 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::ConditionalOperatorClass:
+  {
+    const clang::ConditionalOperator &ternary =
+      static_cast<const clang::ConditionalOperator &>(stmt);
+
+    bool elided = false;
+    if (get_conditional_class_prvalue(ternary, new_expr, elided))
+      return true;
+    if (!elided && clang_c_convertert::get_expr(stmt, new_expr))
+      return true;
+    break;
+  }
+
   case clang::Stmt::CXXPseudoDestructorExprClass:
   {
     const clang::CXXPseudoDestructorExpr &cxxpd =
@@ -1221,56 +1234,47 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     std::string type_name;
     // For a polymorphic glvalue operand, [expr.typeid]/2 requires the operand
-    // to be evaluated (the dynamic type is read from the object's vtable). We
-    // model that by reading the operand's vtable pointer, so a typeid applied
-    // to `*p` with a null `p` faults on the dereference — the standard mandates
-    // std::bad_typeid there. `vtable_read` holds that read when applicable.
+    // to be evaluated: the answer is the *dynamic* type, which is only
+    // reachable through the object's vtable. `vtable_read` holds that read when
+    // applicable; it also faults on a null `*p`, as std::bad_typeid mandates.
     exprt vtable_read = nil_exprt();
+    // Name of the vtable component holding the dynamic type's printed name,
+    // empty unless the operand is a polymorphic glvalue.
+    irep_idt dynamic_name_comp;
     if (cxxtid.isTypeOperand())
     {
       const clang::QualType qtype = cxxtid.getTypeOperand(*ASTContext);
-      type_name = qtype.getAsString();
+      type_name = rtti_type_name(qtype);
     }
     else
     {
       const clang::QualType qtype = cxxtid.getExprOperand()->getType();
-      type_name = qtype.getAsString();
+      type_name = rtti_type_name(qtype);
 
       const clang::CXXRecordDecl *rd = qtype->getAsCXXRecordDecl();
-      // [expr.typeid]/2 singles out the case where the operand is obtained by
-      // dereferencing a pointer: a null pointer there yields std::bad_typeid.
-      // Detect that `*p` form at the AST level so a plain lvalue operand (which
-      // cannot be null) keeps its existing handling untouched.
-      const auto *unary = llvm::dyn_cast<clang::UnaryOperator>(
-        cxxtid.getExprOperand()->IgnoreParenImpCasts());
-      const bool is_deref_operand =
-        unary && unary->getOpcode() == clang::UO_Deref;
-      if (
-        !cxxtid.isMostDerived(*ASTContext) && rd && rd->isPolymorphic() &&
-        is_deref_operand)
+      if (!cxxtid.isMostDerived(*ASTContext) && rd && rd->isPolymorphic())
       {
         exprt operand;
         if (get_expr(*cxxtid.getExprOperand(), operand))
           return true;
 
         const typet &op_type = ns.follow(operand.type());
-        if (operand.id() == "dereference" && op_type.is_struct())
+        if (op_type.is_struct())
           for (const auto &comp : to_struct_type(op_type).components())
             if (comp.get_bool("is_vtptr"))
             {
               vtable_read = member_exprt(operand, comp.name(), comp.type());
+              dynamic_name_comp = rtti_name_component_id(
+                to_pointer_type(comp.type()).subtype().identifier());
               break;
             }
       }
     }
 
-    exprt size = constant_exprt(
-      integer2binary(type_name.size(), bv_width(size_type())),
-      integer2string(type_name.size()),
-      size_type());
-
-    typet arr = array_typet(char_type(), size);
-    string_constantt string_name(type_name, arr, string_constantt::k_default);
+    // Size the array as type_name.size() + 1 so the stored string keeps its
+    // terminating '\0'; type_info::name() returns this pointer, and reading it
+    // as a C string (e.g. strlen) would otherwise run off the end (#6308).
+    string_constantt string_name(type_name);
 
     typet t;
     if (get_type(cxxtid.getType(), t))
@@ -1280,9 +1284,21 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // assigned to the temporary object
     // tmp = { .__name=&"int"[0], .std::type_info@vtable_pointer=0 }
     // const std::type_info& = &tmp
-    // Front end can't account for polymorphism
+    // type_info identity is the __name pointer, so for a polymorphic glvalue
+    // __name is taken from the vtable the object actually points at rather than
+    // from the operand's static type -- that is what makes the result reflect
+    // the dynamic type (#6310).
+    exprt name = address_of_exprt(string_name);
+    if (!dynamic_name_comp.empty())
+    {
+      name = member_exprt(
+        dereference_exprt(vtable_read, vtable_read.type()),
+        dynamic_name_comp,
+        pointer_typet(char_type()));
+    }
+
     exprt sym("struct", t);
-    sym.copy_to_operands(address_of_exprt(string_name));
+    sym.copy_to_operands(name);
     if (vtable_read.is_not_nil())
     {
       // Reading the vtable pointer dereferences the operand, so a null operand
@@ -2577,6 +2593,15 @@ bool clang_cpp_convertert::get_decl_ref(
   case clang::Decl::Binding:
   {
     const auto &bd = static_cast<const clang::BindingDecl &>(decl);
+    // Tuple-like case ([dcl.struct.bind]/4): clang synthesises a holding
+    // variable initialised to get<i>(e) and getBinding() refers to it. That
+    // holding var is never emitted, so resolve directly to its initializer
+    // (the get<i>(e) call) — mirroring how the array/member cases substitute
+    // the holder sub-expression. Re-evaluating get<i>(e) is side-effect free
+    // and yields an lvalue into the holder, so reads and writes are correct.
+    if (const clang::VarDecl *hv = bd.getHoldingVar())
+      if (const clang::Expr *init = hv->getInit())
+        return get_expr(*init, new_expr);
     if (const clang::Expr *e = bd.getBinding())
       return get_expr(*e, new_expr);
     break;
@@ -3194,6 +3219,69 @@ bool clang_cpp_convertert::is_ConstructorOrDestructor(
 {
   return md.getKind() == clang::Decl::CXXConstructor ||
          md.getKind() == clang::Decl::CXXDestructor;
+}
+
+/* [dcl.init]/17.6.1: a class-typed conditional is a prvalue, and the target is
+ * initialised directly from it -- one object, one destructor. Lowering it as an
+ * if_exprt instead materialises a temporary per branch plus a result temporary
+ * and copies between them with a plain assignment, so no copy/move constructor
+ * runs and every one of those temporaries is destroyed, including the branch
+ * that was not taken. Emit a single temporary_object whose initializer branches,
+ * so replace_new_object points both constructors at the same object -- the same
+ * elision the MaterializeTemporaryExpr arm above performs one level down.
+ *
+ * Only the shape where both branches are constructor temporaries is rewritten;
+ * anything else (an lvalue operand, a non-constructor temporary) keeps the
+ * existing lowering, where a copy is genuinely required. */
+static bool is_constructor_temporary(const exprt &e)
+{
+  return e.id() == "sideeffect" && e.statement() == "temporary_object" &&
+         e.initializer().is_not_nil();
+}
+
+bool clang_cpp_convertert::get_conditional_class_prvalue(
+  const clang::ConditionalOperator &ternary,
+  exprt &new_expr,
+  bool &elided)
+{
+  elided = false;
+
+  if (!ternary.getType()->isRecordType() || ternary.isLValue())
+    return false;
+
+  exprt cond;
+  if (get_expr(*ternary.getCond(), cond))
+    return true;
+
+  exprt then;
+  if (get_expr(*ternary.getTrueExpr()->IgnoreParens(), then))
+    return true;
+
+  exprt else_expr;
+  if (get_expr(*ternary.getFalseExpr()->IgnoreParens(), else_expr))
+    return true;
+
+  if (!is_constructor_temporary(then) || !is_constructor_temporary(else_expr))
+    return false;
+
+  typet t;
+  if (get_type(ternary.getType(), t))
+    return true;
+
+  gen_typecast_bool(ns, cond);
+
+  code_ifthenelset ite;
+  ite.cond() = cond;
+  ite.then_case() = to_code(static_cast<const exprt &>(then.initializer()));
+  ite.else_case() =
+    to_code(static_cast<const exprt &>(else_expr.initializer()));
+
+  side_effect_exprt tmp_obj("temporary_object", t);
+  tmp_obj.initializer(ite);
+
+  new_expr = tmp_obj;
+  elided = true;
+  return false;
 }
 
 void clang_cpp_convertert::make_temporary(exprt &expr)

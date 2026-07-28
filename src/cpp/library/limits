@@ -563,7 +563,7 @@ public:
   static constexpr bool is_modulo = false;
   static constexpr int digits = FLT_MANT_DIG;
   static constexpr int digits10 = FLT_DIG;
-  static constexpr int max_digits10 = FLT_DECIMAL_DIG;
+  static constexpr int max_digits10 = __FLT_DECIMAL_DIG__;
   static constexpr int radix = FLT_RADIX;
   static constexpr int min_exponent = FLT_MIN_EXP;
   static constexpr int min_exponent10 = FLT_MIN_10_EXP;
@@ -580,7 +580,7 @@ public:
   static constexpr float infinity() noexcept { return __builtin_huge_valf(); }
   static constexpr float quiet_NaN() noexcept { return __builtin_nanf(""); }
   static constexpr float signaling_NaN() noexcept { return __builtin_nansf(""); }
-  static constexpr float denorm_min() noexcept { return FLT_TRUE_MIN; }
+  static constexpr float denorm_min() noexcept { return __FLT_DENORM_MIN__; }
 };
 
 // double
@@ -603,7 +603,7 @@ public:
   static constexpr bool is_modulo = false;
   static constexpr int digits = DBL_MANT_DIG;
   static constexpr int digits10 = DBL_DIG;
-  static constexpr int max_digits10 = DBL_DECIMAL_DIG;
+  static constexpr int max_digits10 = __DBL_DECIMAL_DIG__;
   static constexpr int radix = FLT_RADIX;
   static constexpr int min_exponent = DBL_MIN_EXP;
   static constexpr int min_exponent10 = DBL_MIN_10_EXP;
@@ -620,7 +620,7 @@ public:
   static constexpr double infinity() noexcept { return __builtin_huge_val(); }
   static constexpr double quiet_NaN() noexcept { return __builtin_nan(""); }
   static constexpr double signaling_NaN() noexcept { return __builtin_nans(""); }
-  static constexpr double denorm_min() noexcept { return DBL_TRUE_MIN; }
+  static constexpr double denorm_min() noexcept { return __DBL_DENORM_MIN__; }
 };
 
 // long double
@@ -643,7 +643,7 @@ public:
   static constexpr bool is_modulo = false;
   static constexpr int digits = LDBL_MANT_DIG;
   static constexpr int digits10 = LDBL_DIG;
-  static constexpr int max_digits10 = LDBL_DECIMAL_DIG;
+  static constexpr int max_digits10 = __LDBL_DECIMAL_DIG__;
   static constexpr int radix = FLT_RADIX;
   static constexpr int min_exponent = LDBL_MIN_EXP;
   static constexpr int min_exponent10 = LDBL_MIN_10_EXP;
@@ -660,7 +660,7 @@ public:
   static constexpr long double infinity() noexcept { return __builtin_huge_vall(); }
   static constexpr long double quiet_NaN() noexcept { return __builtin_nanl(""); }
   static constexpr long double signaling_NaN() noexcept { return __builtin_nansl(""); }
-  static constexpr long double denorm_min() noexcept { return LDBL_TRUE_MIN; }
+  static constexpr long double denorm_min() noexcept { return __LDBL_DENORM_MIN__; }
 };
 
 } // namespace std

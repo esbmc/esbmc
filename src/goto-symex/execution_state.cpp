@@ -5,16 +5,16 @@
 #include <langapi/mode.h>
 #include <sstream>
 #include <string>
-#include <util/breakpoint.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/base/breakpoint.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 #include <vector>
-#include <util/yaml_parser.h>
+#include <util/base/yaml_parser.h>
 
 thread_local unsigned int execution_statet::node_count = 0;
 thread_local unsigned int execution_statet::dynamic_counter = 0;
@@ -267,7 +267,12 @@ void execution_statet::symex_step(reachability_treet &art)
     {
       expr2tc thecode = instruction.code, assign;
       if (make_return_assignment(assign, thecode))
+      {
+        auto saved_source = cur_state->source;
+        cur_state->source = cur_state->top().calling_location;
         goto_symext::symex_assign(assign);
+        cur_state->source = saved_source;
+      }
       symex_return(thecode);
       analyze_assign(assign);
     }

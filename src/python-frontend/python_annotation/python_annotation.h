@@ -8,7 +8,7 @@
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/python_annotation/annotation_parser.h>
 #include <python-frontend/python_annotation/annotation_utils.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 #include <map>
 #include <set>

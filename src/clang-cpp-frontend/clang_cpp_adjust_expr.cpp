@@ -1,10 +1,10 @@
 #include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
-#include <util/c_sizeof.h>
-#include <util/c_types.h>
+#include <util/lang/c_sizeof.h>
+#include <util/lang/c_types.h>
 #include <goto-programs/destructor.h>
-#include <util/expr_util.h>
-#include <util/message.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)
@@ -513,6 +513,26 @@ void clang_cpp_adjust::convert_exception_id(
       convert_exception_id(type.subtype(), "_ptr" + suffix, ids, is_catch);
       return;
     }
+  }
+  else if (type.id() == "struct")
+  {
+    // An aggregate-initialised thrown object (`throw E{...}`, no constructor)
+    // arrives with an inline struct type rather than a symbol reference,
+    // because get_complete_type resolves it during InitListExpr conversion.
+    // Resolve it back to the class's type symbol so its exception id matches a
+    // `catch (E)` clause's symbol-typed id; otherwise the throw and the handler
+    // disagree and the exception escapes uncaught (#6300).
+    irep_idt name = type.get("name");
+    const symbolt *sym = name.empty() ? nullptr : ns.lookup(name);
+    if (sym == nullptr && !type.get("tag").as_string().empty())
+      sym = ns.lookup("tag-" + type.get("tag").as_string());
+    if (sym != nullptr && sym->get_type().id() == "struct")
+    {
+      symbol_typet sym_type(sym->id);
+      convert_exception_id(sym_type, suffix, ids, is_catch);
+      return;
+    }
+    ids.emplace_back(id2string(type.id()) + suffix);
   }
   else if (type.id() == "symbol")
   {

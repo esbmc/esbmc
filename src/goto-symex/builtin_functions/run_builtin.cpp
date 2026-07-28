@@ -1,14 +1,14 @@
 #include <cassert>
 #include <goto-symex/goto_symex.h>
 #include <string>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/prefix.h>
-#include <util/std_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_types.h>
 #include <algorithm>
 
 void goto_symext::bump_call(

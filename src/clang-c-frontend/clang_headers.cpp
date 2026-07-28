@@ -1,6 +1,6 @@
 #include <clang-c-frontend/clang_c_language.h>
 #include <ac_config.h>
-#include <util/filesystem.h>
+#include <util/base/filesystem.h>
 
 #ifdef ESBMC_CLANG_HEADERS_BUNDLED
 extern "C"

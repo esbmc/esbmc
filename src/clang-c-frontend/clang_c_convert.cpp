@@ -1,4 +1,4 @@
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
@@ -19,16 +19,16 @@ CC_DIAGNOSTIC_POP()
 #include <ac_config.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/message.h>
-#include <util/mp_arith.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
-#include <util/symbolic_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/message/message.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/symbolic_types.h>
 
 #include <boost/algorithm/string/replace.hpp>
 
@@ -1935,6 +1935,15 @@ bool clang_c_convertert::get_bitfield_type(
     return true;
 
   new_type = orig_type;
+  // A `bool` bitfield migrates to unsignedbv[N] (a bool has no fixed width the
+  // narrowing can key on), but its legacy id stays "bool", so gen_typecast_bool
+  // treats a read as already-bool and skips the cast -- leaving a non-bool
+  // operand in an &&/||/if that trips a goto-check type assertion. Base the
+  // bitfield on an unsigned bitvector, as integer bitfields already are, so the
+  // boolean-context coercion inserts the cast; the migrated type is unchanged
+  // (#6304).
+  if (new_type.id() == "bool")
+    new_type.id("unsignedbv");
   new_type.width(result.Val.getInt().getSExtValue());
   new_type.set("#bitfield", true);
   new_type.subtype() = orig_type;

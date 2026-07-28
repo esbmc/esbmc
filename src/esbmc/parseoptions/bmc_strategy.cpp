@@ -21,19 +21,19 @@ extern "C"
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/sarif.h>
-#include <util/cwe_mapping.h>
+#include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
-#include <util/config.h>
-#include <util/filesystem.h>
+#include <util/config/config.h>
+#include <util/base/filesystem.h>
 #include <csignal>
 #include <cstdlib>
 #include <limits>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <iostream>
 #include <fstream>
 #include <goto-programs/add_race_assertions.h>
@@ -66,15 +66,15 @@ extern "C"
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
-#include <util/irep.h>
+#include <util/irep/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <memory>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
 #include <pointer-analysis/value_set_analysis.h>
-#include <util/symbol.h>
-#include <util/time_stopping.h>
+#include <util/symtab/symbol.h>
+#include <util/base/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
 #include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
@@ -524,7 +524,11 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
     // via (get-value). Report a clean failure rather than let the exception
     // reach std::terminate.
     log_error("SMT solver process failed: {}", e.what());
-    res = P_ERROR;
+    // A violation already found and printed is not retracted by a later
+    // interleaving whose solver then died (--multi-property explores past the
+    // first violation).
+    res = goto_functionst::property_verdicts.has_violation() ? P_SATISFIABLE
+                                                             : P_ERROR;
   }
 
 #ifdef HAVE_SENDFILE_ESBMC

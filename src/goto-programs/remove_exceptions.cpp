@@ -3,16 +3,16 @@
 #include <goto-programs/exception_globals.h>
 #include <goto-programs/goto_functions.h>
 
-#include <util/namespace.h>
-#include <util/context.h>
-#include <util/symbol.h>
-#include <util/migrate.h>
-#include <util/expr_util.h>
-#include <util/std_types.h>
-#include <util/std_expr.h>
-#include <util/message.h>
-#include <util/type_byte_size.h>
-#include <util/c_types.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/symbol.h>
+#include <util/irep/migrate.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/std_types.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
+#include <util/expr/type_byte_size.h>
+#include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
 
 #include <optional>
@@ -1072,7 +1072,13 @@ private:
     // for a typed catch. The decrement of the uncaught count goes there, so it
     // happens once the exception has entered its handler ([except.uncaught]) and
     // after the catch-parameter is bound (§5.5).
-    auto before_body = h.target;
+    // Anchor the handler prologue (uncaught decrement, handled-stack push) so
+    // it precedes the handler body. A typed catch reassigns this to its binding
+    // instruction below; a catch-all has no binding, and its `h.target` is the
+    // body's first instruction, so anchoring on `landing` keeps the push ahead
+    // of a bare `throw;` (otherwise it landed after the rethrow, leaving the
+    // handled stack empty so the re-raise found no exception -- #6297).
+    auto before_body = landing;
     if (h.type != ellipsis_id)
     {
       auto bind = std::next(h.target);

@@ -6,13 +6,13 @@
 #include <solvers/smt/fp/ir_ieee_conv.h>
 #include <solvers/smt/smt_fp_rounding_utils.h>
 #include <sstream>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 #include <cmath>
 #include <limits>
 
@@ -381,6 +381,7 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   // for compositional lifting.
   ir_ieee_api->propagate_interval(side1, side2);
   ir_ieee_api->propagate_nan_pred(side1, side2);
+  ir_ieee_api->propagate_neg_zero_pred(side1, side2);
 
   return side2;
 }
@@ -2126,9 +2127,13 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
       // it can take a value strictly between 0 and the smallest subnormal
       // (a magnitude no floating-point operation ever produces), which
       // breaks identities like x+0==x now that mk_subnormal_flush()
-      // distinguishes that gap from zero.
+      // distinguishes that gap from zero. Representability doesn't depend
+      // on a rounding mode, so pass a nil expr2tc: mk_subnormal_flush falls
+      // back to its magnitude-only threshold, which is the correct (not
+      // merely conservative) check here.
       const floatbv_type2t &fbv_type = to_floatbv_type(sym.type);
-      assert_ast(mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type)));
+      assert_ast(
+        mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
     }
 
     return sym_ast;
@@ -2517,9 +2522,11 @@ static unsigned long size_to_bit_width(unsigned long sz)
   uint64_t domwidth = 2;
   unsigned int dombits = 1;
 
-  // Shift domwidth up until it's either larger or equal to sz, or we risk
-  // overflowing.
-  while (domwidth != 0x8000000000000000ULL && domwidth < sz)
+  // Shift domwidth up until it is strictly larger than sz, or we risk
+  // overflowing. Strictly larger, not just equal: sz itself is the
+  // one-past-the-end index, a valid pointer value in C, and a domain that
+  // cannot represent it wraps it to 0 and aliases element 0 (#6399).
+  while (domwidth != 0x8000000000000000ULL && domwidth <= sz)
   {
     domwidth <<= 1;
     dombits++;

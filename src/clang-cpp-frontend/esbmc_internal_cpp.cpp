@@ -1,5 +1,5 @@
 #include <clang-cpp-frontend/esbmc_internal_cpp.h>
-#include <util/filesystem.h>
+#include <util/base/filesystem.h>
 extern "C"
 {
 #include <abstract_includes/cpp_includes.h>

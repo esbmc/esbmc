@@ -2,7 +2,7 @@
 #define ESBMC_JIMPLE_METHOD_BODY_H
 
 #include <jimple-frontend/AST/jimple_ast.h>
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 
 /**
  * @brief A Jimple method declaration

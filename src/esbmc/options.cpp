@@ -3,7 +3,7 @@
 #include <fstream>
 #include <limits>
 #include <solvers/solver_config.h>
-#include <util/cmdline.h>
+#include <util/config/cmdline.h>
 
 const struct group_opt_templ all_cmd_options[] = {
   {"Main Usage",
@@ -211,6 +211,10 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Run the IREP2-native Python adjuster alongside the legacy adjust pass "
       "(V.4 migration; experimental, default off)"},
+     {"python-irep2-adjust-only",
+      NULL,
+      "Use the IREP2-native Python adjuster instead of the legacy clang_cpp "
+      "adjust pass (V.4 migration hop-off; experimental, default off)"},
    }},
 #endif
 #ifdef ENABLE_LD_FRONTEND
@@ -638,8 +642,20 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"multi-property",
      NULL,
      "Verify satisfiability of all claims of the current bound"},
+    {"multi-property-interleavings",
+     boost::program_options::value<int>()->value_name("n"),
+     "In multi-property mode, keep exploring thread interleavings after a "
+     "violation until n consecutive ones reach a verdict on no new property "
+     "(default 100, must be positive)"},
     {"no-standard-checks", NULL, "Disable default checks"},
     {"no-assertions", NULL, "Ignore assertions"},
+    {"no-library-assertions",
+     NULL,
+     "Ignore assertions stated by ESBMC's operational models (e.g. \"Sem is "
+     "not initialized\"), keeping the ones in the program under verification. "
+     "Warning: hides genuine API misuse the models report. Leaves the checks "
+     "ESBMC generates inside model code (see --no-standard-checks), renumbers "
+     "--claim, and is unsupported for Python"},
     {"no-bounds-check", NULL, "Do not do array bounds check"},
     {"no-div-by-zero-check", NULL, "Do not do division by zero check"},
     {"no-pointer-check", NULL, "Do not do pointer check"},
@@ -701,6 +717,19 @@ const struct group_opt_templ all_cmd_options[] = {
     {"dead-store-check",
      NULL,
      "Emit advisory notes for dead stores / assignments never read (CWE-563)"},
+    {"excessive-alloc-check",
+     // Optional bound: bare flag uses the implicit 1 MiB (1048576-byte)
+     // default; --excessive-alloc-check=K sets the byte bound to K. `int`
+     // (not a wider type) because cmdlinet only stringifies int / string /
+     // vector<int> values; the 2 GiB ceiling is far past any meaningful
+     // "excessive" threshold.
+     boost::program_options::value<int>()->implicit_value(1048576)->value_name(
+       "bytes"),
+     "Enable check for allocations (malloc/calloc/realloc/new[]) whose size "
+     "can exceed K bytes; attach the bound with '=' as "
+     "--excessive-alloc-check=K "
+     "(a space-separated value is treated as an input file), default 1 MiB "
+     "(CWE-789)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(
@@ -724,6 +753,19 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Enable unreach-call style checking: activates __ESBMC_unreachable() and "
      "treats reach_error()/__VERIFIER_error() as error sentinels"},
+    {"dead-code-check",
+     NULL,
+     "Detect provably-unreachable conditional branch directions (if/loop "
+     "guards) and report them as advisory CWE-561 findings (note level in "
+     "SARIF). Default off; does not flip the verdict to FAILED. Scope is "
+     "branch "
+     "directions only: statements after an unconditional return/abort and "
+     "unreferenced functions are not analysed. Findings are bounded by the "
+     "unwinding depth (use --unwind for programs with loops). The SUCCESSFUL "
+     "verdict of a dead-code run is not a safety verdict: the coverage "
+     "instrumentation neutralises pre-existing assertions, including the "
+     "default bounds and division-by-zero checks, so run this alongside a "
+     "normal verification run rather than instead of one"},
     {"conv-assert-to-assume",
      NULL,
      "Convert assertions for bounds and pointer checks into assumptions"},

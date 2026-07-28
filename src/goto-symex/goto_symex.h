@@ -8,10 +8,10 @@
 #include <map>
 #include <optional>
 #include <pointer-analysis/dereference.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/options.h>
-#include <util/std_types.h>
+#include <util/config/options.h>
+#include <util/irep/std_types.h>
 
 class reachability_treet; // Forward dec
 class execution_statet;   // Forward dec
@@ -275,6 +275,20 @@ protected:
    *  @param msg Textual message explaining assertion.
    */
   virtual void claim(const expr2tc &expr, const std::string &msg);
+
+  /**
+   *  Record a verdict for the claim being symbolically executed.
+   *  Used for claims symex discharges itself, so that they are reported once
+   *  per run alongside the ones the solver discharges, rather than once per
+   *  thread interleaving.
+   *  @param msg Textual message explaining the claim.
+   *  @param verdict Outcome to record.
+   *  @param note How the verdict was reached, when it needs qualifying.
+   */
+  void record_property_verdict(
+    const std::string &msg,
+    property_verdictt verdict,
+    const std::string &note = "");
 
   /**
    *  Perform an assertion.

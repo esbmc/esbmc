@@ -1,8 +1,8 @@
 
 #include <c2goto/cprover_library.h>
-#include <util/language.h>
-#include <util/filesystem.h>
-#include <util/message.h>
+#include <util/lang/language.h>
+#include <util/base/filesystem.h>
+#include <util/message/message.h>
 
 extern "C"
 {

@@ -40,8 +40,8 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/frame_enforcer.h>
-#include <util/context.h>
-#include <util/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
 #include <map>
 #include <set>
 #include <string>
@@ -486,13 +486,18 @@ private:
   std::vector<is_fresh_mapping_t>
   extract_is_fresh_mappings_from_body(const goto_programt &function_body) const;
 
-  /// \brief Replace is_fresh temporary variables in ensures with verification expressions
+  /// \brief Replace is_fresh temporary variables with a concrete predicate.
   /// \param expr Expression containing is_fresh temp variables
   /// \param mappings Vector of is_fresh mappings
-  /// \return Expression with is_fresh temp variables replaced by verification expressions
-  expr2tc replace_is_fresh_in_ensures_expr(
+  /// \param require_dynamic true for ensures (valid_object && is_dynamic);
+  ///   false for a requires clause asserted at a --replace-call-with-contract
+  ///   call site (valid_object only, so live stack/interior sub-objects are
+  ///   accepted, #6380).
+  /// \return Expression with is_fresh temp variables replaced
+  expr2tc replace_is_fresh_temps(
     const expr2tc &expr,
-    const std::vector<is_fresh_mapping_t> &mappings) const;
+    const std::vector<is_fresh_mapping_t> &mappings,
+    bool require_dynamic) const;
 
   /// \brief Havoc assigns targets (similar to loop invariant approach)
   /// \param assigns_clause Assigns clause expression

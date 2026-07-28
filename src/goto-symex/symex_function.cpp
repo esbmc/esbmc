@@ -4,16 +4,16 @@
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <langapi/language_util.h>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/prefix.h>
-#include <util/pretty.h>
-#include <util/python_types.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/base/prefix.h>
+#include <util/symtab/pretty.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_expr.h>
 
 bool goto_symex_utils::is_alloca_return_value_name(const std::string &name)
 {
@@ -606,19 +606,21 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.calling_location = cur_state->source;
   frame.entry_guard = cur_state->guard;
 
-  // assign arguments (goto_function.type is already IREP2)
-  frame.va_index = argument_assignments(
-    identifier, to_code_type(goto_function.type), arguments);
-  frame.va_cursor = frame.va_index;
-
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = ret_value;
   frame.function_identifier = identifier;
   frame.hidden = goto_function.body.hide;
 
+  // Switch source into the callee before assigning arguments so that formal
+  // parameter assignments are attributed to the callee, not the call site.
   cur_state->source.is_set = true;
   cur_state->source.pc = goto_function.body.instructions.begin();
   cur_state->source.prog = &goto_function.body;
+
+  // assign arguments (goto_function.type is already IREP2)
+  frame.va_index = argument_assignments(
+    identifier, to_code_type(goto_function.type), arguments);
+  frame.va_cursor = frame.va_index;
 }
 
 // True if a function of type `candidate` may be called through a function

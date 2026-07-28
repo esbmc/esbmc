@@ -8,11 +8,11 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/type/type_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 
 #include <algorithm>
 #include <cctype>
@@ -482,8 +482,13 @@ exprt function_call_expr::handle_int_to_bytes() const
     const std::size_t byte_index = big_endian ? (length - 1 - i) : i;
 
     // Shift the selected byte down to the low 8 bits and mask everything else out.
+    // `lshr`, not the `shr` placeholder: `shr` is only ever resolved by
+    // clang_c_adjust::adjust_expr_shifts (to lshr/ashr on op0's signedness), and
+    // migrate_expr has no `shr` arm — so a surviving `shr` aborts with "migrate
+    // expr failed". `value` is unsignedbv by construction above, which is the
+    // branch adjust_expr_shifts would take anyway.
     const exprt shift_amount = from_integer(byte_index * 8, value.type());
-    exprt shifted("shr", value.type());
+    exprt shifted("lshr", value.type());
     shifted.copy_to_operands(value, shift_amount);
 
     exprt masked("bitand", value.type());
