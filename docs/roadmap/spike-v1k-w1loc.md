@@ -461,3 +461,58 @@ group. Further native-coverage gains are guard-fallback reductions (low value pe
 slice) — better weighed against the other open Part V workstreams (the V.3
 converter-construction residue, or the V.5 IREP2-native counterexample printer)
 than pursued mechanically.
+
+## Appendix E — the `__ESBMC_main` divergence is closed; legacy was the wrong one (2026-07-27)
+
+The two standing `esbmc-cpp` mismatches (`cpp_sum_class`, `cpp_sum_class_bug`),
+recorded on the #6177/#6179/#6231 rows as "upstream of Phase C entirely and needs
+its own investigation", are resolved. Repro, on plain master, flag-on vs flag-off:
+
+```
+int nondet_int();
+int A = nondet_int();
+int main() { return 0; }
+```
+
+```
+legacy:  // 9                                ASSIGN A=NONDET(signed int);
+native:  // 9 file t.cpp line 2 column 1     ASSIGN A=NONDET(signed int);
+```
+
+**The native path was right and the legacy path was losing the location.** The
+byte-identity gate had been treating the *correct* output as the deviation, which
+is why three rows recorded it as an unexplained native-side anomaly.
+
+**Cause — the same top-down early return #6179 encoded around.** `init_variable`
+stamps each global's initializing `code_assignt` with the symbol's location
+(`clang_c_main.cpp:25`), but `static_lifetime_init` collects them into a
+`code_blockt` with **no** location of its own. `restore_value_locations` computed
+`here` as "own location, else inherited", and on an empty `here` returned
+immediately — abandoning the entire subtree, including child statements that *do*
+carry locations. So the global's value operands were never stamped, and
+`nondet_int()` being side-effecting, `remove_sideeffects` read the emitted
+instruction's location off the bare operand and produced an unlocated `ASSIGN`.
+Every other initializer in `__ESBMC_main` is located because its operands come
+from OM sources that were stamped in their own function bodies.
+
+Fixed by descending into code children unconditionally and gating only the
+*value* stamping on having a location, so a located statement inside an unlocated
+block governs its own subtree — the invariant #6179 gave the native dispatcher,
+now also on the legacy path. The two paths are byte-identical on the repro.
+
+**Blast radius.** This is the default path for every frontend, and the change is
+monotone: it can only turn a blank location into the enclosing statement's, never
+alter an existing one. Measured — coverage suite 19/19 (the named failure mode
+this helper exists to prevent), a stride-12 `python` slice 378/378, and a
+stride-7 `regression/esbmc` slice 743 tests / 47 failures of which 44 are
+`esbmc-solidity` (no `solc` on this host). The three non-Solidity failures
+(`esbmc-unix/04_valgrind`, `esbmc/char32-lit-no-simp`,
+`esbmc-cpp/cpp/github_6200_fail`) were **control-run against a stashed rebuild
+and fail identically without the patch**; only `char32-lit-no-simp` was on the
+recorded macOS baseline, so that baseline should gain the other two.
+
+Regression: `regression/esbmc-cpp/cpp/global_init_location{,_fail}`. The positive
+test pins the location by regex and was confirmed to **fail on a pre-patch
+build** and pass after — a location fix is otherwise invisible to a verdict-only
+test. It must be a C++ test: C rejects a non-constant global initializer, so the
+shape cannot be written in the C suite at all.
