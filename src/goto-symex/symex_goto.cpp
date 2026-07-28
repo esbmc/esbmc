@@ -514,7 +514,7 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
     // Nothing will flag this truncation to the user: the assumption below
     // silently prunes the rest of the loop. Record it so a coverage run can
     // say its percentages are lower bounds (issue #6387).
-    ++bounded_loop_truncations;
+    note_bounded_loop_truncation();
 
     // generate unwinding assumption, unless we permit partial loops
     expr2tc guarded_expr = negated_cond;

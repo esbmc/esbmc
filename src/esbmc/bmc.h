@@ -102,10 +102,14 @@ protected:
 
   int ltl_run_thread(symex_target_equationt &equation) const;
 
+  /// \param truncated_loops how many loops exploration cut off at the
+  ///   unwinding bound, carried in from the symex result rather than read back
+  ///   from live state, which --schedule has already invalidated (#6423).
   smt_resultt multi_property_check(
     const symex_target_equationt &eq,
     size_t remaining_claims,
-    smt_convt &runtime_solver);
+    smt_convt &runtime_solver,
+    unsigned int truncated_loops);
 
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 

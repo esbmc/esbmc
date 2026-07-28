@@ -707,7 +707,8 @@ public:
     optionst &options,
     unsigned int *ptotal_claims,
     unsigned int *premaining_claims,
-    unsigned int *psimplified_claims)
+    unsigned int *psimplified_claims,
+    unsigned int *ptruncations)
     : execution_statet(
         goto_functions,
         ns,
@@ -720,19 +721,29 @@ public:
     this->ptotal_claims = ptotal_claims;
     this->premaining_claims = premaining_claims;
     this->psimplified_claims = psimplified_claims;
+    this->ptruncations = ptruncations;
     *ptotal_claims = 0;
     *premaining_claims = 0;
     *psimplified_claims = 0;
+    *ptruncations = 0;
   };
 
   schedule_execution_statet(const schedule_execution_statet &ref) = default;
   std::shared_ptr<execution_statet> clone() const override;
   ~schedule_execution_statet() override;
   void claim(const expr2tc &expr, const std::string &msg) override;
+  void note_bounded_loop_truncation() override
+  {
+    goto_symext::note_bounded_loop_truncation();
+    ++*ptruncations;
+  }
 
   unsigned int *ptotal_claims;
   unsigned int *premaining_claims;
   unsigned int *psimplified_claims;
+  // Each --schedule path runs in its own execution state, so the count has to
+  // accumulate outside them like the claim counts do.
+  unsigned int *ptruncations;
 };
 
 #endif /* EXECUTION_STATE_H_ */

@@ -2013,7 +2013,10 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
        (options.get_bool_option("inductive-step") &&
         options.get_bool_option("loop-invariant"))))
       return multi_property_check(
-        *eq, solver_result.remaining_claims, *runtime_solver);
+        *eq,
+        solver_result.remaining_claims,
+        *runtime_solver,
+        solver_result.bounded_loop_truncations);
 
     smt_resultt result = run_decision_procedure(*runtime_solver, *eq);
 
@@ -2143,7 +2146,8 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
 smt_resultt bmct::multi_property_check(
   const symex_target_equationt &eq,
   size_t remaining_claims,
-  smt_convt &runtime_solver)
+  smt_convt &runtime_solver,
+  unsigned int truncated_loops)
 {
   // Initial values
   smt_resultt final_result = P_UNSATISFIABLE;
@@ -2167,17 +2171,16 @@ smt_resultt bmct::multi_property_check(
     cov_incomplete_reasons.clear();
   }
 
-  // Symex has already run at this point, so its truncation count is final.
   // A bounded loop cut off without an unwinding assertion leaves no other
   // trace, and the goals past the bound were never emitted, so a percentage
-  // measured here is a lower bound (issue #6387).
-  if (
-    options.get_bool_option("coverage-measurement") &&
-    symex->get_cur_state().bounded_loop_truncations > 0)
+  // measured here is a lower bound (issue #6387). Taken from the symex result
+  // rather than live exploration state, which --schedule has already
+  // invalidated by now (issue #6423).
+  if (options.get_bool_option("coverage-measurement") && truncated_loops > 0)
     note_cov_incomplete(fmt::format(
       "the unwinding bound cut off {} loop iteration(s) with unwinding "
       "assertions disabled, so goals past the bound were never explored",
-      symex->get_cur_state().bounded_loop_truncations));
+      truncated_loops));
 
   // "Assertion Cov"
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||

@@ -105,15 +105,21 @@ public:
       std::shared_ptr<symex_targett> t,
       unsigned int claims,
       unsigned int remain,
-      unsigned int simplified)
+      unsigned int simplified,
+      unsigned int truncations = 0)
       : target(std::move(t)),
         total_claims(claims),
         remaining_claims(remain),
-        simplified_claims(simplified){};
+        simplified_claims(simplified),
+        bounded_loop_truncations(truncations){};
     std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
     unsigned int simplified_claims;
+    /// Carried out of exploration rather than read back from live state:
+    /// under --schedule the current frame is already dangling by the time
+    /// bmct looks (issue #6423).
+    unsigned int bounded_loop_truncations;
   };
 
   /**
@@ -371,6 +377,14 @@ protected:
    *  @param guard Current state guard.
    */
   void loop_bound_exceeded(const expr2tc &guard);
+
+  /// Records that a loop was cut off at the unwinding bound with nothing to
+  /// flag it. Virtual because --schedule runs each path in its own execution
+  /// state, so the count also has to accumulate outside them.
+  virtual void note_bounded_loop_truncation()
+  {
+    ++bounded_loop_truncations;
+  }
 
   // function calls
 

@@ -250,7 +250,11 @@ void goto_symext::assume(const expr2tc &the_assumption)
 goto_symext::symex_resultt goto_symext::get_symex_result()
 {
   return goto_symext::symex_resultt(
-    target, total_claims, remaining_claims, simplified_claims);
+    target,
+    total_claims,
+    remaining_claims,
+    simplified_claims,
+    bounded_loop_truncations);
 }
 
 void goto_symext::symex_step(reachability_treet &art)
