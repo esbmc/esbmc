@@ -1032,6 +1032,8 @@ under the wrong signature, which is why the failure surfaced as a corrupted
 double rather than an outright crash. Generalised: when the callee is not a
 table pointer-to-code symbol but its own type is pointer-to-code, dereference it.
 Argument casting stays on the symbol path, which needs the table entry.
+(Superseded by round 12: casting moved to the call site for expression-form
+calls, and this function now delegates to the shared helper.)
 
 **A rejected first hypothesis, recorded so it is not re-tried.** The same diff
 also shows `ASSIGN …list_elem$175=(double (*)())(&lam1)` against a bare `&lam1`,
@@ -1046,7 +1048,70 @@ Census after this round: **69/70** on the strided sample, the single divergence
 being `github_3034_split-dot-valid-zero_fail`, which is the parked S4 work
 (round 10).
 
-### Per-case triage round 13 — array decay at the call-argument seam (2026-07-28)
+### Per-case triage round 12 — the S5 argument conversion, expression-form only (2026-07-28)
+
+**Reopens the round-10 "negative result" and resolves it.** Mirroring
+`clang_c_adjust::adjust_function_call_arguments` (clang_c_adjust_expr.cpp:1069)
+generically was recorded as a net parity loss: it closed
+`get_object_size(bytes_data)` but added a `(void *)` cast to ~10 list-model
+calls legacy leaves alone. The inference drawn then — that the real defect was
+the operand's type upstream, not the missing cast — was wrong. The actual
+discriminator is the **call form**:
+
+* legacy reaches that loop only via `adjust_side_effect_function_call`, i.e.
+  **expression-form** calls;
+* its statement-form arm (clang_c_adjust_code.cpp:38-53,
+  `statement == "function_call"`) adjusts index expressions and *nothing else*,
+  so a statement-form call keeps its arguments verbatim.
+
+`list_push`/`list_contains`/`list_set_at`/`list_find_index` are statement-form;
+`get_object_size` and `list_size` feed expressions. Restricting the mirror to
+the `sideeffect2t` arm therefore keeps every win and opens none of the losses.
+Two shapes close corpus-wide:
+
+```
+legacy:  get_object_size((void *)bytes_data)          hop-off was: (bytes_data)
+legacy:  list_size(( struct __ESBMC_PyListObj *)d.keys)   hop-off was: (d.keys)
+```
+
+**The census caught a defect four spot-checks missed — record this.** The first
+wrap regressed exactly one test, `bytes5_fail`:
+
+```
+legacy:  ESBMC_range_has_next_(0, 3, 1)
+hop-off: ESBMC_range_has_next_(0, (signed long int)3, 1)
+```
+
+`c_typecastt::do_typecast` folds a cast over a constant through the simplifier
+in its **exprt** overload (c_typecast.cpp:911-922) but not in its **expr2tc**
+overload (:926-948), which only wraps. `python_adjust` works in IREP2, so
+mirroring the wrap alone leaves a visible cast on every constant argument.
+Guarding on `is_constant_expr` and calling `simplify` after the wrap restores
+parity. Generalises: **any arm mirroring a `gen_typecast` into IREP2 inherits
+the missing constant fold.**
+
+**Method note — normalise the instruction counter.** A raw `--goto-functions-only`
+byte-diff is unusable here: one dropped docstring `OTHER` statement renumbers
+every following instruction, inflating `github_3034` to 6462 diff lines against
+a true 114. Strip `// <N> ` before diffing.
+
+**Census (stride-6, 731 tests, GOTO byte-diff, pinned binaries).** This is a far
+stricter metric than the verdict parity quoted in earlier rounds — 715 of 731
+tests differ somewhere at GOTO level (docstrings, `__ESBMC_HIDE` labels) without
+any verdict changing, so the signal is the delta, not the absolute.
+
+| | diff lines | improved | unchanged | regressed |
+|---|---|---|---|---|
+| pre-patch baseline | 215794 | — | — | — |
+| wrap only | 214292 | 711 | 19 | 1 (`bytes5_fail`) |
+| wrap + constant fold | **214286** | **712** | **19** | **0** |
+
+Round 11's closing note that "argument casting stays on the symbol path, which
+needs the table entry" is superseded: casting now happens at the call site for
+every expression-form call, and `wrap_function_pointer_callee` delegates to the
+same helper instead of carrying its own copy of the loop.
+
+### Per-case triage round 14 — array decay at the call-argument seam (2026-07-28)
 
 **A strided whole-corpus census is now the frontier finder.** With round 11's open
 list drained, a 220-test strided sample (every 20th `regression/python` directory)
@@ -1078,7 +1143,7 @@ pointer-to-code callee path, and its `is_castable_kind` list excludes arrays. Ne
 
 Scoped to the array→pointer shape only, which is **structural** — the same object,
 addressed differently. The scalar width/signedness half of S5 changes stored
-values and stays out, the same line round 12 drew against the parked S4
+values and stays out, the same line round 13 drew against the parked S4
 assignment trap.
 
 **The C-Live control build caught a bad regression test — record this.** The first
@@ -1101,8 +1166,8 @@ and pass patched.
 **Census after this round: 218/221.** `github_2839` closed; `github_6258` and
 `string-nondet-index-fail` remain (their own blockers). `github_3701_11` appears
 as a third divergence **only because this branch is cut from master and therefore
-lacks round 12** — it aborts at `smt_solver.cpp:1512`, round 12's exact signature,
-and is at parity on the round-12 binary. Useful independent evidence that round
-12 closes more than its own repro.
+lacks round 13** — it aborts at `smt_solver.cpp:1512`, round 13's exact signature,
+and is at parity on the round-13 binary. Useful independent evidence that round
+13 closes more than its own repro.
 
 Tests: `regression/python/python_irep2_adjust_only_arg_decay{,_fail}`.
