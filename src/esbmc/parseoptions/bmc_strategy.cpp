@@ -464,10 +464,16 @@ int esbmc_parseoptionst::do_bmc_strategy(
     {
       const bool violated =
         is_base_case_violated(options, goto_functions, k_step).is_true();
-      // A coverage run has no verdict to falsify: keep unwinding so later k
-      // steps can still reach goals, and leave through the common exit.
       if (violated && !is_coverage)
         return 1;
+      // A coverage run has no verdict to falsify, so nothing would ever stop
+      // the escalation: without this it re-solves every goal at each bound and
+      // prints one [Coverage] block per k step. One pass is what falsification
+      // did here before the verdict was removed. multi_property_check has
+      // already reported that pass, so return rather than fall through to the
+      // max-k-step exit, whose reason would not apply.
+      if (is_coverage)
+        return 0;
     }
   }
 

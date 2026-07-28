@@ -63,59 +63,42 @@ std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
 std::mutex goto_functionst::reached_claims_mutex;
 std::mutex goto_functionst::reached_mul_claims_mutex;
 std::mutex goto_functionst::clear_claims_mutex;
-std::atomic<size_t> goto_functionst::undecided_cov_goals{0};
-std::set<std::string> goto_functionst::cov_incomplete_reasons;
-std::set<std::string> goto_functionst::cov_suppressed_violations;
-std::mutex goto_functionst::cov_incomplete_mutex;
-
-/* True when this run measures goto coverage rather than verifying the
- * program. Every coverage mode instruments the program with `assert` probes
- * whose falsifiability *is* the measurement: a SAT probe means "this location
- * is reachable", not "a property was violated" (github issue #6387). The
- * original assertions no longer carry their source condition, so a coverage
- * run proves nothing about the program and must not emit a verification
- * verdict, a counterexample, or a violation witness. */
-static bool is_coverage_run(const optionst &options)
-{
-  static const char *const flags[] = {
-    "assertion-coverage",
-    "assertion-coverage-claims",
-    "condition-coverage",
-    "condition-coverage-claims",
-    "condition-coverage-rm",
-    "condition-coverage-claims-rm",
-    "branch-coverage",
-    "branch-coverage-claims",
-    "branch-function-coverage",
-    "branch-function-coverage-claims",
-    // `k-path-coverage` itself stores the CLI integer N, so the boolean
-    // enable flag set by parseoptions is the one to test here.
-    "k-path-coverage-enabled"};
-  for (const char *f : flags)
-    if (options.get_bool_option(f))
-      return true;
-  return false;
-}
+/* Coverage-completeness bookkeeping. File-scope rather than shared state on
+ * goto_functionst: nothing outside this file produces or consumes it, and the
+ * driver prints it once after the last [Coverage] block. Reset per
+ * multi_property_check so a k-induction / incremental run reports the last
+ * pass rather than the sum of every k step. */
+static std::atomic<size_t> undecided_cov_goals{0};
+static std::set<std::string> cov_incomplete_reasons;
+// Claims a coverage run solved but does not report, because it reports no
+// violations at all. Accumulated across passes: a violation found at one k
+// step stays true.
+static std::set<std::string> cov_suppressed_violations;
+static std::mutex cov_report_mutex;
+// Set once a [Coverage] block has actually been produced. Modes that never
+// run BMC (--show-vcc, --program-only) would otherwise close with a
+// completeness verdict over a measurement that never happened.
+static std::atomic<bool> cov_block_reported{false};
 
 // Record why the coverage measurement is not exhaustive, so the reported
 // percentage can be qualified rather than silently understated.
 void note_cov_incomplete(const std::string &reason)
 {
-  std::lock_guard lock(goto_functionst::cov_incomplete_mutex);
-  goto_functionst::cov_incomplete_reasons.insert(reason);
+  std::lock_guard lock(cov_report_mutex);
+  cov_incomplete_reasons.insert(reason);
 }
 
 // Record a claim a coverage run proved violated but does not report.
 static void note_cov_suppressed_violation(const std::string &claim)
 {
-  std::lock_guard lock(goto_functionst::cov_incomplete_mutex);
-  goto_functionst::cov_suppressed_violations.insert(claim);
+  std::lock_guard lock(cov_report_mutex);
+  cov_suppressed_violations.insert(claim);
 }
 
 // As above, for a specific goal whose reachability was never decided.
 static void note_undecided_cov_goal(const std::string &reason)
 {
-  goto_functionst::undecided_cov_goals++;
+  undecided_cov_goals++;
   note_cov_incomplete(reason);
 }
 
@@ -1294,6 +1277,8 @@ void report_coverage(
     log_success("Coverage report written to cov-report.json");
   }
 
+  cov_block_reported = true;
+
   // Generate pytest test case from collected data (for coverage mode)
   if (options.get_bool_option("generate-pytest-testcase"))
   {
@@ -1319,12 +1304,16 @@ void report_coverage(
  * measurement is not a program defect. */
 void report_coverage_completeness()
 {
-  std::lock_guard lock(goto_functionst::cov_incomplete_mutex);
+  // Nothing was measured, so there is nothing to qualify.
+  if (!cov_block_reported)
+    return;
+
+  std::lock_guard lock(cov_report_mutex);
 
   // A coverage run reports no violations. Anything it did refute would be
   // lost without this, so name it: the user asked for a measurement, not for
   // silence about a bug ESBMC happened to find on the way.
-  const auto &suppressed = goto_functionst::cov_suppressed_violations;
+  const auto &suppressed = cov_suppressed_violations;
   if (!suppressed.empty())
   {
     log_warning(
@@ -1336,14 +1325,14 @@ void report_coverage_completeness()
       log_warning("  {}", claim);
   }
 
-  const auto &reasons = goto_functionst::cov_incomplete_reasons;
+  const auto &reasons = cov_incomplete_reasons;
   if (reasons.empty())
   {
     log_success("\nCOVERAGE ANALYSIS COMPLETE");
     return;
   }
 
-  const size_t undecided = goto_functionst::undecided_cov_goals;
+  const size_t undecided = undecided_cov_goals;
   if (undecided > 0)
     log_fail(
       "\nCOVERAGE ANALYSIS INCOMPLETE: {} goal(s) undecided; the percentages "
@@ -1488,7 +1477,7 @@ void bmct::report_result(smt_resultt &res)
   // A coverage run replaced the program's assertions with reachability
   // probes, so it neither proved nor refuted anything about the program.
   // Its result is the [Coverage] block, not a verification verdict.
-  if (is_coverage_run(options))
+  if (options.get_bool_option("coverage-measurement"))
     return;
 
   // Dead-code analysis is advisory. Its instrumented reachability probes are
@@ -2168,6 +2157,28 @@ smt_resultt bmct::multi_property_check(
   auto &reached_mul_claims_mutex =
     symex->goto_functions.reached_mul_claims_mutex;
 
+  if (options.get_bool_option("coverage-measurement"))
+  {
+    // Per pass, not cumulative: under --k-induction / --incremental-bmc this
+    // runs once per phase per k step, and a goal left undecided at k=1 may
+    // well be decided at k=2.
+    std::lock_guard lock(cov_report_mutex);
+    undecided_cov_goals = 0;
+    cov_incomplete_reasons.clear();
+  }
+
+  // Symex has already run at this point, so its truncation count is final.
+  // A bounded loop cut off without an unwinding assertion leaves no other
+  // trace, and the goals past the bound were never emitted, so a percentage
+  // measured here is a lower bound (issue #6387).
+  if (
+    options.get_bool_option("coverage-measurement") &&
+    symex->get_cur_state().bounded_loop_truncations > 0)
+    note_cov_incomplete(fmt::format(
+      "the unwinding bound cut off {} loop iteration(s) with unwinding "
+      "assertions disabled, so goals past the bound were never explored",
+      symex->get_cur_state().bounded_loop_truncations));
+
   // "Assertion Cov"
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
@@ -2196,7 +2207,7 @@ smt_resultt bmct::multi_property_check(
   // A coverage *measurement* run. Deliberately excludes --dead-code-check:
   // that mode borrows the same probes but keeps a verdict and reports CWE-561
   // advisories, so none of the coverage reporting rules below apply to it.
-  const bool is_cov_run = is_coverage_run(options);
+  const bool is_cov_run = options.get_bool_option("coverage-measurement");
 
   // is_vb: enable verbose output coverage info if the option "--verbosity coverage:N" is set, where N should larger than 0
   // By enabling this, we will output the coverage information when handling each instrumentation assertion.
@@ -2260,17 +2271,18 @@ smt_resultt bmct::multi_property_check(
                        &fc,
                        &is,
                        &runtime_solver](const size_t &i) {
-    //"multi-fail-fast n": stop after first n SATs found.
-    if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
+    //"multi-fail-fast n": stop after first n SATs found. A coverage run has
+    // to identify the claim first: only instrumented probes count towards the
+    // goal tally, so bailing here would make "N goal(s) undecided" disagree
+    // with the goal count in the summary line.
+    const bool fail_fast_hit = is_fail_fast && fail_fast_cnt >= fail_fast_limit;
+    if (fail_fast_hit)
     {
       // The skipped claims reach no verdict, so the report is a partial view
       // of the program's properties and must say so.
       report_incomplete = true;
-      // The skipped goals were never solved either. Counting them as
-      // unreached would report a percentage that looks measured but is not.
-      if (is_cov_run)
-        note_undecided_cov_goal("--multi-fail-fast limit reached");
-      return;
+      if (!is_cov_run)
+        return;
     }
 
     // Since this is just a copy, we probably don't need a lock
@@ -2289,6 +2301,19 @@ smt_resultt bmct::multi_property_check(
     const bool is_goto_cov = is_cov_run || is_dead_code;
     claim_slicer claim(i, false, is_goto_cov, ns);
     claim.run(local_eq.SSA_steps);
+
+    if (fail_fast_hit)
+    {
+      // The skipped probes were never solved. Counting them as unreached
+      // would report a percentage that looks measured but is not.
+      if (claim.claim_property == "instrumented assertion")
+      {
+        goto_functionst::property_verdicts.record(
+          claim.claim_cstr, property_verdictt::Unknown);
+        note_undecided_cov_goal("--multi-fail-fast limit reached");
+      }
+      return;
+    }
 
     // Drop claims that verified to be failed
     // we use the "comment + location" to distinguish each claim
@@ -2430,7 +2455,7 @@ smt_resultt bmct::multi_property_check(
       // entirely. It is not a completeness problem — whether it truncates
       // exploration depends on the claim — so it is listed separately from
       // the reasons the percentages may be lower bounds.
-      note_cov_suppressed_violation(claim.claim_msg);
+      note_cov_suppressed_violation(claim.claim_cstr);
     }
 
     solver_stats.total_time_ms.fetch_add(solve_stop - solve_start);

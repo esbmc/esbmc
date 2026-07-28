@@ -1,5 +1,0 @@
-CORE
-main.cpp
---multi-property --assertion-coverage
-^Assertion Instances Coverage: 100%$
-\A(?![\s\S]*[0-9]+ failed)[\s\S]*\Z

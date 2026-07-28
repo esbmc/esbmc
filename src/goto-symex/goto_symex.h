@@ -1283,6 +1283,12 @@ protected:
   unsigned remaining_claims;
   /** Number of assertions that were trivially verified. */
   unsigned simplified_claims;
+  /** Loops cut off at the unwinding bound with no unwinding assertion to flag
+   *  it, i.e. under --no-unwinding-assertions (which the coverage modes force
+   *  on whenever --unwind is given). Exploration stopped there silently, so a
+   *  coverage percentage measured on such a run is a lower bound: goals past
+   *  the bound were never reached (issue #6387). */
+  unsigned bounded_loop_truncations = 0;
   /** Reachability tree we're working with. */
   reachability_treet *art1;
   /** Unwind bounds, loop number -> max unwinds. */

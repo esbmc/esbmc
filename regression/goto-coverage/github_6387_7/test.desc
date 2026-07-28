@@ -1,5 +1,0 @@
-KNOWNBUG
-main.c
---multi-property --sarif-output out.sarif
-^VERIFICATION FAILED$
-CHECK_FILE out.sarif contains "ruleId": "esbmc-assertion"
