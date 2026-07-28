@@ -10,7 +10,15 @@ supported and the known restrictions.
 ## Supported constructs
 
 - **Contacts and coils** — normally-open and normally-closed contacts; output,
-  Set, and Reset coils.
+  Set, and Reset coils. Contacts carrying `edge="rising"` / `edge="falling"`
+  (and the vendor spellings `positive`/`negative`, `R`/`P`, `F`/`N`) are sensed
+  against a previous-scan shadow rather than treated as level contacts.
+- **Rung topology** — parallel paths that reach the same coil are OR-ed, not
+  overwritten by the last branch, and network feedback is snapshotted per scan
+  as required by IEC 61131-3 §4.1.3. A rung path that passes through a function
+  block resolves the block into synthesised pins instead of being dropped.
+- **Declared initial values** — `<initialValue>` on a variable declaration is
+  parsed, so declared presets no longer read as zero.
 - **Timers** — `TON` (on-delay) and `TOF` (off-delay), with their retained
   `ET`/`Q` state evaluated per scan. `TP` (pulse) blocks are accepted but
   currently simplified to `TON` semantics — see Restrictions below.
