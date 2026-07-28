@@ -28,6 +28,7 @@ void __ESBMC_set_thread_internal_data(
 #define __ESBMC_cond_nwaiters_field(a) ((a).__nwaiters)
 #define __ESBMC_rwlock_readers(a) ((a)->__readers)
 #define __ESBMC_rwlock_writer(a) ((a)->__writer)
+#define __ESBMC_rwlock_waiters(a) ((a)->__waiters)
 
 /* Global tracking data. Should all initialize to 0 / false */
 __attribute__((annotate("__ESBMC_inf_size")))
@@ -586,6 +587,7 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_rwlock_readers(lock) = 0;
   __ESBMC_rwlock_writer(lock) = 0;
+  __ESBMC_rwlock_waiters(lock) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -597,6 +599,33 @@ __ESBMC_HIDE:;
   __ESBMC_assume(!__ESBMC_rwlock_writer(lock));
   __ESBMC_rwlock_readers(lock)++;
   __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_rwlock_rdlock_check(pthread_rwlock_t *lock)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  _Bool acquired = !__ESBMC_rwlock_writer(lock);
+
+  if (acquired)
+  {
+    __ESBMC_rwlock_readers(lock)++;
+  }
+  else
+  {
+    __ESBMC_rwlock_waiters(lock)++;
+    __ESBMC_blocked_threads_count++;
+    __ESBMC_assert(
+      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+      "Deadlocked state in pthread_rwlock_rdlock");
+  }
+
+  __ESBMC_atomic_end();
+
+  __ESBMC_assume(acquired);
+
   return 0;
 }
 
@@ -639,6 +668,16 @@ __ESBMC_HIDE:;
     __ESBMC_rwlock_writer(lock) = 0;
   else if (__ESBMC_rwlock_readers(lock) > 0)
     __ESBMC_rwlock_readers(lock)--;
+
+  /* Only the _check acquisitions register waiters, so this is inert without
+   * --deadlock-check. A reader blocks only behind a writer and a writer
+   * excludes readers, so a fully free lock is exactly when every registered
+   * waiter could proceed. */
+  if (!__ESBMC_rwlock_writer(lock) && !__ESBMC_rwlock_readers(lock))
+  {
+    __ESBMC_release_blocked_threads(__ESBMC_rwlock_waiters(lock));
+    __ESBMC_rwlock_waiters(lock) = 0;
+  }
   __ESBMC_atomic_end();
   return 0;
 }
@@ -651,6 +690,34 @@ __ESBMC_HIDE:;
     !(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock)));
   __ESBMC_rwlock_writer(lock) = 1;
   __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_rwlock_wrlock_check(pthread_rwlock_t *lock)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  _Bool acquired =
+    !(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock));
+
+  if (acquired)
+  {
+    __ESBMC_rwlock_writer(lock) = 1;
+  }
+  else
+  {
+    __ESBMC_rwlock_waiters(lock)++;
+    __ESBMC_blocked_threads_count++;
+    __ESBMC_assert(
+      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+      "Deadlocked state in pthread_rwlock_wrlock");
+  }
+
+  __ESBMC_atomic_end();
+
+  __ESBMC_assume(acquired);
+
   return 0;
 }
 
