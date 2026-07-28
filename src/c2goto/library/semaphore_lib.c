@@ -24,6 +24,8 @@ __ESBMC_HIDE:;
   __ESBMC_sem_lock_field(*__sem) = (__value == 0);
   __ESBMC_sem_count_field(*__sem) = __value;
   __ESBMC_sem_init_field(*__sem) = 1;
+  // Re-initialising a contended semaphore frees it: release, don't drop.
+  __ESBMC_release_blocked_threads(__ESBMC_sem_waiters(*__sem));
   __ESBMC_sem_waiters(*__sem) = 0;
   __ESBMC_atomic_end();
   return 0;

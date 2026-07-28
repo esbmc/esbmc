@@ -58,14 +58,9 @@ unsigned short int __ESBMC_num_threads_running = 0;
 unsigned short int __ESBMC_blocked_threads_count = 0;
 
 /* Cancels the blocked-count contributions of every thread waiting on one
- * object. Each was bumped together with that object's waiter count inside a
- * single atomic region, so the two are guarded by the same condition and
- * subtracting the count restores the global counter exactly.
- *
- * The clamp guards a modelling slip only: the pairing makes underflow
- * unreachable, but an unsigned short wrap to 65535 would silently disable
- * deadlock detection for the rest of the run, since 65535 is never equal to
- * __ESBMC_num_threads_running. */
+ * object. Waiter counts live in user-owned storage, so an uninitialised lock
+ * can feed an arbitrary value in here; clamping to 0 disables deadlock
+ * detection at this instant rather than for the rest of the run. */
 void __ESBMC_release_blocked_threads(unsigned int waiters)
 {
 __ESBMC_HIDE:;
@@ -421,6 +416,8 @@ int pthread_mutex_init(
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = 0;
+  // Re-initialising a contended mutex frees it, so release rather than drop.
+  __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
   __ESBMC_mutex_waiters(*mutex) = 0;
   __ESBMC_mutex_owner_field(*mutex) = 0;
   __ESBMC_atomic_end();
@@ -564,8 +561,6 @@ __ESBMC_HIDE:;
 
   // It shall be safe to destroy an initialized mutex that is unlocked
   __ESBMC_mutex_lock_field(*mutex) = -1;
-  __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
-  __ESBMC_mutex_waiters(*mutex) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -596,6 +591,7 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_rwlock_readers(lock) = 0;
   __ESBMC_rwlock_writer(lock) = 0;
+  __ESBMC_release_blocked_threads(__ESBMC_rwlock_waiters(lock));
   __ESBMC_rwlock_waiters(lock) = 0;
   __ESBMC_atomic_end();
   return 0;
@@ -678,10 +674,8 @@ __ESBMC_HIDE:;
   else if (__ESBMC_rwlock_readers(lock) > 0)
     __ESBMC_rwlock_readers(lock)--;
 
-  /* Only the _check acquisitions register waiters, so this is inert without
-   * --deadlock-check. A reader blocks only behind a writer and a writer
-   * excludes readers, so a fully free lock is exactly when every registered
-   * waiter could proceed. */
+  /* A reader blocks only behind a writer and a writer excludes readers, so a
+   * fully free lock is exactly when every registered waiter could proceed. */
   if (!__ESBMC_rwlock_writer(lock) && !__ESBMC_rwlock_readers(lock))
   {
     __ESBMC_release_blocked_threads(__ESBMC_rwlock_waiters(lock));
@@ -814,7 +808,7 @@ __ESBMC_HIDE:;
   if (assrt)
     __ESBMC_assert(
       __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
-      "Deadlocked state in pthread_mutex_lock");
+      "Deadlocked state in pthread_cond_wait");
 
   __ESBMC_atomic_end();
 
