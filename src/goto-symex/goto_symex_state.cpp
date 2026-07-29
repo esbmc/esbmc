@@ -165,9 +165,18 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   if (is_with2t(expr))
   {
+    // Structs are exempt: their pointer fields are what lets the value-set
+    // analysis resolve a later dereference to a single object, without which
+    // placement-new's `this` stays ambiguous and the bounds check reports a
+    // spurious heap out-of-bounds (#6464). Solidity is not exempt: its member
+    // updates carry a type its member does not, so propagating the enclosing
+    // struct builds an ill-formed with2t (assert_type_compat_for_with,
+    // irep2_expr.cpp) — a frontend defect this is not the place to fix.
+    const bool propagate_struct = is_struct_type(expr->type) &&
+                                  config.language.lid != language_idt::SOLIDITY;
+
     if (
-      config.language.lid != language_idt::PYTHON &&
-      !is_struct_type(expr->type) &&
+      config.language.lid != language_idt::PYTHON && !propagate_struct &&
       (config.options.get_bool_option("incremental-bmc") ||
        config.options.get_bool_option("k-induction")))
       // When this option is enabled, the constant propagation
@@ -175,11 +184,6 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // More importantly, the use of incremental-BMC / k-induction does not heavily
       // rely on constants to determine the boundaries. Even if there is a known
       // loop size, esbmc starts unwinding from min k
-      //
-      // Structs are exempt: their pointer fields are what lets the value-set
-      // analysis resolve a later dereference to a single object, without which
-      // placement-new's `this` stays ambiguous and the bounds check reports a
-      // spurious heap out-of-bounds (#6464).
       return false;
 
     // Handle WITH chains for structs where all updates are constants
