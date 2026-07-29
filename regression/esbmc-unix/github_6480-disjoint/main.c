@@ -1,8 +1,10 @@
 /* The two threads hold different elements of the same lock array, so they
    share nothing and are independent. MPOR keyed every access on the base
    symbol `m`, which made them look dependent: 4973 interleavings here versus
-   732 for the same program written with two scalar mutexes. Refining a
-   constant offset into the key (#6480) brings this to 2780. */
+   732 for the same program written with two scalar mutexes. Keying on the
+   array element instead (#6480) brings this to 732 -- exact parity with the
+   scalar form, which is the point: how the locks are stored must not change
+   how much of the interleaving space has to be explored. */
 #include <pthread.h>
 pthread_mutex_t m[2];
 
