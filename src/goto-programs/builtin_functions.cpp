@@ -473,10 +473,10 @@ void goto_convertt::do_cpp_new(
         size_type());
 
     const typet &raw_type = to_code_type(alloc_function.type()).return_type();
-    symbolt &raw = new_tmp_symbol(raw_type);
+    symbol_exprt raw(new_tmp_symbol(raw_type).id, raw_type);
 
     code_function_callt call;
-    call.lhs() = symbol_exprt(raw.id, raw_type);
+    call.lhs() = raw;
     call.function() = alloc_function;
     call.arguments().push_back(byte_size);
     call.location() = rhs.find_location();
@@ -485,7 +485,7 @@ void goto_convertt::do_cpp_new(
     migrate_expr(call, t_a->code);
     t_a->location = rhs.find_location();
 
-    exprt allocated = symbol_exprt(raw.id, raw_type);
+    exprt allocated = raw;
     allocated.make_typecast(lhs.type());
 
     goto_programt::targett t_n = dest.add_instruction(ASSIGN);
