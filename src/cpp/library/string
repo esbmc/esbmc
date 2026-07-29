@@ -3427,29 +3427,49 @@ std::string to_string(long double value)
   return string(buffer);
 }
 
-int stoi(const std::string &str, size_t *pos = 0, int base = 10)
-{
-  const char *c_str = str.c_str();
+/* [string.conversions]. Only stoi and stof were modelled, and both ignored
+ * `pos`, which must receive the index of the first unconverted character.
+ *
+ * The standard has these throw invalid_argument when no conversion happens;
+ * OM code cannot throw a catchable exception (#6338), so the model asserts.
+ * Out-of-range values are not diagnosed: the underlying strto* saturate, and
+ * adding the check would raise new claims on programs that verify today. */
+#define OM_STOI(fn, type, cfn)                                                 \
+  inline type fn(const std::string &str, size_t *pos = 0, int base = 10)       \
+  {                                                                            \
+    const char *c_str = str.c_str();                                           \
+    char *endptr;                                                              \
+    type result = static_cast<type>(cfn(c_str, &endptr, base));                \
+    __ESBMC_assert(endptr != c_str, "No digits in input string");              \
+    if (pos != 0)                                                              \
+      *pos = static_cast<size_t>(endptr - c_str);                              \
+    return result;                                                             \
+  }
 
-  char *endptr;
-  long result = std::strtol(c_str, &endptr, base);
+#define OM_STOF(fn, type, cfn)                                                 \
+  inline type fn(const std::string &str, size_t *pos = 0)                      \
+  {                                                                            \
+    const char *c_str = str.c_str();                                           \
+    char *endptr;                                                              \
+    type result = cfn(c_str, &endptr);                                         \
+    __ESBMC_assert(endptr != c_str, "No digits in input string");              \
+    if (pos != 0)                                                              \
+      *pos = static_cast<size_t>(endptr - c_str);                              \
+    return result;                                                             \
+  }
 
-  __ESBMC_assert(endptr != c_str, "No digits in input string");
+OM_STOI(stoi, int, std::strtol)
+OM_STOI(stol, long, std::strtol)
+OM_STOI(stoul, unsigned long, std::strtoul)
+OM_STOI(stoll, long long, std::strtoll)
+OM_STOI(stoull, unsigned long long, std::strtoull)
 
-  return static_cast<int>(result);
-}
+OM_STOF(stof, float, std::strtof)
+OM_STOF(stod, double, std::strtod)
+OM_STOF(stold, long double, std::strtold)
 
-float stof(const std::string &str, size_t *pos = 0)
-{
-  const char *c_str = str.c_str();
-
-  char *endptr;
-  float result = std::strtof(c_str, &endptr);
-
-  __ESBMC_assert(endptr != c_str, "No digits in input string");
-
-  return result;
-}
+#undef OM_STOI
+#undef OM_STOF
 
 } // namespace std
 #endif
