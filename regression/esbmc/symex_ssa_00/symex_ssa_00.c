@@ -2,9 +2,9 @@
  * Tier-A harness template — docs/roadmap/goto-symex-verification-plan.md, M0.
  *
  * SYMEX-HARNESS-TARGET: src/goto-symex/renaming.cpp::renaming::level2t::make_assignment
- * SYMEX-HARNESS-SHA256: 498622841f15c52ffccc9e727471ddb09a7a092cde0b64ee69cdd61f3a6dc176
+ * SYMEX-HARNESS-SHA256: 2c4c9016c75c0ef2e613cb9c9c0519cd212a3d5644821f7bc49a977bf9f54d37
  * SYMEX-HARNESS-TARGET: src/goto-symex/renaming.cpp::renaming::level2t::coveredinbees
- * SYMEX-HARNESS-SHA256: 517dfba7f965646e21dd94d32a4e2be51d110275a0e056ed5d98a7fb5a85bf78
+ * SYMEX-HARNESS-SHA256: 8c0c0e7b6e3a84b7e8c864b80188e178b3446bb1860db841aa0f477d153303d9
  *
  * Discharges (partially, at the smoke level): I1 / P4 / P8 / P12 — the L2
  * counter published by make_assignment is fresh, strictly increasing per key,
