@@ -551,15 +551,13 @@ int pthread_mutex_destroy_check(pthread_mutex_t *mutex)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assert(
-    __ESBMC_mutex_lock_field(*mutex) != 0, "attempt to destroy a locked mutex");
-  // Attempting to destroy a locked mutex results in undefined behavior.
-  __ESBMC_assert(
-    __ESBMC_mutex_lock_field(*mutex) == 1, "attempt to destroy a locked mutex");
-  __ESBMC_assert(
     __ESBMC_mutex_lock_field(*mutex) != -1,
     "attempt to destroy a previously destroyed mutex");
+  // 0 = unlocked, 1 = locked, -1 = destroyed. Destroying a locked mutex is
+  // undefined behaviour; only an initialised, unlocked mutex may be destroyed.
+  __ESBMC_assert(
+    __ESBMC_mutex_lock_field(*mutex) == 0, "attempt to destroy a locked mutex");
 
-  // It shall be safe to destroy an initialized mutex that is unlocked
   __ESBMC_mutex_lock_field(*mutex) = -1;
   __ESBMC_atomic_end();
   return 0;
