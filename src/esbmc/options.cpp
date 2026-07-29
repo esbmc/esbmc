@@ -914,7 +914,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "Configure time limit, integer followed by {s,m,h}"},
     {"enable-core-dump", NULL, "Do not disable core dump output"},
     {"no-simplify", NULL, "Do not simplify any expression"},
-    {"no-propagation", NULL, "Disable constant propagation"},
+    {"no-propagation",
+     NULL,
+     "Disable constant propagation (unsupported with concurrency: the pthread "
+     "model requires constant thread ids)"},
     {"gcse",
      NULL,
      "Adds intermediate variables to precompute common sub-expressions between "
