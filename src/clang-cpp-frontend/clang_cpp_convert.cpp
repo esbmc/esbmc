@@ -580,6 +580,44 @@ static void replace_new_object_with(const exprt &object, exprt &dest)
       replace_new_object_with(object, *it);
 }
 
+// Pick the deallocation function goto-conversion can actually call for a
+// delete-expression, or null to leave it on the built-in path (github #6494).
+// Clang resolves `delete p` to the C++14 sized form whenever one is declared,
+// and both sized forms are declared implicitly -- so a program that replaces
+// only `operator delete(void *)`, by far the most common shape, resolves to a
+// sized form it never defined. The default sized form's behaviour is to call
+// `operator delete(ptr)` ([new.delete.single]), so follow it to the
+// replacement the program did supply.
+static const clang::FunctionDecl *resolve_deallocation_function(
+  const clang::FunctionDecl *op_del,
+  bool array_form)
+{
+  if (!op_del)
+    return nullptr;
+
+  // The aligned and user-placement forms also take two parameters, but want an
+  // alignment or a tag rather than the byte count this lowering supplies; the
+  // array form has no byte count to give, since the element size it knows is
+  // not the whole array's.
+  const bool sized = !array_form && op_del->getNumParams() == 2 &&
+                     op_del->getParamDecl(1)->getType()->isIntegerType();
+
+  if (op_del->isDefined())
+    return op_del->getNumParams() == 1 || sized ? op_del : nullptr;
+
+  // Only the sized form forwards to a replacement the program did define.
+  if (!sized)
+    return nullptr;
+
+  for (const clang::NamedDecl *d :
+       op_del->getDeclContext()->lookup(op_del->getDeclName()))
+    if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(d))
+      if (fd->getNumParams() == 1 && fd->isDefined())
+        return fd;
+
+  return nullptr;
+}
+
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
@@ -899,6 +937,21 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       }
     }
 
+    // A program may replace ::operator new, and a class may supply its own
+    // ([basic.stc.dynamic.allocation], [expr.new]/9). The built-in cpp_new
+    // below conjures a fresh object and never calls it, so ESBMC verifies a
+    // different program: two allocations from a pool allocator that alias
+    // are modelled as distinct objects, hiding real bugs (github #6494).
+    // Record the resolved function for goto-conversion to call instead.
+    // Only the plain (size) form is routed -- the aligned and user-placement
+    // forms take further arguments this lowering does not supply, and an
+    // allocation function without a body in this TU has nothing to call.
+    const clang::FunctionDecl *op_new = ne.getOperatorNew();
+    const bool replaced_new = op_new && op_new->isDefined() &&
+                              !op_new->isReservedGlobalPlacementOperator() &&
+                              op_new->getNumParams() == 1 &&
+                              ne.getNumPlacementArgs() == 0;
+
     if (ne.isArray())
     {
       new_expr = side_effect_exprt("cpp_new[]", t);
@@ -914,6 +967,14 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     else
     {
       new_expr = side_effect_exprt("cpp_new", t);
+    }
+
+    if (replaced_new)
+    {
+      exprt alloc_function;
+      if (get_decl_ref(*op_new, alloc_function))
+        return true;
+      new_expr.add("alloc_function") = alloc_function;
     }
 
     if (ne.hasInitializer())
@@ -944,6 +1005,19 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     new_expr.move_to_operands(arg);
+
+    // Mirror of the allocation side above: a replaced operator delete has to
+    // be called, or state it maintains is never updated and correct programs
+    // are reported as failing (github #6494).
+    const clang::FunctionDecl *op_del = resolve_deallocation_function(
+      de.getOperatorDelete(), de.isArrayFormAsWritten());
+    if (op_del)
+    {
+      exprt dealloc_function;
+      if (get_decl_ref(*op_del, dealloc_function))
+        return true;
+      new_expr.add("dealloc_function") = dealloc_function;
+    }
 
     if (de.getDestroyedType()->getAsCXXRecordDecl())
     {
