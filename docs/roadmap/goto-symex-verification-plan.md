@@ -672,8 +672,8 @@ this document** — each is a prioritised target for the cited harness.
 
 | ID | Severity | Finding / hypothesis | Evidence | Harness | Recommended action |
 |---|---|---|---|---|---|
-| **R1** | **High (systemic)** | **The shipped binary enforces none of goto-symex's invariants.** There are **113 `assert(...)` in `src/goto-symex/*.cpp` and 5 in the headers**, and **all 674 TUs in this build carry `-DNDEBUG`** (`build/compile_commands.json`, RelWithDebInfo). Every invariant in §4.2 marked "debug only" — including `pop_frame`'s merge-map emptiness (I6) and `coveredinbees`' monotonicity (I1) — is a **no-op in release**. A violation is silent and unbounded. | `grep -c 'assert(' src/goto-symex/*.cpp`; `-DNDEBUG` in all 674 compile commands | H-A1, H-A3 | Introduce a release-checked `SYMEX_INVARIANT(cond, msg)` (CBMC's `INVARIANT` pattern) and promote the ~10 load-bearing asserts (I1, I2, I6, I16) to it. Measure the cost; gate the rest behind an `--expensive-asserts` build option. |
-| **R2** | **High (soundness)** | `pop_frame` discards `merge_state_map` under a debug-only `assert`. In release, a frame popped with pending merges **silently drops those paths** ⇒ missed bug, no diagnostic. | `goto_symex_statet::pop_frame`, `goto_symex_state.h:310` | H-A3 | Promote to `SYMEX_INVARIANT`; add H-B1-adjacent runtime check counting pushed vs merged snapshots per frame. |
+| **R1** | **High (systemic)** — discharged, §15 M3 | **The shipped binary enforces none of goto-symex's invariants.** There are **113 `assert(...)` in `src/goto-symex/*.cpp` and 5 in the headers**, and **all 674 TUs in this build carry `-DNDEBUG`** (`build/compile_commands.json`, RelWithDebInfo). Every invariant in §4.2 marked "debug only" — including `pop_frame`'s merge-map emptiness (I6) and `coveredinbees`' monotonicity (I1) — is a **no-op in release**. A violation is silent and unbounded. | `grep -c 'assert(' src/goto-symex/*.cpp`; `-DNDEBUG` in all 674 compile commands | H-A1, H-A3 | Introduce a release-checked `SYMEX_INVARIANT(cond, msg)` (CBMC's `INVARIANT` pattern) and promote the ~10 load-bearing asserts (I1, I2, I6, I16) to it. Measure the cost; gate the rest behind an `--expensive-asserts` build option. |
+| **R2** | **High (soundness)** — enforced, §15 M3 | `pop_frame` discards `merge_state_map` under a debug-only `assert`. In release, a frame popped with pending merges **silently drops those paths** ⇒ missed bug, no diagnostic. | `goto_symex_statet::pop_frame`, `goto_symex_state.h:310` | H-A3 | Promote to `SYMEX_INVARIANT`; add H-B1-adjacent runtime check counting pushed vs merged snapshots per frame. |
 | **R3** | **Medium (soundness) — re-characterised, §15 M1** | `make_assignment` holds `valuet &entry` — a reference **into** `current_names` (`std::unordered_map`) — across the virtual call `rename(lhs_symbol, entry.count + 1)`, which reaches `coveredinbees` and performs `current_names[key]`. This is safe *only because* the recomputed key is identical (the symbol is still L1 at that point, as `make_assignment` sets `symbol.rlevel` only *after* the call), so `operator[]` finds rather than inserts. **The invariant is unasserted.** The originally-hypothesised consequence — rehash ⇒ dangling `entry` ⇒ use-after-free — **does not hold**: [unord.req.general]/9 states rehashing "does not invalidate pointers or references to elements", and only erasing an element invalidates references to it, which `coveredinbees` never does. The real consequence of a re-keying callee is a **correctness** one: `coveredinbees` would bump a different entry, `make_assignment` would then publish the caller's *stale* `entry.count`, and two distinct program values would share an SSA name — an I1/I10 violation, silently unsound. | `renaming::level2t::make_assignment`; `::coveredinbees`; comment "This'll update entry beneath our feet"; [unord.req.general]/9 | `unit/goto-symex/renaming.test.cpp` (Tier B, discharged) | Severity downgraded from memory safety to soundness. The invariant still deserves an assertion — promote to `SYMEX_INVARIANT` with R1 (M3). No restructure needed: re-`find`ing after the call would buy nothing the standard does not already give. |
 | **R4** | **Medium (crash → no verdict)** | **Eight unchecked `*ns.lookup(...)` dereferences.** `namespacet::lookup` returns `nullptr` on miss (as `renaming.cpp:15-21` itself demonstrates by checking). A miss ⇒ null deref ⇒ SIGSEGV mid-verification. `phi_function`'s site is the most exposed: it filters only `goto_symex::guard!` and `symex::invalid_object` before looking up an arbitrary merged variable's base name. | `symex_goto.cpp:433`; `symex_function.cpp:159`; `symex_valid_object.cpp:47`; `dynamic_allocation.cpp:66,92,105,118,143` | H-A10 | Add checked lookups with a diagnostic (`log_error` + controlled abort) or prove the precondition per site and record it as a cited comment. |
 | **R5** | **Medium (soundness detector disabled)** | `check_for_duplicate_assigns` — the *only* in-tree checker for the core SSA invariant I10 — merely `log_status`es duplicates and then reports "Checked N insns". It never fails, and nothing calls it in a normal run. | `symex_target_equationt::check_for_duplicate_assigns`, `symex_target_equation.cpp` | H-B1 | Turn it into a validator returning a bool; run it under a debug/CI flag over the whole regression corpus. |
@@ -734,7 +734,9 @@ needed because no SMT query is involved. H-A5 is likewise Tier B
 promote the ~10 load-bearing asserts, measure the runtime cost on
 `regression/esbmc` (accept if < 2 %). *Artefact:* invariant macro + benchmark
 note. This is a prerequisite for M1/M2's proofs to mean anything in the shipped
-binary.
+binary. **Done, §15 M3** — 7 promotions covering I1, I2, I6 and R7, with
+`unit/goto-symex/invariant.test.cpp` as the evidence that each fires under
+`NDEBUG`; cost below measurement resolution. **M3 closed.**
 
 **M4 — Individual symex operations on the real engine (1.5 wk).**
 H-B1 (SSA validator — build it first, reuse everywhere), H-B4, H-B5, H-B2.
@@ -1361,6 +1363,65 @@ bug fell out of stating it.
 **M2 is closed.** H-A2/H-A3 (§15 M2) and H-A5 are discharged at Tier B, all
 three without a transcription. Still open from M0: WI-1, WI-2, D12. Next is
 **M3** (R1: `SYMEX_INVARIANT`), which R2 and R7 both wait on.
+
+### M3 — 2026-07-28, M3 closed
+
+**Result: R1 discharged. goto-symex's load-bearing invariants are now checked in
+the shipped binary, at no measurable cost.**
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `src/goto-symex/symex_invariant.{h,cpp}` | `SYMEX_INVARIANT(cond, reason)`: located diagnostic + `abort()` | 7 call sites |
+| `unit/goto-symex/invariant.test.cpp` | each promoted invariant violated on the real engine state | 5 cases, 33 assertions, **pass** |
+
+M1 and M2 proved things about invariants the shipped binary did not check — R1
+is what makes those proofs mean anything at runtime. Promoted:
+
+| Invariant | Site | Was |
+|---|---|---|
+| I1 (L2) | `coveredinbees`, counter monotonicity + the L1-key precondition | `assert`, the precondition additionally behind `#ifndef NDEBUG` |
+| I1 (L1) | `level1t::rename`, activation-index monotonicity | `assert` on a `[[maybe_unused]]` read |
+| I2 | `make_assignment`, the key held across the virtual `rename` | **unchecked** |
+| I6 / R2 | `pop_frame`, no unmerged snapshots | `assert` |
+| R7 | `previous_frame`, a caller frame exists | **unchecked**, and the body formed `begin() - 1` |
+| — | `top()` ×2, non-empty call stack | `assert` |
+
+**I2 had no check at all.** R3 (§15 M1) established that the hazard is not a
+dangling reference but a *stale count*: if the callee re-keyed, `make_assignment`
+would publish this entry's old index and two program values would share an SSA
+name. The cheapest witness that the key held is the count itself — the caller
+now records `expected_count` before the call and requires the entry to carry it
+after, an integer compare that catches exactly the failure R3 describes.
+
+**R7's UB is gone, not just diagnosed.** `previous_frame` now indexes
+`call_stack[size() - 2]` behind a size precondition, so the size-1 case is a
+located abort rather than a pointer formed before the start of a vector
+([expr.add]/4).
+
+**Evidence the promotion is real.** A death test that merely observes `SIGABRT`
+cannot distinguish a live `SYMEX_INVARIANT` from a libc `assert` in a build that
+forgot `-DNDEBUG`. Each case therefore captures the child's stderr and requires
+*our* wording, so the test proves release-mode enforcement rather than assuming
+it. A fifth case runs a well-formed symex and requires that none of the seven
+fires — without it, an invariant that aborted unconditionally would pass all
+four death tests.
+
+**Cost: below measurement resolution.** Benchmark: 8 000 calls and ~40 k L2
+assignments (400 × 20 nested calls, `--unwind 512 --show-vcc`), which excludes
+solver time so the symex fraction — and hence the invariant fraction — is at its
+maximum. Six interleaved A/B pairs on the same machine: baseline mean 12.55 s
+(min 12.34), promoted mean 12.45 s (min 12.34). The promoted binary measures
+*faster* on the mean, i.e. the difference is inside run-to-run noise (±2 %).
+Well under §10's 2 % bar, and that bar is measured here against an upper bound.
+
+**Not promoted.** The other ~111 `assert`s in `src/goto-symex` stay as they are:
+§10 asks for the load-bearing ones, and the macro's contract (see its header) is
+that a check costs a comparison or less. Anything walking a container or
+rebuilding a key belongs behind `assert` or a debug flag.
+
+**M3 is closed.** R1 is discharged, and R2, R7 and I2 — all three deferred here
+from M1/M2 — are now enforced. Still open from M0: WI-1, WI-2, D12. Next is
+**M4** (H-B1 the SSA validator first, then H-B4, H-B5, H-B2).
 ---
 
 ## Appendix A — Methodological basis
