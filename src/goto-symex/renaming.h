@@ -3,6 +3,7 @@
 
 #include <set>
 #include <goto-symex/level1_map.h>
+#include <goto-symex/symex_invariant.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>
 #include <util/base/i2string.h>
@@ -113,8 +114,10 @@ public:
   {
     // Given that this is level1, use base symbol.
     name_record rec(to_symbol2t(symbol));
-    [[maybe_unused]] const unsigned *cur = current_names.find(rec);
-    assert(!cur || *cur <= frame);
+    const unsigned *cur = current_names.find(rec);
+    // I1 at L1: an activation index only ever grows.
+    SYMEX_INVARIANT(
+      !cur || *cur <= frame, "L1 activation counter moved backwards");
     current_names.set(rec, frame);
   }
 

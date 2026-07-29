@@ -27,6 +27,7 @@
 #include <irep2/irep2_expr.h>
 #include <util/symtab/namespace.h>
 
+#include "ssa_validator.h"
 #include "../testing-utils/goto_factory.h"
 
 namespace
@@ -70,6 +71,8 @@ public:
     auto eq = std::dynamic_pointer_cast<symex_target_equationt>(
       rt.get_next_formula().target);
     REQUIRE(eq != nullptr);
+    // §7.2: every equation a Tier-B test builds is another I1/I10/P11 sample.
+    symex_ssa::require_well_formed(*eq);
     return eq;
   }
 

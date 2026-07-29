@@ -272,7 +272,11 @@ public:
   void output(std::ostream &out) const;
   void short_output(std::ostream &out, bool show_ignored = false) const;
 
-  void check_for_duplicate_assigns() const;
+  /** I10: no SSA name is defined twice. Returns false, with one error per
+   *  offender, when the equation is malformed. Opt-in via
+   *  `--double-assign-check`; aborts if an assignment step's lhs is not a
+   *  symbol, which is `assignment()`'s precondition. */
+  bool check_for_duplicate_assigns() const;
 
   void clear()
   {

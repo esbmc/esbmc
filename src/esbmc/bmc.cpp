@@ -23,6 +23,7 @@
 #include <fstream>
 #include <goto-programs/goto_loops.h>
 #include <goto-symex/build_goto_trace.h>
+#include <goto-symex/symex_invariant.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/features.h>
 #include <goto-symex/sarif.h>
@@ -1924,7 +1925,11 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       eq->SSA_steps.size());
 
     if (options.get_bool_option("double-assign-check"))
-      eq->check_for_duplicate_assigns();
+    {
+      const bool ssa_names_unique = eq->check_for_duplicate_assigns();
+      SYMEX_INVARIANT(
+        ssa_names_unique, "the equation defines an SSA name more than once");
+    }
 
     BigInt ignored;
     for (auto &a : algorithms)
