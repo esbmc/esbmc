@@ -124,9 +124,9 @@ size_t filesystemt::bundled_count() const noexcept
 std::vector<std::string> filesystemt::list(const std::string &prefix) const
 {
   std::vector<std::string> paths;
-  for_each_under(
-    prefix,
-    [&paths](const std::string &p, std::string_view) { paths.push_back(p); });
+  for_each_under(prefix, [&paths](const std::string &p, std::string_view) {
+    paths.push_back(p);
+  });
   return paths;
 }
 
@@ -140,9 +140,7 @@ filesystemt::materialize(const std::string &prefix, const std::string &format)
   it = _materialized.emplace(prefix, create_tmp_dir(format)).first;
   const std::string &dir = it->second.path();
   for_each_under(
-    prefix,
-    [&dir, &prefix](const std::string &p, std::string_view data)
-    {
+    prefix, [&dir, &prefix](const std::string &p, std::string_view data) {
       std::string_view rel = std::string_view(p).substr(prefix.size());
       while (!rel.empty() && rel.front() == '/')
         rel.remove_prefix(1);
@@ -189,13 +187,13 @@ const std::string &tmp_path::path() const noexcept
   return _path;
 }
 
-tmp_path &tmp_path::keep(bool yes) & noexcept
+tmp_path &tmp_path::keep(bool yes) &noexcept
 {
   _keep = yes;
   return *this;
 }
 
-tmp_path &&tmp_path::keep(bool yes) && noexcept
+tmp_path &&tmp_path::keep(bool yes) &&noexcept
 {
   _keep = yes;
   return std::move(*this);
@@ -243,8 +241,7 @@ file_operations::create_tmp_file(const std::string &format, const char *mode)
 {
   FILE *r = NULL;
   std::string path = with_unique_tmp_path(
-    [&r, mode](auto path)
-    {
+    [&r, mode](auto path) {
       r = fopen(path.string().c_str(), mode);
       return r;
     },

@@ -5,6 +5,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-c-frontend/AST/vfs_adapter.h>
+#include <clang-c-frontend/AST/vfs_paths.h>
 #include <util/base/filesystem.h>
 
 llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> esbmc_clang_vfs()
@@ -23,7 +24,7 @@ llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> esbmc_clang_vfs()
   llvm::IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> in_memory(
     new llvm::vfs::InMemoryFileSystem);
 
-  for (const std::string &path : fs.list(file_operations::ESBMC_VFS_ROOT))
+  for (const std::string &path : fs.list(clang_vfs_root()))
   {
     std::optional<file_operations::file_data> contents = fs.read(path);
     /* Everything under the VFS root is bundled, so the bytes live in .rodata:

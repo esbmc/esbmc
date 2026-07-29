@@ -30,7 +30,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <clang-c-frontend/AST/build_ast.h>
 #include <clang-c-frontend/AST/vfs_adapter.h>
-#include <util/base/filesystem.h>
+#include <clang-c-frontend/AST/vfs_paths.h>
 
 /// Builds a clang driver initialized for running clang tools.
 static clang::driver::Driver *newDriver(
@@ -159,8 +159,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
    * This is what lets the ASTUnit be built via LoadFromCompilerInvocation,
    * which -- unlike the ...Action() overload -- accepts our FileManager and so
    * reads bundled headers through esbmc_clang_vfs(). */
-  const std::string intrinsics_path =
-    std::string(file_operations::ESBMC_VFS_ROOT) + "/esbmc_intrinsics.h";
+  const std::string intrinsics_path = clang_vfs_root() + "/esbmc_intrinsics.h";
   clang::PreprocessorOptions &PPOpts = Invocation->getPreprocessorOpts();
   /* getMemBufferCopy, not getMemBuffer: `intrinsics` belongs to the caller and
    * does not outlive the returned ASTUnit. Ownership of the copy passes to
@@ -180,7 +179,11 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
       DiagOpts,
 #endif
       Diagnostics,
-      Files));
+      /* Raw pointer: clang 21 and earlier declare this parameter as
+       * FileManager *, clang 22 as IntrusiveRefCntPtr<FileManager>, and the
+       * latter converts implicitly from the former (retaining, so the returned
+       * ASTUnit keeps the manager alive past this scope). */
+      Files.get()));
   assert(unit);
 
   return unit;

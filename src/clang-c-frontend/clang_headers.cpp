@@ -1,5 +1,6 @@
 #include <clang-c-frontend/clang_c_language.h>
 #include <ac_config.h>
+#include <clang-c-frontend/AST/vfs_paths.h>
 #include <util/base/filesystem.h>
 
 #ifdef ESBMC_CLANG_HEADERS_BUNDLED
@@ -9,8 +10,7 @@ extern "C"
 #  undef ESBMC_FLAIL
 }
 
-static const std::string vfs_prefix =
-  std::string(file_operations::ESBMC_VFS_ROOT) + "/clang";
+static const std::string vfs_prefix = clang_vfs_root() + "/clang";
 #endif
 
 void clang_c_languaget::register_bundled()

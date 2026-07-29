@@ -1,4 +1,5 @@
 #include <clang-cpp-frontend/esbmc_internal_cpp.h>
+#include <clang-c-frontend/AST/vfs_paths.h>
 #include <util/base/filesystem.h>
 extern "C"
 {
@@ -6,8 +7,7 @@ extern "C"
 #undef ESBMC_FLAIL
 }
 
-static const std::string vfs_prefix =
-  std::string(file_operations::ESBMC_VFS_ROOT) + "/cpp";
+static const std::string vfs_prefix = clang_vfs_root() + "/cpp";
 
 void esbmct::register_bundled_cpp()
 {

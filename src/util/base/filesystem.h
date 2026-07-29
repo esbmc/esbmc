@@ -17,9 +17,9 @@ namespace file_operations
 /**
  * @brief Root of the bundled path namespace, e.g. /esbmc-vfs/clang/include.
  *
- * An absolute path rather than a URI scheme: these strings reach clang as
- * -isystem / -resource-dir arguments, and llvm::sys::path only understands
- * path syntax. Reserved, so it never names anything on the real filesystem.
+ * A path rather than a URI scheme, because consumers that resolve these
+ * strings understand path syntax and nothing else. Reserved, so it never
+ * names anything on the real filesystem.
  */
 inline constexpr const char *ESBMC_VFS_ROOT = "/esbmc-vfs";
 
@@ -104,8 +104,8 @@ public:
 
   const std::string &path() const noexcept;
 
-  tmp_path &keep(bool yes) & noexcept;
-  tmp_path &&keep(bool yes) && noexcept;
+  tmp_path &keep(bool yes) &noexcept;
+  tmp_path &&keep(bool yes) &&noexcept;
 };
 
 /**
