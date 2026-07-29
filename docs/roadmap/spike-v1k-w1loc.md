@@ -2,10 +2,14 @@
 
 **Program:** repo-wide "IREP2-native frontend→goto pipeline" (the Part V umbrella, #4715).
 **This issue:** the mandatory first spike. Read-only investigation + one throw-away prototype.
-**Owner:** TBD. **Status:** Phases A+B executed (2026-07-05) — **D3 selected (go),
-D1 ruled out; W1-loc refuted as a *fidelity* wall** (the barrier is native-
-dispatcher implementation cost, not location correctness). Phase C prototype is
-the next step. See Appendices A & B. **Refs:** #4715, Part V of
+**Owner:** TBD. **Status (2026-07-29): CONCLUDED — all four deliverables
+produced, native path default-on.** Phases A+B selected **D3** and refuted
+W1-loc as a *fidelity* wall (the barrier was native-dispatcher implementation
+cost, not location correctness); Phase C grew the dispatcher one `code_*2t` kind
+at a time until the reachable ladder was drained (Appendix D); Phase D's
+byte-identity gate is discharged and `--irep2-native-body` is now the **default**,
+with `--no-irep2-native-body` retained as the diagnostic escape hatch
+(Appendix F). See Appendices A–F. **Refs:** #4715, Part V of
 `docs/roadmap/irep2-migration.md`.
 
 ---
@@ -516,3 +520,80 @@ test pins the location by regex and was confirmed to **fail on a pre-patch
 build** and pass after — a location fix is otherwise invisible to a verdict-only
 test. It must be a C++ test: C rejects a non-constant global initializer, so the
 shape cannot be written in the C suite at all.
+
+## Appendix F — Phase D discharged; the native path is the default (2026-07-29)
+
+Deliverable (4). The spike's remaining step was never another `code_*2t` kind —
+Appendix D established the reachable ladder was drained — but the **flip**: the
+dispatcher was still behind a default-off `--irep2-native-body`, so the §5 gates
+were being discharged on a path no user ran. `--irep2-native-body` is now a
+deprecated no-op, the native dispatcher is the default, and
+**`--no-irep2-native-body`** is the escape hatch that restores the whole-body
+legacy round-trip.
+
+**Gate 1 — byte-identical GOTO (the §5 gate that matters here).** A strided
+sample of every 3rd directory in `regression/{esbmc,cbmc,esbmc-cpp/cpp}` —
+**832 tests** — comparing `--goto-functions-only` default vs
+`--no-irep2-native-body`:
+
+| outcome | n | |
+|---|---:|---|
+| byte-identical | **820** | |
+| not runnable on this host | 10 | `--boolector` / `--k-induction --boolector` etc. not built here; reported as SKIP, never counted as a match |
+| unstable against themselves | 2 | `cpp_sum_class_bug`, `cpp_queue_pop_bug` — see the control below |
+| **attributable divergences** | **0** | |
+
+The two unstable tests both run `--k-induction-parallel`, which forks children
+that share the parent's stderr; the captured output interleaves and garbles
+(`ConvertingConverting`, a `WARNING:` line spliced into a `DECL` line). A
+**control run comparing each path against itself** — same flags twice, native
+vs native and opt-out vs opt-out — is UNSTABLE in both configurations, so the
+difference reproduces without any dispatcher change and is not attributable.
+`--k-induction-parallel` tests must be excluded from, or serialized in, any
+byte-identity sweep on this track.
+
+**Gate 2 — the native path is actually taken (C-Live).** Temporary
+instrumentation at the dispatch (added, measured, reverted) on a body mixing
+decl / expression-assignment / `for` / `switch` / `if-else` / `return`:
+
+```
+default:                (nothing for classify — converted natively)
+                        PROBE_FALLBACK optout=0 c:@F@main
+--no-irep2-native-body: PROBE_FALLBACK optout=1 c:@F@classify
+                        PROBE_FALLBACK optout=1 c:@F@main
+```
+
+So the native branch is live with no flag, and the opt-out branch is live too —
+both arms of the new condition discharged, not just assumed. (`main` falls back
+in both: its `assert(classify(0) == 4)` has a result-used call in the guard, an
+existing guard fallback, not a missing kind.)
+
+**Gate 3 — verdicts.** `-R github_4715` 104/108, unit suite 584/584. The 4
+failures are `esbmc-solidity` and **fail identically on unmodified master**
+(no `solc` on this host).
+
+**Sweep methodology — four normalization gaps this run added.** Each first
+presented as a "divergence" and none was one. Recording them because every
+prior row in this table under-normalized at least once, and the failure mode is
+always "a real-looking mismatch that is really the harness":
+
+1. The C++ header tmpdir is `esbmc-cpp-headers-<hex>-<hex>-<hex>` — a narrower
+   regex than the documented one misses it (49 false mismatches).
+2. Generated nested-function filenames carry a **two**-group hex,
+   `esbmc-nested.<hex>-<hex>.c` — the three-group rule misses it (5 false
+   mismatches, the whole `gcc_nested_func_*` cluster).
+3. `Interval Analysis time:` is a **third** timing line beyond the two already
+   documented (1 false mismatch).
+4. A `test.desc` that already contains `--goto-functions-only` gets it twice and
+   boost throws `multiple_occurrences`, collapsing the capture to one error
+   line. **Both** sides collapse identically, so without a minimum-size guard
+   this counts as a *match* — the same class of false zero as the withdrawn
+   stderr figure. A `< 200 bytes → SKIP` guard catches it.
+
+**What this closes and what it does not.** The spike is concluded: D3 was
+selected, implemented, proven byte-identical, and is now the default. What
+remains is **not** spike work — it is the ≈21 % of functions that still take a
+*guard* fallback (Appendix D finding 2: side-effecting conditions the coverage
+options touch, array/VLA decls, atomic or code-typed operands), each a
+shape-by-shape slice with diminishing value. The round-trip therefore still
+exists as a fallback and cannot be deleted; §V.1 bar #3 is advanced, not met.
