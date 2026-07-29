@@ -2,3 +2,4 @@ CORE
 main.cpp
 --std c++11
 ^VERIFICATION FAILED$
+assertion p->x == 4
