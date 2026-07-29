@@ -153,6 +153,21 @@ public:
     expr2tc snapshot_sym; ///< Snapshot symbol holding arr[j] pre-call value
   };
 
+  /// \brief Byte extent of a harness-allocated pointer parameter.
+  ///
+  /// \p justified says whether the harness backing is real enough to read
+  /// through: an __ESBMC_is_fresh size, or the one-element stack backing of
+  /// the #6483 carve-out. It is false for a nondet heap extent, which nothing
+  /// may dereference and nothing may assume a lower bound on -- doing either
+  /// silently re-opens #6212. Keeping that next to the value rather than in a
+  /// separate set makes it a decision every consumer has to spell out; a
+  /// side-channel container was missed by one consumer and cost a regression.
+  struct param_extentt
+  {
+    expr2tc bytes;   ///< Byte-extent expression of the allocation
+    bool justified;  ///< True when the backing may be dereferenced
+  };
+
   /// \brief Check if a function is compiler-generated and should be skipped.
   /// Handles both short names ("fst") and full Clang USR IDs ("c:@F@fst#*1I#").
   /// \param function_name Function name or full ID
@@ -173,12 +188,9 @@ private:
 
   /// Fallback element count for the Phase 2B array-element witness index when
   /// the array's real extent is unknown: a global array, or a parameter in a
-  /// run without --function, where the entry harness never allocates and so
-  /// records no extent. Params whose extent the contract leaves unstated are
-  /// skipped rather than bounded by this, since bounding them would assume the
-  /// extent away (#6212). This can over-bound the witness index and produce the
-  /// spurious "array bounds violated" of #5314, so it is a fallback, not a
-  /// default: prefer a recorded extent whenever one exists.
+  /// run without --function, where the entry harness never allocates. It can
+  /// over-bound the index and produce the spurious "array bounds violated" of
+  /// #5314, so prefer a recorded extent whenever one exists.
   static constexpr size_t WITNESS_IDX_FALLBACK_ELEMS = 100;
 
   /// \brief Find function symbol
@@ -365,6 +377,11 @@ private:
   /// \param wrapper GOTO program to append snapshot instructions to
   /// \param location Source location
   /// \param func_name Function name for unique snapshot naming
+  /// \param param_extents Byte extent of each harness allocation. Params whose
+  ///        backing is not justified are skipped: the snapshot dereferences
+  ///        the pointer, and against a nondet extent that harness-invented
+  ///        read fails its own bounds check, reporting a violation in a
+  ///        parameter the contract never mentions.
   /// \return Vector of snapshot records for use in emit_ptr_deref_assertions
   std::vector<ptr_deref_snapshot_t> materialize_ptr_deref_snapshots(
     const frame_enforcert::classified_assignst &classified,
@@ -372,7 +389,8 @@ private:
     const symbolt &original_func,
     goto_programt &wrapper,
     const locationt &location,
-    const std::string &func_name);
+    const std::string &func_name,
+    const std::map<irep_idt, param_extentt> &param_extents);
 
   /// \brief Emit ASSERT instructions for pointer-parameter dereference compliance.
   /// For each snapshot: asserts *p == snapshot (scalar) or p->field == snapshot (struct).
@@ -395,10 +413,11 @@ private:
   /// \param wrapper GOTO program to append snapshot instructions to
   /// \param location Source location
   /// \param func_name Function name for unique snapshot naming
-  /// \param param_extents Maps each allocated pointer symbol to its byte-extent
-  ///        expression, so the array-element witness index is bounded by the
-  ///        real allocation (extent/sizeof(elem)) rather than a constant.
-  ///        Covers both __ESBMC_is_fresh sizes and harness nondet extents.
+  /// \param param_extents Byte extent of each harness allocation, used to
+  ///        clamp the witness index to extent/sizeof(elem). An absent entry
+  ///        falls back to WITNESS_IDX_FALLBACK_ELEMS. The bound is a clamp and
+  ///        never an ASSUME: assuming a range that a zero or symbolic extent
+  ///        can falsify would discharge the whole wrapper vacuously (#6212).
   /// \return Vector of snapshot records for use in emit_arr_elem_assertions
   std::vector<arr_elem_snapshot_t> materialize_arr_elem_snapshots(
     const frame_enforcert::classified_assignst &classified,
@@ -406,8 +425,7 @@ private:
     goto_programt &wrapper,
     const locationt &location,
     const std::string &func_name,
-    const std::map<irep_idt, expr2tc> &param_extents,
-    const std::set<irep_idt> &unstated_extents);
+    const std::map<irep_idt, param_extentt> &param_extents);
 
   /// \brief Emit ASSERT instructions for array element assigns compliance.
   /// For each snapshot: asserts (j == declared_idx) || (arr[j] == snapshot).
@@ -553,16 +571,14 @@ private:
   ///        --memory-leak-check does not blame the user's function for
   ///        wrapper-internal allocations (CWE-401).
   /// \param param_extents Output: byte extent of each allocation, keyed by
-  ///        parameter symbol, so the Phase 2B witness index can be bounded by
-  ///        the real extent rather than a constant.
+  ///        parameter symbol, each tagged with whether the contract states it.
   void add_pointer_validity_assumptions(
     goto_programt &wrapper,
     const symbolt &func,
     const locationt &location,
     const std::set<irep_idt> &skip_params,
     std::vector<expr2tc> &allocated_ptrs,
-    std::map<irep_idt, expr2tc> &param_extents,
-    std::set<irep_idt> &unstated_extents);
+    std::map<irep_idt, param_extentt> &param_extents);
 
   /// \brief Back a struct/union pointer param with one stack-allocated element.
   ///
@@ -577,6 +593,7 @@ private:
   void emit_struct_stack_backing(
     goto_programt &wrapper,
     const expr2tc &p,
+    const std::string &param_name,
     const type2tc &pointee,
     const symbolt &func,
     const locationt &location);
@@ -585,9 +602,11 @@ private:
   /// Allocates a nondet number of bytes, assigns the result to \p p, assumes
   /// p != NULL, and records \p p in \p allocated_ptrs so the caller can emit a
   /// matching free.
-  void emit_pointer_param_malloc(
+  /// \return The byte-extent expression of the allocation.
+  expr2tc emit_pointer_param_malloc(
     goto_programt &wrapper,
     const expr2tc &p,
+    const std::string &param_name,
     const symbolt &func,
     const locationt &location,
     std::vector<expr2tc> &allocated_ptrs);

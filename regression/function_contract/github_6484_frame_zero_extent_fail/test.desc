@@ -2,4 +2,3 @@ CORE
 main.c
 --function f --enforce-contract f
 ^VERIFICATION FAILED$
-^.*dereference failure.*$

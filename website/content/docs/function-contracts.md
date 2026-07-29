@@ -467,12 +467,22 @@ The following cases are not yet fully supported. KNOWNBUG regression tests
 document each one explicitly.
 
 **The array-assigns witness index falls back to 100 elements when the extent is
-unknown.** For `__ESBMC_assigns(arr[i])` the nondet witness index is bounded by
-the array's real extent: `n / sizeof(elem)` when the pointer came from
-`__ESBMC_is_fresh(a, n)`, and the parameter's nondet extent in entry-harness
-mode. Where neither applies, such as a global array or a run without
-`--function`, the bound falls back to `WITNESS_IDX_FALLBACK_ELEMS = 100`, which can
-over-bound the index and report a spurious bounds violation on a smaller array.
+unknown.** For `__ESBMC_assigns(arr[i])` the nondet witness index is clamped to
+the array's real extent, `n / sizeof(elem)` when the pointer came from
+`__ESBMC_is_fresh(a, n)`. Where no extent is recorded, such as a global array or
+a run without `--function`, the bound falls back to
+`WITNESS_IDX_FALLBACK_ELEMS = 100`, which can over-bound the index and report a
+spurious bounds violation on a smaller array. The bound is a clamp rather than
+an assumption on purpose: assuming the index range would force the extent to be
+at least one element, and for a zero extent it would be an assumption of false,
+which discharges the whole wrapper vacuously.
+
+**Pointer parameters with no stated extent are not checked against the assigns
+clause.** Proving that `*p` is unchanged means reading `*p` in the harness, and
+against an unstated extent that read is itself out of bounds. Such parameters
+are skipped rather than reported, so a contract that wants frame checking for a
+pointer must state its extent with `__ESBMC_is_fresh`. The warning names the
+parameters this applies to.
 
 **Struct pointer parameters assume one element.** A `struct S *` parameter is
 backed by a single stack-allocated `S`, so `s->field` is accepted even when the

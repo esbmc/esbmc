@@ -1075,16 +1075,13 @@ goto_programt code_contractst::generate_checking_wrapper(
     }
   }
 
-  // Byte extent of each allocated pointer (is_fresh sizes and harness nondet
-  // extents) so the Phase 2B array-element witness index can be bounded by the
-  // real allocation rather than a constant.
-  std::map<irep_idt, expr2tc> param_extents;
+  // Byte extent of each harness-allocated pointer param, tagged with whether
+  // the backing may be dereferenced. See param_extentt.
+  std::map<irep_idt, param_extentt> param_extents;
 
-  // Pointer params whose extent the contract never states. Their allocation is
-  // a nondet size, so nothing downstream may assume anything about it -- in
-  // particular Phase 2B must not bound a witness index by it, since that ASSUME
-  // would silently force the extent to be at least one element (#6212).
-  std::set<irep_idt> unstated_extents;
+  // is_fresh'd struct pointers, warned about only if an __ESBMC_old snapshot
+  // actually reads through one (#6483).
+  std::vector<expr2tc> is_fresh_struct_ptrs;
 
   // Emit the malloc + non-null assume for one resolved is_fresh pointer lvalue.
   auto emit_is_fresh_alloc =
@@ -1094,35 +1091,28 @@ goto_programt code_contractst::generate_checking_wrapper(
       assign_inst->location = location;
       assign_inst->location.comment("__ESBMC_is_fresh memory allocation");
 
-      // A struct/union pointee here bypasses the stack-backing carve-out and
-      // gets the heap object #6483 makes unsound. The carve-out cannot cover
-      // it: the contract asked for this allocation explicitly.
-      if (is_symbol2t(ptr_var))
-      {
-        type2tc pointee = ns.follow(to_pointer_type(ptr_var->type).subtype);
-        if (is_struct_type(pointee) || is_union_type(pointee))
-          log_warning(
-            "{}: __ESBMC_is_fresh on struct pointer '{}' heap-backs it, which "
-            "can silently discharge __ESBMC_old-based ensures clauses (#6483).",
-            location,
-            get_pretty_name(id2string(to_symbol2t(ptr_var).thename)));
-      }
-
       // Remember the allocation so the wrapper can free it before returning.
       wrapper_heap_ptrs.push_back(ptr_var);
 
-      // Record the allocation size keyed by the pointer symbol so Phase 2B can
-      // bound its array-element witness index by the real allocation.
-      if (is_symbol2t(ptr_var))
-        param_extents[to_symbol2t(ptr_var).thename] = size_expr;
+      if (is_symbol2t(ptr_var) && is_pointer_type(ptr_var->type))
+      {
+        // The contract asked for this allocation, so its extent is justified.
+        param_extents[to_symbol2t(ptr_var).thename] = {size_expr, true};
+
+        // A struct/union pointee bypasses the stack-backing carve-out and gets
+        // the heap object #6483 makes unsound. Only an __ESBMC_old over that
+        // pointer can trip it, so stay quiet otherwise rather than training
+        // users to ignore the warning.
+        if (
+          is_structure_type(ns.follow(to_pointer_type(ptr_var->type).subtype)))
+          is_fresh_struct_ptrs.push_back(ptr_var);
+      }
 
       // Assume the pointer is non-null: __ESBMC_is_fresh guarantees a fresh,
       // valid memory block.  Without this, symex_mem's non-deterministic
       // malloc-failure path can produce NULL, causing later derefs to fail.
-      expr2tc null_ptr = symbol2tc(ptr_var->type, "NULL");
-      expr2tc not_null = notequal2tc(ptr_var, null_ptr);
       auto assume_nn = wrapper.add_instruction(ASSUME);
-      assume_nn->guard = not_null;
+      assume_nn->guard = notequal2tc(ptr_var, gen_zero(ptr_var->type));
       assume_nn->location = location;
       assume_nn->location.comment("__ESBMC_is_fresh: pointer is non-null");
     };
@@ -1227,8 +1217,7 @@ goto_programt code_contractst::generate_checking_wrapper(
       location,
       is_fresh_allocated_params,
       wrapper_heap_ptrs,
-      param_extents,
-      unstated_extents);
+      param_extents);
   }
 
   // 1b. Allocate deferred is_fresh pointers (those reading through a base
@@ -1243,6 +1232,14 @@ goto_programt code_contractst::generate_checking_wrapper(
   //    safely dereference pointers that were set up above.
   std::vector<old_snapshot_t> old_snapshots =
     collect_old_snapshots_from_body(original_body);
+
+  if (!old_snapshots.empty())
+    for (const expr2tc &sp : is_fresh_struct_ptrs)
+      log_warning(
+        "{}: __ESBMC_is_fresh on struct pointer '{}' heap-backs it, which can "
+        "silently discharge __ESBMC_old-based ensures clauses (#6483).",
+        location,
+        get_pretty_name(id2string(to_symbol2t(sp).thename)));
 
   materialize_old_snapshots_at_wrapper(
     old_snapshots, wrapper, id2string(original_func.name), location);
@@ -1321,7 +1318,8 @@ goto_programt code_contractst::generate_checking_wrapper(
       original_func,
       wrapper,
       location,
-      func_name);
+      func_name,
+      param_extents);
     if (!ptr_deref_snaps.empty())
     {
       log_debug(
@@ -1339,8 +1337,7 @@ goto_programt code_contractst::generate_checking_wrapper(
       wrapper,
       location,
       func_name,
-      param_extents,
-      unstated_extents);
+      param_extents);
     if (!arr_elem_snaps.empty())
     {
       log_debug(
@@ -2370,7 +2367,8 @@ code_contractst::materialize_ptr_deref_snapshots(
   const symbolt &original_func,
   goto_programt &wrapper,
   const locationt &location,
-  const std::string &func_name)
+  const std::string &func_name,
+  const std::map<irep_idt, param_extentt> &param_extents)
 {
   std::vector<ptr_deref_snapshot_t> result;
 
@@ -2402,6 +2400,15 @@ code_contractst::materialize_ptr_deref_snapshots(
       continue;
 
     irep_idt param_id = param.get_identifier();
+
+    // The snapshot below reads *p. Against an unjustified backing that read is
+    // out of bounds, so the wrapper would report a violation in a parameter
+    // the contract never mentions and the body never touches. There is nothing
+    // to protect either: the body cannot validly dereference it.
+    auto extent_it = param_extents.find(param_id);
+    if (extent_it != param_extents.end() && !extent_it->second.justified)
+      continue;
+
     expr2tc ptr_sym = symbol2tc(param_type, param_id);
 
     // If *p is fully covered by the assigns clause → skip.
@@ -2704,8 +2711,7 @@ code_contractst::materialize_arr_elem_snapshots(
   goto_programt &wrapper,
   const locationt &location,
   const std::string &func_name,
-  const std::map<irep_idt, expr2tc> &param_extents,
-  const std::set<irep_idt> &unstated_extents)
+  const std::map<irep_idt, param_extentt> &param_extents)
 {
   std::vector<arr_elem_snapshot_t> result;
 
@@ -2738,20 +2744,6 @@ code_contractst::materialize_arr_elem_snapshots(
       continue;
     }
 
-    // The witness needs a valid arr[j] to snapshot, which bounds j by the
-    // object's extent. When the contract states no extent that bound would
-    // assume one, silently re-opening #6212 for any contract that pairs a
-    // null-check requires with an assigns(arr[i]). Frame checking for such a
-    // pointer needs __ESBMC_is_fresh; warn_unstated_extents says so.
-    if (unstated_extents.count(to_symbol2t(arr_ptr).thename))
-    {
-      log_debug(
-        "contracts",
-        "materialize_arr_elem_snapshots: skipping {} (extent unstated)",
-        id2string(to_symbol2t(arr_ptr).thename));
-      continue;
-    }
-
     // Resolve element type
     const pointer_type2t &ptr_type = to_pointer_type(arr_ptr->type);
     type2tc elem_type = ptr_type.subtype;
@@ -2766,7 +2758,8 @@ code_contractst::materialize_arr_elem_snapshots(
 
     type2tc j_type = idx_expr->type;
     std::string cnt_str = std::to_string(arr_elem_snap_counter);
-    std::string arr_name = id2string(to_symbol2t(arr_ptr).thename);
+    const irep_idt &arr_id = to_symbol2t(arr_ptr).thename;
+    const std::string &arr_name = id2string(arr_id);
 
     // Create nondet witness index j
     std::string j_sym_name =
@@ -2792,33 +2785,49 @@ code_contractst::materialize_arr_elem_snapshots(
     j_assign->location = location;
     j_assign->location.comment("frame: nondet witness index (Phase 2B)");
 
-    // Constrain j to the allocated range so that arr[j] is a valid access.
-    // Both allocation sources record a byte extent in param_extents, so use
-    // extent/sizeof(elem); only arrays with no recorded extent (e.g. globals)
-    // fall back to the constant. Over-bounding j here makes arr[j] read past
-    // the real allocation and trips a spurious "array bounds violated" (#5314).
-    BigInt elem_sz = type_byte_size(elem_type, &ns);
-    auto extent_it = param_extents.find(to_symbol2t(arr_ptr).thename);
+    // Bound j to the allocated range so that arr[j] is a valid access.
+    // Over-bounding j makes arr[j] read past the real allocation and trips a
+    // spurious "array bounds violated" (#5314), so prefer the recorded extent
+    // and fall back to the constant only when there is none (e.g. globals).
+    auto extent_it = param_extents.find(arr_id);
     expr2tc j_hi = constant_int2tc(j_type, BigInt(WITNESS_IDX_FALLBACK_ELEMS));
-    if (extent_it != param_extents.end() && elem_sz > 0)
+    if (extent_it != param_extents.end())
     {
       // Divide in the extent's own unsigned type and cast the quotient, so a
-      // wide extent does not wrap into a negative j_hi. Only stated extents
-      // reach here, so this is a constant fold in the common case.
-      const type2tc &ext_type = extent_it->second->type;
-      expr2tc elem_sz_e = constant_int2tc(ext_type, elem_sz);
-      j_hi =
-        typecast2tc(j_type, div2tc(ext_type, extent_it->second, elem_sz_e));
-      simplify(j_hi);
+      // wide extent does not wrap into a negative j_hi.
+      BigInt elem_sz = type_byte_size(elem_type, &ns);
+      if (elem_sz > 0)
+      {
+        const type2tc &ext_type = extent_it->second.bytes->type;
+        expr2tc elem_sz_e = constant_int2tc(ext_type, elem_sz);
+        j_hi = typecast2tc(
+          j_type, div2tc(ext_type, extent_it->second.bytes, elem_sz_e));
+        simplify(j_hi);
+      }
     }
 
-    goto_programt::targett range_assume = wrapper.add_instruction(ASSUME);
-    range_assume->guard = and2tc(
-      greaterthanequal2tc(witness_j, gen_zero(j_type)),
-      lessthan2tc(witness_j, j_hi));
-    range_assume->location = location;
-    range_assume->location.comment(
-      "frame: constrain witness index to valid array range (Phase 2B)");
+    // Clamp rather than ASSUME. The range can be empty -- a zero or
+    // sub-element extent, or a symbolic one the solver may pick 0 for -- and a
+    // straight-line ASSUME of an empty range is ASSUME(false), which sits
+    // before the call and discharges every assertion after it, verifying the
+    // whole function vacuously. Assuming a non-empty range instead forces the
+    // extent to be at least one element, which is the #6212 assumption in
+    // another guise. Clamping to the declared index does neither: out of
+    // range, arr[j] is the element the contract already names and the paired
+    // assertion holds through its (j == declared_idx) disjunct.
+    goto_programt::targett j_clamp = wrapper.add_instruction(ASSIGN);
+    j_clamp->code = code_assign2tc(
+      witness_j,
+      if2tc(
+        j_type,
+        and2tc(
+          greaterthanequal2tc(witness_j, gen_zero(j_type)),
+          lessthan2tc(witness_j, j_hi)),
+        witness_j,
+        idx_expr));
+    j_clamp->location = location;
+    j_clamp->location.comment(
+      "frame: clamp witness index to valid array range (Phase 2B)");
 
     // Create snapshot arr[j] = *(arr + j)
     std::string snap_sym_name =
@@ -4090,8 +4099,8 @@ static void warn_unstated_extents(
 
   log_warning(
     "{}: {}: contract states no extent for pointer parameter(s) {}, so any "
-    "dereference it does not justify will fail its bounds check and assigns "
-    "compliance is not checked for them. State one with "
+    "dereference will fail its bounds check and they are not checked against "
+    "the assigns clause. State one with "
     "__ESBMC_requires(__ESBMC_is_fresh(<param>, <bytes>)).",
     location,
     func.name,
@@ -4104,8 +4113,7 @@ void code_contractst::add_pointer_validity_assumptions(
   const locationt &location,
   const std::set<irep_idt> &skip_params,
   std::vector<expr2tc> &allocated_ptrs,
-  std::map<irep_idt, expr2tc> &param_extents,
-  std::set<irep_idt> &unstated_extents)
+  std::map<irep_idt, param_extentt> &param_extents)
 {
   if (!func.get_type().is_code())
     return;
@@ -4116,10 +4124,11 @@ void code_contractst::add_pointer_validity_assumptions(
 
   for (const auto &param : to_code_type(func.get_type()).arguments())
   {
+    if (!param.type().is_pointer())
+      continue;
+
     type2tc param_type = migrate_type(param.type());
     expr2tc p = symbol2tc(param_type, param.get_identifier());
-    if (!is_pointer_type(p))
-      continue;
 
     // Skip params already allocated by __ESBMC_is_fresh to avoid overwriting
     // the is_fresh allocation, which has the extent the contract asked for.
@@ -4137,17 +4146,21 @@ void code_contractst::add_pointer_validity_assumptions(
 
     // See emit_struct_stack_backing for why structs are carved out.
     // Drop this branch once #6483 is fixed.
-    if (is_struct_type(pointee) || is_union_type(pointee))
+    if (is_structure_type(pointee))
     {
-      emit_struct_stack_backing(wrapper, p, pointee, func, location);
-      param_extents[param.get_identifier()] =
-        constant_int2tc(size_type2(), type_byte_size(pointee, &ns));
+      emit_struct_stack_backing(wrapper, p, name, pointee, func, location);
+      // Real stack storage, so one element is genuinely dereferenceable even
+      // though the contract never asked for it.
+      param_extents[param.get_identifier()] = {
+        type_byte_size_expr(pointee, &ns), true};
       assumed_one_element.push_back(name);
       continue;
     }
 
-    emit_pointer_param_malloc(wrapper, p, func, location, allocated_ptrs);
-    unstated_extents.insert(param.get_identifier());
+    param_extents[param.get_identifier()] = {
+      emit_pointer_param_malloc(
+        wrapper, p, name, func, location, allocated_ptrs),
+      false};
     nondet_extent.push_back(name);
   }
 
@@ -4158,11 +4171,11 @@ void code_contractst::add_pointer_validity_assumptions(
 void code_contractst::emit_struct_stack_backing(
   goto_programt &wrapper,
   const expr2tc &p,
+  const std::string &param_name,
   const type2tc &pointee,
   const symbolt &func,
   const locationt &location)
 {
-  std::string param_name = get_pretty_name(id2string(to_symbol2t(p).thename));
   std::string harness_var_name =
     "__ESBMC_harness_ptr_" + id2string(func.name) + "_" + param_name;
 
@@ -4203,17 +4216,17 @@ void code_contractst::emit_struct_stack_backing(
     id2string(to_symbol2t(p).thename));
 }
 
-void code_contractst::emit_pointer_param_malloc(
+expr2tc code_contractst::emit_pointer_param_malloc(
   goto_programt &wrapper,
   const expr2tc &p,
+  const std::string &param_name,
   const symbolt &func,
   const locationt &location,
   std::vector<expr2tc> &allocated_ptrs)
 {
-  // The extent must be a named symbol, not an inline nondet: nothing else can
-  // refer to the same value, and a second nondet would decouple any later use
-  // from the allocation.
-  std::string param_name = get_pretty_name(id2string(to_symbol2t(p).thename));
+  // The extent is a named symbol rather than an inline nondet so that the
+  // returned expression and the malloc size are the same value, and so that a
+  // counterexample shows the extent under a readable name.
   std::string extent_name =
     "__ESBMC_harness_extent_" + id2string(func.name) + "_" + param_name;
 
@@ -4225,11 +4238,11 @@ void code_contractst::emit_pointer_param_malloc(
   extent_sym.static_lifetime = false;
   extent_sym.location = location;
   extent_sym.mode = func.mode;
-  context.move_symbol_to_context(extent_sym);
-  expr2tc alloc_size = symbol2tc(size_type2(), extent_name);
+  const irep_idt &extent_id = context.move_symbol_to_context(extent_sym)->id;
+  expr2tc alloc_size = symbol2tc(size_type2(), extent_id);
 
   auto extent_decl = wrapper.add_instruction(DECL);
-  extent_decl->code = code_decl2tc(size_type2(), irep_idt(extent_name));
+  extent_decl->code = code_decl2tc(size_type2(), extent_id);
   extent_decl->location = location;
   extent_decl->location.comment("harness: nondet extent for pointer parameter");
 
@@ -4257,4 +4270,5 @@ void code_contractst::emit_pointer_param_malloc(
     id2string(to_symbol2t(p).thename));
 
   allocated_ptrs.push_back(p);
+  return alloc_size;
 }
