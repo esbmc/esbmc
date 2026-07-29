@@ -1456,6 +1456,7 @@ which two steps emit the duplicate is H-B1 work and is deliberately not
 attempted here — the value of this entry is that the violation is now visible
 and cannot regress unnoticed.
 
+### M4 (H-B1) — 2026-07-28
 ### M4 (closed) — 2026-07-28
 
 **Result: H-B1 closed. The validator is shared, and the corpus sweep was made
@@ -1501,6 +1502,55 @@ quote.
 
 **Still open in M4.** H-B4, H-B5, H-B2. R14 remains pinned, not diagnosed.
 Also still open from M0: WI-1, WI-2, D12.
+
+*(This entry was originally headed "M4 (closed)". It was not — only H-B1 was.
+The heading is corrected above; M4 closes when H-B4, H-B5 and H-B2 land.)*
+
+### M4 (H-B4) — 2026-07-28
+
+**Result: I3 and I4 discharged on the real `renaming::level2t`. No defect
+found — and the mutation testing is the reason that statement is worth
+anything.**
+
+I4 was listed **unenforced** in §4.2 and C1 (renaming/SSA) is P0 in §4.3
+("silent aliasing of distinct values"), so this is the highest-ranked component
+in the plan whose round-trip property had no test at all. Five cases added to
+`unit/goto-symex/renaming.test.cpp` (which already owned I1/I2/R3, so the
+subject keeps one file): 4 → 9 cases, 28 → 520 assertions.
+
+| Case | Property |
+|---|---|
+| `rename is idempotent on an L2 symbol` | I3, early-return path |
+| `rename of an L1 symbol reaches a fixed point` | I3, through the real `current_names` lookup |
+| `get_original_name inverts rename` | I4, for `level1` **and** `level1_global` |
+| `stripping to L0 keeps name and type` | I4, fields zeroed / name and type preserved |
+| `every equation definition strips cleanly to L0` | I4 + level monotonicity over a real equation |
+
+**Two of these were vacuous when first written, and only mutation testing said
+so.** Deliberately breaking `get_original_name` (dropping the `level1_num`
+reset) left the whole-equation sweep **green**, for two independent reasons:
+
+1. The test program had no callee local with a non-zero L1 activation, so
+   `level1_num == 0` held for every definition regardless of the bug. Fixed by
+   giving the program repeated and recursive calls, plus an explicit
+   `REQUIRE(with_activation > 0)` so the weaker vacuity cannot return.
+2. The sweep asserted `rlevel`, `thename`, `type` and idempotence but never
+   asserted the *zeroed fields* — the very thing the mutation changed.
+
+Both are now fixed and the mutation is caught by both cases (39 failing
+assertions). A second mutation — removing `level2t::rename`'s early return for
+already-L2 symbols — is caught by both I3 cases.
+
+**Generalising: a Tier-B sweep over "every step in a real equation" feels
+strong and is easy to make vacuous.** Its coverage is the product of what the
+loop asserts and what shapes the input program actually produces, and neither
+is visible from reading the test. The M2 note already recorded the input half
+(constant phi arms get folded away); this is the assertion half. Recommend
+every whole-equation sweep in this plan carry (a) a counter proving the shape
+it targets was present, and (b) a recorded mutation that it catches.
+
+**Still open in M4.** H-B5, H-B2. R14 remains pinned, not diagnosed. Also
+still open from M0: WI-1, WI-2, D12.
 
 ---
 
