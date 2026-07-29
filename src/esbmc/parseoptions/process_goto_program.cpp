@@ -446,13 +446,15 @@ bool esbmc_parseoptionst::process_goto_program(
     bool has_replace = cmdline.isset("replace-call-with-contract");
     bool has_enforce_all = cmdline.isset("enforce-all-contracts");
     bool has_replace_all = cmdline.isset("replace-all-contracts");
-    if (has_enforce || has_replace || has_enforce_all || has_replace_all)
+    if (
+      (has_enforce || has_replace || has_enforce_all || has_replace_all) &&
       process_function_contracts(
         goto_functions,
         has_replace,
         has_enforce,
         has_enforce_all,
-        has_replace_all);
+        has_replace_all))
+      return true;
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);

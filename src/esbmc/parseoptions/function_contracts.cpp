@@ -8,8 +8,8 @@
 #include <set>
 #include <string>
 
-// Process function contracts if enabled
-void esbmc_parseoptionst::process_function_contracts(
+// Process function contracts if enabled. Returns true on a usage error.
+bool esbmc_parseoptionst::process_function_contracts(
   goto_functionst &goto_functions,
   bool has_replace,
   bool has_enforce,
@@ -59,32 +59,51 @@ void esbmc_parseoptionst::process_function_contracts(
       return result;
     };
 
-  // Lambda function to process function list (handles "*" wildcard)
-  auto process_function_list = [&collect_functions_with_contracts](
-                                 const std::list<std::string> &func_list) {
-    std::set<std::string> result;
-    for (const auto &func : func_list)
-    {
-      if (func == "*")
+  // Lambda function to process function list (handles "*" wildcard).
+  // An unresolvable name is a usage error rather than a warning: these options
+  // decide *what* gets verified, so silently skipping one leaves ESBMC
+  // verifying something other than what was asked and still reporting a
+  // verdict for it. Sets ok=false on the first bad name.
+  bool ok = true;
+  auto process_function_list =
+    [&collect_functions_with_contracts, &contracts, &ok](
+      const std::list<std::string> &func_list, const char *opt) {
+      std::set<std::string> result;
+      for (const auto &func : func_list)
       {
-        // "*" means all functions with contracts
-        result = collect_functions_with_contracts();
-        break; // "*" means all, so we can break after collecting
-      }
-      else
-      {
+        if (func == "*")
+        {
+          // "*" means all functions with contracts
+          return collect_functions_with_contracts();
+        }
+
+        if (contracts.find_function_symbol(func) == nullptr)
+        {
+          log_error(
+            "--{}: no function named '{}'{}",
+            opt,
+            func,
+            func.find(',') != std::string::npos
+              ? " (names are not comma-separated; repeat the flag once per "
+                "function, or use \"*\")"
+              : "");
+          ok = false;
+          return std::set<std::string>();
+        }
         result.insert(func);
       }
-    }
-    return result;
-  };
+      return result;
+    };
 
   // Process enforce-contract option
   if (has_enforce)
   {
     const std::list<std::string> &enforce_list =
       cmdline.get_values("enforce-contract");
-    std::set<std::string> to_enforce = process_function_list(enforce_list);
+    std::set<std::string> to_enforce =
+      process_function_list(enforce_list, "enforce-contract");
+    if (!ok)
+      return true;
 
     if (!to_enforce.empty())
     {
@@ -104,14 +123,13 @@ void esbmc_parseoptionst::process_function_contracts(
   {
     const std::list<std::string> &replace_list =
       cmdline.get_values("replace-call-with-contract");
-    std::set<std::string> to_replace = process_function_list(replace_list);
+    std::set<std::string> to_replace =
+      process_function_list(replace_list, "replace-call-with-contract");
+    if (!ok)
+      return true;
 
     if (!to_replace.empty())
-    {
-      log_status(
-        "Replacing calls with contracts for {} function(s)", to_replace.size());
       contracts.replace_calls(to_replace);
-    }
   }
 
   // Lambda to collect ONLY functions with __ESBMC_contract annotation
@@ -157,4 +175,6 @@ void esbmc_parseoptionst::process_function_contracts(
       contracts.replace_calls(to_replace);
     }
   }
+
+  return false;
 }

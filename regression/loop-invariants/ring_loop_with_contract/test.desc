@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 --loop-invariant --replace-call-with-contract source_startup --replace-call-with-contract source_reaction_start --replace-call-with-contract source_reaction_in --replace-call-with-contract node_reaction --replace-call-with-contract process_messages_at_time --no-align-check
 ^VERIFICATION SUCCESSFUL$

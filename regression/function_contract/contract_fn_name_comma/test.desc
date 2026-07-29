@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract f,g
+^ERROR: --replace-call-with-contract: no function named 'f,g' \(names are not comma-separated; repeat the flag once per function, or use "\*"\)$

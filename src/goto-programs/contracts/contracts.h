@@ -172,6 +172,11 @@ public:
   /// \return True if the function should be skipped (destructor, __cxa_*, etc.)
   bool is_compiler_generated(const std::string &function_name) const;
 
+  /// \brief Find function symbol
+  /// \param function_name Function name (can be full ID or simple name)
+  /// \return Pointer to function symbol, or nullptr if not found
+  symbolt *find_function_symbol(const std::string &function_name);
+
 private:
   goto_functionst &goto_functions;
   contextt &context;
@@ -192,11 +197,6 @@ private:
   /// and produce the spurious "array bounds violated" of #5314, so prefer a
   /// recorded extent whenever one exists.
   static constexpr size_t WITNESS_IDX_FALLBACK_ELEMS = 100;
-
-  /// \brief Find function symbol
-  /// \param function_name Function name (can be full ID or simple name)
-  /// \return Pointer to function symbol, or nullptr if not found
-  symbolt *find_function_symbol(const std::string &function_name);
 
   /// \brief Rename function
   /// \param old_id Original function ID
