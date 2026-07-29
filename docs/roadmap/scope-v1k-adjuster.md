@@ -1111,6 +1111,67 @@ needs the table entry" is superseded: casting now happens at the call site for
 every expression-form call, and `wrap_function_pointer_callee` delegates to the
 same helper instead of carrying its own copy of the loop.
 
+### Per-case triage round 16 — S3 has no reproducer; the last divergence is a vacuous test (2026-07-28)
+
+**Verdict: the third named flip blocker, "S3 member/index at scale", is not
+evidenced by anything in the corpus.** Its sole census witness,
+`string-nondet-index-fail`, is a **vacuous test**, and valid member/index code is
+already at hop-off parity.
+
+The test aborts under `--python-irep2-adjust-only` in `index2t`'s construction
+assert (`irep2_expr.h:1650`). A probe on `migrate_expr`'s index arm names the
+cause exactly:
+
+```
+PROBE_INDEX_SRC legacy_id=empty migrated_type=empty
+```
+
+The index **source has type `empty`**. `nondet_string` is not a supported builtin
+— every test that calls it gets `Undefined function 'nondet_string' - replacing
+with assert(false)` — so `s` is typed void and `s[0]` indexes a void value. The
+irep2 invariant is right to reject it; nothing here argues for relaxing the
+assert.
+
+**Why the test still "passes" on the default path.** Its whole body lowers to a
+single instruction:
+
+```
+python_user_main:
+        ASSERT 0 // Unsupported function 'nondet_string' is reached
+        END_FUNCTION
+```
+
+The assertion it purports to check (`c == "h"`) never reaches the GOTO at all.
+Its expected `^VERIFICATION FAILED$` is satisfied by the unsupported-function
+assert, not by the property — the same "asserts nothing" failure mode as the
+vacuous-`test.desc` batch (#6453/#6454), reached by a different route. Its
+`-success` sibling, `string-nondet-index-success`, is marked **FUTURE**, which is
+the honest label for the feature; the `-fail` twin is marked CORE and passes for
+the wrong reason. The same holds for `string-nondet-{slice,concat,in}-fail` and
+`string-char-symbolic-fail`.
+
+**Valid indexing is at parity.** `def first(s: str) -> str: return s[0]` and
+`def pick(s: str, i: int) -> str: return s[i]` both verify SUCCESSFUL under
+legacy *and* hop-off. Under `--python-irep2-adjust` (the pass running *after*
+`clang_cpp_adjust`) even the degenerate test reports FAILED normally, confirming
+the abort needs both the void source and the absence of the legacy pass.
+
+**Consequence for the flip.** With #6462 (relational signedness), #6466 (array
+argument decay) and #6468 (resolved-struct catch id) landed, the 220-test strided
+census has **no remaining verified divergence**. The three blockers this document
+listed are resolved or refuted:
+
+| blocker | outcome |
+|---|---|
+| S5 arg casts | closed — #6461 (scalar, expression-form) + #6466 (array decay) |
+| `bases` carriage | misfiled; the real defect was the converter's catch-id fallback — #6468 |
+| S3 member/index at scale | **no reproducer**; sole witness is a vacuous test |
+
+The next honest step is therefore not another per-case round but a **denser
+census** (the stride-20 sample is exhausted), plus deciding what to do about
+`nondet_string`: either implement it — which would make the six CORE `-fail`
+tests above assert something — or re-mark those tests, which currently pass
+regardless of the behaviour they name.
 ### Per-case triage round 14 — array decay at the call-argument seam (2026-07-28)
 
 **A strided whole-corpus census is now the frontier finder.** With round 11's open

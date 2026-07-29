@@ -683,6 +683,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R9** | **Low–Medium (approximation direction unproven)** | Three documented "sound over-approximation" claims are unproven: value-set filtering after a pointer havoc (`symex_assign.cpp:~550-570`), the non-scalar uninterpreted-function fallback (`symex_function.cpp:~410-430`), and the function-pointer target enumeration over an over-approximated value set (`symex_function.cpp:~766`). Each *argues* the direction in a comment; none is checked. | cited lines | H-B6 + H-C1/H-C3 | For each, state the claim as a checkable predicate and add a Tier-B assertion (e.g. filtered set ⊆ original **and** the dropped entries are `unknown`/`invalid` only). |
 | **R10** | **Low (latent UB)** | `renaming::level2t::name_record`'s `name_record() = default` leaves `lev`, `l1_num`, `t_num` **and the derived `hash`** indeterminate (contrast `level1t::name_record`, which initialises `base_name("")`). No current default-construction site was found, but a future one (`std::optional`, map default-insert, array of records) would read indeterminate memory in `compare`/`hash`. | `renaming.h:143-214` | MSan (Tier D) + a `static_assert`-style unit check | Add default member initialisers; near-zero cost. |
 | **R11** | **Open question (concurrency soundness)** | MPOR's independence decision consumes `thread_last_reads`/`thread_last_writes`, populated via `get_expr_globals`, which resolves pointer operands through the *current* value set. If a write through a pointer whose value set is incomplete (or whose entry is `unknown`) is missed, the dependency is missed and an interleaving is dropped — **unsound**. `get_expr_globals` also early-returns entirely under `--data-races-check-only`. | `execution_statet::get_expr_globals`, `check_mpor_dependency`; `reachability_treet::ever_written_globals`/`address_taken_globals` | H-A6 (relation) + **H-C4** (end-to-end) | Determine whether an `unknown` value-set entry forces a conservative dependency; if not, that is a concrete unsoundness to fix. Highest-uncertainty item in this plan. |
+| **R13** | **Medium (silent under-verification) — confirmed and fixed, §15 M2 (cont.)** | **`--unwindsetname` never matched a loop.** `unwind_func_set` was keyed by `user_name_to_usr(name)`, which appends a `#` terminator (clang's C++ USR spelling), while `loop_id_to_func_index` was keyed by the goto function-map id, which for a C function is `c:@F@f` with no terminator. The `count(unwind_key)` in `get_unwind` therefore always missed and the global `--unwind` silently won, so a user raising the bound for one function got the lower global bound and a verdict covering less than they asked for. A second defect in the same option: the `name:index:bound` field split scanned left-to-right, so the documented USR form (`c:@F@f#:0:11`) split inside the `c:` prefix. Neither was caught because all five `unwindsetname` regression tests ran without a global `--unwind` and so passed vacuously. | `goto_symext::goto_symext`, `symex_assign.cpp:66-120`; `get_unwind`, `symex_goto.cpp:525`; `user_name_to_usr`, `usr_utils.cpp:29` | `unit/goto-symex/unwind.test.cpp` (Tier B, discharged) | Fixed: both sides now key on the name `--show-loops` prints (`usr_to_user_name`), and the field split scans from the right. Three non-vacuous regression tests added; `unwindsetname_03_priority` corrected to the loop number the program actually has. |
 | **R14** | **Open (I10 violated on a real input)** — found by R5's repaired detector, §15 M4 | With `--double-assign-check` made to fail, `regression/esbmc/github_286_3` produces an equation that **defines one SSA name twice**: `…@F@getNumbers2@numbers2?1!0&0#1`, the L2 index 1 of a local array in a function that returns a dangling pointer to it. Two definitions of one name are two constraints `x#1 == e1` and `x#1 == e2` on the same variable; where the right-hand sides disagree the conjunction is unsatisfiable, which silently removes that path from the formula — the missed-bug direction. One input in ~900 swept. Not yet characterised: which two steps emit it, and whether the two right-hand sides can differ. | `symex_target_equationt::check_for_duplicate_assigns` under `--double-assign-check`; `regression/esbmc/double_assign_check_local_array` (KNOWNBUG) | H-B1 | Find the two emitting steps (the local's scope exit is the first suspect), then decide whether the second definition is a stale re-emission or a legitimate step that must take a fresh index. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
@@ -726,7 +727,8 @@ H-A2 (the highest-value harness), H-A3, H-A5. Dual-solver mandatory.
 **Revised, §15 M2.** H-A2's and H-A3's obligations (I8, I6) are observable in the
 produced equation, so both are discharged at Tier B by
 `unit/goto-symex/merge.test.cpp` per §6.4 — no transcription, no dual-solver gate
-needed because no SMT query is involved. H-A5 is unstarted; R2's
+needed because no SMT query is involved. H-A5 is likewise Tier B
+(`unit/goto-symex/unwind.test.cpp`) and found R13. **M2 closed**; R2's
 `SYMEX_INVARIANT` remains M3.
 
 **M3 — Release-mode enforcement (0.5 wk).** R1: introduce `SYMEX_INVARIANT`,
@@ -1312,11 +1314,56 @@ a durable regression: if a future change starts orphaning snapshots on any of
 these six shapes, this fails rather than silently dropping paths.
 
 **Still open in M2.** H-A5 (unwind bounding, `get_unwind` /
-`loop_bound_exceeded`) is unstarted. Note §11.3 and R12 both forbid pairing
-`--no-unwinding-assertions` with any reachability claim, so H-A5's Tier-C form
-(H-C6, unwind monotonicity: `FAILED` at `--unwind k` ⇒ `FAILED` at every
-`k' > k`) is the safer first cut and needs no oracle. Also still open from M0:
-WI-1, WI-2, D12.
+`loop_bound_exceeded`). Also still open from M0: WI-1, WI-2, D12.
+
+### M2 (cont.) — 2026-07-28, M2 closed
+
+**Result: H-A5 discharged at Tier B — and it found a live bug (R13).**
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `unit/goto-symex/unwind.test.cpp` (H-A5) | real symex under `--unwind`, `--unwindsetname`, `--unwindset`, `--no-unwinding-assertions`, `--partial-loops` | 8 cases, 39 assertions, **pass** |
+
+Both targets are observable from outside the engine, so §6.4 puts them at Tier B:
+`get_unwind`'s decision is the *number of loop-body assignments* in the equation,
+and `loop_bound_exceeded`'s three arms are which step it appends. No case makes a
+reachability claim, so R12 and §11.3 are respected by construction.
+
+- **A5.1, precedence** — the three bounds are given distinct values (global 5,
+  function-specific 3, loop-specific 2) so that a precedence swap lands on a
+  different iteration count rather than an equal one. The loop id passed to
+  `--unwindset` is read out of the built GOTO program, not assumed.
+- **A5.2, `0` means unbounded** — a loop-specific `0` exempts one loop from a
+  global `--unwind 2`, and the loop then runs to its natural exhaustion. Its
+  non-vacuity twin drops only the exemption and gets truncation back.
+- **A5.3, exactly one arm** — `--no-unwinding-assertions` must trade the claim
+  for an assumption *together*: the unwinding-assertion count goes 1 → 0 while
+  the assume count goes n → n+1, at an unchanged iteration count.
+  `--partial-loops` moves neither.
+- **A5.4, guard strengthening** — with a condition still true at the bound, the
+  `¬cond` that `loop_bound_exceeded` adds is `false`, so the code after the loop
+  becomes unreachable and is not emitted. Under `--partial-loops` — the one arm
+  that skips the `guard.add` — the same post-loop assignment *is* emitted. That
+  difference is the guard strengthening, observed rather than modelled.
+
+**R13, found by writing A5.1.** The function-specific arm of `get_unwind`'s
+precedence chain was dead: `unwind_func_set` was keyed by
+`user_name_to_usr(name)`, which appends clang's C++ USR `#` terminator, and
+`loop_id_to_func_index` by the goto function-map id, which for a C function has
+none. Every `--unwindsetname` lookup missed and the global `--unwind` silently
+won. The five existing `unwindsetname` regression tests all passed vacuously:
+none set a global `--unwind`, so all of them verify identically whether the
+option works or is ignored. Both sides now key on the name `--show-loops`
+prints, and the `name:index:bound` split scans from the right so a USR name's
+own `c:` prefix no longer splits the field.
+
+This is the plan's premise landing for the first time on a shipped-binary
+defect: the harness was written to state A5.1, not to hunt for a bug, and the
+bug fell out of stating it.
+
+**M2 is closed.** H-A2/H-A3 (§15 M2) and H-A5 are discharged at Tier B, all
+three without a transcription. Still open from M0: WI-1, WI-2, D12. Next is
+**M3** (R1: `SYMEX_INVARIANT`), which R2 and R7 both wait on.
 
 ### M3 — 2026-07-28, M3 closed
 
