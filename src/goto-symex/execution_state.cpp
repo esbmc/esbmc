@@ -1078,7 +1078,13 @@ bool execution_statet::has_cswitch_point_occured() const
   // a context switch point here — they already drive scheduling through
   // the pthread library's explicit switch mechanisms, and treating every
   // lock access as a cswitch point blows up the DFS width.
-  auto is_pthread_sync_type = [](const type2tc &t) {
+  // An array of locks is still just locks: `pthread_mutex_t m[N]` collects as
+  // the array symbol, whose type is an array rather than the struct, so
+  // without looking through it every acquisition in the textbook dining
+  // -philosophers shape forces a switch point (#6480).
+  auto is_pthread_sync_type = [](type2tc t) {
+    while (is_array_type(t))
+      t = to_array_type(t).subtype;
     if (is_nil_type(t))
       return false;
     if (is_struct_type(t))
