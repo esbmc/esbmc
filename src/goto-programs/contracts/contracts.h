@@ -158,10 +158,8 @@ public:
   /// \p justified says whether the harness backing is real enough to read
   /// through: an __ESBMC_is_fresh size, or the one-element stack backing of
   /// the #6483 carve-out. It is false for a nondet heap extent, which nothing
-  /// may dereference and nothing may assume a lower bound on -- doing either
-  /// silently re-opens #6212. Keeping that next to the value rather than in a
-  /// separate set makes it a decision every consumer has to spell out; a
-  /// side-channel container was missed by one consumer and cost a regression.
+  /// may dereference. An absent map entry is a third state: the harness never
+  /// allocated, so the pointer is the real caller's.
   struct param_extentt
   {
     expr2tc bytes;  ///< Byte-extent expression of the allocation
@@ -562,7 +560,8 @@ private:
   /// only dereferenceable as far as the contract itself justifies via
   /// __ESBMC_is_fresh.  A fixed extent here would assume a buffer size the
   /// contract does not state and mask out-of-bounds accesses in the body
-  /// (GitHub issue #6212).
+  /// (GitHub issue #6212). Struct and union params are the exception: they keep
+  /// a one-element stack backing, see emit_struct_stack_backing.
   /// \param wrapper Destination goto program (wrapper body)
   /// \param func Function symbol
   /// \param location Location information

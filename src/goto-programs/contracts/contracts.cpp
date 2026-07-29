@@ -1083,16 +1083,14 @@ goto_programt code_contractst::generate_checking_wrapper(
   // Byte extent of each harness-allocated pointer param, tagged with whether
   // the backing may be dereferenced. See param_extentt.
   //
-  // Invariant: the key is always the parameter's own symbol id. Both producers
-  // must agree on that -- the is_fresh path below keys on the resolved lvalue's
-  // thename, add_pointer_validity_assumptions on param.get_identifier() -- and
-  // so must every consumer, since a mismatch degrades silently to the
-  // WITNESS_IDX_FALLBACK_ELEMS path with no diagnostic.
+  // Keyed by the pointer symbol's id. A consumer that looks up a different id
+  // degrades silently to the WITNESS_IDX_FALLBACK_ELEMS path with no
+  // diagnostic, so the two producers below must keep agreeing on it.
   std::map<irep_idt, param_extentt> param_extents;
 
-  // is_fresh'd struct pointers, warned about only if an __ESBMC_old snapshot
-  // actually reads through one (#6483).
-  std::vector<expr2tc> is_fresh_struct_ptrs;
+  // is_fresh'd struct pointers, warned about only when the contract uses
+  // __ESBMC_old at all (#6483).
+  std::vector<std::string> is_fresh_struct_ptrs;
 
   // Emit the malloc + non-null assume for one resolved is_fresh pointer lvalue.
   auto emit_is_fresh_alloc =
@@ -1116,7 +1114,8 @@ goto_programt code_contractst::generate_checking_wrapper(
         // users to ignore the warning.
         if (is_structure_type(
               ns.follow(to_pointer_type(ptr_var->type).subtype)))
-          is_fresh_struct_ptrs.push_back(ptr_var);
+          is_fresh_struct_ptrs.push_back(
+            get_pretty_name(id2string(to_symbol2t(ptr_var).thename)));
       }
 
       // Assume the pointer is non-null: __ESBMC_is_fresh guarantees a fresh,
@@ -1244,13 +1243,12 @@ goto_programt code_contractst::generate_checking_wrapper(
   std::vector<old_snapshot_t> old_snapshots =
     collect_old_snapshots_from_body(original_body);
 
-  if (!old_snapshots.empty())
-    for (const expr2tc &sp : is_fresh_struct_ptrs)
-      log_warning(
-        "{}: __ESBMC_is_fresh on struct pointer '{}' heap-backs it, which can "
-        "silently discharge __ESBMC_old-based ensures clauses (#6483).",
-        location,
-        get_pretty_name(id2string(to_symbol2t(sp).thename)));
+  if (!old_snapshots.empty() && !is_fresh_struct_ptrs.empty())
+    log_warning(
+      "{}: __ESBMC_is_fresh on struct pointer(s) {} heap-backs them, which can "
+      "silently discharge __ESBMC_old-based ensures clauses (#6483).",
+      location,
+      fmt::join(is_fresh_struct_ptrs, ", "));
 
   materialize_old_snapshots_at_wrapper(
     old_snapshots, wrapper, id2string(original_func.name), location);
@@ -2395,19 +2393,7 @@ code_contractst::materialize_ptr_deref_snapshots(
 
   for (const auto &param : params)
   {
-    type2tc param_type = migrate_type(param.type());
-    if (!is_pointer_type(param_type))
-      continue;
-
-    const pointer_type2t &ptr_type = to_pointer_type(param_type);
-    type2tc pointee = ptr_type.subtype;
-    if (is_symbol_type(pointee))
-      pointee = ns.follow(pointee);
-
-    // Skip void*, function pointers, pointer-to-pointer (for now)
-    if (
-      is_empty_type(pointee) || is_code_type(pointee) || is_nil_type(pointee) ||
-      is_pointer_type(pointee))
+    if (!param.type().is_pointer())
       continue;
 
     irep_idt param_id = param.get_identifier();
@@ -2418,6 +2404,17 @@ code_contractst::materialize_ptr_deref_snapshots(
     // to protect either: the body cannot validly dereference it.
     auto extent_it = param_extents.find(param_id);
     if (extent_it != param_extents.end() && !extent_it->second.justified)
+      continue;
+
+    type2tc param_type = migrate_type(param.type());
+    type2tc pointee = to_pointer_type(param_type).subtype;
+    if (is_symbol_type(pointee))
+      pointee = ns.follow(pointee);
+
+    // Skip void*, function pointers, pointer-to-pointer (for now)
+    if (
+      is_empty_type(pointee) || is_code_type(pointee) || is_nil_type(pointee) ||
+      is_pointer_type(pointee))
       continue;
 
     expr2tc ptr_sym = symbol2tc(param_type, param_id);
@@ -2485,7 +2482,7 @@ code_contractst::materialize_ptr_deref_snapshots(
     }
 
     // This pointer param is NOT in the assigns clause at all → snapshot *p.
-    if (is_struct_type(pointee) || is_union_type(pointee))
+    if (is_structure_type(pointee))
     {
       // Snapshot each scalar field of the struct.
       const struct_type2t &stype = to_struct_type(pointee);
@@ -2801,31 +2798,27 @@ code_contractst::materialize_arr_elem_snapshots(
     // spurious "array bounds violated" (#5314), so prefer the recorded extent
     // and fall back to the constant only when there is none (e.g. globals).
     auto extent_it = param_extents.find(arr_id);
+    BigInt elem_sz = type_byte_size(elem_type, &ns);
     expr2tc j_hi = constant_int2tc(j_type, BigInt(WITNESS_IDX_FALLBACK_ELEMS));
-    if (extent_it != param_extents.end())
+    if (extent_it != param_extents.end() && elem_sz > 0)
     {
       // Divide in the extent's own unsigned type and cast the quotient, so a
       // wide extent does not wrap into a negative j_hi.
-      BigInt elem_sz = type_byte_size(elem_type, &ns);
-      if (elem_sz > 0)
-      {
-        const type2tc &ext_type = extent_it->second.bytes->type;
-        expr2tc elem_sz_e = constant_int2tc(ext_type, elem_sz);
-        j_hi = typecast2tc(
-          j_type, div2tc(ext_type, extent_it->second.bytes, elem_sz_e));
-        simplify(j_hi);
-      }
+      const expr2tc &bytes = extent_it->second.bytes;
+      j_hi = typecast2tc(
+        j_type,
+        div2tc(bytes->type, bytes, constant_int2tc(bytes->type, elem_sz)));
+      simplify(j_hi);
     }
 
     // Clamp rather than ASSUME. The range can be empty -- a zero or
     // sub-element extent, or a symbolic one the solver may pick 0 for -- and a
-    // straight-line ASSUME of an empty range is ASSUME(false), which sits
-    // before the call and discharges every assertion after it, verifying the
-    // whole function vacuously. Assuming a non-empty range instead forces the
-    // extent to be at least one element, which is the #6212 assumption in
-    // another guise. Clamping to the declared index does neither: out of
-    // range, arr[j] is the element the contract already names and the paired
-    // assertion holds through its (j == declared_idx) disjunct.
+    // straight-line ASSUME of an empty range discharges every assertion after
+    // it, verifying the whole function vacuously. Assuming a non-empty range
+    // instead forces the extent to be at least one element, which is #6212 in
+    // another guise. Clamping to the declared index does neither.
+    // Phase 2C still assumes its range (#6513); it needs a skip rather than a
+    // clamp, having no declared index to fall back to.
     goto_programt::targett j_clamp = wrapper.add_instruction(ASSIGN);
     j_clamp->code = code_assign2tc(
       witness_j,
@@ -4249,7 +4242,7 @@ expr2tc code_contractst::emit_pointer_param_malloc(
   extent_sym.static_lifetime = false;
   extent_sym.location = location;
   extent_sym.mode = func.mode;
-  const irep_idt &extent_id = context.move_symbol_to_context(extent_sym)->id;
+  const irep_idt extent_id = context.move_symbol_to_context(extent_sym)->id;
   expr2tc alloc_size = symbol2tc(size_type2(), extent_id);
 
   auto extent_decl = wrapper.add_instruction(DECL);
