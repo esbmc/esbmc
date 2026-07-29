@@ -73,6 +73,128 @@ The standard given is the one the test exercises (`--std`).
 - `std::vector::at` throws `std::out_of_range` instead of asserting (`try-catch_vector_02_bug`); `std::bad_cast` / `std::bad_typeid` derive from `std::exception` with a virtual `what()`
 - Concurrent exceptions: the exception-state globals are thread-local, so each thread raises, catches, and clears its own in-flight exception independently — concurrently-throwing programs are lowered directly rather than rejected (`lower-exceptions_concurrent`). A pthread start routine reached through a computed pointer (or also called directly) cannot get a sound per-function uncaught-escape check and is declined as unsupported; declining is sound — it never validates a buggy program (`lower-exceptions_concurrent_dualuse`)
 
+# Operational models vs. host headers
+
+By default ESBMC compiles C++ with `-nostdinc++`, so `#include <vector>` resolves
+to ESBMC's own operational model (OM) rather than the host standard library. Two
+flags change that:
+
+- `--no-abstracted-cpp-includes` — do not include the abstract C++ operational
+  models at all.
+- `--mix-cpp-host-headers` — keep the host system headers visible *alongside* the
+  OMs, so an `#include` not covered by the bundled models falls through to the
+  host header. Names defined by both (`char_traits`, `istream`, …) can then
+  produce ambiguity errors, so this is opt-in.
+
+# Standard-library coverage (2026-07 update)
+
+The following are covered by passing regression tests under `regression/esbmc-cpp*`.
+
+**Newly modelled headers**
+
+- `<atomic>` ([#6129](https://github.com/esbmc/esbmc/pull/6129))
+- `<thread>`, `<mutex>` and `<condition_variable>`, lowered onto ESBMC's pthread
+  model so interleaving exploration, deadlock and race detection apply
+  ([#6394](https://github.com/esbmc/esbmc/pull/6394)); `std::promise` /
+  `std::future` on the same basis ([#6411](https://github.com/esbmc/esbmc/pull/6411))
+- `<system_error>` ([#6414](https://github.com/esbmc/esbmc/pull/6414)),
+  `<iosfwd>` ([#6417](https://github.com/esbmc/esbmc/pull/6417)), and `<complex>`,
+  which is now usable ([#6419](https://github.com/esbmc/esbmc/pull/6419))
+
+**Completed existing headers**
+
+- `<algorithm>` — the C++11 algorithms that were missing
+  ([#6435](https://github.com/esbmc/esbmc/pull/6435)); `upper_bound` scanned
+  backwards and returned the wrong iterator
+  ([#6434](https://github.com/esbmc/esbmc/pull/6434))
+- `<numeric>` — `iota`, `gcd`, `lcm`, `reduce`
+  ([#6418](https://github.com/esbmc/esbmc/pull/6418))
+- `<type_traits>` — the classification traits and `_t` aliases
+  ([#6412](https://github.com/esbmc/esbmc/pull/6412))
+- `<iterator>` — `iterator_traits` is now accessible and the iterator tags are
+  present ([#6420](https://github.com/esbmc/esbmc/pull/6420))
+- `<array>` — the required `iterator`/`const_iterator` typedefs
+  ([#6416](https://github.com/esbmc/esbmc/pull/6416))
+- `std::string_view` — the declared-but-missing search members
+  ([#6421](https://github.com/esbmc/esbmc/pull/6421)), plus `string` →
+  `string_view` conversion, `hash<string_view>` and the `fstream` string
+  overloads ([#6397](https://github.com/esbmc/esbmc/pull/6397))
+- `std::valarray` — the declared-but-missing members
+  ([#6424](https://github.com/esbmc/esbmc/pull/6424))
+- Streams — the standard stream objects (`std::cout` and friends) and
+  `ios::widen`/`narrow` ([#6425](https://github.com/esbmc/esbmc/pull/6425)),
+  `ios::exceptions` and `ios::copyfmt`
+  ([#6429](https://github.com/esbmc/esbmc/pull/6429)); `ostream`'s own
+  `width`/`fill`/`precision` were hiding the inherited members and are gone
+  ([#6427](https://github.com/esbmc/esbmc/pull/6427))
+- `std::variant` and `std::any` — the converting constructor no longer hijacks
+  copies ([#6407](https://github.com/esbmc/esbmc/pull/6407),
+  [#6408](https://github.com/esbmc/esbmc/pull/6408))
+- `std::optional` — `emplace`, `swap`, `std::make_optional`
+  ([#6346](https://github.com/esbmc/esbmc/pull/6346))
+- `<tuple>` — `std::tie` and `std::ignore`
+  ([#6344](https://github.com/esbmc/esbmc/pull/6344)); structured binding over a
+  `std::tuple` ([#6342](https://github.com/esbmc/esbmc/pull/6342))
+
+**Containers: const-correctness and the C++11/20 API**
+
+- `std::vector` — the destructor now frees its buffer
+  ([#6232](https://github.com/esbmc/esbmc/pull/6232)), plus `data()`,
+  `emplace_back`, `shrink_to_fit` and `cbegin`/`cend`
+- `std::list` — const `front`/`back`/`rbegin`/`rend`, and `cbegin`/`cend`
+- `std::deque` — const iteration and corrected iterator operators
+- `std::map`/`std::multimap` — a const `at` overload, `count` taking
+  `const key_type&`, const forward and reverse iteration, `emplace`,
+  `try_emplace`, `insert_or_assign`, and iterator equality so
+  `find(k) != end()` behaves
+- `std::set`/`std::multiset` — const-correct const iterators and `emplace`
+- C++20 `contains` on `map`/`multimap`/`set`/`multiset`, and `cbegin`/`cend`
+  across `deque`/`set`/`multiset`/`map`/`multimap`
+
+**`std::string`**
+
+- The `(const char*, size_t)` range constructor and the fill constructor
+  (whose parameters were reversed) are fixed
+- `operator<` / `operator>` are length-aware and available as free non-member
+  overloads against `const char*`
+- `substr(pos, n)` is `const`; C++20 `starts_with` / `ends_with` are available
+- `at` throws a catchable `std::out_of_range` instead of asserting
+  ([#6463](https://github.com/esbmc/esbmc/pull/6463))
+
+**Standard-version guards.** `<compare>` is includable before C++20, `<bit>`,
+`<span>` and `<expected>` are guarded, `<array>` is usable in C++11, `<limits>`
+works under `--std c++11` and `c++14`, and the C++98 container headers parse
+under `--std c++03`.
+
+# Language and frontend fixes (2026-07 update)
+
+- **Placement new** is modelled, including the form without an initializer
+  ([#6133](https://github.com/esbmc/esbmc/pull/6133),
+  [#6195](https://github.com/esbmc/esbmc/pull/6195))
+- **Virtual dispatch through a non-arrow member expression** — `(*p).f()` and
+  `ref.f()` now dispatch virtually
+  ([#6272](https://github.com/esbmc/esbmc/pull/6272))
+- **`delete`** dispatches through the virtual destructor slot
+  ([#6202](https://github.com/esbmc/esbmc/pull/6202)), and deleting through a
+  base subobject whose destructor is not virtual is rejected
+  ([#6285](https://github.com/esbmc/esbmc/pull/6285))
+- **Multiple inheritance** — nested base subobjects, `dynamic_cast<T*>`
+  re-offsetting across bases, override thunks keyed by each base's virtual name
+  and adjusted by the indirect base's cumulative offset, and catch-by-base
+  binding re-offset for MI thrown types
+- **`typeid`** on a polymorphic glvalue reports the dynamic type
+  ([#6392](https://github.com/esbmc/esbmc/pull/6392)), and the `type_info` name
+  string is NUL-terminated
+- **Virtual bases** are initialised only in the most-derived constructor
+  ([#6159](https://github.com/esbmc/esbmc/pull/6159))
+- **Conditional operators** — address-of distributes over a conditional lvalue,
+  class-typed conditionals elide their temporaries, and a reference parameter
+  binds to the selected arm
+- **Dynamic exception specifications** — `unexpected` / `bad_exception` recovery
+  ([#6240](https://github.com/esbmc/esbmc/pull/6240)); an aggregate-thrown
+  exception gets a symbol-consistent type id
+  ([#6303](https://github.com/esbmc/esbmc/pull/6303))
+
 # Features WIP:
 - Fixing our OMs for STL libraries
    * See guidelines: https://github.com/esbmc/esbmc/wiki/Guidelines-for-Fixing-Operational-Models-(OM)-in-ESBMC
