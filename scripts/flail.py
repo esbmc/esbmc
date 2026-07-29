@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import io
 import platform
 import unittest
 from pathlib import Path
@@ -156,8 +157,12 @@ class Flail:
         name = self.obtain_var_name()
         output.write('const char %s[] = {\n' % name)
         output.writelines(content)
-        output.write('};\n')
-        output.write('const unsigned int %s_size = sizeof(%s);\n' % (name, name))
+        # The trailing NUL is a sentinel past the end, excluded from _size:
+        # clang's Lexer requires null-terminated buffers, and bundled files are
+        # handed to it straight from .rodata rather than read back from disk.
+        output.write('0\n};\n')
+        output.write('const unsigned int %s_size = sizeof(%s) - 1;\n' %
+                     (name, name))
         if header is not None:
             if macro is None:
                 header.write('extern const char %s[];\n' % name)
@@ -276,6 +281,18 @@ class TestFlail(unittest.TestCase):
 
     def test_step_5(self):
         self.assertEqual(self.step_5, self.__class__.STEP_5_EXPECTED)
+
+    def test_step_6_nul_sentinel_excluded_from_size(self):
+        obj = Flail("a.h")
+        output = io.StringIO()
+        obj._step_6(self.step_5, output, None, None)
+        text = output.getvalue()
+        body = text.split('{')[1].split('}')[0]
+        elements = [x for x in body.replace('\n', '').split(',') if x != '']
+        # 3 lines of 16 bytes, plus the sentinel the size must not count.
+        self.assertEqual(len(elements), 49)
+        self.assertEqual(elements[-1], '0')
+        self.assertIn('a_buf_size = sizeof(a_buf) - 1;', text)
 
     def test_variable_name_1(self):
         obj = Flail("a.h")
