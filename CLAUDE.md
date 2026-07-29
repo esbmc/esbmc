@@ -64,7 +64,7 @@ ctest -R "regression/esbmc/00_big_endian_01" --output-on-failure
 
 **Important: the Python frontend needs `python3` on `PATH`.** ESBMC's Python frontend invokes `python3` to run `parser.py`. `ast2json` is vendored in the source tree (`src/python-frontend/libs/ast2json`), so it no longer needs to be installed separately for Python regression tests. (`mypy` is an optional extra for type checking.)
 
-**Important: /tmp disk space.** Each regression test creates an `esbmc-headers-*` temp directory (~7.4MB) in `/tmp`. Running the full suite generates thousands of these (~70GB total). Clean them after test runs: `rm -rf /tmp/esbmc-headers-*`
+**Note: /tmp disk space.** C and C++ runs write nothing to `/tmp`: bundled clang headers, the C++ operational models and the internal libc are registered with `file_operations::filesystemt` and served to clang out of `.rodata` via `esbmc_clang_vfs()` (`src/clang-c-frontend/AST/vfs_adapter.h`). The Python and Solidity frontends extract to `/tmp`, because they fork `python3`/`solc` and a separate process cannot read ESBMC's memory. Clean up after large runs of those suites: `rm -rf /tmp/esbmc*`
 
 Regression test format (`test.desc`): line 1 is `CORE`/`KNOWNBUG`/`FUTURE`/`THOROUGH` (THOROUGH is Linux-only), line 2 is the source file, line 3 is ESBMC flags, line 4+ are expected output regexes. Every PR should include at least two regression tests (one passing, one failing).
 

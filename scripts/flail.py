@@ -18,6 +18,11 @@ class Flail:
         by converting its content into a char array. The resulting array will be written in a *.c file.
         The input file can be of any file type. For an input file of binary content, hexdump it
         and you'll see the matching between the output and each element in the result array.
+
+        The array ends with a NUL sentinel one past the file's own bytes, so consumers may treat
+        the data as a C string; the generated <name>_size excludes it and gives the input file's
+        exact byte count. Clang's Lexer requires this of buffers handed to it directly.
+
         For input files that contain any text content, see example below:
 
         Example:
