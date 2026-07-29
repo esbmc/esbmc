@@ -50,6 +50,108 @@ void file_operations::kill_registered_pgroups()
   registered_pgroups.clear();
 }
 
+file_data file_data::bundled(const char *data, size_t size)
+{
+  file_data f;
+  f._borrowed = std::string_view(data, size);
+  return f;
+}
+
+file_data file_data::owned(std::string data)
+{
+  file_data f;
+  f._owned = std::move(data);
+  f._bundled = false;
+  return f;
+}
+
+std::string_view file_data::view() const noexcept
+{
+  return _bundled ? _borrowed : std::string_view(_owned);
+}
+
+size_t file_data::size() const noexcept
+{
+  return view().size();
+}
+
+bool file_data::is_bundled() const noexcept
+{
+  return _bundled;
+}
+
+filesystemt &filesystemt::get()
+{
+  static filesystemt instance;
+  return instance;
+}
+
+void filesystemt::add_bundled(
+  const std::string &path,
+  const char *data,
+  size_t size)
+{
+  _bundled[path] = std::string_view(data, size);
+}
+
+std::optional<file_data> filesystemt::read(const std::string &path) const
+{
+  auto it = _bundled.find(path);
+  if (it != _bundled.end())
+    return file_data::bundled(it->second.data(), it->second.size());
+
+  std::ifstream in(path, std::ios::binary | std::ios::ate);
+  if (!in)
+    return {};
+
+  std::string contents(static_cast<size_t>(in.tellg()), '\0');
+  in.seekg(0);
+  in.read(contents.data(), contents.size());
+  contents.resize(in.gcount());
+  return file_data::owned(std::move(contents));
+}
+
+bool filesystemt::exists(const std::string &path) const
+{
+  return _bundled.count(path) || boost::filesystem::exists(path);
+}
+
+size_t filesystemt::bundled_count() const noexcept
+{
+  return _bundled.size();
+}
+
+std::vector<std::string> filesystemt::list(const std::string &prefix) const
+{
+  std::vector<std::string> paths;
+  for_each_under(
+    prefix,
+    [&paths](const std::string &p, std::string_view) { paths.push_back(p); });
+  return paths;
+}
+
+const std::string &
+filesystemt::materialize(const std::string &prefix, const std::string &format)
+{
+  auto it = _materialized.find(prefix);
+  if (it != _materialized.end())
+    return it->second.path();
+
+  it = _materialized.emplace(prefix, create_tmp_dir(format)).first;
+  const std::string &dir = it->second.path();
+  for_each_under(
+    prefix,
+    [&dir, &prefix](const std::string &p, std::string_view data)
+    {
+      std::string_view rel = std::string_view(p).substr(prefix.size());
+      while (!rel.empty() && rel.front() == '/')
+        rel.remove_prefix(1);
+      create_path_and_write(
+        dir + "/" + std::string(rel), data.data(), data.size());
+    });
+  return dir;
+}
+
 tmp_path::tmp_path(std::string path, bool keep)
   : _path(std::move(path)), _keep(keep)
 {
@@ -87,13 +189,13 @@ const std::string &tmp_path::path() const noexcept
   return _path;
 }
 
-tmp_path &tmp_path::keep(bool yes) &noexcept
+tmp_path &tmp_path::keep(bool yes) & noexcept
 {
   _keep = yes;
   return *this;
 }
 
-tmp_path &&tmp_path::keep(bool yes) &&noexcept
+tmp_path &&tmp_path::keep(bool yes) && noexcept
 {
   _keep = yes;
   return std::move(*this);
@@ -141,7 +243,8 @@ file_operations::create_tmp_file(const std::string &format, const char *mode)
 {
   FILE *r = NULL;
   std::string path = with_unique_tmp_path(
-    [&r, mode](auto path) {
+    [&r, mode](auto path)
+    {
       r = fopen(path.string().c_str(), mode);
       return r;
     },
