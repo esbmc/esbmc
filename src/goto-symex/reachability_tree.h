@@ -342,6 +342,8 @@ protected:
   unsigned int schedule_remaining_claims;
   /** Number of trivial claims in current --schedule exploration */
   unsigned int schedule_simplified_claims;
+  /** Loops cut off at the unwinding bound in current --schedule exploration */
+  unsigned int schedule_bounded_loop_truncations;
   /** Next thread ID to switch to, decided by analyse_* routines */
   unsigned int next_thread_id;
   /** Whether partial-order-reduction is enabled */

@@ -6,4 +6,4 @@ main.c
 ^Total Conditions:  12
 ^Condition Properties - SATISFIED:  4
 ^Condition Properties - UNSATISFIED:  4
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

@@ -2,4 +2,4 @@ KNOWNBUG
 main.c
 --condition-coverage-claims --no-cov-asserts
 ^Condition Coverage: 100%
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

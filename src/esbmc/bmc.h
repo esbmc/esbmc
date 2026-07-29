@@ -102,10 +102,14 @@ protected:
 
   int ltl_run_thread(symex_target_equationt &equation) const;
 
+  /// \param truncated_loops how many loops exploration cut off at the
+  ///   unwinding bound, carried in from the symex result rather than read back
+  ///   from live state, which --schedule has already invalidated (#6423).
   smt_resultt multi_property_check(
     const symex_target_equationt &eq,
     size_t remaining_claims,
-    smt_convt &runtime_solver);
+    smt_convt &runtime_solver,
+    unsigned int truncated_loops);
 
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 
@@ -144,11 +148,14 @@ protected:
   /// testcase, html, json, graphml, yaml) are emitted by the caller while
   /// each witness's solver model is still live; this function only handles
   /// the human-readable counterexample output.
+  /// \param reachability_trace render as evidence that the location is
+  ///   reachable, not as a property violation (coverage runs; issue #6387).
   virtual void report_multi_property_trace(
     const smt_resultt &res,
     const std::vector<witness_recordt> &witnesses,
     enumeration_stop_reasont stop_reason,
-    const std::string &msg);
+    const std::string &msg,
+    bool reachability_trace = false);
 
   void report_coverage_verbose(
     const claim_slicer &claim,
@@ -204,5 +211,14 @@ void report_coverage(
   const std::unordered_multiset<std::string> &reached_mul_claims,
   pytest_generator &pytest_gen,
   ctest_generator &ctest_gen);
+
+/// Record why a coverage measurement is not exhaustive; the reason is listed
+/// under the closing COVERAGE ANALYSIS INCOMPLETE line.
+void note_cov_incomplete(const std::string &reason);
+
+/// Closing line of a coverage run: whether every goal was actually decided,
+/// and if not, why. Printed by the driver once, after the last [Coverage]
+/// block (k-induction prints one per phase).
+void report_coverage_completeness();
 
 #endif
