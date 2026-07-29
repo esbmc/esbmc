@@ -29,10 +29,7 @@ void writel(uint32_t val, const void *addr);
 void writeq(uint64_t val, const void *addr);
 
 /* Block reads/writes */
-void readsl(const void *addr, void *buf, unsigned long count);
 void writesl(const void *addr, const void *buf, unsigned long count);
-void readsw(const void *addr, void *buf, unsigned long count);
-void writesw(const void *addr, const void *buf, unsigned long count);
 
 /* ============================================================
  *  I/O port functions (less common for CXL, but included for

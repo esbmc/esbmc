@@ -526,7 +526,6 @@ void cxl_free_ports(struct cxl_host_bridge *bridge)
     {
       kfree(bridge->devices[i]);
     }
-    kfree(bridge);
   }
   kfree(bridge);
 }
