@@ -1138,19 +1138,36 @@ goto_programt code_contractst::generate_checking_wrapper(
     // to *p.  Earlier revisions had a "fallback" else branch that emitted
     // *p = malloc(...), which dereferenced an uninitialised p and tripped
     // alignment / pointer-validity checks before the body even ran.
+    // Peeling the address-of is only sound when what it wraps is itself a
+    // pointer.  For &obj with obj a struct or scalar, the peel would assign
+    // the malloc result into obj: value-set analysis then walks a pointer as
+    // if it were a struct and aborts (#6469), and for a scalar obj the
+    // assignment silently clobbers it and the contract means nothing.
+    // An address_of is itself pointer-typed, so it has to be matched before
+    // the bare-pointer case or it falls through to an unassignable lvalue.
     expr2tc ptr_var;
+    bool assignable = true;
     if (is_address_of2t(stripped))
     {
-      // &var → assign to var (peel the address-of).
-      ptr_var = to_address_of2t(stripped).ptr_obj;
+      const expr2tc &obj = to_address_of2t(stripped).ptr_obj;
+      assignable = is_pointer_type(obj->type);
+      ptr_var = obj;
     }
     else
     {
-      // Bare pointer expression — assign directly to it.
-      assert(
-        is_pointer_type(stripped->type) &&
-        "__ESBMC_is_fresh first argument must be pointer-typed");
+      assignable = is_pointer_type(stripped->type);
       ptr_var = stripped;
+    }
+
+    if (!assignable)
+    {
+      log_error(
+        "__ESBMC_is_fresh needs a pointer it can point at fresh storage, but "
+        "the contract of '{}' gives it the address of a non-pointer object. "
+        "Take that object as a pointer parameter, or allocate it with malloc "
+        "and pass the pointer.",
+        id2string(original_func.name));
+      abort();
     }
 
     // A plain symbol lvalue is independent of any harness setup — allocate now.
