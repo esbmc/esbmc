@@ -4099,8 +4099,8 @@ static void warn_unstated_extents(
 
   log_warning(
     "{}: {}: contract states no extent for pointer parameter(s) {}, so any "
-    "dereference will fail its bounds check and they are not checked against "
-    "the assigns clause. State one with "
+    "dereference will fail its bounds check and the values they point at are "
+    "not checked against the assigns clause. State one with "
     "__ESBMC_requires(__ESBMC_is_fresh(<param>, <bytes>)).",
     location,
     func.name,

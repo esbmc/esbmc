@@ -187,10 +187,12 @@ private:
     0; ///< Counter for unique array-element snapshot names (Phase 2B)
 
   /// Fallback element count for the Phase 2B array-element witness index when
-  /// the array's real extent is unknown: a global array, or a parameter in a
-  /// run without --function, where the entry harness never allocates. It can
-  /// over-bound the index and produce the spurious "array bounds violated" of
-  /// #5314, so prefer a recorded extent whenever one exists.
+  /// no extent is recorded for the pointer: a global pointer, or a pointer
+  /// parameter with no __ESBMC_is_fresh in a run without --function, where the
+  /// entry harness never allocates. A global *array* does not reach here; it
+  /// takes the whole-object snapshot path instead. It can over-bound the index
+  /// and produce the spurious "array bounds violated" of #5314, so prefer a
+  /// recorded extent whenever one exists.
   static constexpr size_t WITNESS_IDX_FALLBACK_ELEMS = 100;
 
   /// \brief Find function symbol
