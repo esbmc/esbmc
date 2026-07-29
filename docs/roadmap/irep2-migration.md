@@ -3931,9 +3931,9 @@ The S-list frames S3 as "reproduce the pointer-deref / `p[i]`→`*(p+i)` / index
 typecast steps for the pointer-backed Python container/instance sources"
 (mirroring `clang_c_adjust::adjust_index`/`adjust_member`). A code audit shows
 that framing is a **legacy-`exprt` view that does not carry over to IREP2** — the
-Key-implementation-insight of `irep2-keystone-implementation-plan.md` (§"most of
-`clang_cpp_adjust`'s completion must happen at converter construction") is right,
-and this pins it for the index/member surface specifically:
+keystone plan's key implementation insight, that most of `clang_cpp_adjust`'s
+completion must happen at converter construction rather than in a post-pass, is
+right, and this pins it for the index/member surface specifically:
 
 - **`index2t`/`member2t` cannot hold a pointer source.** The construction asserts
   permit only array/vector (`index2t`, `irep2_expr.h:1646`) or struct/union
