@@ -1457,6 +1457,7 @@ attempted here — the value of this entry is that the violation is now visible
 and cannot regress unnoticed.
 
 ### M4 (H-B1) — 2026-07-28
+### M4 (closed) — 2026-07-28
 
 **Result: H-B1 closed. The validator is shared, and the corpus sweep was made
 to answer a question rather than only to collect verdicts.**

@@ -493,6 +493,19 @@ void python_exception_handler::emit_catch_block(
     }
     else if (ct.ellipsis())
       exc_id = "ellipsis";
+    else if (ct.id() == "struct")
+    {
+      // A resolved class type, as `except KeyboardInterrupt:` produces once
+      // the builtin exception tag is completed. Recover the class name from
+      // the tag: the `ct.id()` fallback below yields the literal "struct",
+      // which matches no throw id.
+      const std::string name = ct.get("name").as_string();
+      exc_id = !name.empty()
+                 ? (name.rfind("tag-", 0) == 0 ? name.substr(4) : name)
+                 : ct.get("tag").as_string();
+      if (exc_id.empty())
+        exc_id = ct.id().as_string();
+    }
     else
       exc_id = ct.id().as_string();
     catch_block.set("exception_id", exc_id);
