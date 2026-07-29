@@ -1111,6 +1111,56 @@ needs the table entry" is superseded: casting now happens at the call site for
 every expression-form call, and `wrap_function_pointer_callee` delegates to the
 same helper instead of carrying its own copy of the loop.
 
+### Per-case triage round 15 — the catch id was "struct" (2026-07-28)
+
+**✅ FIXED — `github_6258`, the `bases`-carriage blocker.** And the blocker was
+misfiled: it is a **converter** defect, not an adjuster gap, and nothing about
+`bases` or `set_type` carriage is involved.
+
+Under hop-off the entire handler disappeared:
+
+```
+legacy:   1: IF c:@__ESBMC_exc_typeid == 12 THEN GOTO 2
+             2: ... ASSIGN caught=1; ASSERT caught
+hop-off:  1: GOTO 2
+          2: END_FUNCTION
+```
+
+`emit_catch_block` (`python_exception_handler.cpp`) already pre-derives each
+handler's `exception_id` — that was flip blocker #2, closed earlier. Its
+derivation covers a by-name `symbol` type and the `ellipsis` catch-all, then
+falls back to `ct.id().as_string()`. For `except KeyboardInterrupt:` the catch
+block's type is an **already-resolved struct**, so the fallback stored the
+literal string `"struct"`, which matches no throw id and makes
+`remove_exceptions` drop the handler.
+
+**The pre-set's own comment was wrong, and that is why this survived.** It claims
+`clang_cpp_adjust::adjust_catch` "overwrites the attribute with the identical
+value". True for the symbol and ellipsis shapes; false for a resolved struct,
+where legacy's `convert_exception_id` resolves the tag back to the class name and
+the converter says `"struct"`. Legacy therefore *masked* the defect completely —
+the pre-set is only load-bearing on the hop-off path, which is exactly where it
+was never exercised. Fix: mirror `convert_exception_id`'s struct arm and recover
+the class name from the type's `name`/`tag`.
+
+**Probe, not inference.** `PROBE_EXCID id=struct name= tag=KeyboardInterrupt ->
+struct` names the defect exactly; the enclosing GOTO is byte-identical to legacy
+after the fix.
+
+**Scope, measured against legacy rather than assumed.** A control build shows
+`KeyboardInterrupt`, `SystemExit`, `OverflowError` and `AssertionError` all
+failing under hop-off, but only `KeyboardInterrupt` is a *parity* defect: the
+other three fail under **legacy too** and are pre-existing frontend limitations
+(`raise SystemExit(...)` is not catchable on either path) — a separate issue, not
+this one. `ValueError`/`KeyError`/`IndexError`/`ZeroDivisionError`/`TypeError`/
+`RuntimeError`/`StopIteration` were never affected, because their catch type
+arrives as a by-name symbol and takes the first branch.
+
+Inert on the default pipeline: `adjust_catch` overwrites the attribute
+unconditionally there, so only the hop-off reads what this writes.
+
+Tests: `regression/python/python_irep2_adjust_only_catch_builtin{,_fail}`.
+
 ### Per-case triage round 16 — S3 has no reproducer; the last divergence is a vacuous test (2026-07-28)
 
 **Verdict: the third named flip blocker, "S3 member/index at scale", is not
