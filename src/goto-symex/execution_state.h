@@ -635,6 +635,10 @@ protected:
   /** Are we evaluating the thread guard in the SMT solver during context
    *  switching? */
   bool smt_thread_guard;
+  /** Was constant propagation disabled with --no-propagation? Seeds every
+   *  thread's goto_symex_statet, so the option is looked up once per run
+   *  rather than once per thread creation. */
+  bool no_propagation;
 
   /** Copy execution_statet's own scheduling fields from `ex`. The base
    *  goto_symext slice is left untouched (the copy constructor's

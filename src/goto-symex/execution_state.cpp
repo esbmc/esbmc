@@ -43,6 +43,7 @@ execution_statet::execution_statet(
   symex_trace = options.get_bool_option("symex-trace");
   smt_during_symex = options.get_bool_option("smt-during-symex");
   smt_thread_guard = options.get_bool_option("smt-thread-guard");
+  no_propagation = options.get_bool_option("no-propagation");
 
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("__ESBMC_main");
@@ -55,11 +56,7 @@ execution_statet::execution_statet(
   const goto_programt *goto_program = &(it->second.body);
 
   // Initialize initial thread state
-  goto_symex_statet state(
-    *state_level2,
-    global_value_set,
-    ns,
-    options.get_bool_option("no-propagation"));
+  goto_symex_statet state(*state_level2, global_value_set, ns, no_propagation);
   state.initialize(
     (*goto_program).instructions.begin(),
     (*goto_program).instructions.end(),
@@ -158,6 +155,7 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   symex_trace = ex.symex_trace;
   smt_during_symex = ex.smt_during_symex;
   smt_thread_guard = ex.smt_thread_guard;
+  no_propagation = ex.no_propagation;
 
   CS_number = ex.CS_number;
 
@@ -670,10 +668,7 @@ void execution_statet::execute_guard()
 unsigned int execution_statet::add_thread(const goto_programt *prog)
 {
   goto_symex_statet new_state(
-    *state_level2,
-    global_value_set,
-    ns,
-    options.get_bool_option("no-propagation"));
+    *state_level2, global_value_set, ns, no_propagation);
   new_state.initialize(
     prog->instructions.begin(),
     prog->instructions.end(),
