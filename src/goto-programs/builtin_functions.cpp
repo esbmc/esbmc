@@ -413,9 +413,22 @@ void goto_convertt::do_cpp_new(
     assert(0);
   }
 
+  // The frontend attaches the resolved allocation function when the program
+  // replaced ::operator new, or the class supplied its own. Calling it is the
+  // whole point: a pool allocator that hands out the same storage twice makes
+  // two objects alias, which a fresh built-in allocation hides (github #6494).
+  const exprt &alloc_function =
+    static_cast<const exprt &>(rhs.find("alloc_function"));
+
   // grab initializer
   goto_programt tmp_initializer;
-  cpp_new_initializer(lhs, rhs, tmp_initializer);
+  // With no initializer the built-in path zero-fills, which models a fresh
+  // object well enough. Storage from a replaced operator new is not fresh --
+  // the program decides its contents ([expr.new]/17 default-initialises a
+  // scalar to nothing at all) -- so zero-filling it would overwrite what the
+  // replacement just returned.
+  if (alloc_function.is_nil() || rhs.initializer().is_not_nil())
+    cpp_new_initializer(lhs, rhs, tmp_initializer);
 
   exprt alloc_size;
 
@@ -449,16 +462,49 @@ void goto_convertt::do_cpp_new(
     simplify_via_irep2(alloc_size);
   }
 
-  exprt new_expr("sideeffect", rhs.type());
-  new_expr.statement(rhs.statement());
-  new_expr.cmt_size(alloc_size);
-  new_expr.location() = rhs.find_location();
+  if (alloc_function.is_not_nil())
+  {
+    // operator new takes a byte count. alloc_size is already scaled by the
+    // element size for the array form; the scalar form allocates one T.
+    exprt byte_size = alloc_size;
+    if (rhs.statement() == "cpp_new")
+      byte_size = from_integer(
+        type_byte_size(migrate_type(ns.follow(rhs.type().subtype()))),
+        size_type());
 
-  // produce new object
-  goto_programt::targett t_n = dest.add_instruction(ASSIGN);
-  exprt new_assign = code_assignt(lhs, new_expr);
-  migrate_expr(new_assign, t_n->code);
-  t_n->location = rhs.find_location();
+    const typet &raw_type = to_code_type(alloc_function.type()).return_type();
+    symbolt &raw = new_tmp_symbol(raw_type);
+
+    code_function_callt call;
+    call.lhs() = symbol_exprt(raw.id, raw_type);
+    call.function() = alloc_function;
+    call.arguments().push_back(byte_size);
+    call.location() = rhs.find_location();
+
+    goto_programt::targett t_a = dest.add_instruction(FUNCTION_CALL);
+    migrate_expr(call, t_a->code);
+    t_a->location = rhs.find_location();
+
+    exprt allocated = symbol_exprt(raw.id, raw_type);
+    allocated.make_typecast(lhs.type());
+
+    goto_programt::targett t_n = dest.add_instruction(ASSIGN);
+    migrate_expr(code_assignt(lhs, allocated), t_n->code);
+    t_n->location = rhs.find_location();
+  }
+  else
+  {
+    exprt new_expr("sideeffect", rhs.type());
+    new_expr.statement(rhs.statement());
+    new_expr.cmt_size(alloc_size);
+    new_expr.location() = rhs.find_location();
+
+    // produce new object
+    goto_programt::targett t_n = dest.add_instruction(ASSIGN);
+    exprt new_assign = code_assignt(lhs, new_expr);
+    migrate_expr(new_assign, t_n->code);
+    t_n->location = rhs.find_location();
+  }
 
   // run initializer
   dest.destructive_append(tmp_initializer);

@@ -908,13 +908,11 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // Only the plain (size) form is routed -- the aligned and user-placement
     // forms take further arguments this lowering does not supply, and an
     // allocation function without a body in this TU has nothing to call.
-    exprt alloc_function;
-    if (const clang::FunctionDecl *op_new = ne.getOperatorNew())
-      if (
-        op_new->isDefined() && !op_new->isReservedGlobalPlacementOperator() &&
-        op_new->getNumParams() == 1 && ne.getNumPlacementArgs() == 0)
-        if (get_decl_ref(*op_new, alloc_function))
-          return true;
+    const clang::FunctionDecl *op_new = ne.getOperatorNew();
+    const bool replaced_new = op_new && op_new->isDefined() &&
+                              !op_new->isReservedGlobalPlacementOperator() &&
+                              op_new->getNumParams() == 1 &&
+                              ne.getNumPlacementArgs() == 0;
 
     if (ne.isArray())
     {
@@ -933,8 +931,13 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       new_expr = side_effect_exprt("cpp_new", t);
     }
 
-    if (alloc_function.is_not_nil())
+    if (replaced_new)
+    {
+      exprt alloc_function;
+      if (get_decl_ref(*op_new, alloc_function))
+        return true;
       new_expr.add("alloc_function") = alloc_function;
+    }
 
     if (ne.hasInitializer())
     {
@@ -964,6 +967,20 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     new_expr.move_to_operands(arg);
+
+    // Mirror of the allocation side above: a replaced operator delete has to
+    // be called, or state it maintains is never updated and correct programs
+    // are reported as failing. Both the plain (void *) and the C++14 sized
+    // (void *, size_t) forms are routed; the aligned and user-placement forms
+    // take further arguments this lowering does not supply (github #6494).
+    if (const clang::FunctionDecl *op_del = de.getOperatorDelete())
+      if (op_del->isDefined() && op_del->getNumParams() <= 2)
+      {
+        exprt dealloc_function;
+        if (get_decl_ref(*op_del, dealloc_function))
+          return true;
+        new_expr.add("dealloc_function") = dealloc_function;
+      }
 
     if (de.getDestroyedType()->getAsCXXRecordDecl())
     {

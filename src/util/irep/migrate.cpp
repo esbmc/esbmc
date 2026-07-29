@@ -1937,6 +1937,21 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         migrate_expr(static_cast<const exprt &>(expr.initializer()), init);
         args.push_back(init);
       }
+
+      // A replaced operator new (github #6494) rides in arguments[1], for the
+      // same reason the initializer rides in arguments[0]: sideeffect2t has
+      // fixed fields, so a named sub on the side_effect_exprt does not survive
+      // the round trip. Keep slot 0 occupied so slot 1 stays meaningful.
+      const exprt &alloc_function =
+        static_cast<const exprt &>(expr.find("alloc_function"));
+      if (alloc_function.is_not_nil())
+      {
+        if (args.empty())
+          args.emplace_back();
+        expr2tc fn;
+        migrate_expr(alloc_function, fn);
+        args.push_back(fn);
+      }
     }
     else if (
       expr.statement() == "malloc" || expr.statement() == "realloc" ||
@@ -2067,6 +2082,19 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         expr2tc d;
         migrate_expr(destructor, d);
         args.push_back(d);
+      }
+
+      // A replaced operator delete rides in arguments[1], mirroring the
+      // allocation side (github #6494).
+      const exprt &dealloc_function =
+        static_cast<const exprt &>(expr.find("dealloc_function"));
+      if (dealloc_function.is_not_nil())
+      {
+        if (args.empty())
+          args.emplace_back();
+        expr2tc fn;
+        migrate_expr(dealloc_function, fn);
+        args.push_back(fn);
       }
     }
     else if (expr.statement() == "temporary_object")
@@ -3754,20 +3782,26 @@ exprt migrate_expr_back(const expr2tc &ref)
       ref2.kind == sideeffect2t::allockind::cpp_delete ||
       ref2.kind == sideeffect2t::allockind::cpp_delete_array)
     {
-      // op0 = pointer (in `operand`); arguments[0] = destructor call, if any.
-      // remove_cpp_delete asserts exactly one operand and reads "destructor".
+      // op0 = pointer (in `operand`); arguments[0] = destructor call, if any,
+      // arguments[1] = replaced operator delete, if any. remove_cpp_delete
+      // asserts exactly one operand and reads both named subs back out.
       theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
-      if (!ref2.arguments.empty())
+      if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
         theexpr.set("destructor", migrate_expr_back(ref2.arguments[0]));
+      if (ref2.arguments.size() > 1 && !is_nil_expr(ref2.arguments[1]))
+        theexpr.add("dealloc_function") = migrate_expr_back(ref2.arguments[1]);
     }
     else if (
       ref2.kind == sideeffect2t::allockind::cpp_new ||
       ref2.kind == sideeffect2t::allockind::cpp_new_arr)
     {
       // cpp_new has no operands in source form (size lives in the size field,
-      // handled below; the initializer, if any, is carried in arguments[0]).
+      // handled below; the initializer, if any, is carried in arguments[0],
+      // and a replaced operator new in arguments[1]).
       if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
         theexpr.initializer(migrate_expr_back(ref2.arguments[0]));
+      if (ref2.arguments.size() > 1 && !is_nil_expr(ref2.arguments[1]))
+        theexpr.add("alloc_function") = migrate_expr_back(ref2.arguments[1]);
     }
     else
     {
