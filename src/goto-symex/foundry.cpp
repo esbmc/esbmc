@@ -330,8 +330,9 @@ std::string foundry_generator::format_sol_value(
   // without reaching it.
   if (sol_type == "BYTES_DYN")
   {
-    if (!is_constant_struct2t(value) ||
-        !is_struct_type(to_constant_struct2t(value).type))
+    if (
+      !is_constant_struct2t(value) ||
+      !is_struct_type(to_constant_struct2t(value).type))
       return "";
     const constant_struct2t &cs = to_constant_struct2t(value);
     const struct_type2t &st = to_struct_type(cs.type);
@@ -931,8 +932,8 @@ static unsigned recover_nondet_string_length(
     if (!e)
       return;
     if (
-      is_symbol2t(e) && to_symbol2t(e).thename.as_string().find("rand_str") !=
-                          std::string::npos)
+      is_symbol2t(e) &&
+      to_symbol2t(e).thename.as_string().find("rand_str") != std::string::npos)
     {
       unsigned n = leading_nonzero(smt_conv.get(e));
       if (n > best)

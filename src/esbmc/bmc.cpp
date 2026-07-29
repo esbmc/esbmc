@@ -1168,153 +1168,154 @@ void report_coverage(
     }
     else
     {
-
-    // Denominator = the no-skip static universe built by
-    // solidity_path_coverage() (one entry per enumerated complete path), so a
-    // covered-set skip never shrinks it. Numerator = universe paths EITHER
-    // witnessed this run OR already persisted by an earlier round.
-    const size_t total = goto_coveraget::all_claims.size();
-    // Complete-path coverage keys its cross-run cover on the CONTENT-ADDRESSED
-    // stable id, not on `covered_set` (which solidity_path_coverage()
-    // deliberately leaves empty — see path_witnessed_earlier). Using
-    // covered_set here reported every path carried over from an earlier round
-    // as U: a path with a counterexample in hand, filed under "undecided".
-    const bool cov_set_active = !goto_coveraget::path_covered_outpath.empty();
-    size_t tracked_instance = 0;
-    for (const auto &k : goto_coveraget::all_claims)
-      if (
-        goto_coveraget::path_witnessed_earlier(k) ||
-        reached_claims.count(k.first + "\t" + k.second))
-        ++tracked_instance;
-
-    log_success("\n[Coverage]\n");
-    if (total == 0)
-      log_result("No complete path enumerated");
-    else
-    {
-      log_result("Complete Paths : {}", total);
-      log_result("Reached : {}", tracked_instance);
-      log_result("Path Coverage: {}%", tracked_instance * 100.0 / total);
-      // Exit-shape breakdown on stdout as well as in the JSON. The JSON is a
-      // file, and the regression harness matches program OUTPUT only — without
-      // this line the whole exit classification (and in particular the refusal
-      // to call an undetermined exit "normal") cannot be regression-locked.
-      size_t n_rev = 0, n_und = 0;
+      // Denominator = the no-skip static universe built by
+      // solidity_path_coverage() (one entry per enumerated complete path), so a
+      // covered-set skip never shrinks it. Numerator = universe paths EITHER
+      // witnessed this run OR already persisted by an earlier round.
+      const size_t total = goto_coveraget::all_claims.size();
+      // Complete-path coverage keys its cross-run cover on the CONTENT-ADDRESSED
+      // stable id, not on `covered_set` (which solidity_path_coverage()
+      // deliberately leaves empty — see path_witnessed_earlier). Using
+      // covered_set here reported every path carried over from an earlier round
+      // as U: a path with a counterexample in hand, filed under "undecided".
+      const bool cov_set_active = !goto_coveraget::path_covered_outpath.empty();
+      size_t tracked_instance = 0;
       for (const auto &k : goto_coveraget::all_claims)
-      {
         if (
-          goto_coveraget::revert_paths.count(k) ||
-          goto_coveraget::rollback_revert_paths.count(k))
-          ++n_rev;
-        else if (goto_coveraget::undetermined_exit_paths.count(k))
-          ++n_und;
-      }
-      log_result(
-        "Path Exits: normal {}, revert {}, undetermined {}",
-        total - n_rev - n_und,
-        n_rev,
-        n_und);
+          goto_coveraget::path_witnessed_earlier(k) ||
+          reached_claims.count(k.first + "\t" + k.second))
+          ++tracked_instance;
 
-      // Tri-state totals on stdout too, for the same reason as the exit line:
-      // the per-path F/I/U verdicts live only in the JSON file, which the
-      // regression harness cannot inspect. Without this the central honesty
-      // rule — a claim that merely HELD within the bound is U, never I — is
-      // not regression-locked. Same rule as the JSON emission below.
+      log_success("\n[Coverage]\n");
+      if (total == 0)
+        log_result("No complete path enumerated");
+      else
       {
-        // See path_cov_can_prove_unreachable(): no coverage configuration can
-        // establish unreachability, so this is false and every non-refuted
-        // path is U. Deliberately NOT keyed on --solidity-max-tx 0, which the
-        // back-edge-to-SKIP pass reduces to a single guarded transaction.
-        const bool unb = path_cov_can_prove_unreachable();
-        size_t nF = 0, nI = 0, nU = 0;
-        // Every U carries a reason token. See path_u_reason_token(): a U cell
-        // that can silently absorb an implementation defect has already done so
-        // three times, and each time the broken case looked exactly like an
-        // honest timeout.
-        std::map<std::string, size_t> u_reasons;
-        for (const auto &t : goto_coveraget::path_u_reason_tokens())
-          u_reasons[t] = 0;
-        std::vector<std::string> untokened;
+        log_result("Complete Paths : {}", total);
+        log_result("Reached : {}", tracked_instance);
+        log_result("Path Coverage: {}%", tracked_instance * 100.0 / total);
+        // Exit-shape breakdown on stdout as well as in the JSON. The JSON is a
+        // file, and the regression harness matches program OUTPUT only — without
+        // this line the whole exit classification (and in particular the refusal
+        // to call an undetermined exit "normal") cannot be regression-locked.
+        size_t n_rev = 0, n_und = 0;
         for (const auto &k : goto_coveraget::all_claims)
         {
-          const std::string sig = k.first + "\t" + k.second;
-          char v = 0;
-          {
-            std::lock_guard lk(goto_coveraget::claim_outcome_mutex);
-            auto it_o = goto_coveraget::claim_outcome.find(sig);
-            if (it_o != goto_coveraget::claim_outcome.end())
-              v = it_o->second;
-          }
           if (
-            goto_coveraget::path_witnessed_earlier(k) ||
-            reached_claims.count(sig))
-            ++nF;
-          else if (v == 'P' && unb)
-            ++nI;
-          else
-          {
-            ++nU;
-            const std::string tok = goto_coveraget::path_u_reason_token(k);
-            if (tok.empty())
-              untokened.push_back(k.first);
-            else
-              ++u_reasons[tok];
-          }
+            goto_coveraget::revert_paths.count(k) ||
+            goto_coveraget::rollback_revert_paths.count(k))
+            ++n_rev;
+          else if (goto_coveraget::undetermined_exit_paths.count(k))
+            ++n_und;
         }
-        log_result("Path Status: F {}, I {}, U {}", nF, nI, nU);
-        // Printed whenever there is a U, with EVERY slot listed including the
-        // zeros: a category that stops occurring is noticed, a category that
-        // silently disappears from the output is not.
-        if (nU > 0)
+        log_result(
+          "Path Exits: normal {}, revert {}, undetermined {}",
+          total - n_rev - n_und,
+          n_rev,
+          n_und);
+
+        // Tri-state totals on stdout too, for the same reason as the exit line:
+        // the per-path F/I/U verdicts live only in the JSON file, which the
+        // regression harness cannot inspect. Without this the central honesty
+        // rule — a claim that merely HELD within the bound is U, never I — is
+        // not regression-locked. Same rule as the JSON emission below.
         {
-          std::string breakdown;
+          // See path_cov_can_prove_unreachable(): no coverage configuration can
+          // establish unreachability, so this is false and every non-refuted
+          // path is U. Deliberately NOT keyed on --solidity-max-tx 0, which the
+          // back-edge-to-SKIP pass reduces to a single guarded transaction.
+          const bool unb = path_cov_can_prove_unreachable();
+          size_t nF = 0, nI = 0, nU = 0;
+          // Every U carries a reason token. See path_u_reason_token(): a U cell
+          // that can silently absorb an implementation defect has already done so
+          // three times, and each time the broken case looked exactly like an
+          // honest timeout.
+          std::map<std::string, size_t> u_reasons;
           for (const auto &t : goto_coveraget::path_u_reason_tokens())
-            breakdown +=
-              (breakdown.empty() ? "" : ", ") + t + " " +
-              std::to_string(u_reasons[t]);
-          log_result("U Reasons: {}", breakdown);
-        }
-        if (!untokened.empty())
-        {
-          std::string names;
-          for (const auto &n : untokened)
-            names += (names.empty() ? "" : "; ") + n;
-          log_error(
-            "--solidity-path-coverage: INTERNAL DEFECT — {} path(s) are "
-            "reported U with NO reason token: {}. The claim this pass makes is "
-            "that every uncovered path carries a named reason and there is no "
-            "unexplained remainder. An untokened U is that claim being false, "
-            "and it is exactly the shape in which an implementation defect "
-            "hides inside an honest-looking 'we do not know'.",
-            untokened.size(),
-            names);
-          abort();
+            u_reasons[t] = 0;
+          std::vector<std::string> untokened;
+          for (const auto &k : goto_coveraget::all_claims)
+          {
+            const std::string sig = k.first + "\t" + k.second;
+            char v = 0;
+            {
+              std::lock_guard lk(goto_coveraget::claim_outcome_mutex);
+              auto it_o = goto_coveraget::claim_outcome.find(sig);
+              if (it_o != goto_coveraget::claim_outcome.end())
+                v = it_o->second;
+            }
+            if (
+              goto_coveraget::path_witnessed_earlier(k) ||
+              reached_claims.count(sig))
+              ++nF;
+            else if (v == 'P' && unb)
+              ++nI;
+            else
+            {
+              ++nU;
+              const std::string tok = goto_coveraget::path_u_reason_token(k);
+              if (tok.empty())
+                untokened.push_back(k.first);
+              else
+                ++u_reasons[tok];
+            }
+          }
+          log_result("Path Status: F {}, I {}, U {}", nF, nI, nU);
+          // Printed whenever there is a U, with EVERY slot listed including the
+          // zeros: a category that stops occurring is noticed, a category that
+          // silently disappears from the output is not.
+          if (nU > 0)
+          {
+            std::string breakdown;
+            for (const auto &t : goto_coveraget::path_u_reason_tokens())
+              breakdown += (breakdown.empty() ? "" : ", ") + t + " " +
+                           std::to_string(u_reasons[t]);
+            log_result("U Reasons: {}", breakdown);
+          }
+          if (!untokened.empty())
+          {
+            std::string names;
+            for (const auto &n : untokened)
+              names += (names.empty() ? "" : "; ") + n;
+            log_error(
+              "--solidity-path-coverage: INTERNAL DEFECT — {} path(s) are "
+              "reported U with NO reason token: {}. The claim this pass makes "
+              "is "
+              "that every uncovered path carries a named reason and there is "
+              "no "
+              "unexplained remainder. An untokened U is that claim being "
+              "false, "
+              "and it is exactly the shape in which an implementation defect "
+              "hides inside an honest-looking 'we do not know'.",
+              untokened.size(),
+              names);
+            abort();
+          }
         }
       }
-    }
 
-    // Final write-back of the CONTENT-ADDRESSED cover.
-    //
-    // This call was missing, and the omission killed the whole cross-run
-    // mechanism silently. `write_path_covered_set_atomic` existed and was
-    // correct; nothing called it, while the code here called the BRANCH
-    // metric's writer, gated on `covered_set_outpath` — which
-    // solidity_path_coverage() never sets. Measured before the fix: running
-    // with `--coverage-covered-set cov.json` produced no file at all, so every
-    // round re-instrumented everything and the escalation story (round N spends
-    // its budget only on paths still lacking a CE) did not work at all.
-    //
-    // Same defect shape as the entry-liveness audit before it was wired: a
-    // function that is written, tested by eye, and never called. The function
-    // itself selects only 'F' claims, so nothing but a real witness is ever
-    // persisted.
-    if (cov_set_active)
-    {
-      goto_coveraget::write_path_covered_set_atomic();
-      log_success(
-        "coverage covered-set written to {}",
-        goto_coveraget::path_covered_outpath);
-    }
+      // Final write-back of the CONTENT-ADDRESSED cover.
+      //
+      // This call was missing, and the omission killed the whole cross-run
+      // mechanism silently. `write_path_covered_set_atomic` existed and was
+      // correct; nothing called it, while the code here called the BRANCH
+      // metric's writer, gated on `covered_set_outpath` — which
+      // solidity_path_coverage() never sets. Measured before the fix: running
+      // with `--coverage-covered-set cov.json` produced no file at all, so every
+      // round re-instrumented everything and the escalation story (round N spends
+      // its budget only on paths still lacking a CE) did not work at all.
+      //
+      // Same defect shape as the entry-liveness audit before it was wired: a
+      // function that is written, tested by eye, and never called. The function
+      // itself selects only 'F' claims, so nothing but a real witness is ever
+      // persisted.
+      if (cov_set_active)
+      {
+        goto_coveraget::write_path_covered_set_atomic();
+        log_success(
+          "coverage covered-set written to {}",
+          goto_coveraget::path_covered_outpath);
+      }
     } // end of the non-certification reporting block
   }
 
@@ -1364,7 +1365,8 @@ void report_coverage(
       max_tx == "0"
         ? std::string(
             "one guarded transaction: --solidity-max-tx 0 emits the "
-            "`while (nondet) dispatch()` driver, but Solidity coverage rewrites "
+            "`while (nondet) dispatch()` driver, but Solidity coverage "
+            "rewrites "
             "every _ESBMC_Main* back-edge to a SKIP, so the loop runs at most "
             "once. This explores FEWER transactions than --solidity-max-tx 2")
         : (max_tx.empty()
@@ -1497,12 +1499,10 @@ void report_coverage(
         // reverting transaction succeeded.
         const bool ck_err =
           goto_coveraget::revert_paths.count({claim_msg, claim_loc}) > 0;
-        const bool ck_rb =
-          goto_coveraget::rollback_revert_paths.count({claim_msg, claim_loc}) >
-          0;
-        const bool ck_un =
-          goto_coveraget::undetermined_exit_paths.count({claim_msg, claim_loc}) >
-          0;
+        const bool ck_rb = goto_coveraget::rollback_revert_paths.count(
+                             {claim_msg, claim_loc}) > 0;
+        const bool ck_un = goto_coveraget::undetermined_exit_paths.count(
+                             {claim_msg, claim_loc}) > 0;
         claim_entry["exit_kind"] =
           (ck_err || ck_rb) ? "revert" : (ck_un ? "undetermined" : "normal");
         if (ck_rb)
@@ -1563,7 +1563,8 @@ void report_coverage(
           // name and their order is part of the answer.
           json ext = json::array();
           for (const auto &[n, v] : ce.extcall_returns)
-            ext.push_back({{"symbol", prettify_solidity_expr(n)}, {"value", v}});
+            ext.push_back(
+              {{"symbol", prettify_solidity_expr(n)}, {"value", v}});
           claim_entry["extcall_returns"] = ext;
           if (ce.extcall_returns.empty())
             // NOT "there were no external calls": say what is actually known.
@@ -1759,7 +1760,8 @@ void report_coverage(
         report["summary"]["U_reasons"] = ur;
       }
       report["summary"]["revert_exit_paths"] = nRevert;
-      report["summary"]["bound"]["max_tx"] = max_tx.empty() ? "default" : max_tx;
+      report["summary"]["bound"]["max_tx"] =
+        max_tx.empty() ? "default" : max_tx;
       report["summary"]["bound"]["unwind"] =
         unwind_s.empty() ? "default" : unwind_s;
       report["summary"]["bound"]["kind"] =
@@ -2912,9 +2914,8 @@ smt_convt::resultt bmct::multi_property_check(
           ce.payload_symbols_protected =
             options.get_bool_option("cov-report-json");
           ce.compact_trace = is_compact_trace;
-          ce.revert_pre_rollback =
-            goto_coveraget::revert_paths.count(
-              {claim.claim_msg, claim.claim_loc}) > 0;
+          ce.revert_pre_rollback = goto_coveraget::revert_paths.count(
+                                     {claim.claim_msg, claim.claim_loc}) > 0;
           // Ordered so the emitted post-state is deterministic across runs.
           std::map<std::string, std::string> last_state;
           std::set<std::string> input_seen;
@@ -2944,9 +2945,8 @@ smt_convt::resultt bmct::multi_property_check(
               const auto fpos = fn_id.find("@F@");
               if (fpos != std::string::npos)
                 contract_scope = fn_id.substr(0, fpos + 1);
-              const auto hash = fn_id.find('#', fpos == std::string::npos
-                                                  ? 0
-                                                  : fpos + 3);
+              const auto hash =
+                fn_id.find('#', fpos == std::string::npos ? 0 : fpos + 3);
               if (hash != std::string::npos)
                 fn_id.erase(hash);
               fn_scope = fn_id + "@";
@@ -3082,7 +3082,8 @@ smt_convt::resultt bmct::multi_property_check(
                   : std::string("-"));
               std::string frames;
               for (const auto &fr : st.stack_trace)
-                frames += (frames.empty() ? "" : " < ") + fr.function.as_string();
+                frames +=
+                  (frames.empty() ? "" : " < ") + fr.function.as_string();
               log_debug(
                 "coverage",
                 "   stack[{}]: {}",
@@ -3177,17 +3178,18 @@ smt_convt::resultt bmct::multi_property_check(
             // only `this->member` writes would miss it and report the
             // pre-rollback value as the post-state, i.e. a WRONG value. Adopt
             // every member of the restored object as the new post-state.
-            if (
-              name.rfind("*this", 0) == 0 && is_constant_struct2t(st.value))
+            if (name.rfind("*this", 0) == 0 && is_constant_struct2t(st.value))
             {
               const struct_type2t &sty = to_struct_type(st.value->type);
-              const auto &mems = to_constant_struct2t(st.value).datatype_members;
+              const auto &mems =
+                to_constant_struct2t(st.value).datatype_members;
               for (size_t i = 0; i < sty.member_names.size() && i < mems.size();
                    ++i)
               {
                 const std::string mn = sty.member_names[i].as_string();
-                if (mn.empty() || mn[0] == '$' || mn.rfind("_ESBMC", 0) == 0 ||
-                    mn.rfind("anon_pad", 0) == 0)
+                if (
+                  mn.empty() || mn[0] == '$' || mn.rfind("_ESBMC", 0) == 0 ||
+                  mn.rfind("anon_pad", 0) == 0)
                   continue;
                 if (is_constant_expr(mems[i]))
                   last_state[mn] = from_expr(ns, "", mems[i]);
@@ -3201,7 +3203,8 @@ smt_convt::resultt bmct::multi_property_check(
               // on the contract object ($address/$code/$codehash/binding) are
               // not user state and would only add noise.
               const std::string bare = name.substr(name.rfind("->") + 2);
-              if (!bare.empty() && bare[0] != '$' && bare.rfind("_ESBMC", 0) != 0)
+              if (
+                !bare.empty() && bare[0] != '$' && bare.rfind("_ESBMC", 0) != 0)
                 last_state[bare] = val;
             }
             else

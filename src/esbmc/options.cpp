@@ -908,15 +908,21 @@ const struct group_opt_templ all_cmd_options[] = {
       "still run, and the query uses the SAME `tr` the enumeration does"},
      {"path-cov-outer-box",
       boost::program_options::value<std::string>()->value_name("file"),
-      "Measure each enumerated path's OUTER box in one batch, then subtract the "
-      "siblings' boxes to get a certified region at zero further queries. JSON: "
-      "{unit, probes, coords:[{name,lo,hi}], paths:[{enc,depth,ce:{name:val}}]}. "
-      "For every path the assumption `tr == enc` is FIXED and only the candidate "
+      "Measure each enumerated path's OUTER box in one batch, then subtract "
+      "the "
+      "siblings' boxes to get a certified region at zero further queries. "
+      "JSON: "
+      "{unit, probes, coords:[{name,lo,hi}], "
+      "paths:[{enc,depth,ce:{name:val}}]}. "
+      "For every path the assumption `tr == enc` is FIXED and only the "
+      "candidate "
       "bounds vary, so an entire ladder — all paths, all coordinates, both "
-      "directions — is judged in a single run rather than one query per widening "
+      "directions — is judged in a single run rather than one query per "
+      "widening "
       "step. `lo`/`hi` are the ladder span, which the driver takes from the "
       "nearest sibling counterexamples, and `ce` is the path's own "
-      "counterexample, used to reject a subtraction cut that would carve away a "
+      "counterexample, used to reject a subtraction cut that would carve away "
+      "a "
       "known member of the path's domain. Resolution is (hi-lo)/(probes+1): a "
       "non-adaptive batch cannot give logarithmic precision, so refine with a "
       "second batch on a narrower span"},
@@ -924,7 +930,8 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Solidity complete-path coverage (entry->exit path coverage for test "
       "generation). Instruments each public/external function body's complete "
-      "decision paths (ghost snapshots on decision edges + one exit-edge assert "
+      "decision paths (ghost snapshots on decision edges + one exit-edge "
+      "assert "
       "per enumerated path) and emits one Foundry testcase per feasible path. "
       "Pair with --solidity-max-tx N for the transaction bound and "
       "--generate-foundry-testcase to emit tests. Slice 1: loop-free "
