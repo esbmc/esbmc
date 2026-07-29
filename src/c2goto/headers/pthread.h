@@ -49,6 +49,7 @@ typedef union pthread_attr_t
 typedef struct
 {
   int __lock;
+  /* Repurposed as this mutex's waiter count; see __ESBMC_mutex_waiters. */
   unsigned int __count;
   int __owner;
 } pthread_mutex_t;
@@ -91,6 +92,8 @@ typedef int pthread_once_t;
 typedef struct {
   int __readers;
   int __writer;
+  /* Threads currently blocked on this lock; see __ESBMC_rwlock_waiters. */
+  unsigned int __waiters;
 } pthread_rwlock_t;
 
 /* Read-write lock initializer. */
@@ -562,8 +565,9 @@ extern int pthread_mutexattr_setrobust (pthread_mutexattr_t *__attr,
 #endif
 
 
-#if defined __USE_UNIX98 || defined __USE_XOPEN2K
-/* Functions for handling read-write locks.  */
+/* Functions for handling read-write locks. Unguarded because ESBMC defines
+   neither __USE_UNIX98 nor __USE_XOPEN2K, which would leave the
+   --deadlock-check -D renames with no prototype to rewrite.  */
 
 /* Initialize read-write lock RWLOCK using attributes ATTR, or use
    the default values if later is NULL.  */
@@ -629,7 +633,6 @@ extern int pthread_rwlockattr_getkind_np (__const pthread_rwlockattr_t *
 /* Set reader/write preference.  */
 extern int pthread_rwlockattr_setkind_np (pthread_rwlockattr_t *__attr,
 					  int __pref);
-#endif
 
 
 /* Functions for handling conditional variables.  */
