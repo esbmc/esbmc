@@ -111,6 +111,26 @@ __ESBMC_HIDE:;
   return res;
 }
 
+/* C99 7.20.6.2: div, ldiv and lldiv were declared in stdlib.h but never
+ * defined, so both members of the returned struct were unconstrained. C's
+ * integer division already truncates toward zero, which is exactly the
+ * rounding the standard specifies, so quot*denom + rem == numer holds. */
+#define DIV_DEF(name, result_type, type)                                       \
+  result_type name(type numerator, type denominator)                           \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    result_type result;                                                        \
+    result.quot = numerator / denominator;                                     \
+    result.rem = numerator % denominator;                                      \
+    return result;                                                             \
+  }
+
+DIV_DEF(div, div_t, int)
+DIV_DEF(ldiv, ldiv_t, long int)
+DIV_DEF(lldiv, lldiv_t, long long int)
+
+#undef DIV_DEF
+
 #define STRTOL_DEF(name, type, TYPE)                                           \
   type name(const char *str, char **endptr, int base)                          \
   {                                                                            \
