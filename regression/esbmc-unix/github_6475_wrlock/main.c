@@ -29,5 +29,7 @@ int main(void)
   pthread_rwlock_init(&b, 0);
   pthread_create(&p1, 0, t1, 0);
   pthread_create(&p2, 0, t2, 0);
-  return 0;
+  /* Hand the process over to the workers: returning from main would call
+     exit() and tear them down before they can deadlock (#6479). */
+  pthread_exit(0);
 }
