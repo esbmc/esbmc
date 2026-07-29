@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract extern_fn
+^ERROR: --replace-call-with-contract: cannot use 'extern_fn': that function is declared but has no body here$

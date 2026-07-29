@@ -59,14 +59,32 @@ bool esbmc_parseoptionst::process_function_contracts(
       return result;
     };
 
-  // Lambda function to process function list (handles "*" wildcard).
-  // An unresolvable name is a usage error rather than a warning: these options
-  // decide *what* gets verified, so silently skipping one leaves ESBMC
-  // verifying something other than what was asked and still reporting a
-  // verdict for it. Sets ok=false on the first bad name.
+  // Reject a name these options cannot act on, and say which way it failed.
+  // All three ways -- unresolvable, no body, no contract -- reach the same
+  // place: nothing is enforced or replaced, yet a verdict is still printed for
+  // a run that is not the one that was asked for. Returns the reason, or an
+  // empty string when the name is usable.
+  auto unusable_because = [&contracts,
+                           &goto_functions](const std::string &func) {
+    const symbolt *sym = contracts.find_function_symbol(func);
+    if (sym == nullptr)
+      return std::string("no function of that name");
+
+    auto it = goto_functions.function_map.find(sym->id);
+    if (it == goto_functions.function_map.end() || !it->second.body_available)
+      return std::string("that function is declared but has no body here");
+
+    if (
+      !contracts.has_contracts(it->second.body) &&
+      !contracts.is_annotated_contract_function(*sym))
+      return std::string("that function declares no contract clauses");
+
+    return std::string();
+  };
+
   bool ok = true;
   auto process_function_list =
-    [&collect_functions_with_contracts, &contracts, &ok](
+    [&collect_functions_with_contracts, &unusable_because, &ok](
       const std::list<std::string> &func_list, const char *opt) {
       std::set<std::string> result;
       for (const auto &func : func_list)
@@ -77,12 +95,14 @@ bool esbmc_parseoptionst::process_function_contracts(
           return collect_functions_with_contracts();
         }
 
-        if (contracts.find_function_symbol(func) == nullptr)
+        std::string reason = unusable_because(func);
+        if (!reason.empty())
         {
           log_error(
-            "--{}: no function named '{}'{}",
+            "--{}: cannot use '{}': {}{}",
             opt,
             func,
+            reason,
             func.find(',') != std::string::npos
               ? " (names are not comma-separated; repeat the flag once per "
                 "function, or use \"*\")"

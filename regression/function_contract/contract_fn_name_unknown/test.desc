@@ -1,4 +1,4 @@
 CORE
 main.c
 --replace-call-with-contract no_such_function
-^ERROR: --replace-call-with-contract: no function named 'no_such_function'$
+^ERROR: --replace-call-with-contract: cannot use 'no_such_function': no function of that name$

@@ -1,4 +1,4 @@
 CORE
 main.c
 --enforce-contract no_such_function --function f
-^ERROR: --enforce-contract: no function named 'no_such_function'$
+^ERROR: --enforce-contract: cannot use 'no_such_function': no function of that name$
