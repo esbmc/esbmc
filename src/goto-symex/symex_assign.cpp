@@ -26,7 +26,6 @@ goto_symext::goto_symext(
     remaining_claims(0),
     simplified_claims(0),
     max_unwind(options.get_option("unwind").c_str()),
-    constant_propagation(!options.get_bool_option("no-propagation")),
     ns(_ns),
     new_context(_new_context),
     goto_functions(_goto_functions),
@@ -180,7 +179,6 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   unwind_func_set = sym.unwind_func_set;
   loop_id_to_func_index = sym.loop_id_to_func_index;
   max_unwind = sym.max_unwind;
-  constant_propagation = sym.constant_propagation;
   total_claims = sym.total_claims;
   remaining_claims = sym.remaining_claims;
   simplified_claims = sym.simplified_claims;

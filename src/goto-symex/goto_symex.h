@@ -1298,8 +1298,6 @@ protected:
    *  --no-interval-symex-guard); assertion pruning via --interval-symex-assert
    *  discharges claims proven TRUE. */
   std::optional<interval_domaint> interval_domain_state;
-  /** Whether constant propagation is to be enabled. */
-  bool constant_propagation;
   /** Namespace we're working in. */
   const namespacet &ns;
   /** Context we're working with */

@@ -55,7 +55,11 @@ execution_statet::execution_statet(
   const goto_programt *goto_program = &(it->second.body);
 
   // Initialize initial thread state
-  goto_symex_statet state(*state_level2, global_value_set, ns);
+  goto_symex_statet state(
+    *state_level2,
+    global_value_set,
+    ns,
+    options.get_bool_option("no-propagation"));
   state.initialize(
     (*goto_program).instructions.begin(),
     (*goto_program).instructions.end(),
@@ -665,7 +669,11 @@ void execution_statet::execute_guard()
 
 unsigned int execution_statet::add_thread(const goto_programt *prog)
 {
-  goto_symex_statet new_state(*state_level2, global_value_set, ns);
+  goto_symex_statet new_state(
+    *state_level2,
+    global_value_set,
+    ns,
+    options.get_bool_option("no-propagation"));
   new_state.initialize(
     prog->instructions.begin(),
     prog->instructions.end(),

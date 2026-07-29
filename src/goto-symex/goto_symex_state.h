@@ -45,11 +45,13 @@ public:
    *  and value set / pointer tracking situations.
    *  @param l2 Global L2 state reference.
    *  @param vs Global value set reference.
+   *  @param no_propagation Value of --no-propagation, from the live optionst.
    */
   goto_symex_statet(
     renaming::level2t &l2,
     value_sett &vs,
-    const namespacet &_ns);
+    const namespacet &_ns,
+    bool no_propagation);
 
   /**
    *  Copy constructor.
@@ -459,6 +461,10 @@ public:
 
   /** Flag saying whether to maintain pointer value set tracking. */
   bool use_value_set;
+  /** Flag saying constant propagation was disabled with --no-propagation.
+   *  Cached because constant_propagation() runs on every assignment and
+   *  get_bool_option does a string-keyed map lookup. */
+  bool no_propagation = false;
   /** Reference to global l2 state. */
   renaming::level2t &level2;
   /** Reference to global pointer tracking state. */

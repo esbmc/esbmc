@@ -13,8 +13,9 @@
 goto_symex_statet::goto_symex_statet(
   renaming::level2t &l2,
   value_sett &vs,
-  const namespacet &_ns)
-  : level2(l2), value_set(vs), ns(_ns)
+  const namespacet &_ns,
+  bool no_propagation)
+  : no_propagation(no_propagation), level2(l2), value_set(vs), ns(_ns)
 {
   use_value_set = true;
   num_instructions = 0;
@@ -44,6 +45,7 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   loop_iterations = state.loop_iterations;
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
+  no_propagation = state.no_propagation;
   call_stack = state.call_stack;
   witness_segs = state.witness_segs;
   cur_seg = state.cur_seg;
@@ -97,6 +99,9 @@ static bool type_has_constant_size(const type2tc &type)
 
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
+  if (no_propagation)
+    return false;
+
   if (is_array_type(expr))
   {
     array_type2t arr = to_array_type(expr->type);
