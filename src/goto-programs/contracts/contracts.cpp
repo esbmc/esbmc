@@ -990,8 +990,13 @@ void code_contractst::enforce_contracts(
 }
 
 /// Build `malloc(size_bytes)` typed as u8*, so the allocation is exactly
-/// size_bytes regardless of the pointee width. symex_mem casts the u8* result
-/// to the LHS pointer type, so assigning it to a `T *` lvalue is well-formed.
+/// size_bytes regardless of the pointee width.
+///
+/// The result is assigned to a `T *` lvalue without a cast. That is deliberate
+/// and load-bearing: symex_assign dispatches on is_sideeffect2t(rhs) at the top
+/// level, so wrapping the malloc in a typecast hides it and the assignment is
+/// never routed to symex_mem. symex_mem inserts the cast itself
+/// (memory_alloc.cpp: `if (rhs->type != lhs->type) rhs = typecast2tc(...)`).
 static expr2tc byte_malloc(const expr2tc &size_bytes)
 {
   type2tc char_type = get_uint8_type();
@@ -1077,6 +1082,12 @@ goto_programt code_contractst::generate_checking_wrapper(
 
   // Byte extent of each harness-allocated pointer param, tagged with whether
   // the backing may be dereferenced. See param_extentt.
+  //
+  // Invariant: the key is always the parameter's own symbol id. Both producers
+  // must agree on that -- the is_fresh path below keys on the resolved lvalue's
+  // thename, add_pointer_validity_assumptions on param.get_identifier() -- and
+  // so must every consumer, since a mismatch degrades silently to the
+  // WITNESS_IDX_FALLBACK_ELEMS path with no diagnostic.
   std::map<irep_idt, param_extentt> param_extents;
 
   // is_fresh'd struct pointers, warned about only if an __ESBMC_old snapshot
@@ -4249,6 +4260,11 @@ expr2tc code_contractst::emit_pointer_param_malloc(
   auto extent_assign = wrapper.add_instruction(ASSIGN);
   extent_assign->code = code_assign2tc(alloc_size, gen_nondet(size_type2()));
   extent_assign->location = location;
+  // Zero is admissible and is the point: it is the state that makes an
+  // unstated extent fail. The ASSUME below does not exclude it -- symex models
+  // malloc failure as an independent nondet, not as a function of the
+  // requested size -- so a non-null pointer to a zero-byte object is a
+  // reachable state that every dereference will fail against.
   extent_assign->location.comment("harness: extent is unconstrained");
 
   auto assign_inst = wrapper.add_instruction(ASSIGN);

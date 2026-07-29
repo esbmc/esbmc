@@ -159,10 +159,16 @@ ESBMC builds a checking harness:
 3. Runs the function body symbolically.
 4. **Asserts** the `ensures` clause and assigns compliance.
 
-Step 1 is unconstrained in the extent of pointer parameters too. A pointer
-parameter is backed by an object whose size is nondeterministic, so the body may
-only dereference it as far as the `requires` clause justifies. State the extent
-with [`__ESBMC_is_fresh`](#memory-freshness-__esbmc_is_fresh):
+Step 1 is unconstrained in the extent of pointer parameters too, **in
+entry-harness mode only**. That is, when the enforced function is also the
+`--function` entry point, so ESBMC has to invent the arguments. Under a plain
+`--enforce-contract f` the pointer parameters come from the real caller and
+nothing below applies.
+
+In entry-harness mode a pointer parameter is backed by an object whose size is
+nondeterministic, so the body may only dereference it as far as the `requires`
+clause justifies. State the extent with
+[`__ESBMC_is_fresh`](#memory-freshness-__esbmc_is_fresh):
 
 ```c
 void f(int *p) {
@@ -174,6 +180,13 @@ void f(int *p) {
 Without that clause, `p != NULL` alone says nothing about how many elements `p`
 addresses, so `p[20]` is reported as an out-of-bounds write. ESBMC emits a
 warning naming any pointer parameter whose extent the contract leaves unstated.
+
+This is a deliberate change of meaning, and there is no opt-out flag. A contract
+that dereferenced a pointer parameter without stating its extent was being
+checked against a buffer size ESBMC invented, so the previous verdict was not
+sound to begin with; keeping a flag to restore it would only preserve the false
+negative of [#6212](https://github.com/esbmc/esbmc/issues/6212). The fix is to
+state the extent, which the warning names the parameter for.
 
 If every path through the body satisfies the postcondition and the assigns
 frame, the result is `VERIFICATION SUCCESSFUL`. Otherwise, ESBMC reports a
