@@ -482,6 +482,124 @@ void pci_unregister_driver(struct pci_driver *drv)
 }
 
 /* ============================================================
+ *  PCIe AER (Advanced Error Reporting) models
+ * ============================================================
+ *
+ * Models the AER capability structure and error handling path.
+ * Reference: PCIe r4.0 §7.10, Linux drivers/pci/pcie/aer/
+ * ============================================================ */
+
+/* AER capability state per PCI device */
+struct aer_cap {
+  int enabled;
+  int severity;       /* current error severity */
+  uint64_t corr_count;
+  uint64_t non_fatal_count;
+  uint64_t fatal_count;
+};
+
+/* Simple array to track AER state for registered devices */
+static struct aer_cap esbmc_aer_cap[ESBMC_PCI_DEVICES_MAX];
+static int esbmc_aer_count = 0;
+
+static struct aer_cap *__esbmc_get_aer_cap(struct pci_dev *dev)
+{
+  for (int i = 0; i < esbmc_aer_count; i++)
+  {
+    if (&esbmc_pci_devices[i] == dev)
+      return &esbmc_aer_cap[i];
+  }
+  return NULL;
+}
+
+int pci_enable_aer(struct pci_dev *dev)
+{
+__ESBMC_HIDE:;
+  assert(dev != NULL);
+
+  /* Find or allocate AER state for this device */
+  struct aer_cap *cap = __esbmc_get_aer_cap(dev);
+  if (cap == NULL)
+  {
+    if (esbmc_aer_count >= ESBMC_PCI_DEVICES_MAX)
+      return -ENOMEM;
+    cap = &esbmc_aer_cap[esbmc_aer_count++];
+    memset(cap, 0, sizeof(*cap));
+  }
+
+  cap->enabled = 1;
+  cap->corr_count = 0;
+  cap->non_fatal_count = 0;
+  cap->fatal_count = 0;
+  return 0;
+}
+
+void pci_aer_clear(struct pci_dev *dev, int severity)
+{
+__ESBMC_HIDE:;
+  assert(dev != NULL);
+  struct aer_cap *cap = __esbmc_get_aer_cap(dev);
+  if (cap == NULL || !cap->enabled)
+    return;
+
+  switch (severity)
+  {
+  case AER_CORRECTABLE:
+    cap->corr_count = 0;
+    cap->severity = AER_CORRECTABLE;
+    break;
+  case AER_NON_FATAL:
+    cap->non_fatal_count = 0;
+    cap->severity = AER_NON_FATAL;
+    break;
+  case AER_FATAL:
+    cap->fatal_count = 0;
+    cap->severity = AER_FATAL;
+    break;
+  default:
+    cap->corr_count = 0;
+    cap->non_fatal_count = 0;
+    cap->fatal_count = 0;
+    break;
+  }
+}
+
+int pci_aer_get_first_error(struct pci_dev *dev, int *severity)
+{
+__ESBMC_HIDE:;
+  assert(dev != NULL);
+  assert(severity != NULL);
+
+  struct aer_cap *cap = __esbmc_get_aer_cap(dev);
+  if (cap == NULL || !cap->enabled)
+    return -ENODEV;
+
+  /* Return non-deterministic severity from available error types */
+  int result = __VERIFIER_nondet_int();
+  __ESBMC_assume(result >= 0 && result <= 2);
+  *severity = result;
+  return 0;
+}
+
+int pci_aer_clear_first_error(struct pci_dev *dev)
+{
+__ESBMC_HIDE:;
+  assert(dev != NULL);
+
+  struct aer_cap *cap = __esbmc_get_aer_cap(dev);
+  if (cap == NULL || !cap->enabled)
+    return -ENODEV;
+
+  /* Clear and return the current severity */
+  int severity = cap->severity;
+  cap->corr_count = 0;
+  cap->non_fatal_count = 0;
+  cap->fatal_count = 0;
+  cap->severity = AER_CORRECTABLE;
+  return severity;
+}
+
+/* ============================================================
  *  CXL device models
  * ============================================================ */
 
@@ -668,7 +786,72 @@ __ESBMC_HIDE:;
 }
 
 /* ============================================================
+ *  CXL error injection models
+ * ============================================================
+ *
+ * Models CXL error injection via the mailbox command interface.
+ * Reference: CXL 2.0 §8.2.9.4 (Error Record Serialization)
+ * ============================================================ */
+
+static int esbmc_corr_count = 0;
+static int esbmc_non_fatal_count = 0;
+static int esbmc_fatal_count = 0;
+
+int cxl_err_inject(struct cxl_dev *cxld, enum cxl_error_type type)
+{
+__ESBMC_HIDE:;
+  assert(cxld != NULL);
+  __ESBMC_assume(type >= CXL_ERR_CORRECTABLE && type <= CXL_ERR_FATAL);
+
+  /* Non-deterministic: injection hardware may not be present */
+  int result = __VERIFIER_nondet_int();
+  if (result != 0)
+  {
+    errno = ENODEV;
+    return -1;
+  }
+
+  /* Record the error */
+  switch (type)
+  {
+  case CXL_ERR_CORRECTABLE:
+    esbmc_corr_count++;
+    break;
+  case CXL_ERR_NON_FATAL:
+    esbmc_non_fatal_count++;
+    break;
+  case CXL_ERR_FATAL:
+    esbmc_fatal_count++;
+    break;
+  }
+  return 0;
+}
+
+int cxl_err_get_count(struct cxl_dev *cxld,
+                      int *correctable,
+                      int *non_fatal,
+                      int *fatal)
+{
+__ESBMC_HIDE:;
+  assert(cxld != NULL);
+  assert(correctable != NULL);
+  assert(non_fatal != NULL);
+  assert(fatal != NULL);
+
+  *correctable = esbmc_corr_count;
+  *non_fatal = esbmc_non_fatal_count;
+  *fatal = esbmc_fatal_count;
+  return 0;
+}
+
+/* ============================================================
  *  CXL HDM decoder setup
+ * ============================================================
+ *
+ * CXL 2.0 §8.2.2.12:
+ *   - Maximum 8 HDM decoders per device (CXL_HDM_DECODER_MAX)
+ *   - Region base address must be aligned to 4KB minimum
+ *     (CXL_HDM_ALIGNMENT)
  * ============================================================ */
 
 int cxl_setup_hdm_decoders(struct cxl_dev *cxld,
@@ -680,7 +863,25 @@ __ESBMC_HIDE:;
   assert(region->size > 0);
   assert(region->granularity > 0);
 
-  /* Non-deterministic: decoder setup succeeds or fails */
+  /* Validate 4KB alignment on region base address (CXL 2.0 §8.2.2.12.1) */
+  if ((region->start % CXL_HDM_ALIGNMENT) != 0)
+  {
+    errno = EINVAL;
+    return -1;
+  }
+
+  /* Enforce 8-decoder limit (CXL 2.0 §8.2.2.12) */
+  /* Non-deterministic: the device may have 0-7 decoders already */
+  int existing = __VERIFIER_nondet_int();
+  __ESBMC_assume(existing >= 0 && existing < CXL_HDM_DECODER_MAX);
+
+  if (existing >= (CXL_HDM_DECODER_MAX - 1))
+  {
+    errno = ENOSPC;
+    return -1;
+  }
+
+  /* Non-deterministic: decoder setup may still fail for other reasons */
   int result = __VERIFIER_nondet_int();
   if (result != 0)
   {

@@ -86,6 +86,10 @@ struct cxl_device_id {
 #define CXL_DSR_ENABLED       (1 << 1)
 #define CXL_DSR_HAS_ERROR     (1 << 2)
 
+/* CXL HDM decoder limits (CXL 2.0 §8.2.2.12) */
+#define CXL_HDM_DECODER_MAX    8
+#define CXL_HDM_ALIGNMENT      4096  /* 4KB minimum alignment */
+
 /* CXL Mailbox command opcodes (CXL 2.0 §8.1.3) */
 #define CXL_MBOX_OP_GET_SUPPORTED_LOGS  0x0001
 #define CXL_MBOX_OP_GET_CAPABILITIES    0x0002
@@ -152,5 +156,38 @@ int cxl_setup_hdm_decoders(struct cxl_dev *cxld,
 /* Driver registration */
 int cxl_driver_register(struct cxl_driver *drv);
 void cxl_driver_unregister(struct cxl_driver *drv);
+
+/* ============================================================
+ *  PCIe AER (Advanced Error Reporting) — declared here, modelled
+ *  in cxl_driver.c
+ * ============================================================ */
+
+/* AER error severity levels (PCIe r4.0 §7.10) */
+enum aer_error_severity {
+  AER_CORRECTABLE    = 0,
+  AER_NON_FATAL      = 1,
+  AER_FATAL          = 2,
+};
+
+int pci_enable_aer(struct pci_dev *dev);
+void pci_aer_clear(struct pci_dev *dev, int severity);
+int pci_aer_get_first_error(struct pci_dev *dev, int *severity);
+int pci_aer_clear_first_error(struct pci_dev *dev);
+
+/* ============================================================
+ *  CXL error injection — declared here, modelled in cxl_driver.c
+ * ============================================================ */
+
+enum cxl_error_type {
+  CXL_ERR_CORRECTABLE = 0,
+  CXL_ERR_NON_FATAL,
+  CXL_ERR_FATAL,
+};
+
+int cxl_err_inject(struct cxl_dev *cxld, enum cxl_error_type type);
+int cxl_err_get_count(struct cxl_dev *cxld,
+                      int *correctable,
+                      int *non_fatal,
+                      int *fatal);
 
 #endif /* _LINUX_CXL_H */

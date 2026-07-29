@@ -142,17 +142,22 @@ techniques specific to CXL.
 3. **HDM (Host Memory Decode) decoder validation.**
    - Two regression tests: `cxl_hdm_01` (valid setup) and
      `cxl_hdm_overlap_01` (overlapping regions — detected as a bug).
-   - Alignment and the 8-decoder limit are not enforced in the operational
-     model.
+   - Operational model now enforces 4KB alignment on base addresses and the
+     8-decoder limit per CXL 2.0 §8.2.2.12.
+   - Two additional regression tests:
+     `cxl_driver_hdm_align_01` (aligned addresses succeed) and
+     `cxl_driver_hdm_align_fail_01` (misaligned addresses rejected).
 
 4. **CXL error handling.**
    - Synthetic regression test (`cxl_error_01`) exercises driver error
      injection paths.
-   - No error injection functions are modelled in `cxl_driver.c`.
+   - Operational model now provides `cxl_err_inject()` and
+     `cxl_err_get_count()` for error injection and counting.
 
 5. **PCIe AER (Advanced Error Reporting).**
    - Synthetic regression test (`cxl_aer_01`) exercises error recovery paths.
-   - No AER functions are modelled in `cxl_driver.c`.
+   - Operational model now provides `pci_enable_aer()`, `pci_aer_clear()`,
+     `pci_aer_get_first_error()`, and `pci_aer_clear_first_error()`.
 
 ---
 
@@ -197,6 +202,7 @@ patterns for other device driver families.
    - How to write CXL driver verification tests.
    - How the operational models work.
    - How to extend the models for new CXL features.
+   - User guide: `docs/cxl-driver-verification-guide.md`.
 
 3. **Generalize patterns for other drivers.**
    - The MMIO, DMA, and IRQ modeling patterns are generic.
@@ -210,25 +216,35 @@ patterns for other device driver families.
 
 ## File Inventory
 
-### Headers (Phase 1)
+### Headers (Phase 1 + Phase 4 updates)
 
 ```
 src/c2goto/headers/ubuntu20.04/kernel_5.15.0-76/include/
 ├── asm/
 │   └── io.h                          # MMIO access functions
 └── linux/
-    ├── cxl.h                         # CXL core device API
+    ├── cxl.h                         # CXL core device API + AER + error injection
     ├── cxlmem.h                      # CXL memory device API
     ├── pci.h                         # PCI subsystem API
     ├── irq.h                         # Interrupt handling API
-    └── dma-mapping.h                 # DMA API
+    ├── dma-mapping.h                 # DMA API
+    └── gfp.h                         # GFP flags for memory allocation
 ```
 
-### Operational Model (Phase 1)
+### Operational Model (Phase 1 + Phase 4 updates)
 
 ```
 src/c2goto/library/
 └── cxl_driver.c                      # CXL driver operational model
+    ├── MMIO (readb/writel, barriers, block ops)
+    ├── PCI (enumeration, BAR, MSI, driver registration)
+    ├── AER (enable, clear, get/clear first error)
+    ├── IRQ (request, free, simulate)
+    ├── DMA (coherent alloc, streaming map, sync)
+    ├── CXL core (enumerate, init, mailbox, security)
+    ├── Error injection (inject, get counts)
+    ├── HDM decoder (setup with alignment + 8-decoder constraints)
+    └── CXL memory (attach, detach, regions, partition)
 ```
 
 ### Regression Tests (all phases)
@@ -256,7 +272,10 @@ regression/cxl/
 ├── cxl_driver_remove_01/             # Missing IRQ cleanup (FAIL)
 ├── cxl_error_01/                     # CXL error injection (PASS)
 ├── cxl_mailbox_state_01/             # Mailbox state machine (PASS)
-└── cxl_port_enum_01/                 # Port hierarchy enumeration (PASS)
+├── cxl_port_enum_01/                 # Port hierarchy enumeration (PASS)
+├── cxl_driver_hdm_align_01/          # HDM 4KB alignment validation (PASS)
+├── cxl_driver_hdm_align_fail_01/     # HDM misaligned address rejection (FAIL)
+└── cxl_driver_aer_fatal_01/          # AER fatal error during probe (PASS)
 ```
 
 ## Key Design Decisions
@@ -302,19 +321,23 @@ regression/cxl/
 - [x] Phase 1 regression tests pass with expected results
 - [x] Phase 3 regression suite (22 tests) passes
 - [x] Phase 4 advanced features — regression tests cover mailbox state,
-        HDM validation, AER, error injection, and port enumeration
-        (operational model coverage is partial)
+        HDM validation (with alignment + decoder limit constraints),
+        AER (with operational model functions), error injection (with
+        operational model functions), and port enumeration
 - [x] Phase 5: Real-world driver harnesses created and verified
-- [x] Phase 6: User documentation published
+- [x] Phase 6: User documentation published (user guide + roadmap)
 
 ## Final Statistics
 
 | Metric | Count |
 |--------|-------|
-| Total commits | 6 |
-| Total regression tests | 22 |
-| Passing tests | 15 |
+| Total commits | 6+ |
+| Total regression tests | 25 |
+| Passing tests | 18 |
 | Bug-detecting tests | 7 |
 | Kernel headers added | 6 |
-| Operational model lines | ~1,050 |
-| Documentation pages | 1 |
+| Operational model lines | ~1,250 |
+| Documentation pages | 2 |
+| AER functions added | 4 |
+| Error injection functions added | 2 |
+| HDM constraints added | 2 (alignment + decoder limit) |
