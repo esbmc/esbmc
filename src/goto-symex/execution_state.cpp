@@ -166,6 +166,58 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   state_level2->owner = this;
 }
 
+/* Mutex / condition-var / rwlock / barrier / spinlock types, looking through
+ * arrays: `pthread_mutex_t m[N]` collects as the array symbol, whose type is
+ * an array rather than the struct (#6480). */
+static bool is_pthread_sync_type(type2tc t)
+{
+  while (is_array_type(t))
+    t = to_array_type(t).subtype;
+  if (is_nil_type(t))
+    return false;
+  if (is_struct_type(t))
+  {
+    const std::string &n = to_struct_type(t).name.as_string();
+    return n.find("pthread_mutex_t") != std::string::npos ||
+           n.find("pthread_cond_t") != std::string::npos ||
+           n.find("pthread_rwlock_t") != std::string::npos ||
+           n.find("pthread_barrier_t") != std::string::npos ||
+           n.find("pthread_spinlock_t") != std::string::npos;
+  }
+  if (is_union_type(t))
+  {
+    const std::string &n = to_union_type(t).name.as_string();
+    return n.find("pthread_mutex_t") != std::string::npos ||
+           n.find("pthread_cond_t") != std::string::npos ||
+           n.find("pthread_rwlock_t") != std::string::npos;
+  }
+
+  return false;
+}
+
+/* Two MPOR keys conflict when they may name the same storage. A refined
+ * lock-array key (index2t over the array symbol, see get_expr_globals) and the
+ * whole-array key for that same symbol may name the same element, so they must
+ * be treated as conflicting; two refined keys for distinct elements may not. */
+static bool mpor_keys_may_alias(const expr2tc &a, const expr2tc &b)
+{
+  if (a == b)
+    return true;
+  if (is_index2t(a) == is_index2t(b))
+    return false;
+  const expr2tc &base_a = is_index2t(a) ? to_index2t(a).source_value : a;
+  const expr2tc &base_b = is_index2t(b) ? to_index2t(b).source_value : b;
+  return base_a == base_b;
+}
+
+static bool mpor_set_conflicts(const std::set<expr2tc> &s, const expr2tc &key)
+{
+  for (const expr2tc &e : s)
+    if (mpor_keys_may_alias(e, key))
+      return true;
+  return false;
+}
+
 void execution_statet::symex_step(reachability_treet &art)
 {
   statet &state = get_active_state();
@@ -816,6 +868,19 @@ void execution_statet::get_expr_globals(
           point_to_global =
             s->static_lifetime || s->get_type().is_dynamic_set();
           p = to_object_descriptor2t(obj).object;
+          /* Distinguish the elements of a lock array. Both `&m[0]` and
+           * `&m[1]` resolve to the base symbol `m`, which makes MPOR treat
+           * every lock in the array as one object, so two threads holding
+           * different locks never come out independent -- 6.8x the
+           * interleavings of the same program written with scalar mutexes
+           * (#6480). Refine only a constant offset on a lock array; an
+           * unknown offset keeps the whole-array key, and
+           * mpor_keys_may_alias pairs the refined and unrefined forms. */
+          const expr2tc &off = to_object_descriptor2t(obj).offset;
+          if (
+            is_constant_int2t(off) && is_array_type(p->type) &&
+            is_pthread_sync_type(p->type))
+            p = index2tc(to_array_type(p->type).subtype, p, off);
           /* Stop when the global symbol is found */
           if (point_to_global)
             break;
@@ -937,24 +1002,18 @@ bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
   // don't intersect with this transitions write(s).
 
   // Double write intersection
-  for (std::set<expr2tc>::const_iterator it = thread_last_writes[j].begin();
-       it != thread_last_writes[j].end();
-       ++it)
-    if (thread_last_writes[l].find(*it) != thread_last_writes[l].end())
+  for (const expr2tc &it : thread_last_writes[j])
+    if (mpor_set_conflicts(thread_last_writes[l], it))
       return true;
 
   // This read what that wrote intersection
-  for (std::set<expr2tc>::const_iterator it = thread_last_reads[j].begin();
-       it != thread_last_reads[j].end();
-       ++it)
-    if (thread_last_writes[l].find(*it) != thread_last_writes[l].end())
+  for (const expr2tc &it : thread_last_reads[j])
+    if (mpor_set_conflicts(thread_last_writes[l], it))
       return true;
 
   // We wrote what that reads intersection
-  for (std::set<expr2tc>::const_iterator it = thread_last_writes[j].begin();
-       it != thread_last_writes[j].end();
-       ++it)
-    if (thread_last_reads[l].find(*it) != thread_last_reads[l].end())
+  for (const expr2tc &it : thread_last_writes[j])
+    if (mpor_set_conflicts(thread_last_reads[l], it))
       return true;
 
   // No check for read-read intersection, it doesn't affect anything
@@ -1078,35 +1137,6 @@ bool execution_statet::has_cswitch_point_occured() const
   // a context switch point here — they already drive scheduling through
   // the pthread library's explicit switch mechanisms, and treating every
   // lock access as a cswitch point blows up the DFS width.
-  // An array of locks is still just locks: `pthread_mutex_t m[N]` collects as
-  // the array symbol, whose type is an array rather than the struct, so
-  // without looking through it every acquisition in the textbook dining
-  // -philosophers shape forces a switch point (#6480).
-  auto is_pthread_sync_type = [](type2tc t) {
-    while (is_array_type(t))
-      t = to_array_type(t).subtype;
-    if (is_nil_type(t))
-      return false;
-    if (is_struct_type(t))
-    {
-      const std::string &n = to_struct_type(t).name.as_string();
-      return n.find("pthread_mutex_t") != std::string::npos ||
-             n.find("pthread_cond_t") != std::string::npos ||
-             n.find("pthread_rwlock_t") != std::string::npos ||
-             n.find("pthread_barrier_t") != std::string::npos ||
-             n.find("pthread_spinlock_t") != std::string::npos;
-    }
-    if (is_union_type(t))
-    {
-      const std::string &n = to_union_type(t).name.as_string();
-      return n.find("pthread_mutex_t") != std::string::npos ||
-             n.find("pthread_cond_t") != std::string::npos ||
-             n.find("pthread_rwlock_t") != std::string::npos;
-    }
-
-    return false;
-  };
-
   auto any_non_sync = [&](const std::set<expr2tc> &s) {
     for (const auto &e : s)
       if (!is_pthread_sync_type(e->type))
