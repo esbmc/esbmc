@@ -867,6 +867,18 @@ shared_ptr<T> make_shared(Args &&...args)
 {
   return shared_ptr<T>(new T(std::forward<Args>(args)...));
 }
+
+/* The allocator is deliberately not modelled: storage comes from the same
+ * `new` make_shared uses, because shared_ptr's release path is `delete __p`.
+ * So a custom allocator's allocate/deallocate/construct are never called, and
+ * this model cannot answer questions *about* an allocator -- only about code
+ * that happens to use one (github #6488). The array forms added in C++20 are
+ * not declared. */
+template <class T, class A, class... Args>
+shared_ptr<T> allocate_shared(const A &, Args &&...args)
+{
+  return make_shared<T>(std::forward<Args>(args)...);
+}
 #endif
 
 #if 0
