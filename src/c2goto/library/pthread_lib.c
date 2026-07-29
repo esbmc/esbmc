@@ -29,6 +29,12 @@ void __ESBMC_set_thread_internal_data(
 #define __ESBMC_rwlock_readers(a) ((a)->__readers)
 #define __ESBMC_rwlock_writer(a) ((a)->__writer)
 #define __ESBMC_rwlock_waiters(a) ((a)->__waiters)
+#define __ESBMC_barrier_count(a) ((a)->__count)
+#define __ESBMC_barrier_arrived(a) ((a)->__arrived)
+#define __ESBMC_barrier_generation(a) ((a)->__generation)
+#define __ESBMC_barrier_waiters(a) ((a)->__waiters)
+#define __ESBMC_spin_lock_field(a) ((a)->__lock)
+#define __ESBMC_spin_waiters(a) ((a)->__waiters)
 
 /* Global tracking data. Should all initialize to 0 / false */
 __attribute__((annotate("__ESBMC_inf_size")))
@@ -721,6 +727,175 @@ __ESBMC_HIDE:;
 
   __ESBMC_assume(acquired);
 
+  return 0;
+}
+
+/************************ barrier mainpulation routines ***********************/
+
+int pthread_barrierattr_init(pthread_barrierattr_t *attr)
+{
+  return 0;
+}
+
+int pthread_barrierattr_destroy(pthread_barrierattr_t *attr)
+{
+  return 0;
+}
+
+int pthread_barrierattr_getpshared(
+  const pthread_barrierattr_t *attr,
+  int *pshared)
+{
+__ESBMC_HIDE:;
+  *pshared = PTHREAD_PROCESS_PRIVATE;
+  return 0;
+}
+
+int pthread_barrierattr_setpshared(pthread_barrierattr_t *attr, int pshared)
+{
+  return 0;
+}
+
+int pthread_barrier_init(
+  pthread_barrier_t *barrier,
+  const pthread_barrierattr_t *attr,
+  unsigned int count)
+{
+__ESBMC_HIDE:;
+  if (count == 0)
+    return EINVAL;
+
+  __ESBMC_atomic_begin();
+  __ESBMC_barrier_count(barrier) = count;
+  __ESBMC_barrier_arrived(barrier) = 0;
+  __ESBMC_barrier_generation(barrier) = 0;
+  __ESBMC_release_blocked_threads(__ESBMC_barrier_waiters(barrier));
+  __ESBMC_barrier_waiters(barrier) = 0;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_barrier_destroy(pthread_barrier_t *barrier)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  __ESBMC_assert(
+    __ESBMC_barrier_arrived(barrier) == 0,
+    "attempt to destroy a barrier with waiting threads");
+  __ESBMC_barrier_count(barrier) = 0;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_barrier_wait(pthread_barrier_t *barrier)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  unsigned int generation = __ESBMC_barrier_generation(barrier);
+  int res = 0;
+
+  __ESBMC_barrier_arrived(barrier)++;
+
+  if (__ESBMC_barrier_arrived(barrier) == __ESBMC_barrier_count(barrier))
+  {
+    // Last to arrive: open the barrier and let this round's waiters through.
+    __ESBMC_barrier_arrived(barrier) = 0;
+    __ESBMC_barrier_generation(barrier)++;
+    __ESBMC_release_blocked_threads(__ESBMC_barrier_waiters(barrier));
+    __ESBMC_barrier_waiters(barrier) = 0;
+    res = PTHREAD_BARRIER_SERIAL_THREAD;
+  }
+  else
+  {
+    __ESBMC_barrier_waiters(barrier)++;
+    __ESBMC_blocked_threads_count++;
+    __ESBMC_assert(
+      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+      "Deadlocked state in pthread_barrier_wait");
+  }
+
+  __ESBMC_atomic_end();
+
+  // Only schedules in which this thread's round has since completed continue.
+  __ESBMC_assume(__ESBMC_barrier_generation(barrier) != generation);
+
+  return res;
+}
+
+/*********************** spinlock mainpulation routines ***********************/
+
+int pthread_spin_init(pthread_spinlock_t *lock, int pshared)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  __ESBMC_spin_lock_field(lock) = 0;
+  __ESBMC_release_blocked_threads(__ESBMC_spin_waiters(lock));
+  __ESBMC_spin_waiters(lock) = 0;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_spin_destroy(pthread_spinlock_t *lock)
+{
+  return 0;
+}
+
+int pthread_spin_lock(pthread_spinlock_t *lock)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  _Bool acquired = (__ESBMC_spin_lock_field(lock) == 0);
+
+  if (acquired)
+  {
+    __ESBMC_spin_lock_field(lock) = 1;
+  }
+  else
+  {
+    // A spinning thread never yields, so every thread spinning at once is a
+    // deadlock exactly as it is for a blocking mutex.
+    __ESBMC_spin_waiters(lock)++;
+    __ESBMC_blocked_threads_count++;
+    __ESBMC_assert(
+      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+      "Deadlocked state in pthread_spin_lock");
+  }
+
+  __ESBMC_atomic_end();
+
+  __ESBMC_assume(acquired);
+
+  return 0;
+}
+
+int pthread_spin_trylock(pthread_spinlock_t *lock)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  int res = EBUSY;
+  if (__ESBMC_spin_lock_field(lock) == 0)
+  {
+    __ESBMC_spin_lock_field(lock) = 1;
+    res = 0;
+  }
+
+  __ESBMC_atomic_end();
+  return res;
+}
+
+int pthread_spin_unlock(pthread_spinlock_t *lock)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  __ESBMC_assert(
+    __ESBMC_spin_lock_field(lock), "must hold spinlock upon unlock");
+  __ESBMC_spin_lock_field(lock) = 0;
+  __ESBMC_release_blocked_threads(__ESBMC_spin_waiters(lock));
+  __ESBMC_spin_waiters(lock) = 0;
+  __ESBMC_atomic_end();
   return 0;
 }
 
