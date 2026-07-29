@@ -250,6 +250,13 @@ ESBMC exactly as on Linux — follow the **Ubuntu / Debian** tab. {{% /details %
 
 {{< /tabs >}}
 
+## Debugging the C++ frontend
+
+A debug build of Clang greatly helps when debugging ESBMC's Clang-based C++
+converter, since it lets you step into the Clang AST as ESBMC walks it. See
+[Rafael's guide](https://github.com/esbmc/esbmc/wiki/Windows-Build#llvm) for
+building LLVM from source.
+
 ## Dependency reference
 
 | package   | required | minimum version |
