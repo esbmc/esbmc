@@ -18,7 +18,9 @@ is where the predicate fires.
 The release path mirrors ``pthread_mutex_unlock_check``: assert the
 lock was held before clearing the field, so a release-without-acquire
 bug is caught under the same flag whose job it is to find concurrency
-errors.
+errors, then drain the waiters this lock registered. Without that drain
+the global counter saturates and a later, unrelated block reads as a
+deadlock (#6489).
 """
 # pylint: disable=unused-argument,unnecessary-pass,undefined-variable,function-redefined
 
@@ -28,6 +30,7 @@ class Lock:
 
     def __init__(self) -> None:
         self._locked: int = 0
+        self._waiters: int = 0
 
     def acquire(self) -> None:
         """Block until the lock is free, then mark it held.
@@ -44,6 +47,7 @@ class Lock:
         if unlocked:
             self._locked = 1
         else:
+            self._waiters = self._waiters + 1
             __ESBMC_pylock_block_and_check()
         __ESBMC_atomic_end()
         __ESBMC_assume(unlocked)
@@ -59,6 +63,8 @@ class Lock:
         __ESBMC_atomic_begin()
         assert self._locked == 1, "must hold lock upon unlock"  # nosec B101
         self._locked = 0
+        __pyt_lock_release_waiters(self._waiters)
+        self._waiters = 0
         __ESBMC_atomic_end()
 
 

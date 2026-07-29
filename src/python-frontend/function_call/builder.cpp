@@ -77,6 +77,7 @@ const std::string kPytInitTid = "__pyt_init_tid";
 const std::string kPytJoin = "__pyt_join";
 const std::string kPytTerminate = "__pyt_terminate";
 const std::string kPyLockBlockAndCheck = "__ESBMC_pylock_block_and_check";
+const std::string kPyLockReleaseWaiters = "__pyt_lock_release_waiters";
 
 function_call_builder::function_call_builder(
   python_converter &converter,
@@ -1023,12 +1024,15 @@ exprt function_call_builder::build() const
     const bool is_join = func_name == kPytJoin;
     const bool is_terminate = func_name == kPytTerminate;
     const bool is_lock_block = func_name == kPyLockBlockAndCheck;
-    if (is_init_tid || is_join || is_terminate || is_lock_block)
+    const bool is_lock_release = func_name == kPyLockReleaseWaiters;
+    if (
+      is_init_tid || is_join || is_terminate || is_lock_block ||
+      is_lock_release)
     {
       auto &symbol_table = converter_.symbol_table();
       locationt location = converter_.get_location_from_decl(call_);
 
-      const bool takes_uint_arg = is_init_tid || is_join;
+      const bool takes_uint_arg = is_init_tid || is_join || is_lock_release;
 
       code_typet fn_type;
       fn_type.return_type() = empty_typet();
