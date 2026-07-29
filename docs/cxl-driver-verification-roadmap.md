@@ -126,29 +126,33 @@ and bug classes.
 **Goal:** Model more complex CXL driver behaviors and add verification
 techniques specific to CXL.
 
-**Planned additions:**
+**Implemented additions:**
 
-1. **CXL mailbox protocol state machine.**
-   - Model the mailbox command queue, hardware busy bits, and command
-     completion interrupts.
-   - Verify that drivers handle mailbox busy correctly (polling vs. interrupt).
+1. **Mailbox protocol state machine.**
+   - Synthetic regression test (`cxl_mailbox_state_01`) models the mailbox
+     command state machine with polling for completion.
+   - Does **not** model hardware busy bits or command-completion interrupts
+     in the operational model.
 
 2. **CXL port and switch enumeration.**
-   - Model the CXL port enumeration process (ACPI _CCA, _CRS, _DSM).
-   - Verify that drivers correctly walk the port hierarchy.
+   - Synthetic regression test (`cxl_port_enum_01`) walks a simulated port
+     hierarchy.
+   - Does **not** model ACPI _CCA, _CRS, or _DSM methods.
 
 3. **HDM (Host Memory Decode) decoder validation.**
-   - Model the 8 HDM decoders per CXL device.
-   - Verify that decoder setup doesn't overlap memory regions.
-   - Verify that base/limit registers are properly aligned.
+   - Two regression tests: `cxl_hdm_01` (valid setup) and
+     `cxl_hdm_overlap_01` (overlapping regions — detected as a bug).
+   - Alignment and the 8-decoder limit are not enforced in the operational
+     model.
 
-4. **CXL memory error handling.**
-   - Model CXL error injection (MCE, AER, internal errors).
-   - Verify that drivers handle errors without crashing.
+4. **CXL error handling.**
+   - Synthetic regression test (`cxl_error_01`) exercises driver error
+     injection paths.
+   - No error injection functions are modelled in `cxl_driver.c`.
 
-5. **CXL PCIe AER (Advanced Error Reporting).**
-   - Model PCIe error types (correctable, non-fatal, fatal).
-   - Verify error recovery paths.
+5. **PCIe AER (Advanced Error Reporting).**
+   - Synthetic regression test (`cxl_aer_01`) exercises error recovery paths.
+   - No AER functions are modelled in `cxl_driver.c`.
 
 ---
 
@@ -194,9 +198,6 @@ patterns for other device driver families.
    - How the operational models work.
    - How to extend the models for new CXL features.
 
-2. **Create a CXL driver verification tutorial.**
-   - Step-by-step guide from "hello world" to verifying a real driver path.
-
 3. **Generalize patterns for other drivers.**
    - The MMIO, DMA, and IRQ modeling patterns are generic.
    - Create a template for NVMe, USB, and other PCIe driver verification.
@@ -230,29 +231,32 @@ src/c2goto/library/
 └── cxl_driver.c                      # CXL driver operational model
 ```
 
-### Regression Tests (Phase 1)
+### Regression Tests (all phases)
 
 ```
 regression/cxl/
-├── cxl_mmio_01/
-│   ├── main.c                        # MMIO read/write correctness
-│   └── test.desc
-├── cxl_device_init_01/
-│   ├── main.c                        # Device init sequence
-│   └── test.desc
-├── cxl_mailbox_01/
-│   ├── main.c                        # Mailbox status check (buggy)
-│   └── test.desc
-└── cxl_dma_01/
-    ├── main.c                        # DMA sync correctness (buggy)
-    └── test.desc
-```
-
-### Roadmap (Phase 1)
-
-```
-docs/
-└── cxl-driver-verification-roadmap.md  # This document
+├── cxl_mmio_01/                      # MMIO read/write correctness (PASS)
+├── cxl_device_init_01/               # Device init sequence (PASS)
+├── cxl_mailbox_01/                   # Mailbox status check (FAIL)
+├── cxl_dma_01/                       # DMA sync correctness (FAIL)
+├── cxl_irq_01/                       # IRQ registration/firing (PASS)
+├── cxl_irq_02/                       # IRQ double-free (FAIL)
+├── cxl_pci_enum_01/                  # PCI enumeration (PASS)
+├── cxl_pci_enum_02/                  # NULL BAR access (FAIL)
+├── cxl_partition_01/                 # Partition state machine (PASS)
+├── cxl_security_01/                  # Valid security transitions (PASS)
+├── cxl_security_02/                  # Invalid security transition (FAIL)
+├── cxl_hdm_01/                       # HDM decoder setup (PASS)
+├── cxl_hdm_overlap_01/               # Overlapping HDM decoders (FAIL)
+├── cxl_concurrent_01/                # Concurrent access with spinlocks (PASS)
+├── cxl_mem_attach_01/                # Memory device lifecycle (PASS)
+├── cxl_aer_01/                       # PCIe AER error handling (PASS)
+├── cxl_driver_irq_01/                # IRQ handler dispatch (PASS)
+├── cxl_driver_probe_01/              # Full probe sequence (PASS)
+├── cxl_driver_remove_01/             # Missing IRQ cleanup (FAIL)
+├── cxl_error_01/                     # CXL error injection (PASS)
+├── cxl_mailbox_state_01/             # Mailbox state machine (PASS)
+└── cxl_port_enum_01/                 # Port hierarchy enumeration (PASS)
 ```
 
 ## Key Design Decisions
@@ -296,10 +300,12 @@ docs/
 
 - [x] Phase 1 files compile and integrate into ESBMC build
 - [x] Phase 1 regression tests pass with expected results
-- [x] Phase 3 regression suite (14 tests) passes
-- [x] Phase 4 advanced features modeled
+- [x] Phase 3 regression suite (22 tests) passes
+- [x] Phase 4 advanced features — regression tests cover mailbox state,
+        HDM validation, AER, error injection, and port enumeration
+        (operational model coverage is partial)
 - [x] Phase 5: Real-world driver harnesses created and verified
-- [x] Phase 6: User documentation and tutorial published
+- [x] Phase 6: User documentation published
 
 ## Final Statistics
 
@@ -311,4 +317,4 @@ docs/
 | Bug-detecting tests | 7 |
 | Kernel headers added | 6 |
 | Operational model lines | ~1,050 |
-| Documentation pages | 2 |
+| Documentation pages | 1 |
