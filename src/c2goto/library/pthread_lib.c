@@ -1099,6 +1099,8 @@ __ESBMC_HIDE:;
   pthread_t threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
+  __ESBMC_release_blocked_threads(__ESBMC_pthread_join_waiters[threadid]);
+  __ESBMC_pthread_join_waiters[threadid] = 0;
   // ``pthread_trampoline`` additionally assumes
   // ``__ESBMC_blocked_threads_count == 0`` to prune deadlocked
   // schedules from its own path; we deliberately omit that assume
@@ -1119,6 +1121,9 @@ __ESBMC_HIDE:;
   _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
   if (!ended)
   {
+    // Register as a waiter so __pyt_terminate can cancel this bump; without
+    // it the counter saturates and every later block looks like a deadlock.
+    __ESBMC_pthread_join_waiters[(int)thread]++;
     __ESBMC_blocked_threads_count++;
     // Deadlock if every running thread is now blocked.
     __ESBMC_assert(
@@ -1155,4 +1160,17 @@ __ESBMC_HIDE:;
   __ESBMC_assert(
     __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
     "Deadlocked state in threading.Lock.acquire");
+}
+
+/* Drains a threading.Lock's waiter count, called from ``Lock.release`` in
+ * models/threading_deadlock.py. Mirrors what pthread_mutex_unlock_check does
+ * with __ESBMC_mutex_waiters: without it the bumps made by
+ * __ESBMC_pylock_block_and_check accumulate and a later, unrelated block reads
+ * as a deadlock (#6489). Named __pyt_* rather than __ESBMC_* because symex
+ * intercepts the latter prefix in run_intrinsic and would never run this body.
+ */
+void __pyt_lock_release_waiters(unsigned int waiters)
+{
+__ESBMC_HIDE:;
+  __ESBMC_release_blocked_threads(waiters);
 }
