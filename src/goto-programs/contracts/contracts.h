@@ -164,8 +164,8 @@ public:
   /// side-channel container was missed by one consumer and cost a regression.
   struct param_extentt
   {
-    expr2tc bytes;   ///< Byte-extent expression of the allocation
-    bool justified;  ///< True when the backing may be dereferenced
+    expr2tc bytes;  ///< Byte-extent expression of the allocation
+    bool justified; ///< True when the backing may be dereferenced
   };
 
   /// \brief Check if a function is compiler-generated and should be skipped.

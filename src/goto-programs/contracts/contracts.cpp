@@ -1103,8 +1103,8 @@ goto_programt code_contractst::generate_checking_wrapper(
         // the heap object #6483 makes unsound. Only an __ESBMC_old over that
         // pointer can trip it, so stay quiet otherwise rather than training
         // users to ignore the warning.
-        if (
-          is_structure_type(ns.follow(to_pointer_type(ptr_var->type).subtype)))
+        if (is_structure_type(
+              ns.follow(to_pointer_type(ptr_var->type).subtype)))
           is_fresh_struct_ptrs.push_back(ptr_var);
       }
 
