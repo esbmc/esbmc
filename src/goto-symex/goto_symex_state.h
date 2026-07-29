@@ -8,6 +8,7 @@
 #include <cstring>
 #include <goto-programs/goto_functions.h>
 #include <goto-symex/renaming.h>
+#include <goto-symex/symex_invariant.h>
 #include <goto-symex/symex_target.h>
 #include <pointer-analysis/value_set.h>
 #include <stack>
@@ -283,13 +284,13 @@ public:
    */
   inline framet &top()
   {
-    assert(!call_stack.empty());
+    SYMEX_INVARIANT(!call_stack.empty(), "no activation record to read");
     return call_stack.back();
   }
 
   inline const framet &top() const
   {
-    assert(!call_stack.empty());
+    SYMEX_INVARIANT(!call_stack.empty(), "no activation record to read");
     return call_stack.back();
   }
 
@@ -309,7 +310,11 @@ public:
    */
   inline void pop_frame()
   {
-    assert(call_stack.back().merge_state_map.size() == 0);
+    SYMEX_INVARIANT(!call_stack.empty(), "no activation record to pop");
+    // I6: a dropped merge snapshot silently discards the paths it holds.
+    SYMEX_INVARIANT(
+      call_stack.back().merge_state_map.empty(),
+      "activation record popped with unmerged path snapshots");
     call_stack.pop_back();
   }
 
@@ -318,7 +323,11 @@ public:
    */
   inline const framet &previous_frame()
   {
-    return *(--(--call_stack.end()));
+    // Indexed rather than `*(--(--end()))`, which at size 1 forms a pointer
+    // before the start of the vector ([expr.add]/4).
+    SYMEX_INVARIANT(
+      call_stack.size() >= 2, "no caller frame beneath the current one");
+    return call_stack[call_stack.size() - 2];
   }
 
   // Methods

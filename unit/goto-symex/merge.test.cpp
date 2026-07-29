@@ -28,10 +28,13 @@
 #include <irep2/irep2_expr.h>
 #include <util/symtab/namespace.h>
 
+#include "ssa_validator.h"
 #include "../testing-utils/goto_factory.h"
 
 namespace
 {
+using symex_ssa::is_ssa_symbol;
+
 class engine
 {
 public:
@@ -59,6 +62,8 @@ public:
     auto eq = std::dynamic_pointer_cast<symex_target_equationt>(
       rt.get_next_formula().target);
     REQUIRE(eq != nullptr);
+    // §7.2: every equation a Tier-B test builds is another I1/I10/P11 sample.
+    symex_ssa::require_well_formed(*eq);
     return eq;
   }
 
@@ -81,15 +86,6 @@ private:
   optionst opts;
   reachability_treet rt;
 };
-
-bool is_ssa_symbol(const expr2tc &e)
-{
-  if (!is_symbol2t(e))
-    return false;
-  const symbol_renaming_level lev = to_symbol2t(e).rlevel;
-  return lev == symbol_renaming_level::level2 ||
-         lev == symbol_renaming_level::level2_global;
-}
 
 bool defines(const symex_target_equationt::SSA_stept &step, const char *var)
 {
