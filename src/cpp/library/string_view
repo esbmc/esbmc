@@ -1,6 +1,11 @@
 
 #pragma once
 
+// C++17 header: libstdc++ and libc++ both expand it to nothing in an
+// older language mode rather than erroring, so a translation unit that
+// includes it unconditionally still compiles (github #3387).
+#if __cplusplus >= 201703L
+
 #include <cstddef> /* size_t */
 #include <cstdint> /* SIZE_MAX */
 #include <cstring>
@@ -168,3 +173,5 @@ public:
   friend bool operator>=(string_view lhs, string_view rhs) { return lhs.compare(rhs) >= 0; }
 };
 } // namespace std
+
+#endif // __cplusplus >= 201703L

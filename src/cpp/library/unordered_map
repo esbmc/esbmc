@@ -1,6 +1,11 @@
 #ifndef ESBMC_UNORDERED_MAP_H
 #define ESBMC_UNORDERED_MAP_H
 
+// C++11 header: libstdc++ and libc++ both expand it to nothing in an
+// older language mode rather than erroring, so a translation unit that
+// includes it unconditionally still compiles (github #3387).
+#if __cplusplus >= 201103L
+
 #include <utility>
 
 namespace std {
@@ -560,4 +565,6 @@ public:
 
 } // namespace std
 
+
+#endif // __cplusplus >= 201103L
 #endif // ESBMC_UNORDERED_MAP_H

@@ -1,5 +1,10 @@
 #pragma once
 
+// C++17 header: libstdc++ and libc++ both expand it to nothing in an
+// older language mode rather than erroring, so a translation unit that
+// includes it unconditionally still compiles (github #3387).
+#if __cplusplus >= 201703L
+
 #include "utility"
 #include "type_traits"
 
@@ -155,3 +160,5 @@ constexpr bool operator!=(const optional<T> &a, const optional<T> &b)
 }
 
 } // namespace std
+
+#endif // __cplusplus >= 201703L

@@ -1,6 +1,11 @@
 #ifndef ESBMC_SOURCE_LOCATION
 #define ESBMC_SOURCE_LOCATION
 
+// C++20 header: libstdc++ and libc++ both expand it to nothing in an
+// older language mode rather than erroring, so a translation unit that
+// includes it unconditionally still compiles (github #3387).
+#if __cplusplus >= 202002L
+
 #include "cstdint"
 
 // Minimal C++20 <source_location> operational model: enough for code that
@@ -62,4 +67,6 @@ private:
 
 } // namespace std
 
+
+#endif // __cplusplus >= 202002L
 #endif
