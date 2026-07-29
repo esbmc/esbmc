@@ -1163,11 +1163,12 @@ __ESBMC_HIDE:;
 }
 
 /* Drains a threading.Lock's waiter count, called from ``Lock.release`` in
- * models/threading_deadlock.py. Mirrors what pthread_mutex_unlock_check does
- * with __ESBMC_mutex_waiters: without it the bumps made by
- * __ESBMC_pylock_block_and_check accumulate and a later, unrelated block reads
- * as a deadlock (#6489). Named __pyt_* rather than __ESBMC_* because symex
- * intercepts the latter prefix in run_intrinsic and would never run this body.
+ * ``models/threading_deadlock.py``. Mirrors what ``pthread_mutex_unlock_check``
+ * does with ``__ESBMC_mutex_waiters``: without it the bumps made by
+ * ``__ESBMC_pylock_block_and_check`` accumulate and a later, unrelated block
+ * reads as a deadlock (#6489). Named ``__pyt_*`` rather than ``__ESBMC_*``
+ * because symex intercepts the latter prefix in ``run_intrinsic`` and would
+ * never run this body.
  */
 void __pyt_lock_release_waiters(unsigned int waiters)
 {

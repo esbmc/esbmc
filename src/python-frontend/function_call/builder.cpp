@@ -1025,8 +1025,9 @@ exprt function_call_builder::build() const
     const bool is_terminate = func_name == kPytTerminate;
     const bool is_lock_block = func_name == kPyLockBlockAndCheck;
     const bool is_lock_release = func_name == kPyLockReleaseWaiters;
-    if (is_init_tid || is_join || is_terminate || is_lock_block ||
-        is_lock_release)
+    if (
+      is_init_tid || is_join || is_terminate || is_lock_block ||
+      is_lock_release)
     {
       auto &symbol_table = converter_.symbol_table();
       locationt location = converter_.get_location_from_decl(call_);
