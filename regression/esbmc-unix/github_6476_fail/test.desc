@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 4 --lock-order-check
+^VERIFICATION FAILED$
+attempt to destroy a locked mutex

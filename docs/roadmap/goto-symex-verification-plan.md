@@ -672,17 +672,19 @@ this document** — each is a prioritised target for the cited harness.
 
 | ID | Severity | Finding / hypothesis | Evidence | Harness | Recommended action |
 |---|---|---|---|---|---|
-| **R1** | **High (systemic)** | **The shipped binary enforces none of goto-symex's invariants.** There are **113 `assert(...)` in `src/goto-symex/*.cpp` and 5 in the headers**, and **all 674 TUs in this build carry `-DNDEBUG`** (`build/compile_commands.json`, RelWithDebInfo). Every invariant in §4.2 marked "debug only" — including `pop_frame`'s merge-map emptiness (I6) and `coveredinbees`' monotonicity (I1) — is a **no-op in release**. A violation is silent and unbounded. | `grep -c 'assert(' src/goto-symex/*.cpp`; `-DNDEBUG` in all 674 compile commands | H-A1, H-A3 | Introduce a release-checked `SYMEX_INVARIANT(cond, msg)` (CBMC's `INVARIANT` pattern) and promote the ~10 load-bearing asserts (I1, I2, I6, I16) to it. Measure the cost; gate the rest behind an `--expensive-asserts` build option. |
-| **R2** | **High (soundness)** | `pop_frame` discards `merge_state_map` under a debug-only `assert`. In release, a frame popped with pending merges **silently drops those paths** ⇒ missed bug, no diagnostic. | `goto_symex_statet::pop_frame`, `goto_symex_state.h:310` | H-A3 | Promote to `SYMEX_INVARIANT`; add H-B1-adjacent runtime check counting pushed vs merged snapshots per frame. |
+| **R1** | **High (systemic)** — discharged, §15 M3 | **The shipped binary enforces none of goto-symex's invariants.** There are **113 `assert(...)` in `src/goto-symex/*.cpp` and 5 in the headers**, and **all 674 TUs in this build carry `-DNDEBUG`** (`build/compile_commands.json`, RelWithDebInfo). Every invariant in §4.2 marked "debug only" — including `pop_frame`'s merge-map emptiness (I6) and `coveredinbees`' monotonicity (I1) — is a **no-op in release**. A violation is silent and unbounded. | `grep -c 'assert(' src/goto-symex/*.cpp`; `-DNDEBUG` in all 674 compile commands | H-A1, H-A3 | Introduce a release-checked `SYMEX_INVARIANT(cond, msg)` (CBMC's `INVARIANT` pattern) and promote the ~10 load-bearing asserts (I1, I2, I6, I16) to it. Measure the cost; gate the rest behind an `--expensive-asserts` build option. |
+| **R2** | **High (soundness)** — enforced, §15 M3 | `pop_frame` discards `merge_state_map` under a debug-only `assert`. In release, a frame popped with pending merges **silently drops those paths** ⇒ missed bug, no diagnostic. | `goto_symex_statet::pop_frame`, `goto_symex_state.h:310` | H-A3 | Promote to `SYMEX_INVARIANT`; add H-B1-adjacent runtime check counting pushed vs merged snapshots per frame. |
 | **R3** | **Medium (soundness) — re-characterised, §15 M1** | `make_assignment` holds `valuet &entry` — a reference **into** `current_names` (`std::unordered_map`) — across the virtual call `rename(lhs_symbol, entry.count + 1)`, which reaches `coveredinbees` and performs `current_names[key]`. This is safe *only because* the recomputed key is identical (the symbol is still L1 at that point, as `make_assignment` sets `symbol.rlevel` only *after* the call), so `operator[]` finds rather than inserts. **The invariant is unasserted.** The originally-hypothesised consequence — rehash ⇒ dangling `entry` ⇒ use-after-free — **does not hold**: [unord.req.general]/9 states rehashing "does not invalidate pointers or references to elements", and only erasing an element invalidates references to it, which `coveredinbees` never does. The real consequence of a re-keying callee is a **correctness** one: `coveredinbees` would bump a different entry, `make_assignment` would then publish the caller's *stale* `entry.count`, and two distinct program values would share an SSA name — an I1/I10 violation, silently unsound. | `renaming::level2t::make_assignment`; `::coveredinbees`; comment "This'll update entry beneath our feet"; [unord.req.general]/9 | `unit/goto-symex/renaming.test.cpp` (Tier B, discharged) | Severity downgraded from memory safety to soundness. The invariant still deserves an assertion — promote to `SYMEX_INVARIANT` with R1 (M3). No restructure needed: re-`find`ing after the call would buy nothing the standard does not already give. |
 | **R4** | **Medium (crash → no verdict)** | **Eight unchecked `*ns.lookup(...)` dereferences.** `namespacet::lookup` returns `nullptr` on miss (as `renaming.cpp:15-21` itself demonstrates by checking). A miss ⇒ null deref ⇒ SIGSEGV mid-verification. `phi_function`'s site is the most exposed: it filters only `goto_symex::guard!` and `symex::invalid_object` before looking up an arbitrary merged variable's base name. | `symex_goto.cpp:433`; `symex_function.cpp:159`; `symex_valid_object.cpp:47`; `dynamic_allocation.cpp:66,92,105,118,143` | H-A10 | Add checked lookups with a diagnostic (`log_error` + controlled abort) or prove the precondition per site and record it as a cited comment. |
-| **R5** | **Medium (soundness detector disabled)** | `check_for_duplicate_assigns` — the *only* in-tree checker for the core SSA invariant I10 — merely `log_status`es duplicates and then reports "Checked N insns". It never fails, and nothing calls it in a normal run. | `symex_target_equationt::check_for_duplicate_assigns`, `symex_target_equation.cpp` | H-B1 | Turn it into a validator returning a bool; run it under a debug/CI flag over the whole regression corpus. |
+| **R5** | **Medium (soundness detector disabled)** — discharged, §15 M4 | `check_for_duplicate_assigns` — the *only* in-tree checker for the core SSA invariant I10 — merely `log_status`es duplicates and then reports "Checked N insns". It never fails, and nothing calls it in a normal run. | `symex_target_equationt::check_for_duplicate_assigns`, `symex_target_equation.cpp` | H-B1 | Turn it into a validator returning a bool; run it under a debug/CI flag over the whole regression corpus. |
 | **R6** | **Medium (unsound pruning, opt-in flag)** | `state_hashing_level2t::make_assignment` keys `current_hashes` by the **L0** original name, acknowledged in-code ("XXX — consider whether to use l1 names instead. Recursion, reentrancy."). Two states that differ only in the L1 activation of a recursive local therefore fingerprint identically ⇒ `hit_hashes` prunes a genuinely different state ⇒ missed interleaving. Severity is bounded by `--state-hashing` being opt-in. | `execution_state.cpp:~1342-1378`; `reachability_treet::hit_hashes`, `reachability_tree.h:352` | H-A8-style model + **H-C4** | Key by the L1 name record; H-C4 parity sweep quantifies the current gap. |
 | **R7** | **Low–Medium (UB) — refined, §15 M1** | `previous_frame()` computes `*(--(--call_stack.end()))` with no size check. `call_stackt` is a `std::vector<framet>`, so at size 1 this evaluates `--begin()`, forming a pointer before the start of the array — undefined by [expr.add]/4 **whether or not it is dereferenced**, not merely a bad read. The second clause of the original finding ("returns a reference a subsequent `pop_frame` invalidates") does **not** hold: `pop_back` invalidates only the reference to the erased last element, and `previous_frame` returns the second-to-last. The precondition holds today by construction — the sole call site does `new_frame(...)` on the preceding line — but nothing states it in the shipped binary (R1). | `goto_symex_statet::previous_frame`; sole caller `goto_symext::symex_function_call_code`; [expr.add]/4 | `unit/goto-symex/frame_lifecycle.test.cpp` (Tier B, discharged) | Add a release-checked precondition **as part of R1's `SYMEX_INVARIANT` work in M3**, so the macro lands once with its cost measured; index (`call_stack[size() - 2]`) rather than decrementing an iterator. |
 | **R8** | **Medium (documented model gap)** | `is_valid_object` returns `false` for **every** non-static, non-dynamic symbol: the stack-scope branch is `#if 0`'d out with "XXX re-enable to be able to check for stack-var-out-of-scope problems". Stack-object validity is therefore not modelled, and `dynamic_allocation.cpp` compensates by *assuming* `invalid_pointer` applies only to dynamic objects ("we never update `__ESBMC_alloc` for stack ptrs"). Net effect on stack-lifetime bugs (use-after-scope) is a **missed-bug** direction. | `goto_symext::is_valid_object`, `symex_valid_object.cpp:85-118`; `dynamic_allocation.cpp:110-116` | H-A10 + a targeted `regression/esbmc` use-after-scope corpus | Quantify with a dedicated corpus before attempting a fix; the fix is a model change, not a patch. |
 | **R9** | **Low–Medium (approximation direction unproven)** | Three documented "sound over-approximation" claims are unproven: value-set filtering after a pointer havoc (`symex_assign.cpp:~550-570`), the non-scalar uninterpreted-function fallback (`symex_function.cpp:~410-430`), and the function-pointer target enumeration over an over-approximated value set (`symex_function.cpp:~766`). Each *argues* the direction in a comment; none is checked. | cited lines | H-B6 + H-C1/H-C3 | For each, state the claim as a checkable predicate and add a Tier-B assertion (e.g. filtered set ⊆ original **and** the dropped entries are `unknown`/`invalid` only). |
 | **R10** | **Low (latent UB)** | `renaming::level2t::name_record`'s `name_record() = default` leaves `lev`, `l1_num`, `t_num` **and the derived `hash`** indeterminate (contrast `level1t::name_record`, which initialises `base_name("")`). No current default-construction site was found, but a future one (`std::optional`, map default-insert, array of records) would read indeterminate memory in `compare`/`hash`. | `renaming.h:143-214` | MSan (Tier D) + a `static_assert`-style unit check | Add default member initialisers; near-zero cost. |
 | **R11** | **Open question (concurrency soundness)** | MPOR's independence decision consumes `thread_last_reads`/`thread_last_writes`, populated via `get_expr_globals`, which resolves pointer operands through the *current* value set. If a write through a pointer whose value set is incomplete (or whose entry is `unknown`) is missed, the dependency is missed and an interleaving is dropped — **unsound**. `get_expr_globals` also early-returns entirely under `--data-races-check-only`. | `execution_statet::get_expr_globals`, `check_mpor_dependency`; `reachability_treet::ever_written_globals`/`address_taken_globals` | H-A6 (relation) + **H-C4** (end-to-end) | Determine whether an `unknown` value-set entry forces a conservative dependency; if not, that is a concrete unsoundness to fix. Highest-uncertainty item in this plan. |
+| **R13** | **Medium (silent under-verification) — confirmed and fixed, §15 M2 (cont.)** | **`--unwindsetname` never matched a loop.** `unwind_func_set` was keyed by `user_name_to_usr(name)`, which appends a `#` terminator (clang's C++ USR spelling), while `loop_id_to_func_index` was keyed by the goto function-map id, which for a C function is `c:@F@f` with no terminator. The `count(unwind_key)` in `get_unwind` therefore always missed and the global `--unwind` silently won, so a user raising the bound for one function got the lower global bound and a verdict covering less than they asked for. A second defect in the same option: the `name:index:bound` field split scanned left-to-right, so the documented USR form (`c:@F@f#:0:11`) split inside the `c:` prefix. Neither was caught because all five `unwindsetname` regression tests ran without a global `--unwind` and so passed vacuously. | `goto_symext::goto_symext`, `symex_assign.cpp:66-120`; `get_unwind`, `symex_goto.cpp:525`; `user_name_to_usr`, `usr_utils.cpp:29` | `unit/goto-symex/unwind.test.cpp` (Tier B, discharged) | Fixed: both sides now key on the name `--show-loops` prints (`usr_to_user_name`), and the field split scans from the right. Three non-vacuous regression tests added; `unwindsetname_03_priority` corrected to the loop number the program actually has. |
+| **R14** | **Open (I10 violated on a real input)** — found by R5's repaired detector, §15 M4 | With `--double-assign-check` made to fail, `regression/esbmc/github_286_3` produces an equation that **defines one SSA name twice**: `…@F@getNumbers2@numbers2?1!0&0#1`, the L2 index 1 of a local array in a function that returns a dangling pointer to it. Two definitions of one name are two constraints `x#1 == e1` and `x#1 == e2` on the same variable; where the right-hand sides disagree the conjunction is unsatisfiable, which silently removes that path from the formula — the missed-bug direction. One input in ~900 swept. Not yet characterised: which two steps emit it, and whether the two right-hand sides can differ. | `symex_target_equationt::check_for_duplicate_assigns` under `--double-assign-check`; `regression/esbmc/double_assign_check_local_array` (KNOWNBUG) | H-B1 | Find the two emitting steps (the local's scope exit is the first suspect), then decide whether the second definition is a stale re-emission or a legitimate step that must take a fresh index. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -725,14 +727,17 @@ H-A2 (the highest-value harness), H-A3, H-A5. Dual-solver mandatory.
 **Revised, §15 M2.** H-A2's and H-A3's obligations (I8, I6) are observable in the
 produced equation, so both are discharged at Tier B by
 `unit/goto-symex/merge.test.cpp` per §6.4 — no transcription, no dual-solver gate
-needed because no SMT query is involved. H-A5 is unstarted; R2's
+needed because no SMT query is involved. H-A5 is likewise Tier B
+(`unit/goto-symex/unwind.test.cpp`) and found R13. **M2 closed**; R2's
 `SYMEX_INVARIANT` remains M3.
 
 **M3 — Release-mode enforcement (0.5 wk).** R1: introduce `SYMEX_INVARIANT`,
 promote the ~10 load-bearing asserts, measure the runtime cost on
 `regression/esbmc` (accept if < 2 %). *Artefact:* invariant macro + benchmark
 note. This is a prerequisite for M1/M2's proofs to mean anything in the shipped
-binary.
+binary. **Done, §15 M3** — 7 promotions covering I1, I2, I6 and R7, with
+`unit/goto-symex/invariant.test.cpp` as the evidence that each fires under
+`NDEBUG`; cost below measurement resolution. **M3 closed.**
 
 **M4 — Individual symex operations on the real engine (1.5 wk).**
 H-B1 (SSA validator — build it first, reuse everywhere), H-B4, H-B5, H-B2.
@@ -1309,11 +1314,244 @@ a durable regression: if a future change starts orphaning snapshots on any of
 these six shapes, this fails rather than silently dropping paths.
 
 **Still open in M2.** H-A5 (unwind bounding, `get_unwind` /
-`loop_bound_exceeded`) is unstarted. Note §11.3 and R12 both forbid pairing
-`--no-unwinding-assertions` with any reachability claim, so H-A5's Tier-C form
-(H-C6, unwind monotonicity: `FAILED` at `--unwind k` ⇒ `FAILED` at every
-`k' > k`) is the safer first cut and needs no oracle. Also still open from M0:
-WI-1, WI-2, D12.
+`loop_bound_exceeded`). Also still open from M0: WI-1, WI-2, D12.
+
+### M2 (cont.) — 2026-07-28, M2 closed
+
+**Result: H-A5 discharged at Tier B — and it found a live bug (R13).**
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `unit/goto-symex/unwind.test.cpp` (H-A5) | real symex under `--unwind`, `--unwindsetname`, `--unwindset`, `--no-unwinding-assertions`, `--partial-loops` | 8 cases, 39 assertions, **pass** |
+
+Both targets are observable from outside the engine, so §6.4 puts them at Tier B:
+`get_unwind`'s decision is the *number of loop-body assignments* in the equation,
+and `loop_bound_exceeded`'s three arms are which step it appends. No case makes a
+reachability claim, so R12 and §11.3 are respected by construction.
+
+- **A5.1, precedence** — the three bounds are given distinct values (global 5,
+  function-specific 3, loop-specific 2) so that a precedence swap lands on a
+  different iteration count rather than an equal one. The loop id passed to
+  `--unwindset` is read out of the built GOTO program, not assumed.
+- **A5.2, `0` means unbounded** — a loop-specific `0` exempts one loop from a
+  global `--unwind 2`, and the loop then runs to its natural exhaustion. Its
+  non-vacuity twin drops only the exemption and gets truncation back.
+- **A5.3, exactly one arm** — `--no-unwinding-assertions` must trade the claim
+  for an assumption *together*: the unwinding-assertion count goes 1 → 0 while
+  the assume count goes n → n+1, at an unchanged iteration count.
+  `--partial-loops` moves neither.
+- **A5.4, guard strengthening** — with a condition still true at the bound, the
+  `¬cond` that `loop_bound_exceeded` adds is `false`, so the code after the loop
+  becomes unreachable and is not emitted. Under `--partial-loops` — the one arm
+  that skips the `guard.add` — the same post-loop assignment *is* emitted. That
+  difference is the guard strengthening, observed rather than modelled.
+
+**R13, found by writing A5.1.** The function-specific arm of `get_unwind`'s
+precedence chain was dead: `unwind_func_set` was keyed by
+`user_name_to_usr(name)`, which appends clang's C++ USR `#` terminator, and
+`loop_id_to_func_index` by the goto function-map id, which for a C function has
+none. Every `--unwindsetname` lookup missed and the global `--unwind` silently
+won. The five existing `unwindsetname` regression tests all passed vacuously:
+none set a global `--unwind`, so all of them verify identically whether the
+option works or is ignored. Both sides now key on the name `--show-loops`
+prints, and the `name:index:bound` split scans from the right so a USR name's
+own `c:` prefix no longer splits the field.
+
+This is the plan's premise landing for the first time on a shipped-binary
+defect: the harness was written to state A5.1, not to hunt for a bug, and the
+bug fell out of stating it.
+
+**M2 is closed.** H-A2/H-A3 (§15 M2) and H-A5 are discharged at Tier B, all
+three without a transcription. Still open from M0: WI-1, WI-2, D12. Next is
+**M3** (R1: `SYMEX_INVARIANT`), which R2 and R7 both wait on.
+
+### M3 — 2026-07-28, M3 closed
+
+**Result: R1 discharged. goto-symex's load-bearing invariants are now checked in
+the shipped binary, at no measurable cost.**
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `src/goto-symex/symex_invariant.{h,cpp}` | `SYMEX_INVARIANT(cond, reason)`: located diagnostic + `abort()` | 7 call sites |
+| `unit/goto-symex/invariant.test.cpp` | each promoted invariant violated on the real engine state | 5 cases, 33 assertions, **pass** |
+
+M1 and M2 proved things about invariants the shipped binary did not check — R1
+is what makes those proofs mean anything at runtime. Promoted:
+
+| Invariant | Site | Was |
+|---|---|---|
+| I1 (L2) | `coveredinbees`, counter monotonicity + the L1-key precondition | `assert`, the precondition additionally behind `#ifndef NDEBUG` |
+| I1 (L1) | `level1t::rename`, activation-index monotonicity | `assert` on a `[[maybe_unused]]` read |
+| I2 | `make_assignment`, the key held across the virtual `rename` | **unchecked** |
+| I6 / R2 | `pop_frame`, no unmerged snapshots | `assert` |
+| R7 | `previous_frame`, a caller frame exists | **unchecked**, and the body formed `begin() - 1` |
+| — | `top()` ×2, non-empty call stack | `assert` |
+
+**I2 had no check at all.** R3 (§15 M1) established that the hazard is not a
+dangling reference but a *stale count*: if the callee re-keyed, `make_assignment`
+would publish this entry's old index and two program values would share an SSA
+name. The cheapest witness that the key held is the count itself — the caller
+now records `expected_count` before the call and requires the entry to carry it
+after, an integer compare that catches exactly the failure R3 describes.
+
+**R7's UB is gone, not just diagnosed.** `previous_frame` now indexes
+`call_stack[size() - 2]` behind a size precondition, so the size-1 case is a
+located abort rather than a pointer formed before the start of a vector
+([expr.add]/4).
+
+**Evidence the promotion is real.** A death test that merely observes `SIGABRT`
+cannot distinguish a live `SYMEX_INVARIANT` from a libc `assert` in a build that
+forgot `-DNDEBUG`. Each case therefore captures the child's stderr and requires
+*our* wording, so the test proves release-mode enforcement rather than assuming
+it. A fifth case runs a well-formed symex and requires that none of the seven
+fires — without it, an invariant that aborted unconditionally would pass all
+four death tests.
+
+**Cost: below measurement resolution.** Benchmark: 8 000 calls and ~40 k L2
+assignments (400 × 20 nested calls, `--unwind 512 --show-vcc`), which excludes
+solver time so the symex fraction — and hence the invariant fraction — is at its
+maximum. Six interleaved A/B pairs on the same machine: baseline mean 12.55 s
+(min 12.34), promoted mean 12.45 s (min 12.34). The promoted binary measures
+*faster* on the mean, i.e. the difference is inside run-to-run noise (±2 %).
+Well under §10's 2 % bar, and that bar is measured here against an upper bound.
+
+**Not promoted.** The other ~111 `assert`s in `src/goto-symex` stay as they are:
+§10 asks for the load-bearing ones, and the macro's contract (see its header) is
+that a check costs a comparison or less. Anything walking a container or
+rebuilding a key belongs behind `assert` or a debug flag.
+
+**M3 is closed.** R1 is discharged, and R2, R7 and I2 — all three deferred here
+from M1/M2 — are now enforced. Still open from M0: WI-1, WI-2, D12. Next is
+**M4** (H-B1 the SSA validator first, then H-B4, H-B5, H-B2).
+
+### M4 (partial) — 2026-07-28
+
+**Result: R5 discharged — and the repaired detector immediately found an I10
+violation on a real input (R14).**
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `symex_target_equationt::check_for_duplicate_assigns` | I10 over the produced equation, opt-in via `--double-assign-check` | now returns a verdict; fails the run |
+| `regression/esbmc/double_assign_check_clean` | the check on a well-formed equation | **CORE, passes** |
+| `regression/esbmc/double_assign_check_local_array` | the equation that violates I10 | **KNOWNBUG** |
+
+R5 recorded that the only in-tree checker for I10 "merely `log_status`es
+duplicates and then reports Checked N insns. It never fails." That is now a
+`bool`, each offender is an error rather than a status line, and the
+`--double-assign-check` call site turns a false into a `SYMEX_INVARIANT` stop —
+the M3 macro doing what it was introduced for. The body also reads `step.lhs`
+rather than destructuring `to_equality2t(step.cond).side_1`, which assumed a
+shape the step already exposes directly.
+
+**A detector that cannot fail teaches you nothing about the corpus.** Sweeping
+~900 `regression/esbmc` inputs with the check enabled — each with its own
+`test.desc` flags, 10 s cap — produced exactly one violation: `github_286_3`,
+recorded as R14. The remaining ~899 are the first evidence in this plan that
+I10 holds broadly rather than merely on the shapes M1's `ssa_wellformed` tests
+construct.
+
+**R14 is pinned, not fixed.** `double_assign_check_local_array` is `KNOWNBUG`:
+it states the verdict the input should produce and does not today. Diagnosing
+which two steps emit the duplicate is H-B1 work and is deliberately not
+attempted here — the value of this entry is that the violation is now visible
+and cannot regress unnoticed.
+
+### M4 (H-B1) — 2026-07-28
+### M4 (closed) — 2026-07-28
+
+**Result: H-B1 closed. The validator is shared, and the corpus sweep was made
+to answer a question rather than only to collect verdicts.**
+
+| Artefact | What it drives | Result |
+|---|---|---|
+| `unit/goto-symex/ssa_validator.h` | I1 / I10 / P11 over any equation | shared header, `symex_ssa::require_well_formed` |
+| `merge.test.cpp`, `frame_lifecycle.test.cpp` | the same checks on the equations they already build | asserted in `engine::run()` |
+| `ssa_wellformed.test.cpp` "the shipped I10 detector reports a duplicate" | `check_for_duplicate_assigns` itself | pins the positive path |
+
+The last row matters because the detector was otherwise pinned only by
+`double_assign_check_local_array`, which is KNOWNBUG — it passes when the
+output fails to match *for any reason* — over an input R14 is slated to fix.
+Duplicating a definition in an equation the real engine produced and requiring
+`check_for_duplicate_assigns()` to return false keeps that coverage after R14
+is closed.
+
+§7.2 wanted H-B1 reusable as an assertion inside every other Tier-B test rather
+than private to the test that introduced it. It now is: the checks moved to
+`ssa_validator.h`, and the two other tests that drive the real engine call
+`require_well_formed` from their `run()`, so every equation they build is an
+additional I1/I10/P11 sample for free. Assertion counts: `merge` 31 → 59,
+`frame_lifecycle` → 41, `ssa_wellformed` 37 → 42. `merge.test.cpp`'s private
+copy of `is_ssa_symbol` is gone.
+
+**The `is_symbol2t` guard was dead, and the sweep is what proved it.** The
+repaired `check_for_duplicate_assigns` initially *skipped* an assignment step
+whose lhs was not a symbol. Instrumenting that arm and re-running all **1547**
+`regression/esbmc` inputs produced **zero** hits: no ASSIGNMENT step in the
+corpus carries a non-symbol lhs — which is what `assignment()` documents
+("lhs must be a symbol") and only partly checks (`assert(!is_nil_expr(lhs))`).
+Per the Mode C C-Live obligation an unreachable new branch is dead
+instrumentation and must be removed, so the arm is now a `SYMEX_INVARIANT`
+stating the precondition. A *silent skip inside a validator* is R5's defect one
+level down: it quietly narrows the check the function exists to perform.
+
+Both checks ran in the same pass, so the same 1547 inputs re-confirm R14 as the
+sole I10 violation in the corpus (`github_286_3`, 1 of 1547). The "~900" figure
+in the M4 (partial) entry above counted only inputs that reached a verdict
+inside the 10 s cap; 1547 is the number actually swept, and is the figure to
+quote.
+
+**Still open in M4.** H-B4, H-B5, H-B2. R14 remains pinned, not diagnosed.
+Also still open from M0: WI-1, WI-2, D12.
+
+*(This entry was originally headed "M4 (closed)". It was not — only H-B1 was.
+The heading is corrected above; M4 closes when H-B4, H-B5 and H-B2 land.)*
+
+### M4 (H-B4) — 2026-07-28
+
+**Result: I3 and I4 discharged on the real `renaming::level2t`. No defect
+found — and the mutation testing is the reason that statement is worth
+anything.**
+
+I4 was listed **unenforced** in §4.2 and C1 (renaming/SSA) is P0 in §4.3
+("silent aliasing of distinct values"), so this is the highest-ranked component
+in the plan whose round-trip property had no test at all. Five cases added to
+`unit/goto-symex/renaming.test.cpp` (which already owned I1/I2/R3, so the
+subject keeps one file): 4 → 9 cases, 28 → 520 assertions.
+
+| Case | Property |
+|---|---|
+| `rename is idempotent on an L2 symbol` | I3, early-return path |
+| `rename of an L1 symbol reaches a fixed point` | I3, through the real `current_names` lookup |
+| `get_original_name inverts rename` | I4, for `level1` **and** `level1_global` |
+| `stripping to L0 keeps name and type` | I4, fields zeroed / name and type preserved |
+| `every equation definition strips cleanly to L0` | I4 + level monotonicity over a real equation |
+
+**Two of these were vacuous when first written, and only mutation testing said
+so.** Deliberately breaking `get_original_name` (dropping the `level1_num`
+reset) left the whole-equation sweep **green**, for two independent reasons:
+
+1. The test program had no callee local with a non-zero L1 activation, so
+   `level1_num == 0` held for every definition regardless of the bug. Fixed by
+   giving the program repeated and recursive calls, plus an explicit
+   `REQUIRE(with_activation > 0)` so the weaker vacuity cannot return.
+2. The sweep asserted `rlevel`, `thename`, `type` and idempotence but never
+   asserted the *zeroed fields* — the very thing the mutation changed.
+
+Both are now fixed and the mutation is caught by both cases (39 failing
+assertions). A second mutation — removing `level2t::rename`'s early return for
+already-L2 symbols — is caught by both I3 cases.
+
+**Generalising: a Tier-B sweep over "every step in a real equation" feels
+strong and is easy to make vacuous.** Its coverage is the product of what the
+loop asserts and what shapes the input program actually produces, and neither
+is visible from reading the test. The M2 note already recorded the input half
+(constant phi arms get folded away); this is the assertion half. Recommend
+every whole-equation sweep in this plan carry (a) a counter proving the shape
+it targets was present, and (b) a recorded mutation that it catches.
+
+**Still open in M4.** H-B5, H-B2. R14 remains pinned, not diagnosed. Also
+still open from M0: WI-1, WI-2, D12.
+
 ---
 
 ## Appendix A — Methodological basis

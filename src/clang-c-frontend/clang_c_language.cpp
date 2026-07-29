@@ -87,6 +87,12 @@ void clang_c_languaget::build_compiler_args(
       "-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_check");
     compiler_args.emplace_back("-Dsem_wait=sem_wait_check");
+    // Only the blocking acquisitions need renaming: pthread_rwlock_unlock's
+    // waiter release is inert when nothing registered a waiter.
+    compiler_args.emplace_back(
+      "-Dpthread_rwlock_rdlock=pthread_rwlock_rdlock_check");
+    compiler_args.emplace_back(
+      "-Dpthread_rwlock_wrlock=pthread_rwlock_wrlock_check");
   }
   else if (config.options.get_bool_option("lock-order-check"))
   {

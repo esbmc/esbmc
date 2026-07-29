@@ -1,7 +1,7 @@
 /*******************************************************************
  Module: L2 renaming on the real renaming::level2t
 
- Tier B of docs/roadmap/goto-symex-verification-plan.md (milestone M1).
+ Tier B of docs/roadmap/goto-symex-verification-plan.md (M1, and H-B4 in M4).
 
  The subject is the shipped class: the `renaming::level2t` owned by a real
  `execution_statet`, its real `current_names` (a
@@ -14,6 +14,9 @@
    I2  the key `coveredinbees` recomputes is the caller's key, so the
        `valuet &entry` make_assignment holds addresses the entry that is
        updated (finding R3).
+   I3  rename is idempotent: an already-L2 symbol comes back unchanged.
+   I4  get_original_name inverts rename, and a definition's renaming level
+       never drops below L2 (H-B4). Listed unenforced in the plan's §4.2.
    R3  the *memory-safety* half of the finding, tested rather than assumed:
        [unord.req.general]/9 — "Rehashing invalidates iterators [...] but does
        not invalidate pointers or references to elements" — so an insert inside
@@ -32,6 +35,7 @@
 #include <util/lang/c_types.h>
 #include <util/symtab/namespace.h>
 
+#include "ssa_validator.h"
 #include "../testing-utils/goto_factory.h"
 
 namespace
@@ -40,8 +44,9 @@ namespace
 class engine
 {
 public:
-  engine()
-    : prog(goto_factory::get_goto_functions(
+  explicit engine(std::string src = "int main(void) { int x = 0; return x; }")
+    : source(std::move(src)),
+      prog(goto_factory::get_goto_functions(
         source,
         goto_factory::Architecture::BIT_64)),
       ns(prog.context),
@@ -54,6 +59,7 @@ public:
         std::make_shared<symex_target_equationt>(ns),
         prog.context)
   {
+    opts.set_option("unwind", "4");
     rt.setup_for_new_explore();
   }
 
@@ -62,8 +68,17 @@ public:
     return rt.get_cur_state().get_active_state().level2;
   }
 
+  std::shared_ptr<symex_target_equationt> run()
+  {
+    auto eq = std::dynamic_pointer_cast<symex_target_equationt>(
+      rt.get_next_formula().target);
+    REQUIRE(eq != nullptr);
+    symex_ssa::require_well_formed(*eq);
+    return eq;
+  }
+
 private:
-  std::string source = "int main(void) { int x = 0; return x; }";
+  std::string source;
   program prog;
   namespacet ns;
   optionst opts;
@@ -90,6 +105,36 @@ unsigned publish(renaming::level2t &l2, const expr2tc &l1_sym)
 renaming::level2t::name_record key_of(const expr2tc &l1_sym)
 {
   return renaming::level2t::name_record(to_symbol2t(l1_sym));
+}
+
+/** rename() mutates in place; return the renamed copy. */
+expr2tc renamed(renaming::level2t &l2, const expr2tc &e)
+{
+  expr2tc out = e;
+  l2.rename(out);
+  return out;
+}
+
+/** Strip an L2 symbol to L0 the way the engine does: level2t drops to L1,
+ *  level1t drops that to L0. */
+expr2tc original_of(const expr2tc &e)
+{
+  expr2tc out = e;
+  renaming::renaming_levelt::get_original_name(
+    out, symbol_renaming_level::level1);
+  renaming::renaming_levelt::get_original_name(
+    out, symbol_renaming_level::level0);
+  return out;
+}
+
+bool same_symbol_identity(const expr2tc &a, const expr2tc &b)
+{
+  const symbol2t &x = to_symbol2t(a);
+  const symbol2t &y = to_symbol2t(b);
+  return x.thename == y.thename && x.rlevel == y.rlevel &&
+         x.level1_num == y.level1_num && x.level2_num == y.level2_num &&
+         x.thread_num == y.thread_num && x.node_num == y.node_num &&
+         x.type == y.type;
 }
 } // namespace
 
@@ -171,4 +216,152 @@ TEST_CASE(
   REQUIRE(entry->count == 1);
   REQUIRE(publish(l2, sym) == 2);
   REQUIRE(entry->count == 2);
+}
+
+// ---------------------------------------------------------------------------
+// H-B4: renaming round-trip (I3, I4)
+// ---------------------------------------------------------------------------
+
+TEST_CASE("rename is idempotent on an L2 symbol (I3)", "[symex][renaming]")
+{
+  engine e;
+  renaming::level2t &l2 = e.level2();
+  expr2tc sym = l1_symbol("c:test.c@F@main@idem");
+
+  // Without an entry, rename's early return fires because the map is empty
+  // and the idempotence claim is vacuous.
+  l2.make_assignment(sym, expr2tc(), expr2tc());
+  REQUIRE(to_symbol2t(sym).rlevel == symbol_renaming_level::level2);
+
+  const expr2tc once = renamed(l2, sym);
+  const expr2tc twice = renamed(l2, once);
+  CHECK(same_symbol_identity(once, sym));
+  CHECK(same_symbol_identity(twice, once));
+}
+
+TEST_CASE(
+  "rename of an L1 symbol reaches a fixed point (I3)",
+  "[symex][renaming]")
+{
+  engine e;
+  renaming::level2t &l2 = e.level2();
+  const expr2tc l1 = l1_symbol("c:test.c@F@main@fix");
+
+  expr2tc published = l1;
+  l2.make_assignment(published, expr2tc(), expr2tc());
+
+  // A second application moving the index would let a read observe a value
+  // other than the one the first rename selected.
+  const expr2tc once = renamed(l2, l1);
+  REQUIRE(to_symbol2t(once).rlevel == symbol_renaming_level::level2);
+  REQUIRE(to_symbol2t(once).level2_num == to_symbol2t(published).level2_num);
+  CHECK(same_symbol_identity(renamed(l2, once), once));
+}
+
+TEST_CASE("get_original_name inverts rename (I4)", "[symex][renaming]")
+{
+  engine e;
+  renaming::level2t &l2 = e.level2();
+
+  for (const symbol_renaming_level lev :
+       {symbol_renaming_level::level1, symbol_renaming_level::level1_global})
+  {
+    const expr2tc l1 = l1_symbol("c:test.c@F@main@trip", 3, 2, lev);
+    const expr2tc l2_sym = renamed(l2, l1);
+
+    // The round trip has to land back on whichever level it started from.
+    expr2tc back = l2_sym;
+    renaming::renaming_levelt::get_original_name(
+      back, symbol_renaming_level::level1);
+    CHECK(same_symbol_identity(back, l1));
+  }
+}
+
+TEST_CASE("stripping to L0 keeps name and type (I4)", "[symex][renaming]")
+{
+  engine e;
+  renaming::level2t &l2 = e.level2();
+  const expr2tc l1 = l1_symbol("c:test.c@F@main@strip", 7, 1);
+  expr2tc sym = l1;
+  l2.make_assignment(sym, expr2tc(), expr2tc());
+
+  const expr2tc l0 = original_of(sym);
+  const symbol2t &stripped = to_symbol2t(l0);
+
+  // Non-vacuity: same_symbol_identity would pass on anything if L0 == L2.
+  REQUIRE_FALSE(same_symbol_identity(l0, sym));
+
+  // The type surviving is the load-bearing half: rewriting it would make the
+  // L0 form name a different object.
+  CHECK(stripped.rlevel == symbol_renaming_level::level0);
+  CHECK(stripped.thename == to_symbol2t(l1).thename);
+  CHECK(stripped.type == l1->type);
+  CHECK(stripped.level1_num == 0);
+  CHECK(stripped.level2_num == 0);
+  CHECK(stripped.thread_num == 0);
+  CHECK(stripped.node_num == 0);
+
+  // Idempotent: already-L0 is a fixed point.
+  CHECK(same_symbol_identity(original_of(l0), l0));
+}
+
+TEST_CASE(
+  "every equation definition strips cleanly to L0 (I4)",
+  "[symex][renaming]")
+{
+  // Repeated and nested calls give callee locals distinct L1 activations;
+  // without them the level1_num half is only ever checked against zero.
+  engine e(R"(
+int nondet_int(void);
+int global;
+int twice(int a) { int t = a + a; return t; }
+int sum_to(int n) { int acc = n <= 0 ? 0 : n + sum_to(n - 1); return acc; }
+int main(void)
+{
+  int x = nondet_int();
+  global = x;
+  if (nondet_int() > 0)
+    x = twice(x);
+  x = twice(x) + twice(x + 1);
+  x += sum_to(3);
+  for (int i = 0; i < 3; i++)
+    x += i;
+  return x + global;
+}
+)");
+
+  auto eq = e.run();
+  unsigned checked = 0;
+  unsigned with_activation = 0;
+
+  for (const auto &step : eq->SSA_steps)
+  {
+    if (!step.is_assignment() || !is_symbol2t(step.lhs))
+      continue;
+
+    // I4: a definition below L2 could be renamed again by a later read, which
+    // would pick a different index than the one this step defined.
+    const symbol2t &lhs = to_symbol2t(step.lhs);
+    REQUIRE(
+      (lhs.rlevel == symbol_renaming_level::level2 ||
+       lhs.rlevel == symbol_renaming_level::level2_global));
+
+    const expr2tc l0 = original_of(step.lhs);
+    const symbol2t &stripped = to_symbol2t(l0);
+    CHECK(stripped.rlevel == symbol_renaming_level::level0);
+    CHECK(stripped.thename == lhs.thename);
+    CHECK(stripped.type == step.lhs->type);
+    CHECK(stripped.level1_num == 0);
+    CHECK(stripped.level2_num == 0);
+    CHECK(stripped.thread_num == 0);
+    CHECK(stripped.node_num == 0);
+    CHECK(same_symbol_identity(original_of(l0), l0));
+    checked++;
+    if (lhs.level1_num != 0)
+      with_activation++;
+  }
+
+  // Guard against an empty sweep, and against one of only zero-L1 definitions.
+  REQUIRE(checked > 0);
+  REQUIRE(with_activation > 0);
 }
