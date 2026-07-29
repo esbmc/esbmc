@@ -572,7 +572,7 @@ private:
   ///        --memory-leak-check does not blame the user's function for
   ///        wrapper-internal allocations (CWE-401).
   /// \param param_extents Output: byte extent of each allocation, keyed by
-  ///        parameter symbol, each tagged with whether the contract states it.
+  ///        parameter symbol, each tagged with whether it may be dereferenced.
   void add_pointer_validity_assumptions(
     goto_programt &wrapper,
     const symbolt &func,
@@ -599,18 +599,16 @@ private:
     const symbolt &func,
     const locationt &location);
 
-  /// \brief Emit malloc + non-null ASSUME + tracking push for one pointer param.
-  /// Allocates a nondet number of bytes, assigns the result to \p p, assumes
-  /// p != NULL, and records \p p in \p allocated_ptrs so the caller can emit a
-  /// matching free.
+  /// \brief Emit malloc + non-null ASSUME for one pointer parameter.
+  /// Allocates a nondet number of bytes and assigns the result to \p p. The
+  /// caller registers \p p for the matching free.
   /// \return The byte-extent expression of the allocation.
   expr2tc emit_pointer_param_malloc(
     goto_programt &wrapper,
     const expr2tc &p,
     const std::string &param_name,
     const symbolt &func,
-    const locationt &location,
-    std::vector<expr2tc> &allocated_ptrs);
+    const locationt &location);
 };
 
 #endif // ESBMC_CONTRACTS_H

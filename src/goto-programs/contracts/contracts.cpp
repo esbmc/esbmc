@@ -2802,8 +2802,9 @@ code_contractst::materialize_arr_elem_snapshots(
     expr2tc j_hi = constant_int2tc(j_type, BigInt(WITNESS_IDX_FALLBACK_ELEMS));
     if (extent_it != param_extents.end() && elem_sz > 0)
     {
-      // Divide in the extent's own unsigned type and cast the quotient, so a
-      // wide extent does not wrap into a negative j_hi.
+      // Divide in the extent's own unsigned type before casting, so the
+      // quotient is not computed on a truncated value. An extent above
+      // LONG_MAX still casts negative, which degrades to the clamp fallback.
       const expr2tc &bytes = extent_it->second.bytes;
       j_hi = typecast2tc(
         j_type,
@@ -4162,9 +4163,8 @@ void code_contractst::add_pointer_validity_assumptions(
     }
 
     param_extents[param.get_identifier()] = {
-      emit_pointer_param_malloc(
-        wrapper, p, name, func, location, allocated_ptrs),
-      false};
+      emit_pointer_param_malloc(wrapper, p, name, func, location), false};
+    allocated_ptrs.push_back(p);
     nondet_extent.push_back(name);
   }
 
@@ -4191,16 +4191,16 @@ void code_contractst::emit_struct_stack_backing(
   harness_sym.static_lifetime = false;
   harness_sym.location = location;
   harness_sym.mode = func.mode;
-  context.move_symbol_to_context(harness_sym);
+  const irep_idt harness_id = context.move_symbol_to_context(harness_sym)->id;
 
   goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
-  decl_inst->code = code_decl2tc(pointee, irep_idt(harness_var_name));
+  decl_inst->code = code_decl2tc(pointee, harness_id);
   decl_inst->location = location;
   decl_inst->location.comment("harness: stack backing for pointer parameter");
 
   // ESSENTIAL: symex needs initial SSA versions of all struct fields before
   // any conditional write can create a new version (ITE phi-node).
-  expr2tc harness_expr = symbol2tc(pointee, harness_var_name);
+  expr2tc harness_expr = symbol2tc(pointee, harness_id);
   auto init_inst = wrapper.add_instruction(ASSIGN);
   init_inst->code = code_assign2tc(harness_expr, gen_nondet(pointee));
   init_inst->location = location;
@@ -4225,8 +4225,7 @@ expr2tc code_contractst::emit_pointer_param_malloc(
   const expr2tc &p,
   const std::string &param_name,
   const symbolt &func,
-  const locationt &location,
-  std::vector<expr2tc> &allocated_ptrs)
+  const locationt &location)
 {
   // The extent is a named symbol rather than an inline nondet so that the
   // returned expression and the malloc size are the same value, and so that a
@@ -4250,14 +4249,13 @@ expr2tc code_contractst::emit_pointer_param_malloc(
   extent_decl->location = location;
   extent_decl->location.comment("harness: nondet extent for pointer parameter");
 
+  // A zero extent is admissible and is the point: it is the state that makes
+  // an unstated extent fail. The non-null assume further down does not exclude
+  // it, because symex models malloc failure as an independent nondet rather
+  // than as a function of the requested size.
   auto extent_assign = wrapper.add_instruction(ASSIGN);
   extent_assign->code = code_assign2tc(alloc_size, gen_nondet(size_type2()));
   extent_assign->location = location;
-  // Zero is admissible and is the point: it is the state that makes an
-  // unstated extent fail. The ASSUME below does not exclude it -- symex models
-  // malloc failure as an independent nondet, not as a function of the
-  // requested size -- so a non-null pointer to a zero-byte object is a
-  // reachable state that every dereference will fail against.
   extent_assign->location.comment("harness: extent is unconstrained");
 
   auto assign_inst = wrapper.add_instruction(ASSIGN);
@@ -4278,6 +4276,5 @@ expr2tc code_contractst::emit_pointer_param_malloc(
     "emit_pointer_param_malloc: nondet-extent malloc for parameter {}",
     id2string(to_symbol2t(p).thename));
 
-  allocated_ptrs.push_back(p);
   return alloc_size;
 }
