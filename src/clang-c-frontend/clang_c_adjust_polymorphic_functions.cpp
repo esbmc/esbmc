@@ -219,8 +219,8 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
   // fresh nondeterministic value, which yields both false positives and false
   // negatives on any program using <stdatomic.h> (issue #2174).
   // C11 6.2.6.1/7.17.7: `expected` is taken by pointer, `desired` by value.
-  else if (
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_compare_exchange"))
+  else if (has_prefix(
+             identifier.as_string(), "c:@F@__c11_atomic_compare_exchange"))
   {
     const exprt &ptr_arg = arguments.front();
     const typet &value_type = to_pointer_type(ptr_arg.type()).subtype();
