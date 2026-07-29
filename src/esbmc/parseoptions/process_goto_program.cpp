@@ -113,6 +113,13 @@ bool esbmc_parseoptionst::process_goto_program(
                   cmdline.isset("k-path-coverage-claims") ||
                   cmdline.isset("dead-code-check");
 
+    // Single source of truth for "this run measures coverage", read back by
+    // bmc.cpp. --dead-code-check borrows the same instrumentation but keeps a
+    // verdict and reports CWE-561 advisories, so it is deliberately excluded:
+    // the coverage reporting rules must not apply to it (issue #6387).
+    options.set_option(
+      "coverage-measurement", is_coverage && !cmdline.isset("dead-code-check"));
+
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
     if (is_coverage && cmdline.args.size() > 1)

@@ -2,4 +2,4 @@ THOROUGH
 main.c
 --condition-coverage-claims --unwind 1 --function handleRunplanEvent --no-standard-check --no-simplify
 ^Total Conditions:  8
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS INCOMPLETE

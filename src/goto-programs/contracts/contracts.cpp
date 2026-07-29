@@ -309,6 +309,153 @@ static std::vector<var_assignment_info> find_all_assignments(
   return assignments;
 }
 
+/// Reconstruct the value a temporary holds at \p use, by walking forward over
+/// the region between its declaration and \p use and tracking the path
+/// condition under which each assignment reaches that point.
+///
+/// Clang lowers a conditional whose arms contain calls -- in an ensures clause
+/// that means __ESBMC_old -- into a temporary written on both arms:
+///
+///     ASSIGN v = NONDET
+///     IF !G THEN GOTO L
+///     ASSIGN v = <then>
+///     GOTO M
+///   L:
+///     ASSIGN v = <else>
+///   M: <use of v>
+///
+/// Picking one assignment loses the guard and the other arm, which yields an
+/// ensures that is neither what was written nor a safe approximation of it: it
+/// can be stronger (a false failure) or weaker (a false VERIFICATION
+/// SUCCESSFUL). See #6499. Folding the reaching assignments back into an
+/// if-then-else recovers the clause exactly.
+///
+/// \return The reconstructed value, or nil when the region is not a
+///         forward-only DAG. Nil means "cannot reconstruct", never "no value":
+///         callers must diagnose rather than fall back to a guess.
+static expr2tc reconstruct_conditional_value(
+  const irep_idt &var_name,
+  const goto_programt &body,
+  const goto_programt::const_targett &use)
+{
+  // Region start: the variable's declaration, or the start of the body.
+  goto_programt::const_targett start = body.instructions.begin();
+  for (goto_programt::const_targett it = use; it != body.instructions.begin();)
+  {
+    --it;
+    if (it->is_decl() && is_code_decl2t(it->code))
+      if (to_code_decl2t(it->code).value == var_name)
+      {
+        start = it;
+        break;
+      }
+  }
+
+  // Index the region so branch targets can be ordered against it.
+  std::vector<goto_programt::const_targett> region;
+  std::map<const goto_programt::instructiont *, size_t> index;
+  for (goto_programt::const_targett it = start; it != use; ++it)
+  {
+    index[&*it] = region.size();
+    region.push_back(it);
+  }
+  index[&*use] = region.size();
+  region.push_back(use);
+
+  // (path condition, value) pairs reaching each point. A nil value means the
+  // variable is not yet assigned on that path. Paths carrying the same value
+  // are merged on arrival: without that the list doubles at every branch, and
+  // a clause with a handful of nested conditionals exhausts memory.
+  std::vector<std::vector<std::pair<expr2tc, expr2tc>>> reaching(region.size());
+  auto push = [&reaching](size_t at, const expr2tc &pc, const expr2tc &val) {
+    for (auto &e : reaching[at])
+      if (e.second == val)
+      {
+        e.first = or2tc(e.first, pc);
+        return true;
+      }
+    // A clause needing more distinct values than this is beyond what a linear
+    // fold should be trusted with; the caller diagnoses rather than guesses.
+    if (reaching[at].size() >= 32)
+      return false;
+    reaching[at].emplace_back(pc, val);
+    return true;
+  };
+  reaching[0].emplace_back(gen_true_expr(), expr2tc());
+
+  for (size_t i = 0; i + 1 < region.size(); ++i)
+  {
+    if (reaching[i].empty())
+      continue;
+
+    goto_programt::const_targett it = region[i];
+
+    // An assignment to the variable replaces the value on every path here.
+    std::vector<std::pair<expr2tc, expr2tc>> out = reaching[i];
+    if (it->is_assign() && is_code_assign2t(it->code))
+    {
+      const code_assign2t &a = to_code_assign2t(it->code);
+      if (is_symbol2t(a.target) && to_symbol2t(a.target).thename == var_name)
+      {
+        // Expand the right-hand side once, here, so the two arms of the
+        // if-then-else below share it. Leaving it to the caller re-expands
+        // every nested temporary once per arm, and the clause grows
+        // exponentially in its nesting depth.
+        expr2tc v = inline_temporary_variables(a.source, body, it);
+        for (auto &p : out)
+          p.second = v;
+      }
+    }
+
+    if (!it->is_goto())
+    {
+      for (auto &p : out)
+        if (!push(i + 1, p.first, p.second))
+          return expr2tc();
+      continue;
+    }
+
+    // Only forward branches with a single in-region target are handled. A
+    // backwards branch is a loop, which this linear fold cannot express.
+    if (it->is_backwards_goto() || it->targets.size() != 1)
+      return expr2tc();
+    auto tgt = index.find(&*it->targets.front());
+    if (tgt == index.end() || tgt->second <= i)
+      return expr2tc();
+
+    bool unconditional =
+      is_constant_bool2t(it->guard) && to_constant_bool2t(it->guard).is_true();
+    for (auto &p : out)
+    {
+      if (unconditional)
+      {
+        if (!push(tgt->second, p.first, p.second))
+          return expr2tc();
+        continue;
+      }
+      expr2tc g = inline_temporary_variables(it->guard, body, it);
+      if (
+        !push(tgt->second, and2tc(p.first, g), p.second) ||
+        !push(i + 1, and2tc(p.first, not2tc(g)), p.second))
+        return expr2tc();
+    }
+  }
+
+  // Fold the paths that define the variable into nested if-then-elses.
+  expr2tc result;
+  for (const auto &p : reaching.back())
+  {
+    if (is_nil_expr(p.second))
+      continue;
+    expr2tc guard = p.first;
+    simplify(guard);
+    result = is_nil_expr(result)
+               ? p.second
+               : if2tc(p.second->type, guard, p.second, result);
+  }
+  return result;
+}
+
 // Helper function to inline temporary variables generated by Clang for short-circuit evaluation
 // When ensures contains complex expressions like (a && b) || (c && d) with __ESBMC_old calls,
 // Clang generates control flow with temporary variables (tmp$1, tmp$2, etc).
@@ -391,9 +538,22 @@ static expr2tc inline_temporary_variables(
       //   tmp$7 = 1           (when first branch succeeds - short circuit)
       //   tmp$7 = tmp$6 ? 1:0 (when first branch fails, use second branch result)
       //
-      // We need to find the meaningful assignment that captures the full expression.
-      // Skip: NONDET (initialization), constants 0/1 (short-circuit markers)
-      // Keep: expressions that reference other temporaries (these capture the logic)
+      // Fold the assignments back into an if-then-else under the guards that
+      // select them, rather than choosing one and discarding the rest (#6499).
+      expr2tc folded = reconstruct_conditional_value(
+        sym.thename, function_body, assume_location);
+      if (!is_nil_expr(folded))
+        return folded;
+
+      // Reconstruction failed, so any value chosen here would be a guess that
+      // is neither the written clause nor a safe approximation of it.
+      log_error(
+        "cannot reconstruct the contract clause holding '{}': its control flow "
+        "is not a forward-only region. Rewrite the clause without a "
+        "conditional or short-circuit operator around __ESBMC_old.",
+        sym_name);
+      abort();
+
       expr2tc best_value;
       goto_programt::const_targett best_location =
         function_body.instructions.end();
@@ -1138,19 +1298,36 @@ goto_programt code_contractst::generate_checking_wrapper(
     // to *p.  Earlier revisions had a "fallback" else branch that emitted
     // *p = malloc(...), which dereferenced an uninitialised p and tripped
     // alignment / pointer-validity checks before the body even ran.
+    // Peeling the address-of is only sound when what it wraps is itself a
+    // pointer.  For &obj with obj a struct or scalar, the peel would assign
+    // the malloc result into obj: value-set analysis then walks a pointer as
+    // if it were a struct and aborts (#6469), and for a scalar obj the
+    // assignment silently clobbers it and the contract means nothing.
+    // An address_of is itself pointer-typed, so it has to be matched before
+    // the bare-pointer case or it falls through to an unassignable lvalue.
     expr2tc ptr_var;
+    bool assignable = true;
     if (is_address_of2t(stripped))
     {
-      // &var → assign to var (peel the address-of).
-      ptr_var = to_address_of2t(stripped).ptr_obj;
+      const expr2tc &obj = to_address_of2t(stripped).ptr_obj;
+      assignable = is_pointer_type(obj->type);
+      ptr_var = obj;
     }
     else
     {
-      // Bare pointer expression — assign directly to it.
-      assert(
-        is_pointer_type(stripped->type) &&
-        "__ESBMC_is_fresh first argument must be pointer-typed");
+      assignable = is_pointer_type(stripped->type);
       ptr_var = stripped;
+    }
+
+    if (!assignable)
+    {
+      log_error(
+        "__ESBMC_is_fresh needs a pointer it can point at fresh storage, but "
+        "the contract of '{}' gives it the address of a non-pointer object. "
+        "Take that object as a pointer parameter, or allocate it with malloc "
+        "and pass the pointer.",
+        id2string(original_func.name));
+      abort();
     }
 
     // A plain symbol lvalue is independent of any harness setup — allocate now.

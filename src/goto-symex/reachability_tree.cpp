@@ -322,7 +322,8 @@ void reachability_treet::setup_for_new_explore()
       options,
       &schedule_total_claims,
       &schedule_remaining_claims,
-      &schedule_simplified_claims));
+      &schedule_simplified_claims,
+      &schedule_bounded_loop_truncations));
   }
   else
   {
@@ -813,5 +814,6 @@ goto_symext::symex_resultt reachability_treet::generate_schedule_formula()
     schedule_target,
     schedule_total_claims,
     schedule_remaining_claims,
-    schedule_simplified_claims);
+    schedule_simplified_claims,
+    schedule_bounded_loop_truncations);
 }

@@ -251,8 +251,12 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // have continued past an earlier violation, so we must return 1 even when
   // the closing step (FC/IS) itself succeeds.
   auto conclude = [&]() -> int {
-    // In coverage mode violations are expected; always report success.
-    if (any_violation_found && !is_coverage)
+    // A coverage run measures reachability; it neither proved nor refuted
+    // anything about the program, so it emits no verdict and always exits 0.
+    // report_coverage has already printed the completeness line.
+    if (is_coverage)
+      return 0;
+    if (any_violation_found)
     {
       log_fail("\nVERIFICATION FAILED");
       return 1;
@@ -458,8 +462,18 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // falsification
     if (options.get_bool_option("falsification"))
     {
-      if (is_base_case_violated(options, goto_functions, k_step).is_true())
+      const bool violated =
+        is_base_case_violated(options, goto_functions, k_step).is_true();
+      if (violated && !is_coverage)
         return 1;
+      // A coverage run has no verdict to falsify, so nothing would ever stop
+      // the escalation: without this it re-solves every goal at each bound and
+      // prints one [Coverage] block per k step. One pass is what falsification
+      // did here before the verdict was removed. multi_property_check has
+      // already reported that pass, so return rather than fall through to the
+      // max-k-step exit, whose reason would not apply.
+      if (is_coverage)
+        return 0;
     }
   }
 
@@ -468,16 +482,24 @@ int esbmc_parseoptionst::do_bmc_strategy(
     options.get_bool_option("k-induction"))
     diagnose_unknown_properties(options, goto_functions, last_k_step);
 
-  log_status("Unable to prove or falsify the program, giving up.");
-  log_fail("VERIFICATION UNKNOWN");
-
   if (is_coverage)
+  {
+    // Exhausting the k steps bounds how much of the program was explored, so
+    // goals that were never reached may simply lie beyond the last unwinding.
+    note_cov_incomplete(
+      "the run ended at the maximum k step without proving the program fully "
+      "unwound; goals beyond that bound may never have been explored");
     report_coverage(
       options,
       goto_functions.reached_claims,
       goto_functions.reached_mul_claims,
       pytest_gen,
       ctest_gen);
+    return 0;
+  }
+
+  log_status("Unable to prove or falsify the program, giving up.");
+  log_fail("VERIFICATION UNKNOWN");
   return 0;
 }
 
