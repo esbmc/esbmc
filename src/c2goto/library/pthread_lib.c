@@ -21,13 +21,14 @@ void __ESBMC_set_thread_internal_data(
   struct __pthread_start_data data);
 
 #define __ESBMC_mutex_lock_field(a) ((a).__lock)
-#define __ESBMC_mutex_count_field(a) ((a).__count)
+#define __ESBMC_mutex_waiters(a) ((a).__count)
 #define __ESBMC_mutex_owner_field(a) ((a).__owner)
 #define __ESBMC_cond_lock_field(a) ((a).__lock)
 #define __ESBMC_cond_futex_field(a) ((a).__futex)
 #define __ESBMC_cond_nwaiters_field(a) ((a).__nwaiters)
 #define __ESBMC_rwlock_readers(a) ((a)->__readers)
 #define __ESBMC_rwlock_writer(a) ((a)->__writer)
+#define __ESBMC_rwlock_waiters(a) ((a)->__waiters)
 
 /* Global tracking data. Should all initialize to 0 / false */
 __attribute__((annotate("__ESBMC_inf_size")))
@@ -38,6 +39,10 @@ _Bool __ESBMC_pthread_thread_ended[1];
 
 __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_thread_detach[1];
+
+/* Threads currently blocked in pthread_join waiting for thread[i] to end. */
+__attribute__((
+  annotate("__ESBMC_inf_size"))) unsigned int __ESBMC_pthread_join_waiters[1];
 
 __attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
@@ -51,6 +56,19 @@ static pthread_key_t __ESBMC_next_thread_key = 0;
 unsigned short int __ESBMC_num_total_threads = 0;
 unsigned short int __ESBMC_num_threads_running = 0;
 unsigned short int __ESBMC_blocked_threads_count = 0;
+
+/* Cancels the blocked-count contributions of every thread waiting on one
+ * object. Waiter counts live in user-owned storage, so an uninitialised lock
+ * can feed an arbitrary value in here; clamping to 0 disables deadlock
+ * detection at this instant rather than for the rest of the run. */
+void __ESBMC_release_blocked_threads(unsigned int waiters)
+{
+__ESBMC_HIDE:;
+  __ESBMC_blocked_threads_count =
+    (waiters >= (unsigned int)__ESBMC_blocked_threads_count)
+      ? 0
+      : (unsigned short int)(__ESBMC_blocked_threads_count - waiters);
+}
 
 /* Per-thread cancellation state. All default to 0:
  *   cancel_requested = false
@@ -207,6 +225,8 @@ __ESBMC_HIDE:;
   __ESBMC_pthread_end_values[threadid] = exit_val;
   __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
+  __ESBMC_release_blocked_threads(__ESBMC_pthread_join_waiters[threadid]);
+  __ESBMC_pthread_join_waiters[threadid] = 0;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
   // to the reader.
@@ -264,6 +284,8 @@ __ESBMC_HIDE:;
   __ESBMC_pthread_end_values[threadid] = retval;
   __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
+  __ESBMC_release_blocked_threads(__ESBMC_pthread_join_waiters[threadid]);
+  __ESBMC_pthread_join_waiters[threadid] = 0;
 
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
@@ -344,6 +366,7 @@ __ESBMC_HIDE:;
   _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
   if (!ended)
   {
+    __ESBMC_pthread_join_waiters[(int)thread]++;
     __ESBMC_blocked_threads_count++;
     // If there are now no more threads unblocked, croak.
     __ESBMC_assert(
@@ -393,7 +416,9 @@ int pthread_mutex_init(
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = 0;
-  __ESBMC_mutex_count_field(*mutex) = 0;
+  // Re-initialising a contended mutex frees it, so release rather than drop.
+  __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
+  __ESBMC_mutex_waiters(*mutex) = 0;
   __ESBMC_mutex_owner_field(*mutex) = 0;
   __ESBMC_atomic_end();
   return 0;
@@ -471,6 +496,7 @@ __ESBMC_HIDE:;
   else
   {
     // Deadlock foo
+    __ESBMC_mutex_waiters(*mutex)++;
     __ESBMC_blocked_threads_count++;
     // No more threads to run -> croak.
     __ESBMC_assert(
@@ -494,6 +520,8 @@ __ESBMC_HIDE:;
   __ESBMC_assert(
     __ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
   __ESBMC_mutex_lock_field(*mutex) = 0;
+  __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
+  __ESBMC_mutex_waiters(*mutex) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -542,6 +570,8 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = -1;
+  __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
+  __ESBMC_mutex_waiters(*mutex) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -561,6 +591,8 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_rwlock_readers(lock) = 0;
   __ESBMC_rwlock_writer(lock) = 0;
+  __ESBMC_release_blocked_threads(__ESBMC_rwlock_waiters(lock));
+  __ESBMC_rwlock_waiters(lock) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -572,6 +604,33 @@ __ESBMC_HIDE:;
   __ESBMC_assume(!__ESBMC_rwlock_writer(lock));
   __ESBMC_rwlock_readers(lock)++;
   __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_rwlock_rdlock_check(pthread_rwlock_t *lock)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  _Bool acquired = !__ESBMC_rwlock_writer(lock);
+
+  if (acquired)
+  {
+    __ESBMC_rwlock_readers(lock)++;
+  }
+  else
+  {
+    __ESBMC_rwlock_waiters(lock)++;
+    __ESBMC_blocked_threads_count++;
+    __ESBMC_assert(
+      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+      "Deadlocked state in pthread_rwlock_rdlock");
+  }
+
+  __ESBMC_atomic_end();
+
+  __ESBMC_assume(acquired);
+
   return 0;
 }
 
@@ -614,6 +673,14 @@ __ESBMC_HIDE:;
     __ESBMC_rwlock_writer(lock) = 0;
   else if (__ESBMC_rwlock_readers(lock) > 0)
     __ESBMC_rwlock_readers(lock)--;
+
+  /* A reader blocks only behind a writer and a writer excludes readers, so a
+   * fully free lock is exactly when every registered waiter could proceed. */
+  if (!__ESBMC_rwlock_writer(lock) && !__ESBMC_rwlock_readers(lock))
+  {
+    __ESBMC_release_blocked_threads(__ESBMC_rwlock_waiters(lock));
+    __ESBMC_rwlock_waiters(lock) = 0;
+  }
   __ESBMC_atomic_end();
   return 0;
 }
@@ -626,6 +693,34 @@ __ESBMC_HIDE:;
     !(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock)));
   __ESBMC_rwlock_writer(lock) = 1;
   __ESBMC_atomic_end();
+  return 0;
+}
+
+int pthread_rwlock_wrlock_check(pthread_rwlock_t *lock)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  _Bool acquired =
+    !(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock));
+
+  if (acquired)
+  {
+    __ESBMC_rwlock_writer(lock) = 1;
+  }
+  else
+  {
+    __ESBMC_rwlock_waiters(lock)++;
+    __ESBMC_blocked_threads_count++;
+    __ESBMC_assert(
+      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+      "Deadlocked state in pthread_rwlock_wrlock");
+  }
+
+  __ESBMC_atomic_end();
+
+  __ESBMC_assume(acquired);
+
   return 0;
 }
 
@@ -683,7 +778,11 @@ __ESBMC_HIDE:;
     _Bool _cancel = __ESBMC_pthread_cancel_requested[_ctid] &&
                     __ESBMC_pthread_cancelstate[_ctid] == PTHREAD_CANCEL_ENABLE;
     if (_cancel)
+    {
       __ESBMC_mutex_lock_field(*mutex) = 0;
+      __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
+      __ESBMC_mutex_waiters(*mutex) = 0;
+    }
     __ESBMC_atomic_end();
     if (_cancel)
       pthread_exit(PTHREAD_CANCELED);
@@ -697,6 +796,8 @@ __ESBMC_HIDE:;
 
   // Unlock mutex; register us as waiting on condvar; context switch
   __ESBMC_mutex_lock_field(*mutex) = 0;
+  __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
+  __ESBMC_mutex_waiters(*mutex) = 0;
   __ESBMC_cond_lock_field(*cond) = 1;
 
   // Technically in the gap below, we are blocked. So mark ourselves thus. If
@@ -707,7 +808,7 @@ __ESBMC_HIDE:;
   if (assrt)
     __ESBMC_assert(
       __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
-      "Deadlocked state in pthread_mutex_lock");
+      "Deadlocked state in pthread_cond_wait");
 
   __ESBMC_atomic_end();
 

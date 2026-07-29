@@ -1032,6 +1032,8 @@ under the wrong signature, which is why the failure surfaced as a corrupted
 double rather than an outright crash. Generalised: when the callee is not a
 table pointer-to-code symbol but its own type is pointer-to-code, dereference it.
 Argument casting stays on the symbol path, which needs the table entry.
+(Superseded by round 12: casting moved to the call site for expression-form
+calls, and this function now delegates to the shared helper.)
 
 **A rejected first hypothesis, recorded so it is not re-tried.** The same diff
 also shows `ASSIGN …list_elem$175=(double (*)())(&lam1)` against a bare `&lam1`,
@@ -1045,3 +1047,260 @@ store.
 Census after this round: **69/70** on the strided sample, the single divergence
 being `github_3034_split-dot-valid-zero_fail`, which is the parked S4 work
 (round 10).
+
+### Per-case triage round 12 — the S5 argument conversion, expression-form only (2026-07-28)
+
+**Reopens the round-10 "negative result" and resolves it.** Mirroring
+`clang_c_adjust::adjust_function_call_arguments` (clang_c_adjust_expr.cpp:1069)
+generically was recorded as a net parity loss: it closed
+`get_object_size(bytes_data)` but added a `(void *)` cast to ~10 list-model
+calls legacy leaves alone. The inference drawn then — that the real defect was
+the operand's type upstream, not the missing cast — was wrong. The actual
+discriminator is the **call form**:
+
+* legacy reaches that loop only via `adjust_side_effect_function_call`, i.e.
+  **expression-form** calls;
+* its statement-form arm (clang_c_adjust_code.cpp:38-53,
+  `statement == "function_call"`) adjusts index expressions and *nothing else*,
+  so a statement-form call keeps its arguments verbatim.
+
+`list_push`/`list_contains`/`list_set_at`/`list_find_index` are statement-form;
+`get_object_size` and `list_size` feed expressions. Restricting the mirror to
+the `sideeffect2t` arm therefore keeps every win and opens none of the losses.
+Two shapes close corpus-wide:
+
+```
+legacy:  get_object_size((void *)bytes_data)          hop-off was: (bytes_data)
+legacy:  list_size(( struct __ESBMC_PyListObj *)d.keys)   hop-off was: (d.keys)
+```
+
+**The census caught a defect four spot-checks missed — record this.** The first
+wrap regressed exactly one test, `bytes5_fail`:
+
+```
+legacy:  ESBMC_range_has_next_(0, 3, 1)
+hop-off: ESBMC_range_has_next_(0, (signed long int)3, 1)
+```
+
+`c_typecastt::do_typecast` folds a cast over a constant through the simplifier
+in its **exprt** overload (c_typecast.cpp:911-922) but not in its **expr2tc**
+overload (:926-948), which only wraps. `python_adjust` works in IREP2, so
+mirroring the wrap alone leaves a visible cast on every constant argument.
+Guarding on `is_constant_expr` and calling `simplify` after the wrap restores
+parity. Generalises: **any arm mirroring a `gen_typecast` into IREP2 inherits
+the missing constant fold.**
+
+**Method note — normalise the instruction counter.** A raw `--goto-functions-only`
+byte-diff is unusable here: one dropped docstring `OTHER` statement renumbers
+every following instruction, inflating `github_3034` to 6462 diff lines against
+a true 114. Strip `// <N> ` before diffing.
+
+**Census (stride-6, 731 tests, GOTO byte-diff, pinned binaries).** This is a far
+stricter metric than the verdict parity quoted in earlier rounds — 715 of 731
+tests differ somewhere at GOTO level (docstrings, `__ESBMC_HIDE` labels) without
+any verdict changing, so the signal is the delta, not the absolute.
+
+| | diff lines | improved | unchanged | regressed |
+|---|---|---|---|---|
+| pre-patch baseline | 215794 | — | — | — |
+| wrap only | 214292 | 711 | 19 | 1 (`bytes5_fail`) |
+| wrap + constant fold | **214286** | **712** | **19** | **0** |
+
+Round 11's closing note that "argument casting stays on the symbol path, which
+needs the table entry" is superseded: casting now happens at the call site for
+every expression-form call, and `wrap_function_pointer_callee` delegates to the
+same helper instead of carrying its own copy of the loop.
+
+### Per-case triage round 16 — S3 has no reproducer; the last divergence is a vacuous test (2026-07-28)
+
+**Verdict: the third named flip blocker, "S3 member/index at scale", is not
+evidenced by anything in the corpus.** Its sole census witness,
+`string-nondet-index-fail`, is a **vacuous test**, and valid member/index code is
+already at hop-off parity.
+
+The test aborts under `--python-irep2-adjust-only` in `index2t`'s construction
+assert (`irep2_expr.h:1650`). A probe on `migrate_expr`'s index arm names the
+cause exactly:
+
+```
+PROBE_INDEX_SRC legacy_id=empty migrated_type=empty
+```
+
+The index **source has type `empty`**. `nondet_string` is not a supported builtin
+— every test that calls it gets `Undefined function 'nondet_string' - replacing
+with assert(false)` — so `s` is typed void and `s[0]` indexes a void value. The
+irep2 invariant is right to reject it; nothing here argues for relaxing the
+assert.
+
+**Why the test still "passes" on the default path.** Its whole body lowers to a
+single instruction:
+
+```
+python_user_main:
+        ASSERT 0 // Unsupported function 'nondet_string' is reached
+        END_FUNCTION
+```
+
+The assertion it purports to check (`c == "h"`) never reaches the GOTO at all.
+Its expected `^VERIFICATION FAILED$` is satisfied by the unsupported-function
+assert, not by the property — the same "asserts nothing" failure mode as the
+vacuous-`test.desc` batch (#6453/#6454), reached by a different route. Its
+`-success` sibling, `string-nondet-index-success`, is marked **FUTURE**, which is
+the honest label for the feature; the `-fail` twin is marked CORE and passes for
+the wrong reason. The same holds for `string-nondet-{slice,concat,in}-fail` and
+`string-char-symbolic-fail`.
+
+**Valid indexing is at parity.** `def first(s: str) -> str: return s[0]` and
+`def pick(s: str, i: int) -> str: return s[i]` both verify SUCCESSFUL under
+legacy *and* hop-off. Under `--python-irep2-adjust` (the pass running *after*
+`clang_cpp_adjust`) even the degenerate test reports FAILED normally, confirming
+the abort needs both the void source and the absence of the legacy pass.
+
+**Consequence for the flip.** With #6462 (relational signedness), #6466 (array
+argument decay) and #6468 (resolved-struct catch id) landed, the 220-test strided
+census has **no remaining verified divergence**. The three blockers this document
+listed are resolved or refuted:
+
+| blocker | outcome |
+|---|---|
+| S5 arg casts | closed — #6461 (scalar, expression-form) + #6466 (array decay) |
+| `bases` carriage | misfiled; the real defect was the converter's catch-id fallback — #6468 |
+| S3 member/index at scale | **no reproducer**; sole witness is a vacuous test |
+
+The next honest step is therefore not another per-case round but a **denser
+census** (the stride-20 sample is exhausted), plus deciding what to do about
+`nondet_string`: either implement it — which would make the six CORE `-fail`
+tests above assert something — or re-mark those tests, which currently pass
+regardless of the behaviour they name.
+### Per-case triage round 14 — array decay at the call-argument seam (2026-07-28)
+
+**A strided whole-corpus census is now the frontier finder.** With round 11's open
+list drained, a 220-test strided sample (every 20th `regression/python` directory)
+was run legacy-vs-hop-off. It returned **exactly three** divergences, and each is
+a different one of the three flip blockers this document's status line already
+names — the remaining gap is not a long tail:
+
+| test | hop-off symptom | blocker |
+|---|---|---|
+| `github_2839` | `argument "a" type mismatch: got array, expected pointer` → no verdict | **S5 arg casts** |
+| `github_6258` | `uncaught exception: KeyboardInterrupt` → false FAILED | **`bases` carriage** |
+| `string-nondet-index-fail` | `index2t` construction assert (`irep2_expr.h:1650`) → no verdict | **S3 member/index at scale** |
+
+**✅ FIXED — `github_2839` (S5, array half).** `is_foo(a="foo")` passes a `char[4]`
+literal into a `char *` parameter:
+
+```
+legacy:  FUNCTION_CALL: e=is_foo(&{ 102, 111, 111, 0 }[0])
+hop-off: FUNCTION_CALL: e=is_foo({ 102, 111, 111, 0 })
+```
+
+`clang_c_adjust::adjust_function_call_arguments` converts every argument to its
+declared parameter type, and `c_typecastt`'s array case **decays** rather than
+casts. `python_adjust` had no argument conversion for a *direct* call at all:
+`wrap_function_pointer_callee` does cast arguments, but only on the
+pointer-to-code callee path, and its `is_castable_kind` list excludes arrays. New
+`decay_array_arguments`, on the **expression-form** arm only — the same
+restriction round 12 (#6461) established for argument casting, reached here by
+probe rather than by inheriting the argument. A statement-form wiring was
+written first and removed: **0 firings across 70 tests**, against 1 for
+expression-form. `e = is_foo(...)` is a `code_assign2t` over a `sideeffect2t`
+at adjust time and only becomes a statement-form `FUNCTION_CALL` later in
+goto-convert, so the statement-form arm could never see it.
+
+**The `expr2tc` constant-fold gap round 12 flagged does not reach the relational
+arm.** #6461 warns that any arm mirroring a `gen_typecast` into IREP2 inherits
+`do_typecast`'s missing constant fold. Probed on round 13's relational arm with
+`len(s) < 5`: legacy itself emits `(unsigned long int)5` unfolded and hop-off is
+byte-identical. The fold lives on the `implicit_typecast` → `do_typecast`
+argument path, not in `implicit_typecast_arithmetic`. No fix needed there.
+
+Scoped to the array→pointer shape only, which is **structural** — the same object,
+addressed differently. The scalar width/signedness half of S5 changes stored
+values and stays out, the same line round 13 drew against the parked S4
+assignment trap.
+
+**The C-Live control build caught a bad regression test — record this.** The first
+test pair put the keyword call inside `def main()`, the house idiom. It **passed on
+the control build**, i.e. proved nothing. Probing variants against the
+already-built control binary isolated a much narrower trigger:
+
+| shape | reproduces? |
+|---|---|
+| `e = is_foo(a="foo")` at module level | **yes** |
+| `assert is_foo(a="foo")` at module level | no |
+| `assert is_foo(a="foo")` inside a function | no |
+| `e = is_foo("foo")` (positional) at module level | no |
+
+Module scope **and** assignment **and** a keyword argument. When a repro is this
+narrow, derive the test from the issue's actual source shape; restyling it into
+the house idiom is what drops the trigger. Both tests now abort on the control
+and pass patched.
+
+**Census after this round: 218/221.** `github_2839` closed; `github_6258` and
+`string-nondet-index-fail` remain (their own blockers). `github_3701_11` appears
+as a third divergence **only because this branch is cut from master and therefore
+lacks round 13** — it aborts at `smt_solver.cpp:1512`, round 13's exact signature,
+and is at parity on the round-13 binary. Useful independent evidence that round
+13 closes more than its own repro.
+
+Tests: `regression/python/python_irep2_adjust_only_arg_decay{,_fail}`.
+### Per-case triage round 13 — the relational signedness abort (2026-07-28)
+
+**Re-measure first, as always.** Round 11's two open items shrank to one before any
+triage: `github_3690` is **closed** (legacy and hop-off both SUCCESSFUL, and its
+`_fail` sibling both FAILED) — #6445 did what it claimed and the entry was stale.
+
+**✅ FIXED — `github_3034_split-dot-valid-zero` and its `_fail` sibling.** These are
+the tests round 10 parked on S4, and **the recorded diagnosis was wrong**. The
+residual is not the list of promotions round 10 enumerated; hop-off does not reach
+a verdict at all. It aborts in the solver:
+
+```
+Assertion failed: (is_signedbv_type(lt.side_1) && is_signedbv_type(lt.side_2)),
+  function convert_ast_node, file smt_solver.cpp, line 1512.
+```
+
+`smt_convt::convert_ast_node`'s `lessthan` case dispatches on *both* sides being
+floatbv, *both* fixedbv, *both* unsignedbv, or — in the final `else` — *both*
+signedbv. An ordering relation whose operands disagree in signedness matches no
+arm and trips the assert. `while i < len(parts)` produces exactly that: the loop
+variable is a Python int (`signed long`) and the list model's `list_size` returns
+`unsigned long`. The whole GOTO diff for the enclosing function was **one cast**:
+
+```
+legacy:  IF !((unsigned long int)i < return_value$___ESBMC_list_size$1) THEN GOTO 3
+hop-off: IF !(i < return_value$___ESBMC_list_size$1) THEN GOTO 3
+```
+
+`clang_c_adjust::adjust_expr_rel` reconciles the two operands with
+`gen_typecast_arithmetic`; `python_adjust` had no relational arm at all, so the
+node reached the SMT layer unreconciled.
+
+**Why this is not the rejected "gap-2" arm.** Running `gen_typecast_arithmetic` on
+*every* relational node was tried in round 3 and rejected: it diverges corpus-wide
+from clang's promotions over the OM bodies (~7500 diff lines on `builtin2` alone),
+for a purely cosmetic gain. This arm is gated on the **signedness mismatch** — the
+one shape that is not encodable at all. A same-signedness width promotion
+(`char` vs `int`, gap-2's target) is encodable and stays untouched, so none of
+that traffic is re-admitted. The arm also calls
+`c_implicit_typecast_arithmetic`'s **`expr2tc` overload**, so there is no migrate
+round-trip and gap-2's first negative result — an operand picking up a spurious
+wrap because its migrated type does not compare equal to itself — cannot arise by
+construction. It is the same helper `python_math`'s floor-div/modulo
+reconciliation uses (#5725).
+
+**Relation to the parked S4 trap.** S4's danger is mirroring `adjust_assign`
+*without* operand-level arithmetic reconciliation, which makes `neural-net_fail`
+report SUCCESSFUL where legacy correctly FAILS. This arm is the reconciliation
+half, and only for relationals: it changes no stored value, it makes an otherwise
+unencodable node encodable, and its output is byte-identical to what legacy
+already emits. The masking direction is the assignment half, which stays parked.
+The S4 canary is still broken (round 10) and must still be re-established before
+the assignment half is attempted.
+
+**C-Live discharged by probe, not argument.** Both new tests *abort* on a control
+build with the arm reverted and rebuilt, and pass with it — the arm is live, not
+dead instrumentation. Idempotent: after one application both operands share a
+signedness, so the gate cannot re-fire.
+
+Tests: `regression/python/python_irep2_adjust_only_rel_signedness{,_fail}`.

@@ -432,7 +432,16 @@ public:
    *         Tends to be one integer divided ('/') by another. After inspecting
    *         all other options, there are none that are good, this is a
    *         legitimate use of strings.
-   *  @return The newly created terminal smt_ast of this real. */
+   *  @return An SMT AST representing this real value.
+   *
+   *  No backend is required to return a distinct smt_ast * per call: a
+   *  backend that memoises real constants by value (a natural
+   *  optimisation) is free to hand back the same pointer for repeated
+   *  calls with the same str. Do not key identity-sensitive metadata
+   *  (e.g. AST-pointer-keyed side-channel maps) directly on the result of
+   *  this call unless the value is known to be one this call site
+   *  exclusively owns; mint a fresh symbol (mk_fresh) and constrain it
+   *  equal to the desired real value instead. */
   virtual smt_astt mk_smt_real(const std::string &str) = 0;
 
   // Returns SMT AST representing real zero
