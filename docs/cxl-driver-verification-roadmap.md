@@ -341,3 +341,91 @@ regression/cxl/
 | AER functions added | 4 |
 | Error injection functions added | 2 |
 | HDM constraints added | 2 (alignment + decoder limit) |
+
+---
+
+### Phase 7: Real Driver Coverage (Planned)
+
+**Goal:** Extend the operational model and regression suite to cover the full
+Linux 7.1.5 CXL driver subsystem (~30 source files across 8 driver families),
+moving from synthetic primitives to real-driver-equivalent verification.
+
+**Gap Analysis — Linux 7.1.5 `drivers/cxl/` inventory vs current coverage:**
+
+| Driver Family | Kconfig | Source Files | Current Coverage |
+|---|---|---|---|
+| **CXL Core** (port, memdev, mbox, hdm, region, regs, cdat, features, ras, mce, pmu, suspend) | CXL_BUS | 25 files in `core/` | Partial — only synthetic port/mbox/region tests |
+| **CXL PCI** (pci.c) | CXL_PCI | 1 | Partial — synthetic probe test, no DVSEC/doorbell/MMR timeout paths |
+| **CXL Memory** (mem.c) | CXL_MEM | 1 | Partial — synthetic attach test, no endpoint enumeration |
+| **CXL Port** (port.c) | CXL_PORT | 1 | Partial — synthetic enum test, no dport HDM scan |
+| **CXL PMEM** (pmem.c + security.c) | CXL_PMEM | 2 | Partial — synthetic security tests, no LIBNVDIMM bridge |
+| **CXL ACPI** (acpi.c) | CXL_ACPI | 1 | **None** — CEDT/CFMWS parsing untested |
+| **DAX CXL** (dax/cxl.c) | DEV_DAX_CXL | 1 | **None** — DAX region probing untested |
+| **CXL PMU** (perf/cxl_pmu.c) | CXL_PMU | 1 | **None** — perf event interface untested |
+| **PCIe AER for CXL** (pcie/aer_cxl_rch.c) | built-in | 1 | Partial — basic AER covered, not RCH delegation |
+| **ACPI CPER** (firmware/efi/cper_cxl.c) | built-in | 1 | **None** — CXL error section parsing untested |
+| **ACPI EINJ** (acpi/apei/einj-cxl.c) | EINJ_CXL | 1 | **None** — ACPI error injection untested |
+
+**Proposed regression tests (~25 new):**
+
+| # | Suite | Target | Feature | Expected |
+|---|---|---|---|---|
+| 1 | `cxl_memdev_01` | `core/memdev.c` | `/dev/cxl/X` creation + fw version | PASS |
+| 2 | `cxl_memdev_02` | `core/memdev.c` | memdev ID allocator overflow | FAIL |
+| 3 | `cxl_region_01` | `core/region.c` | Region interleave config | PASS |
+| 4 | `cxl_region_02` | `core/region.c` | Overlapping region targets | FAIL |
+| 5 | `cxl_region_dax_01` | `core/region_dax.c` | DAX region mapping | PASS |
+| 6 | `cxl_region_pmem_01` | `core/region_pmem.c` | PMEM region type | PASS |
+| 7 | `cxl_mbox_ioctl_01` | `core/mbox.c` | IOCTL command table lookup | PASS |
+| 8 | `cxl_mbox_ioctl_02` | `core/mbox.c` | Unsupported opcode via IOCTL | FAIL |
+| 9 | `cxl_port_dport_01` | `port.c` | Downstream port traversal | PASS |
+| 10 | `cxl_port_dport_02` | `port.c` | Dangling dport reference | FAIL |
+| 11 | `cxl_pmem_sec_01` | `pmem.c` + `security.c` | Set/get passphrase flow | PASS |
+| 12 | `cxl_pmem_sec_02` | `pmem.c` + `security.c` | Unlock before freeze (invalid order) | FAIL |
+| 13 | `cxl_acpi_cedt_01` | `acpi.c` | CEDT CFMWS window parsing | PASS |
+| 14 | `cxl_acpi_cedt_02` | `acpi.c` | CFMWS alignment violation | FAIL |
+| 15 | `cxl_cdat_01` | `core/cdat.c` | CDAT latency/bandwidth parsing | PASS |
+| 16 | `cxl_edac_01` | `core/edac.c` | Patrol scrub enable/disable | PASS |
+| 17 | `cxl_features_01` | `core/features.c` | Feature capability query | PASS |
+| 18 | `cxl_ras_01` | `core/ras.c` | CPER error record processing | PASS |
+| 19 | `cxl_ras_02` | `core/ras.c` | CPER uncorrectable fatal w/o recovery | FAIL |
+| 20 | `cxl_mce_01` | `core/mce.c` | MCE offlines aliased SPA page | PASS |
+| 21 | `cxl_pmu_01` | `perf/cxl_pmu.c` | PMU counter configuration | PASS |
+| 22 | `cxl_dax_01` | `dax/cxl.c` | DAX region device registration | PASS |
+| 23 | `cxl_dax_02` | `dax/cxl.c` | DAX on non-DAX region type | FAIL |
+| 24 | `cxl_einj_01` | `acpi/apei/einj-cxl.c` | EINJ error injection to CXL port | PASS |
+| 25 | `cxl_dvsec_01` | `core/pci.c` | PCIe DVSEC register enumeration | PASS |
+
+**New operational model functions (~18):**
+
+| Function | Target |
+|---|---|
+| `cxl_memdev_create()`, `cxl_memdev_destroy()` | memdev lifecycle |
+| `cxl_memdev_id_alloc()` | ID allocator with overflow |
+| `cxl_region_config()` | Interleave granularity/size |
+| `cxl_dax_region_map()` | DAX region mapping |
+| `cxl_pmem_region_type()` | PMEM region type check |
+| `cxl_mailbox_ioctl()` | IOCTL command dispatch |
+| `cxl_dport_add()`, `cxl_dport_walk()` | Port downstream traversal |
+| `cxl_pmem_set_passphrase()`, `cxl_pmem_unlock()` | LIBNVDIMM passphrase bridge |
+| `acpi_cedt_parse_cfmws()` | CFMWS window parsing |
+| `cdat_parse_entry()` | CDAT latency/bandwidth parsing |
+| `cxl_edac_set_patrol_scrub()` | EDAC patrol scrub control |
+| `cxl_feature_query()` | Feature capability table lookup |
+| `cper_process_cxl()` | CXL CPER error record |
+| `cxl_mce_offline_page()` | MCE SPA offline |
+| `cxl_pmu_config_counter()` | PMU hardware config |
+| `cxl_dax_region_register()` | DAX device registration |
+| `einj_inject_cxl_error()` | ACPI EINJ error injection |
+| `pci_cxl_dvsec_enum()` | DVSEC discovery |
+
+**Projection after Phase 7:**
+
+| Metric | After Phase 7 |
+|---|---|
+| Regression tests | ~50 |
+| Passing tests | ~35 |
+| Bug-detecting tests | ~15 |
+| Operational model functions | ~70 |
+| Operational model lines | ~3,000 |
+| Driver families covered | ~9 |
