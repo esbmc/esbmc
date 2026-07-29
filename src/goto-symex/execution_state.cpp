@@ -227,15 +227,21 @@ void execution_statet::symex_step(reachability_treet &art)
     else if (
       (instruction.function == "c:@F@main" ||
        instruction.function == "c:@F@main#") &&
-      !options.get_bool_option("deadlock-check") &&
       !options.get_bool_option("memory-leak-check") &&
       !options.get_bool_option("termination"))
     {
       // check whether we reached the end of the main function and
-      // whether we are not checking for (local and global) deadlocks and memory leaks.
+      // whether we are not checking for memory leaks.
       // We should end the main thread to avoid exploring further interleavings
       // TODO: once we support at_exit, we should check this code
       // TODO: we should support verifying memory leaks in multi-threaded C programs.
+      //
+      // Returning from main is a call to exit(): the process terminates and
+      // every other thread is torn down (C11 5.1.2.2.3), so a thread still
+      // waiting on a lock main held is not deadlocked. This END_FUNCTION is
+      // reached only on a real return -- pthread_exit() ends in
+      // __ESBMC_assume(0) -- so a program whose threads outlive main via
+      // pthread_exit keeps being explored under --deadlock-check (#6479).
       //
       // Skipped under --termination: the strategy inserts an
       // `assert(false)` after the main() call in __ESBMC_main to
