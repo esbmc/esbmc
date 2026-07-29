@@ -1,6 +1,5 @@
 import ast
 import copy
-import pytype_infer
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 # pylint: disable=too-many-nested-blocks,too-many-boolean-expressions,no-else-return,no-else-raise
 # pylint: disable=import-outside-toplevel
@@ -1320,13 +1319,6 @@ class CoreVisitorsMixin:
             return None
 
         node = self.generic_visit(node)
-
-        # try:
-        #     from pytype_infer.annotate import annotate_tree
-        #     node =  annotate_tree(node)
-        # except ImportError:
-        #     pass
-
         self._update_known_literal_for_simple_assign(node)
         self._track_static_seq_binding(node)
         self._maybe_track_seq_iterator(node)
