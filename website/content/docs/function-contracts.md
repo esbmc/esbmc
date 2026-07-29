@@ -181,13 +181,6 @@ Without that clause, `p != NULL` alone says nothing about how many elements `p`
 addresses, so `p[20]` is reported as an out-of-bounds write. ESBMC emits a
 warning naming any pointer parameter whose extent the contract leaves unstated.
 
-This is a deliberate change of meaning, and there is no opt-out flag. A contract
-that dereferenced a pointer parameter without stating its extent was being
-checked against a buffer size ESBMC invented, so the previous verdict was not
-sound to begin with; keeping a flag to restore it would only preserve the false
-negative of [#6212](https://github.com/esbmc/esbmc/issues/6212). The fix is to
-state the extent, which the warning names the parameter for.
-
 If every path through the body satisfies the postcondition and the assigns
 frame, the result is `VERIFICATION SUCCESSFUL`. Otherwise, ESBMC reports a
 counterexample showing which input values and which execution path caused a
@@ -482,13 +475,13 @@ document each one explicitly.
 **The array-assigns witness index falls back to 100 elements when the extent is
 unknown.** For `__ESBMC_assigns(arr[i])` the nondet witness index is clamped to
 the array's real extent, `n / sizeof(elem)` when the pointer came from
-`__ESBMC_is_fresh(a, n)`. Where no extent is recorded, such as a global array or
-a run without `--function`, the bound falls back to
+`__ESBMC_is_fresh(a, n)`. Where no extent is recorded, such as a global pointer
+or a run without `--function`, the bound falls back to
 `WITNESS_IDX_FALLBACK_ELEMS = 100`, which can over-bound the index and report a
 spurious bounds violation on a smaller array. The bound is a clamp rather than
-an assumption on purpose: assuming the index range would force the extent to be
-at least one element, and for a zero extent it would be an assumption of false,
-which discharges the whole wrapper vacuously.
+an assumption: assuming the index range would force the extent to be at least
+one element, and for a zero extent it would be an assumption of false, which
+discharges the whole wrapper vacuously.
 
 **Pointer parameters with no stated extent are not checked against the assigns
 clause.** Proving that `*p` is unchanged means reading `*p` in the harness, and
