@@ -899,6 +899,23 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       }
     }
 
+    // A program may replace ::operator new, and a class may supply its own
+    // ([basic.stc.dynamic.allocation], [expr.new]/9). The built-in cpp_new
+    // below conjures a fresh object and never calls it, so ESBMC verifies a
+    // different program: two allocations from a pool allocator that alias
+    // are modelled as distinct objects, hiding real bugs (github #6494).
+    // Record the resolved function for goto-conversion to call instead.
+    // Only the plain (size) form is routed -- the aligned and user-placement
+    // forms take further arguments this lowering does not supply, and an
+    // allocation function without a body in this TU has nothing to call.
+    exprt alloc_function;
+    if (const clang::FunctionDecl *op_new = ne.getOperatorNew())
+      if (
+        op_new->isDefined() && !op_new->isReservedGlobalPlacementOperator() &&
+        op_new->getNumParams() == 1 && ne.getNumPlacementArgs() == 0)
+        if (get_decl_ref(*op_new, alloc_function))
+          return true;
+
     if (ne.isArray())
     {
       new_expr = side_effect_exprt("cpp_new[]", t);
@@ -915,6 +932,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       new_expr = side_effect_exprt("cpp_new", t);
     }
+
+    if (alloc_function.is_not_nil())
+      new_expr.add("alloc_function") = alloc_function;
 
     if (ne.hasInitializer())
     {
