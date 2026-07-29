@@ -1447,14 +1447,15 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   targets.has_return_value =
     to_code_type(f.type).ret_type->type_id != type2t::empty_id;
 
-  // W1-loc spike Phase C (esbmc/esbmc#4715): --irep2-native-body routes the
-  // body through the IREP2-native dispatcher, which consumes code_*2t directly
-  // (no whole-body legacy round-trip) and inherits statement locations onto
-  // value operands. Until every kind in this body is supported it returns
-  // false and we fall back to goto_convert_rec on the round-tripped `code`, so
-  // flag-on is byte-identical to flag-off. `code`/`end_location` above are
-  // still computed from the round-trip; the native path only replaces the
-  // body-instruction dispatch.
+  // W1-loc keystone (esbmc/esbmc#4715): the body goes through the IREP2-native
+  // dispatcher, which consumes code_*2t directly (no whole-body legacy
+  // round-trip) and inherits statement locations onto value operands. Until
+  // every kind in this body is supported it returns false and we fall back to
+  // goto_convert_rec on the round-tripped `code`, so the native path is
+  // byte-identical to the round-trip. `code`/`end_location` above are still
+  // computed from the round-trip; the native path only replaces the
+  // body-instruction dispatch. --no-irep2-native-body forces the round-trip
+  // for diagnosis.
   //
   // A native attempt that reaches a side-effecting code_while2t condition or
   // a code_assign2t with a function-call rhs (below) calls the shared
@@ -1472,7 +1473,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   unsigned tmp_counter_before = tmp_symbol.counter;
   irep_idt context_mark_before = context.mark();
   targetst targets_before = targets;
-  if (!(options.get_bool_option("irep2-native-body") &&
+  if (!(!options.get_bool_option("no-irep2-native-body") &&
         try_convert_body_native(symbol.get_value2(), f.body)))
   {
     tmp_symbol.counter = tmp_counter_before;
