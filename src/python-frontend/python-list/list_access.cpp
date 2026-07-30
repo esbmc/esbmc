@@ -1588,7 +1588,6 @@ exprt python_list::handle_range_slice(
     // over-count. Size the result accordingly.
     const bool needs_null_term = (elem_type == char_type());
     exprt result_size = slice_len;
-    std::vector<long long> view_shape;
     if (literal_step)
     {
       const array_typet &src_type = to_array_type(resolved_array_type);
@@ -1602,6 +1601,7 @@ exprt python_list::handle_range_slice(
             literal_slice_length(slice_node, source_len, step_val))
         {
           result_size = from_integer(*static_slice_len, size_type());
+          std::vector<long long> view_shape;
           view_shape.push_back(*static_slice_len);
           append_array_shape(ns.follow(elem_type), view_shape);
           ndarray_descriptor descriptor(view_shape, "", 0);
