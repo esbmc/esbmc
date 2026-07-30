@@ -1,6 +1,9 @@
 #ifndef ESBMC_VARIANT
 #define ESBMC_VARIANT
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include "cstddef"
 #include "type_traits"
 #include "utility"
@@ -269,4 +272,5 @@ get_if(const variant<Types...> *v) noexcept
 
 } // namespace std
 
+#endif // __cplusplus >= 201103L
 #endif

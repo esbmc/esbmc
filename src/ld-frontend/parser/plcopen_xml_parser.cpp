@@ -1,6 +1,8 @@
 #include <ld-frontend/parser/plcopen_xml_parser.h>
 #include <pugixml.hpp>
+#include <algorithm>
 #include <cassert>
+#include <cerrno>
 #include <cctype>
 #include <cstdlib>
 #include <iostream>
@@ -387,19 +389,18 @@ literal_to_ticks(const std::string &text, unsigned interval_ms, long long &out)
     return true;
   }
 
-  try
-  {
-    size_t consumed = 0;
-    const long long v = std::stoll(text, &consumed);
-    if (consumed == 0)
-      return false;
-    out = v;
-    return true;
-  }
-  catch (const std::exception &)
-  {
+  // Validate rather than convert-and-catch. A non-numeric preset — a data pin
+  // wired to a named variable, or an unparsable <initialValue> — used to
+  // terminate the process on std::stoll's std::invalid_argument despite the
+  // catch that was here, leaving both callers' fallback paths unreachable.
+  // Parsers should not route ordinary "not a number" input through exceptions.
+  errno = 0;
+  char *end = nullptr;
+  const long long v = std::strtoll(text.c_str(), &end, 10);
+  if (end == text.c_str() || errno == ERANGE)
     return false;
-  }
+  out = v;
+  return true;
 }
 
 // The FB type table is shared between the textual rung parser and the
@@ -532,9 +533,14 @@ static bool parse_graphical_ld(
   // Step 4: enumerate simple paths from every leftPowerRail to a target.
   // The returned paths exclude the rail and the target itself.
   //
-  // NOTE: the number of simple paths is exponential in the number of parallel
-  // branches. This is tractable for the graphical LD programs evaluated here;
-  // larger vendor exports may need a path-count guard.
+  // The search is exponential in the number of parallel branches, so it is
+  // bounded. Exceeding the bound is an error rather than a truncated
+  // enumeration: dropping paths would silently weaken the model the same way
+  // an unmodellable path used to. The bound is ~5000x the widest network in
+  // the benchmark set (stairs_light peaks at 20 steps), so it is only
+  // reachable by an export far wider than anything drawn by hand.
+  static constexpr unsigned long max_path_search_steps = 100000;
+
   std::vector<int> left_rails;
   for (auto &[lid, g] : nodes)
     if (g.tag == "leftPowerRail")
@@ -544,7 +550,13 @@ static bool parse_graphical_ld(
     std::vector<std::vector<int>> found;
     std::vector<int> path;
     std::set<int> visited;
+    unsigned long steps = 0;
     std::function<void(int)> dfs = [&](int cur) {
+      if (++steps > max_path_search_steps)
+        throw LdParseError(
+          "graphical LD: network feeding localId " + std::to_string(target) +
+          " has too many parallel paths to enumerate (limit " +
+          std::to_string(max_path_search_steps) + " steps)");
       if (cur == target)
       {
         found.push_back(path);
@@ -688,7 +700,6 @@ static bool parse_graphical_ld(
   // Convert one path into its contact chain.  A path that runs through a
   // function block is cut at the last block on it and restarted from that
   // block's output pin, which the block's own rung has already assigned.
-  // Returns false if the path contains an element that cannot be modelled.
   auto path_contacts =
     [&](const std::vector<int> &path, std::vector<RungElement> &out) {
       size_t start = 0;
@@ -705,21 +716,17 @@ static bool parse_graphical_ld(
         const GNode &g = nodes.at(path[i]);
         if (g.tag == "leftPowerRail")
           continue;
+        // Dropping the path would verify a program in which this branch never
+        // energises its coil, which hides violations instead of reporting them.
         if (g.tag != "contact")
-        {
-          std::cerr << "warning: graphical LD: rung path contains "
-                    << "unsupported element '" << g.tag << "'"
-                    << (g.var.empty() ? "" : " (var=" + g.var + ")")
-                    << " — skipping path to avoid an unsound model.\n";
-          return false;
-        }
+          throw UnsupportedConstructError(
+            g.tag + (g.var.empty() ? "" : " (var=" + g.var + ")"), 2);
         out.push_back(make_contact(sensed_name(g.var), g.negated, g.edge));
       }
 
       if (!resume_pin.empty())
         out.insert(
           out.begin(), make_contact(resume_pin, false, ContactEdge::None));
-      return true;
     };
 
   // Emit the rungs driving one sink from its incoming paths.  Parallel paths
@@ -728,17 +735,31 @@ static bool parse_graphical_ld(
   // path needs no accumulator and drives the sink directly.
   auto emit_sink = [&](
                      const std::vector<std::vector<int>> &paths,
+                     int sink_id,
                      const std::string &target,
                      CoilKind kind) {
+    // No rail-to-sink path means nothing would ever assign the sink, so it
+    // would hold its initial value for every scan and any property over it
+    // would pass vacuously. A block driving the sink whose enable pin is not
+    // one of enable_pins (step 3) gets no incoming edge and lands here, so
+    // report that block rather than the sink itself.
+    if (paths.empty())
+    {
+      for (const auto &[lid, g] : nodes)
+        if (
+          g.tag == "block" &&
+          std::find(g.feeds.begin(), g.feeds.end(), sink_id) != g.feeds.end())
+          throw UnsupportedConstructError(g.type_name, 2);
+      throw UnsupportedConstructError("undriven sink " + target, 2);
+    }
+
     std::vector<std::vector<RungElement>> chains;
     for (const auto &p : paths)
     {
       std::vector<RungElement> elems;
-      if (path_contacts(p, elems))
-        chains.push_back(std::move(elems));
+      path_contacts(p, elems);
+      chains.push_back(std::move(elems));
     }
-    if (chains.empty())
-      return;
 
     if (chains.size() == 1)
     {
@@ -808,7 +829,7 @@ static bool parse_graphical_ld(
     const char *enable = is_timer ? "IN" : (kind == FBKind::CTU ? "CU" : "CD");
     const std::string enable_var =
       synth_var(pin_name(block_id, enable), VarKind::BOOL, true, 0);
-    emit_sink(paths, enable_var, CoilKind::Output);
+    emit_sink(paths, block_id, enable_var, CoilKind::Output);
 
     RungElement e;
     e.loc = loc;
@@ -898,7 +919,7 @@ static bool parse_graphical_ld(
       kind = CoilKind::Set;
     else if (g.storage == "reset")
       kind = CoilKind::Reset;
-    emit_sink(paths, g.var, kind);
+    emit_sink(paths, coil, g.var, kind);
   }
 
   // Blocks whose outputs drive nothing still advance their internal state
