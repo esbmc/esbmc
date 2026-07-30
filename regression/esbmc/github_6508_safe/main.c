@@ -28,11 +28,13 @@ struct W
   struct H h;
 };
 
-/* A union's storage is deliberately shared between its members. */
+/* A union's storage is deliberately shared between its members. `long long'
+   rather than `long' so the union is 8 bytes under LLP64 (Windows) too and the
+   write below stays inside it. */
 union U
 {
   char c[4];
-  long l;
+  long long l;
 };
 
 int main()
