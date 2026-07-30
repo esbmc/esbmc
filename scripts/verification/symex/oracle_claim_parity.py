@@ -29,47 +29,30 @@ Usage:
 import argparse
 import os
 import re
-import shutil
-import subprocess
 import sys
-import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
-REGRESSION = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "regression"
+from oracle_common import (
+    NO_VERDICT,
+    TIMEOUT,
+    capture,
+    collect_tests,
+    drop_scratch,
+    esbmc_path,
+    load_baseline,
+    report_baseline,
+    scratch_dir,
+    verdict_of,
 )
-sys.path.insert(0, os.path.abspath(REGRESSION))
 
-# pylint: disable=import-error,wrong-import-position
-from testing_tool import TestCase  # type: ignore
-
-VERDICT = re.compile(r"^VERIFICATION (SUCCESSFUL|FAILED|UNKNOWN)$", re.MULTILINE)
 CLAIM_HEAD = re.compile(r"^Claim (\d+):$")
 CLAIM_LOC = re.compile(r"^\s+(file .* line \d+ column \d+ function .*)$")
 PER_CLAIM = re.compile(r"^[✓✗] (PASSED|FAILED): '(.*)'$", re.MULTILINE)
 LOCATION = re.compile(r"file .* line \d+ column \d+ function \S+")
 
-TIMEOUT = "timeout"
-NO_VERDICT = "no-verdict"
-
 # Options that already select or reshape the claim set; re-driving them would not
 # be the comparison this oracle intends.
 CONFLICTING = ("--claim", "--k-induction", "--incremental-bmc", "--falsification")
-
-
-def run(esbmc, args, cwd, timeout):
-    try:
-        proc = subprocess.run(
-            [esbmc] + args,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return None
-    return proc.stdout.decode("utf-8", "replace")
 
 
 def parse_claims(text):
@@ -93,13 +76,6 @@ def location_of(key):
     return found.group(0) if found else None
 
 
-def whole_run_verdict(text):
-    if text is None:
-        return TIMEOUT
-    found = VERDICT.findall(text)
-    return found[-1] if found else NO_VERDICT
-
-
 def compare(case, esbmc, timeout, max_claims):
     # Strip --multi-property from the test's own flags: passing it twice makes
     # ESBMC produce no per-claim report at all, and leaving it on the --claim
@@ -107,9 +83,9 @@ def compare(case, esbmc, timeout, max_claims):
     base = [
         a for a in case.generate_run_argument_list(esbmc)[1:] if a != "--multi-property"
     ]
-    work = tempfile.mkdtemp(prefix="oracle-claim-")
+    work = scratch_dir("oracle-claim-")
     try:
-        listing = run(esbmc, ["--show-claims"] + base, work, timeout)
+        listing = capture(esbmc, ["--show-claims"] + base, work, timeout)
         if listing is None:
             return case.name, "skip", "claim listing timed out", []
         claims = parse_claims(listing)
@@ -117,7 +93,7 @@ def compare(case, esbmc, timeout, max_claims):
             return case.name, "skip", f"{len(claims)} claim(s)", []
         if len(claims) > max_claims:
             return case.name, "skip", f"{len(claims)} claims over cap", []
-        multi = run(esbmc, ["--multi-property"] + base, work, timeout)
+        multi = capture(esbmc, ["--multi-property"] + base, work, timeout)
         if multi is None:
             return case.name, "skip", "multi-property timed out", []
 
@@ -134,8 +110,8 @@ def compare(case, esbmc, timeout, max_claims):
 
         individual_by_location = {}
         for index, location in claims:
-            single = whole_run_verdict(
-                run(esbmc, ["--claim", str(index)] + base, work, timeout)
+            single = verdict_of(
+                capture(esbmc, ["--claim", str(index)] + base, work, timeout)
             )
             if single in (TIMEOUT, NO_VERDICT):
                 # Says nothing about this claim; drop the whole location rather
@@ -176,23 +152,7 @@ def compare(case, esbmc, timeout, max_claims):
         note = f"{len(claims)} claims, {ambiguous} location(s) not comparable"
         return case.name, "compared", note, mismatches
     finally:
-        shutil.rmtree(work, ignore_errors=True)
-
-
-def collect(suite, modes):
-    suite = os.path.abspath(suite)
-    tests = []
-    for entry in sorted(os.listdir(suite)):
-        directory = os.path.join(suite, entry)
-        if not os.path.isfile(os.path.join(directory, "test.desc")):
-            continue
-        case = TestCase(directory, entry)
-        if case.test_mode not in modes:
-            continue
-        if any(opt in case.test_args for opt in CONFLICTING):
-            continue
-        tests.append(case)
-    return tests
+        drop_scratch(work)
 
 
 def main():
@@ -207,19 +167,9 @@ def main():
     parser.add_argument("--baseline", help="see oracle_flag_parity.py --baseline")
     args = parser.parse_args()
 
-    esbmc = os.path.abspath(args.esbmc)
-    if not os.access(esbmc, os.X_OK):
-        parser.error(f"not executable: {esbmc}")
-
-    baseline = set()
-    if args.baseline:
-        with open(args.baseline, "r", encoding="utf-8") as handle:
-            for line in handle:
-                name = line.split("#", 1)[0].strip()
-                if name:
-                    baseline.add(name)
-
-    tests = collect(args.suite, args.modes.split(","))
+    esbmc = esbmc_path(parser, args.esbmc)
+    baseline = load_baseline(args.baseline)
+    tests = collect_tests(args.suite, args.modes.split(","), CONFLICTING)
     if args.limit:
         tests = tests[: args.limit]
     print(f"{len(tests)} candidate tests, max-claims={args.max_claims}")
@@ -248,8 +198,6 @@ def main():
                 print(f"  ... {done}/{len(tests)}", flush=True)
 
     diverged_names = {name for name, _ in diverged}
-    new = sorted(diverged_names - baseline)
-    stale = sorted(baseline - diverged_names)
 
     print(f"\ncompared     {compared}  (>= 2 distinct claims, within the cap)")
     print(f"diverged     {len(diverged)}")
@@ -262,13 +210,7 @@ def main():
         reasons[note] = reasons.get(note, 0) + 1
     for note, count in sorted(reasons.items(), key=lambda kv: -kv[1]):
         print(f"SKIPPED {count}: {note}")
-    if baseline:
-        for name in stale:
-            print(f"STALE-BASELINE {name}: listed as diverging but agrees now")
-        for name in new:
-            print(f"NEW-DIVERGENCE {name}")
-
-    return 1 if new else 0
+    return 1 if report_baseline(baseline, diverged_names) else 0
 
 
 if __name__ == "__main__":

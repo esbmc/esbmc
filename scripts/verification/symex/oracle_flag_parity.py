@@ -30,75 +30,33 @@ Usage:
 
 import argparse
 import os
-import re
-import shutil
-import subprocess
 import sys
-import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
-REGRESSION = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "regression"
+from oracle_common import (
+    NO_VERDICT,
+    TIMEOUT,
+    capture,
+    collect_tests,
+    drop_scratch,
+    esbmc_path,
+    load_baseline,
+    report_baseline,
+    scratch_dir,
+    verdict_of,
 )
-sys.path.insert(0, os.path.abspath(REGRESSION))
-
-# pylint: disable=import-error,wrong-import-position
-from testing_tool import TestCase  # type: ignore
-
-VERDICT = re.compile(r"^VERIFICATION (SUCCESSFUL|FAILED|UNKNOWN)$", re.MULTILINE)
-
-# Not a verdict: the run never reached one, so the pair says nothing about
-# parity. Counted and reported rather than dropped -- a sweep that silently
-# skips its hard cases reads as "1430 inputs agree" when it is not.
-NO_VERDICT = "no-verdict"
-TIMEOUT = "timeout"
-
-
-def verdict_of(esbmc, args, cwd, timeout):
-    try:
-        proc = subprocess.run(
-            [esbmc] + args,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=timeout,
-            check=False,  # a FAILED verdict exits non-zero and is a result
-        )
-    except subprocess.TimeoutExpired:
-        return TIMEOUT
-    found = VERDICT.findall(proc.stdout.decode("utf-8", "replace"))
-    # Under --multi-property ESBMC prints one line per property; the run's
-    # verdict is FAILED if any property failed.
-    if not found:
-        return NO_VERDICT
-    return "FAILED" if "FAILED" in found else found[-1]
-
-
-def collect(suite, modes):
-    # Absolute: TestCase resolves the input file against test_dir, and each pair
-    # runs in a scratch cwd where a repo-relative path would not exist.
-    suite = os.path.abspath(suite)
-    tests = []
-    for entry in sorted(os.listdir(suite)):
-        directory = os.path.join(suite, entry)
-        if not os.path.isfile(os.path.join(directory, "test.desc")):
-            continue
-        case = TestCase(directory, entry)
-        if case.test_mode in modes:
-            tests.append(case)
-    return tests
 
 
 def run_pair(case, esbmc, flags_a, flags_b, timeout):
     """Both flag-sets on one input, in a scratch cwd so output files cannot
     collide between the two runs or between concurrent tests."""
     base = case.generate_run_argument_list(esbmc)[1:]
-    work = tempfile.mkdtemp(prefix="oracle-parity-")
+    work = scratch_dir("oracle-parity-")
     try:
-        a = verdict_of(esbmc, flags_a + base, work, timeout)
-        b = verdict_of(esbmc, flags_b + base, work, timeout)
+        a = verdict_of(capture(esbmc, flags_a + base, work, timeout))
+        b = verdict_of(capture(esbmc, flags_b + base, work, timeout))
     finally:
-        shutil.rmtree(work, ignore_errors=True)
+        drop_scratch(work)
     return case.name, a, b
 
 
@@ -120,14 +78,12 @@ def main():
     )
     args = parser.parse_args()
 
-    esbmc = os.path.abspath(args.esbmc)
-    if not os.access(esbmc, os.X_OK):
-        parser.error(f"not executable: {esbmc}")
+    esbmc = esbmc_path(parser, args.esbmc)
 
     flags_a = args.a.split()
     flags_b = args.b.split()
     modes = args.modes.split(",")
-    tests = collect(args.suite, modes)
+    tests = collect_tests(args.suite, modes)
 
     # A test already naming one of the flags would compare a configuration
     # against itself, or against one the author deliberately pinned.
@@ -137,13 +93,7 @@ def main():
     if args.limit:
         tests = tests[: args.limit]
 
-    baseline = set()
-    if args.baseline:
-        with open(args.baseline, "r", encoding="utf-8") as handle:
-            for line in handle:
-                name = line.split("#", 1)[0].strip()
-                if name:
-                    baseline.add(name)
+    baseline = load_baseline(args.baseline)
 
     print(f"{len(tests)} tests, modes={modes}, A={flags_a or ['(none)']} B={flags_b}")
 
@@ -166,10 +116,6 @@ def main():
                 print(f"  ... {done}/{len(tests)}", flush=True)
 
     diverged_names = {name for name, _, _ in diverged}
-    new_divergences = sorted(diverged_names - baseline)
-    # A baselined test that now agrees means the underlying defect was fixed;
-    # keeping the entry would mask a later regression of the same test.
-    stale_baseline = sorted(baseline - diverged_names)
 
     print(f"\nagreed       {agreed}")
     print(f"diverged     {len(diverged)}")
@@ -182,14 +128,7 @@ def main():
     for name, a, b in sorted(inconclusive):
         print(f"INCONCLUSIVE {name}: A={a} B={b}")
 
-    if baseline:
-        print(f"\nbaselined    {len(diverged_names & baseline)} of {len(baseline)}")
-        for name in stale_baseline:
-            print(f"STALE-BASELINE {name}: listed as diverging but agrees now")
-        for name in new_divergences:
-            print(f"NEW-DIVERGENCE {name}")
-
-    return 1 if new_divergences else 0
+    return 1 if report_baseline(baseline, diverged_names) else 0
 
 
 if __name__ == "__main__":

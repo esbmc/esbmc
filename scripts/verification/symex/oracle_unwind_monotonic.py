@@ -22,28 +22,23 @@ Usage:
 
 import argparse
 import os
-import re
-import shutil
-import subprocess
 import sys
-import tempfile
+import re
 from concurrent.futures import ThreadPoolExecutor
 
-REGRESSION = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "regression"
+from oracle_common import (
+    NO_VERDICT,
+    TIMEOUT,
+    capture,
+    collect_tests,
+    drop_scratch,
+    esbmc_path,
+    scratch_dir,
+    verdict_of,
 )
-sys.path.insert(0, os.path.abspath(REGRESSION))
 
-# pylint: disable=import-error,wrong-import-position
-from testing_tool import TestCase  # type: ignore
-
-VERDICT = re.compile(r"^VERIFICATION (SUCCESSFUL|FAILED|UNKNOWN)$", re.MULTILINE)
 UNWIND_CLAIM = re.compile(r"unwinding assertion loop", re.IGNORECASE)
 
-# A bound whose run said nothing about the property: excluded from the relation
-# and reported, never silently treated as agreement.
-TIMEOUT = "timeout"
-NO_VERDICT = "no-verdict"
 # FAILED on the unwinding assertion: a bound artefact, not a counterexample.
 FAILED_UNWIND = "failed-unwind"
 FAILED_REAL = "failed-real"
@@ -64,23 +59,10 @@ LOOP_HINT = re.compile(r"\bwhile\b|\bfor\s*\(|\bgoto\b|\bdo\b")
 
 
 def classify(esbmc, args, cwd, timeout):
-    try:
-        proc = subprocess.run(
-            [esbmc] + args,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return TIMEOUT
-    out = proc.stdout.decode("utf-8", "replace")
-    found = VERDICT.findall(out)
-    if not found:
-        return NO_VERDICT
-    if "FAILED" not in found:
-        return found[-1]
+    out = capture(esbmc, args, cwd, timeout)
+    verdict = verdict_of(out)
+    if verdict != "FAILED":
+        return verdict
     return FAILED_UNWIND if UNWIND_CLAIM.search(out) else FAILED_REAL
 
 
@@ -98,33 +80,21 @@ def loop_bearing(case):
 
 
 def collect(suite, modes):
-    suite = os.path.abspath(suite)
-    tests = []
-    for entry in sorted(os.listdir(suite)):
-        directory = os.path.join(suite, entry)
-        if not os.path.isfile(os.path.join(directory, "test.desc")):
-            continue
-        case = TestCase(directory, entry)
-        if case.test_mode not in modes:
-            continue
-        if any(opt in case.test_args for opt in BOUND_OPTIONS):
-            continue
-        if not loop_bearing(case):
-            continue
-        tests.append(case)
-    return tests
+    return [
+        c for c in collect_tests(suite, modes, BOUND_OPTIONS) if loop_bearing(c)
+    ]
 
 
 def run_ladder(case, esbmc, bounds, timeout):
     base = case.generate_run_argument_list(esbmc)[1:]
-    work = tempfile.mkdtemp(prefix="oracle-unwind-")
+    work = scratch_dir("oracle-unwind-")
     try:
         return case.name, [
             classify(esbmc, ["--unwind", str(k)] + base, work, timeout)
             for k in bounds
         ]
     finally:
-        shutil.rmtree(work, ignore_errors=True)
+        drop_scratch(work)
 
 
 def first_violation(bounds, verdicts):
@@ -152,9 +122,7 @@ def main():
     parser.add_argument("--limit", type=int, default=0)
     args = parser.parse_args()
 
-    esbmc = os.path.abspath(args.esbmc)
-    if not os.access(esbmc, os.X_OK):
-        parser.error(f"not executable: {esbmc}")
+    esbmc = esbmc_path(parser, args.esbmc)
 
     bounds = [int(b) for b in args.bounds.split(",")]
     if bounds != sorted(bounds):

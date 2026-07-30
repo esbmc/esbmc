@@ -818,6 +818,7 @@ scripts/verification/symex/
     ├── oracle_flag_parity.py                 H-C1, H-C2, H-C3, H-C4, H-C5, H-B8
     ├── oracle_unwind_monotonic.py            H-C6
     ├── oracle_claim_parity.py                H-C7
+    ├── oracle_common.py                      shared: args, run, verdict, baseline
     ├── baselines/<leg>.txt                   triaged divergences, one per leg
     └── drift_check.py                        transcription-drift guard
 .github/workflows/symex-oracles.yml           scheduled Tier-C job
