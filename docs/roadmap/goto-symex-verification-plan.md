@@ -608,7 +608,7 @@ two configurations.
 
 | ID | Relation | Corpus | Detects |
 |---|---|---|---|
-| **H-C1** | verdict(default) == verdict(`--no-slice`) | `regression/esbmc` CORE (1400 of 1543 dirs) | Slicer unsoundness/incompleteness end-to-end |
+| **H-C1** | verdict(default) == verdict(`--no-slice`) | `regression/esbmc` CORE (1430 of 1574 dirs) | Slicer unsoundness/incompleteness end-to-end. **Run, §15 M5: 1328 agreed, 0 diverged**, 67 inconclusive, 35 skipped |
 | **H-C2** | verdict(default) == verdict(`--no-simplify`) | same | Simplifier / constant-propagation semantic drift (P9) |
 | **H-C3** | verdict(bitwuzla) == verdict(z3) | same | Encoding assumptions that only one solver tolerates |
 | **H-C4** | verdict(default) == verdict(`--no-por`) and == verdict(`--state-hashing`) | `regression/esbmc-unix`, `regression/esbmc` concurrency tests | POR / state-hashing over-pruning (I14, I15) |
@@ -754,8 +754,12 @@ there is no `phi.test.cpp`. H-B2 found R15 and refuted objective 7's
 "byte-identical" wording. **WI-4 was not run** and carries to M5 with D14.
 
 **M5 — Constraint generation: the slicer (1 wk).** H-A4, H-B3, then the
-**H-C1** sweep over all 1400 `regression/esbmc` CORE tests. *Artefact:* slicer
+**H-C1** sweep over all 1430 `regression/esbmc` CORE tests. *Artefact:* slicer
 equisatisfiability suite + the first whole-corpus parity report.
+**Partial, §15 M5.** H-C1 is done — `oracle_flag_parity.py`, 1328 agreed, 0
+diverged — and it also covers H-C2/H-C3/H-C5 by argument. H-A4 and H-B3 remain;
+per §6.4, H-A4's obligations should be discharged at Tier B rather than
+transcribed. The scheduled CI job (§11.2) is not yet wired.
 
 **M6 — Subsystem interaction: concurrency (1.5 wk).** H-A6, H-C4, and the R11
 investigation (pointer-mediated writes in `get_expr_globals`). Highest
@@ -793,9 +797,7 @@ regression/esbmc/symex_<area>_<nn>_fail/      Tier A, anti-vacuity twin (§6.1 r
 regression/esbmc/symex_<area>_<nn>_probe/     Tier A, reachability probe (§6.1 r6)
 unit/goto-symex/<area>.test.cpp               Tier B — prefer this, see §6.4
 scripts/verification/symex/
-    ├── oracle_slice_parity.sh                H-C1
-    ├── oracle_simplify_parity.sh             H-C2
-    ├── oracle_solver_parity.sh               H-C3
+    ├── oracle_flag_parity.py                 H-C1, H-C2, H-C3, H-C5
     ├── oracle_por_parity.sh                  H-C4
     ├── oracle_unwind_monotonic.sh            H-C6
     └── drift_check.py                        transcription-drift guard
@@ -805,6 +807,15 @@ scripts/verification/symex/
 `<area>` ∈ `{ssa, merge, mergequeue, slice, unwind, mpor, frame, eqctx,
 lookup, refalias}` — one area per harness family, matching §7. `<nn> = 00` is
 the M0 template.
+
+H-C1, H-C2, H-C3 and H-C5 are the *same* relation — verdict(A) == verdict(B)
+over a corpus — so §15 M5 replaced the four planned shell scripts with one
+parameterised `oracle_flag_parity.py`, invoked as `--b=--no-slice`,
+`--b=--no-simplify`, `--a=--bitwuzla --b=--z3` and
+`--b=--no-interval-symex-guard`. It builds each argument list through
+`regression/testing_tool.py`'s `TestCase` rather than re-parsing `test.desc`, so
+a sweep invokes each input exactly as `ctest` does. H-C4 and H-C6 stay separate:
+one compares three configurations, the other is monotonicity across bounds.
 
 The `_fail` and `_probe` directories hold a one-line
 `#include "../symex_<area>_<nn>/symex_<area>_<nn>.c"` and select their variant
@@ -1693,6 +1704,61 @@ read the live state *before* `run()` and so need `setup_for_new_explore()` in th
 constructor, while `unwind` defers it precisely so its `with()` options are set
 first. Reconciling those is a five-file refactor with no property gain, so it
 should land on its own.
+
+### M5 (H-C1) — 2026-07-30
+
+**Result: slicer verdict-parity holds over the corpus — 1328 inputs agree, 0
+diverge. The first whole-corpus parity report in this plan, and the first
+artefact of D8.**
+
+| | |
+|---|---|
+| Corpus | `regression/esbmc`, 1430 `CORE` of 1574 dirs |
+| Relation | verdict(default flags) == verdict(default flags + `--no-slice`) |
+| **agreed** | **1328** |
+| **diverged** | **0** |
+| inconclusive | 67 — no verdict in one or both legs |
+| skipped | 35 — `test.desc` already names `--no-slice` |
+| Cap | 15 s per leg, 12 concurrent; ESBMC 8.4.0 at master `31aee3387a` |
+
+**The denominators matter more than the headline.** 1328/1430 is the coverage
+this run actually achieved, not 1430. Of the 67 inconclusive, 66 produce **no
+verdict in either leg on this build** — an uncaught `irep2_cast_error` on the
+`memcpy`/bitfield inputs, and `_BitInt` widths this target rejects — so they are
+CORE tests already failing locally, unrelated to slicing, and correctly excluded
+from a parity comparison rather than counted as agreement. The 67th,
+`github_1600`, is `A=FAILED, B=timeout`: it exceeds 15 s only with `--no-slice`,
+which is the slicer working as the performance optimisation it also is. A Linux
+CI build should convert most of the 66 into real comparisons, so the sweep should
+be re-run there before this row is quoted as corpus-wide.
+
+**Four planned scripts collapsed into one.** H-C1, H-C2, H-C3 and H-C5 are the
+same relation over different flags, so `oracle_flag_parity.py` takes both
+flag-sets as arguments instead of §11.1's four near-identical shell scripts
+(§11.1 updated). It builds each argument list through
+`regression/testing_tool.py`'s `TestCase` rather than re-parsing `test.desc` —
+which also inherits the `--timeout`/`--memlimit` stripping and the
+path-resolution rule. Two bugs found while getting that right, both of which
+would have produced a *falsely clean* or *falsely alarming* sweep:
+
+1. Running each pair in a scratch cwd (needed so the two legs cannot collide on
+   output files) broke the repo-relative input paths `TestCase` generates, so
+   **every** test returned "no verdict" — a run that reports 0 divergences
+   because it never verified anything. Fixed by resolving the suite to an
+   absolute path. The lesson is that "0 diverged" is only meaningful next to a
+   non-trivial `agreed` count, which is why the summary prints both.
+2. A test whose own flags already name the compared flag would compare a
+   configuration against itself; 35 such tests exist and are reported as
+   skipped, not silently folded into agreement.
+
+Per the no-silent-caps rule, every skipped, inconclusive and diverging test is
+printed by name, and the script exits non-zero only on a real divergence.
+
+**Still open in M5.** H-A4 and H-B3. Per §6.4 and the M2 precedent, H-A4 should
+not be built as a Tier-A transcription: its A4.1 obligation *is* H-B3, and A4.2
+(no retained step reads a symbol defined only by an ignored step) and A4.3 are
+observable on the real sliced equation, so both belong at Tier B. The scheduled
+CI job of §11.2 is not yet wired, so D8 remains partial.
 
 ---
 
