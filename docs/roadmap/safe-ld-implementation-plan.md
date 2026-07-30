@@ -860,9 +860,28 @@ is the only gate on the front-end.
   | GOTO creation | 0.33 s | 0.37 s | 0.76 s | 1.50 s |
 
   This removes the resolver as the obstacle to the WP2 <5 s / 1000-rung
-  criterion — 1050 contacts now cost 0.76 s to lower. The criterion is stated
-  end-to-end, so the remaining cost is symex and the solver, which is where the
-  measurement should go next.
+  criterion, but **does not meet it**. Measured end-to-end on ladder-shaped
+  programs (each rung a short series chain, every third with a parallel branch),
+  `--k-induction --unlimited-k-steps`, all verdicts SUCCESSFUL:
+
+  | rungs | GOTO creation | end-to-end |
+  |---|---|---|
+  | 100 | 0.12 s | 2.6 s |
+  | 250 | 0.26 s | 12.4 s |
+  | 500 | 0.48 s | 48.0 s |
+  | 1000 | 0.96 s | 190.9 s |
+
+  GOTO creation is linear and is **0.5% of the runtime**; end-to-end grows
+  roughly quadratically, so the criterion holds only to ~130 rungs and is missed
+  by ~38x at 1000.
+
+  The cost is **symex, not the solver**. At 500 rungs one symex pass takes 5.7 s
+  for 12673 assignments, of which slicing then removes 12659 — 99.9% — leaving a
+  single VCC that the solver discharges in 0.000 s. k-induction repeats that
+  whole pass per step. So the lever is not the resolver or the solver but the
+  work symex does on rungs the property never reads: slicing earlier, or
+  restricting the scan body to the cone of influence of the properties, is what
+  the criterion needs.
 - **Arithmetic and unknown blocks on a rung path** are still not modelled —
   only timers and counters are resolved on graphical paths — but they are now
   a hard `UnsupportedConstruct(name, tier=2)` error rather than a dropped path,
@@ -954,8 +973,9 @@ the undriven-sink and unsupported-block rejections and the enumeration bound.
 ### Suggested next increments
 
 1. Run the M1 review of `docs/safe-ld-sos-semantics.md` and close its §10 items.
-2. Measure end-to-end `ld-verify` time against the WP2 <5 s / 1000-rung
-   criterion. The resolver is no longer the bottleneck, so what remains is
-   symex and the solver.
+2. Cut the symex cost that dominates end-to-end time (see the table above):
+   slice against the properties' cone of influence before symex rather than
+   after, so a 1000-rung program does not re-explore 12673 assignments per
+   k-induction step to discharge one VCC.
 3. Model arithmetic/unknown blocks on graphical rung paths, so the programs
    rejected as `UnsupportedConstruct` can be verified rather than refused.
