@@ -869,6 +869,34 @@ is the only gate on the front-end.
 - **Counter reset from a contact chain** is diagnosed and left unconnected;
   only a reset pin wired to a variable is modelled.
 
+### Validation beyond the regression suite
+
+`scripts/ld_resolver_oracle.py` is a randomised **structural** oracle for the
+graphical resolver. It generates random PLCopen networks, derives each one's
+power-flow formula from the ladder algebra independently of the resolver, and
+asserts through ESBMC that the coil is equivalent to that formula (both
+implications, so an undriven coil fails rather than passing vacuously). It is not
+a differential test against a previous resolver, which would bless a bug present
+in both. Two shapes are generated: `sp` (series-parallel, what a vendor tool
+draws) and `dag` (layered, each node fed by a random subset of the previous
+layer — not series-parallel, so it is what checks that path enumeration and the
+per-node recurrence agree by distributivity).
+
+This exists because the graphical corpus is only two real programs
+(`stairs_light`, `water_control`), which is thin cover for changing the resolver.
+Current state: **101 generated programs pass** (69 `sp` at depths 3–5, 32 `dag`
+up to 4 layers x 3 wide). Run it before and after any resolver change:
+
+```sh
+python3 scripts/ld_resolver_oracle.py 30 4 sp        # series-parallel
+python3 scripts/ld_resolver_oracle.py 20 3 dag 4 3   # re-convergent DAG
+```
+
+It does not yet cover function blocks on a rung path, edge contacts, feedback
+variables, or Set/Reset coils — those are still covered only by `stairs_light`
+and the driver tests, and extending the oracle to them is a prerequisite for
+trusting a resolver rewrite.
+
 ### Suggested next increments
 
 1. Run the M1 review of `docs/safe-ld-sos-semantics.md` and close its §10 items.
