@@ -2428,6 +2428,54 @@ and let the boundary say which component is at fault.
 **Still open in M8.** Six unattributed wrong-verdict KNOWNBUGs, after R20 (2),
 R21 (3), R22 (1), one rejected against R18 and one identified as a wrong test.
 
+### M8 (cont. 4) — 2026-07-30
+
+**Result: three more KNOWNBUGs classified, none of them a symex defect. Two fall
+outside §2.3's scope and one rests on a premise the tool does not share. Three
+remain.**
+
+**`40_stack_64_inner_scope_true` — the premise, not the nested scope.** The test
+declares two `int`s in nested scopes, comments them as 8 bytes each, and expects
+`--stack-limit 16` to pass. Measuring what ESBMC actually charges:
+
+| program (`--64`) | smallest passing `--stack-limit` |
+|---|---|
+| empty `main` | 8 (nothing charged) |
+| `char a;` | ≤ 28 |
+| `int a;` | **32** |
+| `int a;` + nested `int a;` (the test) | **64** |
+| three `int`s | > 80 |
+
+So a 4-byte `int` costs 32, and the cost is linear in the number of locals.
+Object size *is* tracked — a `char` is cheaper, an 80-byte array needs more than
+128 — but the scale is inflated roughly eightfold. The test cannot pass at 16
+whatever the nested-scope handling does, so it is not evidence of a scoping bug;
+resolving it means deciding whether the per-object charge is intended. Left
+unattributed rather than filed, since I did not read the accounting to find out.
+
+**`github_1626-no-free` — C library model, not symex.** It expects
+`printf("%s", *ptr)` on an empty struct to fail as `%s` scans for a terminator.
+That requires modelling `printf`'s format-string semantics, which lives in the
+operational model under `src/c2goto/library`, not in goto-symex. Out of §2.3's
+scope.
+
+**`github_248` — k-induction convergence, not symex.** Mutually recursive
+`a()`/`b()` with an infinite loop and no assertions, under
+`--k-induction --function b`; it returns UNKNOWN where the test wants
+SUCCESSFUL. UNKNOWN is the honest answer from a non-converging inductive step,
+and k-induction sits above the engine this plan verifies.
+
+**Three remain unattributed:** `03_inf2`, `03_circular_reduce` (already tested
+against R18 and rejected) and `github_2572_2` (`--z3 --ir`).
+
+**Worth saying plainly about M8 as a whole.** Twelve wrong-verdict KNOWNBUGs went
+in; four turned out to be real defects with reproducers (R20 ×2, R22 ×1, plus
+R21 ×3 as an incompleteness), one was a wrong test, two are other subsystems, one
+rests on an unshared premise, and one was tested against a candidate cause and
+rejected. That distribution — a third genuine defects, a third mis-scoped or
+mis-specified — is the useful output of the survey, and it is not visible from
+the `KNOWNBUG` label alone.
+
 ---
 
 ## Appendix A — Methodological basis
