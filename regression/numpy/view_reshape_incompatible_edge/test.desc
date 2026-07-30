@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: ValueError: cannot reshape array of size 5 into shape \(2, 3\)$
