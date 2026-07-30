@@ -6,8 +6,7 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0–M6 closed, M7 partial** (§15 verdict log); M8 not yet executed.
-§6.4
+**Status:** **M0–M7 closed** (§15 verdict log); M8 not yet executed. §6.4
 records the tier-ordering rule M1 produced. Except where §15 records a
 discharged result, every harness below is a *proposal* and nothing here asserts
 a proof. Findings not marked discharged in §9.2 remain *hypotheses with cited
@@ -615,7 +614,7 @@ two configurations.
 | **H-C4** | verdict(default) == verdict(`--no-por`) and == verdict(`--state-hashing`) | `regression/esbmc-unix`, `regression/esbmc` concurrency tests | POR / state-hashing over-pruning (I14, I15). **Run, §15 M6: 258/0 and 255/0 — clean, but the R18 witness is a program the corpus does not contain** |
 | **H-C5** | verdict(default) == verdict(`--no-interval-symex-guard`) | `regression/esbmc`, `regression/k-induction` | Interval-domain guard pruning (the documented hazard at `symex_goto.cpp:57-79`). **Run, §15 M7: 1360 agreed, 0 diverged** |
 | **H-C6** | **Unwind monotonicity**: FAILED at `--unwind k` ⇒ FAILED at every `k' > k` | loop-bearing subset | Lost counterexamples when the bound grows — a pure soundness relation, no oracle needed |
-| **H-C7** | per-claim verdicts under `--multi-property` == the individual `--claim N` runs | `regression/esbmc` multi-assert tests | Claim/slice interaction bugs (cf. recent `multi_property_check` fixes) |
+| **H-C7** | per-claim verdicts under `--multi-property` == the individual `--claim N` runs | `regression/esbmc` multi-assert tests | Claim/slice interaction bugs (cf. recent `multi_property_check` fixes). **Run, §15 M7 (cont.): 326 compared, 5 diverged** — 4 of them invisible to any run-verdict oracle |
 
 **Cost control.** H-C1/C2/C3 are the cheap wins (one extra run per test).
 Run them as a scheduled (nightly/weekly) CI job, not per-PR; H-C6 needs 2–3 runs
@@ -785,10 +784,10 @@ requirement.
 H-C6, H-C7 wired as a scheduled CI job; H-B8. *Artefact:* the oracle job + a
 per-oracle baseline of known divergences (each triaged to a filed issue or a
 justified waiver — **an untriaged divergence is a blocker, not a baseline**).
-**Partial, §15 M7.** H-C3 (1269/0), H-C5 (1360/0), H-C6 (0 violations, 44 of 163
-tests exercising the relation) and H-B8 (1358/3 → **R19**) are run;
-`.github/workflows/symex-oracles.yml` wires all of them with per-leg baselines.
-**H-C7 remains**, and R19 suggests it is worth writing.
+**Closed, §15 M7.** H-C3 (1269/0), H-C5 (1360/0), H-C6 (0 violations, 44 of 163
+tests exercising the relation), H-B8 (1358/3 → **R19**) and H-C7 (326 compared,
+5 diverged) are run; `.github/workflows/symex-oracles.yml` wires all of them with
+per-leg baselines. H-C7's four untriaged divergences carry to M8.
 
 **M8 — Previously-reported bugs and regression cases (0.5 wk, continuous).**
 Convert every historical goto-symex issue with a reproducer into a Tier-A or
@@ -818,6 +817,7 @@ unit/goto-symex/<area>.test.cpp               Tier B — prefer this, see §6.4
 scripts/verification/symex/
     ├── oracle_flag_parity.py                 H-C1, H-C2, H-C3, H-C4, H-C5, H-B8
     ├── oracle_unwind_monotonic.py            H-C6
+    ├── oracle_claim_parity.py                H-C7
     ├── baselines/<leg>.txt                   triaged divergences, one per leg
     └── drift_check.py                        transcription-drift guard
 .github/workflows/symex-oracles.yml           scheduled Tier-C job
@@ -835,9 +835,11 @@ parameterised `oracle_flag_parity.py`, invoked as `--b=--no-slice`,
 argument list through `regression/testing_tool.py`'s `TestCase` rather than
 re-parsing `test.desc`, so a sweep invokes each input exactly as `ctest` does.
 H-C4 is two invocations of the same script (`--b=--no-por`,
-`--b=--state-hashing`) over `regression/esbmc-unix`. Only H-C6 needs its own
-driver: it is monotonicity across bounds, not a two-configuration comparison, and
-it has to classify a FAILED by the violated property (§15 M7).
+`--b=--state-hashing`) over `regression/esbmc-unix`. H-C6 and H-C7 need their own
+drivers: the first is monotonicity across bounds rather than a two-configuration
+comparison and has to classify a FAILED by the violated property; the second
+compares *per-claim* verdicts, where the two interfaces do not enumerate the same
+property set (§15 M7).
 
 `--baseline <file>` takes a list of already-triaged divergences: the script exits
 non-zero only on a divergence *not* in the file, and prints `STALE-BASELINE` for
@@ -2110,6 +2112,77 @@ comparison has more to say *without* `--smt-during-symex`. It also carries H-B3'
 per-claim residue from M5. The workflow keeps `continue-on-error` until a full
 Linux run confirms the baselines, since they were populated on macOS where 68-72
 inputs reach no verdict.
+
+### M7 (cont.) — 2026-07-30, M7 closed
+
+**Result: H-C7 built and run. It finds 5 per-claim disagreements, 4 of which the
+run-verdict oracles cannot see at all — but none is yet a *new* confirmed defect,
+and per §11.3 none may be baselined until triaged.**
+
+| | |
+|---|---|
+| Relation | per-claim verdict under `--multi-property` == verdict of the matching `--claim k` run |
+| **compared** | **326** (≥ 2 claims, within the 12-claim cap) |
+| **diverged** | **5** |
+| skipped | 984 — 528 with fewer than 2 claims, 433 over the claim cap, 23 with no per-claim report |
+
+**Every divergence is the same direction: `--claim k` says FAILED, the
+`--multi-property` report says that claim PASSED.** Only `github_1655` also
+disagrees on the *run* verdict; for the other four the run still reports FAILED
+because a different claim fails, so the mis-reported claim is invisible to any
+oracle that compares one verdict per run. That is precisely the blind spot M5
+recorded when it passed H-B3's per-claim residue here, now demonstrated rather
+than argued.
+
+**Flag-level triage, before calling anything new.** All five inherit non-default
+flags from their own `test.desc`:
+
+| Test | Flags | Reading |
+|---|---|---|
+| `github_1655` | `--smt-during-symex` | **R19** reproduced from the corpus |
+| `github_192`, `github_205`, `github_45-1-32` | `--no-unwinding-assertions --unwind 1` | R12 truncation territory |
+| `github_interval_guard_phi_fail` | `--compact-trace` ⇒ `--no-slice` | R17's neighbourhood |
+
+So H-C7's first run independently rediscovers R19 and lands the other four inside
+two already-documented hazards. Whether any of the four is a *separate* defect
+needs per-test root-causing: `loop_bound_exceeded` emits its truncating
+assumption during symex, before either claim selection or slicing, so the two
+legs share one equation and one truncation — which argues the disagreement is
+real rather than an artefact of differing exploration. That argument is not a
+proof, so the four stay untriaged and **unbaselined**: §11.3 makes an untriaged
+divergence a blocker, and writing them into `claim-parity.txt` now would convert
+four open questions into four permanent exemptions.
+
+**Three oracle bugs of my own, each of which produced confident nonsense first.**
+Worth recording because all three are the same failure mode — an oracle that
+cannot tell "no disagreement" from "no comparison":
+
+1. **Keying on the printed comment.** `--show-claims` puts the comment and the
+   claim expression on separate lines; `--multi-property` concatenates them
+   (`assertion` vs `assertion (_Bool)0`). Every generic-comment claim looked
+   ABSENT. Fixed by keying on source location.
+2. **Assuming the two interfaces enumerate the same properties.** They do not:
+   `--multi-property` reports properties `--show-claims` never lists (unwinding
+   assertions among them), and one location can carry three reported properties
+   against one listed claim. So the comparison is now per-location *and* only
+   where each side has exactly one entry, with the rest counted as not
+   comparable; the aggregate check covers what that drops.
+3. **Treating an empty per-claim report as "all passed".** Passing
+   `--multi-property` to a test whose flags already contain it makes ESBMC emit
+   no report at all, which scored as agreement and produced a false mismatch on
+   the R19 companion test. Now `--multi-property` is stripped from the inherited
+   flags and an empty report is a skip, not a pass.
+
+Validated against a known answer rather than only on the corpus: the oracle flags
+`multi_property_smt_during_symex` (R19's KNOWNBUG) at both the per-location level
+— naming line 8, `FAILED vs PASSED` — and the aggregate level, and does **not**
+flag its `_last` companion.
+
+**M7 closed.** D8 is delivered: `oracle_flag_parity.py`, `oracle_unwind_monotonic.py`
+and `oracle_claim_parity.py`, all wired in `.github/workflows/symex-oracles.yml`
+with per-leg baselines. Carried forward: triage of H-C7's four untriaged
+divergences, and the 433 tests over the claim cap, which is a real coverage gap
+rather than a tuning choice — a test with 38 claims costs 40 runs.
 
 ---
 

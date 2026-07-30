@@ -158,3 +158,48 @@ jobs:
           path: oracle-unwind.log
           retention-days: 30
           if-no-files-found: warn
+
+  claim-parity:
+    name: claim-parity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    continue-on-error: true
+    # Weekly only: this leg runs one --claim pass per property, so its cost grows
+    # with the claim count rather than being two runs per test.
+    if: github.event_name != 'schedule' || github.event.schedule == '41 3 * * 0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ESBMC
+        run: ./scripts/build.sh -b RelWithDebInfo -e Off -C
+
+      - name: Run claim parity
+        run: |
+          BASELINE=scripts/verification/symex/baselines/claim-parity.txt
+          test -f "$BASELINE" || BASELINE=/dev/null
+          python3 scripts/verification/symex/oracle_claim_parity.py \
+            --esbmc build/src/esbmc/esbmc \
+            --max-claims 12 \
+            --timeout 60 \
+            --baseline "$BASELINE" \
+            | tee oracle-claim.log
+
+      - name: Summarise
+        if: always()
+        run: |
+          test -f oracle-claim.log || exit 0
+          {
+            echo "### claim-parity"
+            echo '```'
+            grep -E '^(compared|diverged|skipped|MISMATCH|NEW-DIVERGENCE|STALE-BASELINE)' oracle-claim.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-claim
+          path: oracle-claim.log
+          retention-days: 30
+          if-no-files-found: warn
