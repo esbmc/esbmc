@@ -837,6 +837,8 @@ private:
 
   bool contains_copied_numpy_view_name(const nlohmann::json &node);
 
+  void reject_numpy_view_mutating_method_call(const nlohmann::json &node);
+
   std::optional<nlohmann::json>
   select_return_value_for_call(const nlohmann::json &call_node) const;
 

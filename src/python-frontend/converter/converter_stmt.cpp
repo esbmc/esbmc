@@ -1146,6 +1146,33 @@ bool python_converter::contains_copied_numpy_view_name(
   return false;
 }
 
+void python_converter::reject_numpy_view_mutating_method_call(
+  const nlohmann::json &node)
+{
+  if (
+    !node.is_object() || node.value("_type", "") != "Call" ||
+    !node.contains("func") || !node["func"].is_object() ||
+    node["func"].value("_type", "") != "Attribute" ||
+    !node["func"].contains("value"))
+    return;
+
+  static const std::set<std::string> mutating_methods = {"fill", "sort"};
+  if (mutating_methods.count(node["func"].value("attr", "")) == 0)
+    return;
+
+  const std::string root_name = root_name_from_subscript(node["func"]["value"]);
+  if (root_name.empty())
+    return;
+
+  const std::string root_id = resolve_name_symbol_id(root_name);
+  if (root_id.empty())
+    return;
+
+  if (numpy_view_copy_sources_.count(root_id) != 0)
+    throw std::runtime_error(
+      "TypeError: writing through a copied numpy view is not supported");
+}
+
 std::optional<nlohmann::json> python_converter::select_return_value_for_call(
   const nlohmann::json &call_node) const
 {
@@ -5146,6 +5173,8 @@ exprt python_converter::get_block(
       }
 
       // Function calls are handled here
+      reject_numpy_view_mutating_method_call(element["value"]);
+
       exprt empty;
       exprt expr = get_expr(element["value"]);
       if (expr != empty)
