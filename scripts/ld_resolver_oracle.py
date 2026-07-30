@@ -35,8 +35,10 @@ fail_seed<N>/ directory for inspection.
 """
 import os
 import random
-import subprocess
+# Runs the esbmc binary; the argv list is built here and no shell is involved.
+import subprocess  # nosec B404
 import sys
+import tempfile
 
 ESBMC = os.environ.get("ESBMC", "build/src/esbmc/esbmc")
 RAIL_LID = 1
@@ -200,7 +202,9 @@ def _sink_xml(coil, exits):
 
 def emit(seed, cfg):
     """Return (ld_xml, props_yaml, formula) for one generated network."""
-    net = Network(random.Random(seed), cfg["nvars"])
+    # A seeded PRNG is the point: a failing case must be reproducible from its
+    # seed alone. Nothing here is security-relevant.
+    net = Network(random.Random(seed), cfg["nvars"])  # nosec B311
     if cfg["mode"] == "dag":
         exits, expr = net.layered_dag(cfg["layers"], cfg["width"])
     else:
@@ -243,7 +247,8 @@ def run_one(seed, tmpdir, cfg, timeout=60):
     try:
         # ESBMC splits output across stdout and stderr; merge or the verdict
         # line is missed.
-        proc = subprocess.run(
+        # Fixed argv, no shell, and both paths are generated above.
+        proc = subprocess.run(  # nosec B603
             [ESBMC, ld_path, "--ld-props", props_path, "--k-induction",
              "--max-k-step", "4"],
             capture_output=True,
@@ -279,15 +284,16 @@ def main():
         "layers": int(argv[3]) if len(argv) > 3 else 3,
         "width": int(argv[4]) if len(argv) > 4 else 2,
     }
-    tmpdir = os.environ.get("TMPDIR", "/tmp")
-
     tally = {}
     failures = []
-    for seed in range(seeds):
-        got, expr, xml, props = run_one(seed, tmpdir, cfg)
-        tally[got] = tally.get(got, 0) + 1
-        if got != "SUCCESSFUL":
-            failures.append((seed, got, expr, xml, props))
+    # A private directory per run: the generated files reuse one name, so two
+    # concurrent runs sharing $TMPDIR would overwrite each other's input.
+    with tempfile.TemporaryDirectory(prefix="ld-oracle-") as tmpdir:
+        for seed in range(seeds):
+            got, expr, xml, props = run_one(seed, tmpdir, cfg)
+            tally[got] = tally.get(got, 0) + 1
+            if got != "SUCCESSFUL":
+                failures.append((seed, got, expr, xml, props))
 
     print(f"seeds={seeds} mode={cfg['mode']} depth={cfg['depth']} "
           f"layers={cfg['layers']} width={cfg['width']} -> {tally}")
