@@ -1375,10 +1375,28 @@ read through a single typed accessor on `solidity_convertert`
 | [#4959](https://github.com/esbmc/esbmc/pull/4959) | `#sol_data_loc` | 3 set / 0 read |
 
 (`#sol_type` was already encapsulated pre-plan via `get_sol_type` /
-`set_sol_type`.) After the pass, raw `"#sol` access outside the accessor
-bodies is gone; the Solidity type-metadata surface sits behind ~10 typed
-seams that a future migration can repoint **in one place each**, rather
-than at the dozens of scattered call sites that existed before. Every PR
+`set_sol_type`.) After the pass, raw `"#sol` access is gone **for every
+attribute in the table above**; the Solidity type-metadata surface sits behind
+~10 typed seams that a future migration can repoint **in one place each**,
+rather than at the dozens of scattered call sites that existed before.
+
+**Correction (2026-07-30) — the pass was per-attribute, not exhaustive.** An
+earlier revision of this section claimed raw `"#sol` access outside the
+accessor bodies was *gone*, unqualified. It is not: two attributes were never
+in scope of the five PRs above and still have raw writes.
+
+| site | attribute | added |
+|---|---|---|
+| `solidity_convert_modifier.cpp:92` | `#sol_tuple_id` | 2026-04-06 |
+| `solidity_convert_stmt.cpp:122` | `#sol_unchecked` | 2026-05-05 |
+
+Both predate the pass's conclusion (2026-05-30), so these are attributes the
+pass never covered — not regressions against it. Re-derive with
+`git grep -n '"#sol' -- src/solidity-frontend`: 24 hits, 21 of them the
+accessor bodies in `solidity_convert.h`, 2 the raw writes above, 1 a comment.
+Anyone resuming Part III should fold these two into the accessor set first, so
+the "one repoint-point per attribute" property the milestone claims actually
+holds for the whole `#sol_*` surface. Every PR
 was a behaviour-preserving mechanical no-op (same key, same value,
 same storage); verdict validation ran on Linux CI, since the
 `esbmc-solidity` suite cannot run on macOS (the `sol64` operational models
@@ -4419,6 +4437,16 @@ straight into the symbol table via `set_type(type2tc)` rather than
 no legacy `typet`; symbol types are IREP2 at write; verdict + text unchanged.
 
 ### Phase V.2 — IREP2-native attribute carriage (removes W3)
+
+> **Superseded (2026-07-30) — read
+> `docs/roadmap/scope-v2-w3-attribute-carriage.md` before acting on this
+> paragraph.** The symbol-keyed companion below cannot serve any of the
+> consumers: every W3 read is off a transient type *value*, with no symbol in
+> hand — the same Q-S1 wall Part III §14 hit for `#sol_*`, recorded there after
+> this text was written and never propagated here. The consumer list is also
+> incomplete (four reader sites, not three) and `#cformat` has no external
+> consumer at all.
+
 Move `#cpp_type`/`#member_name`/`#cformat` off `irept` onto a **typed IREP2
 companion keyed by symbol id** (the §5.1 pattern — *not* a generic string-map,
 which re-introduces the escape hatch IREP2 abolished). Teach the three external
@@ -5245,11 +5273,19 @@ Two items, both sized and neither speculative:
 
 1. **The coupled arithmetic-conversion effort** (operand-level reconciliation,
    then the assignment conversion) — the sole remaining blocker on the
-   `python_adjust` flip. `scope-v1k-adjuster.md` sizes it as multi-PR and proves
-   that shipping either half alone is unsound.
+   `python_adjust` flip. `scope-v1k-adjuster.md` proves that shipping either
+   half alone is unsound. Owner document:
+   `docs/roadmap/scope-coupled-arith-assign-conversion.md`, which re-sizes it
+   at 3 PRs (down from "multi-PR effort") on the finding that the
+   usual-arithmetic-conversion engine already has native `expr2tc` overloads
+   that `python_adjust` already calls.
 2. **V.2/W3 attribute carriage**, which V.1a and V.6 both depend on. Untouched;
    the highest shared blast radius left in the program (`clang_cpp_adjust_expr`,
-   `cpp_expr2string`, `goto2c/expr2c` serve C++ and Solidity too).
+   `cpp_expr2string`, `goto2c/expr2c` serve C++ and Solidity too — and a fourth
+   reader, `clang_cpp_adjust_code_gen`, that §V.2 does not name). Owner
+   document: `docs/roadmap/scope-v2-w3-attribute-carriage.md`, which finds
+   §V.2's prescribed design refuted by Part III's own Q-S1 argument and
+   recommends re-scoping.
 
 V.5 is closed rather than pending — see its scope doc. With those recorded, the
 V-track has no undocumented residue: every remaining item has a named owner

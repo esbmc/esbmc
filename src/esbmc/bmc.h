@@ -44,6 +44,16 @@ public:
   };
   size_t ltl_results_seen[4];
 
+  /* ltl_run_thread returns an ltl_res, or one of these sentinels. Finding no
+   * prefix assertion at all is distinct from having proved every one of them
+   * unsatisfiable: the former says nothing about the property. */
+  static constexpr int ltl_res_uninstrumented = -3;
+
+  // Set when an LTL run found no prefix assertion to check, so no four-valued
+  // verdict is available; consulted by report_result to report UNKNOWN rather
+  // than the ⊤ that an absent assertion used to produce.
+  std::atomic<bool> ltl_uninstrumented{false};
+
   BigInt interleaving_number;
   BigInt interleaving_failed;
 
@@ -100,7 +110,9 @@ protected:
 
   smt_resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
 
-  int ltl_run_thread(symex_target_equationt &equation) const;
+  /* Not const: the solver that satisfied a prefix assertion is kept in
+   * runtime_solver so the verdict can be backed by a counterexample. */
+  int ltl_run_thread(symex_target_equationt &equation);
 
   /// \param truncated_loops how many loops exploration cut off at the
   ///   unwinding bound, carried in from the symex result rather than read back

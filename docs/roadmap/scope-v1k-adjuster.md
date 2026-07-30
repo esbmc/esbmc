@@ -1335,6 +1335,20 @@ Next owner: take the coupled conversion effort as its own scope, then re-run
 this whole-corpus census as the flip gate. Do not re-triage per case — the
 census now names the single mechanism.
 
+**That scope now exists: `docs/roadmap/scope-coupled-arith-assign-conversion.md`
+(2026-07-30).** It carries the census methodology above forward as a
+non-optional gate, and re-sizes the effort at **3 PRs** rather than the
+open-ended "multi-PR effort in its own right" this section estimated. The
+re-sizing rests on two findings this document did not have: the
+usual-arithmetic-conversion engine already has complete `expr2tc` overloads
+(`c_typecast.h:33,43`) which `python_adjust.cpp:428` already calls — so only
+the *guard* is narrow, not the engine — and ~88 of
+`adjust_expr_binary_arithmetic`'s 114 lines are the complex branch, which the
+Python converter appears to pre-lower itself (`math/complex_handler.cpp:98-110`
+builds `ieee_*2tc` over `.real`/`.imag` directly). That second finding is a
+hypothesis with a named discharge, not a result; the new scope gates on it
+(G0) before any code is written.
+
 ### Per-case triage round 14 — array decay at the call-argument seam (2026-07-28)
 
 **A strided whole-corpus census is now the frontier finder.** With round 11's open
