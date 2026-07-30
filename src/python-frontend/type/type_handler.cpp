@@ -1108,13 +1108,23 @@ const typet type_handler::get_list_type() const
   return lower_to_seam(pointer_type2tc(symbol_type2tc(list_type_symbol->id)));
 }
 
-typet type_handler::get_list_element_type() const
+typet type_handler::get_tagged_object_type() const
 {
   static const symbolt *type = nullptr;
   const char *type_id = "tag-struct __ESBMC_PyObj";
   type = converter_.symbol_table().find_symbol(type_id);
   assert(type);
   return symbol_typet(type->id);
+}
+
+bool type_handler::is_tagged_scalar_type(const typet &t) const
+{
+  return t == get_tagged_object_type();
+}
+
+typet type_handler::get_list_element_type() const
+{
+  return get_tagged_object_type();
 }
 
 typet type_handler::get_slice_type() const

@@ -206,6 +206,10 @@ public:
 
   typet get_list_element_type() const;
 
+  typet get_tagged_object_type() const;
+
+  bool is_tagged_scalar_type(const typet &t) const;
+
   /*
    * Gets the generic dictionary type from the symbol table.
    * @return A pointer to the generic __python_dict__ struct type.
