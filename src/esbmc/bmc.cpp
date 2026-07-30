@@ -2204,7 +2204,10 @@ smt_resultt bmct::multi_property_check(
   // Initial values
   smt_resultt final_result = P_UNSATISFIABLE;
   std::mutex result_mutex;
-  std::unordered_set<size_t> jobs;
+  // Solved in claim order: an unordered container would make the per-claim
+  // solve order — and which claim a shared-solver bug lands on — vary by
+  // standard library.
+  std::vector<size_t> jobs;
 
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
@@ -2288,7 +2291,7 @@ smt_resultt bmct::multi_property_check(
 
   // TODO: This is the place to check a cache
   for (size_t i = 1; i <= remaining_claims; i++)
-    jobs.emplace(i);
+    jobs.push_back(i);
 
   /* This is a JOB that will:
    * 1. Generate a solver instance for a specific claim (@parameter i)
