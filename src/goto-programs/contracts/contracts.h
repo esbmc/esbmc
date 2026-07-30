@@ -83,7 +83,9 @@ public:
   ///        When non-empty AND matches the function being enforced, the wrapper
   ///        allocates fresh backing storage for all pointer parameters so that
   ///        the harness-generated nil args become valid dereferenceable objects.
-  void enforce_contracts(
+  /// \return The subset of \p to_enforce that was actually enforced. A name
+  ///         absent from the result named nothing this pass could act on.
+  std::set<std::string> enforce_contracts(
     const std::set<std::string> &to_enforce,
     const std::string &entry_function = "",
     bool check_assigns_compliance = false);
@@ -172,10 +174,23 @@ public:
   /// \return True if the function should be skipped (destructor, __cxa_*, etc.)
   bool is_compiler_generated(const std::string &function_name) const;
 
-  /// \brief Find function symbol
-  /// \param function_name Function name (can be full ID or simple name)
-  /// \return Pointer to function symbol, or nullptr if not found
-  symbolt *find_function_symbol(const std::string &function_name);
+  /// \brief Say why \p function_name cannot be used by a contract flag.
+  ///
+  /// The eligibility rules differ between the two passes and always have:
+  /// enforce_contracts resolves a name through find_function_symbol, while
+  /// replace_calls selects through matches_replace_pattern, which is why a
+  /// C++ id with parameters satisfies one and not the other. This method is
+  /// the single place both rules live, so a caller can ask the same question
+  /// the pass will ask, and get the same answer.
+  ///
+  /// Call it before any pass runs: enforce_contracts rewrites the functions it
+  /// acts on into wrappers that carry no contract, so asking afterwards
+  /// reports a name that was used as unusable.
+  ///
+  /// \param for_replace Ask replace_calls' rule rather than enforce's
+  /// \return The reason, or an empty string when the name is usable
+  std::string
+  diagnose_contract_target(const std::string &function_name, bool for_replace);
 
 private:
   goto_functionst &goto_functions;
@@ -197,6 +212,11 @@ private:
   /// and produce the spurious "array bounds violated" of #5314, so prefer a
   /// recorded extent whenever one exists.
   static constexpr size_t WITNESS_IDX_FALLBACK_ELEMS = 100;
+
+  /// \brief Find function symbol
+  /// \param function_name Function name (can be full ID or simple name)
+  /// \return Pointer to function symbol, or nullptr if not found
+  symbolt *find_function_symbol(const std::string &function_name);
 
   /// \brief Rename function
   /// \param old_id Original function ID

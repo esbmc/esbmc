@@ -1,3 +1,5 @@
+/* extern_fn is declared, has no body here, and IS called: the flag must be
+   rejected because the body is absent, not because nothing calls it. */
 int extern_fn(int x);
 
 int f(int x)
@@ -8,5 +10,5 @@ int f(int x)
 
 int main(void)
 {
-  return f(3) - 3;
+  return f(3) + extern_fn(1) - 3;
 }
