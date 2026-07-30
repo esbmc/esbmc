@@ -1200,6 +1200,35 @@ void python_converter::reject_unknown_numpy_view_call(
   }
 }
 
+void python_converter::reject_numpy_view_identity_query(
+  const nlohmann::json &node)
+{
+  if (!node.is_object())
+    return;
+
+  if (node.value("_type", "") == "Attribute")
+  {
+    const std::string attr = node.value("attr", "");
+    if (attr == "base" || attr == "owndata")
+      throw std::runtime_error(
+        "TypeError: numpy view identity is not supported");
+
+    if (node.contains("value"))
+      reject_numpy_view_identity_query(node["value"]);
+    return;
+  }
+
+  if (
+    node.value("_type", "") == "Call" && node.contains("func") &&
+    node["func"].is_object() && node["func"].value("_type", "") == "Attribute")
+  {
+    const std::string attr = node["func"].value("attr", "");
+    if (attr == "shares_memory" || attr == "may_share_memory")
+      throw std::runtime_error(
+        "TypeError: numpy view identity is not supported");
+  }
+}
+
 std::optional<nlohmann::json> python_converter::select_return_value_for_call(
   const nlohmann::json &call_node) const
 {
@@ -2599,7 +2628,10 @@ void python_converter::get_var_assign(
   }
 
   if (ast_node.contains("value") && ast_node["value"].is_object())
+  {
+    reject_numpy_view_identity_query(ast_node["value"]);
     reject_unknown_numpy_view_call(ast_node["value"]);
+  }
 
   // Stage 1 object-model migration (#3067/#4773): a simple Name target bound to
   // a class instance — either a constructor call `o = ClassName(...)` or an
@@ -5225,6 +5257,7 @@ exprt python_converter::get_block(
       }
 
       // Function calls are handled here
+      reject_numpy_view_identity_query(element["value"]);
       reject_numpy_view_mutating_method_call(element["value"]);
       reject_unknown_numpy_view_call(element["value"]);
 
