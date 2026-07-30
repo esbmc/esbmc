@@ -154,11 +154,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
    * first forced include, which can transitively reach ESBMC's own models and
    * would otherwise see nondet_* / __ESBMC_* undeclared (github #5868).
    * Forced includes are emitted into the predefines buffer in order, after all
-   * -D macros, so being first satisfies both constraints.
-   *
-   * This is what lets the ASTUnit be built via LoadFromCompilerInvocation,
-   * which -- unlike the ...Action() overload -- accepts our FileManager and so
-   * reads bundled headers through esbmc_clang_vfs(). */
+   * -D macros, so being first satisfies both constraints. */
   const std::string intrinsics_path = clang_vfs_root() + "/esbmc_intrinsics.h";
   clang::PreprocessorOptions &PPOpts = Invocation->getPreprocessorOpts();
   /* getMemBufferCopy, not getMemBuffer: `intrinsics` belongs to the caller and
