@@ -5272,13 +5272,17 @@ per-shape dispatcher coverage rather than a fidelity impossibility.
 Two items, both sized and neither speculative:
 
 1. **The coupled arithmetic-conversion effort** (operand-level reconciliation,
-   then the assignment conversion) — the sole remaining blocker on the
+   then the assignment conversion) — the remaining blocker on the
    `python_adjust` flip. `scope-v1k-adjuster.md` proves that shipping either
    half alone is unsound. Owner document:
    `docs/roadmap/scope-coupled-arith-assign-conversion.md`, which re-sizes it
    at 3 PRs (down from "multi-PR effort") on the finding that the
    usual-arithmetic-conversion engine already has native `expr2tc` overloads
-   that `python_adjust` already calls.
+   that `python_adjust` already calls. **Phase 0 (reachability census) and
+   Phase 1 (the operand-level arm) have landed**; Phase 2 (the assignment
+   conversion) and Phase 3 (the flip) remain. Phase 0 also found that half the
+   flip-gate regressions are a *second* mechanism this scope does not clear, so
+   the flip needs one more scope than it looked like it did.
 2. **V.2/W3 attribute carriage**, which V.1a and V.6 both depend on. Untouched;
    the highest shared blast radius left in the program (`clang_cpp_adjust_expr`,
    `cpp_expr2string`, `goto2c/expr2c` serve C++ and Solidity too — and a fourth

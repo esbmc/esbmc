@@ -1,16 +1,17 @@
 # Scope — the coupled arithmetic + assignment conversion (the `python_adjust` flip blocker)
 
-> **Status: Phase 0 discharged (2026-07-30); Phases 1-3 not started.** This
-> document exists because `docs/roadmap/scope-v1k-adjuster.md` §"Flip gate
+> **Status: Phases 0 and 1 discharged (2026-07-30); Phases 2-3 not started.**
+> This document exists because `docs/roadmap/scope-v1k-adjuster.md` §"Flip gate
 > (2026-07-29)" closes that scope with exactly one remaining prerequisite and
 > hands it off: *"Next owner: take the coupled conversion effort as its own
 > scope, then re-run this whole-corpus census as the flip gate."* This is that
 > scope.
 >
-> §9 records the Phase 0 census and the prototype measurements it enabled. **No
-> code has landed** — the instrumentation and the prototype arms were reverted,
-> as Phase 0 requires. §9 confirms §2's coupling argument and corrects §3.2,
-> §3.4 and §4 Phase 2.
+> §9 records the Phase 0 census and the prototype measurements it enabled; its
+> instrumentation and prototype arms were reverted, as Phase 0 requires. §10
+> records what Phase 1 shipped, which is **smaller than §3.4 sized it**: two of
+> the three pieces §3.3/§9.1 asked for are measured dead on this path and were
+> not built.
 
 ## 1. What this unblocks, and what it does not
 
@@ -176,7 +177,7 @@ Discharge G0. Instrument `python_adjust::adjust_expr` to log the `type_id` and
 suite, and tabulate. Deliverable: a table of reachable operand type kinds.
 Revert the instrumentation.
 
-### Phase 1 — operand-level arithmetic reconciliation
+### Phase 1 — operand-level arithmetic reconciliation — **LANDED, §10**
 
 Add the binary-arithmetic arm to `adjust_expr`, covering the kinds Phase 0
 found reachable. Widen the `python_adjust.cpp:421` guard from
@@ -416,3 +417,62 @@ correction recorded in §4 Phase 2.
 One claim in §2 did not reproduce: mirroring the assignment conversion alone
 does **not** fix `precedence2` (it stays FAILED in that configuration). The
 `neural-net_fail` half of that sentence reproduced exactly.
+
+## 10. Phase 1 — what landed (2026-07-30)
+
+An `else if` arm in `python_adjust::adjust_expr` over the eight IREP2
+counterparts of the ids legacy routes to `adjust_expr_binary_arithmetic`
+(`add sub mul div modulus bitand bitxor bitor`), calling
+`c_implicit_typecast_arithmetic(expr2tc&, expr2tc&, ns)` on the two operands
+when both are `bv`/`floatbv`/`fixedbv`. Roughly 20 lines of code, against §3.4's
+40-60 estimate, because two of the three pieces that estimate included turned
+out to be dead on this path.
+
+### 10.1 Two sub-arms §3.3/§9.1 asked for, both measured dead
+
+Neither was shipped; keeping either would be dead instrumentation.
+
+- **The `ieee_*` rebuild (§3.3).** `map_operator` already returns
+  `ieee_add`/`ieee_sub`/`ieee_mul`/`ieee_div` whenever the result type is
+  floatbv (`converter/converter_internal.h:78-89`), so a plain floatbv-typed
+  arithmetic node never reaches the adjuster in the first place. Confirmed
+  empirically: an instrumented build logging every floatbv-typed `add`/`sub`/
+  `mul`/`div` reaching the arm fired **0 times over 597 tests**. §3.3's concern
+  — that IREP2 cannot retype a node in place — is real but does not arise here,
+  because nothing needs retyping.
+- **The node-type adoption (§9.1).** Legacy's
+  `if (type0 == type1 && is_number(type0)) expr.type() = type0;` has nothing to
+  do on this path: `converter_binop.cpp:2540-2560` already derives the node type
+  from its operands and pre-promotes a signed rhs against an unsigned lhs.
+  Instrumented, the adoption fired **0 times** over the corpus, over
+  hand-built probes, and — notably — over both tests §9.1 named, including the
+  `E = uint64(2**4 - 1)` shape recorded as its witness. **§9.1's reading of that
+  shape does not survive: it is not an adoption case.**
+
+### 10.2 Gates
+
+| gate | result |
+|---|---|
+| **G2** (`neural-net_fail --fixedbv` FAILED) | **holds** — legacy FAILED, bare hop-off FAILED, arm FAILED. Matches §9.3 row 5 |
+| G1/G3 tests | all eight verdict-identical to the bare hop-off; unchanged, as expected — they need Phase 2 |
+| default path | unaffected by construction: `python_adjust` runs only under `--python-irep2-adjust-only` / `--python-irep2-adjust`, both default-off (`python_language.cpp:299,331`). 400-test default-path slice green |
+| hop-off suite | 146/150; the 4 failures are `esbmc-solidity`, blocked on macOS (no `solc`, empty `sol64` models) |
+
+### 10.3 The verdict witness, and a residual gap
+
+Phase 1 is not merely verdict-neutral — it clears a false alarm the bare hop-off
+reports, which is what the new `python_irep2_adjust_only_binary_arith{,_fail}`
+pair pins:
+
+```python
+def mix(n: int, x: float) -> float:
+    return n * x + n
+assert mix(2, 1.5) == 5.0     # --fixedbv: legacy SUCCESSFUL,
+                              # bare hop-off FAILED, arm SUCCESSFUL
+```
+
+A neighbouring shape does **not** clear, and is worth recording for Phase 2:
+`return 3 * x - 1` under `--fixedbv` stays FAILED under the arm where legacy
+reports SUCCESSFUL. The operands reconcile; what is missing is the conversion at
+the **return seam**, which is the same node-kind question §4 Phase 2 already
+flags for assignments.
