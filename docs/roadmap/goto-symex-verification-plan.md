@@ -2726,6 +2726,49 @@ recurring error is accepting a flag that recovers a counterexample as evidence f
 *why*, when the flag changes more than one thing. A flag is a valid probe only
 when its effects are separable, and confirming that separation is the step to add.
 
+### M8 (cont. 10) — 2026-07-30
+
+**Result: R23's divergence point located by instrumenting the scheduler. The
+detected and missed variants take identical scheduling decisions until one
+point, where the missed variant switches away from `t1` after a single loop
+iteration.**
+
+There is no debug channel for the reachability tree — `src/goto-symex` logs only
+`goto-trace`, `rename`, `slice` and `ssa` — so this needed temporary
+instrumentation in `reachability_treet::get_next_formula`, logging every
+`decide_ileave_direction` result as `from → to` with the source line. The patch
+was local only and is reverted; it is described here so the measurement can be
+repeated.
+
+| decision | `other = 0` (detected) | `receive = 0` (missed) |
+|---|---|---|
+| 1–3 | identical | identical |
+| 4 | `1→1` at line 7 | `1→1` at line 7 |
+| 5 | `1→1` at line 6 | `1→1` at line 6 |
+| **6** | `1→1` at line 7 — **second iteration** | **`1→0` at line 6 — switches away** |
+| 7 | `1→1` at line 6 | `0→1` at line 10 |
+| 8 | `1→0` | — |
+| total decisions | 8 | 7 |
+
+Line 6 is the `for` header and line 7 the guarded body, so in the detected
+variant `t1` is allowed to run through *both* loop iterations, which is exactly
+what the racy schedule needs — read 0 at `i=0`, `main` writes, read 1 at `i=1`.
+In the missed variant the scheduler leaves `t1` after the first iteration and
+never returns to it in a state where the second read can see the write.
+
+**What this does and does not establish.** It locates *where* the exploration
+diverges — the decision at the loop header after the first iteration — and
+confirms the cause is the set of generated interleavings rather than the
+encoding, which the duplicate-write result in (cont. 7) already implied. It does
+**not** yet say why that decision differs, and the honest candidates are
+`dfs_explore_thread`'s per-frame `mark_explored` bookkeeping and the extra
+context-switch point the guarded write introduces. Distinguishing them means
+logging scheduler-frame state alongside the decision, which is the next step.
+
+Recorded rather than pushed further because the remaining question is a
+scheduler-internals investigation, not a property this plan's harnesses can
+settle.
+
 ---
 
 ## Appendix A — Methodological basis
