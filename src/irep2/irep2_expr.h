@@ -1,11 +1,11 @@
 #ifndef IREP2_EXPR_H_
 #define IREP2_EXPR_H_
 
-#include <util/config.h>
-#include <util/c_types.h>
-#include <util/fixedbv.h>
-#include <util/ieee_float.h>
-#include <util/location.h>
+#include <util/config/config.h>
+#include <util/lang/c_types.h>
+#include <util/arith/fixedbv.h>
+#include <util/arith/ieee_float.h>
+#include <util/irep/location.h>
 #include <irep2/irep2_type.h>
 
 // So - make some type definitions for the different types we're going to be
@@ -311,8 +311,7 @@ class constant_fixedbv2t : public expr2t
 public:
   fixedbvt value;
 
-  /** Primary constructor.
-   *  @param type Type of this expression.
+  /** Primary constructor. The type is derived from value.spec.
    *  @param value fixedbvt object containing number we'll be operating on
    */
   constant_fixedbv2t(const fixedbvt &value)
@@ -334,8 +333,7 @@ class constant_floatbv2t : public expr2t
 public:
   ieee_floatt value;
 
-  /** Primary constructor.
-   *  @param type Type of this expression.
+  /** Primary constructor. The type is derived from value.spec.
    *  @param value ieee_floatt object containing number we'll be operating on
    */
   constant_floatbv2t(const ieee_floatt &value)
@@ -537,10 +535,9 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Constant array.
- *  Contains a vector of array elements, pretty self explanatory. Only valid if
- *  its type has a constant sized array, can't have constant arrays of dynamic
- *  or infinitely sized arrays.
+/** Constant vector.
+ *  Holds one expression per lane of a vector-typed literal (the vector
+ *  analogue of constant_array2t).
  */
 class constant_vector2t : public expr2t
 {
@@ -548,8 +545,8 @@ public:
   std::vector<expr2tc> datatype_members;
 
   /** Primary constructor.
-   *  @param type Type of this array, must be a constant sized array
-   *  @param membrs Vector of elements in this array
+   *  @param type Vector type of this literal
+   *  @param members Vector of per-lane element expressions
    */
   constant_vector2t(const type2tc &type, const std::vector<expr2tc> &members)
     : expr2t(type, constant_vector_id), datatype_members(members)
@@ -1117,7 +1114,8 @@ ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_delete);
 #undef ESBMC_DEFINE_CODE_EXPRESSION_1OP
 
 /** `code_*` declaration carrying `(type, irep_idt name)`. Used for
- *  `code_decl`/`code_dead`. */
+ *  `code_dead`. (code_decl2t is defined separately below because it also
+ *  carries an initializer.) */
 #define ESBMC_DEFINE_CODE_DECL(name)                                           \
   class name##2t : public expr2t                                               \
   {                                                                            \
@@ -1272,7 +1270,7 @@ public:
    *  @param type Type of this expr.
    *  @param v1 First operand.
    *  @param v2 Second operand.
-   *  @param v3 Second operand.
+   *  @param v3 Third operand.
    *  @param rm rounding mode. */
   ieee_fma2t(
     const type2tc &type,
@@ -1640,12 +1638,16 @@ public:
   index2t(const type2tc &type, const expr2tc &source, const expr2tc &idx)
     : expr2t(type, index_id), source_value(source), index(idx)
   {
-    /* A `symbol_id` source is permitted only as a transient pre-resolution
-       state (V.1k two-phase source invariant, see member2t above); the
-       IREP2-native adjuster resolves it to an array/vector before symex. */
+    /* A `symbol_id` or `pointer_id` source is permitted only as a transient
+       pre-resolution state (V.1k two-phase source invariant, see member2t
+       above); the IREP2-native adjuster resolves a symbol source to an
+       array/vector and rewrites a pointer source `p[i]` to `*(p+i)` before
+       symex. A pointer source arises when a legacy `index` over a decayed
+       array (a Python string, char*) is migrated via get_value2(). */
     assert(
       is_array_type(source) || is_vector_type(source) ||
-      source->type->type_id == type2t::symbol_id);
+      source->type->type_id == type2t::symbol_id ||
+      source->type->type_id == type2t::pointer_id);
   }
   index2t(const index2t &ref) = default;
 

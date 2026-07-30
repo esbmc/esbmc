@@ -9,18 +9,18 @@
 
 #include <pointer-analysis/value_set_analysis.h>
 
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/prefix.h>
-#include <util/pretty.h>
-#include <util/std_expr.h>
-#include <util/time_stopping.h>
-#include <util/type_byte_size.h>
-#include <util/message.h>
+#include <util/irep/migrate.h>
+#include <util/base/prefix.h>
+#include <util/symtab/pretty.h>
+#include <util/irep/std_expr.h>
+#include <util/base/time_stopping.h>
+#include <util/expr/type_byte_size.h>
+#include <util/message/message.h>
 
 #include <vector>
 
@@ -47,7 +47,7 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
       // check assertion to produce a counterexample
       assertion(gen_false_expr(), msg);
 
-      // incremental verification succeeded
+      // incremental solving resolved the claim (counterexample will follow)
       return true;
     }
     log_status("Incremental verification returned unknown");
@@ -81,11 +81,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   {
     if (options.get_bool_option("multi-property"))
     {
-      // Log that this assertion was trivially verified
-      log_success(
-        "✓ PASSED: '{}' at {}",
-        msg,
-        cur_state->source.pc->location.as_string());
+      record_property_verdict(msg, property_verdictt::Passed);
 
       // Track trivially verified claims
       ++simplified_claims;
@@ -111,10 +107,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   {
     if (options.get_bool_option("multi-property"))
     {
-      log_success(
-        "✓ PASSED (interval): '{}' at {}",
-        msg,
-        cur_state->source.pc->location.as_string());
+      record_property_verdict(msg, property_verdictt::Passed, "interval");
       ++simplified_claims;
     }
 
@@ -126,7 +119,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   if (
     options.get_bool_option("smt-symex-assert") &&
     check_incremental(new_expr, msg))
-    return; // Verification succeeded, no further action needed
+    return; // claim fully resolved by incremental solving
 
   symex_witness_assert(new_expr, msg);
 
@@ -147,6 +140,15 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
       return;
     }
   }
+}
+
+void goto_symext::record_property_verdict(
+  const std::string &msg,
+  property_verdictt verdict,
+  const std::string &note)
+{
+  goto_functionst::property_verdicts.record(
+    msg + " at " + cur_state->source.pc->location.as_string(), verdict, note);
 }
 
 void goto_symext::assertion(
@@ -237,7 +239,6 @@ void goto_symext::assume(const expr2tc &the_assumption)
 
   cur_state->guard.guard_expr(assumption);
 
-  // Irritatingly, assumption destroys its expr argument
   expr2tc tmp_guard = cur_state->guard.as_expr();
   target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
 
@@ -249,7 +250,11 @@ void goto_symext::assume(const expr2tc &the_assumption)
 goto_symext::symex_resultt goto_symext::get_symex_result()
 {
   return goto_symext::symex_resultt(
-    target, total_claims, remaining_claims, simplified_claims);
+    target,
+    total_claims,
+    remaining_claims,
+    simplified_claims,
+    bounded_loop_truncations);
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -328,7 +333,10 @@ void goto_symext::symex_step(reachability_treet &art)
       expr2tc thecode = instruction.code, assign;
       if (make_return_assignment(assign, thecode))
       {
+        auto saved_source = cur_state->source;
+        cur_state->source = cur_state->top().calling_location;
         goto_symext::symex_assign(assign);
+        cur_state->source = saved_source;
       }
 
       symex_return(thecode);
@@ -670,11 +678,9 @@ void goto_symext::run_intrinsic(
     ex_state.get_active_state().level2.rename(v);
     assert(v->expr_id == expr2t::expr_ids::constant_vector_id);
 
-    // Create new vector
     std::vector<expr2tc> members;
     for (const auto &x : to_constant_vector2t(v).datatype_members)
     {
-      // Create a typecast call
       auto typecast = typecast2tc(subtype, x);
       members.push_back(typecast);
     }
@@ -849,7 +855,6 @@ void goto_symext::run_intrinsic(
     if (ex_state.cur_state->guard.is_false())
       return;
 
-    // Get the argument
     expr2tc arg0 = func_call.operands[0];
     internal_deref_items.clear();
     expr2tc deref = dereference2tc(get_empty_type(), arg0);
@@ -1579,7 +1584,6 @@ void goto_symext::add_memory_leak_checks()
 
           /* Rename so that it reflects the current state. */
           assert(cur_state->call_stack.size() >= 1);
-          // cur_state->top().level1.rename(sym_expr2);
           cur_state->rename(sym_expr2);
 
           /* Further below we'll look at the value-set of (the L1 version of)
@@ -1678,7 +1682,6 @@ void goto_symext::add_memory_leak_checks()
               /* value-set assumes L1 symbols */
               s.rlevel = symbol2t::renaming_level::level1_global;
             }
-            // assert(s.rlevel == symbol2t::renaming_level::level1_global);
           }
 
           /* Collect all objects reachable from 'globals' in 'points_to'. */
@@ -1798,9 +1801,7 @@ void goto_symext::add_memory_leak_checks()
           to_symbol2t(to_address_of2t(e).ptr_obj).get_symbol_name());
 
     maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj) {
-      // Accumulator for OR-ing conditions
       expr2tc is_any;
-      // Iterate over each (expression, condition) pair in tgts
       for (const auto &[e, g] : tgts)
       {
         /* 'obj' is the address of a statically known dynamic object; 'e' is

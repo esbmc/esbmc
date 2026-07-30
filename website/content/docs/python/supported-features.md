@@ -26,7 +26,7 @@ This page is a reference of all Python language constructs, data structures, and
 
 - **Function definitions**: Parameters, return values, and calls
 - **Variadic parameters**: `*args` syntax for variable-length positional argument lists
-- **Type annotations**: Basic types (`int`, `float`, `bool`, `str`), `Any`, `Union[T1, T2]`, PEP 604 `T1 | T2` syntax (including `T | None` on class attributes)
+- **Type annotations**: Basic types (`int`, `float`, `bool`, `str`), `Any`, `Union[T1, T2]`, PEP 604 `T1 | T2` syntax (including `T | None` on class attributes), subscripted forms (`list[int]`), **string forward references** (`node: 'Foo'`) and **dotted** annotations (`node: pkg.mod.Robot`, resolved on the last component). An annotation that cannot be resolved degrades to a clean error rather than a crash
 - **Union types**: Both `Union[int, bool]` and `int | bool` syntax are supported, including chained unions with multiple members
 - **Type widening**: ESBMC selects the widest type from Union members using the hierarchy `float > int > bool`
 - **Any type**: When a function is annotated `-> Any`, ESBMC infers the actual return type by analyzing return statements in the function body; supports `int`, `float`, `bool`, and expressions evaluating to those types
@@ -47,6 +47,7 @@ This page is a reference of all Python language constructs, data structures, and
 - **Inheritance**: Single and multi-level inheritance; verification of scenarios involving overridden methods
 - **`super()` calls**: `super().__init__(...)` and other `super().method(...)` calls, enabling verification of polymorphic behavior and parent-constructor side effects
 - **Explicit base-class `__init__`**: unbound parent-constructor calls of the form `Base.__init__(self, ...)` (the pre-`super()` idiom) are dispatched to the base constructor with `self` bound correctly
+- **`@staticmethod` and `@classmethod`**: receiver binding is taken from the method's decorator list rather than guessed from the first parameter's name. A `@staticmethod` receives no implicit receiver (so `M.twice(6)` binds `6` to the first real parameter), and a `@classmethod`'s `cls` parameter is typed against the enclosing class, so `cls.<attr>` resolves
 - **`@property` getters**: reading a `@property`-decorated attribute (`obj.area`) invokes the decorated getter method rather than looking up a struct field; inherited properties resolve through the base class
 - **Classes as first-class values**: a class name passed as a bare value (`register(Twist)`) — the class object itself, not an instance — is modelled as an opaque placeholder for inert uses (storing/forwarding the class), while normal construction through the name (`Twist()`) is unaffected
 - **Class-method defaults**: `Name` defaults referencing `ESBMC_default_*` helpers are hoisted past the enclosing `ClassDef` so they remain visible at call sites
@@ -62,6 +63,7 @@ This page is a reference of all Python language constructs, data structures, and
 - Empty and literal f-strings: `f""`, `f"Just a string"`
 - F-string concatenation with other strings
 - IEEE 754–compliant 32-bit and 64-bit float-to-string conversion
+- **Shortest-repr floats**: `str()`, `repr()`, f-string interpolation and empty-`{}` `format()` share one renderer that reproduces CPython's `repr` — a whole value below `1e16` renders as `N.0`, everything else uses the fewest significant digits that read back as the same `double`, with the same fixed/exponential cut-over. So `str(0.1 + 0.2)` is `"0.30000000000000004"`, `str(1e-5)` is `"1e-05"` and `repr(0.1234567)` is exact, where a previous release degraded these to a nondeterministic string (which made a correct assertion report a spurious `VERIFICATION FAILED`)
 
 ## Data Structures
 
@@ -81,7 +83,7 @@ This page is a reference of all Python language constructs, data structures, and
 - `in` operator: Membership testing (`2 in [1, 2, 3]`), including membership of a user-class instance by identity (`obj in [obj]`)
 - `del l[i]`: Remove the element at a constant index; `del l[i:j]` removes a slice
 - **Slice assignment**: `l[i:j] = src` and the extended form `l[i:j:k] = src`, including grow/shrink replacement (step 1), step > 1 (CPython requires matching lengths), and negative step (`l[::-1] = src`)
-- `+` operator: List concatenation (`[1,2] + [3,4]`)
+- `+` operator: List concatenation (`[1,2] + [3,4]`). A definite non-list right operand (`[1,2] + 3`, `[1,2] + "x"`) raises a catchable `TypeError`, matching CPython's `can only concatenate list (not "int") to list`; an unknown/`Any`-typed operand is left alone rather than misfiring on imprecise typing
 - **Repetition**: `lst * n` with both literal and variable lists
 - **Nested lists**: Method calls on subscripted elements (e.g., `nested[i].append(v)`)
 - **Typed instance attributes**: `self.attr: List[T]` instance attributes with full method support
@@ -198,6 +200,8 @@ Byte sequences and integer class methods:
 - **Numeric-tower properties** — `int.numerator` / `int.denominator` (an `int` is the ratio `n/1`), `int.real` / `int.imag`, and `float.real` / `float.imag`. `float.numerator` / `float.denominator` and these properties on a `bool` deliberately raise a clean `AttributeError` (CPython's `float` is not a `Rational`).
 - **`float.is_integer()`** — constant-folds on a literal float receiver (e.g. `(2.0).is_integer()` → `True`), evaluated as `isfinite(d) && d == trunc(d)` to match CPython
 - **`float.as_integer_ratio()` / `int.as_integer_ratio()`** — folds a numeric literal to its exact `(numerator, denominator)` pair in lowest terms (`(2.5).as_integer_ratio()` → `(5, 2)`, `(5).as_integer_ratio()` → `(5, 1)`, `(-2.5)` → `(-5, 2)`), including the exact dyadic ratio of a non-representable decimal (`(0.1).as_integer_ratio()`); the folded tuple unpacks (`n, d = (1.5).as_integer_ratio()`)
+- **`float.hex()`** — folds a literal float receiver to CPython's exact hexadecimal string (`(3.5).hex()` → `"0x1.c000000000000p+1"`), including negative and subnormal magnitudes and the special `-0.0` / `0.0` spellings. A `Name` receiver is not folded
+- **`float.fromhex(s)`** — the exact inverse over a **constant string**, matched against the strict C99 hex-float grammar `[sign]0x<hex>[.<hex>]p[sign]<dec>` that `float.hex()` emits, so the `hex → fromhex` round trip is exact. CPython's lenient spellings (no `0x` prefix, missing `p` exponent, `inf`/`nan`, out-of-range input) are rejected rather than folded
 - **`str.encode()` / `bytes.decode()`** — standalone constant-folded conversions over **ASCII** data (`s.encode()` → byte array of ordinals, `b.decode()` → string of byte values); a non-ASCII / multi-byte character falls through to a clean error, matching CPython's `UnicodeDecodeError`. The round-trip form `s.encode().decode()` is also supported.
 
 ## Error Handling
@@ -211,6 +215,7 @@ Byte sequences and integer class methods:
 
 **Built-in exception hierarchy**:
 - `BaseException` → `Exception` → `AssertionError`, `ValueError`, `TypeError`, `IndexError`, `KeyError`, `ZeroDivisionError`, `ImportError`
+- `BaseException` → `KeyboardInterrupt` (raisable and catchable; like `BaseException` itself, its `__init__` takes a required argument)
 - `OSError` → `FileNotFoundError`, `FileExistsError`, `PermissionError`
 
 Exception instances expose a message attribute and support `__str__()`.
@@ -286,7 +291,9 @@ The `--strict-types` flag enables type compatibility validation for function arg
 ## Module System
 
 - **`__name__`**: Set to `"__main__"` when run directly; set to the module name when imported. Enables `if __name__ == "__main__":` idioms.
-- **Imports**: Standard `import` and `from ... import ...` styles validated at verification time
+- **Imports**: Standard `import` and `from ... import ...` styles validated at verification time. Module-level and function-local imports are also processed when verifying a single function with `--function`, so calls through imported modules (including operational models such as `math` and `random`) resolve there too
+- **Multiple files on the command line**: `esbmc a.py b.py` converts each file as its own translation unit of the same program — its own imports, its own global pre-registration, its own `__name__`/`__file__` — and appends each into `python_user_main`, mirroring how the C frontend merges several `.c` files. (Earlier releases kept only the last file, so a violated assertion in `a.py` silently dropped out of verification.)
+- **Relative imports**: `from .module import X` resolves as before. The no-module forms `from . import X` and `from .. import X` are treated as *unresolved* — the importing module still converts and verifies — instead of aborting
 - **Local bindings shadow imported modules**: When a name is both an imported module and a local binding (e.g. a parameter `node` while `from node import Node` is in scope), attribute access such as `node.value` resolves to the local binding, following Python's LEGB rule, rather than to a module member.
 - **Selective imports preserve module-level constants**: `from M import f, C` retains plain `Assign` bindings such as `INT_BOUND = 1024` in addition to `AnnAssign` ones. Tuple-unpacking targets are treated atomically.
 - **Parser package layout**: The Python parser ships as a package under `src/python-frontend/parser/` (entrypoint `parser/__main__.py`, public facade `parser/__init__.py`, import resolution in `parser/import_resolver.py`). The resolver emits deterministic, review-friendly diagnostics for missing modules, cyclic imports, and relative-import rewrites.
@@ -299,7 +306,7 @@ The `--strict-types` flag enables type compatibility validation for function arg
 | `int`, `float`, `bool`, `chr`, `ord`, `str`, `repr`, `hex`, `oct`, `bin`, `ascii` | Type conversions and representations. `bin`, `hex`, and `oct` accept non-literal integer arguments: a compile-time-foldable expression (e.g. `bin(round(3.0))`) folds to the exact literal, while a genuinely symbolic operand (a function parameter or variable) lowers to a runtime operational model (`__python_int_to_{bin,hex,oct}`) producing the correctly prefixed string (`0b`/`0x`/`0o`, a leading `-` for negatives, lowercase hex digits); a non-integer argument still raises `TypeError`. `bin` is `LLONG_MIN`-safe; `ascii` emits `\xNN`/`\uNNNN`/`\UNNNNNNNN` escapes for non-ASCII codepoints. |
 | `pow(b, e)` | Shares the `**` operator lowering (integer, float, bool operands) |
 | `pow(b, e, m)` | 3-argument modular exponentiation: exact `BigInt` for constant integer operands; symbolic operands raise an unsupported diagnostic rather than emit unsound floating-point modulo |
-| `format(value[, spec])` | Builtin formatting (distinct from the `str.format()` method). Constant-folds a literal integer with a bare presentation-type spec (`'d'`/`'x'`/`'X'`/`'o'`/`'b'` or empty) — `format(255, "x")` → `"ff"` (no `0x`/`0o`/`0b` prefix, leading `-` for negatives, `LLONG_MIN`-safe) — and a constant string with the default spec to itself. Width/alignment/precision specs, float values, and variable arguments raise a clean error rather than a wrong fold |
+| `format(value[, spec])` | Builtin formatting (distinct from the `str.format()` method). Constant-folds a literal integer with a bare presentation-type spec (`'d'`/`'x'`/`'X'`/`'o'`/`'b'` or empty) — `format(255, "x")` → `"ff"` (no `0x`/`0o`/`0b` prefix, leading `-` for negatives, `LLONG_MIN`-safe) — and a constant string with the default spec to itself. A **typeless float spec** (no presentation type) is folded too: width, alignment, sign and zero-padding (`format(1.5, "10")`, `format(-1.5, "08")`, `format(1.5, "=+10")`) render the digits through the shared shortest-repr renderer and then pad, and `,`/`_` grouping groups the integer part by 3 as CPython does (`format(1234.5, ",")` → `"1,234.5"`). Combinations that are *not* modelled — typeless precision (`format(1.5, ".2")`), grouping with an explicit float type (`",.1f"`), grouping plus zero/`=` padding (`"08,"`) — and variable arguments raise a clean error rather than a wrong fold |
 | `callable(obj)`, `issubclass(cls, base)` | Resolved at compile time from the symbol table and AST class hierarchy |
 | `len` | Works on lists, sets, strings, tuples |
 | `range` | Used in `for` loops |

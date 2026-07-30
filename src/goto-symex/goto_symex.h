@@ -8,10 +8,10 @@
 #include <map>
 #include <optional>
 #include <pointer-analysis/dereference.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/options.h>
-#include <util/std_types.h>
+#include <util/config/options.h>
+#include <util/irep/std_types.h>
 
 class reachability_treet; // Forward dec
 class execution_statet;   // Forward dec
@@ -105,19 +105,23 @@ public:
       std::shared_ptr<symex_targett> t,
       unsigned int claims,
       unsigned int remain,
-      unsigned int simplified)
+      unsigned int simplified,
+      unsigned int truncations = 0)
       : target(std::move(t)),
         total_claims(claims),
         remaining_claims(remain),
-        simplified_claims(simplified){};
+        simplified_claims(simplified),
+        bounded_loop_truncations(truncations){};
     std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
     unsigned int simplified_claims;
+    /// Carried out of exploration rather than read back from live state:
+    /// under --schedule the current frame is already dangling by the time
+    /// bmct looks (issue #6423).
+    unsigned int bounded_loop_truncations;
   };
 
-  // Macros
-  //
   /**
    *  Return identifier for goto guards.
    *  These guards are symbolic names for the truth of a guard on a GOTO jump.
@@ -189,7 +193,8 @@ protected:
    *  being jumps where the guards are nondeterministic, it's that we have to
    *  handle editing the unwind bound when these things occur, and set up state
    *  merges in the future to handle each path thats taken.
-   *  @param old_guard Renamed guard on this jump occuring.
+   *  @param old_guard Branch guard, dereferenced but not yet L2-renamed
+   *                   (symex_goto renames it itself).
    */
   virtual void symex_goto(const expr2tc &old_guard);
 
@@ -227,7 +232,7 @@ protected:
    *  Interpret an OTHER instruction.
    *  These can take many forms; memory management functions are OTHERs for
    *  example (ideally they should be intrinsics...), but also printf and
-   *  variable declarations are handled here.
+   *  inline asm are handled here.
    */
   void symex_other(const expr2tc &code);
 
@@ -262,7 +267,9 @@ protected:
    *  Perform incremental SMT solving for assert and assume statements.
    *  @param expr Expression that must be checked.
    *  @param msg Textual message explaining assertion.
-   *  @return Return whether verification succeeded.
+   *  @return True if incremental solving conclusively resolved the claim
+   *          (held, or refuted with a counterexample recorded); false if
+   *          the result was unknown.
    */
   bool check_incremental(const expr2tc &expr, const std::string &msg);
 
@@ -274,6 +281,20 @@ protected:
    *  @param msg Textual message explaining assertion.
    */
   virtual void claim(const expr2tc &expr, const std::string &msg);
+
+  /**
+   *  Record a verdict for the claim being symbolically executed.
+   *  Used for claims symex discharges itself, so that they are reported once
+   *  per run alongside the ones the solver discharges, rather than once per
+   *  thread interleaving.
+   *  @param msg Textual message explaining the claim.
+   *  @param verdict Outcome to record.
+   *  @param note How the verdict was reached, when it needs qualifying.
+   */
+  void record_property_verdict(
+    const std::string &msg,
+    property_verdictt verdict,
+    const std::string &note = "");
 
   /**
    *  Perform an assertion.
@@ -322,7 +343,6 @@ protected:
    *  See merge_gotos - when we're merging states together due to previous
    *  jumps, this function implements the merging of pointer tracking data.
    *  @param merge_state Previously recorded merge snapshot to be merged in.
-   *  @param dest Thread state for previous jump to be merged into.
    */
   void merge_value_sets(const statet::merge_statet &merge_state);
 
@@ -357,6 +377,14 @@ protected:
    *  @param guard Current state guard.
    */
   void loop_bound_exceeded(const expr2tc &guard);
+
+  /// Records that a loop was cut off at the unwinding bound with nothing to
+  /// flag it. Virtual because --schedule runs each path in its own execution
+  /// state, so the count also has to accumulate outside them.
+  virtual void note_bounded_loop_truncation()
+  {
+    ++bounded_loop_truncations;
+  }
 
   // function calls
 
@@ -416,10 +444,10 @@ protected:
   virtual void symex_function_call_deref(const expr2tc &call);
 
   /**
-   *  Handle function call to fixed function
-   *  Like symex_function_call_code, but minus an assertion and location
-   *  recording.
-   *  @param code Function code to actually call
+   *  Handle a call to a statically-known function: checks recursion
+   *  bounds, sets up the new frame, assigns arguments, and jumps to the
+   *  body.
+   *  @param call Function call to interpret.
    */
   virtual void symex_function_call_code(const expr2tc &call);
 
@@ -550,13 +578,13 @@ protected:
     const code_function_call2t &func_call);
 
   /**
-   * @brief Intrinsic call for C memset function call
-   * 
+   * @brief Intrinsic call for C memcpy function call
+   *
    * This will either invoke our operational model (at string.c)
    * or try to compute the resulting value directly
-   * 
-   * @param art 
-   * @param func_call memset function call
+   *
+   * @param art
+   * @param func_call memcpy function call
    */
   void intrinsic_memcpy(
     reachability_treet &art,
@@ -904,8 +932,8 @@ protected:
    *  equivalent uses of WITH, or byte_update, and so forth. The end result is
    *  a single new value to be bound to a new symbol.
    *  @param code Code to assign; with lhs and rhs.
-   *  @param type Assignment type, visible by default
-   *  @param kind The step kind, by default is plain BMC
+   *  @param hidden Whether the resulting SSA steps are marked hidden
+   *                (default visible)
    *  @param guard A guard for the assignment, true by default
    */
   virtual void symex_assign(
@@ -1269,6 +1297,12 @@ protected:
   unsigned remaining_claims;
   /** Number of assertions that were trivially verified. */
   unsigned simplified_claims;
+  /** Loops cut off at the unwinding bound with no unwinding assertion to flag
+   *  it, i.e. under --no-unwinding-assertions (which the coverage modes force
+   *  on whenever --unwind is given). Exploration stopped there silently, so a
+   *  coverage percentage measured on such a run is a lower bound: goals past
+   *  the bound were never reached (issue #6387). */
+  unsigned bounded_loop_truncations = 0;
   /** Reachability tree we're working with. */
   reachability_treet *art1;
   /** Unwind bounds, loop number -> max unwinds. */
@@ -1284,8 +1318,6 @@ protected:
    *  --no-interval-symex-guard); assertion pruning via --interval-symex-assert
    *  discharges claims proven TRUE. */
   std::optional<interval_domaint> interval_domain_state;
-  /** Whether constant propagation is to be enabled. */
-  bool constant_propagation;
   /** Namespace we're working in. */
   const namespacet &ns;
   /** Context we're working with */

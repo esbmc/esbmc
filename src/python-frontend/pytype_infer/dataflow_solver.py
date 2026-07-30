@@ -197,49 +197,7 @@ def analyze_function(func_node: ast.FunctionDef, max_iters=50):
 def merge_types(old_t, new_type, use_widen=False):
     if old_t is None:
         return new_type
-    return old_t.widen(new_type) if use_widen else new_type    
-
-
-def resolve_method_call(onj_type, method, arg_types):
-    if isinstance(obj_type, ListType):
-        if method == "append":
-            return NoneType()
-        if method == "pop":
-            return obj_type.elem
-        if method == "copy":
-            return obj_type
-        if method == "extend":
-            if arg_types:
-                return ListType(obj_type.elem.join(arg_types[0]))
-            return obj_type
-
-    if isinstance(obj_type, StrType):
-        if method in ["lower", "upper", "strip", "replace"]:
-            return StrType()
-        if method in ["startswith", "endswith", "isdigit", "isalpha"]:
-            return BoolType()
-        if method in ["find", "rfind", "count"]:
-            return IntType()
-        if method == "split":
-            return ListType(StrType())
-
-    if isinstance(obj_type, StrType):
-        if method in ["lower", "upper", "strip", "replace"]:
-            return StrType()
-        if method in ["startswith", "endswith", "isdigit", "isalpha"]:
-            return BoolType()
-        if method in ["find", "rfind", "count"]:
-            return IntType()
-        if method == "split":
-            return ListType(StrType())
-
-    if isinstance(obj_type, DictType):
-        if method in ["get", "pop"]:
-            return obj_type.v 
-        if method == "keys":
-            return ListType(obj_type.k)
-
-    return Unknown()         
+    return old_t.widen(new_type) if use_widen else new_type            
     
 def resolve_method_call(obj_type, method, arg_types):
     """
@@ -247,9 +205,6 @@ def resolve_method_call(obj_type, method, arg_types):
     Always returns a lattice Type.
     """
 
-    #
-    # ---------- STRINGS ----------
-    #
 
     if isinstance(obj_type, StrType):
 
@@ -307,14 +262,8 @@ def resolve_method_call(obj_type, method, arg_types):
         }:
             return BoolType()
 
-        if method == "encode":
-            return BytesType() if "BytesType" in globals() else Unknown()
-
         return Unknown()
 
-    #
-    # ---------- LISTS ----------
-    #
 
     if isinstance(obj_type, ListType):
 
@@ -343,10 +292,6 @@ def resolve_method_call(obj_type, method, arg_types):
 
         return Unknown()
 
-    #
-    # ---------- TUPLES ----------
-    #
-
     if isinstance(obj_type, TupleType):
 
         if method in {
@@ -357,41 +302,37 @@ def resolve_method_call(obj_type, method, arg_types):
 
         return Unknown()
 
-    #
-    # ---------- DICTIONARIES ----------
-    #
-
     if isinstance(obj_type, DictType):
 
         if method == "copy":
             return DictType(
-                obj_type.key,
-                obj_type.value
+                obj_type.key_t,
+                obj_type.val_t
             )
 
         if method == "get":
-            return obj_type.value
+            return obj_type.val_t
 
         if method == "pop":
-            return obj_type.value
+            return obj_type.val_t
 
         if method == "popitem":
             return TupleType([
-                obj_type.key,
-                obj_type.value
+                obj_type.key_t,
+                obj_type.val_t
             ])
 
         if method == "keys":
-            return ListType(obj_type.key)
+            return ListType(obj_type.key_t)
 
         if method == "values":
-            return ListType(obj_type.value)
+            return ListType(obj_type.val_t)
 
         if method == "items":
             return ListType(
                 TupleType([
-                    obj_type.key,
-                    obj_type.value
+                    obj_type.key_t,
+                    obj_type.val_t
                 ])
             )
 
@@ -404,58 +345,46 @@ def resolve_method_call(obj_type, method, arg_types):
 
         return Unknown()
 
-    #
-    # ---------- SETS ----------
-    #
+    # if isinstance(obj_type, SetType):
 
-    if isinstance(obj_type, SetType):
+    #     if method == "copy":
+    #         return SetType(obj_type.elem)
 
-        if method == "copy":
-            return SetType(obj_type.elem)
+    #     if method == "pop":
+    #         return obj_type.elem
 
-        if method == "pop":
-            return obj_type.elem
+    #     if method in {
+    #         "union",
+    #         "intersection",
+    #         "difference",
+    #         "symmetric_difference",
+    #     }:
+    #         return SetType(obj_type.elem)
 
-        if method in {
-            "union",
-            "intersection",
-            "difference",
-            "symmetric_difference",
-        }:
-            return SetType(obj_type.elem)
+    #     if method in {
+    #         "add",
+    #         "clear",
+    #         "discard",
+    #         "remove",
+    #         "update",
+    #         "intersection_update",
+    #         "difference_update",
+    #         "symmetric_difference_update",
+    #     }:
+    #         return NoneType()
 
-        if method in {
-            "add",
-            "clear",
-            "discard",
-            "remove",
-            "update",
-            "intersection_update",
-            "difference_update",
-            "symmetric_difference_update",
-        }:
-            return NoneType()
+    #     if method in {
+    #         "issubset",
+    #         "issuperset",
+    #         "isdisjoint",
+    #     }:
+    #         return BoolType()
 
-        if method in {
-            "issubset",
-            "issuperset",
-            "isdisjoint",
-        }:
-            return BoolType()
-
-        return Unknown()
-
-    #
-    # ---------- CALLABLES ----------
-    #
+    #     return Unknown()
 
     if isinstance(obj_type, CallableType):
 
         return obj_type.ret
-
-    #
-    # ---------- FALLBACK ----------
-    #
 
     return Unknown()    
                                                                           
@@ -531,40 +460,36 @@ def infer_type_from_expr(expr, env):
                  return DictType(Unknown(), Unknown())
             if f_name == "tuple":
                  return TupleType([])
-            if f_name == "set":
-                 return SetType(Unknown())
 
             return Unknown()                             
        
-    if isinstance(func, ast.Attribute):
+       if isinstance(func, ast.Attribute):
 
-        obj_type = infer_type_from_expr(func.value, env)
+            obj_type = infer_type_from_expr(func.value, env)
 
-        arg_types = [
-            infer_type_from_expr(arg, env)
-            for arg in expr.args
-        ]
+            arg_types = [
+                infer_type_from_expr(arg, env)
+                for arg in expr.args
+            ]
 
-        t = resolve_method_call(
-            obj_type,
-            func.attr,
-            arg_types
-        )
+            t = resolve_method_call(
+                obj_type,
+                func.attr,
+                arg_types
+            )
 
-        if t is None:
-            return Unknown()
+            if t is None:
+                return Unknown()
 
-        return t
-
-    return Unknown()
+            return t
     
-    if isinstance(expr, ast.Lambda):
+    elif isinstance(expr, ast.Lambda):
         # attempt to infer lambda return via body
         
         param_types: List[Type] = [Unknown() for _ in expr.args.args]
         ret_type = infer_type_from_expr(expr.body, env)
         return CallableType(param_types, ret_type)
-    return Unknown()
+    
     if isinstance(expr, ast.Tuple):
         elems = [infer_type_from_expr(e, env) for e in expr.elts]
         return TupleType(elems)
@@ -574,7 +499,8 @@ def infer_type_from_expr(expr, env):
         for key, val in zip(expr.keys, expr.values):
             k = k.join(infer_type_from_expr(key, env))
             v = v.join(infer_type_from_expr(val,env))
-        return DictType(k,v)        
+        return DictType(k,v)
+    return Unknown()        
 
 def repr_dict(d):
     return {k:repr(v) for k,v in d.items()}

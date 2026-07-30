@@ -1,0 +1,5 @@
+CORE
+main.c
+--termination --k-induction-parallel
+Both k-induction and --termination specified. Using --termination.
+^VERIFICATION FAILED$

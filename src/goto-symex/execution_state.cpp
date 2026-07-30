@@ -5,16 +5,17 @@
 #include <langapi/mode.h>
 #include <sstream>
 #include <string>
-#include <util/breakpoint.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/base/breakpoint.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
+#include <util/expr/type_byte_size.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 #include <vector>
-#include <util/yaml_parser.h>
+#include <util/base/yaml_parser.h>
 
 thread_local unsigned int execution_statet::node_count = 0;
 thread_local unsigned int execution_statet::dynamic_counter = 0;
@@ -43,6 +44,7 @@ execution_statet::execution_statet(
   symex_trace = options.get_bool_option("symex-trace");
   smt_during_symex = options.get_bool_option("smt-during-symex");
   smt_thread_guard = options.get_bool_option("smt-thread-guard");
+  no_propagation = options.get_bool_option("no-propagation");
 
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("__ESBMC_main");
@@ -55,7 +57,7 @@ execution_statet::execution_statet(
   const goto_programt *goto_program = &(it->second.body);
 
   // Initialize initial thread state
-  goto_symex_statet state(*state_level2, global_value_set, ns);
+  goto_symex_statet state(*state_level2, global_value_set, ns, no_propagation);
   state.initialize(
     (*goto_program).instructions.begin(),
     (*goto_program).instructions.end(),
@@ -154,6 +156,7 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   symex_trace = ex.symex_trace;
   smt_during_symex = ex.smt_during_symex;
   smt_thread_guard = ex.smt_thread_guard;
+  no_propagation = ex.no_propagation;
 
   CS_number = ex.CS_number;
 
@@ -164,6 +167,73 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   cswitch_forced = ex.cswitch_forced;
 
   state_level2->owner = this;
+}
+
+/* Mutex / condition-var / rwlock / barrier / spinlock types, looking through
+ * arrays: `pthread_mutex_t m[N]` collects as the array symbol, whose type is
+ * an array rather than the struct (#6480). */
+static bool is_pthread_sync_type(type2tc t)
+{
+  while (is_array_type(t))
+    t = to_array_type(t).subtype;
+  if (is_nil_type(t))
+    return false;
+  if (is_struct_type(t))
+  {
+    const std::string &n = to_struct_type(t).name.as_string();
+    return n.find("pthread_mutex_t") != std::string::npos ||
+           n.find("pthread_cond_t") != std::string::npos ||
+           n.find("pthread_rwlock_t") != std::string::npos ||
+           n.find("pthread_barrier_t") != std::string::npos ||
+           n.find("pthread_spinlock_t") != std::string::npos;
+  }
+  if (is_union_type(t))
+  {
+    const std::string &n = to_union_type(t).name.as_string();
+    return n.find("pthread_mutex_t") != std::string::npos ||
+           n.find("pthread_cond_t") != std::string::npos ||
+           n.find("pthread_rwlock_t") != std::string::npos;
+  }
+
+  return false;
+}
+
+/* Build the MPOR key for element `elem` of a lock array. Both the pointer
+ * path (which knows a byte offset) and a direct `m[i]` access (which knows an
+ * element index) funnel through here so the two produce the same key. */
+static expr2tc mpor_lock_array_key(const expr2tc &array, const BigInt &elem)
+{
+  const type2tc &subtype = to_array_type(array->type).subtype;
+  return index2tc(subtype, array, constant_int2tc(index_type2(), elem));
+}
+
+/* Is `e` an array of pthread sync objects that we key per element? */
+static bool is_lock_array(const expr2tc &e)
+{
+  return is_array_type(e->type) && is_pthread_sync_type(e->type);
+}
+
+/* Two MPOR keys conflict when they may name the same storage. A refined
+ * lock-array key (index2t over the array symbol, see get_expr_globals) and the
+ * whole-array key for that same symbol may name the same element, so they must
+ * be treated as conflicting; two refined keys for distinct elements may not. */
+static bool mpor_keys_may_alias(const expr2tc &a, const expr2tc &b)
+{
+  if (a == b)
+    return true;
+  if (is_index2t(a) == is_index2t(b))
+    return false;
+  const expr2tc &base_a = is_index2t(a) ? to_index2t(a).source_value : a;
+  const expr2tc &base_b = is_index2t(b) ? to_index2t(b).source_value : b;
+  return base_a == base_b;
+}
+
+static bool mpor_set_conflicts(const std::set<expr2tc> &s, const expr2tc &key)
+{
+  for (const expr2tc &e : s)
+    if (mpor_keys_may_alias(e, key))
+      return true;
+  return false;
 }
 
 void execution_statet::symex_step(reachability_treet &art)
@@ -227,15 +297,21 @@ void execution_statet::symex_step(reachability_treet &art)
     else if (
       (instruction.function == "c:@F@main" ||
        instruction.function == "c:@F@main#") &&
-      !options.get_bool_option("deadlock-check") &&
       !options.get_bool_option("memory-leak-check") &&
       !options.get_bool_option("termination"))
     {
       // check whether we reached the end of the main function and
-      // whether we are not checking for (local and global) deadlocks and memory leaks.
+      // whether we are not checking for memory leaks.
       // We should end the main thread to avoid exploring further interleavings
       // TODO: once we support at_exit, we should check this code
       // TODO: we should support verifying memory leaks in multi-threaded C programs.
+      //
+      // Returning from main is a call to exit(): the process terminates and
+      // every other thread is torn down (C11 5.1.2.2.3), so a thread still
+      // waiting on a lock main held is not deadlocked. This END_FUNCTION is
+      // reached only on a real return -- pthread_exit() ends in
+      // __ESBMC_assume(0) -- so a program whose threads outlive main via
+      // pthread_exit keeps being explored under --deadlock-check (#6479).
       //
       // Skipped under --termination: the strategy inserts an
       // `assert(false)` after the main() call in __ESBMC_main to
@@ -267,7 +343,12 @@ void execution_statet::symex_step(reachability_treet &art)
     {
       expr2tc thecode = instruction.code, assign;
       if (make_return_assignment(assign, thecode))
+      {
+        auto saved_source = cur_state->source;
+        cur_state->source = cur_state->top().calling_location;
         goto_symext::symex_assign(assign);
+        cur_state->source = saved_source;
+      }
       symex_return(thecode);
       analyze_assign(assign);
     }
@@ -571,8 +652,6 @@ void execution_statet::restore_last_paths()
     new_gs.num_instructions = gs.num_instructions;
     new_gs.guard = gs.guard;
     assert(new_gs.thread_id == gs.thread_id);
-
-    // And that is it!
   }
 
   list.clear();
@@ -662,7 +741,8 @@ void execution_statet::execute_guard()
 
 unsigned int execution_statet::add_thread(const goto_programt *prog)
 {
-  goto_symex_statet new_state(*state_level2, global_value_set, ns);
+  goto_symex_statet new_state(
+    *state_level2, global_value_set, ns, no_propagation);
   new_state.initialize(
     prog->instructions.begin(),
     prog->instructions.end(),
@@ -787,9 +867,7 @@ void execution_statet::get_expr_globals(
     // dependency.
     expr2tc p = expr;
     bool point_to_global = false;
-    if (
-      symbol->get_type().is_pointer() && symbol->name != "invalid_object" &&
-      !symbol->static_lifetime)
+    if (symbol->get_type().is_pointer() && symbol->name != "invalid_object")
     {
       expr2tc tmp = expr;
       /* Rename it so that it can be dereferenced in current state */
@@ -815,6 +893,24 @@ void execution_statet::get_expr_globals(
           point_to_global =
             s->static_lifetime || s->get_type().is_dynamic_set();
           p = to_object_descriptor2t(obj).object;
+          /* Distinguish the elements of a lock array. Both `&m[0]` and
+           * `&m[1]` resolve to the base symbol `m`, which makes MPOR treat
+           * every lock in the array as one object, so two threads holding
+           * different locks never come out independent -- 6.8x the
+           * interleavings of the same program written with scalar mutexes
+           * (#6480). Refine only a constant offset on a lock array; an
+           * unknown offset keeps the whole-array key, and
+           * mpor_keys_may_alias pairs the refined and unrefined forms. */
+          const expr2tc &off = to_object_descriptor2t(obj).offset;
+          if (is_constant_int2t(off) && is_lock_array(p))
+          {
+            /* The descriptor carries a byte offset; the key is an element
+             * index so that it matches the one a direct `m[i]` access
+             * builds. */
+            BigInt esize = type_byte_size(to_array_type(p->type).subtype, &ns);
+            if (esize > 0)
+              p = mpor_lock_array_key(p, to_constant_int2t(off).value / esize);
+          }
           /* Stop when the global symbol is found */
           if (point_to_global)
             break;
@@ -918,6 +1014,34 @@ void execution_statet::get_expr_globals(
     }
   }
 
+  /* A direct `m[i]` on a lock array: record the element. Falling through to
+   * the operand walk below would reach the bare array symbol and record the
+   * whole array, which re-conflates the elements the pointer path above took
+   * care to separate (#6480). */
+  if (is_index2t(expr))
+  {
+    const index2t &idx = to_index2t(expr);
+    if (is_symbol2t(idx.source_value) && is_lock_array(idx.source_value))
+    {
+      expr2tc src = idx.source_value;
+      get_active_state().get_original_name(src);
+      const symbolt *s = ns.lookup(to_symbol2t(src).thename);
+      expr2tc i = idx.index;
+      cur_state->rename(i);
+      simplify(i);
+      if (
+        s && (s->static_lifetime || s->get_type().is_dynamic_set()) &&
+        is_constant_int2t(i))
+      {
+        src = idx.source_value;
+        cur_state->top().level1.rename(src);
+        globals_list.insert(
+          mpor_lock_array_key(src, to_constant_int2t(i).value));
+        return;
+      }
+    }
+  }
+
   expr->foreach_operand([this, &globals_list, &ns, kind](const expr2tc &e) {
     get_expr_globals(ns, e, globals_list, kind);
   });
@@ -936,24 +1060,18 @@ bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
   // don't intersect with this transitions write(s).
 
   // Double write intersection
-  for (std::set<expr2tc>::const_iterator it = thread_last_writes[j].begin();
-       it != thread_last_writes[j].end();
-       ++it)
-    if (thread_last_writes[l].find(*it) != thread_last_writes[l].end())
+  for (const expr2tc &it : thread_last_writes[j])
+    if (mpor_set_conflicts(thread_last_writes[l], it))
       return true;
 
   // This read what that wrote intersection
-  for (std::set<expr2tc>::const_iterator it = thread_last_reads[j].begin();
-       it != thread_last_reads[j].end();
-       ++it)
-    if (thread_last_writes[l].find(*it) != thread_last_writes[l].end())
+  for (const expr2tc &it : thread_last_reads[j])
+    if (mpor_set_conflicts(thread_last_writes[l], it))
       return true;
 
   // We wrote what that reads intersection
-  for (std::set<expr2tc>::const_iterator it = thread_last_writes[j].begin();
-       it != thread_last_writes[j].end();
-       ++it)
-    if (thread_last_reads[l].find(*it) != thread_last_reads[l].end())
+  for (const expr2tc &it : thread_last_writes[j])
+    if (mpor_set_conflicts(thread_last_reads[l], it))
       return true;
 
   // No check for read-read intersection, it doesn't affect anything
@@ -1077,29 +1195,6 @@ bool execution_statet::has_cswitch_point_occured() const
   // a context switch point here — they already drive scheduling through
   // the pthread library's explicit switch mechanisms, and treating every
   // lock access as a cswitch point blows up the DFS width.
-  auto is_pthread_sync_type = [](const type2tc &t) {
-    if (is_nil_type(t))
-      return false;
-    if (is_struct_type(t))
-    {
-      const std::string &n = to_struct_type(t).name.as_string();
-      return n.find("pthread_mutex_t") != std::string::npos ||
-             n.find("pthread_cond_t") != std::string::npos ||
-             n.find("pthread_rwlock_t") != std::string::npos ||
-             n.find("pthread_barrier_t") != std::string::npos ||
-             n.find("pthread_spinlock_t") != std::string::npos;
-    }
-    if (is_union_type(t))
-    {
-      const std::string &n = to_union_type(t).name.as_string();
-      return n.find("pthread_mutex_t") != std::string::npos ||
-             n.find("pthread_cond_t") != std::string::npos ||
-             n.find("pthread_rwlock_t") != std::string::npos;
-    }
-
-    return false;
-  };
-
   auto any_non_sync = [&](const std::set<expr2tc> &s) {
     for (const auto &e : s)
       if (!is_pthread_sync_type(e->type))
@@ -1198,8 +1293,9 @@ void execution_statet::switch_to_monitor()
 
   if (monitor_tid != get_active_state_number())
   {
-    // Don't call switch_to_thread -- it'll execute the thread guard, which is
-    // an extremely bad plan.
+    // Bypass switch_to_thread: a monitor switch must not be followed by
+    // update_after_switch_point/execute_guard, and must adopt the source
+    // thread's guard instead.
     last_active_thread = active_thread;
     active_thread = monitor_tid;
     cur_state = &threads_state[active_thread];
@@ -1225,8 +1321,9 @@ void execution_statet::switch_away_from_monitor()
     monitor_tid == active_thread &&
     "Must call switch_from_monitor from monitor thread\n");
 
-  // Don't call switch_to_thread -- it'll execute the thread guard, which is
-  // an extremely bad plan.
+  // Bypass switch_to_thread: a monitor switch must not be followed by
+  // update_after_switch_point/execute_guard, and must adopt the monitor
+  // thread's guard instead.
   last_active_thread = active_thread;
   active_thread = monitor_from_tid;
   cur_state = &threads_state[active_thread];

@@ -1,0 +1,4 @@
+CORE
+cbmc_strrchr_fail.goto
+--binary --unwind 10
+^VERIFICATION FAILED$

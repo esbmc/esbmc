@@ -1,43 +1,43 @@
 #include <python-frontend/string/char_utils.h>
-#include <python-frontend/exception_utils.h>
-#include <python-frontend/python_int_overflow.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/round_to_nearest_guard.h>
+#include <python-frontend/exception/exception_utils.h>
+#include <python-frontend/math/python_int_overflow.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
-#include <python-frontend/tuple_handler.h>
+#include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/string/string_builder.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_expr.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
-#include <util/type.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
+#include <util/irep/type.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 #include <climits>
 #include <iomanip>
 #include <limits>
 #include <optional>
 #include <functional>
-#include <sstream>
 #include <stdexcept>
 #include <vector>
 
-#include <util/message.h>
+#include <util/message/message.h>
 
 using namespace python_expr;
 
@@ -107,26 +107,6 @@ static char to_upper_char(char c)
   return static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
 }
 
-// Render a constant float as CPython's str() / empty-"{}" field does. A
-// whole-number float below 1e16 renders as its integer digits plus ".0"
-// (str(1.0) == "1.0", str(1000000.0) == "1000000.0"); the default ostream
-// format drops the ".0" and switches to exponential at 1e6, so fold that case
-// exactly. Every other float keeps the ostream behaviour, which already matches
-// CPython's exponential form for |x| >= 1e16 and |x| < 1e-4.
-static std::string format_float_value(double d)
-{
-  if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 1e16)
-  {
-    std::string s = std::to_string(static_cast<long long>(d));
-    if (std::signbit(d) && s[0] != '-') // str(-0.0) == "-0.0"
-      s.insert(s.begin(), '-');
-    return s + ".0";
-  }
-  std::ostringstream oss;
-  oss << d;
-  return oss.str();
-}
-
 static std::string
 format_value_from_json(const nlohmann::json &arg, python_converter &converter)
 {
@@ -151,7 +131,7 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
     if (ov.is_boolean())
       return ov.get<bool>() ? "-1" : "0";
     if (ov.is_number_float())
-      return format_float_value(-ov.get<double>());
+      return string_handler::cpython_float_str(-ov.get<double>());
   }
   if (arg.contains("_type") && arg["_type"] == "Constant")
   {
@@ -170,7 +150,7 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
     if (arg["value"].is_number_integer())
       return std::to_string(arg["value"].get<long long>());
     if (arg["value"].is_number_float())
-      return format_float_value(arg["value"].get<double>());
+      return string_handler::cpython_float_str(arg["value"].get<double>());
     throw std::runtime_error("format() unsupported constant type");
   }
 

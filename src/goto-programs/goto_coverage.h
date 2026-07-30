@@ -113,7 +113,6 @@ public:
   size_t k_path_max_goals = 10000;
 
 protected:
-  // turn a OP b OP c into a list a, b, c
   expr2tc handle_single_guard(const expr2tc &expr, bool top_level);
   void handle_operands_guard(
     const expr2tc &expr,

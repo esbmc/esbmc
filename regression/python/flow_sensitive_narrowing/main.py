@@ -8,3 +8,6 @@ def test(x):
       assert isinstance(y, str)
 
    return y
+
+test(5)
+assert(test(5) == 6)

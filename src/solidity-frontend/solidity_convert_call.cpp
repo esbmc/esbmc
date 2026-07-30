@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 #include <limits>
 
@@ -42,7 +42,6 @@ bool solidity_convertert::get_library_function_call(
 
 // library/error/event functions have no definition node
 // the key difference comparing to the `get_non_library_function_call` is that we do not need a this-object as the first argument for the function call
-// the key difference is that we do not add this pointer.
 bool solidity_convertert::get_library_function_call(
   const exprt &func,
   const typet &t,
@@ -338,8 +337,8 @@ void solidity_convertert::get_nondet_expr(const typet &t, exprt &new_expr)
   new_expr.statement("nondet");
 }
 
-// x._ESBMC_bind_cname = _ESBMC_get_nondet_cname();
-//                        ^^^^^^^^^^^^^^^^^^^^^^^^
+// x._ESBMC_bind_cname = _ESBMC_get_nondet_cont_name();
+//                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 // for high-level call, we bind the external calls with cname
 // e.g.
 // if(x.cname == Base)

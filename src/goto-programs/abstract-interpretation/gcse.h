@@ -2,7 +2,7 @@
 
 // GCSE - Global Common Subexpression Elimination
 
-#include <util/message.h>
+#include <util/message/message.h>
 #include <goto-programs/abstract-interpretation/ai.h>
 #include <pointer-analysis/value_set_analysis.h>
 /**
@@ -31,7 +31,7 @@
  *      then just replace the abstract state with "new".
  *   Otherwise, compute the intersection between "prev" and "new".
  * - Transform operator:
- *   + END_FUNCTION: all local variables are not available anymore
+ *   + RETURN: the returned expression (and sub-expressions) is now available
  *   + ASSIGN: RHS (and sub-expressions) is now available, LHS (and dependencies) is not available anymore
  *   + GOTO/ASSERT/ASSUME: guard (and sub-expressions) is now available
  *   + DECL/DEAD: variable is no longer available
@@ -112,13 +112,13 @@ public:
   static std::shared_ptr<value_set_analysist> vsa;
 };
 
-#include <util/algorithms.h>
+#include <util/ssa/algorithms.h>
 /**
  * @brief Global Common Subexpression Elimination algorithm
  *
  * Compute all common subexpression in a goto program. 
- * For each common subexpression, a new intermediate variable 
- * `__esbmc_cse_symbol$` is created and assigned to the common
+ * For each common subexpression, a new intermediate variable
+ * `__ESBMC_cse_symbol$` is created and assigned to the common
  * value.
  *
  * In ESBMC, the main advantage is for sequential dereferences/with

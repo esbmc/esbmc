@@ -3,15 +3,15 @@
 #include <goto-symex/dynamic_allocation.h>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/message.h>
-#include <util/usr_utils.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/message/message.h>
+#include <util/base/usr_utils.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 
 goto_symext::goto_symext(
   const namespacet &_ns,
@@ -26,7 +26,6 @@ goto_symext::goto_symext(
     remaining_claims(0),
     simplified_claims(0),
     max_unwind(options.get_option("unwind").c_str()),
-    constant_propagation(!options.get_bool_option("no-propagation")),
     ns(_ns),
     new_context(_new_context),
     goto_functions(_goto_functions),
@@ -74,25 +73,31 @@ goto_symext::goto_symext(
       std::string val = func_set.substr(
         start, comma == std::string::npos ? std::string::npos : comma - start);
 
-      // Parse name:index:bound format
-      std::string::size_type first_colon = val.find(":");
-      std::string::size_type second_colon = first_colon != std::string::npos
-                                              ? val.find(":", first_colon + 1)
-                                              : std::string::npos;
+      // Parse name:index:bound from the right: only the last two fields are
+      // fixed, and a USR name is itself colon-prefixed (`c:@F@f#`).
+      std::string::size_type bound_colon = val.rfind(":");
+      std::string::size_type index_colon =
+        bound_colon == std::string::npos || bound_colon == 0
+          ? std::string::npos
+          : val.rfind(":", bound_colon - 1);
 
-      if (first_colon != std::string::npos && second_colon != std::string::npos)
+      if (index_colon != std::string::npos)
       {
-        std::string user_name = val.substr(0, first_colon);
+        std::string user_name = val.substr(0, index_colon);
         unsigned loop_index = atoi(
-          val.substr(first_colon + 1, second_colon - first_colon - 1).c_str());
-        BigInt bound(val.substr(second_colon + 1).c_str());
+          val.substr(index_colon + 1, bound_colon - index_colon - 1).c_str());
+        BigInt bound(val.substr(bound_colon + 1).c_str());
 
-        // Convert user syntax to internal USR format with trailing #
-        std::string usr_name = user_name_to_usr(user_name);
+        // Key on the name --show-loops prints. A user name cannot be turned
+        // back into a function id: ESBMC ids follow clang's USR spelling, so a
+        // C function is `c:@F@f` while a C++ one carries its parameter
+        // mangling (`c:@F@f#i#`). Normalising the id down to the user name is
+        // the only direction that matches both.
+        std::string key_name = usr_to_user_name(user_name);
 
         // Only add valid entries (must have function name)
-        if (!usr_name.empty())
-          unwind_func_set[std::make_pair(usr_name, loop_index)] = bound;
+        if (!key_name.empty())
+          unwind_func_set[std::make_pair(key_name, loop_index)] = bound;
       }
 
       if (comma == std::string::npos)
@@ -110,8 +115,8 @@ goto_symext::goto_symext(
     {
       if (instruction.is_backwards_goto())
       {
-        loop_id_to_func_index[instruction.loop_number] =
-          std::make_pair(func_pair.first.as_string(), loop_index);
+        loop_id_to_func_index[instruction.loop_number] = std::make_pair(
+          usr_to_user_name(func_pair.first.as_string()), loop_index);
         loop_index++;
 
         // Handle #pragma unroll annotations
@@ -174,7 +179,6 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   unwind_func_set = sym.unwind_func_set;
   loop_id_to_func_index = sym.loop_id_to_func_index;
   max_unwind = sym.max_unwind;
-  constant_propagation = sym.constant_propagation;
   total_claims = sym.total_claims;
   remaining_claims = sym.remaining_claims;
   simplified_claims = sym.simplified_claims;
@@ -221,7 +225,6 @@ void goto_symext::do_simplify(expr2tc &expr)
     simplify(expr);
 }
 
-// Handle side effects
 void goto_symext::handle_sideeffect(
   const expr2tc &lhs,
   const sideeffect2t &effect,
@@ -278,7 +281,6 @@ void goto_symext::handle_sideeffect(
   }
 }
 
-// Handle conditional expressions (if2t)
 bool goto_symext::handle_conditional(
   const expr2tc &lhs,
   const if2t &if_effect,
@@ -344,12 +346,6 @@ void goto_symext::symex_assign(
   // actually true (e.g. linked-list traversals where every
   // dereference goes through the same pointer chain).
   //
-  // Snapshot p's pre-havoc value-set here, then re-assert it as a
-  // SAME-OBJECT disjunction *after* the assignment lands. This pins
-  // the freshly-nondet p to the set of dynamic objects the
-  // symex-time value-set analysis has accumulated so far (e.g. the
-  // chain of `dynamic_N_value` symbols allocated by prior loop
-  // iterations).
   // Snapshot p's pre-havoc value-set entry before symex_assign_rec
   // overwrites it with {unknown}. The k-induction `make_nondet_assign`
   // pass emits one `ASSIGN p = nondet()` per modified-loop variable
@@ -382,14 +378,14 @@ void goto_symext::symex_assign(
         cur_state->value_set.get_entry(is_ptr_havoc_l1_name, "").object_map;
 
       // Rewrite the nondet RHS to the pre-havoc value of the pointer,
-      // mirroring master's behaviour on these benchmarks: master
-      // skips pointer havocs entirely under --add-symex-value-sets,
-      // leaving p bound to whatever SSA value it had before the
-      // (would-be) havoc. The pre-havoc value either resolves
-      // statically to a concrete object address (singleton case —
-      // matches the `p = a` pattern master sees) or to an ITE chain
-      // through prior loop iterations (multi-candidate case — matches
-      // master's SSA chain through `p = p->n` updates). Either way
+      // matching the behaviour these benchmarks relied on before this
+      // pass existed: pointer havocs were skipped entirely under
+      // --add-symex-value-sets, leaving p bound to whatever SSA value
+      // it had before the (would-be) havoc. The pre-havoc value either
+      // resolves statically to a concrete object address (singleton
+      // case, the `p = a` pattern) or to an ITE chain through prior
+      // loop iterations (multi-candidate case, the SSA chain through
+      // `p = p->n` updates). Either way
       // the solver gets a concrete binding rather than a fresh
       // nondet pinned via SAME-OBJECT to one of N candidates, and
       // the inductive-step verdict matches the BC depth-k+1
@@ -548,18 +544,13 @@ void goto_symext::symex_assign(
     }
   }
 
-  // Restore the value-set entry to the pre-havoc set, replacing the
-  // {unknown} the symex assignment just wrote. The next dereference
-  // through this pointer (in `symex_dereference.cpp`) will read this
-  // restored set and synthesize an ITE chain over the actual
-  // candidate objects — without it, the deref-time assume can pin
-  // the resolved address but can't drive the value-load itself,
-  // because the load expression's value-set is {*}/invalid_object.
-  //
-  // We do this in addition to the assume() below: the assume
-  // constrains the solver, the value-set restore drives the deref
-  // ITE. Both are needed for IS to prove list traversals where the
-  // havoc would otherwise unbind p from the chain.
+  // Restore the value-set entry to the pre-havoc set after the
+  // assignment. The next dereference through this pointer (in
+  // `symex_dereference.cpp`) will read this restored set and
+  // synthesize an ITE chain over the actual candidate objects —
+  // without it, the deref-time assume can pin the resolved address
+  // but can't drive the value-load itself, because the load
+  // expression's value-set is {*}/invalid_object.
   if (!is_ptr_havoc_l1_name.empty() && !is_ptr_havoc_pre_object_map.empty())
   {
     // Drop unknown/invalid entries from the restored set. Their
@@ -584,12 +575,6 @@ void goto_symext::symex_assign(
         filtered;
   }
 
-  // Re-assert the pre-havoc points-to set on the freshly-nondet
-  // pointer. See the snapshot above for the rationale. The disjunct
-  // construction mirrors the per-dereference assume in
-  // symex_dereference.cpp: SAME-OBJECT for non-NULL candidates, a
-  // plain equality with NULL, and `unknown`/`invalid` entries abort
-  // the constraint (a partial set would be unsound).
   // Note: an earlier prototype also emitted an explicit
   // assume(SAME-OBJECT(p_new, &candidate_1) || ...) right here. With
   // the value-set restore above in place, that assume is redundant —

@@ -5,9 +5,9 @@
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <unordered_set>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 #include <goto-programs/goto_loops.h>
-#include <util/time_stopping.h>
+#include <util/base/time_stopping.h>
 
 template <class Interval>
 inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
@@ -430,7 +430,7 @@ void dump_intervals(
     [[maybe_unused]] auto print_vars = [&out, &i_it](const auto &map) {
       for (const auto &interval : map)
       {
-        // "state,var,min,max,bot,top";
+        // "state,line,column,function,var,min,max,bot,top";
         out << fmt::format(
           "{},{},{},{},{},{},{},{},{}\n",
           i_it->location_number,

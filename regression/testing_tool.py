@@ -156,6 +156,100 @@ def _run_check_json(check, base_dir):
         )
     return True, None
 
+
+# CHECK_FILE directive: assert a regex is present in / absent from a file ESBMC
+# wrote (e.g. an --output .smt2 dump), which stdout/stderr regexes cannot reach.
+CHECK_FILE_KEYWORD = "CHECK_FILE"
+_CHECK_FILE_OPS = ("contains", "absent")
+
+
+def _is_check_file_line(stripped):
+    """True iff the first whitespace-delimited token is CHECK_FILE."""
+    head = stripped.split(maxsplit=1)
+    return bool(head) and head[0] == CHECK_FILE_KEYWORD
+
+
+def _parse_check_file(line):
+    """Parse one CHECK_FILE directive into (file, op, pattern)."""
+    parts = line.split(None, 3)
+    if len(parts) != 4 or parts[0] != CHECK_FILE_KEYWORD:
+        raise ValueError(
+            f"CHECK_FILE expects: CHECK_FILE <file> <contains|absent> <regex>; "
+            f"got: {line!r}"
+        )
+    _, file, op, pattern = parts
+    if os.path.isabs(file):
+        raise ValueError(
+            f"CHECK_FILE file must be a relative path (resolved against ESBMC's "
+            f"working directory); got {file!r}"
+        )
+    if op not in _CHECK_FILE_OPS:
+        raise ValueError(
+            f"CHECK_FILE op must be one of {list(_CHECK_FILE_OPS)}; got {op!r}"
+        )
+    return (file, op, pattern)
+
+
+def _run_check_file(check, base_dir):
+    """Return (passed, message). message is None on pass, diagnostic on fail."""
+    file, op, pattern = check
+    path = os.path.join(base_dir, file)
+    if not os.path.isfile(path):
+        return False, f"CHECK_FILE file not found: {file}"
+    try:
+        with open(path, errors="replace") as f:
+            content = f.read()
+    except OSError as exc:
+        return False, f"CHECK_FILE read failed for {file}: {exc}"
+    found = re.search(pattern, content, re.MULTILINE) is not None
+    if op == "contains" and not found:
+        return False, f"CHECK_FILE {file}: expected to contain /{pattern}/"
+    if op == "absent" and found:
+        return False, f"CHECK_FILE {file}: expected NOT to contain /{pattern}/"
+    return True, None
+
+
+# SEED_FILE directive: create a file in ESBMC's working directory before the
+# run, so a test can establish a precondition CHECK_FILE then asserts on --
+# e.g. that ESBMC refuses to overwrite a file it did not generate.
+SEED_FILE_KEYWORD = "SEED_FILE"
+
+
+def _is_seed_file_line(stripped):
+    """True iff the first whitespace-delimited token is SEED_FILE."""
+    head = stripped.split(maxsplit=1)
+    return bool(head) and head[0] == SEED_FILE_KEYWORD
+
+
+def _parse_seed_file(line):
+    """Parse one SEED_FILE directive into (file, content)."""
+    parts = line.split(None, 2)
+    if len(parts) not in (2, 3) or parts[0] != SEED_FILE_KEYWORD:
+        raise ValueError(
+            f"SEED_FILE expects: SEED_FILE <file> [content]; got: {line!r}"
+        )
+    file = parts[1]
+    # Omitting the content seeds a zero-byte file, which is a distinct case
+    # from a file whose first line is empty.
+    content = parts[2] if len(parts) == 3 else ""
+    if os.path.isabs(file) or os.path.normpath(file).startswith(".."):
+        raise ValueError(
+            f"SEED_FILE file must be a relative path inside ESBMC's working "
+            f"directory; got {file!r}"
+        )
+    return (file, content)
+
+
+def _run_seed_file(seed, base_dir):
+    """Write one seeded file. Raises on failure -- a test whose precondition
+    could not be established would otherwise pass vacuously."""
+    file, content = seed
+    path = os.path.join(base_dir, file)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(content + "\n" if content else "")
+
+
 # Bring up a single benchmark
 BENCHMARK_BRINGUP = False
 
@@ -174,21 +268,41 @@ class TestCase:
                 self.test_mode in SUPPORTED_TEST_MODES
             ), f"{self.test_dir}: {self.test_mode} is not supported"
 
-            # Second line - Test file
+            # Second line - Test file. Empty means "no positional input file"
+            # (e.g. a test exercising an option like Solidity's --sol that
+            # supplies the input file itself).
             self.test_file = fp.readline().strip()
-            assert os.path.exists(self.test_dir + "/" + self.test_file)
+            if self.test_file:
+                assert os.path.exists(self.test_dir + "/" + self.test_file)
 
             # Third line - Arguments of executable
             self.test_args = fp.readline().strip()
 
-            # Line 4+: stdout/stderr regexes and optional CHECK_JSON lines.
+            # Line 4+: stdout/stderr regexes and optional CHECK_JSON /
+            # CHECK_FILE lines.
             self.test_regex = []
             self.check_json = []
+            self.check_file = []
+            self.seed_file = []
             for line in fp:
                 stripped = line.strip()
-                if _is_check_json_line(stripped):
+                if _is_seed_file_line(stripped):
+                    try:
+                        self.seed_file.append(_parse_seed_file(stripped))
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"{self.test_dir}/test.desc: {exc}"
+                        ) from exc
+                elif _is_check_json_line(stripped):
                     try:
                         self.check_json.append(_parse_check_json(stripped))
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"{self.test_dir}/test.desc: {exc}"
+                        ) from exc
+                elif _is_check_file_line(stripped):
+                    try:
+                        self.check_file.append(_parse_check_file(stripped))
                     except ValueError as exc:
                         raise ValueError(
                             f"{self.test_dir}/test.desc: {exc}"
@@ -218,7 +332,8 @@ class TestCase:
             except ValueError:
                 pass
 
-        result.append(os.path.join(self.test_dir, self.test_file))
+        if self.test_file:
+            result.append(os.path.join(self.test_dir, self.test_file))
         return result
 
     def __str__(self):
@@ -233,6 +348,8 @@ class TestCase:
         self.test_file = None
         self.test_mode = "CORE"
         self.check_json = []
+        self.check_file = []
+        self.seed_file = []
         self._initialize_test_case()
 
     def save_test(self):
@@ -250,6 +367,8 @@ class TestCase:
                     f"{CHECK_JSON_KEYWORD} {file} {jsonpath} {op} "
                     f"{json.dumps(expected)}\n"
                 )
+            for file, op, pattern in self.check_file:
+                f.write(f"{CHECK_FILE_KEYWORD} {file} {op} {pattern}\n")
 
     """Ignore regex and only check for crashes"""
     RUN_ONLY = False
@@ -297,12 +416,18 @@ class Executor:
                 # Gracefully shut down the whole process group so
                 # grandchildren don't linger and starve the CI runner.
                 if os.name == "posix":
+                    # Best-effort: on macOS killpg can raise EPERM when the
+                    # group holds a process we can no longer signal, which
+                    # otherwise turns a tolerated timeout into a hard ERROR.
                     try:
                         os.killpg(proc.pid, signal.SIGTERM)
                         proc.wait(timeout=_TERM_GRACE)
                     except subprocess.TimeoutExpired:
-                        os.killpg(proc.pid, signal.SIGKILL)
-                    except ProcessLookupError:
+                        try:
+                            os.killpg(proc.pid, signal.SIGKILL)
+                        except OSError:
+                            pass
+                    except OSError:
                         pass
                 else:
                     proc.kill()
@@ -358,12 +483,16 @@ def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
 
     def test(self):
-        # Per-test cwd so parallel CHECK_JSON tests don't race on output files.
+        # Per-test cwd so parallel CHECK_JSON/CHECK_FILE tests don't race on
+        # output files.
         tmp_dir = (
             tempfile.mkdtemp(prefix="esbmc-regress-")
-            if test_case.check_json else None
+            if test_case.check_json or test_case.check_file
+            or test_case.seed_file else None
         )
         try:
+            for seed in test_case.seed_file:
+                _run_seed_file(seed, tmp_dir)
             stdout, stderr, rc = executor.run(test_case, cwd=tmp_dir)
 
             if stdout is None:
@@ -434,6 +563,10 @@ def _add_test(test_case, executor):
             check_failures = []
             for check in test_case.check_json:
                 passed, msg = _run_check_json(check, tmp_dir)
+                if not passed:
+                    check_failures.append(msg)
+            for check in test_case.check_file:
+                passed, msg = _run_check_file(check, tmp_dir)
                 if not passed:
                     check_failures.append(msg)
             all_checks_pass = matches_regex and not check_failures

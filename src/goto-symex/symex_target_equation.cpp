@@ -2,15 +2,16 @@
 #include <functional>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_symex_state.h>
+#include <goto-symex/symex_invariant.h>
 #include <goto-symex/symex_target_equation.h>
 #include <langapi/language_util.h>
 #include <solvers/smt/smt_conv.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
 
 namespace
 {
@@ -308,8 +309,9 @@ void symex_target_equationt::renumber(
 
 void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
 {
-  // Register address-taken objects first so int-to-ptr casts see the full
-  // set of candidate objects regardless of source-level declaration order.
+  // Pre-register address-of'd string/array literals so int-to-ptr casts see
+  // them regardless of source-level declaration order (see
+  // pre_register_addresses for scope).
   pre_register_addresses(smt_conv, SSA_steps.begin(), SSA_steps.end());
 
   equation_conversion_statet state;
@@ -438,34 +440,30 @@ operator<<(std::ostream &out, const symex_target_equationt &equation)
   return out;
 }
 
-void symex_target_equationt::check_for_duplicate_assigns() const
+bool symex_target_equationt::check_for_duplicate_assigns() const
 {
   std::map<std::string, unsigned int> countmap;
-  unsigned int i = 0;
 
   for (const auto &SSA_step : SSA_steps)
-  {
-    i++;
-    if (!SSA_step.is_assignment())
-      continue;
-
-    const equality2t &ref = to_equality2t(SSA_step.cond);
-    const symbol2t &sym = to_symbol2t(ref.side_1);
-    countmap[sym.get_symbol_name()]++;
-  }
-
-  for (std::map<std::string, unsigned int>::const_iterator it =
-         countmap.begin();
-       it != countmap.end();
-       ++it)
-  {
-    if (it->second != 1)
+    if (SSA_step.is_assignment())
     {
-      log_status("Symbol \"{}\" appears {} times", it->first, it->second);
+      // `assignment()` documents lhs as a symbol but only checks it is
+      // non-nil. Skipping a non-symbol lhs would silently narrow the check
+      // this function exists to perform, so state the precondition instead.
+      SYMEX_INVARIANT(
+        is_symbol2t(SSA_step.lhs), "an assignment step's lhs is not a symbol");
+      countmap[to_symbol2t(SSA_step.lhs).get_symbol_name()]++;
     }
-  }
 
-  log_status("Checked {} insns", i);
+  bool well_formed = true;
+  for (const auto &[name, count] : countmap)
+    if (count != 1)
+    {
+      log_error("SSA name \"{}\" is defined {} times", name, count);
+      well_formed = false;
+    }
+
+  return well_formed;
 }
 
 unsigned int symex_target_equationt::clear_assertions()
@@ -562,12 +560,11 @@ void runtime_encoded_equationt::flush_latest_instructions()
       // There is in fact, nothing to do
       return;
     }
-
-    // Just roll on
   }
 
-  // Register address-taken objects first so int-to-ptr casts see the full
-  // set of candidate objects regardless of source-level declaration order.
+  // Pre-register address-of'd string/array literals so int-to-ptr casts see
+  // them regardless of source-level declaration order (see
+  // pre_register_addresses for scope).
   pre_register_addresses(conv, run_it, SSA_steps.end());
 
   // Now iterate from the start insn to convert, to the end of the list.

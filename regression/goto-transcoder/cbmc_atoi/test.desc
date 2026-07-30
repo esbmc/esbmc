@@ -1,0 +1,4 @@
+CORE
+cbmc_atoi.goto
+--binary --unwind 8
+^VERIFICATION SUCCESSFUL$

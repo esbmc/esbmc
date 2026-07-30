@@ -235,6 +235,23 @@ class ExpressionRewriteMixin:
             return prefix + [node]
         return node
 
+    def visit_Attribute(self, node):
+        node = self.generic_visit(node)
+        if node.attr == "flat" and isinstance(node.ctx, ast.Load):
+            ravel_call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id="np", ctx=ast.Load()),
+                    attr="ravel",
+                    ctx=ast.Load(),
+                ),
+                args=[node.value],
+                keywords=[],
+            )
+            ast.copy_location(ravel_call, node)
+            ast.fix_missing_locations(ravel_call)
+            return ravel_call
+        return node
+
     def visit_Subscript(self, node):
         node = self.generic_visit(node)
 

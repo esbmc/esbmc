@@ -6,13 +6,13 @@
 #include <solvers/smt/fp/ir_ieee_conv.h>
 #include <solvers/smt/smt_fp_rounding_utils.h>
 #include <sstream>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
 #include <cmath>
 #include <limits>
 
@@ -381,6 +381,7 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   // for compositional lifting.
   ir_ieee_api->propagate_interval(side1, side2);
   ir_ieee_api->propagate_nan_pred(side1, side2);
+  ir_ieee_api->propagate_neg_zero_pred(side1, side2);
 
   return side2;
 }
@@ -1029,18 +1030,32 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
                      expr->type, to_constant_string2t(with.update_field).value)
                      .value();
       uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
-      expr2tc upd = bitcast2tc(
-        get_uint_type(mem_bits), typecast2tc(tu.members[c], with.update_value));
-      if (mem_bits < bits)
-        upd = concat2tc(
-          get_uint_type(bits),
-          extract2tc(
-            get_uint_type(bits - mem_bits),
-            with.source_value,
-            bits - 1,
-            mem_bits),
-          upd);
-      a = convert_ast(upd);
+      if (mem_bits == 0)
+      {
+        // A zero-sized union member (e.g. a Rust unit enum variant such as
+        // Result's Err carrying only ()) occupies no storage, so writing it
+        // leaves the union's bit representation unchanged. Encoding it via
+        // get_uint_type(0) would build a degenerate 0-width bitvector that the
+        // solver widens to 1 bit, producing a value one bit wider than the
+        // union sort.
+        a = convert_ast(with.source_value);
+      }
+      else
+      {
+        expr2tc upd = bitcast2tc(
+          get_uint_type(mem_bits),
+          typecast2tc(tu.members[c], with.update_value));
+        if (mem_bits < bits)
+          upd = concat2tc(
+            get_uint_type(bits),
+            extract2tc(
+              get_uint_type(bits - mem_bits),
+              with.source_value,
+              bits - 1,
+              mem_bits),
+            upd);
+        a = convert_ast(upd);
+      }
     }
     else
     {
@@ -1103,9 +1118,77 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::nearbyint_id:
   {
     assert(is_floatbv_type(expr));
-    a = fp_api->mk_smt_nearbyint_from_float(
-      convert_ast(to_nearbyint2t(expr).from),
-      convert_rounding_mode(to_nearbyint2t(expr).rounding_mode));
+    if (int_encoding)
+    {
+      const nearbyint2t &ni = to_nearbyint2t(expr);
+      const expr2tc &rm = ni.rounding_mode;
+      smt_astt operand = convert_ast(ni.from);
+
+      smt_astt zero = mk_smt_real("0");
+      smt_astt one = mk_smt_real("1");
+      smt_astt half = mk_smt_real("0.5");
+
+      // floor(x): SMT real2int rounds toward -inf; lift back to Real.
+      smt_astt floor_v = mk_int2real(mk_real2int(operand));
+      // ceil(x): floor+1 unless x is already integral.
+      smt_astt ceil_v =
+        mk_ite(mk_isint(operand), operand, mk_add(floor_v, one));
+      // Fractional part in [0,1) for all real x (also negative).
+      smt_astt frac = mk_sub(operand, floor_v);
+
+      if (smt_fp_rounding_utils::is_round_to_minus_inf(rm))
+      {
+        a = floor_v;
+      }
+      else if (smt_fp_rounding_utils::is_round_to_plus_inf(rm))
+      {
+        a = ceil_v;
+      }
+      else if (smt_fp_rounding_utils::is_round_to_zero(rm))
+      {
+        // Reuse existing RTZ helper; its integer result is lifted to Real.
+        a = mk_int2real(round_real_to_int(operand));
+      }
+      else if (smt_fp_rounding_utils::is_nearest_rounding_mode(rm))
+      {
+        // Round half to even: tie goes to whichever of floor, floor+1 is even.
+        // floor/2 is an integer iff floor is even — works for negative floors too
+        // (e.g. -2/2 = -1: integer = even; -3/2 = -1.5: not integer = odd).
+        smt_astt two = mk_smt_real("2");
+        smt_astt floor_is_even = mk_isint(mk_div(floor_v, two));
+        smt_astt tie_rte = mk_ite(floor_is_even, floor_v, mk_add(floor_v, one));
+        a = mk_ite(
+          mk_lt(frac, half),
+          floor_v,
+          mk_ite(mk_gt(frac, half), mk_add(floor_v, one), tie_rte));
+      }
+      else if (smt_fp_rounding_utils::is_round_to_away(rm))
+      {
+        // At a 0.5 tie, round toward the integer farther from zero:
+        //   x >= 0: ceil is farther  -> use strict-less so tie picks ceil.
+        //   x <  0: floor is farther -> use <=      so tie picks floor.
+        smt_astt away_pos = mk_ite(mk_lt(frac, half), floor_v, ceil_v);
+        smt_astt away_neg = mk_ite(mk_le(frac, half), floor_v, ceil_v);
+        a = mk_ite(mk_le(zero, operand), away_pos, away_neg);
+      }
+      else
+      {
+        // Symbolic or unsupported rounding mode: produce an unconstrained
+        // integer-valued Real (sound but non-deterministically chosen).
+        smt_astt fresh = mk_fresh(mk_real_sort(), "ra_nearbyint::", nullptr);
+        assert_ast(mk_isint(fresh));
+        a = fresh;
+      }
+
+      if (ir_ieee)
+        ir_ieee_api->propagate_nan_pred(a, operand);
+    }
+    else
+    {
+      a = fp_api->mk_smt_nearbyint_from_float(
+        convert_ast(to_nearbyint2t(expr).from),
+        convert_rounding_mode(to_nearbyint2t(expr).rounding_mode));
+    }
     break;
   }
   case expr2t::if_id:
@@ -1116,6 +1199,17 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     args[1] = convert_ast(if_ref.true_value);
     args[2] = convert_ast(if_ref.false_value);
     a = args[1]->ite(this, args[0], args[2]);
+    if (ir_ieee && is_floatbv_type(expr->type))
+    {
+      smt_astt np_t = ir_ieee_api->get_nan_pred(args[1]);
+      smt_astt np_f = ir_ieee_api->get_nan_pred(args[2]);
+      if (np_t || np_f)
+      {
+        smt_astt t = np_t ? np_t : mk_smt_bool(false);
+        smt_astt f = np_f ? np_f : mk_smt_bool(false);
+        ir_ieee_api->store_nan_pred(a, mk_ite(args[0], t, f));
+      }
+    }
     break;
   }
   case expr2t::isnan_id:
@@ -1363,6 +1457,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       expr2tc ite = if2tc(abs.type, ge, abs.value, neg);
 
       a = convert_ast(ite);
+      if (ir_ieee && is_floatbv_type(abs.value))
+        ir_ieee_api->propagate_nan_pred(a, args[0]);
     }
     break;
   }
@@ -1568,6 +1664,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
     {
       a = mk_neg(args[0]);
+      if (ir_ieee && is_floatbv_type(neg.value))
+        ir_ieee_api->propagate_nan_pred(a, args[0]);
     }
     else if (is_floatbv_type(neg.value))
     {
@@ -1917,8 +2015,41 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     const constant_floatbv2t &thereal = to_constant_floatbv2t(expr);
     if (int_encoding)
     {
-      if (thereal.value.is_zero() || thereal.value.is_NaN())
+      if (thereal.value.is_zero())
+      {
+        // A literal -0.0 constant is a second source of IEEE 754 negative
+        // zero, alongside the subnormal-flush case handled by
+        // mk_subnormal_flush. Reuse the same neg_zero_pred side-channel
+        // rather than adding new tracking machinery -- but tag a fresh
+        // symbol constrained equal to zero, not the shared mk_smt_real("0")
+        // AST directly: nothing guarantees mk_smt_real returns a distinct
+        // pointer per call (see its declaration), so tagging the literal
+        // itself could let an ordinary +0.0 silently inherit this
+        // predicate if any backend ever memoises real constants by value.
+        // Mirrors the NaN branch below, which mints mk_fresh(...) for the
+        // same reason.
+        if (ir_ieee && thereal.value.get_sign())
+        {
+          smt_astt neg_zero_ast =
+            mk_fresh(mk_real_sort(), "ir_ieee::neg_zero_const::", nullptr);
+          smt_astt is_zero = mk_eq(neg_zero_ast, mk_smt_real("0"));
+          assert_ast(is_zero);
+          ir_ieee_api->store_neg_zero_pred(neg_zero_ast, is_zero);
+          return neg_zero_ast;
+        }
         return mk_smt_real("0");
+      }
+      if (thereal.value.is_NaN())
+      {
+        if (ir_ieee)
+        {
+          smt_astt nan_var =
+            mk_fresh(mk_real_sort(), "ir_ieee::nan_const::", nullptr);
+          ir_ieee_api->store_nan_pred(nan_var, mk_smt_bool(true));
+          return nan_var;
+        }
+        return mk_smt_real("0");
+      }
       if (thereal.value.is_infinity())
       {
         // Encode ±∞ as ±double_inf_sentinel (one above double max_normal) for
@@ -1927,7 +2058,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
         // float) produces the same value as a double IEEE_DIV(x,0) result.
         // The double sentinel exceeds both single and double max_normal, so
         // isinf/isfinite predicates work correctly for both precisions.
-        // NaN handling is deferred to the IEEE corner-case phase.
+        // NaN is handled above; infinity is encoded as a sentinel value here.
         smt_astt sentinel = get_double_inf_sentinel();
         if (thereal.value.get_sign())
           return mk_sub(get_zero_real(), sentinel);
@@ -2005,6 +2136,27 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     smt_astt sym_ast = mk_smt_symbol(name, sort);
 
     ir_ieee_api->assert_symbol_range(name, sym_ast, sym);
+
+    if (
+      ir_ieee && is_floatbv_type(sym.type) &&
+      name.rfind("nondet$symex::nondet", 0) == 0)
+    {
+      smt_astt nan_pred =
+        mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", nullptr);
+      ir_ieee_api->store_nan_pred(sym_ast, nan_pred);
+
+      // A nondet float is otherwise an unconstrained real. Without this,
+      // it can take a value strictly between 0 and the smallest subnormal
+      // (a magnitude no floating-point operation ever produces), which
+      // breaks identities like x+0==x now that mk_subnormal_flush()
+      // distinguishes that gap from zero. Representability doesn't depend
+      // on a rounding mode, so pass a nil expr2tc: mk_subnormal_flush falls
+      // back to its magnitude-only threshold, which is the correct (not
+      // merely conservative) check here.
+      const floatbv_type2t &fbv_type = to_floatbv_type(sym.type);
+      assert_ast(
+        mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
+    }
 
     return sym_ast;
   }
@@ -2392,9 +2544,11 @@ static unsigned long size_to_bit_width(unsigned long sz)
   uint64_t domwidth = 2;
   unsigned int dombits = 1;
 
-  // Shift domwidth up until it's either larger or equal to sz, or we risk
-  // overflowing.
-  while (domwidth != 0x8000000000000000ULL && domwidth < sz)
+  // Shift domwidth up until it is strictly larger than sz, or we risk
+  // overflowing. Strictly larger, not just equal: sz itself is the
+  // one-past-the-end index, a valid pointer value in C, and a domain that
+  // cannot represent it wraps it to 0 and aliases element 0 (#6399).
+  while (domwidth != 0x8000000000000000ULL && domwidth <= sz)
   {
     domwidth <<= 1;
     dombits++;
@@ -2990,12 +3144,18 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
     // we return it, without casting to the ternary if type.
     if2t i = to_if2t(res);
 
+    // c is null when the solver produced no value for the condition (e.g. it
+    // still contains a quantifier); fall through to the operand recursion
+    // below, which handles unresolved sub-expressions.
     expr2tc c = get(i.cond);
-    if (is_true(c))
-      return get(i.true_value);
+    if (c)
+    {
+      if (is_true(c))
+        return get(i.true_value);
 
-    if (is_false(c))
-      return get(i.false_value);
+      if (is_false(c))
+        return get(i.false_value);
+    }
   }
 
   default:;
@@ -3068,7 +3228,14 @@ expr2tc smt_solver_baset::get_by_ast(const type2tc &type, smt_astt a)
   switch (type->type_id)
   {
   case type2t::bool_id:
-    return get_bool(a) ? gen_true_expr() : gen_false_expr();
+  {
+    // A null expr2tc is the established "solver produced no value" signal; the
+    // get() callers already treat it as unresolved (see #6191).
+    tvt val = get_bool(a);
+    if (val.is_unknown())
+      return expr2tc();
+    return val.is_true() ? gen_true_expr() : gen_false_expr();
+  }
 
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
@@ -3759,7 +3926,7 @@ tvt smt_solver_baset::l_get(smt_astt a)
   auto it = l_get_cache.find(a);
   if (it != l_get_cache.end())
     return it->second;
-  tvt res = get_bool(a) ? tvt(true) : tvt(false);
+  tvt res = get_bool(a);
   l_get_cache.emplace(a, res);
   return res;
 }

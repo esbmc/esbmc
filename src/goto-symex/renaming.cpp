@@ -1,11 +1,11 @@
 #include <goto-symex/renaming.h>
 #include <langapi/language_util.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/namespace.h>
-#include <util/prefix.h>
-#include <util/symbol.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/namespace.h>
+#include <util/base/prefix.h>
+#include <util/symtab/symbol.h>
 
 namespace
 {
@@ -95,7 +95,7 @@ void renaming::level2t::get_ident_name(expr2tc &sym) const
 
 void renaming::level1t::rename(expr2tc &expr)
 {
-  // rename all the symbols with their last known value
+  // rename symbols to their l1 activation-record names (no value substitution)
 
   if (is_nil_expr(expr))
     return;
@@ -232,15 +232,16 @@ void renaming::level2t::coveredinbees(
   unsigned count,
   unsigned node_id)
 {
-#ifndef NDEBUG
-  symbol2t &sym = to_symbol2t(lhs_sym);
-  assert(
-    sym.rlevel == symbol_renaming_level::level1 ||
-    sym.rlevel == symbol_renaming_level::level1_global);
-#endif
+  const symbol_renaming_level lev = to_symbol2t(lhs_sym).rlevel;
+  SYMEX_INVARIANT(
+    lev == symbol_renaming_level::level1 ||
+      lev == symbol_renaming_level::level1_global,
+    "L2 assignment counters are keyed by the L1 name");
 
   valuet &entry = current_names[name_record(to_symbol2t(lhs_sym))];
-  assert(entry.count <= count);
+  // I1: reissuing an index would let two program values share one SSA name.
+  SYMEX_INVARIANT(
+    entry.count <= count, "L2 assignment counter moved backwards");
   entry.count = count;
   entry.node_id = node_id;
 }
@@ -346,13 +347,21 @@ void renaming::level2t::make_assignment(
   const expr2tc &const_value,
   const expr2tc &)
 {
-  assert(
+  SYMEX_INVARIANT(
     to_symbol2t(lhs_symbol).rlevel == symbol_renaming_level::level1 ||
-    to_symbol2t(lhs_symbol).rlevel == symbol_renaming_level::level1_global);
+      to_symbol2t(lhs_symbol).rlevel == symbol_renaming_level::level1_global,
+    "L2 assignment counters are keyed by the L1 name");
   valuet &entry = current_names[name_record(to_symbol2t(lhs_symbol))];
 
   // This'll update entry beneath our feet; could re-engineer it in the future.
-  rename(lhs_symbol, entry.count + 1);
+  const unsigned expected_count = entry.count + 1;
+  rename(lhs_symbol, expected_count);
+
+  // I2: `entry` stays usable below only because the callee re-keyed to the
+  // same record; the counter is the cheapest witness that the key held.
+  SYMEX_INVARIANT(
+    entry.count == expected_count,
+    "renaming callee bumped a different L2 name record");
 
   symbol2t &symbol = to_symbol2t(lhs_symbol);
   symbol2t::renaming_level lev =

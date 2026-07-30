@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--mix-cpp-host-headers
+^ERROR: PARSING ERROR$
+no member named '__bit_width'

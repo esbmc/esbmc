@@ -5,26 +5,27 @@
 #include <cassert>
 #include <goto-programs/goto_convert_class.h>
 #include <regex>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/location.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/irep/location.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/prefix.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
-#include <util/string_constant.h>
-#include <util/type_byte_size.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/string_constant.h>
+#include <util/expr/type_byte_size.h>
 
 // Simplify a legacy exprt via the IREP2 simplifier. The legacy CBMC
-// simplifier (util/simplify_expr) is being retired (docs/irep2-migration.md
-// Part II Phase 2.2); these alloc-size sites still operate on exprt, so they
-// round-trip through migrate. Behaviour-equivalent for the constant /
-// typecast-of-constant folds these sites need (typecast2t::do_simplify folds
-// (size_t)C to a constant exactly as the legacy simplifier did).
+// simplifier (util/simplify_expr) is being retired
+// (docs/roadmap/irep2-migration.md Part II Phase 2.2); these alloc-size sites
+// still operate on exprt, so they round-trip through migrate.
+// Behaviour-equivalent for the constant / typecast-of-constant folds these
+// sites need (typecast2t::do_simplify folds (size_t)C to a constant exactly as
+// the legacy simplifier did).
 static void simplify_via_irep2(exprt &e)
 {
   expr2tc tmp;
@@ -412,9 +413,22 @@ void goto_convertt::do_cpp_new(
     assert(0);
   }
 
+  // The frontend attaches the resolved allocation function when the program
+  // replaced ::operator new, or the class supplied its own. Calling it is the
+  // whole point: a pool allocator that hands out the same storage twice makes
+  // two objects alias, which a fresh built-in allocation hides (github #6494).
+  const exprt &alloc_function =
+    static_cast<const exprt &>(rhs.find("alloc_function"));
+
   // grab initializer
   goto_programt tmp_initializer;
-  cpp_new_initializer(lhs, rhs, tmp_initializer);
+  // With no initializer the built-in path zero-fills, which models a fresh
+  // object well enough. Storage from a replaced operator new is not fresh --
+  // the program decides its contents ([expr.new]/17 default-initialises a
+  // scalar to nothing at all) -- so zero-filling it would overwrite what the
+  // replacement just returned.
+  if (alloc_function.is_nil() || rhs.initializer().is_not_nil())
+    cpp_new_initializer(lhs, rhs, tmp_initializer);
 
   exprt alloc_size;
 
@@ -448,16 +462,49 @@ void goto_convertt::do_cpp_new(
     simplify_via_irep2(alloc_size);
   }
 
-  exprt new_expr("sideeffect", rhs.type());
-  new_expr.statement(rhs.statement());
-  new_expr.cmt_size(alloc_size);
-  new_expr.location() = rhs.find_location();
+  if (alloc_function.is_not_nil())
+  {
+    // operator new takes a byte count. alloc_size is already scaled by the
+    // element size for the array form; the scalar form allocates one T.
+    exprt byte_size = alloc_size;
+    if (rhs.statement() == "cpp_new")
+      byte_size = from_integer(
+        type_byte_size(migrate_type(ns.follow(rhs.type().subtype()))),
+        size_type());
 
-  // produce new object
-  goto_programt::targett t_n = dest.add_instruction(ASSIGN);
-  exprt new_assign = code_assignt(lhs, new_expr);
-  migrate_expr(new_assign, t_n->code);
-  t_n->location = rhs.find_location();
+    const typet &raw_type = to_code_type(alloc_function.type()).return_type();
+    symbol_exprt raw(new_tmp_symbol(raw_type).id, raw_type);
+
+    code_function_callt call;
+    call.lhs() = raw;
+    call.function() = alloc_function;
+    call.arguments().push_back(byte_size);
+    call.location() = rhs.find_location();
+
+    goto_programt::targett t_a = dest.add_instruction(FUNCTION_CALL);
+    migrate_expr(call, t_a->code);
+    t_a->location = rhs.find_location();
+
+    exprt allocated = raw;
+    allocated.make_typecast(lhs.type());
+
+    goto_programt::targett t_n = dest.add_instruction(ASSIGN);
+    migrate_expr(code_assignt(lhs, allocated), t_n->code);
+    t_n->location = rhs.find_location();
+  }
+  else
+  {
+    exprt new_expr("sideeffect", rhs.type());
+    new_expr.statement(rhs.statement());
+    new_expr.cmt_size(alloc_size);
+    new_expr.location() = rhs.find_location();
+
+    // produce new object
+    goto_programt::targett t_n = dest.add_instruction(ASSIGN);
+    exprt new_assign = code_assignt(lhs, new_expr);
+    migrate_expr(new_assign, t_n->code);
+    t_n->location = rhs.find_location();
+  }
 
   // run initializer
   dest.destructive_append(tmp_initializer);
@@ -523,7 +570,16 @@ void goto_convertt::cpp_new_initializer(
       exprt deref_new("dereference", rhs.type().subtype());
       deref_new.copy_to_operands(lhs);
       replace_new_object(deref_new, initializer);
+
+      // A class-typed initializer may lower to a stack temporary copied into
+      // the heap object (`*new_ptr = tmp`). That temporary is a transfer
+      // slot, not a C++ object: the heap object owns the constructed state
+      // and is destructed via delete, so drop the scope-exit entries this
+      // conversion pushes -- destructing the slot would double-count
+      // (github #6075).
+      std::size_t stack_size = targets.destructor_stack.size();
       convert(to_code(initializer), dest);
+      targets.destructor_stack.resize(stack_size);
     }
     else
       assert(0);
@@ -690,8 +746,9 @@ void goto_convertt::do_function_call_symbol(
       !is_loop_invariant && !is_requires && !is_ensures)
       return;
 
-    // Rafael's invariant merging: combine consecutive __invariant() calls
-    // into a single LOOP_INVARIANT instruction for efficiency
+    // Rafael's invariant merging: combine consecutive
+    // __ESBMC_loop_invariant() calls into a single LOOP_INVARIANT
+    // instruction for efficiency
     // not tested yet, but should be correct
     goto_programt::targett t;
     expr2tc guard;

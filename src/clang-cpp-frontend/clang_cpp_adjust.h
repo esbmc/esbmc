@@ -61,7 +61,19 @@ public:
     side_effect_expr_function_callt &expr) override;
   void adjust_reference(exprt &expr) override;
   void adjust_new(exprt &expr);
+  void adjust_cpp_delete(side_effect_exprt &expr);
   void adjust_cpp_member(member_exprt &expr);
+
+  /**
+   * The callee of a `delete` expression's destructor call: the virtual function
+   * table slot reached through \p object, so that the most-derived destructor
+   * runs ([expr.delete]/3, [class.dtor]/9), or the destructor symbol itself
+   * when it is not virtual.
+   */
+  exprt destructor_binding(
+    const struct_typet &class_type,
+    const struct_typet::componentt &dtor,
+    const exprt &object);
 
   /**
    * Adjusts a C++ pseudo-destructor call expression.

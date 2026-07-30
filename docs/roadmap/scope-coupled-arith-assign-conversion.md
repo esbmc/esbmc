@@ -1,0 +1,418 @@
+# Scope — the coupled arithmetic + assignment conversion (the `python_adjust` flip blocker)
+
+> **Status: Phase 0 discharged (2026-07-30); Phases 1-3 not started.** This
+> document exists because `docs/roadmap/scope-v1k-adjuster.md` §"Flip gate
+> (2026-07-29)" closes that scope with exactly one remaining prerequisite and
+> hands it off: *"Next owner: take the coupled conversion effort as its own
+> scope, then re-run this whole-corpus census as the flip gate."* This is that
+> scope.
+>
+> §9 records the Phase 0 census and the prototype measurements it enabled. **No
+> code has landed** — the instrumentation and the prototype arms were reverted,
+> as Phase 0 requires. §9 confirms §2's coupling argument and corrects §3.2,
+> §3.4 and §4 Phase 2.
+
+## 1. What this unblocks, and what it does not
+
+`python_adjust` is the IREP2-native replacement for the legacy
+`clang_cpp_adjust` pass on the Python path. It is complete enough to run as the
+sole adjuster behind `--python-irep2-adjust-only` (`src/esbmc/options.cpp:214`,
+experimental, default off), and every *structural* gap the adjuster scope
+enumerated is closed or refuted. One it did not enumerate has since surfaced:
+`python_adjust` has no `equality2t`/`notequal2t` arm at all (§9.3). That gap is
+not the defect class below and does not block the flip on its own.
+
+The flip to default-on was thought to be blocked on one defect class. Phase 0
+found that four of the six flip-gate regressions are a *second*, unrelated
+mechanism (§9.4), so clearing this one is necessary but not sufficient. Clearing
+it:
+
+- **unblocks** the `python_adjust` flip (`--python-irep2-adjust-only` becomes
+  the default; the legacy `clang_cpp_adjust` hop on the Python path goes away);
+- **does not** advance §V.1 bars #1, #2 or #4 — those are V.2/W3 and the
+  symbol-write boundary, tracked elsewhere;
+- **does not** touch C or C++, which keep using `clang_c_adjust` /
+  `clang_cpp_adjust` unchanged. The blast radius is the Python suite only.
+
+## 2. The defect, restated precisely
+
+From the flip-gate census (1 108 tests, every 4th directory): 6 genuine
+regressions, ~~all one mechanism~~ — **Phase 0 refutes the "all one mechanism"
+reading: only two of the six respond to the conversions this scope adds, and
+four are a separate defect (§9.4).** The mechanism below is real and is the one
+this scope clears. The witness is `builtin_all_nonliteral`, whose normalized
+`--goto-functions-only` dumps differ in exactly one line:
+
+```
+legacy:   5: ASSIGN element=(_Bool)tmp$5;
+hop-off:  5: ASSIGN element=tmp$5;
+```
+
+A `_Bool`-typed target receives an unconverted integer. The ill-typed
+assignment survives goto-conversion and symex and reaches the solver, where the
+destination AST is not the sort the source expects — SIGSEGV in
+`smt_solver_baset::convert_assign` (`smt_solver.cpp:366`), or a Bitwuzla
+"terms with mismatching sort" abort. This is a **crash class, not a
+false-alarm class**; that severity finding is what moved the flag from
+"tolerable for an experimental flag" to "does not ship".
+
+**Why the obvious fix is unsafe.** `clang_c_adjust::adjust_assign`
+(`clang_c_adjust_code.cpp:175-181`) is two statements:
+
+```cpp
+adjust_operands(code);
+gen_typecast(ns, code.op1(), code.op0().type());
+```
+
+Mirroring only the second line in `python_adjust` fixes `precedence2` **and
+makes `neural-net_fail` (`--fixedbv`) report SUCCESSFUL where legacy correctly
+reports FAILED** — it masks a real bug. The reason is the first line:
+`adjust_operands` has already recursively applied the usual arithmetic
+conversions to the right-hand side. Converting only at the assignment seam,
+over operands that were never reconciled, changes the stored value. The two
+halves are only sound **together**.
+
+## 3. Sizing correction — the conversion engine is already IREP2-native
+
+The adjuster scope sized the operand half as "mirroring
+`clang_c_adjust::adjust_expr_binary_arithmetic` (~114 lines) … a multi-PR
+effort in its own right". That estimate treats the whole legacy function as
+work to be re-implemented. A re-audit of the tree (2026-07-30) finds two
+reasons it is an over-estimate, and one reason it is an under-estimate.
+
+### 3.1 `c_typecastt` already has full `expr2tc` overloads
+
+The usual-arithmetic-conversion engine does **not** need building. Every
+routine the legacy path uses already has a native IREP2 sibling, and they are
+exported as free functions:
+
+| legacy entry point | IREP2 sibling | location |
+|---|---|---|
+| `c_implicit_typecast(exprt&, typet, ns)` | `c_implicit_typecast(expr2tc&, const type2tc&, ns)` | `c_typecast.h:33` |
+| `c_implicit_typecast_arithmetic(exprt&, exprt&, ns)` | `c_implicit_typecast_arithmetic(expr2tc&, expr2tc&, ns)` | `c_typecast.h:43` |
+| `implicit_typecast_followed(exprt&, …)` | `implicit_typecast_followed(expr2tc&, …)` | `c_typecast.cpp:784` |
+| `get_c_type(const typet&)` | `get_c_type(const type2tc&)` | `c_typecast.cpp:364` |
+| `do_typecast(exprt&, const typet&)` | `do_typecast(expr2tc&, const type2tc&)` | `c_typecast.cpp:947` |
+
+These are not stubs — `implicit_typecast_arithmetic(expr2tc&, c_typet)`
+(`c_typecast.cpp:490-565`) implements the full promotion ladder including the
+array→pointer decay case.
+
+**They are already in use on the Python path.** `python_adjust.cpp:428` calls
+the `expr2tc` arithmetic overload today, and so do `python_math.cpp:47`,
+`list_comprehension.cpp:299`, `list_mutation.cpp:981`, `python_set.cpp:180,252`
+and `builtins.cpp:1490`. So the engine is native, exercised, and no
+`migrate_expr` round-trip is involved.
+
+What is narrow is the **guard**, not the engine. `python_adjust.cpp:421-429`
+fires only when the node has exactly 2 operands, *both* are `bv`, and their
+signedness differs — the round-13 relational fix (#6462). Arithmetic binops and
+assignments have **no arm at all**: `adjust_expr`'s dispatch
+(`python_adjust.cpp:247-767`) handles `member2t`, `index2t`, `dereference2t`,
+`if2t`, `not2t`, `constant_struct2t`, `code_function_call2t` and
+`code_cpp_throw2t`, and nothing else.
+
+### 3.2 The complex branch is very likely unreachable on the Python path
+
+Of the 114 lines in `adjust_expr_binary_arithmetic`
+(`clang_c_adjust_expr.cpp:428-541`), **lines 435-522 (~88) are the complex
+branch** — promotion to `{val, 0}`, component-wise lowering, the `ieee_*`
+remap, and `bind_sideeffect_operands`. The scalar path is lines 524-540: follow
+both operand types, one `gen_typecast_arithmetic` call, adopt the result type
+if both operands agree and are numeric, then `adjust_float_arith`.
+
+The Python converter **already lowers complex arithmetic itself**, before the
+adjuster ever runs: `math/complex_handler.cpp:98-110` builds `ieee_mul2tc` /
+`ieee_add2tc` over `.real` / `.imag` `member2tc` accesses directly, carrying
+`symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode")` as the rounding mode
+(`complex_handler.cpp:92`). If no `complex_type2t`-typed binary operation
+survives into `python_adjust`, ~88 of the 114 lines are not this scope's work.
+
+**This was a hypothesis with a named discharge, not a finding.** It is now
+**confirmed** corpus-wide — see §9.1.
+
+### 3.3 The under-estimate — `adjust_float_arith` is not an id rewrite in IREP2
+
+`clang_c_adjust::adjust_float_arith` works by **mutating the node's id in
+place** (`expr.id("ieee_add")`) and then setting a `rounding_mode` sub-irep.
+Neither operation exists in IREP2: `add2t` and `ieee_add2t` are distinct
+classes (`src/irep2/expr_kinds.inc:58`), nodes are immutable, and the rounding
+mode is a constructor **operand**, not an attribute. The IREP2 arm must
+therefore *rebuild* the node — `ieee_add2tc(type, lhs, rhs, rm)` — rather than
+retype it, and must source `rm` the same way the converter already does
+(`c:@__ESBMC_rounding_mode`), or the goto output will not be byte-identical.
+
+The legacy function also carries a `// BUG: setting rounding_mode breaks
+migration` comment and an early return for vector types. Do not port the bug;
+do check whether the vector arm is reachable from Python at all (it likely is
+not — the same census as G0 answers it).
+
+### 3.4 Revised sizing
+
+| half | estimate | basis |
+|---|---|---|
+| operand-level reconciliation | **1 PR**, ~40-60 lines | scalar path only (§3.2), engine already native (§3.1), node rebuild instead of id rewrite (§3.3) |
+| assignment conversion | **1 PR**, ~15-25 lines | `c_implicit_typecast(expr2tc&, type2tc, ns)` at a new `code_assign2t` arm |
+| flip + census | **1 PR** | re-run the §6 gate |
+
+So **3 PRs, not "multi-PR effort" in the open-ended sense** — *conditional on
+G0*. If G0 shows complex or vector binops do reach `python_adjust`, the operand
+half reverts to roughly the original estimate and gains a fourth PR.
+
+**G0 came back clean, so this sizing stands** (§9.1). Two adjustments the census
+forced, neither of which adds a PR: the operand half must exclude `pointer` and
+`code` operands (§9.2), and it must perform legacy's node-type adoption, which in
+IREP2 is a `with_type` rebuild rather than an assignment to `expr.type()`.
+
+## 4. Phased decomposition
+
+Strictly ordered. The ordering is the soundness argument from §2, not a
+preference.
+
+### Phase 0 — the reachability census (no code change)
+
+Discharge G0. Instrument `python_adjust::adjust_expr` to log the `type_id` and
+`expr_id` of every binary arithmetic node it sees, run the whole `python`
+suite, and tabulate. Deliverable: a table of reachable operand type kinds.
+Revert the instrumentation.
+
+### Phase 1 — operand-level arithmetic reconciliation
+
+Add the binary-arithmetic arm to `adjust_expr`, covering the kinds Phase 0
+found reachable. Widen the `python_adjust.cpp:421` guard from
+"both-bv-different-signedness" to the usual arithmetic conversions, rebuilding
+`ieee_*` nodes per §3.3.
+
+**Ships alone.** It must, because it has its own parity gate and because
+shipping it *with* Phase 2 would leave no way to attribute a regression to one
+half. Landing it alone is safe in the direction that matters: it adds
+conversions the legacy path also performs, so it moves the hop-off *toward*
+legacy, and the assignment seam stays as under-converted as it is today.
+
+### Phase 2 — the assignment conversion
+
+Add the assignment-conversion arm calling
+`c_implicit_typecast(source, target->type, ns)`. Only after Phase 1 has landed
+and passed its gate.
+
+**Confirm the node kind first.** A `code_assign2t`-only arm is partly dead on
+this path: the prototype in §9.3 fires on some assignments but leaves
+`precedence2` untouched, whose missing cast is unambiguously at an assignment
+seam. Converter-emitted assignments are `code_expression(sideeffect2t{assign})`
+rather than `code_assign2t` (the same trap recorded for the W1-loc native-body
+work), so the arm must cover both kinds or it will silently skip most Python
+source assignments.
+
+**The `neural-net_fail` check is the acceptance test for this phase**, not a
+regression to notice later. It must report FAILED. §9.3 shows the prototype
+coupling achieves this.
+
+### Phase 3 — the flip
+
+Make `python_adjust` the sole adjuster; `--python-irep2-adjust-only` becomes
+the default with an opt-out, mirroring how the W1-loc keystone shipped
+(`--irep2-native-body` → deprecated no-op, `--no-irep2-native-body` the escape
+hatch, `src/esbmc/options.cpp:964-975`).
+
+## 5. Gates
+
+| # | Gate | Discharged by |
+|---|---|---|
+| **G0** | ~~The reachable operand-kind census exists, and the complex/vector claim in §3.2 is confirmed or refuted~~ **DISCHARGED, §9.1** | Phase 0 |
+| G1 | `builtin_all_nonliteral` and `chained-comparison2_fail` produce legacy-identical verdicts under the hop-off | Phase 2 |
+| G2 | **`neural-net_fail` (`--fixedbv`) reports FAILED** | Phase 2 — the anti-masking gate |
+| G3 | The 3 flip-gate regressions this scope owns clear: `github_4344`, `github_5571_fail`, `github_5571_tuple_str_annotation`. The other 3 (`lambda15`, `precedence2`, `sum_tuple`) are out of scope per §9.4 and must be re-homed before the flip | Phase 2 |
+| G4 | Whole-corpus census re-run, 0 attributable divergences | Phase 3 |
+| G5 | Dual-solver agreement (Bitwuzla + Z3) on the corpus | Phase 3 |
+
+**Census methodology — inherited, non-optional.** Both prior censuses on this
+track were first invalidated by harness artifacts. Reuse the recorded rules:
+
+1. **Skip tests whose `test.desc` already passes the flag** — adding it twice
+   makes boost throw `multiple_occurrences` (9 false divergences in the
+   flip-gate run).
+2. **Count both-paths-no-verdict separately** — differing only in `rc=134` vs
+   `rc=139` is pre-existing, not attributable.
+3. **Exclude or serialize `--k-induction-parallel` tests** — forked children
+   share stderr and the capture garbles; it is UNSTABLE against itself.
+4. **Minimum-size guard on captured output** (`< 200 bytes → SKIP`) — both
+   sides collapsing to one error line otherwise counts as a *match*.
+5. Sample **unbiased and dense**: stride-20 missed a 0.5 % defect rate
+   entirely. Directory-order prefixes are biased.
+
+## 6. Risks
+
+| # | Risk | Mitigation |
+|---|---|---|
+| R1 | Phase 1 lands and Phase 2 never does, leaving the hop-off half-converted indefinitely | Phase 1 is verdict-neutral-or-better by construction; the flag stays default-off until G2-G4 |
+| R2 | The conversions change goto bytes for tests that currently pass, on the *default* path | They cannot — `python_adjust` runs only under `--python-irep2-adjust-only` until Phase 3 |
+| R3 | G0 refutes §3.2 and the effort triples | Phase 0 is deliberately first and cheap; re-size before committing to Phase 1 |
+| R4 | Another masking case exists that `neural-net_fail` does not represent | G3 + G5; and prefer `_fail` tests when sampling — a masked bug only shows on a test that should FAIL |
+
+## 7. Non-goals
+
+- Touching `clang_c_adjust` / `clang_cpp_adjust`, or the C and C++ paths.
+- The four flip-gate regressions Phase 0 found to be a *separate* mechanism
+  (`chained-comparison2_fail`, `lambda15`, `precedence2`, `sum_tuple` — §9.4).
+  They need their own diagnosis and, on the evidence, their own scope; they are
+  not per-case stragglers of this one. This supersedes the earlier "do not
+  re-triage per case" instruction, which rested on the refuted single-mechanism
+  reading.
+- V.1a, V.2/W3, V.5, V.6 — different scopes, see
+  `docs/roadmap/irep2-migration.md` §V.7 and
+  `docs/roadmap/scope-v2-w3-attribute-carriage.md`.
+- §V.1 bars #1/#2/#4. This scope moves none of them.
+
+## 8. One-line summary
+
+The engine is already IREP2-native and already called from `python_adjust`;
+what is missing is a binary-arithmetic arm and an assignment arm, which are
+unsound apart and must land in that order — sized at 3 PRs conditional on a
+cheap reachability census that could shrink the first one by ~88 lines.
+
+Phase 0 discharged that census: the ~88 lines are indeed out of scope, the
+coupling is confirmed by direct measurement, and the arithmetic arm turns out to
+matter for only two tests in the whole suite — but half the flip-gate
+regressions are a second mechanism this scope does not clear, so the flip needs
+one more scope than it looked like it did.
+
+## 9. Phase 0 — results (2026-07-30)
+
+### 9.1 The census, and G0
+
+`python_adjust::adjust_expr` was instrumented to log `expr_id`, node type and
+operand types for the IREP2 counterparts of the eight ids legacy routes to
+`adjust_expr_binary_arithmetic` — `+ - * / mod bitand bitxor bitor`
+(`clang_c_adjust_expr.cpp:124-130`) — plus the four `ieee_*` variants those
+lower to on a floating-point path, then the
+whole `python` suite was run under `--python-irep2-adjust-only`, replaying each
+`test.desc`'s own flags. 4 396 tests ran; 4 301 produced at least one node;
+~5.25 M nodes were logged. The instrumentation has been reverted.
+
+Two methodology notes worth reusing:
+
+- **Probe placement is load-bearing.** `adjust_expr` completes the node's own
+  type and then recurses operands *bottom-up*, both **after** function entry. A
+  probe at entry measures pre-completion, pre-recursion state, so a
+  `symbol_type2t` resolving to `complex` would be invisible — an entry-only
+  census does not discharge G0. Both points were logged; they never disagreed,
+  but that has to be measured rather than assumed.
+- **`--goto-functions-only` is sound here and ~5× faster.** The adjuster runs
+  before symex, so skipping the solve yields byte-identical shape sets while
+  taking each test off its solve timeout.
+
+Every type kind observed, across all 5.25 M nodes:
+
+| kind | appears as |
+|---|---|
+| `signedbv`, `unsignedbv` | node type and operands |
+| `floatbv`, `fixedbv` | node type and operands |
+| `pointer` | operands of `add`/`sub` (and `sub`'s node type, for differences) |
+| `code` | one operand of `ieee_div` only — §9.2 |
+
+**`complex_type2t` and `vector_type2t` do not occur at all.** §3.2 is confirmed:
+~88 of the legacy 114 lines are not this scope's work, and the `adjust_float_arith`
+vector arm is unreachable from Python. `ieee_*` nodes arrive already reconciled —
+both sides `floatbv`, operands ordered `rounding_mode, side_1, side_2`
+(`irep2_expr.cpp:762`) with the rounding mode an `int32` symbol, as §3.3
+predicted — so the arm must not re-lower an already-`ieee_*` node.
+
+**Heterogeneous nodes are 165 of ~5.25 M (0.003 %), in four shapes, confined to
+two tests:**
+
+| shape | count | test | note |
+|---|---:|---|---|
+| `ieee_div floatbv \| signedbv code floatbv` | 160 | 32 `cmath_*` / `complex_*` | §9.2 |
+| `mul signedbv \| signedbv fixedbv` | 3 | `neural-net_fail` (`--fixedbv`) | the masking witness |
+| `add fixedbv \| fixedbv signedbv` | 1 | `neural-net_fail` (`--fixedbv`) | same |
+| `sub unsignedbv \| signedbv signedbv` | 1 | `constants` | node-type only |
+
+So **Phase 1's arithmetic arm has a corpus-wide blast radius of two tests.**
+Under the default (floatbv) configuration the converter already emits
+homogeneous operands; heterogeneity appears only under `--fixedbv`. A census
+sample containing no `--fixedbv` test will report zero heterogeneity and is
+worthless for this question.
+
+`constants` is worth noting separately: `E = uint64(2**4 - 1)` yields a
+`unsignedbv`-typed `sub` over two `signedbv` operands. Legacy's
+`if (type0 == type1 && is_number(type0)) expr.type() = type0;`
+(`clang_c_adjust_expr.cpp:532-533`) retypes the node; the hop-off does not. The
+work here is a **node-type adoption**, not an operand conversion — and in IREP2
+that is a `with_type` rebuild, since nodes are immutable.
+
+### 9.2 Two operand kinds the arm must decline
+
+- **`pointer` is the most common operand kind in the corpus.**
+  `add pointer pointer signedbv` alone is ~31 % of all nodes, plus
+  `sub pointer pointer signedbv` and `sub signedbv pointer pointer` (pointer
+  difference). This traffic is the C operational-model bodies, not Python source.
+  Legacy's `is_number` guard already declines to adopt for it; the IREP2 arm must
+  reproduce that or it will corrupt pointer arithmetic.
+- **`code`-typed operands occur.** `cmath.pi / 2.0` lowers to
+  `IEEE_DIV(pi, 2.000000)` where `pi` is a bare `code`-typed symbol — 160 nodes
+  across 32 `cmath_*`/`complex_*` tests, reproducible in six lines, and present
+  **on the default path too**, so it is not hop-off-specific. It is not currently
+  unsound: bounding probes on `cmath.pi / 2.0` (`> 1.5` SUCCESSFUL, `> 1.6`
+  FAILED, `< 0.0` FAILED) bracket the value correctly at π/2. But a new arm must
+  not hand a `code`-typed operand to `c_implicit_typecast_arithmetic`. Worth
+  filing separately as a node type-hygiene defect; it may be related to the
+  known `cmath_*` SMT-sort abort.
+
+### 9.3 §2's coupling argument, measured
+
+Prototype arms for Phase 1 and Phase 2 were built behind environment gates and
+measured on `neural-net_fail --fixedbv`, where G2 requires FAILED. Both
+prototypes have been reverted; this is evidence for phasing, not an
+implementation.
+
+| config | verdict |
+|---|---|
+| legacy | FAILED |
+| hop-off, bare | FAILED |
+| hop-off **+ assignment arm only** | **SUCCESSFUL — the §2 masking, reproduced** |
+| hop-off + assignment arm + equality arm | SUCCESSFUL |
+| hop-off + arithmetic arm only | FAILED |
+| hop-off **+ arithmetic arm + assignment arm** | **FAILED — G2 satisfied** |
+
+**§2 is confirmed and the §4 ordering is correct**: the assignment conversion
+masks a real bug when it lands alone, and the arithmetic arm is what prevents
+that. Phase 1 must precede Phase 2.
+
+The third row rules out a tempting alternative. `python_adjust` has **no arm for
+`equality2t`/`notequal2t` at all**, while legacy routes `=` and `notequal`
+through `adjust_expr_rel` alongside the four ordering relations `python_adjust`
+does handle (`clang_c_adjust_expr.cpp:109-115` vs `python_adjust.cpp:393-396`);
+and the `neural-net_fail` GOTO diff is an equality —
+`x == (double)((signed int)x)` (legacy) vs `x == (signed int)x` (hop-off). That
+makes a missing-equality-arm explanation look compelling, and it is wrong:
+adding an equality arm does not prevent the masking. The gap is real and is
+tracked in `scope-v1k-adjuster.md`, but it is not this mechanism.
+
+### 9.4 Gate status under the coupled prototype
+
+Four of the eight G1/G3 tests reach legacy parity, including all three crashes
+and the abort:
+
+| test | legacy | coupled prototype | |
+|---|---|---|---|
+| `builtin_all_nonliteral` | SUCCESSFUL | SUCCESSFUL | was SIGSEGV |
+| `github_4344` | SUCCESSFUL | SUCCESSFUL | was SIGSEGV |
+| `github_5571_fail` | FAILED | FAILED | was abort |
+| `github_5571_tuple_str_annotation` | SUCCESSFUL | SUCCESSFUL | was abort |
+| `chained-comparison2_fail` | FAILED | *no verdict* | unchanged |
+| `lambda15` | SUCCESSFUL | *no verdict* | unchanged |
+| `precedence2` | SUCCESSFUL | FAILED | unchanged |
+| `sum_tuple` | SUCCESSFUL | FAILED | unchanged |
+
+The remaining four are **insensitive to all three prototype arms** — identical in
+the bare hop-off and in every configuration — so they are a separate mechanism
+and G3 does not close on Phases 1-2 as scoped. `precedence2` localises it: `x` is
+a `double`, and `x |= 7` gives legacy
+`ASSIGN x=(double)((signed long int)((signed int)x) | 7);` against hop-off
+`ASSIGN x=(signed long int)((signed int)x) | 7;`. That is an assignment
+conversion the `code_assign2t` arm does not see, which is the node-kind
+correction recorded in §4 Phase 2.
+
+One claim in §2 did not reproduce: mirroring the assignment conversion alone
+does **not** fix `precedence2` (it stays FAILED in that configuration). The
+`neural-net_fail` half of that sentence reproduced exactly.

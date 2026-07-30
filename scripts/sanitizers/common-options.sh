@@ -40,6 +40,10 @@ _common="log_path=$_log_prefix:halt_on_error=0:abort_on_error=0:symbolize=1:prin
 ASAN_OPTIONS="$_common:detect_leaks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1"
 UBSAN_OPTIONS="$_common:print_stacktrace=1:report_error_type=1:suppressions=$ESBMC_SANITIZER_REPO_ROOT/scripts/sanitizers/ubsan-suppressions.txt"
 LSAN_OPTIONS="$_common:suppressions=$ESBMC_SANITIZER_REPO_ROOT/scripts/sanitizers/lsan-suppressions.txt"
+# TSan does not honour abort_on_error/symbolize the way the other tools do, so
+# build its option string from the shared log_path/halt_on_error prefix only.
+TSAN_OPTIONS="log_path=$_log_prefix:halt_on_error=0:second_deadlock_stack=1:history_size=4:suppressions=$ESBMC_SANITIZER_REPO_ROOT/scripts/sanitizers/tsan-suppressions.txt"
 
-export ASAN_OPTIONS UBSAN_OPTIONS LSAN_OPTIONS ESBMC_SANITIZER_LOG_DIR ESBMC_SANITIZER_REPO_ROOT
+export ASAN_OPTIONS UBSAN_OPTIONS LSAN_OPTIONS TSAN_OPTIONS
+export ESBMC_SANITIZER_LOG_DIR ESBMC_SANITIZER_REPO_ROOT
 unset _log_prefix _common

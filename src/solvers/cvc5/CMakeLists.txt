@@ -23,6 +23,12 @@ if(ENABLE_CVC5)
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(solvercvc5 PUBLIC fmt::fmt cvc5::cvc5)
 
+    # cvc5's exported target names its own dependencies (cadical, picpoly, ...)
+    # as bare -l flags, so every consumer needs cvc5's lib/ on the link path.
+    cmake_path(SET CVC5_LIB_PATH NORMALIZE "${cvc5_DIR}/../../")
+    cmake_path(ABSOLUTE_PATH CVC5_LIB_PATH OUTPUT_VARIABLE CVC5_LINK_DIR)
+    target_link_directories(solvercvc5 PUBLIC "${CVC5_LINK_DIR}")
+
     # Add to solver link
     target_link_libraries(solvers INTERFACE solvercvc5)
 

@@ -1,10 +1,8 @@
 // Multiple inheritance: the non-primary base B2 sits at a non-zero offset
 // inside D. ~D must call ~B2 with `this` adjusted to the B2 subobject so
-// that B2 sees its own `y == 2`. build_destructor_chain casts the derived
-// `this` to the base pointer type via gen_typecast, mirroring how the
-// constructor base-init path delegates this elsewhere in the frontend.
-// ESBMC's struct-layout model resolves the cast soundly, so this test
-// pins the observable behaviour and guards against future regressions.
+// that B2 sees its own `y == 2`; build_destructor_chain now applies that
+// base-subobject offset (github #6021, surfaced by the return-path unwind
+// in github #6077).
 #include <cassert>
 
 struct B1

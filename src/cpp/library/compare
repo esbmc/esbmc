@@ -9,6 +9,12 @@
 // The signed-char value layout matches the one libc++ and libstdc++ use,
 // which is also what Clang's compiler hooks for default <=> assume.
 
+// Everything below needs consteval, operator<=> and defaulted comparisons.
+// libstdc++ and libc++ both make this header expand to nothing before C++20
+// rather than erroring, so a translation unit that includes it unconditionally
+// still compiles in an older mode; match that (github #3387).
+#if __cplusplus >= 202002L
+
 namespace std
 {
 
@@ -311,5 +317,7 @@ constexpr bool is_gteq(partial_ordering c) noexcept
 }
 
 } // namespace std
+
+#endif // __cplusplus >= 202002L
 
 #endif

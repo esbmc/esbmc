@@ -38,6 +38,7 @@ option(ENABLE_CVC4 "Use CVC4 solver (default: OFF)" OFF)
 option(ENABLE_CVC5 "Use CVC5 solver (default: OFF)" OFF)
 option(ENABLE_BITWUZLA "Use Bitwuzla solver (default: OFF)" OFF)
 option(ENABLE_BITWUZLLOB "Use Bitwuzllob (Bitwuzla on the Mallob platform) via an external mallob binary (default: ON)" ON)
+option(ENABLE_NEUROSYM "Use NeuroSym (neural-guided GAN + Z3 fallback) via an external Python program (default: ON)" ON)
 
 #############################
 # OTHERS

@@ -84,7 +84,13 @@ __ESBMC_HIDE:;
 void __ESBMC_default_unexpected_handler()
 {
 __ESBMC_HIDE:;
-  std::terminate();
+  // No-op: with no user handler installed, a violated dynamic exception
+  // specification must terminate, but that decision is owned by the GOTO
+  // exception lowering, which asserts it directly (FAILED) when this returns
+  // without throwing. Calling std::terminate() here instead would route through
+  // a custom std::set_terminate handler that could end the path (abort ->
+  // assume(0)) and silently swallow the violation. std::unexpected() still
+  // terminates for a direct user call via its own trailing terminate().
 }
 
 inline std::terminate_handler &__ESBMC_terminate_handler_ref()

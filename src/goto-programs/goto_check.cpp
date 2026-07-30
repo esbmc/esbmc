@@ -1,19 +1,19 @@
 #include <goto-programs/goto_check.h>
 #include <cctype>
-#include <util/c_expr2string.h>
+#include <util/lang/c_expr2string.h>
 #include <langapi/language_util.h>
-#include <util/arith_tools.h>
-#include <util/array_name.h>
-#include <util/base_type.h>
-#include <util/config.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/array_name.h>
+#include <util/expr/base_type.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>
-#include <util/i2string.h>
-#include <util/location.h>
-#include <util/migrate.h>
-#include <util/mp_arith.h>
-#include <util/python_types.h>
-#include <util/std_types.h>
+#include <util/base/i2string.h>
+#include <util/irep/location.h>
+#include <util/irep/migrate.h>
+#include <util/arith/mp_arith.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_types.h>
 
 class goto_checkt
 {
@@ -628,7 +628,7 @@ void goto_checkt::input_overflow_check(
         "Unsupported type {}, skip overflow checking", type_id.as_string());
   }
 
-  if (buf_overflow) // FIX ME! add assert(0) to output the error msg
+  if (buf_overflow)
   {
     goto_programt::targett t = new_code.add_instruction(ASSERT);
     t->guard = gen_false_expr();
@@ -940,32 +940,74 @@ void goto_checkt::pointer_rel_check(
     is_pointer_type(*expr->get_sub_expr(0)) &&
     is_pointer_type(*expr->get_sub_expr(1)))
   {
-    // add same-object subgoal
+    // Relational comparison is only well-defined when both operands point
+    // into the same array object (or one past its end); otherwise it is
+    // undefined behaviour (C11 6.5.8p5).
     expr2tc side_1 = *expr->get_sub_expr(0);
     expr2tc side_2 = *expr->get_sub_expr(1);
 
     expr2tc same_object = same_object2tc(side_1, side_2);
     add_guarded_claim(
-      same_object, "Same object violation", "pointer", loc, guard);
+      same_object,
+      "Relational comparison between pointers is only valid for pointers "
+      "to the same object",
+      "pointer",
+      loc,
+      guard);
   }
 }
 
-static bool has_dereference(const expr2tc &expr)
+// Trailing padding is appended after the declared members (padding.cpp, the
+// `pad(components, components.end(), ...)` calls), so the last declared member
+// is the last non-`anon_pad$` entry. That one name is enough: of the four pad
+// kinds add_padding mints, `anon_bit_field_pad$` is only appended to a struct
+// that *ends* in bit-fields, `ext_int_pad$` only ever follows an _ExtInt
+// member, and `$pad` is union-only -- none of them can follow a trailing array.
+// The `char qux[1]` case in regression/esbmc/github_6508_safe pins this skip.
+static bool is_trailing_member(const type2tc &t, const irep_idt &name)
+{
+  const std::vector<irep_idt> names = struct_union_member_names(t);
+
+  auto it = names.rbegin();
+  while (it != names.rend() && has_prefix(*it, "anon_pad$"))
+    ++it;
+
+  return it != names.rend() && *it == name;
+}
+
+// True when `expr` may designate storage extending past its declared type,
+// i.e. a trailing member reached through a pointer. That is the struct-hack
+// idiom -- `struct { int n; T qux[1]; }` allocated with room for more than one
+// `qux` -- where the declared array bound does not govern the object actually
+// allocated (see 82b5ce54f7). An interior member array cannot be over-allocated
+// that way, so its declared bound does apply (C11 6.5.6p8).
+static bool may_be_over_allocated(const expr2tc &expr, const namespacet &ns)
 {
   if (is_dereference2t(expr))
     return true;
 
-  if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
-    // This is an index of a pointer, which is a dereference
-    return true;
+  if (is_index2t(expr))
+    // An index into a pointer is a dereference; an index into a real array
+    // selects a fixed-size element, which cannot be over-allocated.
+    return is_pointer_type(to_index2t(expr).source_value);
 
-  // Recurse through all subsequent source objects, which are always operand
-  // zero.
-  bool found = false;
-  expr->foreach_operand(
-    [&found](const expr2tc &e) { found |= has_dereference(e); });
+  if (is_typecast2t(expr))
+    return may_be_over_allocated(to_typecast2t(expr).from, ns);
 
-  return found;
+  if (is_bitcast2t(expr))
+    return may_be_over_allocated(to_bitcast2t(expr).from, ns);
+
+  if (is_member2t(expr))
+  {
+    const member2t &memb = to_member2t(expr);
+    const type2tc &t = ns.follow(memb.source_value->type);
+    // A union's storage is deliberately shared, so reaching a larger sibling
+    // member through a smaller one is legitimate rather than an overflow.
+    return (is_union_type(t) || is_trailing_member(t, memb.member)) &&
+           may_be_over_allocated(memb.source_value, ns);
+  }
+
+  return false;
 }
 
 void goto_checkt::bounds_check(
@@ -1005,10 +1047,13 @@ void goto_checkt::bounds_check(
   if (is_pointer_type(t))
     return; // done by the pointer code
 
-  // Otherwise, if there's a dereference in the array source, this bounds check
-  // should be performed by the symex-time dereferencing code, as the base thing
-  // being accessed may be anything.
-  if (has_dereference(ind.source_value))
+  // Otherwise, if the object really being accessed may be larger than its
+  // declared type, defer to the symex-time dereferencing code, which bounds
+  // the allocation rather than the type. That only happens for a trailing
+  // member reached through a pointer; for an interior one the declared bound
+  // governs, and the symex-time check misses the overflow entirely because it
+  // still lands inside the enclosing object (issue #6508).
+  if (may_be_over_allocated(ind.source_value, ns))
     return;
 
   // We can't check bounds of an infinite sized array
@@ -1019,7 +1064,7 @@ void goto_checkt::bounds_check(
     "array bounds violated: " + array_name(ns, ind.source_value);
   const expr2tc &the_index = ind.index;
 
-  // Lower bound access should be greater than zero
+  // Lower bound: index must be non-negative (>= 0)
   expr2tc zero = gen_zero(the_index->type);
   assert(!is_nil_expr(zero));
 
@@ -1158,6 +1203,17 @@ void goto_checkt::check_rec(
 
     return;
   }
+
+  case expr2t::forall_id:
+  case expr2t::exists_id:
+    // A quantifier binds a fresh logical variable ranging over its whole type;
+    // its body is a pure predicate, not executed code. Runtime safety checks
+    // (bounds, overflow, div-by-zero) over the bound variable are meaningless --
+    // e.g. a[i] inside `forall i . (0 <= i < n) ==> a[i] == 0` is not a real
+    // out-of-bounds access, since i is universally quantified, not a concrete
+    // index. CBMC likewise emits no such checks inside a quantifier body. Skip
+    // the whole node so the array theory (not goto_check) models the body.
+    return;
 
   default:
     break;

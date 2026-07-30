@@ -96,6 +96,42 @@ public:
    *  mk_or(a, b) if both are set. */
   smt_astt combine_nan_preds(smt_astt a, smt_astt b) const;
 
+  /** Record a predicate that is true iff the SMT AST t represents
+   *  IEEE 754 -0.0. Such predicates originate when a negative
+   *  subnormal-range result is flushed to zero and when a literal
+   *  negative-zero float constant is converted, and may subsequently
+   *  be propagated through assignments or wrapper terms. This does not
+   *  implement general signed-zero semantics. */
+  void store_neg_zero_pred(smt_astt t, smt_astt neg_zero_pred);
+
+  /** Return the stored negative-zero predicate for t, or nullptr if no
+   *  negative-zero metadata is recorded for t. */
+  smt_astt get_neg_zero_pred(smt_astt t) const;
+
+  /** Propagate a negative-zero predicate from rhs to lhs after an SSA
+   *  assignment. Called from smt_solver_baset::convert_assign alongside
+   *  propagate_interval and propagate_nan_pred.
+   *
+   *  One-way: if rhs carries no predicate, any existing entry already
+   *  recorded for lhs is left in place rather than cleared. This is
+   *  harmless under SSA, where each assignment gives lhs a fresh AST
+   *  with no prior entry of its own, but callers reusing an AST across
+   *  more than one assignment should not assume this clears stale
+   *  metadata. */
+  void propagate_neg_zero_pred(smt_astt lhs, smt_astt rhs);
+
+  /** Re-attach inner's negative-zero predicate (if any) to outer, guarded
+   *  by `guard` (the condition under which outer actually evaluates to
+   *  inner). Must be used whenever a term that may carry negative-zero
+   *  metadata is wrapped in a further SMT term such as an ite -- e.g.
+   *  encode_ieee_div's div-by-zero selection -- since the metadata map is
+   *  keyed by AST pointer and the wrapper is a different pointer from
+   *  inner, so a lookup on the wrapper alone would silently miss it. */
+  void propagate_neg_zero_through_ite(
+    smt_astt outer,
+    smt_astt inner,
+    smt_astt guard);
+
   /** Interval-lifted RNE enclosure helper.
    *  Input: exact real result and pre-computed interval endpoints [lo_r, hi_r].
    *  Returns {ra_lo, ra_hi} for storage in the interval map. */
@@ -146,6 +182,27 @@ private:
    *  the operand may be negative. */
   std::unordered_map<const smt_ast *, smt_astt> ir_ieee_nan_map;
 
+  /** Map from AST pointer to its negative-zero predicate (a boolean SMT
+   *  term that is true iff the value stands for IEEE 754 -0.0). Predicates
+   *  originate when a negative subnormal-range result is flushed to zero
+   *  (smt_solver_baset::mk_subnormal_flush) and when a literal
+   *  negative-zero float constant is converted
+   *  (smt_solver_baset::convert_terminal's constant_floatbv_id case), and
+   *  may subsequently be propagated through assignments or wrapper terms;
+   *  an absent entry means that no negative-zero metadata is recorded for
+   *  the value.
+   *
+   *  Lifetime: keyed on raw AST pointers and never pruned, but
+   *  smt_solver_baset::pop_ctx() deletes every AST created since the
+   *  matching push_ctx(). A pop can therefore leave both a key and its
+   *  stored predicate value dangling; a later lookup that hits such an
+   *  entry would hand a freed AST to a consumer. This exposure predates
+   *  this map (ir_ieee_nan_map above has the same shape and is subject
+   *  to the same limitation) and is not specific to negative-zero
+   *  tracking, but is noted here since this map's population grows with
+   *  every literal negative-zero constant converted. */
+  std::unordered_map<const smt_ast *, smt_astt> ir_ieee_neg_zero_map;
+
   /** Set of symbol names that have already received integer range assertions,
    *  preventing duplicate constraints for the same SSA variable. */
   std::unordered_set<std::string> ir_ieee_ranged_syms;
@@ -154,6 +211,18 @@ private:
    *  No-op if neither operand has a known NaN predicate. */
   void store_combined_nan_pred(smt_astt result, smt_astt s1, smt_astt s2);
 
+  /** Returns the max-normal threshold for the given float precision. */
+  smt_astt get_max_normal_real(const floatbv_type2t &fbv_type) const;
+
+  /** True iff x > max_normal (positive infinity in the real-arithmetic encoding). */
+  smt_astt is_pos_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const;
+
+  /** True iff x < −max_normal (negative infinity in the real-arithmetic encoding). */
+  smt_astt is_neg_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const;
+
+  /** True iff |x| > max_normal (either sign of infinity). */
+  smt_astt is_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const;
+
   /** Dispatch the appropriate five-way rounding-mode enclosure. */
   std::pair<smt_astt, smt_astt> apply_enclosure(
     smt_astt real_result,
@@ -161,6 +230,10 @@ private:
     smt_astt hi_r,
     const floatbv_type2t &fbv_type,
     const expr2tc &rounding_mode);
+
+  /** Widen [lo, hi] to [min(0,lo), max(0,hi)] so that the zero produced by
+   *  mk_subnormal_flush is always within the stored interval. */
+  std::pair<smt_astt, smt_astt> widen_for_flush(smt_astt lo, smt_astt hi);
 };
 
 #endif /* SOLVERS_SMT_FP_IR_IEEE_CONV_H_ */

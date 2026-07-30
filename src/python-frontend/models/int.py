@@ -59,7 +59,7 @@ class int:
     def bit_length(cls, n: IntWide) -> int:
         length: int = 0
         # Soundness: the literal 512 must be >= kPythonBitLengthCap in
-        # src/python-frontend/type_handler.cpp, which a static_assert ties
+        # src/python-frontend/type/type_handler.cpp, which a static_assert ties
         # to kPythonBignumWidth. The OM is FLAIL-mangled before the C++
         # side is touched, so the literal cannot read the constant — bump
         # both together when widening Python int (#4642). The static_assert

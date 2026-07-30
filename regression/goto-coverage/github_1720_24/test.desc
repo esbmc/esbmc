@@ -7,4 +7,4 @@ main.c
 ^Condition Properties - SATISFIED:  2
 ^Condition Properties - UNSATISFIED:  0
 ^Condition Coverage: 100%
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

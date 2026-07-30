@@ -502,9 +502,18 @@ continues until all bugs are found. Relevant options:
 
 - `--multi-property` — verify all claims of the current bound (also activates `--no-remove-unreachable`).
 - `--multi-fail-fast N` — stop after the first `N` violations.
+- `--multi-property-interleavings N` — for concurrent programs, keep exploring thread interleavings after a violation until `N` consecutive ones reach a verdict on no new property (default 100, must be positive).
 - `--keep-verified-claims` — do not skip verified claims (assertions inside a loop body are then re-verified during unwinding).
 - `--all-witnesses` — after a property is violated, enumerate further inputs that also violate it (implies `--multi-property`; see below).
 - `--max-witnesses N` — cap witnesses per property (default 16; 0 = unlimited).
+
+Verdicts accumulate across the whole run and each property is reported exactly
+once at the end, with *failed* dominating *unknown* dominating *passed* — so a
+property discharged under one schedule and violated under another is reported as
+violated rather than printing contradictory lines. For a concurrent program,
+exploration continues past the first violation until
+`--multi-property-interleavings` consecutive interleavings decide nothing new; a
+run that stops early states that its report is partial.
 
 ### Enumerating all violating inputs
 
@@ -555,8 +564,11 @@ frame (`push_ctx`/`pop_ctx`) per claim, so the feature is safe under
 `--smt-during-symex` and does not leak between claims. Machine-readable artifacts
 (`--cex-output`, `--generate-testcase`, `--generate-html-report`,
 `--generate-json-report`, `--witness-output-graphml`, `--witness-output-yaml`)
-fan out per witness using the `<ce>-<file>` prefix scheme, one file per witness,
-so it is also safe under `--parallel-solving`. Enumeration is skipped during the
+fan out per witness using the `<phase>-k<K>-<N>-<file>` prefix scheme —
+`<phase>` is the verification phase (`base`/`fwd`/`indstep`/`bmc`), `<K>` the
+unwind bound, and `<N>` a decimal increasing from zero — one file per witness,
+so it is also safe under `--parallel-solving`, and counterexamples found in
+different k-induction phases or k-steps do not overwrite each other. Enumeration is skipped during the
 inductive step of k-induction (a SAT result there means UNKNOWN, not a real
 counterexample).
 
@@ -577,10 +589,27 @@ dynamic-symbolic-execution test generation (KLEE, DART, SAGE), which varies the
 path condition to maximise coverage; `--all-witnesses` instead fixes the failure
 path and enumerates input vectors on it.
 
+## Suppressing assertions inside the operational models
+
+```sh
+esbmc file.c --no-library-assertions
+```
+
+ESBMC's operational models assert their own API preconditions (for example
+`"Sem is not initialized"`). `--no-library-assertions` drops those claims while
+keeping every assertion in the program under verification — useful when a model
+precondition is deliberately violated in code you do not own.
+
+It hides genuine API misuse the models report, so it is off by default. It also
+leaves the checks ESBMC *generates* inside model code (those are controlled by
+`--no-standard-checks`), renumbers `--claim` indices, and is unsupported for
+Python.
+
 ## Supported SMT backends {#smt-backends}
 
 ESBMC integrates several SMT solvers directly via their APIs, and on Unix can
-also drive an external solver process over a pipe:
+also drive an external solver process, either interactively over a pipe or in
+one-shot batch mode:
 
 | Backend | Option |
 |---|---|
@@ -591,6 +620,19 @@ also drive an external solver process over a pipe:
 | CVC4 | `--cvc` |
 | Yices | `--yices` |
 | SMTLIB | `--smtlib --smtlib-solver-prog CMD` |
+| Bitwuzllob | `--bitwuzllob` |
+| NeuroSym | `--neurosym` |
+
+Bitwuzllob and NeuroSym are one-shot subprocess backends: ESBMC renders the
+formula to an SMT-LIB2 file and runs an external program on it in batch mode —
+`mallob` in mono mode (Bitwuzla on the massively parallel Mallob platform) for
+Bitwuzllob, and the NeuroSym neural-guided solver (GAN with Z3 fallback,
+QF_BV only) for NeuroSym. The external command is set with
+`--bitwuzllob-prog CMD` / `--neurosym-prog CMD` (every `%f` is replaced by the
+formula file), and counterexamples are reconstructed by a local interactive
+SMT-LIB2 solver given via `--bitwuzllob-model-prog CMD` /
+`--neurosym-model-prog CMD` (e.g. `"z3 -in"`). Neither backend is ever picked
+implicitly, and NeuroSym rejects `--ir` and incremental strategies.
 
 An alternative default solver can be set with `--default-solver SOLVER` (the
 name without the `--`), which suits a shell alias or the `ESBMC_OPTS`
@@ -605,3 +647,12 @@ shell, so it can include options or chain commands (the tools must be on
 - `cvc5 -L smt2 -m`
 
 Remember to quote the `CMD` string when invoking ESBMC.
+
+### Symmetry breaking
+
+Symmetric formulas — most often a running maximum or minimum folded over an
+uninitialised array — make the backend solver enumerate equivalent case splits.
+ESBMC recognises those max/min folds and asserts the redundant bounds they imply
+before solving, which cuts the search. This is **on by default**; pass
+`--no-symmetry-breaking` to disable it if the extra constraints hurt on a
+particular benchmark.

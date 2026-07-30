@@ -1,1 +1,22 @@
+#pragma once
+
 #include <ctype.h>
+
+// [cctype.syn]: <cctype> declares the C character classification functions in
+// namespace std. Mirrors the cstring/cstdlib models.
+namespace std
+{
+using ::isalnum;
+using ::isalpha;
+using ::iscntrl;
+using ::isdigit;
+using ::isgraph;
+using ::islower;
+using ::isprint;
+using ::ispunct;
+using ::isspace;
+using ::isupper;
+using ::isxdigit;
+using ::tolower;
+using ::toupper;
+} // namespace std

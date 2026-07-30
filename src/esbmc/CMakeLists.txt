@@ -42,15 +42,21 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
   VERBATIM
 )
 
-add_executable(esbmc main.cpp esbmc_parseoptions.cpp bmc.cpp ranking_synthesis.cpp non_termination.cpp globals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
+add_executable(esbmc main.cpp
+    parseoptions/bmc_strategy.cpp
+    parseoptions/command_line_options.cpp
+    parseoptions/driver.cpp
+    parseoptions/function_contracts.cpp
+    parseoptions/goto_program.cpp
+    parseoptions/k_induction.cpp
+    parseoptions/process_goto_program.cpp
+    parseoptions/property_monitors.cpp
+    bmc.cpp ranking_synthesis.cpp non_termination.cpp globals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
 target_include_directories(esbmc
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-cmake_path(SET MY_MAGIC_PATH NORMALIZE "${cvc5_DIR}/../../")
-cmake_path(ABSOLUTE_PATH MY_MAGIC_PATH OUTPUT_VARIABLE CVC_LINK_DIR)
-message("Looking at ${CVC_LINK_DIR}")
 target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${PYTHON_FRONTEND_TARGETS}
                             ${LD_FRONTEND_TARGETS}
                             ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS}
@@ -76,5 +82,4 @@ elseif(MIMALLOC_TARGET)
   # malloc/operator new override wins.
   target_link_libraries(esbmc ${MIMALLOC_TARGET})
 endif()
-target_link_directories(esbmc PUBLIC "${CVC_LINK_DIR}")
 install(TARGETS esbmc DESTINATION bin)

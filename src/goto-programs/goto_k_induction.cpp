@@ -6,10 +6,10 @@
 #include <irep2/irep2_guard.h>
 #include <pointer-analysis/value_set.h>
 #include <pointer-analysis/value_set_analysis.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/std_expr.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/irep/std_expr.h>
 #include <memory>
 #include <unordered_map>
 

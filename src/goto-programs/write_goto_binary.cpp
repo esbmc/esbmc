@@ -1,9 +1,9 @@
 #include <fstream>
 #include <goto-programs/goto_function_serialization.h>
 #include <goto-programs/write_goto_binary.h>
-#include <util/irep_serialization.h>
-#include <util/message.h>
-#include <util/symbol_serialization.h>
+#include <util/irep/irep_serialization.h>
+#include <util/message/message.h>
+#include <util/symtab/symbol_serialization.h>
 
 bool write_goto_binary(
   std::ostream &out,
@@ -41,9 +41,6 @@ bool write_goto_binary(
       gfconverter.convert(it.second, out);
     }
   }
-
-  //irepconverter.output_map(f);
-  //irepconverter.output_string_map(f);
 
   return false;
 }

@@ -104,6 +104,17 @@ if(ENABLE_BITWUZLLOB AND ENABLE_SMTLIB AND NOT WIN32)
         message(WARNING "bitwuzllob regression suite disabled: no z3 binary found on PATH or in Z3_DIR")
     endif()
 endif()
+if(ENABLE_NEUROSYM AND ENABLE_SMTLIB AND NOT WIN32)
+    # Like bitwuzllob: the suite drives the backend through a z3-based sh
+    # stand-in for NeuroSym's batch mode (NeuroSym itself needs a Python +
+    # PyTorch checkout), so it needs a z3 binary and a POSIX shell.
+    find_program(ESBMC_NEUROSYM_TEST_Z3 z3 HINTS "${Z3_DIR}/bin" "${Z3_DIR}")
+    if(ESBMC_NEUROSYM_TEST_Z3)
+        set(REGRESSIONS_NEUROSYM neurosym)
+    else()
+        message(WARNING "neurosym regression suite disabled: no z3 binary found on PATH or in Z3_DIR")
+    endif()
+endif()
 if(ENABLE_CVC4)
     set(REGRESSIONS_CVC cvc)
 endif()
@@ -229,6 +240,7 @@ if(APPLE)
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_BITWUZLLOB}
+                    ${REGRESSIONS_NEUROSYM}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_Z3}
@@ -267,6 +279,7 @@ elseif(WIN32)
                     ${REGRESSIONS_JIMPLE}
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_BITWUZLLOB}
+                    ${REGRESSIONS_NEUROSYM}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_SMTLIB}
@@ -295,6 +308,7 @@ else()
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_BITWUZLLOB}
+                    ${REGRESSIONS_NEUROSYM}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_SMTLIB}
