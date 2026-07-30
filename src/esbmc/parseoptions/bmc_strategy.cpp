@@ -516,6 +516,80 @@ int esbmc_parseoptionst::do_bmc_strategy(
 //  1) GOTO program,
 //  2) verification options.
 //  3) program context,
+// Iterative deepening on the context bound (issue #6480).
+//
+// An unbounded DFS explores one schedule to its full depth before backtracking,
+// so a counterexample that needs only a few context switches can sit far away
+// in DFS order and never be reached inside the time budget -- on the dining
+// philosophers reproducer the deadlock needs 4 switches and is found in ~52 s
+// at --context-bound 4, yet unbounded exploration finds nothing in 300 s.
+//
+// Re-running with the bound raised by one each round visits schedules in order
+// of switch count instead, so the shallowest counterexample is reached first.
+//
+// Soundness. Each round is an under-approximation of the schedule space, so a
+// violation found at any bound is a genuine violation and we stop immediately.
+// The converse needs care: "no violation at bound k" is only a proof if the
+// bound never actually cut anything, which is what reachability_treet::
+// cs_bound_pruned records. While it is set the round is merely bounded-safe and
+// we deepen; once a round completes with it clear, every interleaving was
+// explored and the verdict is a real proof.
+int esbmc_parseoptionst::do_context_bound_deepening(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  const int max_cb = atoi(options.get_option("max-context-bound").c_str());
+
+  if (max_cb < 1)
+  {
+    log_error("--max-context-bound ({}) must be at least 1.", max_cb);
+    return 6;
+  }
+
+  // Intermediate rounds must not each announce success; the verdict is decided
+  // here, once the search either refutes or becomes exhaustive.
+  options.set_option("suppress-bounded-success", true);
+
+  for (int cb = 1; cb <= max_cb; ++cb)
+  {
+    options.set_option("context-bound", std::to_string(cb));
+
+    bmct bmc(goto_functions, options, context);
+    log_progress("Checking with context bound {}", cb);
+
+    const int res = do_bmc(bmc);
+
+    // A violation inside a bounded schedule space is a real violation: the
+    // trace is a concrete execution. do_bmc/report_result has already printed
+    // it, so just propagate the exit code.
+    if (res == P_SATISFIABLE)
+      return 1;
+
+    // Neither a proof nor a refutation -- a solver failure or an SMT-LIB-only
+    // emission says nothing about deeper bounds, so do not keep deepening.
+    if (res != P_UNSATISFIABLE)
+      return res;
+
+    if (!bmc.cs_bound_pruned)
+    {
+      log_status(
+        "Context bound {} covered every interleaving; result is not bounded by "
+        "it",
+        cb);
+      options.set_option("suppress-bounded-success", false);
+      log_success("\nVERIFICATION SUCCESSFUL");
+      return 0;
+    }
+  }
+
+  log_status(
+    "Reached --max-context-bound ({}) with the schedule space still truncated; "
+    "the program is safe only up to that many context switches",
+    max_cb);
+  log_fail("VERIFICATION UNKNOWN");
+  return 0;
+}
+
 int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");

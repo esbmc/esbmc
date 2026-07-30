@@ -392,7 +392,9 @@ int esbmc_parseoptionst::doit()
 
   // Now run one of the chosen strategies
   int res;
-  if (
+  if (cmdline.isset("incremental-context-bound"))
+    res = do_context_bound_deepening(options, goto_functions);
+  else if (
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
     cmdline.isset("falsification") || cmdline.isset("k-induction") ||
     cmdline.isset("loop-invariant"))

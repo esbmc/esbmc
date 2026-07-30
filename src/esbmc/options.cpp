@@ -519,6 +519,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"context-bound",
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "Limit number of context switches for each thread"},
+    {"incremental-context-bound",
+     NULL,
+     "Re-explore with the context bound raised by one each round, stopping at "
+     "the first violation or once a round has covered every interleaving"},
+    {"max-context-bound",
+     boost::program_options::value<int>()->default_value(20)->value_name("nr"),
+     "Highest context bound tried by --incremental-context-bound"},
     {"state-hashing", NULL, "Enable state-hashing, prunes duplicate states"},
     {"no-goto-merge",
      NULL,

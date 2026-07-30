@@ -1528,7 +1528,13 @@ void bmct::report_result(smt_resultt &res)
         !options.get_bool_option("kind-violation-found") &&
         !(is && options.get_bool_option("disable-inductive-step")))
       {
-        if (vacuity_detected)
+        // An --incremental-context-bound round that found nothing has only
+        // shown the program safe up to that bound; whether that amounts to a
+        // proof depends on cs_bound_pruned, which the driver checks. Stay
+        // silent here so intermediate rounds do not each claim success.
+        if (options.get_bool_option("suppress-bounded-success"))
+          log_status("No violation found within the current context bound");
+        else if (vacuity_detected)
           report_unknown();
         else
           report_success();
@@ -1622,6 +1628,10 @@ smt_resultt bmct::start_bmc()
     sarif_goto_trace(options, ns, empty_trace, dead_store_advisories);
     dead_store_sarif_written = true;
   }
+
+  if (symex)
+    cs_bound_pruned = symex->cs_bound_pruned;
+
   return res;
 }
 
