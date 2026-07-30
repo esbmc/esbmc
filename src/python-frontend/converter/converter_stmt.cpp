@@ -1579,6 +1579,23 @@ void python_converter::update_numpy_array_binding(
     }
   }
 
+  if (rhs_node.value("_type", "") == "Call")
+  {
+    std::optional<nlohmann::json> ret_val =
+      select_return_value_for_call(rhs_node);
+    if (ret_val && return_value_uses_call_argument(*ret_val, rhs_node))
+    {
+      nlohmann::json substituted =
+        substitute_call_arguments(*ret_val, rhs_node);
+      if (is_numpy_view_copy_expr(substituted))
+      {
+        record_numpy_view_copy(lhs, substituted);
+        if (numpy_view_copy_sources_.count(lhs_id) != 0)
+          return;
+      }
+    }
+  }
+
   if (is_numpy_view_copy_expr(rhs_node))
   {
     record_numpy_view_copy(lhs, rhs_node);
@@ -4852,9 +4869,40 @@ void python_converter::get_return_statements(
     return;
   }
 
-  if (contains_copied_numpy_view_name(ast_node["value"]))
+  bool is_user_defined_function = false;
+  if (
+    !current_func_name_.empty() && current_func_name_ != "python_user_main" &&
+    ast_json && ast_json->contains("filename") &&
+    is_program_file((*ast_json)["filename"].get<std::string>()))
+  {
+    const std::vector<std::string> function_path =
+      json_utils::split_function_path(current_func_name_);
+    const nlohmann::json func_node =
+      json_utils::find_function_by_path(*ast_json, function_path);
+    is_user_defined_function = !func_node.empty() && !is_model_file(func_node);
+  }
+  const bool returns_name = ast_node["value"].value("_type", "") == "Name" &&
+                            ast_node["value"].contains("id");
+  if (
+    is_user_defined_function && returns_name &&
+    contains_copied_numpy_view_name(ast_node["value"]))
     throw std::runtime_error(
       "TypeError: returning a copied numpy view is not supported");
+  const locationt return_location = get_location_from_decl(ast_node);
+  const std::string return_file = return_location.get_file().as_string();
+  if (
+    returns_name && ast_json && is_user_defined_function &&
+    is_program_file(return_file))
+  {
+    const std::string name = ast_node["value"]["id"].get<std::string>();
+    const nlohmann::json decl =
+      json_utils::find_var_decl(name, current_func_name_, *ast_json);
+    if (
+      decl.is_object() && decl.value("_type", "") != "arg" &&
+      decl.contains("value") && is_numpy_view_copy_expr(decl["value"]))
+      throw std::runtime_error(
+        "TypeError: returning a copied numpy view is not supported");
+  }
 
   exprt return_value = get_expr(ast_node["value"]);
   locationt location = get_location_from_decl(ast_node);
