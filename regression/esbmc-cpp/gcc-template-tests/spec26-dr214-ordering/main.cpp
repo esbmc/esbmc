@@ -1,10 +1,7 @@
 #include <cassert>
-// dg-do run
-// Copyright (C) 2005 Free Software Foundation, Inc.
-// Contributed by Nathan Sidwell 16 Sep 2005 <nathan@codesourcery.com>
-
-// PR 23519  template specialization ordering (DR214)
-// Origin:  Maxim Yegorushkin <maxim.yegorushkin@gmail.com>
+// Companion to gcc-template-tests/spec26, which is rejected as a whole because
+// its `b * a` is ambiguous. These are the DR214 partial-ordering checks from
+// that test that are well-formed, so the ordering behaviour stays covered.
 
 struct A
 {
@@ -19,18 +16,16 @@ template<class T> struct B
 
 template <typename T, typename R> int operator-(B<T>, R&) {return 4;}
 template<class T> int operator+(A&, B<T>&) {return 5;}
-template <typename T> int operator*(T &, A&){return 6;}
 
 int main()
 {
   A a;
   B<A> b;
+  // The free operator+ is more specialised than A's member template.
   if ((a + b) != 5)
     assert(0 == (1));
-  
+
+  // B's non-template member beats the free operator- template.
   if ((b - a) != 2)
     assert(0 == (2));
-  
-  if ((b * a) != 6)
-    assert(0 == (3));
 }
