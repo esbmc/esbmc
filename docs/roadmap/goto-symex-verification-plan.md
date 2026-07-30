@@ -6,7 +6,7 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0 and M1 complete, M2 partial** (§15 verdict log); M3–M8 not yet
+**Status:** **M0–M3 closed, M4 partial** (§15 verdict log); M5–M8 not yet
 executed. §6.4 records the tier-ordering rule M1 produced. Except
 where §15 records a discharged result, every harness below is a *proposal* and
 nothing here asserts a proof. Findings R1–R12 remain *hypotheses with cited
@@ -572,7 +572,7 @@ inspect the produced `symex_target_equationt`.
 | **H-B2** | **Determinism** (P10) | Run symex twice in one process over the same program; compare the two equations step-for-step (kind, `crc` of `cond`, `guard`, `ignore`) | Iteration-order nondeterminism over pointer-keyed containers (`std::set<expr2tc>` in `thread_last_reads/writes`; the `generate_l2_state_hash` comment already concedes cross-run instability) |
 | **H-B3** | **Slicer equisatisfiability** (P0, I11) | Build equation; clone; slice the clone; solve both per-claim with the real backend; assert identical per-claim verdicts on ≥ 30 small programs incl. arrays with symbolic indices | Slicer unsoundness on real formulas — the honest complement to H-A4 |
 | **H-B4** | **Renaming round-trip** (I3/I4) | For each `SSA_stept`, `get_original_name` of `lhs` equals the L0 symbol; `rename` is idempotent; the level never decreases along the step list | `fixup_renamed_type` / `rename_address` regressions |
-| **H-B5** | **Phi laws** (I8) | For 2-branch programs: #phi assignments == #variables written in exactly one branch + #variables written differently in both; **zero** phi for untouched variables | Over- and under-generation of phi nodes |
+| **H-B5** | **Phi laws** (I8) | For 2-branch programs: the set of *program variables* receiving a phi == the set written by at least one arm; **zero** phi for untouched variables. **Corrected, §15 M4 (H-B5)**: this row originally said "written *differently* in both", which the code does not do — `phi_function` filters on the L2 index differing, not the value | Over- and under-generation of phi nodes |
 | **H-B6** | **Value-set merge monotonicity** (I9) | After `merge_value_sets`, assert the result ⊇ both inputs (using `value_sett` API) | An accidental intersection — a silent unsoundness |
 | **H-B7** | **Assumption-discharge suite** (§6.1 rule 3) | For each Tier-A assumption in §7.3, an assertion on the real engine that it holds over the corpus | Over-constrained Tier-A proofs |
 | **H-B8** | **Incremental-equation parity** (I13) | Same program with and without `--smt-during-symex`; assert identical claim count and per-claim verdicts | `runtime_encoded_equationt` ctx-stack bugs |
@@ -746,6 +746,9 @@ real `level1t`) — gated on parse **and** < 60 s verification; a negative resul
 is recorded in §13.3 and Tier A is kept.
 *Artefact:* `unit/goto-symex/{ssa_wellformed,renaming,phi,determinism}.test.cpp`;
 R5 promoted to a real validator; WI-4 verdict.
+**Revised, §15.** H-B1 (#6487), H-B4 (#6491) and H-B5 closed; H-B5's cases live
+in `merge.test.cpp`, which already owned I8, so there is no `phi.test.cpp`.
+**H-B2 is what remains**, plus the WI-4 pilot.
 
 **M5 — Constraint generation: the slicer (1 wk).** H-A4, H-B3, then the
 **H-C1** sweep over all 1400 `regression/esbmc` CORE tests. *Artefact:* slicer
@@ -1551,6 +1554,70 @@ it targets was present, and (b) a recorded mutation that it catches.
 
 **Still open in M4.** H-B5, H-B2. R14 remains pinned, not diagnosed. Also
 still open from M0: WI-1, WI-2, D12.
+
+### M4 (H-B5) — 2026-07-30
+
+**Result: I8's counting law discharged on the real `phi_function`. No defect
+found; §7.2's statement of the law was wrong and is corrected there.**
+
+Five cases added to `unit/goto-symex/merge.test.cpp`, which already owned I8's
+freshness direction (H-A2), so per the M4 (H-B4) precedent the subject keeps one
+file — no `phi.test.cpp`, contrary to §10's artefact list. 7 → 12 cases,
+59 → 97 assertions.
+
+| Case | Property |
+|---|---|
+| `the phi set is exactly the variables an arm wrote` | set equality over `{both, then_only, else_only}` with `untouched` absent |
+| `the same value in both arms still gets a phi` | the index-keyed filter, *not* value-keyed |
+| `a straight-line program gets no phi at all` | no join ⇒ no phi |
+| `a variable declared inside an arm gets no phi` | the `merge_variables.find(...) == end()` arm |
+| `an unwound loop merges only what it writes` | untouched stays 0 across 4 unwindings and a callee |
+
+The set-equality form is what makes this stronger than the per-variable cases
+above it: over-generation and under-generation are caught by one assertion, and
+a phi for a variable the test never named cannot slip through.
+
+**§7.2's law did not match the code.** It required a phi for variables "written
+*differently* in both" arms. `phi_function` compares
+`merge_state.level2.current_number(variable)` against the current state's — an
+L2 *index* comparison — so `if (c) same = v; else same = v;` still emits an
+ite-shaped phi over two distinct SSA names that happen to hold equal values,
+which `simplify` cannot see through. Benign (a redundant ite the solver
+discharges), but a test written to the original wording would have asserted the
+absence of a phi that is really there, and failed for the wrong reason.
+
+**Two discarded discriminators, both of which produced green-but-wrong tests
+before being caught.** Identifying a phi step is the whole difficulty here:
+
+1. *rhs is an ite* — what the pre-existing `phis_for` helper used. A phi is
+   ite-shaped only when neither incoming guard is false, so the first of an
+   if/else's **two** joins yields a symbol-shaped phi that this misses. The
+   helper is now defined in terms of the phi predicate and keeps the ite filter
+   only where the test wants the two-live-values case.
+2. *hidden + unguarded* — correct for phis, but symex's own bookkeeping
+   (`__ESBMC_alloc`, `$tmp::return_value$_*`) is written the same way, so a
+   straight-line program appeared to have eleven "phis". `original_rhs` looked
+   like the fix and is nil on every step in this configuration, discriminating
+   nothing. The predicate now also requires the `@F@<func>@<var>` program-
+   variable shape, and the law is stated over program variables only.
+
+An if/else lowers to two joins, so a variable written in the then-arm receives
+two phis; the loop case shows 12 for one variable at `--unwind 4`. Those counts
+are properties of GOTO lowering rather than of the merge, so the cases assert
+the phi *set* and a `> 1` lower bound, never an exact per-variable count.
+
+**Mutation testing.** Deleting the `continue` on the "not changed" index test
+fails 6 cases (5 of the 6 are these new ones); deleting the "deleted in this
+branch" `continue` fails exactly 1 — `a variable declared inside an arm gets no
+phi`, the only coverage in the suite for that filter.
+
+Artefact: ESBMC 8.4.0 at master `31aee3387a`; 589/589 `ctest -LE regression`
+pass. Test-only change, no `src/` line touched, so no Mode C obligation arises.
+The 5 `regression/esbmc-unix` failures in the sampled subset reproduce on the
+unmodified tree (pre-existing, macOS).
+
+**Still open in M4.** H-B2. R14 remains pinned, not diagnosed. Also still open
+from M0: WI-1, WI-2, D12.
 
 ---
 
