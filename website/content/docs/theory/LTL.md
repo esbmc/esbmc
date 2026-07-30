@@ -14,13 +14,16 @@ rather than true/false.
 This page documents what the `--ltl` path does in ESBMC 8.4.0, including where
 the implementation diverges from [1].
 
-> **Note**: LTL is a legacy, lightly maintained path. It works — the shipped
-> regression tests pass and the four-valued verdict is computed correctly — but
-> it is wired into ESBMC differently from every other property class. Most
-> importantly, **`VERIFICATION SUCCESSFUL` and the exit code do not reflect the
-> LTL verdict**; you must read the `Final lowest outcome:` line. See
-> [Limitations](#limitations) before relying on it, and
-> [Getting a usable exit code](#getting-a-usable-exit-code) for the workaround.
+> **Warning**: LTL is a legacy, lightly maintained path, and it currently
+> **misses violations**. The monitor is not synchronised to updates of the
+> variables its propositions read, so a definitively violated property can be
+> reported as *presumably true*
+> ([#6546](https://github.com/esbmc/esbmc/issues/6546)). Separately,
+> `VERIFICATION SUCCESSFUL` and the exit code do not reflect the LTL verdict at
+> all ([#6548](https://github.com/esbmc/esbmc/issues/6548)) — you must read the
+> `Final lowest outcome:` line — and several ordinary invocations report a false
+> ⊤ ([#6547](https://github.com/esbmc/esbmc/issues/6547)). Read
+> [Limitations](#limitations) before relying on any of it.
 
 ## At a glance
 
@@ -28,6 +31,8 @@ the implementation diverges from [1].
 | --- | --- |
 | Flag | `--ltl` |
 | Languages | C only — no C++, Python, Solidity or Jimple support |
+| Temporal operators | `G` `F` `X` `U` `V` — see [Operators](#operators) |
+| Soundness | **Misses violations** ([#6546](https://github.com/esbmc/esbmc/issues/6546)) |
 | Formula translator | [libltl2ba](https://github.com/esbmc/libltl2ba), external; **not bundled and not fetched by `DOWNLOAD_DEPENDENCIES`** |
 | Verdict reported as | the `Final lowest outcome:` log line |
 | Exit code reflects verdict | **No** — always `0` / `VERIFICATION SUCCESSFUL` |
@@ -77,13 +82,44 @@ Build [libltl2ba](https://github.com/esbmc/libltl2ba) — ESBMC's fork of
 ltl2ba -O c -f '!(G({pressed} -> F {charge > min}))' > notphi.c
 ```
 
+Note the negation: the automaton is a Spin-style *never claim*, so what you hand
+to `ltl2ba` is the complement of the property, and the reported verdict is about
+the property. Feeding `!(φ)` for a φ that holds yields ⊤ᵖ; feeding `!(φ)` for a
+φ that fails yields ⊥ᵖ.
+
 C expressions over the program's global variables are written inside curly
 brackets and act as the atomic propositions; they must be side-effect free and
-evaluate to something usable as a truth value. The remaining syntax is
-libltl2ba's: `G`/`[]`, `F`/`<>`, `X`, `U`, `V` (release), `!`, `&&`, `||`, `->`,
-`<->`. See the libltl2ba
+evaluate to something usable as a truth value.
+
+#### Operators
+
+All five LTL temporal operators are accepted, in both their letter and
+ASCII-art spellings:
+
+| Operator | Syntax | Notes |
+| --- | --- | --- |
+| always | `G`, `[]` | |
+| eventually | `F`, `<>` | |
+| until | `U` | |
+| release | `V` | written `R` in the mathematical notation of [1] |
+| next | `X` | translates and runs, but see the caveat below |
+
+Propositional syntax is `true`, `false`, `{C expression}`, a lowercase
+identifier, `!`, `&&` (or `/\`), `||` (or `\/`), `->` and `<->`. Precedence,
+highest first, is `U`/`V` (right-associative), `&&`, `||`, `<->`, `->`; unary
+operators bind tighter than binary ones, and libltl2ba wants spaces between
+symbols. See its
 [README](https://github.com/esbmc/libltl2ba/blob/master/README) for the full
-grammar and precedence rules.
+grammar.
+
+`X` is the one to be careful with. Its intended reading here is "φ holds after
+the next update of a global variable used in the propositions" [1, §3.1], which
+relies on the monitor being stepped at each such update — exactly the directed
+scheduling that is currently disabled
+([#6546](https://github.com/esbmc/esbmc/issues/6546)). A formula containing `X`
+translates and produces a verdict, but that verdict is not backed by the
+intended semantics. [1, §3.2] recommends X-free, stutter-invariant formulas in
+any case, since `X` is awkward to interpret over finite traces at all.
 
 The generated file contains one pure C accessor per proposition, plus a
 `char __ESBMC_property_*[]` marker that tells ESBMC which functions to treat as
@@ -99,14 +135,21 @@ int _ltl2ba_cexpr_1_status(void) { return charge > min; }
 ### 2. Declare the variables the propositions read
 
 libltl2ba does not know the types of the program's globals, so the generated
-file needs declarations for them. Either add them to `notphi.c`:
+file needs declarations for them. Put them in a header:
 
 ```c
 extern int pressed;
 extern int charge, min;
 ```
 
-or keep them in a header and pass it with `--include-file`:
+and have libltl2ba `#include` it directly with `-H`:
+
+```bash
+ltl2ba -O c -H '"tau.h"' -f '!(G({pressed} -> F {charge > min}))' > notphi.c
+```
+
+Alternatively, add the `extern` declarations to `notphi.c` by hand, or leave the
+header out of the monitor and pass it to ESBMC with `--include-file`:
 
 ```bash
 esbmc program.c --ltl notphi.c --include-file tau.h -DLTL_PREFIX_BOUND=10
@@ -200,17 +243,63 @@ re-checked with different maskings.
 
 ## Limitations
 
-> **Note**: Everything below was reproduced against ESBMC 8.4.0 using the
-> shipped `regression/ltl/basic` test. The `--ltl` path has no dedicated GitHub
-> issue label; see the
-> [`bug` label](https://github.com/esbmc/esbmc/issues?q=is%3Aissue+is%3Aopen+label%3Abug)
-> for open reports.
+> **Note**: Everything below was reproduced against ESBMC 8.4.0. The `--ltl`
+> path has no dedicated issue label; the open reports are
+> [#6546](https://github.com/esbmc/esbmc/issues/6546),
+> [#6547](https://github.com/esbmc/esbmc/issues/6547) and
+> [#6548](https://github.com/esbmc/esbmc/issues/6548).
+
+### Violations are missed
+
+The monitor does not observe updates to the globals its propositions read, so a
+property that is *definitively* violated can be reported as ⊤ᵖ, "presumably
+true" ([#6546](https://github.com/esbmc/esbmc/issues/6546)). For a program that
+assigns `s = 1`:
+
+```c
+int s;
+
+int main()
+{
+	s = 0;
+	s = 1;
+	s = 0;
+	return 0;
+}
+```
+
+the property `G {s == 0}` is definitively false — once `s` is 1 no continuation
+repairs a `G` — so the verdict should be ⊥. Instead:
+
+```bash
+ltl2ba -O c -H '"tau.h"' -f 'F {s != 0}' > safety.c
+esbmc prog.c --ltl safety.c -DLTL_PREFIX_BOUND=6
+```
+
+```
+Final lowest outcome: LTL_SUCCEEDING
+```
+
+The generated automaton does have a reachable bad-prefix state, so this is not a
+translation artefact — but running the same files without `--ltl` shows the
+monitor never enters it in any explored interleaving:
+
+```
+✓ PASSED: 'LTL_BAD at file safety.c line 204 column 2 function ltl2ba_finish_monitor'
+```
+
+The cause is the disabled directed scheduling described under
+[Divergences from the published algorithm](#divergences-from-the-published-algorithm):
+with the monitor free-running as an ordinary thread, no interleaving is
+guaranteed to sample the state at the moment a proposition changes. Raising
+`LTL_PREFIX_BOUND`, `--context-bound` or `--unwind` does not help.
 
 ### The verdict is not in the exit code
 
 `ltl_run_thread`'s result is folded into a log message and nothing else — the
 LTL path always returns "unsatisfiable" to its caller
-(`src/esbmc/bmc.cpp:1995`). A definitive violation still prints
+([#6548](https://github.com/esbmc/esbmc/issues/6548), `src/esbmc/bmc.cpp:1995`).
+A definitive violation still prints
 `VERIFICATION SUCCESSFUL` and exits `0`:
 
 ```
@@ -227,7 +316,8 @@ no trace to inspect. Parse the `Final lowest outcome:` line, or use the
 
 `ltl_run_thread` reports `LTL_GOOD` both when it has *proved* every prefix
 assertion unsatisfiable and when it could not find the assertions at all
-(`src/esbmc/bmc.cpp:2114` and `2147`). "Not instrumented" and "definitively
+([#6547](https://github.com/esbmc/esbmc/issues/6547), `src/esbmc/bmc.cpp:2114`
+and `2147`). "Not instrumented" and "definitively
 correct" are indistinguishable in the output beyond a
 `WARNING: Couldn't find LTL_* assertion` line. Three situations trigger it:
 
