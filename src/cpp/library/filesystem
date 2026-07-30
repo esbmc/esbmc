@@ -1,6 +1,9 @@
 #ifndef ESBMC_FILESYSTEM
 #define ESBMC_FILESYSTEM
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include "cstring"
 #include "string"
 
@@ -132,4 +135,5 @@ inline bool equivalent(const path &a, const path &b)
 } // namespace filesystem
 } // namespace std
 
+#endif // __cplusplus >= 201103L
 #endif
