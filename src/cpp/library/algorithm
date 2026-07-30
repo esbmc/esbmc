@@ -465,26 +465,6 @@ FwdIt1 search(FwdIt1 first1, FwdIt1 last1, FwdIt2 first2, FwdIt2 last2, Pr pred)
   return last1;
 }
 
-template <class InputIterator, class Distance>
-void advance(InputIterator &i, Distance n)
-{
-  i = i + n;
-}
-
-template <class InputIterator>
-int distance(InputIterator first, InputIterator last)
-{
-  int i = 0;
-  int koef = first < last ? 1 : -1;
-  InputIterator pilgrim = first < last ? first : last;
-  while (pilgrim != last)
-  {
-    pilgrim = pilgrim + koef;
-    i++;
-  }
-  return i;
-}
-
 template <class FwdIt, class Diff, class Ty>
 FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty &value)
 {
