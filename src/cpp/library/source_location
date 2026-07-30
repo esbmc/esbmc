@@ -1,10 +1,10 @@
 #ifndef ESBMC_SOURCE_LOCATION
 #define ESBMC_SOURCE_LOCATION
 
-// C++20 header: libstdc++ and libc++ both expand it to nothing in an
+// Post-C++03 header: libstdc++ and libc++ both expand it to nothing in an
 // older language mode rather than erroring, so a translation unit that
 // includes it unconditionally still compiles (github #3387).
-#if __cplusplus >= 202002L
+#if __cplusplus >= 201103L
 
 #include "cstdint"
 
@@ -68,5 +68,5 @@ private:
 } // namespace std
 
 
-#endif // __cplusplus >= 202002L
+#endif // __cplusplus >= 201103L
 #endif

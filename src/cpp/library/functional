@@ -11,8 +11,6 @@
 #  include <cstdint> // for uint32_t, uint64_t
 #  include <cmath>   // for INFINITY
 #  include <string>  // for std::string
-#endif
-#if __cplusplus >= 201703L
 #  include <string_view> // for std::string_view
 #endif
 
@@ -461,7 +459,6 @@ struct hash<::std::string>
   }
 };
 
-#if __cplusplus >= 201703L
 // Specialization for std::string_view. [string.view.hash] requires the hash of
 // a string view to equal the hash of the corresponding string, so this must use
 // the same scheme as hash<std::string> above.
@@ -483,7 +480,6 @@ struct hash<::std::string_view>
     return __esbmc_deterministic_hash(hash_value);
   }
 };
-#endif // __cplusplus >= 201703L
 
 #endif // __cplusplus >= 201103L
 

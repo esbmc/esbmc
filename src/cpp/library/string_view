@@ -1,10 +1,10 @@
 
 #pragma once
 
-// C++17 header: libstdc++ and libc++ both expand it to nothing in an
+// Post-C++03 header: libstdc++ and libc++ both expand it to nothing in an
 // older language mode rather than erroring, so a translation unit that
 // includes it unconditionally still compiles (github #3387).
-#if __cplusplus >= 201703L
+#if __cplusplus >= 201103L
 
 #include <cstddef> /* size_t */
 #include <cstdint> /* SIZE_MAX */
@@ -174,4 +174,4 @@ public:
 };
 } // namespace std
 
-#endif // __cplusplus >= 201703L
+#endif // __cplusplus >= 201103L
