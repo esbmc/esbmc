@@ -10,7 +10,7 @@
 > `response` property), and — beyond the original Tier-1 scope — user-defined
 > function-block bodies, REAL/analog process variables, and an optional
 > scan-watchdog all now lower to GOTO IR and verify end-to-end (see §10). The
-> suite under `regression/ld/` has grown to 33 CTest cases, plus 10 for the
+> suite under `regression/ld/` has grown to 36 CTest cases, plus 10 for the
 > `ld-verify` runner, and CI now actually runs them. All four curated
 > benchmarks have validated verdicts and are wired as regression tests. The WP1
 > SOS specification exists as `docs/safe-ld-sos-semantics.md`; its independent
@@ -572,7 +572,7 @@ all 20 programs pass semantic review; spec reviewed against IEC 61508 §7.
 | T2.1 Parser & Semantic Analyser | PLCopen XML parser; AST; type checker; SOS consistency check | M3 (Month 6): parser handles all WP1 SOS constructs | skeleton landed (#5280); extended with user-FB-body and REAL/analog parsing (#5620) |
 | T2.2 GOTO IR Generator & Property Encoder | LdIR; `ld_converter` (irep2); YAML parser; property encoder (`code_assertt`) | M4 (Month 9): IR generator correct on all benchmark programs | boolean subset + timers/counters/`response` all lower and verify (#5289); ST→`codet` FB-body translator + numeric↔Boolean coercion (#5620); graphical resolver now models FB blocks, edge contacts, parallel-path OR and network feedback; all four benchmark verdicts validated (§10) |
 | T2.3 ESBMC Integration & ld-verify | `ld_languaget`; CMake wiring; ld-verify CLI; JSON report | M5 (Month 12): end-to-end pipeline ready | `--ld-props` wired + JSON report (#5289); `ld-verify` runner implemented, driving `esbmc` (#5294); `--ld-fault-injection`, `--ld-sound-mode`, `--ld-scan-watchdog`/`--ld-scan-budget` driver flags added (#5294, #5620) |
-| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 33 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic) + 10 `ld-verify` runner tests, all run by CI; line-coverage target not yet measured |
+| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 36 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic) + 10 `ld-verify` runner tests, all run by CI; line-coverage target not yet measured |
 
 **Success criteria (WP2):**
 - **Correctness:** ≥95% of benchmark programs translated to GOTO IR with semantic
@@ -790,7 +790,7 @@ prose in §3 is not mistaken for delivered functionality.
   pinned as `esd_manual_reset_fail`, with the corrected program as
   `emergency_shutdown_safe`. The conveyor's failure was a `response` property
   whose bound ignored a free `Stop_Button` input, plus the unparsed preset.
-- **Regression suite `regression/ld/`** now holds **33 CTest cases** (guarded by
+- **Regression suite `regression/ld/`** now holds **36 CTest cases** (guarded by
   `ENABLE_LD_FRONTEND`, with the `benchmarks/` dataset excluded from CTest —
   `regression/CMakeLists.txt`), covering all five property kinds plus
   fault-injection, user-FB, watchdog, REAL-arithmetic, and the `stairs_light` /
@@ -818,7 +818,7 @@ requests as well as pushes touching `src/ld-frontend/`, `tools/ld-verify/`,
 `regression/ld/` or `unit/ld-frontend/`:
 
 - `regression-ld` builds with `BUILD_TESTING=On` / `ENABLE_REGRESSION=On` and
-  runs `regression/ld/` (33 cases), the `ld-verify` runner suite (10 cases) and
+  runs `regression/ld/` (36 cases), the `ld-verify` runner suite (10 cases) and
   the three LD unit binaries.
 - `build-linux-amd64` builds the release binary, smoke-tests that it advertises
   `--ld-props`, and publishes it as an artifact.
@@ -920,10 +920,19 @@ three. `graphical_timer_path_fail` does the same for a timer on a graphical rung
 path, which the enumerating resolver handles by cutting the path at the block and
 resuming from its Q pin.
 
-Still thin: Set/Reset coils and multi-coil networks are covered only inside the
-whole-program benchmarks (`esd`, `stairs_light`, `water_control`), and the
-textual-`<rung>` tests (`counter_*`, `function_blocks_*`, `userfb_*`) bypass the
-graphical resolver entirely, so they are not cover for it.
+Set/Reset coils and multi-coil networks are pinned the same way:
+`graphical_set_latch_fail` shows a set coil holding on with no path energised (an
+output coil cannot); `graphical_set_reset_order_safe` proves the reset drawn
+below the set wins within a scan, and **reversing the two `rightPowerRail`
+connections flips it to FAILED**, so it pins sink emission order rather than
+passing trivially; `graphical_multi_coil_safe` gives two coils different power
+flows from one shared prefix, so a resolver handing both the same flow fails one
+of the two invariants.
+
+Note the textual-`<rung>` tests (`counter_*`, `function_blocks_*`, `userfb_*`)
+bypass the graphical resolver entirely and are not cover for it. What remains
+uncovered for the resolver is the feedback entry-snapshot rule (§6.3), exercised
+only by `stairs_light`.
 
 ### Suggested next increments
 
