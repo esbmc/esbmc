@@ -10,7 +10,7 @@
 > `response` property), and — beyond the original Tier-1 scope — user-defined
 > function-block bodies, REAL/analog process variables, and an optional
 > scan-watchdog all now lower to GOTO IR and verify end-to-end (see §10). The
-> suite under `regression/ld/` has grown to 26 CTest cases, plus 10 for the
+> suite under `regression/ld/` has grown to 28 CTest cases, plus 10 for the
 > `ld-verify` runner, and CI now actually runs them. All four curated
 > benchmarks have validated verdicts and are wired as regression tests. The WP1
 > SOS specification exists as `docs/safe-ld-sos-semantics.md`; its independent
@@ -572,7 +572,7 @@ all 20 programs pass semantic review; spec reviewed against IEC 61508 §7.
 | T2.1 Parser & Semantic Analyser | PLCopen XML parser; AST; type checker; SOS consistency check | M3 (Month 6): parser handles all WP1 SOS constructs | skeleton landed (#5280); extended with user-FB-body and REAL/analog parsing (#5620) |
 | T2.2 GOTO IR Generator & Property Encoder | LdIR; `ld_converter` (irep2); YAML parser; property encoder (`code_assertt`) | M4 (Month 9): IR generator correct on all benchmark programs | boolean subset + timers/counters/`response` all lower and verify (#5289); ST→`codet` FB-body translator + numeric↔Boolean coercion (#5620); graphical resolver now models FB blocks, edge contacts, parallel-path OR and network feedback; all four benchmark verdicts validated (§10) |
 | T2.3 ESBMC Integration & ld-verify | `ld_languaget`; CMake wiring; ld-verify CLI; JSON report | M5 (Month 12): end-to-end pipeline ready | `--ld-props` wired + JSON report (#5289); `ld-verify` runner implemented, driving `esbmc` (#5294); `--ld-fault-injection`, `--ld-sound-mode`, `--ld-scan-watchdog`/`--ld-scan-budget` driver flags added (#5294, #5620) |
-| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 26 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic) + 10 `ld-verify` runner tests, all run by CI; line-coverage target not yet measured |
+| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 28 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic) + 10 `ld-verify` runner tests, all run by CI; line-coverage target not yet measured |
 
 **Success criteria (WP2):**
 - **Correctness:** ≥95% of benchmark programs translated to GOTO IR with semantic
@@ -790,7 +790,7 @@ prose in §3 is not mistaken for delivered functionality.
   pinned as `esd_manual_reset_fail`, with the corrected program as
   `emergency_shutdown_safe`. The conveyor's failure was a `response` property
   whose bound ignored a free `Stop_Button` input, plus the unparsed preset.
-- **Regression suite `regression/ld/`** now holds **26 CTest cases** (guarded by
+- **Regression suite `regression/ld/`** now holds **28 CTest cases** (guarded by
   `ENABLE_LD_FRONTEND`, with the `benchmarks/` dataset excluded from CTest —
   `regression/CMakeLists.txt`), covering all five property kinds plus
   fault-injection, user-FB, watchdog, REAL-arithmetic, and the `stairs_light` /
@@ -818,7 +818,7 @@ requests as well as pushes touching `src/ld-frontend/`, `tools/ld-verify/`,
 `regression/ld/` or `unit/ld-frontend/`:
 
 - `regression-ld` builds with `BUILD_TESTING=On` / `ENABLE_REGRESSION=On` and
-  runs `regression/ld/` (26 cases), the `ld-verify` runner suite (10 cases) and
+  runs `regression/ld/` (28 cases), the `ld-verify` runner suite (10 cases) and
   the three LD unit binaries.
 - `build-linux-amd64` builds the release binary, smoke-tests that it advertises
   `--ld-props`, and publishes it as an artifact.
@@ -835,9 +835,16 @@ is the only gate on the front-end.
   reset dominance, and the scope of the feedback rule).
 - **WRITE_OUTPUTS** is not modelled as a distinct step; output coils are plain
   variable assignments (sufficient for the current property checks).
-- **Timer/counter integer width.** The arithmetic uses `int_type()` with no
-  overflow guard; very long-running counters could wrap. Not exercised by the
-  current bounded tests.
+- **Timer/counter integer width — now saturating.** CTU/CTD saturate CV at the
+  configured integer type's bound and TON bounds ET by PT, so neither wraps.
+  Before this, `CV + 1` on a counter at INTmax was reachable undefined behaviour
+  (`--overflow-check` reports `arithmetic overflow on add`) and the wrap dropped
+  Q back to false, losing violations; `counter_saturate_at_max` pins it, and
+  `counter_counts_fail` pins that the bound does not stop the counter counting.
+  Whether IEC saturates CV at the type bound or at PV is recorded as open item 4
+  for the M1 review in `docs/safe-ld-sos-semantics.md` §10 — the two agree on Q
+  and differ only above the preset, and the type bound is the over-approximating
+  (so non-hiding) choice.
 - **Graphical path enumeration is exponential — now bounded, but not fixed.**
   The resolver enumerates every simple rail-to-sink path, so cost grows as 2^N
   in re-convergent parallel branches. It is now bounded at 100000 search steps
@@ -869,6 +876,5 @@ is the only gate on the front-end.
    The step bound now rejects wide networks instead of hanging, but a linear
    resolver would verify them instead — and is what the WP2 <5 s / 1000-rung
    criterion requires.
-3. Widen or guard the timer/counter integer arithmetic.
-4. Model arithmetic/unknown blocks on graphical rung paths, so the programs
+3. Model arithmetic/unknown blocks on graphical rung paths, so the programs
    rejected as `UnsupportedConstruct` can be verified rather than refused.
