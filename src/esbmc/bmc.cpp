@@ -2423,6 +2423,26 @@ smt_resultt bmct::multi_property_check(
       solver_ptr = new_solver.get();
     }
 
+    // --smt-during-symex shares one persistent solver across every claim.
+    // Scope this claim's re-encoded formula in a context frame; without it
+    // the negated assertion stays asserted forever, and once one claim's
+    // negation is unsatisfiable every later claim solves UNSAT and is
+    // misreported as PASSED (issue #6540).
+    struct solver_ctx_framet
+    {
+      smt_convt *conv;
+      explicit solver_ctx_framet(smt_convt *c) : conv(c)
+      {
+        if (conv)
+          conv->push_ctx();
+      }
+      ~solver_ctx_framet()
+      {
+        if (conv)
+          conv->pop_ctx();
+      }
+    } ctx_frame(new_solver ? nullptr : solver_ptr);
+
     // Store solver name initially but not again
     std::call_once(solver_stats.name_flag, [&]() {
       solver_stats.name = solver_ptr->solver_text();
