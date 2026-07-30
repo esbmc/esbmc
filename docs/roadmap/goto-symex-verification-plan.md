@@ -2769,6 +2769,45 @@ Recorded rather than pushed further because the remaining question is a
 scheduler-internals investigation, not a property this plan's harnesses can
 settle.
 
+### M8 (cont. 11) — 2026-07-30
+
+**Result: R23 narrowed to context-switch-point generation, and the DFS
+bookkeeping candidate eliminated. `t1`'s second loop iteration produces no
+scheduling decision at all in the missed variant.**
+
+(cont. 10) left two candidates: `dfs_explore_thread`'s per-frame
+`mark_explored`, or the extra context-switch point the guarded write introduces.
+Logging each candidate thread's viability *and* its frame-explored bit inside
+`decide_ileave_direction` separates them. Both runs are identical for ten
+decisions, then:
+
+| | `other = 0` (detected) | `receive = 0` (missed) |
+|---|---|---|
+| decision 11 | `tid=1 viable=true already_explored=false → schedulable` at **line 7** | `tid=1 viable=false already_explored=false` at **line 245** |
+
+**`already_explored` is `false` on both sides, so the DFS bookkeeping is not the
+cause.** What differs is where the active thread *is*: in the detected variant
+the scheduler is offered a decision at line 7, the guarded body on the second
+iteration; in the missed variant `t1` has already run to completion and sits in
+the pthread trampoline (`pthread_lib.c:245`).
+
+Scheduling decisions are only taken at context-switch points, so `t1` ran its
+**entire second loop iteration without registering one**. That is precisely why
+`main`'s write cannot be interleaved between the two guard reads, and it explains
+every earlier observation: the empty body and the different-variable body both
+keep the second read's switch point, and duplicating `main`'s write supplies an
+extra point from the other side instead.
+
+**Where this leaves R23.** The remaining question is narrow and well-posed: why
+does the second read of `receive` register a context-switch point when the branch
+body writes `other`, but not when it writes `receive`? That is a question about
+`analyze_read`/`analyze_assign` and the `vars_map` / `is_global` bookkeeping in
+`get_expr_globals` — the same function R18 was fixed in — rather than about POR,
+the DFS, the encoding or the solver, all now eliminated.
+
+Instrumentation was local only and is reverted; both measurements are described
+here so they can be repeated without rediscovering the approach.
+
 ---
 
 ## Appendix A — Methodological basis
