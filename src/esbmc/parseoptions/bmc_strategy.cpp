@@ -516,24 +516,12 @@ int esbmc_parseoptionst::do_bmc_strategy(
 //  1) GOTO program,
 //  2) verification options.
 //  3) program context,
-// Iterative deepening on the context bound (issue #6480).
+// Iterative deepening on the context bound (issue #6480): unbounded DFS can
+// strand a counterexample that needs few switches but sits deep in DFS order.
 //
-// An unbounded DFS explores one schedule to its full depth before backtracking,
-// so a counterexample that needs only a few context switches can sit far away
-// in DFS order and never be reached inside the time budget -- on the dining
-// philosophers reproducer the deadlock needs 4 switches and is found in ~52 s
-// at --context-bound 4, yet unbounded exploration finds nothing in 300 s.
-//
-// Re-running with the bound raised by one each round visits schedules in order
-// of switch count instead, so the shallowest counterexample is reached first.
-//
-// Soundness. Each round is an under-approximation of the schedule space, so a
-// violation found at any bound is a genuine violation and we stop immediately.
-// The converse needs care: "no violation at bound k" is only a proof if the
-// bound never actually cut anything, which is what reachability_treet::
-// cs_bound_pruned records. While it is set the round is merely bounded-safe and
-// we deepen; once a round completes with it clear, every interleaving was
-// explored and the verdict is a real proof.
+// Each round under-approximates the schedule space, so a violation at any bound
+// is genuine. The converse needs cs_bound_pruned: "no violation at bound k" is
+// a proof only once a round completes without the bound cutting anything.
 int esbmc_parseoptionst::do_context_bound_deepening(
   optionst &options,
   goto_functionst &goto_functions)
@@ -546,8 +534,6 @@ int esbmc_parseoptionst::do_context_bound_deepening(
     return 6;
   }
 
-  // Intermediate rounds must not each announce success; the verdict is decided
-  // here, once the search either refutes or becomes exhaustive.
   options.set_option("suppress-bounded-success", true);
 
   for (int cb = 1; cb <= max_cb; ++cb)
@@ -559,14 +545,11 @@ int esbmc_parseoptionst::do_context_bound_deepening(
 
     const int res = do_bmc(bmc);
 
-    // A violation inside a bounded schedule space is a real violation: the
-    // trace is a concrete execution. do_bmc/report_result has already printed
-    // it, so just propagate the exit code.
     if (res == P_SATISFIABLE)
       return 1;
 
-    // Neither a proof nor a refutation -- a solver failure or an SMT-LIB-only
-    // emission says nothing about deeper bounds, so do not keep deepening.
+    // A solver failure or SMT-LIB-only emission says nothing about deeper
+    // bounds, so stop rather than deepen.
     if (res != P_UNSATISFIABLE)
       return res;
 

@@ -47,9 +47,7 @@ public:
   BigInt interleaving_number;
   BigInt interleaving_failed;
 
-  /** Copied out of the reachability tree once exploration finishes: true when
-   *  --context-bound truncated the schedule space rather than the program
-   *  running out of interleavings. Only meaningful after start_bmc(). */
+  /** Mirrors reachability_treet::cs_bound_pruned; valid after start_bmc(). */
   bool cs_bound_pruned = false;
 
   virtual smt_resultt start_bmc();

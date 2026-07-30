@@ -461,12 +461,8 @@ bool execution_statet::check_if_ileaves_blocked()
 {
   if (art1->get_CS_bound() != -1 && CS_number >= art1->get_CS_bound())
   {
-    // Record that the bound, rather than the program, is what stopped the
-    // search here -- but only when a switch was actually available, otherwise
-    // every terminal state would look like a truncation. Iterative deepening
-    // (--incremental-context-bound) uses this to tell "explored everything
-    // within the bound" from "explored everything, full stop": only the latter
-    // makes a SUCCESSFUL verdict a proof rather than a bounded result.
+    // Only count this as truncation if a switch was actually available;
+    // otherwise every terminal state would look truncated.
     if (!art1->cs_bound_pruned)
       for (unsigned int i = 0; i < threads_state.size(); ++i)
         if (

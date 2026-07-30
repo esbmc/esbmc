@@ -1528,10 +1528,8 @@ void bmct::report_result(smt_resultt &res)
         !options.get_bool_option("kind-violation-found") &&
         !(is && options.get_bool_option("disable-inductive-step")))
       {
-        // An --incremental-context-bound round that found nothing has only
-        // shown the program safe up to that bound; whether that amounts to a
-        // proof depends on cs_bound_pruned, which the driver checks. Stay
-        // silent here so intermediate rounds do not each claim success.
+        // A bounded round proves nothing on its own: the driver decides the
+        // verdict once the search becomes exhaustive.
         if (options.get_bool_option("suppress-bounded-success"))
           log_status("No violation found within the current context bound");
         else if (vacuity_detected)

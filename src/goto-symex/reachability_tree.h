@@ -284,12 +284,8 @@ public:
   optionst &options;
   /** __ESBMC_main thread has ended */
   bool main_thread_ended;
-  /** Set when --context-bound stopped a context switch that was otherwise
-   *  available, i.e. the schedule space was truncated by the bound rather than
-   *  exhausted. While this stays false, an exploration that finds no violation
-   *  has covered every interleaving and its verdict is a proof; once it is set,
-   *  the verdict only holds up to the bound. Drives --incremental-context-bound
-   *  (issue #6480). */
+  /** --context-bound cut an available switch: the schedule space was truncated
+   *  rather than exhausted (issue #6480). */
   bool cs_bound_pruned;
 
 protected:
