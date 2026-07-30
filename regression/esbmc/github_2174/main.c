@@ -1,9 +1,8 @@
 #include <assert.h>
 #include <stdatomic.h>
 
-/* Every C11 <stdatomic.h> generic function lowers to a __c11_atomic_*
- * builtin. Before the fix these were body-less: stores were dropped and
- * loads returned a fresh nondeterministic value. See issue #2174. */
+/* Before #2174 the __c11_atomic_* builtins were body-less: stores were
+ * dropped and loads returned nondet. */
 int main(void)
 {
   atomic_int a;

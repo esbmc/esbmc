@@ -2,10 +2,9 @@
 #include <pthread.h>
 #include <stdatomic.h>
 
-/* Negative counterpart of esbmc-unix/github_2174. The read-modify-write is
- * split into a non-atomic load and store, so one update can be lost and the
- * counter may end at 1. This pins that the atomic model above is doing real
- * work rather than the interleaving simply never being explored. */
+/* Negative counterpart of esbmc-unix/github_2174: splitting the read-modify-
+ * write can lose an update, so the atomicity there is not a missed
+ * interleaving. */
 atomic_int counter;
 
 void *worker(void *arg)

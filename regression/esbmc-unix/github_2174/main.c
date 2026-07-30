@@ -3,8 +3,7 @@
 #include <stdatomic.h>
 
 /* Two concurrent atomic read-modify-writes cannot lose an update, so the
- * counter is exactly 2. Before the fix __c11_atomic_fetch_add had no body:
- * the increment never happened and the load returned nondet. See #2174. */
+ * counter is exactly 2. See #2174. */
 atomic_int counter;
 
 void *worker(void *arg)

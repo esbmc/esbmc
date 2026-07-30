@@ -211,14 +211,9 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result(identifier, std::move(t));
     return result;
   }
-  // The C11 `<stdatomic.h>` generic functions are lowered by clang to the
-  // __c11_atomic_* builtins (see clang_c_convertert::get_atomic_expr). They are
-  // polymorphic in the atomic object's value type, so -- exactly like the GCC
-  // __atomic_* family above -- a per-value-type body is synthesised here.
-  // Without this they stay body-less: a store is dropped and a load returns a
-  // fresh nondeterministic value, which yields both false positives and false
-  // negatives on any program using <stdatomic.h> (issue #2174).
-  // C11 6.2.6.1/7.17.7: `expected` is taken by pointer, `desired` by value.
+  // The C11 <stdatomic.h> builtins are polymorphic in the atomic object's value
+  // type, so they need per-type bodies like the GCC family above (issue #2174).
+  // C11 7.17.7.4: `expected` is passed by pointer, `desired` by value.
   else if (has_prefix(
              identifier.as_string(), "c:@F@__c11_atomic_compare_exchange"))
   {
@@ -260,8 +255,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
   }
   else if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_init"))
   {
-    // atomic_init takes no memory order: C11 7.17.2.2 defines it as a
-    // non-atomic initialisation.
+    // C11 7.17.2.2: atomic_init takes no memory-order operand.
     const exprt &ptr_arg = arguments.front();
 
     code_typet t(
@@ -512,9 +506,8 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     has_prefix(identifier.as_string(), "c:@F@__c11_atomic_store") ||
     has_prefix(identifier.as_string(), "c:@F@__c11_atomic_init"))
   {
-    // atomic_init (C11 7.17.2.2) is specified as a non-atomic initialisation,
-    // but concurrently accessing the object being initialised is undefined, so
-    // running it under the atomic lock cannot mask a defined behaviour.
+    // atomic_init is non-atomic per C11 7.17.2.2, but racing on the object
+    // being initialised is UB, so the atomic lock masks no defined behaviour.
     code_typet::argumentt arg0 = code_type.arguments()[0];
     code_typet::argumentt arg1 = code_type.arguments()[1];
     code_assignt assign(
@@ -635,12 +628,9 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     //
     // We treat the CAS as strong regardless of `weak` (a weak CAS that can
     // spuriously fail is a sound under-approximation of strong, but libvsync
-    // - the motivating consumer - issues only strong CASes). The same applies
-    // to C11's __c11_atomic_compare_exchange_weak, which takes `desired` by
-    // value just like the GCC _n variant:
-    //   _Bool __c11_atomic_compare_exchange_strong(A *ptr, C *expected,
-    //                                              C desired, int succ_mo,
-    //                                              int fail_mo);
+    // - the motivating consumer - issues only strong CASes). C11's
+    // compare_exchange_weak gets the same treatment, and passes `desired` by
+    // value like the GCC _n variant.
     const bool desired_by_value =
       has_prefix(identifier.as_string(), "c:@F@__atomic_compare_exchange_n") ||
       has_prefix(identifier.as_string(), "c:@F@__c11_atomic_compare_exchange");
