@@ -1434,6 +1434,19 @@ void python_converter::update_numpy_array_binding(
     return;
 
   const std::string lhs_id = lhs.identifier().as_string();
+  if (rhs_node.value("_type", "") == "Name" && rhs_node.contains("id"))
+  {
+    const std::string rhs_id =
+      resolve_name_symbol_id(rhs_node["id"].get<std::string>());
+    auto view_it = numpy_view_copy_sources_.find(rhs_id);
+    if (view_it != numpy_view_copy_sources_.end())
+    {
+      numpy_view_copy_sources_[lhs_id] = view_it->second;
+      numpy_array_symbols_.insert(lhs_id);
+      return;
+    }
+  }
+
   if (is_numpy_view_copy_expr(rhs_node))
   {
     record_numpy_view_copy(lhs, rhs_node);
