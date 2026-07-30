@@ -290,12 +290,12 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
 
   // V.4 hop-off: with --python-irep2-adjust-only the IREP2-native adjuster
   // *replaces* clang_cpp_adjust on the Python path (the B.5 "sole adjuster"
-  // milestone, gated behind a default-off flag). A 2026-07-24 corrected census
-  // over regression/python (228/228 on the a-b prefix, 290/291 on an unbiased
-  // strided whole-corpus sample) showed verdict parity with the legacy pass and
-  // zero wrong verdicts; docs/scope-v1k-adjuster.md records the method. The one
-  // known non-parity case (boolop-len-or) is a load-dependent solver-time
-  // timeout, not a type-resolution defect, so the hop-off stays experimental.
+  // milestone, gated behind a default-off flag). It stays default-off: a
+  // whole-corpus legacy-vs-hop-off census (2026-07-29) found the missing
+  // assignment/operand conversion documented in docs/roadmap/scope-v1k-adjuster.md
+  // ("the assignment-conversion trap") reaches the solver as an ill-typed term
+  // and crashes it, so the flip waits on the coupled arithmetic-reconciliation
+  // effort that section sizes.
   if (config.options.get_bool_option("python-irep2-adjust-only"))
   {
     python_adjust py_adjuster(context);
