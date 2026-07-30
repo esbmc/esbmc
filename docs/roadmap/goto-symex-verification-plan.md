@@ -6,7 +6,8 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0–M6 closed** (§15 verdict log); M7–M8 not yet executed. §6.4
+**Status:** **M0–M6 closed, M7 partial** (§15 verdict log); M8 not yet executed.
+§6.4
 records the tier-ordering rule M1 produced. Except where §15 records a
 discharged result, every harness below is a *proposal* and nothing here asserts
 a proof. Findings not marked discharged in §9.2 remain *hypotheses with cited
@@ -576,7 +577,7 @@ inspect the produced `symex_target_equationt`.
 | **H-B5** | **Phi laws** (I8) | For 2-branch programs: the set of *program variables* receiving a phi == the set written by at least one arm; **zero** phi for untouched variables. **Corrected, §15 M4 (H-B5)**: this row originally said "written *differently* in both", which the code does not do — `phi_function` filters on the L2 index differing, not the value | Over- and under-generation of phi nodes |
 | **H-B6** | **Value-set merge monotonicity** (I9) | After `merge_value_sets`, assert the result ⊇ both inputs (using `value_sett` API) | An accidental intersection — a silent unsoundness |
 | **H-B7** | **Assumption-discharge suite** (§6.1 rule 3) | For each Tier-A assumption in §7.3, an assertion on the real engine that it holds over the corpus | Over-constrained Tier-A proofs |
-| **H-B8** | **Incremental-equation parity** (I13) | Same program with and without `--smt-during-symex`; assert identical claim count and per-claim verdicts | `runtime_encoded_equationt` ctx-stack bugs |
+| **H-B8** | **Incremental-equation parity** (I13) | Same program with and without `--smt-during-symex`; assert identical claim count and per-claim verdicts. **Run at Tier C instead, §15 M7: 1358 agreed, 3 diverged → R19**, a per-property false PASSED | `runtime_encoded_equationt` ctx-stack bugs |
 
 **Infrastructure note (blocking).** `unit/goto-symex/CMakeLists.txt` currently
 has its single `new_unit_test(...)` **commented out** ("Our current CMake is
@@ -610,9 +611,9 @@ two configurations.
 |---|---|---|---|
 | **H-C1** | verdict(default) == verdict(`--no-slice`) | `regression/esbmc` CORE (1430 of 1574 dirs) | Slicer unsoundness/incompleteness end-to-end. **Run, §15 M5: 1328 agreed, 0 diverged**, 67 inconclusive, 35 skipped |
 | **H-C2** | verdict(default) == verdict(`--no-simplify`) | same | Simplifier / constant-propagation semantic drift (P9). **Run, §15 M5: 1174 agreed, 11 diverged** — R16 (10, incompleteness) and R17 (1, false SUCCESSFUL composed with `--no-slice`) |
-| **H-C3** | verdict(bitwuzla) == verdict(z3) | same | Encoding assumptions that only one solver tolerates |
+| **H-C3** | verdict(bitwuzla) == verdict(z3) | same | Encoding assumptions that only one solver tolerates. **Run, §15 M7: 1269 agreed, 0 diverged** |
 | **H-C4** | verdict(default) == verdict(`--no-por`) and == verdict(`--state-hashing`) | `regression/esbmc-unix`, `regression/esbmc` concurrency tests | POR / state-hashing over-pruning (I14, I15). **Run, §15 M6: 258/0 and 255/0 — clean, but the R18 witness is a program the corpus does not contain** |
-| **H-C5** | verdict(default) == verdict(`--no-interval-symex-guard`) | `regression/esbmc`, `regression/k-induction` | Interval-domain guard pruning (the documented hazard at `symex_goto.cpp:57-79`) |
+| **H-C5** | verdict(default) == verdict(`--no-interval-symex-guard`) | `regression/esbmc`, `regression/k-induction` | Interval-domain guard pruning (the documented hazard at `symex_goto.cpp:57-79`). **Run, §15 M7: 1360 agreed, 0 diverged** |
 | **H-C6** | **Unwind monotonicity**: FAILED at `--unwind k` ⇒ FAILED at every `k' > k` | loop-bearing subset | Lost counterexamples when the bound grows — a pure soundness relation, no oracle needed |
 | **H-C7** | per-claim verdicts under `--multi-property` == the individual `--claim N` runs | `regression/esbmc` multi-assert tests | Claim/slice interaction bugs (cf. recent `multi_property_check` fixes) |
 
@@ -687,6 +688,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R13** | **Medium (silent under-verification) — confirmed and fixed, §15 M2 (cont.)** | **`--unwindsetname` never matched a loop.** `unwind_func_set` was keyed by `user_name_to_usr(name)`, which appends a `#` terminator (clang's C++ USR spelling), while `loop_id_to_func_index` was keyed by the goto function-map id, which for a C function is `c:@F@f` with no terminator. The `count(unwind_key)` in `get_unwind` therefore always missed and the global `--unwind` silently won, so a user raising the bound for one function got the lower global bound and a verdict covering less than they asked for. A second defect in the same option: the `name:index:bound` field split scanned left-to-right, so the documented USR form (`c:@F@f#:0:11`) split inside the `c:` prefix. Neither was caught because all five `unwindsetname` regression tests ran without a global `--unwind` and so passed vacuously. | `goto_symext::goto_symext`, `symex_assign.cpp:66-120`; `get_unwind`, `symex_goto.cpp:525`; `user_name_to_usr`, `usr_utils.cpp:29` | `unit/goto-symex/unwind.test.cpp` (Tier B, discharged) | Fixed: both sides now key on the name `--show-loops` prints (`usr_to_user_name`), and the field split scans from the right. Three non-vacuous regression tests added; `unwindsetname_03_priority` corrected to the loop number the program actually has. |
 | **R14** | **Open (I10 violated on a real input)** — found by R5's repaired detector, §15 M4 | With `--double-assign-check` made to fail, `regression/esbmc/github_286_3` produces an equation that **defines one SSA name twice**: `…@F@getNumbers2@numbers2?1!0&0#1`, the L2 index 1 of a local array in a function that returns a dangling pointer to it. Two definitions of one name are two constraints `x#1 == e1` and `x#1 == e2` on the same variable; where the right-hand sides disagree the conjunction is unsatisfiable, which silently removes that path from the formula — the missed-bug direction. One input in ~900 swept. Not yet characterised: which two steps emit it, and whether the two right-hand sides can differ. | `symex_target_equationt::check_for_duplicate_assigns` under `--double-assign-check`; `regression/esbmc/double_assign_check_local_array` (KNOWNBUG) | H-B1 | Find the two emitting steps (the local's scope exit is the first suspect), then decide whether the second definition is a stale re-emission or a legitimate step that must take a fresh index. |
 | **R15** | **Low (reproducibility, latent collision)** — found by H-B2, §15 M4 (H-B2) | **Object numbering leaks across symex runs in one process.** `execution_statet::dynamic_counter` and `dereferencet::invalid_counter` are `static thread_local` and reset nowhere, so a second exploration in the same process names its objects from where the first stopped: the same program under the same options yields `symex_dynamic::dynamic_1_array` on the first run and `dynamic_2_array` on the second. The sibling `nondet_count` is a plain instance member the constructor zeroes, so the asymmetry is unintended rather than a design choice. The equation is therefore not a function of (program, options) alone. No wrong verdict follows — the names only need to be *fresh*, and monotonic counters are fresh — so this is a reproducibility defect, and objective 7's "byte-identical" wording is unachievable as stated. **Latent second-order risk:** `thread_local` means two threads each start at 0, so if symex is ever parallelised (§14.6) two threads would mint *colliding* object names into a shared context. | `execution_state.cpp:21`, `execution_state.h:583`; `dereference.cpp:23,538`, `dereference.h:281`; contrast `nondet_count` reset at `execution_state.cpp:104` | `unit/goto-symex/determinism.test.cpp` (Tier B, pinned) | Reset both counters per exploration — in `setup_for_new_explore`, **not** in the `execution_statet` constructor, which the reachability tree copies per interleaving and where a reset would mint colliding names. Expect churn in `test.desc` files whose expected output names a dynamic object; run the full corpus before landing. |
+| **R19** | **High (per-property false PASSED, non-default flag pair)** — **confirmed with a minimal reproducer** by H-B8, §15 M7 | **With `--multi-property --smt-during-symex`, a violable claim that is not the last property is individually reported as `✓ PASSED`.** Seven lines reproduce it: two non-trivial properties where the violable one comes first. ESBMC prints `✓ PASSED` for the violable claim, `Properties: 2 verified ✓ 2 passed`, and `VERIFICATION SUCCESSFUL`. Swapping the two assertions so the violable one is **last** restores `FAILED`, so the defect is positional. Neither flag alone loses the counterexample — `--multi-property` alone and `--smt-during-symex` alone both report FAILED — making this a flag *composition* defect like R17. This is I13 exactly as H-B8 hypothesised it: the per-claim solve reuses a `runtime_encoded_equationt` whose context stack still carries the preceding claim's state, so a non-final claim is discharged against the wrong formula. Worse than a verdict flip: the per-property report actively asserts the claim holds. | `oracle_flag_parity.py --b=--smt-during-symex` (3 corpus divergences: `github_1408`, `github_1890_1`, `github_2629`, all `--multi-property` tests); `regression/esbmc/multi_property_smt_during_symex` (KNOWNBUG) and `..._last` (CORE, violable claim last, passes today) | **H-B8** | Inspect `runtime_encoded_equationt`'s `push_ctx`/`pop_ctx` pairing across the per-claim loop in `bmc.cpp` — H-A8 assumes the caller balances them (§7.3). Pinned, not fixed. |
 | **R18** | **High (false SUCCESSFUL, default configuration)** — **confirmed with a witness** by H-A6/H-C4, §15 M6 | **POR drops a racy interleaving when the write goes through a nested dereference.** `get_expr_globals` resolves *one* pointer level (`get_reference_set` on a single `dereference2tc`), so a write spelled `*(*gpp) = 1` is recorded against the intermediate pointer `gp` rather than its target `g`. A second thread writing `g` directly records `g`, the two keys do not alias, `check_mpor_dependency` returns *independent*, and the interleaving is pruned — **a real race missed in the default configuration, with no diagnostic**. Twelve lines reproduce it: writer does `*(*gpp) = 1`, `main` does `g = 2; seen = g;`, and `assert(seen == 2)` is reachable. Default reports **SUCCESSFUL**; `--no-por` reports FAILED. The mechanism is pinned by a decisive pair: with *both* threads using the nested form the race is found again (matching keys), while writer-nested/main-direct misses it. Splitting the nested access into `int *q = *gpp; *q = 1;` also restores detection, so the key depends on the syntactic nesting depth of the access rather than on the object touched. This is precisely the completeness direction H-A6's A6.2 names — a missed dependency — and it is **not** in the relation but upstream in the key construction feeding it. | `execution_statet::get_expr_globals`, `execution_state.cpp:868-918`; `check_mpor_dependency`, `:1050`; `mpor_set_conflicts`, `:231`; `regression/esbmc-unix/mpor_nested_deref_race` (KNOWNBUG) and `..._nopor` (CORE) | **H-A6**, **H-C4** | Resolve pointer chains to a fixed point instead of one level, or make `mpor_keys_may_alias` treat a pointer key as aliasing everything its value set can reach. Pinned, not fixed: either change widens the dependency relation and will cost interleavings, so it needs the H-C4 sweep re-run for cost before landing. |
 | **R16** | **Medium (incompleteness under a non-default flag)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify` is not verdict-preserving: 10 corpus inputs where the default proves SUCCESSFUL and `--no-simplify` does not.** Nine report a spurious counterexample (`github_1174_{hex,lmod,oct,pass}`, `github_2341_3`, `github_2357_5`, `github_2566_1`, `github_785-2`, `realloc13`) and one returns UNKNOWN (`github_252`, under `--k-induction`). In every case the *default* leg matches the verdict the test's own `test.desc` expects, so the fault is in the `--no-simplify` configuration, not the default. Spot-confirmed on `github_2341_3`: `--no-simplify` reports a violated `assert(temp != NULL)` the default discharges. The noisy direction — P1 — but it means `do_simplify` is load-bearing for *correctness of the encoding*, not merely for formula size, which is not how an "optimisation" flag reads. | `oracle_flag_parity.py --b=--no-simplify` over `regression/esbmc` CORE | **H-C2** | Triage one input down to the expression shape the encoder mishandles unsimplified. Until then `--no-simplify` is a debugging aid, not a semantics-preserving flag. |
 | **R17** | **High (false SUCCESSFUL, non-default flag pair)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify --no-slice` misses a reachable `assert(0)`.** Three lines reproduce it: `void *b = malloc(-4); assert(0);` returns **`VERIFICATION SUCCESSFUL`**. Neither flag alone does this (both give FAILED), nor does a positive size, nor no allocation — so it is a **composition** defect, the class §7.4 says Tier C exists to catch. The negative size widens to a huge `size_t`; one VCC is generated and the solver returns UNSAT, so the path to the assertion is **vacuously infeasible** and every later assertion in such a program is silently unreachable. Reached in the corpus via `github_1631_compact`, whose `--compact-trace` sets `no-slice` implicitly (`command_line_options.cpp:410`) — that indirection is why the pair is easy to hit without naming it. | minimal reproducer above; `regression/esbmc/no_simplify_no_slice_huge_malloc` (KNOWNBUG, observed output `VERIFICATION SUCCESSFUL`) and `..._malloc` (CORE, positive size, passes today) | **H-C2** | Find which allocation-model constraint becomes contradictory unsimplified — the `__ESBMC_alloc_size` update and any size-overflow guard are the first suspects. Pinned, not fixed. |
@@ -783,6 +785,10 @@ requirement.
 H-C6, H-C7 wired as a scheduled CI job; H-B8. *Artefact:* the oracle job + a
 per-oracle baseline of known divergences (each triaged to a filed issue or a
 justified waiver — **an untriaged divergence is a blocker, not a baseline**).
+**Partial, §15 M7.** H-C3 (1269/0), H-C5 (1360/0), H-C6 (0 violations, 44 of 163
+tests exercising the relation) and H-B8 (1358/3 → **R19**) are run;
+`.github/workflows/symex-oracles.yml` wires all of them with per-leg baselines.
+**H-C7 remains**, and R19 suggests it is worth writing.
 
 **M8 — Previously-reported bugs and regression cases (0.5 wk, continuous).**
 Convert every historical goto-symex issue with a reproducer into a Tier-A or
@@ -810,9 +816,9 @@ regression/esbmc/symex_<area>_<nn>_fail/      Tier A, anti-vacuity twin (§6.1 r
 regression/esbmc/symex_<area>_<nn>_probe/     Tier A, reachability probe (§6.1 r6)
 unit/goto-symex/<area>.test.cpp               Tier B — prefer this, see §6.4
 scripts/verification/symex/
-    ├── oracle_flag_parity.py                 H-C1, H-C2, H-C3, H-C5
-    ├── oracle_por_parity.sh                  H-C4
-    ├── oracle_unwind_monotonic.sh            H-C6
+    ├── oracle_flag_parity.py                 H-C1, H-C2, H-C3, H-C4, H-C5, H-B8
+    ├── oracle_unwind_monotonic.py            H-C6
+    ├── baselines/<leg>.txt                   triaged divergences, one per leg
     └── drift_check.py                        transcription-drift guard
 .github/workflows/symex-oracles.yml           scheduled Tier-C job
 ```
@@ -821,14 +827,24 @@ scripts/verification/symex/
 lookup, refalias}` — one area per harness family, matching §7. `<nn> = 00` is
 the M0 template.
 
-H-C1, H-C2, H-C3 and H-C5 are the *same* relation — verdict(A) == verdict(B)
-over a corpus — so §15 M5 replaced the four planned shell scripts with one
+H-C1, H-C2, H-C3, H-C5 and H-B8 are the *same* relation — verdict(A) ==
+verdict(B) over a corpus — so §15 M5 replaced the planned shell scripts with one
 parameterised `oracle_flag_parity.py`, invoked as `--b=--no-slice`,
-`--b=--no-simplify`, `--a=--bitwuzla --b=--z3` and
-`--b=--no-interval-symex-guard`. It builds each argument list through
-`regression/testing_tool.py`'s `TestCase` rather than re-parsing `test.desc`, so
-a sweep invokes each input exactly as `ctest` does. H-C4 and H-C6 stay separate:
-one compares three configurations, the other is monotonicity across bounds.
+`--b=--no-simplify`, `--a=--bitwuzla --b=--z3`,
+`--b=--no-interval-symex-guard` and `--b=--smt-during-symex`. It builds each
+argument list through `regression/testing_tool.py`'s `TestCase` rather than
+re-parsing `test.desc`, so a sweep invokes each input exactly as `ctest` does.
+H-C4 is two invocations of the same script (`--b=--no-por`,
+`--b=--state-hashing`) over `regression/esbmc-unix`. Only H-C6 needs its own
+driver: it is monotonicity across bounds, not a two-configuration comparison, and
+it has to classify a FAILED by the violated property (§15 M7).
+
+`--baseline <file>` takes a list of already-triaged divergences: the script exits
+non-zero only on a divergence *not* in the file, and prints `STALE-BASELINE` for
+a listed test that starts agreeing again, so a fixed defect cannot keep its
+exemption silently. Baseline entries must cite a finding id or issue — §11.3's
+rule that an untriaged divergence is a blocker, not a baseline, is enforced by
+review, not by the script.
 
 The `_fail` and `_probe` directories hold a one-line
 `#include "../symex_<area>_<nn>/symex_<area>_<nn>.c"` and select their variant
@@ -848,7 +864,7 @@ a reviewed re-transcription.
 |---|---|---|
 | Tier A (`regression/esbmc/symex_*`) | every PR, via the existing `ctest -L esbmc` path | each harness < 30 s; the suite's 120 s per-test harness cap is hard |
 | Tier B (`unit/goto-symex`) | every PR, `ctest -LE regression` | < 60 s total |
-| Tier C oracles | **scheduled** (nightly for C1/C2/C3, weekly for C4/C6/C7) + `workflow_dispatch` | ≤ 90 min per leg, mirroring `sanitizers.yml` |
+| Tier C oracles | **scheduled**, `.github/workflows/symex-oracles.yml` — nightly `37 2 * * *` for C1/C2/C3, weekly `41 3 * * 0` for C4/C5/C6/B8 — plus `workflow_dispatch` | 120 min per leg, mirroring `sanitizers.yml`; `continue-on-error` during bring-up |
 | Drift check | every PR touching `src/goto-symex/**` | seconds |
 | Sanitizers (Tier D) | existing `sanitizers.yml` (asan/ubsan/tsan) — add an **msan** leg for R10 | existing budget |
 
@@ -914,7 +930,7 @@ for what is claimed; a claim may not outlive its harness.
 | **D5** | Risk assessment (harness-design + code-level) | §9.1 / §9.2 | M0 |
 | **D6** | Tier-A harnesses: 10 kernels × {ok, fail} | `regression/esbmc/symex_*/` | M1–M6 |
 | **D7** | Tier-B suites (8 files) + working `unit/goto-symex` CMake wiring + drift guard | `unit/goto-symex/`, `scripts/verification/symex/drift_check.py` | M0, M4 |
-| **D8** | Tier-C oracle scripts + scheduled workflow | `scripts/verification/symex/`, `.github/workflows/symex-oracles.yml` | M5, M7 |
+| **D8** | Tier-C oracle scripts + scheduled workflow | `scripts/verification/symex/`, `.github/workflows/symex-oracles.yml` | M5, M7 — **delivered except H-C7**, §15 M7 |
 | **D9** | `SYMEX_INVARIANT` release-checked macro + promoted invariants + cost benchmark | `src/goto-symex/` | M3 |
 | **D10** | Fix PRs for confirmed findings (R2–R5, R7, R10 are tractable; R6/R8/R11 are investigations first) | code PRs, each with Mode-C proof where a branch changes | M1–M6 |
 | **D11** | Verdict log — per-harness result, ESBMC commit, solver versions, date — appended to this document | §15 | continuous |
@@ -2020,6 +2036,80 @@ shown it will not.
 superseded by R18 with a witness and a regression pin, and A6.1/A6.3 by
 inspection. Carried forward: A6.4, R6, and the absent `--no-mpor` flag that would
 let a sweep separate MPOR from the rest of POR. R18 is pinned, not fixed.
+
+### M7 — 2026-07-30, M7 partial
+
+**Result: three more oracle legs run, the scheduled job wired with a baseline
+mechanism, and one new confirmed defect — R19, a per-property false `PASSED`.**
+
+| Leg | agreed | diverged | inconclusive | skipped |
+|---|---|---|---|---|
+| **H-C3** bitwuzla vs z3 | 1269 | **0** | 72 | 90 |
+| **H-C5** `--no-interval-symex-guard` | 1360 | **0** | 71 | 0 |
+| **H-B8** `--smt-during-symex` | 1358 | **3** | 68 | 2 |
+| **H-C6** unwind monotonicity | — | **0 violations** | 16 | — |
+
+**R19 — the per-property report asserts a violable claim holds.** All three H-B8
+divergences are `--multi-property` tests whose default leg matches the verdict
+their `test.desc` expects, so the fault is in the `--smt-during-symex`
+configuration. Minimised to seven lines: two non-trivial properties with the
+violable one **first**. ESBMC prints `✓ PASSED` for the violable claim,
+`Properties: 2 verified ✓ 2 passed`, then `VERIFICATION SUCCESSFUL`. Swapping the
+assertions so the violable one is last restores FAILED, so the defect is
+positional; and neither flag alone loses the counterexample, making it a
+composition defect like R17. This is I13 as H-B8 hypothesised it — a per-claim
+solve reusing a `runtime_encoded_equationt` whose context stack still carries the
+previous claim's state — and it is worse than a verdict flip, because the report
+actively claims the property was verified. Pinned by
+`multi_property_smt_during_symex` (KNOWNBUG) and `..._last` (CORE), the second of
+which pins the ordering dependence rather than the flag pair.
+
+**H-B8 moved from Tier B to Tier C, and that is why it found anything.** §7.2
+specced it as a unit test over "the same program with and without
+`--smt-during-symex`". As one more argument to `oracle_flag_parity.py` it ran over
+1363 real inputs instead of a handful of hand-written ones, and the three
+divergences are all `--multi-property` inputs — a flag no hand-written Tier-B case
+would have thought to combine. Fifth harness to be discharged somewhere other
+than its specced tier.
+
+**H-C6 needed its own driver and one non-obvious distinction.** Monotonicity —
+FAILED at bound k must persist at every k' > k — is not a two-configuration
+comparison, so `oracle_unwind_monotonic.py` runs a ladder of bounds. The
+distinction that carries it: with unwinding assertions on (the default) a FAILED
+at a small bound is usually the *unwinding assertion itself*, which correctly
+disappears once the bound covers the loop. Classifying verdicts by the violated
+property rather than by the FAILED line is what keeps the oracle from reporting a
+divergence on every loop-bearing test in the corpus.
+
+**Its headline number is 0 violations; its honest number is 44.** Of 163
+loop-bearing tests only **44 produced a real counterexample at any bound**, so
+the other 119 satisfy monotonicity vacuously. The script prints `exercised`
+alongside `violations` for exactly this reason — a monotonicity oracle over
+programs that never fail is a very fast way to prove nothing.
+
+**The scheduled job exists.** `.github/workflows/symex-oracles.yml` wires seven
+parity legs plus the unwind ladder, nightly for the cheap ones and weekly for the
+rest, `actionlint`-clean. Two implementation notes worth keeping: the default
+`scripts/build.sh` solver set has **no Z3**, so the solver-parity leg needs `-C`
+(the competition set) or it would silently compare bitwuzla against itself; and
+job-level `if` cannot see `matrix`, while job-level `env` can, so the
+nightly/weekly gate is computed once into `RUN_LEG` rather than repeated per step.
+
+**Baselines make the job runnable without being ignorable.** `--baseline <file>`
+exits non-zero only on a divergence *not* already triaged, and prints
+`STALE-BASELINE` when a listed test starts agreeing — so a fixed defect cannot
+keep its exemption unnoticed. Populated for the two legs that diverge: eleven
+entries for H-C2 (R16, R17) and three for H-B8 (R19), each annotated with its
+finding. Verified end to end: the H-B8 leg reports `3 diverged, baselined 3 of 3`
+and exits 0.
+
+**Still open in M7.** **H-C7** (per-claim `--multi-property` versus individual
+`--claim N` runs) is not written, and it is now the most interesting one left: R19
+is an H-C7-shaped defect found accidentally by H-B8, which suggests the per-claim
+comparison has more to say *without* `--smt-during-symex`. It also carries H-B3's
+per-claim residue from M5. The workflow keeps `continue-on-error` until a full
+Linux run confirms the baselines, since they were populated on macOS where 68-72
+inputs reach no verdict.
 
 ---
 

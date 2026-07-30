@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--multi-property --smt-during-symex
+^VERIFICATION FAILED$

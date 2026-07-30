@@ -112,6 +112,12 @@ def main():
     parser.add_argument("--timeout", type=int, default=20)
     parser.add_argument("--jobs", type=int, default=os.cpu_count())
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument(
+        "--baseline",
+        help="file of test names already triaged as diverging (one per line, "
+        "'#' comments allowed). New divergences fail; a baselined test that "
+        "stops diverging is reported so the file cannot rot unnoticed.",
+    )
     args = parser.parse_args()
 
     esbmc = os.path.abspath(args.esbmc)
@@ -130,6 +136,14 @@ def main():
     tests = [t for t in tests if t not in skipped]
     if args.limit:
         tests = tests[: args.limit]
+
+    baseline = set()
+    if args.baseline:
+        with open(args.baseline, "r", encoding="utf-8") as handle:
+            for line in handle:
+                name = line.split("#", 1)[0].strip()
+                if name:
+                    baseline.add(name)
 
     print(f"{len(tests)} tests, modes={modes}, A={flags_a or ['(none)']} B={flags_b}")
 
@@ -151,6 +165,12 @@ def main():
             if done % 100 == 0:
                 print(f"  ... {done}/{len(tests)}", flush=True)
 
+    diverged_names = {name for name, _, _ in diverged}
+    new_divergences = sorted(diverged_names - baseline)
+    # A baselined test that now agrees means the underlying defect was fixed;
+    # keeping the entry would mask a later regression of the same test.
+    stale_baseline = sorted(baseline - diverged_names)
+
     print(f"\nagreed       {agreed}")
     print(f"diverged     {len(diverged)}")
     print(f"inconclusive {len(inconclusive)}  (no verdict or timeout in one leg)")
@@ -162,7 +182,14 @@ def main():
     for name, a, b in sorted(inconclusive):
         print(f"INCONCLUSIVE {name}: A={a} B={b}")
 
-    return 1 if diverged else 0
+    if baseline:
+        print(f"\nbaselined    {len(diverged_names & baseline)} of {len(baseline)}")
+        for name in stale_baseline:
+            print(f"STALE-BASELINE {name}: listed as diverging but agrees now")
+        for name in new_divergences:
+            print(f"NEW-DIVERGENCE {name}")
+
+    return 1 if new_divergences else 0
 
 
 if __name__ == "__main__":
