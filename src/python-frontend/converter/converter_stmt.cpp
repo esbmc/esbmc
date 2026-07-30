@@ -2598,6 +2598,9 @@ void python_converter::get_var_assign(
     }
   }
 
+  if (ast_node.contains("value") && ast_node["value"].is_object())
+    reject_unknown_numpy_view_call(ast_node["value"]);
+
   // Stage 1 object-model migration (#3067/#4773): a simple Name target bound to
   // a class instance — either a constructor call `o = ClassName(...)` or an
   // alias `b = a` of an existing instance — becomes a *reference* (pointer) to
