@@ -19,6 +19,13 @@ itself. Two network shapes are generated:
        that enumerates rail-to-coil paths computes the distributed form
        instead, so this mode is what checks distributivity.
 
+Stateful constructs (edge contacts, feedback variables, function blocks,
+set/reset coils) are out of scope by construction: the shadow update is emitted
+before the scan-boundary assertion, so a previous-scan value is not observable
+where properties are checked, and the property grammar has no temporal
+operators. Those are pinned by the discriminating reachability tests under
+regression/ld/ instead.
+
 Usage:
   scripts/ld_resolver_oracle.py [seeds] [depth] [sp|dag] [layers] [width]
 
@@ -32,6 +39,16 @@ import subprocess
 import sys
 
 ESBMC = os.environ.get("ESBMC", "build/src/esbmc/esbmc")
+RAIL_LID = 1
+RIGHT_RAIL_LID = 2
+
+
+def _join_or(parts):
+    """OR a list of formulas, parenthesising only when there is more than one."""
+    if len(parts) == 1:
+        return parts[0]
+    joined = " || ".join(parts)
+    return f"({joined})"
 
 
 class Network:
@@ -44,15 +61,17 @@ class Network:
         self.nodes = []
 
     def new_lid(self):
+        """Allocate the next unused PLCopen localId."""
         self.lid += 1
         return self.lid
 
     def contact(self, preds):
-        var = "i%d" % self.rng.randrange(self.nvars)
-        neg = self.rng.random() < 0.35
+        """Append one contact fed by preds; return its (localId, condition)."""
+        var = f"i{self.rng.randrange(self.nvars)}"
+        negated = self.rng.random() < 0.35
         lid = self.new_lid()
-        self.nodes.append((lid, var, neg, list(preds)))
-        return lid, ("!%s" % var) if neg else var
+        self.nodes.append((lid, var, negated, list(preds)))
+        return lid, (f"!{var}" if negated else var)
 
     def series_parallel(self, preds, depth):
         """Compose series (AND) and parallel (OR) groups; return (exits, expr)."""
@@ -62,51 +81,39 @@ class Network:
         if self.rng.random() < 0.5:
             exits_a, expr_a = self.series_parallel(preds, depth - 1)
             exits_b, expr_b = self.series_parallel(exits_a, depth - 1)
-            return exits_b, "(%s && %s)" % (expr_a, expr_b)
+            return exits_b, f"({expr_a} && {expr_b})"
         exits_a, expr_a = self.series_parallel(preds, depth - 1)
         exits_b, expr_b = self.series_parallel(preds, depth - 1)
-        return exits_a + exits_b, "(%s || %s)" % (expr_a, expr_b)
+        return exits_a + exits_b, f"({expr_a} || {expr_b})"
 
     def layered_dag(self, layers, width):
         """Build a layered DAG; return (exit ids, power-flow formula)."""
         rail = "TRUE"
-        prev = [(1, rail)]
+        prev = [(RAIL_LID, rail)]
         for _ in range(layers):
             cur = []
             for _ in range(width):
-                chosen = self.rng.sample(
-                    prev, self.rng.randrange(1, len(prev) + 1))
+                chosen = self.rng.sample(prev,
+                                         self.rng.randrange(1, len(prev) + 1))
                 lid, cond = self.contact([p[0] for p in chosen])
                 feeds = [p[1] for p in chosen]
                 if rail in feeds:
                     expr = cond  # energised straight from the rail
                 else:
-                    joined = feeds[0] if len(feeds) == 1 \
-                        else "(" + " || ".join(feeds) + ")"
-                    expr = "(%s && %s)" % (joined, cond)
+                    expr = f"({_join_or(feeds)} && {cond})"
                 cur.append((lid, expr))
             prev = cur
-        parts = [p[1] for p in prev]
-        top = parts[0] if len(parts) == 1 else "(" + " || ".join(parts) + ")"
-        return [p[0] for p in prev], top
+        return [p[0] for p in prev], _join_or([p[1] for p in prev])
 
 
-def emit(seed, cfg):
-    """Return (ld_xml, props_yaml, formula) for one generated network."""
-    nvars = cfg["nvars"]
-    net = Network(random.Random(seed), nvars)
-    if cfg["mode"] == "dag":
-        exits, expr = net.layered_dag(cfg["layers"], cfg["width"])
-    else:
-        exits, expr = net.series_parallel([1], cfg["depth"])
-    coil = net.new_lid()
-
-    out = [
+def _interface_xml(seed, nvars):
+    """Project header through the end of the variable declarations."""
+    lines = [
         "<?xml version='1.0' encoding='utf-8'?>",
         '<project xmlns="http://www.plcopen.org/xml/tc6_0201">',
         '  <fileHeader companyName="ESBMC" productName="ld-oracle"'
         ' productVersion="1" creationDateTime="2026-07-30T00:00:00"/>',
-        '  <contentHeader name="gen%d">' % seed,
+        f'  <contentHeader name="gen{seed}">',
         '    <coordinateInfo><ld><scaling x="10" y="10"/></ld>'
         '</coordinateInfo>',
         '  </contentHeader>',
@@ -114,50 +121,69 @@ def emit(seed, cfg):
         '      <pou name="gen" pouType="program">',
         '        <interface><localVars>',
     ]
-    for v in range(nvars):
-        out.append('          <variable name="i%d" address="%%IX0.%d">'
-                   '<type><BOOL/></type></variable>' % (v, v))
-    out += [
+    for var in range(nvars):
+        lines.append(f'          <variable name="i{var}" address="%IX0.{var}">'
+                     '<type><BOOL/></type></variable>')
+    lines += [
         '          <variable name="q" address="%QX0.0">'
         '<type><BOOL/></type></variable>',
         '        </localVars></interface>',
         '        <body><LD>',
-        '          <leftPowerRail localId="1" width="10" height="40">',
+        f'          <leftPowerRail localId="{RAIL_LID}" width="10" '
+        'height="40">',
         '            <position x="10" y="10"/>',
         '            <connectionPointOut><relPosition x="10" y="10"/>'
         '</connectionPointOut>',
         '          </leftPowerRail>',
     ]
-    for (lid, var, neg, preds) in net.nodes:
-        out.append('          <contact localId="%d" width="20" height="20"'
-                   ' negated="%s">' % (lid, "true" if neg else "false"))
-        out.append('            <position x="%d" y="10"/>' % (40 + 30 * lid))
-        out.append('            <connectionPointIn>')
-        out.append('              <relPosition x="0" y="10"/>')
-        for p in preds:
-            out.append('              <connection refLocalId="%d"/>' % p)
-        out.append('            </connectionPointIn>')
-        out.append('            <connectionPointOut>'
-                   '<relPosition x="20" y="10"/></connectionPointOut>')
-        out.append('            <variable>%s</variable>' % var)
-        out.append('          </contact>')
-    out.append('          <coil localId="%d" width="20" height="20"'
-               ' negated="false">' % coil)
-    out.append('            <position x="900" y="10"/>')
-    out.append('            <connectionPointIn>')
-    out.append('              <relPosition x="0" y="10"/>')
-    for e in exits:
-        out.append('              <connection refLocalId="%d"/>' % e)
-    out.append('            </connectionPointIn>')
-    out.append('            <connectionPointOut><relPosition x="20" y="10"/>'
-               '</connectionPointOut>')
-    out.append('            <variable>q</variable>')
-    out.append('          </coil>')
-    out += [
-        '          <rightPowerRail localId="2" width="10" height="40">',
+    return lines
+
+
+def _contact_xml(node):
+    """One <contact> element, wired to each of its predecessors."""
+    lid, var, negated, preds = node
+    negated_attr = "true" if negated else "false"
+    lines = [
+        f'          <contact localId="{lid}" width="20" height="20"'
+        f' negated="{negated_attr}">',
+        f'            <position x="{40 + 30 * lid}" y="10"/>',
+        '            <connectionPointIn>',
+        '              <relPosition x="0" y="10"/>',
+    ]
+    for pred in preds:
+        lines.append(f'              <connection refLocalId="{pred}"/>')
+    lines += [
+        '            </connectionPointIn>',
+        '            <connectionPointOut><relPosition x="20" y="10"/>'
+        '</connectionPointOut>',
+        f'            <variable>{var}</variable>',
+        '          </contact>',
+    ]
+    return lines
+
+
+def _sink_xml(coil, exits):
+    """The output coil, its incoming connections, and the closing elements."""
+    lines = [
+        f'          <coil localId="{coil}" width="20" height="20"'
+        ' negated="false">',
+        '            <position x="900" y="10"/>',
+        '            <connectionPointIn>',
+        '              <relPosition x="0" y="10"/>',
+    ]
+    for exit_lid in exits:
+        lines.append(f'              <connection refLocalId="{exit_lid}"/>')
+    lines += [
+        '            </connectionPointIn>',
+        '            <connectionPointOut><relPosition x="20" y="10"/>'
+        '</connectionPointOut>',
+        '            <variable>q</variable>',
+        '          </coil>',
+        f'          <rightPowerRail localId="{RIGHT_RAIL_LID}" width="10"'
+        ' height="40">',
         '            <position x="950" y="10"/>',
         '            <connectionPointIn><relPosition x="0" y="10"/>'
-        '<connection refLocalId="%d"/></connectionPointIn>' % coil,
+        f'<connection refLocalId="{coil}"/></connectionPointIn>',
         '          </rightPowerRail>',
         '        </LD></body>',
         '      </pou>',
@@ -169,25 +195,40 @@ def emit(seed, cfg):
         '  </resource></configuration></configurations></instances>',
         '</project>',
     ]
+    return lines
+
+
+def emit(seed, cfg):
+    """Return (ld_xml, props_yaml, formula) for one generated network."""
+    net = Network(random.Random(seed), cfg["nvars"])
+    if cfg["mode"] == "dag":
+        exits, expr = net.layered_dag(cfg["layers"], cfg["width"])
+    else:
+        exits, expr = net.series_parallel([RAIL_LID], cfg["depth"])
+
+    lines = _interface_xml(seed, cfg["nvars"])
+    for node in net.nodes:
+        lines += _contact_xml(node)
+    lines += _sink_xml(net.new_lid(), exits)
 
     # Both implications, so an undriven coil (stuck false) fails the second one
     # rather than passing vacuously.
-    props = ('properties:\n'
-             '  - id: P1\n'
-             '    kind: invariant\n'
-             '    expression: "(!q || %s) && (q || !(%s))"\n'
-             '    description: "coil equals its power flow"\n' % (expr, expr))
-    return "\n".join(out) + "\n", props, expr
+    props = ("properties:\n"
+             "  - id: P1\n"
+             "    kind: invariant\n"
+             f'    expression: "(!q || {expr}) && (q || !({expr}))"\n'
+             '    description: "coil equals its power flow"\n')
+    return "\n".join(lines) + "\n", props, expr
 
 
 def verdict_of(output):
     """Extract ESBMC's verdict word, or an ERROR: line if there is none."""
-    for v in ("VERIFICATION SUCCESSFUL", "VERIFICATION FAILED",
-              "VERIFICATION UNKNOWN"):
-        if v in output:
-            return v.split()[-1]
-    last = output.strip().splitlines()
-    return "ERROR:" + (last[-1] if last else "<no output>")
+    for verdict in ("VERIFICATION SUCCESSFUL", "VERIFICATION FAILED",
+                    "VERIFICATION UNKNOWN"):
+        if verdict in output:
+            return verdict.split()[-1]
+    tail = output.strip().splitlines()
+    return "ERROR:" + (tail[-1] if tail else "<no output>")
 
 
 def run_one(seed, tmpdir, cfg, timeout=60):
@@ -195,33 +236,51 @@ def run_one(seed, tmpdir, cfg, timeout=60):
     xml, props, expr = emit(seed, cfg)
     ld_path = os.path.join(tmpdir, "oracle.ld")
     props_path = os.path.join(tmpdir, "oracle.yaml")
-    with open(ld_path, "w", encoding="utf-8") as f:
-        f.write(xml)
-    with open(props_path, "w", encoding="utf-8") as f:
-        f.write(props)
+    with open(ld_path, "w", encoding="utf-8") as handle:
+        handle.write(xml)
+    with open(props_path, "w", encoding="utf-8") as handle:
+        handle.write(props)
     try:
         # ESBMC splits output across stdout and stderr; merge or the verdict
         # line is missed.
         proc = subprocess.run(
-            [ESBMC, ld_path, "--ld-props", props_path,
-             "--k-induction", "--max-k-step", "4"],
-            capture_output=True, text=True, timeout=timeout, check=False)
+            [ESBMC, ld_path, "--ld-props", props_path, "--k-induction",
+             "--max-k-step", "4"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False)
         return verdict_of(proc.stdout + proc.stderr), expr, xml, props
     except subprocess.TimeoutExpired:
         return "TIMEOUT", expr, xml, props
 
 
+def _save_failure(seed, xml, props):
+    """Write a failing case to fail_seed<N>/ and return the directory name."""
+    outdir = f"fail_seed{seed}"
+    os.makedirs(outdir, exist_ok=True)
+    with open(os.path.join(outdir, "oracle.ld"), "w",
+              encoding="utf-8") as handle:
+        handle.write(xml)
+    with open(os.path.join(outdir, "oracle.yaml"), "w",
+              encoding="utf-8") as handle:
+        handle.write(props)
+    return outdir
+
+
 def main():
     """Generate and verify a batch of networks; return 1 if any failed."""
-    seeds = int(sys.argv[1]) if len(sys.argv) > 1 else 30
-    depth = int(sys.argv[2]) if len(sys.argv) > 2 else 3
-    mode = sys.argv[3] if len(sys.argv) > 3 else "sp"
-    layers = int(sys.argv[4]) if len(sys.argv) > 4 else 3
-    width = int(sys.argv[5]) if len(sys.argv) > 5 else 2
-
-    cfg = {"nvars": 3, "depth": depth, "mode": mode,
-           "layers": layers, "width": width}
+    argv = sys.argv[1:]
+    seeds = int(argv[0]) if argv else 30
+    cfg = {
+        "nvars": 3,
+        "depth": int(argv[1]) if len(argv) > 1 else 3,
+        "mode": argv[2] if len(argv) > 2 else "sp",
+        "layers": int(argv[3]) if len(argv) > 3 else 3,
+        "width": int(argv[4]) if len(argv) > 4 else 2,
+    }
     tmpdir = os.environ.get("TMPDIR", "/tmp")
+
     tally = {}
     failures = []
     for seed in range(seeds):
@@ -230,19 +289,11 @@ def main():
         if got != "SUCCESSFUL":
             failures.append((seed, got, expr, xml, props))
 
-    print("seeds=%d mode=%s depth=%d layers=%d width=%d -> %s"
-          % (seeds, mode, depth, layers, width, tally))
+    print(f"seeds={seeds} mode={cfg['mode']} depth={cfg['depth']} "
+          f"layers={cfg['layers']} width={cfg['width']} -> {tally}")
     for (seed, got, expr, xml, props) in failures[:4]:
-        print("\n--- seed %d: %s\n    formula: %s" % (seed, got, expr))
-        outdir = "fail_seed%d" % seed
-        os.makedirs(outdir, exist_ok=True)
-        with open(os.path.join(outdir, "oracle.ld"), "w",
-                  encoding="utf-8") as f:
-            f.write(xml)
-        with open(os.path.join(outdir, "oracle.yaml"), "w",
-                  encoding="utf-8") as f:
-            f.write(props)
-        print("    saved to %s/" % outdir)
+        print(f"\n--- seed {seed}: {got}\n    formula: {expr}")
+        print(f"    saved to {_save_failure(seed, xml, props)}/")
     return 1 if failures else 0
 
 
