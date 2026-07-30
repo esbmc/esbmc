@@ -5962,6 +5962,33 @@ exprt numpy_call_expr::get()
     return converter_.get_expr(result);
   }
 
+  if (function == "expand_dims")
+  {
+    if (call_["args"].size() < 2)
+      throw std::runtime_error(
+        "TypeError: numpy.expand_dims() requires array and axis arguments");
+
+    nlohmann::json arr_arg = call_["args"][0];
+    resolve_numpy_var(arr_arg);
+
+    numeric_value axis_value;
+    if (
+      !try_extract_numeric_constant(call_["args"][1], axis_value) ||
+      !axis_value.is_int)
+      throw std::runtime_error(
+        "TypeError: numpy.expand_dims() axis must be a concrete integer");
+
+    if (axis_value.int_value != 0)
+      throw std::runtime_error(
+        "AxisError: axis " + std::to_string(axis_value.int_value) +
+        " is out of bounds for array of dimension 1");
+
+    nlohmann::json result;
+    result["_type"] = "List";
+    result["elts"] = nlohmann::json::array({arr_arg});
+    return converter_.get_expr(result);
+  }
+
   // np.squeeze(a[, axis]) — remove axes of size 1 from the shape.
   if (function == "squeeze")
   {
@@ -5985,6 +6012,8 @@ exprt numpy_call_expr::get()
         elts.size() == 1 && elts[0].is_object() &&
         elts[0].value("_type", std::string()) == "List")
         return do_squeeze(elts[0]);
+      if (elts.size() == 1)
+        return do_squeeze(elts[0]);
       nlohmann::json out = node;
       out["elts"] = nlohmann::json::array();
       for (const auto &e : elts)
@@ -5994,6 +6023,48 @@ exprt numpy_call_expr::get()
 
     return converter_.get_expr(do_squeeze(arr_arg));
   }
+
+  if (function == "swapaxes" || function == "moveaxis")
+  {
+    if (call_["args"].size() < 3)
+      throw std::runtime_error(
+        "TypeError: numpy." + function +
+        "() requires array and axis arguments");
+
+    nlohmann::json arr_arg = call_["args"][0];
+    resolve_numpy_var(arr_arg);
+
+    std::vector<std::size_t> shape;
+    const std::size_t rank =
+      get_literal_shape(arr_arg, shape) ? shape.size() : 0;
+
+    for (std::size_t i = 1; i <= 2; ++i)
+    {
+      numeric_value axis_value;
+      if (
+        !try_extract_numeric_constant(call_["args"][i], axis_value) ||
+        !axis_value.is_int)
+        throw std::runtime_error(
+          "TypeError: numpy." + function +
+          "() axis must be a concrete integer");
+
+      long long axis = axis_value.int_value;
+      if (axis < 0)
+        axis += static_cast<long long>(rank);
+      if (rank != 0 && (axis < 0 || axis >= static_cast<long long>(rank)))
+        throw std::runtime_error(
+          "AxisError: axis " + std::to_string(axis_value.int_value) +
+          " is out of bounds for array of dimension " + std::to_string(rank));
+    }
+
+    throw std::runtime_error(
+      "TypeError: numpy." + function + " returns a view and is not supported");
+  }
+
+  if (function == "broadcast_to")
+    throw std::runtime_error(
+      "TypeError: numpy.broadcast_to returns a readonly view and is not "
+      "supported");
 
   // np.stack(arrays[, axis]) — join arrays along a new first axis.
   // Only axis=0 is fully supported; other axes are accepted but also lower

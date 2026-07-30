@@ -3080,6 +3080,46 @@ void python_converter::get_var_assign(
     copy_location_fields_from_decl(ast_node["value"], call_node["func"]);
     effective_ast_node["value"] = call_node;
   }
+  else if (
+    ast_node.contains("value") && ast_node["value"].is_object() &&
+    ast_node["value"].value("_type", "") == "Call" &&
+    ast_node["value"].contains("func") &&
+    ast_node["value"]["func"].is_object() &&
+    ast_node["value"]["func"].value("_type", "") == "Attribute" &&
+    ast_node["value"]["func"].value("attr", "") == "transpose" &&
+    ast_node["value"]["func"].contains("value") &&
+    ast_node["value"].value("args", nlohmann::json::array()).empty())
+  {
+    std::string numpy_alias = "np";
+    for (const auto &entry : imported_modules)
+    {
+      if (entry.second == "numpy")
+      {
+        numpy_alias = entry.first;
+        break;
+      }
+    }
+
+    nlohmann::json module_name;
+    module_name["_type"] = "Name";
+    module_name["id"] = numpy_alias;
+    module_name["ctx"] = {{"_type", "Load"}};
+    copy_location_fields_from_decl(ast_node["value"], module_name);
+
+    nlohmann::json call_node;
+    call_node["_type"] = "Call";
+    call_node["func"] = {
+      {"_type", "Attribute"},
+      {"value", module_name},
+      {"attr", "transpose"},
+      {"ctx", {{"_type", "Load"}}}};
+    call_node["args"] =
+      nlohmann::json::array({ast_node["value"]["func"]["value"]});
+    call_node["keywords"] = nlohmann::json::array();
+    copy_location_fields_from_decl(ast_node["value"], call_node);
+    copy_location_fields_from_decl(ast_node["value"], call_node["func"]);
+    effective_ast_node["value"] = call_node;
+  }
 
   exprt rhs;
   bool has_value = false;
