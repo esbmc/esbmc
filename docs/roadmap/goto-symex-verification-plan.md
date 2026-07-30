@@ -6,7 +6,8 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0–M5 closed** (§15 verdict log); M6–M8 not yet executed. §6.4
+**Status:** **M0–M5 closed, M6 partial** (§15 verdict log); M7–M8 not yet
+executed. §6.4
 records the tier-ordering rule M1 produced. Except where §15 records a
 discharged result, every harness below is a *proposal* and nothing here asserts
 a proof. Findings not marked discharged in §9.2 remain *hypotheses with cited
@@ -611,7 +612,7 @@ two configurations.
 | **H-C1** | verdict(default) == verdict(`--no-slice`) | `regression/esbmc` CORE (1430 of 1574 dirs) | Slicer unsoundness/incompleteness end-to-end. **Run, §15 M5: 1328 agreed, 0 diverged**, 67 inconclusive, 35 skipped |
 | **H-C2** | verdict(default) == verdict(`--no-simplify`) | same | Simplifier / constant-propagation semantic drift (P9). **Run, §15 M5: 1174 agreed, 11 diverged** — R16 (10, incompleteness) and R17 (1, false SUCCESSFUL composed with `--no-slice`) |
 | **H-C3** | verdict(bitwuzla) == verdict(z3) | same | Encoding assumptions that only one solver tolerates |
-| **H-C4** | verdict(default) == verdict(`--no-por`) and == verdict(`--state-hashing`) | `regression/esbmc-unix`, `regression/esbmc` concurrency tests | POR / state-hashing over-pruning (I14, I15) |
+| **H-C4** | verdict(default) == verdict(`--no-por`) and == verdict(`--state-hashing`) | `regression/esbmc-unix`, `regression/esbmc` concurrency tests | POR / state-hashing over-pruning (I14, I15). **Run, §15 M6: 258/0 and 255/0 — clean, but the R18 witness is a program the corpus does not contain** |
 | **H-C5** | verdict(default) == verdict(`--no-interval-symex-guard`) | `regression/esbmc`, `regression/k-induction` | Interval-domain guard pruning (the documented hazard at `symex_goto.cpp:57-79`) |
 | **H-C6** | **Unwind monotonicity**: FAILED at `--unwind k` ⇒ FAILED at every `k' > k` | loop-bearing subset | Lost counterexamples when the bound grows — a pure soundness relation, no oracle needed |
 | **H-C7** | per-claim verdicts under `--multi-property` == the individual `--claim N` runs | `regression/esbmc` multi-assert tests | Claim/slice interaction bugs (cf. recent `multi_property_check` fixes) |
@@ -683,10 +684,11 @@ this document** — each is a prioritised target for the cited harness.
 | **R8** | **Medium (documented model gap)** | `is_valid_object` returns `false` for **every** non-static, non-dynamic symbol: the stack-scope branch is `#if 0`'d out with "XXX re-enable to be able to check for stack-var-out-of-scope problems". Stack-object validity is therefore not modelled, and `dynamic_allocation.cpp` compensates by *assuming* `invalid_pointer` applies only to dynamic objects ("we never update `__ESBMC_alloc` for stack ptrs"). Net effect on stack-lifetime bugs (use-after-scope) is a **missed-bug** direction. | `goto_symext::is_valid_object`, `symex_valid_object.cpp:85-118`; `dynamic_allocation.cpp:110-116` | H-A10 + a targeted `regression/esbmc` use-after-scope corpus | Quantify with a dedicated corpus before attempting a fix; the fix is a model change, not a patch. |
 | **R9** | **Low–Medium (approximation direction unproven)** | Three documented "sound over-approximation" claims are unproven: value-set filtering after a pointer havoc (`symex_assign.cpp:~550-570`), the non-scalar uninterpreted-function fallback (`symex_function.cpp:~410-430`), and the function-pointer target enumeration over an over-approximated value set (`symex_function.cpp:~766`). Each *argues* the direction in a comment; none is checked. | cited lines | H-B6 + H-C1/H-C3 | For each, state the claim as a checkable predicate and add a Tier-B assertion (e.g. filtered set ⊆ original **and** the dropped entries are `unknown`/`invalid` only). |
 | **R10** | **Low (latent UB)** | `renaming::level2t::name_record`'s `name_record() = default` leaves `lev`, `l1_num`, `t_num` **and the derived `hash`** indeterminate (contrast `level1t::name_record`, which initialises `base_name("")`). No current default-construction site was found, but a future one (`std::optional`, map default-insert, array of records) would read indeterminate memory in `compare`/`hash`. | `renaming.h:143-214` | MSan (Tier D) + a `static_assert`-style unit check | Add default member initialisers; near-zero cost. |
-| **R11** | **Open question (concurrency soundness)** | MPOR's independence decision consumes `thread_last_reads`/`thread_last_writes`, populated via `get_expr_globals`, which resolves pointer operands through the *current* value set. If a write through a pointer whose value set is incomplete (or whose entry is `unknown`) is missed, the dependency is missed and an interleaving is dropped — **unsound**. `get_expr_globals` also early-returns entirely under `--data-races-check-only`. | `execution_statet::get_expr_globals`, `check_mpor_dependency`; `reachability_treet::ever_written_globals`/`address_taken_globals` | H-A6 (relation) + **H-C4** (end-to-end) | Determine whether an `unknown` value-set entry forces a conservative dependency; if not, that is a concrete unsoundness to fix. Highest-uncertainty item in this plan. |
+| **R11** | **Confirmed — mechanism corrected, see R18, §15 M6** | MPOR's independence decision consumes `thread_last_reads`/`thread_last_writes`, populated via `get_expr_globals`, which resolves pointer operands through the *current* value set. If a write through a pointer whose value set is incomplete (or whose entry is `unknown`) is missed, the dependency is missed and an interleaving is dropped — **unsound**. `get_expr_globals` also early-returns entirely under `--data-races-check-only`. | `execution_statet::get_expr_globals`, `check_mpor_dependency`; `reachability_treet::ever_written_globals`/`address_taken_globals` | H-A6 (relation) + **H-C4** (end-to-end) | **Answered.** An `unknown` entry does not force a conservative dependency — the `dest` loop skips anything that is not an `object_descriptor2t` over a `symbol2t`, with no fallback. But that is *not* the reachable defect: the witness in R18 shows the missed dependency comes from resolving only **one** pointer level, so a nested dereference is recorded against the intermediate pointer. R11's suspicion was right and its stated mechanism was wrong. Superseded by R18. |
 | **R13** | **Medium (silent under-verification) — confirmed and fixed, §15 M2 (cont.)** | **`--unwindsetname` never matched a loop.** `unwind_func_set` was keyed by `user_name_to_usr(name)`, which appends a `#` terminator (clang's C++ USR spelling), while `loop_id_to_func_index` was keyed by the goto function-map id, which for a C function is `c:@F@f` with no terminator. The `count(unwind_key)` in `get_unwind` therefore always missed and the global `--unwind` silently won, so a user raising the bound for one function got the lower global bound and a verdict covering less than they asked for. A second defect in the same option: the `name:index:bound` field split scanned left-to-right, so the documented USR form (`c:@F@f#:0:11`) split inside the `c:` prefix. Neither was caught because all five `unwindsetname` regression tests ran without a global `--unwind` and so passed vacuously. | `goto_symext::goto_symext`, `symex_assign.cpp:66-120`; `get_unwind`, `symex_goto.cpp:525`; `user_name_to_usr`, `usr_utils.cpp:29` | `unit/goto-symex/unwind.test.cpp` (Tier B, discharged) | Fixed: both sides now key on the name `--show-loops` prints (`usr_to_user_name`), and the field split scans from the right. Three non-vacuous regression tests added; `unwindsetname_03_priority` corrected to the loop number the program actually has. |
 | **R14** | **Open (I10 violated on a real input)** — found by R5's repaired detector, §15 M4 | With `--double-assign-check` made to fail, `regression/esbmc/github_286_3` produces an equation that **defines one SSA name twice**: `…@F@getNumbers2@numbers2?1!0&0#1`, the L2 index 1 of a local array in a function that returns a dangling pointer to it. Two definitions of one name are two constraints `x#1 == e1` and `x#1 == e2` on the same variable; where the right-hand sides disagree the conjunction is unsatisfiable, which silently removes that path from the formula — the missed-bug direction. One input in ~900 swept. Not yet characterised: which two steps emit it, and whether the two right-hand sides can differ. | `symex_target_equationt::check_for_duplicate_assigns` under `--double-assign-check`; `regression/esbmc/double_assign_check_local_array` (KNOWNBUG) | H-B1 | Find the two emitting steps (the local's scope exit is the first suspect), then decide whether the second definition is a stale re-emission or a legitimate step that must take a fresh index. |
 | **R15** | **Low (reproducibility, latent collision)** — found by H-B2, §15 M4 (H-B2) | **Object numbering leaks across symex runs in one process.** `execution_statet::dynamic_counter` and `dereferencet::invalid_counter` are `static thread_local` and reset nowhere, so a second exploration in the same process names its objects from where the first stopped: the same program under the same options yields `symex_dynamic::dynamic_1_array` on the first run and `dynamic_2_array` on the second. The sibling `nondet_count` is a plain instance member the constructor zeroes, so the asymmetry is unintended rather than a design choice. The equation is therefore not a function of (program, options) alone. No wrong verdict follows — the names only need to be *fresh*, and monotonic counters are fresh — so this is a reproducibility defect, and objective 7's "byte-identical" wording is unachievable as stated. **Latent second-order risk:** `thread_local` means two threads each start at 0, so if symex is ever parallelised (§14.6) two threads would mint *colliding* object names into a shared context. | `execution_state.cpp:21`, `execution_state.h:583`; `dereference.cpp:23,538`, `dereference.h:281`; contrast `nondet_count` reset at `execution_state.cpp:104` | `unit/goto-symex/determinism.test.cpp` (Tier B, pinned) | Reset both counters per exploration — in `setup_for_new_explore`, **not** in the `execution_statet` constructor, which the reachability tree copies per interleaving and where a reset would mint colliding names. Expect churn in `test.desc` files whose expected output names a dynamic object; run the full corpus before landing. |
+| **R18** | **High (false SUCCESSFUL, default configuration)** — **confirmed with a witness** by H-A6/H-C4, §15 M6 | **POR drops a racy interleaving when the write goes through a nested dereference.** `get_expr_globals` resolves *one* pointer level (`get_reference_set` on a single `dereference2tc`), so a write spelled `*(*gpp) = 1` is recorded against the intermediate pointer `gp` rather than its target `g`. A second thread writing `g` directly records `g`, the two keys do not alias, `check_mpor_dependency` returns *independent*, and the interleaving is pruned — **a real race missed in the default configuration, with no diagnostic**. Twelve lines reproduce it: writer does `*(*gpp) = 1`, `main` does `g = 2; seen = g;`, and `assert(seen == 2)` is reachable. Default reports **SUCCESSFUL**; `--no-por` reports FAILED. The mechanism is pinned by a decisive pair: with *both* threads using the nested form the race is found again (matching keys), while writer-nested/main-direct misses it. Splitting the nested access into `int *q = *gpp; *q = 1;` also restores detection, so the key depends on the syntactic nesting depth of the access rather than on the object touched. This is precisely the completeness direction H-A6's A6.2 names — a missed dependency — and it is **not** in the relation but upstream in the key construction feeding it. | `execution_statet::get_expr_globals`, `execution_state.cpp:868-918`; `check_mpor_dependency`, `:1050`; `mpor_set_conflicts`, `:231`; `regression/esbmc-unix/mpor_nested_deref_race` (KNOWNBUG) and `..._nopor` (CORE) | **H-A6**, **H-C4** | Resolve pointer chains to a fixed point instead of one level, or make `mpor_keys_may_alias` treat a pointer key as aliasing everything its value set can reach. Pinned, not fixed: either change widens the dependency relation and will cost interleavings, so it needs the H-C4 sweep re-run for cost before landing. |
 | **R16** | **Medium (incompleteness under a non-default flag)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify` is not verdict-preserving: 10 corpus inputs where the default proves SUCCESSFUL and `--no-simplify` does not.** Nine report a spurious counterexample (`github_1174_{hex,lmod,oct,pass}`, `github_2341_3`, `github_2357_5`, `github_2566_1`, `github_785-2`, `realloc13`) and one returns UNKNOWN (`github_252`, under `--k-induction`). In every case the *default* leg matches the verdict the test's own `test.desc` expects, so the fault is in the `--no-simplify` configuration, not the default. Spot-confirmed on `github_2341_3`: `--no-simplify` reports a violated `assert(temp != NULL)` the default discharges. The noisy direction — P1 — but it means `do_simplify` is load-bearing for *correctness of the encoding*, not merely for formula size, which is not how an "optimisation" flag reads. | `oracle_flag_parity.py --b=--no-simplify` over `regression/esbmc` CORE | **H-C2** | Triage one input down to the expression shape the encoder mishandles unsimplified. Until then `--no-simplify` is a debugging aid, not a semantics-preserving flag. |
 | **R17** | **High (false SUCCESSFUL, non-default flag pair)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify --no-slice` misses a reachable `assert(0)`.** Three lines reproduce it: `void *b = malloc(-4); assert(0);` returns **`VERIFICATION SUCCESSFUL`**. Neither flag alone does this (both give FAILED), nor does a positive size, nor no allocation — so it is a **composition** defect, the class §7.4 says Tier C exists to catch. The negative size widens to a huge `size_t`; one VCC is generated and the solver returns UNSAT, so the path to the assertion is **vacuously infeasible** and every later assertion in such a program is silently unreachable. Reached in the corpus via `github_1631_compact`, whose `--compact-trace` sets `no-slice` implicitly (`command_line_options.cpp:410`) — that indirection is why the pair is easy to hit without naming it. | minimal reproducer above; `regression/esbmc/no_simplify_no_slice_huge_malloc` (KNOWNBUG, observed output `VERIFICATION SUCCESSFUL`) and `..._malloc` (CORE, positive size, passes today) | **H-C2** | Find which allocation-model constraint becomes contradictory unsimplified — the `__ESBMC_alloc_size` update and any size-overflow guard are the first suspects. Pinned, not fixed. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
@@ -769,6 +771,11 @@ transcribed. The scheduled CI job (§11.2) is not yet wired.
 investigation (pointer-mediated writes in `get_expr_globals`). Highest
 uncertainty — budget for the answer being "there is a real gap". *Artefact:* MPOR
 relation proof + POR/state-hashing parity report + an R11 verdict.
+**Partial, §15 M6.** H-C4 run (258/0 and 255/0). R11 answered and **superseded by
+R18**: a confirmed default-configuration false SUCCESSFUL where POR prunes a race
+reached through a nested dereference. H-A6's A6.2 is discharged by that
+counterexample at Tier B — the specced Tier-A model would have passed. A6.1,
+A6.3, A6.4 and R6 remain open.
 
 **M7 — End-to-end scenarios and regression pinning (1 wk).** H-C2, H-C3, H-C5,
 H-C6, H-C7 wired as a scheduled CI job; H-B8. *Artefact:* the oracle job + a
@@ -1883,9 +1890,75 @@ The `symex_run::equation` fixture added for H-B2 is now shared with this file
 than live state share one copy. The five-file `engine` consolidation recorded in
 M4 (H-B2) is still owed, still blocked on the same conflict.
 
----
+### M6 — 2026-07-30
 
-## Appendix A — Methodological basis
+**Result: R11 answered, and in answering it a confirmed soundness bug in the
+default configuration — R18. POR drops a real race when the write goes through a
+nested dereference. §10 said to budget for "there is a real gap"; there is.**
+
+**H-C4 first, because it was one command.** `oracle_flag_parity.py` already takes
+the flag pair, so the POR and state-hashing legs needed no new code:
+
+| Leg | agreed | diverged | inconclusive | skipped |
+|---|---|---|---|---|
+| verdict(default) == verdict(`--no-por`) | 258 | **0** | 13 | 9 |
+| verdict(default) == verdict(`--state-hashing`) | 255 | **0** | 9 | 16 |
+
+Corpus `regression/esbmc-unix` CORE (280 of 355 dirs), 30 s cap. **This is weaker
+evidence than it looks and must not be quoted as "POR is sound".** Zero
+divergences over a corpus says nothing about mechanisms the corpus does not
+exercise — R6 needs two states differing only in the L1 activation of a
+*recursive* local, and nothing here establishes that any esbmc-unix input has
+that shape. The R18 witness below makes the point concrete: it is a twelve-line
+program that the 258-input sweep did not contain.
+
+**R18, and how it was found.** R11 asked whether an `unknown` value-set entry
+forces a conservative dependency. Reading `get_expr_globals` answers *no* — the
+`dest` loop skips anything that is not an `object_descriptor2t` over a
+`symbol2t`, with no fallback — but that is not the reachable defect. Writing
+targeted racy programs and diffing default against `--no-por` produced this:
+
+| writer body (main does `g = 2; seen = g;`) | default | `--no-por` |
+|---|---|---|
+| `g = 1;` | FAILED | FAILED |
+| `*gp = 1;` | FAILED | FAILED |
+| `int *q = *gpp; *q = 1;` | FAILED | FAILED |
+| integer round-trip `(int *)(unsigned long)&g` | FAILED | FAILED |
+| **`*(*gpp) = 1;`** | **SUCCESSFUL** | FAILED |
+| **`*(*pp) = 1;`** (local double pointer) | **SUCCESSFUL** | FAILED |
+
+`get_expr_globals` resolves **one** pointer level, so `*(*gpp) = 1` is recorded
+against the intermediate `gp` rather than its target `g`. `main`'s direct write
+records `g`, the keys do not alias, `check_mpor_dependency` reports independent,
+and the interleaving is pruned. A decisive pair pins the mechanism as
+wrong-key rather than nothing-recorded: with **both** threads using the nested
+form the race is found again (the keys match each other), while
+writer-nested/main-direct misses it. So the MPOR key depends on the syntactic
+nesting depth of an access rather than on the object accessed.
+
+**The harness §7.1 specified for H-A6 would not have found this.** A6.1–A6.4 are
+properties of `check_mpor_dependency` — symmetry, completeness, read-read,
+transitive closure — and a Tier-A model of that relation over nondet read/write
+bitmasks satisfies all four while this bug is live, because the relation is
+correct and the *keys handed to it* are wrong. Discharged instead at Tier B
+against the real engine, where the defect is reachable. Second time in two
+milestones that a specced Tier-A model would have verified the wrong component
+(cf. §15 M5's `store_elided` blindness); the pattern is that a harness aimed at a
+decision procedure must also police the data feeding it.
+
+Pinned by `regression/esbmc-unix/mpor_nested_deref_race` (KNOWNBUG, observed
+`VERIFICATION SUCCESSFUL`) and `..._nopor` (CORE, FAILED under `--no-por`). Not
+fixed: resolving pointer chains to a fixed point, or making `mpor_keys_may_alias`
+treat a pointer key as aliasing everything its value set reaches, both widen the
+dependency relation and cost interleavings — #6480 already tuned this relation
+for exactly that reason, so a fix needs the H-C4 sweep re-run as a cost gate.
+
+**Still open in M6.** A6.1/A6.3/A6.4 (the relation's own algebraic properties)
+have no harness; only A6.2 was exercised, and by counterexample. R6
+(state-hashing on L0 names) remains untested for want of a corpus input with the
+recursive-local shape — H-C4's clean state-hashing leg does **not** discharge it.
+No `--no-mpor` flag exists, so `--no-por` cannot separate MPOR pruning from the
+rest of POR; attributing R18 to MPOR rests on the code path, not on a flag.
 
 - **Design by contract.** Every harness is precondition (`__ESBMC_assume`) →
   operation → postcondition (`assert`). §4.2's invariants are the class
