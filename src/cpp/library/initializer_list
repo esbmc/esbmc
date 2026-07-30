@@ -1,9 +1,7 @@
 #ifndef ESBMC_INITIALIZER_LIST
 #define ESBMC_INITIALIZER_LIST
 
-// C++11 header: libstdc++ and libc++ both expand it to nothing in an
-// older language mode rather than erroring, so a translation unit that
-// includes it unconditionally still compiles (github #3387).
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
 #if __cplusplus >= 201103L
 
 #include "cstddef"
@@ -67,7 +65,6 @@ constexpr const E *end(initializer_list<E> il) noexcept
 }
 
 } // namespace std
-
 
 #endif // __cplusplus >= 201103L
 #endif // ESBMC_INITIALIZER_LIST

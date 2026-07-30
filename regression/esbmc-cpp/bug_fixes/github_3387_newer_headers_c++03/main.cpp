@@ -1,7 +1,6 @@
-// Every header below postdates C++03. libstdc++ and libc++ expand them to
-// nothing in an older language mode rather than erroring, so a translation
-// unit that includes them unconditionally still compiles; ESBMC's models were
-// unguarded and failed to parse under --std c++03 (github #3387).
+// Every header below postdates C++03 and must be inert, not a parse error,
+// under --std c++03, while the C++03 headers sharing the TU keep working
+// (#3387).
 #include <initializer_list>
 #include <chrono>
 #include <random>
@@ -14,7 +13,6 @@
 #include <filesystem>
 #include <source_location>
 
-// C++03 headers pulled in through the same TU must stay fully functional.
 #include <vector>
 #include <string>
 #include <map>

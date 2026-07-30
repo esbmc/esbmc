@@ -1,6 +1,4 @@
-// Negative counterpart of github_3387_newer_headers_c++03: the C++03 headers
-// sharing the translation unit still carry real values, so a wrong claim is
-// refuted rather than vacuously proved.
+// Negative counterpart of github_3387_newer_headers_c++03: not vacuous.
 #include <chrono>
 #include <unordered_map>
 #include <optional>

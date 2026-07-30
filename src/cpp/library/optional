@@ -1,8 +1,6 @@
 #pragma once
 
-// Post-C++03 header: libstdc++ and libc++ both expand it to nothing in an
-// older language mode rather than erroring, so a translation unit that
-// includes it unconditionally still compiles (github #3387).
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
 #if __cplusplus >= 201103L
 
 #include "utility"

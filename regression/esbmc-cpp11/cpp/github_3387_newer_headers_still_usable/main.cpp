@@ -1,9 +1,6 @@
-// Guarding a header must not withdraw it from a mode where it already worked.
-// PR #6526 first gated <string_view> and friends at C++17, which broke
-// regression/esbmc/read_spec_verify_1 on Windows: with no --std, ESBMC passes
-// no -std= at all and clang picks a per-target default that is below C++17
-// there, so the header expanded to nothing. The guards are at C++11 instead --
-// the lowest mode each of these already parsed in (github #3387).
+// A guard must not withdraw a header from a mode where it already worked:
+// gating these at C++17 broke read_spec_verify_1 on Windows, where clang's
+// per-target default (ESBMC passes no -std=) is below C++17. See #3387.
 #include <string_view>
 #include <optional>
 #include <any>
