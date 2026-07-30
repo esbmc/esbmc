@@ -3,14 +3,14 @@
 **Status:** PLANNING — WP2 largely implemented (skeleton #5280, property pipeline #5289, ld-verify runner + fault injection #5294, industrial benchmarks #5427, user-FB/REAL/watchdog #5620, graphical-LD soundness fixes + WP1 SOS spec)  
 **Project:** APP113435 — ESBMC-PLC (EPSRC Standard Research Grant)  
 **Tracking:** umbrella issue TBD  
-**Date:** 2026-06-09 (status refreshed 2026-07-24)
+**Date:** 2026-06-09 (status refreshed 2026-07-30)
 
 > **Implementation note.** The boolean/combinational Tier-1 subset, the
 > integer-arithmetic constructs (TON/TOF/TP timers, CTU/CTD counters, and the
 > `response` property), and — beyond the original Tier-1 scope — user-defined
 > function-block bodies, REAL/analog process variables, and an optional
 > scan-watchdog all now lower to GOTO IR and verify end-to-end (see §10). The
-> suite under `regression/ld/` has grown to 23 CTest cases, plus 10 for the
+> suite under `regression/ld/` has grown to 25 CTest cases, plus 10 for the
 > `ld-verify` runner, and CI now actually runs them. All four curated
 > benchmarks have validated verdicts and are wired as regression tests. The WP1
 > SOS specification exists as `docs/safe-ld-sos-semantics.md`; its independent
@@ -572,7 +572,7 @@ all 20 programs pass semantic review; spec reviewed against IEC 61508 §7.
 | T2.1 Parser & Semantic Analyser | PLCopen XML parser; AST; type checker; SOS consistency check | M3 (Month 6): parser handles all WP1 SOS constructs | skeleton landed (#5280); extended with user-FB-body and REAL/analog parsing (#5620) |
 | T2.2 GOTO IR Generator & Property Encoder | LdIR; `ld_converter` (irep2); YAML parser; property encoder (`code_assertt`) | M4 (Month 9): IR generator correct on all benchmark programs | boolean subset + timers/counters/`response` all lower and verify (#5289); ST→`codet` FB-body translator + numeric↔Boolean coercion (#5620); graphical resolver now models FB blocks, edge contacts, parallel-path OR and network feedback; all four benchmark verdicts validated (§10) |
 | T2.3 ESBMC Integration & ld-verify | `ld_languaget`; CMake wiring; ld-verify CLI; JSON report | M5 (Month 12): end-to-end pipeline ready | `--ld-props` wired + JSON report (#5289); `ld-verify` runner implemented, driving `esbmc` (#5294); `--ld-fault-injection`, `--ld-sound-mode`, `--ld-scan-watchdog`/`--ld-scan-budget` driver flags added (#5294, #5620) |
-| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 23 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic) + 10 `ld-verify` runner tests, all run by CI; line-coverage target not yet measured |
+| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 25 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic) + 10 `ld-verify` runner tests, all run by CI; line-coverage target not yet measured |
 
 **Success criteria (WP2):**
 - **Correctness:** ≥95% of benchmark programs translated to GOTO IR with semantic
@@ -777,6 +777,12 @@ prose in §3 is not mistaken for delivered functionality.
   also re-encoded so that `Q` starts false rather than reading an un-run timer's
   `ET` as an expired interval. PLCopen `<initialValue>` is now parsed; before,
   every declared preset silently read as zero.
+- **Unmodellable rung paths are rejected, not dropped.** The graphical resolver
+  used to skip any rail-to-coil path it could not model and, when a block's
+  output drove a coil without a power-flow edge reaching it, emitted no rung and
+  no diagnostic at all — leaving the coil at its initial value and passing
+  properties over it vacuously. Both now raise
+  `UnsupportedConstruct(name, tier=2)` per §7, naming the offending block.
 - **Benchmark verdicts validated.** `conveyor_sequencing` and
   `emergency_shutdown` are wired as regression tests. The ESD violation proved
   to be a true positive — its reset rung does not gate on the manual trip being
@@ -784,7 +790,7 @@ prose in §3 is not mistaken for delivered functionality.
   pinned as `esd_manual_reset_fail`, with the corrected program as
   `emergency_shutdown_safe`. The conveyor's failure was a `response` property
   whose bound ignored a free `Stop_Button` input, plus the unparsed preset.
-- **Regression suite `regression/ld/`** now holds **23 CTest cases** (guarded by
+- **Regression suite `regression/ld/`** now holds **25 CTest cases** (guarded by
   `ENABLE_LD_FRONTEND`, with the `benchmarks/` dataset excluded from CTest —
   `regression/CMakeLists.txt`), covering all five property kinds plus
   fault-injection, user-FB, watchdog, REAL-arithmetic, and the `stairs_light` /
@@ -812,7 +818,7 @@ requests as well as pushes touching `src/ld-frontend/`, `tools/ld-verify/`,
 `regression/ld/` or `unit/ld-frontend/`:
 
 - `regression-ld` builds with `BUILD_TESTING=On` / `ENABLE_REGRESSION=On` and
-  runs `regression/ld/` (23 cases), the `ld-verify` runner suite (10 cases) and
+  runs `regression/ld/` (25 cases), the `ld-verify` runner suite (10 cases) and
   the three LD unit binaries.
 - `build-linux-amd64` builds the release binary, smoke-tests that it advertises
   `--ld-props`, and publishes it as an artifact.
@@ -835,17 +841,23 @@ is the only gate on the front-end.
 - **Graphical path enumeration is exponential.** The resolver enumerates every
   simple rail-to-sink path; a vendor export with many parallel branches would
   blow up. No path-count guard yet.
-- **Arithmetic and unknown blocks on a rung path** are still diagnosed and
-  dropped rather than modelled, so a program using one verifies over strictly
-  less behaviour. Only timers and counters are resolved on graphical paths.
+- **Arithmetic and unknown blocks on a rung path** are still not modelled —
+  only timers and counters are resolved on graphical paths — but they are now
+  a hard `UnsupportedConstruct(name, tier=2)` error rather than a dropped path,
+  so a program using one is rejected instead of verifying over strictly less
+  behaviour. Previously such a block was not even diagnosed: because step 3
+  only makes `IN`/`CU`/`CD` into power-flow edges, a block like `GT` driving a
+  coil got no incoming edge, `paths_to` returned nothing, and the coil was left
+  unassigned — a `VERIFICATION SUCCESSFUL` verdict on a program whose rung had
+  silently vanished (`graphical_unsupported_block_fail` pins this).
 - **Counter reset from a contact chain** is diagnosed and left unconnected;
   only a reset pin wired to a variable is modelled.
 
 ### Suggested next increments
 
 1. Run the M1 review of `docs/safe-ld-sos-semantics.md` and close its §10 items.
-2. Model arithmetic/unknown blocks on graphical rung paths, or make the
-   diagnostic an error rather than a dropped path, so a silently weaker model
-   is not possible.
-3. Add a path-count guard to the graphical resolver.
-4. Widen or guard the timer/counter integer arithmetic.
+2. Add a path-count guard to the graphical resolver.
+3. Widen or guard the timer/counter integer arithmetic.
+4. Model arithmetic/unknown blocks on graphical rung paths, so the programs now
+   rejected under item 2 of the previous list can be verified rather than
+   refused.
