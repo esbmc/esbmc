@@ -1585,7 +1585,11 @@ void python_converter::update_numpy_array_binding(
     return;
   }
 
-  clear_numpy_view_copy(lhs);
+  const bool unconditional_assignment =
+    block_nesting_ == function_body_depth_ + 1;
+  if (unconditional_assignment || numpy_view_copy_sources_.count(lhs_id) == 0)
+    clear_numpy_view_copy(lhs);
+
   if (is_numpy_array_constructor_expr(rhs_node))
     numpy_array_symbols_.insert(lhs_id);
   else
