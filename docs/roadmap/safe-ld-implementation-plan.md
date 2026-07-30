@@ -10,7 +10,7 @@
 > `response` property), and — beyond the original Tier-1 scope — user-defined
 > function-block bodies, REAL/analog process variables, and an optional
 > scan-watchdog all now lower to GOTO IR and verify end-to-end (see §10). The
-> suite under `regression/ld/` has grown to 25 CTest cases, plus 10 for the
+> suite under `regression/ld/` has grown to 26 CTest cases, plus 10 for the
 > `ld-verify` runner, and CI now actually runs them. All four curated
 > benchmarks have validated verdicts and are wired as regression tests. The WP1
 > SOS specification exists as `docs/safe-ld-sos-semantics.md`; its independent
@@ -572,7 +572,7 @@ all 20 programs pass semantic review; spec reviewed against IEC 61508 §7.
 | T2.1 Parser & Semantic Analyser | PLCopen XML parser; AST; type checker; SOS consistency check | M3 (Month 6): parser handles all WP1 SOS constructs | skeleton landed (#5280); extended with user-FB-body and REAL/analog parsing (#5620) |
 | T2.2 GOTO IR Generator & Property Encoder | LdIR; `ld_converter` (irep2); YAML parser; property encoder (`code_assertt`) | M4 (Month 9): IR generator correct on all benchmark programs | boolean subset + timers/counters/`response` all lower and verify (#5289); ST→`codet` FB-body translator + numeric↔Boolean coercion (#5620); graphical resolver now models FB blocks, edge contacts, parallel-path OR and network feedback; all four benchmark verdicts validated (§10) |
 | T2.3 ESBMC Integration & ld-verify | `ld_languaget`; CMake wiring; ld-verify CLI; JSON report | M5 (Month 12): end-to-end pipeline ready | `--ld-props` wired + JSON report (#5289); `ld-verify` runner implemented, driving `esbmc` (#5294); `--ld-fault-injection`, `--ld-sound-mode`, `--ld-scan-watchdog`/`--ld-scan-budget` driver flags added (#5294, #5620) |
-| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 25 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic) + 10 `ld-verify` runner tests, all run by CI; line-coverage target not yet measured |
+| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 26 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic) + 10 `ld-verify` runner tests, all run by CI; line-coverage target not yet measured |
 
 **Success criteria (WP2):**
 - **Correctness:** ≥95% of benchmark programs translated to GOTO IR with semantic
@@ -790,7 +790,7 @@ prose in §3 is not mistaken for delivered functionality.
   pinned as `esd_manual_reset_fail`, with the corrected program as
   `emergency_shutdown_safe`. The conveyor's failure was a `response` property
   whose bound ignored a free `Stop_Button` input, plus the unparsed preset.
-- **Regression suite `regression/ld/`** now holds **25 CTest cases** (guarded by
+- **Regression suite `regression/ld/`** now holds **26 CTest cases** (guarded by
   `ENABLE_LD_FRONTEND`, with the `benchmarks/` dataset excluded from CTest —
   `regression/CMakeLists.txt`), covering all five property kinds plus
   fault-injection, user-FB, watchdog, REAL-arithmetic, and the `stairs_light` /
@@ -818,7 +818,7 @@ requests as well as pushes touching `src/ld-frontend/`, `tools/ld-verify/`,
 `regression/ld/` or `unit/ld-frontend/`:
 
 - `regression-ld` builds with `BUILD_TESTING=On` / `ENABLE_REGRESSION=On` and
-  runs `regression/ld/` (25 cases), the `ld-verify` runner suite (10 cases) and
+  runs `regression/ld/` (26 cases), the `ld-verify` runner suite (10 cases) and
   the three LD unit binaries.
 - `build-linux-amd64` builds the release binary, smoke-tests that it advertises
   `--ld-props`, and publishes it as an artifact.
@@ -838,9 +838,18 @@ is the only gate on the front-end.
 - **Timer/counter integer width.** The arithmetic uses `int_type()` with no
   overflow guard; very long-running counters could wrap. Not exercised by the
   current bounded tests.
-- **Graphical path enumeration is exponential.** The resolver enumerates every
-  simple rail-to-sink path; a vendor export with many parallel branches would
-  blow up. No path-count guard yet.
+- **Graphical path enumeration is exponential — now bounded, but not fixed.**
+  The resolver enumerates every simple rail-to-sink path, so cost grows as 2^N
+  in re-convergent parallel branches. It is now bounded at 100000 search steps
+  (~5000x the widest benchmark network, which peaks at 20), and exceeding the
+  bound is a hard error rather than a truncated path set. **The bound only makes
+  the blowup diagnosable; the algorithm is still exponential.** Measured: a
+  network of 18 fully-connected 2-wide stages — just 36 contacts — costs 112 s
+  of GOTO-creation time unguarded, versus 0.15 s to reject
+  (`graphical_path_explosion_fail`). 36 contacts is far below the 1000 rungs the
+  WP2 performance criterion targets at <5 s, so **that criterion is not merely
+  unmeasured, it is unreachable for re-convergent graphical networks** until the
+  enumeration is replaced by per-node power-flow accumulation, which is linear.
 - **Arithmetic and unknown blocks on a rung path** are still not modelled —
   only timers and counters are resolved on graphical paths — but they are now
   a hard `UnsupportedConstruct(name, tier=2)` error rather than a dropped path,
@@ -856,8 +865,10 @@ is the only gate on the front-end.
 ### Suggested next increments
 
 1. Run the M1 review of `docs/safe-ld-sos-semantics.md` and close its §10 items.
-2. Add a path-count guard to the graphical resolver.
+2. Replace rail-to-sink path enumeration with per-node power-flow accumulation.
+   The step bound now rejects wide networks instead of hanging, but a linear
+   resolver would verify them instead — and is what the WP2 <5 s / 1000-rung
+   criterion requires.
 3. Widen or guard the timer/counter integer arithmetic.
-4. Model arithmetic/unknown blocks on graphical rung paths, so the programs now
-   rejected under item 2 of the previous list can be verified rather than
-   refused.
+4. Model arithmetic/unknown blocks on graphical rung paths, so the programs
+   rejected as `UnsupportedConstruct` can be verified rather than refused.

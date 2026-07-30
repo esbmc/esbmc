@@ -533,9 +533,14 @@ static bool parse_graphical_ld(
   // Step 4: enumerate simple paths from every leftPowerRail to a target.
   // The returned paths exclude the rail and the target itself.
   //
-  // NOTE: the number of simple paths is exponential in the number of parallel
-  // branches. This is tractable for the graphical LD programs evaluated here;
-  // larger vendor exports may need a path-count guard.
+  // The search is exponential in the number of parallel branches, so it is
+  // bounded. Exceeding the bound is an error rather than a truncated
+  // enumeration: dropping paths would silently weaken the model the same way
+  // an unmodellable path used to. The bound is ~5000x the widest network in
+  // the benchmark set (stairs_light peaks at 20 steps), so it is only
+  // reachable by an export far wider than anything drawn by hand.
+  static constexpr unsigned long max_path_search_steps = 100000;
+
   std::vector<int> left_rails;
   for (auto &[lid, g] : nodes)
     if (g.tag == "leftPowerRail")
@@ -545,7 +550,13 @@ static bool parse_graphical_ld(
     std::vector<std::vector<int>> found;
     std::vector<int> path;
     std::set<int> visited;
+    unsigned long steps = 0;
     std::function<void(int)> dfs = [&](int cur) {
+      if (++steps > max_path_search_steps)
+        throw LdParseError(
+          "graphical LD: network feeding localId " + std::to_string(target) +
+          " has too many parallel paths to enumerate (limit " +
+          std::to_string(max_path_search_steps) + " steps)");
       if (cur == target)
       {
         found.push_back(path);
