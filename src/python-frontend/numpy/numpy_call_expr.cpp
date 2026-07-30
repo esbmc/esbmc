@@ -1579,6 +1579,71 @@ get_literal_numpy_array_arg(const nlohmann::json &node)
   return std::nullopt;
 }
 
+static std::optional<nlohmann::json>
+resolve_literal_numpy_row_view(nlohmann::json arg, python_converter &converter)
+{
+  if (arg.value("_type", std::string()) == "Name")
+  {
+    nlohmann::json decl = json_utils::find_var_decl(
+      arg["id"], converter.current_function_name(), converter.ast());
+    if (decl.contains("value") && decl["value"].is_object())
+      arg = decl["value"];
+  }
+
+  if (
+    !arg.is_object() || arg.value("_type", std::string()) != "Subscript" ||
+    !arg.contains("value") || !arg.contains("slice"))
+    return std::nullopt;
+
+  auto parse_index = [](const nlohmann::json &node) -> std::optional<int64_t> {
+    if (
+      node.is_object() && node.value("_type", std::string()) == "Constant" &&
+      node.contains("value") && node["value"].is_number_integer())
+      return node["value"].get<int64_t>();
+
+    if (
+      node.is_object() && node.value("_type", std::string()) == "UnaryOp" &&
+      node.contains("op") &&
+      node["op"].value("_type", std::string()) == "USub" &&
+      node.contains("operand") &&
+      node["operand"].value("_type", std::string()) == "Constant" &&
+      node["operand"].contains("value") &&
+      node["operand"]["value"].is_number_integer())
+      return -node["operand"]["value"].get<int64_t>();
+
+    return std::nullopt;
+  };
+
+  std::optional<int64_t> index = parse_index(arg["slice"]);
+  if (!index)
+    return std::nullopt;
+
+  nlohmann::json base = arg["value"];
+  if (base.value("_type", std::string()) == "Name")
+  {
+    nlohmann::json decl = json_utils::find_var_decl(
+      base["id"], converter.current_function_name(), converter.ast());
+    if (decl.contains("value") && decl["value"].is_object())
+      base = decl["value"];
+  }
+
+  std::optional<nlohmann::json> literal = get_literal_numpy_array_arg(base);
+  if (!literal || !literal->contains("elts") || !(*literal)["elts"].is_array())
+    return std::nullopt;
+
+  const auto &rows = (*literal)["elts"];
+  int64_t resolved_index = *index;
+  if (resolved_index < 0)
+    resolved_index += static_cast<int64_t>(rows.size());
+  if (resolved_index < 0 || resolved_index >= static_cast<int64_t>(rows.size()))
+    return std::nullopt;
+
+  const nlohmann::json &row = rows[static_cast<std::size_t>(resolved_index)];
+  if (row.is_object() && row.value("_type", std::string()) == "List")
+    return row;
+  return std::nullopt;
+}
+
 static bool is_sorted_numeric_list(
   const nlohmann::json &list,
   const std::string &diagnostic)
@@ -2439,6 +2504,10 @@ exprt numpy_call_expr::create_expr_from_call()
 
     nlohmann::json arg = call_["args"][0];
     resolve_var(arg);
+    if (
+      std::optional<nlohmann::json> row_view =
+        resolve_literal_numpy_row_view(arg, converter_))
+      arg = std::move(*row_view);
 
     std::vector<numeric_value> values_1d;
     std::vector<std::vector<numeric_value>> values_2d;
@@ -4563,6 +4632,10 @@ exprt numpy_call_expr::get()
 
     nlohmann::json arg = call_["args"][0];
     resolve_var(arg);
+    if (
+      std::optional<nlohmann::json> row_view =
+        resolve_literal_numpy_row_view(arg, converter_))
+      arg = std::move(*row_view);
 
     std::vector<numeric_value> values_1d;
     std::vector<std::vector<numeric_value>> values_2d;
@@ -5494,8 +5567,13 @@ exprt numpy_call_expr::get()
       }
     }
 
-    nlohmann::json arr_arg =
-      resolve_literal_numpy_array_input(call_["args"][0], function, true);
+    nlohmann::json arr_arg = call_["args"][0];
+    if (
+      std::optional<nlohmann::json> row_view =
+        resolve_literal_numpy_row_view(arr_arg, converter_))
+      arr_arg = std::move(*row_view);
+    else
+      arr_arg = resolve_literal_numpy_array_input(arr_arg, function, true);
 
     std::vector<std::size_t> shape;
     if (!get_literal_shape(arr_arg, shape))
