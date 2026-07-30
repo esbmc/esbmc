@@ -1,0 +1,9 @@
+properties:
+
+  # The network is 18 fully-connected 2-wide stages, so 2**18 simple paths reach
+  # the coil. The resolver must hit its enumeration bound and reject the program
+  # rather than run out of memory or truncate the path set.
+  - id: P1
+    kind: invariant
+    expression: "!out"
+    description: "Coil never energises"
