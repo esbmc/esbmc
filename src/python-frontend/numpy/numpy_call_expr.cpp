@@ -5947,9 +5947,27 @@ exprt numpy_call_expr::get()
 
     std::vector<std::size_t> old_shape;
     if (!get_literal_shape(arr_arg, old_shape))
-      throw std::runtime_error(
-        "TypeError: numpy." + function +
-        "() currently supports only constant arrays");
+    {
+      nlohmann::json original_arg = call_["args"][0];
+      if (original_arg.is_object() && original_arg.value("_type", "") == "Name")
+      {
+        nlohmann::json decl = json_utils::find_var_decl(
+          original_arg["id"],
+          converter_.current_function_name(),
+          converter_.ast());
+        if (decl.contains("value"))
+        {
+          auto literal_arg = get_literal_numpy_array_arg(decl["value"]);
+          if (literal_arg.has_value())
+            arr_arg = std::move(*literal_arg);
+        }
+      }
+
+      if (!get_literal_shape(arr_arg, old_shape))
+        throw std::runtime_error(
+          "TypeError: numpy." + function +
+          "() currently supports only constant arrays");
+    }
 
     std::vector<nlohmann::json> flat;
     flatten_json_list(arr_arg, flat);

@@ -1065,8 +1065,10 @@ bool python_converter::is_numpy_view_copy_expr(const nlohmann::json &node) const
     !node["func"].is_object() || node["func"].value("_type", "") != "Attribute")
     return false;
 
+  static const std::set<std::string> view_functions = {
+    "transpose", "reshape", "ravel"};
   const std::string attr = node["func"].value("attr", "");
-  if (attr != "transpose")
+  if (view_functions.count(attr) == 0)
     return false;
 
   if (node.contains("args") && node["args"].is_array() && !node["args"].empty())
@@ -1094,7 +1096,9 @@ std::string python_converter::root_name_from_numpy_view_copy_expr(
     node.value("_type", "") == "Call" && node.contains("func") &&
     node["func"].is_object() &&
     node["func"].value("_type", "") == "Attribute" &&
-    node["func"].value("attr", "") == "transpose")
+    (node["func"].value("attr", "") == "transpose" ||
+     node["func"].value("attr", "") == "reshape" ||
+     node["func"].value("attr", "") == "ravel"))
   {
     if (
       node.contains("args") && node["args"].is_array() && !node["args"].empty())
@@ -3086,39 +3090,59 @@ void python_converter::get_var_assign(
     ast_node["value"].contains("func") &&
     ast_node["value"]["func"].is_object() &&
     ast_node["value"]["func"].value("_type", "") == "Attribute" &&
-    ast_node["value"]["func"].value("attr", "") == "transpose" &&
-    ast_node["value"]["func"].contains("value") &&
-    ast_node["value"].value("args", nlohmann::json::array()).empty())
+    ast_node["value"]["func"].contains("value"))
   {
-    std::string numpy_alias = "np";
-    for (const auto &entry : imported_modules)
+    const std::string method_name = ast_node["value"]["func"].value("attr", "");
+    const nlohmann::json &method_base = ast_node["value"]["func"]["value"];
+    const std::string method_base_name =
+      method_base.value("_type", "") == "Name" && method_base.contains("id")
+        ? method_base["id"].get<std::string>()
+        : std::string();
+    const bool base_is_imported_module =
+      method_base_name == "np" || method_base_name == "numpy" ||
+      (!method_base_name.empty() && is_imported_module(method_base_name));
+    const bool supported_view_method =
+      !base_is_imported_module &&
+      (method_name == "transpose" || method_name == "reshape" ||
+       method_name == "ravel");
+    if (supported_view_method)
     {
-      if (entry.second == "numpy")
+      std::string numpy_alias = "np";
+      for (const auto &entry : imported_modules)
       {
-        numpy_alias = entry.first;
-        break;
+        if (entry.second == "numpy")
+        {
+          numpy_alias = entry.first;
+          break;
+        }
       }
+
+      nlohmann::json module_name;
+      module_name["_type"] = "Name";
+      module_name["id"] = numpy_alias;
+      module_name["ctx"] = {{"_type", "Load"}};
+      copy_location_fields_from_decl(ast_node["value"], module_name);
+
+      nlohmann::json call_node;
+      call_node["_type"] = "Call";
+      call_node["func"] = {
+        {"_type", "Attribute"},
+        {"value", module_name},
+        {"attr", method_name},
+        {"ctx", {{"_type", "Load"}}}};
+      call_node["args"] =
+        nlohmann::json::array({ast_node["value"]["func"]["value"]});
+      if (
+        ast_node["value"].contains("args") &&
+        ast_node["value"]["args"].is_array())
+        for (const auto &arg : ast_node["value"]["args"])
+          call_node["args"].push_back(arg);
+      call_node["keywords"] =
+        ast_node["value"].value("keywords", nlohmann::json::array());
+      copy_location_fields_from_decl(ast_node["value"], call_node);
+      copy_location_fields_from_decl(ast_node["value"], call_node["func"]);
+      effective_ast_node["value"] = call_node;
     }
-
-    nlohmann::json module_name;
-    module_name["_type"] = "Name";
-    module_name["id"] = numpy_alias;
-    module_name["ctx"] = {{"_type", "Load"}};
-    copy_location_fields_from_decl(ast_node["value"], module_name);
-
-    nlohmann::json call_node;
-    call_node["_type"] = "Call";
-    call_node["func"] = {
-      {"_type", "Attribute"},
-      {"value", module_name},
-      {"attr", "transpose"},
-      {"ctx", {{"_type", "Load"}}}};
-    call_node["args"] =
-      nlohmann::json::array({ast_node["value"]["func"]["value"]});
-    call_node["keywords"] = nlohmann::json::array();
-    copy_location_fields_from_decl(ast_node["value"], call_node);
-    copy_location_fields_from_decl(ast_node["value"], call_node["func"]);
-    effective_ast_node["value"] = call_node;
   }
 
   exprt rhs;
