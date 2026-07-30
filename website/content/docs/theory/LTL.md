@@ -249,12 +249,14 @@ re-checked with different maskings.
 > [#6547](https://github.com/esbmc/esbmc/issues/6547) and
 > [#6548](https://github.com/esbmc/esbmc/issues/6548).
 
-### Violations are missed
+### Violations are missed *(fixed)*
 
-The monitor does not observe updates to the globals its propositions read, so a
-property that is *definitively* violated can be reported as ⊤ᵖ, "presumably
-true" ([#6546](https://github.com/esbmc/esbmc/issues/6546)). For a program that
-assigns `s = 1`:
+Until the directed monitor scheduling described under
+[Divergences from the published algorithm](#divergences-from-the-published-algorithm)
+was enabled, the monitor did not observe updates to the globals its propositions
+read, so a property that is *definitively* violated was reported as ⊤ᵖ,
+"presumably true" ([#6546](https://github.com/esbmc/esbmc/issues/6546)). For a
+program that assigns `s = 1`:
 
 ```c
 int s;
@@ -277,22 +279,22 @@ esbmc prog.c --ltl safety.c -DLTL_PREFIX_BOUND=6
 ```
 
 ```
-Final lowest outcome: LTL_SUCCEEDING
+Final lowest outcome: LTL_BAD
 ```
 
-The generated automaton does have a reachable bad-prefix state, so this is not a
-translation artefact — but running the same files without `--ltl` shows the
-monitor never enters it in any explored interleaving:
+which is the expected ⊥. This case is pinned by `regression/ltl/github_6546`.
 
-```
-✓ PASSED: 'LTL_BAD at file safety.c line 204 column 2 function ltl2ba_finish_monitor'
-```
+Before the fix the same run reported `LTL_SUCCEEDING`: the generated automaton
+does have a reachable bad-prefix state, but with the monitor free-running as an
+ordinary thread no interleaving was guaranteed to sample the state at the moment
+a proposition changed, and raising `LTL_PREFIX_BOUND`, `--context-bound` or
+`--unwind` did not help.
 
-The cause is the disabled directed scheduling described under
-[Divergences from the published algorithm](#divergences-from-the-published-algorithm):
-with the monitor free-running as an ordinary thread, no interleaving is
-guaranteed to sample the state at the moment a proposition changes. Raising
-`LTL_PREFIX_BOUND`, `--context-bound` or `--unwind` does not help.
+Note that the monitor now advances one automaton step per monitored assignment,
+so a program has to be long enough for the automaton to reach a decisive state.
+A run too short for that leaves every path infeasible and produces no verdict —
+`regression/ltl/basic-func` and `basic-success` needed a second loop iteration
+for this reason.
 
 ### The verdict is not in the exit code
 
@@ -380,17 +382,18 @@ Check safety properties and bound adequacy in a separate run without `--ltl`.
 
 ### Divergences from the published algorithm
 
-- **The dedicated monitor scheduler is disabled.** [1, §6.2.3] replaces
+- **The dedicated monitor scheduler is enabled** (it was disabled between
+  commit `4146a8e387` and the fix for
+  [#6546](https://github.com/esbmc/esbmc/issues/6546)). [1, §6.2.3] replaces
   general-purpose scheduling of the monitor with a directed context switch to it
   after each global-variable update, reported there as the change that made the
-  analysis practical. The code that inserts those `__ESBMC_switch_to_monitor`
-  calls is `#if 0`'d out (`property_monitors.cpp:205`, disabled in commit
-  `4146a8e387` as broken), and libltl2ba emits the corresponding calls commented
-  out. The monitor therefore runs as an ordinary schedulable thread — the
-  earlier, slower behaviour that [1] set out to replace. The
-  `switch_to_monitor` / `switch_away_from_monitor` machinery still exists in the
-  symbolic execution engine (`src/goto-symex/execution_state.cpp:1269`) but is
-  unreachable from the `--ltl` path.
+  analysis practical. Reviving it needed three things together: the
+  `__ESBMC_switch_to_monitor` insertion in `property_monitors.cpp`, libltl2ba
+  emitting the paired `__ESBMC_switch_from_monitor()` at the end of each
+  automaton step (without it the monitor thread runs its whole prefix in one go
+  and ends), and `--ltl` implying `--direct-interleavings` so the monitor is not
+  *also* schedulable by the ordinary scheduler — mixing the two returns to the
+  program without the paired switch away and corrupts the switch bookkeeping.
 - **Propositions are re-evaluated, not cached.** [1, §6.2.2] describes inserting
   an update to a Boolean variable per proposition after each assignment. The
   current code only makes the assignment atomic; the automaton calls
@@ -411,10 +414,11 @@ Check safety properties and bound adequacy in a separate run without `--ltl`.
 - **`ltl2ba` is not bundled.** libltl2ba must be built and installed separately.
   Its C output was last adapted for ESBMC 7.6, several releases behind the
   current one.
-- **Test coverage is thin.** `regression/ltl/` holds three tests, and the two
-  automata they ship exercise only ⊥ᵖ and ⊤ᵖ — neither `LTL_BAD` nor `LTL_GOOD`
-  is covered, because both formulas have an empty bad-prefix state set and mark
-  every state as excluded from being a good prefix.
+- **Test coverage is thin.** `regression/ltl/` holds five tests. The two
+  automata shipped by the original three exercise only ⊥ᵖ and ⊤ᵖ, because both
+  formulas have an empty bad-prefix state set and mark every state as excluded
+  from being a good prefix; `github_6546` covers `LTL_BAD`. `LTL_GOOD` is still
+  uncovered.
 - Multi-threaded liveness checking remains practical only for small programs
   [1, §7.2]: liveness needs enough interleavings for every thread to complete
   whole loop iterations, whereas safety violations are typically shallow.
