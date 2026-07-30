@@ -2808,6 +2808,45 @@ the DFS, the encoding or the solver, all now eliminated.
 Instrumentation was local only and is reverted; both measurements are described
 here so they can be repeated without rediscovering the approach.
 
+### M8 (cont. 12) — 2026-07-30, R23 investigation halted
+
+**Result: the divergence is visible at the level of individual accesses, but the
+fifth mechanism hypothesis is also refuted. Halting the investigation here.**
+
+Instrumenting `analyze_read` to log every access and its resolved globals gives
+traces that are identical for fourteen accesses and then split exactly once:
+
+| | `other = 0` (detected) | `receive = 0` (missed) |
+|---|---|---|
+| access 15 | `RD line=7 n=1 [c:@receive]` | `RD-SKIP line=7 guard_false=true` |
+
+So in the missed variant the second guard read is not analysed at all, because
+`analyze_read` returns early when the active state's guard is false
+(`execution_state.cpp:811`). No global is recorded, no context-switch point is
+registered, and `t1` runs to completion — which matches the scheduler trace in
+(cont. 11) exactly.
+
+**That is a symptom, not the cause.** Deleting the `guard.is_false()` clause from
+`analyze_read` and rebuilding leaves the verdict **unchanged** (still
+SUCCESSFUL). The read then registers, and the counterexample still does not
+appear. So the false path guard at that point is a consequence of how the state
+evolved, not the thing suppressing the interleaving.
+
+**Halted.** Five hypotheses have now been proposed and refuted for this finding —
+POR, interval-domain guard pruning, the `main_thread_ended` cutoff,
+`dfs_explore_thread`'s frame bookkeeping, and now `analyze_read`'s guard-false
+early return. Each round cost a build and a measurement, and the returns are
+diminishing: what remains is understanding why the state guard is false on the
+path that should be live, which is a symbolic-execution question about guard and
+path management rather than about scheduling, and is better started fresh with
+that framing than continued as a sixth probe from the outside.
+
+**What R23 has, for whoever picks it up.** A nine-line reproducer; a four-row
+discriminator isolating the trigger to writing the guard variable inside its own
+branch; proof the counterexample is real (`--data-races-check` reports the
+assertion itself); the exact divergent access and scheduling decision; and five
+eliminated mechanisms. All of it is in #6558 apart from this last round.
+
 ---
 
 ## Appendix A — Methodological basis
