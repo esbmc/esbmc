@@ -8,7 +8,7 @@ void *t1(void *arg)
   // The racy schedule is: i=0 reads 0 (skip), main writes 1, i=1 reads 1 and
   // the assertion fires -- before `receive = 0` ever runs. Adding that write
   // nonetheless loses the counterexample; writing any other variable, or
-  // writing `receive = 1`, keeps it. See race_guard_other_write.
+  // writing `receive = 1`, keeps it (#6558). See race_guard_other_write.
   for (int i = 0; i < 2; i++)
     if (receive)
     {
