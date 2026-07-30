@@ -11,7 +11,7 @@ really an invocation difference.
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 - argv lists only, never a shell; see capture()
 import sys
 import tempfile
 
@@ -39,9 +39,14 @@ def esbmc_path(parser, given):
 
 
 def capture(esbmc, args, cwd, timeout):
-    """ESBMC's combined output, or None if it did not finish in time."""
+    """ESBMC's combined output, or None if it did not finish in time.
+
+    The command is a fixed argv list -- the verified ESBMC binary plus flags the
+    caller assembled -- so there is no shell and no interpolation of external
+    input; `esbmc_path` has already checked the binary is executable.
+    """
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # nosec B603 - argv list, shell=False
             [esbmc] + args,
             cwd=cwd,
             stdout=subprocess.PIPE,

@@ -60,6 +60,46 @@ def run_pair(case, esbmc, flags_a, flags_b, timeout):
     return case.name, a, b
 
 
+def sweep(tests, esbmc, flags_a, flags_b, args):
+    """Run both flag-sets over every test, reporting divergences as they land.
+
+    Returns (agreed_count, [(name, a, b)] diverged, [(name, a, b)] inconclusive).
+    """
+    diverged, inconclusive, agreed = [], [], 0
+    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        futures = [
+            pool.submit(run_pair, t, esbmc, flags_a, flags_b, args.timeout)
+            for t in tests
+        ]
+        for done, future in enumerate(futures, 1):
+            name, a, b = future.result()
+            if a in (TIMEOUT, NO_VERDICT) or b in (TIMEOUT, NO_VERDICT):
+                inconclusive.append((name, a, b))
+            elif a != b:
+                diverged.append((name, a, b))
+                print(f"  DIVERGE {name}: A={a} B={b}", flush=True)
+            else:
+                agreed += 1
+            if done % 100 == 0:
+                print(f"  ... {done}/{len(tests)}", flush=True)
+    return agreed, diverged, inconclusive
+
+
+def report(agreed, diverged, inconclusive, skipped):
+    """Counts first, then every excluded and diverging test by name -- a sweep
+    that hides what it dropped reads as broader coverage than it had."""
+    print(f"\nagreed       {agreed}")
+    print(f"diverged     {len(diverged)}")
+    print(f"inconclusive {len(inconclusive)}  (no verdict or timeout in one leg)")
+    print(f"skipped      {len(skipped)}  (test.desc already names a compared flag)")
+    for name, a, b in diverged:
+        print(f"DIVERGE {name}: A={a} B={b}")
+    for name in sorted(t.name for t in skipped):
+        print(f"SKIP {name}")
+    for name, a, b in sorted(inconclusive):
+        print(f"INCONCLUSIVE {name}: A={a} B={b}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--esbmc", default="build/src/esbmc/esbmc")
@@ -97,37 +137,10 @@ def main():
 
     print(f"{len(tests)} tests, modes={modes}, A={flags_a or ['(none)']} B={flags_b}")
 
-    diverged, inconclusive, agreed = [], [], 0
-    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = [
-            pool.submit(run_pair, t, esbmc, flags_a, flags_b, args.timeout)
-            for t in tests
-        ]
-        for done, future in enumerate(futures, 1):
-            name, a, b = future.result()
-            if a in (TIMEOUT, NO_VERDICT) or b in (TIMEOUT, NO_VERDICT):
-                inconclusive.append((name, a, b))
-            elif a != b:
-                diverged.append((name, a, b))
-                print(f"  DIVERGE {name}: A={a} B={b}", flush=True)
-            else:
-                agreed += 1
-            if done % 100 == 0:
-                print(f"  ... {done}/{len(tests)}", flush=True)
+    agreed, diverged, inconclusive = sweep(tests, esbmc, flags_a, flags_b, args)
 
+    report(agreed, diverged, inconclusive, skipped)
     diverged_names = {name for name, _, _ in diverged}
-
-    print(f"\nagreed       {agreed}")
-    print(f"diverged     {len(diverged)}")
-    print(f"inconclusive {len(inconclusive)}  (no verdict or timeout in one leg)")
-    print(f"skipped      {len(skipped)}  (test.desc already names a compared flag)")
-    for name, a, b in diverged:
-        print(f"DIVERGE {name}: A={a} B={b}")
-    for name in sorted(t.name for t in skipped):
-        print(f"SKIP {name}")
-    for name, a, b in sorted(inconclusive):
-        print(f"INCONCLUSIVE {name}: A={a} B={b}")
-
     return 1 if report_baseline(baseline, diverged_names) else 0
 
 
