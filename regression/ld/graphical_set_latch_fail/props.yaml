@@ -1,0 +1,11 @@
+properties:
+
+  # A set coil latches: once energised it stays on after its path drops. So the
+  # state "set path low but coil still on" is reachable. Under plain output-coil
+  # semantics the coil would track its path and this state would be unreachable
+  # (edge_level_safe proves exactly that shape unreachable for an output coil).
+  - id: P1
+    kind: reachability
+    expression: "!a && !b && q"
+    description: "Coil still latched after both its set and reset paths went low"
+    justification: "Only a retentive set coil can hold the coil on with no path energised"

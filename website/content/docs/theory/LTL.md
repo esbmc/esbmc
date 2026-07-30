@@ -18,10 +18,7 @@ the implementation diverges from [1].
 > **misses violations**. The monitor is not synchronised to updates of the
 > variables its propositions read, so a definitively violated property can be
 > reported as *presumably true*
-> ([#6546](https://github.com/esbmc/esbmc/issues/6546)). Separately,
-> `VERIFICATION SUCCESSFUL` and the exit code do not reflect the LTL verdict at
-> all ([#6548](https://github.com/esbmc/esbmc/issues/6548)) — you must read the
-> `Final lowest outcome:` line. Read
+> ([#6546](https://github.com/esbmc/esbmc/issues/6546)). Read
 > [Limitations](#limitations) before relying on any of it.
 
 ## At a glance
@@ -33,14 +30,14 @@ the implementation diverges from [1].
 | Temporal operators | `G` `F` `X` `U` `V` — see [Operators](#operators) |
 | Soundness | **Misses violations** ([#6546](https://github.com/esbmc/esbmc/issues/6546)) |
 | Formula translator | [libltl2ba](https://github.com/esbmc/libltl2ba), external; **not bundled and not fetched by `DOWNLOAD_DEPENDENCIES`** |
-| Verdict reported as | the `Final lowest outcome:` log line |
-| Exit code reflects verdict | **No** — always `0` / `VERIFICATION SUCCESSFUL` |
-| Counterexample | **No** — no `[Counterexample]` is emitted for an LTL outcome |
+| Verdict reported as | the `Final lowest outcome:` log line and the process result |
+| Exit code reflects verdict | **Yes** — ⊥ and ⊥ᵖ report `VERIFICATION FAILED` and exit non-zero; a run with no verdict reports `VERIFICATION UNKNOWN` |
+| Counterexample | **Yes** — the satisfying trace is printed for a ⊥ or ⊥ᵖ verdict |
 | Compatible strategies | plain BMC only; `--unwind N` works if `N` is large enough |
 | Incompatible strategies | `--k-induction`, `--incremental-bmc`, `--termination`, `--falsification` |
 | Monitor prefix bound | `-DLTL_PREFIX_BOUND=N`, **required in practice** (default is 2³¹) |
 | Other properties in the same run | **None** — safety and unwinding assertions are masked |
-| Regression coverage | 3 `CORE` tests in `regression/ltl/`, run on Linux, macOS and Windows |
+| Regression coverage | 6 `CORE` tests in `regression/ltl/`, run on Linux, macOS and Windows |
 | Translator last updated | libltl2ba 2.1 (April 2024), C output targeting ESBMC 7.6 |
 
 ## The four-valued verdict
@@ -58,11 +55,11 @@ infinite continuation satisfies the formula φ.
 | `LTL_FAILING` | ⊥ᵖ | *Presumably false*: the trace ends in a state that violates φ when stutter-extended, but some other continuation would satisfy it. |
 | `LTL_SUCCEEDING` | ⊤ᵖ | *Presumably true*: the program halts in a state that satisfies φ when stutter-extended, but some other continuation would violate it. |
 | `LTL_GOOD` | ⊤ | A **good prefix**: every continuation satisfies φ. The property definitively holds. |
-| `LTL_UNKNOWN` | — | Off the lattice: the run established no prefix verdict, because the monitor was not instrumented or did not run to completion. |
+| *(none)* | — | Off the lattice: the run established no prefix verdict, because the monitor was not instrumented or did not run to completion. Reported as `VERIFICATION UNKNOWN`. |
 
 The lattice order is `⊥ ⊑ ⊥ᵖ ⊑ ⊤ᵖ ⊑ ⊤`. ESBMC checks each interleaving
 separately and reports the **least** value seen across all of them
-(`src/esbmc/bmc.cpp:1750`), which is why the log line reads
+(`src/esbmc/bmc.cpp:1754`), which is why the log line reads
 `Final lowest outcome:`.
 
 For a liveness formula, ⊤ is generally unreachable: no finite prefix of
@@ -197,13 +194,14 @@ Found trace satisfying LTL_FAILING
 ...
 Final lowest outcome: LTL_FAILING
 
-VERIFICATION SUCCESSFUL
+VERIFICATION FAILED
 ```
 
 ⊥ᵖ is the correct answer: the loop can exit with `pressed` true and `charge` not
 yet topped up, and stuttering that final state forever violates
-`F {charge > min}` — but a longer trace could still satisfy it. Note that
-`VERIFICATION SUCCESSFUL` on the last line says nothing about the LTL result.
+`F {charge > min}` — but a longer trace could still satisfy it. The ⊥ᵖ verdict
+maps onto the process result, so the run prints the satisfying trace as a
+`[Counterexample]` and exits non-zero.
 
 ## How it works
 
@@ -232,13 +230,13 @@ Given the program and the generated monitor, ESBMC:
    `_ltl2ba_good_prefix_excluded_states`, labelled `LTL_BAD`, `LTL_FAILING` and
    `LTL_SUCCEEDING`.
 6. **Solves once per lattice level.** `bmct::ltl_run_thread`
-   (`src/esbmc/bmc.cpp:2093`) first checks the monitor's preconditions — every
+   (`src/esbmc/bmc.cpp:2129`) first checks the monitor's preconditions — every
    assertion that is *not* a prefix assertion, so unwinding assertions and
-   libltl2ba's own bound guard included — and reports `LTL_UNKNOWN` if any can be
+   libltl2ba's own bound guard included — and yields no verdict if any can be
    violated, since a truncated automaton supports no prefix claim. It then masks
    all but one of the three prefix assertions and runs a separate solver call for
    each, from ⊥ upwards, returning the first level for which a trace exists. If
-   none is satisfiable it returns `LTL_GOOD`, or `LTL_UNKNOWN` when no prefix
+   none is satisfiable it returns `LTL_GOOD`, or no verdict when no prefix
    assertion was present to prove.
 
 Two smaller accommodations: the context-switch threshold is raised from 2 to 3
@@ -249,9 +247,8 @@ re-checked with different maskings.
 ## Limitations
 
 > **Note**: Everything below was reproduced against ESBMC 8.4.0. The `--ltl`
-> path has no dedicated issue label; the open reports are
-> [#6546](https://github.com/esbmc/esbmc/issues/6546) and
-> [#6548](https://github.com/esbmc/esbmc/issues/6548).
+> path has no dedicated issue label; the open report is
+> [#6546](https://github.com/esbmc/esbmc/issues/6546).
 
 ### Violations are missed
 
@@ -298,44 +295,23 @@ with the monitor free-running as an ordinary thread, no interleaving is
 guaranteed to sample the state at the moment a proposition changes. Raising
 `LTL_PREFIX_BOUND`, `--context-bound` or `--unwind` does not help.
 
-### The verdict is not in the exit code
-
-`ltl_run_thread`'s result is folded into a log message and nothing else — the
-LTL path always returns "unsatisfiable" to its caller
-([#6548](https://github.com/esbmc/esbmc/issues/6548), `src/esbmc/bmc.cpp:1995`).
-A definitive violation still prints
-`VERIFICATION SUCCESSFUL` and exits `0`:
-
-```
-Final lowest outcome: LTL_BAD
-
-VERIFICATION SUCCESSFUL
-```
-
-No `[Counterexample]` is emitted either, for any outcome, so a failing run gives
-no trace to inspect. Parse the `Final lowest outcome:` line, or use the
-[workaround below](#getting-a-usable-exit-code).
-
-### A missing assertion reports `LTL_UNKNOWN`
+### A missing assertion reports `VERIFICATION UNKNOWN`
 
 "Not instrumented" and "definitively correct" are different answers, and only
-the second is ⊤. `ltl_run_thread` reports `LTL_UNKNOWN` rather than `LTL_GOOD`
-when it finds no prefix assertion to prove, and the aggregate in
-`src/esbmc/bmc.cpp:1750` prefers `LTL_UNKNOWN` over `LTL_GOOD` so that one
-uninformative formula cannot be reported as ⊤. Three situations trigger it:
+the second is ⊤. `ltl_run_thread` yields no verdict rather than `LTL_GOOD` when
+it finds no prefix assertion to prove, so one uninformative formula downgrades
+the whole run to `VERIFICATION UNKNOWN` instead of being reported as ⊤
+([#6547](https://github.com/esbmc/esbmc/issues/6547)). Three situations
+trigger it:
 
-- **`--ltl` with no monitor file.** Warns `No LTL traces seen, apparently` and
-  reports `LTL_UNKNOWN`.
+- **`--ltl` with no monitor file.** Warns
+  `No LTL outcome seen; the property was not checked` and reports
+  `VERIFICATION UNKNOWN`.
 - **A program that leaves `main` other than by returning.** `exit()` and
   `abort()` bypass the injected `ltl2ba_finish_monitor` call, because it is only
-  placed before `return` instructions. Every VCC is then simplified away and
-  ESBMC returns before the LTL check runs, so no prefix verdict is reached and
-  the run reports `LTL_UNKNOWN`.
+  placed before `return` instructions. Every VCC is then simplified away and no
+  prefix verdict is reached, so the run reports `VERIFICATION UNKNOWN`.
 - **An incompatible strategy** — see below.
-
-`VERIFICATION SUCCESSFUL` and the exit code are unaffected either way
-([#6548](https://github.com/esbmc/esbmc/issues/6548)), so `LTL_UNKNOWN` still
-has to be read off the `Final lowest outcome:` line.
 
 ### Do not combine `--ltl` with another strategy
 
@@ -346,18 +322,18 @@ has to be read off the `Final lowest outcome:` line.
 | --- | --- |
 | `--ltl` | `LTL_FAILING` ✓ |
 | `--ltl --unwind 3` (and above) | `LTL_FAILING` ✓ |
-| `--ltl --unwind 1`, `--ltl --unwind 2` | `LTL_UNKNOWN` |
-| `--ltl --k-induction` | `LTL_UNKNOWN` |
-| `--ltl --incremental-bmc` | `LTL_UNKNOWN` |
-| `--ltl --termination` | `LTL_UNKNOWN` |
-| `--ltl --falsification` | `LTL_FAILING`, but `VERIFICATION UNKNOWN` and one verdict line per iteration, the early ones `LTL_UNKNOWN` until the bound suffices |
+| `--ltl --unwind 1`, `--ltl --unwind 2` | `VERIFICATION UNKNOWN` |
+| `--ltl --k-induction` | `VERIFICATION UNKNOWN` |
+| `--ltl --incremental-bmc` | `VERIFICATION UNKNOWN` |
+| `--ltl --termination` | `VERIFICATION UNKNOWN` |
+| `--ltl --falsification` | `LTL_FAILING` and `VERIFICATION FAILED` once the bound suffices; earlier iterations warn that the property was not checked |
 
 These combinations yield no verdict rather than a wrong one. The k-induction and
 incremental drivers restructure the program per iteration, so the automaton no
 longer runs to completion; an `--unwind` bound that is too small has the same
 effect, because the bound applies to the monitor's transition loop as well as the
 program's. Either way the monitor's precondition check fails and the run reports
-`LTL_UNKNOWN`. k-induction additionally logs
+`VERIFICATION UNKNOWN`. k-induction additionally logs
 `k-induction does not support concurrency yet. Disabling inductive step`,
 because the monitor is a thread.
 
@@ -375,7 +351,7 @@ per se.
 It does check them collectively: the precondition pass solves the equation with
 only the non-prefix assertions enabled, so a violated unwinding assertion or
 libltl2ba's `"Unwind bound on ltl2ba_fsm insufficient"` guard downgrades the run
-to `LTL_UNKNOWN` instead of being silently discarded. What it does not do is
+to `VERIFICATION UNKNOWN` instead of being silently discarded. What it does not do is
 tell you *which* one failed. Re-running the same command without `--ltl` does:
 
 ```
@@ -418,21 +394,22 @@ Check safety properties and bound adequacy in a separate run without `--ltl`.
 - **`ltl2ba` is not bundled.** libltl2ba must be built and installed separately.
   Its C output was last adapted for ESBMC 7.6, several releases behind the
   current one.
-- **Test coverage is thin.** `regression/ltl/` holds three tests, and the two
-  automata they ship exercise only ⊥ᵖ and ⊤ᵖ — neither `LTL_BAD` nor `LTL_GOOD`
-  is covered, because both formulas have an empty bad-prefix state set and mark
-  every state as excluded from being a good prefix.
+- **Test coverage is thin.** `regression/ltl/` holds six tests, and the two
+  automata they ship exercise only ⊥ᵖ, ⊤ᵖ and the no-verdict cases — neither
+  `LTL_BAD` nor `LTL_GOOD` is covered, because both formulas have an empty
+  bad-prefix state set and mark every state as excluded from being a good
+  prefix.
 - Multi-threaded liveness checking remains practical only for small programs
   [1, §7.2]: liveness needs enough interleavings for every thread to complete
   whole loop iterations, whereas safety violations are typically shallow.
 
-## Getting a usable exit code
+## Checking the prefix assertions individually
 
 The instrumentation is driven by the `__ESBMC_property_*` markers in the monitor
 file, not by `--ltl` (`src/esbmc/parseoptions/process_goto_program.cpp:458`).
 Passing the monitor **without** `--ltl` therefore checks the three prefix
-assertions as ordinary assertions, which restores a non-zero exit code,
-per-claim results and counterexamples:
+assertions as ordinary assertions, which gives per-claim results — useful when
+you want to see every lattice level at once rather than only the lowest:
 
 ```bash
 esbmc program.c notphi.c -DLTL_PREFIX_BOUND=10 --multi-property
@@ -456,24 +433,27 @@ verdict.
 
 ## Regression tests
 
-All three tests check the property `G({pressed} -> F {charge > min})`, or its
+The tests check the property `G({pressed} -> F {charge > min})`, or its
 negation, against the same small program.
 
 | Test | Monitor | Expected outcome |
 | --- | --- | --- |
-| `regression/ltl/basic` | automaton for the formula, propositions inlined as C expressions | `LTL_FAILING` |
-| `regression/ltl/basic-func` | same automaton, propositions via `_ltl2ba_cexpr_N_status()` accessors | `LTL_FAILING` |
-| `regression/ltl/basic-success` | automaton for the negated formula | `LTL_SUCCEEDING` |
+| `regression/ltl/basic` | automaton for the formula, propositions inlined as C expressions | `LTL_FAILING`, `VERIFICATION FAILED` |
+| `regression/ltl/basic-func` | same automaton, propositions via `_ltl2ba_cexpr_N_status()` accessors | `LTL_FAILING`, `VERIFICATION FAILED` |
+| `regression/ltl/basic-success` | automaton for the negated formula | `LTL_SUCCEEDING`, `VERIFICATION SUCCESSFUL` |
+| `regression/ltl/basic-no-monitor` | none | `VERIFICATION UNKNOWN` |
+| `regression/ltl/basic-truncated-unwind` | same automaton, `--unwind 1` | `VERIFICATION UNKNOWN` |
+| `regression/ltl/uninstrumented-unknown` | same automaton, `--k-induction` | `VERIFICATION UNKNOWN` |
 
-All three are `CORE` and pass:
+All six are `CORE` and pass:
 
 ```bash
 ctest -R "regression/ltl/" --output-on-failure
 ```
 
-Each checks both `^VERIFICATION SUCCESSFUL$` and the `Final lowest outcome:`
-line — the latter is what actually pins the LTL behaviour, since the former
-holds regardless.
+Each pins the process verdict, and where one is produced, the
+`Final lowest outcome:` line or the warning that identifies why no verdict was
+reached.
 
 ## References
 

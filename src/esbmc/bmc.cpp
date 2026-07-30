@@ -113,7 +113,6 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   ltl_results_seen[ltl_res_failing] = 0;
   ltl_results_seen[ltl_res_succeeding] = 0;
   ltl_results_seen[ltl_res_good] = 0;
-  ltl_results_seen[ltl_res_inconclusive] = 0;
 
   // The next block will initialize the algorithms used for the analysis.
   {
@@ -485,6 +484,10 @@ void bmct::report_trace(smt_resultt &res, const symex_target_equationt &eq)
     break;
 
   case P_SATISFIABLE:
+    // A verdict can be reached without a solver having been kept — no model to
+    // read, so there is no trace to build and dereferencing it would crash.
+    if (!runtime_solver)
+      break;
     if (!bs && show_cex)
     {
       error_trace(*runtime_solver, eq);
@@ -1529,7 +1532,7 @@ void bmct::report_result(smt_resultt &res)
         !options.get_bool_option("kind-violation-found") &&
         !(is && options.get_bool_option("disable-inductive-step")))
       {
-        if (vacuity_detected)
+        if (vacuity_detected || ltl_uninstrumented)
           report_unknown();
         else
           report_success();
@@ -1750,25 +1753,38 @@ smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 
   if (options.get_bool_option("ltl"))
   {
-    // So, what was the lowest value ltl outcome that we saw?
+    // So, what was the lowest value ltl outcome that we saw? The lattice runs
+    // ⊥ < ⊥ᵖ < ⊤ᵖ < ⊤, and the two lower values say the property is violated
+    // on some prefix, so they have to reach the process result rather than
+    // only a log line.
     if (ltl_results_seen[ltl_res_bad])
+    {
       log_result("Final lowest outcome: LTL_BAD");
+      res = P_SATISFIABLE;
+    }
     else if (ltl_results_seen[ltl_res_failing])
+    {
       log_result("Final lowest outcome: LTL_FAILING");
+      res = P_SATISFIABLE;
+    }
     else if (ltl_results_seen[ltl_res_succeeding])
+    {
       log_result("Final lowest outcome: LTL_SUCCEEDING");
-    /* Checked before LTL_GOOD: ⊤ means every prefix assertion was proved
-     * unsatisfiable, which an inconclusive formula did not establish. */
-    else if (ltl_results_seen[ltl_res_inconclusive])
-      log_result("Final lowest outcome: LTL_UNKNOWN");
+      res = P_UNSATISFIABLE;
+    }
     else if (ltl_results_seen[ltl_res_good])
+    {
       log_result("Final lowest outcome: LTL_GOOD");
+      res = P_UNSATISFIABLE;
+    }
     else
     {
-      /* No formula yielded an outcome at all: the monitor was never
-       * instrumented, or main never reached the ltl2ba_finish_monitor call. */
-      log_warning("No LTL traces seen, apparently");
-      log_result("Final lowest outcome: LTL_UNKNOWN");
+      // No outcome at all: either nothing was instrumented, or symex never
+      // reached the monitor. Either way the property was not checked, which
+      // report_result turns into UNKNOWN.
+      log_warning("No LTL outcome seen; the property was not checked");
+      ltl_uninstrumented = true;
+      res = P_UNSATISFIABLE;
     }
   }
 
@@ -2007,6 +2023,11 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       int res = ltl_run_thread(*eq);
       if (res == -1)
         return P_SMTLIB;
+      if (res == ltl_res_uninstrumented)
+      {
+        ltl_uninstrumented = true;
+        return P_UNSATISFIABLE;
+      }
       if (res < 0)
         return P_ERROR;
       // Record that we've seen this outcome; later decide what the least
@@ -2090,7 +2111,7 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   }
 }
 
-int bmct::ltl_run_thread(symex_target_equationt &equation) const
+int bmct::ltl_run_thread(symex_target_equationt &equation)
 {
   /* LTL checking - first check for whether we have a negative prefix, then
    * the indeterminate ones. */
@@ -2131,16 +2152,17 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
       }
 
     smt_resultt solver_result = P_UNSATISFIABLE;
+    std::unique_ptr<smt_convt> smt_conv;
     if (num_asserts != 0)
     {
-      std::unique_ptr<smt_convt> smt_conv(create_solver("", ns, options));
+      smt_conv.reset(create_solver("", ns, options));
       solver_result = run_decision_procedure(*smt_conv, equation);
     }
 
     for (auto &it : masked)
       it->type = goto_trace_stept::ASSERT;
 
-    return std::make_pair(solver_result, num_asserts);
+    return std::make_tuple(solver_result, num_asserts, std::move(smt_conv));
   };
 
   /* A prefix verdict only describes the program if the monitor ran to
@@ -2149,15 +2171,15 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
    * included -- is masked out below, so check it first: a violation there
    * means the automaton was truncated and no prefix claim follows (#6547). */
   log_status("Checking LTL monitor preconditions");
-  smt_resultt guard_result =
-    solve_only([&](const irep_idt &c) { return !is_prefix_assert(c); }).first;
+  smt_resultt guard_result = std::get<0>(
+    solve_only([&](const irep_idt &c) { return !is_prefix_assert(c); }));
   switch (guard_result)
   {
   case P_SATISFIABLE:
     log_warning(
       "LTL monitor preconditions violated, the automaton did not run to "
       "completion; prefix outcome is inconclusive");
-    return ltl_res_inconclusive;
+    return ltl_res_uninstrumented;
   case P_ERROR:
     return -2;
   case P_SMTLIB:
@@ -2170,7 +2192,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
   for (const auto &[which, check] : seq)
   {
     log_status("Checking for {}", which);
-    auto [solver_result, num_asserts] =
+    auto [solver_result, num_asserts, smt_conv] =
       solve_only([&](const irep_idt &c) { return c == which; });
     total_prefix_asserts += num_asserts;
 
@@ -2182,6 +2204,10 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
     switch (solver_result)
     {
     case P_SATISFIABLE:
+      // Hand the satisfying solver to the trace machinery: report_trace reads
+      // the model out of runtime_solver, which an LTL run otherwise never
+      // populates because it returns before the solver is created.
+      runtime_solver = std::move(smt_conv);
       return check;
     case P_ERROR:
       return -2;
@@ -2192,13 +2218,11 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
     }
   }
 
-  /* Nothing was instrumented, so nothing was proved: "not found" and "proved
-   * unsatisfiable" are different answers and only the latter yields ⊤. */
+  /* Every prefix assertion was absent rather than discharged, so this formula
+   * carries no monitor instrumentation and says nothing about the property.
+   * Reporting the top of the lattice here would claim a proof we never ran. */
   if (total_prefix_asserts == 0)
-  {
-    log_warning("No prefix assertion in this formula; outcome is inconclusive");
-    return ltl_res_inconclusive;
-  }
+    return ltl_res_uninstrumented;
 
   /* Otherwise, we just got a good prefix. */
   return ltl_res_good;

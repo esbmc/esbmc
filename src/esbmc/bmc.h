@@ -40,12 +40,20 @@ public:
     ltl_res_good,
     ltl_res_succeeding,
     ltl_res_failing,
-    ltl_res_bad,
-    /* Off the lattice: the formula carried no usable prefix verdict, so
-     * neither ⊤ nor any lower outcome may be claimed from it (#6547). */
-    ltl_res_inconclusive
+    ltl_res_bad
   };
-  size_t ltl_results_seen[5];
+  size_t ltl_results_seen[4];
+
+  /* ltl_run_thread returns an ltl_res, or one of these sentinels. A formula
+   * with no prefix assertion, or whose monitor preconditions are violated,
+   * carries no usable prefix verdict: neither ⊤ nor any lower outcome may be
+   * claimed from it (#6547). */
+  static constexpr int ltl_res_uninstrumented = -3;
+
+  // Set when an LTL run produced no four-valued verdict; consulted by
+  // report_result to report UNKNOWN rather than the ⊤ that an absent or
+  // truncated monitor used to produce.
+  std::atomic<bool> ltl_uninstrumented{false};
 
   BigInt interleaving_number;
   BigInt interleaving_failed;
@@ -103,7 +111,9 @@ protected:
 
   smt_resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
 
-  int ltl_run_thread(symex_target_equationt &equation) const;
+  /* Not const: the solver that satisfied a prefix assertion is kept in
+   * runtime_solver so the verdict can be backed by a counterexample. */
+  int ltl_run_thread(symex_target_equationt &equation);
 
   /// \param truncated_loops how many loops exploration cut off at the
   ///   unwinding bound, carried in from the symex result rather than read back

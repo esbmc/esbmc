@@ -1,0 +1,5 @@
+CORE
+wide.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^ERROR: graphical LD: network feeding localId \d+ has too many parallel paths to enumerate \(limit 100000 steps\)$
+^ERROR: PARSING ERROR$

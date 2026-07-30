@@ -4350,6 +4350,10 @@ bool clang_c_convertert::get_atomic_expr(
   std::string name;
   switch (atm.getOp())
   {
+  case clang::AtomicExpr::AO__c11_atomic_init:
+    name = "__c11_atomic_init";
+    break;
+
   case clang::AtomicExpr::AO__c11_atomic_load:
     name = "__c11_atomic_load";
     break;
