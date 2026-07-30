@@ -40,9 +40,12 @@ public:
     ltl_res_good,
     ltl_res_succeeding,
     ltl_res_failing,
-    ltl_res_bad
+    ltl_res_bad,
+    /* Off the lattice: the formula carried no usable prefix verdict, so
+     * neither ⊤ nor any lower outcome may be claimed from it (#6547). */
+    ltl_res_inconclusive
   };
-  size_t ltl_results_seen[4];
+  size_t ltl_results_seen[5];
 
   BigInt interleaving_number;
   BigInt interleaving_failed;

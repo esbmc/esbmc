@@ -21,8 +21,7 @@ the implementation diverges from [1].
 > ([#6546](https://github.com/esbmc/esbmc/issues/6546)). Separately,
 > `VERIFICATION SUCCESSFUL` and the exit code do not reflect the LTL verdict at
 > all ([#6548](https://github.com/esbmc/esbmc/issues/6548)) — you must read the
-> `Final lowest outcome:` line — and several ordinary invocations report a false
-> ⊤ ([#6547](https://github.com/esbmc/esbmc/issues/6547)). Read
+> `Final lowest outcome:` line. Read
 > [Limitations](#limitations) before relying on any of it.
 
 ## At a glance
@@ -59,6 +58,7 @@ infinite continuation satisfies the formula φ.
 | `LTL_FAILING` | ⊥ᵖ | *Presumably false*: the trace ends in a state that violates φ when stutter-extended, but some other continuation would satisfy it. |
 | `LTL_SUCCEEDING` | ⊤ᵖ | *Presumably true*: the program halts in a state that satisfies φ when stutter-extended, but some other continuation would violate it. |
 | `LTL_GOOD` | ⊤ | A **good prefix**: every continuation satisfies φ. The property definitively holds. |
+| `LTL_UNKNOWN` | — | Off the lattice: the run established no prefix verdict, because the monitor was not instrumented or did not run to completion. |
 
 The lattice order is `⊥ ⊑ ⊥ᵖ ⊑ ⊤ᵖ ⊑ ⊤`. ESBMC checks each interleaving
 separately and reports the **least** value seen across all of them
@@ -232,9 +232,14 @@ Given the program and the generated monitor, ESBMC:
    `_ltl2ba_good_prefix_excluded_states`, labelled `LTL_BAD`, `LTL_FAILING` and
    `LTL_SUCCEEDING`.
 6. **Solves once per lattice level.** `bmct::ltl_run_thread`
-   (`src/esbmc/bmc.cpp:2083`) masks all but one of the three assertions and runs
-   a separate solver call for each, from ⊥ upwards, returning the first level for
-   which a trace exists. If none is satisfiable it returns `LTL_GOOD`.
+   (`src/esbmc/bmc.cpp:2093`) first checks the monitor's preconditions — every
+   assertion that is *not* a prefix assertion, so unwinding assertions and
+   libltl2ba's own bound guard included — and reports `LTL_UNKNOWN` if any can be
+   violated, since a truncated automaton supports no prefix claim. It then masks
+   all but one of the three prefix assertions and runs a separate solver call for
+   each, from ⊥ upwards, returning the first level for which a trace exists. If
+   none is satisfiable it returns `LTL_GOOD`, or `LTL_UNKNOWN` when no prefix
+   assertion was present to prove.
 
 Two smaller accommodations: the context-switch threshold is raised from 2 to 3
 under `--ltl` (`src/goto-symex/execution_state.cpp:106`), and the assertion
@@ -245,8 +250,7 @@ re-checked with different maskings.
 
 > **Note**: Everything below was reproduced against ESBMC 8.4.0. The `--ltl`
 > path has no dedicated issue label; the open reports are
-> [#6546](https://github.com/esbmc/esbmc/issues/6546),
-> [#6547](https://github.com/esbmc/esbmc/issues/6547) and
+> [#6546](https://github.com/esbmc/esbmc/issues/6546) and
 > [#6548](https://github.com/esbmc/esbmc/issues/6548).
 
 ### Violations are missed
@@ -312,23 +316,26 @@ No `[Counterexample]` is emitted either, for any outcome, so a failing run gives
 no trace to inspect. Parse the `Final lowest outcome:` line, or use the
 [workaround below](#getting-a-usable-exit-code).
 
-### A missing assertion is read as ⊤
+### A missing assertion reports `LTL_UNKNOWN`
 
-`ltl_run_thread` reports `LTL_GOOD` both when it has *proved* every prefix
-assertion unsatisfiable and when it could not find the assertions at all
-([#6547](https://github.com/esbmc/esbmc/issues/6547), `src/esbmc/bmc.cpp:2114`
-and `2147`). "Not instrumented" and "definitively
-correct" are indistinguishable in the output beyond a
-`WARNING: Couldn't find LTL_* assertion` line. Three situations trigger it:
+"Not instrumented" and "definitively correct" are different answers, and only
+the second is ⊤. `ltl_run_thread` reports `LTL_UNKNOWN` rather than `LTL_GOOD`
+when it finds no prefix assertion to prove, and the aggregate in
+`src/esbmc/bmc.cpp:1750` prefers `LTL_UNKNOWN` over `LTL_GOOD` so that one
+uninformative formula cannot be reported as ⊤. Three situations trigger it:
 
 - **`--ltl` with no monitor file.** Warns `No LTL traces seen, apparently` and
-  reports `VERIFICATION SUCCESSFUL`.
+  reports `LTL_UNKNOWN`.
 - **A program that leaves `main` other than by returning.** `exit()` and
   `abort()` bypass the injected `ltl2ba_finish_monitor` call, because it is only
   placed before `return` instructions. Every VCC is then simplified away and
-  ESBMC returns before the LTL check runs, printing no verdict line at all —
-  only `WARNING: No LTL traces seen, apparently` and `VERIFICATION SUCCESSFUL`.
+  ESBMC returns before the LTL check runs, so no prefix verdict is reached and
+  the run reports `LTL_UNKNOWN`.
 - **An incompatible strategy** — see below.
+
+`VERIFICATION SUCCESSFUL` and the exit code are unaffected either way
+([#6548](https://github.com/esbmc/esbmc/issues/6548)), so `LTL_UNKNOWN` still
+has to be read off the `Final lowest outcome:` line.
 
 ### Do not combine `--ltl` with another strategy
 
@@ -339,37 +346,37 @@ correct" are indistinguishable in the output beyond a
 | --- | --- |
 | `--ltl` | `LTL_FAILING` ✓ |
 | `--ltl --unwind 3` (and above) | `LTL_FAILING` ✓ |
-| `--ltl --unwind 1`, `--ltl --unwind 2` | `LTL_GOOD` ✗ |
-| `--ltl --k-induction` | `LTL_GOOD` ✗ |
-| `--ltl --incremental-bmc` | `LTL_GOOD` ✗ |
-| `--ltl --termination` | `LTL_GOOD` ✗ |
-| `--ltl --falsification` | `LTL_FAILING`, but `VERIFICATION UNKNOWN` and one verdict line per iteration |
+| `--ltl --unwind 1`, `--ltl --unwind 2` | `LTL_UNKNOWN` |
+| `--ltl --k-induction` | `LTL_UNKNOWN` |
+| `--ltl --incremental-bmc` | `LTL_UNKNOWN` |
+| `--ltl --termination` | `LTL_UNKNOWN` |
+| `--ltl --falsification` | `LTL_FAILING`, but `VERIFICATION UNKNOWN` and one verdict line per iteration, the early ones `LTL_UNKNOWN` until the bound suffices |
 
-The k-induction and incremental drivers restructure the program per iteration,
-so the prefix assertions are no longer present when `ltl_run_thread` looks for
-them; the fall-through to `LTL_GOOD` then reports the *top* of the lattice for a
-program that plainly fails. k-induction additionally logs
+These combinations yield no verdict rather than a wrong one. The k-induction and
+incremental drivers restructure the program per iteration, so the automaton no
+longer runs to completion; an `--unwind` bound that is too small has the same
+effect, because the bound applies to the monitor's transition loop as well as the
+program's. Either way the monitor's precondition check fails and the run reports
+`LTL_UNKNOWN`. k-induction additionally logs
 `k-induction does not support concurrency yet. Disabling inductive step`,
 because the monitor is a thread.
 
-An `--unwind` bound that is too small fails the same way, and just as silently:
-the bound applies to the monitor's transition loop as well as the program's, so
-too few iterations leave the automaton short of the state that would witness the
-violation.
+Use plain `--ltl`, or `--ltl --unwind N` with an `N` large enough that the
+preconditions hold, if you want an actual verdict.
 
 ### Other properties are masked
 
-To isolate one lattice level at a time, `ltl_run_thread` turns **every**
-assertion that is not the one it is currently seeking into a `SKIP`
-(`src/esbmc/bmc.cpp:2103`). That includes all the ordinary ones: unwinding
-assertions, bounds and NULL checks, overflow checks, and user `assert`s. An
-`--ltl` run therefore says nothing about safety, and it also disables the two
-checks that would otherwise catch a bad bound — the unwinding assertions, and
-the `"Unwind bound on ltl2ba_fsm insufficient"` assertion libltl2ba builds into
-the monitor for exactly this purpose.
+To isolate one lattice level at a time, `ltl_run_thread` masks **every**
+assertion that is not the one it is currently seeking into a `SKIP`. That
+includes all the ordinary ones: bounds and NULL checks, overflow checks, and
+user `assert`s. An `--ltl` run therefore still reports nothing about safety
+per se.
 
-This is why the `--unwind 1` row above reports `LTL_GOOD` rather than an error.
-Re-running the same command without `--ltl` shows what was masked:
+It does check them collectively: the precondition pass solves the equation with
+only the non-prefix assertions enabled, so a violated unwinding assertion or
+libltl2ba's `"Unwind bound on ltl2ba_fsm insufficient"` guard downgrades the run
+to `LTL_UNKNOWN` instead of being silently discarded. What it does not do is
+tell you *which* one failed. Re-running the same command without `--ltl` does:
 
 ```
 ✗ FAILED: 'unwinding assertion loop 3 at file notphi.c line 131 column 2 function ltl2ba_fsm'

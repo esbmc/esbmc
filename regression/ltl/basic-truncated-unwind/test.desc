@@ -1,0 +1,6 @@
+CORE
+test.c
+--ltl test.ba-2.c -DLTL_PREFIX_BOUND=10 --unwind 1
+^VERIFICATION SUCCESSFUL$
+^Final lowest outcome: LTL_UNKNOWN$
+^WARNING: LTL monitor preconditions violated

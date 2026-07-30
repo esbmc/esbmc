@@ -113,6 +113,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   ltl_results_seen[ltl_res_failing] = 0;
   ltl_results_seen[ltl_res_succeeding] = 0;
   ltl_results_seen[ltl_res_good] = 0;
+  ltl_results_seen[ltl_res_inconclusive] = 0;
 
   // The next block will initialize the algorithms used for the analysis.
   {
@@ -1756,10 +1757,19 @@ smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
       log_result("Final lowest outcome: LTL_FAILING");
     else if (ltl_results_seen[ltl_res_succeeding])
       log_result("Final lowest outcome: LTL_SUCCEEDING");
+    /* Checked before LTL_GOOD: ⊤ means every prefix assertion was proved
+     * unsatisfiable, which an inconclusive formula did not establish. */
+    else if (ltl_results_seen[ltl_res_inconclusive])
+      log_result("Final lowest outcome: LTL_UNKNOWN");
     else if (ltl_results_seen[ltl_res_good])
       log_result("Final lowest outcome: LTL_GOOD");
     else
+    {
+      /* No formula yielded an outcome at all: the monitor was never
+       * instrumented, or main never reached the ltl2ba_finish_monitor call. */
       log_warning("No LTL traces seen, apparently");
+      log_result("Final lowest outcome: LTL_UNKNOWN");
+    }
   }
 
   return interleaving_failed > 0 ? P_SATISFIABLE : res;
@@ -2094,42 +2104,80 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
     Type{"LTL_SUCCEEDING", ltl_res_succeeding},
   };
 
-  for (const auto &[which, check] : seq)
-  {
-    size_t num_asserts = 0;
+  auto is_prefix_assert = [](const irep_idt &comment) {
+    for (const auto &[which, _] : seq)
+      if (comment == which)
+        return true;
+    return false;
+  };
 
-    /* Start by turning all assertions that aren't the sought prefix assertion
-     * into skips. */
-    for (auto &SSA_step : equation.SSA_steps)
-      if (SSA_step.is_assert())
+  /* Solve `equation` with only the assertions `keep` selects enabled; the rest
+   * become skips and are restored before returning. Yields the solver result
+   * and how many assertions were actually left to check. */
+  auto solve_only = [&](auto keep) {
+    std::vector<symex_target_equationt::SSA_stepst::iterator> masked;
+    size_t num_asserts = 0;
+    for (auto it = equation.SSA_steps.begin(); it != equation.SSA_steps.end();
+         ++it)
+      if (it->is_assert())
       {
-        if (SSA_step.comment != which)
-          SSA_step.type = goto_trace_stept::SKIP;
-        else
+        if (keep(it->comment))
           num_asserts++;
+        else
+        {
+          masked.push_back(it);
+          it->type = goto_trace_stept::SKIP;
+        }
       }
 
     smt_resultt solver_result = P_UNSATISFIABLE;
-    log_status("Checking for {}", which);
     if (num_asserts != 0)
     {
       std::unique_ptr<smt_convt> smt_conv(create_solver("", ns, options));
       solver_result = run_decision_procedure(*smt_conv, equation);
-      if (solver_result == P_SATISFIABLE)
-        log_status("Found trace satisfying {}", which);
     }
-    else
-      log_warning("Couldn't find {} assertion", which);
 
-    /* Turn skip steps back into assertions. */
-    for (auto &SSA_step : equation.SSA_steps)
-      if (SSA_step.is_skip())
-        for (const auto &[which2, _] : seq)
-          if (SSA_step.comment == which2)
-          {
-            SSA_step.type = goto_trace_stept::ASSERT;
-            break;
-          }
+    for (auto &it : masked)
+      it->type = goto_trace_stept::ASSERT;
+
+    return std::make_pair(solver_result, num_asserts);
+  };
+
+  /* A prefix verdict only describes the program if the monitor ran to
+   * completion. Everything that is not a prefix assertion -- the unwinding
+   * assertions and libltl2ba's own "Unwind bound ... insufficient" guard
+   * included -- is masked out below, so check it first: a violation there
+   * means the automaton was truncated and no prefix claim follows (#6547). */
+  log_status("Checking LTL monitor preconditions");
+  smt_resultt guard_result =
+    solve_only([&](const irep_idt &c) { return !is_prefix_assert(c); }).first;
+  switch (guard_result)
+  {
+  case P_SATISFIABLE:
+    log_warning(
+      "LTL monitor preconditions violated, the automaton did not run to "
+      "completion; prefix outcome is inconclusive");
+    return ltl_res_inconclusive;
+  case P_ERROR:
+    return -2;
+  case P_SMTLIB:
+    return -1;
+  case P_UNSATISFIABLE:
+    break;
+  }
+
+  size_t total_prefix_asserts = 0;
+  for (const auto &[which, check] : seq)
+  {
+    log_status("Checking for {}", which);
+    auto [solver_result, num_asserts] =
+      solve_only([&](const irep_idt &c) { return c == which; });
+    total_prefix_asserts += num_asserts;
+
+    if (num_asserts == 0)
+      log_warning("Couldn't find {} assertion", which);
+    else if (solver_result == P_SATISFIABLE)
+      log_status("Found trace satisfying {}", which);
 
     switch (solver_result)
     {
@@ -2142,6 +2190,14 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
     case P_UNSATISFIABLE:
       continue;
     }
+  }
+
+  /* Nothing was instrumented, so nothing was proved: "not found" and "proved
+   * unsatisfiable" are different answers and only the latter yields ⊤. */
+  if (total_prefix_asserts == 0)
+  {
+    log_warning("No prefix assertion in this formula; outcome is inconclusive");
+    return ltl_res_inconclusive;
   }
 
   /* Otherwise, we just got a good prefix. */
