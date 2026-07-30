@@ -1,6 +1,8 @@
 // Minimal form of the defect behind race_guard_self_clear: a branch on a
 // global whose body writes that same global loses a concurrent write to it
-// across the merge, so `receive` is wrongly proved to be 0 here.
+// across the merge. phi_function names the not-taken arm from the level2
+// snapshot taken at the branch, so the guard and that arm are the same term
+// and the solver exploits a correlation that a concurrent write has broken.
 #include <assert.h>
 #include <pthread.h>
 
