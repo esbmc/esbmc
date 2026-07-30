@@ -6,11 +6,12 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0–M3 closed, M4 partial** (§15 verdict log); M5–M8 not yet
-executed. §6.4 records the tier-ordering rule M1 produced. Except
-where §15 records a discharged result, every harness below is a *proposal* and
-nothing here asserts a proof. Findings R1–R12 remain *hypotheses with cited
-evidence*, not confirmed end-to-end bugs.
+**Status:** **M0–M4 closed** (§15 verdict log); M5–M8 not yet executed. §6.4
+records the tier-ordering rule M1 produced. Except where §15 records a
+discharged result, every harness below is a *proposal* and nothing here asserts
+a proof. Findings not marked discharged in §9.2 remain *hypotheses with cited
+evidence*, not confirmed end-to-end bugs; R14 and R15 are pinned by a failing
+test or an explicit assertion but neither is fixed.
 **Audience:** An engineer who will implement the harnesses and run the
 verification tasks directly from this document.
 **Companion:** `docs/irep2-verification-plan.md` (branch
@@ -569,7 +570,7 @@ inspect the produced `symex_target_equationt`.
 | ID | Property | Method | Detects |
 |---|---|---|---|
 | **H-B1** | **SSA well-formedness validator** (P8/P11, I10) | Walk `SSA_steps`: (a) every assignment `lhs` is a `symbol2t` at `level2`/`level2_global`; (b) no SSA name is defined twice — promote `check_for_duplicate_assigns` from `log_status` to a hard check (R5); (c) every symbol read is previously defined, a `nondet$`/`NULL`/`INVALID` free symbol, or a global; (d) guard symbols are defined before use | The entire class of stale-index / aliasing bugs. **Highest-value single artefact in this plan** — reusable as an assertion inside every other Tier-B test. |
-| **H-B2** | **Determinism** (P10) | Run symex twice in one process over the same program; compare the two equations step-for-step (kind, `crc` of `cond`, `guard`, `ignore`) | Iteration-order nondeterminism over pointer-keyed containers (`std::set<expr2tc>` in `thread_last_reads/writes`; the `generate_l2_state_hash` comment already concedes cross-run instability) |
+| **H-B2** | **Determinism** (P10) | Run symex twice in one process over the same program; compare the two equations step-for-step (kind, `crc` of `cond`, `guard`, `ignore`). **Qualified, §15 M4 (H-B2)**: strict equality holds only for programs creating no dynamic/invalid object; elsewhere the comparison must canonicalise object numbering (R15) | Iteration-order nondeterminism over pointer-keyed containers (`std::set<expr2tc>` in `thread_last_reads/writes`; the `generate_l2_state_hash` comment already concedes cross-run instability) |
 | **H-B3** | **Slicer equisatisfiability** (P0, I11) | Build equation; clone; slice the clone; solve both per-claim with the real backend; assert identical per-claim verdicts on ≥ 30 small programs incl. arrays with symbolic indices | Slicer unsoundness on real formulas — the honest complement to H-A4 |
 | **H-B4** | **Renaming round-trip** (I3/I4) | For each `SSA_stept`, `get_original_name` of `lhs` equals the L0 symbol; `rename` is idempotent; the level never decreases along the step list | `fixup_renamed_type` / `rename_address` regressions |
 | **H-B5** | **Phi laws** (I8) | For 2-branch programs: the set of *program variables* receiving a phi == the set written by at least one arm; **zero** phi for untouched variables. **Corrected, §15 M4 (H-B5)**: this row originally said "written *differently* in both", which the code does not do — `phi_function` filters on the L2 index differing, not the value | Over- and under-generation of phi nodes |
@@ -685,6 +686,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R11** | **Open question (concurrency soundness)** | MPOR's independence decision consumes `thread_last_reads`/`thread_last_writes`, populated via `get_expr_globals`, which resolves pointer operands through the *current* value set. If a write through a pointer whose value set is incomplete (or whose entry is `unknown`) is missed, the dependency is missed and an interleaving is dropped — **unsound**. `get_expr_globals` also early-returns entirely under `--data-races-check-only`. | `execution_statet::get_expr_globals`, `check_mpor_dependency`; `reachability_treet::ever_written_globals`/`address_taken_globals` | H-A6 (relation) + **H-C4** (end-to-end) | Determine whether an `unknown` value-set entry forces a conservative dependency; if not, that is a concrete unsoundness to fix. Highest-uncertainty item in this plan. |
 | **R13** | **Medium (silent under-verification) — confirmed and fixed, §15 M2 (cont.)** | **`--unwindsetname` never matched a loop.** `unwind_func_set` was keyed by `user_name_to_usr(name)`, which appends a `#` terminator (clang's C++ USR spelling), while `loop_id_to_func_index` was keyed by the goto function-map id, which for a C function is `c:@F@f` with no terminator. The `count(unwind_key)` in `get_unwind` therefore always missed and the global `--unwind` silently won, so a user raising the bound for one function got the lower global bound and a verdict covering less than they asked for. A second defect in the same option: the `name:index:bound` field split scanned left-to-right, so the documented USR form (`c:@F@f#:0:11`) split inside the `c:` prefix. Neither was caught because all five `unwindsetname` regression tests ran without a global `--unwind` and so passed vacuously. | `goto_symext::goto_symext`, `symex_assign.cpp:66-120`; `get_unwind`, `symex_goto.cpp:525`; `user_name_to_usr`, `usr_utils.cpp:29` | `unit/goto-symex/unwind.test.cpp` (Tier B, discharged) | Fixed: both sides now key on the name `--show-loops` prints (`usr_to_user_name`), and the field split scans from the right. Three non-vacuous regression tests added; `unwindsetname_03_priority` corrected to the loop number the program actually has. |
 | **R14** | **Open (I10 violated on a real input)** — found by R5's repaired detector, §15 M4 | With `--double-assign-check` made to fail, `regression/esbmc/github_286_3` produces an equation that **defines one SSA name twice**: `…@F@getNumbers2@numbers2?1!0&0#1`, the L2 index 1 of a local array in a function that returns a dangling pointer to it. Two definitions of one name are two constraints `x#1 == e1` and `x#1 == e2` on the same variable; where the right-hand sides disagree the conjunction is unsatisfiable, which silently removes that path from the formula — the missed-bug direction. One input in ~900 swept. Not yet characterised: which two steps emit it, and whether the two right-hand sides can differ. | `symex_target_equationt::check_for_duplicate_assigns` under `--double-assign-check`; `regression/esbmc/double_assign_check_local_array` (KNOWNBUG) | H-B1 | Find the two emitting steps (the local's scope exit is the first suspect), then decide whether the second definition is a stale re-emission or a legitimate step that must take a fresh index. |
+| **R15** | **Low (reproducibility, latent collision)** — found by H-B2, §15 M4 (H-B2) | **Object numbering leaks across symex runs in one process.** `execution_statet::dynamic_counter` and `dereferencet::invalid_counter` are `static thread_local` and reset nowhere, so a second exploration in the same process names its objects from where the first stopped: the same program under the same options yields `symex_dynamic::dynamic_1_array` on the first run and `dynamic_2_array` on the second. The sibling `nondet_count` is a plain instance member the constructor zeroes, so the asymmetry is unintended rather than a design choice. The equation is therefore not a function of (program, options) alone. No wrong verdict follows — the names only need to be *fresh*, and monotonic counters are fresh — so this is a reproducibility defect, and objective 7's "byte-identical" wording is unachievable as stated. **Latent second-order risk:** `thread_local` means two threads each start at 0, so if symex is ever parallelised (§14.6) two threads would mint *colliding* object names into a shared context. | `execution_state.cpp:21`, `execution_state.h:583`; `dereference.cpp:23,538`, `dereference.h:281`; contrast `nondet_count` reset at `execution_state.cpp:104` | `unit/goto-symex/determinism.test.cpp` (Tier B, pinned) | Reset both counters per exploration — in `setup_for_new_explore`, **not** in the `execution_statet` constructor, which the reachability tree copies per interleaving and where a reset would mint colliding names. Expect churn in `test.desc` files whose expected output names a dynamic object; run the full corpus before landing. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -746,9 +748,10 @@ real `level1t`) — gated on parse **and** < 60 s verification; a negative resul
 is recorded in §13.3 and Tier A is kept.
 *Artefact:* `unit/goto-symex/{ssa_wellformed,renaming,phi,determinism}.test.cpp`;
 R5 promoted to a real validator; WI-4 verdict.
-**Revised, §15.** H-B1 (#6487), H-B4 (#6491) and H-B5 closed; H-B5's cases live
-in `merge.test.cpp`, which already owned I8, so there is no `phi.test.cpp`.
-**H-B2 is what remains**, plus the WI-4 pilot.
+**Revised, §15. M4 closed.** H-B1 (#6487), H-B4 (#6491), H-B5 and H-B2 all
+discharged; H-B5's cases live in `merge.test.cpp`, which already owned I8, so
+there is no `phi.test.cpp`. H-B2 found R15 and refuted objective 7's
+"byte-identical" wording. **WI-4 was not run** and carries to M5 with D14.
 
 **M5 — Constraint generation: the slicer (1 wk).** H-A4, H-B3, then the
 **H-C1** sweep over all 1400 `regression/esbmc` CORE tests. *Artefact:* slicer
@@ -1618,6 +1621,78 @@ unmodified tree (pre-existing, macOS).
 
 **Still open in M4.** H-B2. R14 remains pinned, not diagnosed. Also still open
 from M0: WI-1, WI-2, D12.
+
+### M4 (H-B2) — 2026-07-30, M4 closed
+
+**Result: P10 discharged in the form the code actually supports, and objective
+7's wording refuted. Two process-global counters leak across runs — R15.**
+
+New file `unit/goto-symex/determinism.test.cpp`, 6 cases, 26 assertions. It does
+not reuse the `engine` the other Tier-B tests carry: comparing two runs means
+holding two equations alive at once, and each equation's
+`symex_target_equationt` holds its `namespacet` **by reference**, so each run
+must own its whole context bundle for the equation's lifetime.
+
+| Case | Property |
+|---|---|
+| `the comparators distinguish two programs` | control — both comparators separate two different programs |
+| `two runs of a branching program agree` | strict step-for-step equality |
+| `two runs of a loop with calls agree` | strict, across 4 unwindings and a callee |
+| `two runs over addressed locals agree once object ids are normalised` | equality modulo R15, value-set path |
+| `two runs of a heap program agree once object ids are normalised` | equality modulo R15, allocation path |
+| `object numbering leaks across runs (R15)` | pins the leak, so it cannot widen unnoticed |
+
+**Objective 7 asks for byte-identical equations and that is not achievable.**
+The first written form of this harness compared crcs of
+`(type, ignore, hidden, guard, lhs, rhs, cond)` and **failed on 2 of 4
+programs** — every failing one involving a pointer or the heap, at the first
+`malloc`. The cause was not the container-iteration-order hazard §7.2
+anticipated: the symbol *names* differ between runs, `symex_dynamic::dynamic_1_
+array` versus `dynamic_2_array`, because `execution_statet::dynamic_counter` and
+`dereferencet::invalid_counter` are `static thread_local` and reset nowhere.
+Recorded as R15 with the fix location (`setup_for_new_explore`, not the
+`execution_statet` constructor — the reachability tree copies that per
+interleaving, so resetting there would mint *colliding* names). Not fixed here:
+the fix renames objects in counterexample output and needs a full-corpus
+`test.desc` sweep, so it is pinned exactly as R14 was.
+
+The property therefore splits: strict equality where the program creates no such
+object, and equality after canonicalising `dynamic_<n>`/`symex::invalid_object
+<n>` where it does. Canonicalisation works on the pretty-printed step rather
+than a crc, because the numbering sits *inside* symbol names, which a structural
+hash cannot reach without rewriting the expressions.
+
+**What this harness can and cannot catch, stated because a determinism test
+invites over-reading.** It catches only divergence *between two runs*. A
+consistent reordering — iterating `current_names` backwards, say — reorders both
+runs identically and is invisible here; that is correct behaviour for a
+determinism oracle, not a gap in the cases, but it means P10 passing says nothing
+about step order being *right*. It is also same-process only: cross-process
+variation (ASLR changing an address-ordered iteration) is out of reach and
+belongs to a Tier-C oracle.
+
+**Mutation testing.** A process-global skip injected into `phi_function`'s filter
+chain (`static int mut; if (++mut % 9 == 0) continue;`) — a faithful model of the
+leak R15 documents — is caught by both strict-equality cases. The two
+canonicalising cases do not catch it, which is the expected sensitivity ordering:
+canonicalisation trades precision for tolerating R15.
+
+Artefact: ESBMC 8.4.0 at master `31aee3387a`; 595/595 `ctest -LE regression`
+pass. Test-only change plus one CMake line; no `src/` line touched, so no Mode C
+obligation arises.
+
+**M4 closed** — H-B1, H-B4, H-B5, H-B2 all discharged. WI-4 (the Tier-B′ pilot)
+was **not** run and is carried to M5 with D14. R14 and R15 are pinned, not fixed.
+Also still open from M0: WI-1, WI-2, D12.
+
+**Cleanup owed (not done here).** Five Tier-B files now carry a near-identical
+`engine` fixture, and `determinism.test.cpp` adds a sixth variant. Extracting
+one shared fixture is blocked on a real semantic conflict, recorded so the next
+attempt does not rediscover it: `invariant`, `renaming` and `frame_lifecycle`
+read the live state *before* `run()` and so need `setup_for_new_explore()` in the
+constructor, while `unwind` defers it precisely so its `with()` options are set
+first. Reconciling those is a five-file refactor with no property gain, so it
+should land on its own.
 
 ---
 
