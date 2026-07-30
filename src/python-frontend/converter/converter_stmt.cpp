@@ -1173,6 +1173,33 @@ void python_converter::reject_numpy_view_mutating_method_call(
       "TypeError: writing through a copied numpy view is not supported");
 }
 
+void python_converter::reject_unknown_numpy_view_call(
+  const nlohmann::json &node)
+{
+  if (
+    !node.is_object() || node.value("_type", "") != "Call" ||
+    !node.contains("func") || !node["func"].is_object() ||
+    !node.contains("args") || !node["args"].is_array())
+    return;
+
+  if (node["func"].value("_type", "") != "Name")
+    return;
+
+  const std::string func_name = node["func"].value("id", "");
+  if (
+    func_name == "len" || func_name == "bool" || func_name == "int" ||
+    func_name == "float")
+    return;
+
+  for (const auto &arg : node["args"])
+  {
+    if (contains_copied_numpy_view_name(arg))
+      throw std::runtime_error(
+        "TypeError: passing a copied numpy view to an unknown function is not "
+        "supported");
+  }
+}
+
 std::optional<nlohmann::json> python_converter::select_return_value_for_call(
   const nlohmann::json &call_node) const
 {
@@ -2548,6 +2575,28 @@ void python_converter::get_var_assign(
 
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
+
+  if (
+    ast_node.contains("value") && ast_node["value"].is_object() &&
+    contains_copied_numpy_view_name(ast_node["value"]))
+  {
+    if (target.value("_type", "") == "Attribute")
+      throw std::runtime_error(
+        "TypeError: storing a copied numpy view in an attribute is not "
+        "supported");
+
+    if (
+      target.value("_type", "") == "Name" && !current_func_name_.empty() &&
+      target.contains("id"))
+    {
+      symbol_id target_sid = create_symbol_id();
+      target_sid.set_object(target["id"].get<std::string>());
+      if (is_global_variable(target_sid))
+        throw std::runtime_error(
+          "TypeError: storing a copied numpy view in a global is not "
+          "supported");
+    }
+  }
 
   // Stage 1 object-model migration (#3067/#4773): a simple Name target bound to
   // a class instance — either a constructor call `o = ClassName(...)` or an
@@ -5174,6 +5223,7 @@ exprt python_converter::get_block(
 
       // Function calls are handled here
       reject_numpy_view_mutating_method_call(element["value"]);
+      reject_unknown_numpy_view_call(element["value"]);
 
       exprt empty;
       exprt expr = get_expr(element["value"]);
