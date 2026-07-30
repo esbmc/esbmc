@@ -15,6 +15,8 @@ set(inputs
            # pthreads
            pthread.h
            sched.h
+           # C11 threads, layered on the pthread model (issue #3449)
+           threads.h
            # Glibc
            bits/pthreadtypes.h
            bits/thread-shared-types.h

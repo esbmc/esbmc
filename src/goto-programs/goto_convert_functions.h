@@ -63,8 +63,8 @@ protected:
   // locations byte-identically). Returns true iff every statement kind in
   // `body2` is supported by the native dispatcher; returns false — leaving
   // `dest` untouched — the moment it meets an unsupported kind, so the caller
-  // falls back to `goto_convert_rec` and flag-on stays byte-identical to
-  // flag-off until the native path is complete. Gated on --irep2-native-body.
+  // falls back to `goto_convert_rec` and the native path stays byte-identical
+  // to the round-trip. Default on; --no-irep2-native-body forces the fallback.
   bool try_convert_body_native(const expr2tc &body2, goto_programt &dest);
 
   // Consume one IREP2 statement `code2` natively, appending to `dest`. Returns

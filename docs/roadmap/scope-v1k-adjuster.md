@@ -3,6 +3,16 @@
 **Program:** Part V of `docs/roadmap/irep2-migration.md` (IREP2-native frontend→goto, #4715).
 **Question this scopes:** is the whole-body "resolve-then-build" adjuster the right
 next step to close the V.3 residue, and if so, what exactly does it own?
+**Status (2026-07-29): CONCLUDED as a scope — Goal A shipped, Goal B blocked on
+one named prerequisite.** Converter-construction 100 % (Goal A) is complete
+(#6323). The `python_adjust` flip (Goal B) is **not** taken: a denser,
+unbiased whole-corpus census refuted round 16's "no remaining verified
+divergence" and traced every genuine divergence to the single
+assignment/operand-conversion coupling this document already sized as multi-PR
+work. `--python-irep2-adjust-only` therefore stays default-off. See
+§"Flip gate (2026-07-29)" for the measurement and the remaining-work table; the
+narrative below is the execution record.
+
 **Status (updated 2026-07-23):** §5.1's Spike-1 conclusion ("adjuster
 unnecessary; finish inline") held *for Goal A* — **converter-construction 100%
 is now complete**: every arithmetic/relational/member/index node the Python
@@ -1222,6 +1232,109 @@ census** (the stride-20 sample is exhausted), plus deciding what to do about
 `nondet_string`: either implement it — which would make the six CORE `-fail`
 tests above assert something — or re-mark those tests, which currently pass
 regardless of the behaviour they name.
+### Flip gate (2026-07-29) — the denser census refutes the flip; the blocker is the assignment-conversion coupling
+
+Round 16 closed with "the next honest step is a **denser census** (the stride-20
+sample is exhausted)". That census was run, each test executed twice on one
+pinned binary — default (legacy `clang_cpp_adjust`) vs
+`--python-irep2-adjust-only` — with the `test.desc` flags replayed verbatim and
+a 90 s per-run cap, over two samples:
+
+| sample | tests | hop-off regressions |
+|---|---:|---:|
+| directory-order prefix (biased; kept only because it is what first surfaced the mechanism) | 672 | 2 |
+| every 4th directory (unbiased, 5× denser than the exhausted stride-20) | 1 108 | **6** |
+
+The strided run breaks down as 1 062 matches and 46 divergences, of which 31 are
+*both*-paths-no-verdict (pre-existing, not attributable to the adjuster), 9 are a
+harness artifact — those tests already carry `--python-irep2-adjust-only` in
+their own `test.desc`, so adding it again makes boost throw
+`multiple_occurrences`; any census on this track must skip tests that already
+pass the flag — and **6 are genuine**:
+
+| test | legacy | hop-off |
+|---|---|---|
+| `github_4344` | SUCCESSFUL | SIGSEGV |
+| `github_5571_fail` | FAILED | abort |
+| `github_5571_tuple_str_annotation` | SUCCESSFUL | abort |
+| `lambda15` | SUCCESSFUL | abort |
+| `precedence2` | SUCCESSFUL | FAILED (the false alarm this document already documents) |
+| `sum_tuple` | SUCCESSFUL | FAILED |
+
+`sum_tuple`'s own header comment names its subject as "Python's int->float
+promotion" — i.e. the sixth case corroborates the mechanism rather than adding a
+seventh.
+
+**Result: the flip is NOT ready, and round 16's "no remaining verified
+divergence" does not survive the denser sample** — it was an artifact of the
+stride-20 sample being too sparse (6 in 1 108 is ≈0.5 %, which a 220-test sample
+can easily miss entirely).
+
+Throughout, "hop-off regression" means legacy produces a verdict and hop-off
+does not, or produces a different one. Cases where *both* paths fail to produce
+a verdict — differing only in which signal, `rc=134` abort vs `rc=139` segfault
+— are pre-existing and not attributable to the adjuster; they are counted
+separately above.
+
+**Every genuine regression in both samples is the same defect, and it is the one
+this document already named.** They are not new per-case stragglers for another
+triage round — they are the *documented* "assignment-conversion trap" above,
+observed in a more severe form than that section recorded. The prefix sample's
+two are the clearest witnesses:
+
+| test | legacy | hop-off | mechanism |
+|---|---|---|---|
+| `builtin_all_nonliteral` | SUCCESSFUL | **SIGSEGV** in `smt_solver_baset::convert_assign` (`smt_solver.cpp:366`, `side2->assign(this, side1)`) | assignment conversion dropped |
+| `chained-comparison2_fail` | FAILED | **Bitwuzla abort**: "terms with mismatching sort at indices 0 and 1" | same |
+
+`builtin_all_nonliteral` pins the mechanism exactly. Normalising the
+`--goto-functions-only` dumps (strip timings, the docstring `OTHER` the hop-off
+elides, and instruction renumbering) leaves **one** substantive line:
+
+```
+legacy:   5: ASSIGN element=(_Bool)tmp$5;
+hop-off:  5: ASSIGN element=tmp$5;
+```
+
+The `_Bool`-typed target is assigned an unconverted integer. `python_adjust`
+never applies `adjust_assign`'s `gen_typecast(ns, code.op1(), code.op0().type())`,
+so the ill-typed assignment survives goto-conversion and symex and reaches the
+solver, where the destination AST is not the sort the source expects.
+`chained-comparison2_fail` is the same fault one layer up: `x` is retyped to
+float mid-function, and the chained comparison mixes sorts.
+
+**Why this changes the flip decision rather than adding a fix.** The "do not
+mirror `adjust_assign` alone" section above already proved that adding the
+assignment conversion by itself is *unsound*: it makes `neural-net_fail` report
+SUCCESSFUL where legacy correctly reports FAILED — masking a real bug. The
+sound fix is the coupled one that section sizes: operand-level arithmetic
+reconciliation (a faithful `adjust_expr_binary_arithmetic`, ~114 lines with
+complex promotion, `ieee_*` mapping for `floatbv`, and side-effect binding)
+landing **first**, with its own parity gate, and the assignment conversion on
+top. That is explicitly "a multi-PR effort in its own right".
+
+The new information is severity, not direction: the gap was recorded as a
+*false-alarm* class (`precedence2`), so it read as tolerable for an
+experimental flag. It is not — the same missing conversion crashes the solver
+outright, which is why the flag stays **default-off** and the flip does not
+ship with the W1-loc one.
+
+**Status of this scope, concluded.** Goal A (converter-construction 100 %) is
+complete and shipped. Goal B (the `clang_cpp_adjust` replacement) has all its
+*structural* work done — every blocker this document enumerated is closed or
+refuted — and is gated on exactly one remaining, named, sized prerequisite:
+
+| item | state |
+|---|---|
+| S1/S2 type + aggregate completion, exception ids, call rewrite, S4 width reconcile | landed |
+| S5 arg casts, `bases` carriage, S3 member/index at scale | closed / refuted (round 16) |
+| **operand-level arithmetic reconciliation + assignment conversion (coupled)** | **the only remaining blocker; multi-PR, not started** |
+| the flip itself (`python_adjust` as sole adjuster, default-on) | blocked on the row above |
+
+Next owner: take the coupled conversion effort as its own scope, then re-run
+this whole-corpus census as the flip gate. Do not re-triage per case — the
+census now names the single mechanism.
+
 ### Per-case triage round 14 — array decay at the call-argument seam (2026-07-28)
 
 **A strided whole-corpus census is now the frontier finder.** With round 11's open

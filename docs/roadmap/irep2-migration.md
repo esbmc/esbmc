@@ -3030,7 +3030,13 @@ so the body-seam back-migration disappears. Active work moves there.
 
 # Part V — Python frontend → **100 % IREP2** (the deep-pin program)
 
-> **Status: in progress.** Phase V.4 (IREP2-native bodies through
+> **Status: concluded — see §V.7** for the per-phase close-out and the measured
+> §V.1 bar. V.1k and V.4 (with its W1-loc successor) are done and default-on;
+> V.5 is deliberately deferred; V.1a, V.2 and V.6 are not started and are
+> recorded there with their reasons. The in-flight narrative below is kept as
+> the execution record.
+>
+> **Status while in flight: in progress.** Phase V.4 (IREP2-native bodies through
 > `goto_convert`) has landed V.4.0→V.4.3 across all frontends; **V.4.4a
 > flipped the flag on by default** (full-corpus verdict-parity sweep clean —
 > Bitwuzla + Z3; Python, C, C++ at every standard, floats, cstd, CUDA,
@@ -3925,9 +3931,9 @@ The S-list frames S3 as "reproduce the pointer-deref / `p[i]`→`*(p+i)` / index
 typecast steps for the pointer-backed Python container/instance sources"
 (mirroring `clang_c_adjust::adjust_index`/`adjust_member`). A code audit shows
 that framing is a **legacy-`exprt` view that does not carry over to IREP2** — the
-Key-implementation-insight of `irep2-keystone-implementation-plan.md` (§"most of
-`clang_cpp_adjust`'s completion must happen at converter construction") is right,
-and this pins it for the index/member surface specifically:
+keystone plan's key implementation insight, that most of `clang_cpp_adjust`'s
+completion must happen at converter construction rather than in a post-pass, is
+right, and this pins it for the index/member surface specifically:
 
 - **`index2t`/`member2t` cannot hold a pointer source.** The construction asserts
   permit only array/vector (`index2t`, `irep2_expr.h:1646`) or struct/union
@@ -5165,3 +5171,86 @@ at the seam by design.** If the initiative *is* greenlit, **Phase V.1k
 (resolve-then-build) is the mandatory first spike** — it is the keystone, its
 proof obligation (RV2) is the highest-value question to settle, and every other
 converter phase is blocked on it.
+
+## V.7 Part V close-out (2026-07-29)
+
+Recorded in the §15.1 spirit: the plan sections above are the forward plan, and
+this is what the program actually reached. §V.6's recommendation — "unless ESBMC
+commits to the repo-wide initiative, the defensible target remains Part IV's" —
+was answered by *partially* committing: the two keystones were prosecuted to
+completion, and the remaining phases are closed with a recorded reason rather
+than left implicitly open.
+
+### Per-phase final status
+
+| Phase | Removes | Status | Where it is recorded |
+|---|---|---|---|
+| V.0 | — | **done** | harness/census tooling in use by every row below |
+| V.1k | W2 | **done** | the relaxed `member2t`/`index2t` construction assert (round 3 breakthrough), then every width-hazard and deferred-operand site in the converter migrated — the working plan that tracked those sites was deleted once drained; §"V.3 close-out (2026-07-04)" is the surviving record |
+| V.1k (b) adjuster | — | **structurally done, flip blocked** | `docs/roadmap/scope-v1k-adjuster.md` §"Flip gate (2026-07-29)" |
+| V.1a | — | **not started** | type builders still `lower_to_seam`; blocked on V.2 by the dependency graph in §V.3 |
+| V.2 | W3 | **not started** | the three legacy `#cpp_type`/`#member_name`/`#cformat` consumers are unchanged |
+| V.3 | — | **done for converter expression construction; bar #1/#2 not met** | §"V.3 close-out (2026-07-04)"; the residue is type/symbol-write surface, not expressions |
+| V.4 | W1 | **done** | V.4.0→V.4.4b landed; the deeper W1 removal reopened and completed as W1-loc, now default-on |
+| V.5 | W4 | **deferred, concluded** | see "Why V.5 is deferred" below — this is now the only record; its scope doc was deleted |
+| V.6 | — | **not reached** | requires V.1a + V.2 |
+
+### Why V.5 is deferred
+
+The counterexample printer (`c_expr2stringt` / `cpp_expr2stringt`, reached via
+`from_expr`) is the lowest-value Part V item, and the reasoning is worth keeping
+even though its scope document has been deleted:
+
+- **The value is all-or-nothing.** The only gain is deleting the
+  `migrate_expr_back` in `from_expr` (`language_util.h:18-24`) — a cleanliness
+  win on a path that runs once per reported counterexample, not a hot path. That
+  back-hop cannot go until **every** kind `convert_rec` can receive is handled
+  natively, because one fall-through re-introduces it. Migrating 10 of the ~159
+  kinds removes **zero** back-hops.
+- **The gate is strict per-kind byte-identity.** Counterexample text is asserted
+  verbatim by `test.desc` regexes, and the symbol *shorthand* machinery
+  (`id_shorthand` / `get_shorthands`) is expression-global, so even a bare symbol
+  is not a local rewrite.
+- **It duplicates a large surface** across two classes until the legacy printer
+  can be deleted, which needs every frontend's `from_expr` users migrated first.
+
+If it is ever taken, the only sound shape is a native `expr2string(ns, id,
+expr2tc)` that falls back to `migrate_expr_back` + the legacy printer for
+unmigrated kinds, gated on byte-identical output over the whole suite, migrated
+in dependency order (constants → symbols-with-shorthand → unary/binary with
+precedence → aggregates), with the fallback kept until the reachable-kind census
+is exhausted. Partial migration must **not** be tracked as progress.
+
+### The §V.1 acceptance bar, measured
+
+Re-run at this revision, the bar stands as follows. These are the honest
+numbers; the converter's *expression* surface being IREP2-native is not the same
+thing as the bar being met, and the two were easy to conflate while the work was
+in flight.
+
+| # | Bar | Measured | Met? |
+|---|---|---|---|
+| 1 | `git grep -P '\b([A-Za-z_]*(exprt\|typet\|codet)\|irept)\b' -- src/python-frontend` → ~0 | **5 495** | no |
+| 2 | `grep -rn 'set_type(\|set_value(' src/python-frontend \| grep -vc 2tc` → 0 | **100** | no |
+| 3 | bodies reach `goto_convert` with no `migrate_*` back-hop | native dispatcher is default-on; unsupported constructs still fall back to the round-trip (≈78.7 % of functions native on the `esbmc-cpp` census) | partially |
+| 4 | no `#`-attribute legacy escape hatch into a shared pass | W3 intact | no |
+
+Bar #3 is the one the program moved decisively: the round-trip is no longer
+*load-bearing for location fidelity* (the W1-loc result), so what remains is
+per-shape dispatcher coverage rather than a fidelity impossibility.
+
+### What is left, and why it is left
+
+Two items, both sized and neither speculative:
+
+1. **The coupled arithmetic-conversion effort** (operand-level reconciliation,
+   then the assignment conversion) — the sole remaining blocker on the
+   `python_adjust` flip. `scope-v1k-adjuster.md` sizes it as multi-PR and proves
+   that shipping either half alone is unsound.
+2. **V.2/W3 attribute carriage**, which V.1a and V.6 both depend on. Untouched;
+   the highest shared blast radius left in the program (`clang_cpp_adjust_expr`,
+   `cpp_expr2string`, `goto2c/expr2c` serve C++ and Solidity too).
+
+V.5 is closed rather than pending — see its scope doc. With those recorded, the
+V-track has no undocumented residue: every remaining item has a named owner
+document, a sized cost, and a stated reason it was not taken.

@@ -963,13 +963,17 @@ const struct group_opt_templ all_cmd_options[] = {
      "bypass and the --no-irep2-bodies escape hatch have been removed."},
     {"irep2-native-body",
      NULL,
-     "Experimental, default off (W1-loc spike Phase C, esbmc/esbmc#4715). "
-     "Route function bodies to an IREP2-native goto_convert that consumes "
-     "code_*2t directly and inherits the statement location onto value "
-     "operands at consumption, skipping the whole-body legacy round-trip. "
-     "Grown one statement kind at a time; any body containing an unsupported "
-     "construct falls back to the round-trip path, so flag-on is byte-"
-     "identical to flag-off until the native path is complete."}}},
+     "Deprecated no-op (accepted for backward compatibility). Function bodies "
+     "are routed to the IREP2-native goto_convert by default since the W1-loc "
+     "keystone concluded; --no-irep2-native-body opts out."},
+    {"no-irep2-native-body",
+     NULL,
+     "Convert function bodies through the whole-body legacy round-trip "
+     "instead of the IREP2-native goto_convert (esbmc/esbmc#4715). The native "
+     "path consumes code_*2t directly and inherits the statement location "
+     "onto value operands at consumption; a body containing an unsupported "
+     "construct falls back to the round-trip either way, so this is a "
+     "diagnostic escape hatch, not a semantic switch."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},
