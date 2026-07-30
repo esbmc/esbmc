@@ -6,7 +6,7 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0–M7 closed** (§15 verdict log); M8 not yet executed. §6.4
+**Status:** **M0–M7 closed, M8 partial** (§15 verdict log). §6.4
 records the tier-ordering rule M1 produced. Except where §15 records a
 discharged result, every harness below is a *proposal* and nothing here asserts
 a proof. Findings not marked discharged in §9.2 remain *hypotheses with cited
@@ -793,6 +793,10 @@ per-leg baselines. H-C7's four untriaged divergences carry to M8.
 Convert every historical goto-symex issue with a reproducer into a Tier-A or
 Tier-B case; start from the tree's own `KNOWNBUG` inventory. *Artefact:* a
 `regression/esbmc/symex_regressions/` index mapping issue → harness.
+**Partial, §15 M8.** All 27 goto-symex `KNOWNBUG`s surveyed and indexed; **9 of
+27 never reach a verdict on this toolchain**, so their KNOWNBUG status is
+uninformative. The index lives in §15 M8 rather than a new directory of copied
+tests. Root-causing the 12 unattributed wrong-verdict entries remains.
 
 Total ≈ 9 engineer-weeks for the verification track, plus ≈ 2 weeks for the
 ESBMC extension critical path (WI-1…WI-3, §13.6) running alongside it.
@@ -2184,6 +2188,63 @@ and `oracle_claim_parity.py`, all wired in `.github/workflows/symex-oracles.yml`
 with per-leg baselines. Carried forward: triage of H-C7's four untriaged
 divergences, and the 433 tests over the claim cap, which is a real coverage gap
 rather than a tuning choice — a test with 38 claims costs 40 runs.
+
+### M8 — 2026-07-30, M8 partial
+
+**Result: the goto-symex `KNOWNBUG` inventory surveyed and indexed. A third of it
+is uninformative on this toolchain — those tests pass without the documented bug
+being exercised at all, which is the mechanism, not an accident.**
+
+27 `KNOWNBUG` tests live in `regression/esbmc` (21) and `regression/esbmc-unix`
+(6). Running each with its own flags and classifying what actually happened:
+
+| Outcome | Count | What the KNOWNBUG status means |
+|---|---|---|
+| Wrong verdict | 16 | the documented defect, exercised — the useful inventory |
+| **`ERROR: PARSING ERROR`** | **7** | never reaches symex |
+| Crash (uncaught exception / SIGSEGV) | 2 | never reaches a verdict |
+| No verdict / timeout | 2 | one is R14's `SYMEX_INVARIANT` stop, by design |
+
+**`KNOWNBUG` passes when the output fails to match for *any* reason**, so a test
+that no longer parses stays green and says nothing about whether its defect
+survives. Nine of 27 (33 %) are in that state here. `fam_false_2` and
+`fam_true_4` are the clearest case: both fail on `main() {` — implicit `int`,
+which this Clang rejects — so neither reaches the flexible-array-member modelling
+they were written for. The M4 (H-B1) entry identified this hazard for R14's own
+pin; this measures it across the inventory. Caveat: the parse failures are
+toolchain-dependent (macOS/Clang here), so on CI some may parse and rejoin the
+useful 16 — the *masking* is what generalises, not the count.
+
+**Index.** Four of the 16 are this plan's own pins, each carrying the finding it
+documents; the rest are pre-existing and unattributed:
+
+| Test | Observed | Finding |
+|---|---|---|
+| `double_assign_check_local_array` | invariant stop | **R14** (I10 violated on a real input) |
+| `no_simplify_no_slice_huge_malloc` | SUCCESSFUL | **R17** (vacuous path, flag pair) |
+| `mpor_nested_deref_race` | SUCCESSFUL | **R18** (POR drops a race) |
+| `multi_property_smt_during_symex` | SUCCESSFUL | **R19** (per-property false PASSED) |
+| `03_inf2`, `github_1175_9`, `github_1175_11`, `github_159_postdecrement_fail`, `github_162_fail`, `github_1626-no-free`, `03_circular_reduce` | SUCCESSFUL, expected FAILED | unattributed — the missed-bug direction |
+| `40_stack_64_inner_scope_true`, `github_2572_2`, `github_426_2`, `github_426_3`, `github_426_4` | FAILED, expected SUCCESSFUL | unattributed — spurious counterexample |
+| `github_248` | UNKNOWN, expected SUCCESSFUL | unattributed |
+
+**One hypothesis tested and rejected.** `03_circular_reduce` is a concurrency test
+expecting FAILED that reports SUCCESSFUL, so R18 (POR pruning a racy
+interleaving) was the obvious suspect. It reports SUCCESSFUL under
+`--context-bound 2`, under `--no-por`, with both, and with neither — POR is not
+the cause and this does not extend R18. Recorded so the next reader does not
+re-run it.
+
+**Artefact deviation.** §10 asked for a `regression/esbmc/symex_regressions/`
+directory mapping issue → harness. Building it would mean copying 27 tests that
+already exist, creating two copies to keep in step; and the four pins this plan
+added already sit beside their subjects, which is the repo's own convention. The
+index above is the artefact instead.
+
+**Still open in M8.** The 12 unattributed wrong-verdict KNOWNBUGs are not yet
+root-caused, and the 9 masked ones need re-running on Linux before their status
+means anything. Neither is a Tier-A/Tier-B conversion in the §10 sense — the
+inventory turned out to need triage first.
 
 ---
 
