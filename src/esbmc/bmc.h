@@ -105,6 +105,10 @@ protected:
 
   int ltl_run_thread(symex_target_equationt &equation) const;
 
+  /// Log the least lattice outcome seen across every formula and map it onto
+  /// the process result, so an LTL verdict reaches the exit code (#6548).
+  smt_resultt report_ltl_outcome() const;
+
   /// \param truncated_loops how many loops exploration cut off at the
   ///   unwinding bound, carried in from the symex result rather than read back
   ///   from live state, which --schedule has already invalidated (#6423).

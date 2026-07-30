@@ -466,6 +466,14 @@ void bmct::show_program(const symex_target_equationt &eq)
 
 void bmct::report_trace(smt_resultt &res, const symex_target_equationt &eq)
 {
+  /* An --ltl run never builds runtime_solver: ltl_run_thread solves each
+   * lattice level with its own throwaway solver and returns before the shared
+   * one is created. There is no model here to render a trace from, and now
+   * that a violation maps to P_SATISFIABLE the arm below would dereference a
+   * null solver (#6548). */
+  if (options.get_bool_option("ltl"))
+    return;
+
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
@@ -1501,6 +1509,20 @@ void bmct::report_result(smt_resultt &res)
     return;
   }
 
+  /* The --ltl verdict is the four-valued bounded-trace outcome, already mapped
+   * by report_ltl_outcome(): ⊥ and ⊥ᵖ are violations, ⊤ᵖ and ⊤ hold, and
+   * LTL_UNKNOWN is off the lattice and proves nothing either way (#6548). */
+  if (options.get_bool_option("ltl"))
+  {
+    if (res == P_SATISFIABLE)
+      report_failure();
+    else if (res == P_UNSATISFIABLE)
+      report_success();
+    else
+      report_unknown();
+    return;
+  }
+
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
@@ -1749,30 +1771,47 @@ smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
   } while (symex->setup_next_formula());
 
   if (options.get_bool_option("ltl"))
-  {
-    // So, what was the lowest value ltl outcome that we saw?
-    if (ltl_results_seen[ltl_res_bad])
-      log_result("Final lowest outcome: LTL_BAD");
-    else if (ltl_results_seen[ltl_res_failing])
-      log_result("Final lowest outcome: LTL_FAILING");
-    else if (ltl_results_seen[ltl_res_succeeding])
-      log_result("Final lowest outcome: LTL_SUCCEEDING");
-    /* Checked before LTL_GOOD: ⊤ means every prefix assertion was proved
-     * unsatisfiable, which an inconclusive formula did not establish. */
-    else if (ltl_results_seen[ltl_res_inconclusive])
-      log_result("Final lowest outcome: LTL_UNKNOWN");
-    else if (ltl_results_seen[ltl_res_good])
-      log_result("Final lowest outcome: LTL_GOOD");
-    else
-    {
-      /* No formula yielded an outcome at all: the monitor was never
-       * instrumented, or main never reached the ltl2ba_finish_monitor call. */
-      log_warning("No LTL traces seen, apparently");
-      log_result("Final lowest outcome: LTL_UNKNOWN");
-    }
-  }
+    return report_ltl_outcome();
 
   return interleaving_failed > 0 ? P_SATISFIABLE : res;
+}
+
+smt_resultt bmct::report_ltl_outcome() const
+{
+  // So, what was the lowest value ltl outcome that we saw?
+  if (ltl_results_seen[ltl_res_bad])
+  {
+    log_result("Final lowest outcome: LTL_BAD");
+    return P_SATISFIABLE;
+  }
+  if (ltl_results_seen[ltl_res_failing])
+  {
+    log_result("Final lowest outcome: LTL_FAILING");
+    return P_SATISFIABLE;
+  }
+  if (ltl_results_seen[ltl_res_succeeding])
+  {
+    log_result("Final lowest outcome: LTL_SUCCEEDING");
+    return P_UNSATISFIABLE;
+  }
+  /* Checked before LTL_GOOD: ⊤ means every prefix assertion was proved
+   * unsatisfiable, which an inconclusive formula did not establish. */
+  if (ltl_results_seen[ltl_res_inconclusive])
+  {
+    log_result("Final lowest outcome: LTL_UNKNOWN");
+    return P_ERROR;
+  }
+  if (ltl_results_seen[ltl_res_good])
+  {
+    log_result("Final lowest outcome: LTL_GOOD");
+    return P_UNSATISFIABLE;
+  }
+
+  /* No formula yielded an outcome at all: the monitor was never instrumented,
+   * or main never reached the ltl2ba_finish_monitor call. */
+  log_warning("No LTL traces seen, apparently");
+  log_result("Final lowest outcome: LTL_UNKNOWN");
+  return P_ERROR;
 }
 
 void bmct::bidirectional_search(
