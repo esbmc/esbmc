@@ -845,18 +845,24 @@ is the only gate on the front-end.
   for the M1 review in `docs/safe-ld-sos-semantics.md` §10 — the two agree on Q
   and differ only above the preset, and the type bound is the over-approximating
   (so non-hiding) choice.
-- **Graphical path enumeration is exponential — now bounded, but not fixed.**
-  The resolver enumerates every simple rail-to-sink path, so cost grows as 2^N
-  in re-convergent parallel branches. It is now bounded at 100000 search steps
-  (~5000x the widest benchmark network, which peaks at 20), and exceeding the
-  bound is a hard error rather than a truncated path set. **The bound only makes
-  the blowup diagnosable; the algorithm is still exponential.** Measured: a
-  network of 18 fully-connected 2-wide stages — just 36 contacts — costs 112 s
-  of GOTO-creation time unguarded, versus 0.15 s to reject
-  (`graphical_path_explosion_fail`). 36 contacts is far below the 1000 rungs the
-  WP2 performance criterion targets at <5 s, so **that criterion is not merely
-  unmeasured, it is unreachable for re-convergent graphical networks** until the
-  enumeration is replaced by per-node power-flow accumulation, which is linear.
+- **Graphical path enumeration replaced by per-node accumulation.** The
+  resolver used to enumerate every simple rail-to-sink path, so cost grew as 2^N
+  in re-convergent parallel branches: 18 fully-connected 2-wide stages — just 36
+  contacts — cost 112 s of GOTO-creation time, and a search bound was needed to
+  reject such a program outright. It now computes
+  `pf(n) = (OR over preds p of pf(p)) AND cond(n)` once per node, which is
+  O(V+E), and the search bound is gone. The same 36-contact network resolves in
+  0.13 s (`graphical_wide_network_fail`), and GOTO creation is linear in
+  practice on fully re-convergent networks:
+
+  | contacts | 150 | 450 | 1050 | 2100 |
+  |---|---|---|---|---|
+  | GOTO creation | 0.33 s | 0.37 s | 0.76 s | 1.50 s |
+
+  This removes the resolver as the obstacle to the WP2 <5 s / 1000-rung
+  criterion — 1050 contacts now cost 0.76 s to lower. The criterion is stated
+  end-to-end, so the remaining cost is symex and the solver, which is where the
+  measurement should go next.
 - **Arithmetic and unknown blocks on a rung path** are still not modelled —
   only timers and counters are resolved on graphical paths — but they are now
   a hard `UnsupportedConstruct(name, tier=2)` error rather than a dropped path,
@@ -948,9 +954,8 @@ the undriven-sink and unsupported-block rejections and the enumeration bound.
 ### Suggested next increments
 
 1. Run the M1 review of `docs/safe-ld-sos-semantics.md` and close its §10 items.
-2. Replace rail-to-sink path enumeration with per-node power-flow accumulation.
-   The step bound now rejects wide networks instead of hanging, but a linear
-   resolver would verify them instead — and is what the WP2 <5 s / 1000-rung
-   criterion requires.
+2. Measure end-to-end `ld-verify` time against the WP2 <5 s / 1000-rung
+   criterion. The resolver is no longer the bottleneck, so what remains is
+   symex and the solver.
 3. Model arithmetic/unknown blocks on graphical rung paths, so the programs
    rejected as `UnsupportedConstruct` can be verified rather than refused.
