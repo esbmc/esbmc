@@ -9,6 +9,7 @@
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/expr/expr_util.h>
+#include <util/expr/type_byte_size.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <util/irep/migrate.h>
@@ -195,6 +196,21 @@ static bool is_pthread_sync_type(type2tc t)
   }
 
   return false;
+}
+
+/* Build the MPOR key for element `elem` of a lock array. Both the pointer
+ * path (which knows a byte offset) and a direct `m[i]` access (which knows an
+ * element index) funnel through here so the two produce the same key. */
+static expr2tc mpor_lock_array_key(const expr2tc &array, const BigInt &elem)
+{
+  const type2tc &subtype = to_array_type(array->type).subtype;
+  return index2tc(subtype, array, constant_int2tc(index_type2(), elem));
+}
+
+/* Is `e` an array of pthread sync objects that we key per element? */
+static bool is_lock_array(const expr2tc &e)
+{
+  return is_array_type(e->type) && is_pthread_sync_type(e->type);
 }
 
 /* Two MPOR keys conflict when they may name the same storage. A refined
@@ -886,10 +902,15 @@ void execution_statet::get_expr_globals(
            * unknown offset keeps the whole-array key, and
            * mpor_keys_may_alias pairs the refined and unrefined forms. */
           const expr2tc &off = to_object_descriptor2t(obj).offset;
-          if (
-            is_constant_int2t(off) && is_array_type(p->type) &&
-            is_pthread_sync_type(p->type))
-            p = index2tc(to_array_type(p->type).subtype, p, off);
+          if (is_constant_int2t(off) && is_lock_array(p))
+          {
+            /* The descriptor carries a byte offset; the key is an element
+             * index so that it matches the one a direct `m[i]` access
+             * builds. */
+            BigInt esize = type_byte_size(to_array_type(p->type).subtype, &ns);
+            if (esize > 0)
+              p = mpor_lock_array_key(p, to_constant_int2t(off).value / esize);
+          }
           /* Stop when the global symbol is found */
           if (point_to_global)
             break;
@@ -990,6 +1011,34 @@ void execution_statet::get_expr_globals(
     else
     {
       return;
+    }
+  }
+
+  /* A direct `m[i]` on a lock array: record the element. Falling through to
+   * the operand walk below would reach the bare array symbol and record the
+   * whole array, which re-conflates the elements the pointer path above took
+   * care to separate (#6480). */
+  if (is_index2t(expr))
+  {
+    const index2t &idx = to_index2t(expr);
+    if (is_symbol2t(idx.source_value) && is_lock_array(idx.source_value))
+    {
+      expr2tc src = idx.source_value;
+      get_active_state().get_original_name(src);
+      const symbolt *s = ns.lookup(to_symbol2t(src).thename);
+      expr2tc i = idx.index;
+      cur_state->rename(i);
+      simplify(i);
+      if (
+        s && (s->static_lifetime || s->get_type().is_dynamic_set()) &&
+        is_constant_int2t(i))
+      {
+        src = idx.source_value;
+        cur_state->top().level1.rename(src);
+        globals_list.insert(
+          mpor_lock_array_key(src, to_constant_int2t(i).value));
+        return;
+      }
     }
   }
 
