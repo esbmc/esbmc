@@ -609,7 +609,7 @@ two configurations.
 | ID | Relation | Corpus | Detects |
 |---|---|---|---|
 | **H-C1** | verdict(default) == verdict(`--no-slice`) | `regression/esbmc` CORE (1430 of 1574 dirs) | Slicer unsoundness/incompleteness end-to-end. **Run, §15 M5: 1328 agreed, 0 diverged**, 67 inconclusive, 35 skipped |
-| **H-C2** | verdict(default) == verdict(`--no-simplify`) | same | Simplifier / constant-propagation semantic drift (P9) |
+| **H-C2** | verdict(default) == verdict(`--no-simplify`) | same | Simplifier / constant-propagation semantic drift (P9). **Run, §15 M5: 1174 agreed, 11 diverged** — R16 (10, incompleteness) and R17 (1, false SUCCESSFUL composed with `--no-slice`) |
 | **H-C3** | verdict(bitwuzla) == verdict(z3) | same | Encoding assumptions that only one solver tolerates |
 | **H-C4** | verdict(default) == verdict(`--no-por`) and == verdict(`--state-hashing`) | `regression/esbmc-unix`, `regression/esbmc` concurrency tests | POR / state-hashing over-pruning (I14, I15) |
 | **H-C5** | verdict(default) == verdict(`--no-interval-symex-guard`) | `regression/esbmc`, `regression/k-induction` | Interval-domain guard pruning (the documented hazard at `symex_goto.cpp:57-79`) |
@@ -687,6 +687,8 @@ this document** — each is a prioritised target for the cited harness.
 | **R13** | **Medium (silent under-verification) — confirmed and fixed, §15 M2 (cont.)** | **`--unwindsetname` never matched a loop.** `unwind_func_set` was keyed by `user_name_to_usr(name)`, which appends a `#` terminator (clang's C++ USR spelling), while `loop_id_to_func_index` was keyed by the goto function-map id, which for a C function is `c:@F@f` with no terminator. The `count(unwind_key)` in `get_unwind` therefore always missed and the global `--unwind` silently won, so a user raising the bound for one function got the lower global bound and a verdict covering less than they asked for. A second defect in the same option: the `name:index:bound` field split scanned left-to-right, so the documented USR form (`c:@F@f#:0:11`) split inside the `c:` prefix. Neither was caught because all five `unwindsetname` regression tests ran without a global `--unwind` and so passed vacuously. | `goto_symext::goto_symext`, `symex_assign.cpp:66-120`; `get_unwind`, `symex_goto.cpp:525`; `user_name_to_usr`, `usr_utils.cpp:29` | `unit/goto-symex/unwind.test.cpp` (Tier B, discharged) | Fixed: both sides now key on the name `--show-loops` prints (`usr_to_user_name`), and the field split scans from the right. Three non-vacuous regression tests added; `unwindsetname_03_priority` corrected to the loop number the program actually has. |
 | **R14** | **Open (I10 violated on a real input)** — found by R5's repaired detector, §15 M4 | With `--double-assign-check` made to fail, `regression/esbmc/github_286_3` produces an equation that **defines one SSA name twice**: `…@F@getNumbers2@numbers2?1!0&0#1`, the L2 index 1 of a local array in a function that returns a dangling pointer to it. Two definitions of one name are two constraints `x#1 == e1` and `x#1 == e2` on the same variable; where the right-hand sides disagree the conjunction is unsatisfiable, which silently removes that path from the formula — the missed-bug direction. One input in ~900 swept. Not yet characterised: which two steps emit it, and whether the two right-hand sides can differ. | `symex_target_equationt::check_for_duplicate_assigns` under `--double-assign-check`; `regression/esbmc/double_assign_check_local_array` (KNOWNBUG) | H-B1 | Find the two emitting steps (the local's scope exit is the first suspect), then decide whether the second definition is a stale re-emission or a legitimate step that must take a fresh index. |
 | **R15** | **Low (reproducibility, latent collision)** — found by H-B2, §15 M4 (H-B2) | **Object numbering leaks across symex runs in one process.** `execution_statet::dynamic_counter` and `dereferencet::invalid_counter` are `static thread_local` and reset nowhere, so a second exploration in the same process names its objects from where the first stopped: the same program under the same options yields `symex_dynamic::dynamic_1_array` on the first run and `dynamic_2_array` on the second. The sibling `nondet_count` is a plain instance member the constructor zeroes, so the asymmetry is unintended rather than a design choice. The equation is therefore not a function of (program, options) alone. No wrong verdict follows — the names only need to be *fresh*, and monotonic counters are fresh — so this is a reproducibility defect, and objective 7's "byte-identical" wording is unachievable as stated. **Latent second-order risk:** `thread_local` means two threads each start at 0, so if symex is ever parallelised (§14.6) two threads would mint *colliding* object names into a shared context. | `execution_state.cpp:21`, `execution_state.h:583`; `dereference.cpp:23,538`, `dereference.h:281`; contrast `nondet_count` reset at `execution_state.cpp:104` | `unit/goto-symex/determinism.test.cpp` (Tier B, pinned) | Reset both counters per exploration — in `setup_for_new_explore`, **not** in the `execution_statet` constructor, which the reachability tree copies per interleaving and where a reset would mint colliding names. Expect churn in `test.desc` files whose expected output names a dynamic object; run the full corpus before landing. |
+| **R16** | **Medium (incompleteness under a non-default flag)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify` is not verdict-preserving: 10 corpus inputs where the default proves SUCCESSFUL and `--no-simplify` does not.** Nine report a spurious counterexample (`github_1174_{hex,lmod,oct,pass}`, `github_2341_3`, `github_2357_5`, `github_2566_1`, `github_785-2`, `realloc13`) and one returns UNKNOWN (`github_252`, under `--k-induction`). In every case the *default* leg matches the verdict the test's own `test.desc` expects, so the fault is in the `--no-simplify` configuration, not the default. Spot-confirmed on `github_2341_3`: `--no-simplify` reports a violated `assert(temp != NULL)` the default discharges. The noisy direction — P1 — but it means `do_simplify` is load-bearing for *correctness of the encoding*, not merely for formula size, which is not how an "optimisation" flag reads. | `oracle_flag_parity.py --b=--no-simplify` over `regression/esbmc` CORE | **H-C2** | Triage one input down to the expression shape the encoder mishandles unsimplified. Until then `--no-simplify` is a debugging aid, not a semantics-preserving flag. |
+| **R17** | **High (false SUCCESSFUL, non-default flag pair)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify --no-slice` misses a reachable `assert(0)`.** Three lines reproduce it: `void *b = malloc(-4); assert(0);` returns **`VERIFICATION SUCCESSFUL`**. Neither flag alone does this (both give FAILED), nor does a positive size, nor no allocation — so it is a **composition** defect, the class §7.4 says Tier C exists to catch. The negative size widens to a huge `size_t`; one VCC is generated and the solver returns UNSAT, so the path to the assertion is **vacuously infeasible** and every later assertion in such a program is silently unreachable. Reached in the corpus via `github_1631_compact`, whose `--compact-trace` sets `no-slice` implicitly (`command_line_options.cpp:410`) — that indirection is why the pair is easy to hit without naming it. | minimal reproducer above; `regression/esbmc/no_simplify_no_slice_huge_malloc` (KNOWNBUG, observed output `VERIFICATION SUCCESSFUL`) and `..._malloc` (CORE, positive size, passes today) | **H-C2** | Find which allocation-model constraint becomes contradictory unsimplified — the `__ESBMC_alloc_size` update and any size-overflow guard are the first suspects. Pinned, not fixed. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -756,8 +758,9 @@ there is no `phi.test.cpp`. H-B2 found R15 and refuted objective 7's
 **M5 — Constraint generation: the slicer (1 wk).** H-A4, H-B3, then the
 **H-C1** sweep over all 1430 `regression/esbmc` CORE tests. *Artefact:* slicer
 equisatisfiability suite + the first whole-corpus parity report.
-**Partial, §15 M5.** H-C1 is done — `oracle_flag_parity.py`, 1328 agreed, 0
-diverged — and it also covers H-C2/H-C3/H-C5 by argument. H-A4 and H-B3 remain;
+**Partial, §15 M5.** H-C1 (1328 agreed, 0 diverged) and H-C2 (1174 agreed, **11
+diverged** → R16, R17) are done via `oracle_flag_parity.py`, which also covers
+H-C3/H-C5 by argument. H-A4 and H-B3 remain;
 per §6.4, H-A4's obligations should be discharged at Tier B rather than
 transcribed. The scheduled CI job (§11.2) is not yet wired.
 
@@ -1759,6 +1762,61 @@ not be built as a Tier-A transcription: its A4.1 obligation *is* H-B3, and A4.2
 (no retained step reads a symbol defined only by an ignored step) and A4.3 are
 observable on the real sliced equation, so both belong at Tier B. The scheduled
 CI job of §11.2 is not yet wired, so D8 remains partial.
+
+### M5 (H-C2) — 2026-07-30
+
+**Result: 11 divergences, the fault in the `--no-simplify` leg in every one. One
+is a false SUCCESSFUL (R17); the other ten are spurious or absent verdicts
+(R16). The first real defects this plan's Tier C has produced.**
+
+| | |
+|---|---|
+| Relation | verdict(default) == verdict(default + `--no-simplify`) |
+| **agreed** | **1174** |
+| **diverged** | **11** |
+| inconclusive | 197 — 156 of them a timeout in the `--no-simplify` leg |
+| skipped | 48 |
+
+**Triage came almost free, and it is what makes the result actionable.** Each
+divergence was checked against the verdict its own `test.desc` expects, and in
+all 11 the *default* leg matches it. `--no-simplify` is therefore the faulty
+configuration in every case, and no default-configuration soundness bug is
+implied. Ten are R16 (nine spurious counterexamples, one UNKNOWN under
+`--k-induction`); one is R17.
+
+**R17 is the one that matters**, and no single flag exhibits it:
+
+| Configuration | Verdict on `void *b = malloc(-4); assert(0);` |
+|---|---|
+| default | FAILED ✓ |
+| `--no-slice` | FAILED ✓ |
+| `--no-simplify` | FAILED ✓ |
+| `--no-simplify --no-slice` | **SUCCESSFUL ✗** |
+
+A reachable `assert(0)` is missed: one VCC is generated and the solver returns
+UNSAT, so the path became vacuously infeasible. Minimised from
+`github_1631_compact` by dropping `--force-malloc-success` and the second
+allocation; a *positive* size does not reproduce, so the trigger is the negative
+size widening to a huge `size_t`. Pinned by
+`regression/esbmc/no_simplify_no_slice_huge_malloc` (KNOWNBUG) with a
+positive-size CORE companion, and not fixed — root-causing which allocation
+constraint turns contradictory is its own task.
+
+**One inference I made and had to retract**, recorded because it would have
+become a wrong bug report. The corpus reproducer needs `--compact-trace`, and I
+first read that as a *trace-formatting flag changing a verdict*, which would
+contradict §2.3's ranking of trace output as P3 and non-load-bearing for the
+verdict. Reading the option handling showed `--compact-trace` sets `no-slice`
+implicitly (`command_line_options.cpp:410`). §2.3's ranking stands; what the
+episode actually shows is that an output flag quietly enabling a *semantic* one
+makes flag-composition defects reachable without the user naming either.
+
+**H-C2's cost is the timeout tail, not the runs.** 156 of the 197 inconclusive
+are a timeout in the `--no-simplify` leg alone — unsimplified formulas are much
+harder, so the 15 s cap that suffices for H-C1 truncates ~11 % of this sweep.
+Those inputs are reported by name rather than folded into agreement, so the
+honest coverage figure is 1185 of 1382 compared, and a scheduled run should give
+this oracle a longer cap than its siblings.
 
 ---
 
