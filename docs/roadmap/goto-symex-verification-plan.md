@@ -6,7 +6,7 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0–M4 closed** (§15 verdict log); M5–M8 not yet executed. §6.4
+**Status:** **M0–M5 closed** (§15 verdict log); M6–M8 not yet executed. §6.4
 records the tier-ordering rule M1 produced. Except where §15 records a
 discharged result, every harness below is a *proposal* and nothing here asserts
 a proof. Findings not marked discharged in §9.2 remain *hypotheses with cited
@@ -571,7 +571,7 @@ inspect the produced `symex_target_equationt`.
 |---|---|---|---|
 | **H-B1** | **SSA well-formedness validator** (P8/P11, I10) | Walk `SSA_steps`: (a) every assignment `lhs` is a `symbol2t` at `level2`/`level2_global`; (b) no SSA name is defined twice — promote `check_for_duplicate_assigns` from `log_status` to a hard check (R5); (c) every symbol read is previously defined, a `nondet$`/`NULL`/`INVALID` free symbol, or a global; (d) guard symbols are defined before use | The entire class of stale-index / aliasing bugs. **Highest-value single artefact in this plan** — reusable as an assertion inside every other Tier-B test. |
 | **H-B2** | **Determinism** (P10) | Run symex twice in one process over the same program; compare the two equations step-for-step (kind, `crc` of `cond`, `guard`, `ignore`). **Qualified, §15 M4 (H-B2)**: strict equality holds only for programs creating no dynamic/invalid object; elsewhere the comparison must canonicalise object numbering (R15) | Iteration-order nondeterminism over pointer-keyed containers (`std::set<expr2tc>` in `thread_last_reads/writes`; the `generate_l2_state_hash` comment already concedes cross-run instability) |
-| **H-B3** | **Slicer equisatisfiability** (P0, I11) | Build equation; clone; slice the clone; solve both per-claim with the real backend; assert identical per-claim verdicts on ≥ 30 small programs incl. arrays with symbolic indices | Slicer unsoundness on real formulas — the honest complement to H-A4 |
+| **H-B3** | **Slicer equisatisfiability** (P0, I11) | Build equation; clone; slice the clone; solve both per-claim with the real backend; assert identical per-claim verdicts on ≥ 30 small programs incl. arrays with symbolic indices. **Discharged by H-C1 instead, §15 M5 (H-A4/H-B3)**: 1328 corpus inputs at 0 divergences beats 30 programs; the per-claim residue moves to H-C7 | Slicer unsoundness on real formulas — the honest complement to H-A4 |
 | **H-B4** | **Renaming round-trip** (I3/I4) | For each `SSA_stept`, `get_original_name` of `lhs` equals the L0 symbol; `rename` is idempotent; the level never decreases along the step list | `fixup_renamed_type` / `rename_address` regressions |
 | **H-B5** | **Phi laws** (I8) | For 2-branch programs: the set of *program variables* receiving a phi == the set written by at least one arm; **zero** phi for untouched variables. **Corrected, §15 M4 (H-B5)**: this row originally said "written *differently* in both", which the code does not do — `phi_function` filters on the L2 index differing, not the value | Over- and under-generation of phi nodes |
 | **H-B6** | **Value-set merge monotonicity** (I9) | After `merge_value_sets`, assert the result ⊇ both inputs (using `value_sett` API) | An accidental intersection — a silent unsoundness |
@@ -758,9 +758,10 @@ there is no `phi.test.cpp`. H-B2 found R15 and refuted objective 7's
 **M5 — Constraint generation: the slicer (1 wk).** H-A4, H-B3, then the
 **H-C1** sweep over all 1430 `regression/esbmc` CORE tests. *Artefact:* slicer
 equisatisfiability suite + the first whole-corpus parity report.
-**Partial, §15 M5.** H-C1 (1328 agreed, 0 diverged) and H-C2 (1174 agreed, **11
-diverged** → R16, R17) are done via `oracle_flag_parity.py`, which also covers
-H-C3/H-C5 by argument. H-A4 and H-B3 remain;
+**Closed, §15 M5.** H-C1 (1328 agreed, 0 diverged) and H-C2 (1174 agreed, **11
+diverged** → R16, R17) via `oracle_flag_parity.py`, which also covers H-C3/H-C5
+by argument; H-A4's A4.2 at Tier B in `unit/goto-symex/slice.test.cpp`; H-B3's
+equisatisfiability via H-C1, with the per-claim residue passed to H-C7. H-A4 and H-B3 remain;
 per §6.4, H-A4's obligations should be discharged at Tier B rather than
 transcribed. The scheduled CI job (§11.2) is not yet wired.
 
@@ -1817,6 +1818,70 @@ harder, so the 15 s cap that suffices for H-C1 truncates ~11 % of this sweep.
 Those inputs are reported by name rather than folded into agreement, so the
 honest coverage figure is 1185 of 1382 compared, and a scheduled run should give
 this oracle a longer cap than its siblings.
+
+### M5 (H-A4 / H-B3) — 2026-07-30, M5 closed
+
+**Result: the slicer's closure obligation is discharged against the real
+`symex_slicet`. No defect found — and the first version of the harness could not
+have found one, which mutation testing is the only reason I know.**
+
+New file `unit/goto-symex/slice.test.cpp`, 5 cases, 141 assertions. Per §6.4,
+H-A4 was **not** built as the Tier-A transcription §7.1 specified: A4.2 is
+entirely observable on the equation the real slicer rewrites, so transcribing
+`symex_slicet` would add drift risk (§9.1) to verify a copy. This is the third
+harness to take that route after H-A1 (M1) and H-A2/H-A3 (M2); §7.1's Tier-A
+entries should now be read as obligations, not as prescribed implementations.
+
+| Case | Property |
+|---|---|
+| `the slicer keeps every definition it still reads` | A4.2 on straight-line code |
+| `closure survives a branch and a join` | A4.2 across phi nodes |
+| `closure survives a call and an unwound loop` | A4.2 across frames and 4 unwindings |
+| `closure survives constant array indices` | A4.2, and the dead-store elision fires |
+| `a symbolic array index disqualifies the array` | no store elided when the read index is unknown |
+
+**The harness was blind in its first version, and passed anyway.** The slicer
+discards information *two* ways: setting `step.ignore`, and rewriting an
+assignment's `cond` to `lhs == src` so a dead array store encodes the identity.
+Version one audited only `ignore` flags, so deleting the `array_disqualified`
+consultation in `slice.cpp` — §7.1's prescribed twin for this very harness —
+left every `ignore` flag unchanged and **all five cases still passed**. A
+`store_elided` predicate comparing each assignment's `cond` against
+`equality2tc(lhs, rhs)` closed the hole, and the twin now fails the
+symbolic-index case. Generalising: where a component has more than one mechanism
+for discarding information, a harness keyed on one of them looks like coverage
+and is not.
+
+**Input vacuity, caught the same way.** The assertions were first written
+`x == x`, which folds to `true` before the slicer runs, so the assert read
+nothing, the read set was empty, and closure held for free. Rewritten as
+`x != 424242`. This is the trap the M4 (H-B4) entry recorded for phi arms, now
+hit in a second harness, so it is worth a standing rule: an assertion written to
+be trivially true is usually also trivially *unread*.
+
+**Mutation testing.** Removing the `array_disqualified` consultation fails the
+symbolic-index case and only it. Over-slicing every fifth assignment
+(`|| ++mut % 5 == 0` on the tracked-lhs test) fails 3 cases via
+`dangling_reads`. Every case also requires `ignored > 0`, `retained > 0` and
+`live_reads > 0`, so neither an inert slicer nor an unread equation can pass.
+
+**H-B3's equisatisfiability obligation is discharged by H-C1, not by this file.**
+§7.2 asked for per-claim solver verdicts over "≥ 30 small programs"; H-C1
+compared whole-run verdicts with and without slicing over **1328** real corpus
+inputs at 0 divergences, which is the stronger corpus. What H-C1 does not give is
+*per-claim* granularity: a compensating pair of claim-level divergences within
+one run would cancel. Closing that is exactly H-C7's `--multi-property`
+comparison, so the residue is passed there rather than claimed here.
+
+**M5 closed** — H-C1, H-C2, H-A4 (at Tier B) and H-B3 (via H-C1, per-claim
+residue to H-C7). R16 and R17 are pinned, not fixed. D8 stays partial: the §11.2
+scheduled job is still unwired, which is the one thing keeping these oracles from
+running unasked.
+
+The `symex_run::equation` fixture added for H-B2 is now shared with this file
+(`unit/goto-symex/symex_run.h`), so the two harnesses that own an equation rather
+than live state share one copy. The five-file `engine` consolidation recorded in
+M4 (H-B2) is still owed, still blocked on the same conflict.
 
 ---
 
