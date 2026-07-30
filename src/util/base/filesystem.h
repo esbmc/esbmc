@@ -104,8 +104,8 @@ public:
 
   const std::string &path() const noexcept;
 
-  tmp_path &keep(bool yes) &noexcept;
-  tmp_path &&keep(bool yes) &&noexcept;
+  tmp_path &keep(bool yes) & noexcept;
+  tmp_path &&keep(bool yes) && noexcept;
 };
 
 /**
@@ -161,12 +161,25 @@ tmp_path create_tmp_dir(const std::string &format = "esbmc.%%%%-%%%%-%%%%");
 
 /**
  *  @brief Creates all folders needed for a path
- * 
+ *
  * std::ofstream will not create folders needed for a
  * complete path. This will generate the folder and the file
  * contents
  */
 void create_path_and_write(const std::string &path, const char *s, size_t n);
+
+/**
+ * @brief The register_*() registries below are process-global and
+ *        unsynchronised.
+ *
+ * Each only appends; the reader is named with the registry. Registration must
+ * be complete before that reader can run, and nothing makes a write safe
+ * against a reader observing it half-done -- for the two consumed from signal
+ * handlers, that means a signal landing mid-call.
+ */
+
+/** @brief Temporary paths, read by cleanup_registered_tmps() from the signal
+ *         handlers, which run before exit() reaches any destructor. */
 void register_tmp_for_cleanup(const std::string &path);
 void cleanup_registered_tmps();
 
@@ -191,18 +204,17 @@ void kill_registered_pgroups();
  * @brief ESBMC's filesystem: files bundled into the binary, overlaid on the
  *        real one.
  *
- * Every file scripts/flail.py bundles is registered here at startup under a
- * path below ESBMC_VFS_ROOT, costing nothing but a map entry -- the bytes stay
- * in .rodata. Lookups resolve by path: the registry first, the real filesystem
- * on a miss. Callers therefore need not know, and cannot tell, which of the
- * two answered.
+ * Every file scripts/flail.py bundles is registered here under a path below
+ * ESBMC_VFS_ROOT. Lookups resolve by path: the registry first, the real
+ * filesystem on a miss. Callers therefore need not know, and cannot tell,
+ * which of the two answered.
  *
  * Bundled files still have to be written out for anything ESBMC cannot reach
  * into: a forked python3 or solc has its own address space and can only read
  * real files. materialize() serves those.
  *
- * Registration is unsynchronised and must complete before any concurrent
- * read; calling the modules' register_bundled() from main() satisfies that.
+ * The readers are read() and list(). ESBMC main() registers up-front. c2goto
+ * has its own main() and doesn't register upfront, but on access.
  */
 class filesystemt
 {
