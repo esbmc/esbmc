@@ -2,6 +2,7 @@
 #include <pugixml.hpp>
 #include <algorithm>
 #include <cassert>
+#include <cerrno>
 #include <cctype>
 #include <cstdlib>
 #include <iostream>
@@ -388,19 +389,18 @@ literal_to_ticks(const std::string &text, unsigned interval_ms, long long &out)
     return true;
   }
 
-  try
-  {
-    size_t consumed = 0;
-    const long long v = std::stoll(text, &consumed);
-    if (consumed == 0)
-      return false;
-    out = v;
-    return true;
-  }
-  catch (const std::exception &)
-  {
+  // Validate rather than convert-and-catch. A non-numeric preset — a data pin
+  // wired to a named variable, or an unparsable <initialValue> — used to
+  // terminate the process on std::stoll's std::invalid_argument despite the
+  // catch that was here, leaving both callers' fallback paths unreachable.
+  // Parsers should not route ordinary "not a number" input through exceptions.
+  errno = 0;
+  char *end = nullptr;
+  const long long v = std::strtoll(text.c_str(), &end, 10);
+  if (end == text.c_str() || errno == ERANGE)
     return false;
-  }
+  out = v;
+  return true;
 }
 
 // The FB type table is shared between the textual rung parser and the

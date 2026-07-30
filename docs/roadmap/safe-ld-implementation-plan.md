@@ -10,7 +10,7 @@
 > `response` property), and — beyond the original Tier-1 scope — user-defined
 > function-block bodies, REAL/analog process variables, and an optional
 > scan-watchdog all now lower to GOTO IR and verify end-to-end (see §10). The
-> suite under `regression/ld/` has grown to 28 CTest cases, plus 10 for the
+> suite under `regression/ld/` has grown to 33 CTest cases, plus 10 for the
 > `ld-verify` runner, and CI now actually runs them. All four curated
 > benchmarks have validated verdicts and are wired as regression tests. The WP1
 > SOS specification exists as `docs/safe-ld-sos-semantics.md`; its independent
@@ -572,7 +572,7 @@ all 20 programs pass semantic review; spec reviewed against IEC 61508 §7.
 | T2.1 Parser & Semantic Analyser | PLCopen XML parser; AST; type checker; SOS consistency check | M3 (Month 6): parser handles all WP1 SOS constructs | skeleton landed (#5280); extended with user-FB-body and REAL/analog parsing (#5620) |
 | T2.2 GOTO IR Generator & Property Encoder | LdIR; `ld_converter` (irep2); YAML parser; property encoder (`code_assertt`) | M4 (Month 9): IR generator correct on all benchmark programs | boolean subset + timers/counters/`response` all lower and verify (#5289); ST→`codet` FB-body translator + numeric↔Boolean coercion (#5620); graphical resolver now models FB blocks, edge contacts, parallel-path OR and network feedback; all four benchmark verdicts validated (§10) |
 | T2.3 ESBMC Integration & ld-verify | `ld_languaget`; CMake wiring; ld-verify CLI; JSON report | M5 (Month 12): end-to-end pipeline ready | `--ld-props` wired + JSON report (#5289); `ld-verify` runner implemented, driving `esbmc` (#5294); `--ld-fault-injection`, `--ld-sound-mode`, `--ld-scan-watchdog`/`--ld-scan-budget` driver flags added (#5294, #5620) |
-| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 28 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic) + 10 `ld-verify` runner tests, all run by CI; line-coverage target not yet measured |
+| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 33 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic) + 10 `ld-verify` runner tests, all run by CI; line-coverage target not yet measured |
 
 **Success criteria (WP2):**
 - **Correctness:** ≥95% of benchmark programs translated to GOTO IR with semantic
@@ -790,7 +790,7 @@ prose in §3 is not mistaken for delivered functionality.
   pinned as `esd_manual_reset_fail`, with the corrected program as
   `emergency_shutdown_safe`. The conveyor's failure was a `response` property
   whose bound ignored a free `Stop_Button` input, plus the unparsed preset.
-- **Regression suite `regression/ld/`** now holds **28 CTest cases** (guarded by
+- **Regression suite `regression/ld/`** now holds **33 CTest cases** (guarded by
   `ENABLE_LD_FRONTEND`, with the `benchmarks/` dataset excluded from CTest —
   `regression/CMakeLists.txt`), covering all five property kinds plus
   fault-injection, user-FB, watchdog, REAL-arithmetic, and the `stairs_light` /
@@ -818,7 +818,7 @@ requests as well as pushes touching `src/ld-frontend/`, `tools/ld-verify/`,
 `regression/ld/` or `unit/ld-frontend/`:
 
 - `regression-ld` builds with `BUILD_TESTING=On` / `ENABLE_REGRESSION=On` and
-  runs `regression/ld/` (28 cases), the `ld-verify` runner suite (10 cases) and
+  runs `regression/ld/` (33 cases), the `ld-verify` runner suite (10 cases) and
   the three LD unit binaries.
 - `build-linux-amd64` builds the release binary, smoke-tests that it advertises
   `--ld-props`, and publishes it as an artifact.
@@ -868,6 +868,17 @@ is the only gate on the front-end.
   silently vanished (`graphical_unsupported_block_fail` pins this).
 - **Counter reset from a contact chain** is diagnosed and left unconnected;
   only a reset pin wired to a variable is modelled.
+- **Non-numeric presets used to terminate the process.** `literal_to_ticks`
+  converted with `std::stoll` and relied on catching `std::invalid_argument`, but
+  the catch did not fire: a block data pin wired to a named variable via
+  `<inVariable>`, or an unparsable `<initialValue>`, aborted ESBMC with an
+  uncaught exception. Both of the callers' fallback paths — the identifier
+  reference in `resolve_data_pin` and the "unrecognised initial value" warning in
+  `parse_var_decl` — were therefore unreachable. It now validates with `strtoll`
+  and errno instead of converting and catching; `ld_preset_named_pin_safe` and
+  `graphical_timer_path_fail` pin the two paths. Why the handler was skipped is
+  not established, so the same convert-and-catch pattern elsewhere in ESBMC
+  (~20 `std::sto*` call sites, several on user input) should not be assumed safe.
 
 ### Validation beyond the regression suite
 
@@ -892,10 +903,27 @@ python3 scripts/ld_resolver_oracle.py 30 4 sp        # series-parallel
 python3 scripts/ld_resolver_oracle.py 20 3 dag 4 3   # re-convergent DAG
 ```
 
-It does not yet cover function blocks on a rung path, edge contacts, feedback
-variables, or Set/Reset coils — those are still covered only by `stairs_light`
-and the driver tests, and extending the oracle to them is a prerequisite for
-trusting a resolver rewrite.
+The oracle cannot be extended to stateful constructs, and this is a property of
+the property language rather than an omission: the edge/feedback shadow update is
+emitted *before* the scan-boundary assertion, so a previous-scan value is not
+observable where properties are checked (`__edge_prev_a == a` there), and the
+expression grammar has no temporal operators. So `q <=> f(inputs, prev)` is not
+expressible.
+
+Stateful constructs are therefore pinned by **discriminating reachability
+tests** instead: a state that is reachable under the intended semantics and
+provably unreachable under the plausible wrong one. `edge_rising_fail` /
+`edge_falling_fail` assert that `a && !q` / `!a && q` are reachable, and
+`edge_level_safe` proves both unreachable for a plain contact — so a resolver
+that ignored the `edge` attribute again (as one did before #6378) flips all
+three. `graphical_timer_path_fail` does the same for a timer on a graphical rung
+path, which the enumerating resolver handles by cutting the path at the block and
+resuming from its Q pin.
+
+Still thin: Set/Reset coils and multi-coil networks are covered only inside the
+whole-program benchmarks (`esd`, `stairs_light`, `water_control`), and the
+textual-`<rung>` tests (`counter_*`, `function_blocks_*`, `userfb_*`) bypass the
+graphical resolver entirely, so they are not cover for it.
 
 ### Suggested next increments
 
