@@ -6,7 +6,7 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0–M7 closed, M8 partial** (§15 verdict log). §6.4
+**Status:** **M0–M8 closed** (§15 verdict log) — every milestone executed. §6.4
 records the tier-ordering rule M1 produced. Except where §15 records a
 discharged result, every harness below is a *proposal* and nothing here asserts
 a proof. Findings not marked discharged in §9.2 remain *hypotheses with cited
@@ -796,10 +796,12 @@ per-leg baselines, all of which are now triaged and cited.
 Convert every historical goto-symex issue with a reproducer into a Tier-A or
 Tier-B case; start from the tree's own `KNOWNBUG` inventory. *Artefact:* a
 `regression/esbmc/symex_regressions/` index mapping issue → harness.
-**Partial, §15 M8.** All 27 goto-symex `KNOWNBUG`s surveyed and indexed; **9 of
+**Closed, §15 M8.** All 27 goto-symex `KNOWNBUG`s surveyed and indexed; **9 of
 27 never reach a verdict on this toolchain**, so their KNOWNBUG status is
 uninformative. The index lives in §15 M8 rather than a new directory of copied
-tests. Root-causing the 12 unattributed wrong-verdict entries remains.
+tests. All 13 wrong-verdict entries are now attributed: six are genuine defects
+(R20, R21, R22), two are wrong tests, three belong to other subsystems, one rests
+on an unshared premise, and `03_circular_reduce` remains unexplained.
 
 Total ≈ 9 engineer-weeks for the verification track, plus ≈ 2 weeks for the
 ESBMC extension critical path (WI-1…WI-3, §13.6) running alongside it.
@@ -2475,6 +2477,54 @@ rests on an unshared premise, and one was tested against a candidate cause and
 rejected. That distribution — a third genuine defects, a third mis-scoped or
 mis-specified — is the useful output of the survey, and it is not visible from
 the `KNOWNBUG` label alone.
+
+### M8 (cont. 5) — 2026-07-30, M8 closed
+
+**Result: the last KNOWNBUGs classified. Every wrong-verdict entry in the
+goto-symex inventory now has a cause or a reason it is not one. Also a
+correction: the population was 13, not the 12 quoted in earlier entries.**
+
+**Count correction.** The survey found 16 wrong-verdict KNOWNBUGs, of which
+**three** are this plan's own pins (`no_simplify_no_slice_huge_malloc`,
+`mpor_nested_deref_race`, `multi_property_smt_during_symex`) — not four.
+`double_assign_check_local_array` is a no-verdict entry, the `SYMEX_INVARIANT`
+stop, and was miscounted with the pins. So 13 pre-existing entries needed
+attribution, and the "12" in the M8 (cont.) through (cont. 4) entries is wrong.
+
+**`03_inf2` — a wrong test.** Its two assertions sit inside
+`if (st1 -> z > 0)`, and `st1` comes from `st_alloc(a, b)` with `a, b > 0`
+assumed, which takes the branch setting `t -> z = NULL`. The guard is therefore
+false and both assertions are unreachable, so SUCCESSFUL is right. Swapping the
+call to `st_compact(st2, st1)` — `st2` is the allocation whose `z` is non-null —
+makes it FAILED, confirming the assertions are live only in the other argument
+order.
+
+**`github_2572_2` — solver encoding, Tier D.** Under `--z3 --ir` it violates
+`0 + f == f` (`IEEE_ADD((double)0, f) == f`, line 14) with NaN and infinity both
+assumed away. The identity holds in IEEE-754 for every remaining value including
+negative zero, so the counterexample is spurious — but it comes from the
+integer/real encoding in `src/solvers`, which §14.3 places outside this plan.
+
+**M8 closed.** Final disposition of the 13:
+
+| outcome | count | entries |
+|---|---|---|
+| real defect, reproducer filed | 2 | R20 (#6544) ×2 |
+| real defect, reproducer filed | 3 | R21 (#6545) ×3 |
+| real defect, pinned unfiled | 1 | R22 |
+| wrong test | 2 | `github_159_postdecrement_fail`, `03_inf2` |
+| another subsystem | 3 | library model, k-induction, solver `--ir` |
+| unshared premise | 1 | `40_stack_64_inner_scope_true` |
+| candidate cause tested and rejected, still unexplained | 1 | `03_circular_reduce` |
+
+Six of 13 are genuine defects; five are mis-scoped, mis-specified or belong to
+another subsystem. That ratio is the survey's real output: acting on "fix the
+KNOWNBUGs" without triage would have spent roughly half the effort on tests that
+should be rewritten or retired, or on subsystems this plan does not cover.
+
+`03_circular_reduce` is the one honest loose end — a concurrency test expecting
+FAILED that reports SUCCESSFUL under `--context-bound 2`, with and without
+`--no-por`, so R18 does not explain it and nothing else has been tried.
 
 ---
 
