@@ -6,8 +6,7 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0–M5 closed, M6 partial** (§15 verdict log); M7–M8 not yet
-executed. §6.4
+**Status:** **M0–M6 closed** (§15 verdict log); M7–M8 not yet executed. §6.4
 records the tier-ordering rule M1 produced. Except where §15 records a
 discharged result, every harness below is a *proposal* and nothing here asserts
 a proof. Findings not marked discharged in §9.2 remain *hypotheses with cited
@@ -679,7 +678,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R3** | **Medium (soundness) — re-characterised, §15 M1** | `make_assignment` holds `valuet &entry` — a reference **into** `current_names` (`std::unordered_map`) — across the virtual call `rename(lhs_symbol, entry.count + 1)`, which reaches `coveredinbees` and performs `current_names[key]`. This is safe *only because* the recomputed key is identical (the symbol is still L1 at that point, as `make_assignment` sets `symbol.rlevel` only *after* the call), so `operator[]` finds rather than inserts. **The invariant is unasserted.** The originally-hypothesised consequence — rehash ⇒ dangling `entry` ⇒ use-after-free — **does not hold**: [unord.req.general]/9 states rehashing "does not invalidate pointers or references to elements", and only erasing an element invalidates references to it, which `coveredinbees` never does. The real consequence of a re-keying callee is a **correctness** one: `coveredinbees` would bump a different entry, `make_assignment` would then publish the caller's *stale* `entry.count`, and two distinct program values would share an SSA name — an I1/I10 violation, silently unsound. | `renaming::level2t::make_assignment`; `::coveredinbees`; comment "This'll update entry beneath our feet"; [unord.req.general]/9 | `unit/goto-symex/renaming.test.cpp` (Tier B, discharged) | Severity downgraded from memory safety to soundness. The invariant still deserves an assertion — promote to `SYMEX_INVARIANT` with R1 (M3). No restructure needed: re-`find`ing after the call would buy nothing the standard does not already give. |
 | **R4** | **Medium (crash → no verdict)** | **Eight unchecked `*ns.lookup(...)` dereferences.** `namespacet::lookup` returns `nullptr` on miss (as `renaming.cpp:15-21` itself demonstrates by checking). A miss ⇒ null deref ⇒ SIGSEGV mid-verification. `phi_function`'s site is the most exposed: it filters only `goto_symex::guard!` and `symex::invalid_object` before looking up an arbitrary merged variable's base name. | `symex_goto.cpp:433`; `symex_function.cpp:159`; `symex_valid_object.cpp:47`; `dynamic_allocation.cpp:66,92,105,118,143` | H-A10 | Add checked lookups with a diagnostic (`log_error` + controlled abort) or prove the precondition per site and record it as a cited comment. |
 | **R5** | **Medium (soundness detector disabled)** — discharged, §15 M4 | `check_for_duplicate_assigns` — the *only* in-tree checker for the core SSA invariant I10 — merely `log_status`es duplicates and then reports "Checked N insns". It never fails, and nothing calls it in a normal run. | `symex_target_equationt::check_for_duplicate_assigns`, `symex_target_equation.cpp` | H-B1 | Turn it into a validator returning a bool; run it under a debug/CI flag over the whole regression corpus. |
-| **R6** | **Medium (unsound pruning, opt-in flag)** | `state_hashing_level2t::make_assignment` keys `current_hashes` by the **L0** original name, acknowledged in-code ("XXX — consider whether to use l1 names instead. Recursion, reentrancy."). Two states that differ only in the L1 activation of a recursive local therefore fingerprint identically ⇒ `hit_hashes` prunes a genuinely different state ⇒ missed interleaving. Severity is bounded by `--state-hashing` being opt-in. | `execution_state.cpp:~1342-1378`; `reachability_treet::hit_hashes`, `reachability_tree.h:352` | H-A8-style model + **H-C4** | Key by the L1 name record; H-C4 parity sweep quantifies the current gap. |
+| **R6** | **Medium (unsound pruning, opt-in flag) — mechanism pinned, no witness, §15 M6 (cont.)** | `state_hashing_level2t::make_assignment` keys `current_hashes` by the **L0** original name, acknowledged in-code ("XXX — consider whether to use l1 names instead. Recursion, reentrancy."). Two states that differ only in the L1 activation of a recursive local therefore fingerprint identically ⇒ `hit_hashes` prunes a genuinely different state ⇒ missed interleaving. Severity is bounded by `--state-hashing` being opt-in. | `execution_state.cpp:~1342-1378`; `reachability_treet::hit_hashes`, `reachability_tree.h:352` | H-A8-style model + **H-C4** | Key by the L1 name record (or mix call-stack depth into `generate_hash`). The unproven step is the "equal fingerprints are bisimilar" claim at `reachability_tree.cpp:420`: the fingerprint omits call-stack depth, so two states at one pc with equal L0→value maps but different recursion depths collide while resuming into different continuations. H-C4's state-hashing leg is clean (255/0) and four targeted programs produced no verdict-changing prune, so a witness must make the bug reachable *exclusively* behind the colliding state — that construction is the open task. |
 | **R7** | **Low–Medium (UB) — refined, §15 M1** | `previous_frame()` computes `*(--(--call_stack.end()))` with no size check. `call_stackt` is a `std::vector<framet>`, so at size 1 this evaluates `--begin()`, forming a pointer before the start of the array — undefined by [expr.add]/4 **whether or not it is dereferenced**, not merely a bad read. The second clause of the original finding ("returns a reference a subsequent `pop_frame` invalidates") does **not** hold: `pop_back` invalidates only the reference to the erased last element, and `previous_frame` returns the second-to-last. The precondition holds today by construction — the sole call site does `new_frame(...)` on the preceding line — but nothing states it in the shipped binary (R1). | `goto_symex_statet::previous_frame`; sole caller `goto_symext::symex_function_call_code`; [expr.add]/4 | `unit/goto-symex/frame_lifecycle.test.cpp` (Tier B, discharged) | Add a release-checked precondition **as part of R1's `SYMEX_INVARIANT` work in M3**, so the macro lands once with its cost measured; index (`call_stack[size() - 2]`) rather than decrementing an iterator. |
 | **R8** | **Medium (documented model gap)** | `is_valid_object` returns `false` for **every** non-static, non-dynamic symbol: the stack-scope branch is `#if 0`'d out with "XXX re-enable to be able to check for stack-var-out-of-scope problems". Stack-object validity is therefore not modelled, and `dynamic_allocation.cpp` compensates by *assuming* `invalid_pointer` applies only to dynamic objects ("we never update `__ESBMC_alloc` for stack ptrs"). Net effect on stack-lifetime bugs (use-after-scope) is a **missed-bug** direction. | `goto_symext::is_valid_object`, `symex_valid_object.cpp:85-118`; `dynamic_allocation.cpp:110-116` | H-A10 + a targeted `regression/esbmc` use-after-scope corpus | Quantify with a dedicated corpus before attempting a fix; the fix is a model change, not a patch. |
 | **R9** | **Low–Medium (approximation direction unproven)** | Three documented "sound over-approximation" claims are unproven: value-set filtering after a pointer havoc (`symex_assign.cpp:~550-570`), the non-scalar uninterpreted-function fallback (`symex_function.cpp:~410-430`), and the function-pointer target enumeration over an over-approximated value set (`symex_function.cpp:~766`). Each *argues* the direction in a comment; none is checked. | cited lines | H-B6 + H-C1/H-C3 | For each, state the claim as a checkable predicate and add a Tier-B assertion (e.g. filtered set ⊆ original **and** the dropped entries are `unknown`/`invalid` only). |
@@ -771,11 +770,14 @@ transcribed. The scheduled CI job (§11.2) is not yet wired.
 investigation (pointer-mediated writes in `get_expr_globals`). Highest
 uncertainty — budget for the answer being "there is a real gap". *Artefact:* MPOR
 relation proof + POR/state-hashing parity report + an R11 verdict.
-**Partial, §15 M6.** H-C4 run (258/0 and 255/0). R11 answered and **superseded by
+**Closed, §15 M6.** H-C4 run (258/0 and 255/0). R11 answered and **superseded by
 R18**: a confirmed default-configuration false SUCCESSFUL where POR prunes a race
-reached through a nested dereference. H-A6's A6.2 is discharged by that
-counterexample at Tier B — the specced Tier-A model would have passed. A6.1,
-A6.3, A6.4 and R6 remain open.
+reached through a nested dereference. A6.2 is refuted by that counterexample at
+Tier B — the specced Tier-A model would have passed it. A6.1 and A6.3 discharged
+by inspection. **Carried forward: A6.4** (the active-row reset in
+`calculate_mpor_constraints`) **and R6**, whose unproven step is now pinned to the
+bisimilarity comment at `reachability_tree.cpp:420` with a stated witness
+requirement.
 
 **M7 — End-to-end scenarios and regression pinning (1 wk).** H-C2, H-C3, H-C5,
 H-C6, H-C7 wired as a scheduled CI job; H-B8. *Artefact:* the oracle job + a
@@ -1959,6 +1961,69 @@ have no harness; only A6.2 was exercised, and by counterexample. R6
 recursive-local shape — H-C4's clean state-hashing leg does **not** discharge it.
 No `--no-mpor` flag exists, so `--no-por` cannot separate MPOR pruning from the
 rest of POR; attributing R18 to MPOR rests on the code path, not on a flag.
+
+### M6 (cont.) — 2026-07-30, M6 closed
+
+**Result: A6.1 and A6.3 discharged by inspection, A6.4 left open with the
+suspect operation named, and R6 advanced from a hypothesis about
+`make_assignment` to a named unproven claim plus a stated witness requirement —
+recorded as a negative result, since no witness was found.**
+
+**A6.1 (symmetry) — discharged by inspection, no harness built.** Every clause of
+`mpor_keys_may_alias` is symmetric in its arguments (`a == b`, then
+`is_index2t(a) == is_index2t(b)`, then a base-symbol comparison), and
+`check_mpor_dependency`'s three clauses map onto each other under j↔l: WW is
+self-symmetric, and the "j reads what l wrote" and "j writes what l reads"
+clauses exchange. So `dep(j,l) == dep(l,j)` holds structurally. A Tier-A model to
+rediscover this would have cost more than reading it.
+
+**A6.3 (read-read never forces a dependency) — discharged by inspection.** There
+is no read-read clause; the omission is explicit and is the point of the
+optimisation.
+
+**A6.4 (transitive closure) — NOT discharged.** `calculate_mpor_constraints`
+copies the previous chain, resets the active thread's row to −1, sets
+`[active][active] = 1`, then takes a two-hop step: `new[j][active] = 1` when some
+`l` has `dependency_chain[j][l] == 1` and `check_mpor_dependency(active, l)`. Two
+observations, short of a proof. The `res == 0` path deliberately does **not**
+overwrite, preserving an existing dependency — the conservative direction, so
+harmless. The one operation that *removes* relations is the active-row reset, so
+that is where an unsound step would live, and settling it needs the MPOR paper's
+chain definition rather than inspection. This is the open half of H-A6.
+
+**R6 — mechanism pinned, no witness, and the negative result is worth more than
+the hypothesis was.** `generate_hash` combines `generate_l2_state_hash()` — an
+ordered map of **L0 base name → `crc(value)`**, since
+`state_hashing_level2t::make_assignment` keys on `to_symbol2t(lhs_sym).thename`,
+which carries no L1 activation — with each thread's `source.pc->location_number`.
+It does **not** include call-stack depth. Two states at the same pc, with the same
+L0→value map, at different recursion depths therefore fingerprint identically and
+are *not* bisimilar: they resume into different continuations. That makes the
+comment at `reachability_tree.cpp:420` — "equal fingerprints are bisimilar and any
+collision prunes soundly" — the precise unproven step, and false in the recursion
+case. It belongs to the R9 family of unproven-direction claims, now with a
+citable location rather than a suspicion.
+
+Four targeted programs (constant-valued recursive local so the L0 entry matches
+across depths; depths 2 and 4; the shared write at the recursion bottom) reported
+FAILED under `--state-hashing` exactly as under the default, so **no
+verdict-changing prune was produced**. The reason is structural, not a missing
+trick: for pruning to change a verdict the collision must sit on the path to the
+*only* buggy interleaving, and a two-thread race on one global admits many racy
+interleavings, an early one of which is found before any duplicate state is
+reached. A witness needs the bug reachable *exclusively* behind the colliding
+state. R6 stays open with that requirement written down, in place of the original
+"H-C4 parity sweep quantifies the current gap" — the clean sweep has already
+shown it will not.
+
+**M6 closed.** Delivered: the H-C4 parity report (both legs), an R11 verdict
+superseded by R18 with a witness and a regression pin, and A6.1/A6.3 by
+inspection. Carried forward: A6.4, R6, and the absent `--no-mpor` flag that would
+let a sweep separate MPOR from the rest of POR. R18 is pinned, not fixed.
+
+---
+
+## Appendix A — Methodological basis
 
 - **Design by contract.** Every harness is precondition (`__ESBMC_assume`) →
   operation → postcondition (`assert`). §4.2's invariants are the class
