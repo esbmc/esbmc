@@ -333,8 +333,8 @@ regression/cxl/
 |--------|-------|
 | Total commits | 6+ |
 | Total regression tests | 25 |
-| Passing tests | 18 |
-| Bug-detecting tests | 7 |
+| Passing tests | 17 |
+| Bug-detecting tests | 8 |
 | Kernel headers added | 6 |
 | Operational model lines | ~1,250 |
 | Documentation pages | 2 |
