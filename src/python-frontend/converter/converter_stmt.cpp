@@ -1007,6 +1007,32 @@ static bool json_contains_slice_node(const nlohmann::json &node)
   return false;
 }
 
+static bool json_literal_contains_boolean(const nlohmann::json &node)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+
+  if (node.is_object())
+  {
+    if (
+      node.value("_type", "") == "Constant" && node.contains("value") &&
+      node["value"].is_boolean())
+      return true;
+
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (json_literal_contains_boolean(it.value()))
+        return true;
+  }
+  else
+  {
+    for (const auto &elem : node)
+      if (json_literal_contains_boolean(elem))
+        return true;
+  }
+
+  return false;
+}
+
 bool python_converter::is_basic_numpy_view_subscript(
   const nlohmann::json &node) const
 {
@@ -1015,7 +1041,30 @@ bool python_converter::is_basic_numpy_view_subscript(
     !node.contains("value") || !node.contains("slice"))
     return false;
 
+  auto is_boolean_mask_index = [&](const nlohmann::json &idx) {
+    nlohmann::json value = idx;
+    if (idx.value("_type", "") == "Name" && idx.contains("id"))
+    {
+      nlohmann::json decl =
+        json_utils::find_var_decl(idx["id"], current_func_name_, *ast_json);
+      if (decl.contains("value") && decl["value"].is_object())
+        value = decl["value"];
+    }
+
+    if (
+      value.value("_type", "") != "Call" || !value.contains("func") ||
+      !value["func"].is_object() ||
+      value["func"].value("_type", "") != "Attribute" ||
+      value["func"].value("attr", "") != "array" || !value.contains("args") ||
+      !value["args"].is_array() || value["args"].empty())
+      return false;
+
+    return json_literal_contains_boolean(value["args"][0]);
+  };
+
   auto is_basic_index = [&](const nlohmann::json &idx) {
+    if (is_boolean_mask_index(idx))
+      return false;
     const std::string type = idx.value("_type", "");
     return type == "Constant" || type == "UnaryOp" || type == "Name" ||
            type == "Slice";
@@ -3229,7 +3278,13 @@ void python_converter::get_var_assign(
       !base_is_imported_module &&
       (method_name == "transpose" || method_name == "reshape" ||
        method_name == "ravel");
-    if (supported_view_method)
+    const bool supported_copy_method =
+      !base_is_imported_module && method_name == "copy";
+    if (supported_copy_method)
+    {
+      effective_ast_node["value"] = ast_node["value"]["func"]["value"];
+    }
+    else if (supported_view_method)
     {
       std::string numpy_alias = "np";
       for (const auto &entry : imported_modules)
