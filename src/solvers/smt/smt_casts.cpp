@@ -90,8 +90,10 @@ smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_bool(
 
   smt_astt zero = mk_smt_bv(BigInt(0), to_integer_bits);
   smt_astt one = mk_smt_bv(BigInt(1), to_integer_bits);
-  smt_astt switched = mk_ite(a, zero, one);
-  return mk_concat(switched, zero);
+  smt_astt switched = mk_ite(a, one, zero);
+
+  smt_astt zero_fracbits = mk_smt_bv(BigInt(0), fbvt.width - to_integer_bits);
+  return mk_concat(switched, zero_fracbits);
 }
 
 smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_fixedbv(
