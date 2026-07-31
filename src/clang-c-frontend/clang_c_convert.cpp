@@ -4327,7 +4327,18 @@ bool clang_c_convertert::get_compound_assign_expr(
     return true;
 
   if (!lhs.type().is_pointer())
-    gen_typecast(ns, rhs, lhs.type());
+  {
+    // C11 6.5.16.2p3: `E1 op= E2` is equivalent to `E1 = E1 op (E2)`, so the
+    // operation runs in the type the usual arithmetic conversions produce, not
+    // in E1's. Narrowing E2 to E1's type makes the overflow claim on a narrow
+    // E1 unfalsifiable, and can turn a valid divisor into zero (#6589).
+    typet computation_type;
+    if (get_type(compop.getComputationResultType(), computation_type))
+      return true;
+
+    gen_typecast(ns, rhs, computation_type);
+    new_expr.add("computation_type") = computation_type;
+  }
 
   new_expr.copy_to_operands(lhs, rhs);
   return false;
