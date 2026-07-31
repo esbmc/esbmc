@@ -1,7 +1,8 @@
 # Scope — the coupled arithmetic + assignment conversion (the `python_adjust` flip blocker)
 
-> **Status: Phases 0 and 1 discharged (2026-07-30); Phase 2 landed with G2
-> held but G1/G3 not fully closed (2026-07-31, §11-§12); Phase 3 not started.**
+> **Status: Phases 0-2 discharged against the gates this scope owns
+> (2026-07-31, §11-§13); Phase 3 blocked on two foreign mechanisms, not on
+> this scope's implementation.**
 > This document exists because `docs/roadmap/scope-v1k-adjuster.md` §"Flip gate
 > (2026-07-29)" closes that scope with exactly one remaining prerequisite and
 > hands it off: *"Next owner: take the coupled conversion effort as its own
@@ -222,9 +223,9 @@ hatch, `src/esbmc/options.cpp:964-975`).
 | # | Gate | Discharged by |
 |---|---|---|
 | **G0** | ~~The reachable operand-kind census exists, and the complex/vector claim in §3.2 is confirmed or refuted~~ **DISCHARGED, §9.1** | Phase 0 |
-| G1 | `builtin_all_nonliteral` and `chained-comparison2_fail` produce legacy-identical verdicts under the hop-off | Phase 2 |
-| G2 | **`neural-net_fail` (`--fixedbv`) reports FAILED** | Phase 2 — the anti-masking gate |
-| G3 | The 3 flip-gate regressions this scope owns clear: `github_4344`, `github_5571_fail`, `github_5571_tuple_str_annotation`. The other 3 (`lambda15`, `precedence2`, `sum_tuple`) are out of scope per §9.4 and must be re-homed before the flip | Phase 2 |
+| G1 | ~~`builtin_all_nonliteral` and `chained-comparison2_fail`~~ **`builtin_all_nonliteral` only** produces legacy-identical verdicts under the hop-off; `chained-comparison2_fail` belongs to the second mechanism (§13.1). **Met** | Phase 2 |
+| G2 | **`neural-net_fail` (`--fixedbv`) reports FAILED** — the anti-masking gate. **Met** | Phase 2 |
+| G3 | ~~3 regressions~~ **`github_4344` only** — the `github_5571` pair is the array-typecast mechanism, not this scope (§13). `lambda15`, `precedence2`, `sum_tuple` stay out of scope per §9.4. **Met** | Phase 2 |
 | G4 | Whole-corpus census re-run, 0 attributable divergences | Phase 3 |
 | G5 | Dual-solver agreement (Bitwuzla + Z3) on the corpus | Phase 3 |
 
@@ -635,3 +636,46 @@ The whole-corpus census (G4) and dual-solver agreement (G5) are Phase 3 gates
 and have not been run for this arm. The hop-off regression subset is green
 (44/44) and the flag remains default-off, so nothing here reaches the default
 path.
+
+## 13. The `github_5571` pair is not this scope's work (2026-07-31)
+
+§12.2 flagged the pair as the first thing to chase. Chased, and the answer is
+that **§9.4's table over-credits the §9.3 prototype**: both tests abort
+identically in the bare hop-off, under Phase 1 alone, and under Phase 1+2 —
+
+```
+ERROR: Typecast for unexpected type
+typecast
+* from : constant_array   (char[1], i.e. the "" literal + NUL)
+* type : array            (char[16])
+```
+
+— an **array-to-array typecast between different sizes**, produced by `s = ""`
+where `s` is a `char[16]`. Neither the arithmetic arm nor the assignment arm
+constructs or consumes such a node, and the three binaries' error output is
+byte-identical. §9.4 records both as "was abort → cleared by the coupled
+prototype"; that is not reproducible on this tree, and the mechanism is not one
+the coupled conversion can reach.
+
+This is a third mechanism, distinct from both this scope and the "second
+mechanism" of §9.4. It is in the same family as the existing array→pointer decay
+arm (`python_adjust.cpp`, the `is_typecast2t && is_pointer_type(target)` case)
+but with an **array** target, which that arm's guard declines. It wants its own
+diagnosis.
+
+### 13.1 G1 and G3 must be rewritten
+
+Both gates name tests that other mechanisms own, so as written neither can ever
+close, no matter how correct Phases 1-2 are:
+
+| gate | as written | owns | should name |
+|---|---|---|---|
+| G1 | `builtin_all_nonliteral` + `chained-comparison2_fail` | §7 puts `chained-comparison2_fail` in the second mechanism | `builtin_all_nonliteral` only |
+| G3 | `github_4344`, `github_5571_fail`, `github_5571_tuple_str_annotation` | the 5571 pair is the array-typecast mechanism above | `github_4344` only |
+
+**Against the corrected lists, Phases 1-2 discharge every gate this scope owns:**
+G1 (`builtin_all_nonliteral` SUCCESSFUL), G2 (`neural-net_fail` FAILED),
+G3 (`github_4344` SUCCESSFUL). What remains before the Phase 3 flip is not this
+scope's implementation but the two foreign mechanisms — the §9.4 second
+mechanism (`chained-comparison2_fail`, `lambda15`, `precedence2`, `sum_tuple`)
+and the array-typecast class (the `github_5571` pair) — plus G4/G5.
