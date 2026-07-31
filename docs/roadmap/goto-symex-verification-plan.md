@@ -694,6 +694,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R22** | **High (false SUCCESSFUL, default configuration)** — **confirmed with a minimal reproducer** by M8 triage, **confirmed and fixed**, §15 M8 (cont. 6) | **A shared write performed by a function's return-value assignment creates no interleaving point.** Six lines reproduce it: one thread runs `x = notify(); x = 2;` (`notify` returns `1`), another asserts `x != 1`. Default reports **SUCCESSFUL** — no schedule can observe the intermediate value, because no context switch is offered between the two writes. Three controls make the boundary exact: writing `x = 1; x = 2;` inline reports FAILED; splitting the call off the shared write (`int v = notify(); x = v; x = 2;`) reports FAILED; and inserting *any* other shared write between them (`x = notify(); g = 5; x = 2;`) reports FAILED. The value therefore reaches the equation — `x = notify();` alone reports FAILED, and an in-thread `assert(x == 1)` after it holds — so what is lost is the *scheduling point*, not the write. Not POR (`--no-por` unchanged), not the context bound (`--context-bound 10` unchanged), and not constant propagation (the split control propagates identically and still catches it). `x = notify()` lowers to a `FUNCTION_CALL` instruction carrying the lhs, so the write is performed by the `RETURN` case's `make_return_assignment` path; `execution_statet::symex_step` calls `analyze_assign(assign)` there **after** `symex_return(thecode)`, whose last statement is `cur_state->guard.make_false()`, and `analyze_assign` early-returns on a false guard. That is the same mistake #6558 fixed at `symex_goto`, and instrumentation confirms the reorder does exactly what the argument predicts — the `RETURN` step goes from `writes=0 cswitch=false` to `writes=1 cswitch=true`. **It is still not sufficient**, and the second half is now identified: `execute_guard` emits `assume(false)` and kills the interleaving whenever a switch is taken away from a thread whose guard is false, which `symex_return` guarantees at a return boundary. That is **#6558's defect at a second boundary** — the `last_transition.branch` arm chains the pre-branch guard for gotos and nothing does so for returns. Both halves must be fixed together; see §15 M8 (cont. 4) and (cont. 5). **Fixed in §15 M8 (cont. 6)**, where the two halves collapse into one change: a return parks its continuation exactly as a branch parks its sibling arm, so `symex_return` now records that parked path through the same hook `symex_goto` uses, and the existing branch arms in `execute_guard` and `preserve_last_paths` cover returns unchanged. Fixing only the first two halves exposed a third — the returning thread was marked `thread_ended` at the boundary — which the same change removes. | reproducer and controls above; `execution_statet::execute_guard`, `execution_state.cpp:712-755`; `execution_statet::symex_step` `RETURN` case, `execution_state.cpp:339-356`; `goto_symext::symex_return`, `symex_function.cpp:1041-1066`; `execution_statet::analyze_assign`, `execution_state.cpp:819-838`; `regression/esbmc-unix/symex_return_value_cswitch` (CORE, flipped from KNOWNBUG by the fix), `..._split` (CORE) and `..._resume` (CORE, added by the fix to pin the thread-survival half) | M8 triage; **H-A6**'s A6.2 completeness obligation | Done. All three pins are CORE and the whole `esbmc-unix` suite is clean. |
 | **R16** | **Medium (incompleteness under a non-default flag)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify` is not verdict-preserving: 10 corpus inputs where the default proves SUCCESSFUL and `--no-simplify` does not.** Nine report a spurious counterexample (`github_1174_{hex,lmod,oct,pass}`, `github_2341_3`, `github_2357_5`, `github_2566_1`, `github_785-2`, `realloc13`) and one returns UNKNOWN (`github_252`, under `--k-induction`). In every case the *default* leg matches the verdict the test's own `test.desc` expects, so the fault is in the `--no-simplify` configuration, not the default. Spot-confirmed on `github_2341_3`: `--no-simplify` reports a violated `assert(temp != NULL)` the default discharges. The noisy direction — P1 — but it means `do_simplify` is load-bearing for *correctness of the encoding*, not merely for formula size, which is not how an "optimisation" flag reads. | `oracle_flag_parity.py --b=--no-simplify` over `regression/esbmc` CORE | **H-C2** | Triage one input down to the expression shape the encoder mishandles unsimplified. Until then `--no-simplify` is a debugging aid, not a semantics-preserving flag. |
 | **R17** | **High (false SUCCESSFUL, non-default flag pair)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify --no-slice` misses a reachable `assert(0)`.** Three lines reproduce it: `void *b = malloc(-4); assert(0);` returns **`VERIFICATION SUCCESSFUL`**. Neither flag alone does this (both give FAILED), nor does a positive size, nor no allocation — so it is a **composition** defect, the class §7.4 says Tier C exists to catch. The negative size widens to a huge `size_t`; one VCC is generated and the solver returns UNSAT, so the path to the assertion is **vacuously infeasible** and every later assertion in such a program is silently unreachable. Reached in the corpus via `github_1631_compact`, whose `--compact-trace` sets `no-slice` implicitly (`command_line_options.cpp:410`) — that indirection is why the pair is easy to hit without naming it. | minimal reproducer above; `regression/esbmc/no_simplify_no_slice_huge_malloc` (KNOWNBUG, observed output `VERIFICATION SUCCESSFUL`) and `..._malloc` (CORE, positive size, passes today) | **H-C2** | Find which allocation-model constraint becomes contradictory unsimplified — the `__ESBMC_alloc_size` update and any size-overflow guard are the first suspects. Pinned, not fixed. |
+| **R23** | **High (false SUCCESSFUL *and* false FAILED, default configuration)** — **confirmed with a two-line reproducer** by M8 triage, §15 M8 (cont. 7); filed as **#6589** | **Compound assignment narrows the right operand to the left operand's type before the operation.** C11 **6.5.16.2p3**: "A compound assignment of the form E1 op= E2 is equivalent to the simple assignment expression E1 = E1 op (E2), except that the lvalue E1 is evaluated only once". ESBMC violates that equivalence for every left operand narrower than `int`. `char b; b += a;` emits `!overflow("+", (signed int)b, (signed int)((signed char)a))` — the right operand cast to `char` — where `b = b + a` correctly emits `!overflow("+", (signed int)b, a)`. Both directions are reachable and both are wrong: with `b = 3, a = INT_MAX`, `b += a` reports **SUCCESSFUL** (the overflow claim is unfalsifiable, a **missed bug**) while `b = b + a` reports FAILED; and with `char b = 100; int a = 256`, `b /= a` reports **FAILED "division by zero"** because the divisor narrows to `(char)256 == 0`, where C gives `100 / 256 == 0` and gcc/UBSan agree. Not bitfield-specific — `char`, `short`, struct members and bitfields all reproduce; the discriminator is *narrower than the promoted type*, not the member/bitfield spelling. This attributes `github_162_fail`, whose claim is vacuous for exactly this reason. **Frontend, not goto-symex**, so it is outside §2.3's scope, but it is a soundness defect in extremely common C. | `clang_c_convertert::get_compound_assign_expr`, `clang_c_convert.cpp:4258-4332`, specifically the unconditional `gen_typecast(ns, rhs, lhs.type())`; clang exposes `getComputationLHSType()`/`getComputationResultType()` for precisely this. `regression/esbmc/compound_assign_narrow_overflow` (KNOWNBUG), `..._explicit` (CORE control) and `compound_assign_narrow_divzero` (KNOWNBUG) | M8 triage | Perform the operation in `getComputationResultType()` and convert only the *result* back to the left operand's type. The explicit-form control pins the direction a fix must not break. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -802,7 +803,10 @@ uninformative. The index lives in §15 M8 rather than a new directory of copied
 tests. R20 (#6544) and R21 (#6545) attribute five of the twelve unattributed
 wrong-verdict entries. The Linux re-run (§15 M8 cont. 3) discharges the
 "re-measure the masked ones" half: masking drops to 5/28, six tests rejoin the
-inventory, and two of them produce **R22**. Ten unattributed entries remain.
+inventory, and two of them produce **R22**. Triage of the resulting ten
+(§15 M8 cont. 7) attributes `github_162_fail` to **R23**, settles three as wrong
+tests — two of them fixed and retired from the inventory — and narrows
+`github_732-1-1` to bitfield layout under type punning. Five remain.
 
 Total ≈ 9 engineer-weeks for the verification track, plus ≈ 2 weeks for the
 ESBMC extension critical path (WI-1…WI-3, §13.6) running alongside it.
@@ -2641,6 +2645,61 @@ machine with or without the patch. Timed A/B against a stashed master build:
 
 Adding interleaving points at returns was the obvious perf risk and it did not
 materialise at a measurable scale.
+
+### M8 (cont. 7) — 2026-07-31, the unattributed ten
+
+**Result: five of the ten unattributed KNOWNBUGs resolved. One is a new
+finding, R23, that is larger than the entry it came from; three are wrong
+tests, two of which are now fixed and retired; one is narrowed to a specific
+subsystem. All ten were first re-measured — none moved under R22's fix.**
+
+**Re-measurement first.** R22's fix had just landed and two entries
+(`03_inf2`, `03_circular_reduce`) are concurrency tests, so every entry was
+re-run before triage. All ten still produce the same wrong verdict; none is a
+stale record and none was fixed as a side effect.
+
+**R23 — `github_162_fail`, and the plan's own note about it was wrong.** The
+entry was carried as "may be a wrong test: the claim is `arithmetic overflow on
+add` over `int` operands that genuinely cannot overflow". The operands cannot
+overflow, but that is the *defect*, not an exoneration. The claim is
+
+```
+!overflow("+", (signed int)b.a, (signed int)((signed _ExtInt(3))a))
+```
+
+— the right operand is truncated to the bitfield width *before* the addition,
+so an unbounded `int` becomes a value in −4…3 and the claim is unfalsifiable.
+C11 6.5.16.2p3 makes `E1 op= E2` equivalent to `E1 = E1 op (E2)`, and ESBMC
+disagrees with itself on the two forms. See §9.2's R23 row for the full
+characterisation; it is a frontend defect, reaches `char`/`short`/struct
+members as well as bitfields, and produces a **missed overflow** in one
+direction and a **spurious division by zero** in the other (`char b = 100; int
+a = 256; b /= a;`, which gcc + UBSan confirm is well defined and equals 0).
+
+**Three wrong tests.** Each was settled by a control, not by reading:
+
+| test | why it is wrong | disposition |
+|---|---|---|
+| `github_159_postdecrement_fail` | `(b--)->d.c` dereferences the *old*, in-bounds `&Q[0]`; the only UB is *forming* `Q-1`. `b--;` alone is SUCCESSFUL, `b--; *b` is FAILED, and `*(b--)` is SUCCESSFUL — ESBMC checks dereferences, not pointer formation, and no sibling in the 8-test family requires otherwise. | left KNOWNBUG: its intent needs a pointer-formation checker that does not exist, which is a maintainer's call, not a test edit |
+| `github_1626-no-free` | the sibling `github_1626` catches a use-after-free; this variant comments the `free` out, leaving only the `printf("%s", *ptr)` defect, which needs the opt-in `--printf-check`. The test never passes it. | **fixed** — flag added, KNOWNBUG → CORE |
+| `40_stack_64_inner_scope_true` | the family's own model (`40_stack_64_primitives_true`) counts an `int` as `4 * 8 = 32` units and a `char` as `8`; this test's comments say `int a; // 8` and it asks for `--stack-limit 16`. Two `int`s need 64, and the measured threshold is exactly 64 (63 FAILED / 64 SUCCESSFUL, and a `char` rewrite brackets 15/16). | **fixed** — limits corrected to 64/63 and the misleading comments with them, KNOWNBUG → CORE |
+
+`40_stack_64_inner_scope_false` shared the bug in the opposite direction: it
+asserts FAILED at limit 15 against a program that needs 64, so it passed
+**vacuously** and would have kept passing however wrong the accounting became.
+Its bound is now 63, one below the real threshold, which is what an anti-vacuity
+twin is for (§6.1 r5).
+
+**`github_732-1-1` narrowed, not closed.** Of its three assertions, `sizeof(s)
+== 4` and `s.y == -1` both hold; only `*(int *)&s == 0x000fffff` fails. The
+field *values* are right and the *memory image* is wrong, so this is bitfield
+layout under type punning — unrelated to R23, which is about the type an
+operation is performed in.
+
+**Still open in M8.** Five unattributed: `03_inf2`, `03_circular_reduce`,
+`github_2572_2`, `github_1091`, `github_2513_6`, plus `github_732-1-1` narrowed
+as above and `github_248` (UNKNOWN under `--k-induction` on mutual infinite
+recursion, which may be plain incompleteness rather than a defect).
 
 ### M7 (CI) — 2026-07-30, R19 pins withdrawn
 
