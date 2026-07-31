@@ -15,5 +15,15 @@ int main()
   uint32_t n = 4000000000u;
   assert(n > 2147483647u);
   assert(sizeof(uint32_t) == 4);
+
+  std::uint32_t qn = n;
+  std::int64_t big = INT64_C(-5000000000);
+  std::size_t sz = 3;
+  uint_least16_t least = 7;
+  assert(qn == n);
+  assert(big < -2147483648LL);
+  assert(sz + least == 10);
+  assert(UINT32_MAX == 4294967295u);
+  assert(sizeof(intmax_t) >= sizeof(int32_t));
   return 0;
 }
