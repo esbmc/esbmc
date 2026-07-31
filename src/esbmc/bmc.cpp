@@ -2133,48 +2133,81 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
     Type{"LTL_SUCCEEDING", ltl_res_succeeding},
   };
 
-  size_t total_asserts = 0;
+  auto is_prefix_assert = [](const irep_idt &comment) {
+    for (const auto &[which, _] : seq)
+      if (comment == which)
+        return true;
+    return false;
+  };
 
-  for (const auto &[which, check] : seq)
-  {
+  /* Solve `equation` with only the assertions `keep` selects enabled; the rest
+   * become skips and are restored before returning. Yields the solver result
+   * and how many assertions were actually left to check. */
+  auto solve_only = [&](auto keep) {
+    std::vector<symex_target_equationt::SSA_stepst::iterator> masked;
     size_t num_asserts = 0;
-
-    /* Start by turning all assertions that aren't the sought prefix assertion
-     * into skips. */
-    for (auto &SSA_step : equation.SSA_steps)
-      if (SSA_step.is_assert())
+    for (auto it = equation.SSA_steps.begin(); it != equation.SSA_steps.end();
+         ++it)
+      if (it->is_assert())
       {
-        if (SSA_step.comment != which)
-          SSA_step.type = goto_trace_stept::SKIP;
+        if (keep(it->comment))
+          num_asserts++;
         else
         {
-          num_asserts++;
-          total_asserts++;
+          masked.push_back(it);
+          it->type = goto_trace_stept::SKIP;
         }
       }
 
     smt_resultt solver_result = P_UNSATISFIABLE;
     std::unique_ptr<smt_convt> smt_conv;
-    log_status("Checking for {}", which);
     if (num_asserts != 0)
     {
       smt_conv.reset(create_solver("", ns, options));
       solver_result = run_decision_procedure(*smt_conv, equation);
-      if (solver_result == P_SATISFIABLE)
-        log_status("Found trace satisfying {}", which);
     }
-    else
-      log_warning("Couldn't find {} assertion", which);
 
-    /* Turn skip steps back into assertions. */
-    for (auto &SSA_step : equation.SSA_steps)
-      if (SSA_step.is_skip())
-        for (const auto &[which2, _] : seq)
-          if (SSA_step.comment == which2)
-          {
-            SSA_step.type = goto_trace_stept::ASSERT;
-            break;
-          }
+    for (auto &it : masked)
+      it->type = goto_trace_stept::ASSERT;
+
+    return std::make_tuple(solver_result, num_asserts, std::move(smt_conv));
+  };
+
+  /* A prefix verdict only describes the program if the monitor ran to
+   * completion. Everything that is not a prefix assertion -- the unwinding
+   * assertions and libltl2ba's own "Unwind bound ... insufficient" guard
+   * included -- is masked out below, so check it first: a violation there
+   * means the automaton was truncated and no prefix claim follows (#6547). */
+  log_status("Checking LTL monitor preconditions");
+  smt_resultt guard_result = std::get<0>(
+    solve_only([&](const irep_idt &c) { return !is_prefix_assert(c); }));
+  switch (guard_result)
+  {
+  case P_SATISFIABLE:
+    log_warning(
+      "LTL monitor preconditions violated, the automaton did not run to "
+      "completion; prefix outcome is inconclusive");
+    return ltl_res_uninstrumented;
+  case P_ERROR:
+    return -2;
+  case P_SMTLIB:
+    return -1;
+  case P_UNSATISFIABLE:
+    break;
+  }
+
+  size_t total_prefix_asserts = 0;
+  for (const auto &[which, check] : seq)
+  {
+    log_status("Checking for {}", which);
+    auto [solver_result, num_asserts, smt_conv] =
+      solve_only([&](const irep_idt &c) { return c == which; });
+    total_prefix_asserts += num_asserts;
+
+    if (num_asserts == 0)
+      log_warning("Couldn't find {} assertion", which);
+    else if (solver_result == P_SATISFIABLE)
+      log_status("Found trace satisfying {}", which);
 
     switch (solver_result)
     {
@@ -2196,7 +2229,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
   /* Every prefix assertion was absent rather than discharged, so this formula
    * carries no monitor instrumentation and says nothing about the property.
    * Reporting the top of the lattice here would claim a proof we never ran. */
-  if (total_asserts == 0)
+  if (total_prefix_asserts == 0)
     return ltl_res_uninstrumented;
 
   /* Otherwise, we just got a good prefix. */
@@ -2212,7 +2245,10 @@ smt_resultt bmct::multi_property_check(
   // Initial values
   smt_resultt final_result = P_UNSATISFIABLE;
   std::mutex result_mutex;
-  std::unordered_set<size_t> jobs;
+  // Solved in claim order: an unordered container would make the per-claim
+  // solve order — and which claim a shared-solver bug lands on — vary by
+  // standard library.
+  std::vector<size_t> jobs;
 
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
@@ -2296,7 +2332,7 @@ smt_resultt bmct::multi_property_check(
 
   // TODO: This is the place to check a cache
   for (size_t i = 1; i <= remaining_claims; i++)
-    jobs.emplace(i);
+    jobs.push_back(i);
 
   /* This is a JOB that will:
    * 1. Generate a solver instance for a specific claim (@parameter i)
@@ -2427,6 +2463,26 @@ smt_resultt bmct::multi_property_check(
       new_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
       solver_ptr = new_solver.get();
     }
+
+    // --smt-during-symex shares one persistent solver across every claim.
+    // Scope this claim's re-encoded formula in a context frame; without it
+    // the negated assertion stays asserted forever, and once one claim's
+    // negation is unsatisfiable every later claim solves UNSAT and is
+    // misreported as PASSED (issue #6540).
+    struct solver_ctx_framet
+    {
+      smt_convt *conv;
+      explicit solver_ctx_framet(smt_convt *c) : conv(c)
+      {
+        if (conv)
+          conv->push_ctx();
+      }
+      ~solver_ctx_framet()
+      {
+        if (conv)
+          conv->pop_ctx();
+      }
+    } ctx_frame(new_solver ? nullptr : solver_ptr);
 
     // Store solver name initially but not again
     std::call_once(solver_stats.name_flag, [&]() {
