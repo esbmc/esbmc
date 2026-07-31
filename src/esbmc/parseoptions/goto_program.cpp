@@ -493,9 +493,9 @@ static void warn_undefined_external_symbols(const contextt &context)
   });
 
   std::sort(
-    undefined.begin(),
-    undefined.end(),
-    [](const symbolt *a, const symbolt *b) { return a->id < b->id; });
+    undefined.begin(), undefined.end(), [](const symbolt *a, const symbolt *b) {
+      return a->id < b->id;
+    });
 
   for (const symbolt *s : undefined)
     log_warning(
