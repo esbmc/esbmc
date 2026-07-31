@@ -2245,7 +2245,10 @@ smt_resultt bmct::multi_property_check(
   // Initial values
   smt_resultt final_result = P_UNSATISFIABLE;
   std::mutex result_mutex;
-  std::unordered_set<size_t> jobs;
+  // Solved in claim order: an unordered container would make the per-claim
+  // solve order — and which claim a shared-solver bug lands on — vary by
+  // standard library.
+  std::vector<size_t> jobs;
 
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
@@ -2329,7 +2332,7 @@ smt_resultt bmct::multi_property_check(
 
   // TODO: This is the place to check a cache
   for (size_t i = 1; i <= remaining_claims; i++)
-    jobs.emplace(i);
+    jobs.push_back(i);
 
   /* This is a JOB that will:
    * 1. Generate a solver instance for a specific claim (@parameter i)
@@ -2460,6 +2463,26 @@ smt_resultt bmct::multi_property_check(
       new_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
       solver_ptr = new_solver.get();
     }
+
+    // --smt-during-symex shares one persistent solver across every claim.
+    // Scope this claim's re-encoded formula in a context frame; without it
+    // the negated assertion stays asserted forever, and once one claim's
+    // negation is unsatisfiable every later claim solves UNSAT and is
+    // misreported as PASSED (issue #6540).
+    struct solver_ctx_framet
+    {
+      smt_convt *conv;
+      explicit solver_ctx_framet(smt_convt *c) : conv(c)
+      {
+        if (conv)
+          conv->push_ctx();
+      }
+      ~solver_ctx_framet()
+      {
+        if (conv)
+          conv->pop_ctx();
+      }
+    } ctx_frame(new_solver ? nullptr : solver_ptr);
 
     // Store solver name initially but not again
     std::call_once(solver_stats.name_flag, [&]() {
