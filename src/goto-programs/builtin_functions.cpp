@@ -510,6 +510,33 @@ void goto_convertt::do_cpp_new(
   dest.destructive_append(tmp_initializer);
 }
 
+// Locate the constructor call inside a cpp_new initializer. Mirrors
+// find_constructor_call in clang_cpp_adjust_code.cpp: a temporary_object keeps
+// its call under the named "initializer" sub-irep rather than in an operand.
+static const exprt *find_cpp_new_constructor(const exprt &e)
+{
+  if (
+    e.id() == "sideeffect" && e.statement() == "function_call" &&
+    e.get_bool("constructor"))
+    return &e;
+
+  if (e.id() == "sideeffect" && e.statement() == "temporary_object")
+  {
+    const irept &init = e.initializer();
+    if (init.is_not_nil())
+      if (
+        const exprt *c =
+          find_cpp_new_constructor(static_cast<const exprt &>(init)))
+        return c;
+  }
+
+  forall_operands (it, e)
+    if (const exprt *c = find_cpp_new_constructor(*it))
+      return c;
+
+  return nullptr;
+}
+
 void goto_convertt::cpp_new_initializer(
   const exprt &lhs,
   const exprt &rhs,
@@ -563,7 +590,61 @@ void goto_convertt::cpp_new_initializer(
   {
     if (rhs.statement() == "cpp_new[]")
     {
-      // build loop
+      // Construct every element: what the scalar arm below does once, done for
+      // each element of the allocated array. Leaving this unimplemented meant
+      // `new T[n]` ran no constructor at all, so members initialised by T's
+      // constructor read back nondeterministically (github #6584). The element
+      // count need not be a compile-time constant, so emit a loop rather than
+      // unrolling it:
+      //
+      //   for (size_type i = 0; i < n; ++i)
+      //     <initializer, retargeted at *(lhs + i)>
+      exprt count = static_cast<const exprt &>(rhs.size_irep());
+      if (count.type() != size_type())
+        count.make_typecast(size_type());
+      remove_sideeffects(count, dest);
+
+      symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+      index_exprt element(lhs, index, rhs.type().subtype());
+
+      // The frontend's initializer for the array form is shaped for the whole
+      // array: a temporary_object of type T[n] whose constructor targets
+      // element 0. Retargeting its `new_object` per element would splice a
+      // single element into a context expecting the array, so take the
+      // constructor call out and re-point its `this` at &lhs[i] instead.
+      codet body;
+      if (const exprt *ctor = find_cpp_new_constructor(initializer))
+      {
+        exprt call = *ctor;
+        call.op1().operands().at(0) = address_of_exprt(element);
+        code_expressiont ctor_code;
+        ctor_code.expression() = call;
+        body = ctor_code;
+      }
+      else
+      {
+        // No constructor (`new int[n]`, or value-initialisation): the scalar
+        // arm's substitution is correct element-wise.
+        replace_new_object(element, initializer);
+        body = to_code(initializer);
+      }
+
+      plus_exprt next(index, from_integer(1, size_type()));
+      next.type() = size_type();
+
+      code_fort loop;
+      loop.init() = code_assignt(index, from_integer(0, size_type()));
+      loop.cond() = binary_relation_exprt(index, "<", count);
+      loop.iter() = code_assignt(index, next);
+      loop.body() = body;
+      loop.location() = rhs.find_location();
+
+      // Same reasoning as the scalar arm: a class-typed initializer may lower
+      // to a stack temporary copied into the element, and that slot must not
+      // get its own scope-exit destructor.
+      std::size_t stack_size = targets.destructor_stack.size();
+      convert(loop, dest);
+      targets.destructor_stack.resize(stack_size);
     }
     else if (rhs.statement() == "cpp_new")
     {
