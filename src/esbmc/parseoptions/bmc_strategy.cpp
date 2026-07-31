@@ -516,6 +516,63 @@ int esbmc_parseoptionst::do_bmc_strategy(
 //  1) GOTO program,
 //  2) verification options.
 //  3) program context,
+// Iterative deepening on the context bound (issue #6480): unbounded DFS can
+// strand a counterexample that needs few switches but sits deep in DFS order.
+//
+// Each round under-approximates the schedule space, so a violation at any bound
+// is genuine. The converse needs cs_bound_pruned: "no violation at bound k" is
+// a proof only once a round completes without the bound cutting anything.
+int esbmc_parseoptionst::do_context_bound_deepening(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  const int max_cb = atoi(options.get_option("max-context-bound").c_str());
+
+  if (max_cb < 1)
+  {
+    log_error("--max-context-bound ({}) must be at least 1.", max_cb);
+    return 6;
+  }
+
+  options.set_option("suppress-bounded-success", true);
+
+  for (int cb = 1; cb <= max_cb; ++cb)
+  {
+    options.set_option("context-bound", std::to_string(cb));
+
+    bmct bmc(goto_functions, options, context);
+    log_progress("Checking with context bound {}", cb);
+
+    const int res = do_bmc(bmc);
+
+    if (res == P_SATISFIABLE)
+      return 1;
+
+    // A solver failure or SMT-LIB-only emission says nothing about deeper
+    // bounds, so stop rather than deepen.
+    if (res != P_UNSATISFIABLE)
+      return res;
+
+    if (!bmc.cs_bound_pruned)
+    {
+      log_status(
+        "Context bound {} covered every interleaving; result is not bounded by "
+        "it",
+        cb);
+      options.set_option("suppress-bounded-success", false);
+      log_success("\nVERIFICATION SUCCESSFUL");
+      return 0;
+    }
+  }
+
+  log_status(
+    "Reached --max-context-bound ({}) with the schedule space still truncated; "
+    "the program is safe only up to that many context switches",
+    max_cb);
+  log_fail("VERIFICATION UNKNOWN");
+  return 0;
+}
+
 int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");

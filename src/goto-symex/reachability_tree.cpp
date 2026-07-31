@@ -35,6 +35,7 @@ reachability_treet::reachability_treet(
   smt_during_symex = options.get_bool_option("smt-during-symex");
   por = !options.get_bool_option("no-por");
   main_thread_ended = false;
+  cs_bound_pruned = false;
   target_template = std::move(target);
 
   readonly_global_opt =

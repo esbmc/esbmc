@@ -399,6 +399,15 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("context-bound", -1);
 
+  if (cmdline.isset("incremental-context-bound"))
+    options.set_option("incremental-context-bound", true);
+
+  if (cmdline.isset("max-context-bound"))
+    options.set_option(
+      "max-context-bound", cmdline.getval("max-context-bound"));
+  else
+    options.set_option("max-context-bound", 20);
+
   if (cmdline.isset("deadlock-check"))
   {
     options.set_option("deadlock-check", true);

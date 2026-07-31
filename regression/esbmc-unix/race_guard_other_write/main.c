@@ -6,8 +6,6 @@ _Bool other = 0;
 
 void *t1(void *arg)
 {
-  // Same race, but the branch writes a different variable, which is detected.
-  // Pins the boundary of #6558 rather than the guarded write alone.
   for (int i = 0; i < 2; i++)
     if (receive)
     {
