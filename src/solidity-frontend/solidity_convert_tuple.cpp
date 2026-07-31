@@ -87,7 +87,7 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
 
     // construct comp
     comp.type() = mem_type;
-    comp.type().set("#member_name", t.tag());
+    comp.type().member_name(t.tag());
     comp.identifier(mem_id);
     comp.name(mem_name);
     comp.pretty_name(mem_name);
