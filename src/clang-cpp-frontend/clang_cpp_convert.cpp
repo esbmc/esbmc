@@ -2536,28 +2536,39 @@ void clang_cpp_convertert::name_param_and_continue(
   assert(id.empty() && name.empty());
 
   const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
-  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
+  /* Every implicit or explicitly-defaulted function gets a compiler-synthesised
+   * body that refers to its parameter, so the parameter needs a name even
+   * though the declaration leaves it unnamed. Testing isImplicit() alone left
+   * `= default` assignment and comparison operators — which are defaulted but
+   * not implicit — with an unnamed parameter, so their synthesised body read
+   * from an unbound operand (github #4377). Matching CXXMethodDecl alone left
+   * the same hole for a defaulted comparison declared as a friend, which is a
+   * plain FunctionDecl taking both operands as parameters (github #6578). */
+  const auto *fd = llvm::dyn_cast_or_null<clang::FunctionDecl>(dcxt);
+  if (!fd || !(fd->isImplicit() || fd->isDefaulted()))
+    return;
+
+  get_decl_name(*fd, name, id);
+
+  // name would be just `ref` and id would be "<cpyctor_id>::ref"
+  name = name + "::" + constref_suffix;
+  id = id + "::" + constref_suffix;
+
+  /* A defaulted friend comparison takes two unnamed parameters, which the
+   * suffix above would give the same symbol; disambiguate by position, as the
+   * named-parameter path in get_decl_name already does. */
+  if (fd->getNumParams() > 1)
   {
-    /* Every implicit or explicitly-defaulted method gets a compiler-synthesised
-     * body that refers to its parameter, so the parameter needs a name even
-     * though the declaration leaves it unnamed. Testing isImplicit() alone left
-     * `= default` assignment and comparison operators — which are defaulted but
-     * not implicit — with an unnamed parameter, so their synthesised body read
-     * from an unbound operand (github #4377). */
-    if (md->isImplicit() || md->isDefaulted())
-    {
-      get_decl_name(*md, name, id);
-
-      // name would be just `ref` and id would be "<cpyctor_id>::ref"
-      name = name + "::" + constref_suffix;
-      id = id + "::" + constref_suffix;
-
-      // sync param name
-      param.cmt_base_name(name);
-      param.identifier(id);
-      param.name(name);
-    }
+    const std::string index_suffix =
+      "::" + std::to_string(pd.getFunctionScopeIndex());
+    name += index_suffix;
+    id += index_suffix;
   }
+
+  // sync param name
+  param.cmt_base_name(name);
+  param.identifier(id);
+  param.name(name);
 }
 
 template <typename SpecializationDecl>
