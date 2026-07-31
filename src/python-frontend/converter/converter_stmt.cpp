@@ -140,6 +140,28 @@ bool is_imported_numpy_module_alias(
   return false;
 }
 
+bool ast_imports_numpy_module(const nlohmann::json &ast)
+{
+  if (!ast.is_object() || !ast.contains("body") || !ast["body"].is_array())
+    return false;
+
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      !stmt.is_object() || stmt.value("_type", std::string()) != "Import" ||
+      !stmt.contains("names") || !stmt["names"].is_array())
+      continue;
+
+    for (const auto &alias : stmt["names"])
+      if (
+        alias.is_object() && alias.value("_type", std::string()) == "alias" &&
+        alias.value("name", std::string()) == "numpy")
+        return true;
+  }
+
+  return false;
+}
+
 // RAII bump of the get_block() nesting depth, and optionally the function-body
 // or loop-body depth. Depth 1 is an unconditional top-level (module) statement;
 // anything deeper is nested in a function or a conditional body. Straight-line
@@ -1012,6 +1034,9 @@ python_converter::root_name_from_subscript(const nlohmann::json &node) const
     return node["id"].get<std::string>();
 
   if (node["_type"] == "Subscript" && node.contains("value"))
+    return root_name_from_subscript(node["value"]);
+
+  if (node["_type"] == "Attribute" && node.contains("value"))
     return root_name_from_subscript(node["value"]);
 
   return "";
@@ -4976,9 +5001,18 @@ void python_converter::get_return_statements(
         root_name_from_numpy_view_copy_expr(decl["value"]);
       const std::string root_id =
         root_name.empty() ? std::string() : resolve_name_symbol_id(root_name);
-      if (
+      const bool root_is_tracked_numpy =
         !root_id.empty() && (numpy_array_symbols_.count(root_id) != 0 ||
-                             numpy_view_copy_sources_.count(root_id) != 0))
+                             numpy_view_copy_sources_.count(root_id) != 0);
+      bool root_is_numpy_param = false;
+      if (!root_name.empty() && ast_json && ast_imports_numpy_module(*ast_json))
+      {
+        const nlohmann::json root_decl =
+          json_utils::find_var_decl(root_name, current_func_name_, *ast_json);
+        root_is_numpy_param =
+          root_decl.is_object() && root_decl.value("_type", "") == "arg";
+      }
+      if (root_is_tracked_numpy || root_is_numpy_param)
       {
         throw std::runtime_error(
           "TypeError: returning a copied numpy view is not supported");
