@@ -695,6 +695,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R16** | **Medium (incompleteness under a non-default flag)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify` is not verdict-preserving: 10 corpus inputs where the default proves SUCCESSFUL and `--no-simplify` does not.** Nine report a spurious counterexample (`github_1174_{hex,lmod,oct,pass}`, `github_2341_3`, `github_2357_5`, `github_2566_1`, `github_785-2`, `realloc13`) and one returns UNKNOWN (`github_252`, under `--k-induction`). In every case the *default* leg matches the verdict the test's own `test.desc` expects, so the fault is in the `--no-simplify` configuration, not the default. Spot-confirmed on `github_2341_3`: `--no-simplify` reports a violated `assert(temp != NULL)` the default discharges. The noisy direction — P1 — but it means `do_simplify` is load-bearing for *correctness of the encoding*, not merely for formula size, which is not how an "optimisation" flag reads. | `oracle_flag_parity.py --b=--no-simplify` over `regression/esbmc` CORE | **H-C2** | Triage one input down to the expression shape the encoder mishandles unsimplified. Until then `--no-simplify` is a debugging aid, not a semantics-preserving flag. |
 | **R17** | **High (false SUCCESSFUL, non-default flag pair)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify --no-slice` misses a reachable `assert(0)`.** Three lines reproduce it: `void *b = malloc(-4); assert(0);` returns **`VERIFICATION SUCCESSFUL`**. Neither flag alone does this (both give FAILED), nor does a positive size, nor no allocation — so it is a **composition** defect, the class §7.4 says Tier C exists to catch. The negative size widens to a huge `size_t`; one VCC is generated and the solver returns UNSAT, so the path to the assertion is **vacuously infeasible** and every later assertion in such a program is silently unreachable. Reached in the corpus via `github_1631_compact`, whose `--compact-trace` sets `no-slice` implicitly (`command_line_options.cpp:410`) — that indirection is why the pair is easy to hit without naming it. | minimal reproducer above; `regression/esbmc/no_simplify_no_slice_huge_malloc` (KNOWNBUG, observed output `VERIFICATION SUCCESSFUL`) and `..._malloc` (CORE, positive size, passes today) | **H-C2** | Find which allocation-model constraint becomes contradictory unsimplified — the `__ESBMC_alloc_size` update and any size-overflow guard are the first suspects. Pinned, not fixed. |
 | **R23** | **High (false SUCCESSFUL *and* false FAILED, default configuration)** — **confirmed with a two-line reproducer** by M8 triage, §15 M8 (cont. 7); filed as **#6589** | **Compound assignment narrows the right operand to the left operand's type before the operation.** C11 **6.5.16.2p3**: "A compound assignment of the form E1 op= E2 is equivalent to the simple assignment expression E1 = E1 op (E2), except that the lvalue E1 is evaluated only once". ESBMC violates that equivalence for every left operand narrower than `int`. `char b; b += a;` emits `!overflow("+", (signed int)b, (signed int)((signed char)a))` — the right operand cast to `char` — where `b = b + a` correctly emits `!overflow("+", (signed int)b, a)`. Both directions are reachable and both are wrong: with `b = 3, a = INT_MAX`, `b += a` reports **SUCCESSFUL** (the overflow claim is unfalsifiable, a **missed bug**) while `b = b + a` reports FAILED; and with `char b = 100; int a = 256`, `b /= a` reports **FAILED "division by zero"** because the divisor narrows to `(char)256 == 0`, where C gives `100 / 256 == 0` and gcc/UBSan agree. Not bitfield-specific — `char`, `short`, struct members and bitfields all reproduce; the discriminator is *narrower than the promoted type*, not the member/bitfield spelling. `github_162_fail` is where it was found, and its claim is vacuous for exactly this reason — but that entry is a *wrong test* independently of R23, see §15 M8 (cont. 8). **Frontend, not goto-symex**, so it is outside §2.3's scope, but it is a soundness defect in extremely common C. **Fixed, §15 M8 (cont. 8).** | `clang_c_convertert::get_compound_assign_expr`, `clang_c_convert.cpp:4258-4343`, specifically the unconditional `gen_typecast(ns, rhs, lhs.type())`, together with `goto_convertt::remove_assignment`, `goto_sideeffects.cpp:1714-1870`, which took the operation's type from `expr.op0()`. `regression/esbmc/compound_assign_narrow_overflow`, `..._explicit` (control) and `compound_assign_narrow_divzero`, all CORE | M8 triage | Done. The frontend records clang's `getComputationResultType()` on the side effect; `remove_assignment` performs the operation there and converts the result back on assignment. |
+| **R24** | **Medium (spurious counterexample, default configuration)** — **confirmed with a reproducer** by M8 triage, §15 M8 (cont. 10) | **`memset` does not constrain a struct's bitfield padding bits, so a type-punned read of the object is partly nondeterministic.** For `struct { int x : 12, y : 8; } s;`, `memset(&s, 0, sizeof s); s.x = -1; s.y = -1;` then reading `*(int *)&s` gives a value whose low 20 bits are correct — `(v & 0xFFFFF) == 0xFFFFF` verifies — but whose 12 padding bits are unconstrained: `(v >> 20) == 0` **fails**. gcc gives `0x000fffff` exactly, so the declared fields are laid out right and only the `memset`'s effect on the bits above them is lost. This is the direction an over-approximation produces (a false alarm, never a missed bug), and it is reachable with **no flags at all**, which is what separates it from the four flag-inadequacy entries triaged alongside it. Explains `github_732-1-1`, whose `sizeof(s) == 4` and `s.y == -1` assertions both hold and only whose type-punned assertion fails. | `regression/esbmc/bitfield_padding_memset` (KNOWNBUG) and `..._fields` (CORE control); `regression/esbmc/github_732-1-1` | M8 triage | Make `memset` (and struct zero-initialisation) constrain the padding bits of a bitfield-bearing struct, so a byte-level read of the object is fully determined. The control pins the low bits a fix must not regress. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -804,10 +805,10 @@ tests. R20 (#6544) and R21 (#6545) attribute five of the twelve unattributed
 wrong-verdict entries. The Linux re-run (§15 M8 cont. 3) discharges the
 "re-measure the masked ones" half: masking drops to 5/28, six tests rejoin the
 inventory, and two of them produce **R22**. Triage of the resulting ten
-(§15 M8 cont. 7, 8, 9) yields **R23** — found through `github_162_fail` and
-fixed — settles five as wrong tests, four of them fixed and retired from the
-inventory, and narrows `github_732-1-1` to bitfield layout under type punning.
-Three remain.
+(§15 M8 cont. 7-10) closes the inventory: **R23** (found through `github_162_fail`,
+fixed) and **R24** (bitfield padding under type punning, pinned), with seven of
+the eleven entries turning out to be wrong tests rather than defects — six of
+those fixed and retired.
 
 Total ≈ 9 engineer-weeks for the verification track, plus ≈ 2 weeks for the
 ESBMC extension critical path (WI-1…WI-3, §13.6) running alongside it.
@@ -2701,6 +2702,57 @@ operation is performed in.
 `github_2572_2`, `github_1091`, `github_2513_6`, plus `github_732-1-1` narrowed
 as above and `github_248` (UNKNOWN under `--k-induction` on mutual infinite
 recursion, which may be plain incompleteness rather than a defect).
+
+### M8 (cont. 10) — 2026-07-31, the inventory closes: flags first, defect last
+
+**Result: the remaining five checked flags-against-property before assuming a
+defect, as (cont. 9) recommended. Four were the test asking for the wrong
+thing; exactly one is a real defect, R24. All ten are now resolved.**
+
+The lens has two halves, and both earned their keep:
+
+- an **under-approximation** (a bound) can hide a bug but cannot invent one, so
+  it is only a candidate for entries that expect FAILED and get SUCCESSFUL;
+- an **over-approximation** can invent a counterexample but cannot hide one, so
+  it is the candidate for the opposite direction.
+
+That split immediately sorted the five, and each was then confirmed by
+measurement rather than by the argument alone:
+
+| test | flags asked | property needs | outcome |
+|---|---|---|---|
+| `github_1091` | `--unwind 1`, expects FAILED | **`--unwind 5`** — 4 is still SUCCESSFUL; the bug is a heap overflow in `strcpy` from `malloc(strlen(f) - 4)` (CWE-122), and the bound truncates the OM's `strlen`/`strcpy` loops | fixed, CORE, message pinned |
+| `github_2513_6` | `--unwind 3`, expects SUCCESSFUL | **`--unwind 5`** — at 3 and 4 it fails its *own* unwinding assertions (loops 13 and 8), so it was asked to prove safety while bounded too tightly to discharge | fixed, CORE |
+| `github_248` | `--k-induction --function b`, expects SUCCESSFUL | **UNKNOWN** — issue #248 was a *segfault*, not a verdict. It no longer crashes: it warns "k-induction does not support recursion yet" and returns UNKNOWN, which is the honest answer for unbounded mutual recursion. The test pinned the wrong property. | fixed, CORE, now pins the warning + UNKNOWN |
+| `github_2572_2` | `--z3 --ir`, expects SUCCESSFUL | **`--ir-ieee`** — `--ir` is documented as *overapproximating*, so it cannot soundly prove IEEE-754 properties and produces a spurious counterexample on `0+f==f`, a true assertion (the source assumes `f` is neither NaN nor Inf). Its sibling `github_2572` proves the same property under `--ir-ieee`. | fixed, CORE |
+| `github_732-1-1` | no flags | nothing a flag can supply | **R24**, below |
+
+A trap avoided in that table: `github_2572_1` also runs `--z3 --ir` and expects
+FAILED, which reads like "the family already pins `--ir` as failing". It does
+not — that test's assertion is `0+f==-f`, which is simply **false**, so FAILED
+is correct there under any solver mode. The family splits by *property truth*,
+not by solver mode, and reading it the other way would have justified the wrong
+correction to `github_2572_2`.
+
+**R24 — the one real defect.** `github_732-1-1` has no flags, so neither
+approximation direction can explain it, and it survives to be a defect. After
+`memset(&s, 0, sizeof(s))` on a `struct { int x : 12, y : 8; }`, writing both
+fields and reading the object back through `*(int *)&s` gives a value whose
+**low 20 bits are correct** (`(v & 0xFFFFF) == 0xFFFFF` verifies) but whose
+**12 padding bits are unconstrained** (`(v >> 20) == 0` fails). gcc gives
+`0x000fffff` exactly. So the bitfield *layout* is right and the `memset`'s
+zeroing of the bits above the declared fields is not visible to a type-punned
+read. Pinned by `regression/esbmc/bitfield_padding_memset` (KNOWNBUG) and
+`..._fields` (CORE control, so a fix cannot regress the low bits).
+
+**M8's inventory is closed.** Of the ten unattributed wrong-verdict entries:
+one produced **R23** (fixed), one is **R24** (pinned, open), seven were wrong
+tests — six fixed and retired, one (`github_159_postdecrement_fail`) left
+KNOWNBUG because its intent needs a pointer-formation checker that does not
+exist — and `github_248`, carried separately as the UNKNOWN entry, was also a
+wrong test. **Seven of eleven entries were the test asking for the wrong
+thing, not ESBMC answering wrongly**, which is the single most useful number
+this milestone produced.
 
 ### M8 (cont. 9) — 2026-07-31, two more wrong tests, both under-approximations
 
