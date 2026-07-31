@@ -691,6 +691,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R20** | **Medium–High (missed bug, default configuration)** — found by M8 triage, §15 M8 (cont.); filed as **#6544** | **A dereference through a constant non-null integer address is unchecked.** One line reproduces it: `int *p = (int *)65; return *p;` reports **`VERIFICATION SUCCESSFUL`**. The boundary is narrow and is what makes this a defect rather than a modelling choice: `(int *)0` is caught by the null check, `(int *)nondet_ulong()` is caught, and `(int *)(unsigned long)&x` is correctly accepted as a valid round-trip — only the *constant* non-null address escapes, for reads and for writes alike. Attributes two pre-existing KNOWNBUGs to one cause: `github_1175_9` casts `'A'` (65) and `github_1175_11` casts a constant-folded `strlen("Hello")` (5). **The obvious mechanism is refuted:** `--no-propagation` and `--no-simplify`, together and separately, leave the verdict SUCCESSFUL, so constant propagation is not what loses the check. | one-line reproducer above; `regression/esbmc/deref_constant_int_address` (KNOWNBUG) and `deref_nondet_int_address` (CORE, nondet address, caught today); `regression/esbmc/github_1175_{9,11}` (pre-existing KNOWNBUGs) | M8 triage; belongs to H-A10's `symex_dereference` obligation | Find where a constant-integer pointer bypasses the `invalid_pointer` obligation that a nondet one receives. `src/pointer-analysis/dereference.cpp` is Tier D by §14.2, but symex's *use* of it is in scope. Pinned, not fixed; filed as #6544. |
 | **R19** | **High (per-property false PASSED, non-default flag pair)** — **confirmed with a minimal reproducer** by H-B8, §15 M7; filed as **#6540** | **With `--multi-property --smt-during-symex`, a violable claim that is not the last property is individually reported as `✓ PASSED`.** Seven lines reproduce it: two non-trivial properties where the violable one comes first. ESBMC prints `✓ PASSED` for the violable claim, `Properties: 2 verified ✓ 2 passed`, and `VERIFICATION SUCCESSFUL`. Swapping the two assertions so the violable one is **last** restores `FAILED`, so the defect is positional. Neither flag alone loses the counterexample — `--multi-property` alone and `--smt-during-symex` alone both report FAILED — making this a flag *composition* defect like R17. This is I13 exactly as H-B8 hypothesised it: the per-claim solve reuses a `runtime_encoded_equationt` whose context stack still carries the preceding claim's state, so a non-final claim is discharged against the wrong formula. Worse than a verdict flip: the per-property report actively asserts the claim holds. | `oracle_flag_parity.py --b=--smt-during-symex` (3 corpus divergences: `github_1408`, `github_1890_1`, `github_2629`, all `--multi-property` tests); reproducer in #6540; **no portable regression pin** — see §15 M7 (CI) | **H-B8** | Inspect `runtime_encoded_equationt`'s `push_ctx`/`pop_ctx` pairing across the per-claim loop in `bmc.cpp` — H-A8 assumes the caller balances them (§7.3). Pinned, not fixed. |
 | **R18** | **High (false SUCCESSFUL, default configuration)** — **confirmed with a witness** by H-A6/H-C4, §15 M6; filed as **#6539** | **POR drops a racy interleaving when the write goes through a nested dereference.** `get_expr_globals` resolves *one* pointer level (`get_reference_set` on a single `dereference2tc`), so a write spelled `*(*gpp) = 1` is recorded against the intermediate pointer `gp` rather than its target `g`. A second thread writing `g` directly records `g`, the two keys do not alias, `check_mpor_dependency` returns *independent*, and the interleaving is pruned — **a real race missed in the default configuration, with no diagnostic**. Twelve lines reproduce it: writer does `*(*gpp) = 1`, `main` does `g = 2; seen = g;`, and `assert(seen == 2)` is reachable. Default reports **SUCCESSFUL**; `--no-por` reports FAILED. The mechanism is pinned by a decisive pair: with *both* threads using the nested form the race is found again (matching keys), while writer-nested/main-direct misses it. Splitting the nested access into `int *q = *gpp; *q = 1;` also restores detection, so the key depends on the syntactic nesting depth of the access rather than on the object touched. This is precisely the completeness direction H-A6's A6.2 names — a missed dependency — and it is **not** in the relation but upstream in the key construction feeding it. | `execution_statet::get_expr_globals`, `execution_state.cpp:868-918`; `check_mpor_dependency`, `:1050`; `mpor_set_conflicts`, `:231`; `regression/esbmc-unix/mpor_nested_deref_race` (KNOWNBUG) and `..._nopor` (CORE) | **H-A6**, **H-C4** | Resolve pointer chains to a fixed point instead of one level, or make `mpor_keys_may_alias` treat a pointer key as aliasing everything its value set can reach. Pinned, not fixed: either change widens the dependency relation and will cost interleavings, so it needs the H-C4 sweep re-run for cost before landing. |
+| **R22** | **High (false SUCCESSFUL, default configuration)** — **confirmed with a minimal reproducer** by M8 triage, §15 M8 (cont. 3) | **A shared write performed by a function's return-value assignment creates no interleaving point.** Six lines reproduce it: one thread runs `x = notify(); x = 2;` (`notify` returns `1`), another asserts `x != 1`. Default reports **SUCCESSFUL** — no schedule can observe the intermediate value, because no context switch is offered between the two writes. Three controls make the boundary exact: writing `x = 1; x = 2;` inline reports FAILED; splitting the call off the shared write (`int v = notify(); x = v; x = 2;`) reports FAILED; and inserting *any* other shared write between them (`x = notify(); g = 5; x = 2;`) reports FAILED. The value therefore reaches the equation — `x = notify();` alone reports FAILED, and an in-thread `assert(x == 1)` after it holds — so what is lost is the *scheduling point*, not the write. Not POR (`--no-por` unchanged), not the context bound (`--context-bound 10` unchanged), and not constant propagation (the split control propagates identically and still catches it). `x = notify()` lowers to a `FUNCTION_CALL` instruction carrying the lhs, so the write is performed by the `RETURN` case's `make_return_assignment` path; `execution_statet::symex_step` calls `analyze_assign(assign)` there **after** `symex_return(thecode)`, whose last statement is `cur_state->guard.make_false()`, and `analyze_assign` early-returns on a false guard. That is the same mistake #6558 fixed at `symex_goto` — but reordering the two calls alone does **not** flip the reproducer, so the guard falsification is not the whole mechanism and the remaining step is unidentified. | reproducer and controls above; `execution_statet::symex_step` `RETURN` case, `execution_state.cpp:339-356`; `goto_symext::symex_return`, `symex_function.cpp:1041-1066`; `execution_statet::analyze_assign`, `execution_state.cpp:819-838`; `regression/esbmc-unix/symex_return_value_cswitch` (KNOWNBUG) and `..._split` (CORE) | M8 triage; **H-A6**'s A6.2 completeness obligation | Identify the remaining step, then restore the interleaving point at a call-assigned shared write. Reordering `analyze_assign` before `symex_return` is necessary by the #6558 argument but demonstrably not sufficient. Pinned, not fixed. |
 | **R16** | **Medium (incompleteness under a non-default flag)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify` is not verdict-preserving: 10 corpus inputs where the default proves SUCCESSFUL and `--no-simplify` does not.** Nine report a spurious counterexample (`github_1174_{hex,lmod,oct,pass}`, `github_2341_3`, `github_2357_5`, `github_2566_1`, `github_785-2`, `realloc13`) and one returns UNKNOWN (`github_252`, under `--k-induction`). In every case the *default* leg matches the verdict the test's own `test.desc` expects, so the fault is in the `--no-simplify` configuration, not the default. Spot-confirmed on `github_2341_3`: `--no-simplify` reports a violated `assert(temp != NULL)` the default discharges. The noisy direction — P1 — but it means `do_simplify` is load-bearing for *correctness of the encoding*, not merely for formula size, which is not how an "optimisation" flag reads. | `oracle_flag_parity.py --b=--no-simplify` over `regression/esbmc` CORE | **H-C2** | Triage one input down to the expression shape the encoder mishandles unsimplified. Until then `--no-simplify` is a debugging aid, not a semantics-preserving flag. |
 | **R17** | **High (false SUCCESSFUL, non-default flag pair)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify --no-slice` misses a reachable `assert(0)`.** Three lines reproduce it: `void *b = malloc(-4); assert(0);` returns **`VERIFICATION SUCCESSFUL`**. Neither flag alone does this (both give FAILED), nor does a positive size, nor no allocation — so it is a **composition** defect, the class §7.4 says Tier C exists to catch. The negative size widens to a huge `size_t`; one VCC is generated and the solver returns UNSAT, so the path to the assertion is **vacuously infeasible** and every later assertion in such a program is silently unreachable. Reached in the corpus via `github_1631_compact`, whose `--compact-trace` sets `no-slice` implicitly (`command_line_options.cpp:410`) — that indirection is why the pair is easy to hit without naming it. | minimal reproducer above; `regression/esbmc/no_simplify_no_slice_huge_malloc` (KNOWNBUG, observed output `VERIFICATION SUCCESSFUL`) and `..._malloc` (CORE, positive size, passes today) | **H-C2** | Find which allocation-model constraint becomes contradictory unsimplified — the `__ESBMC_alloc_size` update and any size-overflow guard are the first suspects. Pinned, not fixed. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
@@ -798,7 +799,10 @@ Tier-B case; start from the tree's own `KNOWNBUG` inventory. *Artefact:* a
 **Partial, §15 M8.** All 27 goto-symex `KNOWNBUG`s surveyed and indexed; **9 of
 27 never reach a verdict on this toolchain**, so their KNOWNBUG status is
 uninformative. The index lives in §15 M8 rather than a new directory of copied
-tests. Root-causing the 12 unattributed wrong-verdict entries remains.
+tests. R20 (#6544) and R21 (#6545) attribute five of the twelve unattributed
+wrong-verdict entries. The Linux re-run (§15 M8 cont. 3) discharges the
+"re-measure the masked ones" half: masking drops to 5/28, six tests rejoin the
+inventory, and two of them produce **R22**. Ten unattributed entries remain.
 
 Total ≈ 9 engineer-weeks for the verification track, plus ≈ 2 weeks for the
 ESBMC extension critical path (WI-1…WI-3, §13.6) running alongside it.
@@ -2336,6 +2340,80 @@ unattributed after the survey: two are R20 (#6544), three are R21, and
 `03_circular_reduce` was tested against R18 and rejected. Seven remain, two of
 which (`github_159_postdecrement_fail`, `github_162_fail`) still look like wrong
 tests rather than defects.
+
+### M8 (cont. 3) — 2026-07-31, the Linux re-run
+
+**Result: the masked third of the KNOWNBUG inventory re-measured on Linux, as M8
+asked. Masking drops from 9/27 to 5/28, six tests rejoin the useful inventory,
+five of them are wrong verdicts, and two of those five are one new finding —
+R22.**
+
+The M8 survey ran on macOS/Clang and flagged its own caveat: seven tests never
+parsed, so their `KNOWNBUG` status said nothing about whether their defect
+survived. Re-running all 28 with each test's own flags here:
+
+| Outcome | Linux (28) | macOS (27) |
+|---|---|---|
+| Wrong verdict | 21 | 16 |
+| `ERROR: PARSING ERROR` | 4 | 7 |
+| Crash / no verdict | 1 (R14's `SYMEX_INVARIANT` stop, by design) | 2 crashes + 2 no-verdict |
+
+The four still-unparsed are `fam_false_2`, `fam_true_4` (both `main() {` —
+implicit `int`), `github_197` and `05_pfscan-1.0_01`. **The masking is
+toolchain-dependent exactly as predicted**, which is the point worth keeping: a
+`KNOWNBUG` verdict is only meaningful on a toolchain that parses the test, and no
+single platform's survey settles the inventory.
+
+**The six that were uninformative on macOS and reach a verdict here**, classified
+against their own `test.desc`:
+
+| Test | Expected | Linux | Direction |
+|---|---|---|---|
+| `03_wait_notify` | FAILED | SUCCESSFUL | missed bug — **attributed below** |
+| `03_wait_notify2` | FAILED | SUCCESSFUL | missed bug — **attributed below** |
+| `github_732-1-1` | SUCCESSFUL | FAILED | spurious counterexample |
+| `github_1091` | FAILED | SUCCESSFUL | missed bug |
+| `github_2513_6` | SUCCESSFUL | FAILED | spurious counterexample |
+| `linking-7` | `ERROR` | FAILED | out of §2.3 scope (symbol linking, not symex) |
+
+**Both `wait_notify` tests are attributed, and not to the obvious suspect.** They
+share an `ecsc.h` whose `notify_event()` is
+`{ __ESBMC_atomic_begin(); return 1; __ESBMC_atomic_end(); }` — the
+`__ESBMC_atomic_end()` sits after a `return` and is unreachable, so the atomic
+section is entered and never left and no further context switch is offered.
+Balancing that one function makes both tests report FAILED, as their `test.desc`
+expects. This is a defect in the tests' own header rather than in symex, but the
+ESBMC-side observation transfers: **an unterminated atomic section silently
+disables all remaining interleaving, with no diagnostic** — the same
+false-SUCCESSFUL shape as R17, reached through a modelling error the tool does
+not report. Worth a check at thread end; not filed as a finding here because the
+input is at fault.
+
+**R22 came out of the control, not the hypothesis.** The first guess was that the
+leaked atomic explained a minimal probe too. It did not: the *no-atomic* control
+`x = notify(); x = 2;` is equally SUCCESSFUL, while the inline `x = 1; x = 2;`
+FAILS. That flipped the investigation onto the call, and the boundary is sharp —
+splitting the call off the shared write, or putting any other shared write
+between the two, restores the bug. So the return value lands in the equation and
+only the scheduling point is missing. Full characterisation and the refuted
+mechanisms in §9.2's R22 row.
+
+**A partial mechanism, recorded as partial.** `analyze_assign` is called at
+`RETURN` *after* `symex_return` falsifies the path guard, and `analyze_assign`
+early-returns on a false guard — textually the same mistake #6558 fixed at
+`symex_goto`. Reordering the two calls and rebuilding leaves the reproducer
+SUCCESSFUL, so that is not the whole story and the fix is not landed. Recorded
+as an unfinished trail rather than a plausible-sounding cause, per the standard
+M8 (cont.) set for R20.
+
+Pinned by `regression/esbmc-unix/symex_return_value_cswitch` (KNOWNBUG) and
+`..._split` (CORE, dual-solver agreed), the second so a change that stops
+generating interleaving points for ordinary shared writes cannot make the pair
+pass.
+
+**Still open in M8.** The seven unattributed wrong-verdict KNOWNBUGs from the
+macOS survey, plus the three newly-revealed ones above (`github_732-1-1`,
+`github_1091`, `github_2513_6`).
 
 ### M7 (CI) — 2026-07-30, R19 pins withdrawn
 
