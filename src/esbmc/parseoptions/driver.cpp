@@ -212,6 +212,25 @@ int esbmc_parseoptionst::doit()
         return 1;
       }
 
+  // --incremental-context-bound owns the outer verification loop, re-running
+  // do_bmc per context bound; the unwinding strategies each drive an outer
+  // loop of their own, so only one driver can own the run (issue #6480).
+  if (cmdline.isset("incremental-context-bound"))
+    for (const char *incompatible :
+         {"termination",
+          "incremental-bmc",
+          "falsification",
+          "k-induction",
+          "k-induction-parallel",
+          "loop-invariant"})
+      if (cmdline.isset(incompatible))
+      {
+        log_error(
+          "--incremental-context-bound cannot be combined with --{}",
+          incompatible);
+        return 1;
+      }
+
   // Preprocess the input program.
   // (This will not have any effect if OLD_FRONTEND is not enabled.)
   if (cmdline.isset("preprocess"))
@@ -392,7 +411,9 @@ int esbmc_parseoptionst::doit()
 
   // Now run one of the chosen strategies
   int res;
-  if (
+  if (cmdline.isset("incremental-context-bound"))
+    res = do_context_bound_deepening(options, goto_functions);
+  else if (
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
     cmdline.isset("falsification") || cmdline.isset("k-induction") ||
     cmdline.isset("loop-invariant"))

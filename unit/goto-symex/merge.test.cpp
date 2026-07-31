@@ -21,6 +21,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
+#include <map>
 #include <set>
 #include <string>
 
@@ -94,13 +95,60 @@ bool defines(const symex_target_equationt::SSA_stept &step, const char *var)
            std::string::npos;
 }
 
-/** Assignments to `var` whose rhs is an ite — phi_function's output shape. */
+/** `func@var` for a phi `phi_function` synthesised over a *program* variable,
+ *  else "". Only phi steps are hidden-and-unguarded (`symex_goto.cpp:484`);
+ *  ordinary writes carry the path guard (`symex_assign.cpp:698`). Two traps:
+ *  `original_rhs` is nil on every step here, so it discriminates nothing, and
+ *  hidden-and-unguarded alone also matches symex's own bookkeeping symbols
+ *  (`__ESBMC_alloc`, the `$tmp::return_value$_*` call temporaries — a
+ *  straight-line program has eleven), excluded here by shape. The rhs shape is
+ *  not a discriminator either: a phi is ite-shaped only when neither incoming
+ *  guard is false. */
+std::string phi_target(const symex_target_equationt::SSA_stept &step)
+{
+  if (!step.is_assignment() || !step.hidden || !is_true(step.guard))
+    return "";
+  if (!is_ssa_symbol(step.lhs))
+    return "";
+  const std::string name = to_symbol2t(step.lhs).thename.as_string();
+  const size_t at = name.find("@F@");
+  if (at == std::string::npos)
+    return "";
+  const std::string target = name.substr(at + 3, name.find('?') - at - 3);
+  // A program variable is `@F@<func>@<var>`; a temporary, `@F@<func>::$tmp::…`.
+  if (target.find("::") != std::string::npos)
+    return "";
+  return target.find('@') == std::string::npos ? "" : target;
+}
+
+/** Every `func@var` that received a phi, and how many each got. */
+std::map<std::string, size_t> phi_targets(const symex_target_equationt &eq)
+{
+  std::map<std::string, size_t> counts;
+  for (const auto &step : eq.SSA_steps)
+  {
+    const std::string target = phi_target(step);
+    if (!target.empty())
+      counts[target]++;
+  }
+  return counts;
+}
+
+std::set<std::string> phi_variables(const symex_target_equationt &eq)
+{
+  std::set<std::string> names;
+  for (const auto &[name, _] : phi_targets(eq))
+    names.insert(name);
+  return names;
+}
+
+/** Phis for `var` that select between two live values. */
 std::vector<const symex_target_equationt::SSA_stept *>
 phis_for(const symex_target_equationt &eq, const char *var)
 {
   std::vector<const symex_target_equationt::SSA_stept *> found;
   for (const auto &step : eq.SSA_steps)
-    if (defines(step, var) && !is_nil_expr(step.rhs) && is_if2t(step.rhs))
+    if (phi_target(step) == var && !is_nil_expr(step.rhs) && is_if2t(step.rhs))
       found.push_back(&step);
   return found;
 }
@@ -140,13 +188,13 @@ int main(void)
 )");
 
   auto eq = e.run();
-  const auto phis = phis_for(*eq, "@main@x");
+  const auto phis = phis_for(*eq, "main@x");
   REQUIRE(phis.size() == 1);
 
   // I8 freshness: the phi must define a *new* SSA name, not reuse either of
   // the values it selects between — reuse would alias two distinct values.
   const unsigned phi_index = to_symbol2t(phis[0]->lhs).level2_num;
-  REQUIRE(phi_index > highest_index_before(*eq, "@main@x", phis[0]));
+  REQUIRE(phi_index > highest_index_before(*eq, "main@x", phis[0]));
 
   REQUIRE(e.pending_merges() == 0);
 }
@@ -167,7 +215,7 @@ int main(void)
 )");
 
   auto eq = e.run();
-  const auto phis = phis_for(*eq, "@main@x");
+  const auto phis = phis_for(*eq, "main@x");
   REQUIRE(phis.size() == 1);
 
   const if2t &sel = to_if2t(phis[0]->rhs);
@@ -195,8 +243,8 @@ int main(void)
 )");
 
   auto eq = e.run();
-  REQUIRE(phis_for(*eq, "@main@x").size() == 1);
-  REQUIRE(phis_for(*eq, "@main@untouched").empty());
+  REQUIRE(phis_for(*eq, "main@x").size() == 1);
+  REQUIRE(phis_for(*eq, "main@untouched").empty());
   REQUIRE(e.pending_merges() == 0);
 }
 
@@ -222,7 +270,7 @@ int main(void)
 
   auto eq = e.run();
   // One join per branch construct.
-  REQUIRE(phis_for(*eq, "@main@x").size() == 2);
+  REQUIRE(phis_for(*eq, "main@x").size() == 2);
   REQUIRE(e.pending_merges() == 0);
 }
 
@@ -248,7 +296,7 @@ int main(void) { return pick(1) + pick(2); }
 )");
 
   auto eq = e.run();
-  REQUIRE(!phis_for(*eq, "@pick@r").empty());
+  REQUIRE(!phis_for(*eq, "pick@r").empty());
   REQUIRE(e.pending_merges() == 0);
 }
 
@@ -291,6 +339,137 @@ int main(void)
 )");
 
   auto eq = e.run();
-  REQUIRE(phis_for(*eq, "@main@x").size() >= 3);
+  REQUIRE(phis_for(*eq, "main@x").size() >= 3);
+  REQUIRE(e.pending_merges() == 0);
+}
+
+/* H-B5 (I8, M4) — the phi *counting* law. The cases above pin one variable at
+   a time; these pin the whole set at once, so over-generation (a phi for a
+   variable no arm wrote) and under-generation (none for a variable an arm did
+   write) are both caught by a single equality. §7.2 states the law over
+   "variables written differently in both" arms; `phi_function` filters on the
+   L2 index differing, not the value, so "differently" does not hold — the
+   same-value case below pins what the code actually does. */
+
+TEST_CASE("the phi set is exactly the variables an arm wrote", "[symex][merge]")
+{
+  engine e(R"(
+int nondet_int(void);
+int main(void)
+{
+  int both = nondet_int();
+  int then_only = nondet_int();
+  int else_only = nondet_int();
+  int untouched = nondet_int();
+  if (nondet_int() > 0)
+  {
+    both = nondet_int();
+    then_only = nondet_int();
+  }
+  else
+  {
+    both = nondet_int();
+    else_only = nondet_int();
+  }
+  return both + then_only + else_only + untouched;
+}
+)");
+
+  auto eq = e.run();
+  const std::set<std::string> expected{
+    "main@both", "main@else_only", "main@then_only"};
+  REQUIRE(phi_variables(*eq) == expected);
+  REQUIRE(e.pending_merges() == 0);
+}
+
+TEST_CASE("the same value in both arms still gets a phi", "[symex][merge]")
+{
+  // phi_function's "not changed" test compares L2 indices, so writing one
+  // value down both arms still merges: the arms are distinct SSA names that
+  // happen to hold equal values, which `simplify` cannot see.
+  engine e(R"(
+int nondet_int(void);
+int main(void)
+{
+  int v = nondet_int();
+  int same = nondet_int();
+  if (nondet_int() > 0)
+    same = v;
+  else
+    same = v;
+  return same;
+}
+)");
+
+  auto eq = e.run();
+  REQUIRE(phi_variables(*eq) == std::set<std::string>{"main@same"});
+  REQUIRE(phis_for(*eq, "main@same").size() == 1);
+}
+
+TEST_CASE("a straight-line program gets no phi at all", "[symex][merge]")
+{
+  engine e(R"(
+int nondet_int(void);
+int main(void)
+{
+  int a = nondet_int();
+  int b = a + 1;
+  b = nondet_int();
+  return a + b;
+}
+)");
+
+  auto eq = e.run();
+  // Non-vacuity: the equation exists and assigns, there is just no join in it.
+  REQUIRE(eq->SSA_steps.size() > 0);
+  REQUIRE(phi_variables(*eq).empty());
+}
+
+TEST_CASE("a variable declared inside an arm gets no phi", "[symex][merge]")
+{
+  // The variable is gone from the merged state's L2 map at the join, which is
+  // the one filter in phi_function keyed on absence rather than on the index.
+  engine e(R"(
+int nondet_int(void);
+int main(void)
+{
+  int outer = nondet_int();
+  if (nondet_int() > 0)
+  {
+    int inner = nondet_int();
+    outer = inner;
+  }
+  else
+    outer = nondet_int();
+  return outer;
+}
+)");
+
+  auto eq = e.run();
+  REQUIRE(phi_variables(*eq) == std::set<std::string>{"main@outer"});
+}
+
+TEST_CASE("an unwound loop merges only what it writes", "[symex][merge]")
+{
+  // Every iteration adds joins, so the written variable accumulates phis while
+  // the untouched one must stay at zero however many times the loop unwinds.
+  engine e(R"(
+int nondet_int(void);
+int pick(int a) { if (nondet_int() > 0) return a + 1; return a - 1; }
+int main(void)
+{
+  int x = nondet_int();
+  int y = nondet_int();
+  while (nondet_int() > 0)
+    x = pick(x);
+  return x + y;
+}
+)");
+
+  auto eq = e.run();
+  const auto counts = phi_targets(*eq);
+  REQUIRE(counts.count("main@x") == 1);
+  REQUIRE(counts.at("main@x") > 1);
+  REQUIRE(counts.count("main@y") == 0);
   REQUIRE(e.pending_merges() == 0);
 }
