@@ -121,7 +121,8 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 
     // Catch free pointers: don't allow anything to be pointer object 1, the
     // invalid pointer. Compare object ids, not whole pointers: an
-    // integer-derived pointer lands on that object at a non-zero offset (#6544).
+    // integer-derived pointer lands on that object at a non-zero offset
+    // (#6544).
     type2tc ptr_type = pointer_type2tc(get_empty_type());
     expr2tc invalid_object = symbol2tc(ptr_type, "INVALID");
     expr2tc isinvalid =
