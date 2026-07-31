@@ -5,4 +5,3 @@ row = a[0]
 shape = row.shape
 
 assert shape[0] == 2
-

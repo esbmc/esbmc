@@ -8,4 +8,3 @@ b[0] = 99
 
 assert a[0] == 10
 assert b[0] == 99
-

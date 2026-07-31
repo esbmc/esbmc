@@ -5,4 +5,3 @@ row = a[0]
 owns = row.flags.owndata
 
 assert not owns
-

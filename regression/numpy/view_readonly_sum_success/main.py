@@ -5,4 +5,3 @@ row = a[0]
 total = np.sum(row)
 
 assert total == 3
-

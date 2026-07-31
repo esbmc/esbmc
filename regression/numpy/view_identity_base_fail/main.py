@@ -5,4 +5,3 @@ row = a[0]
 base = row.base
 
 assert base is not None
-

@@ -4,4 +4,3 @@ a = np.array([])
 b = np.flatten(a)
 
 assert len(b) == 0
-

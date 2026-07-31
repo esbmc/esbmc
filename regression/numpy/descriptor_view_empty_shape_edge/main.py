@@ -5,4 +5,3 @@ empty = a[1:1]
 
 assert empty.shape[0] == 0
 assert empty.ndim == 1
-

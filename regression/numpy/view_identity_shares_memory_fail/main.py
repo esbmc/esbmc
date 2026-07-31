@@ -5,4 +5,3 @@ row = a[0]
 shared = np.shares_memory(a, row)
 
 assert shared
-

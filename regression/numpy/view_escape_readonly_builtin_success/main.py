@@ -7,4 +7,3 @@ shape = row.shape
 
 assert n == 2
 assert shape[0] == 2
-

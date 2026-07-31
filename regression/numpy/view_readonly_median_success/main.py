@@ -5,4 +5,3 @@ row = a[0]
 m = np.median(row)
 
 assert m == 3
-

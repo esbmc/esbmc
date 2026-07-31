@@ -6,4 +6,3 @@ row = a[0]
 items = [[row]]
 
 assert True
-

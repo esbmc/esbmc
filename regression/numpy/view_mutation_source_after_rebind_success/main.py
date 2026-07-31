@@ -7,4 +7,3 @@ row = np.array([7, 8])
 a[0][0] = 99
 
 assert True
-

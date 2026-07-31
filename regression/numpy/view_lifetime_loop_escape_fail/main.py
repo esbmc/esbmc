@@ -8,4 +8,3 @@ while n:
     n = False
 
 a[0][0] = 99
-

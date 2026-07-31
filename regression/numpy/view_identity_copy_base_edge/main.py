@@ -5,4 +5,3 @@ b = a.copy()
 base = b.base
 
 assert base is None
-

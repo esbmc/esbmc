@@ -10,4 +10,3 @@ row = a[0]
 box = Box()
 
 box.value = row
-

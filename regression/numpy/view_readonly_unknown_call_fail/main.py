@@ -10,4 +10,3 @@ row = a[0]
 value = consume(row)
 
 assert value == 1
-
