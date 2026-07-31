@@ -441,9 +441,9 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // over operands this pass never reconciled masks a real bug
     // (neural-net_fail SUCCESSFUL where legacy correctly reports FAILED).
     //
-    // Legacy's other three pieces -- the complex branch, the ieee_* retype and
-    // the node-type adoption -- are all measured dead on the Python path;
-    // §10.1 of that scope records the evidence and the converter sites.
+    // Legacy's other two pieces -- the complex branch and the ieee_* retype --
+    // are measured dead on the Python path; §10.1 of that scope records the
+    // evidence and the converter sites responsible.
     std::vector<expr2tc *> ops;
     expr->Foreach_operand([&ops](expr2tc &op) { ops.push_back(&op); });
 
@@ -458,7 +458,27 @@ void python_adjust::adjust_expr(expr2tc &expr)
     };
 
     if (ops.size() == 2 && convertible(*ops[0]) && convertible(*ops[1]))
-      c_implicit_typecast_arithmetic(*ops[0], *ops[1], ns);
+    {
+      expr2tc lhs = *ops[0], rhs = *ops[1];
+      c_implicit_typecast_arithmetic(lhs, rhs, ns);
+
+      // arith_2ops requires the node's own type to agree with *both* operands
+      // in bv-ness and width (assert_arith_2ops_consistency,
+      // irep2_expr.cpp:656 -- compiled out under NDEBUG, so a Release build
+      // will not catch a violation here). Reconcile on copies and commit only
+      // when the promotion lands both operands on one type, which is then
+      // adopted for the node: a half-applied promotion would leave the node
+      // ill-formed. This is legacy's `expr.type() = type0`
+      // (clang_c_adjust_expr.cpp:532-533) with the rebuild IREP2 immutability
+      // forces.
+      if (lhs->type == rhs->type)
+      {
+        *ops[0] = lhs;
+        *ops[1] = rhs;
+        if (lhs->type != expr->type)
+          expr = expr->with_type(lhs->type);
+      }
+    }
   }
   else if (
     is_typecast2t(expr) && is_pointer_type(expr->type) &&

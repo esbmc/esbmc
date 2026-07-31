@@ -424,13 +424,15 @@ An `else if` arm in `python_adjust::adjust_expr` over the eight IREP2
 counterparts of the ids legacy routes to `adjust_expr_binary_arithmetic`
 (`add sub mul div modulus bitand bitxor bitor`), calling
 `c_implicit_typecast_arithmetic(expr2tc&, expr2tc&, ns)` on the two operands
-when both are `bv`/`floatbv`/`fixedbv`. Roughly 20 lines of code, against §3.4's
-40-60 estimate, because two of the three pieces that estimate included turned
-out to be dead on this path.
+when both are `bv`/`floatbv`/`fixedbv`, then adopting the reconciled type for
+the node. Well under §3.4's 40-60 estimate, because one of the three pieces
+that estimate included is dead on this path.
 
-### 10.1 Two sub-arms §3.3/§9.1 asked for, both measured dead
+### 10.1 One sub-arm §3.3 asked for, measured dead
 
-Neither was shipped; keeping either would be dead instrumentation.
+It was not shipped; keeping it would be dead instrumentation. The node-type
+adoption was *also* judged dead on a first pass — that judgement was wrong, and
+CI caught it; see §10.4.
 
 - **The `ieee_*` rebuild (§3.3).** `map_operator` already returns
   `ieee_add`/`ieee_sub`/`ieee_mul`/`ieee_div` whenever the result type is
@@ -440,14 +442,6 @@ Neither was shipped; keeping either would be dead instrumentation.
   `mul`/`div` reaching the arm fired **0 times over 597 tests**. §3.3's concern
   — that IREP2 cannot retype a node in place — is real but does not arise here,
   because nothing needs retyping.
-- **The node-type adoption (§9.1).** Legacy's
-  `if (type0 == type1 && is_number(type0)) expr.type() = type0;` has nothing to
-  do on this path: `converter_binop.cpp:2540-2560` already derives the node type
-  from its operands and pre-promotes a signed rhs against an unsigned lhs.
-  Instrumented, the adoption fired **0 times** over the corpus, over
-  hand-built probes, and — notably — over both tests §9.1 named, including the
-  `E = uint64(2**4 - 1)` shape recorded as its witness. **§9.1's reading of that
-  shape does not survive: it is not an adoption case.**
 
 ### 10.2 Gates
 
@@ -476,3 +470,45 @@ A neighbouring shape does **not** clear, and is worth recording for Phase 2:
 reports SUCCESSFUL. The operands reconcile; what is missing is the conversion at
 the **return seam**, which is the same node-kind question §4 Phase 2 already
 flags for assignments.
+
+### 10.4 The node-type adoption is required — a correction
+
+The first version of this arm converted the operands and left the node type
+alone, on the finding that legacy's adoption never fires here. **That finding
+was an artefact of the probe, and the resulting arm was ill-formed.** CI caught
+it: both new tests aborted on macOS with
+
+```
+Assertion failed: (p1 || (is_bv_type(t) == is_bv_type(v2->type) &&
+  t->get_width() == v2->type->get_width())), function
+  assert_arith_2ops_consistency, file irep2_expr.cpp, line 678.
+```
+
+`arith_2ops` requires the node type to agree with **both** operands in bv-ness
+and width. Promoting an operand without adopting the type violates that
+directly.
+
+**Why the probe said "0 firings".** It logged only the case
+`lhs->type == rhs->type && reconciled != expr->type`. But
+`c_implicit_typecast_arithmetic` frequently promotes *one* operand and leaves
+the other — a `signedbv` literal against a `fixedbv` variable is the common
+shape — so the equality precondition was false exactly when the node became
+inconsistent. The probe measured a strictly narrower condition than the
+invariant, and reported the difference as absence. **Probe the invariant you
+depend on, not a proxy for it.**
+
+**Why local testing did not catch it.** `assert_arith_2ops_consistency` is
+`#ifndef NDEBUG`, so a `RelWithDebInfo` build compiles it out; the corpus census,
+the flip-gate tests and both new regression tests all passed locally with an
+ill-formed IR. Two dead ends worth not repeating: a bare `#undef NDEBUG` in
+`irep2_expr.cpp` makes `c2goto` abort (exit 138) on a *pre-existing* violation
+in the C operational-model build, so it cannot be used to isolate Python-path
+regressions; and a full `DebugOpt` build is the documented route but costs a
+complete rebuild.
+
+**What replaced it.** The arm now reconciles on copies and commits only when the
+promotion lands both operands on one type, which it then adopts via
+`with_type`. Verified by a postcondition probe that checks the invariant itself
+on every 2-op arith node the arm touches — **validated by first confirming it
+reports 2 violations on the pre-fix code**, then 0 after the fix, then 0 across
+the corpus. A probe that has not been shown to fire proves nothing.
