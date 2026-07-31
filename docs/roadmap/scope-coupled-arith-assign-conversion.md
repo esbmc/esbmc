@@ -1,6 +1,7 @@
 # Scope — the coupled arithmetic + assignment conversion (the `python_adjust` flip blocker)
 
-> **Status: Phases 0 and 1 discharged (2026-07-30); Phases 2-3 not started.**
+> **Status: Phases 0 and 1 discharged (2026-07-30); Phase 2 reconnaissance
+> done (2026-07-31, §11), its implementation not started; Phase 3 not started.**
 > This document exists because `docs/roadmap/scope-v1k-adjuster.md` §"Flip gate
 > (2026-07-29)" closes that scope with exactly one remaining prerequisite and
 > hands it off: *"Next owner: take the coupled conversion effort as its own
@@ -196,13 +197,14 @@ Add the assignment-conversion arm calling
 `c_implicit_typecast(source, target->type, ns)`. Only after Phase 1 has landed
 and passed its gate.
 
-**Confirm the node kind first.** A `code_assign2t`-only arm is partly dead on
-this path: the prototype in §9.3 fires on some assignments but leaves
-`precedence2` untouched, whose missing cast is unambiguously at an assignment
-seam. Converter-emitted assignments are `code_expression(sideeffect2t{assign})`
-rather than `code_assign2t` (the same trap recorded for the W1-loc native-body
-work), so the arm must cover both kinds or it will silently skip most Python
-source assignments.
+**Confirm the node kind first.** ~~A `code_assign2t`-only arm is partly dead on
+this path … so the arm must cover both kinds or it will silently skip most
+Python source assignments.~~ **Measured and refuted — see §11.** Every
+Python-source assignment, plain or augmented, arrives as `code_assign2t`; the
+expression-form traffic is `sideeffect_assign2t` (not `sideeffect2t{assign}`,
+which is not a class) and is **entirely C operational-model bodies**. A
+`code_assign2t`-only arm is therefore the correct scope, and it does see
+`precedence2`.
 
 **The `neural-net_fail` check is the acceptance test for this phase**, not a
 regression to notice later. It must report FAILED. §9.3 shows the prototype
@@ -512,3 +514,61 @@ promotion lands both operands on one type, which it then adopts via
 on every 2-op arith node the arm touches — **validated by first confirming it
 reports 2 violations on the pre-fix code**, then 0 after the fix, then 0 across
 the corpus. A probe that has not been shown to fire proves nothing.
+
+## 11. Phase 2 reconnaissance — the assignment node kind, measured (2026-07-31)
+
+§4 Phase 2 opens with "confirm the node kind first". Done, and it changes the
+phase's scope: **two claims in this document were wrong, and both made Phase 2
+look harder than it is.**
+
+### 11.1 What the two node kinds actually are
+
+There is no `sideeffect2t{assign}`. `sideeffect2t`'s `allockind` enum
+(`irep2_expr.h:71-93`) has no `assign` member. Legacy assignment side-effects
+migrate to a **distinct class**, `sideeffect_assign2t`
+(`irep2_expr.h:2382`, built at `migrate.cpp:1905`), carrying an `op` string —
+`assign`, `assign+`, `assign_bitor`, `assign_lshr`, … The statement form is
+`code_assign2t` as expected.
+
+### 11.2 The measurement
+
+`python_adjust::adjust_expr` was instrumented to log each assignment node's
+kind, operand type ids and whether they agree. Controlled minimal pairs isolate
+what Python *source* contributes from the operational-model background:
+
+| program | delta vs its control |
+|---|---|
+| `x = 1.0` → `x = 1.0; x \|= 7` | **+1 shape: `code_assign2t floatbv signedbv DIFF`**; no new `sideeffect_assign2t` shape |
+| `assert True` → `y = n; y += 1; return y` | **+2 `code_assign2t signedbv signedbv`**; `sideeffect_assign2t assign+ signedbv` stays at **9, unchanged** |
+
+The `sideeffect_assign2t` population is *invariant under the Python source* —
+identical counts across all four programs. It is the C operational-model bodies,
+which `clang_c_adjust` already reconciled before `c2goto` froze them.
+
+### 11.3 Consequences for Phase 2
+
+- **A `code_assign2t`-only arm is the correct scope**, not a partial one. §4
+  Phase 2's warning is withdrawn.
+- **§9.4's diagnosis of `precedence2` is withdrawn too.** It reads the missing
+  cast as "an assignment conversion the `code_assign2t` arm does not see"; the
+  measurement shows `x |= 7` *is* a `code_assign2t`, with target `floatbv` and
+  source `signedbv` (`x` is monomorphically float because of the earlier
+  `x /= 3`). Whatever made the §9.3 prototype miss it, it was not the node kind.
+  `precedence2` should be re-tried against a plain `code_assign2t` arm before
+  being re-homed to the "second mechanism" scope.
+- **Do not extend the arm to `sideeffect_assign2t`.** It would touch only OM
+  bodies, for no Python-source benefit, and the traffic includes
+  `assign+ pointer signedbv` (pointer arithmetic) — the same operand kind §9.2
+  requires the arithmetic arm to decline.
+
+### 11.4 Legacy semantics the arm must mirror
+
+For the record, `clang_c_adjust::adjust_side_effect_assign`
+(`clang_c_adjust_expr.cpp:888-923`) is three cases, only the first of which the
+`code_assign2t` path needs (`clang_c_adjust_code.cpp:30`):
+
+| op | legacy action |
+|---|---|
+| `assign` | node type := lhs type; `gen_typecast(rhs, lhs_type)` |
+| `assign_shl` / `assign_shr` | promote **rhs alone**; `shr` becomes `lshr`/`ashr` by lhs signedness — an *op rewrite*, so IREP2 must rebuild the node |
+| all other compound ops | `gen_typecast_arithmetic(lhs, rhs)` — reconcile **both** |
