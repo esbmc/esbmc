@@ -5286,10 +5286,12 @@ Two items, both sized and neither speculative:
    document: `docs/roadmap/scope-v2-w3-attribute-carriage.md`, which finds
    §V.2's prescribed design refuted by Part III's own Q-S1 argument and
    re-scopes to Option D (encapsulate the raw writers; decline W3 removal on a
-   recorded rationale). **Step 1 of 3 has landed** — `#member_name` is seamed
-   end-to-end behind `irept::member_name()`. Solidity's writers and clang-c's
-   `#cpp_type` remain. Option D deliberately does **not** move bar #4, so V.1a
-   and V.6 stay blocked.
+   recorded rationale). **All three Option D steps have landed** —
+   `#member_name` and `#cpp_type` are seamed repo-wide behind
+   `irept::member_name()` / `irept::cpp_type()`, and only `irep.cpp` still
+   spells either key. Option D deliberately does **not** move bar #4, so V.1a
+   and V.6 stay blocked; what changed is that the blockage now rests on a
+   recorded rationale (§3 of the scope doc) rather than an unexamined plan.
 
 V.5 is closed rather than pending — see its scope doc. With those recorded, the
 V-track has no undocumented residue: every remaining item has a named owner
