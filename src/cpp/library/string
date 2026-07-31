@@ -6,8 +6,7 @@
 #include "cstring"
 #include "cstdio"
 #include "cassert"
-// Not via the C++11-guarded <string_view> below: hosts expose the fixed-width
-// typedefs from <string> in every mode (github #3267).
+// Explicit, not via the C++11-guarded <string_view> below (github #3267).
 #include "cstdint"
 #include "iostream"
 #include "cstdlib"
