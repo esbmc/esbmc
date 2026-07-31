@@ -1158,7 +1158,7 @@ void solidity_convertert::convert_type_expr(
     if (is_byte_type(src_type) && is_byte_type(dest_type))
     {
       // prevent something like
-      // bytes_dynamic_from_uint({ .offset=0, .length=0, .initialized=0, .anon_pad$3=0 }, this->$dynamic_pool);
+      // bytes_dynamic_from_uint({ .offset=0, .length=0, .initialized=0, .anon_pad#3=0 }, this->$dynamic_pool);
       if (src_expr.is_struct())
         src_expr = make_aux_var(src_expr, src_expr.location());
 

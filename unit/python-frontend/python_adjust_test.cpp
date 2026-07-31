@@ -659,7 +659,7 @@ TEST_CASE(
   "[python-adjust]")
 {
   // A converter-built literal carries only the value operands; the followed
-  // struct pads to { c, anon_pad$, i } (S1), so S2 must insert a zero pad
+  // struct pads to { c, anon_pad#, i } (S1), so S2 must insert a zero pad
   // operand at position 1, mirroring the legacy adjust_struct insertion.
   config.ansi_c.set_data_model(configt::LP64);
 

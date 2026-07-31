@@ -1,6 +1,7 @@
 #include <goto2c/expr2c.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_misc.h>
+#include <util/irep/pad_names.h>
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/arith/fixedbv.h>
@@ -28,8 +29,7 @@ std::string expr2ct::get_name_shorthand(std::string fullname)
 
 bool expr2ct::is_padding(std::string tag)
 {
-  return has_prefix(tag, "anon_pad$") || has_prefix(tag, "$pad") ||
-         has_prefix(tag, "anon_bit_field_pad$");
+  return is_padding_name(tag);
 }
 
 bool expr2ct::is_anonymous_member(std::string tag)
