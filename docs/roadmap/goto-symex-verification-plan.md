@@ -804,9 +804,10 @@ tests. R20 (#6544) and R21 (#6545) attribute five of the twelve unattributed
 wrong-verdict entries. The Linux re-run (§15 M8 cont. 3) discharges the
 "re-measure the masked ones" half: masking drops to 5/28, six tests rejoin the
 inventory, and two of them produce **R22**. Triage of the resulting ten
-(§15 M8 cont. 7) attributes `github_162_fail` to **R23**, settles three as wrong
-tests — two of them fixed and retired from the inventory — and narrows
-`github_732-1-1` to bitfield layout under type punning. Five remain.
+(§15 M8 cont. 7, 8, 9) yields **R23** — found through `github_162_fail` and
+fixed — settles five as wrong tests, four of them fixed and retired from the
+inventory, and narrows `github_732-1-1` to bitfield layout under type punning.
+Three remain.
 
 Total ≈ 9 engineer-weeks for the verification track, plus ≈ 2 weeks for the
 ESBMC extension critical path (WI-1…WI-3, §13.6) running alongside it.
@@ -2700,6 +2701,54 @@ operation is performed in.
 `github_2572_2`, `github_1091`, `github_2513_6`, plus `github_732-1-1` narrowed
 as above and `github_248` (UNKNOWN under `--k-induction` on mutual infinite
 recursion, which may be plain incompleteness rather than a defect).
+
+### M8 (cont. 9) — 2026-07-31, two more wrong tests, both under-approximations
+
+**Result: `03_inf2` and `03_circular_reduce` are wrong tests, both fixed and
+retired. Neither is a defect: each asks ESBMC for less than the property needs
+and then expects the property to be found anyway. Seven of the ten are now
+resolved.**
+
+A correction to (cont. 7) first: it grouped `03_inf2` with `03_circular_reduce`
+as "the two concurrency entries". `03_inf2` lives in `regression/esbmc/` and has
+no threads at all — it is a `malloc` test. Only `03_circular_reduce` is
+concurrent.
+
+**`03_inf2` — the `github_1626-no-free` shape again.** Its two assertions are
+*unreachable*: `st1 = st_alloc(a, b)` with `a > 0 && b > 0` takes the arm that
+sets `t->z = NULL`, so `if (st1->z > 0)` is never taken. An
+`__ESBMC_assert(0, …)` probe in each of the two bodies reports SUCCESSFUL, and
+the same probe on the following `return` reports FAILED — so the probe fires
+when it should and the bodies really are dead. What the program *does* have is
+three unfreed `malloc`s, and `--memory-leak-check` reports
+`forgotten memory: dynamic_1_array` (CWE-401), which is the FAILED the test
+wants. Flag added, KNOWNBUG → CORE, with the leak message pinned so the test
+cannot pass on some unrelated failure.
+
+**`03_circular_reduce` — the context bound truncated the search by one switch.**
+The loop variable shadows the global `i`, so `assert(i < 1)` fails exactly when
+`receive` first becomes true on the second iteration, which needs
+main → t1 → main → t1: **three** context switches. The test asked for
+`--context-bound 2`:
+
+| configuration | verdict |
+|---|---|
+| sequential simulation of that schedule | FAILED — the property is violable |
+| `--context-bound 2` (as the test had it) | SUCCESSFUL |
+| `--context-bound 3` | FAILED |
+| `--no-por`, or no flags at all | FAILED |
+
+So the bug is found by default and the entry never was a symex defect. Bound
+corrected to 3 — the tight value, so the test still fails if a change loses a
+switch — and KNOWNBUG → CORE. Worth noting for R12's file: this is
+`--context-bound` behaving as designed (an under-approximation reported as
+`VERIFICATION SUCCESSFUL`) biting a test inside this repo's own suite, which is
+the same trap R12 records for `--no-unwinding-assertions`.
+
+**Still open in M8.** Three unattributed — `github_2572_2`, `github_1091`,
+`github_2513_6` — plus `github_732-1-1` (narrowed to bitfield layout under type
+punning) and `github_248` (UNKNOWN under `--k-induction` on mutual infinite
+recursion, likely incompleteness rather than a defect).
 
 ### M8 (cont. 8) — 2026-07-31, R23 fixed, and its attribution corrected
 
