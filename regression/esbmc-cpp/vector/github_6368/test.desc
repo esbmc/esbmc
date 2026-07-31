@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 main.cpp
---unwind 1
+--incremental-bmc
 ^VERIFICATION SUCCESSFUL$
