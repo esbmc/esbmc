@@ -529,8 +529,9 @@ static exprt *find_cpp_new_constructor(exprt &e)
   if (e.id() == "sideeffect" && e.statement() == "temporary_object")
   {
     if (e.find("initializer").is_not_nil())
-      if (exprt *c = find_cpp_new_constructor(
-            static_cast<exprt &>(e.add("initializer"))))
+      if (
+        exprt *c =
+          find_cpp_new_constructor(static_cast<exprt &>(e.add("initializer"))))
         return c;
   }
 
@@ -608,7 +609,17 @@ void goto_convertt::cpp_new_initializer(
       // unrolling it:
       //
       //   for (size_type i = 0; i < n; ++i)
-      //     <initializer, retargeted at *(lhs + i)>
+      //     <element constructor, with `this` = lhs + i>
+      //
+      // Only when there is a constructor to run. `new int[n]` has none, and
+      // the scalar arm's zero-fill is not worth an n-iteration loop: it would
+      // both change the existing behaviour (the array form has always left
+      // such elements nondeterministic) and, for a symbolic n, cost far more
+      // than it buys.
+      exprt *ctor = find_cpp_new_constructor(initializer);
+      if (ctor == nullptr)
+        return;
+
       exprt count = static_cast<const exprt &>(rhs.size_irep());
       if (count.type() != size_type())
         count.make_typecast(size_type());
@@ -628,25 +639,12 @@ void goto_convertt::cpp_new_initializer(
       // The frontend's initializer is shaped for the whole array: a
       // temporary_object of type T[n] wrapping the element constructor, whose
       // `this` is &new_object[0]. Lift that call out and re-point its `this`
-      // at &lhs[i], so each iteration constructs its own element in place.
-      codet body;
-      if (exprt *ctor = find_cpp_new_constructor(initializer))
-      {
-        exprt call = *ctor;
-        call.op1().operands().at(0) = element_addr;
-        code_expressiont ctor_code;
-        ctor_code.expression() = call;
-        ctor_code.location() = rhs.find_location();
-        body = ctor_code;
-      }
-      else
-      {
-        // No constructor to lift (`new int[n]`): the element-wise
-        // substitution the scalar arm performs is already correct.
-        dereference_exprt element(element_addr, lhs.type());
-        replace_new_object(element, initializer);
-        body = to_code(initializer);
-      }
+      // at lhs + i, so each iteration constructs its own element in place.
+      exprt call = *ctor;
+      call.op1().operands().at(0) = element_addr;
+      code_expressiont body;
+      body.expression() = call;
+      body.location() = rhs.find_location();
 
       plus_exprt next(index, from_integer(1, size_type()));
       next.type() = size_type();

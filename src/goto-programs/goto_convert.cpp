@@ -1116,9 +1116,16 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
       exprt byte_size("dynamic_size", size_type());
       byte_size.copy_to_operands(tmp_op);
 
-      exprt elem_size = from_integer(
-        type_byte_size(migrate_type(ns.follow(tmp_op.type().subtype()))),
-        size_type());
+      // An empty class models as zero bytes here, while C++ gives it a
+      // nonzero size ([class]/4). Clamp so the division below is well defined;
+      // the allocation for such a class is itself zero bytes, so its element
+      // count comes out as zero and no destructor runs -- see the limitation
+      // noted on #6584.
+      BigInt esz =
+        type_byte_size(migrate_type(ns.follow(tmp_op.type().subtype())));
+      if (esz == 0)
+        esz = 1;
+      exprt elem_size = from_integer(esz, size_type());
 
       exprt count("/", size_type());
       count.copy_to_operands(byte_size, elem_size);
