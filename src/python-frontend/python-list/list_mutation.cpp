@@ -1249,6 +1249,7 @@ exprt python_list::build_shallow_copy_call(
     config.ansi_c.address_width));
 
   BigInt elem_size_bytes = 0;
+  size_t float_type_id = 0;
   if (src.is_symbol())
   {
     auto it = list_type_map.find(src.identifier().as_string());
@@ -1263,6 +1264,12 @@ exprt python_list::build_shallow_copy_call(
           type_byte_size(migrate_type(elem_type), &converter_.name_space());
       }
     }
+    int type_flag = 0;
+    get_list_type_flags(
+      src.identifier().as_string(),
+      converter_.get_type_handler(),
+      type_flag,
+      float_type_id);
   }
   constant_exprt elem_size(size_type());
   elem_size.set_value(
@@ -1273,6 +1280,7 @@ exprt python_list::build_shallow_copy_call(
   copy_call.arguments().push_back(src);
   copy_call.arguments().push_back(list_type_id);
   copy_call.arguments().push_back(elem_size);
+  copy_call.arguments().push_back(from_integer(float_type_id, size_type()));
   copy_call.lhs() = build_symbol(copied);
   copy_call.type() = list_type;
   copy_call.location() = location;
