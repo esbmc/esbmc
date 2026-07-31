@@ -1,0 +1,5 @@
+CORE
+main.c
+--incremental-bmc
+^VERIFICATION FAILED$
+no definition for external symbol undefined_extern declared at file .*main\.c line 3

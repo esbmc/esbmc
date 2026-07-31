@@ -479,6 +479,31 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
   return failed;
 }
 
+/* A call to a bodyless function is reported ("no body for function", see
+ * symex_function.cpp), but an undefined external variable was silently havoc'd,
+ * leaving no trace that the run covered less than the user believed
+ * (esbmc/esbmc#1424). c_link clears is_extern once a definition is linked in,
+ * so what survives final() is exactly the undefined set. */
+static void warn_undefined_external_symbols(const contextt &context)
+{
+  std::vector<const symbolt *> undefined;
+  context.foreach_operand([&undefined](const symbolt &s) {
+    if (s.is_extern && !s.is_type && !s.get_type().is_code())
+      undefined.push_back(&s);
+  });
+
+  std::sort(
+    undefined.begin(),
+    undefined.end(),
+    [](const symbolt *a, const symbolt *b) { return a->id < b->id; });
+
+  for (const symbolt *s : undefined)
+    log_warning(
+      "no definition for external symbol {} declared at {}",
+      s->name,
+      s->location);
+}
+
 // This method creates a GOTO program by parsing the input program files.
 //
 // \param options - options to be passed to the program parser,
@@ -507,6 +532,8 @@ bool esbmc_parseoptionst::parse_goto_program(
       return true;
     if (final())
       return true;
+
+    warn_undefined_external_symbols(context);
 
     // we no longer need any parse trees or language files
     clear_parse();
