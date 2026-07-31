@@ -1,0 +1,26 @@
+#include <assert.h>
+#include <pthread.h>
+
+_Bool receive = 0;
+_Bool other = 0;
+
+void *t1(void *arg)
+{
+  // Same race, but the branch writes a different variable, which is detected.
+  // Pins the boundary of #6558 rather than the guarded write alone.
+  for (int i = 0; i < 2; i++)
+    if (receive)
+    {
+      assert(i < 1);
+      other = 0;
+    }
+  return NULL;
+}
+
+int main()
+{
+  pthread_t id;
+  pthread_create(&id, NULL, t1, NULL);
+  receive = 1;
+  return 0;
+}
