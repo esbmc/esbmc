@@ -420,7 +420,7 @@ void transform_loop(goto_functiont &goto_function, loopst &loop)
 /// behaviour). We abstain whenever the points-to set is empty, unknown,
 /// invalid, or contains a heap (dynamic) object — none of which has a
 /// nameable symbol to havoc.
-bool resolve_pointer_array_writes(loopst &loop, value_set_analysist &vsa)
+bool resolve_pointer_array_writes(loopst &loop, value_setst &vsa)
 {
   // A write reaching the loop through a callee (pointer is a callee
   // parameter, not in scope here) or with no extractable pointer cannot be
@@ -537,13 +537,14 @@ bool goto_k_induction(goto_functionst &goto_functions, const namespacet &ns)
   // run before any transform_loop mutation, not lazily from inside the loop
   // (an earlier plain loop would already have been transformed). Built only
   // when a pointer-array write is present, to avoid paying the cost.
-  std::shared_ptr<value_set_analysist> vsa;
+  std::shared_ptr<value_setst> vsa;
   if (has_direct_pointer_array_write(goto_functions))
   {
-    vsa = std::make_shared<value_set_analysist>(ns);
+    auto value_sets = std::make_shared<value_set_analysist>(ns);
+    vsa = value_sets;
     try
     {
-      (*vsa)(goto_functions);
+      (*value_sets)(goto_functions);
     }
     catch (...)
     {

@@ -10,7 +10,7 @@
 #include <util/prefix.h>
 #include <fmt/format.h>
 // TODO: Do an points-to abstract interpreter
-std::shared_ptr<value_set_analysist> cse_domaint::vsa = nullptr;
+std::shared_ptr<value_setst> cse_domaint::vsa = nullptr;
 
 void cse_domaint::transform(
   goto_programt::const_targett from,
@@ -229,9 +229,8 @@ void cse_domaint::havoc_expr(
 {
   if (is_dereference2t(target) && vsa != nullptr)
   {
-    auto state = (*vsa)[i_it];
     value_setst::valuest dest;
-    state.value_set->get_reference_set(target, dest);
+    vsa->get_reference_set(i_it, target, dest);
     for (const auto &x : dest)
     {
       if (is_object_descriptor2t(x))

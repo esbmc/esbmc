@@ -4,7 +4,7 @@
 
 #include <util/message.h>
 #include <goto-programs/abstract-interpretation/ai.h>
-#include <pointer-analysis/value_set_analysis.h>
+#include <pointer-analysis/value_sets.h>
 /**
  * @brief Abstract domain to obtain all available expressions (AE)
  *
@@ -109,7 +109,7 @@ protected:
 public:
   // TODO: clearly this shouldn't be here. The proper way is to create a new Abstract Interpreter
   // that contains a points-to analysis
-  static std::shared_ptr<value_set_analysist> vsa;
+  static std::shared_ptr<value_setst> vsa;
 };
 
 #include <util/algorithms.h>
@@ -137,7 +137,7 @@ public:
 class goto_cse : public goto_functions_algorithm
 {
 public:
-  goto_cse(contextt &ns, std::shared_ptr<value_set_analysist> &vsa)
+  goto_cse(contextt &ns, std::shared_ptr<value_setst> &vsa)
     : goto_functions_algorithm(true), context(ns)
   {
     cse_domaint::vsa = vsa;

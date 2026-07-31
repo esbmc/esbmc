@@ -217,12 +217,12 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if (cmdline.isset("gcse"))
     {
-      std::shared_ptr<value_set_analysist> vsa =
-        std::make_shared<value_set_analysist>(ns);
+      auto value_sets = std::make_shared<value_set_analysist>(ns);
+      std::shared_ptr<value_setst> vsa = value_sets;
       try
       {
         log_status("Computing Value-Set Analysis (VSA)");
-        (*vsa)(goto_functions);
+        (*value_sets)(goto_functions);
       }
       catch (vsa_not_implemented_exception &)
       {

@@ -31,10 +31,10 @@
 /// \section andersen_model The abstraction: nodes
 ///
 /// Every variable and every allocation site in the program is abstracted to
-/// a single **node** (see \ref node_id).  A heap allocation inside a loop is
-/// one node no matter how many concrete objects it creates at run time —
-/// that is the source of most of Andersen's imprecision, and it is what keeps
-/// the analysis finite and fast.
+/// a single **node** (see \ref andersent::node_id).  A heap allocation inside
+/// a loop is one node no matter how many concrete objects it creates at run
+/// time — that is the source of most of Andersen's imprecision, and it is what
+/// keeps the analysis finite and fast.
 ///
 /// The result is a map `pts : node_id -> set<node_id>` where `n' in pts[n]`
 /// means "the pointer abstracted by `n` may hold the address of the object
@@ -56,47 +56,9 @@
 ///
 /// Constraints 1 and 2 are *static*: they never change.  Constraints 3 and 4
 /// are *dynamic*: the pairs they relate depend on the points-to sets, which
-/// are still being computed — that is why solving needs a fixpoint.
-///
-/// \section andersen_solve Solving = dynamic transitive closure
-///
-/// Think of copy constraints as edges of a graph over nodes: a copy
-/// `pts[p] ⊇ pts[q]` is an edge `q -> p` meaning "everything q points to also
-/// flows to p".  Solving is:
-///
-///   1. Seed: apply every address-of constraint (`pts[p] ∪= {a}`).
-///   2. Add a copy edge `q -> p` for every copy constraint.
-///   3. Propagate to a fixpoint with a work-list of nodes whose set changed.
-///      When node `n` is processed:
-///        - Load  `p = *n`:   for each `o ∈ pts[n]`, add copy edge `o -> p`.
-///        - Store `*n = q`:   for each `o ∈ pts[n]`, add copy edge `q -> o`.
-///        - Push along every copy edge `n -> m`: `pts[m] ∪= pts[n]`;
-///          if `pts[m]` grew, (re)queue `m`.
-///      Adding an edge can itself enlarge a set, so newly created edges feed
-///      back into the work-list.  The process terminates because sets only
-///      ever grow and are bounded by the (finite) node set.
-///
-/// This is the classic O(n^3) dynamic-transitive-closure formulation.  Real
-/// implementations bolt on cycle elimination (HCD/LCD) and better data
-/// structures; those are deliberately left out here so the core algorithm is
-/// visible.
-///
-/// \section andersen_layers How this file is organised
-///
-/// The class is split into three layers so the *algorithm* can be learned and
-/// unit-tested without dragging in the GOTO/irep2 machinery:
-///
-///   - **Core solver** — pure, operates only on \ref node_id and constraints.
-///     This is the heart of Andersen and the part you implement (see
-///     \ref andersent::solve).  It is fully exercised by the unit tests using
-///     hand-built constraints; no GOTO program is needed.
-///   - **GOTO frontend** — \ref andersent::collect_constraints walks the
-///     goto-functions and lowers each assignment to one of the four
-///     constraints.  This is ESBMC-specific glue, provided as a stub.
-///   - **Query / transparency layer** — implements \ref value_setst so the
-///     existing whole-program consumers (currently GCSE, and the k-induction
-///     pointer-array-write resolver) can query it exactly as they queried the
-///     value-set analysis.
+/// are still being computed — that is why \ref andersent::solve needs a
+/// fixpoint (the classic O(n^3) dynamic transitive closure; cycle elimination
+/// such as HCD/LCD is deliberately left out).
 ///
 /// \section andersen_soundness Soundness contract (why the TOP node exists)
 ///
@@ -114,11 +76,12 @@
 /// int->ptr cast, union type-pun, varargs), an empty set would let a consumer
 /// wrongly conclude "nothing to invalidate" and apply an unsafe rewrite.
 ///
-/// \ref TOP closes that hole.  It is the reserved node "may point anywhere".
-/// Any assignment \ref collect_constraints cannot classify must route its LHS
-/// to TOP (see \ref points_to_top).  The query layer then reports an
-/// unnameable (`unknown`) target, which every consumer already treats as
-/// "abstain / be maximally conservative".  Model-less code stays sound.
+/// \ref andersent::TOP closes that hole.  It is the reserved node "may point
+/// anywhere".  Any assignment \ref andersent::collect_constraints cannot
+/// classify must route its LHS to TOP (see \ref andersent::points_to_top).
+/// The query layer then reports an unnameable (`unknown`) target, which every
+/// consumer already treats as "abstain / be maximally conservative".
+/// Model-less code stays sound.
 class andersent : public value_setst
 {
 public:
@@ -129,9 +92,7 @@ public:
   /// cheap hashed-int sets (and, later, bitvectors).
   typedef unsigned node_id;
 
-  /// Reserved node meaning "may point anywhere" (unknown / unmodelled target).
-  /// Interned once by the constructor, so real program nodes start at 1 and
-  /// \ref get_node never returns it.  See \ref andersen_soundness.
+  /// Reserved "may point anywhere"
   static constexpr node_id TOP = 0;
 
   /// The four inclusion-constraint shapes of \ref andersen_constraints.
@@ -150,12 +111,12 @@ public:
     node_id rhs;
   };
 
-  /// \name Core solver (implement me)
-  /// The pedagogical heart of the class.  These operate purely on node ids.
+  /// \name Core solver
+  /// Operates purely on node ids, so it is exercised by the unit tests from
+  /// synthetic constraints without needing a GOTO program.
   /// @{
 
   /// Interns \p e as a node, returning a stable id (creates one on first use).
-  /// The reverse mapping (node -> expr) powers the query layer.
   node_id get_node(const expr2tc &e);
 
   /// Registers one constraint.  Cheap; the real work happens in \ref solve.
@@ -166,8 +127,7 @@ public:
   void points_to_top(node_id n);
 
   /// Computes the least fixpoint of all registered constraints, populating
-  /// \ref pts.  **This is the exercise** — see \ref andersen_solve for the
-  /// algorithm.  Idempotent: safe to call again after adding constraints.
+  /// \ref pts.  Idempotent: safe to call again after adding constraints.
   void solve();
 
   /// The points-to set of \p n after \ref solve (empty if never grown).
@@ -178,40 +138,42 @@ public:
 
   /// @}
 
-  /// \name GOTO frontend (implement me, phase 2)
+  /// \name GOTO frontend
   /// @{
 
-  /// Walks every function body and lowers pointer-relevant assignments to
-  /// constraints via \ref add_constraint.  Left as a stub: fill in the
-  /// irep2 pattern matching (symbol / address_of / dereference / member /
-  /// index) as the second exercise.
+  /// Walks every function body and lowers pointer-relevant assignments,
+  /// returns and calls to constraints via \ref add_constraint.  Field-,
+  /// index- and context-insensitive; see the implementation for the modelling
+  /// choices.  Independent of \ref solve: it only builds constraints.
+  ///
+  /// Calls through a function pointer cannot be lowered here — their targets
+  /// are exactly what is being computed — so they are recorded and left to
+  /// \ref resolve_indirect_calls.  Use \ref operator(), which drives both.
   void collect_constraints(const goto_functionst &goto_functions);
 
   /// @}
 
   /// \name Query / transparency layer
-  /// Lets whole-program consumers use Andersen wherever they used the
-  /// value-set analysis.  Because the analysis is flow-insensitive, the
-  /// location argument \p l is accepted for API compatibility and ignored.
+  /// Lets whole-program consumers (GCSE, the k-induction pointer-array-write
+  /// resolver) use Andersen wherever they used the value-set analysis.
+  /// Because the analysis is flow-insensitive, the location argument \p l is
+  /// accepted for API compatibility and ignored.
   /// @{
 
-  /// Runs the whole analysis: \ref collect_constraints then \ref solve.
+  /// Runs the whole analysis: \ref collect_constraints, then \ref solve and
+  /// \ref resolve_indirect_calls alternately until a round adds nothing.
   void operator()(const goto_functionst &goto_functions);
 
   /// \ref value_setst interface: values \p expr may hold, as a list of
   /// `object_descriptor2t` wrapping each pointee's program expression.
-  void get_values(
-    goto_programt::const_targett l,
-    const expr2tc &expr,
-    valuest &dest) override;
+  void get_values(locationt l, const expr2tc &expr, valuest &dest) override;
 
-  /// The set of objects a dereference-style l-value can refer to.  Mirrors
-  /// `value_sett::get_reference_set`, so the GCSE havoc path can switch to
-  /// Andersen by calling this instead of reaching into `.value_set`.
-  void get_reference_set(const expr2tc &expr, valuest &dest);
+  /// The set of objects a dereference-style l-value can refer to.
+  void
+  get_reference_set(locationt l, const expr2tc &expr, valuest &dest) override;
 
   /// Flow-insensitive: any location is "known" once the analysis has run.
-  bool has_location(goto_programt::const_targett) const
+  bool has_location(locationt) const override
   {
     return solved;
   }
@@ -226,18 +188,93 @@ protected:
   std::vector<constraintt> constraints;
 
   /// Copy edges `from -> to` built during \ref solve (dynamic edges from
-  /// load/store are appended here as they are discovered).
-  std::vector<std::vector<node_id>> copy_edges;
+  /// load/store are appended here as they are discovered).  A set, because
+  /// the load/store rules re-derive the same edge on every re-visit of a
+  /// node and duplicates would otherwise accumulate without bound.
+  std::vector<std::unordered_set<node_id>> copy_edges;
 
-  /// expr <-> node bijection backing \ref get_node and the query layer.
+  /// Node tracking
   std::unordered_map<expr2tc, node_id, irep2_hash> expr_to_node;
-  std::vector<expr2tc> node_to_expr;
+  std::vector<expr2tc> node_to_expr; // reverse lookup
+
+  /// Counter behind \ref fresh_node.
+  unsigned tmp_count = 0;
 
   /// Set once \ref solve has produced a valid fixpoint.
   bool solved = false;
 
   /// Grows all node-indexed vectors so \p n is a valid index.
   void ensure_node(node_id n);
+
+  /// A node with no program expression, used to hold the intermediate value
+  /// of a compound right-hand side.  Never the target of an ADDRESS_OF, so it
+  /// never appears inside a points-to set.
+  node_id fresh_node();
+
+  /// Unions `pts[src]` into `pts[dst]`; true iff `pts[dst]` grew.
+  bool join(node_id dst, node_id src);
+
+  /// Adds the copy edge `from -> to` and propagates along it immediately.
+  /// True iff `pts[to]` grew.
+  bool add_copy_edge(node_id from, node_id to);
+
+  /// A node whose points-to set is `{TOP}`.  Used as the source of a STORE to
+  /// express "an unmodelled callee may write anything through this pointer".
+  node_id top_source();
+
+  /// The node standing for \p fn's return value, shared by every call site
+  /// (context insensitivity).
+  node_id return_node(const irep_idt &fn);
+
+  /// A node whose points-to set is the value of \p rhs, introducing a
+  /// \ref fresh_node when the expression is not already a nameable object.
+  node_id eval_rhs(const expr2tc &rhs, unsigned location_number);
+
+  /// Lowers `lhs := rhs` to whichever of the four constraints fits.
+  void handle_assign(
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    unsigned location_number);
+
+  /// Binds arguments to formals and the return value to the LHS.
+  void handle_function_call(
+    const code_function_call2t &call,
+    const goto_functionst &goto_functions,
+    unsigned location_number);
+
+  /// A call through a function pointer.  Its targets are only known once the
+  /// pointer's own set has been solved, so it is recorded here and lowered
+  /// later by \ref resolve_indirect_calls.
+  struct indirect_callt
+  {
+    node_id function; ///< node of the callee pointer
+    expr2tc ret;
+    std::vector<expr2tc> arguments;
+    unsigned location_number;
+    std::set<irep_idt> bound; ///< callees already lowered
+    bool widened = false;     ///< conservative fallback already emitted
+  };
+
+  std::vector<indirect_callt> indirect_calls;
+
+  /// Lowers every indirect call whose target set is now known.  True iff new
+  /// constraints were added, meaning another \ref solve round is needed.
+  bool resolve_indirect_calls(const goto_functionst &goto_functions);
+
+  /// Binds \p arguments to \p callee's formals and its return value to \p ret.
+  void bind_call(
+    const irep_idt &callee_name,
+    const goto_functiont &callee,
+    const expr2tc &ret,
+    const std::vector<expr2tc> &arguments,
+    unsigned location_number);
+
+  /// The conservative treatment of a callee this analysis cannot name: it may
+  /// return anything and write anything through the pointers it is handed.
+  void widen_call(
+    const expr2tc &ret,
+    const std::vector<expr2tc> &arguments,
+    unsigned location_number);
 
   /// Translates a solved points-to set into the `object_descriptor2t` list
   /// shape that \ref value_setst consumers expect.
