@@ -1,0 +1,5 @@
+CORE
+prog.c
+--ltl safety.c -DLTL_PREFIX_BOUND=8
+^WARNING: No LTL outcome seen; the property was not checked$
+^VERIFICATION UNKNOWN$

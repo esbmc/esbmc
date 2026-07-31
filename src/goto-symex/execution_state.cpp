@@ -494,7 +494,9 @@ bool execution_statet::check_if_ileaves_blocked()
     // Don't generate further interleavings since __ESBMC_main thread has ended.
     return true;
 
-  if (threads_state.size() < 2)
+  // The monitor never counts: it is stepped by directed switches, so it does
+  // not make an otherwise single-threaded program worth interleaving (#6585).
+  if (threads_state.size() < 2u + (tid_is_set ? 1u : 0u))
     return true;
 
   return false;

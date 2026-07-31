@@ -1,0 +1,6 @@
+CORE
+test.c
+test.ba-2.c -DLTL_PREFIX_BOUND=10 --multi-property
+^\[Counterexample\]$
+FAILED: 'LTL_FAILING
+^VERIFICATION FAILED$

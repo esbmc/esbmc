@@ -493,6 +493,12 @@ unsigned int
 reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 {
   auto is_thread_schedulable = [&](int tid) {
+    // The Buchi monitor steps only via its directed switches; scheduling it
+    // here too would return to the program without the paired switch away and
+    // corrupt the switch bookkeeping (#6585).
+    if (ex_state.tid_is_set && tid == (int)ex_state.monitor_tid)
+      return false;
+
     return check_thread_viable(tid, true) && dfs_explore_thread(tid);
   };
 
