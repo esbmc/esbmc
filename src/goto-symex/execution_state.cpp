@@ -482,6 +482,13 @@ bool execution_statet::check_if_ileaves_blocked()
   if (get_active_atomic_number() > 0)
     return true;
 
+  // A directed monitor step runs from switch_to_monitor to its paired switch
+  // away. The caller's ATOMIC_BEGIN does not cover it -- atomic counts are
+  // per-thread and the monitor's own is zero -- so interleaving here would
+  // abandon the monitor mid-step and strand the bookkeeping (#6585).
+  if (mon_from_tid)
+    return true;
+
   if (art1->directed_interleavings)
     // Don't generate interleavings automatically - instead, the user will
     // inserts intrinsics identifying where they want interleavings to occur,
