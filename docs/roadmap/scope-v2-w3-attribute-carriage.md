@@ -1,6 +1,6 @@
 # Scope — V.2 / W3 IREP2-native attribute carriage
 
-> **Status: not started, and this document recommends re-scoping before it is.**
+> **Status: re-scoped to Option D; step 1 of 3 landed (2026-07-31, §9).**
 > `docs/roadmap/irep2-migration.md` §V.7 lists V.2/W3 as one of two remaining
 > items — *"Untouched; the highest shared blast radius left in the program"* —
 > and V.1a and V.6 both depend on it. This scope re-grounds §V.2 against the
@@ -134,7 +134,7 @@ frontends that were never in scope:
 1. **clang-cpp `#member_name`** (`clang_cpp_convert.cpp`, `.h`) — 4 sites
    behind a typed accessor. Pairs with the single reader at
    `clang_cpp_adjust_code_gen.cpp:51,200`, so `#member_name` becomes fully
-   seamed end-to-end in one PR.
+   seamed end-to-end in one PR. **DONE — §9.**
 2. **Solidity `#cpp_type` + `#member_name`** — the sites Phase 3.1 skipped,
    plus the two `#sol_*` stragglers `irep2-migration.md` §14's correction names
    (`#sol_tuple_id`, `#sol_unchecked`).
@@ -181,3 +181,51 @@ transient type *values*, the same Q-S1 wall Part III hit — so the honest choic
 is the low-cost encapsulation pass that Parts III and IV both converged on,
 with W3 removal declined on a recorded rationale rather than left implicitly
 open.
+
+## 9. Option D step 1 — what landed (2026-07-31)
+
+`#member_name` is now seamed end-to-end: both clang-cpp writers
+(`clang_cpp_convert.cpp:2762,2831`), both readers
+(`clang_cpp_adjust_code_gen.cpp:51,200`), and the Python frontend's existing
+`type_utils` accessors all go through one place.
+
+**One shared seam, not one per frontend — a deliberate departure from §5.1.**
+The accessor is `irept::member_name()` / `member_name(val)` /
+`remove_member_name()`, keyed by an interned `a_member_name`, alongside the
+`irept::cformat()` pair that already treats this attribute family exactly this
+way (`irep.h:478`). Two reasons the shared form is strictly better here:
+
+- **The reader is shared.** `clang_cpp_adjust_code_gen` reads what clang-cpp,
+  Solidity *and* Python write. A per-frontend seam would still leave the key
+  literal in three writer headers plus the reader — four repoint-points for one
+  attribute, which is not what §5.1 was trying to buy.
+- **It matches the codebase's own convention**, so step 2 (Solidity) becomes
+  seven one-line call-site edits with no new accessor to design.
+
+After this step the only live `#member_name` key literal in the tree is
+`irep.cpp:508`. The remaining `git grep` hits in `src/clang-cpp-frontend` and
+`src/python-frontend` are comments.
+
+### 9.1 Gates
+
+| # | Result |
+|---|---|
+| G1 | **Discharged.** `--goto-functions-only` A/B against master over all 582 runnable `esbmc-cpp/cpp` tests: 2 raw divergences, both non-attributable — `ch19_1` embeds a wall-clock timestamp in a string literal, `cpp_sum_class` differs only in stdout/stderr interleaving of a progress line |
+| G2 | **Discharged** for `esbmc-cpp` (676/685; the 9 failures reproduce identically on the master binary) and `python` (375/375 on a stride-4 slice). `esbmc-solidity` is untouched by this step and is macOS-blocked — it rides CI |
+| G3 | Not applicable to this step: `cpp_expr2string` reads `#cpp_type`, not `#member_name` |
+| G4 | Not applicable: `goto2c/expr2c` reads `#cpp_type` |
+| G5 | **Discharged** for clang-cpp and Python (comments only). Solidity's 7 writers are step 2 |
+
+**Harness note for step 2.** Both A/B censuses on this track were first invalidated
+by randomized temp directories embedded in the GOTO dump, in four spellings —
+`esbmc.XXXX-`, `esbmc_XXXX-`, `esbmc-cpp-headers-`, `esbmc-headers-` — plus
+`esbmc-python-astgen-` on the Python side. Normalize the whole path segment
+(`s@/esbmc[-._][^/ ]*@/TMPD@g`), not individual prefixes, or the run reports
+~90 % false divergence.
+
+### 9.2 What this does not do
+
+Unchanged from §5.1's honest trade, restated because it is easy to lose: this
+does **not** remove W3. §V.1 bar #4 stays "no", and V.1a and V.6 stay blocked.
+What it buys is one repoint-point for `#member_name` if carriage is ever
+revisited — and §3's argument that it should not be is unaffected.

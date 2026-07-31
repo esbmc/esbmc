@@ -1,0 +1,11 @@
+properties:
+
+  # A rising-edge contact energises the coil only on the scan its operand goes
+  # high, so the operand can still be held while the coil has already dropped.
+  # A resolver that ignored the edge attribute would make q track a, and this
+  # state would be unreachable (edge_level_safe proves exactly that).
+  - id: P1
+    kind: reachability
+    expression: "a && !q"
+    description: "Operand still held while the coil has dropped"
+    justification: "Only transition sensing can leave the coil off while its operand is high"
