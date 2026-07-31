@@ -1299,8 +1299,20 @@ void python_converter::reject_numpy_view_identity_query(
   {
     const std::string attr = node.value("attr", "");
     if (attr == "base" || attr == "owndata")
-      throw std::runtime_error(
-        "TypeError: numpy view identity is not supported");
+    {
+      const std::string root_name = node.contains("value")
+                                      ? root_name_from_subscript(node["value"])
+                                      : std::string();
+      const std::string root_id =
+        root_name.empty() ? std::string() : resolve_name_symbol_id(root_name);
+      if (
+        !root_id.empty() && (numpy_array_symbols_.count(root_id) != 0 ||
+                             numpy_view_copy_sources_.count(root_id) != 0))
+      {
+        throw std::runtime_error(
+          "TypeError: numpy view identity is not supported");
+      }
+    }
 
     if (node.contains("value"))
       reject_numpy_view_identity_query(node["value"]);
@@ -1312,9 +1324,17 @@ void python_converter::reject_numpy_view_identity_query(
     node["func"].is_object() && node["func"].value("_type", "") == "Attribute")
   {
     const std::string attr = node["func"].value("attr", "");
-    if (attr == "shares_memory" || attr == "may_share_memory")
-      throw std::runtime_error(
-        "TypeError: numpy view identity is not supported");
+    if (attr != "shares_memory" && attr != "may_share_memory")
+      return;
+
+    const nlohmann::json &func = node["func"];
+    if (
+      !func.contains("value") || !func["value"].is_object() ||
+      func["value"].value("_type", "") != "Name" ||
+      !is_imported_numpy_module_alias(*ast_json, func["value"].value("id", "")))
+      return;
+
+    throw std::runtime_error("TypeError: numpy view identity is not supported");
   }
 }
 
@@ -3345,8 +3365,13 @@ void python_converter::get_var_assign(
       !base_is_imported_module &&
       (method_name == "transpose" || method_name == "reshape" ||
        method_name == "ravel");
+    const std::string method_base_id =
+      method_base_name.empty() ? std::string()
+                               : resolve_name_symbol_id(method_base_name);
     const bool supported_copy_method =
-      !base_is_imported_module && method_name == "copy";
+      !base_is_imported_module && method_name == "copy" &&
+      !method_base_id.empty() &&
+      numpy_array_symbols_.count(method_base_id) != 0;
     if (supported_copy_method)
     {
       effective_ast_node["value"] = ast_node["value"]["func"]["value"];
@@ -4946,8 +4971,19 @@ void python_converter::get_return_statements(
     if (
       decl.is_object() && decl.value("_type", "") != "arg" &&
       decl.contains("value") && is_numpy_view_copy_expr(decl["value"]))
-      throw std::runtime_error(
-        "TypeError: returning a copied numpy view is not supported");
+    {
+      const std::string root_name =
+        root_name_from_numpy_view_copy_expr(decl["value"]);
+      const std::string root_id =
+        root_name.empty() ? std::string() : resolve_name_symbol_id(root_name);
+      if (
+        !root_id.empty() && (numpy_array_symbols_.count(root_id) != 0 ||
+                             numpy_view_copy_sources_.count(root_id) != 0))
+      {
+        throw std::runtime_error(
+          "TypeError: returning a copied numpy view is not supported");
+      }
+    }
   }
 
   exprt return_value = get_expr(ast_node["value"]);
