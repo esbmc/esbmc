@@ -2759,7 +2759,7 @@ bool clang_cpp_convertert::annotate_class_field(
     return true;
   }
   std::string parent_class_id = tag_prefix + type.tag().as_string();
-  comp.type().set("#member_name", parent_class_id);
+  comp.type().member_name(parent_class_id);
 
   // set access in component
   if (annotate_class_field_access(field, comp))
@@ -2828,7 +2828,7 @@ bool clang_cpp_convertert::annotate_class_method(
   // versions don't).
   std::string parent_class_name, parent_class_id;
   get_decl_name(*cxxmdd.getParent(), parent_class_name, parent_class_id);
-  component_type.set("#member_name", parent_class_id);
+  component_type.member_name(parent_class_id);
 
   // annotate ctor and dtor
   if (is_ConstructorOrDestructor(cxxmdd))
