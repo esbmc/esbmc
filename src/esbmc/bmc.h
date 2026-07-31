@@ -58,6 +58,9 @@ public:
   BigInt interleaving_number;
   BigInt interleaving_failed;
 
+  /** Mirrors reachability_treet::cs_bound_pruned; valid after start_bmc(). */
+  bool cs_bound_pruned = false;
+
   virtual smt_resultt start_bmc();
   virtual smt_resultt run(std::shared_ptr<symex_target_equationt> &eq);
   virtual ~bmct();

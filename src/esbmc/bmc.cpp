@@ -1532,7 +1532,11 @@ void bmct::report_result(smt_resultt &res)
         !options.get_bool_option("kind-violation-found") &&
         !(is && options.get_bool_option("disable-inductive-step")))
       {
-        if (vacuity_detected || ltl_uninstrumented)
+        // A bounded round proves nothing on its own: the driver decides the
+        // verdict once the search becomes exhaustive.
+        if (options.get_bool_option("suppress-bounded-success"))
+          log_status("No violation found within the current context bound");
+        else if (vacuity_detected || ltl_uninstrumented)
           report_unknown();
         else
           report_success();
@@ -1626,6 +1630,10 @@ smt_resultt bmct::start_bmc()
     sarif_goto_trace(options, ns, empty_trace, dead_store_advisories);
     dead_store_sarif_written = true;
   }
+
+  if (symex)
+    cs_bound_pruned = symex->cs_bound_pruned;
+
   return res;
 }
 

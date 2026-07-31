@@ -845,18 +845,43 @@ is the only gate on the front-end.
   for the M1 review in `docs/safe-ld-sos-semantics.md` §10 — the two agree on Q
   and differ only above the preset, and the type bound is the over-approximating
   (so non-hiding) choice.
-- **Graphical path enumeration is exponential — now bounded, but not fixed.**
-  The resolver enumerates every simple rail-to-sink path, so cost grows as 2^N
-  in re-convergent parallel branches. It is now bounded at 100000 search steps
-  (~5000x the widest benchmark network, which peaks at 20), and exceeding the
-  bound is a hard error rather than a truncated path set. **The bound only makes
-  the blowup diagnosable; the algorithm is still exponential.** Measured: a
-  network of 18 fully-connected 2-wide stages — just 36 contacts — costs 112 s
-  of GOTO-creation time unguarded, versus 0.15 s to reject
-  (`graphical_path_explosion_fail`). 36 contacts is far below the 1000 rungs the
-  WP2 performance criterion targets at <5 s, so **that criterion is not merely
-  unmeasured, it is unreachable for re-convergent graphical networks** until the
-  enumeration is replaced by per-node power-flow accumulation, which is linear.
+- **Graphical path enumeration replaced by per-node accumulation.** The
+  resolver used to enumerate every simple rail-to-sink path, so cost grew as 2^N
+  in re-convergent parallel branches: 18 fully-connected 2-wide stages — just 36
+  contacts — cost 112 s of GOTO-creation time, and a search bound was needed to
+  reject such a program outright. It now computes
+  `pf(n) = (OR over preds p of pf(p)) AND cond(n)` once per node, which is
+  O(V+E), and the search bound is gone. The same 36-contact network resolves in
+  0.13 s (`graphical_wide_network_fail`), and GOTO creation is linear in
+  practice on fully re-convergent networks:
+
+  | contacts | 150 | 450 | 1050 | 2100 |
+  |---|---|---|---|---|
+  | GOTO creation | 0.33 s | 0.37 s | 0.76 s | 1.50 s |
+
+  This removes the resolver as the obstacle to the WP2 <5 s / 1000-rung
+  criterion, but **does not meet it**. Measured end-to-end on ladder-shaped
+  programs (each rung a short series chain, every third with a parallel branch),
+  `--k-induction --unlimited-k-steps`, all verdicts SUCCESSFUL:
+
+  | rungs | GOTO creation | end-to-end |
+  |---|---|---|
+  | 100 | 0.12 s | 2.6 s |
+  | 250 | 0.26 s | 12.4 s |
+  | 500 | 0.48 s | 48.0 s |
+  | 1000 | 0.96 s | 190.9 s |
+
+  GOTO creation is linear and is **0.5% of the runtime**; end-to-end grows
+  roughly quadratically, so the criterion holds only to ~130 rungs and is missed
+  by ~38x at 1000.
+
+  The cost is **symex, not the solver**. At 500 rungs one symex pass takes 5.7 s
+  for 12673 assignments, of which slicing then removes 12659 — 99.9% — leaving a
+  single VCC that the solver discharges in 0.000 s. k-induction repeats that
+  whole pass per step. So the lever is not the resolver or the solver but the
+  work symex does on rungs the property never reads: slicing earlier, or
+  restricting the scan body to the cone of influence of the properties, is what
+  the criterion needs.
 - **Arithmetic and unknown blocks on a rung path** are still not modelled —
   only timers and counters are resolved on graphical paths — but they are now
   a hard `UnsupportedConstruct(name, tier=2)` error rather than a dropped path,
@@ -948,9 +973,9 @@ the undriven-sink and unsupported-block rejections and the enumeration bound.
 ### Suggested next increments
 
 1. Run the M1 review of `docs/safe-ld-sos-semantics.md` and close its §10 items.
-2. Replace rail-to-sink path enumeration with per-node power-flow accumulation.
-   The step bound now rejects wide networks instead of hanging, but a linear
-   resolver would verify them instead — and is what the WP2 <5 s / 1000-rung
-   criterion requires.
+2. Cut the symex cost that dominates end-to-end time (see the table above):
+   slice against the properties' cone of influence before symex rather than
+   after, so a 1000-rung program does not re-explore 12673 assignments per
+   k-induction step to discharge one VCC.
 3. Model arithmetic/unknown blocks on graphical rung paths, so the programs
    rejected as `UnsupportedConstruct` can be verified rather than refused.

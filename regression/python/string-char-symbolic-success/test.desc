@@ -1,4 +1,4 @@
-FUTURE
+CORE
 main.py
-
+--nondet-str-length 4 --unwind 5
 ^VERIFICATION SUCCESSFUL$
