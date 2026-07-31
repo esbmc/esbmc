@@ -679,3 +679,43 @@ G3 (`github_4344` SUCCESSFUL). What remains before the Phase 3 flip is not this
 scope's implementation but the two foreign mechanisms — the §9.4 second
 mechanism (`chained-comparison2_fail`, `lambda15`, `precedence2`, `sum_tuple`)
 and the array-typecast class (the `github_5571` pair) — plus G4/G5.
+
+## 14. §13 refined — the `github_5571` abort *is* an assignment conversion
+
+§13 concluded the pair was "a third mechanism this scope cannot reach". A GOTO
+diff of `github_5571_tuple_str_annotation` shows that is half right: the mechanism
+is distinct, but it is reachable by an assignment arm — an **array-aware** one,
+which §12's numeric-plus-pointer-into-Boolean guard declines.
+
+The whole difference in `f` is one line:
+
+```
+legacy:   DECL signed char [0] s;  ASSIGN s = (signed char [16])(&{ 0 }[0]);
+hop-off:  DECL signed char [0] s;  ASSIGN s = { 0 };
+```
+
+Legacy does **two** things at the assignment seam — decays the `char[1]` string
+literal to `&{0}[0]`, then casts to `char[16]`. The hop-off does neither and
+assigns the bare `constant_array`. Crucially, `typecast → char[16]` appears
+**twice in the legacy dump and only once in the hop-off dump**: the cast the SMT
+layer chokes on is not in the hop-off GOTO at all. It is synthesised later,
+during symex, when the `char[1]` value meets its differently-sized destination —
+and `convert_typecast` has no array arm, hence
+`ERROR: Typecast for unexpected type`.
+
+So the defect class is the one §2 describes — an unconverted assignment reaching
+the solver — with an array type instead of a scalar one. The reason it survived
+Phase 2 is the guard, not the node kind: §11's measurement stands, the
+assignment *is* a `code_assign2t`.
+
+**What an array arm has to reproduce**, and why it was not attempted blind: the
+legacy shape `(signed char [16])(&{ 0 }[0])` is a cast of a *pointer* to an
+*array* type, assigned to a variable declared `char[0]`. All three widths differ
+and the existing `is_pointer_type(target)` decay arm cannot emit it. Getting that
+wrong risks the array/pointer mismatch at symex rename that the decay arms were
+added to fix, so it wants its own measured pass rather than an extension bolted
+onto §12's guard.
+
+This supersedes §13's "cannot reach" framing. G3's re-homing still stands — the
+pair is not cleared by Phases 1-2 as built — but the follow-up belongs to this
+scope's family, not to an unrelated one.
