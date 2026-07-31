@@ -257,7 +257,7 @@ nothing else. §5.1's three-step list is discharged.
 | # | Result |
 |---|---|
 | G1 | **Discharged.** Full-output A/B against master over all 582 runnable `esbmc-cpp/cpp` tests: 1 raw divergence, `cpp_sum_class`, proven non-attributable by a **master-vs-master self-A/B control** that produces 2 140 diff lines on the same test — it is `--k-induction-parallel`, the shape §5's census rule 3 already flags as unstable against itself |
-| G2 | **Discharged** for `esbmc-cpp` and `python`; `esbmc-solidity` rides Linux CI (macOS has no `solc` and stubbed `sol64` models) |
+| G2 | **Discharged.** `esbmc-cpp` 676/685 — the same 9 failures as §9.1, each verified identical on the master binary; `python` green on a stride-5 slice. `esbmc-solidity` rides Linux CI (macOS has no `solc` and stubbed `sol64` models) |
 | G3 | **Discharged, and it is the load-bearing one here** — `cpp_expr2string` is a reader, so the A/B compares full stdout including counterexample text, not just verdicts. 0 divergences over all 106 `esbmc-cpp/cpp/*_fail` tests, which are the ones that print a counterexample |
 | G4 | **Not runnable.** `goto2c/expr2c.cpp` is a reader, but the tree has no goto2c regression suite and no `test.desc` invokes that path — `grep -rl goto2c regression/` is empty. The reader is covered by inspection only (a one-line `get` → accessor substitution). Recorded rather than claimed |
 | G5 | **Discharged repo-wide**, see above |
