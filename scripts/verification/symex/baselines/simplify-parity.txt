@@ -1,0 +1,22 @@
+# H-C2 (--no-simplify) known divergences.
+# Each entry must cite a finding or issue; an untriaged divergence is a blocker,
+# not a baseline (plan §11.3). Remove an entry when its defect is fixed -- the
+# oracle reports STALE-BASELINE if a listed test starts agreeing again.
+
+# R16 -- spurious counterexample under --no-simplify (default leg is correct).
+github_1174_hex
+github_1174_lmod
+github_1174_oct
+github_1174_pass
+github_2341_3
+github_2357_5
+github_2566_1
+github_785-2
+realloc13
+
+# R16 -- returns UNKNOWN under --no-simplify, under --k-induction.
+github_252
+
+# R17 -- false SUCCESSFUL: --compact-trace implies --no-slice, and
+# --no-simplify --no-slice makes a reachable assert(0) vacuously unreachable.
+github_1631_compact

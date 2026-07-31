@@ -1,0 +1,205 @@
+name: Symex Oracles
+
+# Tier-C metamorphic oracles for the goto-symex verification plan
+# (docs/roadmap/goto-symex-verification-plan.md §7.4, §11.2). Each leg compares
+# ESBMC against itself under a semantically-equivalent configuration and fails
+# only on a divergence that is not already triaged in its baseline file.
+#
+# These are deliberately *not* per-PR checks: each leg runs the corpus twice, so
+# they are scheduled rather than blocking. Nightly covers the cheap legs (one
+# extra run per test); the weekly cron additionally covers the concurrency and
+# unwind-ladder legs.
+#
+# A divergence is a real defect in one of the two configurations — the oracle
+# cannot say which. Per §11.3 an untriaged divergence is a blocker, not a
+# baseline: entries may only be added to a baseline file with a finding id or an
+# issue link. STALE-BASELINE lines mean a listed test now agrees and the entry
+# should be removed, so a fixed defect cannot silently keep its exemption.
+#
+# Bring-up note: `continue-on-error: true` mirrors sanitizers.yml — the R16/R17
+# baseline is populated from a macOS run and the Linux runner may reach verdicts
+# on inputs that time out locally. Drop the flag once a full Linux run has
+# confirmed the baselines.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 02:37 daily — cheap legs.
+    - cron: '37 2 * * *'
+    # 03:41 Sunday — everything, including the weekly legs.
+    - cron: '41 3 * * 0'
+
+jobs:
+  oracle:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    continue-on-error: true
+    # A weekly cron runs every leg; the nightly cron runs only the cheap ones.
+    # Job-level `if` cannot see `matrix`, but job-level `env` can, so the
+    # condition is evaluated once here rather than repeated on each step.
+    env:
+      RUN_LEG: >-
+        ${{ github.event_name != 'schedule' ||
+            matrix.cadence == 'nightly' ||
+            github.event.schedule == '41 3 * * 0' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: slice-parity
+            cadence: nightly
+            args: --b=--no-slice
+            suite: regression/esbmc
+          - name: simplify-parity
+            cadence: nightly
+            args: --b=--no-simplify
+            suite: regression/esbmc
+          - name: solver-parity
+            cadence: nightly
+            args: --a=--bitwuzla --b=--z3
+            suite: regression/esbmc
+          - name: interval-guard-parity
+            cadence: weekly
+            args: --b=--no-interval-symex-guard
+            suite: regression/esbmc
+          - name: incremental-equation-parity
+            cadence: weekly
+            args: --b=--smt-during-symex
+            suite: regression/esbmc
+          - name: por-parity
+            cadence: weekly
+            args: --b=--no-por
+            suite: regression/esbmc-unix
+          - name: state-hashing-parity
+            cadence: weekly
+            args: --b=--state-hashing
+            suite: regression/esbmc-unix
+    steps:
+      - uses: actions/checkout@v4
+        if: env.RUN_LEG == 'true'
+
+      - name: Build ESBMC
+        if: env.RUN_LEG == 'true'
+        run: ./scripts/build.sh -b RelWithDebInfo -e Off -C
+
+      - name: Run ${{ matrix.name }}
+        if: env.RUN_LEG == 'true'
+        run: |
+          BASELINE=scripts/verification/symex/baselines/${{ matrix.name }}.txt
+          test -f "$BASELINE" || BASELINE=/dev/null
+          python3 scripts/verification/symex/oracle_flag_parity.py \
+            --esbmc build/src/esbmc/esbmc \
+            --suite ${{ matrix.suite }} \
+            ${{ matrix.args }} \
+            --timeout 60 \
+            --baseline "$BASELINE" \
+            | tee oracle-${{ matrix.name }}.log
+
+      - name: Summarise
+        if: always()
+        run: |
+          LOG=oracle-${{ matrix.name }}.log
+          test -f "$LOG" || exit 0
+          {
+            echo "### ${{ matrix.name }}"
+            echo '```'
+            grep -E '^(agreed|diverged|inconclusive|skipped|baselined)' "$LOG" || true
+            grep -E '^(NEW-DIVERGENCE|STALE-BASELINE)' "$LOG" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-${{ matrix.name }}
+          path: oracle-${{ matrix.name }}.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  unwind-monotonic:
+    name: unwind-monotonicity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    continue-on-error: true
+    # Weekly only: this leg runs each test once per bound, not twice overall.
+    if: github.event_name != 'schedule' || github.event.schedule == '41 3 * * 0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ESBMC
+        run: ./scripts/build.sh -b RelWithDebInfo -e Off -C
+
+      - name: Run unwind monotonicity
+        run: |
+          python3 scripts/verification/symex/oracle_unwind_monotonic.py \
+            --esbmc build/src/esbmc/esbmc \
+            --bounds 1,2,4,8 \
+            --timeout 60 \
+            | tee oracle-unwind.log
+
+      - name: Summarise
+        if: always()
+        run: |
+          test -f oracle-unwind.log || exit 0
+          {
+            echo "### unwind-monotonicity"
+            echo '```'
+            grep -E '^(exercised|violations|inconclusive|LOST)' oracle-unwind.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-unwind
+          path: oracle-unwind.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  claim-parity:
+    name: claim-parity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    continue-on-error: true
+    # Weekly only: this leg runs one --claim pass per property, so its cost grows
+    # with the claim count rather than being two runs per test.
+    if: github.event_name != 'schedule' || github.event.schedule == '41 3 * * 0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ESBMC
+        run: ./scripts/build.sh -b RelWithDebInfo -e Off -C
+
+      - name: Run claim parity
+        run: |
+          BASELINE=scripts/verification/symex/baselines/claim-parity.txt
+          test -f "$BASELINE" || BASELINE=/dev/null
+          python3 scripts/verification/symex/oracle_claim_parity.py \
+            --esbmc build/src/esbmc/esbmc \
+            --max-claims 12 \
+            --timeout 60 \
+            --baseline "$BASELINE" \
+            | tee oracle-claim.log
+
+      - name: Summarise
+        if: always()
+        run: |
+          test -f oracle-claim.log || exit 0
+          {
+            echo "### claim-parity"
+            echo '```'
+            grep -E '^(compared|diverged|skipped|MISMATCH|NEW-DIVERGENCE|STALE-BASELINE)' oracle-claim.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-claim
+          path: oracle-claim.log
+          retention-days: 30
+          if-no-files-found: warn
