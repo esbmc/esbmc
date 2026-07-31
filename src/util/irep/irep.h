@@ -480,6 +480,16 @@ public:
     return get(a_cformat);
   }
 
+  /// Owning class tag of a member function type, e.g. `tag-MyClass`.
+  /// Written by the clang-cpp, Solidity and Python frontends; read by
+  /// clang_cpp_adjust_code_gen to locate a constructor's class symbol.
+  /// Carriage stays on the legacy irep — see
+  /// docs/roadmap/scope-v2-w3-attribute-carriage.md.
+  inline const irep_idt &member_name() const
+  {
+    return get(a_member_name);
+  }
+
   inline const irep_idt &cmt_width() const
   {
     return get(a_cmt_width);
@@ -718,6 +728,16 @@ public:
   inline void cformat(const irep_idt val)
   {
     set(a_cformat, val);
+  }
+
+  inline void member_name(const irep_idt val)
+  {
+    set(a_member_name, val);
+  }
+
+  inline void remove_member_name()
+  {
+    remove(a_member_name);
   }
 
   inline void flavor(const irep_idt val)
@@ -1252,6 +1272,7 @@ public:
   static const irep_idt a_pretty_name, a_property, a_size, a_integer_bits, a_to;
   static const irep_idt a_failed_symbol, a_dynamic, a_cmt_base_name, a_id_class;
   static const irep_idt a_cmt_identifier, a_cformat, a_cmt_width, a_axiom;
+  static const irep_idt a_member_name;
   static const irep_idt a_cmt_constant, a_default;
   static const irep_idt a_ellipsis, a_explicit, a_file_local;
   static const irep_idt a_hex_or_oct, a_hide, a_implicit, a_incomplete;

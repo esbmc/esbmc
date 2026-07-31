@@ -530,51 +530,56 @@ static bool parse_graphical_ld(
     }
   }
 
-  // Step 4: enumerate simple paths from every leftPowerRail to a target.
-  // The returned paths exclude the rail and the target itself.
+  // Step 4: invert the power-flow edges and mark which nodes the rails reach.
   //
-  // The search is exponential in the number of parallel branches, so it is
-  // bounded. Exceeding the bound is an error rather than a truncated
-  // enumeration: dropping paths would silently weaken the model the same way
-  // an unmodellable path used to. The bound is ~5000x the widest network in
-  // the benchmark set (stairs_light peaks at 20 steps), so it is only
-  // reachable by an export far wider than anything drawn by hand.
-  static constexpr unsigned long max_path_search_steps = 100000;
-
+  // Power flow is computed per node, not per rail-to-sink path:
+  //
+  //     pf(n) = (OR over predecessors p of pf(p)) AND cond(n)
+  //
+  // which needs each node's predecessors and costs O(V+E). Enumerating simple
+  // paths instead — the distributed form of the same expression — is
+  // exponential in the number of parallel branches, and reached 112s of
+  // GOTO-creation time on a network of 36 contacts.
+  //
+  // Reachability is tracked separately because a node whose predecessors never
+  // reach a rail has pf = false in every scan. That is indistinguishable from a
+  // correctly de-energised node in the emitted IR, so such a sink is diagnosed
+  // (below) rather than left to verify over strictly less behaviour.
   std::vector<int> left_rails;
   for (auto &[lid, g] : nodes)
     if (g.tag == "leftPowerRail")
       left_rails.push_back(lid);
 
-  auto paths_to = [&](int target) {
-    std::vector<std::vector<int>> found;
-    std::vector<int> path;
-    std::set<int> visited;
-    unsigned long steps = 0;
-    std::function<void(int)> dfs = [&](int cur) {
-      if (++steps > max_path_search_steps)
-        throw LdParseError(
-          "graphical LD: network feeding localId " + std::to_string(target) +
-          " has too many parallel paths to enumerate (limit " +
-          std::to_string(max_path_search_steps) + " steps)");
-      if (cur == target)
-      {
-        found.push_back(path);
-        return;
-      }
-      if (visited.count(cur))
-        return;
-      visited.insert(cur);
-      path.push_back(cur);
-      for (int nxt : nodes.at(cur).feeds)
-        dfs(nxt);
-      path.pop_back();
-      visited.erase(cur);
-    };
+  std::map<int, std::vector<int>> preds;
+  for (auto &[lid, g] : nodes)
+    for (int succ : g.feeds)
+      preds[succ].push_back(lid);
+
+  std::set<int> rail_reaches;
+  {
+    std::vector<int> queue(left_rails.begin(), left_rails.end());
     for (int rail : left_rails)
-      for (int nxt : nodes.at(rail).feeds)
-        dfs(nxt);
-    return found;
+      rail_reaches.insert(rail);
+    while (!queue.empty())
+    {
+      const int cur = queue.back();
+      queue.pop_back();
+      for (int succ : nodes.at(cur).feeds)
+        if (rail_reaches.insert(succ).second)
+          queue.push_back(succ);
+    }
+  }
+
+  // Predecessors that carry power: a node fed only by unreachable nodes is
+  // dead, and the callers treat it as an undriven sink.
+  auto live_preds = [&](int lid) {
+    std::vector<int> live;
+    auto it = preds.find(lid);
+    if (it != preds.end())
+      for (int p : it->second)
+        if (rail_reaches.count(p))
+          live.push_back(p);
+    return live;
   };
 
   // Step 5: rung construction helpers.
@@ -697,53 +702,96 @@ static bool parse_graphical_ld(
     return synth_var(pin_name(block_id, pin), kind, false, value);
   };
 
-  // Convert one path into its contact chain.  A path that runs through a
-  // function block is cut at the last block on it and restarted from that
-  // block's output pin, which the block's own rung has already assigned.
-  auto path_contacts =
-    [&](const std::vector<int> &path, std::vector<RungElement> &out) {
-      size_t start = 0;
-      std::string resume_pin;
-      for (size_t i = 0; i < path.size(); ++i)
-        if (nodes.at(path[i]).tag == "block")
-        {
-          start = i + 1;
-          resume_pin = pin_name(path[i], "Q");
-        }
+  // The element a node contributes to a rung that reads its power flow: a
+  // contact tests its own operand, a block hands on its Q pin, and a rail is
+  // unconditionally live so it contributes nothing.
+  std::function<void(int)> ensure_pf;
 
-      for (size_t i = start; i < path.size(); ++i)
-      {
-        const GNode &g = nodes.at(path[i]);
-        if (g.tag == "leftPowerRail")
-          continue;
-        // Dropping the path would verify a program in which this branch never
-        // energises its coil, which hides violations instead of reporting them.
-        if (g.tag != "contact")
-          throw UnsupportedConstructError(
-            g.tag + (g.var.empty() ? "" : " (var=" + g.var + ")"), 2);
-        out.push_back(make_contact(sensed_name(g.var), g.negated, g.edge));
-      }
+  // Name the power flow out of a node. Contacts get one variable per node
+  // rather than per operand: the same operand may appear on several rungs with
+  // different upstream conditions. A block's power flow is its Q pin, already
+  // assigned by its own step.
+  auto pf_name = [&](int lid) {
+    const GNode &g = nodes.at(lid);
+    if (g.tag == "block" || g.tag == "Block")
+      return pin_name(lid, "Q");
+    return "pf" + std::to_string(lid);
+  };
 
-      if (!resume_pin.empty())
-        out.insert(
-          out.begin(), make_contact(resume_pin, false, ContactEdge::None));
-    };
+  // The element a node contributes to a rung that reads its power flow.
+  auto pf_contact = [&](int lid) {
+    const GNode &g = nodes.at(lid);
+    if (g.tag != "contact" && g.tag != "block" && g.tag != "Block")
+      throw UnsupportedConstructError(
+        g.tag + (g.var.empty() ? "" : " (var=" + g.var + ")"), 2);
+    return make_contact(pf_name(lid), false, ContactEdge::None);
+  };
 
-  // Emit the rungs driving one sink from its incoming paths.  Parallel paths
-  // are alternatives, so they are OR-combined through a scratch accumulator:
-  // clear it, set it from each path, then drive the sink from it.  A single
-  // path needs no accumulator and drives the sink directly.
-  auto emit_sink = [&](
-                     const std::vector<std::vector<int>> &paths,
-                     int sink_id,
-                     const std::string &target,
-                     CoilKind kind) {
-    // No rail-to-sink path means nothing would ever assign the sink, so it
-    // would hold its initial value for every scan and any property over it
-    // would pass vacuously. A block driving the sink whose enable pin is not
-    // one of enable_pins (step 3) gets no incoming edge and lands here, so
-    // report that block rather than the sink itself.
-    if (paths.empty())
+  // Emit the rungs that assign a node's power flow, once per node. The
+  // accumulator is cleared and then set from each live predecessor, so the
+  // whole network costs one clear plus one rung per edge.
+  std::set<int> pf_emitted;
+  std::set<int> pf_in_progress;
+  auto emit_pf = [&](int lid) {
+    const GNode &g = nodes.at(lid);
+    const std::string acc = synth_var(pf_name(lid), VarKind::BOOL, true, 0);
+    const auto live = live_preds(lid);
+
+    RungNode clear = new_rung();
+    clear.elements.push_back(make_coil(acc, CoilKind::Reset));
+    net.rungs.push_back(std::move(clear));
+
+    for (int p : live)
+    {
+      RungNode r = new_rung();
+      // The rail is always live, so a node wired straight to it needs only its
+      // own condition.
+      if (nodes.at(p).tag != "leftPowerRail")
+        r.elements.push_back(pf_contact(p));
+      r.elements.push_back(make_contact(sensed_name(g.var), g.negated, g.edge));
+      r.elements.push_back(make_coil(acc, CoilKind::Set));
+      net.rungs.push_back(std::move(r));
+    }
+  };
+
+  std::function<void(int)> emit_block;
+
+  // Assign a node's power flow, after its predecessors'. Recursion depth is
+  // bounded by the longest chain, and the in-progress set turns a cyclic
+  // network into a diagnostic rather than a stack overflow.
+  ensure_pf = [&](int lid) {
+    const GNode &g = nodes.at(lid);
+    if (g.tag == "leftPowerRail" || !pf_emitted.insert(lid).second)
+      return;
+    if (!pf_in_progress.insert(lid).second)
+      throw LdParseError(
+        "graphical LD: power flow into localId " + std::to_string(lid) +
+        " is cyclic");
+
+    for (int p : live_preds(lid))
+      ensure_pf(p);
+
+    if (g.tag == "block" || g.tag == "Block")
+      emit_block(lid);
+    else if (g.tag == "contact")
+      emit_pf(lid);
+    else if (!is_coil_tag(g.tag))
+      throw UnsupportedConstructError(
+        g.tag + (g.var.empty() ? "" : " (var=" + g.var + ")"), 2);
+
+    pf_in_progress.erase(lid);
+  };
+
+  // Drive a sink from the OR of its live predecessors' power flow. A single
+  // predecessor needs no accumulator and drives the sink directly.
+  auto emit_sink = [&](int sink_id, const std::string &target, CoilKind kind) {
+    const auto live = live_preds(sink_id);
+    // Nothing would ever assign the sink, so it would hold its initial value
+    // for every scan and any property over it would pass vacuously. A block
+    // driving the sink whose enable pin is not one of enable_pins (step 3)
+    // gets no incoming edge and lands here, so report that block rather than
+    // the sink itself.
+    if (live.empty())
     {
       for (const auto &[lid, g] : nodes)
         if (
@@ -753,18 +801,13 @@ static bool parse_graphical_ld(
       throw UnsupportedConstructError("undriven sink " + target, 2);
     }
 
-    std::vector<std::vector<RungElement>> chains;
-    for (const auto &p : paths)
-    {
-      std::vector<RungElement> elems;
-      path_contacts(p, elems);
-      chains.push_back(std::move(elems));
-    }
+    for (int p : live)
+      ensure_pf(p);
 
-    if (chains.size() == 1)
+    if (live.size() == 1 && nodes.at(live.front()).tag != "leftPowerRail")
     {
       RungNode r = new_rung();
-      r.elements = std::move(chains.front());
+      r.elements.push_back(pf_contact(live.front()));
       r.elements.push_back(make_coil(target, kind));
       net.rungs.push_back(std::move(r));
       return;
@@ -779,10 +822,11 @@ static bool parse_graphical_ld(
     clear.elements.push_back(make_coil(acc, CoilKind::Reset));
     net.rungs.push_back(std::move(clear));
 
-    for (auto &chain : chains)
+    for (int p : live)
     {
       RungNode r = new_rung();
-      r.elements = std::move(chain);
+      if (nodes.at(p).tag != "leftPowerRail")
+        r.elements.push_back(pf_contact(p));
       r.elements.push_back(make_coil(acc, CoilKind::Set));
       net.rungs.push_back(std::move(r));
     }
@@ -797,16 +841,13 @@ static bool parse_graphical_ld(
   // FB step itself.  Blocks feeding this one are emitted first so that their
   // output pins are already assigned when this block reads them.
   std::set<int> emitted_blocks;
-  std::function<void(int)> emit_block = [&](int block_id) {
+  emit_block = [&](int block_id) {
     if (!emitted_blocks.insert(block_id).second)
       return;
 
     const GNode &g = nodes.at(block_id);
-    const auto paths = paths_to(block_id);
-    for (const auto &p : paths)
-      for (int nid : p)
-        if (nodes.at(nid).tag == "block")
-          emit_block(nid);
+    for (int p : live_preds(block_id))
+      ensure_pf(p);
 
     FBKind kind;
     try
@@ -829,7 +870,7 @@ static bool parse_graphical_ld(
     const char *enable = is_timer ? "IN" : (kind == FBKind::CTU ? "CU" : "CD");
     const std::string enable_var =
       synth_var(pin_name(block_id, enable), VarKind::BOOL, true, 0);
-    emit_sink(paths, block_id, enable_var, CoilKind::Output);
+    emit_sink(block_id, enable_var, CoilKind::Output);
 
     RungElement e;
     e.loc = loc;
@@ -907,19 +948,13 @@ static bool parse_graphical_ld(
 
   for (int coil : coils)
   {
-    const auto paths = paths_to(coil);
-    for (const auto &p : paths)
-      for (int nid : p)
-        if (nodes.at(nid).tag == "block")
-          emit_block(nid);
-
     const GNode &g = nodes.at(coil);
     CoilKind kind = CoilKind::Output;
     if (g.storage == "set")
       kind = CoilKind::Set;
     else if (g.storage == "reset")
       kind = CoilKind::Reset;
-    emit_sink(paths, coil, g.var, kind);
+    emit_sink(coil, g.var, kind);
   }
 
   // Blocks whose outputs drive nothing still advance their internal state
