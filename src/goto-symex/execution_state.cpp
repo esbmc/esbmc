@@ -460,7 +460,20 @@ void execution_statet::switch_to_thread(unsigned int i)
 bool execution_statet::check_if_ileaves_blocked()
 {
   if (art1->get_CS_bound() != -1 && CS_number >= art1->get_CS_bound())
+  {
+    // Only count this as truncation if a switch was actually available;
+    // otherwise every terminal state would look truncated.
+    if (!art1->cs_bound_pruned)
+      for (unsigned int i = 0; i < threads_state.size(); ++i)
+        if (
+          i != active_thread && !threads_state[i].thread_ended &&
+          !threads_state[i].call_stack.empty())
+        {
+          art1->cs_bound_pruned = true;
+          break;
+        }
     return true;
+  }
 
   if (get_active_atomic_number() > 0)
     return true;
