@@ -510,28 +510,32 @@ void goto_convertt::do_cpp_new(
   dest.destructive_append(tmp_initializer);
 }
 
-// Locate the constructor call inside a cpp_new initializer. Mirrors
-// find_constructor_call in clang_cpp_adjust_code.cpp: a temporary_object keeps
-// its call under the named "initializer" sub-irep rather than in an operand.
-static const exprt *find_cpp_new_constructor(const exprt &e)
+// Locate the element constructor inside a cpp_new[] initializer, by shape.
+//
+// The decl-path helper (find_constructor_call in clang_cpp_adjust_code.cpp)
+// keys on the "constructor" flag, but nothing in the initializer the frontend
+// builds for the array form carries it. What is there is a plain function_call
+// side effect -- the element constructor, whose first argument is the `this`
+// pointer -- nested inside a temporary_object of the whole array type. Match
+// that shape instead, and note a temporary_object keeps its call under the
+// named "initializer" sub-irep rather than in an operand.
+static exprt *find_cpp_new_constructor(exprt &e)
 {
   if (
     e.id() == "sideeffect" && e.statement() == "function_call" &&
-    e.get_bool("constructor"))
+    e.operands().size() == 2 && !e.op1().operands().empty())
     return &e;
 
   if (e.id() == "sideeffect" && e.statement() == "temporary_object")
   {
-    const irept &init = e.initializer();
-    if (init.is_not_nil())
-      if (
-        const exprt *c =
-          find_cpp_new_constructor(static_cast<const exprt &>(init)))
+    if (e.find("initializer").is_not_nil())
+      if (exprt *c = find_cpp_new_constructor(
+            static_cast<exprt &>(e.add("initializer"))))
         return c;
   }
 
-  forall_operands (it, e)
-    if (const exprt *c = find_cpp_new_constructor(*it))
+  Forall_operands (it, e)
+    if (exprt *c = find_cpp_new_constructor(*it))
       return c;
 
   return nullptr;
@@ -565,7 +569,13 @@ void goto_convertt::cpp_new_initializer(
   {
     initializer = static_cast<const code_expressiont &>(rhs.initializer());
 
-    if (!initializer.op0().get_bool("constructor"))
+    // The wrap below is scalar-shaped: it assigns into a `new_object` of the
+    // element type. For the array form the frontend supplies an array-typed
+    // temporary_object, so wrapping it assigns a T* into a T. The cpp_new[]
+    // arm retargets the element constructor itself instead (github #6584).
+    if (
+      rhs.statement() != "cpp_new[]" &&
+      !initializer.op0().get_bool("constructor"))
     {
       // for auto *p = Foo(3) and int *p = 3
       // constructor case:  init is Foo(&(*new_object), 3)
@@ -605,26 +615,35 @@ void goto_convertt::cpp_new_initializer(
       remove_sideeffects(count, dest);
 
       symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
-      index_exprt element(lhs, index, rhs.type().subtype());
 
-      // The frontend's initializer for the array form is shaped for the whole
-      // array: a temporary_object of type T[n] whose constructor targets
-      // element 0. Retargeting its `new_object` per element would splice a
-      // single element into a context expecting the array, so take the
-      // constructor call out and re-point its `this` at &lhs[i] instead.
+      // The element address is plain pointer arithmetic on lhs. Building it as
+      // &lhs[i] instead would not survive symex: dereference_expr_nonscalar
+      // recurses into an index's source, and a pointer source is scalar, so it
+      // trips the "no sudden transition back to scalars" assertion. `p[i]` in
+      // user code only reaches symex as a dereference because the adjuster
+      // rewrites it, and this runs after adjust.
+      plus_exprt element_addr(lhs, index);
+      element_addr.type() = lhs.type();
+
+      // The frontend's initializer is shaped for the whole array: a
+      // temporary_object of type T[n] wrapping the element constructor, whose
+      // `this` is &new_object[0]. Lift that call out and re-point its `this`
+      // at &lhs[i], so each iteration constructs its own element in place.
       codet body;
-      if (const exprt *ctor = find_cpp_new_constructor(initializer))
+      if (exprt *ctor = find_cpp_new_constructor(initializer))
       {
         exprt call = *ctor;
-        call.op1().operands().at(0) = address_of_exprt(element);
+        call.op1().operands().at(0) = element_addr;
         code_expressiont ctor_code;
         ctor_code.expression() = call;
+        ctor_code.location() = rhs.find_location();
         body = ctor_code;
       }
       else
       {
-        // No constructor (`new int[n]`, or value-initialisation): the scalar
-        // arm's substitution is correct element-wise.
+        // No constructor to lift (`new int[n]`): the element-wise
+        // substitution the scalar arm performs is already correct.
+        dereference_exprt element(element_addr, lhs.type());
         replace_new_object(element, initializer);
         body = to_code(initializer);
       }
