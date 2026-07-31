@@ -2181,40 +2181,27 @@ bool clang_cpp_convertert::get_function_body(
                                     rhs.statement() == "function_call" &&
                                     rhs.get_bool("constructor");
 
-          /* Bound the per-element construction: unrolling one constructor call
-           * per leaf element is only viable for modestly-sized fixed arrays.
-           * The internal buffers of STL container operational models are the
-           * arrays to stay away from -- and they are not all large: the
-           * per-instance pools in <list> and <stack> hold 20 slots and <map>
-           * holds 15, while <set>/<deque>/<queue>/<unordered_*> hold hundreds
-           * to ~1024. Each such slot may itself embed a class element (e.g.
-           * list<string> stores a std::string per node), so eagerly running
-           * its constructor on every slot bloats symex -- enough to push the
-           * heavy list<string> sort test over the CI timeout. Keep the bound
-           * comfortably below the smallest of those buffers (15) so all of
-           * them retain the prior single-element behaviour, while still
-           * covering realistic user arrays. Above the bound we construct just
-           * the representative element 0 (the behaviour prior to this change),
-           * so those cases are unchanged. (The static/global path in
-           * clang_cpp_main.cpp unrolls without this bound; proper bounded-loop
-           * construction is future work for both.) */
+          /* Construct every leaf element, whatever the extent. Constructing
+           * only element 0 is not a cheaper approximation but an unsound one:
+           * destruction is not bounded to match, so the skipped elements are
+           * destroyed having never been constructed, and any element type
+           * holding a resource then reports a spurious violation (#6574).
+           * An extent that is not a compile-time constant cannot be unrolled,
+           * so it keeps the single-element fallback. */
           const bool is_fixed_array = ns.follow(new_member.type()).is_array();
-          const BigInt max_unroll = 8;
-          BigInt total_elements = 1;
+          bool has_constant_extent = is_fixed_array;
           for (typet t = ns.follow(new_member.type()); t.is_array();
                t = ns.follow(to_array_type(t).subtype()))
           {
             BigInt dim;
             if (to_integer(to_array_type(t).size(), dim))
             {
-              /* unknown size: treat as large */
-              total_elements = max_unroll + 1;
+              has_constant_extent = false;
               break;
             }
-            total_elements *= dim;
           }
 
-          if (is_ctor_call && is_fixed_array && total_elements <= max_unroll)
+          if (is_ctor_call && has_constant_extent)
           {
             /* A single CXXConstructExpr for an array member stands for
              * constructing *every* element (e.g. `B b_array[2];` runs B's
