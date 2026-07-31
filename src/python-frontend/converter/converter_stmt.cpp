@@ -106,6 +106,40 @@ bool ast_contains_call(const nlohmann::json &n)
   return false;
 }
 
+bool is_imported_numpy_module_alias(
+  const nlohmann::json &ast,
+  const std::string &name)
+{
+  if (
+    name.empty() || !ast.is_object() || !ast.contains("body") ||
+    !ast["body"].is_array())
+    return false;
+
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      !stmt.is_object() || stmt.value("_type", std::string()) != "Import" ||
+      !stmt.contains("names") || !stmt["names"].is_array())
+      continue;
+
+    for (const auto &alias : stmt["names"])
+    {
+      if (
+        !alias.is_object() || alias.value("_type", std::string()) != "alias" ||
+        alias.value("name", std::string()) != "numpy")
+        continue;
+
+      const nlohmann::json &asname = alias.value("asname", nlohmann::json());
+      const std::string bound_name =
+        asname.is_null() ? std::string("numpy") : asname.get<std::string>();
+      if (bound_name == name)
+        return true;
+    }
+  }
+
+  return false;
+}
+
 // RAII bump of the get_block() nesting depth, and optionally the function-body
 // or loop-body depth. Depth 1 is an unconditional top-level (module) statement;
 // anything deeper is nested in a function or a conditional body. Straight-line
@@ -1088,7 +1122,13 @@ bool python_converter::is_numpy_array_constructor_expr(
   if (
     !node.is_object() || node.value("_type", "") != "Call" ||
     !node.contains("func") || !node["func"].is_object() ||
-    node["func"].value("_type", "") != "Attribute")
+    node["func"].value("_type", "") != "Attribute" ||
+    !node["func"].contains("value") || !node["func"]["value"].is_object() ||
+    node["func"]["value"].value("_type", "") != "Name")
+    return false;
+
+  const std::string module_name = node["func"]["value"].value("id", "");
+  if (!is_imported_numpy_module_alias(*ast_json, module_name))
     return false;
 
   static const std::set<std::string> constructors = {
@@ -1574,6 +1614,12 @@ void python_converter::update_numpy_array_binding(
     if (view_it != numpy_view_copy_sources_.end())
     {
       numpy_view_copy_sources_[lhs_id] = view_it->second;
+      numpy_array_symbols_.insert(lhs_id);
+      return;
+    }
+    if (numpy_array_symbols_.count(rhs_id) != 0)
+    {
+      clear_numpy_view_copy(lhs);
       numpy_array_symbols_.insert(lhs_id);
       return;
     }
