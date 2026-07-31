@@ -867,7 +867,8 @@ expr2tc execution_statet::resolve_pointer_target(
   /* Rename it so that it can be dereferenced in current state */
   cur_state->rename(tmp);
   /* Both call sites check the operand is a pointer, so this is a precondition
-   * rather than a case to handle: a guard here would be dead instrumentation. */
+   * rather than a case to handle: a guard here would be dead instrumentation.
+   */
   SYMEX_INVARIANT(
     is_pointer_type(tmp->type), "resolving a non-pointer operand");
 
