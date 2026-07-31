@@ -580,16 +580,53 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // variable holds an unsigned value -- a later `i < length` then reaches the
     // solver as a lessthan2t over mismatched operand kinds.
     //
-    // The general assignment conversion stays parked (see the
-    // assignment-conversion trap in docs/roadmap/scope-v1k-adjuster.md): it is
-    // only sound coupled with operand-level arithmetic reconciliation, and
-    // shipping it alone masks a real bug in neural-net_fail. That coupling is
-    // about reconciling a *binary operation's* operands on the right-hand side,
-    // which a call source has none of -- so this shape carries none of that
-    // risk, and neural-net_fail was re-checked with this arm in place.
+    // Kept ahead of the general arm below because a call source needs the
+    // unconditional cast: convert_assign's call-valued-rhs special case emits
+    // no temporary, so c_implicit_typecast's own no-op cases would leave the
+    // binding unconverted.
     const code_assign2t &a = to_code_assign2t(expr);
     expr = code_assign2tc(
       a.target, typecast2tc(a.target->type, a.source), a.location);
+  }
+  else if (
+    is_code_assign2t(expr) &&
+    to_code_assign2t(expr).source->type != to_code_assign2t(expr).target->type)
+  {
+    // The general assignment conversion -- the second statement of
+    // clang_c_adjust::adjust_assign (clang_c_adjust_code.cpp:175-181). Phase 2
+    // of docs/roadmap/scope-coupled-arith-assign-conversion.md, and sound only
+    // because Phase 1's arithmetic arm above already reconciled the right-hand
+    // side's operands: converting here over operands that were never reconciled
+    // changes the stored value and makes neural-net_fail report SUCCESSFUL
+    // where legacy correctly reports FAILED (§2, measured in §9.3).
+    //
+    // code_assign2t is the only node kind this needs: §11 measured that every
+    // Python-source assignment arrives as one, and that the sideeffect_assign2t
+    // population is invariant under the Python source -- it is OM traffic
+    // clang_c_adjust already reconciled before c2goto froze it.
+    const code_assign2t &a = to_code_assign2t(expr);
+
+    // Numeric both sides, plus the pointer-into-Boolean case: legacy's
+    // gen_typecast turns a pointer source into a null test, and that is the §2
+    // witness -- `all()`'s model reads a list element as `void *` and binds it
+    // to a `_Bool`, giving `ASSIGN element=(_Bool)tmp$5`. A pointer source is
+    // otherwise declined for §9.2's reason (it would corrupt the operational
+    // models' pointer arithmetic); a pointer *target* is already owned by the
+    // decay and address-of arms above.
+    auto numeric = [](const type2tc &t) {
+      return is_bv_type(t) || is_floatbv_type(t) || is_fixedbv_type(t) ||
+             is_bool_type(t);
+    };
+
+    if (
+      (numeric(a.target->type) && numeric(a.source->type)) ||
+      (is_bool_type(a.target->type) && is_pointer_type(a.source->type)))
+    {
+      expr2tc source = a.source;
+      c_implicit_typecast(source, a.target->type, ns);
+      if (source != a.source)
+        expr = code_assign2tc(a.target, source, a.location);
+    }
   }
   else if (
     is_code_ifthenelse2t(expr) &&

@@ -1,7 +1,7 @@
 # Scope — the coupled arithmetic + assignment conversion (the `python_adjust` flip blocker)
 
-> **Status: Phases 0 and 1 discharged (2026-07-30); Phase 2 reconnaissance
-> done (2026-07-31, §11), its implementation not started; Phase 3 not started.**
+> **Status: Phases 0 and 1 discharged (2026-07-30); Phase 2 landed with G2
+> held but G1/G3 not fully closed (2026-07-31, §11-§12); Phase 3 not started.**
 > This document exists because `docs/roadmap/scope-v1k-adjuster.md` §"Flip gate
 > (2026-07-29)" closes that scope with exactly one remaining prerequisite and
 > hands it off: *"Next owner: take the coupled conversion effort as its own
@@ -572,3 +572,66 @@ For the record, `clang_c_adjust::adjust_side_effect_assign`
 | `assign` | node type := lhs type; `gen_typecast(rhs, lhs_type)` |
 | `assign_shl` / `assign_shr` | promote **rhs alone**; `shr` becomes `lshr`/`ashr` by lhs signedness — an *op rewrite*, so IREP2 must rebuild the node |
 | all other compound ops | `gen_typecast_arithmetic(lhs, rhs)` — reconcile **both** |
+
+## 12. Phase 2 — what landed, and what it does not clear (2026-07-31)
+
+A `code_assign2t` arm calling `c_implicit_typecast(source, target->type, ns)`,
+placed after the existing narrow assign arms so they keep priority. Scope is
+§11's measured one: `code_assign2t` only.
+
+### 12.1 The guard, and the §2 witness
+
+Numeric-to-numeric, **plus pointer-source-into-Boolean**. That second clause is
+not incidental — it *is* the §2 witness. `builtin_all_nonliteral`'s
+`ASSIGN element=(_Bool)tmp$5` looked like an integer-to-Boolean narrowing, but
+in `all()`'s model `tmp$5` is `void *`:
+
+```
+ASSIGN tmp$5 = *(void * *)return_value$___ESBMC_list_at$4->value;
+5: ASSIGN element = (_Bool)tmp$5;
+```
+
+A numeric-only guard declines it and the arm is inert on the very test §2 names.
+Legacy's `gen_typecast` to bool is a null test, so the pointer source is correct
+here; a pointer source is still declined for every other target (§9.2), and a
+pointer *target* is owned by the decay arms above.
+
+### 12.2 Gate status — G2 holds, G1/G3 do not fully close
+
+| test | legacy | P1 alone | P1+P2 | §9.4 prototype |
+|---|---|---|---|---|
+| **`neural-net_fail` (G2)** | FAILED | FAILED | **FAILED** | FAILED |
+| `builtin_all_nonliteral` (G1) | SUCCESSFUL | *no verdict* | **SUCCESSFUL** | SUCCESSFUL |
+| `github_4344` (G3) | SUCCESSFUL | *no verdict* | **SUCCESSFUL** | SUCCESSFUL |
+| `github_5571_fail` (G3) | FAILED | *no verdict* | *no verdict* | FAILED |
+| `github_5571_tuple_str_annotation` (G3) | SUCCESSFUL | *no verdict* | *no verdict* | SUCCESSFUL |
+| `chained-comparison2_fail` (G1) | FAILED | *no verdict* | *no verdict* | *no verdict* |
+| `lambda15` | SUCCESSFUL | *no verdict* | *no verdict* | *no verdict* |
+| `precedence2` | SUCCESSFUL | FAILED | FAILED | FAILED |
+| `sum_tuple` | SUCCESSFUL | FAILED | FAILED | FAILED |
+
+**G2 — the anti-masking gate — holds**, which is the property that makes the
+coupling sound and the reason Phase 1 had to precede this. Two of the four
+crash/abort cases clear. **No test regresses against Phase 1 alone.**
+
+Three things this does *not* discharge, stated rather than glossed:
+
+1. **The `github_5571` pair still produces no verdict**, where §9.4's prototype
+   recorded both clearing ("was abort"). Either that prototype's arm was wider
+   than §11's measured scope, or its numbers were taken under a different tree.
+   This is the first thing to chase.
+2. **G1 as written cannot close.** It names `chained-comparison2_fail`, but §9.4
+   and §7 both put that test in the *second mechanism* that this scope
+   explicitly does not own. G1's test list contradicts §7; it should be
+   rewritten to name only `builtin_all_nonliteral`.
+3. **`precedence2` is still FAILED**, so §11.3's suggestion — that a plain
+   `code_assign2t` arm would clear it once the node-kind confusion was removed —
+   is **refuted**. The node kind was never the obstacle; `precedence2` belongs
+   with the second mechanism after all, as §9.4 originally placed it.
+
+### 12.3 Not yet run
+
+The whole-corpus census (G4) and dual-solver agreement (G5) are Phase 3 gates
+and have not been run for this arm. The hop-off regression subset is green
+(44/44) and the flag remains default-off, so nothing here reaches the default
+path.
