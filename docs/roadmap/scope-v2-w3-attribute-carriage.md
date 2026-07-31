@@ -256,7 +256,7 @@ nothing else. §5.1's three-step list is discharged.
 
 | # | Result |
 |---|---|
-| G1 | **Discharged.** Full-output A/B against master over the `esbmc-cpp/cpp` suite |
+| G1 | **Discharged.** Full-output A/B against master over all 582 runnable `esbmc-cpp/cpp` tests: 1 raw divergence, `cpp_sum_class`, proven non-attributable by a **master-vs-master self-A/B control** that produces 2 140 diff lines on the same test — it is `--k-induction-parallel`, the shape §5's census rule 3 already flags as unstable against itself |
 | G2 | **Discharged** for `esbmc-cpp` and `python`; `esbmc-solidity` rides Linux CI (macOS has no `solc` and stubbed `sol64` models) |
 | G3 | **Discharged, and it is the load-bearing one here** — `cpp_expr2string` is a reader, so the A/B compares full stdout including counterexample text, not just verdicts. 0 divergences over all 106 `esbmc-cpp/cpp/*_fail` tests, which are the ones that print a counterexample |
 | G4 | **Not runnable.** `goto2c/expr2c.cpp` is a reader, but the tree has no goto2c regression suite and no `test.desc` invokes that path — `grep -rl goto2c regression/` is empty. The reader is covered by inspection only (a one-line `get` → accessor substitution). Recorded rather than claimed |
@@ -265,7 +265,10 @@ nothing else. §5.1's three-step list is discharged.
 **Harness note, extending §9.1's.** A *full-output* A/B additionally needs the
 timing lines stripped — `Symex completed in: 0.000s` vs `0.001s` alone produced
 46 false divergences out of 106. Filter `completed in:|time:|Runtime|Elapsed`
-on top of the temp-path normalization.
+on top of the temp-path normalization, and exclude `--k-induction-parallel`
+tests as §5 rule 3 requires. When a divergence survives, run the baseline
+against *itself* before attributing it to the patch: that control is what
+settled `cpp_sum_class` here, and it costs one extra run.
 
 ### 10.2 Residue
 
