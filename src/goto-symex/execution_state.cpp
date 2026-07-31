@@ -382,10 +382,14 @@ void execution_statet::symex_goto(const expr2tc &old_guard)
 {
   last_transition.parent_guard = threads_state[active_thread].guard;
 
-  goto_symext::symex_goto(old_guard);
-
+  // Analyze the guard's shared reads before executing the goto: a
+  // constant-true guard kills the fall-through path guard, and analyzing
+  // afterwards would then skip the read entirely, losing the context-switch
+  // point at the branch (issue #6558).
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(old_guard);
+
+  goto_symext::symex_goto(old_guard);
 }
 
 void execution_statet::record_branch_sibling(
@@ -607,12 +611,17 @@ void execution_statet::preserve_last_paths(const transition_resultt &transition)
 
 void execution_statet::cull_all_paths()
 {
-  // check whether the guard is enabled before culling all execution paths.
-  // this check should prevent us from removing execution paths that are needed
-  // to verifying a given safety property (cf. GitHub issue #608).
+  // A false guard means this thread's live continuations are its parked
+  // merge states. If the switch-out preserved nothing, keep them (GitHub
+  // issue #608). When paths were preserved, fall through and clear:
+  // restore_last_paths re-parks them against the present level2 values, and
+  // the stale twins left behind here would otherwise resurrect pre-switch
+  // values at the merge, losing every write other threads made since the
+  // branch (issue #6558).
   if (
-    is_false(cur_state->guard.as_expr()) ||
-    is_cur_state_guard_false(cur_state->guard.as_expr()))
+    (is_false(cur_state->guard.as_expr()) ||
+     is_cur_state_guard_false(cur_state->guard.as_expr())) &&
+    preserved_paths[active_thread].empty())
     return;
 
   // Walk through _all_ symbolic paths in the program and wipe them out.
@@ -713,6 +722,14 @@ void execution_statet::execute_guard()
     guard2tc tmp = *last_transition.parent_guard;
     tmp |= threads_state[last_active_thread].guard;
     parent_guard = tmp.as_expr();
+  }
+  else if (last_transition.branch && last_transition.parent_guard)
+  {
+    // Switching right after a branch: the thread continues on the
+    // fall-through OR the parked arm, so chain the pre-branch guard. Using
+    // only the fall-through guard poisons the suffix with assume(false)
+    // when a constant-true goto killed the fall-through (issue #6558).
+    parent_guard = last_transition.parent_guard->as_expr();
   }
   else
   {
