@@ -184,12 +184,12 @@ public:
 
   static void set_member_name(typet &t, const irep_idt &value)
   {
-    t.set("#member_name", value);
+    t.member_name(value);
   }
 
   static void remove_member_name(typet &t)
   {
-    t.remove("#member_name");
+    t.remove_member_name();
   }
 
   static bool is_char_type(const typet &t)
