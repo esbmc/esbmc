@@ -5283,13 +5283,17 @@ Two items, both sized and neither speculative:
    conversion) and Phase 3 (the flip) remain. Phase 0 also found that half the
    flip-gate regressions are a *second* mechanism this scope does not clear, so
    the flip needs one more scope than it looked like it did.
-2. **V.2/W3 attribute carriage**, which V.1a and V.6 both depend on. Untouched;
-   the highest shared blast radius left in the program (`clang_cpp_adjust_expr`,
+2. **V.2/W3 attribute carriage**, which V.1a and V.6 both depend on. The
+   highest shared blast radius left in the program (`clang_cpp_adjust_expr`,
    `cpp_expr2string`, `goto2c/expr2c` serve C++ and Solidity too — and a fourth
    reader, `clang_cpp_adjust_code_gen`, that §V.2 does not name). Owner
    document: `docs/roadmap/scope-v2-w3-attribute-carriage.md`, which finds
    §V.2's prescribed design refuted by Part III's own Q-S1 argument and
-   recommends re-scoping.
+   re-scopes to Option D (encapsulate the raw writers; decline W3 removal on a
+   recorded rationale). **Step 1 of 3 has landed** — `#member_name` is seamed
+   end-to-end behind `irept::member_name()`. Solidity's writers and clang-c's
+   `#cpp_type` remain. Option D deliberately does **not** move bar #4, so V.1a
+   and V.6 stay blocked.
 
 V.5 is closed rather than pending — see its scope doc. With those recorded, the
 V-track has no undocumented residue: every remaining item has a named owner
