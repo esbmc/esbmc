@@ -858,6 +858,141 @@ void execution_statet::analyze_args(const expr2tc &expr)
     analyze_read(expr);
 }
 
+expr2tc execution_statet::resolve_pointer_target(
+  const namespacet &ns,
+  const expr2tc &ptr,
+  bool &to_global)
+{
+  expr2tc tmp = ptr;
+  /* Rename it so that it can be dereferenced in current state */
+  cur_state->rename(tmp);
+  /* Both call sites check the operand is a pointer, so this is a precondition
+   * rather than a case to handle: a guard here would be dead instrumentation.
+   */
+  SYMEX_INVARIANT(
+    is_pointer_type(tmp->type), "resolving a non-pointer operand");
+
+  /* Collect all the objects pointed to by the pointer */
+  expr2tc deref = dereference2tc(to_pointer_type(tmp->type).subtype, tmp);
+  value_setst::valuest dest;
+  cur_state->value_set.get_reference_set(deref, dest);
+
+  expr2tc found;
+  for (const auto &obj : dest)
+  {
+    if (
+      !is_object_descriptor2t(obj) ||
+      !is_symbol2t(to_object_descriptor2t(obj).object))
+      continue;
+
+    const std::string &n =
+      to_symbol2t(to_object_descriptor2t(obj).object).thename.as_string();
+    const symbolt *s = ns.lookup(n);
+    if (!s)
+      continue;
+    if (is_esbmc_internal_symbol(n))
+      continue;
+
+    to_global = s->static_lifetime || s->get_type().is_dynamic_set();
+    found = to_object_descriptor2t(obj).object;
+    /* Distinguish the elements of a lock array. Both `&m[0]` and `&m[1]`
+     * resolve to the base symbol `m`, which makes MPOR treat every lock in the
+     * array as one object, so two threads holding different locks never come
+     * out independent -- 6.8x the interleavings of the same program written
+     * with scalar mutexes (#6480). Refine only a constant offset on a lock
+     * array; an unknown offset keeps the whole-array key, and
+     * mpor_keys_may_alias pairs the refined and unrefined forms. */
+    const expr2tc &off = to_object_descriptor2t(obj).offset;
+    if (is_constant_int2t(off) && is_lock_array(found))
+    {
+      /* The descriptor carries a byte offset; the key is an element index so
+       * that it matches the one a direct `m[i]` access builds. */
+      BigInt esize = type_byte_size(to_array_type(found->type).subtype, &ns);
+      if (esize > 0)
+        found =
+          mpor_lock_array_key(found, to_constant_int2t(off).value / esize);
+    }
+    /* Stop when the global symbol is found */
+    if (to_global)
+      break;
+  }
+  return found;
+}
+
+void execution_statet::record_access_key(
+  const expr2tc &key,
+  std::set<expr2tc> &globals_list,
+  access_kindt kind)
+{
+  // Read-only-global filter: a READ of a global that is never written
+  // anywhere in the program cannot participate in a data race, so it
+  // must not trigger a cswitch. WRITE accesses are never filtered --
+  // a write on its own establishes the "may be written" fact for the
+  // other side of any future read/write conflict.
+  if (art1->readonly_global_opt && kind == access_kindt::READ)
+  {
+    expr2tc orig = key;
+    get_active_state().get_original_name(orig);
+    if (is_symbol2t(orig))
+    {
+      const irep_idt &resolved_name = to_symbol2t(orig).thename;
+      if (!art1->may_be_written(resolved_name))
+        return;
+    }
+  }
+
+  expr2tc p = key;
+  std::list<unsigned int> threadId_list;
+  auto it_find = art1->vars_map.find(p);
+
+  // the expression was accessed in another interleaving
+  if (it_find != art1->vars_map.end())
+  {
+    threadId_list = it_find->second;
+    if (
+      std::find(threadId_list.begin(), threadId_list.end(), active_thread) ==
+      threadId_list.end())
+    {
+      it_find->second.push_back(active_thread);
+    }
+
+    std::list<unsigned int>::iterator it_list;
+    for (it_list = threadId_list.begin(); it_list != threadId_list.end();
+         ++it_list)
+    {
+      // find if some thread access the same expression
+      if (*it_list != active_thread)
+      {
+        globals_list.insert(p);
+        art1->is_global.insert(p);
+      }
+      // expression was not accessed by other thread
+      else
+      {
+        auto its_global = art1->is_global.find(p);
+        // expression was defined as global in another interleaving
+        if (its_global != art1->is_global.end())
+          globals_list.insert(p);
+      }
+    }
+    // first access of expression
+  }
+  else
+  {
+    auto its_global = art1->is_global.find(p);
+    if (its_global != art1->is_global.end())
+      globals_list.insert(p);
+    else
+    {
+      threadId_list.push_back(active_thread);
+      art1->vars_map.insert(
+        std::pair<expr2tc, std::list<unsigned int>>(p, threadId_list));
+      globals_list.insert(p);
+      art1->is_global.insert(p);
+    }
+  }
+}
+
 void execution_statet::get_expr_globals(
   const namespacet &ns,
   const expr2tc &expr,
@@ -897,54 +1032,35 @@ void execution_statet::get_expr_globals(
     // dependency.
     expr2tc p = expr;
     bool point_to_global = false;
+    std::vector<expr2tc> deeper_targets;
     if (symbol->get_type().is_pointer() && symbol->name != "invalid_object")
     {
-      expr2tc tmp = expr;
-      /* Rename it so that it can be dereferenced in current state */
-      cur_state->rename(tmp);
-      /* Collect all the objects pointed to by the pointer */
-      expr2tc deref = dereference2tc(to_pointer_type(tmp->type).subtype, tmp);
-      value_setst::valuest dest;
-      cur_state->value_set.get_reference_set(deref, dest);
+      p = resolve_pointer_target(ns, expr, point_to_global);
+      if (is_nil_expr(p))
+        p = expr;
 
-      for (const auto &obj : dest)
+      // Follow the rest of the chain. Resolving a single level records the
+      // *intermediate* pointer for an access spelled `*(*pp)`, so a thread
+      // reaching the same object directly keys on something else and MPOR
+      // calls the two transitions independent (#6539). Every object along the
+      // way is recorded, not just the last: stopping at the first shared one
+      // would not reach the target, and skipping to the target would lose a
+      // shared intermediate. The visited set bounds a pointer cycle.
+      std::set<std::string> seen;
+      expr2tc cursor = p;
+      while (is_symbol2t(cursor) && is_pointer_type(cursor->type) &&
+             seen.insert(to_symbol2t(cursor).thename.as_string()).second)
       {
-        if (
-          is_object_descriptor2t(obj) &&
-          is_symbol2t(to_object_descriptor2t(obj).object))
+        bool deeper_is_global = false;
+        expr2tc next = resolve_pointer_target(ns, cursor, deeper_is_global);
+        if (is_nil_expr(next))
+          break;
+        if (deeper_is_global)
         {
-          const std::string &n =
-            to_symbol2t(to_object_descriptor2t(obj).object).thename.as_string();
-          const symbolt *s = ns.lookup(n);
-          if (!s)
-            continue;
-          if (is_esbmc_internal_symbol(n))
-            continue;
-          point_to_global =
-            s->static_lifetime || s->get_type().is_dynamic_set();
-          p = to_object_descriptor2t(obj).object;
-          /* Distinguish the elements of a lock array. Both `&m[0]` and
-           * `&m[1]` resolve to the base symbol `m`, which makes MPOR treat
-           * every lock in the array as one object, so two threads holding
-           * different locks never come out independent -- 6.8x the
-           * interleavings of the same program written with scalar mutexes
-           * (#6480). Refine only a constant offset on a lock array; an
-           * unknown offset keeps the whole-array key, and
-           * mpor_keys_may_alias pairs the refined and unrefined forms. */
-          const expr2tc &off = to_object_descriptor2t(obj).offset;
-          if (is_constant_int2t(off) && is_lock_array(p))
-          {
-            /* The descriptor carries a byte offset; the key is an element
-             * index so that it matches the one a direct `m[i]` access
-             * builds. */
-            BigInt esize = type_byte_size(to_array_type(p->type).subtype, &ns);
-            if (esize > 0)
-              p = mpor_lock_array_key(p, to_constant_int2t(off).value / esize);
-          }
-          /* Stop when the global symbol is found */
-          if (point_to_global)
-            break;
+          deeper_targets.push_back(next);
+          point_to_global = true;
         }
+        cursor = next;
       }
     }
 
@@ -969,79 +1085,17 @@ void execution_statet::get_expr_globals(
     if (
       symbol->static_lifetime || symbol->get_type().is_dynamic_set() ||
       point_to_global || python_global)
+      record_access_key(p, globals_list, kind);
+
+    // Objects further along the chain are shared on their own merit, so they
+    // are recorded whether or not the pointer that reached them qualifies:
+    // `int *lp = &g; int **lpp = &lp;` has no shared symbol until `g` (#6539).
+    for (expr2tc deeper : deeper_targets)
     {
-      // Read-only-global filter: a READ of a global that is never written
-      // anywhere in the program cannot participate in a data race, so it
-      // must not trigger a cswitch. WRITE accesses are never filtered —
-      // a write on its own establishes the "may be written" fact for the
-      // other side of any future read/write conflict.
-      if (art1->readonly_global_opt && kind == access_kindt::READ)
-      {
-        expr2tc orig = p;
-        get_active_state().get_original_name(orig);
-        if (is_symbol2t(orig))
-        {
-          const irep_idt &resolved_name = to_symbol2t(orig).thename;
-          if (!art1->may_be_written(resolved_name))
-            return;
-        }
-      }
-
-      std::list<unsigned int> threadId_list;
-      auto it_find = art1->vars_map.find(p);
-
-      // the expression was accessed in another interleaving
-      if (it_find != art1->vars_map.end())
-      {
-        threadId_list = it_find->second;
-        if (
-          std::find(
-            threadId_list.begin(), threadId_list.end(), active_thread) ==
-          threadId_list.end())
-        {
-          it_find->second.push_back(active_thread);
-        }
-
-        std::list<unsigned int>::iterator it_list;
-        for (it_list = threadId_list.begin(); it_list != threadId_list.end();
-             ++it_list)
-        {
-          // find if some thread access the same expression
-          if (*it_list != active_thread)
-          {
-            globals_list.insert(p);
-            art1->is_global.insert(p);
-          }
-          // expression was not accessed by other thread
-          else
-          {
-            auto its_global = art1->is_global.find(p);
-            // expression was defined as global in another interleaving
-            if (its_global != art1->is_global.end())
-              globals_list.insert(p);
-          }
-        }
-        // first access of expression
-      }
-      else
-      {
-        auto its_global = art1->is_global.find(p);
-        if (its_global != art1->is_global.end())
-          globals_list.insert(p);
-        else
-        {
-          threadId_list.push_back(active_thread);
-          art1->vars_map.insert(
-            std::pair<expr2tc, std::list<unsigned int>>(p, threadId_list));
-          globals_list.insert(p);
-          art1->is_global.insert(p);
-        }
-      }
+      cur_state->top().level1.rename(deeper);
+      record_access_key(deeper, globals_list, kind);
     }
-    else
-    {
-      return;
-    }
+    return;
   }
 
   /* A direct `m[i]` on a lock array: record the element. Falling through to

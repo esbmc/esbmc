@@ -5,9 +5,9 @@ int g = 0;
 int *gp = &g;
 int **gpp = &gp;
 
-// Writes g through a nested dereference: get_expr_globals resolves one pointer
-// level, so this is recorded against gp, not g, and MPOR sees no conflict with
-// main's direct write below (#6539).
+// Writes g through a nested dereference. get_expr_globals follows the pointer
+// chain, so this is recorded against g and MPOR sees the conflict with main's
+// direct write below (#6539).
 void *writer(void *arg)
 {
   *(*gpp) = 1;
