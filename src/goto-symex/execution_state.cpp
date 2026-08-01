@@ -488,10 +488,16 @@ bool execution_statet::check_if_ileaves_blocked()
     // and to what thread.
     return true;
 
+  // Don't generate further interleavings since the __ESBMC_main thread has
+  // ended. Whether it has is a property of *this* state, not of the search:
+  // the reachability tree's own flag is set once and never cleared on
+  // backtracking, so a single branch running main to completion used to
+  // disable interleaving for every branch explored afterwards -- which is
+  // where the racy schedules live (#4584).
   if (
-    art1->main_thread_ended && !options.get_bool_option("deadlock-check") &&
+    !threads_state.empty() && threads_state[0].thread_ended &&
+    !options.get_bool_option("deadlock-check") &&
     !options.get_bool_option("data-races-check"))
-    // Don't generate further interleavings since __ESBMC_main thread has ended.
     return true;
 
   if (threads_state.size() < 2)
