@@ -173,17 +173,39 @@ techniques specific to CXL.
 
 ---
 
-### Phase 5: Real-World Validation (Not started)
+### Phase 5: Real-World Validation (Started)
 
 **Goal:** Apply the CXL verification infrastructure to real Linux CXL driver
 code and validate against known bugs.
 
-**Status:** No real kernel source is compiled or verified by any test in this
-branch. The `cxl_driver_*` suites are synthetic harnesses that imitate driver
-*shapes* (probe/remove ordering, IRQ cleanup, AER abort paths) against the
-synthetic API described in the scope note above. They are useful as models of
-common bug classes, but they establish nothing about the Linux CXL driver.
-Reaching this phase requires the real-API work planned in Phase 7.
+**Status:** `drivers/cxl/core/pci.c` from Linux 7.1.5 now converts to a GOTO
+program (5233 functions) and two of its functions are verified. Harnesses,
+prerequisites and flags are in `regression/cxl-linux/`; they need a configured
+kernel tree, so they are not registered with ctest and do not run in CI.
+
+| Function | Property | Result |
+|---|---|---|
+| `cdat_checksum()` | no out-of-bounds read for `size <= sizeof(buf)` | SUCCESSFUL |
+| `cdat_checksum()` | negative variant, bound relaxed | FAILED at `pci.c:554` |
+| `cxl_pci_get_latency()` | division by zero, callee unconstrained | FAILED at `pci.c:667` |
+| `cxl_pci_get_latency()` | same, callee contract modelled | SUCCESSFUL |
+
+The `cxl_pci_get_latency()` failure is a false positive, not a kernel bug: the
+`bw < 0` guard is sufficient only because `pcie_dev_speed_mbps()` returns
+`-EINVAL` or a speed `>= 2500`. That invariant is unstated in the code, which
+is the general lesson — verifying against undefined kernel functions requires
+modelling each callee's contract, and each assumption is a soundness obligation.
+
+Reaching this phase required four ESBMC fixes, none CXL-specific: the sign of
+`void *` pointer subtraction (`value_set.cpp`), `offsetof` as a constant
+expression, the unimplemented `--fms-extensions` option, `FileScopeAsm`
+(`EXPORT_SYMBOL()`), and an anonymous-record tag collision that sent padding
+computation into unbounded recursion on `__DECLARE_FLEX_ARRAY()`.
+
+The `cxl_driver_*` suites remain synthetic harnesses that imitate driver
+*shapes* against the invented API described in the scope note above; they still
+establish nothing about the Linux CXL driver. Broad real-driver coverage is
+Phase 7.
 
 **Tasks:**
 
@@ -351,8 +373,9 @@ regression/cxl/
         HDM validation (with alignment + decoder limit constraints),
         AER (with operational model functions), error injection (with
         operational model functions), and port enumeration
-- [ ] Phase 5: Real-world driver harnesses created and verified — **not started**;
-        no real kernel source is verified (see Phase 5)
+- [x] Phase 5: first real driver harnesses created and verified —
+        `drivers/cxl/core/pci.c` converts, `cdat_checksum()` and
+        `cxl_pci_get_latency()` verified (see Phase 5); broad coverage pending
 - [x] Phase 6.1: User documentation published (user guide + roadmap + test summary)
 - [ ] Phase 6.2–6.3: Generic driver template and technical report — not started
 
@@ -370,7 +393,8 @@ regression/cxl/
 | AER functions added | 4 |
 | Error injection functions added | 2 |
 | HDM constraints added | 2 (alignment + decoder limit) |
-| Real Linux driver files verified | 0 |
+| Real Linux driver files converted to GOTO | 1 |
+| Real Linux driver functions verified | 2 |
 
 ---
 
