@@ -9,6 +9,18 @@ and other devices. Verifying CXL drivers is critical because bugs in these
 kernel-mode drivers can cause system crashes, data corruption, and security
 vulnerabilities.
 
+> **Scope note — the modelled API is synthetic.** The operational model in
+> `src/c2goto/library/cxl_driver.c` implements a *CXL-like* API invented for
+> this work, not the Linux CXL API. Names such as `struct cxl_dev`,
+> `cxl_mailbox_send_cmd()`, `cxl_device_init()`, `cxl_setup_hdm_decoders()` and
+> `pci_enable_aer()` do not exist in Linux 7.1.5 (the real equivalents are
+> `struct cxl_memdev` / `struct cxl_dev_state`, `cxl_internal_send_cmd()`,
+> `pci_aer_clear_nonfatal_status()`, …). The generic kernel primitives the model
+> also provides — `readl`/`writel`, `pci_iomap`, `dma_alloc_coherent`,
+> `request_irq` — *are* real. Every regression test is therefore a synthetic
+> harness exercising driver *patterns*; none compiles real kernel source.
+> Closing that gap is the subject of Phase 7.
+
 ## Target Scope
 
 - **CXL 2.0 / 3.0 specification** compliance in driver code
@@ -161,18 +173,28 @@ techniques specific to CXL.
 
 ---
 
-### Phase 5: Real-World Validation (Completed)
+### Phase 5: Real-World Validation (Not started)
 
 **Goal:** Apply the CXL verification infrastructure to real Linux CXL driver
 code and validate against known bugs.
 
+**Status:** No real kernel source is compiled or verified by any test in this
+branch. The `cxl_driver_*` suites are synthetic harnesses that imitate driver
+*shapes* (probe/remove ordering, IRQ cleanup, AER abort paths) against the
+synthetic API described in the scope note above. They are useful as models of
+common bug classes, but they establish nothing about the Linux CXL driver.
+Reaching this phase requires the real-API work planned in Phase 7.
+
 **Tasks:**
 
-1. **Select target drivers.**
-   - `drivers/cxl/cxl_core.c` — CXL core infrastructure
+1. **Select target drivers.** (Paths verified against Linux 7.1.5.)
+   - `drivers/cxl/core/port.c` — CXL core port/bus infrastructure
    - `drivers/cxl/pci.c` — CXL PCI device probe
    - `drivers/cxl/mem.c` — CXL memory device driver
-   - `drivers/cxl/pci_cxl.c` — CXL PCI device setup
+   - `drivers/cxl/core/pci.c` — CXL PCI DVSEC/register setup
+
+   Earlier revisions of this roadmap listed `drivers/cxl/cxl_core.c` and
+   `drivers/cxl/pci_cxl.c`; neither file exists in the kernel tree.
 
 2. **Create verification harnesses.**
    - Write minimal driver harnesses that exercise specific code paths.
@@ -188,27 +210,28 @@ code and validate against known bugs.
 4. **Contribute findings back to the Linux kernel.**
    - File bug reports with ESBMC counterexamples.
    - Submit patches for verified bugs.
+   - Nothing has been reported or submitted upstream to date.
 
 ---
 
-### Phase 6: Generalization & Documentation (Completed)
+### Phase 6: Generalization & Documentation (Partially completed)
 
 **Goal:** Make CXL verification accessible to other users and generalize
 patterns for other device driver families.
 
 **Tasks:**
 
-1. **Write user documentation.**
+1. **Write user documentation.** — Done.
    - How to write CXL driver verification tests.
    - How the operational models work.
    - How to extend the models for new CXL features.
    - User guide: `docs/cxl-driver-verification-guide.md`.
 
-3. **Generalize patterns for other drivers.**
+2. **Generalize patterns for other drivers.** — Not started.
    - The MMIO, DMA, and IRQ modeling patterns are generic.
    - Create a template for NVMe, USB, and other PCIe driver verification.
 
-4. **Publish a technical report.**
+3. **Publish a technical report.** — Not started.
    - Document the methodology and findings.
    - Target a verification conference (CAV, TACAS, etc.).
 
@@ -227,9 +250,11 @@ src/c2goto/headers/ubuntu20.04/kernel_5.15.0-76/include/
     ├── cxlmem.h                      # CXL memory device API
     ├── pci.h                         # PCI subsystem API
     ├── irq.h                         # Interrupt handling API
-    ├── dma-mapping.h                 # DMA API
-    └── gfp.h                         # GFP flags for memory allocation
+    └── dma-mapping.h                 # DMA API
 ```
+
+`gfp.h`, `slab.h`, `spinlock.h` and `asm/uaccess.h` are also used by the model
+but already existed on `master`; only the six files above were added here.
 
 ### Operational Model (Phase 1 + Phase 4 updates)
 
@@ -275,7 +300,9 @@ regression/cxl/
 ├── cxl_port_enum_01/                 # Port hierarchy enumeration (PASS)
 ├── cxl_driver_hdm_align_01/          # HDM 4KB alignment validation (PASS)
 ├── cxl_driver_hdm_align_fail_01/     # HDM misaligned address rejection (FAIL)
-└── cxl_driver_aer_fatal_01/          # AER fatal error during probe (PASS)
+├── cxl_driver_aer_fatal_01/          # AER fatal error during probe (PASS)
+├── cxl_mmio_readback_01/             # MMIO write-then-read round-trip (PASS)
+└── cxl_mmio_readback_02/             # Unwritten register is not fixed (FAIL)
 ```
 
 ## Key Design Decisions
@@ -319,42 +346,45 @@ regression/cxl/
 
 - [x] Phase 1 files compile and integrate into ESBMC build
 - [x] Phase 1 regression tests pass with expected results
-- [x] Phase 3 regression suite (22 tests) passes
+- [x] Phase 3 regression suite passes (10 new tests, 22 cumulative at that point)
 - [x] Phase 4 advanced features — regression tests cover mailbox state,
         HDM validation (with alignment + decoder limit constraints),
         AER (with operational model functions), error injection (with
         operational model functions), and port enumeration
-- [x] Phase 5: Real-world driver harnesses created and verified
-- [x] Phase 6: User documentation published (user guide + roadmap)
+- [ ] Phase 5: Real-world driver harnesses created and verified — **not started**;
+        no real kernel source is verified (see Phase 5)
+- [x] Phase 6.1: User documentation published (user guide + roadmap + test summary)
+- [ ] Phase 6.2–6.3: Generic driver template and technical report — not started
 
-## Final Statistics
+## Current Statistics
 
 | Metric | Count |
 |--------|-------|
-| Total commits | 6+ |
-| Total regression tests | 25 |
-| Passing tests | 17 |
-| Bug-detecting tests | 8 |
+| Total commits | 10 |
+| Total regression tests | 27 |
+| Passing tests | 18 |
+| Bug-detecting tests | 9 |
 | Kernel headers added | 6 |
-| Operational model lines | ~1,250 |
-| Documentation pages | 2 |
+| Operational model lines | ~1,300 |
+| Documentation pages | 3 |
 | AER functions added | 4 |
 | Error injection functions added | 2 |
 | HDM constraints added | 2 (alignment + decoder limit) |
+| Real Linux driver files verified | 0 |
 
 ---
 
 ### Phase 7: Real Driver Coverage (Planned)
 
 **Goal:** Extend the operational model and regression suite to cover the full
-Linux 7.1.5 CXL driver subsystem (~30 source files across 8 driver families),
+Linux 7.1.5 CXL driver subsystem (~30 source files across 11 driver families),
 moving from synthetic primitives to real-driver-equivalent verification.
 
 **Gap Analysis — Linux 7.1.5 `drivers/cxl/` inventory vs current coverage:**
 
 | Driver Family | Kconfig | Source Files | Current Coverage |
 |---|---|---|---|
-| **CXL Core** (port, memdev, mbox, hdm, region, regs, cdat, features, ras, mce, pmu, suspend) | CXL_BUS | 25 files in `core/` | Partial — only synthetic port/mbox/region tests |
+| **CXL Core** (port, memdev, mbox, hdm, region, regs, cdat, features, ras, mce, pmu, suspend) | CXL_BUS | 20 `.c` files in `core/` | Partial — only synthetic port/mbox/region tests |
 | **CXL PCI** (pci.c) | CXL_PCI | 1 | Partial — synthetic probe test, no DVSEC/doorbell/MMR timeout paths |
 | **CXL Memory** (mem.c) | CXL_MEM | 1 | Partial — synthetic attach test, no endpoint enumeration |
 | **CXL Port** (port.c) | CXL_PORT | 1 | Partial — synthetic enum test, no dport HDM scan |

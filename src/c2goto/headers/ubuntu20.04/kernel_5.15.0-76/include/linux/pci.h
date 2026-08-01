@@ -15,7 +15,10 @@ typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned int u32;
 typedef unsigned long long u64;
-typedef long resource_size_t;
+/* Unsigned, matching the kernel's `typedef phys_addr_t resource_size_t` — as a
+ * signed type, `start % SIZE` on a nondet BAR address can go negative and turn
+ * every derived MMIO offset out-of-bounds. */
+typedef unsigned long resource_size_t;
 
 /* PCI BAR (Base Address Register) */
 #define PCI_NUM_RESOURCES     6

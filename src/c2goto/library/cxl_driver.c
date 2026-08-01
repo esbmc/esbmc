@@ -10,7 +10,9 @@
  * Key design decisions:
  *   - MMIO space is modelled as a global byte array (ESBMC_MMIO_SPACE).
  *     readl/writel etc. read/write from/to this space at the device's
- *     mapped offset.  Reads return nondet values; writes store values.
+ *     mapped offset.  Writes store; a read returns the stored value once
+ *     the driver has written that register, and a nondet value before then
+ *     (unknown power-on hardware state).
  *   - DMA coherent memory is modelled as a separate global array
  *     (ESBMC_DMA_SPACE) so that device-visible data is distinct from
  *     kernel virtual memory.
@@ -65,6 +67,8 @@ extern size_t  __VERIFIER_nondet_size_t(void);
 #define ESBMC_IRQ_HANDLERS_MAX   32
 
 static char esbmc_mmio_space[ESBMC_MMIO_SPACE_SIZE];
+/* Per-byte shadow: 1 once the driver has written that byte of register space */
+static char esbmc_mmio_written[ESBMC_MMIO_SPACE_SIZE];
 static char esbmc_dma_space[ESBMC_DMA_SPACE_SIZE];
 static int  esbmc_dma_used[ESBMC_DMA_SPACE_SIZE]; /* tracking for assertions */
 
@@ -91,77 +95,124 @@ static int esbmc_irq_count = 0;
  * RO (read-only) and ignore writes.
  * ============================================================ */
 
-/* Helper: check that a pointer falls within our MMIO space */
-static inline int __esbmc_mmio_valid(const void *addr)
+/* Resolve a pointer to an offset in the MMIO space, rejecting accesses whose
+ * full width does not fit — checking only the first byte would let readq/writeq
+ * near the top of the space run past esbmc_mmio_space.  Stays in pointer
+ * arithmetic throughout: casting through uintptr_t loses the object
+ * association in ESBMC's pointer model, which leaves the offset unconstrained
+ * and makes every read take the non-deterministic path. */
+static inline int
+__esbmc_mmio_offset(const void *addr, size_t width, size_t *off)
 {
 __ESBMC_HIDE:;
-  uintptr_t base = (uintptr_t)esbmc_mmio_space;
-  uintptr_t off  = (uintptr_t)addr - base;
-  return off < ESBMC_MMIO_SPACE_SIZE;
+  const char *p = (const char *)addr;
+  if (p < esbmc_mmio_space ||
+      p > esbmc_mmio_space + (ESBMC_MMIO_SPACE_SIZE - width))
+    return 0;
+  *off = (size_t)(p - esbmc_mmio_space);
+  return 1;
+}
+
+/* A register byte reads back only once the driver has written it; until then
+ * its content is whatever the hardware left there, i.e. non-deterministic. */
+static inline int __esbmc_mmio_is_written(size_t off, size_t width)
+{
+__ESBMC_HIDE:;
+  for (size_t i = 0; i < width; i++)
+    if (!esbmc_mmio_written[off + i])
+      return 0;
+  return 1;
+}
+
+static inline void __esbmc_mmio_mark_written(size_t off, size_t width)
+{
+__ESBMC_HIDE:;
+  for (size_t i = 0; i < width; i++)
+    esbmc_mmio_written[off + i] = 1;
 }
 
 uint8_t readb(const void *addr)
 {
 __ESBMC_HIDE:;
-  if (!__esbmc_mmio_valid(addr))
+  size_t off;
+  if (!__esbmc_mmio_offset(addr, sizeof(uint8_t), &off))
     return 0; /* out-of-bounds read returns 0 */
-  return __VERIFIER_nondet_uchar();
+  if (!__esbmc_mmio_is_written(off, sizeof(uint8_t)))
+    return __VERIFIER_nondet_uchar();
+  return *(volatile uint8_t *)((void *)addr);
 }
 
 uint16_t readw(const void *addr)
 {
 __ESBMC_HIDE:;
-  if (!__esbmc_mmio_valid(addr))
+  size_t off;
+  if (!__esbmc_mmio_offset(addr, sizeof(uint16_t), &off))
     return 0;
-  return __VERIFIER_nondet_ushort();
+  if (!__esbmc_mmio_is_written(off, sizeof(uint16_t)))
+    return __VERIFIER_nondet_ushort();
+  return *(volatile uint16_t *)((void *)addr);
 }
 
 uint32_t readl(const void *addr)
 {
 __ESBMC_HIDE:;
-  if (!__esbmc_mmio_valid(addr))
+  size_t off;
+  if (!__esbmc_mmio_offset(addr, sizeof(uint32_t), &off))
     return 0;
-  return __VERIFIER_nondet_uint();
+  if (!__esbmc_mmio_is_written(off, sizeof(uint32_t)))
+    return __VERIFIER_nondet_uint();
+  return *(volatile uint32_t *)((void *)addr);
 }
 
 uint64_t readq(const void *addr)
 {
 __ESBMC_HIDE:;
-  if (!__esbmc_mmio_valid(addr))
+  size_t off;
+  if (!__esbmc_mmio_offset(addr, sizeof(uint64_t), &off))
     return 0;
-  return (uint64_t)__VERIFIER_nondet_ulong();
+  if (!__esbmc_mmio_is_written(off, sizeof(uint64_t)))
+    return (uint64_t)__VERIFIER_nondet_ulong();
+  return *(volatile uint64_t *)((void *)addr);
 }
 
 void writeb(uint8_t val, const void *addr)
 {
 __ESBMC_HIDE:;
-  if (!__esbmc_mmio_valid(addr))
+  size_t off;
+  if (!__esbmc_mmio_offset(addr, sizeof(val), &off))
     return;
   *(volatile uint8_t *)((void *)addr) = val;
+  __esbmc_mmio_mark_written(off, sizeof(val));
 }
 
 void writew(uint16_t val, const void *addr)
 {
 __ESBMC_HIDE:;
-  if (!__esbmc_mmio_valid(addr))
+  size_t off;
+  if (!__esbmc_mmio_offset(addr, sizeof(val), &off))
     return;
   *(volatile uint16_t *)((void *)addr) = val;
+  __esbmc_mmio_mark_written(off, sizeof(val));
 }
 
 void writel(uint32_t val, const void *addr)
 {
 __ESBMC_HIDE:;
-  if (!__esbmc_mmio_valid(addr))
+  size_t off;
+  if (!__esbmc_mmio_offset(addr, sizeof(val), &off))
     return;
   *(volatile uint32_t *)((void *)addr) = val;
+  __esbmc_mmio_mark_written(off, sizeof(val));
 }
 
 void writeq(uint64_t val, const void *addr)
 {
 __ESBMC_HIDE:;
-  if (!__esbmc_mmio_valid(addr))
+  size_t off;
+  if (!__esbmc_mmio_offset(addr, sizeof(val), &off))
     return;
   *(volatile uint64_t *)((void *)addr) = val;
+  __esbmc_mmio_mark_written(off, sizeof(val));
 }
 
 /* Relaxed variants — same as strict, no ordering guarantee */
@@ -185,7 +236,7 @@ __ESBMC_HIDE:;
   /* Each 32-bit word is non-deterministic */
   for (unsigned long i = 0; i < count; i++)
   {
-    ((uint32_t *)buf)[i] = readl((const void *)((uintptr_t)addr + i * 4));
+    ((uint32_t *)buf)[i] = readl((const char *)addr + i * 4);
   }
 }
 
@@ -198,7 +249,7 @@ __ESBMC_HIDE:;
   for (unsigned long i = 0; i < count; i++)
   {
     writel(((const uint32_t *)buf)[i],
-           (const void *)((uintptr_t)addr + i * 4));
+           (const char *)addr + i * 4);
   }
 }
 
@@ -363,12 +414,17 @@ __ESBMC_HIDE:;
   if (start == 0)
     return NULL;
 
-  /* Map to an offset within our MMIO space */
-  uintptr_t offset = start % ESBMC_MMIO_SPACE_SIZE;
-  if (max > 0 && (offset + max) > ESBMC_MMIO_SPACE_SIZE)
+  if (max > ESBMC_MMIO_SPACE_SIZE)
+    return NULL;
+
+  /* Clamp so the whole window fits.  Written as a subtraction rather than
+   * `offset + max > SIZE` because that sum overflows for a large offset and
+   * wraps back under the limit, yielding an out-of-bounds mapping. */
+  size_t offset = (size_t)(start % ESBMC_MMIO_SPACE_SIZE);
+  if (offset > ESBMC_MMIO_SPACE_SIZE - max)
     offset = ESBMC_MMIO_SPACE_SIZE - max;
 
-  return (void *)(offset + (uintptr_t)esbmc_mmio_space);
+  return esbmc_mmio_space + offset;
 }
 
 void pci_iounmap(struct pci_dev *dev, void *addr)
@@ -718,7 +774,7 @@ u64 cxl_read_dev_stat(struct cxl_dev *cxld)
 __ESBMC_HIDE:;
   assert(cxld != NULL);
   assert(cxld->regs != NULL);
-  return (u64)readl((void *)((uintptr_t)cxld->regs + 8));
+  return (u64)readl((char *)cxld->regs + 8);
 }
 
 /* ============================================================
@@ -735,7 +791,7 @@ __ESBMC_HIDE:;
   __ESBMC_assume(cmd->opcode >= 0x0001 && cmd->opcode <= 0x4004);
 
   /* Write command to MMIO mailbox register */
-  writel(cmd->opcode, (void *)((uintptr_t)cxld->regs + 0x100));
+  writel(cmd->opcode, (char *)cxld->regs + 0x100);
 
   /* Non-deterministic: command succeeds or fails */
   int result = __VERIFIER_nondet_int();
@@ -967,7 +1023,7 @@ void cxl_mem_disable(struct cxl_mem *cxlmem)
 {
   if (cxlmem == NULL)
     return;
-  writel(0, (void *)((uintptr_t)cxlmem->cxld->regs + 0x400));
+  writel(0, (char *)cxlmem->cxld->regs + 0x400);
 }
 
 int cxl_mem_get_regions(struct cxl_mem *cxlmem,
@@ -1086,10 +1142,10 @@ __ESBMC_HIDE:;
   assert(dev != NULL);
   assert(size > 0);
   assert(cpu_addr != NULL);
-  assert((uintptr_t)cpu_addr >= (uintptr_t)esbmc_dma_space);
-  assert((uintptr_t)cpu_addr < (uintptr_t)esbmc_dma_space + ESBMC_DMA_SPACE_SIZE);
+  assert((char *)cpu_addr >= esbmc_dma_space);
+  assert((char *)cpu_addr < esbmc_dma_space + ESBMC_DMA_SPACE_SIZE);
 
-  int offset = (int)((uintptr_t)cpu_addr - (uintptr_t)esbmc_dma_space);
+  int offset = (int)((char *)cpu_addr - esbmc_dma_space);
   for (size_t i = 0; i < size; i++)
     esbmc_dma_used[offset + i] = 0;
 }

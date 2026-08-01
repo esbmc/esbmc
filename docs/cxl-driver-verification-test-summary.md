@@ -2,17 +2,24 @@
 
 ## Flags & Configuration
 
-All 25 tests share the same configuration:
+All 27 tests share the same configuration:
 
 | Property | Value |
 |---|---|
 | **test.desc mode** | `CORE` (no KNOWNBUG/FUTURE/THOROUGH tags) |
-| **ESBMC mode** | BMC (default — k-induction with unwinding) |
-| **Additional flags** | None (no `--unwind`, `--floats`, `--pointer-check`, etc.) |
+| **ESBMC mode** | BMC (default, with automatic unwinding) |
+| **Additional flags** | None — line 3 of every `test.desc` is present but empty |
 | **Test runner env** | `ESBMC_REGRESS_TIMEOUT=1200`, `ESBMC_REGRESS_MEMORY_LIMIT=8192` |
 | **Expected verdicts** | `VERIFICATION SUCCESSFUL` (PASS tests) or `VERIFICATION FAILED` (FAIL tests) |
 
-**Assessment of flags:** The tests are **intentionally lightweight** — no `--unwind` overrides, no floating-point checks, no pointer checks, no concurrency (`--shared-variables`). This is appropriate for the small synthetic test programs (53–155 lines each) which exercise control flow, not large unrolled loops or complex data-race scenarios. The only test using nondeterminism (`cxl_irq_01`) has a bounded 10-iteration loop, so BMC's default unwinding suffices.
+**Assessment of flags:** The tests are **intentionally lightweight** — no `--unwind` overrides, no floating-point checks, no pointer checks, no concurrency (`--shared-variables`). This is appropriate for the small synthetic test programs (53–155 lines each) which exercise control flow, not large unrolled loops or complex data-race scenarios. The tests that use nondeterminism (`cxl_driver_irq_01`, `cxl_device_init_01`, and the two `cxl_mmio_readback_*` suites) are bounded — `cxl_driver_irq_01`'s loop runs 10 iterations — so BMC's default unwinding suffices.
+
+> The empty line 3 is load-bearing. It is the ESBMC argument list; if it is
+> omitted, the expected-output regex slides onto it and is passed to ESBMC as
+> command-line arguments. ESBMC then aborts with `failed to figure out type of
+> file`, the test is left with no regex to match, and it passes without
+> verifying anything. Every suite here previously had this defect except
+> `cxl_dma_01`.
 
 ---
 
@@ -64,6 +71,8 @@ All 25 tests share the same configuration:
 | 15 | `cxl_mem_attach_01` | 88 | assert chain | **SUCCESSFUL** | Lifecycle: attach → enable → disable → detach; asserts enforce must-attached before enable, must-enabled before detach |
 | 16 | `cxl_partition_01` | 77 | assert chain | **SUCCESSFUL** | Partition state machine: UNPARTITIONED → SPLIT (512/512MB) → SPLIT (256/768MB); total_size invariant preserved |
 | 17 | `cxl_mmio_01` | 53 | wmb/mb no-op + trivial assert | **SUCCESSFUL** | Minimal smoke test: wmb() and mb() compile and run (no-op in model); null MMIO pointer handled gracefully |
+| 17a | `cxl_mmio_readback_01` | 37 | assert chain over the model | **SUCCESSFUL** | Register read-back: write→read round-trip at 8/32/64-bit widths, later write wins, adjacent registers do not alias |
+| 17b | `cxl_mmio_readback_02` | 25 | __ESBMC_assert invariant | **FAILED** (bug) | Guards against an over-constrained model: a register the driver never wrote must not read as a fixed value |
 
 ### Category 7: DMA (1 test)
 
@@ -101,7 +110,7 @@ All 25 tests share the same configuration:
 
 | # | Suite | Lines | Strategy | Expected Verdict | What's Checked |
 |---|---|---|---|---|---|
-| 25 | `cxl_concurrent_01` | 89 | assert chain | **SUCCESSFUL** | Spinlock data-race freedom: 3 concurrent command submits + 1 error handler; `__ESBMC_atomic_begin/end` blocks ensure互斥; command_count==3, error_count==1, lock==false |
+| 25 | `cxl_concurrent_01` | 89 | assert chain | **SUCCESSFUL** | Spinlock data-race freedom: 3 concurrent command submits + 1 error handler; `__ESBMC_atomic_begin/end` blocks enforce mutual exclusion; command_count==3, error_count==1, lock==false |
 
 ---
 
@@ -109,52 +118,24 @@ All 25 tests share the same configuration:
 
 | Verdict | Count | Tests | Pattern |
 |---|---|---|---|
-| **VERIFICATION SUCCESSFUL** | **18** | 1,2,3,5,7,9,12,13,15,16,17,19,21,22,23,24,25 + cxl_driver_aer_fatal_01 | Correct driver behavior — all assertions hold, invariants preserved |
-| **VERIFICATION FAILED** | **7** | 4,6,8,10,11,14,18,20 | Intentional bugs — driver violates spec/contract |
+| **VERIFICATION SUCCESSFUL** | **18** | see list below | Correct driver behavior — all assertions hold, invariants preserved |
+| **VERIFICATION FAILED** | **9** | see list below | Intentional bugs — driver violates spec/contract |
 
-Wait, let me recount:
+**SUCCESSFUL (18):** `cxl_aer_01`, `cxl_driver_aer_fatal_01`, `cxl_error_01`,
+`cxl_hdm_01`, `cxl_driver_hdm_align_01`, `cxl_driver_probe_01`,
+`cxl_mailbox_state_01`, `cxl_security_01`, `cxl_mem_attach_01`,
+`cxl_partition_01`, `cxl_mmio_01`, `cxl_mmio_readback_01`, `cxl_pci_enum_01`,
+`cxl_port_enum_01`, `cxl_irq_01`, `cxl_driver_irq_01`, `cxl_device_init_01`,
+`cxl_concurrent_01`
 
-**SUCCESSFUL (18 tests):**
-1. cxl_aer_01
-2. cxl_driver_aer_fatal_01
-3. cxl_error_01
-4. cxl_hdm_01
-5. cxl_driver_hdm_align_01
-6. cxl_driver_probe_01
-7. cxl_mailbox_state_01
-8. cxl_security_01
-9. cxl_mem_attach_01
-10. cxl_partition_01
-11. cxl_mmio_01
-12. cxl_pci_enum_01
-13. cxl_port_enum_01
-14. cxl_irq_01
-15. cxl_driver_irq_01
-16. cxl_device_init_01
-17. cxl_concurrent_01
+**FAILED (9):** `cxl_irq_02` (double-free), `cxl_hdm_overlap_01` (missing
+overlap check), `cxl_driver_hdm_align_fail_01` (missing alignment check),
+`cxl_driver_remove_01` (missing IRQ cleanup), `cxl_mailbox_01` (unchecked
+return value), `cxl_security_02` (invalid state transition), `cxl_dma_01`
+(missing DMA sync), `cxl_pci_enum_02` (NULL pointer dereference),
+`cxl_mmio_readback_02` (unwritten register assumed fixed)
 
-That's 17. Let me verify:
-
-**FAILED (8 tests):**
-1. cxl_irq_02 (double-free)
-2. cxl_hdm_overlap_01 (missing overlap check)
-3. cxl_driver_hdm_align_fail_01 (missing alignment check)
-4. cxl_driver_remove_01 (missing IRQ cleanup)
-5. cxl_mailbox_01 (missing return value check)
-6. cxl_security_02 (invalid state transition)
-7. cxl_dma_01 (DMA sync missing)
-8. cxl_pci_enum_02 (NULL pointer dereference)
-
-That's 8. 17 + 8 = 25. ✓
-
-But the roadmap says 18 passing / 7 failing. Let me check — the roadmap was written before the tests were fully run. The actual result from ctest was 25/25 passed (meaning all test.expected verdicts matched). The "7 bug-detecting" in the roadmap refers to tests *designed* to detect bugs. Let me check if one of the "FAILED" expected tests is actually not failing...
-
-Looking at the ctest output from earlier, all 25 tests passed (meaning their expected verdict matched). So:
-
-- **17 passing tests** (VERIFICATION SUCCESSFUL expected + verified)
-- **8 bug-detecting tests** (VERIFICATION FAILED expected + verified)
-
-The roadmap entry says 18/7 — this is **off by one**. Need to correct it.
+18 + 9 = 27, matching `ctest -L cxl`.
 
 ---
 
@@ -176,11 +157,11 @@ The roadmap entry says 18/7 — this is **off by one**. Need to correct it.
    - Missing validation (hdm_align_fail_01, hdm_overlap_01)
    - Missing state machine enforcement (security_02, irq_02)
 
-4. **cxl_driver_* tests mirror real kernel code patterns** from `drivers/cxl/pci.c`, `drivers/cxl/cxl_core.c` etc.
+4. **cxl_driver_* tests mirror the *shape* of real driver code** — probe/remove ordering, IRQ cleanup, AER abort paths. They do not compile or link any kernel source, and the CXL API they call is synthetic (see the scope note in the roadmap); `drivers/cxl/cxl_core.c` does not exist in the kernel.
 
 ### Recommendations
 
-1. **Roadmap statistic correction needed:** Update to 17 passing / 8 bug-detecting (not 18/7).
+1. **Roadmap statistics** are now 18 passing / 9 bug-detecting across 27 suites, matching `ctest -L cxl`.
 
 2. **Flags are adequate but sparse.** No test uses:
    - `--z3` / `--bitwuzla` solver selection — all tests run with the default SMT solver
@@ -189,6 +170,6 @@ The roadmap entry says 18/7 — this is **off by one**. Need to correct it.
    - `--pointer-check` — pointer bugs are tested via `assert` (e.g., pci_enum_02), not the built-in pointer checker. For deeper pointer analysis (buffer overflows, OOB), this could be added.
    - `--shared-variables` — concurrent_01 uses `__ESBMC_atomic_begin/end` instead of shared-variable interleaving. Both are valid; the atomic approach is simpler and sufficient for these small programs.
 
-3. **cxl_irq_01** uses `__VERIFIER_nondet_int() % 3` to explore all 3 IRQ types. This is the only test with genuine nondeterministic exploration. The 10-iteration for-loop is small enough that BMC unwinding won't explode.
+3. **cxl_driver_irq_01** uses `__VERIFIER_nondet_int() % 3` to explore all 3 IRQ types over a 10-iteration loop — small enough that BMC unwinding won't explode. `cxl_irq_01`, despite the similar name, is fully deterministic and has no loop.
 
 4. **No tests use `--k-induction` or `--unwind N`.** For the small programs here, default BMC with automatic unwinding is appropriate. If tests grow to include unbounded loops, k-induction would become necessary.
