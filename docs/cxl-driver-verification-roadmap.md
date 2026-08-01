@@ -397,12 +397,12 @@ regression/cxl/
 
 | Metric | Count |
 |--------|-------|
-| Total commits | 10 |
+| Total commits | 16 |
 | Total regression tests | 27 |
 | Passing tests | 18 |
 | Bug-detecting tests | 9 |
 | Kernel headers added | 6 |
-| Operational model lines | ~1,300 |
+| Operational model lines | 1,385 |
 | Documentation pages | 3 |
 | AER functions added | 4 |
 | Error injection functions added | 2 |
