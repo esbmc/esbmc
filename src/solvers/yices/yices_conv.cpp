@@ -18,6 +18,14 @@
 #  define yices_bvor yices_bvor2
 #endif
 
+// Yices 2.7 likewise renamed the smt_status_t enumerators with a YICES_ prefix,
+// keeping no aliases for the old spelling (yices_types.h).
+
+#if __YICES_VERSION > 2 || (__YICES_VERSION == 2 && __YICES_VERSION_MAJOR >= 7)
+#  define STATUS_SAT YICES_STATUS_SAT
+#  define STATUS_UNSAT YICES_STATUS_UNSAT
+#endif
+
 #define new_ast new_solver_ast<yices_smt_ast>
 
 smt_solver_baset *create_new_yices_solver(
