@@ -106,8 +106,9 @@ __esbmc_mmio_offset(const void *addr, size_t width, size_t *off)
 {
 __ESBMC_HIDE:;
   const char *p = (const char *)addr;
-  if (p < esbmc_mmio_space ||
-      p > esbmc_mmio_space + (ESBMC_MMIO_SPACE_SIZE - width))
+  if (
+    p < esbmc_mmio_space ||
+    p > esbmc_mmio_space + (ESBMC_MMIO_SPACE_SIZE - width))
     return 0;
   *off = (size_t)(p - esbmc_mmio_space);
   return 1;
@@ -248,8 +249,7 @@ __ESBMC_HIDE:;
   assert(count > 0);
   for (unsigned long i = 0; i < count; i++)
   {
-    writel(((const uint32_t *)buf)[i],
-           (const char *)addr + i * 4);
+    writel(((const uint32_t *)buf)[i], (const char *)addr + i * 4);
   }
 }
 
