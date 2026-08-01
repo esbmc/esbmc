@@ -231,28 +231,52 @@ void cse_domaint::havoc_symbol(const irep_idt &sym)
     available_expressions.erase(x);
 }
 
+static void collect_dereferences(const expr2tc &e, std::vector<expr2tc> &dest)
+{
+  if (!e)
+    return;
+
+  if (is_dereference2t(e))
+  {
+    dest.push_back(e);
+    return;
+  }
+
+  e->foreach_operand(
+    [&dest](const expr2tc &op) { collect_dereferences(op, dest); });
+}
+
 void cse_domaint::havoc_expr(
   const expr2tc &target,
   const goto_programt::const_targett &i_it)
 {
-  if (is_dereference2t(target) && vsa != nullptr)
+  if (vsa != nullptr)
   {
-    value_setst::valuest dest;
-    vsa->get_reference_set(i_it, target, dest);
-    for (const auto &x : dest)
-    {
-      if (is_object_descriptor2t(x))
-      {
-        havoc_expr(to_object_descriptor2t(x).object, i_it);
-        continue;
-      }
+    // A store through `p->f` or `(*p)[i]` writes whatever `p` points to, but
+    // the dereference is nested inside the lvalue rather than being it, so
+    // every dereference in the target has to be resolved -- not just a
+    // top-level one.
+    std::vector<expr2tc> dereferences;
+    collect_dereferences(target, dereferences);
 
-      // An unnameable target (the points-to analysis reports "may point
-      // anywhere") could be any object at all, so nothing stays available.
-      // Keeping the set here would let CSE reuse a value this store just
-      // invalidated.
-      available_expressions.clear();
-      return;
+    for (const expr2tc &deref : dereferences)
+    {
+      value_setst::valuest dest;
+      vsa->get_reference_set(i_it, deref, dest);
+      for (const auto &x : dest)
+      {
+        // An unnameable target (the points-to analysis reports "may point
+        // anywhere") could be any object at all, so nothing stays available.
+        // Keeping the set here would let CSE reuse a value this store just
+        // invalidated.
+        if (!is_object_descriptor2t(x))
+        {
+          available_expressions.clear();
+          return;
+        }
+
+        havoc_expr(to_object_descriptor2t(x).object, i_it);
+      }
     }
   }
   std::vector<expr2tc> to_remove;
