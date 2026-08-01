@@ -17,6 +17,41 @@
 #include <utility>
 #include <vector>
 
+// A monitor that never yields control back never steps its automaton, so no
+// prefix assertion is reachable and the run ends in an unexplained
+// VERIFICATION UNKNOWN. libltl2ba emitted both switch calls commented out up to
+// and including its v2.1 release (esbmc/libltl2ba#4), so name the cause rather
+// than leaving it indistinguishable from the other routes to UNKNOWN.
+static void
+warn_if_monitor_never_switches_back(const goto_functionst &goto_functions)
+{
+  // --full-inlining releases every body outside __ESBMC_main, and the monitor
+  // is not reachable from there yet (the call to it is inserted below), so its
+  // body is dropped rather than inlined. Absence of the call proves nothing
+  // then.
+  auto start = goto_functions.function_map.find("c:@F@ltl2ba_start_monitor");
+  if (
+    start == goto_functions.function_map.end() || !start->second.body_available)
+    return;
+
+  forall_goto_functions (f_it, goto_functions)
+    forall_goto_program_instructions (p_it, f_it->second.body)
+    {
+      if (p_it->type != FUNCTION_CALL)
+        continue;
+      const expr2tc &func = to_code_function_call2t(p_it->code).function;
+      if (
+        is_symbol2t(func) && to_symbol2t(func).get_symbol_name() ==
+                               "c:@F@__ESBMC_switch_from_monitor")
+        return;
+    }
+
+  log_warning(
+    "monitor has no __ESBMC_switch_from_monitor() call; regenerate it with "
+    "libltl2ba master (>= b810033), the v2.1 release predates the fix for "
+    "esbmc/esbmc#6546");
+}
+
 void esbmc_parseoptionst::add_property_monitors(
   goto_functionst &goto_functions,
   namespacet &ns [[maybe_unused]])
@@ -38,6 +73,8 @@ void esbmc_parseoptionst::add_property_monitors(
 
   if (monitors.size() == 0)
     return;
+
+  warn_if_monitor_never_switches_back(goto_functions);
 
   Forall_goto_functions (f_it, goto_functions)
   {
