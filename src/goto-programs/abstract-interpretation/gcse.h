@@ -53,13 +53,18 @@ public:
 
   virtual void make_bottom() override
   {
-    // A bottom for AE means that there are no expressions available
     available_expressions.clear();
+    bottom = true;
   }
 
+  /// Entry has nothing available yet, but is reachable — distinct from bottom.
+  /// Conflating the two would let a merge adopt the other side's expressions
+  /// wholesale, and would make ai_baset treat a function whose exit has no
+  /// available expression as an unreachable exit point.
   virtual void make_entry() override
   {
     available_expressions.clear();
+    bottom = false;
   };
   virtual void make_top() override
   {
@@ -71,7 +76,7 @@ public:
 
   virtual bool is_bottom() const override
   {
-    return available_expressions.size() == 0;
+    return bottom;
   }
   virtual bool is_top() const override
   {
@@ -90,6 +95,10 @@ public:
     goto_programt::const_targett);
   /// All expressions available
   std::unordered_set<expr2tc, irep2_hash> available_expressions;
+
+  /// Unreachable-so-far marker. A default-constructed domain must be bottom:
+  /// ai_baset asserts as much for states it has not visited.
+  bool bottom = true;
 
 protected:
   /// Add non-primitive expression `e` (and its sub-expressions) into available_expressions.

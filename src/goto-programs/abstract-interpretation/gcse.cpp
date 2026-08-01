@@ -1,7 +1,7 @@
 #include <goto-programs/goto_program.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
-#include <pointer-analysis/value_set_analysis.h>
+#include <pointer-analysis/value_sets.h>
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
@@ -101,7 +101,18 @@ bool cse_domaint::merge(
    * simulate one by just passing through common instructions
    * and only doing intersections at target destinations */
 
-  if (!(to->is_target() || from->is_function_call()) || is_bottom())
+  // Nothing flows out of an unreachable predecessor.
+  if (b.is_bottom())
+    return false;
+
+  if (is_bottom())
+  {
+    available_expressions = b.available_expressions;
+    bottom = false;
+    return true;
+  }
+
+  if (!(to->is_target() || from->is_function_call()))
   {
     bool changed = available_expressions != b.available_expressions;
     available_expressions = b.available_expressions;
@@ -110,15 +121,12 @@ bool cse_domaint::merge(
 
   size_t size_before_intersection = available_expressions.size();
   for (auto it = available_expressions.begin();
-       it != available_expressions.end();
-       it++)
+       it != available_expressions.end();)
   {
-    if (!b.available_expressions.count(*it))
-    {
+    if (b.available_expressions.count(*it))
+      ++it;
+    else
       it = available_expressions.erase(it);
-      if (it == available_expressions.end())
-        break;
-    }
   }
 
   return size_before_intersection != available_expressions.size();
@@ -234,11 +242,17 @@ void cse_domaint::havoc_expr(
     for (const auto &x : dest)
     {
       if (is_object_descriptor2t(x))
-        havoc_expr(to_object_descriptor2t(x).object, i_it);
-      else
       {
-        log_error("Unsupported descriptor: {}", *x);
+        havoc_expr(to_object_descriptor2t(x).object, i_it);
+        continue;
       }
+
+      // An unnameable target (the points-to analysis reports "may point
+      // anywhere") could be any object at all, so nothing stays available.
+      // Keeping the set here would let CSE reuse a value this store just
+      // invalidated.
+      available_expressions.clear();
+      return;
     }
   }
   std::vector<expr2tc> to_remove;
