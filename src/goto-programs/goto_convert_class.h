@@ -146,6 +146,12 @@ protected:
     const exprt &elem_count,
     goto_programt &dest);
 
+  void cpp_new_zero_fill(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt &elem_count,
+    goto_programt &dest);
+
   //
   // function calls
   //

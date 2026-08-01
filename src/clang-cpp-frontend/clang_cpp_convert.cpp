@@ -618,6 +618,38 @@ static const clang::FunctionDecl *resolve_deallocation_function(
   return nullptr;
 }
 
+// Does this new-expression initializer value-initialise the allocated elements?
+// Clang spells the same request three ways: an ImplicitValueInitExpr for a
+// scalar element, an InitListExpr with no explicit initialiser for the braced
+// form, and, for a class element, a CXXConstructExpr carrying the zeroing flag
+// (set exactly when the constructor is not user-provided, so the elements are
+// zero-initialised before it runs).
+static bool zero_initialises(const clang::Expr &init)
+{
+  if (llvm::isa<clang::ImplicitValueInitExpr>(init))
+    return true;
+
+  if (const auto *ile = llvm::dyn_cast<clang::InitListExpr>(&init))
+  {
+    // A list with explicit initialisers zero-fills only the tail; modelling
+    // that needs the leading values too, which this does not supply.
+    if (ile->getNumInits() != 0)
+      return false;
+
+    // For an array new the per-element request is the filler, not an init, so
+    // a filler running a user-provided constructor must not be zeroed on top.
+    if (const clang::Expr *filler = ile->getArrayFiller())
+      return zero_initialises(*filler);
+
+    return true;
+  }
+
+  if (const auto *ce = llvm::dyn_cast<clang::CXXConstructExpr>(&init))
+    return ce->requiresZeroInitialization();
+
+  return false;
+}
+
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
@@ -976,6 +1008,16 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         return true;
       new_expr.add("alloc_function") = alloc_function;
     }
+
+    // [expr.new]/24: `new T[n]()` and `new T[n]{}` value-initialise every
+    // element, which zero-initialises whatever the element constructor -- if
+    // there is one at all -- does not write itself. Plain `new T[n]`
+    // default-initialises and correctly leaves a scalar element indeterminate,
+    // so the two forms must be told apart here (github #6588).
+    if (
+      ne.isArray() && ne.hasInitializer() &&
+      zero_initialises(*ne.getInitializer()))
+      new_expr.set("zero_initialized", true);
 
     if (ne.hasInitializer())
     {
