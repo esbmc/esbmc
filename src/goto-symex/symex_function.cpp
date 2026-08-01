@@ -1048,6 +1048,8 @@ void goto_symext::symex_return(const expr2tc &code)
     cur_state->top().merge_state_map[cur_state->top().end_of_function];
 
   merge_state_list.emplace_back(*cur_state);
+  record_parked_path(
+    cur_state->top().end_of_function, std::prev(merge_state_list.end()));
 
   // check whether the stack limit and return
   // value optimization have been activated.

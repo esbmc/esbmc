@@ -260,7 +260,9 @@ void goto_symext::intrinsic_register_monitor(
   }
 
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
-  assert(art.get_cur_state().threads_state.size() >= tid);
+  // The monitor must be *in* threads_state: check_if_ileaves_blocked discounts
+  // it from the thread count and check_thread_viable indexes by it.
+  assert(art.get_cur_state().threads_state.size() > tid);
   ex_state.monitor_tid = tid;
   ex_state.tid_is_set = true;
 }

@@ -36,7 +36,7 @@ the implementation diverges from [1].
 | Incompatible strategies | `--k-induction`, `--incremental-bmc`, `--termination` |
 | Monitor prefix bound | `-DLTL_PREFIX_BOUND=N`, **required in practice** (default is 2³¹) |
 | Other properties in the same run | **None** — safety and unwinding assertions are masked |
-| Regression coverage | 7 `CORE` tests in `regression/ltl/`, run on Linux, macOS and Windows |
+| Regression coverage | 11 `CORE` tests in `regression/ltl/`, run on Linux, macOS and Windows |
 | Minimum translator version | libltl2ba `master` at [`b810033`](https://github.com/esbmc/libltl2ba/commit/b81003333) or later ([libltl2ba#4](https://github.com/esbmc/libltl2ba/pull/4)) — **later than the v2.1 tag** |
 
 ## The four-valued verdict
@@ -294,7 +294,7 @@ a proposition changed, and raising `LTL_PREFIX_BOUND`, `--context-bound` or
 A monitor emitted by a libltl2ba older than
 [#4](https://github.com/esbmc/libltl2ba/pull/4) — including the v2.1 tag — emits
 `__ESBMC_switch_to_monitor()` and `__ESBMC_switch_from_monitor()` commented out.
-Since `--ltl` now also stops the ordinary scheduler from running the monitor,
+Since the monitor is never scheduled the ordinary way,
 such a monitor never steps at all, and every run reports
 `VERIFICATION UNKNOWN` rather than a wrong verdict. If a formula that should
 decide keeps coming back without a verdict, check the generated file for those
@@ -380,13 +380,15 @@ Check safety properties and bound adequacy in a separate run without `--ltl`.
   [#6546](https://github.com/esbmc/esbmc/issues/6546)). [1, §6.2.3] replaces
   general-purpose scheduling of the monitor with a directed context switch to it
   after each global-variable update, reported there as the change that made the
-  analysis practical. Reviving it needed three things together: the
-  `__ESBMC_switch_to_monitor` insertion in `property_monitors.cpp`, libltl2ba
-  emitting the paired `__ESBMC_switch_from_monitor()` at the end of each
-  automaton step (without it the monitor thread runs its whole prefix in one go
-  and ends), and `--ltl` implying `--direct-interleavings` so the monitor is not
-  *also* schedulable by the ordinary scheduler — mixing the two returns to the
-  program without the paired switch away and corrupts the switch bookkeeping.
+  analysis practical. Reviving it needed the `__ESBMC_switch_to_monitor`
+  insertion in `property_monitors.cpp` and libltl2ba emitting the paired
+  `__ESBMC_switch_from_monitor()` at the end of each automaton step (without it
+  the monitor thread runs its whole prefix in one go and ends). The monitor is
+  kept off the ordinary scheduler by `check_thread_viable`, and interleaving is
+  blocked for the duration of a directed step so it cannot be abandoned
+  half-way ([#6585](https://github.com/esbmc/esbmc/issues/6585)); the program's
+  own threads interleave normally, which the verdict is a minimum over
+  [1, §7.2].
 - **Propositions are re-evaluated, not cached.** [1, §6.2.2] describes inserting
   an update to a Boolean variable per proposition after each assignment. The
   current code only makes the assignment atomic; the automaton calls
@@ -413,14 +415,19 @@ Check safety properties and bound adequacy in a separate run without `--ltl`.
   and from `master` — the newest tagged release, v2.1 (April 2024), predates the
   context-switch emission this version of ESBMC requires. Nothing checks the
   pairing, and the resulting `VERIFICATION UNKNOWN` does not name the cause.
-- **Test coverage is thin.** `regression/ltl/` holds seven tests. The two
+- **Test coverage is thin.** `regression/ltl/` holds eleven tests. The two
   automata shipped by the original three exercise only ⊥ᵖ, ⊤ᵖ and the
   no-verdict cases, because both formulas have an empty bad-prefix state set
   and mark every state as excluded from being a good prefix; `github_6546`
   covers `LTL_BAD`. `LTL_GOOD` is still uncovered.
 - Multi-threaded liveness checking remains practical only for small programs
   [1, §7.2]: liveness needs enough interleavings for every thread to complete
-  whole loop iterations, whereas safety violations are typically shallow.
+  whole loop iterations, whereas safety violations are typically shallow. The
+  interleaving count climbs steeply — two program threads reach 34 schedules
+  and three reach 366 on the `regression/ltl/multithreaded*` programs. Bound it
+  with `--context-bound`, not `--direct-interleavings`, which suppresses the
+  program's own interleavings and re-creates
+  [#6585](https://github.com/esbmc/esbmc/issues/6585).
 
 ## Checking the prefix assertions individually
 
@@ -430,12 +437,8 @@ Passing the monitor **without** `--ltl` therefore checks the three prefix
 assertions as ordinary assertions, which gives per-claim results — useful when
 you want to see every lattice level at once rather than only the lowest.
 
-`--direct-interleavings` has to be passed explicitly here: only `--ltl` implies
-it, and without it the monitor is scheduled as an ordinary thread again, so the
-run reports `VERIFICATION SUCCESSFUL` without ever solving a prefix claim.
-
 ```bash
-esbmc program.c notphi.c -DLTL_PREFIX_BOUND=10 --multi-property --direct-interleavings
+esbmc program.c notphi.c -DLTL_PREFIX_BOUND=10 --multi-property
 ```
 
 ```
@@ -470,7 +473,7 @@ against the program in [Limitations](#violations-were-missed-fixed-in-840).
 | `regression/ltl/basic-truncated-unwind` | same automaton, `--unwind 1` | `VERIFICATION UNKNOWN` |
 | `regression/ltl/uninstrumented-unknown` | same automaton, `--k-induction` | `VERIFICATION UNKNOWN` |
 
-All seven are `CORE` and pass:
+All eleven are `CORE` and pass:
 
 ```bash
 ctest -R "regression/ltl/" --output-on-failure

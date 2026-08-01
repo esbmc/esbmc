@@ -199,15 +199,16 @@ protected:
   virtual void symex_goto(const expr2tc &old_guard);
 
   /**
-   *  Hook called when a GOTO forks off a sibling merge_statet snapshot.
-   *  Used by execution_statet to record an explicit reference to the sibling
-   *  path on the active transition result, so it can be preserved across
-   *  context switches without re-discovering it by scanning merge_state_map.
-   *  No-op for non-concurrent symex.
+   *  Hook called when a step parks a merge_statet snapshot for a deferred
+   *  merge — a GOTO forking off its sibling arm, or a RETURN parking the
+   *  continuation at end_of_function. Used by execution_statet to record an
+   *  explicit reference to that path on the active transition result, so it
+   *  can be preserved across context switches without re-discovering it by
+   *  scanning merge_state_map. No-op for non-concurrent symex.
    */
-  virtual void record_branch_sibling(
+  virtual void record_parked_path(
     goto_programt::const_targett /*target*/,
-    statet::merge_state_listt::iterator /*sibling*/)
+    statet::merge_state_listt::iterator /*parked*/)
   {
   }
 

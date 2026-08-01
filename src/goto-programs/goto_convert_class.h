@@ -140,8 +140,11 @@ protected:
 
   static void replace_new_object(const exprt &object, exprt &dest);
 
-  void
-  cpp_new_initializer(const exprt &lhs, const exprt &rhs, goto_programt &dest);
+  void cpp_new_initializer(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt &elem_count,
+    goto_programt &dest);
 
   //
   // function calls
