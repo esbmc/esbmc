@@ -41,6 +41,13 @@ int main()
   static_assert(!std::disjunction_v<std::false_type, std::false_type>, "");
   static_assert(std::negation_v<std::false_type>, "");
 
+  static_assert(std::is_same<std::remove_cvref_t<const int &>, int>::value, "");
+  static_assert(
+    std::is_same<std::remove_cvref_t<volatile int &&>, int>::value, "");
+  // Only top-level cv is stripped: a pointer to const keeps its pointee cv.
+  static_assert(
+    !std::is_same<std::remove_cvref_t<const int *>, int *>::value, "");
+
   std::aligned_storage_t<sizeof(Plain), alignof(Plain)> buf;
   assert(sizeof(buf) >= sizeof(Plain));
   return 0;
