@@ -16,11 +16,15 @@ int main()
 
   assert(cxl_dport_count(&port) == 0);
 
-  /* Registration allocates, so it may legitimately fail. */
+  /* Registration allocates, so it may legitimately fail — and bailing out
+     must not strand the dport that did register. */
   if (cxl_dport_add(&port, &d0, 0) != 0)
     return 0;
   if (cxl_dport_add(&port, &d1, 1) != 0)
+  {
+    cxl_dport_remove(&port, 0);
     return 0;
+  }
   assert(cxl_dport_count(&port) == 2);
 
   /* A second dport claiming a live id is refused. */
