@@ -692,9 +692,12 @@ this document** — each is a prioritised target for the cited harness.
 | **R21** | **Medium (incompleteness, default configuration)** — found by M8 triage, §15 M8 (cont.); filed as **#6545** | **Multiplying an address-derived integer loses object identity, so the reconstructed pointer is rejected.** `uintptr_t u = (uintptr_t)&s; u *= 2; u -= (uintptr_t)&s; *(int *)u = 3;` recovers `&s` exactly, yet reports **FAILED**. The boundary: an *additive* round-trip (`u += 4; u -= 4`) is tracked, multiplying a *pure integer* offset and adding it to an address is tracked, and `u = u * 1` folds away — only a genuine multiplication of an address-derived term defeats recovery. `offsetof` counts as address-derived, since it expands to `(size_t)&((S *)0)->m`: the same program with a literal `4` in place of `offsetof(struct S, y)` verifies, with `offsetof` it does not. Attributes three pre-existing KNOWNBUGs to one cause — `github_426_2` (multiplies an `offsetof`), `github_426_3` and `github_426_4` (multiply an address). Noisy direction, so P1: a spurious counterexample, not a missed bug — and the exact complement of R20, which *accepts* a computed address it should reject. | boundary probes above; `regression/esbmc/ptr_int_multiply_roundtrip` (KNOWNBUG) and `ptr_int_additive_roundtrip` (CORE); `regression/esbmc/github_426_{2,3,4}` (pre-existing KNOWNBUGs) | M8 triage; H-A10's `symex_dereference` obligation | Decide whether recovering object identity through a multiplicative term is worth the model complexity; if not, document it as a stated limitation so the three KNOWNBUGs stop reading as open defects. Pinned, not fixed; filed as #6545. |
 | **R20** | **Medium–High (missed bug, default configuration)** — found by M8 triage, §15 M8 (cont.); filed as **#6544** | **A dereference through a constant non-null integer address is unchecked.** One line reproduces it: `int *p = (int *)65; return *p;` reports **`VERIFICATION SUCCESSFUL`**. The boundary is narrow and is what makes this a defect rather than a modelling choice: `(int *)0` is caught by the null check, `(int *)nondet_ulong()` is caught, and `(int *)(unsigned long)&x` is correctly accepted as a valid round-trip — only the *constant* non-null address escapes, for reads and for writes alike. Attributes two pre-existing KNOWNBUGs to one cause: `github_1175_9` casts `'A'` (65) and `github_1175_11` casts a constant-folded `strlen("Hello")` (5). **The obvious mechanism is refuted:** `--no-propagation` and `--no-simplify`, together and separately, leave the verdict SUCCESSFUL, so constant propagation is not what loses the check. | one-line reproducer above; `regression/esbmc/deref_constant_int_address` (KNOWNBUG) and `deref_nondet_int_address` (CORE, nondet address, caught today); `regression/esbmc/github_1175_{9,11}` (pre-existing KNOWNBUGs) | M8 triage; belongs to H-A10's `symex_dereference` obligation | Find where a constant-integer pointer bypasses the `invalid_pointer` obligation that a nondet one receives. `src/pointer-analysis/dereference.cpp` is Tier D by §14.2, but symex's *use* of it is in scope. Pinned, not fixed; filed as #6544. |
 | **R19** | **High (per-property false PASSED, non-default flag pair)** — **confirmed with a minimal reproducer** by H-B8, §15 M7; filed as **#6540** | **With `--multi-property --smt-during-symex`, a violable claim that is not the last property is individually reported as `✓ PASSED`.** Seven lines reproduce it: two non-trivial properties where the violable one comes first. ESBMC prints `✓ PASSED` for the violable claim, `Properties: 2 verified ✓ 2 passed`, and `VERIFICATION SUCCESSFUL`. Swapping the two assertions so the violable one is **last** restores `FAILED`, so the defect is positional. Neither flag alone loses the counterexample — `--multi-property` alone and `--smt-during-symex` alone both report FAILED — making this a flag *composition* defect like R17. This is I13 exactly as H-B8 hypothesised it: the per-claim solve reuses a `runtime_encoded_equationt` whose context stack still carries the preceding claim's state, so a non-final claim is discharged against the wrong formula. Worse than a verdict flip: the per-property report actively asserts the claim holds. | `oracle_flag_parity.py --b=--smt-during-symex` (3 corpus divergences: `github_1408`, `github_1890_1`, `github_2629`, all `--multi-property` tests); reproducer in #6540; **no portable regression pin** — see §15 M7 (CI) | **H-B8** | Inspect `runtime_encoded_equationt`'s `push_ctx`/`pop_ctx` pairing across the per-claim loop in `bmc.cpp` — H-A8 assumes the caller balances them (§7.3). Pinned, not fixed. |
+| **R18** | **High (false SUCCESSFUL, default configuration)** — **confirmed with a witness** by H-A6/H-C4, §15 M6; filed as **#6539** | **POR drops a racy interleaving when the write goes through a nested dereference.** `get_expr_globals` resolves *one* pointer level (`get_reference_set` on a single `dereference2tc`), so a write spelled `*(*gpp) = 1` is recorded against the intermediate pointer `gp` rather than its target `g`. A second thread writing `g` directly records `g`, the two keys do not alias, `check_mpor_dependency` returns *independent*, and the interleaving is pruned — **a real race missed in the default configuration, with no diagnostic**. Twelve lines reproduce it: writer does `*(*gpp) = 1`, `main` does `g = 2; seen = g;`, and `assert(seen == 2)` is reachable. Default reports **SUCCESSFUL**; `--no-por` reports FAILED. The mechanism is pinned by a decisive pair: with *both* threads using the nested form the race is found again (matching keys), while writer-nested/main-direct misses it. Splitting the nested access into `int *q = *gpp; *q = 1;` also restores detection, so the key depends on the syntactic nesting depth of the access rather than on the object touched. This is precisely the completeness direction H-A6's A6.2 names — a missed dependency — and it is **not** in the relation but upstream in the key construction feeding it. | `execution_statet::get_expr_globals`, `execution_state.cpp:868-918`; `check_mpor_dependency`, `:1050`; `mpor_set_conflicts`, `:231`; `regression/esbmc-unix/mpor_nested_deref_race` (KNOWNBUG) and `..._nopor` (CORE) | **H-A6**, **H-C4** | Resolve pointer chains to a fixed point instead of one level, or make `mpor_keys_may_alias` treat a pointer key as aliasing everything its value set can reach. Pinned, not fixed: either change widens the dependency relation and will cost interleavings, so it needs the H-C4 sweep re-run for cost before landing. |
+| **R22** | **High (false SUCCESSFUL, default configuration)** — **confirmed with a minimal reproducer** by M8 triage, **confirmed and fixed**, §15 M8 (cont. 6) | **A shared write performed by a function's return-value assignment creates no interleaving point.** Six lines reproduce it: one thread runs `x = notify(); x = 2;` (`notify` returns `1`), another asserts `x != 1`. Default reports **SUCCESSFUL** — no schedule can observe the intermediate value, because no context switch is offered between the two writes. Three controls make the boundary exact: writing `x = 1; x = 2;` inline reports FAILED; splitting the call off the shared write (`int v = notify(); x = v; x = 2;`) reports FAILED; and inserting *any* other shared write between them (`x = notify(); g = 5; x = 2;`) reports FAILED. The value therefore reaches the equation — `x = notify();` alone reports FAILED, and an in-thread `assert(x == 1)` after it holds — so what is lost is the *scheduling point*, not the write. Not POR (`--no-por` unchanged), not the context bound (`--context-bound 10` unchanged), and not constant propagation (the split control propagates identically and still catches it). `x = notify()` lowers to a `FUNCTION_CALL` instruction carrying the lhs, so the write is performed by the `RETURN` case's `make_return_assignment` path; `execution_statet::symex_step` calls `analyze_assign(assign)` there **after** `symex_return(thecode)`, whose last statement is `cur_state->guard.make_false()`, and `analyze_assign` early-returns on a false guard. That is the same mistake #6558 fixed at `symex_goto`, and instrumentation confirms the reorder does exactly what the argument predicts — the `RETURN` step goes from `writes=0 cswitch=false` to `writes=1 cswitch=true`. **It is still not sufficient**, and the second half is now identified: `execute_guard` emits `assume(false)` and kills the interleaving whenever a switch is taken away from a thread whose guard is false, which `symex_return` guarantees at a return boundary. That is **#6558's defect at a second boundary** — the `last_transition.branch` arm chains the pre-branch guard for gotos and nothing does so for returns. Both halves must be fixed together; see §15 M8 (cont. 4) and (cont. 5). **Fixed in §15 M8 (cont. 6)**, where the two halves collapse into one change: a return parks its continuation exactly as a branch parks its sibling arm, so `symex_return` now records that parked path through the same hook `symex_goto` uses, and the existing branch arms in `execute_guard` and `preserve_last_paths` cover returns unchanged. Fixing only the first two halves exposed a third — the returning thread was marked `thread_ended` at the boundary — which the same change removes. | reproducer and controls above; `execution_statet::execute_guard`, `execution_state.cpp:712-755`; `execution_statet::symex_step` `RETURN` case, `execution_state.cpp:339-356`; `goto_symext::symex_return`, `symex_function.cpp:1041-1066`; `execution_statet::analyze_assign`, `execution_state.cpp:819-838`; `regression/esbmc-unix/symex_return_value_cswitch` (CORE, flipped from KNOWNBUG by the fix), `..._split` (CORE) and `..._resume` (CORE, added by the fix to pin the thread-survival half) | M8 triage; **H-A6**'s A6.2 completeness obligation | Done. All three pins are CORE and the whole `esbmc-unix` suite is clean. |
 | **R18** | **High (false SUCCESSFUL, default configuration)** — **FIXED**, §15 M6 (fix); filed as **#6539**, fixed by **#6550** | **POR drops a racy interleaving when the write goes through a nested dereference.** `get_expr_globals` resolves *one* pointer level (`get_reference_set` on a single `dereference2tc`), so a write spelled `*(*gpp) = 1` is recorded against the intermediate pointer `gp` rather than its target `g`. A second thread writing `g` directly records `g`, the two keys do not alias, `check_mpor_dependency` returns *independent*, and the interleaving is pruned — **a real race missed in the default configuration, with no diagnostic**. Twelve lines reproduce it: writer does `*(*gpp) = 1`, `main` does `g = 2; seen = g;`, and `assert(seen == 2)` is reachable. Default reports **SUCCESSFUL**; `--no-por` reports FAILED. The mechanism is pinned by a decisive pair: with *both* threads using the nested form the race is found again (matching keys), while writer-nested/main-direct misses it. Splitting the nested access into `int *q = *gpp; *q = 1;` also restores detection, so the key depends on the syntactic nesting depth of the access rather than on the object touched. This is precisely the completeness direction H-A6's A6.2 names — a missed dependency — and it is **not** in the relation but upstream in the key construction feeding it. | `execution_statet::get_expr_globals`, `execution_state.cpp:868-918`; `check_mpor_dependency`, `:1050`; `mpor_set_conflicts`, `:231`; `regression/esbmc-unix/mpor_nested_deref_race` (KNOWNBUG) and `..._nopor` (CORE) | **H-A6**, **H-C4** | **Fixed in #6550** by following the chain and recording every shared object along it. The cost gate the entry called for was run: H-C4 agreement *rose* (258→259 on `--no-por`, 255→257 on `--state-hashing`) at 0 divergences, and the concurrency suite timing was unchanged (24.10 s vs 24.12 s). |
 | **R16** | **Medium (incompleteness under a non-default flag)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify` is not verdict-preserving: 10 corpus inputs where the default proves SUCCESSFUL and `--no-simplify` does not.** Nine report a spurious counterexample (`github_1174_{hex,lmod,oct,pass}`, `github_2341_3`, `github_2357_5`, `github_2566_1`, `github_785-2`, `realloc13`) and one returns UNKNOWN (`github_252`, under `--k-induction`). In every case the *default* leg matches the verdict the test's own `test.desc` expects, so the fault is in the `--no-simplify` configuration, not the default. Spot-confirmed on `github_2341_3`: `--no-simplify` reports a violated `assert(temp != NULL)` the default discharges. The noisy direction — P1 — but it means `do_simplify` is load-bearing for *correctness of the encoding*, not merely for formula size, which is not how an "optimisation" flag reads. | `oracle_flag_parity.py --b=--no-simplify` over `regression/esbmc` CORE | **H-C2** | Triage one input down to the expression shape the encoder mishandles unsimplified. Until then `--no-simplify` is a debugging aid, not a semantics-preserving flag. |
 | **R17** | **High (false SUCCESSFUL, non-default flag pair)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify --no-slice` misses a reachable `assert(0)`.** Three lines reproduce it: `void *b = malloc(-4); assert(0);` returns **`VERIFICATION SUCCESSFUL`**. Neither flag alone does this (both give FAILED), nor does a positive size, nor no allocation — so it is a **composition** defect, the class §7.4 says Tier C exists to catch. The negative size widens to a huge `size_t`; one VCC is generated and the solver returns UNSAT, so the path to the assertion is **vacuously infeasible** and every later assertion in such a program is silently unreachable. Reached in the corpus via `github_1631_compact`, whose `--compact-trace` sets `no-slice` implicitly (`command_line_options.cpp:410`) — that indirection is why the pair is easy to hit without naming it. | minimal reproducer above; `regression/esbmc/no_simplify_no_slice_huge_malloc` (KNOWNBUG, observed output `VERIFICATION SUCCESSFUL`) and `..._malloc` (CORE, positive size, passes today) | **H-C2** | Find which allocation-model constraint becomes contradictory unsimplified — the `__ESBMC_alloc_size` update and any size-overflow guard are the first suspects. Pinned, not fixed. |
+| **R23** | **High (false SUCCESSFUL *and* false FAILED, default configuration)** — **confirmed with a two-line reproducer** by M8 triage, §15 M8 (cont. 7); filed as **#6589** | **Compound assignment narrows the right operand to the left operand's type before the operation.** C11 **6.5.16.2p3**: "A compound assignment of the form E1 op= E2 is equivalent to the simple assignment expression E1 = E1 op (E2), except that the lvalue E1 is evaluated only once". ESBMC violates that equivalence for every left operand narrower than `int`. `char b; b += a;` emits `!overflow("+", (signed int)b, (signed int)((signed char)a))` — the right operand cast to `char` — where `b = b + a` correctly emits `!overflow("+", (signed int)b, a)`. Both directions are reachable and both are wrong: with `b = 3, a = INT_MAX`, `b += a` reports **SUCCESSFUL** (the overflow claim is unfalsifiable, a **missed bug**) while `b = b + a` reports FAILED; and with `char b = 100; int a = 256`, `b /= a` reports **FAILED "division by zero"** because the divisor narrows to `(char)256 == 0`, where C gives `100 / 256 == 0` and gcc/UBSan agree. Not bitfield-specific — `char`, `short`, struct members and bitfields all reproduce; the discriminator is *narrower than the promoted type*, not the member/bitfield spelling. This attributes `github_162_fail`, whose claim is vacuous for exactly this reason. **Frontend, not goto-symex**, so it is outside §2.3's scope, but it is a soundness defect in extremely common C. | `clang_c_convertert::get_compound_assign_expr`, `clang_c_convert.cpp:4258-4332`, specifically the unconditional `gen_typecast(ns, rhs, lhs.type())`; clang exposes `getComputationLHSType()`/`getComputationResultType()` for precisely this. `regression/esbmc/compound_assign_narrow_overflow` (KNOWNBUG), `..._explicit` (CORE control) and `compound_assign_narrow_divzero` (KNOWNBUG) | M8 triage | Perform the operation in `getComputationResultType()` and convert only the *result* back to the left operand's type. The explicit-form control pins the direction a fix must not break. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -800,6 +803,14 @@ Tier-B case; start from the tree's own `KNOWNBUG` inventory. *Artefact:* a
 **Closed, §15 M8.** All 27 goto-symex `KNOWNBUG`s surveyed and indexed; **9 of
 27 never reach a verdict on this toolchain**, so their KNOWNBUG status is
 uninformative. The index lives in §15 M8 rather than a new directory of copied
+tests. R20 (#6544) and R21 (#6545) attribute five of the twelve unattributed
+wrong-verdict entries. The Linux re-run (§15 M8 cont. 3) discharges the
+"re-measure the masked ones" half: masking drops to 5/28, six tests rejoin the
+inventory, and two of them produce **R22**. Triage of the resulting ten
+(§15 M8 cont. 7) attributes `github_162_fail` to **R23**, settles three as wrong
+tests — two of them fixed and retired from the inventory — and narrows
+`github_732-1-1` to bitfield layout under type punning. Five remain.
+inventory, and two of them produce **R22**. Ten unattributed entries remain.
 tests. All 13 wrong-verdict entries are now attributed: six are genuine defects
 (R20, R21, R22), two are wrong tests, three belong to other subsystems, one rests
 on an unshared premise, and `03_circular_reduce` remains unexplained.
@@ -2341,6 +2352,362 @@ unattributed after the survey: two are R20 (#6544), three are R21, and
 `03_circular_reduce` was tested against R18 and rejected. Seven remain, two of
 which (`github_159_postdecrement_fail`, `github_162_fail`) still look like wrong
 tests rather than defects.
+
+### M8 (cont. 3) — 2026-07-31, the Linux re-run
+
+**Result: the masked third of the KNOWNBUG inventory re-measured on Linux, as M8
+asked. Masking drops from 9/27 to 5/28, six tests rejoin the useful inventory,
+five of them are wrong verdicts, and two of those five are one new finding —
+R22.**
+
+The M8 survey ran on macOS/Clang and flagged its own caveat: seven tests never
+parsed, so their `KNOWNBUG` status said nothing about whether their defect
+survived. Re-running all 28 with each test's own flags here:
+
+| Outcome | Linux (28) | macOS (27) |
+|---|---|---|
+| Wrong verdict | 21 | 16 |
+| `ERROR: PARSING ERROR` | 4 | 7 |
+| Crash / no verdict | 1 (R14's `SYMEX_INVARIANT` stop, by design) | 2 crashes + 2 no-verdict |
+
+The four still-unparsed are `fam_false_2`, `fam_true_4` (both `main() {` —
+implicit `int`), `github_197` and `05_pfscan-1.0_01`. **The masking is
+toolchain-dependent exactly as predicted**, which is the point worth keeping: a
+`KNOWNBUG` verdict is only meaningful on a toolchain that parses the test, and no
+single platform's survey settles the inventory.
+
+**The six that were uninformative on macOS and reach a verdict here**, classified
+against their own `test.desc`:
+
+| Test | Expected | Linux | Direction |
+|---|---|---|---|
+| `03_wait_notify` | FAILED | SUCCESSFUL | missed bug — **attributed below** |
+| `03_wait_notify2` | FAILED | SUCCESSFUL | missed bug — **attributed below** |
+| `github_732-1-1` | SUCCESSFUL | FAILED | spurious counterexample |
+| `github_1091` | FAILED | SUCCESSFUL | missed bug |
+| `github_2513_6` | SUCCESSFUL | FAILED | spurious counterexample |
+| `linking-7` | `ERROR` | FAILED | out of §2.3 scope (symbol linking, not symex) |
+
+**Both `wait_notify` tests are attributed, and not to the obvious suspect.** They
+share an `ecsc.h` whose `notify_event()` is
+`{ __ESBMC_atomic_begin(); return 1; __ESBMC_atomic_end(); }` — the
+`__ESBMC_atomic_end()` sits after a `return` and is unreachable, so the atomic
+section is entered and never left and no further context switch is offered.
+Balancing that one function makes both tests report FAILED, as their `test.desc`
+expects. This is a defect in the tests' own header rather than in symex, but the
+ESBMC-side observation transfers: **an unterminated atomic section silently
+disables all remaining interleaving, with no diagnostic** — the same
+false-SUCCESSFUL shape as R17, reached through a modelling error the tool does
+not report. Worth a check at thread end; not filed as a finding here because the
+input is at fault.
+
+**R22 came out of the control, not the hypothesis.** The first guess was that the
+leaked atomic explained a minimal probe too. It did not: the *no-atomic* control
+`x = notify(); x = 2;` is equally SUCCESSFUL, while the inline `x = 1; x = 2;`
+FAILS. That flipped the investigation onto the call, and the boundary is sharp —
+splitting the call off the shared write, or putting any other shared write
+between the two, restores the bug. So the return value lands in the equation and
+only the scheduling point is missing. Full characterisation and the refuted
+mechanisms in §9.2's R22 row.
+
+**A partial mechanism, recorded as partial.** `analyze_assign` is called at
+`RETURN` *after* `symex_return` falsifies the path guard, and `analyze_assign`
+early-returns on a false guard — textually the same mistake #6558 fixed at
+`symex_goto`. Reordering the two calls and rebuilding leaves the reproducer
+SUCCESSFUL, so that is not the whole story and the fix is not landed. Recorded
+as an unfinished trail rather than a plausible-sounding cause, per the standard
+M8 (cont.) set for R20.
+
+Pinned by `regression/esbmc-unix/symex_return_value_cswitch` (KNOWNBUG) and
+`..._split` (CORE, dual-solver agreed), the second so a change that stops
+generating interleaving points for ordinary shared writes cannot make the pair
+pass.
+
+**Still open in M8.** The seven unattributed wrong-verdict KNOWNBUGs from the
+macOS survey, plus the three newly-revealed ones above (`github_732-1-1`,
+`github_1091`, `github_2513_6`).
+
+### M8 (cont. 4) — 2026-07-31, R22 mechanism split in two
+
+**Result: R22 is two independent defects stacked, not one. The first is
+confirmed and its fix is verified to work at its own level. The second is
+*not* in the DFS — an intermediate reading that said so was refuted by measuring
+frame identity instead of inferring it from frame counts — and is now pinned to
+the state carried across a switch taken at a function-return boundary. Nothing
+is committed as a fix, because half a mechanism is not a fix.**
+
+M8 (cont. 3) left R22 with a plausible cause — `analyze_assign` running after
+`symex_return` falsifies the guard — and the honest note that reordering the two
+calls did not flip the reproducer. Instrumenting both halves settles which part
+of that was right.
+
+**Part 1 — confirmed, and the fix works at its own level.** Logging the `RETURN`
+case directly:
+
+| RETURN of `notify()` in `x = notify(); x = 2;` | `thread_last_writes` | `has_cswitch_point_occured()` |
+|---|---|---|
+| as shipped (`analyze_assign` after `symex_return`) | 0 | **false** |
+| `analyze_assign` moved before `symex_return` | 1 | **true** |
+
+So the guard-falsification argument is exactly right, and the one-line reorder
+does create the interleaving point that is missing today. The verdict is
+nevertheless still SUCCESSFUL — with `--no-por` and with `--context-bound 10`
+too. A fix that is provably necessary and demonstrably insufficient is worth
+recording as such rather than landing.
+
+**Part 2 — where it is not.** With the point present, `--symex-trace` shows 8
+interleavings and **none** places the observer between the two writes; the inline
+control reaches exactly that schedule as its interleaving 4. One scheduler
+observation holds up: `decide_ileave_direction` scans forward from
+`active_thread + 1` and then *backward from `active_thread` itself*, so when no
+higher-numbered thread is schedulable it re-selects the running thread — logged
+as `decided=1 (active=1)` at the return boundary. Staying is legitimate; it
+defers the alternative to a backtrack.
+
+**The deferred alternative is taken, so the DFS is not where the schedule is
+lost.** Logging each schedulability decision with the active thread's program
+point identifies the frames directly, rather than inferring them from frame
+counts:
+
+```
+DBG SCHED: tid=1 viable=true dfs=true active=1 activePC=248 tidPC=248   (choose to stay)
+DBG SCHED: tid=1 viable=false ...        active=1 activePC=248          (backtrack: t1 explored)
+DBG SCHED: tid=0 viable=true  dfs=true   active=1 activePC=248 tidPC=395 (switch to main)
+```
+
+`activePC=248` is `notify`'s `END_FUNCTION` — after the return-value write and
+before `x = 2`. The DFS backtracks to exactly that frame and schedules the
+observer from it. So the interleaving that should expose the write **is
+generated**, and the violation is still not found.
+
+That relocates the remaining defect from the scheduler to the **state carried
+across the switch**. The distinguishing feature of that frame is that the
+returning thread's guard is already false (`symex_return`) and its return state
+is parked in `merge_state_map` awaiting `END_FUNCTION`; the inline control has no
+such parked state at the corresponding point. Whether the observer resumed from
+that frame reads the pre- or post-`x = 2` value of `x` is the next measurement.
+
+**Refuted this round, each by a run rather than by argument.** Thread creation
+order (`obs_first.c`); the observer being a spawned thread rather than `main`
+(`main_obs.c` reproduces with two threads total, and its inline twin FAILS);
+the observer thread not existing yet at the return (3 of the 4 `writes=1`
+returns in the original probe occur with all 3 threads live); POR; and the
+context bound. Constant propagation was already refuted in M8 (cont. 3) by the
+split control.
+
+**A methodological note worth keeping.** The DFS reading came from correlating
+`exploration_frames.size()` with thread ids across a backtrack, which looked
+conclusive and was not: frame counts do not identify frames. Logging the active
+thread's `location_number` alongside each decision cost one rebuild and inverted
+the conclusion. Any further triage in this area should identify frames by
+program point, never by depth.
+
+The pins from M8 (cont. 3) are unchanged and still red/green in the right
+directions. The next step is to measure which value of `x` the observer reads
+when resumed from the `activePC=248` frame, and — if it reads the post-`x = 2`
+value — why the parked return state in `merge_state_map` lets a later write
+overtake the switch.
+
+### M8 (cont. 5) — 2026-07-31, R22 mechanism complete
+
+**Result: R22 is fully explained, and its second half is #6558's defect at the
+function-return boundary — the same `parent_guard` chaining fix, applied to
+branches and not to returns. The fix shape follows from the mechanism.**
+
+Picking up the measurement M8 (cont. 4) asked for: what the observer reads when
+resumed from the `activePC=248` frame.
+
+**It reads the right value.** Logging every claim after renaming and
+simplification, the call form and the inline control each produce **exactly one**
+`assertion x != 1` that folds to *false* — the observer does see `x == 1`. The
+call form also produces three claims that fold to *true* against the inline
+form's two, which is the extra schedule, not a lost one. So symex reaches the
+violating state in both.
+
+**Two hypotheses died on the way.** The claim is not lost to constant folding —
+`claim()` drops a claim entirely when it simplifies to true, which would have
+been a clean story, but the violating claim survives folding in both forms. Nor
+is the *thread* guard contradictory: at the false claim `cur_state->guard` prints
+as `constant_bool true`. Both were worth checking and neither is the answer.
+
+**The vacuity is in the global guard.** `goto_symext::assertion` applies
+`cur_state->global_guard` on top of `cur_state->guard`, and the fully-guarded
+claim is byte-identical in the two forms — `not(execution_statet::\guard_exec)`.
+What differs is the equation feeding it: 4 surviving assignments in the call
+form against 6 inline. Same claim, same guard expression, different constraints
+on `guard_exec`, and the call form's copy solves UNSAT.
+
+**`execute_guard` is where it happens** (`execution_state.cpp:712-755`). When a
+switch is taken *away from* a thread whose path guard is false, it emits an
+assumption of that false guard into the equation and falsifies the incoming
+thread's guard:
+
+```cpp
+parent_guard = threads_state[last_active_thread].guard.as_expr();
+if (is_false(parent_guard) || is_cur_state_guard_false(parent_guard))
+{
+  if (active_thread != last_active_thread)
+    target->assumption(guard2tc().as_expr(), parent_guard, ...);  // assume(false)
+  cur_state->guard.make_false();
+  return;
+}
+```
+
+The in-code comment calls this "the only way to bail out of evaluating a
+particular interleaving early right now". `symex_return` ends in
+`cur_state->guard.make_false()`, so a switch at a return boundary hits this arm
+every time: the interleaving that would expose the write is generated, entered,
+and then assumed away.
+
+**This is #6558 at a second boundary.** The `last_transition.branch` arm
+immediately above exists because a constant-true goto killed the fall-through
+guard and "poison[ed] the suffix with assume(false)" — the identical failure, at
+the branch boundary, fixed by chaining the *pre-branch* guard instead of the
+falsified one. Returns never got the same treatment. That makes R22's two halves
+one story: `analyze_assign` at `RETURN` runs after the guard dies (so no switch
+point is offered), and `execute_guard` treats a switch at that boundary as a
+dead interleaving (so offering one is not enough).
+
+**Fix shape, for the next iteration.** Record the pre-return guard on
+`last_transition` at `RETURN` — the state `symex_return` parks in
+`merge_state_map` already holds it — and chain it in `execute_guard` exactly as
+the branch arm chains `last_transition.parent_guard`. Both halves must land
+together: neither alone moves the verdict, which is why the two earlier
+single-change attempts each looked like a failed fix.
+
+### M8 (cont. 6) — 2026-07-31, R22 fixed
+
+**Result: R22 is fixed, and the fix is smaller than the two-half diagnosis
+suggested. A return parks its continuation exactly as a branch parks its
+sibling arm, so the machinery #6558 built for branches generalises to returns
+verbatim — once the return actually records what it parked.**
+
+(cont. 5) prescribed recording a pre-return guard on `last_transition` and
+chaining it in `execute_guard` "exactly as the branch arm chains
+`last_transition.parent_guard`". Implementing that literally works, but writing
+it exposed the redundancy: `execute_guard`'s branch arm keys off
+`last_transition.branch`, which exists only because `symex_goto` calls
+`record_branch_sibling` after pushing its snapshot. `symex_return` pushes a
+snapshot the same way — `merge_state_map[end_of_function]` — and simply never
+told anyone. So the fix is for `symex_return` to call the same hook, and both
+existing branch arms then cover returns with no new conditions:
+
+- `goto_symext::symex_return` calls the hook after `merge_state_list.emplace_back`.
+- The `RETURN` case runs `analyze_assign` *before* `symex_return` and records
+  `parent_guard` (the two changes (cont. 3) and (cont. 5) identified).
+- Nothing else changes. The hook and its payload are renamed
+  `record_branch_sibling` → `record_parked_path` and `branch_resultt` →
+  `parked_patht`, since returns now set the field too and `branch` would lie.
+
+**A third defect surfaced while fixing the first two, and the same change kills
+it.** With only the (cont. 3) + (cont. 5) changes applied, the verdict is
+correct but `preserve_last_paths` marks the *returning* thread `thread_ended`
+at every return boundary it switches away from. The reason is structural: it
+preserves the current path only when the guard is live (false at a return) and
+otherwise only a recorded branch sibling (absent for a return), so `pp` comes
+out empty and it takes its assume(0) branch. That silently truncates the
+writer. Recording the parked path fills `pp`, so the thread survives *and* its
+continuation is re-parked by `restore_last_paths` against post-switch level2
+values — which is what #6571 established as necessary at branches, and is
+equally necessary here.
+
+**Measurements.** Verdicts A/B against a stashed master build:
+
+| test | master | patched |
+|---|---|---|
+| `symex_return_value_cswitch` | SUCCESSFUL (the bug) | FAILED |
+| `symex_return_value_cswitch_split` (control) | FAILED | FAILED |
+| `symex_return_value_cswitch_resume` (new) | SUCCESSFUL (the bug) | FAILED |
+
+The first flips KNOWNBUG → CORE and fires on the intended claim (`assertion
+x != 1`, `observer`, thread 2). The debug counter for the truncation above goes
+2 → 0.
+
+`..._resume` is added here because the first two cannot see the third defect:
+both detect the violation *at* the boundary, so a truncated writer still
+reports FAILED. It closes that gap by requiring the writer to come back —
+`x = notify(); x = 2; assert(z != 7);` against an observer that sets `z = 7`
+only under `x == 1`. The observer can only take that branch at the return
+boundary, and the writer only reads `z` after resuming from it, so the
+assertion fires only if a switch is offered there *and* the returning thread
+survives it.
+
+**A probe that was vacuous, recorded because it nearly stuck.** The first
+measurement of that counter used `--verbosity debug` and returned 0, which
+looked like "the defect does not occur". `--verbosity` takes `N` or `module:N`;
+a bare word silently enables nothing, and the whole run emitted 2 lines. Under
+`--verbosity symex:9` the same run emits 63 lines and the counter reads 2. Any
+`grep -c` over ESBMC log output is worthless until the channel is shown to emit
+at all.
+
+**Regression.** The full `esbmc-unix` label (557 tests) is clean apart from
+`03_boundedBuffer` and `01_pthread60`, both of which are **pre-existing**
+near-timeout THOROUGH tests rather than verdict changes: each produces the
+expected `VERIFICATION FAILED` but exceeds the harness's hard 120 s cap on this
+machine with or without the patch. Timed A/B against a stashed master build:
+
+| test | master | patched |
+|---|---|---|
+| `03_boundedBuffer` | 1m56.9s | 1m53.1s |
+| `01_pthread60` | 1m40.2s | 1m43.3s |
+
+Adding interleaving points at returns was the obvious perf risk and it did not
+materialise at a measurable scale.
+
+### M8 (cont. 7) — 2026-07-31, the unattributed ten
+
+**Result: five of the ten unattributed KNOWNBUGs resolved. One is a new
+finding, R23, that is larger than the entry it came from; three are wrong
+tests, two of which are now fixed and retired; one is narrowed to a specific
+subsystem. All ten were first re-measured — none moved under R22's fix.**
+
+**Re-measurement first.** R22's fix had just landed and two entries
+(`03_inf2`, `03_circular_reduce`) are concurrency tests, so every entry was
+re-run before triage. All ten still produce the same wrong verdict; none is a
+stale record and none was fixed as a side effect.
+
+**R23 — `github_162_fail`, and the plan's own note about it was wrong.** The
+entry was carried as "may be a wrong test: the claim is `arithmetic overflow on
+add` over `int` operands that genuinely cannot overflow". The operands cannot
+overflow, but that is the *defect*, not an exoneration. The claim is
+
+```
+!overflow("+", (signed int)b.a, (signed int)((signed _ExtInt(3))a))
+```
+
+— the right operand is truncated to the bitfield width *before* the addition,
+so an unbounded `int` becomes a value in −4…3 and the claim is unfalsifiable.
+C11 6.5.16.2p3 makes `E1 op= E2` equivalent to `E1 = E1 op (E2)`, and ESBMC
+disagrees with itself on the two forms. See §9.2's R23 row for the full
+characterisation; it is a frontend defect, reaches `char`/`short`/struct
+members as well as bitfields, and produces a **missed overflow** in one
+direction and a **spurious division by zero** in the other (`char b = 100; int
+a = 256; b /= a;`, which gcc + UBSan confirm is well defined and equals 0).
+
+**Three wrong tests.** Each was settled by a control, not by reading:
+
+| test | why it is wrong | disposition |
+|---|---|---|
+| `github_159_postdecrement_fail` | `(b--)->d.c` dereferences the *old*, in-bounds `&Q[0]`; the only UB is *forming* `Q-1`. `b--;` alone is SUCCESSFUL, `b--; *b` is FAILED, and `*(b--)` is SUCCESSFUL — ESBMC checks dereferences, not pointer formation, and no sibling in the 8-test family requires otherwise. | left KNOWNBUG: its intent needs a pointer-formation checker that does not exist, which is a maintainer's call, not a test edit |
+| `github_1626-no-free` | the sibling `github_1626` catches a use-after-free; this variant comments the `free` out, leaving only the `printf("%s", *ptr)` defect, which needs the opt-in `--printf-check`. The test never passes it. | **fixed** — flag added, KNOWNBUG → CORE |
+| `40_stack_64_inner_scope_true` | the family's own model (`40_stack_64_primitives_true`) counts an `int` as `4 * 8 = 32` units and a `char` as `8`; this test's comments say `int a; // 8` and it asks for `--stack-limit 16`. Two `int`s need 64, and the measured threshold is exactly 64 (63 FAILED / 64 SUCCESSFUL, and a `char` rewrite brackets 15/16). | **fixed** — limits corrected to 64/63 and the misleading comments with them, KNOWNBUG → CORE |
+
+`40_stack_64_inner_scope_false` shared the bug in the opposite direction: it
+asserts FAILED at limit 15 against a program that needs 64, so it passed
+**vacuously** and would have kept passing however wrong the accounting became.
+Its bound is now 63, one below the real threshold, which is what an anti-vacuity
+twin is for (§6.1 r5).
+
+**`github_732-1-1` narrowed, not closed.** Of its three assertions, `sizeof(s)
+== 4` and `s.y == -1` both hold; only `*(int *)&s == 0x000fffff` fails. The
+field *values* are right and the *memory image* is wrong, so this is bitfield
+layout under type punning — unrelated to R23, which is about the type an
+operation is performed in.
+
+**Still open in M8.** Five unattributed: `03_inf2`, `03_circular_reduce`,
+`github_2572_2`, `github_1091`, `github_2513_6`, plus `github_732-1-1` narrowed
+as above and `github_248` (UNKNOWN under `--k-induction` on mutual infinite
+recursion, which may be plain incompleteness rather than a defect).
 
 ### M7 (CI) — 2026-07-30, R19 pins withdrawn
 

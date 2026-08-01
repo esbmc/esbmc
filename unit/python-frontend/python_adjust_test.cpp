@@ -1,4 +1,4 @@
-#define CATCH_CONFIG_MAIN
+#define CATCH_CONFIG_RUNNER
 #include <catch2/catch.hpp>
 
 #include <python-frontend/python_adjust.h>
@@ -23,6 +23,19 @@
 // unit tests exercise the behaviour directly — the "machinery-first,
 // prove-inert, wire-later" gate used for the V.4.0 structured-CF kinds
 // (esbmc/esbmc#5265).
+
+// c_typecastt ranks an operand by comparing its width against config.ansi_c
+// (c_typecast.cpp, get_c_type). The global is zero-initialised, so with no data
+// model set every comparison but the in-class-initialised int_128_width is
+// false and the arithmetic arm promotes a plain int+int to __int128. The driver
+// always sets a model; pin one here so the pass sees real C ranks. Done in
+// main(), not at namespace scope: `config` lives in another translation unit,
+// so a static initialiser here would race its constructor.
+int main(int argc, char *argv[])
+{
+  config.ansi_c.set_data_model(configt::LP64);
+  return Catch::Session().run(argc, argv);
+}
 
 namespace
 {
