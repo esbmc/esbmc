@@ -5272,13 +5272,17 @@ per-shape dispatcher coverage rather than a fidelity impossibility.
 Two items, both sized and neither speculative:
 
 1. **The coupled arithmetic-conversion effort** (operand-level reconciliation,
-   then the assignment conversion) — the sole remaining blocker on the
+   then the assignment conversion) — the remaining blocker on the
    `python_adjust` flip. `scope-v1k-adjuster.md` proves that shipping either
    half alone is unsound. Owner document:
    `docs/roadmap/scope-coupled-arith-assign-conversion.md`, which re-sizes it
    at 3 PRs (down from "multi-PR effort") on the finding that the
    usual-arithmetic-conversion engine already has native `expr2tc` overloads
-   that `python_adjust` already calls.
+   that `python_adjust` already calls. **Phase 0 (reachability census) and
+   Phase 1 (the operand-level arm) have landed**; Phase 2 (the assignment
+   conversion) and Phase 3 (the flip) remain. Phase 0 also found that half the
+   flip-gate regressions are a *second* mechanism this scope does not clear, so
+   the flip needs one more scope than it looked like it did.
 2. **V.2/W3 attribute carriage**, which V.1a and V.6 both depend on. The
    highest shared blast radius left in the program (`clang_cpp_adjust_expr`,
    `cpp_expr2string`, `goto2c/expr2c` serve C++ and Solidity too — and a fourth
@@ -5286,10 +5290,12 @@ Two items, both sized and neither speculative:
    document: `docs/roadmap/scope-v2-w3-attribute-carriage.md`, which finds
    §V.2's prescribed design refuted by Part III's own Q-S1 argument and
    re-scopes to Option D (encapsulate the raw writers; decline W3 removal on a
-   recorded rationale). **Step 1 of 3 has landed** — `#member_name` is seamed
-   end-to-end behind `irept::member_name()`. Solidity's writers and clang-c's
-   `#cpp_type` remain. Option D deliberately does **not** move bar #4, so V.1a
-   and V.6 stay blocked.
+   recorded rationale). **All three Option D steps have landed** —
+   `#member_name` and `#cpp_type` are seamed repo-wide behind
+   `irept::member_name()` / `irept::cpp_type()`, and only `irep.cpp` still
+   spells either key. Option D deliberately does **not** move bar #4, so V.1a
+   and V.6 stay blocked; what changed is that the blockage now rests on a
+   recorded rationale (§3 of the scope doc) rather than an unexamined plan.
 
 V.5 is closed rather than pending — see its scope doc. With those recorded, the
 V-track has no undocumented residue: every remaining item has a named owner

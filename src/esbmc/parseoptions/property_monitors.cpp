@@ -168,9 +168,9 @@ void esbmc_parseoptionst::add_monitor_exprs(
   // We've been handed an instruction; look for assignments to a symbol
   // referenced by some monitor proposition. When we find one, wrap the
   // assignment in an atomic block so the monitor thread observes it as a
-  // single transition. (The explicit context switch to the monitor thread
-  // after the assignment — __ESBMC_switch_to_monitor — is currently
-  // disabled; see the #if 0 block below.)
+  // single transition, and switch directly to the monitor so it samples the
+  // proposition at the moment it changes rather than whenever the scheduler
+  // happens to run it.
 
   if (!insn->is_assign())
     return;
@@ -202,7 +202,6 @@ void esbmc_parseoptionst::add_monitor_exprs(
 
   insn++;
 
-#if 0
   new_insn.type = FUNCTION_CALL;
   expr2tc func_sym =
     symbol2tc(get_empty_type(), "c:@F@__ESBMC_switch_to_monitor");
@@ -210,7 +209,6 @@ void esbmc_parseoptionst::add_monitor_exprs(
   new_insn.code = code_function_call2tc(expr2tc(), func_sym, args);
   new_insn.function = insn->function;
   insn_list.insert(insn, new_insn);
-#endif
 
   new_insn.type = ATOMIC_END;
   new_insn.function = insn->function;

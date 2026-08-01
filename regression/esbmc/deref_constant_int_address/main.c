@@ -1,8 +1,7 @@
 int main()
 {
-  // A constant non-null integer cast to a pointer is dereferenced without an
-  // invalid-pointer check, so this reports SUCCESSFUL (#6544). (int *)0 and a
-  // nondet integer address are both checked; only the constant escapes.
+  // A constant non-null integer cast to a pointer must still be checked; it
+  // used to escape the invalid-pointer check (#6544).
   int *p = (int *)65;
   return *p;
 }

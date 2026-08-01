@@ -1,13 +1,14 @@
 # Scope — V.2 / W3 IREP2-native attribute carriage
 
-> **Status: re-scoped to Option D; step 1 of 3 landed (2026-07-31, §9).**
+> **Status: re-scoped to Option D; all three steps landed (2026-07-31, §9-§10).**
 > `docs/roadmap/irep2-migration.md` §V.7 lists V.2/W3 as one of two remaining
 > items — *"Untouched; the highest shared blast radius left in the program"* —
 > and V.1a and V.6 both depend on it. This scope re-grounds §V.2 against the
 > tree (2026-07-30) and finds that **the design §V.2 prescribes is refuted by an
 > argument Part III already recorded and never propagated forward.**
 >
-> A forward plan, not a record of work. Nothing below has landed.
+> §1-§8 are the original forward plan and its re-scoping argument, unchanged.
+> §9-§10 record what actually landed.
 
 ## 1. What §V.2 asks for
 
@@ -137,8 +138,10 @@ frontends that were never in scope:
    seamed end-to-end in one PR. **DONE — §9.**
 2. **Solidity `#cpp_type` + `#member_name`** — the sites Phase 3.1 skipped,
    plus the two `#sol_*` stragglers `irep2-migration.md` §14's correction names
-   (`#sol_tuple_id`, `#sol_unchecked`).
+   (`#sol_tuple_id`, `#sol_unchecked`). **DONE — §10** (the `#sol_*` pair
+   excepted, see §10.2).
 3. **clang-c `#cpp_type`** (`clang_c_convert.cpp:1891`) — one site.
+   **DONE — §10.**
 
 This delivers the only property V.2 was actually going to buy — *one
 repoint-point per attribute per frontend* — at a small fraction of the cost,
@@ -229,3 +232,46 @@ Unchanged from §5.1's honest trade, restated because it is easy to lose: this
 does **not** remove W3. §V.1 bar #4 stays "no", and V.1a and V.6 stay blocked.
 What it buys is one repoint-point for `#member_name` if carriage is ever
 revisited — and §3's argument that it should not be is unaffected.
+
+## 10. Option D steps 2 and 3 — what landed (2026-07-31)
+
+Steps 2 and 3 shipped together, because splitting them would have introduced a
+`cpp_type()` accessor used by one frontend while another kept writing the key
+raw. `irept::cpp_type()` / `cpp_type(val)` joins `member_name()` on the same
+interned-key pattern, and every remaining site now goes through one of the two:
+
+| what | sites |
+|---|---|
+| Solidity `#member_name` writers | 8 across 6 files (`solidity_convert_{builtin,constructor,contract,decl,modifier,tuple}.cpp`) |
+| Solidity `#cpp_type` writers | 7 (`solidity_convert.cpp:118`, `solidity_convert_type.cpp` ×6) |
+| clang-c `#cpp_type` writer | 1 (`clang_c_convert.cpp:1891`) — this is step 3 |
+| `#cpp_type` readers | 3 (`clang_cpp_adjust_expr.cpp:582`, `goto2c/expr2c.cpp:174`, `cpp_expr2string.cpp:138,140`) |
+| Python `type_utils` cpp_type accessors | delegate rather than spelling the key |
+
+**Option D is now complete.** `git grep '"#member_name"\|"#cpp_type"' -- src`
+returns comments plus the two interned definitions in `irep.cpp:508-509`, and
+nothing else. §5.1's three-step list is discharged.
+
+### 10.1 Gates
+
+| # | Result |
+|---|---|
+| G1 | **Discharged.** Full-output A/B against master over all 582 runnable `esbmc-cpp/cpp` tests: 1 raw divergence, `cpp_sum_class`, proven non-attributable by a **master-vs-master self-A/B control** that produces 2 140 diff lines on the same test — it is `--k-induction-parallel`, the shape §5's census rule 3 already flags as unstable against itself |
+| G2 | **Discharged.** `esbmc-cpp` 676/685 — the same 9 failures as §9.1, each verified identical on the master binary; `python` green on a stride-5 slice. `esbmc-solidity` rides Linux CI (macOS has no `solc` and stubbed `sol64` models) |
+| G3 | **Discharged, and it is the load-bearing one here** — `cpp_expr2string` is a reader, so the A/B compares full stdout including counterexample text, not just verdicts. 0 divergences over all 106 `esbmc-cpp/cpp/*_fail` tests, which are the ones that print a counterexample |
+| G4 | **Not runnable.** `goto2c/expr2c.cpp` is a reader, but the tree has no goto2c regression suite and no `test.desc` invokes that path — `grep -rl goto2c regression/` is empty. The reader is covered by inspection only (a one-line `get` → accessor substitution). Recorded rather than claimed |
+| G5 | **Discharged repo-wide**, see above |
+
+**Harness note, extending §9.1's.** A *full-output* A/B additionally needs the
+timing lines stripped — `Symex completed in: 0.000s` vs `0.001s` alone produced
+46 false divergences out of 106. Filter `completed in:|time:|Runtime|Elapsed`
+on top of the temp-path normalization, and exclude `--k-induction-parallel`
+tests as §5 rule 3 requires. When a divergence survives, run the baseline
+against *itself* before attributing it to the patch: that control is what
+settled `cpp_sum_class` here, and it costs one extra run.
+
+### 10.2 Residue
+
+The two `#sol_*` stragglers §5.1 step 2 mentions (`#sol_tuple_id`,
+`#sol_unchecked`) are a different attribute family from W3's and were left
+alone; they belong with Phase 3.1's `#sol_*` work, not here.

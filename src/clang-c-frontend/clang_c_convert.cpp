@@ -1888,7 +1888,7 @@ bool clang_c_convertert::get_builtin_type(
   }
   }
 
-  new_type.set("#cpp_type", c_type);
+  new_type.cpp_type(c_type);
   return false;
 }
 

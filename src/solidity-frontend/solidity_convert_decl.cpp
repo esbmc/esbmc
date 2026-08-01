@@ -849,7 +849,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
       struct_typet::componentt comp;
       comp.swap(tmp_expr);
       comp.id("component");
-      comp.type().set("#member_name", t.tag());
+      comp.type().member_name(t.tag());
 
       if (get_access_from_decl(*itr, comp))
         return true;
@@ -1033,7 +1033,7 @@ bool solidity_convertert::get_struct_class_fields(
   //   comp.type().subtype() = t;
   //   comp.set_is_unnamed_bitfield(false);
   // }
-  comp.type().set("#member_name", type.tag());
+  comp.type().member_name(type.tag());
 
   if (get_access_from_decl(ast_node, comp))
     return true;
