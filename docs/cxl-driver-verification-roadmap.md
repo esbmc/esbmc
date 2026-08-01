@@ -341,7 +341,11 @@ regression/cxl/
 ├── cxl_memdev_01/                    # memdev create/destroy lifecycle (PASS)
 ├── cxl_memdev_02/                    # Unchecked memdev id allocation (FAIL)
 ├── cxl_region_01/                    # Region interleave validation (PASS)
-└── cxl_region_02/                    # Overlapping region targets (FAIL)
+├── cxl_region_02/                    # Overlapping region targets (FAIL)
+├── cxl_mbox_ioctl_01/                # Mailbox IOCTL validation (PASS)
+├── cxl_mbox_ioctl_02/                # Unchecked IOCTL payload size (FAIL)
+├── cxl_port_dport_01/                # Downstream port traversal (PASS)
+└── cxl_port_dport_02/                # Dangling dport reference (FAIL)
 ```
 
 ## Key Design Decisions
@@ -396,20 +400,21 @@ regression/cxl/
         `cxl_hdm_decode_init()` verified (see Phase 5); broad coverage pending
 - [x] Phase 6.1: User documentation published (user guide + roadmap + test summary)
 - [ ] Phase 6.2–6.3: Generic driver template and technical report — not started
-- [~] Phase 7: first slice delivered — memdev id allocation and region
-        interleave modelled against the real driver's constraints (4 tests,
-        5 model functions); remaining ~21 tests and ~13 functions pending
+- [~] Phase 7: two slices delivered — memdev id allocation, region
+        interleave, the mailbox IOCTL path and downstream port lifetime,
+        all modelled against the real driver's constraints (8 tests, 11
+        model functions); remaining ~17 tests and ~9 functions pending
 
 ## Current Statistics
 
 | Metric | Count |
 |--------|-------|
-| Total commits | 19 |
-| Total regression tests | 31 |
-| Passing tests | 20 |
-| Bug-detecting tests | 11 |
+| Total commits | 22 |
+| Total regression tests | 35 |
+| Passing tests | 22 |
+| Bug-detecting tests | 13 |
 | Kernel headers added | 6 |
-| Operational model lines | 1,499 |
+| Operational model lines | 1,637 |
 | Documentation pages | 3 |
 | AER functions added | 4 |
 | Error injection functions added | 2 |
@@ -434,6 +439,22 @@ driver's constraints rather than the invented API in the scope note:
 interleave encodings from `drivers/cxl/core/region.c`. Writing them exposed a
 latent defect — the model's own allocations called a `static` `__kmalloc()`
 through an implicit declaration, which no test had ever reached.
+
+The second slice adds the mailbox IOCTL path (`core/mbox.c`) and downstream
+port lifetime (`port.c`) — tests 7-10 — bringing the suite to 35. Test 8 was
+retargeted: an unsupported opcode is already covered as a rejection assertion
+in `cxl_mbox_ioctl_01`, so the failing case models the more interesting bug,
+a user-controlled payload length bounded against the mailbox limit rather
+than the driver's own staging buffer. `cxl_dport_walk()` was dropped in
+favour of `cxl_dport_find()` plus `cxl_dport_count()`, which express the same
+traversal without a callback.
+
+Both slices were put through a verification-soundness review: every model
+branch was shown independently reachable, and each failing test was
+patched-and-reverified to confirm it flips to SUCCESSFUL once the modelled
+driver bug is fixed, rather than failing for an incidental reason. That
+review also found the missing overflow precondition on
+`cxl_region_overlaps()`, since fixed.
 
 **Gap Analysis — Linux 7.1.5 `drivers/cxl/` inventory vs current coverage:**
 
@@ -461,10 +482,10 @@ through an implicit declaration, which no test had ever reached.
 | 4 | `cxl_region_02` | `core/region.c` | Overlapping region targets | FAIL — **done** |
 | 5 | `cxl_region_dax_01` | `core/region_dax.c` | DAX region mapping | PASS |
 | 6 | `cxl_region_pmem_01` | `core/region_pmem.c` | PMEM region type | PASS |
-| 7 | `cxl_mbox_ioctl_01` | `core/mbox.c` | IOCTL command table lookup | PASS |
-| 8 | `cxl_mbox_ioctl_02` | `core/mbox.c` | Unsupported opcode via IOCTL | FAIL |
-| 9 | `cxl_port_dport_01` | `port.c` | Downstream port traversal | PASS |
-| 10 | `cxl_port_dport_02` | `port.c` | Dangling dport reference | FAIL |
+| 7 | `cxl_mbox_ioctl_01` | `core/mbox.c` | IOCTL command table lookup | PASS — **done** |
+| 8 | `cxl_mbox_ioctl_02` | `core/mbox.c` | Unchecked payload size via IOCTL | FAIL — **done**, retargeted |
+| 9 | `cxl_port_dport_01` | `port.c` | Downstream port traversal | PASS — **done** |
+| 10 | `cxl_port_dport_02` | `port.c` | Dangling dport reference | FAIL — **done** |
 | 11 | `cxl_pmem_sec_01` | `pmem.c` + `security.c` | Set/get passphrase flow | PASS |
 | 12 | `cxl_pmem_sec_02` | `pmem.c` + `security.c` | Unlock before freeze (invalid order) | FAIL |
 | 13 | `cxl_acpi_cedt_01` | `acpi.c` | CEDT CFMWS window parsing | PASS |
@@ -491,8 +512,9 @@ through an implicit declaration, which no test had ever reached.
 | `cxl_region_overlaps()` | HPA intersection test — **done**, not in the original plan |
 | `cxl_dax_region_map()` | DAX region mapping |
 | `cxl_pmem_region_type()` | PMEM region type check |
-| `cxl_mailbox_ioctl()` | IOCTL command dispatch |
-| `cxl_dport_add()`, `cxl_dport_walk()` | Port downstream traversal |
+| `cxl_mailbox_ioctl()` | IOCTL command dispatch — **done** |
+| `cxl_mbox_cmd_index()` | Command table lookup — **done**, not in the original plan |
+| `cxl_dport_add()`, `cxl_dport_find()`, `cxl_dport_remove()`, `cxl_dport_count()` | Port downstream traversal — **done**; `_walk()` was replaced by find/count |
 | `cxl_pmem_set_passphrase()`, `cxl_pmem_unlock()` | LIBNVDIMM passphrase bridge |
 | `acpi_cedt_parse_cfmws()` | CFMWS window parsing |
 | `cdat_parse_entry()` | CDAT latency/bandwidth parsing |
