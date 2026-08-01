@@ -133,7 +133,7 @@ def parse_result(the_output, prop):
       return Result.fail_termination
 
     if prop == Property.memory:
-      if memory_leak in the_output:
+      if memory_leak in the_output and "valid-memtrack" in memsafety_subprops:
         return Result.fail_memtrack
 
       if invalid_pointer_free in the_output:
@@ -286,7 +286,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
   if prop == Property.overflow:
     command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions "
   elif prop == Property.memory:
-    command_line += "--memory-leak-check --no-reachable-memory-leak --no-assertions "
+    if "valid-memtrack" in memsafety_subprops:
+      command_line += "--memory-leak-check --no-reachable-memory-leak "
+    command_line += "--no-assertions "
     # It seems SV-COMP doesn't want to check for memleaks on abort()
     # see also <https://github.com/esbmc/esbmc/issues/1259>
     command_line += "--no-abnormal-memory-leak "
@@ -389,8 +391,19 @@ validate_mode = "violation" if args.validate_violation else "correctness" if arg
 f = open(property_file, 'r')
 property_file_content = f.read()
 
+# SV-COMP defines the memsafety property as a unit of three sub-properties, but
+# that is not guaranteed to stay that way -- valid-memsafety-ub.prp was proposed
+# with valid-free and valid-deref only (esbmc/esbmc#1440). Record which ones the
+# file actually asks for, so a sub-property that is absent is neither checked
+# nor reported on.
+memsafety_subprops = {
+  sub
+  for sub in ("valid-free", "valid-deref", "valid-memtrack")
+  if "CHECK( init(main()), LTL(G %s) )" % sub in property_file_content
+}
+
 category_property = 0
-if "CHECK( init(main()), LTL(G valid-free) )" in property_file_content:
+if memsafety_subprops:
   category_property = Property.memory
 elif "CHECK( init(main()), LTL(G ! overflow) )" in property_file_content:
   category_property = Property.overflow
