@@ -162,14 +162,18 @@ static void collect_thread_escaped_locals(
       const code_assign2t &a = to_code_assign2t(i_it->code);
 
       const expr2tc dest = lvalue_root(a.target);
-      if (is_nil_expr(dest))
-        continue;
-      const irep_idt &dname = to_symbol2t(dest).thename;
-      const symbolt *dsym = ns.lookup(dname);
-      if (!dsym)
-        continue;
-      if (!dsym->static_lifetime && out.count(dname) == 0)
-        continue;
+      if (!is_nil_expr(dest))
+      {
+        const irep_idt &dname = to_symbol2t(dest).thename;
+        const symbolt *dsym = ns.lookup(dname);
+        if (!dsym)
+          continue;
+        if (!dsym->static_lifetime && out.count(dname) == 0)
+          continue;
+      }
+      /* A nil root means the destination is a dereference (`*p = &i`), whose
+       * target we cannot name here. Assume it may be reachable from a thread:
+       * the alternative is to drop the store, which loses the race outright. */
 
       rw_sett::shared_localst taken;
       collect_address_taken(a.source, taken);
