@@ -576,8 +576,8 @@ TEST_CASE(
   "[python-adjust]")
 {
   // union { int8 b[5]; int32 i; } is 5 bytes wide with 4-byte alignment, so
-  // add_padding appends a trailing `$pad` member widening it to 8 bytes. The
-  // second pass exercises the `$pad` case of the #is_padding re-derivation:
+  // add_padding appends a trailing `union_pad#` member widening it to 8 bytes.
+  // The second pass exercises that case of the #is_padding re-derivation:
   // the union arm must be as idempotent as the struct one.
   config.ansi_c.set_data_model(configt::LP64);
 
@@ -597,7 +597,7 @@ TEST_CASE(
   REQUIRE(is_union_type(t));
   const union_type2t &ut = to_union_type(t);
   REQUIRE(ut.members.size() == 3);
-  REQUIRE(ut.member_names[2] == "$pad");
+  REQUIRE(ut.member_names[2] == "union_pad#");
   REQUIRE(is_unsignedbv_type(ut.members[2]));
 
   const type2tc padded = t;
@@ -672,7 +672,7 @@ TEST_CASE(
   "[python-adjust]")
 {
   // A converter-built literal carries only the value operands; the followed
-  // struct pads to { c, anon_pad$, i } (S1), so S2 must insert a zero pad
+  // struct pads to { c, anon_pad#, i } (S1), so S2 must insert a zero pad
   // operand at position 1, mirroring the legacy adjust_struct insertion.
   config.ansi_c.set_data_model(configt::LP64);
 
