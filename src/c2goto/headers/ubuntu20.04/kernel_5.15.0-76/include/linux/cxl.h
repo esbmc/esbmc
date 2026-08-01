@@ -214,4 +214,52 @@ int cxl_region_config(
 /* Non-zero when the two regions share any host physical address. */
 int cxl_region_overlaps(const struct cxl_region *a, const struct cxl_region *b);
 
+/* ============================================================
+ *  CXL mailbox IOCTL — declared here, modelled in cxl_driver.c
+ * ============================================================
+ *
+ * Models the user-facing path in drivers/cxl/core/mbox.c: cxl_send_cmd()
+ * looks the opcode up in cxl_mem_commands[], rejects anything absent with
+ * -ENOTTY, rejects a command the device has not enabled
+ * (cxlds->enabled_cmds) with the same code, and bounds the payload before
+ * touching it.
+ */
+
+/* Largest payload the modelled mailbox accepts (CXL 2.0 §8.2.8.4.3). */
+#define CXL_MBOX_IOCTL_MAX_PAYLOAD 4096
+
+/* Slot in the modelled command table, or negative when absent. */
+int cxl_mbox_cmd_index(u16 opcode);
+
+int cxl_mailbox_ioctl(
+  struct cxl_dev *cxld,
+  u16 opcode,
+  void *payload,
+  u32 size);
+
+/* ============================================================
+ *  CXL downstream ports (dports) — declared here, modelled in
+ *  cxl_driver.c
+ * ============================================================
+ *
+ * drivers/cxl/core/port.c keeps a switch's downstream ports in a list
+ * owned by the parent port; Linux spells these devm_cxl_add_dport() and
+ * cxl_find_dport_by_dev(). The model keeps the same lifetime rule, so a
+ * dport pointer cached across a removal dangles.
+ */
+
+#define CXL_PORT_MAX_DPORTS 8
+
+struct cxl_dport
+{
+  struct cxl_port *port;
+  struct pci_dev *dport_dev;
+  int id;
+};
+
+int cxl_dport_add(struct cxl_port *port, struct pci_dev *dport_dev, int id);
+struct cxl_dport *cxl_dport_find(struct cxl_port *port, int id);
+void cxl_dport_remove(struct cxl_port *port, int id);
+int cxl_dport_count(struct cxl_port *port);
+
 #endif /* _LINUX_CXL_H */
