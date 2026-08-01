@@ -63,6 +63,12 @@ target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS}
                             clangcfrontend clangcppfrontend symex langapi
                             solvers clibs gotoalgorithms cache ${Boost_LIBRARIES} goto2c ${OS_INCLUDE_LIBS}
                             nlohmann_json::nlohmann_json)
+if(MSVC)
+  # Windows counterpart of the large stack main.cpp asks for elsewhere: its
+  # default is 1MB, so deeply nested expressions overflow sooner still. The
+  # reserve is address space, committed on demand.
+  target_link_options(esbmc PRIVATE /STACK:536870912)
+endif()
 # mimalloc (when ENABLE_MIMALLOC resolved to a target): MI_OVERRIDE makes it
 # replace the global allocator for the whole executable, speeding the
 # allocation-heavy symex path. MIMALLOC_TARGET is empty if mimalloc was
