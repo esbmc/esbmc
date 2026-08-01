@@ -337,7 +337,11 @@ regression/cxl/
 ├── cxl_driver_hdm_align_fail_01/     # HDM misaligned address rejection (FAIL)
 ├── cxl_driver_aer_fatal_01/          # AER fatal error during probe (PASS)
 ├── cxl_mmio_readback_01/             # MMIO write-then-read round-trip (PASS)
-└── cxl_mmio_readback_02/             # Unwritten register is not fixed (FAIL)
+├── cxl_mmio_readback_02/             # Unwritten register is not fixed (FAIL)
+├── cxl_memdev_01/                    # memdev create/destroy lifecycle (PASS)
+├── cxl_memdev_02/                    # Unchecked memdev id allocation (FAIL)
+├── cxl_region_01/                    # Region interleave validation (PASS)
+└── cxl_region_02/                    # Overlapping region targets (FAIL)
 ```
 
 ## Key Design Decisions
@@ -392,17 +396,20 @@ regression/cxl/
         `cxl_hdm_decode_init()` verified (see Phase 5); broad coverage pending
 - [x] Phase 6.1: User documentation published (user guide + roadmap + test summary)
 - [ ] Phase 6.2–6.3: Generic driver template and technical report — not started
+- [~] Phase 7: first slice delivered — memdev id allocation and region
+        interleave modelled against the real driver's constraints (4 tests,
+        5 model functions); remaining ~21 tests and ~13 functions pending
 
 ## Current Statistics
 
 | Metric | Count |
 |--------|-------|
-| Total commits | 16 |
-| Total regression tests | 27 |
-| Passing tests | 18 |
-| Bug-detecting tests | 9 |
+| Total commits | 19 |
+| Total regression tests | 31 |
+| Passing tests | 20 |
+| Bug-detecting tests | 11 |
 | Kernel headers added | 6 |
-| Operational model lines | 1,385 |
+| Operational model lines | 1,499 |
 | Documentation pages | 3 |
 | AER functions added | 4 |
 | Error injection functions added | 2 |
@@ -412,11 +419,21 @@ regression/cxl/
 
 ---
 
-### Phase 7: Real Driver Coverage (Planned)
+### Phase 7: Real Driver Coverage (Started)
 
 **Goal:** Extend the operational model and regression suite to cover the full
 Linux 7.1.5 CXL driver subsystem (~30 source files across 11 driver families),
 moving from synthetic primitives to real-driver-equivalent verification.
+
+**Status:** the first slice is in. `cxl_memdev_*` and `cxl_region_*` (tests 1-4
+below) are implemented and passing, along with the five operational-model
+functions they need. These are the first models written against the real
+driver's constraints rather than the invented API in the scope note:
+`cxl_memdev_id_alloc()` reproduces the `-ENOSPC` result of
+`ida_alloc_range()`, and `cxl_region_config()` enforces the power-of-two
+interleave encodings from `drivers/cxl/core/region.c`. Writing them exposed a
+latent defect — the model's own allocations called a `static` `__kmalloc()`
+through an implicit declaration, which no test had ever reached.
 
 **Gap Analysis — Linux 7.1.5 `drivers/cxl/` inventory vs current coverage:**
 
@@ -438,10 +455,10 @@ moving from synthetic primitives to real-driver-equivalent verification.
 
 | # | Suite | Target | Feature | Expected |
 |---|---|---|---|---|
-| 1 | `cxl_memdev_01` | `core/memdev.c` | `/dev/cxl/X` creation + fw version | PASS |
-| 2 | `cxl_memdev_02` | `core/memdev.c` | memdev ID allocator overflow | FAIL |
-| 3 | `cxl_region_01` | `core/region.c` | Region interleave config | PASS |
-| 4 | `cxl_region_02` | `core/region.c` | Overlapping region targets | FAIL |
+| 1 | `cxl_memdev_01` | `core/memdev.c` | `/dev/cxl/X` creation + fw version | PASS — **done** |
+| 2 | `cxl_memdev_02` | `core/memdev.c` | memdev ID allocator overflow | FAIL — **done** |
+| 3 | `cxl_region_01` | `core/region.c` | Region interleave config | PASS — **done** |
+| 4 | `cxl_region_02` | `core/region.c` | Overlapping region targets | FAIL — **done** |
 | 5 | `cxl_region_dax_01` | `core/region_dax.c` | DAX region mapping | PASS |
 | 6 | `cxl_region_pmem_01` | `core/region_pmem.c` | PMEM region type | PASS |
 | 7 | `cxl_mbox_ioctl_01` | `core/mbox.c` | IOCTL command table lookup | PASS |
@@ -468,9 +485,10 @@ moving from synthetic primitives to real-driver-equivalent verification.
 
 | Function | Target |
 |---|---|
-| `cxl_memdev_create()`, `cxl_memdev_destroy()` | memdev lifecycle |
-| `cxl_memdev_id_alloc()` | ID allocator with overflow |
-| `cxl_region_config()` | Interleave granularity/size |
+| `cxl_memdev_create()`, `cxl_memdev_destroy()` | memdev lifecycle — **done** |
+| `cxl_memdev_id_alloc()` | ID allocator with overflow — **done** |
+| `cxl_region_config()` | Interleave granularity/size — **done** |
+| `cxl_region_overlaps()` | HPA intersection test — **done**, not in the original plan |
 | `cxl_dax_region_map()` | DAX region mapping |
 | `cxl_pmem_region_type()` | PMEM region type check |
 | `cxl_mailbox_ioctl()` | IOCTL command dispatch |
