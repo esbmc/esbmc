@@ -84,4 +84,40 @@ int cxl_mem_set_partition_state(struct cxl_mem *cxlmem,
                                 u32 split_data_size,
                                 u32 split_pmem_size);
 
+/* ============================================================
+ *  CXL memdev (/dev/cxl/memN) — declared here, modelled in
+ *  cxl_driver.c
+ * ============================================================
+ *
+ * Models the character device drivers/cxl/core/memdev.c creates for
+ * each memory expander.  Real Linux spells the constructors
+ * cxl_memdev_alloc() / devm_cxl_add_memdev() and draws the minor
+ * number from ida_alloc_range(&cxl_memdev_ida, 0, CXL_MEM_MAX_DEVS,
+ * GFP_KERNEL) — an allocation that can fail.
+ */
+
+/* drivers/cxl/cxlmem.h: CXL_MEM_MAX_DEVS */
+#define CXL_MEM_MAX_DEVS 65536
+
+/* FW revision string from IDENTIFY output (CXL 2.0 §8.2.9.5.1) */
+#define CXL_MEMDEV_FW_REV_LEN 16
+
+struct cxl_memdev
+{
+  struct cxl_dev *cxld;
+  int id; /* N in /dev/cxl/memN; negative when unallocated */
+  char fw_rev[CXL_MEMDEV_FW_REV_LEN]; /* always NUL-terminated */
+  int live;                           /* non-zero between create and destroy */
+};
+
+/*
+ * Returns a free minor number in [0, CXL_MEM_MAX_DEVS), or -ENOSPC when
+ * the id space is exhausted.  Callers must check the sign before using
+ * the result as an index.
+ */
+int cxl_memdev_id_alloc(void);
+
+struct cxl_memdev *cxl_memdev_create(struct cxl_dev *cxld);
+void cxl_memdev_destroy(struct cxl_memdev *cxlmd);
+
 #endif /* _LINUX_CXLMEM_H */

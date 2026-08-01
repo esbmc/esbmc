@@ -1383,3 +1383,117 @@ __ESBMC_HIDE:;
     }
   }
 }
+
+/* ============================================================
+ *  CXL memdev (/dev/cxl/memN) models
+ * ============================================================
+ *
+ * drivers/cxl/core/memdev.c draws a minor number per memory expander
+ * from an IDA.  That allocation is fallible, but the failure only
+ * shows up once the id space is exhausted, so drivers routinely skip
+ * the check.  The model keeps exhaustion reachable on every call so
+ * the missing check is caught.
+ * ============================================================ */
+
+int cxl_memdev_id_alloc(void)
+{
+__ESBMC_HIDE:;
+  int id = __VERIFIER_nondet_int();
+  if (id < 0 || id >= CXL_MEM_MAX_DEVS)
+    return -ENOSPC;
+  return id;
+}
+
+struct cxl_memdev *cxl_memdev_create(struct cxl_dev *cxld)
+{
+__ESBMC_HIDE:;
+  assert(cxld != NULL);
+
+  int id = cxl_memdev_id_alloc();
+  if (id < 0)
+    return NULL;
+
+  struct cxl_memdev *cxlmd =
+    (struct cxl_memdev *)kmalloc(sizeof(struct cxl_memdev), GFP_KERNEL);
+  if (cxlmd == NULL)
+    return NULL;
+
+  cxlmd->cxld = cxld;
+  cxlmd->id = id;
+  cxlmd->live = 1;
+
+  /* IDENTIFY returns an opaque revision string, so the buffer keeps the
+     non-deterministic contents kmalloc left behind.  The one guarantee a
+     driver may rely on is termination. */
+  cxlmd->fw_rev[CXL_MEMDEV_FW_REV_LEN - 1] = '\0';
+
+  return cxlmd;
+}
+
+void cxl_memdev_destroy(struct cxl_memdev *cxlmd)
+{
+  if (cxlmd == NULL)
+    return;
+  cxlmd->live = 0;
+  kfree(cxlmd);
+}
+
+/* ============================================================
+ *  CXL region interleave models
+ * ============================================================
+ *
+ * CXL 3.0 §8.2.4.20.1 encodes granularity and ways as exponents, so
+ * both must be powers of two inside their ranges;
+ * drivers/cxl/core/region.c rejects anything else in
+ * granularity_to_eig() and ways_to_eiw().
+ * ============================================================ */
+
+static int esbmc_is_power_of_two(unsigned int v)
+{
+  return v != 0 && (v & (v - 1)) == 0;
+}
+
+int cxl_region_config(
+  struct cxl_region *region,
+  unsigned int ways,
+  unsigned int granularity)
+{
+__ESBMC_HIDE:;
+  assert(region != NULL);
+
+  if (!esbmc_is_power_of_two(ways) || ways > CXL_DECODER_MAX_WAYS)
+  {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (
+    !esbmc_is_power_of_two(granularity) ||
+    granularity < CXL_DECODER_MIN_GRANULARITY ||
+    granularity > CXL_DECODER_MAX_GRANULARITY)
+  {
+    errno = EINVAL;
+    return -1;
+  }
+
+  /* Every interleave position must own a whole number of stripes,
+     otherwise one position holds a partial stripe. */
+  resource_size_t stripe = (resource_size_t)ways * granularity;
+  if (region->size == 0 || (region->size % stripe) != 0)
+  {
+    errno = EINVAL;
+    return -1;
+  }
+
+  region->ways = ways;
+  region->granularity = granularity;
+  return 0;
+}
+
+int cxl_region_overlaps(const struct cxl_region *a, const struct cxl_region *b)
+{
+__ESBMC_HIDE:;
+  assert(a != NULL);
+  assert(b != NULL);
+  return a->start < b->start + b->size && b->start < a->start + a->size;
+}
