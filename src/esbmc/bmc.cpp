@@ -410,7 +410,7 @@ void bmct::show_program(const symex_target_equationt &eq)
   if (config.options.get_bool_option("ssa-symbol-table"))
     ::show_symbol_table_plain(ns, oss);
 
-  languagest languages(ns, language_idt::C);
+  languagest languages(ns, configured_language());
 
   oss << "\nProgram constraints: \n";
 
