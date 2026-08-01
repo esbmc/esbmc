@@ -489,6 +489,12 @@ public:
     return mpor_says_no;
   }
 
+  /** Read-only accessor for the MPOR dependency chain, for the A6.4 harness. */
+  const std::vector<std::vector<int>> &get_dependency_chain() const
+  {
+    return dependency_chain;
+  }
+
   /** Accessor method for cswitch_forced. Sets it to true. */
   void force_cswitch()
   {
