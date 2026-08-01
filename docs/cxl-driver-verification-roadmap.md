@@ -272,6 +272,231 @@ patterns for other device driver families.
 
 ---
 
+### Phase 7: Real Driver Coverage (Started)
+
+**Goal:** Extend the operational model and regression suite to cover the full
+Linux 7.1.5 CXL driver subsystem (~30 source files across 11 driver families),
+moving from synthetic primitives to real-driver-equivalent verification.
+
+**Status:** the first slice is in. `cxl_memdev_*` and `cxl_region_*` (tests 1-4
+below) are implemented and passing, along with the five operational-model
+functions they need. These are the first models written against the real
+driver's constraints rather than the invented API in the scope note:
+`cxl_memdev_id_alloc()` reproduces the `-ENOSPC` result of
+`ida_alloc_range()`, and `cxl_region_config()` enforces the power-of-two
+interleave encodings from `drivers/cxl/core/region.c`. Writing them exposed a
+latent defect — the model's own allocations called a `static` `__kmalloc()`
+through an implicit declaration, which no test had ever reached.
+
+The second slice adds the mailbox IOCTL path (`core/mbox.c`) and downstream
+port lifetime (`port.c`) — tests 7-10 — bringing the suite to 35. Test 8 was
+retargeted: an unsupported opcode is already covered as a rejection assertion
+in `cxl_mbox_ioctl_01`, so the failing case models the more interesting bug,
+a user-controlled payload length bounded against the mailbox limit rather
+than the driver's own staging buffer. `cxl_dport_walk()` was dropped in
+favour of `cxl_dport_find()` plus `cxl_dport_count()`, which express the same
+traversal without a callback.
+
+Both slices were put through a verification-soundness review: every model
+branch was shown independently reachable, and each failing test was
+patched-and-reverified to confirm it flips to SUCCESSFUL once the modelled
+driver bug is fixed, rather than failing for an incidental reason. That
+review also found the missing overflow precondition on
+`cxl_region_overlaps()`, since fixed.
+
+**Gap Analysis — Linux 7.1.5 `drivers/cxl/` inventory vs current coverage:**
+
+| Driver Family | Kconfig | Source Files | Current Coverage |
+|---|---|---|---|
+| **CXL Core** (port, memdev, mbox, hdm, region, regs, cdat, features, ras, mce, pmu, suspend) | CXL_BUS | 20 `.c` files in `core/` | Partial — only synthetic port/mbox/region tests |
+| **CXL PCI** (pci.c) | CXL_PCI | 1 | Partial — synthetic probe test, no DVSEC/doorbell/MMR timeout paths |
+| **CXL Memory** (mem.c) | CXL_MEM | 1 | Partial — synthetic attach test, no endpoint enumeration |
+| **CXL Port** (port.c) | CXL_PORT | 1 | Partial — synthetic enum test, no dport HDM scan |
+| **CXL PMEM** (pmem.c + security.c) | CXL_PMEM | 2 | Partial — synthetic security tests, no LIBNVDIMM bridge |
+| **CXL ACPI** (acpi.c) | CXL_ACPI | 1 | **None** — CEDT/CFMWS parsing untested |
+| **DAX CXL** (dax/cxl.c) | DEV_DAX_CXL | 1 | **None** — DAX region probing untested |
+| **CXL PMU** (perf/cxl_pmu.c) | CXL_PMU | 1 | **None** — perf event interface untested |
+| **PCIe AER for CXL** (pcie/aer_cxl_rch.c) | built-in | 1 | Partial — basic AER covered, not RCH delegation |
+| **ACPI CPER** (firmware/efi/cper_cxl.c) | built-in | 1 | **None** — CXL error section parsing untested |
+| **ACPI EINJ** (acpi/apei/einj-cxl.c) | EINJ_CXL | 1 | **None** — ACPI error injection untested |
+
+**Real files no proposed test covers.** Checked against the Linux 7.1.5 tree,
+not from memory — `drivers/cxl/core/` really does hold 20 `.c` files as the
+table above says, but seven of them are claimed by no test row below:
+
+| File | Why it matters |
+|---|---|
+| `core/regs.c` | Register block mapping — the foundation the whole MMIO model rests on |
+| `core/atl.c` | Address translation; directly under the region/HPA work in tests 3-4 |
+| `core/pmem.c` | Distinct from the top-level `pmem.c` that test 11 covers |
+| `core/ras_rch.c` | RCH error handling, distinct from `pcie/aer_cxl_rch.c` |
+| `core/pmu.c` | See below |
+| `core/suspend.c` | Suspend/resume paths |
+| `core/trace.c` | Tracepoints; likely out of scope, but should be said rather than omitted |
+
+`core/pmu.c` and `drivers/perf/cxl_pmu.c` are **two different files** and both
+exist. The family table lists "pmu" under CXL Core while test 21 targets
+`perf/cxl_pmu.c`, so `core/pmu.c` currently has no owner.
+
+**Proposed regression tests (~25 new):**
+
+| # | Suite | Target | Feature | Expected |
+|---|---|---|---|---|
+| 1 | `cxl_memdev_01` | `core/memdev.c` | `/dev/cxl/X` creation + fw version | PASS — **done** |
+| 2 | `cxl_memdev_02` | `core/memdev.c` | memdev ID allocator overflow | FAIL — **done** |
+| 3 | `cxl_region_01` | `core/region.c` | Region interleave config | PASS — **done** |
+| 4 | `cxl_region_02` | `core/region.c` | Overlapping region targets | FAIL — **done** |
+| 5 | `cxl_region_dax_01` | `core/region_dax.c` | DAX region mapping | PASS |
+| 6 | `cxl_region_pmem_01` | `core/region_pmem.c` | PMEM region type | PASS |
+| 7 | `cxl_mbox_ioctl_01` | `core/mbox.c` | IOCTL command table lookup | PASS — **done** |
+| 8 | `cxl_mbox_ioctl_02` | `core/mbox.c` | Unchecked payload size via IOCTL | FAIL — **done**, retargeted |
+| 9 | `cxl_port_dport_01` | `port.c` | Downstream port traversal | PASS — **done** |
+| 10 | `cxl_port_dport_02` | `port.c` | Dangling dport reference | FAIL — **done** |
+| 11 | `cxl_pmem_sec_01` | `pmem.c` + `security.c` | Set/get passphrase flow | PASS |
+| 12 | `cxl_pmem_sec_02` | `pmem.c` + `security.c` | Unlock before freeze (invalid order) | FAIL |
+| 13 | `cxl_acpi_cedt_01` | `acpi.c` | CEDT CFMWS window parsing | PASS |
+| 14 | `cxl_acpi_cedt_02` | `acpi.c` | CFMWS alignment violation | FAIL |
+| 15 | `cxl_cdat_01` | `core/cdat.c` | CDAT latency/bandwidth parsing | PASS |
+| 16 | `cxl_edac_01` | `core/edac.c` | Patrol scrub enable/disable | PASS |
+| 17 | `cxl_features_01` | `core/features.c` | Feature capability query | PASS |
+| 18 | `cxl_ras_01` | `core/ras.c` | CPER error record processing | PASS |
+| 19 | `cxl_ras_02` | `core/ras.c` | CPER uncorrectable fatal w/o recovery | FAIL |
+| 20 | `cxl_mce_01` | `core/mce.c` | MCE offlines aliased SPA page | PASS |
+| 21 | `cxl_pmu_01` | `perf/cxl_pmu.c` | PMU counter configuration | PASS |
+| 22 | `cxl_dax_01` | `dax/cxl.c` | DAX region device registration | PASS |
+| 23 | `cxl_dax_02` | `dax/cxl.c` | DAX on non-DAX region type | FAIL |
+| 24 | `cxl_einj_01` | `acpi/apei/einj-cxl.c` | EINJ error injection to CXL port | PASS |
+| 25 | `cxl_dvsec_01` | `core/pci.c` | PCIe DVSEC register enumeration | PASS |
+
+**New operational model functions (~18):**
+
+| Function | Target |
+|---|---|
+| `cxl_memdev_create()`, `cxl_memdev_destroy()` | memdev lifecycle — **done** |
+| `cxl_memdev_id_alloc()` | ID allocator with overflow — **done** |
+| `cxl_region_config()` | Interleave granularity/size — **done** |
+| `cxl_region_overlaps()` | HPA intersection test — **done**, not in the original plan |
+| `cxl_dax_region_map()` | DAX region mapping |
+| `cxl_pmem_region_type()` | PMEM region type check |
+| `cxl_mailbox_ioctl()` | IOCTL command dispatch — **done** |
+| `cxl_mbox_cmd_index()` | Command table lookup — **done**, not in the original plan |
+| `cxl_dport_add()`, `cxl_dport_find()`, `cxl_dport_remove()`, `cxl_dport_count()` | Port downstream traversal — **done**; `_walk()` was replaced by find/count |
+| `cxl_pmem_set_passphrase()`, `cxl_pmem_unlock()` | LIBNVDIMM passphrase bridge |
+| `acpi_cedt_parse_cfmws()` | CFMWS window parsing |
+| `cdat_parse_entry()` | CDAT latency/bandwidth parsing |
+| `cxl_edac_set_patrol_scrub()` | EDAC patrol scrub control |
+| `cxl_feature_query()` | Feature capability table lookup |
+| `cper_process_cxl()` | CXL CPER error record |
+| `cxl_mce_offline_page()` | MCE SPA offline |
+| `cxl_pmu_config_counter()` | PMU hardware config |
+| `cxl_dax_region_register()` | DAX device registration |
+| `einj_inject_cxl_error()` | ACPI EINJ error injection |
+| `pci_cxl_dvsec_enum()` | DVSEC discovery |
+
+**Projection after Phase 7:**
+
+| Metric | After Phase 7 |
+|---|---|
+| Regression tests | ~50 |
+| Passing tests | ~35 |
+| Bug-detecting tests | ~15 |
+| Operational model functions | ~70 |
+| Operational model lines | ~3,000 |
+| Driver families covered | ~9 |
+
+---
+
+### Phase 8: Assurance (Planned — should precede more breadth)
+
+**Goal:** make the suite establish what it appears to establish. Phases 1-7
+grew coverage outwards; this one closes the gap between the number of tests
+and the amount of assurance they provide. Each item below comes from a
+measured defect, not a stylistic preference.
+
+**1. Declare the properties each test verifies.**
+
+Every `test.desc` in this suite historically left the flags line empty, so all
+of them ran on ESBMC defaults. `--memory-leak-check`, `--overflow-check`,
+`--data-races-check` and `--deadlock-check` are opt-in and none were used.
+This is not hypothetical: enabling `--memory-leak-check` immediately exposed
+a real CWE-401 leak in `cxl_port_dport_01` on its bail-out path, in a test
+that had been committed green the same day. A test that does not say which
+properties it checks is not guarding them.
+
+- Add leak checking to every test that allocates.
+- Add overflow checking to every test doing address arithmetic — the
+  `cxl_region_overlaps()` wraparound gap was exactly this class.
+- Treat the flags line as part of the test's specification in review.
+
+**2. Measure model coverage, not test count.**
+
+Only 11 of the 35 tests ever call a modelled function without also defining
+it locally. The other 24 declare their own structs and driver functions and
+verify those, so deleting `cxl_driver.c` would leave most of the suite
+passing. Several tests go further and *shadow* modelled functions with local
+definitions — `cxl_mem_attach_01` and `cxl_port_enum_01` do this, as do the
+four HDM-alignment tests.
+
+The distribution is worse than the ratio suggests: 8 of those 11 were added
+in the Phase 7 work, so for most of this project's life exactly **3 of 27**
+tests exercised the model at all — the MMIO read-back pair and
+`cxl_mmio_01`.
+
+That is why `cxl_driver.c` called a `static __kmalloc()` through an implicit
+declaration for its entire existence without any test noticing: **the model's
+own allocation code had never once executed.** Track "modelled functions
+executed by at least one test" and treat it, not the test count, as the
+coverage number.
+
+**3. Get the real-driver harnesses into CI.**
+
+`regression/cxl-linux/` holds the only work that touches real kernel source —
+and it is unregistered with ctest because it needs a configured kernel tree.
+The project's most valuable output is therefore its least protected, free to
+rot silently. Vendoring preprocessed translation units (`.i` files) for the
+verified functions would make Phase 5 reproducible without a kernel checkout.
+
+**4. Verify concurrency at all.**
+
+CXL exists to extend cache coherence across a link, and the Target Scope
+lists concurrent driver access and DMA coherence. Yet `cxl_concurrent_01` —
+the suite's only "concurrent" test — spawns no threads. It calls
+`submit_command()` three times in sequence, where `command_count == 3` is
+trivially true. No test in the suite explores an interleaving, and Phase 7
+proposes no concurrency tests either.
+
+Needed: a genuinely threaded mailbox submission race, and a DMA-coherence
+test, both under `--data-races-check`.
+
+**5. Require patch-and-reverify for every failing test.**
+
+A test expecting `VERIFICATION FAILED` can fail for a reason unrelated to the
+bug it claims to model. The practice that works: patch the modelled bug in a
+scratch copy and confirm the test flips to `VERIFICATION SUCCESSFUL`. This was
+done for `cxl_memdev_02`, `cxl_region_02`, `cxl_mbox_ioctl_02` and
+`cxl_port_dport_02`; make it the documented standard for new failing tests
+rather than an occasional courtesy.
+
+**6. Resolve the kernel-version incoherence.**
+
+The model's headers live under `ubuntu20.04/kernel_5.15.0-76/` while the
+real-driver work targets Linux 7.1.5 — different kernel eras. Nothing states
+which is authoritative, or what is supposed to happen when the real driver
+API moves under the model. Pick one, say so, and record how the pin is
+updated.
+
+**Acceptance criteria:**
+- Every test declares its property flags; the leak and overflow classes are
+  checked wherever they apply.
+- A model-coverage figure exists and is reported alongside the test count.
+- Phase 5's harnesses run in CI without a kernel checkout.
+- At least two genuinely concurrent tests exist and pass under
+  `--data-races-check`.
+- No failing test is added without a recorded patch-and-reverify.
+
+
+---
+
 ## File Inventory
 
 ### Headers (Phase 1 + Phase 4 updates)
@@ -384,6 +609,9 @@ regression/cxl/
 | Missing kernel symbols not covered by headers | Add stubs incrementally as needed by real driver code |
 | CXL spec changes | Model CXL 2.0 first; 3.0 additions are incremental |
 | Performance on real driver code | Start with minimal harnesses; scale up gradually |
+| Suite cost outgrowing its value | All cxl tests are THOROUGH and the suite is opt-in (`-DENABLE_CXL_REGRESSION=On`); one test accounts for most of the wall time |
+| Model and real driver drifting apart | Headers are pinned to kernel 5.15.0-76 while real-driver work targets 7.1.5; unresolved, see Phase 8.6 |
+| Tests that pass without establishing anything | Phase 8.1-8.2: declare property flags per test, measure model coverage rather than test count |
 
 ## Success Metrics
 
@@ -404,8 +632,38 @@ regression/cxl/
         interleave, the mailbox IOCTL path and downstream port lifetime,
         all modelled against the real driver's constraints (8 tests, 11
         model functions); remaining ~17 tests and ~9 functions pending
+- [ ] Phase 8: assurance — not started
+
+**On reading these numbers.** Test and line counts measure output, not
+assurance, and this document has historically reported only those. Three
+figures say more about what is actually established, and two of them are
+currently poor:
+
+| Question | Today |
+|---|---|
+| Real Linux driver functions verified | 4 |
+| Tests that execute the operational model | 11 of 35 |
+| Tests declaring the properties they check | 1 of 35 |
+
+The last two are what Phase 8 exists to fix. Until they move, a rising test
+count should not be read as rising confidence.
 
 ## Current Statistics
+
+**Suite status:** every cxl test is classified `THOROUGH`, and the suite is
+**not registered by default** — `regression/CMakeLists.txt` gates it behind
+`ENABLE_CXL_REGRESSION`, which is `OFF`. CI therefore does not run it. Run it
+locally with:
+
+```sh
+cmake -DENABLE_CXL_REGRESSION=On -Bbuild -S . && ctest -L cxl
+```
+
+This keeps CI budget on suites that guard shipped behaviour, at the cost of
+leaving the CXL work unguarded against regressions from elsewhere in the tree.
+That trade-off is only sound while the suite stays largely self-contained; if
+Phase 8.2 raises model coverage, the suite becomes worth re-enabling.
+
 
 | Metric | Count |
 |--------|-------|
@@ -421,119 +679,3 @@ regression/cxl/
 | HDM constraints added | 2 (alignment + decoder limit) |
 | Real Linux driver files converted to GOTO | 1 |
 | Real Linux driver functions verified | 4 |
-
----
-
-### Phase 7: Real Driver Coverage (Started)
-
-**Goal:** Extend the operational model and regression suite to cover the full
-Linux 7.1.5 CXL driver subsystem (~30 source files across 11 driver families),
-moving from synthetic primitives to real-driver-equivalent verification.
-
-**Status:** the first slice is in. `cxl_memdev_*` and `cxl_region_*` (tests 1-4
-below) are implemented and passing, along with the five operational-model
-functions they need. These are the first models written against the real
-driver's constraints rather than the invented API in the scope note:
-`cxl_memdev_id_alloc()` reproduces the `-ENOSPC` result of
-`ida_alloc_range()`, and `cxl_region_config()` enforces the power-of-two
-interleave encodings from `drivers/cxl/core/region.c`. Writing them exposed a
-latent defect — the model's own allocations called a `static` `__kmalloc()`
-through an implicit declaration, which no test had ever reached.
-
-The second slice adds the mailbox IOCTL path (`core/mbox.c`) and downstream
-port lifetime (`port.c`) — tests 7-10 — bringing the suite to 35. Test 8 was
-retargeted: an unsupported opcode is already covered as a rejection assertion
-in `cxl_mbox_ioctl_01`, so the failing case models the more interesting bug,
-a user-controlled payload length bounded against the mailbox limit rather
-than the driver's own staging buffer. `cxl_dport_walk()` was dropped in
-favour of `cxl_dport_find()` plus `cxl_dport_count()`, which express the same
-traversal without a callback.
-
-Both slices were put through a verification-soundness review: every model
-branch was shown independently reachable, and each failing test was
-patched-and-reverified to confirm it flips to SUCCESSFUL once the modelled
-driver bug is fixed, rather than failing for an incidental reason. That
-review also found the missing overflow precondition on
-`cxl_region_overlaps()`, since fixed.
-
-**Gap Analysis — Linux 7.1.5 `drivers/cxl/` inventory vs current coverage:**
-
-| Driver Family | Kconfig | Source Files | Current Coverage |
-|---|---|---|---|
-| **CXL Core** (port, memdev, mbox, hdm, region, regs, cdat, features, ras, mce, pmu, suspend) | CXL_BUS | 20 `.c` files in `core/` | Partial — only synthetic port/mbox/region tests |
-| **CXL PCI** (pci.c) | CXL_PCI | 1 | Partial — synthetic probe test, no DVSEC/doorbell/MMR timeout paths |
-| **CXL Memory** (mem.c) | CXL_MEM | 1 | Partial — synthetic attach test, no endpoint enumeration |
-| **CXL Port** (port.c) | CXL_PORT | 1 | Partial — synthetic enum test, no dport HDM scan |
-| **CXL PMEM** (pmem.c + security.c) | CXL_PMEM | 2 | Partial — synthetic security tests, no LIBNVDIMM bridge |
-| **CXL ACPI** (acpi.c) | CXL_ACPI | 1 | **None** — CEDT/CFMWS parsing untested |
-| **DAX CXL** (dax/cxl.c) | DEV_DAX_CXL | 1 | **None** — DAX region probing untested |
-| **CXL PMU** (perf/cxl_pmu.c) | CXL_PMU | 1 | **None** — perf event interface untested |
-| **PCIe AER for CXL** (pcie/aer_cxl_rch.c) | built-in | 1 | Partial — basic AER covered, not RCH delegation |
-| **ACPI CPER** (firmware/efi/cper_cxl.c) | built-in | 1 | **None** — CXL error section parsing untested |
-| **ACPI EINJ** (acpi/apei/einj-cxl.c) | EINJ_CXL | 1 | **None** — ACPI error injection untested |
-
-**Proposed regression tests (~25 new):**
-
-| # | Suite | Target | Feature | Expected |
-|---|---|---|---|---|
-| 1 | `cxl_memdev_01` | `core/memdev.c` | `/dev/cxl/X` creation + fw version | PASS — **done** |
-| 2 | `cxl_memdev_02` | `core/memdev.c` | memdev ID allocator overflow | FAIL — **done** |
-| 3 | `cxl_region_01` | `core/region.c` | Region interleave config | PASS — **done** |
-| 4 | `cxl_region_02` | `core/region.c` | Overlapping region targets | FAIL — **done** |
-| 5 | `cxl_region_dax_01` | `core/region_dax.c` | DAX region mapping | PASS |
-| 6 | `cxl_region_pmem_01` | `core/region_pmem.c` | PMEM region type | PASS |
-| 7 | `cxl_mbox_ioctl_01` | `core/mbox.c` | IOCTL command table lookup | PASS — **done** |
-| 8 | `cxl_mbox_ioctl_02` | `core/mbox.c` | Unchecked payload size via IOCTL | FAIL — **done**, retargeted |
-| 9 | `cxl_port_dport_01` | `port.c` | Downstream port traversal | PASS — **done** |
-| 10 | `cxl_port_dport_02` | `port.c` | Dangling dport reference | FAIL — **done** |
-| 11 | `cxl_pmem_sec_01` | `pmem.c` + `security.c` | Set/get passphrase flow | PASS |
-| 12 | `cxl_pmem_sec_02` | `pmem.c` + `security.c` | Unlock before freeze (invalid order) | FAIL |
-| 13 | `cxl_acpi_cedt_01` | `acpi.c` | CEDT CFMWS window parsing | PASS |
-| 14 | `cxl_acpi_cedt_02` | `acpi.c` | CFMWS alignment violation | FAIL |
-| 15 | `cxl_cdat_01` | `core/cdat.c` | CDAT latency/bandwidth parsing | PASS |
-| 16 | `cxl_edac_01` | `core/edac.c` | Patrol scrub enable/disable | PASS |
-| 17 | `cxl_features_01` | `core/features.c` | Feature capability query | PASS |
-| 18 | `cxl_ras_01` | `core/ras.c` | CPER error record processing | PASS |
-| 19 | `cxl_ras_02` | `core/ras.c` | CPER uncorrectable fatal w/o recovery | FAIL |
-| 20 | `cxl_mce_01` | `core/mce.c` | MCE offlines aliased SPA page | PASS |
-| 21 | `cxl_pmu_01` | `perf/cxl_pmu.c` | PMU counter configuration | PASS |
-| 22 | `cxl_dax_01` | `dax/cxl.c` | DAX region device registration | PASS |
-| 23 | `cxl_dax_02` | `dax/cxl.c` | DAX on non-DAX region type | FAIL |
-| 24 | `cxl_einj_01` | `acpi/apei/einj-cxl.c` | EINJ error injection to CXL port | PASS |
-| 25 | `cxl_dvsec_01` | `core/pci.c` | PCIe DVSEC register enumeration | PASS |
-
-**New operational model functions (~18):**
-
-| Function | Target |
-|---|---|
-| `cxl_memdev_create()`, `cxl_memdev_destroy()` | memdev lifecycle — **done** |
-| `cxl_memdev_id_alloc()` | ID allocator with overflow — **done** |
-| `cxl_region_config()` | Interleave granularity/size — **done** |
-| `cxl_region_overlaps()` | HPA intersection test — **done**, not in the original plan |
-| `cxl_dax_region_map()` | DAX region mapping |
-| `cxl_pmem_region_type()` | PMEM region type check |
-| `cxl_mailbox_ioctl()` | IOCTL command dispatch — **done** |
-| `cxl_mbox_cmd_index()` | Command table lookup — **done**, not in the original plan |
-| `cxl_dport_add()`, `cxl_dport_find()`, `cxl_dport_remove()`, `cxl_dport_count()` | Port downstream traversal — **done**; `_walk()` was replaced by find/count |
-| `cxl_pmem_set_passphrase()`, `cxl_pmem_unlock()` | LIBNVDIMM passphrase bridge |
-| `acpi_cedt_parse_cfmws()` | CFMWS window parsing |
-| `cdat_parse_entry()` | CDAT latency/bandwidth parsing |
-| `cxl_edac_set_patrol_scrub()` | EDAC patrol scrub control |
-| `cxl_feature_query()` | Feature capability table lookup |
-| `cper_process_cxl()` | CXL CPER error record |
-| `cxl_mce_offline_page()` | MCE SPA offline |
-| `cxl_pmu_config_counter()` | PMU hardware config |
-| `cxl_dax_region_register()` | DAX device registration |
-| `einj_inject_cxl_error()` | ACPI EINJ error injection |
-| `pci_cxl_dvsec_enum()` | DVSEC discovery |
-
-**Projection after Phase 7:**
-
-| Metric | After Phase 7 |
-|---|---|
-| Regression tests | ~50 |
-| Passing tests | ~35 |
-| Bug-detecting tests | ~15 |
-| Operational model functions | ~70 |
-| Operational model lines | ~3,000 |
-| Driver families covered | ~9 |
