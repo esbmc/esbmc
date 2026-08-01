@@ -26,6 +26,7 @@ struct cxl_region {
   resource_size_t start;
   resource_size_t size;
   unsigned int granularity;
+  unsigned int ways; /* interleave ways; 0 until cxl_region_config() */
 };
 
 /* CXL port (root port / switch port) */
@@ -189,5 +190,28 @@ int cxl_err_get_count(struct cxl_dev *cxld,
                       int *correctable,
                       int *non_fatal,
                       int *fatal);
+
+/* ============================================================
+ *  CXL region interleave — declared here, modelled in cxl_driver.c
+ * ============================================================
+ *
+ * Constraints follow CXL 3.0 §8.2.4.20.1 and the encoders in
+ * drivers/cxl/core/region.c (granularity_to_eig(), ways_to_eiw()):
+ * interleave granularity is a power of two in [256, 16384] bytes, and
+ * interleave ways is a power of two in [1, 16].  The 3/6/12/16-way
+ * non-power-of-two encodings are not modelled.
+ */
+
+#define CXL_DECODER_MIN_GRANULARITY 256
+#define CXL_DECODER_MAX_GRANULARITY 16384
+#define CXL_DECODER_MAX_WAYS 16
+
+int cxl_region_config(
+  struct cxl_region *region,
+  unsigned int ways,
+  unsigned int granularity);
+
+/* Non-zero when the two regions share any host physical address. */
+int cxl_region_overlaps(const struct cxl_region *a, const struct cxl_region *b);
 
 #endif /* _LINUX_CXL_H */
