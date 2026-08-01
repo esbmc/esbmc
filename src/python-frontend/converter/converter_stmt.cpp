@@ -4441,7 +4441,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       tag_location,
       type_handler_.get_tagged_object_type());
     tag_symbol.lvalue = true;
-    tag_symbol.file_local = true;
+    tag_symbol.file_local = !current_func_name_.empty();
     tag_symbol.is_extern = false;
 
     symbolt *tag_symbol_ptr = symbol_table_.move_symbol_to_context(tag_symbol);
