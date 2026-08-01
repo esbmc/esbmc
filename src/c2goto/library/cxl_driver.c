@@ -1497,3 +1497,134 @@ __ESBMC_HIDE:;
   assert(b != NULL);
   return a->start < b->start + b->size && b->start < a->start + a->size;
 }
+
+/* ============================================================
+ *  CXL mailbox IOCTL models
+ * ============================================================
+ *
+ * drivers/cxl/core/mbox.c validates a user command in three steps: the
+ * opcode must appear in cxl_mem_commands[], the payload must fit, and the
+ * device must have that command enabled. All three rejections stay
+ * reachable here.
+ * ============================================================ */
+
+static const u16 esbmc_cxl_mbox_opcodes[] = {
+  CXL_MBOX_OP_GET_SUPPORTED_LOGS,
+  CXL_MBOX_OP_GET_CAPABILITIES,
+  CXL_MBOX_OP_GET_STATUS,
+  CXL_MBOX_OP_SET_SECURITY,
+  CXL_MBOX_OP_SET_LOCK,
+  CXL_MBOX_OP_SET_PMEM_CAP,
+  CXL_MBOX_OP_GET_PARTITION_STATE,
+  CXL_MBOX_OP_SET_PARTITION_STATE,
+};
+
+#define ESBMC_CXL_MBOX_OPCODE_COUNT                                            \
+  (sizeof(esbmc_cxl_mbox_opcodes) / sizeof(esbmc_cxl_mbox_opcodes[0]))
+
+int cxl_mbox_cmd_index(u16 opcode)
+{
+__ESBMC_HIDE:;
+  for (unsigned int i = 0; i < ESBMC_CXL_MBOX_OPCODE_COUNT; i++)
+    if (esbmc_cxl_mbox_opcodes[i] == opcode)
+      return (int)i;
+  return -1;
+}
+
+int cxl_mailbox_ioctl(struct cxl_dev *cxld, u16 opcode, void *payload, u32 size)
+{
+__ESBMC_HIDE:;
+  assert(cxld != NULL);
+
+  if (cxl_mbox_cmd_index(opcode) < 0)
+    return -ENOTTY;
+
+  if (size > CXL_MBOX_IOCTL_MAX_PAYLOAD)
+    return -EINVAL;
+
+  if (size > 0 && payload == NULL)
+    return -EINVAL;
+
+  /* Present in the table, but the device need not have it enabled. */
+  if (!__VERIFIER_nondet_int())
+    return -ENOTTY;
+
+  return 0;
+}
+
+/* ============================================================
+ *  CXL downstream port (dport) models
+ * ============================================================
+ *
+ * A dport lives exactly as long as its parent port keeps it registered;
+ * Linux drops it in devm cleanup. Removal frees the object here too, so a
+ * pointer cached across a removal is a use-after-free rather than a
+ * silently stale read.
+ * ============================================================ */
+
+static struct cxl_dport *esbmc_cxl_dports[CXL_PORT_MAX_DPORTS];
+
+struct cxl_dport *cxl_dport_find(struct cxl_port *port, int id)
+{
+__ESBMC_HIDE:;
+  assert(port != NULL);
+  for (int i = 0; i < CXL_PORT_MAX_DPORTS; i++)
+    if (
+      esbmc_cxl_dports[i] != NULL && esbmc_cxl_dports[i]->port == port &&
+      esbmc_cxl_dports[i]->id == id)
+      return esbmc_cxl_dports[i];
+  return NULL;
+}
+
+int cxl_dport_add(struct cxl_port *port, struct pci_dev *dport_dev, int id)
+{
+__ESBMC_HIDE:;
+  assert(port != NULL);
+
+  if (cxl_dport_find(port, id) != NULL)
+    return -EBUSY;
+
+  for (int i = 0; i < CXL_PORT_MAX_DPORTS; i++)
+  {
+    if (esbmc_cxl_dports[i] != NULL)
+      continue;
+
+    struct cxl_dport *dp =
+      (struct cxl_dport *)kmalloc(sizeof(struct cxl_dport), GFP_KERNEL);
+    if (dp == NULL)
+      return -ENOMEM;
+
+    dp->port = port;
+    dp->dport_dev = dport_dev;
+    dp->id = id;
+    esbmc_cxl_dports[i] = dp;
+    return 0;
+  }
+  return -ENOSPC;
+}
+
+void cxl_dport_remove(struct cxl_port *port, int id)
+{
+__ESBMC_HIDE:;
+  assert(port != NULL);
+  for (int i = 0; i < CXL_PORT_MAX_DPORTS; i++)
+    if (
+      esbmc_cxl_dports[i] != NULL && esbmc_cxl_dports[i]->port == port &&
+      esbmc_cxl_dports[i]->id == id)
+    {
+      kfree(esbmc_cxl_dports[i]);
+      esbmc_cxl_dports[i] = NULL;
+      return;
+    }
+}
+
+int cxl_dport_count(struct cxl_port *port)
+{
+__ESBMC_HIDE:;
+  assert(port != NULL);
+  int n = 0;
+  for (int i = 0; i < CXL_PORT_MAX_DPORTS; i++)
+    if (esbmc_cxl_dports[i] != NULL && esbmc_cxl_dports[i]->port == port)
+      n++;
+  return n;
+}
