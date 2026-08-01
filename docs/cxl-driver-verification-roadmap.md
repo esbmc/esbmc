@@ -189,6 +189,19 @@ kernel tree, so they are not registered with ctest and do not run in CI.
 | `cdat_checksum()` | negative variant, bound relaxed | FAILED at `pci.c:554` |
 | `cxl_pci_get_latency()` | division by zero, callee unconstrained | FAILED at `pci.c:667` |
 | `cxl_pci_get_latency()` | same, callee contract modelled | SUCCESSFUL |
+| `cxl_dvsec_rr_decode()` | `info->dvsec_range[2]` store stays in bounds (`ranges <= 2`) | SUCCESSFUL |
+| `cxl_dvsec_rr_decode()` | liveness: asserting `ranges <= 1` | FAILED — both ranges reachable |
+| `cxl_hdm_decode_init()` | no out-of-bounds read, caller contract assumed | SUCCESSFUL |
+| `cxl_hdm_decode_init()` | same, contract dropped | FAILED at `range.h:20` |
+
+Both bounded harnesses also verify with unwinding assertions enabled, so the
+`--unwind` bounds are sound rather than truncated.
+
+`cxl_dvsec_rr_decode()` and `cxl_hdm_decode_init()` are joined by a precondition
+that appears nowhere in the code: the first caps `info->ranges` at 2 via its
+`hdm_count > 2` rejection, and the second indexes `info->dvsec_range[i]` for
+`i < info->ranges` without re-validating it. Safe today because `core/hdm.c`
+calls them in sequence on the same `info`.
 
 The `cxl_pci_get_latency()` failure is a false positive, not a kernel bug: the
 `bw < 0` guard is sufficient only because `pcie_dev_speed_mbps()` returns
@@ -374,8 +387,9 @@ regression/cxl/
         AER (with operational model functions), error injection (with
         operational model functions), and port enumeration
 - [x] Phase 5: first real driver harnesses created and verified —
-        `drivers/cxl/core/pci.c` converts, `cdat_checksum()` and
-        `cxl_pci_get_latency()` verified (see Phase 5); broad coverage pending
+        `drivers/cxl/core/pci.c` converts; `cdat_checksum()`,
+        `cxl_pci_get_latency()`, `cxl_dvsec_rr_decode()` and
+        `cxl_hdm_decode_init()` verified (see Phase 5); broad coverage pending
 - [x] Phase 6.1: User documentation published (user guide + roadmap + test summary)
 - [ ] Phase 6.2–6.3: Generic driver template and technical report — not started
 
@@ -394,7 +408,7 @@ regression/cxl/
 | Error injection functions added | 2 |
 | HDM constraints added | 2 (alignment + decoder limit) |
 | Real Linux driver files converted to GOTO | 1 |
-| Real Linux driver functions verified | 2 |
+| Real Linux driver functions verified | 4 |
 
 ---
 

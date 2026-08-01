@@ -54,10 +54,54 @@ instead, because ESBMC has no `-include` (its equivalent is `--include-file`).
 | `harness_cdat_checksum_fail.c` | `cdat_checksum()` with the buffer bound relaxed | FAILED — array bounds violated at `pci.c:554` |
 | `harness_latency_nocontract.c` | `cxl_pci_get_latency()` | FAILED — division by zero at `pci.c:667` |
 | `harness_latency_contract.c` | same, callee contract modelled | SUCCESSFUL |
+| `harness_dvsec_rr_decode.c` | `cxl_dvsec_rr_decode()` | SUCCESSFUL |
+| `harness_dvsec_rr_decode_fail.c` | same, asserting `ranges <= 1` | FAILED — 2 ranges are reachable |
+| `harness_hdm_decode_init.c` `-DRANGES_BOUNDED` | `cxl_hdm_decode_init()` | SUCCESSFUL |
+| `harness_hdm_decode_init.c` | same, caller contract dropped | FAILED — out of bounds at `range.h:20` |
 
 The `cdat_checksum` pair is the two-tier pattern: the positive harness proves
 the loop stays in bounds for `size <= sizeof(buf)`, and the negative one relaxes
 exactly that bound so the checker is shown to be live rather than vacuous.
+
+Run the two `--unwind`-bounded harnesses **without** `--no-unwinding-assertions`
+as well. Both still report SUCCESSFUL, which is what makes the bound sound
+rather than an artefact of truncated unwinding.
+
+## The two DVSEC functions, and the contract between them
+
+`cxl_dvsec_rr_decode()` fills `info->dvsec_range[]`, which holds 2 entries. The
+store is kept in bounds solely by the `hdm_count > 2` rejection, so that guard
+is load-bearing; the harness proves `info.ranges <= 2` over nondeterministic PCI
+config space. The `_fail` variant asserts `ranges <= 1` instead and fails, which
+shows both ranges are genuinely reachable.
+
+`cxl_hdm_decode_init()` then walks `info->dvsec_range[i]` for `i < info->ranges`
+and never re-validates that bound. It is safe only because its sole caller
+(`core/hdm.c:1273`) passes the `info` that `cxl_dvsec_rr_decode()` populated at
+`hdm.c:1262`. Drop that assumption and ESBMC reports the out-of-bounds read.
+So the two functions are joined by a precondition that appears nowhere in the
+code — the same lesson as the latency pair, but inter-procedural.
+
+## Stub surface
+
+Verifying against undefined kernel functions makes every stub an assumption:
+
+- `pci_read_config_word/dword()` — hardware state: unconstrained value, may fail.
+- `to_cxl_port()`, `to_cxl_decoder()` — model the success path only, returning a
+  well-formed object. The real `to_cxl_port()` can return NULL on a device-type
+  mismatch, and the caller in `cxl_hdm_decode_init()` would then dereference it;
+  that path is outside these harnesses, which fix a well-typed topology.
+- `device_find_child()` — must invoke `match()` rather than return a nondet
+  pointer. Stubbing it out would leave `&info->dvsec_range[i]` as mere address
+  arithmetic, and the out-of-bounds read would never be exercised.
+- `harness_decoder.flags` must carry `CXL_DECODER_F_RAM`, otherwise the match
+  callback returns before `range_contains()` and the negative harness passes
+  vacuously.
+
+The last two are worth dwelling on: both were real defects in an earlier version
+of this harness that made the negative case pass for the wrong reason. A negative
+harness that does not fail is not evidence of correctness — it is evidence the
+harness is wrong.
 
 ## The latency pair is not a kernel bug
 
