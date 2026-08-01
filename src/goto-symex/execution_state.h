@@ -453,6 +453,21 @@ public:
     access_kindt kind);
 
   /**
+   *  Resolve one pointer level: the object `ptr`'s value set names, or nil.
+   *  @param to_global Set when the resolved object is shared.
+   */
+  expr2tc resolve_pointer_target(
+    const namespacet &ns,
+    const expr2tc &ptr,
+    bool &to_global);
+
+  /** Record `key` as an object accessed by this transition, for MPOR. */
+  void record_access_key(
+    const expr2tc &key,
+    std::set<expr2tc> &global_list,
+    access_kindt kind);
+
+  /**
    *  Check for scheduling dependencies. Whether it exists between the variables
    *  accessed by the last transition of thread j and the last transition of
    *  thread l.

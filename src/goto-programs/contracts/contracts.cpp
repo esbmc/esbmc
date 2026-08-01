@@ -892,11 +892,12 @@ void code_contractst::havoc_static_globals(
   });
 }
 
-void code_contractst::enforce_contracts(
+std::set<std::string> code_contractst::enforce_contracts(
   const std::set<std::string> &to_enforce,
   const std::string &entry_function,
   bool check_assigns_compliance)
 {
+  std::set<std::string> enforced;
   for (const auto &function_name : to_enforce)
   {
     // Skip compiler-generated functions (destructors, constructors, exception handlers)
@@ -910,7 +911,9 @@ void code_contractst::enforce_contracts(
     symbolt *func_sym = find_function_symbol(function_name);
     if (func_sym == nullptr)
     {
-      log_warning("Function {} not found", function_name);
+      // Not necessarily absent: find_function_symbol also returns nullptr for
+      // an ambiguous short name, and logs which candidates it found.
+      log_warning("Could not resolve {} to a single function", function_name);
       continue;
     }
 
@@ -1144,9 +1147,11 @@ void code_contractst::enforce_contracts(
     goto_functions.function_map[original_id] = new_func;
 
     log_status("Enforced contract for function {}", function_name);
+    enforced.insert(function_name);
   }
 
   goto_functions.update();
+  return enforced;
 }
 
 /// Build `malloc(size_bytes)` typed as u8*, so the allocation is exactly
@@ -3728,11 +3733,52 @@ bool code_contractst::is_annotated_contract_function(
   return func_sym.get_type().get_bool("#annotated_contract");
 }
 
+std::string code_contractst::diagnose_contract_target(
+  const std::string &function_name,
+  bool for_replace)
+{
+  if (for_replace)
+  {
+    // Mirror replace_calls' selection below: a body-available function whose
+    // goto key matches the pattern, carrying a contract or the annotation.
+    bool any_match = false;
+    forall_goto_functions (it, goto_functions)
+    {
+      if (!it->second.body_available)
+        continue;
+      if (!matches_replace_pattern(id2string(it->first), {function_name}))
+        continue;
+      any_match = true;
+      symbolt *sym = context.find_symbol(it->first);
+      if (
+        has_contracts(it->second.body) ||
+        (sym && is_annotated_contract_function(*sym)))
+        return std::string();
+    }
+    return any_match ? "that function declares no contract clauses"
+                     : "no function of that name has a body here";
+  }
+
+  // Mirror enforce_contracts' gates.
+  if (is_compiler_generated(function_name))
+    return "that name is compiler-generated";
+
+  const symbolt *sym = find_function_symbol(function_name);
+  if (sym == nullptr)
+    return "no function of that name, or the name is ambiguous";
+
+  auto it = goto_functions.function_map.find(sym->id);
+  if (it == goto_functions.function_map.end() || !it->second.body_available)
+    return "that function is declared but has no body here";
+
+  if (!has_contracts(it->second.body) && !is_annotated_contract_function(*sym))
+    return "that function declares no contract clauses";
+
+  return std::string();
+}
+
 void code_contractst::replace_calls(const std::set<std::string> &to_replace)
 {
-  log_status(
-    "Replacing calls with contracts for {} function(s)", to_replace.size());
-
   // Build a map of function names to their symbols, bodies, and IDs for quick lookup
   // Key: function name (e.g., "increment")
   // Value: (symbol pointer, body pointer, function ID in goto_functions)
@@ -3778,6 +3824,10 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
 
   for (const auto &f : replaceable_funcs)
     log_debug("contracts", "  Replaceable: {}", f);
+
+  log_status(
+    "Replacing calls with contracts for {} function(s)",
+    replaceable_funcs.size());
 
   // Track functions to delete after replacement
   std::set<irep_idt> functions_to_delete;

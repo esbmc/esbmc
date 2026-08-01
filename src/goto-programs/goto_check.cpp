@@ -10,6 +10,7 @@
 #include <irep2/irep2_guard.h>
 #include <util/base/i2string.h>
 #include <util/irep/location.h>
+#include <util/irep/pad_names.h>
 #include <util/irep/migrate.h>
 #include <util/arith/mp_arith.h>
 #include <util/lang/python_types.h>
@@ -959,17 +960,17 @@ void goto_checkt::pointer_rel_check(
 
 // Trailing padding is appended after the declared members (padding.cpp, the
 // `pad(components, components.end(), ...)` calls), so the last declared member
-// is the last non-`anon_pad$` entry. That one name is enough: of the four pad
-// kinds add_padding mints, `anon_bit_field_pad$` is only appended to a struct
-// that *ends* in bit-fields, `ext_int_pad$` only ever follows an _ExtInt
-// member, and `$pad` is union-only -- none of them can follow a trailing array.
-// The `char qux[1]` case in regression/esbmc/github_6508_safe pins this skip.
+// is the last non-`anon_pad#` entry. That one name is enough: of the four pad
+// kinds add_padding mints, `anon_bit_field_pad#` is only appended to a struct
+// that *ends* in bit-fields, `ext_int_pad#` only ever follows an _ExtInt
+// member, and the union pad is union-only -- none of them can follow a trailing
+// array. The `char qux[1]` case in regression/esbmc/github_6508_safe pins this.
 static bool is_trailing_member(const type2tc &t, const irep_idt &name)
 {
   const std::vector<irep_idt> names = struct_union_member_names(t);
 
   auto it = names.rbegin();
-  while (it != names.rend() && has_prefix(*it, "anon_pad$"))
+  while (it != names.rend() && has_prefix(*it, pad_prefix))
     ++it;
 
   return it != names.rend() && *it == name;
