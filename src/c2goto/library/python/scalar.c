@@ -25,8 +25,6 @@ __ESBMC_HIDE:;
 void *__python_scalar_tag_copy(const void *value, size_t size)
 {
 __ESBMC_HIDE:;
-  if (size == 0)
-    return (void *)0;
   void *copied = __ESBMC_alloca(size);
   if (size == 1)
     *(uint8_t *)copied = *(const uint8_t *)value;
