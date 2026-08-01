@@ -48,12 +48,12 @@
 /* ============================================================
  *  Non-deterministic value generators (ESBMC built-ins)
  * ============================================================ */
-extern int     __VERIFIER_nondet_int(void);
+extern int __VERIFIER_nondet_int(void);
 extern uint8_t __VERIFIER_nondet_uchar(void);
 extern uint16_t __VERIFIER_nondet_ushort(void);
 extern uint32_t __VERIFIER_nondet_uint(void);
 extern unsigned long __VERIFIER_nondet_ulong(void);
-extern size_t  __VERIFIER_nondet_size_t(void);
+extern size_t __VERIFIER_nondet_size_t(void);
 
 /* ============================================================
  *  Memory space declarations
@@ -61,23 +61,24 @@ extern size_t  __VERIFIER_nondet_size_t(void);
 
 /* MMIO space — models the device register address space.
  * 64 KB per device is generous but covers all CXL register blocks. */
-#define ESBMC_MMIO_SPACE_SIZE   (64 * 1024)
-#define ESBMC_PCI_DEVICES_MAX    16
-#define ESBMC_DMA_SPACE_SIZE    (1024 * 1024)  /* 1 MB DMA-coherent space */
-#define ESBMC_IRQ_HANDLERS_MAX   32
+#define ESBMC_MMIO_SPACE_SIZE (64 * 1024)
+#define ESBMC_PCI_DEVICES_MAX 16
+#define ESBMC_DMA_SPACE_SIZE (1024 * 1024) /* 1 MB DMA-coherent space */
+#define ESBMC_IRQ_HANDLERS_MAX 32
 
 static char esbmc_mmio_space[ESBMC_MMIO_SPACE_SIZE];
 /* Per-byte shadow: 1 once the driver has written that byte of register space */
 static char esbmc_mmio_written[ESBMC_MMIO_SPACE_SIZE];
 static char esbmc_dma_space[ESBMC_DMA_SPACE_SIZE];
-static int  esbmc_dma_used[ESBMC_DMA_SPACE_SIZE]; /* tracking for assertions */
+static int esbmc_dma_used[ESBMC_DMA_SPACE_SIZE]; /* tracking for assertions */
 
 /* PCI device table */
 static struct pci_dev esbmc_pci_devices[ESBMC_PCI_DEVICES_MAX];
 static int esbmc_pci_count = 0;
 
 /* IRQ handler table */
-static struct {
+static struct
+{
   unsigned int irq;
   irq_handler_t handler;
   void *dev_id;
@@ -255,29 +256,65 @@ __ESBMC_HIDE:;
 
 /* Memory barriers — no-op in the model (ordering is verified by ESBMC's
  * thread interleaving, not by hardware barriers). */
-void mb(void)     { /* no-op */ }
-void wmb(void)    { /* no-op */ }
-void rmb(void)    { /* no-op */ }
-void smp_mb(void) { /* no-op */ }
-void smp_wmb(void){ /* no-op */ }
-void smp_rmb(void){ /* no-op */ }
+void mb(void)
+{ /* no-op */
+}
+void wmb(void)
+{ /* no-op */
+}
+void rmb(void)
+{ /* no-op */
+}
+void smp_mb(void)
+{ /* no-op */
+}
+void smp_wmb(void)
+{ /* no-op */
+}
+void smp_rmb(void)
+{ /* no-op */
+}
 
 /* ============================================================
  *  I/O port functions (stub — not used by CXL, but declared)
  * ============================================================ */
-uint8_t  inb(unsigned long port)     { (void)port; return __VERIFIER_nondet_uchar(); }
-uint16_t inw(unsigned long port)     { (void)port; return __VERIFIER_nondet_ushort(); }
-uint32_t inl(unsigned long port)     { (void)port; return __VERIFIER_nondet_uint(); }
-void outb(uint8_t val, unsigned long port)  { (void)val; (void)port; }
-void outw(uint16_t val, unsigned long port) { (void)val; (void)port; }
-void outl(uint32_t val, unsigned long port) { (void)val; (void)port; }
+uint8_t inb(unsigned long port)
+{
+  (void)port;
+  return __VERIFIER_nondet_uchar();
+}
+uint16_t inw(unsigned long port)
+{
+  (void)port;
+  return __VERIFIER_nondet_ushort();
+}
+uint32_t inl(unsigned long port)
+{
+  (void)port;
+  return __VERIFIER_nondet_uint();
+}
+void outb(uint8_t val, unsigned long port)
+{
+  (void)val;
+  (void)port;
+}
+void outw(uint16_t val, unsigned long port)
+{
+  (void)val;
+  (void)port;
+}
+void outl(uint32_t val, unsigned long port)
+{
+  (void)val;
+  (void)port;
+}
 
 /* ============================================================
  *  PCI device models
  * ============================================================ */
 
-static struct pci_dev *__esbmc_pci_find_by_id(u16 vendor, u16 device,
-                                              struct pci_dev *from)
+static struct pci_dev *
+__esbmc_pci_find_by_id(u16 vendor, u16 device, struct pci_dev *from)
 {
   int start = 0;
   if (from != NULL)
@@ -297,8 +334,9 @@ static struct pci_dev *__esbmc_pci_find_by_id(u16 vendor, u16 device,
 
   for (int i = start; i < esbmc_pci_count; i++)
   {
-    if ((vendor == 0 || esbmc_pci_devices[i].vendor == vendor) &&
-        (device == 0 || esbmc_pci_devices[i].device == device))
+    if (
+      (vendor == 0 || esbmc_pci_devices[i].vendor == vendor) &&
+      (device == 0 || esbmc_pci_devices[i].device == device))
     {
       return &esbmc_pci_devices[i];
     }
@@ -325,7 +363,9 @@ __ESBMC_HIDE:;
 struct pci_dev *pci_get_bus_device(u32 domain, u8 bus, u8 devfn)
 {
 __ESBMC_HIDE:;
-  (void)domain; (void)bus; (void)devfn;
+  (void)domain;
+  (void)bus;
+  (void)devfn;
   if (esbmc_pci_count == 0)
     return NULL;
   int idx = __VERIFIER_nondet_int() % esbmc_pci_count;
@@ -392,7 +432,8 @@ __ESBMC_HIDE:;
   assert(bar >= 0 && bar < PCI_NUM_RESOURCES_WITH_ROM);
   resource_size_t start = pci_resource_start(dev, bar);
   size_t size = (size_t)(__VERIFIER_nondet_ulong() & ~0xFFFUL);
-  if (size == 0) size = 4096;
+  if (size == 0)
+    size = 4096;
   return start + size - 1;
 }
 
@@ -452,8 +493,11 @@ void pci_disable_msi(struct pci_dev *dev)
   (void)dev;
 }
 
-int pci_alloc_irq_vectors(struct pci_dev *dev, unsigned int min_vecs,
-                          unsigned int max_vecs, unsigned int flags)
+int pci_alloc_irq_vectors(
+  struct pci_dev *dev,
+  unsigned int min_vecs,
+  unsigned int max_vecs,
+  unsigned int flags)
 {
 __ESBMC_HIDE:;
   (void)flags;
@@ -502,19 +546,25 @@ __ESBMC_HIDE:;
 
 int pci_write_config_byte(struct pci_dev *dev, int where, u8 val)
 {
-  (void)dev; (void)where; (void)val;
+  (void)dev;
+  (void)where;
+  (void)val;
   return __VERIFIER_nondet_int();
 }
 
 int pci_write_config_word(struct pci_dev *dev, int where, u16 val)
 {
-  (void)dev; (void)where; (void)val;
+  (void)dev;
+  (void)where;
+  (void)val;
   return __VERIFIER_nondet_int();
 }
 
 int pci_write_config_dword(struct pci_dev *dev, int where, u32 val)
 {
-  (void)dev; (void)where; (void)val;
+  (void)dev;
+  (void)where;
+  (void)val;
   return __VERIFIER_nondet_int();
 }
 
@@ -546,9 +596,10 @@ void pci_unregister_driver(struct pci_driver *drv)
  * ============================================================ */
 
 /* AER capability state per PCI device */
-struct aer_cap {
+struct aer_cap
+{
   int enabled;
-  int severity;       /* current error severity */
+  int severity; /* current error severity */
   uint64_t corr_count;
   uint64_t non_fatal_count;
   uint64_t fatal_count;
@@ -666,8 +717,8 @@ __ESBMC_HIDE:;
   if (__VERIFIER_nondet_int() == 0)
     return NULL;
 
-  struct cxl_host_bridge *bridge =
-    (struct cxl_host_bridge *)__kmalloc(sizeof(struct cxl_host_bridge), GFP_KERNEL);
+  struct cxl_host_bridge *bridge = (struct cxl_host_bridge *)__kmalloc(
+    sizeof(struct cxl_host_bridge), GFP_KERNEL);
   if (bridge == NULL)
     return NULL;
 
@@ -678,7 +729,8 @@ __ESBMC_HIDE:;
 
   for (unsigned int i = 0; i < bridge->num_devices; i++)
   {
-    bridge->devices[i] = (struct cxl_dev *)__kmalloc(sizeof(struct cxl_dev), GFP_KERNEL);
+    bridge->devices[i] =
+      (struct cxl_dev *)__kmalloc(sizeof(struct cxl_dev), GFP_KERNEL);
     if (bridge->devices[i])
     {
       bridge->devices[i]->dev_type = (__VERIFIER_nondet_int() % 3) + 1;
@@ -704,12 +756,13 @@ void cxl_free_ports(struct cxl_host_bridge *bridge)
   kfree(bridge);
 }
 
-struct cxl_dev *cxl_find_device(struct cxl_host_bridge *bridge, u16 vendor,
-                                u16 device)
+struct cxl_dev *
+cxl_find_device(struct cxl_host_bridge *bridge, u16 vendor, u16 device)
 {
 __ESBMC_HIDE:;
   assert(bridge != NULL);
-  (void)vendor; (void)device;
+  (void)vendor;
+  (void)device;
   if (bridge->num_devices == 0)
     return NULL;
   int idx = __VERIFIER_nondet_int() % bridge->num_devices;
@@ -883,10 +936,11 @@ __ESBMC_HIDE:;
   return 0;
 }
 
-int cxl_err_get_count(struct cxl_dev *cxld,
-                      int *correctable,
-                      int *non_fatal,
-                      int *fatal)
+int cxl_err_get_count(
+  struct cxl_dev *cxld,
+  int *correctable,
+  int *non_fatal,
+  int *fatal)
 {
 __ESBMC_HIDE:;
   assert(cxld != NULL);
@@ -910,8 +964,9 @@ __ESBMC_HIDE:;
  *     (CXL_HDM_ALIGNMENT)
  * ============================================================ */
 
-int cxl_setup_hdm_decoders(struct cxl_dev *cxld,
-                           const struct cxl_region *region)
+int cxl_setup_hdm_decoders(
+  struct cxl_dev *cxld,
+  const struct cxl_region *region)
 {
 __ESBMC_HIDE:;
   assert(cxld != NULL);
@@ -1026,9 +1081,10 @@ void cxl_mem_disable(struct cxl_mem *cxlmem)
   writel(0, (char *)cxlmem->cxld->regs + 0x400);
 }
 
-int cxl_mem_get_regions(struct cxl_mem *cxlmem,
-                        struct cxl_memregion_info *regions,
-                        unsigned int max_regions)
+int cxl_mem_get_regions(
+  struct cxl_mem *cxlmem,
+  struct cxl_memregion_info *regions,
+  unsigned int max_regions)
 {
 __ESBMC_HIDE:;
   assert(cxlmem != NULL);
@@ -1044,7 +1100,8 @@ __ESBMC_HIDE:;
     regions[i].index = i;
     regions[i].base = (u64)(__VERIFIER_nondet_ulong() & ~0xFFFUL);
     regions[i].size = (u64)(__VERIFIER_nondet_ulong() & ~0xFFFUL);
-    if (regions[i].size == 0) regions[i].size = 4096;
+    if (regions[i].size == 0)
+      regions[i].size = 4096;
     regions[i].phys_handle = 0;
     regions[i].mapping = __VERIFIER_nondet_uchar() % 8;
   }
@@ -1066,9 +1123,10 @@ __ESBMC_HIDE:;
   return 0;
 }
 
-int cxl_mem_get_partition_state(struct cxl_mem *cxlmem,
-                                u32 *split_data_size,
-                                u32 *split_pmem_size)
+int cxl_mem_get_partition_state(
+  struct cxl_mem *cxlmem,
+  u32 *split_data_size,
+  u32 *split_pmem_size)
 {
 __ESBMC_HIDE:;
   assert(cxlmem != NULL);
@@ -1080,9 +1138,10 @@ __ESBMC_HIDE:;
   return 0;
 }
 
-int cxl_mem_set_partition_state(struct cxl_mem *cxlmem,
-                                u32 split_data_size,
-                                u32 split_pmem_size)
+int cxl_mem_set_partition_state(
+  struct cxl_mem *cxlmem,
+  u32 split_data_size,
+  u32 split_pmem_size)
 {
 __ESBMC_HIDE:;
   assert(cxlmem != NULL);
@@ -1100,8 +1159,11 @@ __ESBMC_HIDE:;
  *  DMA models
  * ============================================================ */
 
-void *dma_alloc_coherent(struct device *dev, size_t size,
-                         dma_addr_t *dma_handle, unsigned int flag)
+void *dma_alloc_coherent(
+  struct device *dev,
+  size_t size,
+  dma_addr_t *dma_handle,
+  unsigned int flag)
 {
 __ESBMC_HIDE:;
   assert(dev != NULL);
@@ -1135,8 +1197,11 @@ __ESBMC_HIDE:;
   return esbmc_dma_space + offset;
 }
 
-void dma_free_coherent(struct device *dev, size_t size,
-                       void *cpu_addr, dma_addr_t dma_handle)
+void dma_free_coherent(
+  struct device *dev,
+  size_t size,
+  void *cpu_addr,
+  dma_addr_t dma_handle)
 {
 __ESBMC_HIDE:;
   assert(dev != NULL);
@@ -1150,8 +1215,11 @@ __ESBMC_HIDE:;
     esbmc_dma_used[offset + i] = 0;
 }
 
-dma_addr_t dma_map_single(struct device *dev, void *cpu_addr, size_t size,
-                          enum dma_data_direction dir)
+dma_addr_t dma_map_single(
+  struct device *dev,
+  void *cpu_addr,
+  size_t size,
+  enum dma_data_direction dir)
 {
 __ESBMC_HIDE:;
   assert(dev != NULL);
@@ -1163,8 +1231,11 @@ __ESBMC_HIDE:;
   return (dma_addr_t)__VERIFIER_nondet_ulong();
 }
 
-void dma_unmap_single(struct device *dev, dma_addr_t dma_handle, size_t size,
-                      enum dma_data_direction dir)
+void dma_unmap_single(
+  struct device *dev,
+  dma_addr_t dma_handle,
+  size_t size,
+  enum dma_data_direction dir)
 {
   (void)dev;
   (void)dma_handle;
@@ -1172,8 +1243,11 @@ void dma_unmap_single(struct device *dev, dma_addr_t dma_handle, size_t size,
   (void)dir;
 }
 
-void dma_sync_single_for_cpu(struct device *dev, dma_addr_t dma_handle,
-                             size_t size, enum dma_data_direction dir)
+void dma_sync_single_for_cpu(
+  struct device *dev,
+  dma_addr_t dma_handle,
+  size_t size,
+  enum dma_data_direction dir)
 {
   (void)dev;
   (void)dma_handle;
@@ -1181,8 +1255,11 @@ void dma_sync_single_for_cpu(struct device *dev, dma_addr_t dma_handle,
   (void)dir;
 }
 
-void dma_sync_single_for_device(struct device *dev, dma_addr_t dma_handle,
-                                size_t size, enum dma_data_direction dir)
+void dma_sync_single_for_device(
+  struct device *dev,
+  dma_addr_t dma_handle,
+  size_t size,
+  enum dma_data_direction dir)
 {
   (void)dev;
   (void)dma_handle;
@@ -1210,8 +1287,12 @@ __ESBMC_HIDE:;
  *  IRQ models
  * ============================================================ */
 
-int request_irq(unsigned int irq, irq_handler_t handler, unsigned long flags,
-                const char *name, void *dev_id)
+int request_irq(
+  unsigned int irq,
+  irq_handler_t handler,
+  unsigned long flags,
+  const char *name,
+  void *dev_id)
 {
 __ESBMC_HIDE:;
   assert(handler != NULL);
@@ -1246,8 +1327,7 @@ __ESBMC_HIDE:;
 
   for (int i = 0; i < esbmc_irq_count; i++)
   {
-    if (esbmc_irq_table[i].irq == irq &&
-        esbmc_irq_table[i].dev_id == dev_id)
+    if (esbmc_irq_table[i].irq == irq && esbmc_irq_table[i].dev_id == dev_id)
     {
       /* Remove entry by shifting */
       esbmc_irq_count--;
@@ -1296,8 +1376,7 @@ __ESBMC_HIDE:;
   /* Find and invoke the registered handler */
   for (int i = 0; i < esbmc_irq_count; i++)
   {
-    if (esbmc_irq_table[i].irq == irq &&
-        esbmc_irq_table[i].dev_id == dev_id)
+    if (esbmc_irq_table[i].irq == irq && esbmc_irq_table[i].dev_id == dev_id)
     {
       esbmc_irq_table[i].handler(irq, dev_id);
       return;
