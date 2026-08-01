@@ -2512,7 +2512,6 @@ void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  if (!tagged_scalar_names_.empty())
   {
     const std::string stmt_type = ast_node.value("_type", "");
     nlohmann::json tag_target;
@@ -2526,7 +2525,16 @@ void python_converter::get_var_assign(
     if (tag_target.is_object() && tag_target.value("_type", "") == "Name")
     {
       const std::string name = tag_target["id"].get<std::string>();
-      if (tagged_scalar_names_.count(name))
+      bool is_tagged = tagged_scalar_names_.count(name) > 0;
+      if (!is_tagged)
+      {
+        symbol_id sid = create_symbol_id();
+        sid.set_object(name);
+        const symbolt *sym = symbol_table_.find_symbol(sid.to_string());
+        is_tagged = sym && type_handler_.is_tagged_scalar_type(sym->get_type());
+      }
+
+      if (is_tagged)
       {
         if (
           ast_node.contains("value") &&
