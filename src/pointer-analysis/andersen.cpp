@@ -623,8 +623,13 @@ void andersent::to_object_descriptors(node_id n, valuest &dest) const
 void andersent::get_values(locationt, const expr2tc &expr, valuest &dest)
 {
   auto it = expr_to_node.find(base_object(expr));
-  if (it != expr_to_node.end())
-    to_object_descriptors(it->second, dest);
+  if (it == expr_to_node.end())
+  {
+    dest.push_back(unknown2tc(pointer_type2()));
+    return;
+  }
+
+  to_object_descriptors(it->second, dest);
 }
 
 void andersent::get_reference_set(locationt, const expr2tc &expr, valuest &dest)
@@ -636,6 +641,15 @@ void andersent::get_reference_set(locationt, const expr2tc &expr, valuest &dest)
     pointer = base_object(to_dereference2t(pointer).value);
 
   auto it = expr_to_node.find(pointer);
-  if (it != expr_to_node.end())
-    to_object_descriptors(it->second, dest);
+  if (it == expr_to_node.end())
+  {
+    // An expression with no node -- a nested dereference such as `(*q)->f`,
+    // say -- was never constrained, so nothing is known about it. Returning
+    // an empty set here would read as "refers to no object at all" and let
+    // consumers keep facts this access invalidates.
+    dest.push_back(unknown2tc(pointer_type2()));
+    return;
+  }
+
+  to_object_descriptors(it->second, dest);
 }
