@@ -117,19 +117,29 @@ classify_branch_literal_assigns(const nlohmann::json &block)
 
     if (target.value("_type", "") != "Name" || !target.contains("id"))
       continue;
+    const std::string &name = target["id"].get<std::string>();
 
+    // A later reassignment invalidates any literal kind recorded for `name`
+    // by an earlier statement in this same block.
     if (!stmt.contains("value") || stmt["value"].is_null())
+    {
+      types.erase(name);
       continue;
+    }
     const auto &value = stmt["value"];
     if (value.value("_type", "") != "Constant" || !value.contains("value"))
+    {
+      types.erase(name);
       continue;
+    }
 
     const auto &lit = value["value"];
     if (lit.is_string())
-      types[target["id"].get<std::string>()] = "str";
+      types[name] = "str";
     else if (lit.is_number_integer() || lit.is_boolean())
-      types[target["id"].get<std::string>()] = "num";
-    // Anything else (float, None, ...) is left unclassified.
+      types[name] = "num";
+    else
+      types.erase(name);
   }
 
   return types;
