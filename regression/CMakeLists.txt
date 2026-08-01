@@ -56,11 +56,23 @@ endif()
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT
      "${ESBMC_REGRESS_TIMEOUT} + ${ESBMC_REGRESS_TIMEOUT_GRACE}")
 
+# An optional 5th argument names a backend to run the suite under. The tool
+# string is shlex-split by testing_tool.py, so the extra option rides along with
+# the binary; --default-solver only applies when the test itself names no
+# solver, leaving solver-specific tests on their own backend (esbmc/esbmc#1118).
 function(add_esbmc_regression_test folder modes test)
+    set(solver "${ARGN}")
     set(test_name "regression/${folder}/${test}")
+    set(tool "${ESBMC_BIN}")
+    set(extra_labels "")
+    if(solver)
+        set(test_name "${test_name}[${solver}]")
+        set(tool "${ESBMC_BIN} --default-solver=${solver}")
+        set(extra_labels ";cross-backend;cross-backend/${solver}")
+    endif()
     add_test(NAME ${test_name}
              COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
-                     --tool=${ESBMC_BIN}
+                     --tool=${tool}
                      --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder}
                      --modes ${modes}
                      --file=${test}
@@ -70,11 +82,11 @@ function(add_esbmc_regression_test folder modes test)
       PROPERTIES SKIP_RETURN_CODE 10
       TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT}
       ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
-      LABELS "regression;${folder}/")
+      LABELS "regression;${folder}/${extra_labels}")
 endfunction()
 
 function(add_esbmc_regression folder modes)
-    subdirlist(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${regression})
+    subdirlist(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${folder})
     if(${folder} STREQUAL "quixbugs")
         list(REMOVE_ITEM SUBDIRS bucketsort)
     endif()
@@ -83,7 +95,7 @@ function(add_esbmc_regression folder modes)
         list(REMOVE_ITEM SUBDIRS benchmarks)
     endif()
     foreach(test ${SUBDIRS})
-        add_esbmc_regression_test(${folder} "${modes}" ${test})
+        add_esbmc_regression_test(${folder} "${modes}" ${test} ${ARGN})
     endforeach()
 endfunction()
 
@@ -368,6 +380,41 @@ foreach(regression IN LISTS REGRESSIONS)
     endif()
     add_esbmc_regression("${regression}" "${MODES}")
 endforeach()
+
+# Cross-backend regression testing (esbmc/esbmc#1118). Off unless a backend is
+# named, so an ordinary build registers exactly the tests it did before. Each
+# named backend re-registers CROSS_BACKEND_SUITES as
+# `regression/<suite>/<test>[<backend>]`, labelled `cross-backend` and
+# `cross-backend/<backend>`, so one backend can be run on its own:
+#     cmake -DCROSS_BACKEND_SOLVERS="z3;bitwuzla" ...
+#     ctest -L "cross-backend/z3"
+# smtlib additionally needs a solver binary, which has to be supplied through
+# the same mechanism (--smtlib-solver-prog), and that program's own timeout can
+# change verdicts -- so it is deliberately not enabled by default here.
+set(CROSS_BACKEND_SOLVERS "" CACHE STRING
+    "Backends to additionally run CROSS_BACKEND_SUITES under, e.g. z3;bitwuzla")
+set(CROSS_BACKEND_SUITES "esbmc" CACHE STRING
+    "Suites re-run under every entry of CROSS_BACKEND_SOLVERS")
+
+if(CROSS_BACKEND_SOLVERS)
+    string(REPLACE " " ";" _available_solvers "${ESBMC_AVAILABLE_SOLVERS}")
+    list(REMOVE_ITEM _available_solvers "")
+
+    foreach(solver IN LISTS CROSS_BACKEND_SOLVERS)
+        if(NOT solver IN_LIST _available_solvers)
+            message(FATAL_ERROR
+                    "CROSS_BACKEND_SOLVERS names '${solver}', which this build "
+                    "does not have. Available: ${_available_solvers}")
+        endif()
+        foreach(suite IN LISTS CROSS_BACKEND_SUITES)
+            if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${suite}")
+                message(FATAL_ERROR "CROSS_BACKEND_SUITES names '${suite}', which is not a suite")
+            endif()
+            add_esbmc_regression("${suite}" "${MODES}" "${solver}")
+        endforeach()
+    endforeach()
+    message(STATUS "Cross-backend regression: ${CROSS_BACKEND_SUITES} x ${CROSS_BACKEND_SOLVERS}")
+endif()
 
 # Tests that legitimately run close to the per-test TIMEOUT on CI's Linux
 # runners (locally ~20-30s; CI ~75-110s; CI cap 120s, leaving no headroom).
