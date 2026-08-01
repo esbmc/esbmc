@@ -3,6 +3,7 @@
 > **Status: Phases 0-2 discharged against the gates this scope owns
 > (2026-07-31, §11-§13); Phase 3 blocked on two foreign mechanisms, not on
 > this scope's implementation.**
+> **Status: Phases 0 and 1 discharged (2026-07-30); Phases 2-3 not started.**
 > This document exists because `docs/roadmap/scope-v1k-adjuster.md` §"Flip gate
 > (2026-07-29)" closes that scope with exactly one remaining prerequisite and
 > hands it off: *"Next owner: take the coupled conversion effort as its own

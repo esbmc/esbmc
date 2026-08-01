@@ -65,7 +65,8 @@ protected:
   /// \param has_enforce Whether to enforce contracts
   /// \param has_enforce_all Whether to enforce contracts for all annotated functions
   /// \param has_replace_all Whether to replace calls for all annotated functions
-  void process_function_contracts(
+  /// \return True on a usage error, e.g. a named function that nothing acted on
+  bool process_function_contracts(
     goto_functionst &goto_functions,
     bool has_replace,
     bool has_enforce,

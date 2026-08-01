@@ -44,14 +44,15 @@ public:
   };
   size_t ltl_results_seen[4];
 
-  /* ltl_run_thread returns an ltl_res, or one of these sentinels. Finding no
-   * prefix assertion at all is distinct from having proved every one of them
-   * unsatisfiable: the former says nothing about the property. */
+  /* ltl_run_thread returns an ltl_res, or one of these sentinels. A formula
+   * with no prefix assertion, or whose monitor preconditions are violated,
+   * carries no usable prefix verdict: neither ⊤ nor any lower outcome may be
+   * claimed from it (#6547). */
   static constexpr int ltl_res_uninstrumented = -3;
 
-  // Set when an LTL run found no prefix assertion to check, so no four-valued
-  // verdict is available; consulted by report_result to report UNKNOWN rather
-  // than the ⊤ that an absent assertion used to produce.
+  // Set when an LTL run produced no four-valued verdict; consulted by
+  // report_result to report UNKNOWN rather than the ⊤ that an absent or
+  // truncated monitor used to produce.
   std::atomic<bool> ltl_uninstrumented{false};
 
   BigInt interleaving_number;
