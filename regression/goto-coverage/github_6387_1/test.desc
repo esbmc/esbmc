@@ -1,0 +1,7 @@
+CORE
+main.cpp
+--multi-property --assertion-coverage
+^Coverage goals: 2 ✓ 2 reached$
+^Assertion Instances Coverage: 100%$
+^COVERAGE ANALYSIS COMPLETE$
+\A(?![\s\S]*VERIFICATION FAILED)[\s\S]*\Z

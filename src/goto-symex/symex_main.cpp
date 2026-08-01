@@ -9,18 +9,18 @@
 
 #include <pointer-analysis/value_set_analysis.h>
 
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/prefix.h>
-#include <util/pretty.h>
-#include <util/std_expr.h>
-#include <util/time_stopping.h>
-#include <util/type_byte_size.h>
-#include <util/message.h>
+#include <util/irep/migrate.h>
+#include <util/base/prefix.h>
+#include <util/symtab/pretty.h>
+#include <util/irep/std_expr.h>
+#include <util/base/time_stopping.h>
+#include <util/expr/type_byte_size.h>
+#include <util/message/message.h>
 
 #include <vector>
 
@@ -81,11 +81,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   {
     if (options.get_bool_option("multi-property"))
     {
-      // Log that this assertion was trivially verified
-      log_success(
-        "✓ PASSED: '{}' at {}",
-        msg,
-        cur_state->source.pc->location.as_string());
+      record_property_verdict(msg, property_verdictt::Passed);
 
       // Track trivially verified claims
       ++simplified_claims;
@@ -111,10 +107,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   {
     if (options.get_bool_option("multi-property"))
     {
-      log_success(
-        "✓ PASSED (interval): '{}' at {}",
-        msg,
-        cur_state->source.pc->location.as_string());
+      record_property_verdict(msg, property_verdictt::Passed, "interval");
       ++simplified_claims;
     }
 
@@ -147,6 +140,15 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
       return;
     }
   }
+}
+
+void goto_symext::record_property_verdict(
+  const std::string &msg,
+  property_verdictt verdict,
+  const std::string &note)
+{
+  goto_functionst::property_verdicts.record(
+    msg + " at " + cur_state->source.pc->location.as_string(), verdict, note);
 }
 
 void goto_symext::assertion(
@@ -248,7 +250,11 @@ void goto_symext::assume(const expr2tc &the_assumption)
 goto_symext::symex_resultt goto_symext::get_symex_result()
 {
   return goto_symext::symex_resultt(
-    target, total_claims, remaining_claims, simplified_claims);
+    target,
+    total_claims,
+    remaining_claims,
+    simplified_claims,
+    bounded_loop_truncations);
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -327,7 +333,10 @@ void goto_symext::symex_step(reachability_treet &art)
       expr2tc thecode = instruction.code, assign;
       if (make_return_assignment(assign, thecode))
       {
+        auto saved_source = cur_state->source;
+        cur_state->source = cur_state->top().calling_location;
         goto_symext::symex_assign(assign);
+        cur_state->source = saved_source;
       }
 
       symex_return(thecode);

@@ -10,10 +10,10 @@
 #include <list>
 #include <map>
 #include <memory>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <irep2/irep2.h>
-#include <util/namespace.h>
-#include <util/threeval.h>
+#include <util/symtab/namespace.h>
+#include <util/base/threeval.h>
 #include <vector>
 
 class smt_convt;
@@ -272,7 +272,11 @@ public:
   void output(std::ostream &out) const;
   void short_output(std::ostream &out, bool show_ignored = false) const;
 
-  void check_for_duplicate_assigns() const;
+  /** I10: no SSA name is defined twice. Returns false, with one error per
+   *  offender, when the equation is malformed. Opt-in via
+   *  `--double-assign-check`; aborts if an assignment step's lhs is not a
+   *  symbol, which is `assignment()`'s precondition. */
+  bool check_for_duplicate_assigns() const;
 
   void clear()
   {

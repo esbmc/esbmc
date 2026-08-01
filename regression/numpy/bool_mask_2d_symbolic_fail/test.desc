@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: boolean-mask row selection \(a\[mask\]\) requires every mask element to be a literal bool

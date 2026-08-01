@@ -126,6 +126,12 @@ weight: 4
 - Core built-in exception types are supported, but not all Python standard library exceptions; custom exception hierarchies with complex inheritance patterns may not be fully handled.
 - `try`/`finally` is supported (including bare `try`/`finally`), but two shapes are refused at parse time rather than lowered unsoundly: a non-empty `else` clause on the `try` (a pre-existing gap — `orelse` is silently dropped today), and a `return`/`break`/`continue` that escapes the `try`, an `except` handler, or the `finally` body (it would bypass the appended `finally`).
 
+## Methods Without an Operational Model
+
+- A method call whose receiver class cannot be resolved — most commonly a method invoked directly on a **container literal**, e.g. `{1}.isdisjoint({2})` or `[1].foobar()` — evaluates to a **nondeterministic value**, so neither the assertion nor its negation can be discharged and both report `VERIFICATION FAILED`. This is deliberate: the previous fallback returned a null (falsy) value, which *proved* the negation of any such call. Binding the receiver to a name first (`s = {1}` … `s.isdisjoint({2})`) gets the modelled semantics.
+- An attribute assigned from a method whose return type is not the enclosing class, then used as a receiver (`self.pub = self.make_publisher()` followed by `self.pub.publish(...)`), degrades to `Unsupported function 'publish' is reached` / `VERIFICATION FAILED` rather than resolving the call.
+- `self.attr = self.method()` types `attr` by the **enclosing** class and does not perform virtual dispatch, so a subclass override is ignored and a valid polymorphic program can be reported as a false `VERIFICATION FAILED` (pinned as a KNOWNBUG in `regression/python/github_6242_override`).
+
 ## Class Attributes
 
 - Type inference for class attributes requires values with clear, determinable types; complex expressions may require explicit type annotations.

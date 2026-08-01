@@ -4,6 +4,7 @@
 #include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math/math_guard_utils.h>
+#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/set/python_set.h>
@@ -13,18 +14,18 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_expr_builder.h>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_typecast.h>
-#include <util/expr_util.h>
-#include <util/ieee_float.h>
-#include <util/message.h>
-#include <util/python_types.h>
-#include <util/std_expr.h>
-#include <util/c_sizeof.h>
-#include <util/string_constant.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_typecast.h>
+#include <util/expr/expr_util.h>
+#include <util/arith/ieee_float.h>
+#include <util/message/message.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_expr.h>
+#include <util/lang/c_sizeof.h>
+#include <util/expr/string_constant.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 #include <algorithm>
 #include <cctype>
@@ -56,6 +57,29 @@ std::string node_type_of(const nlohmann::json &node)
     throw std::runtime_error("Missing or invalid _type field in AST node");
   }
   return node["_type"].get<std::string>();
+}
+
+/// True when the AST subtree rooted at \p node contains a call.
+bool contains_call(const nlohmann::json &node)
+{
+  if (!node.is_object())
+    return false;
+
+  if (node.contains("_type") && node["_type"] == "Call")
+    return true;
+
+  for (const auto &[key, value] : node.items())
+  {
+    if (value.is_array())
+    {
+      for (const auto &item : value)
+        if (contains_call(item))
+          return true;
+    }
+    else if (value.is_object() && contains_call(value))
+      return true;
+  }
+  return false;
 }
 
 } // namespace
@@ -1068,6 +1092,105 @@ exprt function_call_expr::handle_float_is_integer_literal() const
   // fractional part (mirrors the float OM's `x == int(x)`).
   const bool is_int = std::isfinite(d) && d == std::trunc(d);
   return migrate_expr_back(is_int ? gen_true_expr() : gen_false_expr());
+}
+
+// Render a double as CPython's float.hex() does: sign, a leading hex digit,
+// 13 hex mantissa digits (the 52-bit significand), and a binary exponent
+// "p{sign}{n}". This mirrors CPython's float_hex() (Objects/floatobject.c)
+// bit-for-bit rather than delegating to "%a": the C standard leaves the
+// leading-digit normalisation of %a implementation-defined, and glibc keeps a
+// subnormal's leading digit 0 with exponent -1022 while macOS/BSD libc
+// renormalises to a leading 1 with a smaller exponent — so %a is not portable
+// for subnormals (e.g. 5e-324). A float literal can never be inf/nan here:
+// those overflow the AST-JSON parser before reaching this fold.
+static std::string py_float_hex(double d)
+{
+  if (d == 0.0)
+    return std::signbit(d) ? "-0x0.0p+0" : "0x0.0p+0";
+
+  const bool neg = std::signbit(d);
+  int e;
+  double m = std::frexp(std::fabs(d), &e); // 0.5 <= m < 1, |d| = m * 2^e
+  // Subnormals share the minimum exponent (-1022): keep a leading 0 digit
+  // rather than renormalising to a leading 1.
+  const int shift = 1 - std::max(-1021 - e, 0);
+  m = std::ldexp(m, shift);
+  e -= shift;
+  const int lead = static_cast<int>(m); // 0 (subnormal) or 1 (normal)
+  m -= lead;
+
+  std::string mantissa;
+  for (int i = 0; i < 13; ++i)
+  {
+    m *= 16.0;
+    const int digit = static_cast<int>(m);
+    mantissa += "0123456789abcdef"[digit];
+    m -= digit;
+  }
+
+  char exponent[16];
+  std::snprintf(exponent, sizeof(exponent), "p%+d", e);
+  return std::string(neg ? "-0x" : "0x") + static_cast<char>('0' + lead) + '.' +
+         mantissa + exponent;
+}
+
+exprt function_call_expr::handle_float_hex_literal() const
+{
+  if (
+    !call_["args"].empty() ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    throw std::runtime_error("hex() takes no arguments");
+
+  // Receiver is a constant float literal, or a unary +/- over one.
+  const auto &obj = call_["func"]["value"];
+  const nlohmann::json &lit = obj["_type"] == "UnaryOp" ? obj["operand"] : obj;
+  double d = lit["value"].get<double>();
+  if (
+    obj["_type"] == "UnaryOp" && obj.contains("op") &&
+    ((obj["op"].is_object() && obj["op"].value("_type", "") == "USub") ||
+     (obj["op"].is_string() && obj["op"] == "USub")))
+    d = -d;
+
+  return converter_.get_string_builder().build_string_literal(py_float_hex(d));
+}
+
+exprt function_call_expr::handle_float_fromhex() const
+{
+  if (call_["args"].size() != 1)
+    throw std::runtime_error("float.fromhex() takes exactly one argument");
+
+  std::string s;
+  if (!string_handler::extract_constant_string(call_["args"][0], converter_, s))
+    throw std::runtime_error(
+      "float.fromhex() is only supported on a constant string");
+
+  // Strip leading/trailing ASCII whitespace, as CPython does.
+  std::size_t b = 0, e = s.size();
+  while (b < e && std::isspace(static_cast<unsigned char>(s[b])))
+    ++b;
+  while (e > b && std::isspace(static_cast<unsigned char>(s[e - 1])))
+    --e;
+  const std::string t = s.substr(b, e - b);
+
+  // Fold only the strict C99 hex-float form [sign]0x<hex>[.<hex>]p[sign]<dec>,
+  // i.e. exactly what float.hex() emits. strtod parses that byte-identically to
+  // CPython (verified over ~2000 doubles), so the round trip is exact. CPython
+  // also accepts lenient spellings (hex digits without "0x", a missing "p",
+  // "inf"/"nan") and raises OverflowError on overflow; those are left
+  // unsupported rather than risk a wrong fold.
+  static const std::regex hex_float(
+    R"(^[+-]?0[xX](?:[0-9A-Fa-f]+\.?[0-9A-Fa-f]*|\.[0-9A-Fa-f]+)[pP][+-]?[0-9]+$)");
+  if (!std::regex_match(t, hex_float))
+    throw std::runtime_error(
+      "float.fromhex() only supports the 0x...p... hexadecimal form");
+
+  const round_to_nearest_guard rounding_guard;
+  char *end = nullptr;
+  const double d = std::strtod(t.c_str(), &end);
+  if (end != t.c_str() + t.size() || !std::isfinite(d))
+    throw std::runtime_error("float.fromhex() argument is out of range");
+
+  return from_double(d, type_handler_.get_typet("float", 0));
 }
 
 exprt function_call_expr::handle_bytes_fromhex() const
@@ -2338,7 +2461,35 @@ bool function_call_expr::is_list_method_call() const
     return sym != nullptr && sym->get_type() == list_type;
   }
 
-  return true;
+  // append/insert/remove/extend/sort/reverse/appendleft/popleft are list-only
+  // mutators. The #6264 crash is specifically a *character array* (str/bytes)
+  // receiver routed into the list model, where __ESBMC_list_push is handed an
+  // array where it expects a PyListObject* and aborts GOTO conversion. Claim the
+  // call unless the receiver resolves to such an array type. Every other receiver
+  // is routed into the list model, matching the historical catch-all here:
+  //   - a genuine list is a PyListObject* (a pointer, not an array);
+  //   - a value the annotator can only type loosely still routes correctly —
+  //     e.g. `m = min([l]); m.append(x)`, where min() is typed int though it
+  //     returns the list itself (#5955). A pure `resolves-to-list_type` positive
+  //     check is unsound here: it drops that receiver (whose static type is int)
+  //     and regresses the test.
+  // str/bytes reached through a Name, an attribute, or a subscript all resolve to
+  // an array type, so this also excludes `self.s.append(...)` and
+  // `xs[0].append(...)` (#6264 review), which then fall through to the correct
+  // AttributeError path.
+  {
+    const std::string recv_type = call_["func"]["value"].value("_type", "");
+    if (recv_type == "List" || recv_type == "BinOp" || recv_type == "ListComp")
+      return true;
+    // Converting a receiver that contains a call would re-emit that call: a
+    // discriminator must stay free of IR side effects (see
+    // materialize_list_symbol). Such a receiver is materialised exactly once by
+    // get_object_list_symbol() in the handler, so claim it without converting.
+    if (contains_call(call_["func"]["value"]))
+      return true;
+    const exprt recv = converter_.get_expr(call_["func"]["value"]);
+    return !converter_.ns.follow(recv.type()).is_array();
+  }
 }
 
 exprt function_call_expr::handle_list_method() const
@@ -2784,6 +2935,28 @@ bool function_call_expr::is_float_is_integer_literal_call() const
   const auto &obj = call_["func"]["value"];
   // A constant float literal, or a unary +/- over one (e.g. (-2.0)); a
   // Name receiver is left to the float operational model.
+  if (
+    obj["_type"] == "Constant" && obj.contains("value") &&
+    obj["value"].is_number_float())
+    return true;
+  return obj["_type"] == "UnaryOp" && obj.contains("op") &&
+         obj.contains("operand") && obj["operand"].contains("value") &&
+         obj["operand"]["value"].is_number_float() &&
+         ((obj["op"].is_object() && (obj["op"].value("_type", "") == "USub" ||
+                                     obj["op"].value("_type", "") == "UAdd")) ||
+          (obj["op"].is_string() &&
+           (obj["op"] == "USub" || obj["op"] == "UAdd")));
+}
+
+bool function_call_expr::is_float_hex_literal_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+  if (function_id_.get_function() != "hex")
+    return false;
+  const auto &obj = call_["func"]["value"];
+  // A constant float literal, or a unary +/- over one; a Name receiver has no
+  // float.hex() operational model and is left unsupported.
   if (
     obj["_type"] == "Constant" && obj.contains("value") &&
     obj["value"].is_number_float())
@@ -3478,6 +3651,12 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_float_is_integer_literal(); },
      "float.is_integer()"},
 
+    // float.hex() on a constant literal receiver, e.g. (3.5).hex(). A Name
+    // receiver has no float OM for hex() and stays unsupported.
+    {[this]() { return is_float_hex_literal_call(); },
+     [this]() { return handle_float_hex_literal(); },
+     "float.hex()"},
+
     // Min/Max functions
     {[this]() { return is_min_max_call(); },
      [this]() {
@@ -3685,6 +3864,15 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_bytes_fromhex(); },
      "bytes.fromhex()"},
 
+    // float.fromhex("0x1.8p3") classmethod — fold the strict hex-float form to
+    // a double (the inverse of float.hex()).
+    {[this]() {
+       return function_id_.get_function() == "fromhex" &&
+              get_object_name() == "float";
+     },
+     [this]() { return handle_float_fromhex(); },
+     "float.fromhex()"},
+
     // Built-in type constructors (int, float, str, bool, etc.)
     {[this]() {
        const std::string &func_name = function_id_.get_function();
@@ -3733,6 +3921,12 @@ exprt function_call_expr::handle_general_function_call()
   // list sort/equality model.
   if (std::optional<exprt> folded = try_fold_sorted())
     return *folded;
+
+  // A pure `def f(a): return a` over an array-shaped parameter is inlined
+  // to the caller's own argument (see try_fold_identity_array_return):
+  // arrays aren't a valid by-value return type yet.
+  if (std::optional<exprt> identity = try_fold_identity_array_return())
+    return *identity;
 
   // Skip builtin dispatch if the user imported a function with the same name
   // e.g. "from other import sum" defines a user sum that shadows the builtin
@@ -4194,6 +4388,41 @@ std::optional<exprt> function_call_expr::fold_sorted_symbolic_tuples(
   return std::nullopt;
 }
 
+std::optional<exprt> function_call_expr::try_fold_identity_array_return()
+{
+  std::optional<nlohmann::json> ret_val =
+    converter_.select_return_value_for_call(call_);
+  if (!ret_val)
+    return std::nullopt;
+  if (!converter_.return_value_uses_call_argument(*ret_val, call_))
+    return std::nullopt;
+
+  nlohmann::json substituted =
+    converter_.substitute_call_arguments(*ret_val, call_);
+  exprt ret_expr = converter_.get_expr(substituted);
+  const typet &arg_type = converter_.ns.follow(ret_expr.type());
+  typet element_candidate;
+  if (arg_type.is_array())
+    element_candidate = arg_type;
+  else if (arg_type.is_pointer())
+    element_candidate = converter_.ns.follow(arg_type.subtype());
+
+  if (!element_candidate.is_array())
+    return std::nullopt;
+
+  // Strings are also modelled as char arrays in this codebase; restrict this
+  // fold to numpy-shaped (non-char) arrays so plain `def f(s): return s`
+  // string passthroughs -- already handled correctly elsewhere -- are left
+  // to their existing path.
+  typet innermost = converter_.ns.follow(element_candidate);
+  while (innermost.is_array())
+    innermost = converter_.ns.follow(to_array_type(innermost).subtype());
+  if (innermost == char_type())
+    return std::nullopt;
+
+  return ret_expr;
+}
+
 std::optional<exprt> function_call_expr::try_handle_round(bool is_user_imported)
 {
   const std::string &func_name = function_id_.get_function();
@@ -4558,14 +4787,22 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
 
         if (!method_exists && !is_in_same_class)
         {
-          // In dynamic/untyped flows we may only have fallback class guesses.
-          // Do not inject a hard failure from uncertain inference.
+          // In dynamic/untyped flows we may only have fallback class guesses,
+          // so do not inject a hard failure from uncertain inference. Keep the
+          // null void*: it is a constant, and the folding it enables is what
+          // keeps method-heavy programs tractable (making it nondet here takes
+          // regression/python/jpl from 300 to 2173 VCCs and ~0.01s to >120s of
+          // solving). Its one unsound use is truthiness -- a null reads as
+          // False, so `assert not obj.unresolved()` was *proved* rather than
+          // left unknown -- so tag it and let the `not` arm nondet just that.
+          // Every method on a container literal lands here, since a literal
+          // receiver never resolves to a class (`{1}.isdisjoint({2})`).
           if (inferred_classes_from_fallback)
           {
             locationt location = converter_.get_location_from_decl(call_);
-            // V.3: build the void* null fallback via the IREP2 factory.
             exprt zero_fallback =
               migrate_expr_back(gen_zero(migrate_type(any_type())));
+            zero_fallback.set(PYTHON_UNRESOLVED_CALL_ATTR, true);
             zero_fallback.location() = location;
             zero_fallback.location().user_provided(true);
             return zero_fallback;
@@ -4836,15 +5073,25 @@ size_t function_call_expr::bind_call_receiver(
       // the class type, so the object is sized symbolically by the struct at
       // symex time — robust to the class struct still gaining fields after this
       // construction (which a byte-sized allocation cannot handle).
-      // If the lvalue is `object`/Any (a pointer to void/empty), the
-      // new_object interception cannot size the allocation — the pointee type
-      // has no width. Retype the lvalue (and its symbol) to the class being
-      // constructed; a `void*`/Any slot legitimately holds the resulting
-      // `Class*` pointer. Without this, `t: object = Box()` aborts in symex.
+      // If the lvalue is `object`/Any (a pointer to void/empty) or a `None`
+      // placeholder (a prior `g = None` binding, pointer-to-bool per
+      // none_type()), the new_object interception cannot size the allocation
+      // correctly — the pointee type has no width, or the wrong (bool)
+      // width. Retype the lvalue (and its symbol) to the class being
+      // constructed; a `void*`/Any or `None` slot legitimately holds the
+      // resulting `Class*` pointer once rebound. Without this, `t: object =
+      // Box()` aborts in symex (#4773), and `g = None; g = Box()` allocates
+      // a bool-sized object and overruns it as soon as the constructor
+      // writes a real field (#6243). The none_type() check is a structural
+      // match on pointer-to-bool: this frontend reserves that shape
+      // exclusively for the None sentinel (see util/python_types.cpp), so
+      // it cannot collide with a real user-level bool pointer (Python
+      // exposes no raw pointers).
       if (
         converter_.current_lhs->type().is_pointer() &&
         (converter_.current_lhs->type().subtype().id() == "empty" ||
-         converter_.current_lhs->type().subtype().id().empty()))
+         converter_.current_lhs->type().subtype().id().empty() ||
+         converter_.current_lhs->type() == none_type()))
       {
         const typet class_ptr = gen_pointer_type(call.type());
         converter_.current_lhs->type() = class_ptr;
@@ -4974,19 +5221,15 @@ size_t function_call_expr::bind_call_receiver(
     // Check if this is an instance method being called through the class
     // e.g., MyClass.method(instance) where the first param should be 'self'
     const code_typet &func_type = to_code_type(func_symbol->get_type());
-    bool first_param_is_self = false;
+    std::string first_param;
 
     if (!func_type.arguments().empty())
-    {
-      const std::string &first_param =
-        func_type.arguments()[0].get_base_name().as_string();
-      first_param_is_self = (first_param == "self");
-    }
+      first_param = func_type.arguments()[0].get_base_name().as_string();
 
     // If first parameter is 'self' and we have positional arguments,
     // the first positional arg should be treated as 'self', not as a regular argument
     if (
-      first_param_is_self && !call_["args"].empty() &&
+      first_param == "self" && !call_["args"].empty() &&
       (!call_.contains("keywords") || call_["keywords"].empty() ||
        call_["keywords"][0]["arg"] != "self"))
     {
@@ -4994,11 +5237,34 @@ size_t function_call_expr::bind_call_receiver(
       // Don't add a NULL cls parameter
       param_offset = 1;
     }
+    else if (first_param != "self" && first_param != "cls")
+    {
+      // A genuine @staticmethod (or any call whose callee declares no
+      // bound-receiver parameter at all): no implicit argument is bound
+      // here. Previously this branch unconditionally pushed a bogus null
+      // "cls" argument, shifting every real argument one slot and
+      // corrupting arity (github #6255).
+      param_offset = 0;
+    }
     else
     {
-      // Passing a void pointer to the "cls" argument
-      // (V.3: build the void* null via the IREP2 factory).
-      typet t = pointer_typet(empty_typet());
+      // first_param == "cls" (a real @classmethod, or an int/float OM
+      // method using the same cls-first convention for an always-null
+      // receiver slot -- see the int/float special-casing below), or
+      // first_param == "self" with no usable positional argument.
+      //
+      // A real cls must be typed like self -- a pointer to the callee's
+      // own class -- so cls.<attr> resolves through the same
+      // struct-component lookup that already works for self.<attr>
+      // (github #6255); a bare "self" fallback keeps the prior
+      // pointer-to-void placeholder.
+      std::string cls_name = function_id_.get_class();
+      if (cls_name.empty())
+        cls_name =
+          symbol_id::from_string(func_symbol->id.as_string()).get_class();
+      typet t = (first_param == "cls" && !cls_name.empty())
+                  ? gen_pointer_type(type_handler_.get_typet(cls_name))
+                  : pointer_typet(empty_typet());
       call.arguments().push_back(migrate_expr_back(gen_zero(migrate_type(t))));
       param_offset = 1;
 

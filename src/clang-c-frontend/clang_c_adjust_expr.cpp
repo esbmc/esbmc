@@ -1,19 +1,19 @@
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/c_sizeof.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/ieee_float.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/lang/c_sizeof.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/arith/ieee_float.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/prefix.h>
-#include <util/std_code.h>
-#include <util/type_byte_size.h>
-#include <util/type2name.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_code.h>
+#include <util/expr/type_byte_size.h>
+#include <util/expr/type2name.h>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))
@@ -199,7 +199,10 @@ void clang_c_adjust::adjust_expr(exprt &expr)
       exprt func = expr.op1();
       code_typet &code_type = to_code_type(func.type().subtype());
       exprt arg0 = address_of_exprt(expr.op0());
-      code_type.arguments().push_back(arg0.type());
+      // `this` is the first parameter; appending its type at the back instead
+      // shifted every explicit argument by one (#6293).
+      code_type.arguments().insert(
+        code_type.arguments().begin(), code_typet::argumentt(arg0.type()));
       expr.swap(func);
     }
   }
@@ -689,6 +692,36 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
   adjust_operands(expr);
 
   exprt &op = expr.op0();
+
+  // &(cond ? a : b) is (cond ? &a : &b). In C++ a conditional whose arms are
+  // lvalues of the same type is itself an lvalue ([expr.cond]), so its address
+  // may be taken or a reference bound to it. Distributing the address-of over
+  // the branches lets the resulting pointer alias the selected operand; left
+  // as address_of(if(...)) the pointer analysis fails to resolve either arm
+  // (#6291). Clang only emits address_of(if) for a genuine lvalue conditional,
+  // whose arms already share a type (adjust_if has also typecast them to the
+  // conditional's type by now); the equal-type check is a defensive guard so a
+  // hypothetical mismatched if never yields an if with divergent pointer arms.
+  if (
+    op.id() == "if" && op.operands().size() == 3 &&
+    op.op1().type() == op.op2().type())
+  {
+    exprt addr_true("address_of");
+    addr_true.copy_to_operands(op.op1());
+    addr_true.location() = expr.location();
+    adjust_address_of(addr_true);
+
+    exprt addr_false("address_of");
+    addr_false.copy_to_operands(op.op2());
+    addr_false.location() = expr.location();
+    adjust_address_of(addr_false);
+
+    exprt new_if("if", addr_true.type());
+    new_if.copy_to_operands(op.op0(), addr_true, addr_false);
+    new_if.location() = expr.location();
+    expr.swap(new_if);
+    return;
+  }
 
   // special case: address of function designator
   // ANSI-C 99 section 6.3.2.1 paragraph 4

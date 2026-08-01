@@ -9,14 +9,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::is_low_level_call(const std::string &name)
@@ -253,7 +253,7 @@ void solidity_convertert::move_builtin_to_contract(
 
     struct_typet::componentt comp(sym.name(), sym.name(), sym.type());
     comp.set_access(access);
-    comp.type().set("#member_name", c_sym.get_type().tag());
+    comp.type().member_name(c_sym.get_type().tag());
     {
       typet t = c_sym.get_type();
       to_struct_type(t).components().push_back(comp);

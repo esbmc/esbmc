@@ -8,13 +8,14 @@
 #include <cstring>
 #include <goto-programs/goto_functions.h>
 #include <goto-symex/renaming.h>
+#include <goto-symex/symex_invariant.h>
 #include <goto-symex/symex_target.h>
 #include <pointer-analysis/value_set.h>
 #include <stack>
 #include <string>
 #include <unordered_set>
 #include <irep2/irep2_guard.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <memory>
 #include <vector>
@@ -44,11 +45,13 @@ public:
    *  and value set / pointer tracking situations.
    *  @param l2 Global L2 state reference.
    *  @param vs Global value set reference.
+   *  @param no_propagation Value of --no-propagation, from the live optionst.
    */
   goto_symex_statet(
     renaming::level2t &l2,
     value_sett &vs,
-    const namespacet &_ns);
+    const namespacet &_ns,
+    bool no_propagation);
 
   /**
    *  Copy constructor.
@@ -283,13 +286,13 @@ public:
    */
   inline framet &top()
   {
-    assert(!call_stack.empty());
+    SYMEX_INVARIANT(!call_stack.empty(), "no activation record to read");
     return call_stack.back();
   }
 
   inline const framet &top() const
   {
-    assert(!call_stack.empty());
+    SYMEX_INVARIANT(!call_stack.empty(), "no activation record to read");
     return call_stack.back();
   }
 
@@ -309,7 +312,11 @@ public:
    */
   inline void pop_frame()
   {
-    assert(call_stack.back().merge_state_map.size() == 0);
+    SYMEX_INVARIANT(!call_stack.empty(), "no activation record to pop");
+    // I6: a dropped merge snapshot silently discards the paths it holds.
+    SYMEX_INVARIANT(
+      call_stack.back().merge_state_map.empty(),
+      "activation record popped with unmerged path snapshots");
     call_stack.pop_back();
   }
 
@@ -318,7 +325,11 @@ public:
    */
   inline const framet &previous_frame()
   {
-    return *(--(--call_stack.end()));
+    // Indexed rather than `*(--(--end()))`, which at size 1 forms a pointer
+    // before the start of the vector ([expr.add]/4).
+    SYMEX_INVARIANT(
+      call_stack.size() >= 2, "no caller frame beneath the current one");
+    return call_stack[call_stack.size() - 2];
   }
 
   // Methods
@@ -450,6 +461,10 @@ public:
 
   /** Flag saying whether to maintain pointer value set tracking. */
   bool use_value_set;
+  /** Flag saying constant propagation was disabled with --no-propagation.
+   *  Cached because constant_propagation() runs on every assignment and
+   *  get_bool_option does a string-keyed map lookup. */
+  bool no_propagation = false;
   /** Reference to global l2 state. */
   renaming::level2t &level2;
   /** Reference to global pointer tracking state. */

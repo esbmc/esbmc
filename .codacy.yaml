@@ -49,15 +49,15 @@ engines:
       # Flawfinder's name-based check produces only false positives on
       # these files; renaming the API would churn thousands of call sites
       # across every downstream fork. The wider files surrounding the
-      # call sites in src/util/c_expr2string.cpp,
-      # src/util/cpp_expr2string.cpp, and src/goto2c/expr2c.cpp are
+      # call sites in src/util/lang/c_expr2string.cpp,
+      # src/util/lang/cpp_expr2string.cpp, and src/goto2c/expr2c.cpp are
       # intentionally NOT excluded — those files contain code unrelated
       # to the read() call and remain in scope for flawfinder.
-      - 'src/util/irep.h'
-      - 'src/util/irep.cpp'
-      - 'src/util/parser.h'
-      - 'src/util/c_qualifiers.h'
-      - 'src/util/c_qualifiers.cpp'
+      - 'src/util/irep/irep.h'
+      - 'src/util/irep/irep.cpp'
+      - 'src/util/lang/parser.h'
+      - 'src/util/lang/c_qualifiers.h'
+      - 'src/util/lang/c_qualifiers.cpp'
 
   bandit:
     enabled: true
@@ -77,6 +77,24 @@ engines:
       # hypothesis — see unit/python-frontend/test_decimal_model.py and
       # siblings.
       - 'unit/python-frontend/**'
+
+      # Developer build and test tooling, run by hand or from CI against a
+      # checkout — never shipped, and never fed untrusted input. Driving
+      # another program IS the job of these scripts (esbmc for
+      # ld_resolver_oracle.py, csmith and a compiler for run_csmith.py,
+      # gcov for cov-report.py), so B404 "consider implications of the
+      # subprocess module" and B603 "subprocess call - check for execution
+      # of untrusted input" fire on every one of them. B603 in particular
+      # fires on the *recommended* form: a fixed argv list with no shell.
+      # B311 likewise flags the seeded PRNG that ld_resolver_oracle.py
+      # needs precisely because a failing case must be reproducible from
+      # its seed alone; a cryptographic generator would defeat that.
+      # Bandit's own `# nosec` markers are not honoured by Codacy and
+      # patterns cannot be disabled in this file, so the path is excluded
+      # instead. This mirrors the global 'regression/**' exclusion above,
+      # which already covers the identical findings in
+      # regression/testing_tool.py.
+      - 'scripts/**'
 
   cppcheck:
     enabled: true

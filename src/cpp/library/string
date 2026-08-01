@@ -6,9 +6,14 @@
 #include "cstring"
 #include "cstdio"
 #include "cassert"
+// Explicit, not via the C++11-guarded <string_view> below (github #3267).
+#include "cstdint"
 #include "iostream"
 #include "cstdlib"
 #include "memory"
+#if __cplusplus >= 201103L
+#  include "string_view" // string_view itself is C++11-only syntax
+#endif
 
 #define STRING_CAPACITY 128
 
@@ -535,17 +540,10 @@ public:
 
   char *c_str() const;
   bool operator>(basic_string<CharT, Traits, Alloc> &a);
-  bool operator>(const char *a);
-  friend bool
-  operator>(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs);
-  friend bool
-  operator>(basic_string<CharT, Traits, Alloc> &lhs, const char *rhs);
   bool operator<(basic_string<CharT, Traits, Alloc> &a);
-  bool operator<(const char *a);
-  friend bool
-  operator<(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs);
-  friend bool
-  operator<(basic_string<CharT, Traits, Alloc> &lhs, const char *rhs);
+  // The const char* relational overloads are non-member free templates (like
+  // operator==/!=), not members: a member operator>(const char*) would be
+  // ambiguous with the free operator>(basic_string&, const char*) for s > "lit".
   bool operator>=(basic_string<CharT, Traits, Alloc> &a);
   bool operator>=(const char *lhs);
   bool operator<=(basic_string<CharT, Traits, Alloc> &a);
@@ -590,6 +588,58 @@ public:
   size_t find(const char *s, size_t pos = 0) const;
   size_t find(const char *s, size_t pos, size_t n) const;
   size_t find(char c, size_t pos = 0) const;
+
+#if __cplusplus >= 202002L
+  bool starts_with(const basic_string<CharT, Traits, Alloc> &x) const
+  {
+    if (x._size > this->_size)
+      return false;
+    for (int i = 0; i < x._size; i++)
+      if (this->str[i] != x.str[i])
+        return false;
+    return true;
+  }
+  bool starts_with(CharT c) const
+  {
+    return this->_size > 0 && this->str[0] == c;
+  }
+  bool starts_with(const CharT *s) const
+  {
+    for (int i = 0; s[i] != '\0'; i++)
+      if (i >= this->_size || this->str[i] != s[i])
+        return false;
+    return true;
+  }
+
+  bool ends_with(const basic_string<CharT, Traits, Alloc> &x) const
+  {
+    if (x._size > this->_size)
+      return false;
+    int off = this->_size - x._size;
+    for (int i = 0; i < x._size; i++)
+      if (this->str[off + i] != x.str[i])
+        return false;
+    return true;
+  }
+  bool ends_with(CharT c) const
+  {
+    return this->_size > 0 && this->str[this->_size - 1] == c;
+  }
+  bool ends_with(const CharT *s) const
+  {
+    int n = 0;
+    while (s[n] != '\0')
+      n++;
+    if (n > this->_size)
+      return false;
+    int off = this->_size - n;
+    for (int i = 0; i < n; i++)
+      if (this->str[off + i] != s[i])
+        return false;
+    return true;
+  }
+#endif
+
   basic_string<CharT, Traits, Alloc> &
   assign(basic_string<CharT, Traits, Alloc> &s);
   basic_string<CharT, Traits, Alloc> &assign(const char *s, size_t n);
@@ -1032,7 +1082,7 @@ public:
   size_t copy(char *s, size_t n, size_t pos = 0) const;
   const char *data() const;
 
-  basic_string<CharT, Traits, Alloc> substr(size_t pos, size_t n)
+  basic_string<CharT, Traits, Alloc> substr(size_t pos, size_t n) const
   {
   __ESBMC_HIDE:
     __ESBMC_assert(pos >= 0, "The first parameter must be greater than zero");
@@ -1120,6 +1170,17 @@ public:
     return *this;
   }
 
+#if __cplusplus >= 201103L
+  /* [string.accessors]: `constexpr operator basic_string_view<charT, traits>()
+   * const noexcept`. The model's string_view is char-only, so this is
+   * well-formed exactly for basic_string<char>; instantiating it for wstring
+   * is ill-formed, as the conversion is in the real library too. */
+  operator string_view() const OM_NOEXCEPT
+  {
+    return string_view(c_str(), size());
+  }
+#endif
+
 private:
 };
 
@@ -1129,6 +1190,12 @@ typedef basic_string<char> string;
 // operations are not modelled.
 typedef basic_string<wchar_t> wstring;
 } // namespace std
+
+/* basic_string is complete from here on, so the exception hierarchy -- whose
+ * what_arg constructors take a const std::string & -- can be defined now. It
+ * must be in scope before the out-of-line member definitions below, because
+ * basic_string::at throws std::out_of_range ([string.access]). */
+#include "__stdexcept_base"
 
 namespace std
 {
@@ -1238,26 +1305,9 @@ bool basic_string<CharT, Traits, Alloc>::operator>(
 __ESBMC_HIDE:
   __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
   int i;
-  for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++)
-  {
-    if (this->str[i] > a.str[i])
-      return true;
-  }
-  return false;
-}
-
-template <typename CharT, typename Traits, typename Alloc>
-bool basic_string<CharT, Traits, Alloc>::operator>(const char *a)
-{
-__ESBMC_HIDE:
-  __ESBMC_assert(a != NULL, "The parameter must be different than NULL");
-  int i;
-  for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++)
-  {
-    if (this->str[i] > a[i])
-      return true;
-  }
-  return false;
+  for (i = 0; this->str[i] != '\0' && this->str[i] == a.str[i]; i++)
+    ;
+  return (unsigned char)this->str[i] > (unsigned char)a.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1271,12 +1321,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs.str[i] != '\0') && (rhs.str[i] != '\0'); i++)
-  {
-    if (lhs.str[i] > rhs.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] > (unsigned char)rhs.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1290,12 +1337,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs.str[i] != '\0') && (rhs.str[i] != '\0'); i++)
-  {
-    if (lhs.str[i] < rhs.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] < (unsigned char)rhs.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1307,12 +1351,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs[i] != '\0') && (rhs.str[i] != '\0'); i++)
-  {
-    if (lhs[i] > rhs.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs[i] != '\0' && lhs[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs[i] > (unsigned char)rhs.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1324,12 +1365,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs.str[i] != '\0') && (rhs[i] != '\0'); i++)
-  {
-    if (lhs.str[i] > rhs[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] > (unsigned char)rhs[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1339,26 +1377,9 @@ bool basic_string<CharT, Traits, Alloc>::operator<(
 __ESBMC_HIDE:
   __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
   int i;
-  for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++)
-  {
-    if (this->str[i] < a.str[i])
-      return true;
-  }
-  return false;
-}
-
-template <typename CharT, typename Traits, typename Alloc>
-bool basic_string<CharT, Traits, Alloc>::operator<(const char *a)
-{
-__ESBMC_HIDE:
-  __ESBMC_assert(a != NULL, "The parameter must be different than NULL");
-  int i;
-  for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++)
-  {
-    if (this->str[i] < a[i])
-      return true;
-  }
-  return false;
+  for (i = 0; this->str[i] != '\0' && this->str[i] == a.str[i]; i++)
+    ;
+  return (unsigned char)this->str[i] < (unsigned char)a.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1370,12 +1391,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs[i] != '\0') && (rhs.str[i] != '\0'); i++)
-  {
-    if (lhs[i] < rhs.str[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs[i] != '\0' && lhs[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs[i] < (unsigned char)rhs.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1387,12 +1405,9 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     rhs != NULL, "The second parameter must be different than NULL");
   int i;
-  for (i = 0; (lhs.str[i] != '\0') && (rhs[i] != '\0'); i++)
-  {
-    if (lhs.str[i] < rhs[i])
-      return true;
-  }
-  return false;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] < (unsigned char)rhs[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1461,6 +1476,30 @@ __ESBMC_HIDE:
   }
 }
 
+// Free const char*-on-the-left overloads, so "lit" >= s / "lit" <= s resolve
+// (the member operators only cover s >= "lit" / s <= "lit").
+template <typename CharT, typename Traits, typename Alloc>
+bool operator>=(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs)
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(
+    lhs != NULL, "The first parameter must be different than NULL");
+  __ESBMC_assert(
+    rhs.str != NULL, "The second parameter must be different than NULL");
+  return strcmp(lhs, rhs.str) >= 0;
+}
+
+template <typename CharT, typename Traits, typename Alloc>
+bool operator<=(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs)
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(
+    lhs != NULL, "The first parameter must be different than NULL");
+  __ESBMC_assert(
+    rhs.str != NULL, "The second parameter must be different than NULL");
+  return strcmp(lhs, rhs.str) <= 0;
+}
+
 template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::length() const
 {
@@ -1511,12 +1550,15 @@ __ESBMC_HIDE:
 template <typename CharT, typename Traits, typename Alloc>
 char basic_string<CharT, Traits, Alloc>::at(size_t pos) const
 {
+  // [string.access]: at throws std::out_of_range when pos >= size(). The throw
+  // must stay lexically in this body -- ESBMC's exception lowering only marks a
+  // function as throwing when the throw is directly in it, so routing it
+  // through a helper would silently drop the landing pad at the call site.
+  // Message-less, as in vector::at: constructing a std::string what_arg would
+  // drag a malloc/strlen into every at() call, and a catch of out_of_range or
+  // of exception still matches.
   if (pos >= this->length())
-  {
-    // TODO: when we support try-catch, replace the assert with the throw statement below
-    //throw out_of_range();
-    __ESBMC_assert(0, "basic_string append failed, out_of_range");
-  }
+    throw std::out_of_range();
 
   return this->str[pos];
 }
@@ -3387,29 +3429,49 @@ std::string to_string(long double value)
   return string(buffer);
 }
 
-int stoi(const std::string &str, size_t *pos = 0, int base = 10)
-{
-  const char *c_str = str.c_str();
+/* [string.conversions]. Only stoi and stof were modelled, and both ignored
+ * `pos`, which must receive the index of the first unconverted character.
+ *
+ * The standard has these throw invalid_argument when no conversion happens;
+ * OM code cannot throw a catchable exception (#6338), so the model asserts.
+ * Out-of-range values are not diagnosed: the underlying strto* saturate, and
+ * adding the check would raise new claims on programs that verify today. */
+#define OM_STOI(fn, type, cfn)                                                 \
+  inline type fn(const std::string &str, size_t *pos = 0, int base = 10)       \
+  {                                                                            \
+    const char *c_str = str.c_str();                                           \
+    char *endptr;                                                              \
+    type result = static_cast<type>(cfn(c_str, &endptr, base));                \
+    __ESBMC_assert(endptr != c_str, "No digits in input string");              \
+    if (pos != 0)                                                              \
+      *pos = static_cast<size_t>(endptr - c_str);                              \
+    return result;                                                             \
+  }
 
-  char *endptr;
-  long result = std::strtol(c_str, &endptr, base);
+#define OM_STOF(fn, type, cfn)                                                 \
+  inline type fn(const std::string &str, size_t *pos = 0)                      \
+  {                                                                            \
+    const char *c_str = str.c_str();                                           \
+    char *endptr;                                                              \
+    type result = cfn(c_str, &endptr);                                         \
+    __ESBMC_assert(endptr != c_str, "No digits in input string");              \
+    if (pos != 0)                                                              \
+      *pos = static_cast<size_t>(endptr - c_str);                              \
+    return result;                                                             \
+  }
 
-  __ESBMC_assert(endptr != c_str, "No digits in input string");
+OM_STOI(stoi, int, std::strtol)
+OM_STOI(stol, long, std::strtol)
+OM_STOI(stoul, unsigned long, std::strtoul)
+OM_STOI(stoll, long long, std::strtoll)
+OM_STOI(stoull, unsigned long long, std::strtoull)
 
-  return static_cast<int>(result);
-}
+OM_STOF(stof, float, std::strtof)
+OM_STOF(stod, double, std::strtod)
+OM_STOF(stold, long double, std::strtold)
 
-float stof(const std::string &str, size_t *pos = 0)
-{
-  const char *c_str = str.c_str();
-
-  char *endptr;
-  float result = std::strtof(c_str, &endptr);
-
-  __ESBMC_assert(endptr != c_str, "No digits in input string");
-
-  return result;
-}
+#undef OM_STOI
+#undef OM_STOF
 
 } // namespace std
 #endif

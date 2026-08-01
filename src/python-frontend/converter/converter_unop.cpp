@@ -1,12 +1,12 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type/type_utils.h>
-#include <util/c_typecast.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
 
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 {
@@ -26,6 +26,20 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 
   // Get the operand expression
   exprt unary_sub = get_expr(element["operand"]);
+
+  // An unresolved method call yields a placeholder null (see
+  // PYTHON_UNRESOLVED_CALL_ATTR). Reading that null as False would let
+  // `not obj.unresolved()` be proved from an inference gap, so this is the one
+  // context where the result has to be unknown rather than constant.
+  if (
+    element["op"]["_type"] == "Not" &&
+    unary_sub.get_bool(PYTHON_UNRESOLVED_CALL_ATTR))
+  {
+    side_effect_expr_nondett unknown_truth(bool_type());
+    unknown_truth.location() = get_location_from_decl(element);
+    unknown_truth.location().user_provided(true);
+    return unknown_truth;
+  }
 
   // Use operand's exact type to preserve metadata
   if (!unary_sub.type().is_nil() && !unary_sub.type().is_empty())

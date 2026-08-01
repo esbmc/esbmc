@@ -1,6 +1,6 @@
 #include <cassert>
 #include <goto-symex/goto_symex.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 
 expr2tc goto_symex_statet::framet::process_stack_size(

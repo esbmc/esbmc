@@ -1,4 +1,4 @@
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Frontend/ASTUnit.h>
@@ -12,14 +12,14 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-c-frontend/clang_c_main.h>
-#include <util/c_expr2string.h>
+#include <util/lang/c_expr2string.h>
 #include <sstream>
-#include <util/c_link.h>
+#include <util/lang/c_link.h>
 
-#include <util/filesystem.h>
+#include <util/base/filesystem.h>
 #include <clang-c-frontend/nested_func_transform.h>
 #include <clang-c-frontend/clang_c_lexer.h>
-#include <util/yaml_parser.h>
+#include <util/base/yaml_parser.h>
 
 #include <ac_config.h>
 
@@ -87,6 +87,12 @@ void clang_c_languaget::build_compiler_args(
       "-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_check");
     compiler_args.emplace_back("-Dsem_wait=sem_wait_check");
+    // Only the blocking acquisitions need renaming: pthread_rwlock_unlock's
+    // waiter release is inert when nothing registered a waiter.
+    compiler_args.emplace_back(
+      "-Dpthread_rwlock_rdlock=pthread_rwlock_rdlock_check");
+    compiler_args.emplace_back(
+      "-Dpthread_rwlock_wrlock=pthread_rwlock_wrlock_check");
   }
   else if (config.options.get_bool_option("lock-order-check"))
   {
@@ -502,12 +508,13 @@ extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
 // Contract predicate: indicates that a pointer points to freshly allocated memory
-// Signature: __ESBMC_is_fresh(void **ptr, size_t size)
-// - ptr: Address of the pointer variable (semantically void**, declared as void* to avoid Clang USR issues)
+// Signature: __ESBMC_is_fresh(p, size)
+// - p: The pointer itself, passed bare. const so that const-qualified pointer
+//      params are accepted, which C++ overload resolution otherwise rejects.
 // - size: Size in bytes of the memory region
 // Returns: true when memory is successfully allocated (in contract enforcement mode)
 // Note: Used in requires clauses to specify fresh memory allocation requirements
-_Bool __ESBMC_is_fresh(void*, __SIZE_TYPE__);
+_Bool __ESBMC_is_fresh(const void*, __SIZE_TYPE__);
 
 _Bool __ESBMC_is_little_endian();
 

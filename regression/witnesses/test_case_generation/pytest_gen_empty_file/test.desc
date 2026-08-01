@@ -1,0 +1,7 @@
+CORE
+main.py
+--generate-pytest-testcase --pytest-output-dir out --unwind 2
+^Generated pytest test case
+^VERIFICATION FAILED$
+SEED_FILE out/test_main.py
+CHECK_FILE out/test_main.py contains def test_

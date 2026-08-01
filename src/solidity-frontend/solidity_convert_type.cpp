@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::get_type_description(
@@ -543,14 +543,14 @@ bool solidity_convertert::get_type_description(
   {
     // do nothing as it won't be used
     new_type = struct_typet();
-    new_type.set("#cpp_type", "void");
+    new_type.cpp_type("void");
     set_sol_type(new_type, SolidityGrammar::SolType::TUPLE_RETURNS);
     break;
   }
   case SolidityGrammar::TypeNameT::ErrorTypeName:
   {
     new_type = empty_typet();
-    new_type.set("#cpp_type", "void");
+    new_type.cpp_type("void");
     break;
   }
   case SolidityGrammar::TypeNameT::UserDefinedTypeName:
@@ -694,7 +694,7 @@ bool solidity_convertert::get_array_to_pointer_type(
     std::string::npos)
   {
     new_type = unsigned_char_type();
-    new_type.set("#cpp_type", "unsigned_char");
+    new_type.cpp_type("unsigned_char");
   }
   else
   {
@@ -849,7 +849,7 @@ bool solidity_convertert::get_elementary_type_name(
   {
     // for int_const type
     new_type = signedbv_typet(256);
-    new_type.set("#cpp_type", "signed_char");
+    new_type.cpp_type("signed_char");
     set_sol_type(new_type, SolidityGrammar::SolType::INT_CONST);
     break;
   }
@@ -981,7 +981,7 @@ bool solidity_convertert::get_parameter_list(
   {
     // equivalent to clang's "void"
     new_type = empty_typet();
-    new_type.set("#cpp_type", "void");
+    new_type.cpp_type("void");
     break;
   }
   case SolidityGrammar::ParameterListT::ONE_PARAM:
@@ -1009,7 +1009,7 @@ bool solidity_convertert::get_parameter_list(
     // We will return null because we create the symbols of the struct accordingly
     assert(type_name["parameters"].size() > 1);
     new_type = empty_typet();
-    new_type.set("#cpp_type", "void");
+    new_type.cpp_type("void");
     set_sol_type(new_type, SolidityGrammar::SolType::TUPLE_RETURNS);
     break;
   }

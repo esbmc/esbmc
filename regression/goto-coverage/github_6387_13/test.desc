@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--multi-property --assertion-coverage --show-vcc
+^Generated 2 VCC\(s\)
+\A(?![\s\S]*COVERAGE ANALYSIS)[\s\S]*\Z
+\A(?![\s\S]*VERIFICATION (SUCCESSFUL|FAILED|UNKNOWN))[\s\S]*\Z

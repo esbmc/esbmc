@@ -10,8 +10,8 @@
 
 #include <unordered_map>
 #include <unordered_set>
-#include <util/message.h>
-#include <util/options.h>
+#include <util/message/message.h>
+#include <util/config/options.h>
 
 /** White-list of ESBMC internal symbol names that must never be treated as
  *  race-eligible user globals. */
@@ -96,6 +96,11 @@ public:
   /**
    *  Return current execution_statet being explored / symex'd.
    *  @return Current execution_statet being explored.
+   *  Only valid while exploration_frames is non-empty. generate_schedule_formula()
+   *  drains exploration_frames completely before returning, leaving cur_frame_it
+   *  at exploration_frames.end() — do not call this (or get_cur_scheduler_frame())
+   *  after that point without first re-establishing a frame via
+   *  setup_for_new_explore().
    */
   execution_statet &get_cur_state();
   const execution_statet &get_cur_state() const;
@@ -279,6 +284,9 @@ public:
   optionst &options;
   /** __ESBMC_main thread has ended */
   bool main_thread_ended;
+  /** --context-bound cut an available switch: the schedule space was truncated
+   *  rather than exhausted (issue #6480). */
+  bool cs_bound_pruned;
 
 protected:
   struct scheduler_framet
@@ -337,6 +345,8 @@ protected:
   unsigned int schedule_remaining_claims;
   /** Number of trivial claims in current --schedule exploration */
   unsigned int schedule_simplified_claims;
+  /** Loops cut off at the unwinding bound in current --schedule exploration */
+  unsigned int schedule_bounded_loop_truncations;
   /** Next thread ID to switch to, decided by analyse_* routines */
   unsigned int next_thread_id;
   /** Whether partial-order-reduction is enabled */

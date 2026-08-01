@@ -21,19 +21,19 @@ extern "C"
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/sarif.h>
-#include <util/cwe_mapping.h>
+#include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
-#include <util/config.h>
-#include <util/filesystem.h>
+#include <util/config/config.h>
+#include <util/base/filesystem.h>
 #include <csignal>
 #include <cstdlib>
 #include <limits>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <iostream>
 #include <fstream>
 #include <goto-programs/add_race_assertions.h>
@@ -66,15 +66,15 @@ extern "C"
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
-#include <util/irep.h>
+#include <util/irep/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <memory>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
 #include <pointer-analysis/value_set_analysis.h>
-#include <util/symbol.h>
-#include <util/time_stopping.h>
+#include <util/symtab/symbol.h>
+#include <util/base/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
 #include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
@@ -251,8 +251,12 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // have continued past an earlier violation, so we must return 1 even when
   // the closing step (FC/IS) itself succeeds.
   auto conclude = [&]() -> int {
-    // In coverage mode violations are expected; always report success.
-    if (any_violation_found && !is_coverage)
+    // A coverage run measures reachability; it neither proved nor refuted
+    // anything about the program, so it emits no verdict and always exits 0.
+    // report_coverage has already printed the completeness line.
+    if (is_coverage)
+      return 0;
+    if (any_violation_found)
     {
       log_fail("\nVERIFICATION FAILED");
       return 1;
@@ -458,8 +462,18 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // falsification
     if (options.get_bool_option("falsification"))
     {
-      if (is_base_case_violated(options, goto_functions, k_step).is_true())
+      const bool violated =
+        is_base_case_violated(options, goto_functions, k_step).is_true();
+      if (violated && !is_coverage)
         return 1;
+      // A coverage run has no verdict to falsify, so nothing would ever stop
+      // the escalation: without this it re-solves every goal at each bound and
+      // prints one [Coverage] block per k step. One pass is what falsification
+      // did here before the verdict was removed. multi_property_check has
+      // already reported that pass, so return rather than fall through to the
+      // max-k-step exit, whose reason would not apply.
+      if (is_coverage)
+        return 0;
     }
   }
 
@@ -468,16 +482,24 @@ int esbmc_parseoptionst::do_bmc_strategy(
     options.get_bool_option("k-induction"))
     diagnose_unknown_properties(options, goto_functions, last_k_step);
 
-  log_status("Unable to prove or falsify the program, giving up.");
-  log_fail("VERIFICATION UNKNOWN");
-
   if (is_coverage)
+  {
+    // Exhausting the k steps bounds how much of the program was explored, so
+    // goals that were never reached may simply lie beyond the last unwinding.
+    note_cov_incomplete(
+      "the run ended at the maximum k step without proving the program fully "
+      "unwound; goals beyond that bound may never have been explored");
     report_coverage(
       options,
       goto_functions.reached_claims,
       goto_functions.reached_mul_claims,
       pytest_gen,
       ctest_gen);
+    return 0;
+  }
+
+  log_status("Unable to prove or falsify the program, giving up.");
+  log_fail("VERIFICATION UNKNOWN");
   return 0;
 }
 
@@ -494,6 +516,63 @@ int esbmc_parseoptionst::do_bmc_strategy(
 //  1) GOTO program,
 //  2) verification options.
 //  3) program context,
+// Iterative deepening on the context bound (issue #6480): unbounded DFS can
+// strand a counterexample that needs few switches but sits deep in DFS order.
+//
+// Each round under-approximates the schedule space, so a violation at any bound
+// is genuine. The converse needs cs_bound_pruned: "no violation at bound k" is
+// a proof only once a round completes without the bound cutting anything.
+int esbmc_parseoptionst::do_context_bound_deepening(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  const int max_cb = atoi(options.get_option("max-context-bound").c_str());
+
+  if (max_cb < 1)
+  {
+    log_error("--max-context-bound ({}) must be at least 1.", max_cb);
+    return 6;
+  }
+
+  options.set_option("suppress-bounded-success", true);
+
+  for (int cb = 1; cb <= max_cb; ++cb)
+  {
+    options.set_option("context-bound", std::to_string(cb));
+
+    bmct bmc(goto_functions, options, context);
+    log_progress("Checking with context bound {}", cb);
+
+    const int res = do_bmc(bmc);
+
+    if (res == P_SATISFIABLE)
+      return 1;
+
+    // A solver failure or SMT-LIB-only emission says nothing about deeper
+    // bounds, so stop rather than deepen.
+    if (res != P_UNSATISFIABLE)
+      return res;
+
+    if (!bmc.cs_bound_pruned)
+    {
+      log_status(
+        "Context bound {} covered every interleaving; result is not bounded by "
+        "it",
+        cb);
+      options.set_option("suppress-bounded-success", false);
+      log_success("\nVERIFICATION SUCCESSFUL");
+      return 0;
+    }
+  }
+
+  log_status(
+    "Reached --max-context-bound ({}) with the schedule space still truncated; "
+    "the program is safe only up to that many context switches",
+    max_cb);
+  log_fail("VERIFICATION UNKNOWN");
+  return 0;
+}
+
 int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");
@@ -524,7 +603,11 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
     // via (get-value). Report a clean failure rather than let the exception
     // reach std::terminate.
     log_error("SMT solver process failed: {}", e.what());
-    res = P_ERROR;
+    // A violation already found and printed is not retracted by a later
+    // interleaving whose solver then died (--multi-property explores past the
+    // first violation).
+    res = goto_functionst::property_verdicts.has_violation() ? P_SATISFIABLE
+                                                             : P_ERROR;
   }
 
 #ifdef HAVE_SENDFILE_ESBMC

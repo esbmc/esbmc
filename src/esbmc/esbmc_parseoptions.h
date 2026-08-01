@@ -4,11 +4,11 @@
 #include <esbmc/bmc.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <langapi/language_ui.h>
-#include <util/cmdline.h>
-#include <util/options.h>
-#include <util/parseoptions.h>
-#include <util/algorithms.h>
-#include <util/threeval.h>
+#include <util/config/cmdline.h>
+#include <util/config/options.h>
+#include <util/config/parseoptions.h>
+#include <util/ssa/algorithms.h>
+#include <util/base/threeval.h>
 #include <string_view>
 
 // Macro to determine if color output should be enabled
@@ -65,7 +65,8 @@ protected:
   /// \param has_enforce Whether to enforce contracts
   /// \param has_enforce_all Whether to enforce contracts for all annotated functions
   /// \param has_replace_all Whether to replace calls for all annotated functions
-  void process_function_contracts(
+  /// \return True on a usage error, e.g. a named function that nothing acted on
+  bool process_function_contracts(
     goto_functionst &goto_functions,
     bool has_replace,
     bool has_enforce,
@@ -73,6 +74,10 @@ protected:
     bool has_replace_all);
 
   int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
+
+  int do_context_bound_deepening(
+    optionst &options,
+    goto_functionst &goto_functions);
 
   int doit_k_induction_parallel();
 

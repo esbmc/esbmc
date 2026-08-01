@@ -2,8 +2,8 @@
 #define ESBMC_PYTHON_TUPLE_HANDLER_H
 
 #include <python-frontend/python_converter.h>
-#include <util/type.h>
-#include <util/expr.h>
+#include <util/irep/type.h>
+#include <util/irep/expr.h>
 #include <nlohmann/json.hpp>
 #include <string>
 

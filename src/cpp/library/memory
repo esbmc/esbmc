@@ -298,13 +298,15 @@ public:
     return *this;
   }
 
-#if 0
-  // TODO: fix remove goto sideeffect
+  /* Disabled until the class-typed conditional operator elided its temporaries:
+   * with a destructor present, the old lowering destroyed every branch
+   * temporary, so `cond ? unique_ptr<T>(new T) : nullptr` reported a false
+   * double free. Without one the model never frees, which reports a spurious
+   * leak on correct RAII and misses a real use-after-free. */
   ~unique_ptr()
   {
     deleter(ptr);
   }
-#endif
 
   T *operator->() const
   {
@@ -423,6 +425,11 @@ public:
     ptr = other.release();
     deleter = std::move(other.get_deleter());
     return *this;
+  }
+
+  ~unique_ptr()
+  {
+    deleter(ptr);
   }
 
   T &operator[](size_t i) const
@@ -568,6 +575,315 @@ template <
 unique_ptr<T> make_unique(size_t n)
 {
   return unique_ptr<T>(new remove_extent_t<T>[n]());
+}
+#endif
+
+#if __cplusplus >= 201103L
+/* Model of shared_ptr/weak_ptr (github #5868 gap 4) using the usual two-count
+ * control block: __scount owns the pointee, __wcount owns the control block and
+ * is held collectively by the shared owners as a single count. That is what
+ * makes weak_ptr::expired() observable after the last shared owner dies while
+ * the control block is still alive. */
+struct __sp_control
+{
+  long __scount;
+  long __wcount;
+};
+
+template <class T>
+class weak_ptr;
+
+template <class T>
+class shared_ptr
+{
+  T *__p;
+  __sp_control *__c;
+
+  template <class U>
+  friend class shared_ptr;
+  template <class U>
+  friend class weak_ptr;
+
+  void __retain() noexcept
+  {
+    if (__c)
+      ++__c->__scount;
+  }
+
+  void __release() noexcept
+  {
+    if (!__c)
+      return;
+    if (--__c->__scount == 0)
+    {
+      delete __p;
+      __p = nullptr;
+      if (--__c->__wcount == 0)
+        delete __c;
+    }
+    __c = nullptr;
+  }
+
+public:
+  typedef T element_type;
+
+  constexpr shared_ptr() noexcept : __p(nullptr), __c(nullptr)
+  {
+  }
+
+  constexpr shared_ptr(nullptr_t) noexcept : __p(nullptr), __c(nullptr)
+  {
+  }
+
+  explicit shared_ptr(T *p) : __p(p), __c(new __sp_control)
+  {
+    __c->__scount = 1;
+    __c->__wcount = 1;
+  }
+
+  shared_ptr(const shared_ptr &o) noexcept : __p(o.__p), __c(o.__c)
+  {
+    __retain();
+  }
+
+  shared_ptr(shared_ptr &&o) noexcept : __p(o.__p), __c(o.__c)
+  {
+    o.__p = nullptr;
+    o.__c = nullptr;
+  }
+
+  // Derived* -> Base* aliasing conversion.
+  template <class U>
+  shared_ptr(const shared_ptr<U> &o) noexcept : __p(o.__p), __c(o.__c)
+  {
+    __retain();
+  }
+
+  ~shared_ptr()
+  {
+    __release();
+  }
+
+  shared_ptr &operator=(const shared_ptr &o) noexcept
+  {
+    if (this != &o)
+    {
+      __release();
+      __p = o.__p;
+      __c = o.__c;
+      __retain();
+    }
+    return *this;
+  }
+
+  shared_ptr &operator=(shared_ptr &&o) noexcept
+  {
+    if (this != &o)
+    {
+      __release();
+      __p = o.__p;
+      __c = o.__c;
+      o.__p = nullptr;
+      o.__c = nullptr;
+    }
+    return *this;
+  }
+
+  void reset() noexcept
+  {
+    __release();
+  }
+
+  void reset(T *p)
+  {
+    __release();
+    __p = p;
+    __c = new __sp_control;
+    __c->__scount = 1;
+    __c->__wcount = 1;
+  }
+
+  void swap(shared_ptr &o) noexcept
+  {
+    T *p = __p;
+    __sp_control *c = __c;
+    __p = o.__p;
+    __c = o.__c;
+    o.__p = p;
+    o.__c = c;
+  }
+
+  T *get() const noexcept
+  {
+    return __p;
+  }
+
+  T &operator*() const
+  {
+    return *__p;
+  }
+
+  T *operator->() const
+  {
+    return __p;
+  }
+
+  long use_count() const noexcept
+  {
+    return __c ? __c->__scount : 0;
+  }
+
+  bool unique() const noexcept
+  {
+    return use_count() == 1;
+  }
+
+  explicit operator bool() const noexcept
+  {
+    return __p != nullptr;
+  }
+};
+
+template <class T, class U>
+bool operator==(const shared_ptr<T> &a, const shared_ptr<U> &b) noexcept
+{
+  return a.get() == b.get();
+}
+
+template <class T, class U>
+bool operator!=(const shared_ptr<T> &a, const shared_ptr<U> &b) noexcept
+{
+  return a.get() != b.get();
+}
+
+template <class T>
+bool operator==(const shared_ptr<T> &a, nullptr_t) noexcept
+{
+  return a.get() == nullptr;
+}
+
+template <class T>
+bool operator!=(const shared_ptr<T> &a, nullptr_t) noexcept
+{
+  return a.get() != nullptr;
+}
+
+template <class T>
+class weak_ptr
+{
+  T *__p;
+  __sp_control *__c;
+
+  template <class U>
+  friend class weak_ptr;
+
+  void __retain() noexcept
+  {
+    if (__c)
+      ++__c->__wcount;
+  }
+
+  void __release() noexcept
+  {
+    if (__c && --__c->__wcount == 0)
+      delete __c;
+    __c = nullptr;
+    __p = nullptr;
+  }
+
+public:
+  typedef T element_type;
+
+  constexpr weak_ptr() noexcept : __p(nullptr), __c(nullptr)
+  {
+  }
+
+  weak_ptr(const weak_ptr &o) noexcept : __p(o.__p), __c(o.__c)
+  {
+    __retain();
+  }
+
+  weak_ptr(const shared_ptr<T> &o) noexcept : __p(o.__p), __c(o.__c)
+  {
+    __retain();
+  }
+
+  ~weak_ptr()
+  {
+    __release();
+  }
+
+  weak_ptr &operator=(const weak_ptr &o) noexcept
+  {
+    if (this != &o)
+    {
+      __release();
+      __p = o.__p;
+      __c = o.__c;
+      __retain();
+    }
+    return *this;
+  }
+
+  weak_ptr &operator=(const shared_ptr<T> &o) noexcept
+  {
+    __release();
+    __p = o.__p;
+    __c = o.__c;
+    __retain();
+    return *this;
+  }
+
+  void reset() noexcept
+  {
+    __release();
+  }
+
+  long use_count() const noexcept
+  {
+    return __c ? __c->__scount : 0;
+  }
+
+  bool expired() const noexcept
+  {
+    return use_count() == 0;
+  }
+
+  shared_ptr<T> lock() const noexcept
+  {
+    shared_ptr<T> r;
+    if (!expired())
+    {
+      r.__p = __p;
+      r.__c = __c;
+      ++__c->__scount;
+    }
+    return r;
+  }
+};
+
+template <class T, class... Args>
+shared_ptr<T> make_shared(Args &&...args)
+{
+  return shared_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
+/* The allocator is deliberately not modelled, and the two halves cannot be
+ * coupled as they stand: allocator::allocate hands out malloc'd storage while
+ * shared_ptr releases with `delete __p`, so routing through the allocator
+ * makes every use report "Mismatched memory deallocation operators". Storage
+ * therefore comes from the same `new` make_shared uses, a custom allocator's
+ * allocate/deallocate/construct are never called, and this model cannot
+ * answer questions *about* an allocator -- only about code that happens to
+ * use one. allocate_shared_allocator_calls pins that divergence (github
+ * #6488). The array forms added in C++20 are not declared.
+ * `typename A::value_type` ([allocator.requirements]) stops A deducing to a
+ * constructor argument when the allocator is omitted altogether, which would
+ * otherwise silently swallow it. */
+template <class T, class A, class... Args, class = typename A::value_type>
+shared_ptr<T> allocate_shared(const A &, Args &&...args)
+{
+  return make_shared<T>(std::forward<Args>(args)...);
 }
 #endif
 

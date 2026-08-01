@@ -1,7 +1,7 @@
 #include <pointer-analysis/andersen.h>
 
 #include <irep2/irep2_utils.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 
 namespace
 {

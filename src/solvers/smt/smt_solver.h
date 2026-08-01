@@ -12,9 +12,9 @@
 #include <solvers/prop/pointer_logic.h>
 #include <solvers/smt/smt_result.h>
 #include <irep2/irep2_utils.h>
-#include <util/message.h>
-#include <util/namespace.h>
-#include <util/threeval.h>
+#include <util/message/message.h>
+#include <util/symtab/namespace.h>
+#include <util/base/threeval.h>
 
 /** @file smt_conv.h
  *  SMT conversion tools and utilities.
@@ -432,7 +432,16 @@ public:
    *         Tends to be one integer divided ('/') by another. After inspecting
    *         all other options, there are none that are good, this is a
    *         legitimate use of strings.
-   *  @return The newly created terminal smt_ast of this real. */
+   *  @return An SMT AST representing this real value.
+   *
+   *  No backend is required to return a distinct smt_ast * per call: a
+   *  backend that memoises real constants by value (a natural
+   *  optimisation) is free to hand back the same pointer for repeated
+   *  calls with the same str. Do not key identity-sensitive metadata
+   *  (e.g. AST-pointer-keyed side-channel maps) directly on the result of
+   *  this call unless the value is known to be one this call site
+   *  exclusively owns; mint a fresh symbol (mk_fresh) and constrain it
+   *  equal to the desired real value instead. */
   virtual smt_astt mk_smt_real(const std::string &str) = 0;
 
   // Returns SMT AST representing real zero
@@ -449,10 +458,15 @@ public:
   smt_astt get_single_min_subnormal();
   // Returns SMT AST representing single precision maximum normal value (~3.4028234663852886e+38)
   smt_astt get_single_max_normal();
-  // Under --ir-ieee, returns ite(|r| < min_subnormal, 0, r) for single/double,
-  // modelling IEEE 754 flush-to-zero for results below the subnormal threshold.
-  // Returns r unchanged for unsupported formats.
-  smt_astt mk_subnormal_flush(smt_astt r, const floatbv_type2t &fbv_type);
+  // Under --ir-ieee, returns real zero when r lies in the region that
+  // rounds to zero under the selected rounding mode; otherwise returns r
+  // unchanged. This models only the zero/nonzero underflow boundary:
+  // signed zero and subnormal-grid quantization are not represented.
+  // Returns r unchanged for unsupported float formats.
+  smt_astt mk_subnormal_flush(
+    smt_astt r,
+    const floatbv_type2t &fbv_type,
+    const expr2tc &rounding_mode);
 
   // Returns SMT AST for the integer-encoding sentinel for double +∞: max_normal+1
   smt_astt get_double_inf_sentinel();

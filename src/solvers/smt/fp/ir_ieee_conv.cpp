@@ -2,7 +2,7 @@
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/smt_fp_rounding_utils.h>
 #include <irep2/irep2_type.h>
-#include <util/ieee_float.h>
+#include <util/arith/ieee_float.h>
 
 ir_ieee_convt::ir_ieee_convt(smt_solver_baset *ctx) : ctx(ctx)
 {
@@ -69,6 +69,34 @@ void ir_ieee_convt::propagate_nan_pred(smt_astt lhs, smt_astt rhs)
   auto it = ir_ieee_nan_map.find(rhs);
   if (it != ir_ieee_nan_map.end())
     ir_ieee_nan_map[lhs] = it->second;
+}
+
+void ir_ieee_convt::store_neg_zero_pred(smt_astt t, smt_astt neg_zero_pred)
+{
+  ir_ieee_neg_zero_map[t] = neg_zero_pred;
+}
+
+smt_astt ir_ieee_convt::get_neg_zero_pred(smt_astt t) const
+{
+  auto it = ir_ieee_neg_zero_map.find(t);
+  return it != ir_ieee_neg_zero_map.end() ? it->second : nullptr;
+}
+
+void ir_ieee_convt::propagate_neg_zero_pred(smt_astt lhs, smt_astt rhs)
+{
+  auto it = ir_ieee_neg_zero_map.find(rhs);
+  if (it != ir_ieee_neg_zero_map.end())
+    ir_ieee_neg_zero_map[lhs] = it->second;
+}
+
+void ir_ieee_convt::propagate_neg_zero_through_ite(
+  smt_astt outer,
+  smt_astt inner,
+  smt_astt guard)
+{
+  smt_astt inner_neg_zero = get_neg_zero_pred(inner);
+  if (inner_neg_zero)
+    store_neg_zero_pred(outer, ctx->mk_and(guard, inner_neg_zero));
 }
 
 smt_astt ir_ieee_convt::combine_nan_preds(smt_astt a, smt_astt b) const
@@ -484,7 +512,8 @@ smt_astt ir_ieee_convt::encode_ieee_add(const expr2tc &expr)
     smt_astt nan_p = combine_nan_preds(
       combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
       invalid_op_nan);
-    smt_astt flushed = ctx->mk_subnormal_flush(real_result, fbv_type);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
     store_interval(flushed, lo_w, hi_w);
     if (nan_p)
@@ -523,7 +552,8 @@ smt_astt ir_ieee_convt::encode_ieee_sub(const expr2tc &expr)
     smt_astt nan_p = combine_nan_preds(
       combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
       invalid_op_nan);
-    smt_astt flushed = ctx->mk_subnormal_flush(real_result, fbv_type);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
     store_interval(flushed, lo_w, hi_w);
     if (nan_p)
@@ -595,7 +625,8 @@ smt_astt ir_ieee_convt::encode_ieee_mul(const expr2tc &expr)
     smt_astt nan_p = combine_nan_preds(
       combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
       invalid_op_nan);
-    smt_astt flushed = ctx->mk_subnormal_flush(real_result, fbv_type);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
     store_interval(flushed, lo_w, hi_w);
     if (nan_p)
@@ -628,8 +659,19 @@ smt_astt ir_ieee_convt::encode_ieee_div(const expr2tc &expr)
   }
 
   smt_astt sentinel = ctx->get_double_inf_sentinel();
+  // IEEE 754: the sign of x / +-0 is sign(x) XOR sign of the zero divisor.
+  // side2 is a bare real zero here (div_by_zero requires side2 == zero),
+  // which cannot carry its own sign, so the divisor's sign is recovered
+  // from its tracked negative-zero predicate (set when side2 is the
+  // result of flushing a negative subnormal-range value, or is itself a
+  // literal -0.0 constant); absent that predicate, side2 is treated as
+  // ordinary +0.0, matching prior behaviour.
+  smt_astt side1_neg = ctx->mk_lt(side1, zero);
+  smt_astt side2_neg_zero = get_neg_zero_pred(side2);
+  smt_astt result_neg =
+    side2_neg_zero ? ctx->mk_xor(side1_neg, side2_neg_zero) : side1_neg;
   smt_astt inf_result =
-    ctx->mk_ite(ctx->mk_lt(side1, zero), ctx->mk_sub(zero, sentinel), sentinel);
+    ctx->mk_ite(result_neg, ctx->mk_sub(zero, sentinel), sentinel);
   smt_astt real_result = ctx->mk_div(side1, side2);
   const expr2tc &rounding_mode = to_ieee_div2t(expr).rounding_mode;
 
@@ -678,7 +720,8 @@ smt_astt ir_ieee_convt::encode_ieee_div(const expr2tc &expr)
 
     auto bounds =
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
-    smt_astt flushed = ctx->mk_subnormal_flush(real_result, fbv_type);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     smt_astt a = ctx->mk_ite(div_by_zero, inf_result, flushed);
     // When div_by_zero fires (denominator flushed to zero), the result is
     // ±sentinel (infinity).  Widen to [−sentinel, sentinel] in that branch;
@@ -697,12 +740,17 @@ smt_astt ir_ieee_convt::encode_ieee_div(const expr2tc &expr)
       combine_nan_preds(
         combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
         combine_nan_preds(zero_div_zero_nan, inf_div_inf_nan)));
+    // `a` is a further ite over `flushed`, not `flushed` itself.
+    propagate_neg_zero_through_ite(a, flushed, ctx->mk_not(div_by_zero));
     return a;
   }
 
   smt_astt ieee_result =
     ctx->apply_ieee754_semantics(real_result, fbv_type, nullptr, rounding_mode);
-  return ctx->mk_ite(div_by_zero, inf_result, ieee_result);
+  smt_astt result = ctx->mk_ite(div_by_zero, inf_result, ieee_result);
+  // `result` is a further ite over `ieee_result`, not `ieee_result` itself.
+  propagate_neg_zero_through_ite(result, ieee_result, ctx->mk_not(div_by_zero));
+  return result;
 }
 
 smt_astt ir_ieee_convt::encode_ieee_fma(const expr2tc &expr)
@@ -789,7 +837,8 @@ smt_astt ir_ieee_convt::encode_ieee_fma(const expr2tc &expr)
       combine_nan_preds(get_nan_pred(val1), get_nan_pred(val2)),
       combine_nan_preds(
         get_nan_pred(val3), combine_nan_preds(mul_nan, add_nan)));
-    smt_astt flushed = ctx->mk_subnormal_flush(real_result, fbv_type);
+    smt_astt flushed =
+      ctx->mk_subnormal_flush(real_result, fbv_type, rounding_mode);
     auto [lo_w, hi_w] = widen_for_flush(bounds.first, bounds.second);
     store_interval(flushed, lo_w, hi_w);
     if (nan_p)

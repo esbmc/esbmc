@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 // parse the explicit ctor, or add the implicit ctor
@@ -81,7 +81,7 @@ bool solidity_convertert::add_implicit_constructor(
   code_typet type;
   typet tmp_rtn_type("constructor");
   type.return_type() = tmp_rtn_type;
-  type.set("#member_name", prefix + contract_name);
+  type.member_name(prefix + contract_name);
   type.set("#inlined", true);
 
   locationt location_begin;

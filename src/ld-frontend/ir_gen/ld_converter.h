@@ -1,9 +1,10 @@
 #pragma once
 
 #include <ld-frontend/ir/ld_ir.h>
-#include <util/context.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/symtab/context.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <map>
 #include <string>
 
 // ld_converter translates LdIR into ESBMC's GOTO IR (irep2 / contextt).
@@ -37,15 +38,24 @@ private:
   const LdIR &ir_;
   bool fault_injection_ = false;
 
+  // Operands sensed by an edge contact, mapped to their previous-scan shadow.
+  // The shadows are updated once at the end of the scan body so that every
+  // edge contact in the scan compares against the same previous-scan sample,
+  // independently of rung order.
+  std::map<std::string, symbol_exprt> edge_shadows_;
+
   typet bool_t() const;
   typet int32_t_() const;
   typet type_of_kind(VarKind kind) const; // IEC 61131-3 type -> ESBMC typet
   exprt int_const(long long value) const;
+  exprt int_max() const;
+  exprt int_min() const;
 
   symbol_exprt declare_variable(const VarDecl &v);
   symbol_exprt declare_bool_shadow(const std::string &id);
   symbol_exprt declare_scoped(const std::string &id, const typet &t);
   symbol_exprt var_expr(const std::string &name) const;
+  exprt bool_value_of(const symbol_exprt &var) const;
 
   code_blockt build_scan_body(const exprt &pf_in);
 

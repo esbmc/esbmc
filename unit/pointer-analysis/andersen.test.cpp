@@ -14,7 +14,7 @@
 #include <catch2/catch.hpp>
 
 #include <pointer-analysis/andersen.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
 
 namespace

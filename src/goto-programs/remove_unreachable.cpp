@@ -1,7 +1,7 @@
 #include <goto-programs/remove_unreachable.h>
 #include <set>
 #include <stack>
-#include <prefix.h>
+#include <util/base/prefix.h>
 
 // This method iterates through all GOTO functions in the program
 // and removes all unreachable instructions from each of them.

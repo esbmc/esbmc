@@ -1,4 +1,4 @@
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
@@ -21,16 +21,16 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/exception_specification.h>
-#include <util/string_constant.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/lang/exception_specification.h>
+#include <util/expr/string_constant.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -580,6 +580,44 @@ static void replace_new_object_with(const exprt &object, exprt &dest)
       replace_new_object_with(object, *it);
 }
 
+// Pick the deallocation function goto-conversion can actually call for a
+// delete-expression, or null to leave it on the built-in path (github #6494).
+// Clang resolves `delete p` to the C++14 sized form whenever one is declared,
+// and both sized forms are declared implicitly -- so a program that replaces
+// only `operator delete(void *)`, by far the most common shape, resolves to a
+// sized form it never defined. The default sized form's behaviour is to call
+// `operator delete(ptr)` ([new.delete.single]), so follow it to the
+// replacement the program did supply.
+static const clang::FunctionDecl *resolve_deallocation_function(
+  const clang::FunctionDecl *op_del,
+  bool array_form)
+{
+  if (!op_del)
+    return nullptr;
+
+  // The aligned and user-placement forms also take two parameters, but want an
+  // alignment or a tag rather than the byte count this lowering supplies; the
+  // array form has no byte count to give, since the element size it knows is
+  // not the whole array's.
+  const bool sized = !array_form && op_del->getNumParams() == 2 &&
+                     op_del->getParamDecl(1)->getType()->isIntegerType();
+
+  if (op_del->isDefined())
+    return op_del->getNumParams() == 1 || sized ? op_del : nullptr;
+
+  // Only the sized form forwards to a replacement the program did define.
+  if (!sized)
+    return nullptr;
+
+  for (const clang::NamedDecl *d :
+       op_del->getDeclContext()->lookup(op_del->getDeclName()))
+    if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(d))
+      if (fd->getNumParams() == 1 && fd->isDefined())
+        return fd;
+
+  return nullptr;
+}
+
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
@@ -899,6 +937,21 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       }
     }
 
+    // A program may replace ::operator new, and a class may supply its own
+    // ([basic.stc.dynamic.allocation], [expr.new]/9). The built-in cpp_new
+    // below conjures a fresh object and never calls it, so ESBMC verifies a
+    // different program: two allocations from a pool allocator that alias
+    // are modelled as distinct objects, hiding real bugs (github #6494).
+    // Record the resolved function for goto-conversion to call instead.
+    // Only the plain (size) form is routed -- the aligned and user-placement
+    // forms take further arguments this lowering does not supply, and an
+    // allocation function without a body in this TU has nothing to call.
+    const clang::FunctionDecl *op_new = ne.getOperatorNew();
+    const bool replaced_new = op_new && op_new->isDefined() &&
+                              !op_new->isReservedGlobalPlacementOperator() &&
+                              op_new->getNumParams() == 1 &&
+                              ne.getNumPlacementArgs() == 0;
+
     if (ne.isArray())
     {
       new_expr = side_effect_exprt("cpp_new[]", t);
@@ -914,6 +967,14 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     else
     {
       new_expr = side_effect_exprt("cpp_new", t);
+    }
+
+    if (replaced_new)
+    {
+      exprt alloc_function;
+      if (get_decl_ref(*op_new, alloc_function))
+        return true;
+      new_expr.add("alloc_function") = alloc_function;
     }
 
     if (ne.hasInitializer())
@@ -945,6 +1006,19 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     new_expr.move_to_operands(arg);
 
+    // Mirror of the allocation side above: a replaced operator delete has to
+    // be called, or state it maintains is never updated and correct programs
+    // are reported as failing (github #6494).
+    const clang::FunctionDecl *op_del = resolve_deallocation_function(
+      de.getOperatorDelete(), de.isArrayFormAsWritten());
+    if (op_del)
+    {
+      exprt dealloc_function;
+      if (get_decl_ref(*op_del, dealloc_function))
+        return true;
+      new_expr.add("dealloc_function") = dealloc_function;
+    }
+
     if (de.getDestroyedType()->getAsCXXRecordDecl())
     {
       typet destt;
@@ -953,6 +1027,19 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       new_expr.type() = destt;
     }
 
+    break;
+  }
+
+  case clang::Stmt::ConditionalOperatorClass:
+  {
+    const clang::ConditionalOperator &ternary =
+      static_cast<const clang::ConditionalOperator &>(stmt);
+
+    bool elided = false;
+    if (get_conditional_class_prvalue(ternary, new_expr, elided))
+      return true;
+    if (!elided && clang_c_convertert::get_expr(stmt, new_expr))
+      return true;
     break;
   }
 
@@ -1221,56 +1308,47 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     std::string type_name;
     // For a polymorphic glvalue operand, [expr.typeid]/2 requires the operand
-    // to be evaluated (the dynamic type is read from the object's vtable). We
-    // model that by reading the operand's vtable pointer, so a typeid applied
-    // to `*p` with a null `p` faults on the dereference — the standard mandates
-    // std::bad_typeid there. `vtable_read` holds that read when applicable.
+    // to be evaluated: the answer is the *dynamic* type, which is only
+    // reachable through the object's vtable. `vtable_read` holds that read when
+    // applicable; it also faults on a null `*p`, as std::bad_typeid mandates.
     exprt vtable_read = nil_exprt();
+    // Name of the vtable component holding the dynamic type's printed name,
+    // empty unless the operand is a polymorphic glvalue.
+    irep_idt dynamic_name_comp;
     if (cxxtid.isTypeOperand())
     {
       const clang::QualType qtype = cxxtid.getTypeOperand(*ASTContext);
-      type_name = qtype.getAsString();
+      type_name = rtti_type_name(qtype);
     }
     else
     {
       const clang::QualType qtype = cxxtid.getExprOperand()->getType();
-      type_name = qtype.getAsString();
+      type_name = rtti_type_name(qtype);
 
       const clang::CXXRecordDecl *rd = qtype->getAsCXXRecordDecl();
-      // [expr.typeid]/2 singles out the case where the operand is obtained by
-      // dereferencing a pointer: a null pointer there yields std::bad_typeid.
-      // Detect that `*p` form at the AST level so a plain lvalue operand (which
-      // cannot be null) keeps its existing handling untouched.
-      const auto *unary = llvm::dyn_cast<clang::UnaryOperator>(
-        cxxtid.getExprOperand()->IgnoreParenImpCasts());
-      const bool is_deref_operand =
-        unary && unary->getOpcode() == clang::UO_Deref;
-      if (
-        !cxxtid.isMostDerived(*ASTContext) && rd && rd->isPolymorphic() &&
-        is_deref_operand)
+      if (!cxxtid.isMostDerived(*ASTContext) && rd && rd->isPolymorphic())
       {
         exprt operand;
         if (get_expr(*cxxtid.getExprOperand(), operand))
           return true;
 
         const typet &op_type = ns.follow(operand.type());
-        if (operand.id() == "dereference" && op_type.is_struct())
+        if (op_type.is_struct())
           for (const auto &comp : to_struct_type(op_type).components())
             if (comp.get_bool("is_vtptr"))
             {
               vtable_read = member_exprt(operand, comp.name(), comp.type());
+              dynamic_name_comp = rtti_name_component_id(
+                to_pointer_type(comp.type()).subtype().identifier());
               break;
             }
       }
     }
 
-    exprt size = constant_exprt(
-      integer2binary(type_name.size(), bv_width(size_type())),
-      integer2string(type_name.size()),
-      size_type());
-
-    typet arr = array_typet(char_type(), size);
-    string_constantt string_name(type_name, arr, string_constantt::k_default);
+    // Size the array as type_name.size() + 1 so the stored string keeps its
+    // terminating '\0'; type_info::name() returns this pointer, and reading it
+    // as a C string (e.g. strlen) would otherwise run off the end (#6308).
+    string_constantt string_name(type_name);
 
     typet t;
     if (get_type(cxxtid.getType(), t))
@@ -1280,9 +1358,21 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // assigned to the temporary object
     // tmp = { .__name=&"int"[0], .std::type_info@vtable_pointer=0 }
     // const std::type_info& = &tmp
-    // Front end can't account for polymorphism
+    // type_info identity is the __name pointer, so for a polymorphic glvalue
+    // __name is taken from the vtable the object actually points at rather than
+    // from the operand's static type -- that is what makes the result reflect
+    // the dynamic type (#6310).
+    exprt name = address_of_exprt(string_name);
+    if (!dynamic_name_comp.empty())
+    {
+      name = member_exprt(
+        dereference_exprt(vtable_read, vtable_read.type()),
+        dynamic_name_comp,
+        pointer_typet(char_type()));
+    }
+
     exprt sym("struct", t);
-    sym.copy_to_operands(address_of_exprt(string_name));
+    sym.copy_to_operands(name);
     if (vtable_read.is_not_nil())
     {
       // Reading the vtable pointer dereferences the operand, so a null operand
@@ -2091,40 +2181,27 @@ bool clang_cpp_convertert::get_function_body(
                                     rhs.statement() == "function_call" &&
                                     rhs.get_bool("constructor");
 
-          /* Bound the per-element construction: unrolling one constructor call
-           * per leaf element is only viable for modestly-sized fixed arrays.
-           * The internal buffers of STL container operational models are the
-           * arrays to stay away from -- and they are not all large: the
-           * per-instance pools in <list> and <stack> hold 20 slots and <map>
-           * holds 15, while <set>/<deque>/<queue>/<unordered_*> hold hundreds
-           * to ~1024. Each such slot may itself embed a class element (e.g.
-           * list<string> stores a std::string per node), so eagerly running
-           * its constructor on every slot bloats symex -- enough to push the
-           * heavy list<string> sort test over the CI timeout. Keep the bound
-           * comfortably below the smallest of those buffers (15) so all of
-           * them retain the prior single-element behaviour, while still
-           * covering realistic user arrays. Above the bound we construct just
-           * the representative element 0 (the behaviour prior to this change),
-           * so those cases are unchanged. (The static/global path in
-           * clang_cpp_main.cpp unrolls without this bound; proper bounded-loop
-           * construction is future work for both.) */
+          /* Construct every leaf element, whatever the extent. Constructing
+           * only element 0 is not a cheaper approximation but an unsound one:
+           * destruction is not bounded to match, so the skipped elements are
+           * destroyed having never been constructed, and any element type
+           * holding a resource then reports a spurious violation (#6574).
+           * An extent that is not a compile-time constant cannot be unrolled,
+           * so it keeps the single-element fallback. */
           const bool is_fixed_array = ns.follow(new_member.type()).is_array();
-          const BigInt max_unroll = 8;
-          BigInt total_elements = 1;
+          bool has_constant_extent = is_fixed_array;
           for (typet t = ns.follow(new_member.type()); t.is_array();
                t = ns.follow(to_array_type(t).subtype()))
           {
             BigInt dim;
             if (to_integer(to_array_type(t).size(), dim))
             {
-              /* unknown size: treat as large */
-              total_elements = max_unroll + 1;
+              has_constant_extent = false;
               break;
             }
-            total_elements *= dim;
           }
 
-          if (is_ctor_call && is_fixed_array && total_elements <= max_unroll)
+          if (is_ctor_call && has_constant_extent)
           {
             /* A single CXXConstructExpr for an array member stands for
              * constructing *every* element (e.g. `B b_array[2];` runs B's
@@ -2459,28 +2536,39 @@ void clang_cpp_convertert::name_param_and_continue(
   assert(id.empty() && name.empty());
 
   const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
-  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
+  /* Every implicit or explicitly-defaulted function gets a compiler-synthesised
+   * body that refers to its parameter, so the parameter needs a name even
+   * though the declaration leaves it unnamed. Testing isImplicit() alone left
+   * `= default` assignment and comparison operators — which are defaulted but
+   * not implicit — with an unnamed parameter, so their synthesised body read
+   * from an unbound operand (github #4377). Matching CXXMethodDecl alone left
+   * the same hole for a defaulted comparison declared as a friend, which is a
+   * plain FunctionDecl taking both operands as parameters (github #6578). */
+  const auto *fd = llvm::dyn_cast_or_null<clang::FunctionDecl>(dcxt);
+  if (!fd || !(fd->isImplicit() || fd->isDefaulted()))
+    return;
+
+  get_decl_name(*fd, name, id);
+
+  // name would be just `ref` and id would be "<cpyctor_id>::ref"
+  name = name + "::" + constref_suffix;
+  id = id + "::" + constref_suffix;
+
+  /* A defaulted friend comparison takes two unnamed parameters, which the
+   * suffix above would give the same symbol; disambiguate by position, as the
+   * named-parameter path in get_decl_name already does. */
+  if (fd->getNumParams() > 1)
   {
-    /* Every implicit or explicitly-defaulted method gets a compiler-synthesised
-     * body that refers to its parameter, so the parameter needs a name even
-     * though the declaration leaves it unnamed. Testing isImplicit() alone left
-     * `= default` assignment and comparison operators — which are defaulted but
-     * not implicit — with an unnamed parameter, so their synthesised body read
-     * from an unbound operand (github #4377). */
-    if (md->isImplicit() || md->isDefaulted())
-    {
-      get_decl_name(*md, name, id);
-
-      // name would be just `ref` and id would be "<cpyctor_id>::ref"
-      name = name + "::" + constref_suffix;
-      id = id + "::" + constref_suffix;
-
-      // sync param name
-      param.cmt_base_name(name);
-      param.identifier(id);
-      param.name(name);
-    }
+    const std::string index_suffix =
+      "::" + std::to_string(pd.getFunctionScopeIndex());
+    name += index_suffix;
+    id += index_suffix;
   }
+
+  // sync param name
+  param.cmt_base_name(name);
+  param.identifier(id);
+  param.name(name);
 }
 
 template <typename SpecializationDecl>
@@ -2577,6 +2665,15 @@ bool clang_cpp_convertert::get_decl_ref(
   case clang::Decl::Binding:
   {
     const auto &bd = static_cast<const clang::BindingDecl &>(decl);
+    // Tuple-like case ([dcl.struct.bind]/4): clang synthesises a holding
+    // variable initialised to get<i>(e) and getBinding() refers to it. That
+    // holding var is never emitted, so resolve directly to its initializer
+    // (the get<i>(e) call) — mirroring how the array/member cases substitute
+    // the holder sub-expression. Re-evaluating get<i>(e) is side-effect free
+    // and yields an lvalue into the holder, so reads and writes are correct.
+    if (const clang::VarDecl *hv = bd.getHoldingVar())
+      if (const clang::Expr *init = hv->getInit())
+        return get_expr(*init, new_expr);
     if (const clang::Expr *e = bd.getBinding())
       return get_expr(*e, new_expr);
     break;
@@ -2660,7 +2757,7 @@ bool clang_cpp_convertert::annotate_class_field(
     return true;
   }
   std::string parent_class_id = tag_prefix + type.tag().as_string();
-  comp.type().set("#member_name", parent_class_id);
+  comp.type().member_name(parent_class_id);
 
   // set access in component
   if (annotate_class_field_access(field, comp))
@@ -2729,7 +2826,7 @@ bool clang_cpp_convertert::annotate_class_method(
   // versions don't).
   std::string parent_class_name, parent_class_id;
   get_decl_name(*cxxmdd.getParent(), parent_class_name, parent_class_id);
-  component_type.set("#member_name", parent_class_id);
+  component_type.member_name(parent_class_id);
 
   // annotate ctor and dtor
   if (is_ConstructorOrDestructor(cxxmdd))
@@ -3194,6 +3291,69 @@ bool clang_cpp_convertert::is_ConstructorOrDestructor(
 {
   return md.getKind() == clang::Decl::CXXConstructor ||
          md.getKind() == clang::Decl::CXXDestructor;
+}
+
+/* [dcl.init]/17.6.1: a class-typed conditional is a prvalue, and the target is
+ * initialised directly from it -- one object, one destructor. Lowering it as an
+ * if_exprt instead materialises a temporary per branch plus a result temporary
+ * and copies between them with a plain assignment, so no copy/move constructor
+ * runs and every one of those temporaries is destroyed, including the branch
+ * that was not taken. Emit a single temporary_object whose initializer branches,
+ * so replace_new_object points both constructors at the same object -- the same
+ * elision the MaterializeTemporaryExpr arm above performs one level down.
+ *
+ * Only the shape where both branches are constructor temporaries is rewritten;
+ * anything else (an lvalue operand, a non-constructor temporary) keeps the
+ * existing lowering, where a copy is genuinely required. */
+static bool is_constructor_temporary(const exprt &e)
+{
+  return e.id() == "sideeffect" && e.statement() == "temporary_object" &&
+         e.initializer().is_not_nil();
+}
+
+bool clang_cpp_convertert::get_conditional_class_prvalue(
+  const clang::ConditionalOperator &ternary,
+  exprt &new_expr,
+  bool &elided)
+{
+  elided = false;
+
+  if (!ternary.getType()->isRecordType() || ternary.isLValue())
+    return false;
+
+  exprt cond;
+  if (get_expr(*ternary.getCond(), cond))
+    return true;
+
+  exprt then;
+  if (get_expr(*ternary.getTrueExpr()->IgnoreParens(), then))
+    return true;
+
+  exprt else_expr;
+  if (get_expr(*ternary.getFalseExpr()->IgnoreParens(), else_expr))
+    return true;
+
+  if (!is_constructor_temporary(then) || !is_constructor_temporary(else_expr))
+    return false;
+
+  typet t;
+  if (get_type(ternary.getType(), t))
+    return true;
+
+  gen_typecast_bool(ns, cond);
+
+  code_ifthenelset ite;
+  ite.cond() = cond;
+  ite.then_case() = to_code(static_cast<const exprt &>(then.initializer()));
+  ite.else_case() =
+    to_code(static_cast<const exprt &>(else_expr.initializer()));
+
+  side_effect_exprt tmp_obj("temporary_object", t);
+  tmp_obj.initializer(ite);
+
+  new_expr = tmp_obj;
+  elided = true;
+  return false;
 }
 
 void clang_cpp_convertert::make_temporary(exprt &expr)

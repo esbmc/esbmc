@@ -20,14 +20,14 @@
 
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
-#include <util/namespace.h>
-#include <util/context.h>
-#include <util/expr_util.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
-#include <util/c_types.h>
-#include <util/arith_tools.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/context.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/lang/c_types.h>
+#include <util/arith/arith_tools.h>
 
 namespace
 {

@@ -3,10 +3,10 @@
 
 #include <pointer-analysis/value_sets.h>
 #include <set>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <irep2/irep2_guard.h>
-#include <util/namespace.h>
-#include <util/options.h>
+#include <util/symtab/namespace.h>
+#include <util/config/options.h>
 
 /** @file dereference.h
  *  The dereferencing code's purpose is to take a symbol with pointer type that
@@ -550,6 +550,7 @@ private:
     const expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,
+    const guard2tc &guard,
     const expr2tc &accuml_guard,
     modet mode,
     std::list<std::pair<expr2tc, expr2tc>> &output);

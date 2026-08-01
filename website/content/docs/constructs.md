@@ -232,6 +232,36 @@ Run with a supported solver:
 esbmc file.c --z3
 ```
 
+### Calls, branches and loops inside a quantifier body
+
+A quantifier body may call a function. ESBMC inlines the callee *under* the
+binder, so the bound variable stays free:
+
+```c
+_Bool eq(int a, int b) { return a == b; }
+
+int main() {
+  int var;
+  __ESBMC_assert(__ESBMC_forall(&var, eq(var, 6)), "not valid for every var");
+}
+```
+
+Beyond a single `return`, a callee built from local declarations, assignments,
+`if`/`else`, and loops with a **statically constant** trip count is summarized
+into one side-effect-free expression — so a counting or accumulating helper can
+appear under `__ESBMC_forall`/`__ESBMC_exists` directly.
+
+Summarization is bounded by the size of the resulting expression rather than by
+the iteration count, because a branch merge inside an unrolled loop can double
+the summary on every iteration. The cap is
+`--max-quantifier-summary-nodes NR` (default 20000); raise it if a legitimate
+body is rejected for size.
+
+Shapes that cannot be summarized soundly — data-dependent trip counts, pointer
+writes, `break`, `switch`, recursion — are **rejected with a diagnostic naming
+the cause**, not silently hoisted out of the binder (which would freeze the
+bound variable and make the quantifier vacuous).
+
 ### Limitations
 
 - Supported solvers are Z3 and CVC5 (no SMT-LIB support).

@@ -21,19 +21,19 @@ extern "C"
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/sarif.h>
-#include <util/cwe_mapping.h>
+#include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
-#include <util/config.h>
-#include <util/filesystem.h>
+#include <util/config/config.h>
+#include <util/base/filesystem.h>
 #include <csignal>
 #include <cstdlib>
 #include <limits>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <iostream>
 #include <fstream>
 #include <goto-programs/add_race_assertions.h>
@@ -66,15 +66,15 @@ extern "C"
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
-#include <util/irep.h>
+#include <util/irep/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <memory>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
 #include <pointer-analysis/value_set_analysis.h>
-#include <util/symbol.h>
-#include <util/time_stopping.h>
+#include <util/symtab/symbol.h>
+#include <util/base/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
 #include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
@@ -105,6 +105,12 @@ static std::string_view esbmc_version_string()
 void timeout_handler(int)
 {
   log_error("Timed out");
+  // Under --multi-property the run keeps exploring interleavings after a
+  // violation, to reach the properties only later schedules touch. A timeout
+  // landing in that tail must not discard a counterexample already found and
+  // printed: the verdict is settled once a property is violated.
+  if (goto_functionst::property_verdicts.has_violation())
+    log_fail("VERIFICATION FAILED");
   // Kill any external solver process groups first: they are in their own
   // groups, so they outlive this _exit() otherwise (e.g. an mpirun job).
   file_operations::kill_registered_pgroups();
@@ -392,6 +398,15 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("context-bound", cmdline.getval("context-bound"));
   else
     options.set_option("context-bound", -1);
+
+  if (cmdline.isset("incremental-context-bound"))
+    options.set_option("incremental-context-bound", true);
+
+  if (cmdline.isset("max-context-bound"))
+    options.set_option(
+      "max-context-bound", cmdline.getval("max-context-bound"));
+  else
+    options.set_option("max-context-bound", 20);
 
   if (cmdline.isset("deadlock-check"))
   {

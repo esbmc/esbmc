@@ -3,17 +3,17 @@
 #include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>
 #include <goto-programs/remove_no_op.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/i2string.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2_utils.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/prefix.h>
-#include <util/replace_symbol.h>
-#include <util/std_expr.h>
-#include <util/type_byte_size.h>
+#include <util/base/prefix.h>
+#include <util/symtab/replace_symbol.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/type_byte_size.h>
 
 static bool is_empty(const goto_programt &goto_program)
 {
@@ -1140,6 +1140,38 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
     }
     else
       assert(0);
+  }
+
+  // A replaced operator delete owns the storage the matching operator new
+  // handed out, so call it instead of the built-in deallocation -- which
+  // would otherwise free memory the program never obtained from us, and skip
+  // whatever bookkeeping the replacement does (github #6494).
+  const exprt &dealloc_function =
+    static_cast<const exprt &>(code.find("dealloc_function"));
+
+  if (dealloc_function.is_not_nil())
+  {
+    const code_typet::argumentst &params =
+      to_code_type(dealloc_function.type()).arguments();
+
+    code_function_callt call;
+    call.function() = dealloc_function;
+    call.arguments().push_back(tmp_op);
+    call.arguments().back().make_typecast(params[0].type());
+
+    // The C++14 sized form takes the object's byte count as its second
+    // argument ([basic.stc.dynamic.deallocation]).
+    if (params.size() == 2)
+      call.arguments().push_back(from_integer(
+        type_byte_size(migrate_type(ns.follow(tmp_op.type().subtype()))),
+        params[1].type()));
+
+    call.location() = code.location();
+
+    goto_programt::targett t_d = dest.add_instruction(FUNCTION_CALL);
+    migrate_expr(call, t_d->code);
+    t_d->location = code.location();
+    return;
   }
 
   expr2tc tmp_op2;

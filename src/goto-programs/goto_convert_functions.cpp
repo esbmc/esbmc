@@ -3,13 +3,14 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/remove_no_op.h>
-#include <util/base_type.h>
-#include <util/c_types.h>
-#include <util/i2string.h>
-#include <util/prefix.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
-#include <util/type_byte_size.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
+#include <util/base/i2string.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/type_byte_size.h>
 
 goto_convert_functionst::goto_convert_functionst(
   contextt &_context,
@@ -130,33 +131,22 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
   const locationt &here =
     (own.is_not_nil() && !own.get_file().empty()) ? own : inherited;
 
-  if (here.get_file().empty())
-    return; // no location to propagate yet
+  // Keep descending even with nothing to propagate: a nested statement may
+  // carry its own location and govern its own subtree. __ESBMC_main's
+  // synthesised block is the case that matters -- static_lifetime_init builds
+  // an unlocated code_blockt whose child assignments are located from their
+  // symbols (clang_c_main.cpp:25), so returning here left every global
+  // initializer's value operands bare, and a side-effecting one
+  // (`int A = nondet_int();`) lowered to an unlocated ASSIGN.
+  const bool have_location = !here.get_file().empty();
 
   Forall_operands (it, code)
   {
     if (it->is_code())
       restore_value_locations(*it, here);
-    else
+    else if (have_location)
       stamp_value_locations(*it, here);
   }
-}
-
-// True if `expr` contains a temporary_object side effect anywhere. Lowering one
-// pushes scope-exit entries that die at the end of the full expression
-// (C++ [class.temporary]/4, github #6075/#6076) rather than at block exit, and
-// the native dispatcher does not yet reproduce that interaction with the
-// destructor stack -- see the code_expression2t handler.
-static bool has_temporary_object(const exprt &expr)
-{
-  if (expr.id() == "sideeffect" && expr.statement() == "temporary_object")
-    return true;
-
-  forall_operands (it, expr)
-    if (has_temporary_object(*it))
-      return true;
-
-  return false;
 }
 
 // The location restore_value_locations would propagate into `code`'s value
@@ -170,6 +160,56 @@ effective_location(const locationt &own, const locationt &inherited)
   return (own.is_not_nil() && !own.get_file().empty()) ? own : inherited;
 }
 
+// A statement's own location field, i.e. exactly what migrate_expr_back writes
+// into the legacy `#location` the legacy path then reads back. Only the kinds
+// convert_native_rec supports are listed; anything else cannot reach a caller.
+static const locationt &statement_location(const expr2tc &code2)
+{
+  switch (code2->expr_id)
+  {
+  case expr2t::code_block_id:
+    return to_code_block2t(code2).location;
+  case expr2t::code_skip_id:
+    return to_code_skip2t(code2).location;
+  case expr2t::code_assign_id:
+    return to_code_assign2t(code2).location;
+  case expr2t::code_expression_id:
+    return to_code_expression2t(code2).location;
+  case expr2t::code_decl_id:
+    return to_code_decl2t(code2).location;
+  case expr2t::code_return_id:
+    return to_code_return2t(code2).location;
+  case expr2t::code_ifthenelse_id:
+    return to_code_ifthenelse2t(code2).location;
+  case expr2t::code_while_id:
+    return to_code_while2t(code2).location;
+  case expr2t::code_dowhile_id:
+    return to_code_dowhile2t(code2).location;
+  case expr2t::code_for_id:
+    return to_code_for2t(code2).location;
+  case expr2t::code_switch_id:
+    return to_code_switch2t(code2).location;
+  case expr2t::code_switch_case_id:
+    return to_code_switch_case2t(code2).location;
+  case expr2t::code_break_id:
+    return to_code_break2t(code2).location;
+  case expr2t::code_continue_id:
+    return to_code_continue2t(code2).location;
+  case expr2t::code_assert_id:
+    return to_code_assert2t(code2).location;
+  case expr2t::code_assume_id:
+    return to_code_assume2t(code2).location;
+  case expr2t::code_function_call_id:
+    return to_code_function_call2t(code2).location;
+  case expr2t::code_goto_id:
+    return to_code_goto2t(code2).location;
+  case expr2t::code_label_id:
+    return to_code_label2t(code2).location;
+  default:
+    return static_cast<const locationt &>(get_nil_irep());
+  }
+}
+
 // W1-loc spike Phase C (esbmc/esbmc#4715): consume one IREP2 statement `code2`
 // natively (design D3), appending to `dest`, and recurse into nested blocks.
 // Returns false the instant an unsupported kind (or a shape whose native
@@ -178,7 +218,10 @@ effective_location(const locationt &own, const locationt &inherited)
 // the structural leaves (block/skip), the single-instruction value statements
 // (assign/expression) that reduce to one ASSIGN/OTHER with nothing to lower,
 // trivial-type declarations (DECL + optional side-effect-free ASSIGN + scope-exit
-// DEAD, the block managing the destructor stack as convert_block does), a value
+// DEAD, the block managing the destructor stack as convert_block does; a
+// declaration whose type has a destructor or whose initializer needs lowering
+// is instead delegated to convert_decl via convert(), so a local object no
+// longer forces a whole-function fallback), a value
 // return (RETURN + unconditional GOTO to the function's end), a
 // side-effect-free `if`/`if-else` whose branches convert natively (the
 // general, unfolded branch shape only — see the assert-fold guard below), a
@@ -188,7 +231,9 @@ effective_location(const locationt &own, const locationt &inherited)
 // side-effect-free `while` whose body converts natively (`v: if(!c) goto z;
 // x: P; y: goto v; z: ;`), its `do`/`while` counterpart (`w: P; y: if(c) goto
 // w; z: ;`), the `for` loop that `while` shape desugars from (init, then the
-// same shape with the iteration statement at the continue target), and
+// same shape with the iteration statement at the continue target), a
+// side-effect-free `switch` whose body converts natively (the LOCATION node,
+// the case-guard chain, the arms, and the trailing break target), and
 // `break`/`continue` (an unconditional GOTO to
 // the nearest enclosing loop's break/continue target, preceded by
 // unwind_destructor_stack's DEAD instructions for whatever was pushed since
@@ -197,7 +242,12 @@ effective_location(const locationt &own, const locationt &inherited)
 // statement to a plain named symbol with a body and side-effect-free
 // arguments (a single FUNCTION_CALL; the return-unused requirement means
 // do_function_call's temp-symbol machinery is never entered, so this kind
-// carries no shared-counter byte-identity risk). Each reads its own
+// carries no shared-counter byte-identity risk), an expression statement whose
+// operand is a code cpp-throw (a `throw ...;`), which is delegated to the legacy
+// convert() exactly as convert_expression's is_code branch does so a throw no
+// longer forces a whole-function fallback, and a source-level try/catch
+// (code_cpp_catch2t), delegated to the legacy convert()/convert_catch so the
+// statements around it convert natively. Each reads its own
 // code_*2t fields directly (no legacy round-trip) and carries the
 // statement's own location, matching goto_convertt::convert() byte-for-byte
 // on this subset.
@@ -279,12 +329,12 @@ bool goto_convert_functionst::convert_native_rec(
     // legacy itself doesn't apply one here. Delegate to the real
     // do_function_call() (not a reimplementation) so `has_next =
     // ESBMC_range_has_next_(...)` — the statement a desugared Python `for`
-    // loop's preprocessor hoists the call into (see docs/spike-v1k-w1loc.md)
-    // — converts natively. Narrow slice: callee and arguments must be
-    // side-effect-free, so do_function_call's own remove_sideeffects() calls
-    // on them are no-ops we can skip issuing; convert_function's
-    // tmp_symbol/context rollback (above) still protects the temp
-    // do_function_call allocates if a later statement in this body is
+    // loop's preprocessor hoists the call into (see
+    // docs/roadmap/spike-v1k-w1loc.md) — converts natively. Narrow slice:
+    // callee and arguments must be side-effect-free, so do_function_call's own
+    // remove_sideeffects() calls on them are no-ops we can skip issuing;
+    // convert_function's tmp_symbol/context rollback (above) still protects the
+    // temp do_function_call allocates if a later statement in this body is
     // unsupported and forces a fallback.
     if (
       is_sideeffect2t(assign.source) &&
@@ -345,20 +395,36 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_expression2t &expr_stmt = to_code_expression2t(code2);
 
-    // Reproduce convert_expression() (goto_convert.cpp) verbatim on its two
-    // emitting branches. A code-typed operand is re-dispatched through the
-    // legacy convert(), and a top-level ternary is peeled unconditionally into
-    // convert_ifthenelse before remove_sideeffects runs; fall back on both.
+    // Reproduce convert_expression() (goto_convert.cpp) verbatim on its
+    // emitting branches. A top-level ternary is peeled unconditionally into
+    // convert_ifthenelse before remove_sideeffects runs; fall back on it.
     exprt op = migrate_expr_back(expr_stmt.operand);
-    if (op.is_nil() || op.is_code() || op.id() == "if")
+    if (op.is_nil() || op.id() == "if")
       return false;
 
-    // A temporary_object's scope-exit entries die at the end of the full
-    // expression, not at block exit, so lowering one here would need the
-    // destructor-stack interaction convert_decl/remove_sideeffects implement;
-    // until that is reproduced natively, fall back (C++ `g = use(T(a));`).
-    if (has_temporary_object(op))
-      return false;
+    // convert_expression re-dispatches a code-typed operand straight through
+    // the legacy convert(): the --irep2-bodies round-trip lowers an
+    // expression-position side_effect_exprt("cpp-throw") to its code form
+    // codet("cpp-throw"), the only code shape that reaches here (migrate.cpp).
+    // Reproduce that delegation for cpp-throw so a throw statement no longer
+    // forces a whole-function fallback -- convert()'s convert_throw owns the
+    // C++ stack unwind and the throw-object side-effect lowering. The codet's
+    // own location already comes from migrate_expr_back (code_cpp_throw2t
+    // .location); what the round-trip drops is the location on its thrown-value
+    // operands, which convert_throw reads when lowering a thrown temporary.
+    // Run the same restore_value_locations pass the legacy path applies to the
+    // round-tripped body -- it pushes the enclosing statement location down onto
+    // those operands without touching the codet's own location. Any other code
+    // operand is unexpected here; fall back.
+    if (op.is_code())
+    {
+      if (op.statement() != "cpp-throw")
+        return false;
+      restore_value_locations(
+        op, effective_location(expr_stmt.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    }
 
     if (has_sideeffect(op))
     {
@@ -409,36 +475,52 @@ bool goto_convert_functionst::convert_native_rec(
     if (s == nullptr)
       return false;
 
-    // convert_decl (goto_convert.cpp) has several paths this native handler
-    // does not reproduce; fall back on each so flag-on stays byte-identical:
+    // Fall back on the two convert_decl shapes this handler neither reproduces
+    // natively nor delegates, so flag-on stays byte-identical:
     //  - a static-lifetime or code-typed symbol is a no-op SKIP,
     //  - an array type may be a VLA needing rewrite_vla_decl / a dynamic-size
-    //    generator — exclude all arrays conservatively,
-    //  - a type with a destructor pushes a second stack entry and lowers a
-    //    FUNCTION_CALL at scope exit,
-    //  - a temporary_object or side-effect initializer is lowered.
-    // What remains is exactly convert_decl's plain path: a DECL, an optional
-    // side-effect-free ASSIGN, and one scope-exit code_dead.
+    //    generator — exclude all arrays conservatively.
+    // A destructible type or an initializer needing lowering is delegated to
+    // convert_decl just below; everything else is convert_decl's plain path
+    // (a DECL, an optional side-effect-free ASSIGN, and one scope-exit code_dead)
+    // reproduced natively after that.
     if (
       s->static_lifetime || s->get_type().is_code() || s->get_type().is_array())
       return false;
 
-    code_function_callt destructor;
-    if (get_destructor(ns, s->get_type(), destructor))
-      return false;
-
     exprt initializer = is_nil_expr(decl.init) ? static_cast<exprt>(nil_exprt())
                                                : migrate_expr_back(decl.init);
-    // A top-level ternary initializer is side-effect-free yet still lowered to a
-    // DECL/IF/GOTO branch by remove_sideeffects under --validate-violation-witness
-    // (goto_sideeffects.cpp), which a single ASSIGN would not reproduce —
-    // mirror the same guard the assign handler carries.
-    if (
-      initializer.is_not_nil() &&
-      (has_sideeffect(initializer) || initializer.id() == "if" ||
-       (initializer.id() == "sideeffect" &&
-        initializer.statement() == "temporary_object")))
-      return false;
+
+    // convert_decl handles two shapes the plain native path below does not: a
+    // type with a destructor (it pushes a scope-exit destructor FUNCTION_CALL in
+    // addition to the code_dead) and an initializer it lowers specially -- a
+    // temporary_object constructing in place / a call returning by value, plus
+    // any side effect and its full-expression temporary drain, and a top-level
+    // ternary (which remove_sideeffects lowers to a DECL/IF/GOTO branch under
+    // --validate-violation-witness). Delegate those to the legacy convert()
+    // rather than fall back the whole function: convert_decl emits the DECL,
+    // lowers the initializer and pushes the scope-exit entries (code_dead, and
+    // the destructor for a destructible type) onto targets.destructor_stack,
+    // which the native block handler unwinds at scope exit exactly as
+    // convert_block does. Any temps it allocates and any gotos/labels an
+    // initializer registers in `targets` are covered by convert_function's
+    // snapshot/restore on a later fallback. Restore the initializer's
+    // value-operand locations first, as the legacy body round-trip does.
+    // A top-level temporary_object is itself a side effect, so has_sideeffect
+    // already subsumes it (as the assign handler above relies on); only the
+    // side-effect-free top-level ternary needs the extra id() == "if" test.
+    code_function_callt destructor;
+    const bool needs_convert_decl =
+      get_destructor(ns, s->get_type(), destructor) ||
+      (initializer.is_not_nil() &&
+       (has_sideeffect(initializer) || initializer.id() == "if"));
+    if (needs_convert_decl)
+    {
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(decl.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    }
 
     // Emit exactly as convert_decl does: copy() migrates the freshly-built
     // legacy node, so the DECL/ASSIGN instructions match byte-for-byte. Build the
@@ -489,12 +571,30 @@ bool goto_convert_functionst::convert_native_rec(
     // A void function returning a value is a C/C++ constraint violation the
     // frontend rejects, so it never reaches here; only a valueless void return
     // does, which correctly emits just the end-of-function goto below.
-    // convert_return unwinds the destructor stack only when it holds a
-    // destructor FUNCTION_CALL, which cannot happen here: the decl handler
-    // falls back on any type with a destructor, so a native subtree's stack
-    // holds only scope-exit code_dead entries, which convert_return leaves
-    // alone; the enclosing block handler reproduces the (skipped) scope-exit
-    // behaviour via the trailing-goto guard above.
+    // When the destructor stack holds a destructor FUNCTION_CALL, convert_return
+    // runs an unwind-before-RETURN (C++ [stmt.return]: capture the value into a
+    // temp, run the destructors, then return the temp; a constant value takes a
+    // simpler sub-path). Reproducing that natively would allocate a
+    // $tmp::tmp$ temp from the shared tmp_symbol counter -- the byte-identity
+    // hazard this dispatcher avoids -- so delegate the whole return statement to
+    // the legacy convert()/convert_return rather than fall back the entire
+    // function. convert_return leaves the destructor stack unchanged (its unwind
+    // is non-destructive and any return-temp entries are resized away) and emits
+    // a trailing unconditional goto, so the enclosing block handler's
+    // unreachable guard skips the scope-exit unwind and no destructor runs
+    // twice. Any temp it allocates is covered by convert_function's
+    // snapshot/restore on a later fallback; restore the value-operand locations
+    // first as the legacy body round-trip does.
+    for (const codet &d : targets.destructor_stack)
+      if (d.get_statement() == "function_call")
+      {
+        exprt op = migrate_expr_back(code2);
+        restore_value_locations(
+          op, effective_location(ret.location, inherited));
+        convert(to_code(op), dest);
+        return true;
+      }
+
     exprt val = is_nil_expr(ret.operand) ? static_cast<exprt>(nil_exprt())
                                          : migrate_expr_back(ret.operand);
     if (
@@ -674,8 +774,8 @@ bool goto_convert_functionst::convert_native_rec(
       // desugared Python `for`/`while <call>` loop produces: the
       // preprocessor always rewrites those into an explicit `while True: if
       // not <call>(): break` before goto_convert ever sees them (confirmed
-      // empirically — see docs/spike-v1k-w1loc.md), so this path is reached
-      // by a C/C++ `while` whose condition is directly a call.
+      // empirically — see docs/roadmap/spike-v1k-w1loc.md), so this path is
+      // reached by a C/C++ `while` whose condition is directly a call.
       // generate_conditional_branch/remove_sideeffects read the location for
       // each instruction they emit off the *operand* being lowered, not off the
       // statement. IREP2 value expressions carry no location, so the
@@ -743,22 +843,31 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_dowhile2t &dw = to_code_dowhile2t(code2);
 
-    // convert_dowhile lowers the condition with remove_sideeffects and makes
-    // the first emitted instruction the continue target; with a side-effect-free
-    // condition that program is empty and the continue target collapses onto
-    // the conditional goto. Restrict this kind to that shape — a side-effecting
-    // condition is a separate slice, as it was for code_while2t.
+    const locationt &here = effective_location(dw.location, inherited);
+
+    // convert_dowhile lowers the condition with remove_sideeffects before it
+    // saves the break/continue targets, and makes the first instruction that
+    // emits the continue target. Keep both: the lowering may allocate from the
+    // shared tmp_symbol counter, whose numbering is observable.
+    goto_programt sideeffects;
+    expr2tc guard = dw.cond;
     if (has_sideeffect(dw.cond))
-      return false;
+    {
+      exprt cond = migrate_expr_back(dw.cond);
+      if (!here.get_file().empty())
+        stamp_value_locations(cond, here);
+      remove_sideeffects(cond, sideeffects);
+      migrate_expr(cond, guard);
+    }
 
     break_continue_targetst old_break_continue(targets);
-    const locationt &here = effective_location(dw.location, inherited);
 
     //    do P while(c);
     //--------------------
     // w: P;
-    // y: if(c) goto w;    <-- continue target (no condition side effects)
-    // z: ;                <-- break target
+    // x: sideeffects in c  <-- continue target, collapsing onto y when empty
+    // y: if(c) goto w;
+    // z: ;                 <-- break target
     goto_programt tmp_y;
     goto_programt::targett y = tmp_y.add_instruction();
 
@@ -768,7 +877,8 @@ bool goto_convert_functionst::convert_native_rec(
     z->location = dw.location;
 
     targets.set_break(z);
-    targets.set_continue(y);
+    targets.set_continue(
+      sideeffects.instructions.empty() ? y : sideeffects.instructions.begin());
 
     // As in the if/while arms: a body that is not itself a code_block2t could
     // leak a scope-exit code_dead with no enclosing block to unwind it.
@@ -790,7 +900,7 @@ bool goto_convert_functionst::convert_native_rec(
     }
 
     y->make_goto(tmp_w.instructions.begin());
-    y->guard = dw.cond;
+    y->guard = guard;
     // convert_dowhile reads the condition's location off the operand
     // (code.op0().find_location()), which restore_value_locations has stamped
     // with the governing statement location on the legacy path. Where that
@@ -804,6 +914,7 @@ bool goto_convert_functionst::convert_native_rec(
     y->pragma_unroll_count = dw.pragma_unroll_count;
 
     dest.destructive_append(tmp_w);
+    dest.destructive_append(sideeffects);
     dest.destructive_append(tmp_y);
     dest.destructive_append(tmp_z);
     return true;
@@ -813,13 +924,9 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_for2t &f = to_code_for2t(code2);
 
-    // convert_for lowers the condition with remove_sideeffects and makes the
-    // first instruction that emits the loop's back-edge target; with a
-    // side-effect-free condition that program is empty and the back edge
-    // collapses onto the guard instruction. Restrict this kind to that shape,
-    // as code_while2t was first sliced. A condition-less `for(;;)` is excluded
-    // too: legacy migrates the nil operand straight into the guard.
-    if (is_nil_expr(f.cond) || has_sideeffect(f.cond))
+    // A condition-less `for(;;)` is excluded: legacy migrates the nil operand
+    // straight into the guard.
+    if (is_nil_expr(f.cond))
       return false;
 
     const locationt &here = effective_location(f.location, inherited);
@@ -828,11 +935,12 @@ bool goto_convert_functionst::convert_native_rec(
     //    for(A; c; B) P;
     //--------------------
     //    A;
+    // u: sideeffects in c  <-- back-edge target, collapsing onto v when empty
     // v: if(!c) goto z;
     // w: P;
-    // x: B;               <-- continue target
-    // y: goto v;
-    // z: ;                <-- break target
+    // x: B;                <-- continue target
+    // y: goto u;
+    // z: ;                 <-- break target
 
     // convert_for emits the init straight into dest, before it saves the
     // break/continue targets, and leaves any scope-exit code_dead a
@@ -841,6 +949,21 @@ bool goto_convert_functionst::convert_native_rec(
     {
       targets.destructor_stack = stack_before;
       return false;
+    }
+
+    // convert_for lowers the condition before it saves the break/continue
+    // targets and before it converts the iteration statement; the lowering may
+    // allocate from the shared tmp_symbol counter, whose numbering is
+    // observable, so the order is kept.
+    goto_programt sideeffects;
+    expr2tc guard = f.cond;
+    if (has_sideeffect(f.cond))
+    {
+      exprt cond = migrate_expr_back(f.cond);
+      if (!here.get_file().empty())
+        stamp_value_locations(cond, here);
+      remove_sideeffects(cond, sideeffects);
+      migrate_expr(cond, guard);
     }
 
     break_continue_targetst old_break_continue(targets);
@@ -881,7 +1004,7 @@ bool goto_convert_functionst::convert_native_rec(
     targets.set_continue(tmp_x.instructions.begin());
 
     v->make_goto(z);
-    v->guard = not2tc(f.cond);
+    v->guard = not2tc(guard);
     v->location = f.location;
 
     destructor_stackt stack_before_body = targets.destructor_stack;
@@ -898,11 +1021,13 @@ bool goto_convert_functionst::convert_native_rec(
 
     goto_programt tmp_y;
     goto_programt::targett y = tmp_y.add_instruction();
-    y->make_goto(v);
+    y->make_goto(
+      sideeffects.instructions.empty() ? v : sideeffects.instructions.begin());
     y->guard = gen_true_expr();
     y->location = f.location;
     y->pragma_unroll_count = f.pragma_unroll_count;
 
+    dest.destructive_append(sideeffects);
     dest.destructive_append(tmp_v);
     dest.destructive_append(tmp_w);
     dest.destructive_append(tmp_x);
@@ -911,12 +1036,143 @@ bool goto_convert_functionst::convert_native_rec(
     return true;
   }
 
+  if (is_code_switch2t(code2))
+  {
+    const code_switch2t &sw = to_code_switch2t(code2);
+
+    const locationt &here = effective_location(sw.location, inherited);
+
+    //    switch(v) { case x: Px; case y: Py; default: Pd; }
+    // --------------------
+    //    <LOCATION>          <-- the switch statement itself
+    //    sideeffects in v
+    //    if(v==x) goto X;
+    //    if(v==y) goto Y;
+    //    goto d;
+    // X: Px;
+    // Y: Py;
+    // d: Pd;
+    // z: ;                   <-- break target, and default when there is none
+
+    dest.add_instruction()->make_location(sw.location);
+
+    // convert_switch lowers the value with remove_sideeffects before it saves
+    // the break/default/case targets, and the guards then compare against the
+    // *lowered* value. Keep both: the lowering may allocate from the shared
+    // tmp_symbol counter, whose numbering is observable.
+    exprt argument = migrate_expr_back(sw.value);
+    goto_programt sideeffects;
+    if (has_sideeffect(sw.value))
+    {
+      if (!here.get_file().empty())
+        stamp_value_locations(argument, here);
+      remove_sideeffects(argument, sideeffects);
+    }
+
+    break_switch_targetst old_targets(targets);
+    destructor_stackt stack_before = targets.destructor_stack;
+
+    goto_programt tmp_z;
+    goto_programt::targett z = tmp_z.add_instruction(SKIP);
+    z->location = sw.location;
+
+    // convert_switch clears `cases` but deliberately not `cases_map`; both are
+    // saved and restored by old_targets, so a nested switch behaves as it does
+    // on the legacy path.
+    targets.set_break(z);
+    targets.set_default(z);
+    targets.cases.clear();
+
+    goto_programt tmp;
+    bool body_ok = convert_native_rec(sw.body, tmp, here);
+
+    if (!body_ok || targets.destructor_stack.size() != stack_before.size())
+    {
+      old_targets.restore(targets);
+      targets.destructor_stack = stack_before;
+      return false;
+    }
+
+    goto_programt tmp_cases;
+    for (auto &it : targets.cases)
+    {
+      exprt guard_expr;
+      case_guard(argument, it.second, guard_expr);
+
+      goto_programt::targett x = tmp_cases.add_instruction();
+      x->make_goto(it.first);
+      migrate_expr(guard_expr, x->guard);
+      x->location = sw.location;
+      if (
+        options.get_bool_option("validate-violation-witness") ||
+        options.get_option("witness-output-yaml") != "")
+        for (const auto &op : it.second)
+        {
+          BigInt val;
+          if (!to_integer(op, val))
+            x->switch_case_ids.push_back(integer2string(val));
+        }
+    }
+
+    goto_programt::targett d_jump = tmp_cases.add_instruction();
+    d_jump->make_goto(targets.default_target);
+    d_jump->location = targets.default_target->location;
+
+    dest.destructive_append(sideeffects);
+    dest.destructive_append(tmp_cases);
+    dest.destructive_append(tmp);
+    dest.destructive_append(tmp_z);
+
+    old_targets.restore(targets);
+    return true;
+  }
+
+  if (is_code_switch_case2t(code2))
+  {
+    const code_switch_case2t &sc = to_code_switch_case2t(code2);
+
+    goto_programt tmp;
+    if (!convert_native_rec(
+          sc.code, tmp, effective_location(sc.location, inherited)))
+      return false;
+
+    // convert() always leaves at least one instruction (it appends a SKIP when
+    // a statement emitted nothing), so legacy can take instructions.begin()
+    // unconditionally; convert_native_rec only guarantees that for a block.
+    if (tmp.instructions.empty())
+      return false;
+
+    goto_programt::targett target = tmp.insert(tmp.instructions.begin());
+    target->make_skip();
+    target->location = statement_location(sc.code);
+    dest.destructive_append(tmp);
+
+    if (sc.is_default)
+    {
+      targets.set_default(target);
+      return true;
+    }
+
+    // Consecutive labels on one statement (`case 1: case 2: P;`) share a
+    // target, so the arm accumulates its case operands into one entry.
+    cases_mapt::iterator entry = targets.cases_map.find(target);
+    if (entry == targets.cases_map.end())
+    {
+      targets.cases.push_back(std::make_pair(target, caset()));
+      entry =
+        targets.cases_map.insert(std::make_pair(target, --targets.cases.end()))
+          .first;
+    }
+    entry->second->second.push_back(migrate_expr_back(sc.case_op));
+    return true;
+  }
+
   if (is_code_break2t(code2))
   {
     const code_break2t &b = to_code_break2t(code2);
 
-    // A break outside a loop/switch shouldn't reach here (switch isn't a
-    // supported kind), but stay defensive rather than trust the invariant.
+    // A break outside a loop or switch shouldn't reach here, but stay defensive
+    // rather than trust the invariant.
     if (!targets.break_set)
       return false;
 
@@ -1070,6 +1326,32 @@ bool goto_convert_functionst::convert_native_rec(
     return true;
   }
 
+  if (is_code_cpp_catch2t(code2))
+  {
+    const code_cpp_catch2t &c = to_code_cpp_catch2t(code2);
+
+    // A source-level try/catch (operands[0] is the try block, operands[1..N]
+    // the handlers). Delegate the whole statement to the legacy convert():
+    // convert_catch (goto_convert.cpp) owns the CATCH push/pop
+    // markers, the per-handler target weave, the end-target gotos and the
+    // throw_stack_size save/restore around the try body -- machinery this
+    // dispatcher does not reproduce natively. The only reason a try/catch
+    // reaches here at all (rather than forcing a whole-function fallback) is to
+    // let the statements around it convert natively. Any gotos/labels/cases the
+    // try body registers in `targets`, and any temp symbols it allocates, are
+    // covered by convert_function's snapshot/restore if a later statement forces
+    // a fallback. The round-trip drops the value-operand locations inside the
+    // blocks, so run the same restore_value_locations pass the legacy body gets.
+    // The bodyless CATCH marker form never appears in a function body (it is
+    // synthesised into the goto program by convert_catch), so a source-level
+    // cpp-catch here always carries its try block plus >=1 handler -- which is
+    // what convert_catch's assert(operands >= 2) requires.
+    exprt op = migrate_expr_back(code2);
+    restore_value_locations(op, effective_location(c.location, inherited));
+    convert(to_code(op), dest);
+    return true;
+  }
+
   return false; // unsupported kind: whole body falls back to goto_convert_rec
 }
 
@@ -1165,14 +1447,15 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   targets.has_return_value =
     to_code_type(f.type).ret_type->type_id != type2t::empty_id;
 
-  // W1-loc spike Phase C (esbmc/esbmc#4715): --irep2-native-body routes the
-  // body through the IREP2-native dispatcher, which consumes code_*2t directly
-  // (no whole-body legacy round-trip) and inherits statement locations onto
-  // value operands. Until every kind in this body is supported it returns
-  // false and we fall back to goto_convert_rec on the round-tripped `code`, so
-  // flag-on is byte-identical to flag-off. `code`/`end_location` above are
-  // still computed from the round-trip; the native path only replaces the
-  // body-instruction dispatch.
+  // W1-loc keystone (esbmc/esbmc#4715): the body goes through the IREP2-native
+  // dispatcher, which consumes code_*2t directly (no whole-body legacy
+  // round-trip) and inherits statement locations onto value operands. Until
+  // every kind in this body is supported it returns false and we fall back to
+  // goto_convert_rec on the round-tripped `code`, so the native path is
+  // byte-identical to the round-trip. `code`/`end_location` above are still
+  // computed from the round-trip; the native path only replaces the
+  // body-instruction dispatch. --no-irep2-native-body forces the round-trip
+  // for diagnosis.
   //
   // A native attempt that reaches a side-effecting code_while2t condition or
   // a code_assign2t with a function-call rhs (below) calls the shared
@@ -1190,7 +1473,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   unsigned tmp_counter_before = tmp_symbol.counter;
   irep_idt context_mark_before = context.mark();
   targetst targets_before = targets;
-  if (!(options.get_bool_option("irep2-native-body") &&
+  if (!(!options.get_bool_option("no-irep2-native-body") &&
         try_convert_body_native(symbol.get_value2(), f.body)))
   {
     tmp_symbol.counter = tmp_counter_before;

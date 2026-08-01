@@ -1,18 +1,18 @@
-#define CATCH_CONFIG_MAIN
+#define CATCH_CONFIG_RUNNER
 #include <catch2/catch.hpp>
 
 #include <python-frontend/python_adjust.h>
-#include <util/context.h>
-#include <util/symbol.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/migrate.h>
+#include <util/symtab/context.h>
+#include <util/symtab/symbol.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/irep/migrate.h>
 #include <irep2/irep2_utils.h>
 #include <string>
 #include <vector>
 
 // Dead-but-tested gate for the V.1k (b) IREP2-native Python adjuster
-// (docs/irep2-migration.md, "V.1k (b)-adjuster", phases B.0/B.1).
+// (docs/roadmap/irep2-migration.md, "V.1k (b)-adjuster", phases B.0/B.1).
 //
 // B.0 pins the inert baseline: a non-member/index expression is byte-identical
 // after a walk. B.1 adds the resolution behaviour: a transient symbol_type2t
@@ -23,6 +23,19 @@
 // unit tests exercise the behaviour directly — the "machinery-first,
 // prove-inert, wire-later" gate used for the V.4.0 structured-CF kinds
 // (esbmc/esbmc#5265).
+
+// c_typecastt ranks an operand by comparing its width against config.ansi_c
+// (c_typecast.cpp, get_c_type). The global is zero-initialised, so with no data
+// model set every comparison but the in-class-initialised int_128_width is
+// false and the arithmetic arm promotes a plain int+int to __int128. The driver
+// always sets a model; pin one here so the pass sees real C ranks. Done in
+// main(), not at namespace scope: `config` lives in another translation unit,
+// so a static initialiser here would race its constructor.
+int main(int argc, char *argv[])
+{
+  config.ansi_c.set_data_model(configt::LP64);
+  return Catch::Session().run(argc, argv);
+}
 
 namespace
 {
@@ -1039,6 +1052,38 @@ TEST_CASE(
   REQUIRE(is_code_type(c.function->type));
   REQUIRE(is_pointer_type(to_dereference2t(c.function).value->type));
   REQUIRE(c.operands.size() == 1);
+  // The argument is a constant, so the conversion folds into the literal
+  // rather than wrapping it, matching c_typecastt::do_typecast's exprt
+  // overload (c_typecast.cpp:911-922).
+  REQUIRE(is_constant_int2t(c.operands[0]));
+  REQUIRE(c.operands[0]->type == get_int32_type());
+}
+
+TEST_CASE(
+  "python_adjust wraps a non-constant converted argument",
+  "[python-adjust]")
+{
+  // The other half of the fold: only a constant collapses into the literal,
+  // a symbol keeps a visible typecast.
+  contextt ctx;
+  const type2tc code_t = add_funcptr_var(ctx, "py_fptr_sym_arg");
+
+  symbolt arg_var;
+  arg_var.id = arg_var.name = "py_arg_u64";
+  arg_var.mode = "Python";
+  arg_var.set_type(get_uint64_type());
+  ctx.add(arg_var);
+
+  const expr2tc callee = symbol2tc(code_t, "py_fptr_sym_arg");
+  const expr2tc arg = symbol2tc(get_uint64_type(), "py_arg_u64");
+  expr2tc call = code_function_call2tc(
+    expr2tc(), callee, std::vector<expr2tc>{arg}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(call);
+
+  const code_function_call2t &c = to_code_function_call2t(call);
+  REQUIRE(c.operands.size() == 1);
   REQUIRE(is_typecast2t(c.operands[0]));
   REQUIRE(c.operands[0]->type == get_int32_type());
 }
@@ -1391,6 +1436,7 @@ TEST_CASE(
   // The OM raise shape end-to-end: the throw operand is a by-name struct
   // literal; operand recursion (S2) retypes it to the resolved struct first,
   // and the throw arm must derive the chain from that resolved shape.
+  config.ansi_c.set_data_model(configt::LP64);
   contextt ctx;
   add_class_with_base(ctx, "E", "Exception");
 

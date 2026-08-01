@@ -53,7 +53,7 @@ long int labs(long int n);
 
 ldiv_t ldiv(long int numerator, long int denominator);
 
-lldiv_t lldiv(long int numerator, long int denominator);
+lldiv_t lldiv(long long int numerator, long long int denominator);
 
 int mblen(const char * pmb, size_t max);
 

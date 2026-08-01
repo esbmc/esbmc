@@ -1,6 +1,9 @@
 #ifndef ESBMC_UNORDERED_MAP_H
 #define ESBMC_UNORDERED_MAP_H
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include <utility>
 
 namespace std {
@@ -560,4 +563,5 @@ public:
 
 } // namespace std
 
+#endif // __cplusplus >= 201103L
 #endif // ESBMC_UNORDERED_MAP_H

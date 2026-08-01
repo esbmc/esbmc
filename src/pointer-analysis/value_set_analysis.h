@@ -4,7 +4,7 @@
 #include <goto-programs/static_analysis.h>
 #include <pointer-analysis/value_set_domain.h>
 #include <pointer-analysis/value_sets.h>
-#include <util/xml.h>
+#include <util/base/xml.h>
 
 class value_set_analysist : public value_setst,
                             public static_analysist<value_set_domaint>

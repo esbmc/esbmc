@@ -26,23 +26,41 @@ public:
   typedef Category iterator_category;
 };
 
+/* [iterator.tags]: the five categories, with the inheritance the standard
+ * specifies. forward_ and bidirectional_ were missing, and random_access_ did
+ * not derive from anything, so tag dispatch could not select an overload. */
 ///  Marking input iterators.
-class input_iterator_tag
+struct input_iterator_tag
 {
 };
 
 ///  Marking output iterators.
-class output_iterator_tag
+struct output_iterator_tag
+{
+};
+
+///  Marking forward iterators.
+struct forward_iterator_tag : public input_iterator_tag
+{
+};
+
+///  Marking bidirectional iterators.
+struct bidirectional_iterator_tag : public forward_iterator_tag
 {
 };
 
 // Marking random iterators
-class random_access_iterator_tag
+struct random_access_iterator_tag : public bidirectional_iterator_tag
 {
 };
 
+/* [iterator.traits] specifies iterator_traits as a struct. Declared as a
+ * class with no access specifier, all five member typedefs were private, so
+ * iterator_traits<It>::value_type on any class-type iterator failed with
+ * "'value_type' is a private member". Only the T* specialisation below --
+ * already a struct -- worked. */
 template <class Iterator>
-class iterator_traits
+struct iterator_traits
 {
   typedef typename Iterator::difference_type difference_type;
   typedef typename Iterator::value_type value_type;
@@ -71,12 +89,52 @@ struct iterator_traits<const T *>
   typedef random_access_iterator_tag iterator_category;
 };
 
+/* [iterator.synopsis] puts advance and distance here, but the definitions
+ * lived in <algorithm> while <iterator> carried declarations with no body.
+ * A translation unit that included <iterator> without <algorithm> therefore
+ * got a distance() returning an unconstrained value -- it satisfied neither
+ * `== 3` nor `!= 3` on a three-element range -- and an advance() that left
+ * the iterator where it was. The bodies below are the ones <algorithm> had;
+ * <algorithm> includes this header, so its own callers are unaffected. */
 template <class InputIterator, class Distance>
-void advance(InputIterator &i, Distance n);
+void advance(InputIterator &i, Distance n)
+{
+  i = i + n;
+}
 
 template <class InputIterator>
-typename iterator_traits<InputIterator>::difference_type
-distance(InputIterator first, InputIterator last);
+int distance(InputIterator first, InputIterator last)
+{
+  int i = 0;
+  int koef = first < last ? 1 : -1;
+  InputIterator pilgrim = first < last ? first : last;
+  while (pilgrim != last)
+  {
+    pilgrim = pilgrim + koef;
+    i++;
+  }
+  return i;
+}
+
+#if __cplusplus >= 201103L
+/* [iterator.operations]/3,6. The parameter type is spelled ptrdiff_t rather
+ * than iterator_traits<It>::difference_type so that these stay usable with the
+ * container iterators that do not carry the traits typedefs -- the same reason
+ * distance above returns int. */
+template <class ForwardIterator>
+ForwardIterator next(ForwardIterator i, ptrdiff_t n = 1)
+{
+  advance(i, n);
+  return i;
+}
+
+template <class BidirectionalIterator>
+BidirectionalIterator prev(BidirectionalIterator i, ptrdiff_t n = 1)
+{
+  advance(i, -n);
+  return i;
+}
+#endif
 
 template <class Container>
 class back_insert_iterator

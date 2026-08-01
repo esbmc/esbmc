@@ -3,16 +3,16 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
 #include <string>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_types.h>
-#include <util/context.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/context.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/std_types.h>
-#include <util/symbol.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_types.h>
+#include <util/symtab/symbol.h>
 
 void goto_symext::intrinsic_yield(reachability_treet &art)
 {
@@ -260,7 +260,9 @@ void goto_symext::intrinsic_register_monitor(
   }
 
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
-  assert(art.get_cur_state().threads_state.size() >= tid);
+  // The monitor must be *in* threads_state: check_if_ileaves_blocked discounts
+  // it from the thread count and check_thread_viable indexes by it.
+  assert(art.get_cur_state().threads_state.size() > tid);
   ex_state.monitor_tid = tid;
   ex_state.tid_is_set = true;
 }

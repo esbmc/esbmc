@@ -4,6 +4,10 @@
 #include "OM_compiler_defs.h"
 #include "definitions.h"
 #include "cstdio"
+// Base of the stream chain, so this is what makes the fixed-width typedefs
+// reachable from <ios>/<ostream>/<istream>/<iomanip>/<iostream>/<iterator>/
+// <memory> as on libstdc++ and libc++ (github #3267).
+#include "cstdint"
 
 namespace std
 {
