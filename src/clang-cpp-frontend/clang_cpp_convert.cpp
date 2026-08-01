@@ -2181,40 +2181,27 @@ bool clang_cpp_convertert::get_function_body(
                                     rhs.statement() == "function_call" &&
                                     rhs.get_bool("constructor");
 
-          /* Bound the per-element construction: unrolling one constructor call
-           * per leaf element is only viable for modestly-sized fixed arrays.
-           * The internal buffers of STL container operational models are the
-           * arrays to stay away from -- and they are not all large: the
-           * per-instance pools in <list> and <stack> hold 20 slots and <map>
-           * holds 15, while <set>/<deque>/<queue>/<unordered_*> hold hundreds
-           * to ~1024. Each such slot may itself embed a class element (e.g.
-           * list<string> stores a std::string per node), so eagerly running
-           * its constructor on every slot bloats symex -- enough to push the
-           * heavy list<string> sort test over the CI timeout. Keep the bound
-           * comfortably below the smallest of those buffers (15) so all of
-           * them retain the prior single-element behaviour, while still
-           * covering realistic user arrays. Above the bound we construct just
-           * the representative element 0 (the behaviour prior to this change),
-           * so those cases are unchanged. (The static/global path in
-           * clang_cpp_main.cpp unrolls without this bound; proper bounded-loop
-           * construction is future work for both.) */
+          /* Construct every leaf element, whatever the extent. Constructing
+           * only element 0 is not a cheaper approximation but an unsound one:
+           * destruction is not bounded to match, so the skipped elements are
+           * destroyed having never been constructed, and any element type
+           * holding a resource then reports a spurious violation (#6574).
+           * An extent that is not a compile-time constant cannot be unrolled,
+           * so it keeps the single-element fallback. */
           const bool is_fixed_array = ns.follow(new_member.type()).is_array();
-          const BigInt max_unroll = 8;
-          BigInt total_elements = 1;
+          bool has_constant_extent = is_fixed_array;
           for (typet t = ns.follow(new_member.type()); t.is_array();
                t = ns.follow(to_array_type(t).subtype()))
           {
             BigInt dim;
             if (to_integer(to_array_type(t).size(), dim))
             {
-              /* unknown size: treat as large */
-              total_elements = max_unroll + 1;
+              has_constant_extent = false;
               break;
             }
-            total_elements *= dim;
           }
 
-          if (is_ctor_call && is_fixed_array && total_elements <= max_unroll)
+          if (is_ctor_call && has_constant_extent)
           {
             /* A single CXXConstructExpr for an array member stands for
              * constructing *every* element (e.g. `B b_array[2];` runs B's
@@ -2549,28 +2536,39 @@ void clang_cpp_convertert::name_param_and_continue(
   assert(id.empty() && name.empty());
 
   const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
-  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
+  /* Every implicit or explicitly-defaulted function gets a compiler-synthesised
+   * body that refers to its parameter, so the parameter needs a name even
+   * though the declaration leaves it unnamed. Testing isImplicit() alone left
+   * `= default` assignment and comparison operators — which are defaulted but
+   * not implicit — with an unnamed parameter, so their synthesised body read
+   * from an unbound operand (github #4377). Matching CXXMethodDecl alone left
+   * the same hole for a defaulted comparison declared as a friend, which is a
+   * plain FunctionDecl taking both operands as parameters (github #6578). */
+  const auto *fd = llvm::dyn_cast_or_null<clang::FunctionDecl>(dcxt);
+  if (!fd || !(fd->isImplicit() || fd->isDefaulted()))
+    return;
+
+  get_decl_name(*fd, name, id);
+
+  // name would be just `ref` and id would be "<cpyctor_id>::ref"
+  name = name + "::" + constref_suffix;
+  id = id + "::" + constref_suffix;
+
+  /* A defaulted friend comparison takes two unnamed parameters, which the
+   * suffix above would give the same symbol; disambiguate by position, as the
+   * named-parameter path in get_decl_name already does. */
+  if (fd->getNumParams() > 1)
   {
-    /* Every implicit or explicitly-defaulted method gets a compiler-synthesised
-     * body that refers to its parameter, so the parameter needs a name even
-     * though the declaration leaves it unnamed. Testing isImplicit() alone left
-     * `= default` assignment and comparison operators — which are defaulted but
-     * not implicit — with an unnamed parameter, so their synthesised body read
-     * from an unbound operand (github #4377). */
-    if (md->isImplicit() || md->isDefaulted())
-    {
-      get_decl_name(*md, name, id);
-
-      // name would be just `ref` and id would be "<cpyctor_id>::ref"
-      name = name + "::" + constref_suffix;
-      id = id + "::" + constref_suffix;
-
-      // sync param name
-      param.cmt_base_name(name);
-      param.identifier(id);
-      param.name(name);
-    }
+    const std::string index_suffix =
+      "::" + std::to_string(pd.getFunctionScopeIndex());
+    name += index_suffix;
+    id += index_suffix;
   }
+
+  // sync param name
+  param.cmt_base_name(name);
+  param.identifier(id);
+  param.name(name);
 }
 
 template <typename SpecializationDecl>

@@ -174,12 +174,12 @@ public:
   // behaviour-preserving relocation, not a semantic change.
   static void set_cpp_type(typet &t, const irep_idt &value)
   {
-    t.set("#cpp_type", value);
+    t.cpp_type(value);
   }
 
   static irep_idt get_cpp_type(const typet &t)
   {
-    return t.get("#cpp_type");
+    return t.cpp_type();
   }
 
   static void set_member_name(typet &t, const irep_idt &value)
