@@ -496,6 +496,14 @@ set(_slow_regression_tests
     # It stays KNOWNBUG; the larger inner timeout lets testing_tool record the
     # KNOWNBUG verdict instead of ctest hard-killing the run.
     "regression/quixbugs/reverse_linked_list"
+    # github_2335_1 verifies SUCCESSFUL but sits exactly on the cap: ~30s
+    # locally, 120.15s on the DebugOpt Linux runner. Its cost is one k
+    # iteration of the --no-reachable-memory-leak closure over a 30-object heap
+    # (10 slots x 3 nodes), so bounding --k-step does not shrink it. With no
+    # headroom it flaps on runner jitter, and has timed out at exactly 120.15s
+    # in #6609 and #6611 -- neither of which touches its code path (#6611 adds
+    # only two test directories and no source at all).
+    "regression/esbmc/github_2335_1"
     # github_4435 was a soundness false alarm on the SV-COMP libvsync
     # bounded_mpmc_check_full benchmark; the underlying deref unit
     # mismatch is fixed by PR #4939, but the full benchmark
