@@ -98,15 +98,40 @@ collect_address_taken(const expr2tc &expr, rw_sett::shared_localst &out)
     [&out](const expr2tc &op) { collect_address_taken(op, out); });
 }
 
-// A stack local becomes shared between threads when its address is handed to a
-// newly spawned thread, i.e. passed as an argument to pthread_create. Only such
-// locals need to stay race-eligible when accessed directly by name (issue
-// #4424). Collecting *every* address-taken local instead floods large/CUDA
-// kernels with race guards, and because each guard inserts yield()
-// context-switch points it dilutes context-bounded search and can hide real
-// races. Restrict the escape set to the arguments of pthread_create calls.
+// Root symbol an lvalue denotes, looking through the selectors that do not
+// change which object is written (`s.f` -> s, `a[k]` -> a, `(T)x` -> x). A
+// dereference yields nil: `*p = &x` names no statically-known destination.
+static expr2tc lvalue_root(const expr2tc &e)
+{
+  expr2tc obj = e;
+  while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
+  {
+    if (is_member2t(obj))
+      obj = to_member2t(obj).source_value;
+    else if (is_index2t(obj))
+      obj = to_index2t(obj).source_value;
+    else
+      obj = to_typecast2t(obj).from;
+  }
+  return is_symbol2t(obj) ? obj : expr2tc();
+}
+
+// A stack local becomes shared between threads when its address reaches a newly
+// spawned thread. Passing it straight to pthread_create is only the direct
+// case: the address also reaches the thread when it is parked somewhere the
+// thread can read it, either a global or another local that has itself escaped
+// (`g = &i;`, or `p = &i;` with `&p` handed to pthread_create). Both leave the
+// local race-eligible when accessed directly by name, and missing them drops
+// the race entirely.
+//
+// The escape set stays deliberately narrow -- only locals whose address is
+// stored into a global or an already-escaped object. Collecting *every*
+// address-taken local floods large/CUDA kernels with race guards, and because
+// each guard inserts yield() context-switch points it dilutes context-bounded
+// search and can hide real races (issue #4424).
 static void collect_thread_escaped_locals(
   const goto_programt &goto_program,
+  const namespacet &ns,
   rw_sett::shared_localst &out)
 {
   forall_goto_program_instructions (i_it, goto_program)
@@ -122,6 +147,36 @@ static void collect_thread_escaped_locals(
       continue;
     for (const expr2tc &arg : call.operands)
       collect_address_taken(arg, out);
+  }
+
+  /* Propagate through stores until nothing new escapes. Bounded by the number
+   * of symbols, since `out` only ever grows. */
+  bool changed = true;
+  while (changed)
+  {
+    changed = false;
+    forall_goto_program_instructions (i_it, goto_program)
+    {
+      if (!i_it->is_assign())
+        continue;
+      const code_assign2t &a = to_code_assign2t(i_it->code);
+
+      const expr2tc dest = lvalue_root(a.target);
+      if (is_nil_expr(dest))
+        continue;
+      const irep_idt &dname = to_symbol2t(dest).thename;
+      const symbolt *dsym = ns.lookup(dname);
+      if (!dsym)
+        continue;
+      if (!dsym->static_lifetime && out.count(dname) == 0)
+        continue;
+
+      rw_sett::shared_localst taken;
+      collect_address_taken(a.source, taken);
+      for (const irep_idt &n : taken)
+        if (out.insert(n).second)
+          changed = true;
+    }
   }
 }
 
@@ -578,8 +633,9 @@ void add_race_assertions(contextt &context, goto_programt &goto_program)
 {
   w_guardst w_guards(context);
 
+  namespacet ns(context);
   rw_sett::shared_localst shared_locals;
-  collect_thread_escaped_locals(goto_program, shared_locals);
+  collect_thread_escaped_locals(goto_program, ns, shared_locals);
 
   // No call-graph context is available for a single program, so no function
   // can be proven always-atomic; instrument every access normally.
@@ -593,6 +649,7 @@ void add_race_assertions(contextt &context, goto_programt &goto_program)
 void add_race_assertions(contextt &context, goto_functionst &goto_functions)
 {
   w_guardst w_guards(context);
+  namespacet ns(context);
 
   // An escape analysis must see the whole program: a local declared in one
   // function may have its address taken there and be dereferenced in another
@@ -600,7 +657,7 @@ void add_race_assertions(contextt &context, goto_functionst &goto_functions)
   // before instrumenting any of them.
   rw_sett::shared_localst shared_locals;
   forall_goto_functions (f_it, goto_functions)
-    collect_thread_escaped_locals(f_it->second.body, shared_locals);
+    collect_thread_escaped_locals(f_it->second.body, ns, shared_locals);
 
   // A function reached only from atomic contexts runs its whole body under the
   // global atomic lock, so its accesses can never race and must be instrumented
