@@ -717,20 +717,20 @@ __ESBMC_HIDE:;
   if (__VERIFIER_nondet_int() == 0)
     return NULL;
 
-  struct cxl_host_bridge *bridge = (struct cxl_host_bridge *)__kmalloc(
+  struct cxl_host_bridge *bridge = (struct cxl_host_bridge *)kmalloc(
     sizeof(struct cxl_host_bridge), GFP_KERNEL);
   if (bridge == NULL)
     return NULL;
 
   bridge->num_devices = __VERIFIER_nondet_int() % 8;
   __ESBMC_assume(bridge->num_devices <= 4);
-  bridge->devices = (struct cxl_dev **)__kmalloc(
+  bridge->devices = (struct cxl_dev **)kmalloc(
     bridge->num_devices * sizeof(struct cxl_dev *), GFP_KERNEL);
 
   for (unsigned int i = 0; i < bridge->num_devices; i++)
   {
     bridge->devices[i] =
-      (struct cxl_dev *)__kmalloc(sizeof(struct cxl_dev), GFP_KERNEL);
+      (struct cxl_dev *)kmalloc(sizeof(struct cxl_dev), GFP_KERNEL);
     if (bridge->devices[i])
     {
       bridge->devices[i]->dev_type = (__VERIFIER_nondet_int() % 3) + 1;
@@ -1034,7 +1034,7 @@ struct cxl_mem *cxl_mem_attach(struct cxl_dev *cxld)
 __ESBMC_HIDE:;
   assert(cxld != NULL);
   struct cxl_mem *cxlmem =
-    (struct cxl_mem *)__kmalloc(sizeof(struct cxl_mem), GFP_KERNEL);
+    (struct cxl_mem *)kmalloc(sizeof(struct cxl_mem), GFP_KERNEL);
   if (cxlmem == NULL)
     return NULL;
 
