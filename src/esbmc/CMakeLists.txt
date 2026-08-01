@@ -27,8 +27,15 @@ if(ENABLE_JIMPLE_FRONTEND)
   set(JIMPLE_FRONTEND_TARGETS jimple)
 endif()
 
-add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
+# A custom target always runs, so the version ID is re-derived on every build
+# rather than once when the build tree is configured, which is what made
+# --git-hash report the configure-time commit instead of the compiled one.
+# buildidobj.py leaves the file untouched when only its timestamp would change,
+# so the flail rule below, and the relink after it, still only fire when the ID
+# actually changes.
+add_custom_target(esbmc_buildid
   COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/buildidobj.py ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
+  BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   COMMENT "Generating ESBMC version ID"
   VERBATIM
@@ -36,7 +43,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt
 set(BUILD_ID_OBJ_OUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.txt)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
   COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py -o ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c ${BUILD_ID_OBJ_OUT}
-  DEPENDS  ${BUILD_ID_OBJ_OUT} ${CMAKE_SOURCE_DIR}/scripts/flail.py
+  DEPENDS  ${BUILD_ID_OBJ_OUT} ${CMAKE_SOURCE_DIR}/scripts/flail.py esbmc_buildid
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   COMMENT "Flailing build ID object"
   VERBATIM
