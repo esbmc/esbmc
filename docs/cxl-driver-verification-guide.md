@@ -11,6 +11,13 @@ and I/O coherence to accelerators, storage, and other devices. Bugs in CXL
 kernel-mode drivers can cause system crashes, data corruption, and security
 vulnerabilities, making formal verification valuable.
 
+> **Read this first.** The CXL-specific API in these models is *synthetic* — a
+> CXL-like interface invented for this work, not the Linux CXL API. It lets you
+> verify driver *patterns* (probe/remove ordering, mailbox status checking, DMA
+> sync discipline, HDM validation) without a hardware backend, but a passing
+> result says nothing about `drivers/cxl/` in the kernel. See the Known
+> Limitations table below.
+
 ESBMC verifies CXL drivers by:
 
 1. **Compiling driver code** via `c2goto` into a GOTO program
@@ -29,16 +36,27 @@ while constraining the state space via `__ESBMC_assume()`.
 Functions: `readb`, `readw`, `readl`, `readq`, `writeb`, `writew`, `writel`,
 `writeq`, and relaxed variants.
 
-- Reads return non-deterministic values
-- Writes are stored in a 64 KB global MMIO space, so subsequent reads of the
-  same address return the written value
-- Out-of-bounds accesses return 0 (reads) or are no-ops (writes)
+- Writes are stored in a 64 KB global MMIO space, so a subsequent read of the
+  same address returns the written value
+- A register the driver has **not** yet written reads non-deterministically —
+  it holds unknown power-on hardware state, so verification must hold for any
+  value the device could present
+- Out-of-bounds accesses return 0 (reads) or are no-ops (writes); an access is
+  out of bounds unless its **full width** fits inside the MMIO space
 
 ```c
 writel(0x1, mmio_base + CXL_REGMAP_DEV_CTRL);
 uint32_t echo = readl(mmio_base + CXL_REGMAP_DEV_CTRL);
 // echo == 0x1 (written value, stored in MMIO space)
+
+uint32_t status = readl(mmio_base + CXL_REGMAP_DEV_STAT);
+// status is non-deterministic — never written by the driver
 ```
+
+Pointers into the MMIO space must be derived from `pci_iomap()` and offset with
+ordinary pointer arithmetic. Casting through `uintptr_t` loses the object
+association in ESBMC's pointer model, and every read then falls back to the
+non-deterministic path.
 
 ### PCI Device Model
 
@@ -99,10 +117,17 @@ Each regression test lives in `regression/cxl/<suite>/` with two files:
 ### test.desc
 
 ```
-CORE          # test class (CORE, KNOWNBUG, FUTURE, THOROUGH)
-main.c        # source file
-^VERIFICATION SUCCESSFUL$  # expected result (regex)
+CORE                       # line 1: test class (CORE, KNOWNBUG, FUTURE, THOROUGH)
+main.c                     # line 2: source file
+                           # line 3: ESBMC flags — MUST be present, empty if none
+^VERIFICATION SUCCESSFUL$  # line 4+: expected output (regex)
 ```
+
+Line 3 is the ESBMC argument list, so it must exist even when the test passes
+no flags. Omitting it silently shifts the regex onto the flags line: ESBMC is
+invoked with `^VERIFICATION SUCCESSFUL$` as command-line arguments, bails out
+with `failed to figure out type of file`, and the test is left with no
+expected-output regex — so it passes without ever verifying anything.
 
 ### main.c
 
@@ -159,8 +184,11 @@ ctest -j$(nproc) -L cxl --timeout 120
 # Run a specific test
 ctest -R "cxl_driver_hdm_align_01" --output-on-failure
 
-# Run with verbose output and Z3 solver
-ctest -R "cxl_driver_hdm_align_01" -V --output-on-failure --build-target esbmc
+# Run with verbose output
+ctest -R "cxl_driver_hdm_align_01" -V --output-on-failure
+
+# Run one harness directly, outside ctest
+./build/src/esbmc/esbmc regression/cxl/cxl_driver_hdm_align_01/main.c
 ```
 
 ## Extending the Models
@@ -202,14 +230,14 @@ __ESBMC_HIDE:;
 ## Known Limitations
 
 | Limitation | Impact | Workaround |
-|-----------|--------|------------|
+|-----------|--------------|------------|
+| **The CXL API modelled here is synthetic** | `struct cxl_dev`, `cxl_mailbox_send_cmd()`, `cxl_setup_hdm_decoders()`, `pci_enable_aer()` and the rest of the CXL-specific surface do not exist in Linux. The generic primitives (`readl`/`writel`, `pci_iomap`, `dma_alloc_coherent`, `request_irq`) are real. | Treat results as statements about driver *patterns*, not about the Linux CXL driver |
+| No real Linux kernel driver source is compiled | Every test is a synthetic harness | Write harnesses that exercise specific code paths |
 | No ACPI _CCA/_CRS/_DSM modeling | Port enumeration is synthetic | Override models in tests |
 | No hardware busy bits | Mailbox state machine is simplified | Use polling in tests |
 | Command-completion interrupts not modeled | Mailbox completion relies on return values | Call `esbmc_simulate_irq()` manually |
-| AER functions not in operational model (legacy) | See new functions | Use `pci_enable_aer()` etc. |
-| Error injection not in operational model (legacy) | See new functions | Use `cxl_err_inject()` etc. |
-| HDM alignment not enforced (legacy) | See new constraints | Use `cxl_setup_hdm_decoders()` with aligned addresses |
-| No real Linux kernel driver source | Tests are synthetic | Write harnesses that exercise specific code paths |
+| `dma_sync_single_for_cpu/_for_device` are no-ops | The model cannot itself detect a missing DMA sync | Track sync state in the harness, as `cxl_dma_01` does |
+| MMIO space is a single 64 KB region shared by all devices | Two mapped BARs can alias | Map one device per verification run |
 
 ## API Quick Reference
 
