@@ -732,6 +732,10 @@ void value_sett::get_value_set_rec(
         if (is_empty_type(subtype))
         {
           total_offs = to_constant_int2t(non_ptr_op).value;
+          /* The sized path above negates for sub2t after scaling; this
+           * recovery path scales by one, so it must negate too. */
+          if (is_sub2t(expr))
+            total_offs.negate();
           is_const = true;
         }
         else
