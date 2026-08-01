@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --color always
 ^.*CONVERSION ERROR$
