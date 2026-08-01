@@ -420,17 +420,12 @@ void goto_convertt::do_cpp_new(
   const exprt &alloc_function =
     static_cast<const exprt &>(rhs.find("alloc_function"));
 
-  // grab initializer
-  goto_programt tmp_initializer;
-  // With no initializer the built-in path zero-fills, which models a fresh
-  // object well enough. Storage from a replaced operator new is not fresh --
-  // the program decides its contents ([expr.new]/17 default-initialises a
-  // scalar to nothing at all) -- so zero-filling it would overwrite what the
-  // replacement just returned.
-  if (alloc_function.is_nil() || rhs.initializer().is_not_nil())
-    cpp_new_initializer(lhs, rhs, tmp_initializer);
-
+  // The element count drives both the allocation size and the construction
+  // loop, and `new T[f()]` evaluates f() exactly once, so evaluate it here --
+  // ahead of cpp_new_initializer -- and hand the resulting side-effect-free
+  // expression to both.
   exprt alloc_size;
+  exprt elem_count;
 
   if (rhs.statement() == "cpp_new[]")
   {
@@ -439,6 +434,7 @@ void goto_convertt::do_cpp_new(
       alloc_size.make_typecast(size_type());
 
     remove_sideeffects(alloc_size, dest);
+    elem_count = alloc_size;
 
     // jmorse: multiply alloc size by size of subtype.
     type2tc subtype = migrate_type(ns.follow(rhs.type().subtype()));
@@ -452,6 +448,16 @@ void goto_convertt::do_cpp_new(
   }
   else
     alloc_size = from_integer(1, size_type());
+
+  // grab initializer
+  goto_programt tmp_initializer;
+  // With no initializer the built-in path zero-fills, which models a fresh
+  // object well enough. Storage from a replaced operator new is not fresh --
+  // the program decides its contents ([expr.new]/17 default-initialises a
+  // scalar to nothing at all) -- so zero-filling it would overwrite what the
+  // replacement just returned.
+  if (alloc_function.is_nil() || rhs.initializer().is_not_nil())
+    cpp_new_initializer(lhs, rhs, elem_count, tmp_initializer);
 
   if (alloc_size.is_nil())
     alloc_size = from_integer(1, size_type());
@@ -545,6 +551,7 @@ static exprt *find_cpp_new_constructor(exprt &e)
 void goto_convertt::cpp_new_initializer(
   const exprt &lhs,
   const exprt &rhs,
+  const exprt &elem_count,
   goto_programt &dest)
 {
   // grab initializer
@@ -620,10 +627,9 @@ void goto_convertt::cpp_new_initializer(
       if (ctor == nullptr)
         return;
 
-      exprt count = static_cast<const exprt &>(rhs.size_irep());
-      if (count.type() != size_type())
-        count.make_typecast(size_type());
-      remove_sideeffects(count, dest);
+      // do_cpp_new already evaluated the count for the allocation; reusing it
+      // is what keeps `new T[f()]` from calling f() a second time here.
+      const exprt &count = elem_count;
 
       symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
 

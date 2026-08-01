@@ -1,4 +1,4 @@
 CORE
 main.cpp
---std c++11 --memory-leak-check
+--std c++11 --memory-leak-check --unwind 4
 ^VERIFICATION SUCCESSFUL$
