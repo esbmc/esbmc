@@ -5,9 +5,10 @@ import threading
 # where both threads read counter==0 before either writes leaves
 # counter==1, violating the assertion.
 #
-# Regression for #4584, exercising the ``--data-races-check`` path.
-# threading_thread_increment_race_no_flag_fail runs the same program
-# without that flag.
+# Regression for #4584, the plain path: no --data-races-check. That flag
+# used to be the only thing keeping interleaving generation alive once a
+# sibling schedule had run __ESBMC_main to completion, because the
+# reachability tree tracked that per search rather than per state.
 counter: int = 0
 
 
