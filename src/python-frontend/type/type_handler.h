@@ -210,6 +210,10 @@ public:
 
   bool is_tagged_scalar_type(const typet &t) const;
 
+  exprt tagged_scalar_type_id(const typet &type) const;
+
+  exprt tagged_scalar_byte_size(const exprt &value) const;
+
   /*
    * Gets the generic dictionary type from the symbol table.
    * @return A pointer to the generic __python_dict__ struct type.

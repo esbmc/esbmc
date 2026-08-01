@@ -2457,7 +2457,7 @@ void python_converter::get_tagged_scalar_assign(
   exprt value_to_store = rhs;
   if (rhs.type() == bool_type())
     value_to_store = python_expr::build_typecast(
-      rhs, signedbv_typet(config.ansi_c.long_int_width));
+      rhs, signedbv_typet(config.ansi_c.long_long_int_width));
 
   symbolt &backing = create_tmp_symbol(
     ast_node, "$scalar_tag$", value_to_store.type(), value_to_store);
@@ -2466,25 +2466,7 @@ void python_converter::get_tagged_scalar_assign(
   backing_decl.location() = location;
   target_block.copy_to_operands(backing_decl);
 
-  // Byte size of the backing value: array length * element width for a
-  // string literal, plain width for a numeric scalar.
-  exprt elem_size;
-  if (value_to_store.type().is_array())
-  {
-    const array_typet &array_type = to_array_type(value_to_store.type());
-    const size_t array_length =
-      std::stoull(array_type.size().value().as_string(), nullptr, 2);
-    const size_t subtype_bits =
-      std::stoull(array_type.subtype().width().as_string(), nullptr, 10);
-    elem_size =
-      from_integer(BigInt((array_length * subtype_bits) / 8), size_type());
-  }
-  else
-  {
-    const size_t width_bits =
-      std::stoull(value_to_store.type().width().as_string(), nullptr, 10);
-    elem_size = from_integer(BigInt(width_bits / 8), size_type());
-  }
+  exprt elem_size = type_handler_.tagged_scalar_byte_size(value_to_store);
 
   // `backing` goes DEAD at the end of this branch; copy its value into
   // non-expiring storage first so `.value` stays valid past the join.
@@ -2499,12 +2481,7 @@ void python_converter::get_tagged_scalar_assign(
   exprt copy_call = python_expr::build_call_expr(
     *copy_func, pointer_typet(empty_typet()), {backing_addr, elem_size});
 
-  // Reuses the list-element type_id hash, so a tagged scalar and a list
-  // element of the same Python type share the same value.
-  const std::string type_name = type_handler_.type_to_string(rhs.type());
-  constant_exprt type_id_value(size_type());
-  type_id_value.set_value(integer2binary(
-    std::hash<std::string>{}(type_name), config.ansi_c.address_width));
+  exprt type_id_value = type_handler_.tagged_scalar_type_id(rhs.type());
 
   exprt tag_expr = python_expr::build_symbol(*tag_symbol);
 

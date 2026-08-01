@@ -873,12 +873,7 @@ exprt python_converter::build_tagged_scalar_eq_literal(
   const exprt &literal)
 {
   exprt tagged_addr = python_expr::build_address_of(tagged);
-
-  const std::string lit_type_name =
-    type_handler_.type_to_string(literal.type());
-  constant_exprt lit_type_id(size_type());
-  lit_type_id.set_value(integer2binary(
-    std::hash<std::string>{}(lit_type_name), config.ansi_c.address_width));
+  exprt lit_type_id = type_handler_.tagged_scalar_type_id(literal.type());
 
   if (literal.type().is_array())
   {
@@ -886,14 +881,7 @@ exprt python_converter::build_tagged_scalar_eq_literal(
       symbol_table_.find_symbol("c:@F@__python_scalar_eq_str");
     assert(eq_str_func && "__python_scalar_eq_str not found in symbol table");
     exprt lit_addr = string_handler_.get_array_base_address(literal);
-
-    const array_typet &lit_array_type = to_array_type(literal.type());
-    const size_t lit_array_length =
-      std::stoull(lit_array_type.size().value().as_string(), nullptr, 2);
-    const size_t lit_subtype_bits =
-      std::stoull(lit_array_type.subtype().width().as_string(), nullptr, 10);
-    exprt lit_size = from_integer(
-      BigInt((lit_array_length * lit_subtype_bits) / 8), size_type());
+    exprt lit_size = type_handler_.tagged_scalar_byte_size(literal);
 
     exprt call = python_expr::build_call_expr(
       *eq_str_func, int_type(), {tagged_addr, lit_type_id, lit_addr, lit_size});
@@ -907,13 +895,8 @@ exprt python_converter::build_tagged_scalar_eq_literal(
       "comparing a dynamically-typed variable against this literal type is "
       "not yet supported");
 
-  exprt lit_value = literal;
-  if (lit_value.type() == bool_type())
-    lit_value = python_expr::build_typecast(
-      lit_value, signedbv_typet(config.ansi_c.long_int_width));
-  else
-    lit_value = python_expr::build_typecast(
-      lit_value, signedbv_typet(config.ansi_c.long_long_int_width));
+  exprt lit_value = python_expr::build_typecast(
+    literal, signedbv_typet(config.ansi_c.long_long_int_width));
 
   const symbolt *eq_num_func =
     symbol_table_.find_symbol("c:@F@__python_scalar_eq_num");
