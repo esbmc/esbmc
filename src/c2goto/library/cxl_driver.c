@@ -1495,6 +1495,13 @@ int cxl_region_overlaps(const struct cxl_region *a, const struct cxl_region *b)
 __ESBMC_HIDE:;
   assert(a != NULL);
   assert(b != NULL);
+
+  /* A host physical address range cannot wrap the address space. The
+     half-open test below adds start to size, so without this precondition
+     a wrapping range would silently report "no overlap". */
+  assert(a->start <= (resource_size_t)-1 - a->size);
+  assert(b->start <= (resource_size_t)-1 - b->size);
+
   return a->start < b->start + b->size && b->start < a->start + a->size;
 }
 
