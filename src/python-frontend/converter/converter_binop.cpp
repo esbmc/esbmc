@@ -2469,8 +2469,13 @@ exprt python_converter::build_binary_expression(
   // type, the narrower float widens to the wider. Bitwise operands were
   // already coerced to int above, so no float reaches a bitwise op.
   {
-    const bool lhs_float = lhs.type().is_floatbv();
-    const bool rhs_float = rhs.type().is_floatbv();
+    // Under --fixedbv a Python float is a fixedbv, not a floatbv; testing only
+    // is_floatbv() left the int/float mix unreconciled there (#6567).
+    auto is_float = [](const typet &t) {
+      return t.is_floatbv() || t.is_fixedbv();
+    };
+    const bool lhs_float = is_float(lhs.type());
+    const bool rhs_float = is_float(rhs.type());
     if (lhs_float && is_bv_or_bool(rhs.type()))
       rhs = typecast_exprt(rhs, lhs.type());
     else if (rhs_float && is_bv_or_bool(lhs.type()))

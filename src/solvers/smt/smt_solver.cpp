@@ -1478,6 +1478,24 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     expr2tc inner = if2tc(
       cw.type, eq, make_cmp_value(cw.type, 0), make_cmp_value(cw.type, 1));
     expr2tc outer = if2tc(cw.type, lt, make_cmp_value(cw.type, -1), inner);
+
+    // Floating-point operands yield std::partial_ordering, whose fourth
+    // result is `unordered` when either operand is NaN ([expr.spaceship]/4).
+    // Without this the NaN case falls through the chain above and is reported
+    // as `greater`. The sentinel must agree with std::partial_ordering's
+    // representation in src/cpp/library/compare, which follows libc++.
+    if (is_floatbv_type(cw.side_1) || is_floatbv_type(cw.side_2))
+    {
+      constexpr int partial_ordering_unordered = -127;
+      expr2tc gt = greaterthan2tc(cw.side_1, cw.side_2);
+      expr2tc ordered = or2tc(lt, or2tc(eq, gt));
+      outer = if2tc(
+        cw.type,
+        ordered,
+        outer,
+        make_cmp_value(cw.type, partial_ordering_unordered));
+    }
+
     a = convert_ast(outer);
     break;
   }

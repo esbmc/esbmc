@@ -408,15 +408,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("max-context-bound", 20);
 
-  // The Buchi monitor is driven by directed switches inserted after every
-  // update to a variable one of its propositions reads; that mechanism exists
-  // precisely to replace general-purpose scheduling of the monitor thread.
-  // Leaving the monitor ordinarily schedulable as well lets the scheduler
-  // return to the program without the paired switch away from the monitor, so
-  // the next directed switch trips over its own bookkeeping.
-  if (cmdline.isset("ltl"))
-    options.set_option("direct-interleavings", true);
-
   if (cmdline.isset("deadlock-check"))
   {
     options.set_option("deadlock-check", true);

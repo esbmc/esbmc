@@ -349,8 +349,14 @@ void execution_statet::symex_step(reachability_treet &art)
         goto_symext::symex_assign(assign);
         cur_state->source = saved_source;
       }
-      symex_return(thecode);
+      // symex_return falsifies the path guard, and analyze_assign ignores a
+      // false guard, so a shared write performed by the return assignment
+      // offers no context-switch point unless analyzed first. The guard a
+      // switch here must chain is likewise the one from before the return
+      // (issue #6558).
       analyze_assign(assign);
+      last_transition.parent_guard = threads_state[active_thread].guard;
+      symex_return(thecode);
     }
     state.source.pc++;
     break;
@@ -392,11 +398,11 @@ void execution_statet::symex_goto(const expr2tc &old_guard)
   goto_symext::symex_goto(old_guard);
 }
 
-void execution_statet::record_branch_sibling(
+void execution_statet::record_parked_path(
   goto_programt::const_targett target,
-  statet::merge_state_listt::iterator sibling)
+  statet::merge_state_listt::iterator parked)
 {
-  last_transition.branch = branch_resultt{target, sibling};
+  last_transition.parked = parked_patht{target, parked};
 }
 
 void execution_statet::assume(const expr2tc &assumption)
@@ -482,6 +488,16 @@ bool execution_statet::check_if_ileaves_blocked()
   if (get_active_atomic_number() > 0)
     return true;
 
+  // A directed monitor step runs from switch_to_monitor to its paired switch
+  // away. The caller's ATOMIC_BEGIN does not cover it -- atomic counts are
+  // per-thread and the monitor's own is zero -- so interleaving here would
+  // abandon the monitor mid-step and strand the bookkeeping (#6585). The
+  // instrumented sites in property_monitors.cpp are all atomic anyway; the one
+  // exception is libltl2ba's own switch in ltl2ba_start_monitor, which runs
+  // before any user thread exists.
+  if (mon_from_tid)
+    return true;
+
   if (art1->directed_interleavings)
     // Don't generate interleavings automatically - instead, the user will
     // inserts intrinsics identifying where they want interleavings to occur,
@@ -494,7 +510,9 @@ bool execution_statet::check_if_ileaves_blocked()
     // Don't generate further interleavings since __ESBMC_main thread has ended.
     return true;
 
-  if (threads_state.size() < 2)
+  // The monitor never counts: it is stepped by directed switches, so it does
+  // not make an otherwise single-threaded program worth interleaving (#6585).
+  if (threads_state.size() < 2u + (tid_is_set ? 1u : 0u))
     return true;
 
   return false;
@@ -515,6 +533,12 @@ void execution_statet::end_thread()
   // live thread (because it's trying to be atomic). So, disable atomic blocks
   // when the thread ends.
   atomic_numbers[active_thread] = 0;
+
+  // A monitor that runs out of prefix bound ends mid-step, so its paired
+  // switch away never clears the in-flight flag. Left set it would block
+  // every later interleaving, the same way a stale atomic count would.
+  if (tid_is_set && active_thread == monitor_tid)
+    mon_from_tid = false;
 }
 
 void execution_statet::update_after_switch_point()
@@ -566,23 +590,23 @@ void execution_statet::preserve_last_paths(const transition_resultt &transition)
   if (!ls.guard.is_false() || !is_cur_state_guard_false(ls.guard.as_expr()))
     pp.push_back(std::make_pair(ls.source.pc, merge_statet(ls)));
 
-  if (transition.branch)
+  if (transition.parked)
   {
-    // The GOTO that produced this transition pushed a sibling merge_statet
-    // onto ls.top().merge_state_map[transition.branch->target]. We captured
+    // The GOTO or RETURN that produced this transition pushed a merge_statet
+    // onto ls.top().merge_state_map[transition.parked->target]. We captured
     // an iterator to it at the time, so no further scan or guard matching
     // is needed.
     //
     // Sanity: the map entry for the recorded target must still exist.
-    // See branch_resultt::sibling docs for why the iterator can survive
+    // See parked_patht::snapshot docs for why the iterator can survive
     // the clone but stays load-bearing: this assertion does NOT catch
     // a dangling iterator, only the easier case where the list entry
     // itself disappeared.
     assert(
-      ls.top().merge_state_map.count(transition.branch->target) &&
-      "preserved branch target missing from merge_state_map");
+      ls.top().merge_state_map.count(transition.parked->target) &&
+      "parked path target missing from merge_state_map");
     pp.emplace_back(
-      transition.branch->target, merge_statet(*transition.branch->sibling));
+      transition.parked->target, merge_statet(*transition.parked->snapshot));
   }
 
   // We must have picked up at least one path to merge
@@ -723,12 +747,13 @@ void execution_statet::execute_guard()
     tmp |= threads_state[last_active_thread].guard;
     parent_guard = tmp.as_expr();
   }
-  else if (last_transition.branch && last_transition.parent_guard)
+  else if (last_transition.parked && last_transition.parent_guard)
   {
-    // Switching right after a branch: the thread continues on the
-    // fall-through OR the parked arm, so chain the pre-branch guard. Using
-    // only the fall-through guard poisons the suffix with assume(false)
-    // when a constant-true goto killed the fall-through (issue #6558).
+    // Switching right after a step that parked the thread's continuation:
+    // chain the guard from before it was parked, since the present one is
+    // false. Using it poisons the suffix with assume(false) -- when a
+    // constant-true goto killed the fall-through, and at every return, where
+    // symex_return always falsifies the guard (issue #6558).
     parent_guard = last_transition.parent_guard->as_expr();
   }
   else
