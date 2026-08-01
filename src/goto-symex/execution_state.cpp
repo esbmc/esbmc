@@ -488,6 +488,16 @@ bool execution_statet::check_if_ileaves_blocked()
   if (get_active_atomic_number() > 0)
     return true;
 
+  // A directed monitor step runs from switch_to_monitor to its paired switch
+  // away. The caller's ATOMIC_BEGIN does not cover it -- atomic counts are
+  // per-thread and the monitor's own is zero -- so interleaving here would
+  // abandon the monitor mid-step and strand the bookkeeping (#6585). The
+  // instrumented sites in property_monitors.cpp are all atomic anyway; the one
+  // exception is libltl2ba's own switch in ltl2ba_start_monitor, which runs
+  // before any user thread exists.
+  if (mon_from_tid)
+    return true;
+
   if (art1->directed_interleavings)
     // Don't generate interleavings automatically - instead, the user will
     // inserts intrinsics identifying where they want interleavings to occur,
@@ -500,7 +510,9 @@ bool execution_statet::check_if_ileaves_blocked()
     // Don't generate further interleavings since __ESBMC_main thread has ended.
     return true;
 
-  if (threads_state.size() < 2)
+  // The monitor never counts: it is stepped by directed switches, so it does
+  // not make an otherwise single-threaded program worth interleaving (#6585).
+  if (threads_state.size() < 2u + (tid_is_set ? 1u : 0u))
     return true;
 
   return false;
@@ -521,6 +533,12 @@ void execution_statet::end_thread()
   // live thread (because it's trying to be atomic). So, disable atomic blocks
   // when the thread ends.
   atomic_numbers[active_thread] = 0;
+
+  // A monitor that runs out of prefix bound ends mid-step, so its paired
+  // switch away never clears the in-flight flag. Left set it would block
+  // every later interleaving, the same way a stale atomic count would.
+  if (tid_is_set && active_thread == monitor_tid)
+    mon_from_tid = false;
 }
 
 void execution_statet::update_after_switch_point()
