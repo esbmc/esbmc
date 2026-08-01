@@ -429,6 +429,58 @@ void python_adjust::adjust_expr(expr2tc &expr)
     }
   }
   else if (
+    is_add2t(expr) || is_sub2t(expr) || is_mul2t(expr) || is_div2t(expr) ||
+    is_modulus2t(expr) || is_bitand2t(expr) || is_bitxor2t(expr) ||
+    is_bitor2t(expr))
+  {
+    // The scalar half of clang_c_adjust::adjust_expr_binary_arithmetic
+    // (clang_c_adjust_expr.cpp:524-540), over the IREP2 counterparts of the
+    // eight ids legacy routes there (clang_c_adjust_expr.cpp:124-130). Phase 1
+    // of docs/roadmap/scope-coupled-arith-assign-conversion.md, and it must
+    // precede that scope's assignment arm: converting at the assignment seam
+    // over operands this pass never reconciled masks a real bug
+    // (neural-net_fail SUCCESSFUL where legacy correctly reports FAILED).
+    //
+    // Legacy's other two pieces -- the complex branch and the ieee_* retype --
+    // are measured dead on the Python path; §10.1 of that scope records the
+    // evidence and the converter sites responsible.
+    std::vector<expr2tc *> ops;
+    expr->Foreach_operand([&ops](expr2tc &op) { ops.push_back(&op); });
+
+    // Declining pointer reproduces legacy's is_number guard: pointer operands
+    // are ~31 % of the corpus (the C operational-model bodies' pointer
+    // arithmetic) and converting them would corrupt it. `code` operands occur
+    // too -- `cmath.pi / 2.0` builds an IEEE_DIV over a bare code-typed symbol
+    // -- and c_implicit_typecast_arithmetic has no arm for either.
+    auto convertible = [](const expr2tc &e) {
+      return is_bv_type(e->type) || is_floatbv_type(e->type) ||
+             is_fixedbv_type(e->type);
+    };
+
+    if (ops.size() == 2 && convertible(*ops[0]) && convertible(*ops[1]))
+    {
+      expr2tc lhs = *ops[0], rhs = *ops[1];
+      c_implicit_typecast_arithmetic(lhs, rhs, ns);
+
+      // arith_2ops requires the node's own type to agree with *both* operands
+      // in bv-ness and width (assert_arith_2ops_consistency,
+      // irep2_expr.cpp:656 -- compiled out under NDEBUG, so a Release build
+      // will not catch a violation here). Reconcile on copies and commit only
+      // when the promotion lands both operands on one type, which is then
+      // adopted for the node: a half-applied promotion would leave the node
+      // ill-formed. This is legacy's `expr.type() = type0`
+      // (clang_c_adjust_expr.cpp:532-533) with the rebuild IREP2 immutability
+      // forces.
+      if (lhs->type == rhs->type)
+      {
+        *ops[0] = lhs;
+        *ops[1] = rhs;
+        if (lhs->type != expr->type)
+          expr = expr->with_type(lhs->type);
+      }
+    }
+  }
+  else if (
     is_typecast2t(expr) && is_pointer_type(expr->type) &&
     is_array_type(to_typecast2t(expr).from->type))
   {

@@ -1,16 +1,17 @@
 # Scope — the coupled arithmetic + assignment conversion (the `python_adjust` flip blocker)
 
-> **Status: Phase 0 discharged (2026-07-30); Phases 1-3 not started.** This
-> document exists because `docs/roadmap/scope-v1k-adjuster.md` §"Flip gate
+> **Status: Phases 0 and 1 discharged (2026-07-30); Phases 2-3 not started.**
+> This document exists because `docs/roadmap/scope-v1k-adjuster.md` §"Flip gate
 > (2026-07-29)" closes that scope with exactly one remaining prerequisite and
 > hands it off: *"Next owner: take the coupled conversion effort as its own
 > scope, then re-run this whole-corpus census as the flip gate."* This is that
 > scope.
 >
-> §9 records the Phase 0 census and the prototype measurements it enabled. **No
-> code has landed** — the instrumentation and the prototype arms were reverted,
-> as Phase 0 requires. §9 confirms §2's coupling argument and corrects §3.2,
-> §3.4 and §4 Phase 2.
+> §9 records the Phase 0 census and the prototype measurements it enabled; its
+> instrumentation and prototype arms were reverted, as Phase 0 requires. §10
+> records what Phase 1 shipped, which is **smaller than §3.4 sized it**: two of
+> the three pieces §3.3/§9.1 asked for are measured dead on this path and were
+> not built.
 
 ## 1. What this unblocks, and what it does not
 
@@ -176,7 +177,7 @@ Discharge G0. Instrument `python_adjust::adjust_expr` to log the `type_id` and
 suite, and tabulate. Deliverable: a table of reachable operand type kinds.
 Revert the instrumentation.
 
-### Phase 1 — operand-level arithmetic reconciliation
+### Phase 1 — operand-level arithmetic reconciliation — **LANDED, §10**
 
 Add the binary-arithmetic arm to `adjust_expr`, covering the kinds Phase 0
 found reachable. Widen the `python_adjust.cpp:421` guard from
@@ -416,3 +417,98 @@ correction recorded in §4 Phase 2.
 One claim in §2 did not reproduce: mirroring the assignment conversion alone
 does **not** fix `precedence2` (it stays FAILED in that configuration). The
 `neural-net_fail` half of that sentence reproduced exactly.
+
+## 10. Phase 1 — what landed (2026-07-30)
+
+An `else if` arm in `python_adjust::adjust_expr` over the eight IREP2
+counterparts of the ids legacy routes to `adjust_expr_binary_arithmetic`
+(`add sub mul div modulus bitand bitxor bitor`), calling
+`c_implicit_typecast_arithmetic(expr2tc&, expr2tc&, ns)` on the two operands
+when both are `bv`/`floatbv`/`fixedbv`, then adopting the reconciled type for
+the node. Well under §3.4's 40-60 estimate, because one of the three pieces
+that estimate included is dead on this path.
+
+### 10.1 One sub-arm §3.3 asked for, measured dead
+
+It was not shipped; keeping it would be dead instrumentation. The node-type
+adoption was *also* judged dead on a first pass — that judgement was wrong, and
+CI caught it; see §10.4.
+
+- **The `ieee_*` rebuild (§3.3).** `map_operator` already returns
+  `ieee_add`/`ieee_sub`/`ieee_mul`/`ieee_div` whenever the result type is
+  floatbv (`converter/converter_internal.h:78-89`), so a plain floatbv-typed
+  arithmetic node never reaches the adjuster in the first place. Confirmed
+  empirically: an instrumented build logging every floatbv-typed `add`/`sub`/
+  `mul`/`div` reaching the arm fired **0 times over 597 tests**. §3.3's concern
+  — that IREP2 cannot retype a node in place — is real but does not arise here,
+  because nothing needs retyping.
+
+### 10.2 Gates
+
+| gate | result |
+|---|---|
+| **G2** (`neural-net_fail --fixedbv` FAILED) | **holds** — legacy FAILED, bare hop-off FAILED, arm FAILED. Matches §9.3 row 5 |
+| G1/G3 tests | all eight verdict-identical to the bare hop-off; unchanged, as expected — they need Phase 2 |
+| default path | unaffected by construction: `python_adjust` runs only under `--python-irep2-adjust-only` / `--python-irep2-adjust`, both default-off (`python_language.cpp:299,331`). 400-test default-path slice green |
+| hop-off suite | 146/150; the 4 failures are `esbmc-solidity`, blocked on macOS (no `solc`, empty `sol64` models) |
+
+### 10.3 The verdict witness, and a residual gap
+
+Phase 1 is not merely verdict-neutral — it clears a false alarm the bare hop-off
+reports, which is what the new `python_irep2_adjust_only_binary_arith{,_fail}`
+pair pins:
+
+```python
+def mix(n: int, x: float) -> float:
+    return n * x + n
+assert mix(2, 1.5) == 5.0     # --fixedbv: legacy SUCCESSFUL,
+                              # bare hop-off FAILED, arm SUCCESSFUL
+```
+
+A neighbouring shape does **not** clear, and is worth recording for Phase 2:
+`return 3 * x - 1` under `--fixedbv` stays FAILED under the arm where legacy
+reports SUCCESSFUL. The operands reconcile; what is missing is the conversion at
+the **return seam**, which is the same node-kind question §4 Phase 2 already
+flags for assignments.
+
+### 10.4 The node-type adoption is required — a correction
+
+The first version of this arm converted the operands and left the node type
+alone, on the finding that legacy's adoption never fires here. **That finding
+was an artefact of the probe, and the resulting arm was ill-formed.** CI caught
+it: both new tests aborted on macOS with
+
+```
+Assertion failed: (p1 || (is_bv_type(t) == is_bv_type(v2->type) &&
+  t->get_width() == v2->type->get_width())), function
+  assert_arith_2ops_consistency, file irep2_expr.cpp, line 678.
+```
+
+`arith_2ops` requires the node type to agree with **both** operands in bv-ness
+and width. Promoting an operand without adopting the type violates that
+directly.
+
+**Why the probe said "0 firings".** It logged only the case
+`lhs->type == rhs->type && reconciled != expr->type`. But
+`c_implicit_typecast_arithmetic` frequently promotes *one* operand and leaves
+the other — a `signedbv` literal against a `fixedbv` variable is the common
+shape — so the equality precondition was false exactly when the node became
+inconsistent. The probe measured a strictly narrower condition than the
+invariant, and reported the difference as absence. **Probe the invariant you
+depend on, not a proxy for it.**
+
+**Why local testing did not catch it.** `assert_arith_2ops_consistency` is
+`#ifndef NDEBUG`, so a `RelWithDebInfo` build compiles it out; the corpus census,
+the flip-gate tests and both new regression tests all passed locally with an
+ill-formed IR. Two dead ends worth not repeating: a bare `#undef NDEBUG` in
+`irep2_expr.cpp` makes `c2goto` abort (exit 138) on a *pre-existing* violation
+in the C operational-model build, so it cannot be used to isolate Python-path
+regressions; and a full `DebugOpt` build is the documented route but costs a
+complete rebuild.
+
+**What replaced it.** The arm now reconciles on copies and commits only when the
+promotion lands both operands on one type, which it then adopts via
+`with_type`. Verified by a postcondition probe that checks the invariant itself
+on every 2-op arith node the arm touches — **validated by first confirming it
+reports 2 violations on the pre-fix code**, then 0 after the fix, then 0 across
+the corpus. A probe that has not been shown to fire proves nothing.
