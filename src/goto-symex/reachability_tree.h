@@ -282,8 +282,6 @@ public:
   const namespacet &ns;
   /** Options that are enabled */
   optionst &options;
-  /** __ESBMC_main thread has ended */
-  bool main_thread_ended;
   /** --context-bound cut an available switch: the schedule space was truncated
    *  rather than exhausted (issue #6480). */
   bool cs_bound_pruned;
