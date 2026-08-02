@@ -62,8 +62,8 @@ SCENARIO(
       expr2tc in_range = constant_int2tc(idx_type, BigInt(3));
       THEN("the stored field is returned")
       {
-        REQUIRE(flattener.mk_select(ma, in_range, subtype) ==
-                ma->array_fields[3]);
+        REQUIRE(
+          flattener.mk_select(ma, in_range, subtype) == ma->array_fields[3]);
       }
     }
 
