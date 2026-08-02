@@ -461,7 +461,7 @@ The project's most valuable output is therefore its least protected, free to
 rot silently. Vendoring preprocessed translation units (`.i` files) for the
 verified functions would make Phase 5 reproducible without a kernel checkout.
 
-**4. Verify concurrency at all.** — Started.
+**4. Verify concurrency at all.** — Done.
 
 CXL exists to extend cache coherence across a link, and the Target Scope
 lists concurrent driver access and DMA coherence. Yet `cxl_concurrent_01` —
@@ -477,10 +477,20 @@ the in-flight counter (CWE-362), and the passing variant is the same test with
 the mutex taken — so the pair is its own patch-and-reverify. Both run under
 `--data-races-check --context-bound 2`.
 
-Still needed: a DMA-coherence test, and `cxl_concurrent_01` should either
-become genuinely threaded or stop claiming to cover concurrency.
+`cxl_concurrent_01` is now genuinely threaded — two submitters and an error
+handler contending for the same device state, with a blocking spinlock.
+Deleting its lock makes ESBMC report a W/W data race on the counter, so it
+passes because the lock works rather than because nothing contends.
 
-**5. Require patch-and-reverify for every failing test.**
+`cxl_dma_coherent_01/02` cover the DMA half. Coherent means the CPU and device
+observe each other's writes without cache maintenance; it does not mean they
+may write the same word at once, so ownership still has to be handed over. The
+failing variant hands nothing over.
+
+Five tests now verify an interleaving, all under `--data-races-check
+--context-bound 2`.
+
+**5. Require patch-and-reverify for every failing test.** — Done as practice.
 
 A test expecting `VERIFICATION FAILED` can fail for a reason unrelated to the
 bug it claims to model. The practice that works: patch the modelled bug in a
@@ -650,9 +660,10 @@ figure; without it only the static analysis runs.
         `cxl_hdm_decode_init()` verified (see Phase 5); broad coverage pending
 - [x] Phase 6.1: User documentation published (user guide + roadmap + test summary)
 - [ ] Phase 6.2–6.3: Generic driver template and technical report — not started
-- [~] Phase 8: 8.1 (property flags) and 8.2 (coverage metric) done; 8.4
-        (concurrency) started — mailbox race pair landed, DMA coherence
-        pending; 8.3, 8.5, 8.6 not started
+- [~] Phase 8: 8.1 (property flags), 8.2 (coverage metric), 8.4
+        (concurrency) and 8.5 (patch-and-reverify, by construction in the
+        race pairs) done; 8.3 (real-driver harnesses in CI) and 8.6 (kernel
+        version) not started
 - [~] Phase 7: two slices delivered — memdev id allocation, region
         interleave, the mailbox IOCTL path and downstream port lifetime,
         all modelled against the real driver's constraints (8 tests, 11
@@ -667,13 +678,13 @@ currently poor:
 | Question | Today | Was |
 |---|---|---|
 | Real Linux driver functions verified | 4 | 4 |
-| Operational model functions exercised | 20 of 105 (19%) | not measured |
-| Tests that execute the operational model | 13 of 37 | 11 of 35 |
-| Tests declaring the properties they check | 37 of 37 | 1 of 35 |
-| Tests that verify an interleaving | 2 of 37 | 0 of 35 |
+| Operational model functions exercised | 22 of 105 (21%) | not measured |
+| Tests that execute the operational model | 15 of 39 | 11 of 35 |
+| Tests declaring the properties they check | 39 of 39 | 1 of 35 |
+| Tests that verify an interleaving | 5 of 39 | 0 of 35 |
 
 Phase 8.1 and 8.4 moved the last two; 8.2 made the second measurable for the
-first time, and at 19% it is the number most worth moving next. A rising test
+first time, and at 21% it is still the number most worth moving next. A rising test
 count still should not be read as rising confidence.
 
 ## Current Statistics
@@ -695,10 +706,10 @@ Phase 8.2 raises model coverage, the suite becomes worth re-enabling.
 
 | Metric | Count |
 |--------|-------|
-| Total commits | 27 |
-| Total regression tests | 37 |
-| Passing tests | 23 |
-| Bug-detecting tests | 14 |
+| Total commits | 30 |
+| Total regression tests | 39 |
+| Passing tests | 24 |
+| Bug-detecting tests | 15 |
 | Kernel headers added | 6 |
 | Operational model lines | 1,637 |
 | Documentation pages | 3 |
