@@ -258,6 +258,13 @@ exprt function_call_expr::handle_isinstance() const
   const auto &obj_arg = args[0];
   const auto &type_arg = args[1];
 
+  // A tagged-scalar operand has no single static C type for isinstance()
+  // to check against -- its real type lives in the runtime `.type_id`
+  // field, which isinstance() does not consult yet.
+  if (converter_.get_type_handler().is_tagged_scalar_type(obj_expr.type()))
+    throw std::runtime_error(
+      "isinstance() on a dynamically-typed variable is not yet supported");
+
   // Check if the first argument is a type object (e.g., x = int; isinstance(x, str))
   // Type objects themselves are not instances of other types (except 'type')
   if (obj_arg["_type"] == "Name")

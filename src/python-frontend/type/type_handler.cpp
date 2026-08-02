@@ -1108,13 +1108,50 @@ const typet type_handler::get_list_type() const
   return lower_to_seam(pointer_type2tc(symbol_type2tc(list_type_symbol->id)));
 }
 
-typet type_handler::get_list_element_type() const
+typet type_handler::get_tagged_object_type() const
 {
   static const symbolt *type = nullptr;
   const char *type_id = "tag-struct __ESBMC_PyObj";
   type = converter_.symbol_table().find_symbol(type_id);
   assert(type);
   return symbol_typet(type->id);
+}
+
+bool type_handler::is_tagged_scalar_type(const typet &t) const
+{
+  return t == get_tagged_object_type();
+}
+
+exprt type_handler::tagged_scalar_type_id(const typet &type) const
+{
+  const std::string type_name =
+    type == bool_type() ? "int" : type_to_string(type);
+  constant_exprt type_id(size_type());
+  type_id.set_value(integer2binary(
+    std::hash<std::string>{}(type_name), config.ansi_c.address_width));
+  return type_id;
+}
+
+exprt type_handler::tagged_scalar_byte_size(const exprt &value) const
+{
+  if (value.type().is_array())
+  {
+    const array_typet &array_type = to_array_type(value.type());
+    const size_t array_length =
+      std::stoull(array_type.size().value().as_string(), nullptr, 2);
+    const size_t subtype_bits =
+      std::stoull(array_type.subtype().width().as_string(), nullptr, 10);
+    return from_integer(BigInt((array_length * subtype_bits) / 8), size_type());
+  }
+
+  const size_t width_bits =
+    std::stoull(value.type().width().as_string(), nullptr, 10);
+  return from_integer(BigInt(width_bits / 8), size_type());
+}
+
+typet type_handler::get_list_element_type() const
+{
+  return get_tagged_object_type();
 }
 
 typet type_handler::get_slice_type() const
