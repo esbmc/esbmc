@@ -3425,6 +3425,21 @@ void python_converter::get_var_assign(
     // Create LHS expression
     lhs = create_lhs_expression(target, lhs_symbol, location_begin);
 
+    // A dict literal containing a copied numpy view (named or inline, e.g.
+    // {"row": x[0]}) is handled entirely by dict_handler_ below, which
+    // never routes through the generic List/Tuple/Dict escape check further
+    // down this function (dict_handler_ returns before reaching it) — so it
+    // has to be caught here too, or the view ends up embedded in the dict's
+    // runtime representation in a way that crashes SMT encoding instead of
+    // producing a diagnostic (mismatched sort widths in z3_convt::mk_eq).
+    if (
+      ast_node.contains("value") && ast_node["value"].is_object() &&
+      ast_node["value"].value("_type", "") == "Dict" &&
+      contains_copied_numpy_view_name(ast_node["value"]))
+      throw std::runtime_error(
+        "TypeError: storing a copied numpy view in a container is not "
+        "supported");
+
     // Handle dict literal assignment specially - after LHS is created
     if (dict_handler_->handle_literal_assignment_check(*this, ast_node, lhs))
     {
@@ -3454,6 +3469,17 @@ void python_converter::get_var_assign(
     lhs_symbol = symbol_table_.find_symbol(sid.to_string());
 
     bool is_global = is_global_variable(sid);
+
+    // Same reasoning as the annotated-assignment dict check above: this
+    // path also hands off to dict_handler_ before the generic container
+    // escape check further down ever runs.
+    if (
+      ast_node.contains("value") && ast_node["value"].is_object() &&
+      ast_node["value"].value("_type", "") == "Dict" &&
+      contains_copied_numpy_view_name(ast_node["value"]))
+      throw std::runtime_error(
+        "TypeError: storing a copied numpy view in a container is not "
+        "supported");
 
     // Handle unannotated dict literal assignment
     if (
