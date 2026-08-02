@@ -1,1 +1,0 @@
-#include "/Users/user/esbmc/src/c2goto/headers/libc_hdr.h"
