@@ -184,6 +184,130 @@ static void collect_thread_escaped_locals(
   }
 }
 
+// Does `e` mention symbol `name` as a value (not merely as the object of an
+// address-of)? Used to see a pointer parameter being stored somewhere.
+static bool mentions_symbol(const expr2tc &e, const irep_idt &name)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_symbol2t(e) && to_symbol2t(e).thename == name)
+    return true;
+  bool found = false;
+  e->foreach_operand([&](const expr2tc &op) {
+    if (!found)
+      found = mentions_symbol(op, name);
+  });
+  return found;
+}
+
+// Parameter positions whose incoming pointer a function parks somewhere a
+// thread may reach: stored into a global, through a dereference, or handed on
+// to another function that does the same. `void set_ptr(int *q) { g = q; }`
+// makes position 0 of set_ptr escaping, so `set_ptr(&i)` escapes `i`.
+//
+// Without this a local reaching a thread through a helper keeps its accesses
+// unguarded and the race is lost. Keying on the position rather than on "any
+// address-taken call argument" is what stops this from degenerating into the
+// blanket escape set that floods large kernels (issue #4424).
+using escaping_paramst = std::map<irep_idt, std::set<unsigned>>;
+
+static escaping_paramst compute_escaping_params(
+  const goto_functionst &goto_functions,
+  const namespacet &ns)
+{
+  escaping_paramst esc;
+
+  bool changed = true;
+  while (changed)
+  {
+    changed = false;
+    forall_goto_functions (f_it, goto_functions)
+    {
+      if (!f_it->second.body_available)
+        continue;
+      if (!is_code_type(f_it->second.type))
+        continue;
+      const std::vector<irep_idt> &pnames =
+        to_code_type(f_it->second.type).argument_names;
+
+      for (unsigned i = 0; i < pnames.size(); i++)
+      {
+        if (pnames[i].empty() || esc[f_it->first].count(i))
+          continue;
+
+        bool escapes = false;
+        forall_goto_program_instructions (i_it, f_it->second.body)
+        {
+          if (i_it->is_assign())
+          {
+            const code_assign2t &a = to_code_assign2t(i_it->code);
+            if (!mentions_symbol(a.source, pnames[i]))
+              continue;
+            /* A nil root is a store through a pointer: destination unknown. */
+            const expr2tc dest = lvalue_root(a.target);
+            if (is_nil_expr(dest))
+              escapes = true;
+            else
+            {
+              const symbolt *d = ns.lookup(to_symbol2t(dest).thename);
+              if (d && d->static_lifetime)
+                escapes = true;
+            }
+          }
+          else if (i_it->is_function_call())
+          {
+            const code_function_call2t &c = to_code_function_call2t(i_it->code);
+            if (!is_symbol2t(c.function))
+              continue;
+            auto cit = esc.find(to_symbol2t(c.function).thename);
+            if (cit == esc.end())
+              continue;
+            for (unsigned j = 0; j < c.operands.size(); j++)
+              if (
+                cit->second.count(j) &&
+                mentions_symbol(c.operands[j], pnames[i]))
+                escapes = true;
+          }
+          if (escapes)
+            break;
+        }
+
+        if (escapes)
+        {
+          esc[f_it->first].insert(i);
+          changed = true;
+        }
+      }
+    }
+  }
+  return esc;
+}
+
+// Escape every local whose address is passed at an escaping parameter position.
+static void collect_escapes_through_calls(
+  const goto_functionst &goto_functions,
+  const escaping_paramst &esc,
+  rw_sett::shared_localst &out)
+{
+  forall_goto_functions (f_it, goto_functions)
+  {
+    forall_goto_program_instructions (i_it, f_it->second.body)
+    {
+      if (!i_it->is_function_call())
+        continue;
+      const code_function_call2t &c = to_code_function_call2t(i_it->code);
+      if (!is_symbol2t(c.function))
+        continue;
+      auto cit = esc.find(to_symbol2t(c.function).thename);
+      if (cit == esc.end())
+        continue;
+      for (unsigned j = 0; j < c.operands.size(); j++)
+        if (cit->second.count(j))
+          collect_address_taken(c.operands[j], out);
+    }
+  }
+}
+
 // Collect the identifiers of every function whose *address* is taken in `e`
 // (a function used as a value -- assigned to a function pointer, passed as an
 // argument, stored in a struct field, etc.). Such a function may later be
@@ -660,6 +784,8 @@ void add_race_assertions(contextt &context, goto_functionst &goto_functions)
   // thread's entry function. Collect address-taken locals across every body
   // before instrumenting any of them.
   rw_sett::shared_localst shared_locals;
+  collect_escapes_through_calls(
+    goto_functions, compute_escaping_params(goto_functions, ns), shared_locals);
   forall_goto_functions (f_it, goto_functions)
     collect_thread_escaped_locals(f_it->second.body, ns, shared_locals);
 
