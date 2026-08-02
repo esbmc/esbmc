@@ -5930,6 +5930,22 @@ exprt numpy_call_expr::get()
         raw_shape.push_back(d);
       }
     }
+    else if (call_["args"].size() > 2)
+    {
+      // Method form with each dimension as its own positional argument
+      // (a.reshape(d1, d2, ...)), equivalent to a.reshape((d1, d2, ...)).
+      // Only reachable here (not the single-tuple-arg branch above) because
+      // a single dimension can't be split into more than one argument, so
+      // more than one argument past the array itself always means this form.
+      for (std::size_t i = 1; i < call_["args"].size(); ++i)
+      {
+        int64_t d = parse_reshape_dim(call_["args"][i]);
+        if (d == INT64_MIN)
+          throw std::runtime_error(
+            "TypeError: numpy.reshape() shape must contain concrete integers");
+        raw_shape.push_back(d);
+      }
+    }
     else
     {
       int64_t d = parse_reshape_dim(shape_arg);
