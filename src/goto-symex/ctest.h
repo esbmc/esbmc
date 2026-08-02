@@ -2,12 +2,13 @@
 #define CPROVER_GOTO_SYMEX_CTEST_H
 
 #include <goto-symex/symex_target_equation.h>
-#include <solvers/smt/smt_conv.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <string>
 #include <vector>
 #include <mutex>
 #include "witnesses.h"
+
+class smt_convt;
 
 /// This generates CTest test-cases for C programs
 class ctest_generator
@@ -23,7 +24,7 @@ private:
 
   std::vector<std::vector<test_variable>> test_cases;
   std::string function_name;
-  std::string source_file;
+  std::vector<std::string> source_files;
   mutable std::mutex data_mutex;
 
   /// Build a per-type value fingerprint for deduplication in generate().
@@ -49,6 +50,10 @@ private:
 public:
   ctest_generator() = default;
 
+  /// Output goes to a dedicated subdirectory: writing into the working
+  /// directory silently destroyed files ESBMC did not own (github #6214).
+  static constexpr const char *default_output_dir = "esbmc-ctest";
+
   /// Clear collected data (called at start of coverage run)
   void clear();
 
@@ -58,8 +63,9 @@ public:
     smt_convt &smt_conv,
     const namespacet &ns);
 
-  /// Generate C test files and CMakeLists.txt from collected data
-  void generate() const;
+  /// Generate C test files and CMakeLists.txt from collected data into
+  /// output_dir. Refuses to overwrite files ESBMC did not generate.
+  void generate(const std::string &output_dir) const;
 
   /// Single-shot generation for non-coverage mode
   void generate_single(

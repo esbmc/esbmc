@@ -76,7 +76,11 @@ void goto_coveraget::replace_assert_to_guard(
     it->location.property("instrumented assertion");
   else
     it->location.property("replaced assertion");
-  it->location.comment(from_expr(ns, "", old_guard));
+  // Keep an existing comment (e.g. the "msg" of __ESBMC_assert(cond, "msg"),
+  // or the modeled "assertion ..." text of C library asserts) as the claim
+  // identifier; asserts lowered without a comment get the stringified guard.
+  if (it->location.comment().empty())
+    it->location.comment(from_expr(ns, "", old_guard));
   it->location.user_provided(true);
 }
 

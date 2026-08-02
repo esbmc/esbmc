@@ -1,13 +1,14 @@
 #ifndef PYTHON_FRONTEND_STRING_HANDLER_H
 #define PYTHON_FRONTEND_STRING_HANDLER_H
 
-#include <util/expr.h>
-#include <util/std_types.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/context.h>
-#include <util/message.h>
+#include <util/irep/expr.h>
+#include <util/irep/std_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/context.h>
+#include <util/message/message.h>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -200,10 +201,8 @@ public:
 
   /**
    * @brief Handle string repetition
-   * @param op multiply operator (Eq, Mult)
    * @param lhs Left operand
    * @param rhs Right operand
-   * @param element JSON element with location info
    * @return Repetition expression
    */
   exprt handle_string_repetition(exprt &lhs, exprt &rhs);
@@ -284,6 +283,30 @@ public:
     const exprt &string_obj,
     const exprt &suffix_arg,
     const locationt &location);
+
+  /**
+   * @brief Handle str.startswith/endswith with optional start/end position
+   *        arguments: s.startswith(prefix, start[, end]) is evaluated as
+   *        s[start:end].startswith(prefix). @p is_suffix selects endswith.
+   *        Constant receiver and constant start/end only.
+   */
+  exprt handle_startswith_endswith_with_pos(
+    const exprt &string_obj,
+    const nlohmann::json &args,
+    python_converter &converter,
+    const locationt &location,
+    bool is_suffix);
+
+  /**
+   * @brief Shared implementation for startswith()/endswith() with a tuple of
+   *        affixes: True iff the string matches any element. @p is_suffix
+   *        selects endswith (true) vs startswith (false).
+   */
+  exprt build_affix_tuple_match(
+    const exprt &string_obj,
+    const exprt &affix_tuple,
+    const locationt &location,
+    bool is_suffix);
 
   /**
    * @brief Handle str.isdigit() method
@@ -482,6 +505,40 @@ public:
     const locationt &location);
 
   /**
+   * @brief Handle str.rindex() method (rfind that raises on not-found)
+   * @param call Call AST node (for the temp/exception location)
+   * @param string_obj String object
+   * @param find_arg Substring to locate
+   * @param location Source location
+   * @return index of the last occurrence of the substring.
+   * @throws ValueError if substring is not found.
+   */
+  exprt handle_string_rindex(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.rindex() with start/end
+   * @param call Call AST node (for the temp/exception location)
+   * @param string_obj String object
+   * @param find_arg Substring to locate
+   * @param start_arg Start index
+   * @param end_arg End index (INT_MIN means default)
+   * @param location Source location
+   * @return index of the last occurrence within range.
+   * @throws ValueError if substring is not found.
+   */
+  exprt handle_string_rindex_range(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
+
+  /**
    * @brief Handle str.replace() method
    * @param string_obj String object
    * @param old_arg Substring to replace
@@ -521,7 +578,7 @@ public:
   handle_string_casefold(const exprt &string_obj, const locationt &location);
 
   /**
-   * @brief Handle str.count() method (constant-only support)
+   * @brief Handle str.count() method (constant fold, else runtime model)
    */
   exprt handle_string_count(
     const exprt &string_obj,
@@ -552,7 +609,8 @@ public:
   exprt handle_string_splitlines(
     const nlohmann::json &call,
     const exprt &string_obj,
-    const locationt &location);
+    const locationt &location,
+    bool keepends = false);
 
   /**
    * @brief Handle str.format() method (minimal support, constant-only)
@@ -569,6 +627,27 @@ public:
     const exprt &string_obj,
     const exprt &sep_arg,
     const locationt &location);
+
+  /**
+   * @brief Handle str.rpartition() method (constant-only support).
+   *
+   * Like partition() but splits at the last occurrence of the separator.
+   */
+  exprt handle_string_rpartition(
+    const exprt &string_obj,
+    const exprt &sep_arg,
+    const locationt &location);
+
+  /**
+   * @brief Shared implementation of partition()/rpartition(): builds the
+   *        3-tuple (before, sep, after), searching from the left when
+   *        @p from_right is false and from the right when true.
+   */
+  exprt build_partition_tuple(
+    const exprt &string_obj,
+    const exprt &sep_arg,
+    const locationt &location,
+    bool from_right);
 
   /**
    * @brief Handle str.isalnum() method
@@ -827,6 +906,21 @@ private:
     const std::string &float_bits,
     std::size_t width,
     int precision);
+
+public:
+  /**
+   * @brief Render a constant double as CPython's str()/repr() would: the
+   *        shortest decimal string that reads back as the same double.
+   *
+   * A whole value below 1e16 gets the "N.0" spelling; every other finite value
+   * (and nan/inf) uses the fewest %g significant digits that round-trip, which
+   * reproduces CPython's shortest repr and its fixed/exponential cut-over. This
+   * is total: it renders every double, so str()/repr() and f-string
+   * interpolation fold to the exact CPython string for inexact values too
+   * (str(0.1 + 0.2) == "0.30000000000000004", str(1e-5) == "1e-05"). The caller
+   * still emits a nondet string for a 32-bit float or a nondet value.
+   */
+  static std::string cpython_float_str(double d);
 };
 
 #endif // PYTHON_FRONTEND_STRING_HANDLER_H

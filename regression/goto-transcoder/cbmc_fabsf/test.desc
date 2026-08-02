@@ -1,0 +1,4 @@
+CORE
+cbmc_fabsf.goto
+--binary
+^VERIFICATION SUCCESSFUL$

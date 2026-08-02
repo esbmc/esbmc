@@ -8,40 +8,52 @@
 // reintroduced a to_int64 / is_uint64 fast path on either side of that
 // boundary would corrupt the constant before the solver ever sees it.
 //
-// We exercise ESBMC's overload end-to-end via create_new_z3_solver: assert
-// a fresh symbol equals the constant, solve, and read the value back as a
-// BigInt via get_bv. Testing Z3's own numeral API is camada's responsibility
-// now, not ours.
+// We exercise ESBMC's overload end-to-end: assert a fresh symbol equals the
+// constant, solve, and read the value back as a BigInt via get_bv. Testing
+// Z3's own numeral API is camada's responsibility now, not ours.
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 #include <memory>
 #include <big-int/bigint.hh>
-#include <util/context.h>
-#include <util/mp_arith.h>
-#include <util/namespace.h>
-#include <util/options.h>
-#include <solvers/smt/smt_conv.h>
+#include <util/symtab/context.h>
+#include <util/arith/mp_arith.h>
+#include <util/symtab/namespace.h>
+#include <util/config/options.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/solve.h>
 
+extern solver_creator create_new_z3_solver;
+
 SCENARIO(
-  "create_solver(\"z3\")->mk_smt_int preserves BigInt precision and sign",
+  "create_new_z3_solver()->mk_smt_int preserves BigInt precision and sign",
   "[z3][bigint]")
 {
   // Drive ESBMC's overload through camada's Z3 backend so a regression that
   // reintroduces a to_int64 / is_uint64 fast path in either mk_smt_int or
   // integer2string surfaces here, not at the next bignum-aware caller.
   //
-  // Use create_solver (not create_new_z3_solver directly): it calls
-  // smt_post_init() under the hood, which initialises boolean_sort and the
-  // address-space scaffolding that mk_eq / assert_ast depend on.
+  // The AST-level API (mk_smt_int / mk_eq / get_bv) lives on
+  // smt_solver_baset and is deliberately unreachable through smt_conv.h, so
+  // go through the creator directly rather than create_solver().
   contextt ctx;
   namespacet ns(ctx);
   optionst options;
   // mk_smt_int returns an Int sort, which only works in integer-encoding
   // mode. Without this the solver would reject the assert below.
   options.set_option("int-encoding", true);
-  std::unique_ptr<smt_convt> solver{create_solver("z3", ns, options)};
+  tuple_iface *tuple_api = nullptr;
+  array_iface *array_api = nullptr;
+  fp_convt *fp_api = nullptr;
+  std::unique_ptr<smt_solver_baset> solver{
+    create_new_z3_solver(options, ns, &tuple_api, &array_api, &fp_api)};
   REQUIRE(solver != nullptr);
+
+  // create_solver() does this wiring plus smt_post_init(); replicate the part
+  // mk_eq / assert_ast need (boolean_sort and the address-space scaffolding).
+  solver->set_tuple_iface(tuple_api);
+  solver->set_array_iface(array_api);
+  solver->set_fp_conv(fp_api);
+  solver->smt_post_init();
 
   // Round-trip a BigInt through the solver: assert x == mk_smt_int(v), solve,
   // read x back via get_bv. If mk_smt_int (or anything beneath it) drops bits
@@ -50,7 +62,7 @@ SCENARIO(
     smt_astt sym = solver->mk_smt_symbol("test_bigint", solver->mk_int_sort());
     smt_astt eq = solver->mk_eq(sym, solver->mk_smt_int(v));
     solver->assert_ast(eq);
-    REQUIRE(solver->dec_solve() == smt_convt::P_SATISFIABLE);
+    REQUIRE(solver->dec_solve() == P_SATISFIABLE);
     return solver->get_bv(sym, /*is_signed=*/true);
   };
 

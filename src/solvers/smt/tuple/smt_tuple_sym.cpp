@@ -1,10 +1,10 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_array_ast.h>
 #include <solvers/smt/tuple/smt_tuple_sym_ast.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
 #include <sstream>
-#include <util/base_type.h>
-#include <util/c_types.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
 
 smt_astt smt_tuple_sym_flattener::tuple_create(const expr2tc &structdef)
 {

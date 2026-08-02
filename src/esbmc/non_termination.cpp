@@ -6,8 +6,8 @@
 #include <solvers/smt/smt_conv.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
-#include <util/c_types.h>
-#include <util/std_expr.h>
+#include <util/lang/c_types.h>
+#include <util/irep/std_expr.h>
 
 #include <map>
 #include <memory>
@@ -27,7 +27,7 @@ bool is_sat(const expr2tc &formula, optionst &options, const namespacet &ns)
 {
   std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
   solver->assert_expr(formula);
-  return solver->dec_solve() == smt_convt::P_SATISFIABLE;
+  return solver->dec_solve() == P_SATISFIABLE;
 }
 
 /// True if @p e has any subexpression that we can't safely hand to the

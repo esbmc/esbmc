@@ -3,6 +3,8 @@
 #include <solvers/smt/array_conv.h>
 #include <solvers/smt/fp/fp_conv.h>
 #include <solvers/smt/smt_array.h>
+#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
 
@@ -17,6 +19,8 @@ solver_creator create_new_cvc5_solver;
 solver_creator create_new_mathsat_solver;
 solver_creator create_new_yices_solver;
 solver_creator create_new_bitwuzla_solver;
+solver_creator create_new_bitwuzllob_solver;
+solver_creator create_new_neurosym_solver;
 
 static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
 #ifdef SMTLIB
@@ -44,14 +48,23 @@ static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
   {"yices", create_new_yices_solver},
 #endif
 #ifdef BITWUZLA
-  {"bitwuzla", create_new_bitwuzla_solver}
+  {"bitwuzla", create_new_bitwuzla_solver},
+#endif
+#ifdef BITWUZLLOB
+  {"bitwuzllob", create_new_bitwuzllob_solver},
+#endif
+#ifdef NEUROSYM
+  {"neurosym", create_new_neurosym_solver}
 #endif
 };
 
-// Order encodes default priority: first compiled-in entry (excluding smtlib)
-// is selected when no solver is explicitly requested.
+// Order encodes default priority: the first compiled-in entry that is not
+// smtlib, bitwuzllob or neurosym is selected when no solver is explicitly
+// requested (those three depend on external programs; see pick_default_solver).
 static const std::string all_solvers[] = {
   "smtlib",
+  "bitwuzllob",
+  "neurosym",
   "bitwuzla",
   "boolector",
   "z3",
@@ -65,7 +78,11 @@ static std::string pick_default_solver()
 {
   for (const std::string &name : all_solvers)
   {
-    if (name == "smtlib" || !esbmc_solvers.count(name))
+    // smtlib, bitwuzllob and neurosym depend on external programs the user
+    // must configure, so they are never picked implicitly.
+    if (
+      name == "smtlib" || name == "bitwuzllob" || name == "neurosym" ||
+      !esbmc_solvers.count(name))
       continue;
     log_status("No solver specified; defaulting to {}", name);
     return name;
@@ -154,7 +171,8 @@ pick_solver(std::string &solver_name, const optionst &options)
   // forced via --default-solver together with --ir / --ir-ieee.
   if (
     options.get_bool_option("int-encoding") &&
-    (solver_name == "bitwuzla" || solver_name == "boolector"))
+    (solver_name == "bitwuzla" || solver_name == "bitwuzllob" ||
+     solver_name == "neurosym" || solver_name == "boolector"))
   {
     log_error(
       "Integer/real arithmetic (--ir / --ir-ieee) requires a solver that "
@@ -185,7 +203,7 @@ smt_convt *create_solver(
   fp_convt *fp_api = nullptr;
 
   solver_creator &factory = pick_solver(solver_name, options);
-  smt_convt *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api);
+  smt_solver_baset *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");
@@ -222,5 +240,5 @@ smt_convt *create_solver(
     ctx->set_fp_conv(fp_api);
 
   ctx->smt_post_init();
-  return ctx;
+  return new smt_convt(std::unique_ptr<smt_solver_baset>(ctx));
 }

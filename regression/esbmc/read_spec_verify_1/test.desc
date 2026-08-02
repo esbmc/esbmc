@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--incremental-bmc --unsigned-overflow-check --no-pointer-check --unwind 5
+^VERIFICATION SUCCESSFUL$

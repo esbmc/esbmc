@@ -1,11 +1,11 @@
 #ifndef IREP2_EXPR_H_
 #define IREP2_EXPR_H_
 
-#include <util/config.h>
-#include <util/c_types.h>
-#include <util/fixedbv.h>
-#include <util/ieee_float.h>
-#include <util/location.h>
+#include <util/config/config.h>
+#include <util/lang/c_types.h>
+#include <util/arith/fixedbv.h>
+#include <util/arith/ieee_float.h>
+#include <util/irep/location.h>
 #include <irep2/irep2_type.h>
 
 // So - make some type definitions for the different types we're going to be
@@ -83,10 +83,13 @@ enum class sideeffect_allockind
   postincrement,
   predecrement,
   postdecrement,
-  old_snapshot,         // For __ESBMC_old() in function contracts
-  assigns_target,       // For __ESBMC_assigns() in function contracts
-  statement_expression, // GNU C ({ ... }) extension
-  temporary_object      // C++ temporary created inline (constructor)
+  old_snapshot,               // For __ESBMC_old() in function contracts
+  assigns_target,             // For __ESBMC_assigns() in function contracts
+  statement_expression,       // GNU C ({ ... }) extension
+  temporary_object,           // C++ temporary created inline (constructor)
+  gcc_conditional_expression, // GNU C `a ?: b` (omitted middle operand)
+  cpp_delete,                 // C++ `delete p` in expression position
+  cpp_delete_array            // C++ `delete[] p` in expression position
 };
 
 /** Which member of the printf family a `code_printf2t` represents. */
@@ -220,9 +223,6 @@ irep_typedefs(code_cpp_del_array);
 irep_typedefs(code_cpp_delete);
 irep_typedefs(code_cpp_catch);
 irep_typedefs(code_cpp_throw);
-irep_typedefs(code_cpp_throw_decl);
-irep_typedefs(code_cpp_throw_decl_end);
-irep_typedefs(code_cpp_src_throw_decl);
 irep_typedefs(isinf);
 irep_typedefs(isnormal);
 irep_typedefs(isfinite);
@@ -239,6 +239,8 @@ irep_typedefs(isinstance);
 irep_typedefs(hasattr);
 irep_typedefs(isnone);
 irep_typedefs(new_object);
+irep_typedefs(sizeof);
+irep_typedefs(uninterpreted_func);
 
 class exists2t : public expr2t
 {
@@ -309,8 +311,7 @@ class constant_fixedbv2t : public expr2t
 public:
   fixedbvt value;
 
-  /** Primary constructor.
-   *  @param type Type of this expression.
+  /** Primary constructor. The type is derived from value.spec.
    *  @param value fixedbvt object containing number we'll be operating on
    */
   constant_fixedbv2t(const fixedbvt &value)
@@ -332,8 +333,7 @@ class constant_floatbv2t : public expr2t
 public:
   ieee_floatt value;
 
-  /** Primary constructor.
-   *  @param type Type of this expression.
+  /** Primary constructor. The type is derived from value.spec.
    *  @param value ieee_floatt object containing number we'll be operating on
    */
   constant_floatbv2t(const ieee_floatt &value)
@@ -445,9 +445,19 @@ public:
     // struct view at the SMT boundary (see struct_union_members), and
     // the clang frontend builds complex literals as struct-id exprt
     // with a complex type — accept that shape here.
+    //
+    // A symbol_id type is permitted ONLY as a transient pre-resolution state,
+    // the same V.1k "two-phase source invariant" the member2t/index2t asserts
+    // carry: the Python frontend stores class instances with a by-name
+    // symbol_type and resolves it lazily, so migrating a constant aggregate
+    // before the IREP2-native adjuster has followed the type would otherwise
+    // abort here. The adjuster re-establishes the strong invariant before symex;
+    // no frontend builds a constant_struct2t pre-adjust today, so this disjunct
+    // is staged enabling infra exercised by the --python-irep2-adjust path.
     assert(
       type->type_id == type2t::struct_id ||
-      type->type_id == type2t::complex_id);
+      type->type_id == type2t::complex_id ||
+      type->type_id == type2t::symbol_id);
   }
   constant_struct2t(const constant_struct2t &ref) = default;
 
@@ -525,10 +535,9 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Constant array.
- *  Contains a vector of array elements, pretty self explanatory. Only valid if
- *  its type has a constant sized array, can't have constant arrays of dynamic
- *  or infinitely sized arrays.
+/** Constant vector.
+ *  Holds one expression per lane of a vector-typed literal (the vector
+ *  analogue of constant_array2t).
  */
 class constant_vector2t : public expr2t
 {
@@ -536,8 +545,8 @@ public:
   std::vector<expr2tc> datatype_members;
 
   /** Primary constructor.
-   *  @param type Type of this array, must be a constant sized array
-   *  @param membrs Vector of elements in this array
+   *  @param type Vector type of this literal
+   *  @param members Vector of per-lane element expressions
    */
   constant_vector2t(const type2tc &type, const std::vector<expr2tc> &members)
     : expr2t(type, constant_vector_id), datatype_members(members)
@@ -611,7 +620,7 @@ public:
   {
     /* At some point in the past, symbols named "NULL" and "0" were equivalent.
      * The symbol called "0" should no longer be created for uniformity reasons.
-     * Confirm that here, since support for it has been removed from smt_convt.
+     * Confirm that here, since support for it has been removed from smt_solver_baset.
      * No other reason to disallow "0" as a symbol. */
     assert(init != "0");
   }
@@ -774,22 +783,28 @@ public:
   expr2tc cond;
   expr2tc true_value;
   expr2tc false_value;
+  locationt
+    location; // not reflected: carries the ? position for witness branching
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
   /** Primary constructor
    *  @param type Type this expression evaluates to.
    *  @param cond Condition to evaulate which side of ternary operator is used.
    *  @param trueval Value to use if cond evaluates to true.
    *  @param falseval Value to use if cond evaluates to false.
+   *  @param loc Source location of the ? token (optional).
    */
   if2t(
     const type2tc &type,
     const expr2tc &cond_,
     const expr2tc &trueval,
-    const expr2tc &falseval)
+    const expr2tc &falseval,
+    const locationt &loc = locationt())
     : expr2t(type, if_id),
       cond(cond_),
       true_value(trueval),
-      false_value(falseval)
+      false_value(falseval),
+      location(loc)
   {
     assert(type->type_id == trueval->type->type_id);
     assert(type->type_id == falseval->type->type_id);
@@ -1079,8 +1094,10 @@ ESBMC_DEFINE_TYPE_ONLY(null_object);
   {                                                                            \
   public:                                                                      \
     expr2tc operand;                                                           \
-    name##2t(const expr2tc &op)                                                \
-      : expr2t(get_empty_type(), name##_id), operand(op)                       \
+    locationt location; /* not reflected: source loc travels with the stmt */  \
+    static constexpr std::size_t excluded_field_bytes = sizeof(locationt);     \
+    name##2t(const expr2tc &op, const locationt &loc = locationt())            \
+      : expr2t(get_empty_type(), name##_id), operand(op), location(loc)        \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1097,14 +1114,20 @@ ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_delete);
 #undef ESBMC_DEFINE_CODE_EXPRESSION_1OP
 
 /** `code_*` declaration carrying `(type, irep_idt name)`. Used for
- *  `code_decl`/`code_dead`. */
+ *  `code_dead`. (code_decl2t is defined separately below because it also
+ *  carries an initializer.) */
 #define ESBMC_DEFINE_CODE_DECL(name)                                           \
   class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
     irep_idt value;                                                            \
-    name##2t(const type2tc &type, const irep_idt &n)                           \
-      : expr2t(type, name##_id), value(n)                                      \
+    locationt location; /* not reflected: source loc travels with the stmt */  \
+    static constexpr std::size_t excluded_field_bytes = sizeof(locationt);     \
+    name##2t(                                                                  \
+      const type2tc &type,                                                     \
+      const irep_idt &n,                                                       \
+      const locationt &loc = locationt())                                      \
+      : expr2t(type, name##_id), value(n), location(loc)                       \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1128,13 +1151,16 @@ ESBMC_DEFINE_CODE_DECL(code_dead);
 class code_decl2t : public expr2t
 {
 public:
-  irep_idt value; // symbol name
-  expr2tc init;   // optional initializer; nil when absent
+  irep_idt value;     // symbol name
+  expr2tc init;       // optional initializer; nil when absent
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
   code_decl2t(
     const type2tc &type,
     const irep_idt &n,
-    const expr2tc &i = expr2tc())
-    : expr2t(type, code_decl_id), value(n), init(i)
+    const expr2tc &i = expr2tc(),
+    const locationt &loc = locationt())
+    : expr2t(type, code_decl_id), value(n), init(i), location(loc)
   {
   }
   code_decl2t(const code_decl2t &ref) = default;
@@ -1143,33 +1169,6 @@ public:
     std::make_tuple(&expr2t::type, &code_decl2t::value, &code_decl2t::init);
   static std::string field_names[esbmct::num_type_fields];
 };
-
-/** `code_*` C++ throw-decl carrying a single `std::vector<irep_idt>`
- *  of exception names. Used for `code_cpp_throw_decl`/
- *  `code_cpp_throw_decl_end`. */
-#define ESBMC_DEFINE_CODE_CPP_THROW_DECL(name)                                 \
-  class name##2t : public expr2t                                               \
-  {                                                                            \
-  public:                                                                      \
-    std::vector<irep_idt> exception_list;                                      \
-    name##2t(const std::vector<irep_idt> &names)                               \
-      : expr2t(get_empty_type(), name##_id), exception_list(names)             \
-    {                                                                          \
-    }                                                                          \
-    name##2t(const name##2t & ref) = default;                                  \
-    expr2tc do_simplify() const override;                                      \
-    static constexpr auto fields =                                             \
-      std::make_tuple(&expr2t::type, &name##2t ::exception_list);              \
-    static std::string field_names[esbmct::num_type_fields];                   \
-  }
-
-ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_throw_decl);
-ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_throw_decl_end);
-// Source-level exception spec: codet("throw_decl") with operands carrying
-// throw_decl_id attributes. Back-migrates to "throw_decl" (underscore) so
-// goto_convert_rec calls convert_throw_decl rather than copy-to-OTHER.
-ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_src_throw_decl);
-#undef ESBMC_DEFINE_CODE_CPP_THROW_DECL
 
 /** C++20 three-way comparison `a <=> b`. Result type is the
  * comparison-category struct (`std::strong_ordering` /
@@ -1271,7 +1270,7 @@ public:
    *  @param type Type of this expr.
    *  @param v1 First operand.
    *  @param v2 Second operand.
-   *  @param v3 Second operand.
+   *  @param v3 Third operand.
    *  @param rm rounding mode. */
   ieee_fma2t(
     const type2tc &type,
@@ -1639,12 +1638,16 @@ public:
   index2t(const type2tc &type, const expr2tc &source, const expr2tc &idx)
     : expr2t(type, index_id), source_value(source), index(idx)
   {
-    /* A `symbol_id` source is permitted only as a transient pre-resolution
-       state (V.1k two-phase source invariant, see member2t above); the
-       IREP2-native adjuster resolves it to an array/vector before symex. */
+    /* A `symbol_id` or `pointer_id` source is permitted only as a transient
+       pre-resolution state (V.1k two-phase source invariant, see member2t
+       above); the IREP2-native adjuster resolves a symbol source to an
+       array/vector and rewrites a pointer source `p[i]` to `*(p+i)` before
+       symex. A pointer source arises when a legacy `index` over a decayed
+       array (a Python string, char*) is migrated via get_value2(). */
     assert(
       is_array_type(source) || is_vector_type(source) ||
-      source->type->type_id == type2t::symbol_id);
+      source->type->type_id == type2t::symbol_id ||
+      source->type->type_id == type2t::pointer_id);
   }
   index2t(const index2t &ref) = default;
 
@@ -1844,9 +1847,21 @@ class code_block2t : public expr2t
 {
 public:
   std::vector<expr2tc> operands;
+  locationt location; // not reflected: source loc travels with the stmt
+  // not reflected: the closing-brace location travels with the block too, so a
+  // code_block2t consumed natively by goto_convert (W1, esbmc/esbmc#4715) keeps
+  // the end location convert_block needs for destructor placement.
+  locationt end_location;
+  static constexpr std::size_t excluded_field_bytes = 2 * sizeof(locationt);
 
-  code_block2t(const std::vector<expr2tc> &ops)
-    : expr2t(get_empty_type(), code_block_id), operands(ops)
+  code_block2t(
+    const std::vector<expr2tc> &ops,
+    const locationt &loc = locationt(),
+    const locationt &end_loc = locationt())
+    : expr2t(get_empty_type(), code_block_id),
+      operands(ops),
+      location(loc),
+      end_location(end_loc)
   {
   }
   code_block2t(const code_block2t &ref) = default;
@@ -1861,9 +1876,17 @@ class code_assign2t : public expr2t
 public:
   expr2tc target;
   expr2tc source;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_assign2t(const expr2tc &tgt, const expr2tc &src)
-    : expr2t(get_empty_type(), code_assign_id), target(tgt), source(src)
+  code_assign2t(
+    const expr2tc &tgt,
+    const expr2tc &src,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_assign_id),
+      target(tgt),
+      source(src),
+      location(loc)
   {
   }
   code_assign2t(const code_assign2t &ref) = default;
@@ -1880,9 +1903,17 @@ class code_printf2t : public expr2t
 public:
   std::vector<expr2tc> operands;
   printf_kindt kind;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_printf2t(const std::vector<expr2tc> &opers, printf_kindt k)
-    : expr2t(get_empty_type(), code_printf_id), operands(opers), kind(k)
+  code_printf2t(
+    const std::vector<expr2tc> &opers,
+    printf_kindt k,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_printf_id),
+      operands(opers),
+      kind(k),
+      location(loc)
   {
   }
   code_printf2t(const code_printf2t &ref) = default;
@@ -1897,7 +1928,10 @@ public:
 class code_skip2t : public expr2t
 {
 public:
-  code_skip2t(const type2tc &type) : expr2t(type, code_skip_id)
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+  code_skip2t(const type2tc &type, const locationt &loc = locationt())
+    : expr2t(type, code_skip_id), location(loc)
   {
   }
   code_skip2t(const code_skip2t &ref) = default;
@@ -1922,13 +1956,50 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Uninterpreted-function application.
+ *  Models a call to a "__ESBMC_uninterpreted_*" / "__CPROVER_uninterpreted_*"
+ *  function as a genuine uninterpreted function: its value is an arbitrary but
+ *  *fixed* function of its arguments. Created during symbolic execution (the
+ *  concrete body, if any, is discarded) and consumed only at SMT conversion
+ *  time. The backend declares one solver function symbol per @ref
+ *  function_name and applies it to the converted arguments, so functional
+ *  congruence (equal arguments imply an equal result) is enforced natively by
+ *  the solver rather than by hand-rolled Ackermannisation in symex.
+ */
+class uninterpreted_func2t : public expr2t
+{
+public:
+  /** Mangled callee name; the stable key under which the solver declares the
+   *  function symbol, so every application of the same callee shares one decl
+   *  and is tied together by congruence. */
+  irep_idt function_name;
+  std::vector<expr2tc> arguments;
+
+  uninterpreted_func2t(
+    const type2tc &type,
+    const irep_idt &name,
+    const std::vector<expr2tc> &args)
+    : expr2t(type, uninterpreted_func_id), function_name(name), arguments(args)
+  {
+  }
+  uninterpreted_func2t(const uninterpreted_func2t &ref) = default;
+
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &uninterpreted_func2t::function_name,
+    &uninterpreted_func2t::arguments);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 class code_goto2t : public expr2t
 {
 public:
   irep_idt target;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_goto2t(const irep_idt &targ)
-    : expr2t(get_empty_type(), code_goto_id), target(targ)
+  code_goto2t(const irep_idt &targ, const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_goto_id), target(targ), location(loc)
   {
   }
   code_goto2t(const code_goto2t &ref) = default;
@@ -1974,15 +2045,19 @@ public:
   expr2tc ret;
   expr2tc function;
   std::vector<expr2tc> operands;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
   code_function_call2t(
     const expr2tc &r,
     const expr2tc &func,
-    const std::vector<expr2tc> &args)
+    const std::vector<expr2tc> &args,
+    const locationt &loc = locationt())
     : expr2t(get_empty_type(), code_function_call_id),
       ret(r),
       function(func),
-      operands(args)
+      operands(args),
+      location(loc)
   {
   }
   code_function_call2t(const code_function_call2t &ref) = default;
@@ -2050,13 +2125,24 @@ public:
   expr2tc cond;
   expr2tc body;
   locationt location; // not reflected (see note above)
-  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+  // `#pragma unroll N` count: travels with the loop statement so the
+  // --irep2-bodies round-trip preserves the per-loop unwind bound that
+  // goto_convert later stamps onto the loop's GOTO instruction. Not
+  // reflected, so it stays out of value identity (like `location`).
+  unsigned pragma_unroll_count;
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(locationt) + sizeof(unsigned);
 
   code_while2t(
     const expr2tc &c,
     const expr2tc &b,
-    const locationt &loc = locationt())
-    : expr2t(get_empty_type(), code_while_id), cond(c), body(b), location(loc)
+    const locationt &loc = locationt(),
+    unsigned pragma = 0)
+    : expr2t(get_empty_type(), code_while_id),
+      cond(c),
+      body(b),
+      location(loc),
+      pragma_unroll_count(pragma)
   {
   }
   code_while2t(const code_while2t &ref) = default;
@@ -2072,13 +2158,21 @@ public:
   expr2tc cond;
   expr2tc body;
   locationt location; // not reflected (see note above)
-  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+  // `#pragma unroll N` count (see code_while2t).
+  unsigned pragma_unroll_count;
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(locationt) + sizeof(unsigned);
 
   code_dowhile2t(
     const expr2tc &c,
     const expr2tc &b,
-    const locationt &loc = locationt())
-    : expr2t(get_empty_type(), code_dowhile_id), cond(c), body(b), location(loc)
+    const locationt &loc = locationt(),
+    unsigned pragma = 0)
+    : expr2t(get_empty_type(), code_dowhile_id),
+      cond(c),
+      body(b),
+      location(loc),
+      pragma_unroll_count(pragma)
   {
   }
   code_dowhile2t(const code_dowhile2t &ref) = default;
@@ -2098,20 +2192,25 @@ public:
   expr2tc iter; // nil when absent
   expr2tc body;
   locationt location; // not reflected (see note above)
-  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+  // `#pragma unroll N` count (see code_while2t).
+  unsigned pragma_unroll_count;
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(locationt) + sizeof(unsigned);
 
   code_for2t(
     const expr2tc &i,
     const expr2tc &c,
     const expr2tc &it,
     const expr2tc &b,
-    const locationt &loc = locationt())
+    const locationt &loc = locationt(),
+    unsigned pragma = 0)
     : expr2t(get_empty_type(), code_for_id),
       init(i),
       cond(c),
       iter(it),
       body(b),
-      location(loc)
+      location(loc),
+      pragma_unroll_count(pragma)
   {
   }
   code_for2t(const code_for2t &ref) = default;
@@ -2286,13 +2385,16 @@ public:
   irep_idt op; // "assign", "assign+", "assign-", "assign*", etc.
   expr2tc lhs;
   expr2tc rhs;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
   sideeffect_assign2t(
     const type2tc &t,
     const irep_idt &o,
     const expr2tc &l,
-    const expr2tc &r)
-    : expr2t(t, sideeffect_assign_id), op(o), lhs(l), rhs(r)
+    const expr2tc &r,
+    const locationt &loc = locationt())
+    : expr2t(t, sideeffect_assign_id), op(o), lhs(l), rhs(r), location(loc)
   {
   }
   sideeffect_assign2t(const sideeffect_assign2t &ref) = default;
@@ -2343,9 +2445,14 @@ class code_asm2t : public expr2t
 {
 public:
   irep_idt value;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_asm2t(const type2tc &type, const irep_idt &stringref)
-    : expr2t(type, code_asm_id), value(stringref)
+  code_asm2t(
+    const type2tc &type,
+    const irep_idt &stringref,
+    const locationt &loc = locationt())
+    : expr2t(type, code_asm_id), value(stringref), location(loc)
   {
   }
   code_asm2t(const code_asm2t &ref) = default;
@@ -2359,15 +2466,39 @@ class code_cpp_catch2t : public expr2t
 {
 public:
   std::vector<irep_idt> exception_list;
+  // Source-level try/catch operands: operands[0] is the try block, operands
+  // [1..N] the catch-handler blocks (parallel to exception_list). Empty for
+  // the post-goto-convert CATCH-push/pop marker instructions, which carry only
+  // the catchable-type list. Retained so a try/catch body survives the
+  // --irep2-bodies round-trip (esbmc/esbmc#4715); convert_catch reads it back.
+  std::vector<expr2tc> operands;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_cpp_catch2t(const std::vector<irep_idt> &el)
-    : expr2t(get_empty_type(), code_cpp_catch_id), exception_list(el)
+  code_cpp_catch2t(
+    const std::vector<irep_idt> &el,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_cpp_catch_id),
+      exception_list(el),
+      location(loc)
+  {
+  }
+  code_cpp_catch2t(
+    const std::vector<irep_idt> &el,
+    const std::vector<expr2tc> &ops,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_cpp_catch_id),
+      exception_list(el),
+      operands(ops),
+      location(loc)
   {
   }
   code_cpp_catch2t(const code_cpp_catch2t &ref) = default;
 
-  static constexpr auto fields =
-    std::make_tuple(&expr2t::type, &code_cpp_catch2t::exception_list);
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_cpp_catch2t::exception_list,
+    &code_cpp_catch2t::operands);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2376,9 +2507,17 @@ class code_cpp_throw2t : public expr2t
 public:
   expr2tc operand;
   std::vector<irep_idt> exception_list;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_cpp_throw2t(const expr2tc &o, const std::vector<irep_idt> &l)
-    : expr2t(get_empty_type(), code_cpp_throw_id), operand(o), exception_list(l)
+  code_cpp_throw2t(
+    const expr2tc &o,
+    const std::vector<irep_idt> &l,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_cpp_throw_id),
+      operand(o),
+      exception_list(l),
+      location(loc)
   {
   }
   code_cpp_throw2t(const code_cpp_throw2t &ref) = default;
@@ -2436,6 +2575,39 @@ public:
     &extract2t::from,
     &extract2t::upper,
     &extract2t::lower);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** sizeof(T) expression.
+ *  Replaces the legacy sizeof-type irep attribute side channel
+ *  (esbmc/esbmc#5337) with two first-class reflected fields:
+ *    - `value`: the byte size, computed eagerly by the frontend so it matches
+ *      clang's authoritative `sizeof` (constants via Expr::EvaluateAsInt, VLAs
+ *      via c_sizeof with a namespace). Keeping clang's value — rather than
+ *      recomputing it from `sizeof_type` via type_byte_size — is what makes
+ *      flexible-array-members, bitfields and VLAs agree with the source.
+ *    - `sizeof_type`: the measured type T, read by allocation typing
+ *      (`get_alloc_type`), the scanf overflow check and the pretty-printer.
+ *  `do_simplify()` unwraps to `value`; the SMT backend lowers the node to
+ *  `value` directly so it is sound even under --no-simplify. Both fields ride
+ *  in `fields`, so the node migrates / copies / hashes with no side channel.
+ */
+class sizeof2t : public expr2t
+{
+public:
+  expr2tc value;
+  type2tc sizeof_type;
+
+  sizeof2t(const type2tc &type, const expr2tc &val, const type2tc &sizeof_t)
+    : expr2t(type, sizeof_id), value(val), sizeof_type(sizeof_t)
+  {
+  }
+  sizeof2t(const sizeof2t &ref) = default;
+
+  expr2tc do_simplify() const override;
+
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &sizeof2t::value, &sizeof2t::sizeof_type);
   static std::string field_names[esbmct::num_type_fields];
 };
 

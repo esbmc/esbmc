@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.linalg.det currently supports only constant 2D numeric arrays$
+^ERROR: TypeError: numpy.linalg.det does not support complex-valued matrices$

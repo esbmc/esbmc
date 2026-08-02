@@ -2,7 +2,7 @@
 #define CPROVER_GOTO_SYMEX_WITNESSES_H
 
 #include <boost/property_tree/xml_parser.hpp>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <irep2/irep2.h>
 #include <langapi/language_util.h>
 #include <goto-symex/goto_trace.h>
@@ -96,6 +96,14 @@ public:
     cycle   // must be passed infinitely
   };
 
+  // Parsed \result constraint for function_return waypoints.
+  // expr is an IRep2 expression tree with symbol2tc("\\result") as placeholder.
+  struct parsed_constraintt
+  {
+    expr2tc expr;
+    bool valid = false;
+  };
+
   Type type = unknown;
   Action action = follow;
   size_t segment_idx = 0;
@@ -106,7 +114,9 @@ public:
   BigInt column = c_nonset;
   std::string function;
   irep_idt line_id;
+  irep_idt column_id;
   irep_idt function_id;
+  parsed_constraintt parsed_cond;
 };
 
 class invariant
@@ -257,29 +267,17 @@ std::string get_formated_assignment(
   const goto_trace_stept &step,
   bool yaml);
 
-/**
- *
- */
 bool is_valid_witness_expr(
   const namespacet &ns,
   const irep_container<expr2t> &exp);
 
-/**
- *
- */
 BigInt get_line_number(
   std::string &verified_file,
   BigInt relative_line_number,
   optionst &options);
 
-/**
- *
- */
 int generate_sha256_hash_for_file(const char *path, std::string &output);
 
-/**
- *
- */
 std::string
 get_invariant(std::string verified_file, BigInt line_number, optionst &options);
 
@@ -306,7 +304,6 @@ struct collected_nondet_value
 };
 
 /// Collect all nondet values from SSA
-/// Reuses generate_testcase pattern
 std::vector<collected_nondet_value> collect_nondet_values(
   const symex_target_equationt &target,
   smt_convt &smt_conv);

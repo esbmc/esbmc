@@ -8,10 +8,10 @@
 #include <map>
 #include <optional>
 #include <pointer-analysis/dereference.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/options.h>
-#include <util/std_types.h>
+#include <util/config/options.h>
+#include <util/irep/std_types.h>
 
 class reachability_treet; // Forward dec
 class execution_statet;   // Forward dec
@@ -105,19 +105,23 @@ public:
       std::shared_ptr<symex_targett> t,
       unsigned int claims,
       unsigned int remain,
-      unsigned int simplified)
+      unsigned int simplified,
+      unsigned int truncations = 0)
       : target(std::move(t)),
         total_claims(claims),
         remaining_claims(remain),
-        simplified_claims(simplified){};
+        simplified_claims(simplified),
+        bounded_loop_truncations(truncations){};
     std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
     unsigned int simplified_claims;
+    /// Carried out of exploration rather than read back from live state:
+    /// under --schedule the current frame is already dangling by the time
+    /// bmct looks (issue #6423).
+    unsigned int bounded_loop_truncations;
   };
 
-  // Macros
-  //
   /**
    *  Return identifier for goto guards.
    *  These guards are symbolic names for the truth of a guard on a GOTO jump.
@@ -189,20 +193,22 @@ protected:
    *  being jumps where the guards are nondeterministic, it's that we have to
    *  handle editing the unwind bound when these things occur, and set up state
    *  merges in the future to handle each path thats taken.
-   *  @param old_guard Renamed guard on this jump occuring.
+   *  @param old_guard Branch guard, dereferenced but not yet L2-renamed
+   *                   (symex_goto renames it itself).
    */
   virtual void symex_goto(const expr2tc &old_guard);
 
   /**
-   *  Hook called when a GOTO forks off a sibling merge_statet snapshot.
-   *  Used by execution_statet to record an explicit reference to the sibling
-   *  path on the active transition result, so it can be preserved across
-   *  context switches without re-discovering it by scanning merge_state_map.
-   *  No-op for non-concurrent symex.
+   *  Hook called when a step parks a merge_statet snapshot for a deferred
+   *  merge — a GOTO forking off its sibling arm, or a RETURN parking the
+   *  continuation at end_of_function. Used by execution_statet to record an
+   *  explicit reference to that path on the active transition result, so it
+   *  can be preserved across context switches without re-discovering it by
+   *  scanning merge_state_map. No-op for non-concurrent symex.
    */
-  virtual void record_branch_sibling(
+  virtual void record_parked_path(
     goto_programt::const_targett /*target*/,
-    statet::merge_state_listt::iterator /*sibling*/)
+    statet::merge_state_listt::iterator /*parked*/)
   {
   }
 
@@ -211,12 +217,23 @@ protected:
    *  @param code return statement.
    */
   void symex_return(const expr2tc &code);
+  void
+  symex_witness_function_return(expr2tc ret_val, const irep_idt &call_line);
+  bool symex_witness_function_enter(const irep_idt &call_line);
+  void symex_witness_branching(
+    const expr2tc &old_guard,
+    const expr2tc &new_guard,
+    bool forward,
+    bool &new_guard_true,
+    bool &new_guard_false,
+    const goto_programt::instructiont &instruction);
+  void symex_witness_assert(expr2tc &new_expr, const std::string &msg);
 
   /**
    *  Interpret an OTHER instruction.
    *  These can take many forms; memory management functions are OTHERs for
    *  example (ideally they should be intrinsics...), but also printf and
-   *  variable declarations are handled here.
+   *  inline asm are handled here.
    */
   void symex_other(const expr2tc &code);
 
@@ -251,7 +268,9 @@ protected:
    *  Perform incremental SMT solving for assert and assume statements.
    *  @param expr Expression that must be checked.
    *  @param msg Textual message explaining assertion.
-   *  @return Return whether verification succeeded.
+   *  @return True if incremental solving conclusively resolved the claim
+   *          (held, or refuted with a counterexample recorded); false if
+   *          the result was unknown.
    */
   bool check_incremental(const expr2tc &expr, const std::string &msg);
 
@@ -265,12 +284,43 @@ protected:
   virtual void claim(const expr2tc &expr, const std::string &msg);
 
   /**
+   *  Record a verdict for the claim being symbolically executed.
+   *  Used for claims symex discharges itself, so that they are reported once
+   *  per run alongside the ones the solver discharges, rather than once per
+   *  thread interleaving.
+   *  @param msg Textual message explaining the claim.
+   *  @param verdict Outcome to record.
+   *  @param note How the verdict was reached, when it needs qualifying.
+   */
+  void record_property_verdict(
+    const std::string &msg,
+    property_verdictt verdict,
+    const std::string &note = "");
+
+  /**
    *  Perform an assertion.
    *  Adds to target an assertion that must be checked.
    *  @param assertion Assertion that must be checked.
    *  @param msg Textual message explaining assertion.
    */
   virtual void assertion(const expr2tc &assertion, const std::string &msg);
+
+  /// Lift `var == const` from an assume into the level2 constant
+  /// propagator so subsequent renames of `var` substitute the constant
+  /// directly. Called from symex_assume() after the assumption has been
+  /// recorded into the SSA target, so the constraint itself is preserved
+  /// and the lift only affects future renames.
+  ///
+  /// Peels outer typecasts (the C frontend wraps the equality as
+  /// (bool)(int)(x == k) for __VERIFIER_assume-style intrinsics), matches
+  /// `symbol == const` or `const == symbol`, and writes the constant into
+  /// the level2 entry for the symbol via cur_state->assignment.
+  ///
+  /// Skips IEEE-754 zero constants: +0.0 and -0.0 compare equal under
+  /// IEEE equality but have distinct bit patterns, so propagating either
+  /// would silently fold signbit-sensitive code (1.0/x, copysign, bit
+  /// reinterpretation) and mask real bugs.
+  void propagate_assume_equality(const expr2tc &the_assumption);
 
   /**
    *  Perform an assumption.
@@ -294,7 +344,6 @@ protected:
    *  See merge_gotos - when we're merging states together due to previous
    *  jumps, this function implements the merging of pointer tracking data.
    *  @param merge_state Previously recorded merge snapshot to be merged in.
-   *  @param dest Thread state for previous jump to be merged into.
    */
   void merge_value_sets(const statet::merge_statet &merge_state);
 
@@ -330,6 +379,14 @@ protected:
    */
   void loop_bound_exceeded(const expr2tc &guard);
 
+  /// Records that a loop was cut off at the unwinding bound with nothing to
+  /// flag it. Virtual because --schedule runs each path in its own execution
+  /// state, so the count also has to accumulate outside them.
+  virtual void note_bounded_loop_truncation()
+  {
+    ++bounded_loop_truncations;
+  }
+
   // function calls
 
   /**
@@ -338,6 +395,18 @@ protected:
    *  variables from the l2 renaming, and value set tracking.
    */
   void pop_frame();
+
+  /**
+   *  Whether `base` is a user-defined Python class instance that follows
+   *  garbage-collected lifetime semantics (issue #4773). Such objects are kept
+   *  alive past their defining frame so references captured into a returned or
+   *  otherwise escaping aggregate stay valid, matching CPython (which heap-
+   *  allocates objects and frees them only when unreachable). Internal Python
+   *  model aggregates (tuples, dicts, and the list/slice/object/type
+   *  operational-model structs) are excluded: they manage their own
+   *  representation and must not have frame teardown skipped.
+   */
+  bool is_python_gc_object(const symbolt *base) const;
 
   /**
    *  Create assignment for return statement.
@@ -376,12 +445,28 @@ protected:
   virtual void symex_function_call_deref(const expr2tc &call);
 
   /**
-   *  Handle function call to fixed function
-   *  Like symex_function_call_code, but minus an assertion and location
-   *  recording.
-   *  @param code Function code to actually call
+   *  Handle a call to a statically-known function: checks recursion
+   *  bounds, sets up the new frame, assigns arguments, and jumps to the
+   *  body.
+   *  @param call Function call to interpret.
    */
   virtual void symex_function_call_code(const expr2tc &call);
+
+  /**
+   *  Model a call to a "__ESBMC_uninterpreted_*" or "__CPROVER_uninterpreted_*"
+   *  function as a genuine uninterpreted function: assign the return an
+   *  uninterpreted_func2t application of the (mangled) callee to its renamed
+   *  arguments. Functional congruence (equal arguments imply an equal result)
+   *  is enforced downstream by the SMT backend's native uninterpreted-function
+   *  support, not here. The concrete body, if present, is deliberately ignored
+   *  (CBMC semantics). Returns true when the call was handled here (caller must
+   *  then advance the program counter).
+   *  @param call The function-call code being executed.
+   *  @param identifier The (mangled) callee symbol name.
+   */
+  bool symex_uninterpreted_function(
+    const code_function_call2t &call,
+    const irep_idt &identifier);
 
   /**
    *  Discover whether recursion bound has been exceeded.
@@ -494,17 +579,67 @@ protected:
     const code_function_call2t &func_call);
 
   /**
-   * @brief Intrinsic call for C memset function call
-   * 
+   * @brief Intrinsic call for C memcpy function call
+   *
    * This will either invoke our operational model (at string.c)
    * or try to compute the resulting value directly
-   * 
-   * @param art 
-   * @param func_call memset function call
+   *
+   * @param art
+   * @param func_call memcpy function call
    */
   void intrinsic_memcpy(
     reachability_treet &art,
     const code_function_call2t &func_call);
+
+  /**
+   * @brief Intrinsic call for C memchr function call
+   *
+   * This will either invoke our operational model (at string.c)
+   * or build the result pointer directly: it scans the first n bytes of the
+   * object pointed to by buf and returns a pointer to the first byte equal to
+   * the (unsigned char) value ch, or NULL if no such byte is found.
+   *
+   * @param art
+   * @param func_call memchr function call
+   */
+  void intrinsic_memchr(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Models __ESBMC_memcmp(s1, s2, n): for a constant n with both pointers
+   *  resolving to concrete primitive objects, build the lexicographic
+   *  comparison result as a single nested-ite expression over the n byte
+   *  reads (no loop, no unwinding) and assign it to the call's return.
+   *  Falls back to the C __memcmp_impl loop otherwise. */
+  void intrinsic_memcmp(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
+   *  primitive object with a constant offset, validating that an
+   *  @p number_of_bytes read stays in bounds. Returns false (bump to the C
+   *  loop) on any miss. */
+  bool memcmp_resolve_operand(
+    const expr2tc &ptr,
+    unsigned long number_of_bytes,
+    expr2tc &object,
+    uint64_t &offset,
+    uint64_t &avail_bytes);
+
+  /** Models __ESBMC_memmove. Identical optimisation to memcpy (the new value
+   *  is built from the current src/dst bytes before assigning, so overlapping
+   *  regions are correct); only the C fallback differs. */
+  void intrinsic_memmove(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Shared core for intrinsic_memcpy / intrinsic_memmove; @p bump_name is the
+   *  C fallback (__memcpy_impl / __memmove_impl) used when the byte-exact
+   *  optimisation cannot apply. */
+  void intrinsic_memcpy_impl(
+    reachability_treet &art,
+    const code_function_call2t &func_call,
+    const std::string &bump_name);
 
   // Function to call a symname function, in case where were not able to optimize it
   void
@@ -798,8 +933,8 @@ protected:
    *  equivalent uses of WITH, or byte_update, and so forth. The end result is
    *  a single new value to be bound to a new symbol.
    *  @param code Code to assign; with lhs and rhs.
-   *  @param type Assignment type, visible by default
-   *  @param kind The step kind, by default is plain BMC
+   *  @param hidden Whether the resulting SSA steps are marked hidden
+   *                (default visible)
    *  @param guard A guard for the assignment, true by default
    */
   virtual void symex_assign(
@@ -852,6 +987,27 @@ protected:
    *  @param guard Guard; intent unknown
    */
   void symex_assign_structure(
+    const expr2tc &lhs,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
+    expr2tc &full_rhs,
+    guard2tc &guard,
+    const bool hidden);
+
+  /**
+   *  Perform assignment to an array literal.
+   *
+   *  Mirrors symex_assign_structure for a constant_array lhs: project each
+   *  element out and recurse, so a reconstituted array (e.g. an array-typed
+   *  struct member surfaced by symex_assign_structure) is assigned
+   *  element-wise instead of hitting the unhandled-lhs abort.
+   *
+   *  @param lhs Array literal to assign to
+   *  @param full_lhs The original assignment symbol
+   *  @param rhs Value to assign to the array
+   *  @param guard Guard of the current assignment
+   */
+  void symex_assign_array_structure(
     const expr2tc &lhs,
     const expr2tc &full_lhs,
     expr2tc &rhs,
@@ -1063,6 +1219,22 @@ protected:
     const guard2tc &guard);
   /** Symbolic implementation of printf */
   void symex_printf(const expr2tc &lhs, expr2tc &code);
+  /** Recover the variadic arguments hidden behind a va_list operand of a
+   *  v*printf-family call (vprintf/vfprintf/vsprintf/vsnprintf/vasprintf).
+   *  Succeeds only under conservative conditions guaranteeing the mapping is
+   *  exact: the call must sit in the variadic function's own frame, the
+   *  va_list operand must be one of that function's own non-parameter
+   *  locals, and no va_arg may have been consumed in the activation yet. On
+   *  success fills `out` with the activation's L2-renamed va_arg values (in
+   *  declaration order) and returns true; otherwise returns false and the
+   *  caller must keep treating the arguments as unreliable (sound fallback).
+   *  @param call The original (unrenamed) printf side effect.
+   *  @param fmt_idx Index of the format-string operand within `call`.
+   *  @param out Receives the recovered argument expressions on success. */
+  bool recover_va_list_args(
+    const code_printf2t &call,
+    size_t fmt_idx,
+    std::list<expr2tc> &out);
   /** Symbolic implementation of scanf and fscanf */
   void symex_input(const code_function_call2t &expr);
   /** Symbolic implementation of va_arg */
@@ -1070,6 +1242,19 @@ protected:
     const expr2tc &lhs,
     const sideeffect2t &code,
     const guard2tc &guard);
+  /** Resolve a va_list expression to the l1 identity record of the local
+   *  variable backing it; nullopt when it cannot be pinned down to one. */
+  std::optional<renaming::level2t::name_record>
+  va_list_l1_record(const expr2tc &va_list_expr) const;
+  /** Whether the va_list denoted by this expression is known (or assumed)
+   *  to have been initialised by va_start/va_copy. va_lists whose base
+   *  cannot be resolved to a local variable's symbol are conservatively
+   *  assumed started. */
+  bool va_list_is_started(const expr2tc &va_list_expr) const;
+  /** Record the started-by-va_start state of the va_list denoted by this
+   *  expression. No-op if the base cannot be resolved to a local
+   *  variable's symbol. */
+  void va_list_mark_started(const expr2tc &va_list_expr, bool started);
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -1113,6 +1298,12 @@ protected:
   unsigned remaining_claims;
   /** Number of assertions that were trivially verified. */
   unsigned simplified_claims;
+  /** Loops cut off at the unwinding bound with no unwinding assertion to flag
+   *  it, i.e. under --no-unwinding-assertions (which the coverage modes force
+   *  on whenever --unwind is given). Exploration stopped there silently, so a
+   *  coverage percentage measured on such a run is a lower bound: goals past
+   *  the bound were never reached (issue #6387). */
+  unsigned bounded_loop_truncations = 0;
   /** Reachability tree we're working with. */
   reachability_treet *art1;
   /** Unwind bounds, loop number -> max unwinds. */
@@ -1128,8 +1319,6 @@ protected:
    *  --no-interval-symex-guard); assertion pruning via --interval-symex-assert
    *  discharges claims proven TRUE. */
   std::optional<interval_domaint> interval_domain_state;
-  /** Whether constant propagation is to be enabled. */
-  bool constant_propagation;
   /** Namespace we're working in. */
   const namespacet &ns;
   /** Context we're working with */
@@ -1149,6 +1338,19 @@ protected:
    *  Used to track what we should level memory-leak-assertions against when the
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
+
+  /** Level-1 identities (base name, activation, thread) of va_list objects
+   *  initialised by va_start, or by va_copy from a started source. Keyed on
+   *  the l1 renaming so the same object is recognised across frames (a
+   *  va_list reached through a pointer dereferences to the owning
+   *  activation's l1 name) and across recursion or loop re-declaration (each
+   *  DECL bumps the l1 number, so a fresh activation needs a fresh va_start).
+   *  Insertion ignores the path guard, over-approximating towards "started",
+   *  so a conditional va_start can never yield a false positive. */
+  std::unordered_set<
+    renaming::level2t::name_record,
+    renaming::level2t::name_rec_hash>
+    va_started;
 
   /** Disable return value optimization */
   bool no_return_value_opt;
@@ -1193,8 +1395,7 @@ protected:
   bool inductive_step;
   /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
   bool validate_witness;
-  /** Pre-interned target waypoint line; empty when no target is present. */
-  irep_idt witness_target_line;
+
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */

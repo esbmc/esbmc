@@ -5,19 +5,22 @@
 
 static void print_usage()
 {
-  std::cerr <<
-    "Usage: ld-verify [options] <program.xml>\n"
-    "\n"
-    "Options:\n"
-    "  --props <file.yaml>   YAML property specification\n"
-    "  --strategy <s>        k-induction | bmc | portfolio (default: k-induction)\n"
-    "  --unwind <n>          BMC unwind bound (default: 100)\n"
-    "  --fault-injection     Enable fault-injection mode (for WP1 validation)\n"
-    "  --show-parse          Print the parsed LD program and exit\n"
-    "  --help                Print this message\n"
-    "\n"
-    "ld-verify checks safety properties of IEC 61131-3 Ladder Diagram programs\n"
-    "exported in PLCopen XML format.  Results are reported as JSON to stdout.\n";
+  std::cerr
+    << "Usage: ld-verify [options] <program.xml>\n"
+       "\n"
+       "Options:\n"
+       "  --props <file.yaml>   YAML property specification\n"
+       "  --strategy <s>        k-induction | bmc (default: k-induction)\n"
+       "  --unwind <n>          BMC unwind bound (default: 100)\n"
+       "  --fault-injection     Enable fault-injection mode (for WP1 "
+       "validation)\n"
+       "  --show-parse          Print the parsed LD program and exit\n"
+       "  --help                Print this message\n"
+       "\n"
+       "ld-verify checks safety properties of IEC 61131-3 Ladder Diagram "
+       "programs\n"
+       "exported in PLCopen XML format.  Results are reported as JSON to "
+       "stdout.\n";
 }
 
 int main(int argc, char *argv[])

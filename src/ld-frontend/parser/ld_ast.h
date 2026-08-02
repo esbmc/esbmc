@@ -22,9 +22,20 @@ enum class ContactKind
   NormallyClosed // --[/]--
 };
 
+// IEC 61131-3 §2.5.1.1 transition-sensing contacts. An edge contact conducts
+// for exactly one scan: the scan in which the operand takes the sensed
+// transition, measured against its value at the previous scan.
+enum class ContactEdge
+{
+  None,
+  Rising, // --[P]--
+  Falling // --[N]--
+};
+
 struct ContactNode
 {
   ContactKind kind = ContactKind::NormallyOpen;
+  ContactEdge edge = ContactEdge::None;
   std::string variable; // PLCopen XML identifier
   LdLocation loc;
 };
@@ -162,6 +173,7 @@ enum class VarKind
   INT,
   DINT,
   TIME, // used for timer PT/ET fields
+  REAL, // IEEE floating point (analog process variables)
 };
 
 struct VarDecl
@@ -170,6 +182,52 @@ struct VarDecl
   VarKind kind = VarKind::BOOL;
   bool is_input = false;
   bool is_output = false;
+  // Initial value for numeric variables. Graphical LD wires FB presets from
+  // <inVariable> literals rather than declared variables, so the synthesised
+  // preset symbol carries the literal here.
+  long long init_value = 0;
+  LdLocation loc;
+};
+
+// -----------------------------------------------------------------------
+// User-defined function blocks (e.g. EQ_0/GT_0/SUB_0 wrappers that may carry
+// Ladder Logic Bombs).  Their Structured Text bodies are translated and
+// executed in the scan cycle so the embedded logic reaches the GOTO IR.
+// -----------------------------------------------------------------------
+
+// A function-block formal/local variable with its declared IEC 61131-3 type.
+// Carrying the type (rather than just the name) keeps REAL/analog FB variables
+// from being silently demoted to int when the body is translated.
+struct FBVarDecl
+{
+  std::string name;
+  VarKind kind = VarKind::INT; // numeric default for an untyped FB variable
+};
+
+struct UserFBDef
+{
+  std::string type_name;               // e.g. "EQ_0"
+  std::vector<FBVarDecl> input_vars;   // formal inputs (IN1, IN2, ...) + types
+  std::vector<FBVarDecl> local_vars;   // FB-local variables (e.g. "i") + types
+  std::string output_var;              // formal output name (OUT)
+  VarKind output_kind = VarKind::BOOL; // OUT declared type
+  std::string st_body;                 // raw Structured Text body
+};
+
+// Wiring of an FB output pin to a program variable: "prog_var := <inst>__pin".
+struct FBOutWire
+{
+  std::string prog_var; // program variable driven by the pin (e.g. MV1)
+  std::string pin;      // FB formal output name (e.g. OUT_MV1)
+};
+
+struct UserFBInstance
+{
+  std::string type_name;     // references a UserFBDef
+  std::string instance_name; // e.g. "EQ_00"
+  std::string block_id;      // graphical localId of the block
+  std::string in1_var; // program variable feeding IN1 ("" => nondet sample)
+  std::vector<FBOutWire> out_wires; // pins consumed by program outVariables
   LdLocation loc;
 };
 
@@ -182,5 +240,7 @@ struct LdAst
   std::string source_file;           // path of the PLCopen XML file
   std::vector<VarDecl> variables;    // all declared variables
   std::vector<NetworkNode> networks; // one per POU (Tier 1: single POU)
-  bool has_interrupt_tasks = false;  // triggers Tier-2 rejection
+  std::vector<UserFBDef> user_fb_defs;
+  std::vector<UserFBInstance> user_fb_instances;
+  bool has_interrupt_tasks = false; // triggers Tier-2 rejection
 };

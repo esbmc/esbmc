@@ -4,11 +4,12 @@
 #include <esbmc/bmc.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <langapi/language_ui.h>
-#include <util/cmdline.h>
-#include <util/options.h>
-#include <util/parseoptions.h>
-#include <util/algorithms.h>
-#include <util/threeval.h>
+#include <util/config/cmdline.h>
+#include <util/config/options.h>
+#include <util/config/parseoptions.h>
+#include <util/ssa/algorithms.h>
+#include <util/base/threeval.h>
+#include <string_view>
 
 // Macro to determine if color output should be enabled
 #ifdef _WIN32
@@ -64,7 +65,8 @@ protected:
   /// \param has_enforce Whether to enforce contracts
   /// \param has_enforce_all Whether to enforce contracts for all annotated functions
   /// \param has_replace_all Whether to replace calls for all annotated functions
-  void process_function_contracts(
+  /// \return True on a usage error, e.g. a named function that nothing acted on
+  bool process_function_contracts(
     goto_functionst &goto_functions,
     bool has_replace,
     bool has_enforce,
@@ -72,6 +74,10 @@ protected:
     bool has_replace_all);
 
   int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
+
+  int do_context_bound_deepening(
+    optionst &options,
+    goto_functionst &goto_functions);
 
   int doit_k_induction_parallel();
 
@@ -97,10 +103,22 @@ protected:
 
   bool read_goto_binary(goto_functionst &goto_functions);
 
+  /// True if any --binary input is a CBMC goto-binary (magic 0x7f 'G' 'B' 'F').
+  bool has_cbmc_binary_input();
+
+  /// Synthesises ESBMC's "additions" (the __ESBMC_main entry wrapper and the
+  /// CPROVER-intrinsic bodies) by compiling a boilerplate translation unit
+  /// through the C frontend into the given symbol table / goto functions, so a
+  /// CBMC goto-binary verifies without manually linking a library.goto.
+  /// Returns true on error.
+  bool synthesize_cprover_additions(
+    optionst &options,
+    goto_functionst &goto_functions);
+
   bool set_claims(goto_functionst &goto_functions);
 
-  uint64_t read_time_spec(const char *str);
-  uint64_t read_mem_spec(const char *str);
+  uint64_t read_time_spec(std::string_view str);
+  uint64_t read_mem_spec(std::string_view str);
 
   void preprocessing();
 
@@ -120,6 +138,10 @@ protected:
 
   std::vector<std::unique_ptr<goto_functions_algorithm>>
     goto_preprocess_algorithms;
+
+  // Dead-store advisories (CWE-563) collected by --dead-store-check during
+  // goto preprocessing; surfaced textually and (via bmct) in SARIF.
+  std::vector<dead_store_advisoryt> dead_store_advisories;
 
   // coverage mode
   bool is_coverage;

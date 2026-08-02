@@ -5,26 +5,27 @@
 #include <cassert>
 #include <goto-programs/goto_convert_class.h>
 #include <regex>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/location.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/irep/location.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/prefix.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
-#include <util/string_constant.h>
-#include <util/type_byte_size.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/string_constant.h>
+#include <util/expr/type_byte_size.h>
 
 // Simplify a legacy exprt via the IREP2 simplifier. The legacy CBMC
-// simplifier (util/simplify_expr) is being retired (docs/irep2-migration.md
-// Part II Phase 2.2); these alloc-size sites still operate on exprt, so they
-// round-trip through migrate. Behaviour-equivalent for the constant /
-// typecast-of-constant folds these sites need (typecast2t::do_simplify folds
-// (size_t)C to a constant exactly as the legacy simplifier did).
+// simplifier (util/simplify_expr) is being retired
+// (docs/roadmap/irep2-migration.md Part II Phase 2.2); these alloc-size sites
+// still operate on exprt, so they round-trip through migrate.
+// Behaviour-equivalent for the constant / typecast-of-constant folds these
+// sites need (typecast2t::do_simplify folds (size_t)C to a constant exactly as
+// the legacy simplifier did).
 static void simplify_via_irep2(exprt &e)
 {
   expr2tc tmp;
@@ -64,18 +65,44 @@ static void get_string_constant(const exprt &expr, std::string &the_string)
   the_string.append(v.as_string());
 }
 
+// Recover the measured type T from a sizeof(T) node, peeling any surrounding
+// typecast. Returns a nil type if `src` is not (a cast of) a sizeof node
+// (esbmc/esbmc#5337). T rides as the type of the node's first (type_exprt)
+// operand; a second operand may carry the byte-size value.
+static typet sizeof_measured_type(const exprt &src)
+{
+  const exprt *e = &src;
+  while (e->id() == "typecast" && e->operands().size() == 1)
+    e = &e->op0();
+  if (e->id() == "sizeof" && !e->operands().empty())
+    return e->op0().type();
+  return static_cast<const typet &>(get_nil_irep());
+}
+
 static void get_alloc_type_rec(
   const exprt &src,
   typet &type,
   exprt &size,
   bool is_mul = false)
 {
-  const irept &sizeof_type = src.c_sizeof_type();
+  // A (possibly typecast-wrapped) sizeof(T) outside a multiplication sets the
+  // allocated element type T. The typecast is peeled only in service of
+  // reaching the sizeof — a cast around a non-sizeof size operand (e.g. the
+  // (size_t)(-4) of malloc(-4)) is left intact, so its size_t reconciliation
+  // survives into `size`. Inside `n * sizeof(T)` the product is treated as a
+  // raw byte count and the allocated type stays char, matching the historical
+  // behaviour (esbmc/esbmc#5337).
+  if (!is_mul)
+  {
+    typet measured = sizeof_measured_type(src);
+    if (measured.is_not_nil())
+    {
+      type = measured;
+      return;
+    }
+  }
 
-  // If sizeof_type is valid and we are not in a multiplication context
-  if (!sizeof_type.is_nil() && !is_mul)
-    type = static_cast<const typet &>(sizeof_type);
-  else if (src.id() == "*")
+  if (src.id() == "*")
   {
     // Mark as multiplication context and recurse
     for (const auto &operand : src.operands())
@@ -386,11 +413,19 @@ void goto_convertt::do_cpp_new(
     assert(0);
   }
 
-  // grab initializer
-  goto_programt tmp_initializer;
-  cpp_new_initializer(lhs, rhs, tmp_initializer);
+  // The frontend attaches the resolved allocation function when the program
+  // replaced ::operator new, or the class supplied its own. Calling it is the
+  // whole point: a pool allocator that hands out the same storage twice makes
+  // two objects alias, which a fresh built-in allocation hides (github #6494).
+  const exprt &alloc_function =
+    static_cast<const exprt &>(rhs.find("alloc_function"));
 
+  // The element count drives both the allocation size and the construction
+  // loop, and `new T[f()]` evaluates f() exactly once, so evaluate it here --
+  // ahead of cpp_new_initializer -- and hand the resulting side-effect-free
+  // expression to both.
   exprt alloc_size;
+  exprt elem_count;
 
   if (rhs.statement() == "cpp_new[]")
   {
@@ -399,6 +434,7 @@ void goto_convertt::do_cpp_new(
       alloc_size.make_typecast(size_type());
 
     remove_sideeffects(alloc_size, dest);
+    elem_count = alloc_size;
 
     // jmorse: multiply alloc size by size of subtype.
     type2tc subtype = migrate_type(ns.follow(rhs.type().subtype()));
@@ -413,6 +449,16 @@ void goto_convertt::do_cpp_new(
   else
     alloc_size = from_integer(1, size_type());
 
+  // grab initializer
+  goto_programt tmp_initializer;
+  // With no initializer the built-in path zero-fills, which models a fresh
+  // object well enough. Storage from a replaced operator new is not fresh --
+  // the program decides its contents ([expr.new]/17 default-initialises a
+  // scalar to nothing at all) -- so zero-filling it would overwrite what the
+  // replacement just returned.
+  if (alloc_function.is_nil() || rhs.initializer().is_not_nil())
+    cpp_new_initializer(lhs, rhs, elem_count, tmp_initializer);
+
   if (alloc_size.is_nil())
     alloc_size = from_integer(1, size_type());
 
@@ -422,24 +468,132 @@ void goto_convertt::do_cpp_new(
     simplify_via_irep2(alloc_size);
   }
 
-  exprt new_expr("sideeffect", rhs.type());
-  new_expr.statement(rhs.statement());
-  new_expr.cmt_size(alloc_size);
-  new_expr.location() = rhs.find_location();
+  if (alloc_function.is_not_nil())
+  {
+    // operator new takes a byte count. alloc_size is already scaled by the
+    // element size for the array form; the scalar form allocates one T.
+    exprt byte_size = alloc_size;
+    if (rhs.statement() == "cpp_new")
+      byte_size = from_integer(
+        type_byte_size(migrate_type(ns.follow(rhs.type().subtype()))),
+        size_type());
 
-  // produce new object
-  goto_programt::targett t_n = dest.add_instruction(ASSIGN);
-  exprt new_assign = code_assignt(lhs, new_expr);
-  migrate_expr(new_assign, t_n->code);
-  t_n->location = rhs.find_location();
+    const typet &raw_type = to_code_type(alloc_function.type()).return_type();
+    symbol_exprt raw(new_tmp_symbol(raw_type).id, raw_type);
+
+    code_function_callt call;
+    call.lhs() = raw;
+    call.function() = alloc_function;
+    call.arguments().push_back(byte_size);
+    call.location() = rhs.find_location();
+
+    goto_programt::targett t_a = dest.add_instruction(FUNCTION_CALL);
+    migrate_expr(call, t_a->code);
+    t_a->location = rhs.find_location();
+
+    exprt allocated = raw;
+    allocated.make_typecast(lhs.type());
+
+    goto_programt::targett t_n = dest.add_instruction(ASSIGN);
+    migrate_expr(code_assignt(lhs, allocated), t_n->code);
+    t_n->location = rhs.find_location();
+  }
+  else
+  {
+    exprt new_expr("sideeffect", rhs.type());
+    new_expr.statement(rhs.statement());
+    new_expr.cmt_size(alloc_size);
+    new_expr.location() = rhs.find_location();
+
+    // produce new object
+    goto_programt::targett t_n = dest.add_instruction(ASSIGN);
+    exprt new_assign = code_assignt(lhs, new_expr);
+    migrate_expr(new_assign, t_n->code);
+    t_n->location = rhs.find_location();
+  }
 
   // run initializer
   dest.destructive_append(tmp_initializer);
 }
 
+// Locate the element constructor inside a cpp_new[] initializer, by shape.
+//
+// The decl-path helper (find_constructor_call in clang_cpp_adjust_code.cpp)
+// keys on the "constructor" flag, but nothing in the initializer the frontend
+// builds for the array form carries it. What is there is a plain function_call
+// side effect -- the element constructor, whose first argument is the `this`
+// pointer -- nested inside a temporary_object of the whole array type. Match
+// that shape instead, and note a temporary_object keeps its call under the
+// named "initializer" sub-irep rather than in an operand.
+static exprt *find_cpp_new_constructor(exprt &e)
+{
+  if (
+    e.id() == "sideeffect" && e.statement() == "function_call" &&
+    e.operands().size() == 2 && !e.op1().operands().empty())
+    return &e;
+
+  if (e.id() == "sideeffect" && e.statement() == "temporary_object")
+  {
+    if (e.find("initializer").is_not_nil())
+      if (
+        exprt *c =
+          find_cpp_new_constructor(static_cast<exprt &>(e.add("initializer"))))
+        return c;
+  }
+
+  Forall_operands (it, e)
+    if (exprt *c = find_cpp_new_constructor(*it))
+      return c;
+
+  return nullptr;
+}
+
+// Zero the elements a value-initialising `new T[n]()` just allocated:
+//
+//   for (size_type i = 0; i < n; ++i)
+//     *(lhs + i) = <zero of T>;
+//
+// An assignment loop rather than a memset call: n need not be a compile-time
+// constant, and __ESBMC_memset falls back to a library body that is only linked
+// when the program itself calls memset.
+void goto_convertt::cpp_new_zero_fill(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &elem_count,
+  goto_programt &dest)
+{
+  const typet &subtype = ns.follow(rhs.type().subtype());
+
+  symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+
+  // Pointer arithmetic on lhs, for the reason spelled out at the element
+  // constructor loop below: &lhs[i] does not survive symex.
+  plus_exprt element_addr(lhs, index);
+  element_addr.type() = lhs.type();
+
+  exprt element("dereference", subtype);
+  element.copy_to_operands(element_addr);
+
+  code_assignt body(element, gen_zero(subtype));
+  body.location() = rhs.find_location();
+
+  plus_exprt next(index, from_integer(1, size_type()));
+  next.type() = size_type();
+
+  code_fort loop;
+  loop.init() = code_assignt(index, from_integer(0, size_type()));
+  loop.cond() = binary_relation_exprt(index, "<", elem_count);
+  loop.iter() = code_assignt(index, next);
+  loop.body() = body;
+  loop.location() = rhs.find_location();
+
+  convert(loop, dest);
+}
+
 void goto_convertt::cpp_new_initializer(
   const exprt &lhs,
   const exprt &rhs,
+  const exprt &elem_count,
   goto_programt &dest)
 {
   // grab initializer
@@ -465,7 +619,13 @@ void goto_convertt::cpp_new_initializer(
   {
     initializer = static_cast<const code_expressiont &>(rhs.initializer());
 
-    if (!initializer.op0().get_bool("constructor"))
+    // The wrap below is scalar-shaped: it assigns into a `new_object` of the
+    // element type. For the array form the frontend supplies an array-typed
+    // temporary_object, so wrapping it assigns a T* into a T. The cpp_new[]
+    // arm retargets the element constructor itself instead (github #6584).
+    if (
+      rhs.statement() != "cpp_new[]" &&
+      !initializer.op0().get_bool("constructor"))
     {
       // for auto *p = Foo(3) and int *p = 3
       // constructor case:  init is Foo(&(*new_object), 3)
@@ -490,14 +650,88 @@ void goto_convertt::cpp_new_initializer(
   {
     if (rhs.statement() == "cpp_new[]")
     {
-      // build loop
+      // The parenthesised and braced-empty forms value-initialise, which zeroes
+      // every element the constructor -- if any -- does not write itself
+      // ([expr.new]/24, github #6588). The frontend flags exactly those forms,
+      // so plain `new T[n]` keeps its indeterminate elements.
+      // An array element type (`new T[n][m]()`) is skipped: symex rejects a
+      // dereference yielding an array, and leaving those elements
+      // indeterminate stays sound.
+      if (
+        rhs.get_bool("zero_initialized") &&
+        !ns.follow(rhs.type().subtype()).is_array())
+        cpp_new_zero_fill(lhs, rhs, elem_count, dest);
+
+      // Construct every element: what the scalar arm below does once, done for
+      // each element of the allocated array. Leaving this unimplemented meant
+      // `new T[n]` ran no constructor at all, so members initialised by T's
+      // constructor read back nondeterministically (github #6584). The element
+      // count need not be a compile-time constant, so emit a loop rather than
+      // unrolling it:
+      //
+      //   for (size_type i = 0; i < n; ++i)
+      //     <element constructor, with `this` = lhs + i>
+      exprt *ctor = find_cpp_new_constructor(initializer);
+      if (ctor == nullptr)
+        return;
+
+      // do_cpp_new already evaluated the count for the allocation; reusing it
+      // is what keeps `new T[f()]` from calling f() a second time here.
+      const exprt &count = elem_count;
+
+      symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+
+      // The element address is plain pointer arithmetic on lhs. Building it as
+      // &lhs[i] instead would not survive symex: dereference_expr_nonscalar
+      // recurses into an index's source, and a pointer source is scalar, so it
+      // trips the "no sudden transition back to scalars" assertion. `p[i]` in
+      // user code only reaches symex as a dereference because the adjuster
+      // rewrites it, and this runs after adjust.
+      plus_exprt element_addr(lhs, index);
+      element_addr.type() = lhs.type();
+
+      // The frontend's initializer is shaped for the whole array: a
+      // temporary_object of type T[n] wrapping the element constructor, whose
+      // `this` is &new_object[0]. Lift that call out and re-point its `this`
+      // at lhs + i, so each iteration constructs its own element in place.
+      exprt call = *ctor;
+      call.op1().operands().at(0) = element_addr;
+      code_expressiont body;
+      body.expression() = call;
+      body.location() = rhs.find_location();
+
+      plus_exprt next(index, from_integer(1, size_type()));
+      next.type() = size_type();
+
+      code_fort loop;
+      loop.init() = code_assignt(index, from_integer(0, size_type()));
+      loop.cond() = binary_relation_exprt(index, "<", count);
+      loop.iter() = code_assignt(index, next);
+      loop.body() = body;
+      loop.location() = rhs.find_location();
+
+      // Same reasoning as the scalar arm: a class-typed initializer may lower
+      // to a stack temporary copied into the element, and that slot must not
+      // get its own scope-exit destructor.
+      std::size_t stack_size = targets.destructor_stack.size();
+      convert(loop, dest);
+      targets.destructor_stack.resize(stack_size);
     }
     else if (rhs.statement() == "cpp_new")
     {
       exprt deref_new("dereference", rhs.type().subtype());
       deref_new.copy_to_operands(lhs);
       replace_new_object(deref_new, initializer);
+
+      // A class-typed initializer may lower to a stack temporary copied into
+      // the heap object (`*new_ptr = tmp`). That temporary is a transfer
+      // slot, not a C++ object: the heap object owns the constructed state
+      // and is destructed via delete, so drop the scope-exit entries this
+      // conversion pushes -- destructing the slot would double-count
+      // (github #6075).
+      std::size_t stack_size = targets.destructor_stack.size();
       convert(to_code(initializer), dest);
+      targets.destructor_stack.resize(stack_size);
     }
     else
       assert(0);
@@ -560,6 +794,23 @@ exprt make_va_list(const exprt &expr)
     return expr.op0();
 
   return expr;
+}
+
+// Keep a va_start/va_copy call in the GOTO program (with no lhs) so symex
+// can track which va_lists have been initialised. run_builtin intercepts
+// the call; no actual function body is ever looked up.
+static void emit_va_marker_call(
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  code_function_callt call;
+  call.location() = function.location();
+  call.function() = function;
+  call.arguments() = arguments;
+  goto_programt::targett t = dest.add_instruction(FUNCTION_CALL);
+  migrate_expr(call, t->code);
+  t->location = function.location();
 }
 
 void goto_convertt::do_function_call_symbol(
@@ -647,8 +898,9 @@ void goto_convertt::do_function_call_symbol(
       !is_loop_invariant && !is_requires && !is_ensures)
       return;
 
-    // Rafael's invariant merging: combine consecutive __invariant() calls
-    // into a single LOOP_INVARIANT instruction for efficiency
+    // Rafael's invariant merging: combine consecutive
+    // __ESBMC_loop_invariant() calls into a single LOOP_INVARIANT
+    // instruction for efficiency
     // not tested yet, but should be correct
     goto_programt::targett t;
     expr2tc guard;
@@ -1011,11 +1263,11 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-#if ESBMC_SVCOMP
     /* <https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks/-/issues/1296> */
-    if (base_name == "__builtin_unreachable")
+    if (
+      base_name == "__builtin_unreachable" &&
+      config.options.get_bool_option("sv-comp"))
       return;
-#endif
 
     if (!options.get_bool_option("no-assertions"))
     {
@@ -1188,10 +1440,30 @@ void goto_convertt::do_function_call_symbol(
     new_function.add("#location") = function.cmt_location();
     new_function.add("sizeof") = arguments.front();
 
+    // The allocated element type is the T of a `sizeof(T)` size argument,
+    // recovered from the unfolded sizeof node (esbmc/esbmc#5337). When the
+    // argument is not a sizeof (e.g. operator new(n) for a raw byte count),
+    // fall back to a single zero-initialised unsigned integer spanning the
+    // requested bytes: operator new(n) allocates n raw bytes, so a later typed
+    // read sees zero, matching the sizeof-present path.
+    typet sizeof_type = sizeof_measured_type(arguments.front());
+    if (sizeof_type.is_nil())
+    {
+      const unsigned char_width = config.ansi_c.char_width;
+      BigInt nbytes(1);
+      if (arguments.front().is_constant())
+        nbytes = binary2integer(arguments.front().value().as_string(), false);
+      // Fall back to a single byte for a non-constant or pathological size:
+      // 1 byte avoids the crash, and capping the byte count keeps the derived
+      // bitvector width from overflowing unsignedbv_typet's 32-bit width.
+      if (nbytes < 1 || nbytes > BigInt(0xFFFFFFFFu / char_width))
+        nbytes = 1;
+      sizeof_type = unsignedbv_typet(nbytes.to_uint64() * char_width);
+    }
+
     // Set return type, a allocated pointer
     // XXX jmorse, const-qual misery
-    new_function.type() = pointer_typet(
-      static_cast<const typet &>(arguments.front().c_sizeof_type()));
+    new_function.type() = pointer_typet(sizeof_type);
     new_function.type().add("#location") = function.cmt_location();
 
     do_cpp_new(lhs, new_function, dest);
@@ -1212,8 +1484,11 @@ void goto_convertt::do_function_call_symbol(
 
     if (lhs.is_not_nil())
     {
+      // Carry the va_list lvalue as the operand so symex can flag a va_arg
+      // on a va_list that was never initialised by va_start; the argument's
+      // value plays no role in resolving the vararg itself.
       side_effect_exprt rhs("va_arg", lhs.type());
-      rhs.copy_to_operands(gen_zero(lhs.type()));
+      rhs.copy_to_operands(make_va_list(arguments[0]));
       rhs.location() = function.location();
       goto_programt::targett t2 = dest.add_instruction(ASSIGN);
       exprt assign_expr = code_assignt(lhs, rhs);
@@ -1305,6 +1580,8 @@ void goto_convertt::do_function_call_symbol(
       log_error("va_start argument expected to be lvalue");
       abort();
     }
+
+    emit_va_marker_call(function, arguments, dest);
   }
   else if (base_name == "__builtin_va_end")
   {
@@ -1321,8 +1598,13 @@ void goto_convertt::do_function_call_symbol(
   else if (base_name == "__builtin_va_copy")
   {
     // For Clang frontend, goto_symex tracks VA args via va_index in the
-    // call frame; no assignment is needed. Emitting an ASSIGN crashes the
-    // pointer analysis on Linux/Windows where va_list is a struct array.
+    // call frame, so va_arg needs no assignment here. Emitting an ASSIGN
+    // crashes the pointer analysis on Linux/Windows where va_list is a
+    // struct array, so those targets keep the erased form. Where va_list is
+    // a plain pointer, emit the real copy: symex_printf's va_list recovery
+    // must be able to see that the destination now aliases another va_list
+    // (an erased copy would let a foreign va_list masquerade as a fresh
+    // local, defeating the recovery's provenance gate).
     exprt dest_expr = make_va_list(arguments[0]);
 
     if (!is_lvalue(dest_expr))
@@ -1330,6 +1612,19 @@ void goto_convertt::do_function_call_symbol(
       log_error("va_copy argument expected to be lvalue");
       abort();
     }
+
+    if (arguments.size() >= 2 && ns.follow(dest_expr.type()).is_pointer())
+    {
+      exprt src_expr =
+        typecast_exprt(make_va_list(arguments[1]), dest_expr.type());
+      goto_programt::targett t = dest.add_instruction(ASSIGN);
+      exprt assign_expr = code_assignt(dest_expr, src_expr);
+      migrate_expr(assign_expr, t->code);
+      t->location = function.location();
+    }
+
+    if (arguments.size() >= 2)
+      emit_va_marker_call(function, arguments, dest);
   }
   // Nontemporal means "do not cache please" (https://lwn.net/Articles/255364/)
   else if (base_name == "__builtin_nontemporal_load")

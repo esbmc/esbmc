@@ -1,0 +1,4 @@
+CORE
+response_blocked.ld
+--ld-props props.yaml --k-induction
+^VERIFICATION FAILED$

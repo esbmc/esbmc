@@ -3,17 +3,17 @@
 #include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>
 #include <goto-programs/remove_no_op.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/i2string.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2_utils.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/prefix.h>
-#include <util/replace_symbol.h>
-#include <util/std_expr.h>
-#include <util/type_byte_size.h>
+#include <util/base/prefix.h>
+#include <util/symtab/replace_symbol.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/type_byte_size.h>
 
 static bool is_empty(const goto_programt &goto_program)
 {
@@ -275,10 +275,6 @@ void goto_convertt::convert(const codet &code, goto_programt &dest)
     convert_catch(code, dest);
   else if (statement == "cpp-throw")
     convert_throw(code, dest);
-  else if (statement == "throw_decl")
-    convert_throw_decl(code, dest);
-  else if (statement == "throw_decl_end")
-    convert_throw_decl_end(code, dest);
   else if (statement == "dead")
     copy(code, DEAD, dest);
   else
@@ -293,42 +289,6 @@ void goto_convertt::convert(const codet &code, goto_programt &dest)
     dest.instructions.back().code = expr2tc();
     dest.instructions.back().location = code.location();
   }
-}
-
-void goto_convertt::convert_throw_decl_end(
-  const exprt &expr,
-  goto_programt &dest)
-{
-  // add the THROW_DECL_END instruction to 'dest'
-  std::vector<irep_idt> exc; /* TODO: should this really be empty? */
-  goto_programt::targett throw_decl_end_instruction = dest.add_instruction();
-  throw_decl_end_instruction->make_throw_decl_end();
-  throw_decl_end_instruction->code = code_cpp_throw_decl_end2tc(exc);
-  throw_decl_end_instruction->location = expr.location();
-}
-
-void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
-{
-  // add the THROW_DECL instruction to 'dest'
-  goto_programt::targett throw_decl_instruction = dest.add_instruction();
-  codet c("code");
-  c.set_statement("throw-decl");
-  c.location() = expr.location();
-
-  // the THROW_DECL instruction is annotated with a list of IDs,
-  // one per target
-  irept::subt &throw_list = c.add("throw_list").get_sub();
-  for (const auto &block : expr.operands())
-  {
-    irept type = irept(block.get("throw_decl_id"));
-
-    // grab the ID and add to THROW_DECL instruction
-    throw_list.emplace_back(type);
-  }
-
-  throw_decl_instruction->make_throw_decl();
-  throw_decl_instruction->location = expr.location();
-  migrate_expr(c, throw_decl_instruction->code);
 }
 
 /// The automatic object a destructor-stack entry cleans up: the symbol of a
@@ -353,8 +313,20 @@ static irep_idt destructor_entry_symbol(const codet &entry)
   return irep_idt();
 }
 
-void goto_convertt::convert_throw(const exprt &expr, goto_programt &dest)
+void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
 {
+  // The thrown operand may still carry side effects — most importantly a
+  // `temporary_object` that constructs the thrown value — when convert_throw is
+  // reached through the code-statement path (a codet("cpp-throw"), as produced
+  // by the --irep2-bodies body round-trip) instead of the side_effect_exprt path
+  // in remove_sideeffects, which lowers operands before dispatching here. Lower
+  // them now so the thrown value is a plain symbol, matching the legacy flag-off
+  // GOTO; otherwise the constructor never runs and the handler reads an
+  // unconstructed object. A no-op when the operand is already side-effect-free.
+  exprt expr = expr_in;
+  Forall_operands (it, expr)
+    remove_sideeffects(*it, dest);
+
   // C++ stack unwinding: before the throw, run the destructors of the automatic
   // objects constructed since the nearest enclosing try block, in reverse
   // construction order ([except.ctor]). throw_stack_size is the destructor-stack
@@ -495,6 +467,27 @@ void goto_convertt::convert_block(const codet &code, goto_programt &dest)
   targets.destructor_stack = old_stack;
 }
 
+void goto_convertt::convert_controlled(const codet &code, goto_programt &dest)
+{
+  // A braced block gets its own destructor scope via convert_block; a bare
+  // controlled substatement (e.g. `if (c) throw std::bad_alloc();`) does not, so
+  // full-expression temporaries created in it would leak their destructors onto
+  // the enclosing block's stack and run on sibling paths where the object was
+  // never constructed -> spurious use-after-free (#5950). Wrap a non-block
+  // substatement so it is scoped identically to a braced one.
+  if (code.get_statement() == "block")
+  {
+    convert(code, dest); // convert_block already scopes the destructor stack
+    return;
+  }
+
+  code_blockt block;
+  block.copy_to_operands(code);
+  block.location() = code.location();
+  block.end_location(code.location());
+  convert(block, dest); // dispatches to convert_block, which scopes + unwinds
+}
+
 void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
 {
   if (code.operands().size() != 1)
@@ -504,6 +497,33 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
   }
 
   exprt expr = code.op0();
+
+  // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) strips the
+  // source location from a side_effect_exprt: sideeffect2t carries no location
+  // field, unlike the enclosing code_expression statement (whose location does
+  // survive). remove_function_call copies expr.location() into the lowered call,
+  // so for the function_call side effect that backs the void builtins
+  // (__ESBMC_assert / assert, __ESBMC_assume / __VERIFIER_assume, the
+  // loop-invariant / requires / ensures contracts) this yields a location-less
+  // ASSERT/ASSUME — which in turn makes --assertion-coverage's filename-gated
+  // counter ignore it ("Total Asserts: 0", spurious SUCCESSFUL). Restore the
+  // statement location onto the side effect when the round-trip has dropped it;
+  // a no-op on the legacy path (the side effect keeps its own location there).
+  if (expr.id() == "sideeffect" && expr.location().get_file().empty())
+    expr.location() = code.location();
+
+  // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) lowers a
+  // nested side_effect_exprt("cpp-throw") to its code form codet("cpp-throw"):
+  // migrate_expr_back has no way to know the throw sat in expression position
+  // (block statements need is_code(), so the back-arm cannot universally emit
+  // the side-effect form). A code operand here is therefore a statement that
+  // must be converted as such; otherwise remove_sideeffects below does not
+  // recognize it as a side effect and the throw is silently dropped.
+  if (expr.is_code())
+  {
+    convert(to_code(expr), dest);
+    return;
+  }
 
   if (expr.id() == "if")
   {
@@ -760,14 +780,88 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
   if (!initializer.is_nil())
   {
-    goto_programt sideeffects;
-    // the side effect is not just removed. Actually, it's converted and removed.
-    remove_sideeffects(initializer, sideeffects);
-    dest.destructive_append(sideeffects);
+    // A temporary_object initializer carrying a constructor (C++ `T t;` or
+    // `T t = T(...)`) constructs the object in place: retarget the
+    // constructor's new_object to `var` and emit it directly, instead of
+    // constructing a separate temporary and copying it. The copy path would
+    // leave that temporary with its own scope-exit destructor -- a spurious
+    // second destructor for what is semantically a single object.
+    if (
+      initializer.id() == "sideeffect" &&
+      initializer.statement() == "temporary_object" &&
+      static_cast<const exprt &>(initializer.initializer()).is_not_nil())
+    {
+      exprt ctor_code = static_cast<const exprt &>(initializer.initializer());
+      replace_new_object(var, ctor_code);
+      convert(to_code(ctor_code), dest);
+    }
+    else if (
+      initializer.id() == "sideeffect" &&
+      initializer.statement() == "temporary_object" &&
+      initializer.operands().size() == 1 &&
+      initializer.op0().id() == "sideeffect" &&
+      initializer.op0().statement() == "function_call")
+    {
+      // A temporary_object wrapping a plain (non-constructor) function call
+      // (C++ `T t = f(...);` where f returns T by value): call it with `var`
+      // as the lhs directly instead of routing the result through a fresh
+      // return_value$ temporary. The generic path below would give that
+      // temporary its own scope-exit destructor for what is semantically the
+      // same object as `var` (github #2306). `var`'s own destructor is
+      // scheduled below via targets.destructor_stack regardless of which
+      // branch above ran; if that destructor appears to not fire for a
+      // function ending in an explicit `return <expr>;`, look at
+      // convert_return's handling of its local unwind program instead of
+      // here -- that path is a separate, pre-existing gap.
+      const exprt &call_expr = initializer.op0();
+      code_function_callt call;
+      call.location() = call_expr.location();
+      call.lhs() = var;
+      call.function() = call_expr.op0();
+      call.arguments() = call_expr.op1().operands();
+      convert_function_call(call, dest);
+    }
+    else
+    {
+      std::size_t stack_size = targets.destructor_stack.size();
 
-    code_assignt assign(var, initializer);
-    assign.location() = new_code.location();
-    copy(assign, ASSIGN, dest);
+      goto_programt sideeffects;
+      // the side effect is not just removed. Actually, it's converted and removed.
+      remove_sideeffects(initializer, sideeffects);
+      dest.destructive_append(sideeffects);
+
+      code_assignt assign(var, initializer);
+      assign.location() = new_code.location();
+      copy(assign, ASSIGN, dest);
+
+      // Temporaries materialized while lowering the initializer die at the
+      // end of the full expression (C++ [class.temporary]/4, github #6075):
+      // emit their pending scope-exit entries (destructor then DEAD) right
+      // after the assignment. A reference declaration extends its
+      // temporary's lifetime to the scope ([class.temporary]/6) and a
+      // destructor-free tail (plain DEADs of C-style temps) keeps
+      // block-level scope, so both retain the old shape.
+      if (!is_lvalue_or_rvalue_reference(s->get_type()))
+      {
+        bool have_destructor = false;
+        for (std::size_t i = stack_size; i < targets.destructor_stack.size();
+             i++)
+          if (targets.destructor_stack[i].get_statement() == "function_call")
+          {
+            have_destructor = true;
+            break;
+          }
+
+        if (have_destructor)
+          while (targets.destructor_stack.size() > stack_size)
+          {
+            codet d_code = targets.destructor_stack.back();
+            targets.destructor_stack.pop_back();
+            d_code.location() = new_code.location();
+            convert(d_code, dest);
+          }
+      }
+    }
   }
 
   // now create a 'dead' instruction -- will be added after the
@@ -781,8 +875,17 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   }
 
   // do destructor
+  //
+  // The C++ frontend's `array_init$` is a construction helper: it builds an
+  // aggregate/array member, then copies its contents into the object under
+  // construction (`*this = array_init$`).  Giving it an automatic scope-exit
+  // destructor would run the copied members' destructors a second time (and
+  // double-free any resource-owning member), so skip it -- its members are
+  // owned and destroyed through `*this`.  `array_init$` is a reserved
+  // synthetic name (`$` cannot appear in a user identifier), so this cannot
+  // match a user variable.
   code_function_callt destructor;
-  if (get_destructor(ns, s->get_type(), destructor))
+  if (s->name != "array_init$" && get_destructor(ns, s->get_type(), destructor))
   {
     // add "this"
     address_of_exprt this_expr(symbol_expr);
@@ -810,7 +913,7 @@ bool goto_convertt::is_atomic_symbol(const exprt &expr, const namespacet &ns)
 
 /// Returns true if @p expr contains a direct read of any C11 _Atomic variable
 /// (stops early at the first match; does not recurse into address_of).
-static bool has_atomic_read(const exprt &expr, const namespacet &ns)
+bool goto_convertt::has_atomic_read(const exprt &expr, const namespacet &ns)
 {
   if (expr.is_address_of())
     return false;
@@ -1002,19 +1105,137 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
   {
     if (code.statement() == "cpp_delete[]")
     {
-      // build loop
+      // Destroy every element, pairing the construction loop do_cpp_new emits
+      // for `new T[n]` (github #6584). Leaving this empty while construction
+      // runs would be worse than leaving both empty: elements would be built
+      // and never torn down, so a T that acquires a resource in its
+      // constructor reports a spurious leak under --memory-leak-check.
+      //
+      // delete[] does not carry the element count, so recover it from the
+      // allocation -- dynamic_size is the object's size in bytes.
+      exprt byte_size("dynamic_size", size_type());
+      byte_size.copy_to_operands(tmp_op);
+
+      // An empty class models as zero bytes here, while C++ gives it a
+      // nonzero size ([class]/4). Clamp so the division below is well defined;
+      // the allocation for such a class is itself zero bytes, so its element
+      // count comes out as zero and no destructor runs -- see the limitation
+      // noted on #6584.
+      BigInt esz =
+        type_byte_size(migrate_type(ns.follow(tmp_op.type().subtype())));
+      if (esz == 0)
+        esz = 1;
+      exprt elem_size = from_integer(esz, size_type());
+
+      exprt count("/", size_type());
+      count.copy_to_operands(byte_size, elem_size);
+
+      symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+
+      // *(p + i). As in the scalar arm the destructor is retargeted at the
+      // pointee, since a virtually-bound destructor reads the vtable pointer
+      // out of that dereference.
+      exprt element_addr("+", tmp_op.type());
+      element_addr.copy_to_operands(tmp_op, index);
+      exprt element("dereference", ns.follow(tmp_op.type().subtype()));
+      element.copy_to_operands(element_addr);
+
+      codet tmp_code = to_code(destructor);
+      replace_new_object(element, tmp_code);
+
+      exprt next("+", size_type());
+      next.copy_to_operands(index, from_integer(1, size_type()));
+
+      code_fort loop;
+      loop.init() = code_assignt(index, from_integer(0, size_type()));
+      loop.cond() = binary_relation_exprt(index, "<", count);
+      loop.iter() = code_assignt(index, next);
+      loop.body() = tmp_code;
+      loop.location() = code.location();
+
+      // C++ [expr.delete]/7: deleting a null pointer invokes no destructor.
+      goto_programt dtor_prog;
+      convert(loop, dtor_prog);
+
+      goto_programt::targett t_skip = dtor_prog.add_instruction(SKIP);
+      t_skip->location = code.location();
+
+      goto_programt::targett t_null = dest.add_instruction();
+      t_null->make_goto(t_skip);
+      exprt is_null("not", typet("bool"));
+      exprt non_null("typecast", typet("bool"));
+      non_null.copy_to_operands(tmp_op);
+      is_null.move_to_operands(non_null);
+      migrate_expr(is_null, t_null->guard);
+      t_null->location = code.location();
+
+      dest.destructive_append(dtor_prog);
     }
     else if (code.statement() == "cpp_delete")
     {
-      exprt deref_op("dereference", tmp_op.type().subtype());
+      // Follow the pointee: a virtually-bound destructor reads the vtable
+      // pointer out of this dereference, and member2t needs a resolved struct
+      // source. This cannot move to the C++ adjuster, because the
+      // replace_new_object below substitutes the placeholder node wholesale,
+      // type included. Only the C++ frontend emits cpp_delete.
+      exprt deref_op("dereference", ns.follow(tmp_op.type().subtype()));
       deref_op.copy_to_operands(tmp_op);
 
       codet tmp_code = to_code(destructor);
       replace_new_object(deref_op, tmp_code);
-      convert(tmp_code, dest);
+
+      // C++ [expr.delete]/7: deleting a null pointer invokes no destructor.
+      goto_programt dtor_prog;
+      convert(tmp_code, dtor_prog);
+
+      goto_programt::targett t_skip = dtor_prog.add_instruction(SKIP);
+      t_skip->location = code.location();
+
+      goto_programt::targett t_null = dest.add_instruction();
+      t_null->make_goto(t_skip);
+      exprt is_null("not", typet("bool"));
+      exprt non_null("typecast", typet("bool"));
+      non_null.copy_to_operands(tmp_op);
+      is_null.move_to_operands(non_null);
+      migrate_expr(is_null, t_null->guard);
+      t_null->location = code.location();
+
+      dest.destructive_append(dtor_prog);
     }
     else
       assert(0);
+  }
+
+  // A replaced operator delete owns the storage the matching operator new
+  // handed out, so call it instead of the built-in deallocation -- which
+  // would otherwise free memory the program never obtained from us, and skip
+  // whatever bookkeeping the replacement does (github #6494).
+  const exprt &dealloc_function =
+    static_cast<const exprt &>(code.find("dealloc_function"));
+
+  if (dealloc_function.is_not_nil())
+  {
+    const code_typet::argumentst &params =
+      to_code_type(dealloc_function.type()).arguments();
+
+    code_function_callt call;
+    call.function() = dealloc_function;
+    call.arguments().push_back(tmp_op);
+    call.arguments().back().make_typecast(params[0].type());
+
+    // The C++14 sized form takes the object's byte count as its second
+    // argument ([basic.stc.dynamic.deallocation]).
+    if (params.size() == 2)
+      call.arguments().push_back(from_integer(
+        type_byte_size(migrate_type(ns.follow(tmp_op.type().subtype()))),
+        params[1].type()));
+
+    call.location() = code.location();
+
+    goto_programt::targett t_d = dest.add_instruction(FUNCTION_CALL);
+    migrate_expr(call, t_d->code);
+    t_d->location = code.location();
+    return;
   }
 
   expr2tc tmp_op2;
@@ -1155,7 +1376,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
 
   // do the w label
   goto_programt tmp_w;
-  convert(to_code(code.op3()), tmp_w);
+  convert_controlled(to_code(code.op3()), tmp_w);
 
   // y: goto u;
   goto_programt tmp_y;
@@ -1224,7 +1445,7 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
 
   // do the x label
   goto_programt tmp_x;
-  convert(to_code(code.op1()), tmp_x);
+  convert_controlled(to_code(code.op1()), tmp_x);
 
   // y: if(c) goto v;
   y->make_goto(v);
@@ -1293,7 +1514,7 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
 
   // do the w label
   goto_programt tmp_w;
-  convert(to_code(code.op1()), tmp_w);
+  convert_controlled(to_code(code.op1()), tmp_w);
   goto_programt::targett w = tmp_w.instructions.begin();
 
   // y: if(c) goto w;
@@ -1405,7 +1626,16 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
     goto_programt::targett x = tmp_cases.add_instruction();
     x->make_goto(it.first);
     migrate_expr(guard_expr, x->guard);
-    x->location = case_ops.front().find_location();
+    x->location = code.location();
+    if (
+      options.get_bool_option("validate-violation-witness") ||
+      options.get_option("witness-output-yaml") != "")
+      for (const auto &op : case_ops)
+      {
+        BigInt val;
+        if (!to_integer(op, val))
+          x->switch_case_ids.push_back(integer2string(val));
+      }
   }
 
   {
@@ -1452,13 +1682,61 @@ void goto_convertt::convert_return(
   code_returnt new_code(code);
   if (new_code.has_return_value())
   {
+    // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) lowers a
+    // sideeffect_exprt("cpp-throw") that appears as the return value to its
+    // code form codet("cpp-throw"). A throw has void type and cannot be used
+    // as a return value; convert it as a statement and return early (the throw
+    // is unconditional, so no RETURN instruction is needed).
+    // Mirrors the `expr.is_code()` guard in convert_expression.
+    if (
+      new_code.return_value().is_code() &&
+      to_code(new_code.return_value()).get_statement() == "cpp-throw")
+    {
+      convert(to_code(new_code.return_value()), dest);
+      return;
+    }
+    // Scope-exit entries pushed while lowering the return value are dropped
+    // wholesale: a materialized return temporary (e.g. `return A(n);`) is the
+    // return slot itself and must survive both this return's unwind and the
+    // enclosing block's fall-through unwind. This also skips destructors of
+    // other full-expression temporaries (e.g. `return A(n).num;`), matching
+    // pre-existing behaviour (github #6075/#6076).
+    std::size_t value_stack_size = targets.destructor_stack.size();
     goto_programt sideeffects;
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
+    targets.destructor_stack.resize(value_stack_size);
   }
 
-  goto_programt dummy;
-  unwind_destructor_stack(code.location(), 0, dummy);
+  // C++ [stmt.return]: the return value is computed before the local
+  // objects' destructors run. When the scope holds an object with a
+  // non-trivial destructor, capture the value into a temporary, emit the
+  // unwind program, and return the temporary (a destructor may modify state
+  // the return expression reads, and symex treats RETURN as a jump, so the
+  // unwind cannot go after it). A destructor-free stack (plain C) keeps the
+  // old shape: scope exit is handled at block level (github #6077).
+  bool have_destructor = false;
+  for (const codet &d : targets.destructor_stack)
+    if (d.get_statement() == "function_call")
+    {
+      have_destructor = true;
+      break;
+    }
+
+  if (have_destructor)
+  {
+    if (
+      targets.has_return_value && new_code.has_return_value() &&
+      !new_code.return_value().is_constant())
+    {
+      std::size_t stack_size = targets.destructor_stack.size();
+      make_temp_symbol(new_code.return_value(), dest);
+      // The temporary is the return slot: it outlives the unwind, so drop
+      // the scope-exit entries convert_decl pushed for it.
+      targets.destructor_stack.resize(stack_size);
+    }
+    unwind_destructor_stack(code.location(), 0, dest);
+  }
 
   if (targets.has_return_value)
   {
@@ -1583,7 +1861,10 @@ void goto_convertt::generate_ifthenelse(
   }
 
   // do guarded assertions directly
+  // Disabled under --validate-violation-witness: the folding eliminates the
+  // conditional GOTO that witness branching waypoints need to steer the path.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     true_case.instructions.size() == 1 &&
     true_case.instructions.back().is_assert() &&
     is_false(true_case.instructions.back().guard) &&
@@ -1604,7 +1885,9 @@ void goto_convertt::generate_ifthenelse(
   }
 
   // similarly, do guarded assertions directly
+  // Disabled under --validate-violation-witness for the same reason.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     false_case.instructions.size() == 1 &&
     false_case.instructions.back().is_assert() &&
     is_false(false_case.instructions.back().guard) &&
@@ -1626,7 +1909,9 @@ void goto_convertt::generate_ifthenelse(
 
   // a special case for C libraries that use
   // (void)((cond) || (assert(0),0))
+  // Disabled under --validate-violation-witness for the same reason.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     is_empty(false_case) && true_case.instructions.size() == 2 &&
     true_case.instructions.front().is_assert() &&
     is_false(true_case.instructions.front().guard) &&
@@ -1743,12 +2028,12 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
 
   // convert 'then'-branch
   goto_programt tmp_op1;
-  convert(to_code(code.op1()), tmp_op1);
+  convert_controlled(to_code(code.op1()), tmp_op1);
 
   goto_programt tmp_op2;
 
   if (has_else)
-    convert(to_code(code.op2()), tmp_op2);
+    convert_controlled(to_code(code.op2()), tmp_op2);
 
   exprt tmp_guard = code.op0();
 

@@ -37,6 +37,8 @@ option(ENABLE_YICES "Use Yices solver (default: OFF)" OFF)
 option(ENABLE_CVC4 "Use CVC4 solver (default: OFF)" OFF)
 option(ENABLE_CVC5 "Use CVC5 solver (default: OFF)" OFF)
 option(ENABLE_BITWUZLA "Use Bitwuzla solver (default: OFF)" OFF)
+option(ENABLE_BITWUZLLOB "Use Bitwuzllob (Bitwuzla on the Mallob platform) via an external mallob binary (default: ON)" ON)
+option(ENABLE_NEUROSYM "Use NeuroSym (neural-guided GAN + Z3 fallback) via an external Python program (default: ON)" ON)
 
 #############################
 # OTHERS
@@ -51,7 +53,6 @@ option(BENCHBRINGUP "Run a user-specified benchmark in Github workflow" OFF)
 option(DOWNLOAD_DEPENDENCIES "Download and build dependencies if needed (default: OFF)" OFF)
 option(ENABLE_MIMALLOC "Link the mimalloc allocator into esbmc (default: OFF). Speeds up the allocation-heavy symex path (~15% on high-unwind runs) but regresses some SV-COMP benchmarks. Found via find_package, or downloaded when DOWNLOAD_DEPENDENCIES is ON." OFF)
 option(ACADEMIC_BUILD "Check and Enable libs that available only in Academic builds (default: OFF)" OFF)
-option(ESBMC_SVCOMP "Enable an SV-COMP build of ESBMC (default: OFF)" OFF)
 option(CORE_REGRESSION_ONLY "Only add tests in the regression that are CORE (default: OFF)" OFF)
 
 #############################

@@ -1,29 +1,29 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 
-static smt_astt extract_exponent(smt_convt *ctx, smt_astt fp)
+static smt_astt extract_exponent(smt_solver_baset *ctx, smt_astt fp)
 {
   std::size_t exp_top = fp->sort->get_data_width() - 2;
   std::size_t exp_bot = fp->sort->get_significand_width() - 2;
   return ctx->mk_extract(fp, exp_top, exp_bot + 1);
 }
 
-static smt_astt extract_significand(smt_convt *ctx, smt_astt fp)
+static smt_astt extract_significand(smt_solver_baset *ctx, smt_astt fp)
 {
   return ctx->mk_extract(fp, fp->sort->get_significand_width() - 2, 0);
 }
 
-static smt_astt extract_signbit(smt_convt *ctx, smt_astt fp)
+static smt_astt extract_signbit(smt_solver_baset *ctx, smt_astt fp)
 {
   return ctx->mk_extract(
     fp, fp->sort->get_data_width() - 1, fp->sort->get_data_width() - 1);
 }
 
-static smt_astt extract_exp_sig(smt_convt *ctx, smt_astt fp)
+static smt_astt extract_exp_sig(smt_solver_baset *ctx, smt_astt fp)
 {
   return ctx->mk_extract(fp, fp->sort->get_data_width() - 2, 0);
 }
 
-fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)
+fp_convt::fp_convt(smt_solver_baset *_ctx) : ctx(_ctx)
 {
 }
 
@@ -1146,7 +1146,7 @@ ieee_floatt fp_convt::get_fpbv(smt_astt a)
 }
 
 static void add_core(
-  smt_convt *ctx,
+  smt_solver_baset *ctx,
   unsigned sbits,
   unsigned ebits,
   smt_astt &c_sgn,

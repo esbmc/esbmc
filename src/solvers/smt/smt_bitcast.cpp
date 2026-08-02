@@ -1,5 +1,5 @@
-#include <solvers/smt/smt_conv.h>
-#include <util/type_byte_size.h>
+#include <solvers/smt/smt_solver.h>
+#include <util/expr/type_byte_size.h>
 
 /**
  * Constructs the tree-like concatenation of expressions from a sequence.
@@ -126,7 +126,7 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
   abort();
 }
 
-smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
 {
   assert(is_bitcast2t(expr));
 
@@ -175,7 +175,6 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
   }
   else if (is_bv_type(to_type))
   {
-    // Under --ir-ieee, float values are real-encoded; bit-pattern reinterpretation
     // Under integer encoding (--ir/--ir-ieee), fixed- and floating-point values are
     // real-encoded; fall back to value-based typecast.
     if (int_encoding && (is_fixedbv_type(from) || is_floatbv_type(from)))

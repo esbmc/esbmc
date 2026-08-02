@@ -1,15 +1,15 @@
 #include <memory>
 #include <charconv>
 #include <unordered_map>
-#include <util/fixedbv.h>
-#include <util/i2string.h>
-#include <util/ieee_float.h>
+#include <util/arith/fixedbv.h>
+#include <util/base/i2string.h>
+#include <util/arith/ieee_float.h>
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
 #include <irep2/irep2_dispatch.h>
 #include <util/message/format.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 // Pretty names indexed by expr2t::expr_ids. Driven by expr_kinds.inc;
 // adding a new expression kind there automatically populates this
@@ -100,14 +100,20 @@ void expr2t::dump() const
 
 unsigned long constant_int2t::as_ulong() const
 {
-  // XXXjmorse - add assertion that we don't exceed machine word width?
   assert(!value.is_negative());
+  // Guard the documented truncation (R2): to_uint64() shifts every digit
+  // into a 64-bit accumulator, silently dropping the high digits when the
+  // magnitude exceeds 64 bits. is_uint64() is true iff the magnitude fits.
+  assert(value.is_uint64());
   return value.to_uint64();
 }
 
 long constant_int2t::as_long() const
 {
-  // XXXjmorse - add assertion that we don't exceed machine word width?
+  // Guard the documented truncation/overflow (R2): to_int64() negates the
+  // (possibly truncated) to_uint64() magnitude, so it is only correct when
+  // the value fits the signed 64-bit range. is_int64() is sign-aware.
+  assert(value.is_int64());
   return value.to_int64();
 }
 
@@ -401,7 +407,7 @@ printf_kindt printf_kind_from_name(const irep_idt &name)
 }
 
 /********************** Switch-based v2 dispatchers ***************************/
-// All 111 expr kinds now expose `fields`; every case uses the generic path.
+// Every expr kind exposes `fields`; every case uses the generic path.
 // `end_expr_id` is a sentinel never assigned to a live node; including it as
 // a switch case (with -Wswitch enabled) makes the compiler enforce per-kind
 // exhaustiveness via the X-macro — adding a new kind without wiring it into
@@ -471,7 +477,7 @@ namespace
 // starts with `&expr2t::type` for cmp/crc/hash purposes but whose
 // constructor synthesises the type from operands and rejects a leading
 // `type2tc` (e.g. and/or/xor/implies/isinstance/hasattr/isnone,
-// signbit/popcount, code_cpp_throw_decl[_end]). Treating those as
+// signbit/popcount). Treating those as
 // supported would silently fail to instantiate at the make_irep call
 // inside `rebuild_with_type_impl`; the trait pushes the failure to a
 // readable "kind unsupported" path instead.
@@ -841,6 +847,8 @@ std::string code_skip2t::field_names[esbmct::num_type_fields] =
   {"", "", "", "", ""};
 std::string new_object2t::field_names[esbmct::num_type_fields] =
   {"", "", "", "", ""};
+std::string uninterpreted_func2t::field_names[esbmct::num_type_fields] =
+  {"function_name", "arguments", "", "", ""};
 std::string code_free2t::field_names[esbmct::num_type_fields] =
   {"operand", "", "", "", ""};
 std::string code_goto2t::field_names[esbmct::num_type_fields] =
@@ -884,15 +892,9 @@ std::string code_cpp_del_array2t::field_names[esbmct::num_type_fields] =
 std::string code_cpp_delete2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string code_cpp_catch2t::field_names[esbmct::num_type_fields] =
-  {"exception_list", "", "", "", ""};
+  {"exception_list", "operands", "", "", ""};
 std::string code_cpp_throw2t::field_names[esbmct::num_type_fields] =
   {"operand", "exception_list", "", "", ""};
-std::string code_cpp_throw_decl2t::field_names[esbmct::num_type_fields] =
-  {"exception_list", "", "", "", ""};
-std::string code_cpp_throw_decl_end2t::field_names[esbmct::num_type_fields] =
-  {"exception_list", "", "", "", ""};
-std::string code_cpp_src_throw_decl2t::field_names[esbmct::num_type_fields] =
-  {"exception_list", "", "", "", ""};
 std::string isinf2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string isnormal2t::field_names[esbmct::num_type_fields] =
@@ -923,3 +925,5 @@ std::string hasattr2t::field_names[esbmct::num_type_fields] =
   {"value", "attr", "", "", ""};
 std::string isnone2t::field_names[esbmct::num_type_fields] =
   {"lhs", "rhs", "", "", ""};
+std::string sizeof2t::field_names[esbmct::num_type_fields] =
+  {"value", "sizeof_type", "", "", ""};

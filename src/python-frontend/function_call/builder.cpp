@@ -1,115 +1,36 @@
 #include <python-frontend/function_call/builder.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/numpy_call_expr.h>
-#include <python-frontend/python_list.h>
+#include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/type_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/message.h>
-#include <util/std_expr.h>
-#include <irep2/irep2_utils.h>
-#include <util/migrate.h>
+#include <python-frontend/type/type_utils.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
+#include <util/irep/std_expr.h>
+#include <python-frontend/python_expr_builder.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
 
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving). Back-migrated for the legacy adjust/goto-convert seam. Each
-// guards the dyn-sized-array round-trip hazard (fall back to legacy), and the
-// member/index/typecast variants restore the exact result type (#cpp_type that
-// migrate_type drops).
-bool contains_dyn_array(const typet &t)
-{
-  if (t.is_array())
-  {
-    const array_typet &at = to_array_type(t);
-    if (at.size().is_nil() || !at.size().is_constant())
-      return true;
-    return contains_dyn_array(at.subtype());
-  }
-  if (t.is_pointer())
-    return contains_dyn_array(t.subtype());
-  return false;
-}
+using namespace python_expr;
 
-exprt build_address_of(const exprt &obj)
+// True for a bare `:` slice, i.e. Slice(lower=None, upper=None, step=None).
+// Mirrors converter_expr.cpp's helper of the same name: used here to tell
+// whether a Tuple-sliced Subscript (`a[i, j]`) is one of the two supported
+// 2-D slicing patterns (which produce an array) or a fully scalar multi-index
+// (which does not), so len() dispatch doesn't misroute the latter.
+static bool is_full_slice_node(const nlohmann::json &node)
 {
-  if (contains_dyn_array(obj.type()))
-    return address_of_exprt(obj);
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
+  if (!(node.contains("_type") && node["_type"] == "Slice"))
+    return false;
+  auto is_absent = [&](const char *key) {
+    return !node.contains(key) || node[key].is_null();
+  };
+  return is_absent("lower") && is_absent("upper") && is_absent("step");
 }
-
-exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
-{
-  if (contains_dyn_array(t))
-    return member_exprt(base, name, t);
-  expr2tc base2;
-  migrate_expr(base, base2);
-  if (
-    is_struct_type(base2->type) || is_union_type(base2->type) ||
-    is_symbol_type(base2->type))
-  {
-    exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
-    result.type() = t;
-    return result;
-  }
-  return member_exprt(base, name, t);
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
-    return typecast_exprt(from, t);
-  expr2tc from2;
-  migrate_expr(from, from2);
-  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
-  // migrate_type does not round-trip #cpp_type; restore the exact target type
-  // so legacy typecast_exprt(from, t) is reproduced faithfully.
-  result.type() = t;
-  return result;
-}
-
-// Expression-context call `callee(args...)` returning return_type, where the
-// callee is an already-built function expression (here a by-name symbol_exprt
-// carrying a code_typet). Falls back to the legacy node for a dyn-sized-array
-// return/argument type.
-exprt build_call(
-  const exprt &callee,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  bool dyn = contains_dyn_array(return_type);
-  for (const exprt &a : args)
-    dyn = dyn || contains_dyn_array(a.type());
-  if (dyn)
-  {
-    side_effect_expr_function_callt call(return_type);
-    call.function() = callee;
-    for (const exprt &a : args)
-      call.arguments().push_back(a);
-    return call;
-  }
-  expr2tc callee2;
-  migrate_expr(callee, callee2);
-  std::vector<expr2tc> args2;
-  args2.reserve(args.size());
-  for (const exprt &a : args)
-  {
-    expr2tc a2;
-    migrate_expr(a, a2);
-    args2.push_back(std::move(a2));
-  }
-  return migrate_expr_back(
-    side_effect_function_call2tc(migrate_type(return_type), callee2, args2));
-}
-} // namespace
 
 static typet normalize_pylist_candidate_type(typet type, const namespacet &ns)
 {
@@ -156,6 +77,7 @@ const std::string kPytInitTid = "__pyt_init_tid";
 const std::string kPytJoin = "__pyt_join";
 const std::string kPytTerminate = "__pyt_terminate";
 const std::string kPyLockBlockAndCheck = "__ESBMC_pylock_block_and_check";
+const std::string kPyLockReleaseWaiters = "__pyt_lock_release_waiters";
 
 function_call_builder::function_call_builder(
   python_converter &converter,
@@ -172,7 +94,12 @@ bool function_call_builder::is_cover_call(const symbol_id &function_id) const
 
 bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
 {
-  if (type_utils::is_builtin_type(function_id.get_function()))
+  const std::string &function = function_id.get_function();
+  if (
+    type_utils::is_builtin_type(function) || function == "isinstance" ||
+    function == "hasattr" ||
+    boost::algorithm::starts_with(function, "nondet_") ||
+    boost::algorithm::starts_with(function, "__VERIFIER_nondet_"))
     return false;
 
   const std::string &filename = function_id.get_filename();
@@ -479,9 +406,61 @@ symbol_id function_call_builder::build_function_id() const
         function_id.set_function(func_name);
         return function_id;
       }
+      else if (
+        arg.contains("func") && arg["func"].is_object() &&
+        arg["func"].value("_type", "") == "Attribute" &&
+        arg["func"].value("attr", "") == "encode")
+        // len(s.encode()): the encoded bytes are a wide-int array whose zero
+        // high bytes make strlen stop at the first element, so size by element
+        // count instead (matches the bytes variable and bytes-slice paths).
+        func_name = kGetObjectSize;
     }
     else if (arg["_type"] == "List")
       func_name = kGetObjectSize;
+    else if (
+      arg["_type"] == "Subscript" && arg.contains("slice") &&
+      arg["slice"].is_object() && arg["slice"].value("_type", "") == "Slice" &&
+      arg.contains("value") && arg["value"].is_object() &&
+      arg["value"].value("_type", "") == "Name" &&
+      th.get_var_type(arg["value"]["id"].get<std::string>()) == "bytes")
+    {
+      // Inline len(b[a:b]) where b is bytes: the slice is a wide-int array, so
+      // count elements rather than running strlen over the byte representation
+      // (which stops at the first element's zero high bytes). String slices
+      // keep the strlen path (their result is a null-terminated char array).
+      func_name = kGetObjectSize;
+    }
+    else if (
+      arg["_type"] == "Subscript" && arg.contains("slice") &&
+      arg["slice"].is_object() && arg["slice"].value("_type", "") == "List" &&
+      arg.contains("value") && arg["value"].is_object() &&
+      arg["value"].value("_type", "") == "Name" &&
+      th.get_var_type(arg["value"]["id"].get<std::string>()) != "str")
+    {
+      // len(a[[0, 2]]): fancy indexing always selects multiple elements into
+      // a fresh numeric array, never a null-terminated string; count elements
+      // instead of running strlen.
+      func_name = kGetObjectSize;
+    }
+    else if (
+      arg["_type"] == "Subscript" && arg.contains("slice") &&
+      arg["slice"].is_object() && arg["slice"].value("_type", "") == "Tuple" &&
+      arg["slice"].contains("elts") && arg["slice"]["elts"].is_array() &&
+      arg["slice"]["elts"].size() == 2 &&
+      is_full_slice_node(arg["slice"]["elts"][0]) !=
+        is_full_slice_node(arg["slice"]["elts"][1]) &&
+      arg.contains("value") && arg["value"].is_object() &&
+      arg["value"].value("_type", "") == "Name" &&
+      th.get_var_type(arg["value"]["id"].get<std::string>()) != "str")
+    {
+      // len(a[i, :]) / len(a[:, j]): 2-D slicing on a numpy array produces a
+      // fresh numeric array, not a null-terminated string; count elements
+      // instead of running strlen. Only the two supported 2-D slicing
+      // patterns (exactly one axis fully sliced) reach this branch -- a
+      // fully scalar multi-index like `a[0, 1]` produces a scalar and must
+      // keep falling through to normal scalar handling below.
+      func_name = kGetObjectSize;
+    }
     else if (arg["_type"] == "Name")
     {
       const std::string &var_type = th.get_var_type(arg["id"]);
@@ -595,6 +574,16 @@ symbol_id function_call_builder::build_function_id() const
         // Use list size semantics for len(sub) where sub = lst[a:b].
         func_name = kGetObjectSize;
       }
+      else if (
+        var_symbol && converter_.ns.follow(var_symbol->get_type()).is_array() &&
+        converter_.ns.follow(var_symbol->get_type()).subtype() != char_type())
+      {
+        // A non-char array reaching here unannotated — e.g. a bytes slice
+        // (s = b[a:b]), which loses its "bytes" frontend type — must be sized
+        // by element count, not strlen: bytes elements are wide ints whose zero
+        // high bytes make strlen stop at the first element.
+        func_name = kGetObjectSize;
+      }
     }
     function_id.clear();
     function_id.set_prefix("c:");
@@ -618,7 +607,19 @@ symbol_id function_call_builder::build_function_id() const
   }
   else if (th.is_constructor_call(call_))
   {
-    class_name = func_name;
+    // An explicit `Base.__init__(self, ...)` call names the receiver class and
+    // passes self explicitly. is_constructor_call() flags any `.__init__`, but
+    // here the constructor is the named class's own, stored under the class
+    // name (@C@Base@F@Base), not the literal "__init__". Resolve both the class
+    // and the (renamed) function to the receiver so the symbol is found; a
+    // direct `Base()` call keeps func_name as the class name already.
+    if (func_name == "__init__" && json_utils::is_class(obj_name, ast))
+    {
+      class_name = obj_name;
+      func_name = obj_name;
+    }
+    else
+      class_name = func_name;
   }
   else if (is_member_function_call)
   {
@@ -718,7 +719,6 @@ exprt function_call_builder::build() const
   }
 
   symbol_id function_id = build_function_id();
-
   if (is_len_call(function_id) && !call_["args"].empty())
   {
     exprt arg_expr = converter_.get_expr(call_["args"][0]);
@@ -755,6 +755,10 @@ exprt function_call_builder::build() const
 
     if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
       return from_integer(1, long_long_int_type());
+
+    typet len_arg_type = converter_.ns.follow(arg_expr.type());
+    if (len_arg_type.is_array() && len_arg_type.subtype() != char_type())
+      return to_array_type(len_arg_type).size();
 
     // len() of a tuple-typed expression (e.g. an inline str.partition() result
     // that is not bound to a Name, so the __ESBMC_len_tuple routing above never
@@ -974,9 +978,18 @@ exprt function_call_builder::build() const
       auto &symbol_table = converter_.symbol_table();
       locationt location = converter_.get_location_from_decl(call_);
 
-      code_typet trampoline_type;
-      trampoline_type.return_type() = empty_typet();
-      typet param_type = pointer_typet(trampoline_type);
+      if (call_["args"].size() != 1)
+        throw std::runtime_error(func_name + " takes exactly one argument");
+      exprt arg = converter_.get_expr(call_["args"][0]);
+      if (arg.type().is_code())
+        arg = build_address_of(arg);
+
+      // intrinsic_spawn_thread requires a *literal* address_of(symbol); a
+      // typecast around it trips its is_address_of2t assertion. The trampoline
+      // returns None, whose GOTO return type is none_type() rather than void
+      // (issue #5914), so derive the parameter type from the actual address
+      // expression instead of forcing pointer-to-void() and typecasting.
+      typet param_type = arg.type();
 
       code_typet fn_type;
       fn_type.return_type() = uint_type();
@@ -989,14 +1002,6 @@ exprt function_call_builder::build() const
           converter_.python_file(), func_name, symbol_id, location, fn_type);
         converter_.add_symbol(symbol);
       }
-
-      if (call_["args"].size() != 1)
-        throw std::runtime_error(func_name + " takes exactly one argument");
-      exprt arg = converter_.get_expr(call_["args"][0]);
-      if (arg.type().is_code())
-        arg = build_address_of(arg);
-      if (arg.type() != param_type)
-        arg = build_typecast(arg, param_type);
 
       code_function_callt call;
       call.function() = symbol_exprt(symbol_id, fn_type);
@@ -1019,12 +1024,15 @@ exprt function_call_builder::build() const
     const bool is_join = func_name == kPytJoin;
     const bool is_terminate = func_name == kPytTerminate;
     const bool is_lock_block = func_name == kPyLockBlockAndCheck;
-    if (is_init_tid || is_join || is_terminate || is_lock_block)
+    const bool is_lock_release = func_name == kPyLockReleaseWaiters;
+    if (
+      is_init_tid || is_join || is_terminate || is_lock_block ||
+      is_lock_release)
     {
       auto &symbol_table = converter_.symbol_table();
       locationt location = converter_.get_location_from_decl(call_);
 
-      const bool takes_uint_arg = is_init_tid || is_join;
+      const bool takes_uint_arg = is_init_tid || is_join || is_lock_release;
 
       code_typet fn_type;
       fn_type.return_type() = empty_typet();

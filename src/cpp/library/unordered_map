@@ -1,6 +1,9 @@
 #ifndef ESBMC_UNORDERED_MAP_H
 #define ESBMC_UNORDERED_MAP_H
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include <utility>
 
 namespace std {
@@ -171,7 +174,9 @@ public:
 
 private:
     // Simple fixed-size array storage
-    static const size_t MAX_SIZE = 1024; // Small size for verification
+    // 64 slots keeps the inline data_ array small: with std::string's inline
+    // buffer, 1024 slots made one map ~140KB and solver encodings timed out.
+    static const size_t MAX_SIZE = 64;
     value_type data_[MAX_SIZE];
     size_type size_;
     hasher hash_function_;
@@ -558,4 +563,5 @@ public:
 
 } // namespace std
 
+#endif // __cplusplus >= 201103L
 #endif // ESBMC_UNORDERED_MAP_H

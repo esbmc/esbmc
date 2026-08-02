@@ -16,6 +16,7 @@ add_library(ldfrontend STATIC
   ir/ld_ir.cpp
   ir/ld_ir_builder.cpp
   ir_gen/ld_converter.cpp
+  ir_gen/st_fb_translator.cpp
   property/yaml_property_parser.cpp
   property/property_encoder.cpp
   verify/ld_verify.cpp
@@ -23,10 +24,13 @@ add_library(ldfrontend STATIC
 
 target_include_directories(ldfrontend
   PUBLIC  ${CMAKE_SOURCE_DIR}/src
+          ${Boost_INCLUDE_DIRS}
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+# ld_verify.cpp drives the esbmc binary via Boost.Process and locates it via
+# Boost.DLL, which need Boost.Filesystem/System at link time.
 target_link_libraries(ldfrontend
   PUBLIC pugixml::static util_esbmc irep2
-  PRIVATE fmt::fmt yaml-cpp::yaml-cpp
+  PRIVATE fmt::fmt yaml-cpp::yaml-cpp ${Boost_LIBRARIES}
 )

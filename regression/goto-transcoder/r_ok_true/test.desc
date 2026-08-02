@@ -1,4 +1,4 @@
 CORE
 main.goto
---cprover --binary library.goto
+--binary library.goto
 ^VERIFICATION SUCCESSFUL$

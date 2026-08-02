@@ -1,11 +1,35 @@
-# SAFE-LD Property Specification Format
+# ESBMC-PLC Property Specification Format
 
 **Status:** DRAFT (WP1 / T1.3)  
-**Version:** 0.1  
-**Date:** 2026-06-09
+**Version:** 0.2  
+**Date:** 2026-07-24
 
 This document specifies the YAML format used to express safety properties for
-IEC 61131-3 Ladder Diagram programs verified with SAFE-LD.
+IEC 61131-3 Ladder Diagram programs verified with ESBMC-PLC.
+
+---
+
+## Implementation Status (#5289)
+
+A property file is consumed either by the `esbmc` driver directly —
+`esbmc program.ld --ld-props props.yaml --k-induction` — or via `ld-verify`
+(`ld-verify program.{ld,xml} --props props.yaml`). The property encoder turns
+each entry into a `code_assertt` node appended to the scan-loop body.
+
+| Kind | Status |
+|---|---|
+| `mutual_exclusion` | **Implemented & exercised** (regression test `missing_interlock_fail`) |
+| `invariant` | **Implemented**, encodes and verifies |
+| `absence` | **Implemented & exercised** (regression test `motor_interlock`) |
+| `reachability` | **Implemented**, encodes and verifies |
+| `response` | **Implemented & exercised** (regression tests `response_direct` SAFE, `response_blocked_fail` VIOLATION); the auxiliary scan counter is emitted as typed arithmetic |
+
+The `description` field is propagated into the `code_assertt` comment, so a
+violated property is named in the ESBMC counterexample and in the `ld-verify`
+JSON report's `description` field (pinned by `ld-verify/violation-named`).
+
+Properties are evaluated at the scan boundary — after the last rung of a scan
+and before the next input sample. See `docs/safe-ld-sos-semantics.md` §9.
 
 ---
 
@@ -146,6 +170,18 @@ established.
 - Property `id` values must be unique within a file.
 - Variable names in expressions must match the identifiers declared in the
   PLCopen XML `<variable name="...">` elements exactly (case-sensitive).
+- Properties may also name the variables the graphical resolver synthesises,
+  which have no `<variable>` declaration of their own:
+
+  | Form | Names |
+  |---|---|
+  | `<instance>__<pin>` | a function-block pin — `TOF0__Q`, `TOF0__ET`, `CTU1__CV`. The instance is the block's `instanceName`, or `blk<localId>` when it has none |
+  | `<var>__prev` | the entry-value snapshot of a variable read and written in the same network (SOS §6.3) |
+  | `<var>__pf<n>` | the accumulator OR-ing parallel paths into a sink; an implementation detail, not intended for use in properties |
+
+  Naming a pin is the only way to state a property about a timer or counter
+  output in a graphical body, since those pins are wires in the source rather
+  than declared variables. See `regression/ld/stairs_light_safe/props.yaml`.
 - The `description` field is copied verbatim into the `code_assertt` comment
   field and appears in the ESBMC counterexample trace and the `ld-verify` JSON
   report.

@@ -102,6 +102,30 @@ CIMPORT1(sqrt)
 CIMPORT2(fmod)
 CIMPORT1(round)
 
+/* [cmath.syn]: the C99 additions. math.h already declares the f/d/l triples,
+ * so these only have to be pulled into namespace std. */
+CIMPORT1(cbrt)
+CIMPORT1(exp2)
+CIMPORT1(expm1)
+CIMPORT1(log1p)
+CIMPORT1(log2)
+CIMPORT1(asinh)
+CIMPORT1(acosh)
+CIMPORT1(atanh)
+CIMPORT1(erf)
+CIMPORT1(erfc)
+CIMPORT1(tgamma)
+CIMPORT1(lgamma)
+CIMPORT1(nearbyint)
+CIMPORT1(rint)
+CIMPORT2(fmin)
+CIMPORT2(fmax)
+CIMPORT2(fdim)
+CIMPORT2(hypot)
+CIMPORT2(copysign)
+CIMPORT2(remainder)
+CIMPORT2(nextafter)
+
 using ::pow;
 #if !defined(__MATHCALL_VEC)
 using ::powf;
@@ -164,8 +188,15 @@ template <typename Integer>
 double modf(Integer num, double *iptr);
  */
 
+/* These classifiers are function-like macros in the C <math.h> (e.g. glibc
+ * lowers isinf to __builtin_isinf_sign). Undefine them so the std:: overloads
+ * below are real functions; otherwise `std::isinf(x)` macro-expands to
+ * `std::__builtin_isinf_sign(x)`, which is not a member of std (issue #5). */
 #undef isnan
+#undef isinf
+#undef isfinite
 #undef isnormal
+#undef signbit
 
 #define CIMPORT3(name)                                                         \
   bool name(float x)                                                           \
@@ -179,10 +210,50 @@ double modf(Integer num, double *iptr);
   bool name(long double x)                                                     \
   {                                                                            \
     return __builtin_##name(x);                                                \
+  }                                                                            \
+  /* [c.math.fpclass]: an integral argument is treated as double. */           \
+  template <typename T>                                                        \
+  typename std::enable_if<std::is_integral<T>::value, bool>::type name(T x)    \
+  {                                                                            \
+    return __builtin_##name((double)x);                                        \
   }
 
 CIMPORT3(isnan);
+CIMPORT3(isinf);
+CIMPORT3(isfinite);
 CIMPORT3(isnormal);
+CIMPORT3(signbit);
+
+/* [c.math.fpclass]. Expressed via the classifiers above rather than
+ * __builtin_fpclassify, whose 5-category form the frontend does not lower. */
+#undef fpclassify
+
+#define OM_FPCLASSIFY(type)                                                    \
+  inline int fpclassify(type x)                                                \
+  {                                                                            \
+    if (__builtin_isnan(x))                                                    \
+      return FP_NAN;                                                           \
+    if (__builtin_isinf(x))                                                    \
+      return FP_INFINITE;                                                      \
+    if (x == (type)0)                                                          \
+      return FP_ZERO;                                                          \
+    if (__builtin_isnormal(x))                                                 \
+      return FP_NORMAL;                                                        \
+    return FP_SUBNORMAL;                                                       \
+  }
+
+OM_FPCLASSIFY(float)
+OM_FPCLASSIFY(double)
+OM_FPCLASSIFY(long double)
+
+#undef OM_FPCLASSIFY
+
+template <typename T>
+inline typename std::enable_if<std::is_integral<T>::value, int>::type
+fpclassify(T x)
+{
+  return fpclassify((double)x);
+}
 
 #undef trunc
 #undef truncf

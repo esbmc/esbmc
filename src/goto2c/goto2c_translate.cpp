@@ -1,8 +1,8 @@
 #include <goto2c/goto2c.h>
 #include <goto2c/expr2c.h>
-#include <util/expr_util.h>
-#include <util/c_sizeof.h>
-#include <util/config.h>
+#include <util/expr/expr_util.h>
+#include <util/lang/c_sizeof.h>
+#include <util/config/config.h>
 
 // This translates the given GOTO program (aka list of GOTO functions)
 std::string goto2ct::translate()
@@ -230,8 +230,6 @@ std::string goto2ct::translate(goto_programt::instructiont &instruction)
   // These are C++ instructions. We do not translate those at the moment.
   case THROW:
   case CATCH:
-  case THROW_DECL:
-  case THROW_DECL_END:
     assert(!"C++ instructions are not supported by GOTO2C");
     out << "C++ instruction";
     break;

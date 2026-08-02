@@ -378,7 +378,6 @@ public:
   }
 
   const std::string mode; // Int, char, long, etc... e.g. Random().nextInt()
-  //std::string bound;
   virtual exprt to_exprt(
     contextt &ctx,
     const std::string &class_name,

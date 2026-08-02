@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--mix-cpp-host-headers
+^VERIFICATION SUCCESSFUL$

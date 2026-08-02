@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: List slice assignment \(a\[i:j\] = ...\) is not supported$

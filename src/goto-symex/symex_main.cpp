@@ -9,16 +9,20 @@
 
 #include <pointer-analysis/value_set_analysis.h>
 
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/prefix.h>
-#include <util/pretty.h>
-#include <util/std_expr.h>
-#include <util/time_stopping.h>
+#include <util/irep/migrate.h>
+#include <util/base/prefix.h>
+#include <util/symtab/pretty.h>
+#include <util/irep/std_expr.h>
+#include <util/base/time_stopping.h>
+#include <util/expr/type_byte_size.h>
+#include <util/message/message.h>
 
+#include <map>
 #include <vector>
 
 bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
@@ -44,7 +48,7 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
       // check assertion to produce a counterexample
       assertion(gen_false_expr(), msg);
 
-      // incremental verification succeeded
+      // incremental solving resolved the claim (counterexample will follow)
       return true;
     }
     log_status("Incremental verification returned unknown");
@@ -78,11 +82,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   {
     if (options.get_bool_option("multi-property"))
     {
-      // Log that this assertion was trivially verified
-      log_success(
-        "✓ PASSED: '{}' at {}",
-        msg,
-        cur_state->source.pc->location.as_string());
+      record_property_verdict(msg, property_verdictt::Passed);
 
       // Track trivially verified claims
       ++simplified_claims;
@@ -108,10 +108,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   {
     if (options.get_bool_option("multi-property"))
     {
-      log_success(
-        "✓ PASSED (interval): '{}' at {}",
-        msg,
-        cur_state->source.pc->location.as_string());
+      record_property_verdict(msg, property_verdictt::Passed, "interval");
       ++simplified_claims;
     }
 
@@ -123,13 +120,9 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   if (
     options.get_bool_option("smt-symex-assert") &&
     check_incremental(new_expr, msg))
-    return; // Verification succeeded, no further action needed
+    return; // claim fully resolved by incremental solving
 
-  if (
-    validate_witness && !witness_target_line.empty() &&
-    !has_prefix(msg, "unwinding assertion loop") &&
-    cur_state->source.pc->location.get_line() != witness_target_line)
-    new_expr = gen_true_expr();
+  symex_witness_assert(new_expr, msg);
 
   // add assertion to the target equation
   assertion(new_expr, msg);
@@ -148,6 +141,15 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
       return;
     }
   }
+}
+
+void goto_symext::record_property_verdict(
+  const std::string &msg,
+  property_verdictt verdict,
+  const std::string &note)
+{
+  goto_functionst::property_verdicts.record(
+    msg + " at " + cur_state->source.pc->location.as_string(), verdict, note);
 }
 
 void goto_symext::assertion(
@@ -195,6 +197,34 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
   return is_false(assumption);
 }
 
+void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
+{
+  expr2tc c = the_assumption;
+  while (is_typecast2t(c))
+    c = to_typecast2t(c).from;
+
+  if (!is_equality2t(c))
+    return;
+
+  const equality2t &eq = to_equality2t(c);
+  expr2tc lhs = eq.side_1;
+  expr2tc rhs = eq.side_2;
+
+  // IEEE-754 +0.0 and -0.0 compare equal but have distinct bit
+  // patterns; propagating either would mask signbit-sensitive bugs.
+  auto is_fp_zero = [](const expr2tc &e) {
+    return is_constant_floatbv2t(e) && to_constant_floatbv2t(e).value.is_zero();
+  };
+
+  // Only propagate when the other side is a constant: a symbol == symbol
+  // assumption must NOT be turned into an assignment, as that perturbs the
+  // symbolic state and aliasing (e.g. a[i]=7; assume(i==j); read a[j]).
+  if (is_symbol2t(lhs) && is_constant_expr(rhs) && !is_fp_zero(rhs))
+    cur_state->assignment(lhs, rhs);
+  else if (is_symbol2t(rhs) && is_constant_expr(lhs) && !is_fp_zero(lhs))
+    cur_state->assignment(rhs, lhs);
+}
+
 void goto_symext::assume(const expr2tc &the_assumption)
 {
   expr2tc assumption = the_assumption;
@@ -210,7 +240,6 @@ void goto_symext::assume(const expr2tc &the_assumption)
 
   cur_state->guard.guard_expr(assumption);
 
-  // Irritatingly, assumption destroys its expr argument
   expr2tc tmp_guard = cur_state->guard.as_expr();
   target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
 
@@ -222,7 +251,11 @@ void goto_symext::assume(const expr2tc &the_assumption)
 goto_symext::symex_resultt goto_symext::get_symex_result()
 {
   return goto_symext::symex_resultt(
-    target, total_claims, remaining_claims, simplified_claims);
+    target,
+    total_claims,
+    remaining_claims,
+    simplified_claims,
+    bounded_loop_truncations);
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -266,9 +299,16 @@ void goto_symext::symex_step(reachability_treet &art)
     replace_nondet(tmp);
     volatile_check(tmp);
 
+    // Lower Python predicates (isnone/isinstance/hasattr) *before* dereference:
+    // a short-circuited `a is None or a.b is None` dereferences `a.b` under the
+    // guard `not isnone(a)`, and dereference records the NULL-pointer safety
+    // assertion immediately. If the isnone is still live it leaks into that
+    // assertion's condition and reaches the SMT backend unlowered (no convert
+    // rule for isnone), aborting. dereference never introduces any of these
+    // predicates, so lowering first is strictly safe.
+    simplify_python_builtins(tmp);
     dereference(tmp, dereferencet::READ);
     replace_dynamic_allocation(tmp);
-    simplify_python_builtins(tmp);
 
     symex_goto(tmp);
   }
@@ -294,7 +334,10 @@ void goto_symext::symex_step(reachability_treet &art)
       expr2tc thecode = instruction.code, assign;
       if (make_return_assignment(assign, thecode))
       {
+        auto saved_source = cur_state->source;
+        cur_state->source = cur_state->top().calling_location;
         goto_symext::symex_assign(assign);
+        cur_state->source = saved_source;
       }
 
       symex_return(thecode);
@@ -374,36 +417,11 @@ void goto_symext::symex_step(reachability_treet &art)
       }
     }
 
-    // Violation-witness: handle function_enter waypoints in the current segment.
-    // avoid, not matching: skip (persistent).
-    // avoid, matching: skip the call (pc++), segment does not advance.
-    // follow, not matching: stop (follows are ordered; cannot bypass).
-    // follow, matching: advance to next segment; fall through to the call.
-    if (validate_witness && cur_state->cur_seg < cur_state->witness_segs.size())
+    if (validate_witness)
     {
-      const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
-      const auto &loc = cur_state->source.pc->location;
-      for (size_t wp_idx = 0; wp_idx < seg.size(); ++wp_idx)
-      {
-        const waypoint &wp = seg[wp_idx];
-        if (wp.type != waypoint::function_enter)
-          continue;
-        const bool loc_matches =
-          !wp.line_id.empty() && wp.line_id == loc.get_line() &&
-          (wp.function_id.empty() || wp.function_id == loc.get_function());
-        if (loc_matches)
-        {
-          if (wp.action == waypoint::avoid)
-          {
-            cur_state->source.pc++;
-            return;
-          }
-          cur_state->advance_witness_position();
-          break;
-        }
-        if (wp.action != waypoint::avoid)
-          break;
-      }
+      const irep_idt call_line = cur_state->source.pc->location.get_line();
+      if (symex_witness_function_enter(call_line))
+        return;
     }
 
     symex_function_call(deref_code);
@@ -460,31 +478,7 @@ void goto_symext::symex_assume()
   replace_dynamic_allocation(cond);
 
   assume(cond);
-  expr2tc c = cond;
-  // Recursively remove typecast
-  while (is_typecast2t(c))
-    c = to_typecast2t(c).from;
-
-  // Hack for assume, which allows us to take advantage
-  // of constant propagation in some cases
-  if (is_equality2t(c))
-  {
-    // In the IEEE-754 floating-point number semantics,
-    // there can be situations where the numerical comparison is equal,
-    // but the internal bit patterns are different: +0.0 and -0.0
-
-    // We don't perform constant propagation on it.
-    expr2tc lhs = to_equality2t(c).side_1;
-    expr2tc rhs = to_equality2t(c).side_2;
-    auto is_float_zero = [](const expr2tc &e) {
-      const constant_floatbv2t *f = try_to_constant_floatbv2t(e);
-      return f && f->value.is_zero();
-    };
-    if (is_symbol2t(lhs) && is_constant_expr(rhs) && !is_float_zero(rhs))
-      cur_state->assignment(lhs, rhs);
-    else if (is_symbol2t(rhs) && is_constant_expr(lhs) && !is_float_zero(lhs))
-      cur_state->assignment(rhs, lhs);
-  }
+  propagate_assume_equality(cond);
 }
 
 void goto_symext::symex_assert()
@@ -523,6 +517,18 @@ void goto_symext::run_intrinsic(
   reachability_treet &art,
   const std::string &symname)
 {
+  // "__ESBMC_uninterpreted_*" is the native spelling of an uninterpreted
+  // function (the "__CPROVER_uninterpreted_*" alias is handled later, in
+  // symex_function_call_code, since it is not __ESBMC-prefixed). All __ESBMC_*
+  // calls are routed here before body inlining, so the native prefix must be
+  // intercepted in run_intrinsic. The caller has already advanced the program
+  // counter, so symex_uninterpreted_function must not (and does not) touch it.
+  if (has_prefix(symname, "c:@F@__ESBMC_uninterpreted_"))
+  {
+    symex_uninterpreted_function(func_call, symname);
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_yield")
   {
     intrinsic_yield(art);
@@ -625,6 +631,24 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_memchr")
+  {
+    intrinsic_memchr(art, func_call);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_memcmp")
+  {
+    intrinsic_memcmp(art, func_call);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_memmove")
+  {
+    intrinsic_memmove(art, func_call);
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_get_object_size")
   {
     intrinsic_get_object_size(func_call, art);
@@ -655,11 +679,9 @@ void goto_symext::run_intrinsic(
     ex_state.get_active_state().level2.rename(v);
     assert(v->expr_id == expr2t::expr_ids::constant_vector_id);
 
-    // Create new vector
     std::vector<expr2tc> members;
     for (const auto &x : to_constant_vector2t(v).datatype_members)
     {
-      // Create a typecast call
       auto typecast = typecast2tc(subtype, x);
       members.push_back(typecast);
     }
@@ -800,6 +822,15 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_sv_comp")
+  {
+    expr2tc sv_comp = config.options.get_bool_option("sv-comp")
+                        ? gen_true_expr()
+                        : gen_false_expr();
+    symex_assign(code_assign2tc(func_call.ret, sv_comp));
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_builtin_constant_p")
   {
     assert(
@@ -825,7 +856,6 @@ void goto_symext::run_intrinsic(
     if (ex_state.cur_state->guard.is_false())
       return;
 
-    // Get the argument
     expr2tc arg0 = func_call.operands[0];
     internal_deref_items.clear();
     expr2tc deref = dereference2tc(get_empty_type(), arg0);
@@ -1014,13 +1044,74 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  // PythonList / dict / set methods
+  // PythonList / dict / set methods — model functions with real bodies that
+  // must be executed, not treated as built-in intrinsics.
   if (
     has_prefix(symname, "c:@F@__ESBMC_list") ||
     has_prefix(symname, "c:@F@__ESBMC_dict") ||
     has_prefix(symname, "c:@F@__ESBMC_set"))
   {
     bump_call(func_call, symname);
+    return;
+  }
+
+  // Python object allocator (Stage 1 object-model migration, #3067/#4773).
+  // `o = ClassName(...)` lowers to `o = __ESBMC_new_object()` where `o` is a
+  // pointer to the class struct. Allocate a single, typed, non-expiring dynamic
+  // object of that struct and bind `o` to it. Sized symbolically by the struct
+  // type (robust to fields added to the struct after this construction site),
+  // guaranteed valid (CPython construction never fails — no malloc-NULL model),
+  // and finite (a single value, not an infinite array, which would blow up
+  // pointer-identity reasoning). Mirrors symex_mem_inf's binding but with a
+  // size-1 dynamic object.
+  if (has_prefix(symname, "c:@F@__ESBMC_new_object"))
+  {
+    assert(
+      is_pointer_type(func_call.ret->type) && "object ref must be pointer");
+    const expr2tc &lhs = func_call.ret;
+    const type2tc base = to_pointer_type(lhs->type).subtype;
+    const guard2tc &guard = cur_state->guard;
+
+    // Build a single dynamic struct value (mirrors symex_mem's size_is_one
+    // path) — typed (sized symbolically by the struct), guaranteed valid (no
+    // malloc-NULL model) and not auto-deallocated, so it survives the
+    // constructing function's return.
+    unsigned int &dynamic_counter = get_dynamic_counter();
+    dynamic_counter++;
+    symbolt symbol;
+    symbol.name = "dynamic_" + i2string(dynamic_counter) + "_value";
+    symbol.id = std::string("symex_dynamic::") + id2string(symbol.name);
+    symbol.lvalue = true;
+    symbol.mode = "C";
+    {
+      typet t = ns.follow(migrate_type_back(base));
+      t.dynamic(true);
+      t.set(
+        "alignment",
+        constant_exprt(config.ansi_c.max_alignment(), size_type()));
+      symbol.set_type(std::move(t));
+    }
+    new_context.add(symbol);
+
+    const type2tc new_type = migrate_symbol_type(symbol);
+    expr2tc obj = symbol2tc(new_type, symbol.id);
+    // address_of2tc(new_type, e): first argument is the *pointee* type, so the
+    // result is `new_type *` — reconcile with the LHS pointer type.
+    expr2tc rhs = address_of2tc(new_type, obj);
+    do_simplify(rhs);
+    expr2tc ptr_rhs = rhs;
+    guard2tc alloc_guard = guard;
+    if (rhs->type != lhs->type)
+      rhs = typecast2tc(lhs->type, rhs);
+    cur_state->rename(rhs);
+    expr2tc rhs_copy(rhs);
+    symex_assign(code_assign2tc(lhs, rhs), true, guard);
+
+    expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
+    track_new_pointer(ptr_obj, new_type, guard);
+    alloc_guard.append(guard);
+    dynamic_memory.emplace_back(
+      rhs_copy, alloc_guard, false, symbol.name.as_string());
     return;
   }
 
@@ -1084,6 +1175,18 @@ void goto_symext::run_intrinsic(
 
     if (matched->action != waypoint::avoid)
       cur_state->advance_witness_position();
+    return;
+  }
+
+  // Not a recognised intrinsic. If the operational-model library provides a
+  // real body for this __ESBMC-prefixed symbol (e.g. __ESBMC_run_unexpected),
+  // execute it as an ordinary call rather than treating it as an intrinsic.
+  auto func_it = goto_functions.function_map.find(symname);
+  if (
+    func_it != goto_functions.function_map.end() &&
+    func_it->second.body_available)
+  {
+    bump_call(func_call, symname);
     return;
   }
 
@@ -1176,275 +1279,549 @@ void goto_symext::add_memory_leak_checks()
 
     value_set_analysist va(ns);
 
-    /* List of sets of all globally reachable symbols (encoded as a list of
-     * value-set entries), each together with an expression denoting a condition
-     * under which this set is valid.
+    /* The value-set entries of all global symbols; these are the roots of the
+     * "points-to" graph explored below.
      *
-     * When looking at the "points-to" relation as a graph, this condition
-     * encodes whether the symbol S, whose value-set is under consideration, is
-     * globally reachable, i.e. whether in this graph there is a path from a
-     * globally defined symbol to S.
+     * Every symbol S in that graph gets a condition encoding whether S is
+     * globally reachable, i.e. whether the graph has a path from a globally
+     * defined symbol to S. Throughout, an empty expression stands for 'true'.
      *
      * Crucially, this condition is later used in negated form as a constraint
      * for the solver, that is, "there is no path starting from global symbols
      * to the dynamic object and it is still allocated". For structures and
      * constant-size arrays this is not a big deal since the possible neighbours
      * can statically be encoded, but it poses problems for arrays with dynamic
-     * size, see the comments about it when handling the split suffix below.
+     * size, see the comments about it when handling the split suffix below. */
+    std::list<value_sett::entryt> globals;
+    va.get_globals(globals);
+
+    /* A dynamic object reachable only through an in-scope automatic variable of
+     * an active call frame is NOT a leak: when __ESBMC_memory_leak_checks() is
+     * invoked from exit()/abort() (or a __noreturn assert) the call stack is
+     * still live, so SV-COMP valid-memtrack counts stack-reachable memory as
+     * tracked. The static-globals roots above miss these; without them an
+     * `argv` buffer that the entry harness allocates and keeps in main's own
+     * local is wrongly reported as "forgotten memory" (issue #5138).
      *
-     * Initially, as an optimization, the expression is empty (which stands for
-     * 'true'). */
-    std::vector<std::pair<expr2tc, std::list<value_sett::entryt>>> globals(1);
-    va.get_globals(globals[0].second);
+     * We root reachability from the pointer-typed locals of every active frame
+     * and then chase the pointer graph through heap objects, recording each
+     * reachable object (and the condition under which it is reachable) into
+     * globals_point_to alongside the global roots above.
+     *
+     * Heap buffers need a content-based chase rather than the type-based
+     * get_entries_rec() used for globals: the SV-COMP entry harness stores an
+     * array of `char *` arguments into a single `malloc((argc+1)*8)` block,
+     * which ESBMC types as a flat byte array. get_entries_rec() sees no pointer
+     * sub-component there and would stop, leaking the argument strings. Instead,
+     * for each constant-size object we read a pointer at every pointer-aligned
+     * offset and OR same_object() over them: this reads the actual stored bytes
+     * (sound -- a pointer the buffer no longer holds does not match) and, being
+     * fully expanded for a constant size, is negatable in the leak claim's
+     * `not(reachable)` context (the array-index reachability TODO below only
+     * blocks the *symbolic*-size case). */
+    const bool is_big_endian =
+      (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+    const BigInt ptr_bytes(config.ansi_c.pointer_width() / 8);
+    const type2tc void_ptr_type = pointer_type2tc(get_empty_type());
 
-    /* In order to handle every globally reachable symbol just once even in case
-     * the user code has constructed circular data structures, maintain a set
-     * of visited symbols. */
-    std::unordered_set<std::string> visited;
-    for (int i = 0; !globals.empty(); i++)
+    /* A value-set target is a usable reachability root only if it denotes a
+     * concrete object: drop unknown/invalid descriptors and null/string/code
+     * objects. Returns the root object symbol, or nil to skip. */
+    auto usable_root = [](const expr2tc &descriptor) -> expr2tc {
+      if (is_unknown2t(descriptor) || is_invalid2t(descriptor))
+        return expr2tc();
+      assert(is_object_descriptor2t(descriptor));
+      expr2tc obj = to_object_descriptor2t(descriptor).get_root_object();
+      if (
+        is_null_object2t(obj) || is_constant_string2t(obj) ||
+        is_code_type(obj) || !is_symbol2t(obj))
+        return expr2tc();
+      return obj;
+    };
+
+    /* Worklist of (heap-object symbol, condition under which it is reachable).
+     * `local_reached` bounds work on cyclic heaps and caps total objects. */
+    std::vector<std::pair<expr2tc, expr2tc>> reach_work;
+    std::unordered_set<std::string> local_reached;
+    const size_t max_reached = 4096;
+    const uint64_t max_slots = 1024;
+
+    for (const auto &local_frame : cur_state->call_stack)
     {
-      std::vector<std::pair<expr2tc, std::list<value_sett::entryt>>> tmp;
-      for (const auto &[path_to_e, g] : globals)
-        for (const value_sett::entryt &e : g)
+      for (const auto &lv : local_frame.local_variables)
+      {
+        const symbolt *lsym = ns.lookup(lv.base_name);
+        if (lsym == nullptr || has_prefix(lsym->name, "__ESBMC_"))
+          continue;
+
+        /* Skip compiler-generated temporaries. A function-return temporary
+         * such as `return_value$_malloc$N` keeps holding the pointer it
+         * produced even after the source program has dropped its last
+         * reference (e.g. `p = malloc(); p = NULL;`), so rooting reachability
+         * from it would mask genuine leaks (unsound). Only source-level
+         * automatic variables denote program-visible references; the frontend
+         * names those `<file>@<line>@F@<func>@<var>` (no `$`) and reserves `$`
+         * for synthetic symbols, so a `$` anywhere marks a temporary. Dropping
+         * a real root we fail to recognise only costs precision (a residual
+         * false positive), never soundness. */
+        const std::string &lname = lv.base_name.as_string();
+        if (lname.find('$') != std::string::npos)
+          continue;
+
+        type2tc lsym_type = migrate_symbol_type(*lsym);
+        if (!is_pointer_type(lsym_type))
+          continue;
+
+        expr2tc lptr = symbol2tc(lsym_type, lv.base_name);
+        local_frame.level1.get_ident_name(lptr);
+
+        value_sett::object_mapt lpoints_to;
+        cur_state->value_set.get_value_set_rec(
+          lptr, lpoints_to, "", lptr->type);
+
+        /* The value set is flow-insensitive: lptr's entry still lists every
+         * object it ever pointed at, even ones it no longer holds (e.g. after
+         * `p = NULL`). To keep the leak check sound we must test the pointer's
+         * *current* value, so L2-rename a copy of lptr to its SSA value here.
+         * level1 was already applied via the owning frame above; level2 is
+         * frame-independent, so renaming through the current state is correct. */
+        expr2tc lptr_val = lptr;
+        cur_state->level2.rename(lptr_val);
+
+        for (auto it = lpoints_to.begin(); it != lpoints_to.end(); ++it)
         {
-          /* Skip if already visited
-           *
-           * TODO: this is possibly wrongly culling paths that have different
-           *       preconditions; should take path_to_e into account. */
-          if (!visited.emplace(e.identifier + e.suffix).second)
+          expr2tc root_object = usable_root(cur_state->value_set.to_expr(it));
+          if (is_nil_expr(root_object))
             continue;
 
-          /* Unfortunately, we just have the symbol id and a suffix that's only
-           * meaningful to the value-set analysis, but no type. However, we
-           * need a type. So reconstruct the current state's version of a
-           * symbol-expr referring to this symbol. */
-          symbol_exprt sym_expr(e.identifier);
-          expr2tc sym_expr2;
-          migrate_expr(sym_expr, sym_expr2);
-
-          /* Now obtain the type. */
-          const symbolt *sym = ns.lookup(to_symbol2t(sym_expr2).thename);
-
-          /* By "global" only user-defined symbols are meant. Internally used ones
-           * we can ignore. */
-          if (e.identifier == "argv'" || has_prefix(sym->name, "__ESBMC_"))
-            continue;
-          log_debug(
-            "memcleanup",
-            "memcleanup: itr {}, obtaining value-set for global '{}' suffix "
-            "'{}'",
-            i,
-            e.identifier,
-            e.suffix);
-          sym_expr2 = sym_expr2->with_type(migrate_symbol_type(*sym));
-
-          /* Rename so that it reflects the current state. */
-          assert(cur_state->call_stack.size() >= 1);
-          // cur_state->top().level1.rename(sym_expr2);
-          cur_state->rename(sym_expr2);
-
-          /* Further below we'll look at the value-set of (the L1 version of)
-           * sym_expr2 and compare the root-objects in it (via same_object2t) to
-           * something in this symbol that is of pointer type. The symbol could
-           * well be an array or a structure.
-           *
-           * The suffix from the value-set entry says to which sub-component(s)
-           * (if any) of the object referred to by sym_expr2 this entry belongs.
-           * Those sub-components are of pointer type and could point to objects
-           * reachable further out. Construct expressions that refer into the
-           * symbol based on the suffix so that we catch all the pointers. If
-           * the suffix is empty, sym_expr2 already has pointer type. Otherwise
-           * the symbol has a compound type. */
-          std::vector<expr2tc> sub_exprs = {sym_expr2};
-          for (const suffix_componentt &c : split_suffix_components(e.suffix))
-          {
-            /* The suffix consists of a sequence of components, which are either
-             * "[]" or ".name" where name is the name of some member of a
-             * structure type. */
-            if (c.is_member())
-            {
-              for (expr2tc &p : sub_exprs)
-              {
-                assert(is_structure_type(p));
-                unsigned n =
-                  struct_union_get_component_number(p->type, c.member_name)
-                    .value();
-                p =
-                  member2tc(struct_union_members(p->type)[n], p, c.member_name);
-              }
-              continue;
-            }
-
-            assert(c.is_index());
-            const type2tc &type = sub_exprs[0]->type;
-            assert(is_array_type(type));
-            const array_type2t &array_type = to_array_type(type);
-            const expr2tc &size = array_type.array_size;
-            if (!size)
-            {
-              /* The user is doing evil things like pointing to infinite-size
-               * arrays. Bad user. Those arrays are not "global symbols" in the
-               * sense of --no-reachable-memory-leak; ignore those. */
-              sub_exprs.clear();
-              break;
-            }
-
-            if (is_constant_int2t(size))
-            {
-              /* This could be huge. TODO: switch to the case below. */
-              uint64_t n = to_constant_int2t(size).value.to_uint64();
-              std::vector<expr2tc> new_sub_exprs;
-              new_sub_exprs.reserve(n * sub_exprs.size());
-              for (const expr2tc &p : sub_exprs)
-                for (uint64_t i = 0; i < n; i++)
-                  new_sub_exprs.emplace_back(
-                    index2tc(array_type.subtype, p, gen_long(size->type, i)));
-              sub_exprs = std::move(new_sub_exprs);
-              continue;
-            }
-
-            /* TODO: Missing implementation.
-             *
-             * We cannot just use a new symbol for the index since this
-             * expression is used in a negated context. I.e. we will need to
-             * encode a condition whose negation is true if and only if the
-             * target 'adr' is *not* reachable from this array.
-             * Exists index, s.t. "array[index] is the same object as 'adr'"
-             * does not satisfy this requirement: solvers are free to choose an
-             * 'index' where the same-object condition is false. Instead, the
-             * counter-example needs to include a witness that 'adr' is *not*
-             * reachable from the array.
-             *
-             * XXX fbrausse: Can we use the inductive counting construction from
-             *   Immerman and Szelepcsényi proving co-NL = NL here?
-             *   Alternatively, we might be able to use Savitch's theorem to
-             *   construct a deterministic expression for reachability and
-             *   negate that. Might even be faster since the expression
-             *   constructed in DSPACE(log^2(n)) should be handled faster than
-             *   the time it takes to solve a formula constructed in DTIME(n^2).
-             */
-
-            // this is a workaround because there is no implementation, yet
-            sub_exprs.clear();
-            break;
-          }
-          if (sub_exprs.empty()) /* this target is not to be handled */
-            continue;
-
-          if (is_symbol2t(sym_expr2))
-          {
-            symbol2t &s = to_symbol2t(sym_expr2);
-            if (s.rlevel == symbol2t::renaming_level::level2_global)
-            {
-              /* value-set assumes L1 symbols */
-              s.rlevel = symbol2t::renaming_level::level1_global;
-            }
-            // assert(s.rlevel == symbol2t::renaming_level::level1_global);
-          }
-
-          /* Collect all objects reachable from 'globals' in 'points_to'. */
-          value_sett::object_mapt points_to;
-          /* Collect its value-set into 'points_to'. Since that's a map, this
-           * will only add targets that are not already in there. */
-          cur_state->value_set.get_value_set_rec(
-            sym_expr2, points_to, e.suffix, sym_expr2->type);
-
-          /* Now add the new found symbols to 'globals_point_to' and also record
-           * them in 'globals'. If they were known already, we don't need to handle
-           * them again. */
-          for (auto it = points_to.begin(); it != points_to.end(); ++it)
-          {
-            expr2tc target = cur_state->value_set.to_expr(it);
-            /* A value-set entry can be unknown, invalid or a descriptor of an
-             * object. */
-            if (is_unknown2t(target))
-            {
-              log_debug(
-                "memcleanup-skip", "memcleanup: skipping target unknown2t");
-              /* Treating 'unknown' as "could potentially point anywhere" generates
-               * too many false positives. It will basically make the memory-leak
-               * check useless since all dynamic objects could potentially still
-               * be referenced. We ignore it for now and pretend that's OK because
-               * dereference() with INTERNAL mode would also do that.
-              has_unknown = true;
-              globals.clear();
-              break;
-               */
-              continue;
-            }
-            /* invalid targets are not objects, ignore those */
-            if (is_invalid2t(target))
-            {
-              log_debug(
-                "memcleanup-skip", "memcleanup: skipping target invalid2t");
-              continue;
-            }
-
-            assert(is_object_descriptor2t(target));
-            expr2tc root_object =
-              to_object_descriptor2t(target).get_root_object();
-
-            /* null-objects, constant strings and functions are interesting for
-             * neither the memory-leak check nor for finding more pointers to
-             * enlarge the set of reachable objects */
-            if (is_null_object2t(root_object))
-            {
-              log_debug(
-                "memcleanup-skip", "memcleanup: skipping target null-object");
-              continue;
-            }
-            if (is_constant_string2t(root_object))
-            {
-              log_debug(
-                "memcleanup-skip",
-                "memcleanup: skipping target constant-string");
-              continue;
-            }
-            if (is_code_type(root_object))
-            {
-              log_debug(
-                "memcleanup-skip", "memcleanup: skipping target of code type");
-              continue;
-            }
-
-            log_debug(
-              "memcleanup-skip",
-              "memcleanup: found target '{}' of {} type",
-              to_symbol2t(root_object).get_symbol_name(),
-              get_type_id(root_object->type));
-
-            /* Record and, if new, obtain all the "entries" interesting for the
-             * value-set analysis. An entry is interesting basically if its type
-             * contains a pointer type. Those are also exactly the ones interesting
-             * for the building the set of reachable objects. */
-            expr2tc adr = address_of2tc(root_object->type, root_object);
-
-            expr2tc same_as_e;
-            for (const expr2tc &sub_expr : sub_exprs)
-            {
-              assert(is_pointer_type(sub_expr));
-              expr2tc same = same_object2tc(sub_expr, adr);
-              same_as_e = same_as_e ? or2tc(same_as_e, same) : same;
-            }
-            assert(same_as_e);
-            expr2tc is_e = path_to_e ? and2tc(path_to_e, same_as_e) : same_as_e;
-            expr2tc &pts = globals_point_to[adr];
-            pts = pts ? or2tc(pts, is_e) : is_e;
-
-            /* Check the contents of a valid root object of this target for more
-             * pointers reaching out further */
-            assert(is_symbol2t(root_object));
-            std::list<value_sett::entryt> root_points_to;
-            va.get_entries_rec(
-              to_symbol2t(root_object).get_symbol_name(),
-              "",
-              migrate_type_back(root_object->type),
-              root_points_to);
-
-            tmp.emplace_back(is_e, std::move(root_points_to));
-          }
+          /* The local is unconditionally live; it points at root_object
+           * exactly when same_object holds. */
+          expr2tc adr = address_of2tc(root_object->type, root_object);
+          reach_work.emplace_back(root_object, same_object2tc(lptr_val, adr));
         }
-      globals = std::move(tmp);
+      }
+    }
+
+    while (!reach_work.empty() && local_reached.size() < max_reached)
+    {
+      expr2tc obj = reach_work.back().first;
+      expr2tc cond = reach_work.back().second;
+      reach_work.pop_back();
+
+      /* Record the object as reachable under `cond`. */
+      expr2tc adr = address_of2tc(obj->type, obj);
+      expr2tc &pts = globals_point_to[adr];
+      pts = pts ? or2tc(pts, cond) : cond;
+
+      /* Expand each object's contents once. */
+      if (!local_reached.insert(to_symbol2t(obj).get_symbol_name()).second)
+        continue;
+
+      /* Only constant-size objects can be soundly, fully expanded; a symbolic
+       * size hits the array-index reachability TODO further down and is left
+       * as a (sound) residual false positive. */
+      if (!is_array_type(obj->type))
+        continue;
+      const array_type2t &arr_t = to_array_type(obj->type);
+      if (is_nil_expr(arr_t.array_size) || !is_constant_int2t(arr_t.array_size))
+        continue;
+
+      /* Only scalar elements are read below: a byte (stitched) or a
+       * pointer-width number/pointer (indexed directly). Restricting to these
+       * keeps type_byte_size() off incomplete/unsized types and keeps the
+       * direct-index path off aggregates (bitcast would be ill-formed). Arrays
+       * of structs/arrays are left unexpanded -- a sound residual. */
+      if (!is_number_type(arr_t.subtype) && !is_pointer_type(arr_t.subtype))
+        continue;
+
+      const BigInt elem_bytes = type_byte_size(arr_t.subtype);
+      const BigInt total_bytes =
+        to_constant_int2t(arr_t.array_size).value * elem_bytes;
+      if (
+        ptr_bytes == 0 || elem_bytes == 0 ||
+        total_bytes / ptr_bytes > BigInt(max_slots))
+        continue;
+
+      /* Each pointer occupies a whole number of elements, or each element is a
+       * single byte we stitch together; other element sizes are skipped (a
+       * sound residual). The SMT backend rejects byte_extract on an array, so
+       * read element-by-element via index() and combine. */
+      const uint64_t pb = ptr_bytes.to_uint64();
+      if (elem_bytes != 1 && elem_bytes != ptr_bytes)
+        continue;
+
+      /* The buffer's current content: L2-rename the object symbol. */
+      expr2tc buf_val = obj;
+      cur_state->rename(buf_val);
+
+      /* Read the pointer stored at byte offset `off`. */
+      auto read_slot = [&](const BigInt &off) -> expr2tc {
+        if (elem_bytes == ptr_bytes)
+        {
+          expr2tc el = index2tc(
+            arr_t.subtype, buf_val, gen_ulong((off / elem_bytes).to_uint64()));
+          return is_pointer_type(el) ? typecast2tc(void_ptr_type, el)
+                                     : bitcast2tc(void_ptr_type, el);
+        }
+        /* elem_bytes == 1: stitch `pb` consecutive bytes into a pointer. */
+        std::vector<expr2tc> bytes;
+        bytes.reserve(pb);
+        for (uint64_t b = 0; b < pb; b++)
+          bytes.push_back(typecast2tc(
+            get_uint8_type(),
+            index2tc(
+              arr_t.subtype,
+              buf_val,
+              gen_ulong((off + BigInt(b)).to_uint64()))));
+        expr2tc accuml = is_big_endian ? bytes.front() : bytes.back();
+        if (is_big_endian)
+          for (uint64_t b = 1; b < pb; b++)
+            accuml = concat2tc(
+              get_uint_type(accuml->type->get_width() + 8), accuml, bytes[b]);
+        else
+          for (int b = (int)pb - 2; b >= 0; b--)
+            accuml = concat2tc(
+              get_uint_type(accuml->type->get_width() + 8), accuml, bytes[b]);
+        return bitcast2tc(void_ptr_type, accuml);
+      };
+
+      /* Candidate objects the buffer's elements may point at. */
+      value_sett::object_mapt contents;
+      cur_state->value_set.get_value_set_rec(obj, contents, "[]", obj->type);
+
+      for (auto c_it = contents.begin(); c_it != contents.end(); ++c_it)
+      {
+        expr2tc cobj = usable_root(cur_state->value_set.to_expr(c_it));
+        if (is_nil_expr(cobj))
+          continue;
+
+        /* Reach `cobj` iff some pointer-aligned slot of the buffer currently
+         * holds its address: OR over slots of same_object(slot, &cobj). */
+        expr2tc cadr = address_of2tc(cobj->type, cobj);
+        expr2tc slot_reach;
+        for (BigInt off(0); off + ptr_bytes <= total_bytes; off += ptr_bytes)
+        {
+          expr2tc so = same_object2tc(read_slot(off), cadr);
+          slot_reach = slot_reach ? or2tc(slot_reach, so) : so;
+        }
+        if (slot_reach)
+          reach_work.emplace_back(cobj, and2tc(cond, slot_reach));
+      }
+    }
+
+    /* Reachability is computed in two phases.
+     *
+     * Phase 1 expands every (symbol, value-set suffix) entry exactly once and
+     * records the points-to graph. An edge S -> T carries only the *local*
+     * condition "some pointer sub-component of S currently holds T's address",
+     * which is independent of how S itself was reached.
+     *
+     * Phase 2 then solves the reachability conditions on that graph as a least
+     * fixpoint. Deriving a symbol's condition in place, from the single path
+     * that happened to discover it first, gives its outgoing edges a condition
+     * that is false on the executions reaching it by a longer route; a list
+     * node behind a concurrently inserted predecessor was then reported as
+     * forgotten memory (#6594). Merging the incoming paths of one frontier
+     * level, as the previous fix for #2335 did, only covers routes of equal
+     * length. */
+    using edge_listt = std::vector<std::pair<std::string, expr2tc>>;
+    /* Ordered so that the shape of the conditions built below does not depend
+     * on the standard library's hashing. */
+    std::map<std::string, edge_listt> out_edges;
+    std::map<std::string, expr2tc> node_adr;
+
+    std::unordered_set<std::string> roots;
+    for (const value_sett::entryt &e : globals)
+      roots.insert(e.identifier);
+
+    /* Visiting each entry only once also keeps phase 1 terminating on circular
+     * data structures. */
+    std::unordered_set<std::string> visited;
+    while (!globals.empty())
+    {
+      const value_sett::entryt e = std::move(globals.front());
+      globals.pop_front();
+      if (!visited.emplace(e.identifier + e.suffix).second)
+        continue;
+
+      /* Unfortunately, we just have the symbol id and a suffix that's only
+       * meaningful to the value-set analysis, but no type. However, we
+       * need a type. So reconstruct the current state's version of a
+       * symbol-expr referring to this symbol. */
+      symbol_exprt sym_expr(e.identifier);
+      expr2tc sym_expr2;
+      migrate_expr(sym_expr, sym_expr2);
+
+      /* Now obtain the type. */
+      const symbolt *sym = ns.lookup(to_symbol2t(sym_expr2).thename);
+
+      /* By "global" only user-defined symbols are meant. Internally used ones
+       * we can ignore. */
+      if (e.identifier == "argv'" || has_prefix(sym->name, "__ESBMC_"))
+        continue;
+      log_debug(
+        "memcleanup",
+        "memcleanup: obtaining value-set for global '{}' suffix '{}'",
+        e.identifier,
+        e.suffix);
+      sym_expr2 = sym_expr2->with_type(migrate_symbol_type(*sym));
+
+      /* Rename so that it reflects the current state. */
+      assert(cur_state->call_stack.size() >= 1);
+      cur_state->rename(sym_expr2);
+
+      /* Further below we'll look at the value-set of (the L1 version of)
+       * sym_expr2 and compare the root-objects in it (via same_object2t) to
+       * something in this symbol that is of pointer type. The symbol could
+       * well be an array or a structure.
+       *
+       * The suffix from the value-set entry says to which sub-component(s)
+       * (if any) of the object referred to by sym_expr2 this entry belongs.
+       * Those sub-components are of pointer type and could point to objects
+       * reachable further out. Construct expressions that refer into the
+       * symbol based on the suffix so that we catch all the pointers. If
+       * the suffix is empty, sym_expr2 already has pointer type. Otherwise
+       * the symbol has a compound type. */
+      std::vector<expr2tc> sub_exprs = {sym_expr2};
+      for (const suffix_componentt &c : split_suffix_components(e.suffix))
+      {
+        /* The suffix consists of a sequence of components, which are either
+         * "[]" or ".name" where name is the name of some member of a
+         * structure type. */
+        if (c.is_member())
+        {
+          for (expr2tc &p : sub_exprs)
+          {
+            assert(is_structure_type(p));
+            unsigned n =
+              struct_union_get_component_number(p->type, c.member_name).value();
+            p = member2tc(struct_union_members(p->type)[n], p, c.member_name);
+          }
+          continue;
+        }
+
+        assert(c.is_index());
+        const type2tc &type = sub_exprs[0]->type;
+        assert(is_array_type(type));
+        const array_type2t &array_type = to_array_type(type);
+        const expr2tc &size = array_type.array_size;
+        if (!size)
+        {
+          /* The user is doing evil things like pointing to infinite-size
+           * arrays. Bad user. Those arrays are not "global symbols" in the
+           * sense of --no-reachable-memory-leak; ignore those. */
+          sub_exprs.clear();
+          break;
+        }
+
+        if (is_constant_int2t(size))
+        {
+          /* This could be huge. TODO: switch to the case below. */
+          uint64_t n = to_constant_int2t(size).value.to_uint64();
+          std::vector<expr2tc> new_sub_exprs;
+          new_sub_exprs.reserve(n * sub_exprs.size());
+          for (const expr2tc &p : sub_exprs)
+            for (uint64_t i = 0; i < n; i++)
+              new_sub_exprs.emplace_back(
+                index2tc(array_type.subtype, p, gen_long(size->type, i)));
+          sub_exprs = std::move(new_sub_exprs);
+          continue;
+        }
+
+        /* TODO: Missing implementation.
+         *
+         * We cannot just use a new symbol for the index since this
+         * expression is used in a negated context. I.e. we will need to
+         * encode a condition whose negation is true if and only if the
+         * target 'adr' is *not* reachable from this array.
+         * Exists index, s.t. "array[index] is the same object as 'adr'"
+         * does not satisfy this requirement: solvers are free to choose an
+         * 'index' where the same-object condition is false. Instead, the
+         * counter-example needs to include a witness that 'adr' is *not*
+         * reachable from the array.
+         *
+         * XXX fbrausse: Can we use the inductive counting construction from
+         *   Immerman and Szelepcsényi proving co-NL = NL here?
+         *   Alternatively, we might be able to use Savitch's theorem to
+         *   construct a deterministic expression for reachability and
+         *   negate that. Might even be faster since the expression
+         *   constructed in DSPACE(log^2(n)) should be handled faster than
+         *   the time it takes to solve a formula constructed in DTIME(n^2).
+         */
+
+        // this is a workaround because there is no implementation, yet
+        sub_exprs.clear();
+        break;
+      }
+      if (sub_exprs.empty()) /* this target is not to be handled */
+        continue;
+
+      if (is_symbol2t(sym_expr2))
+      {
+        symbol2t &s = to_symbol2t(sym_expr2);
+        if (s.rlevel == symbol2t::renaming_level::level2_global)
+        {
+          /* value-set assumes L1 symbols */
+          s.rlevel = symbol2t::renaming_level::level1_global;
+        }
+      }
+
+      /* Collect all objects reachable from 'globals' in 'points_to'. */
+      value_sett::object_mapt points_to;
+      /* Collect its value-set into 'points_to'. Since that's a map, this
+       * will only add targets that are not already in there. */
+      cur_state->value_set.get_value_set_rec(
+        sym_expr2, points_to, e.suffix, sym_expr2->type);
+
+      /* Now add the new found symbols to 'globals_point_to' and also record
+       * them in 'globals'. If they were known already, we don't need to handle
+       * them again. */
+      for (auto it = points_to.begin(); it != points_to.end(); ++it)
+      {
+        expr2tc target = cur_state->value_set.to_expr(it);
+        /* A value-set entry can be unknown, invalid or a descriptor of an
+         * object. */
+        if (is_unknown2t(target))
+        {
+          log_debug("memcleanup-skip", "memcleanup: skipping target unknown2t");
+          /* Treating 'unknown' as "could potentially point anywhere" generates
+           * too many false positives. It will basically make the memory-leak
+           * check useless since all dynamic objects could potentially still
+           * be referenced. We ignore it for now and pretend that's OK because
+           * dereference() with INTERNAL mode would also do that.
+          has_unknown = true;
+          globals.clear();
+          break;
+           */
+          continue;
+        }
+        /* invalid targets are not objects, ignore those */
+        if (is_invalid2t(target))
+        {
+          log_debug("memcleanup-skip", "memcleanup: skipping target invalid2t");
+          continue;
+        }
+
+        assert(is_object_descriptor2t(target));
+        expr2tc root_object = to_object_descriptor2t(target).get_root_object();
+
+        /* null-objects, constant strings and functions are interesting for
+         * neither the memory-leak check nor for finding more pointers to
+         * enlarge the set of reachable objects */
+        if (is_null_object2t(root_object))
+        {
+          log_debug(
+            "memcleanup-skip", "memcleanup: skipping target null-object");
+          continue;
+        }
+        if (is_constant_string2t(root_object))
+        {
+          log_debug(
+            "memcleanup-skip", "memcleanup: skipping target constant-string");
+          continue;
+        }
+        if (is_code_type(root_object))
+        {
+          log_debug(
+            "memcleanup-skip", "memcleanup: skipping target of code type");
+          continue;
+        }
+
+        log_debug(
+          "memcleanup-skip",
+          "memcleanup: found target '{}' of {} type",
+          to_symbol2t(root_object).get_symbol_name(),
+          get_type_id(root_object->type));
+
+        /* Record the edge and, if new, obtain all the "entries" interesting
+         * for the value-set analysis. An entry is interesting basically if
+         * its type contains a pointer type. Those are also exactly the ones
+         * interesting for the building the set of reachable objects. */
+        expr2tc adr = address_of2tc(root_object->type, root_object);
+
+        expr2tc same_as_e;
+        for (const expr2tc &sub_expr : sub_exprs)
+        {
+          assert(is_pointer_type(sub_expr));
+          expr2tc same = same_object2tc(sub_expr, adr);
+          same_as_e = same_as_e ? or2tc(same_as_e, same) : same;
+        }
+        assert(same_as_e);
+
+        assert(is_symbol2t(root_object));
+        const std::string dst = to_symbol2t(root_object).get_symbol_name();
+        out_edges[e.identifier].emplace_back(dst, same_as_e);
+        node_adr.emplace(dst, adr);
+
+        /* Check the contents of a valid root object of this target for more
+         * pointers reaching out further */
+        va.get_entries_rec(
+          dst, "", migrate_type_back(root_object->type), globals);
+      }
+    }
+
+    /* Phase 2: least fixpoint of the reachability conditions. Global symbols
+     * are unconditionally reachable; every other symbol is reachable under the
+     * disjunction, over its incoming edges, of (source reachable) and (edge
+     * condition). Propagating only the disjuncts added by the previous round
+     * keeps each round's formula linear in the number of edges.
+     *
+     * A symbol reachable in some execution is reachable there along a simple
+     * path, and a simple path leaves its root once and thereafter only visits
+     * pointed-at symbols, so `node_adr.size()` rounds cover every one of them.
+     * On an acyclic heap the rounds run dry well before that; on a cyclic one
+     * they do not, and the later rounds only re-derive disjuncts that the
+     * simple-path ones already imply. */
+    std::map<std::string, expr2tc> reach, delta;
+    for (const std::string &r : roots)
+      reach.emplace(r, expr2tc());
+    delta = reach;
+
+    for (size_t round = 0; round < node_adr.size() && !delta.empty(); round++)
+    {
+      std::map<std::string, expr2tc> contrib;
+      for (const auto &[src, g_src] : delta)
+      {
+        auto eit = out_edges.find(src);
+        if (eit == out_edges.end())
+          continue;
+        for (const auto &[dst, cond] : eit->second)
+        {
+          expr2tc g = g_src ? and2tc(g_src, cond) : cond;
+          auto [cit, ins] = contrib.emplace(dst, g);
+          if (!ins)
+            cit->second = or2tc(cit->second, g);
+        }
+      }
+
+      for (auto it = contrib.begin(); it != contrib.end();)
+      {
+        auto [rit, ins] = reach.emplace(it->first, it->second);
+        if (!ins)
+        {
+          if (!rit->second)
+          {
+            /* Already unconditionally reachable, nothing left to propagate. */
+            it = contrib.erase(it);
+            continue;
+          }
+          rit->second = or2tc(rit->second, it->second);
+        }
+        ++it;
+      }
+      delta = std::move(contrib);
+    }
+
+    /* The fixpoint above ran enough rounds to reach every recorded target, so
+     * each of them has a condition. A global symbol reachable from another
+     * global carries the nil condition; 'maybe_global_target' below requires a
+     * non-null one. */
+    for (const auto &[k, adr] : node_adr)
+    {
+      const expr2tc &r = reach.at(k);
+      expr2tc g = r ? r : gen_true_expr();
+      expr2tc &pts = globals_point_to[adr];
+      pts = pts ? or2tc(pts, g) : g;
     }
 
     if (log_debug(
@@ -1458,25 +1835,27 @@ void goto_symext::add_memory_leak_checks()
           to_symbol2t(to_address_of2t(e).ptr_obj).get_symbol_name());
 
     maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj) {
-      // Accumulator for OR-ing conditions
       expr2tc is_any;
-      // Iterate over each (expression, condition) pair in tgts
       for (const auto &[e, g] : tgts)
       {
-        /* XXX: 'obj' is the address of a statically known dynamic object,
-           *      couldn't we just statically check whether the symbol 'e'
-           *      addresses is the same as 'obj' directly?
-           *
-           * Explanation:
-           * - 'g' acts as a guard condition, determining whether 'e' should be considered.
-           * - 'same_object2tc(obj, e)' checks if 'obj' and 'e' refer to the same object.
-           * - If 'g' is an AND condition (is_and2t) or already a same-object check (is_same_object2t),
-           *   then 'g' is combined with 'same_object2tc(obj, e)'.
-           * - Otherwise, we directly use 'same_object2tc(obj, e)'.
-           */
-        expr2tc same = (is_and2t(g) || is_same_object2t(g))
-                         ? and2tc(g, same_object2tc(obj, e))
-                         : same_object2tc(obj, e);
+        /* 'obj' is the address of a statically known dynamic object; 'e' is
+         * the address of an object found reachable from a global, and 'g' is
+         * the condition under which 'e' is actually reachable. The object is
+         * globally reachable here iff some reachable 'e' is the same object as
+         * 'obj', i.e. the contribution of this target is g ∧ same_object(obj,e).
+         *
+         * The guard 'g' must ALWAYS be conjoined. Dropping it (as was done for
+         * guards that are neither an and2t nor a bare same_object2t, e.g. the
+         * or2t built when an object is reachable via more than one path) makes
+         * same_object(obj,e) unconditional. Since 'obj' itself appears among
+         * the targets, same_object(obj,obj) is trivially true, so 'targeted'
+         * collapses to true and the object's leak claim becomes vacuous — a
+         * missed leak (false VERIFICATION SUCCESSFUL) for memory that is in
+         * fact orphaned on some path. See issue #5400.
+         *
+         * 'g' is non-null by construction: every entry recorded in 'tgts' above
+         * carries the non-null reachability condition 'is_e'. */
+        expr2tc same = and2tc(g, same_object2tc(obj, e));
         is_any = is_any ? or2tc(is_any, same) : same;
       }
       return is_any ? is_any : gen_false_expr();

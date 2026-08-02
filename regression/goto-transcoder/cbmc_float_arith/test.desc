@@ -1,0 +1,4 @@
+CORE
+cbmc_float_arith.goto
+--binary
+^VERIFICATION SUCCESSFUL$

@@ -111,7 +111,11 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   {
     if (obj["_type"] == "ImportFrom")
     {
-      if (load_and_check(obj["module"].template get<std::string>()))
+      // `from . import X` (relative, no module name) has module == null; skip
+      // it rather than crashing on a null-to-string conversion (#6281).
+      if (
+        !obj["module"].is_null() &&
+        load_and_check(obj["module"].template get<std::string>()))
         return true;
     }
     else if (obj["_type"] == "Import")
@@ -148,8 +152,9 @@ bool is_module(const std::string &module_name, const JsonType &ast)
   return result;
 }
 
+/// Returns an empty JsonType on a miss. Never throws.
 template <typename JsonType>
-JsonType find_function(const JsonType &json, const std::string &func_name)
+JsonType try_find_function(const JsonType &json, const std::string &func_name)
 {
   for (const auto &elem : json)
   {
@@ -159,8 +164,9 @@ JsonType find_function(const JsonType &json, const std::string &func_name)
   return JsonType();
 }
 
+/// Throws std::runtime_error on a miss.
 template <typename JsonType>
-JsonType &find_function(JsonType &json, const std::string &func_name)
+JsonType &find_function_or_throw(JsonType &json, const std::string &func_name)
 {
   for (auto &elem : json)
   {
@@ -168,6 +174,28 @@ JsonType &find_function(JsonType &json, const std::string &func_name)
       return elem;
   }
   throw std::runtime_error("Function " + func_name + " not found\n");
+}
+
+/// True when `from <module> import <entity>` appears at the AST top level.
+template <typename JsonType>
+bool is_imported_from(
+  const JsonType &ast,
+  const std::string &module,
+  const std::string &entity)
+{
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      stmt.contains("_type") && stmt["_type"] == "ImportFrom" &&
+      stmt.contains("module") && stmt["module"] == module &&
+      stmt.contains("names"))
+    {
+      for (const auto &name : stmt["names"])
+        if (name.contains("name") && name["name"] == entity)
+          return true;
+    }
+  }
+  return false;
 }
 
 template <typename JsonType>
@@ -685,6 +713,38 @@ inline std::string extract_var_name_from_symbol_id(const std::string &symbol_id)
   size_t last_at = symbol_id.find_last_of('@');
   return (last_at != std::string::npos) ? symbol_id.substr(last_at + 1)
                                         : symbol_id;
+}
+
+// Build a List/Tuple AST node whose elements are the single-character strings
+// of @p chars. Used to lower list("abc") / tuple("abc") to the proven
+// list/tuple-literal path. Location fields are copied from @p loc_src.
+template <typename JsonType>
+JsonType build_char_sequence_node(
+  const char *kind,
+  const std::string &chars,
+  const JsonType &loc_src)
+{
+  static constexpr const char *loc_keys[] = {
+    "lineno", "col_offset", "end_lineno", "end_col_offset"};
+  auto copy_loc = [&](JsonType &node) {
+    for (const char *k : loc_keys)
+      if (loc_src.contains(k))
+        node[k] = loc_src[k];
+  };
+
+  JsonType node;
+  node["_type"] = kind;
+  node["elts"] = JsonType::array();
+  for (const char ch : chars)
+  {
+    JsonType elt;
+    elt["_type"] = "Constant";
+    elt["value"] = std::string(1, ch);
+    copy_loc(elt);
+    node["elts"].push_back(elt);
+  }
+  copy_loc(node);
+  return node;
 }
 
 template <typename JsonType>

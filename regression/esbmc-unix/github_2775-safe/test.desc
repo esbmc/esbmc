@@ -1,0 +1,4 @@
+CORE
+main.c
+--state-hashing --k-step 2 --unlimited-k-steps --64 --error-label ERROR --goto-unwind --unlimited-goto-unwind --k-induction --max-inductive-step 3
+^VERIFICATION SUCCESSFUL$

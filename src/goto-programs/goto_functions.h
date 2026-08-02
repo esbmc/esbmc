@@ -14,8 +14,10 @@
        it++)
 
 #include <goto-programs/goto_program.h>
-#include <util/std_types.h>
-#include <util/options.h>
+#include <goto-programs/property_verdict.h>
+#include <util/irep/std_types.h>
+#include <util/config/options.h>
+#include <util/lang/exception_specification.h>
 
 class goto_functiont
 {
@@ -27,6 +29,13 @@ public:
   // to_code_type() dereferences it. All construction paths set it before use.
   type2tc type;
   bool body_available = false;
+
+  // Cached, decoded copy of the function's C++ exception specification. The
+  // canonical representation lives on the function symbol's typet (and so
+  // survives GOTO-binary serialization); this is derived from it whenever the
+  // function type is (re)built. Used by symex to enforce the specification at
+  // the function-frame boundary.
+  exception_specificationt exception_spec;
 
   // The set of functions that have been inlined into this one. Necessary to
   // make symex renaming work.
@@ -71,6 +80,12 @@ public:
 
   static std::mutex reached_claims_mutex;
   static std::mutex reached_mul_claims_mutex;
+
+  // One verdict per property for the current run, shared between symbolic
+  // execution (which discharges trivially true claims) and bmct (which solves
+  // the rest). Static for the same reason reached_claims is: goto_symext holds
+  // goto_functionst by const reference. Cleared at the start of each run.
+  static property_verdict_tablet property_verdicts;
 
   // Serialises clear_verified_claims_in_goto across parallel multi-property
   // claims, which may concurrently make_skip() the same assert instruction.

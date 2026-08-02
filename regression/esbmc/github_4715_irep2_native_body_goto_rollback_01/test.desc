@@ -1,0 +1,5 @@
+CORE
+main.c
+--irep2-native-body --error-label ERROR --goto-functions-only
+// Labels: ERROR
+ASSERT

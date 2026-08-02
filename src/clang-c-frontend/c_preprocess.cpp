@@ -17,8 +17,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <util/config.h>
-#include <util/i2string.h>
+#include <util/config/config.h>
+#include <util/base/i2string.h>
 #include <clang-cpp-frontend/esbmc_internal_cpp.h>
 extern "C"
 {
@@ -318,6 +318,8 @@ int configure_and_run_cpp(
     record_define("pthread_mutex_unlock=pthread_mutex_unlock_check");
     record_define("pthread_cond_wait=pthread_cond_wait_check");
     record_define("pthread_join=pthread_join_switch");
+    record_define("pthread_rwlock_rdlock=pthread_rwlock_rdlock_check");
+    record_define("pthread_rwlock_wrlock=pthread_rwlock_wrlock_check");
   }
   else if (config.options.get_bool_option("lock-order-check"))
   {

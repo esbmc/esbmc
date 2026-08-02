@@ -1,4 +1,4 @@
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Frontend/ASTUnit.h>
@@ -12,13 +12,14 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-c-frontend/clang_c_main.h>
-#include <util/c_expr2string.h>
+#include <util/lang/c_expr2string.h>
 #include <sstream>
-#include <util/c_link.h>
+#include <util/lang/c_link.h>
 
-#include <util/filesystem.h>
+#include <util/base/filesystem.h>
 #include <clang-c-frontend/nested_func_transform.h>
-#include <util/yaml_parser.h>
+#include <clang-c-frontend/clang_c_lexer.h>
+#include <util/base/yaml_parser.h>
 
 #include <ac_config.h>
 
@@ -86,6 +87,12 @@ void clang_c_languaget::build_compiler_args(
       "-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_check");
     compiler_args.emplace_back("-Dsem_wait=sem_wait_check");
+    // Only the blocking acquisitions need renaming: pthread_rwlock_unlock's
+    // waiter release is inert when nothing registered a waiter.
+    compiler_args.emplace_back(
+      "-Dpthread_rwlock_rdlock=pthread_rwlock_rdlock_check");
+    compiler_args.emplace_back(
+      "-Dpthread_rwlock_wrlock=pthread_rwlock_wrlock_check");
   }
   else if (config.options.get_bool_option("lock-order-check"))
   {
@@ -246,19 +253,25 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("-Wno-implicit-function-declaration");
   }
 
-#if ESBMC_SVCOMP
-  compiler_args.push_back("-D__ESBMC_SVCOMP");
-  // No longer show compiler warnings for SV-COMP
-  compiler_args.push_back("-w");
-  compiler_args.push_back("-Wno-incompatible-function-pointer-types");
-  compiler_args.push_back("-Wno-int-conversion");
-#endif
+  if (config.options.get_bool_option("sv-comp"))
+  {
+    compiler_args.push_back("-D__ESBMC_SVCOMP");
+    // No longer show compiler warnings for SV-COMP
+    compiler_args.push_back("-w");
+    compiler_args.push_back("-Wno-incompatible-function-pointer-types");
+    // clang 15+ promotes -Wint-conversion to a hard error by default, which
+    // rejects GCC-acceptable implicit int<->pointer conversions common in
+    // preprocessed kernel/CIL inputs (e.g. the sentinel pointers CIL emits as
+    // (void *)0xffffffffffffffffUL). ESBMC models the conversion in its
+    // typecast logic, so downgrading the diagnostic does not affect semantics.
+    compiler_args.push_back("-Wno-int-conversion");
+  }
 
   // Increase maximum bracket depth
   compiler_args.push_back("-fbracket-depth=1024");
 
-  // Add -Wunknown-attributes, preprocessed files with GCC generate a bunch
-  // of __leaf__ attributes that we don't care about
+  // Suppress -Wunknown-attributes: GCC-preprocessed files carry a bunch of
+  // __leaf__ etc. attributes that we don't care about
   compiler_args.emplace_back("-Wno-unknown-attributes");
 
   // Suppress incompatible-pointer-types universally; became a hard error in
@@ -338,7 +351,27 @@ bool clang_c_languaget::parse(const std::string &path)
   else if (config.options.get_bool_option("validate-violation-witness"))
   {
     const std::string witness_path = config.options.get_option("witness");
-    auto waypoints = yaml_parser::get_waypoints(witness_path);
+    auto &waypoints = yaml_parser::get_waypoints(witness_path);
+    yaml_parser::fill_columns(actual_path, waypoints);
+    clang_c_lexert lexer;
+    for (auto &wp : waypoints)
+    {
+      if (wp.format != "ext_c_expression" && wp.format != "acsl_expression")
+        continue;
+      expr2tc e = lexer.parse_expr(wp.value);
+      if (e)
+      {
+        wp.parsed_cond.expr = e;
+        wp.parsed_cond.valid = true;
+      }
+      else
+      {
+        log_error(
+          "witness: could not parse constraint '{}'; witness is invalid",
+          wp.value);
+        abort();
+      }
+    }
     std::string content =
       yaml_parser::build_violation_witness_source(actual_path, path, waypoints);
     if (!content.empty())
@@ -370,7 +403,7 @@ bool clang_c_languaget::parse(const std::string &path)
     return true;
 
   if (!AST)
-    AST = move(newAST);
+    AST = std::move(newAST);
   else
     mergeASTs(newAST, AST);
 
@@ -403,18 +436,25 @@ void clang_c_languaget::set_language_version()
     config.language.c_std = c_stdt::c89;
 }
 
-bool clang_c_languaget::typecheck(contextt &context, const std::string &)
+bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
 {
   set_language_version();
-  clang_c_convertert converter(context, AST, "C");
+
+  // Convert + adjust this translation unit in an isolated context, then
+  // merge the fully-adjusted symbols into the shared context via c_link.
+  // This keeps each TU's convert/adjust from re-walking and re-adjusting
+  // symbols contributed by other frontends/TUs sharing `context` (#5309).
+  contextt new_context;
+
+  clang_c_convertert converter(new_context, AST, "C");
   if (converter.convert())
     return true;
 
-  clang_c_adjust adjuster(context);
+  clang_c_adjust adjuster(new_context);
   if (adjuster.adjust())
     return true;
 
-  return false;
+  return c_link(context, new_context, module);
 }
 
 void clang_c_languaget::show_parse(std::ostream &)
@@ -424,10 +464,6 @@ void clang_c_languaget::show_parse(std::ostream &)
 
 bool clang_c_languaget::preprocess(const std::string &, std::ostream &)
 {
-// TODO: Check the preprocess situation.
-#if 0
-  return c_preprocess(path, outstream, false);
-#endif
   return false;
 }
 
@@ -472,20 +508,24 @@ extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
 // Contract predicate: indicates that a pointer points to freshly allocated memory
-// Signature: __ESBMC_is_fresh(void **ptr, size_t size)
-// - ptr: Address of the pointer variable (semantically void**, declared as void* to avoid Clang USR issues)
+// Signature: __ESBMC_is_fresh(p, size)
+// - p: The pointer itself, passed bare. const so that const-qualified pointer
+//      params are accepted, which C++ overload resolution otherwise rejects.
 // - size: Size in bytes of the memory region
 // Returns: true when memory is successfully allocated (in contract enforcement mode)
 // Note: Used in requires clauses to specify fresh memory allocation requirements
-_Bool __ESBMC_is_fresh(void*, __SIZE_TYPE__);
+_Bool __ESBMC_is_fresh(const void*, __SIZE_TYPE__);
 
 _Bool __ESBMC_is_little_endian();
 
 extern int __ESBMC_rounding_mode;
 
 void *__ESBMC_memset(void *, int, __SIZE_TYPE__);
-      void *__ESBMC_memcpy(void *, const void *, __SIZE_TYPE__);
-      
+void *__ESBMC_memcpy(void *, const void *, __SIZE_TYPE__);
+void *__ESBMC_memmove(void *, const void *, __SIZE_TYPE__);
+void *__ESBMC_memchr(const void *, int, __SIZE_TYPE__);
+int __ESBMC_memcmp(const void *, const void *, __SIZE_TYPE__);
+
 /* same semantics as memcpy(tgt, src, size) where size matches the size of the
  * types tgt and src point to. */
 void __ESBMC_bitcast(void * /* tgt */, void * /* src */);
@@ -567,7 +607,14 @@ _Noreturn void __ESBMC_unreachable();
  * int i = 0;
  * __ESBMC_forall(&i, i < 0);
  *
- * This will return false, because 'i' became a local variable i.e, it means "forall i \in [min(int), (max(int))] . i < 0" */
+ * This will return false, because 'i' became a local variable i.e, it means "forall i \in [min(int), (max(int))] . i < 0"
+ *
+ * The body may call functions built from local declarations, straight-line
+ * assignments, if/else, and loops with a statically constant trip count: such a
+ * callee is summarized (loops unrolled, branches muxed) into a single pure
+ * expression (GitHub #6154).  Functions with a data-dependent trip count,
+ * pointer/array writes, recursion, or other non-summarizable shapes are still
+ * rejected inside a quantifier. */
 
 _Bool __ESBMC_forall(void*, _Bool);
 _Bool __ESBMC_exists(void*, _Bool);

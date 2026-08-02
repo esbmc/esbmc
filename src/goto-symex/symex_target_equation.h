@@ -10,11 +10,13 @@
 #include <list>
 #include <map>
 #include <memory>
-#include <solvers/smt/smt_conv.h>
-#include <util/config.h>
+#include <util/config/config.h>
 #include <irep2/irep2.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
+#include <util/base/threeval.h>
 #include <vector>
+
+class smt_convt;
 
 class symex_target_equationt : public symex_targett
 {
@@ -28,8 +30,7 @@ public:
     ssa_smt_trace = config.options.get_bool_option("ssa-smt-trace");
   }
 
-  // assignment to a variable - must be symbol
-  // the value is destroyed
+  // assignment to a variable - lhs must be a symbol
   void assignment(
     const expr2tc &guard,
     const expr2tc &lhs,
@@ -56,7 +57,6 @@ public:
     unsigned loop_number) override;
 
   // record an assumption
-  // cond is destroyed
   void assumption(
     const expr2tc &guard,
     const expr2tc &cond,
@@ -64,7 +64,6 @@ public:
     unsigned loop_number) override;
 
   // record an assertion
-  // cond is destroyed
   void assertion(
     const expr2tc &guard,
     const expr2tc &cond,
@@ -87,20 +86,6 @@ public:
   // support vacuity mode (it asserts `!vacuity_mode`); incremental BMC
   // callers must run vacuity probes through the non-incremental path.
   virtual void convert(smt_convt &smt_conv, bool vacuity_mode = false);
-  void convert_internal_step(
-    smt_convt &smt_conv,
-    smt_astt &assumpt_ast,
-    smt_convt::ast_vec &assertions,
-    SSA_stept &s,
-    bool vacuity_mode);
-
-  // Pre-register address_of expressions over string/array literals so
-  // int-to-ptr casts see them regardless of source-level declaration order
-  // (issue #1539).
-  void pre_register_addresses(
-    smt_convt &smt_conv,
-    std::list<SSA_stept>::iterator begin,
-    std::list<SSA_stept>::iterator end);
 
   void reconstruct_symbolic_expression(expr2tc &expr, bool keep_local_variables)
     const override;
@@ -143,15 +128,16 @@ public:
 
     expr2tc guard;
 
-    // for ASSIGNMENT
+    // for ASSIGNMENT; RENUMBER reuses lhs = symbol, rhs = new size
     expr2tc lhs, rhs;
     expr2tc original_lhs, original_rhs;
 
-    // for ASSUME/ASSERT. Interned: assertion messages are a small,
-    // highly repetitive set ("dereference failure", "array bounds
-    // violated", ...), so irep_idt both shrinks the inline footprint
-    // (4 bytes vs a 32-byte std::string) and dedups the payload across
-    // the many steps that share a message.
+    // cond: assume/assert condition, assignment equality, or branch guard.
+    // comment interned: assertion messages are a small, highly repetitive
+    // set ("dereference failure", "array bounds violated", ...), so
+    // irep_idt both shrinks the inline footprint (4 bytes vs a 32-byte
+    // std::string) and dedups the payload across the many steps that share
+    // a message.
     expr2tc cond;
     irep_idt comment;
 
@@ -177,8 +163,11 @@ public:
     // write through stack_trace_payload().
     std::unique_ptr<std::vector<stack_framet>> stack_trace_box;
 
-    // for conversion
-    smt_astt guard_ast, cond_ast;
+    // Discharged assertion expression used for counterexample trace queries.
+    // Conversion sets it to the discharged claim for asserts and to true
+    // for ignored steps and other non-assume steps; it stays nil for
+    // non-ignored assumes and before conversion.
+    expr2tc cond_expr;
 
     // for slicing
     bool ignore;
@@ -213,8 +202,7 @@ public:
           o.stack_trace_box
             ? std::make_unique<std::vector<stack_framet>>(*o.stack_trace_box)
             : nullptr),
-        guard_ast(o.guard_ast),
-        cond_ast(o.cond_ast),
+        cond_expr(o.cond_expr),
         ignore(o.ignore),
         hidden(o.hidden),
         loop_number(o.loop_number)
@@ -284,7 +272,11 @@ public:
   void output(std::ostream &out) const;
   void short_output(std::ostream &out, bool show_ignored = false) const;
 
-  void check_for_duplicate_assigns() const;
+  /** I10: no SSA name is defined twice. Returns false, with one error per
+   *  offender, when the equation is malformed. Opt-in via
+   *  `--double-assign-check`; aborts if an assignment step's lhs is not a
+   *  symbol, which is `assignment()`'s precondition. */
+  bool check_for_duplicate_assigns() const;
 
   void clear()
   {
@@ -296,8 +288,8 @@ public:
 
   std::shared_ptr<symex_targett> clone() const override
   {
-    // No pointers or anything that requires ownership modification, can just
-    // duplicate self.
+    // SSA_stept's copy constructor deep-copies its unique_ptr payloads, so
+    // plain member-wise duplication is safe.
     return std::shared_ptr<symex_targett>(new symex_target_equationt(*this));
   }
 
@@ -324,6 +316,7 @@ public:
   };
 
   runtime_encoded_equationt(const namespacet &_ns, smt_convt &conv);
+  ~runtime_encoded_equationt() override;
 
   void push_ctx() override;
   void pop_ctx() override;
@@ -336,8 +329,8 @@ public:
   tvt ask_solver_question(const expr2tc &question);
 
   smt_convt &conv;
-  std::list<smt_convt::ast_vec> assert_vec_list;
-  std::list<smt_astt> assumpt_chain;
+  struct solver_statet;
+  std::unique_ptr<solver_statet> solver_state;
   std::list<SSA_stepst::iterator> scoped_end_points;
   SSA_stepst::iterator cvt_progress;
 };

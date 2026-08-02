@@ -6,10 +6,11 @@
 #include <cassert>
 #include <ostream>
 #include <set>
+#include <vector>
 #include <irep2/irep2_utils.h>
-#include <util/location.h>
-#include <util/namespace.h>
-#include <util/std_code.h>
+#include <util/irep/location.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_code.h>
 
 #define forall_goto_program_instructions(it, program)                          \
   for (goto_programt::instructionst::const_iterator it =                       \
@@ -26,25 +27,30 @@
 typedef enum
 {
   NO_INSTRUCTION_TYPE = 0,
-  GOTO = 1,            // branch, possibly guarded
-  ASSUME = 2,          // non-failing guarded self loop
-  ASSERT = 3,          // assertions
-  OTHER = 4,           // anything else
-  SKIP = 5,            // just advance the PC
-  LOCATION = 8,        // semantically like SKIP
-  END_FUNCTION = 9,    // exit point of a function
-  ATOMIC_BEGIN = 10,   // marks a block without interleavings
-  ATOMIC_END = 11,     // end of a block without interleavings
-  RETURN = 12,         // return from a function
-  ASSIGN = 13,         // assignment lhs:=rhs
-  DECL = 14,           // declare a local variable
-  DEAD = 15,           // marks the end-of-live of a local variable
-  FUNCTION_CALL = 16,  // call a function
-  THROW = 17,          // throw an exception
-  CATCH = 18,          // catch an exception
-  THROW_DECL = 19,     // list of throws that a function can throw
-  THROW_DECL_END = 20, // end of throw declaration
-  LOOP_INVARIANT = 21  // loop invariant
+  GOTO = 1,           // branch, possibly guarded
+  ASSUME = 2,         // non-failing guarded self loop
+  ASSERT = 3,         // assertions
+  OTHER = 4,          // anything else
+  SKIP = 5,           // just advance the PC
+  LOCATION = 8,       // semantically like SKIP
+  END_FUNCTION = 9,   // exit point of a function
+  ATOMIC_BEGIN = 10,  // marks a block without interleavings
+  ATOMIC_END = 11,    // end of a block without interleavings
+  RETURN = 12,        // return from a function
+  ASSIGN = 13,        // assignment lhs:=rhs
+  DECL = 14,          // declare a local variable
+  DEAD = 15,          // marks the end-of-live of a local variable
+  FUNCTION_CALL = 16, // call a function
+  THROW = 17,         // throw an exception
+  CATCH = 18,         // catch an exception
+  // 19 and 20 were THROW_DECL / THROW_DECL_END, removed in favour of
+  // function-level exception-specification metadata. The numeric values are
+  // left as a gap so the remaining kinds keep their GOTO-binary encoding (and
+  // the in-repo v1 binary fixtures keep loading). A pre-removal binary that
+  // actually contains 19/20 -- only produced from C++ exception-spec code by an
+  // older ESBMC -- has no handler and fails loudly at the symex_step default,
+  // like any other unsupported instruction in a cross-version binary.
+  LOOP_INVARIANT = 21 // loop invariant
 } goto_program_instruction_typet;
 
 std::ostream &operator<<(std::ostream &, goto_program_instruction_typet);
@@ -57,7 +63,7 @@ class goto_programt
 {
 public:
   /*! \brief copy constructor
-      \param[in] src an empty goto program
+      \param[in] src the goto program to copy from
   */
   inline goto_programt(const goto_programt &src)
   {
@@ -70,7 +76,7 @@ public:
   }
 
   /*! \brief assignment operator
-      \param[in] src an empty goto program
+      \param[in] src the goto program to copy from
   */
   inline goto_programt &operator=(const goto_programt &src)
   {
@@ -120,7 +126,7 @@ public:
       return *loop_contract_data;
     }
 
-    //! the target for gotos and for start_thread nodes
+    //! the targets for gotos and catch
     typedef std::list<class instructiont>::iterator targett;
     typedef std::list<class instructiont>::const_iterator const_targett;
     typedef std::list<targett> targetst;
@@ -162,6 +168,11 @@ public:
     // folded into "IF cond GOTO target". The guard is then the positive source
     // condition, so GOTO-taken means the branch body (original target) IS reached.
     bool flipped_guard;
+
+    // Set by convert_switch: decimal strings of all case constants whose
+    // target is this GOTO, used by witness waypoint matching.  Contains more
+    // than one entry when multiple case labels fall through to the same body.
+    std::vector<std::string> switch_case_ids;
 
     //! is this node a branch target?
     inline bool is_target() const
@@ -217,16 +228,6 @@ public:
     inline void make_catch()
     {
       clear(CATCH);
-    }
-
-    inline void make_throw_decl()
-    {
-      clear(THROW_DECL);
-    }
-
-    inline void make_throw_decl_end()
-    {
-      clear(THROW_DECL_END);
     }
 
     inline void make_assertion(const expr2tc &g)
@@ -409,6 +410,7 @@ public:
         inductive_step_instruction(other.inductive_step_instruction),
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
+        switch_case_ids(other.switch_case_ids),
         location_number(other.location_number),
         loop_number(other.loop_number),
         pragma_unroll_count(other.pragma_unroll_count),
@@ -439,6 +441,7 @@ public:
         inductive_step_instruction(other.inductive_step_instruction),
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
+        switch_case_ids(std::move(other.switch_case_ids)),
         location_number(other.location_number),
         loop_number(other.loop_number),
         pragma_unroll_count(other.pragma_unroll_count),
@@ -476,6 +479,7 @@ public:
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(flipped_guard, instruction.flipped_guard);
+      instruction.switch_case_ids.swap(switch_case_ids);
       // Swap location_number too — same copy-assign-through-swap
       // reasoning as for labels.
       std::swap(instruction.location_number, location_number);
@@ -633,7 +637,7 @@ public:
     return --tmp;
   }
 
-  //! Adds an instruction of given type at the end.
+  //! Adds a copy of the given instruction at the end.
   //! \return The newly added instruction.
   inline targett add_instruction(instructiont &instruction)
   {

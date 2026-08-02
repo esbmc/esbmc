@@ -16,9 +16,8 @@
 #
 # Note: this model matches CPython's `str.title()` semantics, which
 # treat ASCII digits as word breaks (so `"123abc"` titles to
-# `"123Abc"`). The Python interpreter's `eval` path for constant
-# receivers has a separate, slightly different rule (digits don't
-# break words); that pre-existing divergence is out of scope here.
+# `"123Abc"`). The consteval path for constant receivers now applies
+# the same rule (see regression/python/str_title_digit_boundary).
 #
 # The call sites below go through an `if do_it:` wrapper so consteval
 # bails (control flow in the body) and the runtime model actually

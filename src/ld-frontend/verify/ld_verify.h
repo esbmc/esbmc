@@ -6,12 +6,12 @@
 //   PLCopen XML → Parser → TypeChecker → LdIRBuilder → ld_converter
 //   → property_encoder → ESBMC engine → JSON report
 //
-// This class is used by the ld-verify CLI and by ld_languaget.
+// This class is used by the ld-verify CLI (tools/ld-verify).
 struct LdVerifyOptions
 {
   std::string program_path; // PLCopen XML or .ld input
   std::string props_path;   // YAML property file (optional)
-  std::string strategy;     // "k-induction" | "bmc" | "portfolio"
+  std::string strategy;     // "k-induction" | "bmc"
   unsigned bmc_unwind = 100;
   bool fault_injection = false;
 };

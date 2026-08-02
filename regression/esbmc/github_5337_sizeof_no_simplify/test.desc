@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-simplify --force-malloc-success
+^VERIFICATION SUCCESSFUL$

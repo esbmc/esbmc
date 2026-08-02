@@ -2,3 +2,4 @@ THOROUGH
 main.cpp
 --incremental-bmc
 ^VERIFICATION FAILED$
+^  String capacity exceeded$

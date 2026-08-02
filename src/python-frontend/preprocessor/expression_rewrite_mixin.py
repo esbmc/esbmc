@@ -235,6 +235,23 @@ class ExpressionRewriteMixin:
             return prefix + [node]
         return node
 
+    def visit_Attribute(self, node):
+        node = self.generic_visit(node)
+        if node.attr == "flat" and isinstance(node.ctx, ast.Load):
+            ravel_call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id="np", ctx=ast.Load()),
+                    attr="ravel",
+                    ctx=ast.Load(),
+                ),
+                args=[node.value],
+                keywords=[],
+            )
+            ast.copy_location(ravel_call, node)
+            ast.fix_missing_locations(ravel_call)
+            return ravel_call
+        return node
+
     def visit_Subscript(self, node):
         node = self.generic_visit(node)
 
@@ -295,6 +312,10 @@ class ExpressionRewriteMixin:
             if stmts is not None:
                 return stmts
 
+        rewritten_seq_next = self._maybe_rewrite_seq_next_expr(node)
+        if rewritten_seq_next is not None:
+            return rewritten_seq_next
+
         prefix, new_value, _ = self._lower_listcomp_in_expr(node.value)
         node.value = new_value
         dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
@@ -337,13 +358,30 @@ class ExpressionRewriteMixin:
         return comparison
 
     def visit_While(self, node):
+        # Hoist generator initialisation (e.g. `j = 0`) for `var = next(gen)`
+        # loop bodies out of the loop *before* visiting it, so the init runs
+        # once and the generator's state persists across iterations. Without
+        # this the init is inlined inside the loop body and resets every pass,
+        # so `next(gen)` always yields the first value and the loop never makes
+        # progress (wedges into an unbounded loop). Mirrors the range-for path
+        # in _visit_for_inner.
+        gen_pre_stmts = self._hoist_generator_inits(node.body, node)
         node = self.generic_visit(node)
+        # Lower `while ... else: <orelse>` (the else runs when the loop ends
+        # without break) into a did-not-break flag, the same desugaring used for
+        # for-else. Without this the while node keeps its orelse, which the
+        # converter emits as an invalid third operand of the GOTO `while`
+        # ("while takes two operands"). _lower_for_else is a no-op when there is
+        # no orelse and clears node.orelse otherwise.
+        while_else_pre, while_else_post = self._lower_for_else(node)
         prefix, new_test, _ = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
         node.test = self._transform_list_truthiness(node.test, node)
-        if prefix:
-            return prefix + [node]
-        return node
+        result = (prefix or []) + [node]
+        if while_else_pre or while_else_post:
+            result = while_else_pre + result + while_else_post
+        result = gen_pre_stmts + result
+        return result if len(result) > 1 else node
 
     def _simplify_isinstance(self, node):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)

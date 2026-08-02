@@ -1,0 +1,21 @@
+properties:
+
+  # The stairs_light coil is fed by two parallel branches: the TOF timer output
+  # and the latched button toggle. P1/P2 require each branch to reach the coil,
+  # P3 requires nothing else to. Together they pin the graphical resolver's
+  # handling of function blocks on a rung path and of parallel-path OR.
+
+  - id: P1
+    kind: invariant
+    expression: "!TOF0__Q || stairs_light"
+    description: "Timer output energises the light"
+
+  - id: P2
+    kind: invariant
+    expression: "!lights_buttons_state__prev || stairs_light"
+    description: "Latched button toggle energises the light"
+
+  - id: P3
+    kind: invariant
+    expression: "!stairs_light || TOF0__Q || lights_buttons_state__prev"
+    description: "Light is only ever on when the timer or the toggle drives it"

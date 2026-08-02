@@ -1,0 +1,5 @@
+CORE
+main.c
+--overflow-check --witness-output-graphml -
+data == 9223372036854775807
+^VERIFICATION FAILED$

@@ -7,23 +7,25 @@
 // implementations live in function_call/expr.{h,cpp}.
 
 #include <python-frontend/function_call/expr.h>
-#include <python-frontend/complex_handler.h>
-#include <python-frontend/complex_handler_utils.h>
+#include <python-frontend/math/complex_handler.h>
+#include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/python_types.h>
-#include <util/std_expr.h>
-#include <util/string_constant.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
+#include <python-frontend/python_expr_builder.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_typecast.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/string_constant.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 #include <algorithm>
 #include <cmath>
@@ -33,105 +35,7 @@
 #include <stdexcept>
 
 using namespace json_utils;
-
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving). Back-migrated for the legacy adjust/goto-convert seam.
-//
-// Two migrate_type round-trip hazards are guarded: a dynamically-sized array
-// type (non-constant size) throws get_width downstream, and type attributes
-// such as #cpp_type are dropped. So the helpers fall back to the legacy node
-// for dyn-sized arrays / non-matching sources, and restore the exact result
-// type (result.type() = t) on the member/index/typecast nodes.
-bool contains_dyn_array(const typet &t)
-{
-  if (t.is_array())
-  {
-    const array_typet &at = to_array_type(t);
-    if (at.size().is_nil() || !at.size().is_constant())
-      return true;
-    return contains_dyn_array(at.subtype());
-  }
-  if (t.is_pointer())
-    return contains_dyn_array(t.subtype());
-  return false;
-}
-
-exprt build_symbol(const symbolt &sym)
-{
-  if (contains_dyn_array(sym.get_type()))
-    return symbol_expr(sym);
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
-    return typecast_exprt(from, t);
-  expr2tc from2;
-  migrate_expr(from, from2);
-  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
-  result.type() = t;
-  return result;
-}
-
-exprt build_address_of(const exprt &obj)
-{
-  if (contains_dyn_array(obj.type()))
-    return address_of_exprt(obj);
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-
-// member2t needs a struct/union/symbol source; fall back to legacy otherwise
-// (and for dyn-array result types).
-exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
-{
-  if (contains_dyn_array(t))
-    return member_exprt(base, name, t);
-  expr2tc base2;
-  migrate_expr(base, base2);
-  if (
-    is_struct_type(base2->type) || is_union_type(base2->type) ||
-    is_symbol_type(base2->type))
-  {
-    exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
-    result.type() = t;
-    return result;
-  }
-  return member_exprt(base, name, t);
-}
-
-// index2t needs an array/vector/symbol source; fall back to legacy otherwise
-// (and for dyn-array source/result types -- string indexing relies on the
-// #cpp_type attribute that migrate_type drops, hence result.type() = t).
-exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
-{
-  if (contains_dyn_array(arr.type()) || contains_dyn_array(t))
-    return index_exprt(arr, idx, t);
-  expr2tc arr2, idx2;
-  migrate_expr(arr, arr2);
-  migrate_expr(idx, idx2);
-  if (
-    is_array_type(arr2->type) || is_vector_type(arr2->type) ||
-    is_symbol_type(arr2->type))
-  {
-    exprt result = migrate_expr_back(index2tc(migrate_type(t), arr2, idx2));
-    result.type() = t;
-    return result;
-  }
-  return index_exprt(arr, idx, t);
-}
-
-// 2-arg form: element type is the source array's subtype (matches the legacy
-// index_exprt(arr, idx) constructor).
-exprt build_index(const exprt &arr, const exprt &idx)
-{
-  return build_index(arr, idx, arr.type().subtype());
-}
-} // namespace
+using namespace python_expr;
 
 namespace
 {
@@ -215,9 +119,12 @@ bool is_empty_literal(const nlohmann::json &node)
 
 exprt function_call_expr::combine_truthiness(exprt acc, exprt next, ReduceOp op)
 {
-  return (op == ReduceOp::Any)
-           ? exprt(or_exprt(std::move(acc), std::move(next)))
-           : exprt(and_exprt(std::move(acc), std::move(next)));
+  // V.3: build the any/all reduction fold in IREP2.
+  expr2tc a2, n2;
+  migrate_expr(acc, a2);
+  migrate_expr(next, n2);
+  return migrate_expr_back(
+    op == ReduceOp::Any ? or2tc(a2, n2) : and2tc(a2, n2));
 }
 
 exprt function_call_expr::handle_input() const
@@ -251,8 +158,9 @@ exprt function_call_expr::handle_input() const
   len_assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(len_assign);
 
-  exprt len_bound("<", bool_type());
-  len_bound.copy_to_operands(
+  // len_sym and the literal are both size_type (synthetic), so build the
+  // length-bound comparison in IREP2 (V.3).
+  exprt len_bound = build_less_than(
     build_symbol(len_sym), from_integer(max_str_length, size_type()));
   codet assume_len("assume");
   assume_len.copy_to_operands(len_bound);
@@ -349,6 +257,13 @@ exprt function_call_expr::handle_isinstance() const
   const exprt &obj_expr = converter_.get_expr(args[0]);
   const auto &obj_arg = args[0];
   const auto &type_arg = args[1];
+
+  // A tagged-scalar operand has no single static C type for isinstance()
+  // to check against -- its real type lives in the runtime `.type_id`
+  // field, which isinstance() does not consult yet.
+  if (converter_.get_type_handler().is_tagged_scalar_type(obj_expr.type()))
+    throw std::runtime_error(
+      "isinstance() on a dynamically-typed variable is not yet supported");
 
   // Check if the first argument is a type object (e.g., x = int; isinstance(x, str))
   // Type objects themselves are not instances of other types (except 'type')
@@ -458,18 +373,35 @@ exprt function_call_expr::handle_isinstance() const
       if (!obj_expr.type().is_pointer())
         return gen_zero(typet("bool")); // false
 
-      // For pointer types, check if it's null
-      exprt null_ptr = gen_zero(obj_expr.type());
-      exprt equality("=", typet("bool"));
-      equality.copy_to_operands(obj_expr);
-      equality.move_to_operands(null_ptr);
-      return equality;
+      // For pointer types, check if it's null. Built in IREP2 (V.1k keystone,
+      // D), mirroring the list-pointer case below: obj_expr and the null
+      // literal share obj_expr's pointer type, so this is a clean equality
+      // round-trip (migrate lowers a legacy "=" to equality2tc).
+      expr2tc obj2;
+      migrate_expr(obj_expr, obj2);
+      return migrate_expr_back(equality2tc(obj2, gen_zero(obj2->type)));
     }
 
     // Regular type checking
     typet expected_type = type_handler_.get_typet(type_name, 0);
     if (expected_type.is_nil())
       throw std::runtime_error("Could not resolve type: " + type_name);
+
+    // Lists use a dedicated pointer-backed operational model. The generic
+    // isinstance expression cannot be used here because its operand widths
+    // are incompatible. When the static type is a list pointer, emit a
+    // runtime null check so that Optional[list] parameters (None at runtime)
+    // correctly return False.
+    if (type_name == "list")
+    {
+      if (obj_expr.type() == type_handler_.get_list_type())
+      {
+        expr2tc obj2;
+        migrate_expr(obj_expr, obj2);
+        return migrate_expr_back(notequal2tc(obj2, gen_zero(obj2->type)));
+      }
+      return false_exprt();
+    }
 
     // String special case: get_typet("str") returns char[0], which the
     // generic encoding lowers to gen_zero(char[0]) — an empty array
@@ -517,10 +449,12 @@ exprt function_call_expr::handle_isinstance() const
     else
       t = gen_zero(expected_type);
 
-    exprt isinstance("isinstance", typet("bool"));
-    isinstance.copy_to_operands(obj_expr);
-    isinstance.move_to_operands(t);
-    return isinstance;
+    // V.3: build the isinstance node in IREP2 (isinstance2t is a 2-operand
+    // custom kind with forward/back migrate arms since #3289).
+    expr2tc obj2, t2;
+    migrate_expr(obj_expr, obj2);
+    migrate_expr(t, t2);
+    return migrate_expr_back(isinstance2tc(obj2, t2));
   };
 
   // Handle tuple of types: isinstance(v, (int, str, type(None)))
@@ -801,6 +735,12 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   // - delegate to the complex handler when the operand is complex,
   // - otherwise emit a symbolic abs() expression preserving the type.
   auto build_abs = [this](exprt operand) -> exprt {
+    // bool is an int subclass in Python; abs() of a bool yields an int
+    // (abs(True) == 1, abs(False) == 0). Cast before building the abs node so
+    // its `>= 0` comparison does not mix a bool and a signed-bitvector sort
+    // (which trips a solver sort assertion).
+    if (operand.type().is_bool())
+      operand = build_typecast(operand, type_handler_.get_typet("int", 0));
     exprt dunder_result = converter_.dispatch_unary_dunder_operator(
       "abs", operand, converter_.get_location_from_decl(call_));
     if (!dunder_result.is_nil())
@@ -954,13 +894,28 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
     }
     else
     {
-      // round(x, n) -> float rounded to n decimals
+      // round(x, n) -> float rounded to n decimals. A negative ndigits literal
+      // such as -2 is a UnaryOp(USub, Constant(2)) — not a plain Constant — so
+      // unwrap the minus to recover the integer; otherwise the constant fold is
+      // skipped and the (much more expensive) symbolic path is taken, which
+      // times out for round(int, -n).
       auto ndigits_arg = args[1];
+      bool ndigits_negated = false;
+      if (
+        ndigits_arg.contains("_type") && ndigits_arg["_type"] == "UnaryOp" &&
+        ndigits_arg.contains("op") && ndigits_arg["op"]["_type"] == "USub" &&
+        ndigits_arg.contains("operand"))
+      {
+        ndigits_arg = ndigits_arg["operand"];
+        ndigits_negated = true;
+      }
       if (
         ndigits_arg.contains("value") &&
         ndigits_arg["value"].is_number_integer())
       {
         int n = ndigits_arg["value"].get<int>();
+        if (ndigits_negated)
+          n = -n;
         double val = arg["value"].is_number_integer()
                        ? static_cast<double>(arg["value"].get<int>())
                        : arg["value"].get<double>();
@@ -1315,14 +1270,21 @@ exprt function_call_expr::handle_complex() const
 
             if (true_complex && false_complex)
             {
-              exprt real_part = if_exprt(
-                cond,
-                from_double(true_complex->first, double_type()),
-                from_double(false_complex->first, double_type()));
-              exprt imag_part = if_exprt(
-                cond,
-                from_double(true_complex->second, double_type()),
-                from_double(false_complex->second, double_type()));
+              // V.3: build the per-part conditional selects in IREP2 (both
+              // branches are double constants, so the if2t types agree).
+              const type2tc dbl2 = double_type2();
+              expr2tc cond2, tr2, fr2, ti2, fi2;
+              migrate_expr(cond, cond2);
+              migrate_expr(
+                from_double(true_complex->first, double_type()), tr2);
+              migrate_expr(
+                from_double(false_complex->first, double_type()), fr2);
+              migrate_expr(
+                from_double(true_complex->second, double_type()), ti2);
+              migrate_expr(
+                from_double(false_complex->second, double_type()), fi2);
+              exprt real_part = migrate_expr_back(if2tc(dbl2, cond2, tr2, fr2));
+              exprt imag_part = migrate_expr_back(if2tc(dbl2, cond2, ti2, fi2));
               return make_complex(real_part, imag_part);
             }
 
@@ -1522,14 +1484,39 @@ exprt function_call_expr::handle_min_max(
           exprt elem =
             build_member(arg, components[i].get_name(), components[i].type());
 
-          // Create comparison: elem < result (for min) or elem > result (for max)
-          exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
-          condition.copy_to_operands(elem, result);
-
-          // result = (elem < result) ? elem : result
-          if_exprt update(condition, elem, result);
-          update.type() = components[i].type();
-          result = update;
+          // result = (elem < result) ? elem : result  (> for max), built in
+          // IREP2. Reconcile mixed-type components to their common arithmetic
+          // type first so the wider candidate survives: the previous legacy
+          // builder set the select's type to the *current* component's type
+          // (ut), truncating a running double accumulator back to int
+          // (min((3, 2.5)) wrongly became 2, not 2.5).
+          // c_implicit_typecast_arithmetic is a no-op when the types already
+          // match, so the same-type case stays byte-identical.
+          exprt elem_r = elem, result_r = result;
+          if (elem_r.type() != result_r.type())
+            c_implicit_typecast_arithmetic(elem_r, result_r, converter_.ns);
+          if (elem_r.type() == result_r.type())
+          {
+            const type2tc rt2 = migrate_type(elem_r.type());
+            expr2tc elem2, result2;
+            migrate_expr(elem_r, elem2);
+            migrate_expr(result_r, result2);
+            expr2tc cond = comparison_op == exprt::i_lt
+                             ? lessthan2tc(elem2, result2)
+                             : greaterthan2tc(elem2, result2);
+            result = migrate_expr_back(if2tc(rt2, cond, elem2, result2));
+          }
+          else
+          {
+            // Differing non-arithmetic components (an invalid Python min/max,
+            // a TypeError in CPython). Keep the legacy select rather than
+            // tripping if2t's type-id assertion.
+            exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
+            condition.copy_to_operands(elem, result);
+            if_exprt update(condition, elem, result);
+            update.type() = components[i].type();
+            result = update;
+          }
         }
 
         return result;
@@ -1542,6 +1529,40 @@ exprt function_call_expr::handle_min_max(
   exprs.reserve(args.size());
   for (const auto &arg : args)
     exprs.push_back(to_value_expr(converter_.get_expr(arg), converter_.ns));
+
+  // With a key= keyword the comparison is on key(x), not the operands
+  // themselves, so non-numeric operands (e.g. max(s1, s2, key=len)) are
+  // legitimate. handle_min_max does not yet apply the key here (it is dropped,
+  // matching the pre-existing single-iterable fallback), but we must not reject
+  // these calls outright: doing so aborts conversion of any branch containing
+  // such a call even when that branch is unreachable.
+  bool has_key_kwarg = false;
+  if (call_.contains("keywords"))
+    for (const auto &kw : call_["keywords"])
+      if (kw.value("arg", "") == "key")
+      {
+        has_key_kwarg = true;
+        break;
+      }
+
+  // The comparison chain below lowers to arithmetic </> over the operands,
+  // which is only meaningful for numeric (and bool) values. Over strings,
+  // tuples or lists it builds a bitvector/pointer comparison that the SMT
+  // backend rejects in compute_pointer_offset (a crash) or that silently
+  // yields a wrong result. Reject those cleanly and point at the single-
+  // iterable form, which the model handles lexicographically.
+  if (!has_key_kwarg)
+    for (const exprt &e : exprs)
+    {
+      const typet &t = converter_.ns.follow(e.type());
+      if (!(t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+            t.is_fixedbv() || t.is_bool()))
+        throw std::runtime_error(
+          func_name +
+          "() with multiple non-numeric arguments is not supported; pass a "
+          "single iterable instead, e.g. " +
+          func_name + "([...])");
+    }
 
   // Determine common promoted type across all arguments.
   typet result_type = exprs[0].type();
@@ -1577,17 +1598,21 @@ exprt function_call_expr::handle_min_max(
       e = build_typecast(e, result_type);
 
   // Fold: result = exprs[0]; for each subsequent arg update via if-expr.
-  exprt result = exprs[0];
+  // V.3: build the min/max selection chain in IREP2. All args are already
+  // promoted to result_type, so the if2t branch types agree.
+  const type2tc rt2 = migrate_type(result_type);
+  expr2tc result2;
+  migrate_expr(exprs[0], result2);
   for (size_t i = 1; i < exprs.size(); ++i)
   {
-    exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
-    condition.copy_to_operands(exprs[i], result);
-    if_exprt update(condition, exprs[i], result);
-    update.type() = result_type;
-    result = update;
+    expr2tc e2;
+    migrate_expr(exprs[i], e2);
+    expr2tc cond = comparison_op == exprt::i_lt ? lessthan2tc(e2, result2)
+                                                : greaterthan2tc(e2, result2);
+    result2 = if2tc(rt2, cond, e2, result2);
   }
 
-  return result;
+  return migrate_expr_back(result2);
 }
 
 exprt function_call_expr::handle_print() const
@@ -1627,8 +1652,9 @@ exprt function_call_expr::handle_print() const
 
 exprt function_call_expr::compute_element_truthiness(const exprt &element) const
 {
+  // V.3: build the scalar truthiness predicate in IREP2.
   if (element.type() == none_type())
-    return gen_boolean(false);
+    return migrate_expr_back(gen_false_expr());
 
   if (element.type().is_bool())
     return element;
@@ -1636,13 +1662,18 @@ exprt function_call_expr::compute_element_truthiness(const exprt &element) const
   if (
     element.type().id() == "signedbv" || element.type().id() == "unsignedbv" ||
     element.type().id() == "floatbv" || element.type().is_pointer())
-    return not_exprt(equality_exprt(element, gen_zero(element.type())));
+  {
+    // element != 0
+    expr2tc el2;
+    migrate_expr(element, el2);
+    return migrate_expr_back(not2tc(equality2tc(el2, gen_zero(el2->type))));
+  }
 
   if (is_complex_type(element.type()))
     return complex_to_bool_expr(element);
 
   // For other types, assume truthy (conservative)
-  return gen_boolean(true);
+  return migrate_expr_back(gen_true_expr());
 }
 
 exprt function_call_expr::handle_any_all(ReduceOp op, const char *name)
@@ -1707,13 +1738,15 @@ exprt function_call_expr::reduce_iterable_literal_truthiness(
   const auto &elts = iterable_arg["elts"];
 
   if (elts.empty())
-    return gen_boolean(op == ReduceOp::All);
+    // V.3: empty reduction -> all()=True, any()=False (built in IREP2).
+    return migrate_expr_back(
+      op == ReduceOp::All ? gen_true_expr() : gen_false_expr());
 
   std::optional<exprt> result;
   for (const auto &elt : elts)
   {
     exprt is_truthy = is_empty_literal(elt)
-                        ? gen_boolean(false)
+                        ? migrate_expr_back(gen_false_expr()) // V.3
                         : compute_element_truthiness(converter_.get_expr(elt));
     result = result ? combine_truthiness(std::move(*result), is_truthy, op)
                     : is_truthy;
@@ -1729,7 +1762,9 @@ exprt function_call_expr::reduce_tuple_expr_truthiness(
   const auto &components = tuple_type.components();
 
   if (components.empty())
-    return gen_boolean(op == ReduceOp::All);
+    // V.3: empty reduction -> all()=True, any()=False (built in IREP2).
+    return migrate_expr_back(
+      op == ReduceOp::All ? gen_true_expr() : gen_false_expr());
 
   std::optional<exprt> result;
   for (const auto &component : components)

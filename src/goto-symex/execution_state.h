@@ -14,8 +14,8 @@
 #include <optional>
 #include <set>
 #include <irep2/irep2.h>
-#include <util/message.h>
-#include <util/std_expr.h>
+#include <util/message/message.h>
+#include <util/irep/std_expr.h>
 
 class reachability_treet;
 
@@ -31,11 +31,11 @@ class reachability_treet;
  *
  *  Context switches are not detected by ad-hoc hooks. Instead, every
  *  symex_step records the executed transition into last_transition
- *  (thread id, optional parent guard, optional branch_resultt). When the
+ *  (thread id, optional parent guard, optional parked_patht). When the
  *  scheduler later decides to switch threads, preserve_last_paths reads
  *  last_transition to know which deferred-merge snapshots to carry across
- *  the switch — including a direct iterator to the branch sibling pushed
- *  by goto_symext::symex_goto via the record_branch_sibling hook.
+ *  the switch — including a direct iterator to the path parked by
+ *  goto_symext::symex_goto or symex_return via the record_parked_path hook.
  *
  *  goto_symext occasionally needs data only execution_statet has (current
  *  thread id, the ability to spawn a new thread); those flow back through
@@ -49,11 +49,15 @@ public:
   // Convenience typedef
   typedef goto_symex_statet::merge_statet merge_statet;
 
-  struct branch_resultt
+  /** A path the transition parked for a deferred merge: the sibling arm of a
+   *  branch, or the continuation a return parked at end_of_function. In both
+   *  cases the thread's live continuation is the parked state, not its
+   *  present (falsified) guard. */
+  struct parked_patht
   {
-    /** Instruction at which the sibling path will be merged in. */
+    /** Instruction at which the parked path will be merged in. */
     goto_programt::const_targett target;
-    /** Direct reference to the sibling merge_statet in
+    /** Direct reference to the parked merge_statet in
      *  cur_state->top().merge_state_map[target]. std::list iterators
      *  don't invalidate on inserts/erases of other nodes.
      *
@@ -62,7 +66,7 @@ public:
      *  clones an execution_statet via create_next_state(), the clone
      *  rebuilds its own threads_state / merge_state_maps but the
      *  defaulted operator= still copies this iterator unchanged. On
-     *  the clone, sibling therefore points into the **parent**'s
+     *  the clone, snapshot therefore points into the **parent**'s
      *  merge_state_map.
      *
      *  This is currently sound because (a) the parent's exploration
@@ -75,14 +79,14 @@ public:
      *  iterator dereference will read corrupted data — fix by
      *  snapshotting the {guard, num_instructions, value_set} at record
      *  time instead of storing the iterator. */
-    goto_symex_statet::merge_state_listt::iterator sibling;
+    goto_symex_statet::merge_state_listt::iterator snapshot;
   };
 
   struct transition_resultt
   {
     unsigned int thread_id = 0;
     std::optional<guard2tc> parent_guard;
-    std::optional<branch_resultt> branch;
+    std::optional<parked_patht> parked;
   };
 
 public:
@@ -240,8 +244,8 @@ public:
    *  also passes the assignment to a reachability_treet analysis function to
    *  see whether the assignment should be generating a context switch.
    *  @param code Code representing assignment we're making.
-   *  @param guard A guard for the assignment, true by default
-   *  @param type Assignment type, visible by default
+   *  @param hidden Whether the assignment is hidden from the trace.
+   *  @param guard A guard for the assignment.
    */
   void symex_assign(
     const expr2tc &code,
@@ -323,7 +327,8 @@ public:
   /**
    *  Perform a context switch to thread ID i.
    *  Essentially this just updates the counter indicating which thread is
-   *  currently active. It also causes the execution guard to be reexecuted.
+   *  currently active. Callers taking a scheduling switch must follow this
+   *  with update_after_switch_point(), which re-executes the execution guard.
    *  @see execute_guard.
    *  @param i Thread ID to switch to.
    */
@@ -401,9 +406,9 @@ public:
   void cull_all_paths();
   void restore_last_paths();
 
-  void record_branch_sibling(
+  void record_parked_path(
     goto_programt::const_targett target,
-    statet::merge_state_listt::iterator sibling) override;
+    statet::merge_state_listt::iterator parked) override;
 
   /**
    *  Analyze the contents of an assignment for threading.
@@ -423,16 +428,44 @@ public:
    */
   void analyze_read(const expr2tc &expr);
 
+  /** Kind of memory access, used by get_expr_globals to decide whether a
+   *  read-only global can be filtered out of cswitch-triggering sets. */
+  enum class access_kindt
+  {
+    READ,
+    WRITE
+  };
+
   /**
    *  Get list of globals accessed by expr.
+   *  Reads of globals that are provably never written anywhere in the program
+   *  are filtered out — they cannot participate in data races and should not
+   *  force a context switch.
    *  @param ns Namespace to work under.
-   *  @expr Expression to count global writes in.
-   *  @return Number of global refs in this expression.
+   *  @param expr Expression to count global refs in.
+   *  @param global_list Output set of global refs.
+   *  @param kind Whether this access is a READ or a WRITE.
    */
   void get_expr_globals(
     const namespacet &ns,
     const expr2tc &expr,
-    std::set<expr2tc> &global_list);
+    std::set<expr2tc> &global_list,
+    access_kindt kind);
+
+  /**
+   *  Resolve one pointer level: the object `ptr`'s value set names, or nil.
+   *  @param to_global Set when the resolved object is shared.
+   */
+  expr2tc resolve_pointer_target(
+    const namespacet &ns,
+    const expr2tc &ptr,
+    bool &to_global);
+
+  /** Record `key` as an object accessed by this transition, for MPOR. */
+  void record_access_key(
+    const expr2tc &key,
+    std::set<expr2tc> &global_list,
+    access_kindt kind);
 
   /**
    *  Check for scheduling dependencies. Whether it exists between the variables
@@ -450,11 +483,16 @@ public:
    */
   void calculate_mpor_constraints();
 
-  /** Accessor method for mpor_schedulable. Ensures its access is within bounds
-   *  and is read-only. */
+  /** Read-only accessor for mpor_says_no. */
   bool is_transition_blocked_by_mpor() const
   {
     return mpor_says_no;
+  }
+
+  /** Read-only accessor for the MPOR dependency chain, for the A6.4 harness. */
+  const std::vector<std::vector<int>> &get_dependency_chain() const
+  {
+    return dependency_chain;
   }
 
   /** Accessor method for cswitch_forced. Sets it to true. */
@@ -465,7 +503,7 @@ public:
 
   /**
    *  Has a context switch point occurred.
-   *  Four things can justify this:
+   *  Two things can justify this:
    *   1. cswitch forced by atomic end or yield.
    *   2. Global data read/written.
    *  @return True if context switch is now triggered
@@ -622,6 +660,10 @@ protected:
   /** Are we evaluating the thread guard in the SMT solver during context
    *  switching? */
   bool smt_thread_guard;
+  /** Was constant propagation disabled with --no-propagation? Seeds every
+   *  thread's goto_symex_statet, so the option is looked up once per run
+   *  rather than once per thread creation. */
+  bool no_propagation;
 
   /** Copy execution_statet's own scheduling fields from `ex`. The base
    *  goto_symext slice is left untouched (the copy constructor's
@@ -643,13 +685,10 @@ public:
 };
 
 /**
- *  Class for performing a DFS thread exploration.
- *  On the whole, just uses the same functionality provided by execution_statet
- *  but with the only modification that this class resets a portion of the
- *  global string pool when it destructs, to prevent string pool inflation.
- *  Specifically; names that have been generated in execution states that are
- *  generated later in execution that this one will all be no longer used after
- *  this one is destructed. So no need to keep their names around.
+ *  Execution state for DFS thread exploration.
+ *  On the whole, just uses the same functionality provided by execution_statet;
+ *  clone() duplicates the target equation (or pushes a solver context under
+ *  --smt-during-symex), and the destructor pops that context again.
  */
 
 class dfs_execution_statet : public execution_statet
@@ -697,7 +736,8 @@ public:
     optionst &options,
     unsigned int *ptotal_claims,
     unsigned int *premaining_claims,
-    unsigned int *psimplified_claims)
+    unsigned int *psimplified_claims,
+    unsigned int *ptruncations)
     : execution_statet(
         goto_functions,
         ns,
@@ -710,19 +750,29 @@ public:
     this->ptotal_claims = ptotal_claims;
     this->premaining_claims = premaining_claims;
     this->psimplified_claims = psimplified_claims;
+    this->ptruncations = ptruncations;
     *ptotal_claims = 0;
     *premaining_claims = 0;
     *psimplified_claims = 0;
+    *ptruncations = 0;
   };
 
   schedule_execution_statet(const schedule_execution_statet &ref) = default;
   std::shared_ptr<execution_statet> clone() const override;
   ~schedule_execution_statet() override;
   void claim(const expr2tc &expr, const std::string &msg) override;
+  void note_bounded_loop_truncation() override
+  {
+    goto_symext::note_bounded_loop_truncation();
+    ++*ptruncations;
+  }
 
   unsigned int *ptotal_claims;
   unsigned int *premaining_claims;
   unsigned int *psimplified_claims;
+  // Each --schedule path runs in its own execution state, so the count has to
+  // accumulate outside them like the claim counts do.
+  unsigned int *ptruncations;
 };
 
 #endif /* EXECUTION_STATE_H_ */

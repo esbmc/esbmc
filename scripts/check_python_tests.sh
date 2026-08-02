@@ -33,6 +33,9 @@ ignored_dirs=(
   "decimal_fail"
   "decimal4"
   "decimal4_fail"
+  "decimal5"
+  "decimal6"
+  "decimal6_fail"
   "dict_del12_fail"
   "dict_del13_fail"
   "dict_del14"
@@ -56,6 +59,7 @@ ignored_dirs=(
   "enumerate15_fail"
   "func-no-params-types-fail"
   "function-option-fail"
+  "github_6211_function_multi_fail"
   "github_2843_fail"
   "github_2843_4_fail"
   "github_2908_1"
@@ -89,6 +93,7 @@ ignored_dirs=(
   "github_4666_2d"
   "github_4666_shape"
   "github_5102_nested_list_copy"
+  "github_5937_fail"
   "torch_mm_allclose"
   "global"
   "infer-func-no-return_fail"
@@ -99,6 +104,7 @@ ignored_dirs=(
   "input3"
   "input5"
   "input6"
+  "harness_os_listdir"
   "github_3712"
   "github_3713"
   "github_3713_1"
@@ -133,6 +139,7 @@ ignored_dirs=(
   "range19-fail"
   "ternary_symbolic"
   "threading_thread_increment_race_fail"
+  "threading_thread_increment_race_no_flag_fail"
   "threading_thread_race_fail"
   "threading_thread_subclass_race_fail"
   "threading_thread_subclass_run_assert_fail"
@@ -156,6 +163,15 @@ ignored_dirs=(
   "string-symbolic-8"
   "complex_str_nonconstant"
   "dataclass_factory_kwarg_ignored"
+  "harness_time_monotonic"
+  "harness_time_monotonic_fail"
+  # Top-level relative imports (`from . import X`) cannot run as a bare
+  # `python3 main.py` script -- CPython raises "attempted relative import with
+  # no known parent package" regardless of file layout. These exercise ESBMC's
+  # relative-import handling and are validated via the ESBMC regression harness.
+  "github_6281"
+  "github_6281_used"
+  "github_6281_fail"
 )
 
 # Prefixes for ESBMC-specific regression directories that are not suitable for
@@ -163,6 +179,8 @@ ignored_dirs=(
 ignored_prefixes=(
   "github_4666_"
   "github_4668_"
+  "harness_numpy_"
+  "harness_torch_"
 )
 
 for dir in */; do

@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--irep2-bodies --unwind 5 --incremental-bmc
+^VERIFICATION FAILED$

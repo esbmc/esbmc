@@ -1,0 +1,4 @@
+CORE
+cbmc_pointer_offset.goto
+--binary
+^VERIFICATION SUCCESSFUL$

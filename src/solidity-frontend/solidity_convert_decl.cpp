@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::get_non_function_decl(
@@ -47,7 +47,7 @@ bool solidity_convertert::get_non_function_decl(
   }
   case SolidityGrammar::ContractBodyElementT::StructDef:
   {
-    return get_struct_class(ast_node); // rule enum-definition
+    return get_struct_class(ast_node); // rule struct-definition
   }
   case SolidityGrammar::ContractBodyElementT::ModifierDef:
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
@@ -849,7 +849,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
       struct_typet::componentt comp;
       comp.swap(tmp_expr);
       comp.id("component");
-      comp.type().set("#member_name", t.tag());
+      comp.type().member_name(t.tag());
 
       if (get_access_from_decl(*itr, comp))
         return true;
@@ -1033,7 +1033,7 @@ bool solidity_convertert::get_struct_class_fields(
   //   comp.type().subtype() = t;
   //   comp.set_is_unnamed_bitfield(false);
   // }
-  comp.type().set("#member_name", type.tag());
+  comp.type().member_name(type.tag());
 
   if (get_access_from_decl(ast_node, comp))
     return true;
@@ -1484,7 +1484,7 @@ void solidity_convertert::get_error_definition_name(
   if (cname.empty())
     id = "sol:@" + name + "#" + std::to_string(id_num);
   else
-    // e.g. sol:@C@Base@F@error@1
+    // e.g. sol:@C@Base@F@errmsg#12
     id = "sol:@C@" + cname + "@F@" + name + "#" + std::to_string(id_num);
 }
 

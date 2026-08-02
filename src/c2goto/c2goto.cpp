@@ -4,10 +4,10 @@
 #include <goto-programs/write_goto_binary.h>
 #include <langapi/language_ui.h>
 #include <langapi/mode.h>
-#include <util/cmdline.h>
-#include <util/config.h>
+#include <util/config/cmdline.h>
+#include <util/config/config.h>
 #include <irep2/irep2.h>
-#include <util/parseoptions.h>
+#include <util/config/parseoptions.h>
 #include <stdlib.h>
 
 const struct group_opt_templ c2goto_options[] = {
@@ -109,4 +109,7 @@ int main(int argc, const char **argv)
   return parseopt.main();
 }
 
-const mode_table_et mode_table[] = {LANGAPI_MODE_CLANG_C, LANGAPI_MODE_END};
+const mode_table_et mode_table[] = {
+  LANGAPI_MODE_CLANG_C,
+  LANGAPI_MODE_CLANG_CPP,
+  LANGAPI_MODE_END};

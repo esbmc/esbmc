@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--no-standard-checks --multi-property
+^VERIFICATION SUCCESSFUL$

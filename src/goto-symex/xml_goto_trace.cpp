@@ -2,8 +2,8 @@
 #include <goto-symex/printf_formatter.h>
 #include <goto-symex/xml_goto_trace.h>
 #include <langapi/language_util.h>
-#include <util/i2string.h>
-#include <util/xml_irep.h>
+#include <util/base/i2string.h>
+#include <util/irep/xml_irep.h>
 
 void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
 {
@@ -116,7 +116,6 @@ void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
     default:
       if (location != previous_location)
       {
-        // just the location
         if (xml_location.name != "")
         {
           xmlt &xml_location_only = xml.new_element("location-only");

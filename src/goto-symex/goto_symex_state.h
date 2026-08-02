@@ -3,17 +3,19 @@
 
 #include <cassert>
 #include <cstdint>
+#include <climits>
 #include <cstdio>
 #include <cstring>
 #include <goto-programs/goto_functions.h>
 #include <goto-symex/renaming.h>
+#include <goto-symex/symex_invariant.h>
 #include <goto-symex/symex_target.h>
 #include <pointer-analysis/value_set.h>
 #include <stack>
 #include <string>
 #include <unordered_set>
 #include <irep2/irep2_guard.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
 #include <memory>
 #include <vector>
@@ -43,11 +45,13 @@ public:
    *  and value set / pointer tracking situations.
    *  @param l2 Global L2 state reference.
    *  @param vs Global value set reference.
+   *  @param no_propagation Value of --no-propagation, from the live optionst.
    */
   goto_symex_statet(
     renaming::level2t &l2,
     value_sett &vs,
-    const namespacet &_ns);
+    const namespacet &_ns,
+    bool no_propagation);
 
   /**
    *  Copy constructor.
@@ -102,6 +106,8 @@ public:
     guard2tc guard;
     unsigned int thread_id;
     variable_name_sett local_variables;
+    std::shared_ptr<void>
+      interval_snapshot; // interval_domaint::interval_map; set in symex_goto.cpp
 
     explicit merge_statet(const goto_symex_statet &s)
       : num_instructions(s.num_instructions),
@@ -121,7 +127,8 @@ public:
         value_set(s.value_set),
         guard(s.guard),
         thread_id(s.thread_id),
-        local_variables(s.local_variables)
+        local_variables(s.local_variables),
+        interval_snapshot(s.interval_snapshot)
     {
     }
 
@@ -211,6 +218,13 @@ public:
      */
     unsigned int va_index;
 
+    /** Cursor into this activation's va_args, advanced by each va_arg use.
+     *  Starts equal to va_index. va_cursor == va_index means no argument has
+     *  been consumed yet; symex_printf's va_list recovery relies on this
+     *  (after any consumption a va_start rewind is indistinguishable from
+     *  further consumption, so recovery must decline). */
+    unsigned int va_cursor;
+
     /** Record the entry guard of the function */
     guard2tc entry_guard;
 
@@ -221,7 +235,11 @@ public:
     BigInt stack_frame_total;
 
     framet(unsigned int thread_id, const namespacet *ns = nullptr)
-      : return_value(expr2tc()), hidden(false), stack_frame_total(0)
+      : return_value(expr2tc()),
+        va_index(UINT_MAX),
+        va_cursor(UINT_MAX),
+        hidden(false),
+        stack_frame_total(0)
     {
       level1.thread_id = thread_id;
       level1.ns = ns;
@@ -268,13 +286,13 @@ public:
    */
   inline framet &top()
   {
-    assert(!call_stack.empty());
+    SYMEX_INVARIANT(!call_stack.empty(), "no activation record to read");
     return call_stack.back();
   }
 
   inline const framet &top() const
   {
-    assert(!call_stack.empty());
+    SYMEX_INVARIANT(!call_stack.empty(), "no activation record to read");
     return call_stack.back();
   }
 
@@ -294,7 +312,11 @@ public:
    */
   inline void pop_frame()
   {
-    assert(call_stack.back().merge_state_map.size() == 0);
+    SYMEX_INVARIANT(!call_stack.empty(), "no activation record to pop");
+    // I6: a dropped merge snapshot silently discards the paths it holds.
+    SYMEX_INVARIANT(
+      call_stack.back().merge_state_map.empty(),
+      "activation record popped with unmerged path snapshots");
     call_stack.pop_back();
   }
 
@@ -303,7 +325,11 @@ public:
    */
   inline const framet &previous_frame()
   {
-    return *(--(--call_stack.end()));
+    // Indexed rather than `*(--(--end()))`, which at size 1 forms a pointer
+    // before the start of the vector ([expr.add]/4).
+    SYMEX_INVARIANT(
+      call_stack.size() >= 2, "no caller frame beneath the current one");
+    return call_stack[call_stack.size() - 2];
   }
 
   // Methods
@@ -377,19 +403,18 @@ public:
   void get_original_name(expr2tc &expr) const;
 
   /**
-   *  Print stack trace of state to osstream.
+   *  Print stack trace of state to an output stream.
    *  Takes all the current function calls and produces an indented stack
-   *  trace, then prints it to stdout.
+   *  trace, written to the given stream.
    *  @param indent Number of spaces to indent contents by.
-   *  @param oss output stream to output
+   *  @param os Output stream to write to.
    */
   void print_stack_trace(unsigned int indent, std::ostream &os) const;
 
   /**
-   *  Generate set of strings making up a stack trace.
-   *  From the current thread state, produces a set of strings recording the
-   *  current function invocations on the stack, and returns them.
-   *  @return Vector of strings describing the current function calls in state.
+   *  Generate a stack trace as a vector of stack_framet, one per function
+   *  invocation on the current call stack.
+   *  @return Vector of stack frames.
    */
   std::vector<stack_framet> gen_stack_trace() const;
 
@@ -436,6 +461,10 @@ public:
 
   /** Flag saying whether to maintain pointer value set tracking. */
   bool use_value_set;
+  /** Flag saying constant propagation was disabled with --no-propagation.
+   *  Cached because constant_propagation() runs on every assignment and
+   *  get_bool_option does a string-keyed map lookup. */
+  bool no_propagation = false;
   /** Reference to global l2 state. */
   renaming::level2t &level2;
   /** Reference to global pointer tracking state. */
@@ -457,8 +486,17 @@ public:
   /// witness_segs[seg]: all actionable waypoints per segment
   std::vector<std::vector<waypoint>> witness_segs;
   size_t cur_seg;
+  /// Set to true the first time the target assertion is allowed through.
+  /// Subsequent assertions at the target line (from continuation calls after
+  /// the witness call chain returns) are filtered to avoid false positives.
+  bool witness_target_reached;
 
-  /// Advance to the next segment (called when a follow waypoint is matched).
+  /// Pre-built O(1) lookup for branching(cycle) waypoints.
+  /// Maps line_id → direction_true (from wp.value == "true").
+  /// Populated at init time; queried on every forward-goto without touching
+  /// cur_seg (cycle branching is a persistent constraint, not a one-shot).
+  std::unordered_map<irep_idt, bool> cycle_branch_map;
+
   void advance_witness_position();
 };
 

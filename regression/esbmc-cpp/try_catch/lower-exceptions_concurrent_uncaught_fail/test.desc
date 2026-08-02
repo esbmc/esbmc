@@ -1,5 +1,4 @@
-KNOWNBUG
+CORE
 main.cpp
---context-bound 2
 
 ^VERIFICATION FAILED$

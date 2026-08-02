@@ -312,7 +312,12 @@ endif()
 if(CAMADA_EXTRA_LIBRARY_DIRS)
   target_link_directories(solvercamada PUBLIC ${CAMADA_EXTRA_LIBRARY_DIRS})
 endif()
-target_link_libraries(solvercamada PUBLIC fmt::fmt camada::camada)
+# smtfp/smttuple carry the fp_convt and tuple_iface bases camada_convt derives
+# from, and prop carries the pointer_logict the memspace code needs; naming
+# them here keeps the archive self-contained regardless of the order the
+# `solvers` interface lib hands its members to the linker.
+target_link_libraries(solvercamada
+  PUBLIC fmt::fmt camada::camada smtfp smttuple prop)
 target_link_libraries(solvers INTERFACE solvercamada)
 
 # Advertise each enabled solver to the rest of ESBMC.

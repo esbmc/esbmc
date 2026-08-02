@@ -3,9 +3,34 @@ title: Setup
 weight: 1
 ---
 
-To install ESBMC, download the latest binary for Linux or Windows from
-[GitHub](https://github.com/esbmc/esbmc/releases), then save and unzip it on your
-disk.
+## Ubuntu
+
+The easiest way to install ESBMC on Ubuntu is through our official
+[PPA](https://launchpad.net/~esbmc/+archive/ubuntu/esbmc), which provides
+releases for automatic installation:
+
+```sh
+sudo add-apt-repository ppa:esbmc/esbmc
+sudo apt update
+sudo apt install esbmc
+```
+
+This method is recommended for general users and supports Ubuntu 22.04 (Jammy)
+and 24.04 (Noble).
+
+## Homebrew (macOS and Linux)
+
+```sh
+brew install esbmc
+```
+
+This installs `esbmc` together with its bundled SMT solvers (Z3, Bitwuzla).
+
+## GitHub Release
+
+You can also download the latest binary for Linux, Windows or macOS from the
+[releases page](https://github.com/esbmc/esbmc/releases), then save and unzip it
+on your disk.
 
 Once unzipped, read the license before running ESBMC. The distribution is split
 into two directories:

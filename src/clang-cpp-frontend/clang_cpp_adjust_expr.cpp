@@ -1,10 +1,10 @@
 #include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
-#include <util/c_sizeof.h>
-#include <util/c_types.h>
+#include <util/lang/c_sizeof.h>
+#include <util/lang/c_types.h>
 #include <goto-programs/destructor.h>
-#include <util/expr_util.h>
-#include <util/message.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)
@@ -28,12 +28,11 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   if (symbol.get_value().is_not_nil())
   {
     value = symbol.get_value();
-    [[maybe_unused]] const code_blockt &existing_body =
-      to_code_block(to_code(value));
-    assert(
-      existing_body.operands().size() == 1 &&
-      existing_body.op0().statement() ==
-        "throw_decl"); // just a sanity check that we don't accidentally change any clang generated body in the future
+    const code_blockt &existing_body = to_code_block(to_code(value));
+    // Sanity check that we don't accidentally clobber a clang-generated body:
+    // the implicit union copy/move constructor has no statements of its own.
+    assert(existing_body.operands().empty());
+    (void)existing_body;
   }
   else
   {
@@ -69,6 +68,15 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
 {
   clang_c_adjust::adjust_symbol(symbol);
 
+  // Resolve a dynamic exception specification's declared types to exception
+  // ids now that the namespace is fully populated.
+  if (symbol.get_type().is_code())
+  {
+    typet t = symbol.get_type();
+    finalize_exception_specification(t);
+    symbol.set_type(std::move(t));
+  }
+
   /*
    * implicit code generation for vptr initializations:
    * The idea is to get the constructor method symbol and
@@ -89,18 +97,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   }
   else if (statement == "cpp_delete" || statement == "cpp_delete[]")
   {
-    adjust_operands(expr);
-    // adjust side effect node to explicitly call class destructor
-    // e.g. the adjustment here will add the following instruction in GOTO:
-    // FUNCTION_CALL:  ~t2(&(*p))
-    code_function_callt destructor;
-    if (get_destructor(ns, expr.type(), destructor))
-    {
-      exprt new_object("new_object", expr.type());
-
-      destructor.arguments().push_back(address_of_exprt(new_object));
-      expr.set("destructor", destructor);
-    }
+    adjust_cpp_delete(expr);
   }
   else if (statement == "temporary_object")
   {
@@ -124,6 +121,96 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
     clang_c_adjust::adjust_side_effect(expr);
 }
 
+void clang_cpp_adjust::adjust_cpp_delete(side_effect_exprt &expr)
+{
+  adjust_operands(expr);
+
+  // adjust side effect node to explicitly call class destructor
+  // e.g. the adjustment here will add the following instruction in GOTO:
+  // FUNCTION_CALL:  ~t2(&(*p))
+  const struct_typet *class_type = resolve_class_type(ns, expr.type());
+  if (class_type == nullptr)
+    return;
+
+  const struct_typet::componentt *dtor =
+    get_destructor_component(ns, *class_type);
+  if (dtor == nullptr)
+    return;
+
+  exprt new_object("new_object", expr.type());
+
+  code_function_callt destructor;
+  destructor.function() = destructor_binding(*class_type, *dtor, new_object);
+  destructor.arguments().push_back(address_of_exprt(new_object));
+  expr.set("destructor", destructor);
+}
+
+exprt clang_cpp_adjust::destructor_binding(
+  const struct_typet &class_type,
+  const struct_typet::componentt &dtor,
+  const exprt &object)
+{
+  exprt static_binding("symbol", dtor.type());
+  static_binding.identifier(dtor.name());
+
+  if (!dtor.get_bool("is_virtual"))
+    return static_binding;
+
+  // The slot is keyed by the destructor's `virtual_name`, i.e. the id of the
+  // ultimate overridden destructor. Select the vtable pointer whose table
+  // actually carries that slot rather than assuming the class's own vptr comes
+  // first among the components.
+  const struct_typet::componentt *vptr = nullptr;
+  const struct_typet::componentt *slot = nullptr;
+  const typet *vtable_type = nullptr;
+
+  for (const auto &comp : class_type.components())
+  {
+    if (!comp.get_bool("is_vtptr"))
+      continue;
+
+    const typet &candidate = ns.follow(comp.type().subtype());
+    if (candidate.id() != "struct")
+      continue;
+
+    for (const auto &entry : to_struct_type(candidate).components())
+      if (entry.get("virtual_name") == dtor.get("virtual_name"))
+      {
+        vptr = &comp;
+        slot = &entry;
+        vtable_type = &candidate;
+        break;
+      }
+
+    if (slot != nullptr)
+      break;
+  }
+
+  // A class with a virtual destructor always carries a vtable pointer and a
+  // matching slot: both are emitted together when the vtable is built. Falling
+  // back to the static destructor here would silently skip the derived
+  // destructors' side effects, so fail loudly instead.
+  if (slot == nullptr)
+  {
+    log_error(
+      "{}: no virtual table slot for destructor `{}` of `{}`",
+      __func__,
+      dtor.name(),
+      class_type.tag());
+    abort();
+  }
+
+  // *object.@vtable_pointer->~T#
+  member_exprt vptr_member(object, vptr->name(), vptr->type());
+  dereference_exprt vtable(vptr_member, vptr->type());
+  // No further adjust pass runs over this expression, so resolve the vtable
+  // symbol type here: member2t requires a resolved struct source.
+  vtable.type() = *vtable_type;
+
+  member_exprt slot_member(vtable, slot->name(), slot->type());
+  return dereference_exprt(slot_member, slot->type());
+}
+
 void clang_cpp_adjust::adjust_new(exprt &expr)
 {
   if (expr.initializer().is_not_nil())
@@ -139,11 +226,10 @@ void clang_cpp_adjust::adjust_new(exprt &expr)
     expr.size(new_size);
   }
 
-  // Set sizeof and cmt_sizeof_type
-  exprt size_of = c_sizeof(expr.type().subtype(), ns);
-  size_of.set("#c_sizeof_type", expr.type().subtype());
-
-  expr.set("sizeof", size_of);
+  // Note: the cpp_new allocation size flows via size_irep() (the array count)
+  // and the allocated type via type().subtype(); the old "sizeof" named-sub
+  // (a c_sizeof fold tagged with the legacy sizeof-type attribute) was never
+  // read, so it is no longer produced (esbmc/esbmc#5337).
 }
 
 void clang_cpp_adjust::adjust_member(member_exprt &expr)
@@ -244,9 +330,13 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     // just populate rhs' argument and replace the entire expression
     exprt &lhs = expr.op0();
     exprt arg = address_of_exprt(lhs);
-    exprt base_symbol = arg.op0();
-    assert(base_symbol.op0().id() == "symbol");
-    // TODO: wrap base symbol into dereference if it's a member
+    // Sanity: the object being constructed must ultimately root at a symbol,
+    // whether it is a plain member `s.m` or a nested member/array element such
+    // as `s.arr[i]` (emitted for per-element construction of array members).
+    const exprt *base_symbol = &lhs;
+    while (base_symbol->has_operands())
+      base_symbol = &base_symbol->op0();
+    assert(base_symbol->id() == "symbol");
     exprt::operandst &arguments = rhs_func_call.arguments();
     arguments.insert(arguments.begin(), arg);
 
@@ -377,6 +467,13 @@ void clang_cpp_adjust::adjust_side_effect_throw(side_effect_exprt &expr)
   if (expr.operands().size() == 0)
     return;
 
+  // Adjust the thrown expression like any other operand. In particular, when
+  // the operand is the copy/move construction of the exception object (e.g.
+  // `throw e;` for a by-value parameter `e`), this address-of's the lvalue
+  // arguments bound to the constructor's reference parameters — otherwise the
+  // ctor is called with a struct value where a pointer is expected.
+  adjust_expr(expr.op0());
+
   const typet &exception_type = expr.op0().type();
 
   std::vector<irep_idt> ids;
@@ -416,6 +513,26 @@ void clang_cpp_adjust::convert_exception_id(
       convert_exception_id(type.subtype(), "_ptr" + suffix, ids, is_catch);
       return;
     }
+  }
+  else if (type.id() == "struct")
+  {
+    // An aggregate-initialised thrown object (`throw E{...}`, no constructor)
+    // arrives with an inline struct type rather than a symbol reference,
+    // because get_complete_type resolves it during InitListExpr conversion.
+    // Resolve it back to the class's type symbol so its exception id matches a
+    // `catch (E)` clause's symbol-typed id; otherwise the throw and the handler
+    // disagree and the exception escapes uncaught (#6300).
+    irep_idt name = type.get("name");
+    const symbolt *sym = name.empty() ? nullptr : ns.lookup(name);
+    if (sym == nullptr && !type.get("tag").as_string().empty())
+      sym = ns.lookup("tag-" + type.get("tag").as_string());
+    if (sym != nullptr && sym->get_type().id() == "struct")
+    {
+      symbol_typet sym_type(sym->id);
+      convert_exception_id(sym_type, suffix, ids, is_catch);
+      return;
+    }
+    ids.emplace_back(id2string(type.id()) + suffix);
   }
   else if (type.id() == "symbol")
   {
@@ -462,9 +579,18 @@ void clang_cpp_adjust::convert_exception_id(
   }
 
   // add C++ type
-  std::string cpp_type = type.get("#cpp_type").as_string();
+  std::string cpp_type = type.cpp_type().as_string();
   if (!cpp_type.empty())
     ids.emplace_back(cpp_type + suffix);
+
+  // Fallback: an unusual catch parameter type (e.g. a function type, as in the
+  // ill-formed `catch (exception())`) matches none of the cases above and would
+  // leave `ids` empty, which callers such as adjust_catch dereference via
+  // `ids.front()`. Emit the type's own id so the result is never empty; such a
+  // synthetic id simply never matches a real throw, which is the intended
+  // behaviour for a catch clause that cannot name a throwable type.
+  if (ids.empty())
+    ids.emplace_back(id2string(type.id()) + suffix);
 }
 
 void clang_cpp_adjust::adjust_side_effect_function_call(

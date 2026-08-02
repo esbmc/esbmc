@@ -1,36 +1,37 @@
 #include <python-frontend/string/char_utils.h>
-#include <python-frontend/complex_handler.h>
+#include <python-frontend/math/complex_handler.h>
 #include <python-frontend/converter/converter_internal.h>
-#include <python-frontend/convert_float_literal.h>
+#include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/builder.h>
-#include <python-frontend/python_consteval.h>
+#include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/module_locator.h>
-#include <python-frontend/python_annotation.h>
-#include <python-frontend/python_class_builder.h>
+#include <python-frontend/module/module_locator.h>
+#include <python-frontend/param_annotations.h>
+#include <python-frontend/python_annotation/python_annotation.h>
+#include <python-frontend/class/python_class_builder.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_dict_handler.h>
-#include <python-frontend/python_exception_handler.h>
-#include <python-frontend/python_lambda.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/python_typechecking.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/lambda/python_lambda.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/type/python_typechecking.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_utils.h>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_typecast.h>
-#include <util/c_types.h>
-#include <util/encoding.h>
-#include <util/expr_util.h>
-#include <util/irep.h>
-#include <util/message.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
-#include <util/symbolic_types.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_utils.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
+#include <util/base/encoding.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/irep.h>
+#include <util/message/message.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
+#include <util/expr/symbolic_types.h>
 
 #include <algorithm>
 #include <cctype>
@@ -59,10 +60,12 @@ python_converter::get_op(const std::string &op, const typet &type) const
 python_converter::python_converter(
   contextt &_context,
   const nlohmann::json *ast,
-  const global_scope &gs)
+  const global_scope &gs,
+  const std::vector<nlohmann::json> *extra_asts)
   : symbol_table_(_context),
     ast_json(ast),
     entry_ast_(ast),
+    extra_asts_(extra_asts),
     global_scope_(gs),
     type_handler_(*this),
     string_builder_(new string_builder(*this, &string_handler_)),
@@ -227,14 +230,28 @@ void python_converter::create_builtin_symbols()
   add_string_builtin("__file__", current_python_file);
 }
 
+// Module name for an Import/ImportFrom AST node. For a relative import with no
+// module name (`from . import X` / `from .. import X`), ImportFrom.module is
+// null; return "" so the import is treated as unresolved rather than crashing on
+// a null-to-std::string conversion (nlohmann type_error, #6281). A relative
+// import that names a module (`from ..pkg import X`) carries the plain name and
+// is handled as before.
+static std::string import_module_name(const nlohmann::json &node)
+{
+  if (node["_type"] == "ImportFrom")
+  {
+    const nlohmann::json &m = node["module"];
+    return m.is_null() ? std::string() : m.get<std::string>();
+  }
+  return node["names"][0]["name"].get<std::string>();
+}
+
 bool python_converter::import_module_into_block(
   const nlohmann::json &import_node,
   module_locator &locator,
   code_blockt &block)
 {
-  const std::string &module_name = (import_node["_type"] == "ImportFrom")
-                                     ? import_node["module"]
-                                     : import_node["names"][0]["name"];
+  const std::string module_name = import_module_name(import_node);
 
   if (imported_modules.find(module_name) != imported_modules.end())
     return true;
@@ -312,9 +329,7 @@ void python_converter::pre_collect_module_asts(
       return;
     if (node.value("module_not_found", false))
       return;
-    const std::string module_name = (node["_type"] == "ImportFrom")
-                                      ? node["module"]
-                                      : node["names"][0]["name"];
+    const std::string module_name = import_module_name(node);
     if (module_ast_pool_.count(module_name))
       return;
     std::ifstream f = locator.open_module_file(module_name);
@@ -349,6 +364,115 @@ void python_converter::pre_collect_module_asts(
   }
 }
 
+void python_converter::convert_module_imports(code_blockt &all_imports_block)
+{
+  // Convert imported modules
+  module_locator locator((*ast_json)["ast_output_dir"].get<std::string>());
+
+  // Pre-walk the import graph so each annotator can see subscript usages
+  // from any other module (GitHub #4554).
+  pre_collect_module_asts(*ast_json, locator);
+
+  // Retype each imported module's list parameters from their call sites,
+  // before import_module_into_block annotates and converts them. The entry
+  // module was retyped in python_languaget::parse(); it is read here only to
+  // find the calls that reach into the imported modules (GitHub #5936).
+  std::vector<python_param_annotations::module_ast> modules{
+    {ast_json, nullptr, ""}};
+  for (auto &entry : module_ast_pool_)
+    modules.push_back({&entry.second, &entry.second, entry.first});
+  python_param_annotations::propagate_tuple_list_params(modules);
+
+  for (const auto &elem : (*ast_json)["body"])
+  {
+    if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
+    {
+      if (elem.value("module_not_found", false))
+      {
+        const std::string module_name = import_module_name(elem);
+        log_warning("skipping unresolvable import: {}", module_name);
+        continue;
+      }
+      is_importing_module = true;
+      if (!import_module_into_block(elem, locator, all_imports_block))
+      {
+        const std::string module_name = import_module_name(elem);
+        // Relative import with no module name (`from . import X`): there is no
+        // module file to open. Treat it as unresolved and continue (#6281).
+        if (module_name.empty())
+        {
+          log_warning("skipping relative import with no module name");
+          continue;
+        }
+        throw std::runtime_error(
+          "Cannot open file: " + locator.module_path(module_name));
+      }
+    }
+  }
+
+  // Do the same for imports that appear directly inside functions.
+  for (const auto &elem : (*ast_json)["body"])
+  {
+    if (
+      elem["_type"] != "FunctionDef" || !elem.contains("body") ||
+      !elem["body"].is_array())
+      continue;
+
+    for (const auto &stmt : elem["body"])
+    {
+      if (stmt["_type"] != "ImportFrom" && stmt["_type"] != "Import")
+        continue;
+
+      is_importing_module = true;
+      if (!import_module_into_block(stmt, locator, all_imports_block))
+      {
+        const std::string module_name = import_module_name(stmt);
+        // Relative import with no module name (`from . import X`): nothing to
+        // open — treat as unresolved and continue (#6281).
+        if (module_name.empty())
+        {
+          log_warning("skipping relative import with no module name");
+          continue;
+        }
+        throw std::runtime_error(
+          "Cannot open file: " + locator.module_path(module_name));
+      }
+    }
+  }
+
+  is_importing_module = false;
+  current_python_file = main_python_file;
+}
+
+void python_converter::convert_extra_translation_unit(
+  const nlohmann::json &extra_ast,
+  code_blockt &init_code,
+  code_blockt &combined_user_code)
+{
+  current_python_file = extra_ast["filename"].get<std::string>();
+  create_builtin_symbols();
+
+  // convert_module_imports() returns void, so it can't go through with_ast()
+  // (whose decltype(auto) result can't bind void); swap ast_json by hand
+  // instead. It also resets current_python_file to main_python_file on
+  // exit, so that must be undone afterwards too.
+  code_blockt extra_imports_block;
+  const nlohmann::json *saved_ast_json = ast_json;
+  ast_json = &extra_ast;
+  convert_module_imports(extra_imports_block);
+  ast_json = saved_ast_json;
+  current_python_file = extra_ast["filename"].get<std::string>();
+  if (!extra_imports_block.operands().empty())
+    init_code.copy_to_operands(extra_imports_block);
+
+  exprt extra_block = with_ast(&extra_ast, [&]() {
+    preregister_global_variables(extra_ast["body"]);
+    return get_block(extra_ast["body"]);
+  });
+  codet extra_code = convert_expression_to_code(extra_block);
+  combined_user_code.copy_to_operands(extra_code);
+}
+
 void python_converter::convert()
 {
   main_python_file = (*ast_json)["filename"].get<std::string>();
@@ -369,6 +493,7 @@ void python_converter::convert()
       "builtins",
       "range",
       "int",
+      "float",
       "consensus",
       "random",
       "exceptions",
@@ -455,6 +580,17 @@ void python_converter::convert()
   const std::string function = config.options.get_option("function");
   if (!function.empty())
   {
+    // --function only ever searches the entry file's AST for the named
+    // function (below); silently ignoring any extra positional command-line
+    // files here would reproduce the exact silent-drop unsoundness github
+    // #6211 reports, just gated behind --function instead of file order. Fail
+    // loudly instead of guessing which file the caller meant.
+    if (extra_asts_ && !extra_asts_->empty())
+      throw std::runtime_error(
+        "--function does not support multiple positional Python files; "
+        "pass a single file, or drop --function to verify the whole "
+        "program (github #6211)");
+
     /* If the user passes --function, we add only a call to the
      * respective function in __ESBMC_main instead of entire Python program
      */
@@ -477,6 +613,14 @@ void python_converter::convert()
 
     // Add intrinsic assignments first
     block.copy_to_operands(intrinsic_block);
+
+    // Convert module-level and function-local imports so imported
+    // functions/classes are bound in the symbol table (github #5937):
+    // without this, any call through an imported module falls through to
+    // the generic "unsupported function" stub.
+    code_blockt imports_block;
+    convert_module_imports(imports_block);
+    block.copy_to_operands(imports_block);
 
     // Convert classes referenced by the function
     for (const auto &clazz : global_scope_.classes())
@@ -549,67 +693,9 @@ void python_converter::convert()
   }
   else
   {
-    // Convert imported modules
-    module_locator locator((*ast_json)["ast_output_dir"].get<std::string>());
-
-    // Pre-walk the import graph so each annotator can see subscript usages
-    // from any other module (GitHub #4554).
-    pre_collect_module_asts(*ast_json, locator);
-
     // Accumulate all imports
     code_blockt all_imports_block;
-
-    for (const auto &elem : (*ast_json)["body"])
-    {
-      if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
-      {
-        if (elem.value("module_not_found", false))
-        {
-          const std::string module_name = (elem["_type"] == "ImportFrom")
-                                            ? elem["module"]
-                                            : elem["names"][0]["name"];
-          log_warning("skipping unresolvable import: {}", module_name);
-          continue;
-        }
-        is_importing_module = true;
-        if (!import_module_into_block(elem, locator, all_imports_block))
-        {
-          const std::string &module_name = (elem["_type"] == "ImportFrom")
-                                             ? elem["module"]
-                                             : elem["names"][0]["name"];
-          throw std::runtime_error(
-            "Cannot open file: " + locator.module_path(module_name));
-        }
-      }
-    }
-
-    // Do the same for imports that appear directly inside functions.
-    for (const auto &elem : (*ast_json)["body"])
-    {
-      if (
-        elem["_type"] != "FunctionDef" || !elem.contains("body") ||
-        !elem["body"].is_array())
-        continue;
-
-      for (const auto &stmt : elem["body"])
-      {
-        if (stmt["_type"] != "ImportFrom" && stmt["_type"] != "Import")
-          continue;
-
-        is_importing_module = true;
-        if (!import_module_into_block(stmt, locator, all_imports_block))
-        {
-          const std::string &module_name = (stmt["_type"] == "ImportFrom")
-                                             ? stmt["module"]
-                                             : stmt["names"][0]["name"];
-          throw std::runtime_error(
-            "Cannot open file: " + locator.module_path(module_name));
-        }
-      }
-    }
-
-    is_importing_module = false;
-    current_python_file = main_python_file;
+    convert_module_imports(all_imports_block);
 
     // Convert main statements
     exprt main_block = get_block((*ast_json)["body"]);
@@ -621,6 +707,23 @@ void python_converter::convert()
     init_code.copy_to_operands(intrinsic_block);
     if (!all_imports_block.operands().empty())
       init_code.copy_to_operands(all_imports_block);
+
+    // GitHub #6211: merge any additional positional Python files passed on
+    // the command line as extra translation units of the same program,
+    // mirroring how the C frontend merges multiple .c files' declarations
+    // (clang_c_languaget::parse -> mergeASTs). Without this, only the entry
+    // file's statements reach python_user_main and every other file's code
+    // (including any assertions) silently drops out of verification.
+    if (extra_asts_ && !extra_asts_->empty())
+    {
+      code_blockt combined_user_code;
+      combined_user_code.copy_to_operands(user_code);
+      for (const auto &extra_ast : *extra_asts_)
+        convert_extra_translation_unit(
+          extra_ast, init_code, combined_user_code);
+      current_python_file = main_python_file;
+      user_code = combined_user_code;
+    }
   }
 
   /*

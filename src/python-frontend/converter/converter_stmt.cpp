@@ -1,37 +1,39 @@
 #include <python-frontend/converter/converter_internal.h>
-#include <python-frontend/convert_float_literal.h>
+#include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_consteval.h>
+#include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_dict_handler.h>
-#include <python-frontend/python_annotation.h>
-#include <python-frontend/python_exception_handler.h>
-#include <python-frontend/python_lambda.h>
-#include <python-frontend/python_list.h>
-#include <python-frontend/python_typechecking.h>
-#include <python-frontend/python_math.h>
+#include <python-frontend/python_expr_builder.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
+#include <python-frontend/python_annotation/python_annotation.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/lambda/python_lambda.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/type/python_typechecking.h>
+#include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/bitvector.h>
-#include <util/c_typecast.h>
-#include <util/c_types.h>
-#include <util/encoding.h>
-#include <util/expr_util.h>
-#include <util/irep.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
-#include <util/symbolic_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/base/encoding.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/irep.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
+#include <util/expr/symbolic_types.h>
 
 #include <algorithm>
 #include <stdexcept>
@@ -46,6 +48,22 @@ namespace
 bool is_py_string_type(const typet &t)
 {
   return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
+}
+
+// True when `expr` (or any of its operands) is a `cpp-throw` marker, i.e. a
+// probe build hit an error path instead of producing a usable value.
+bool contains_cpp_throw(const exprt &expr)
+{
+  if (expr.statement() == "cpp-throw")
+    return true;
+
+  for (const auto &op : expr.operands())
+  {
+    if (contains_cpp_throw(op))
+      return true;
+  }
+
+  return false;
 }
 
 bool is_py_numeric_scalar_type(const typet &t)
@@ -66,20 +84,171 @@ bool is_incompatible_scalar_string_retype(const typet &lhs, const typet &rhs)
          (is_py_string_type(lhs) && is_py_numeric_scalar_type(rhs));
 }
 
-// RAII bump of the get_block() nesting depth. Depth 1 is an unconditional
-// top-level (module/imported-module) statement; anything deeper is nested in a
-// function or a conditionally-executed body, where straight-line retyping is
-// unsound (see #4770/#4774).
+// Classifies a branch's direct, top-level literal assignments by literal
+// type.
+std::unordered_map<std::string, std::string>
+classify_branch_literal_assigns(const nlohmann::json &block)
+{
+  std::unordered_map<std::string, std::string> types;
+  if (!block.is_array())
+    return types;
+
+  for (const auto &stmt : block)
+  {
+    if (!stmt.is_object())
+      continue;
+
+    const std::string stmt_type = stmt.value("_type", "");
+    nlohmann::json target;
+    if (stmt_type == "Assign")
+    {
+      if (!stmt.contains("targets") || stmt["targets"].size() != 1)
+        continue;
+      target = stmt["targets"][0];
+    }
+    else if (stmt_type == "AnnAssign")
+    {
+      if (!stmt.contains("target"))
+        continue;
+      target = stmt["target"];
+    }
+    else
+      continue;
+
+    if (target.value("_type", "") != "Name" || !target.contains("id"))
+      continue;
+    const std::string &name = target["id"].get<std::string>();
+
+    // A later reassignment invalidates any literal kind recorded for `name`
+    // by an earlier statement in this same block.
+    if (!stmt.contains("value") || stmt["value"].is_null())
+    {
+      types.erase(name);
+      continue;
+    }
+    const auto &value = stmt["value"];
+    if (value.value("_type", "") != "Constant" || !value.contains("value"))
+    {
+      types.erase(name);
+      continue;
+    }
+
+    const auto &lit = value["value"];
+    if (lit.is_string())
+      types[name] = "str";
+    else if (lit.is_number_integer() || lit.is_boolean())
+      types[name] = "num";
+    else
+      types.erase(name);
+  }
+
+  return types;
+}
+
+// True if the AST subtree contains a function-call node. Used to gate
+// constant-folding of assertion tests to expressions that actually invoke a
+// (potentially pure) function — plain symbolic asserts stay on the solver path.
+bool ast_contains_call(const nlohmann::json &n)
+{
+  if (n.is_object())
+  {
+    if (n.contains("_type") && n["_type"] == "Call")
+      return true;
+    for (auto it = n.begin(); it != n.end(); ++it)
+      if (ast_contains_call(it.value()))
+        return true;
+  }
+  else if (n.is_array())
+  {
+    for (const auto &e : n)
+      if (ast_contains_call(e))
+        return true;
+  }
+  return false;
+}
+
+// RAII bump of the get_block() nesting depth, and optionally the function-body
+// or loop-body depth. Depth 1 is an unconditional top-level (module) statement;
+// anything deeper is nested in a function or a conditional body. Straight-line
+// retyping (#4770/#4774) is sound on the unconditional spine (module body plus
+// enclosing function bodies): exactly block_nesting_ == function_body_depth_ + 1.
+// loop_body_depth_ counts enclosing while/for bodies: a loop target variable
+// leaks past the loop in Python (so its retype must not be reverted at the
+// body's join), so dynamic retyping is refused inside a loop body and left to
+// the existing fallback, matching the pre-#5716 behaviour.
 struct block_nesting_guard
 {
   unsigned &depth;
-  explicit block_nesting_guard(unsigned &d) : depth(d)
+  unsigned *fb_depth;
+  unsigned *loop_depth;
+  explicit block_nesting_guard(
+    unsigned &d,
+    unsigned *fb = nullptr,
+    unsigned *loop = nullptr)
+    : depth(d), fb_depth(fb), loop_depth(loop)
   {
     ++depth;
+    if (fb_depth)
+      ++*fb_depth;
+    if (loop_depth)
+      ++*loop_depth;
   }
   ~block_nesting_guard()
   {
     --depth;
+    if (fb_depth)
+      --*fb_depth;
+    if (loop_depth)
+      --*loop_depth;
+  }
+};
+
+// RAII snapshot/restore of the dynamic-retyping alias map across a conditional
+// body. A numeric<->string reassignment inside an if/while/for/try body retypes
+// the variable so in-body reads observe the new type (sound: there is no join
+// before the body ends). On body exit the alias map is reverted so the
+// post-join view keeps the variable's pre-conditional type — the branch-taken
+// retype must not leak across the control-flow join (see retype_str_cond_gated).
+// Inactive on the unconditional spine, where retypes persist for the whole body.
+struct retype_alias_scope_guard
+{
+  std::unordered_map<std::string, std::string> &aliases;
+  std::unordered_map<std::string, std::string> saved;
+  bool active;
+  retype_alias_scope_guard(
+    std::unordered_map<std::string, std::string> &a,
+    bool act)
+    : aliases(a), active(act)
+  {
+    if (active)
+      saved = aliases;
+  }
+  ~retype_alias_scope_guard()
+  {
+    if (active)
+      aliases = std::move(saved);
+  }
+};
+
+// Removes on exit only the names this instance added, keeping nested
+// invocations independent.
+struct tagged_scalar_scope_guard
+{
+  std::unordered_set<std::string> &names;
+  std::unordered_set<std::string> added;
+  tagged_scalar_scope_guard(
+    std::unordered_set<std::string> &n,
+    const std::unordered_set<std::string> &candidates)
+    : names(n)
+  {
+    for (const auto &c : candidates)
+      if (names.insert(c).second)
+        added.insert(c);
+  }
+  ~tagged_scalar_scope_guard()
+  {
+    for (const auto &a : added)
+      names.erase(a);
   }
 };
 } // namespace
@@ -88,6 +257,27 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
   typet &lhs_type = lhs.type();
   typet &rhs_type = rhs.type();
+
+  // Case 0: assigning a migrated class pointer (`Class*`) into a by-value
+  // class lvalue (`Class`). After the object-model migration a class
+  // parameter/return is a pointer, but a struct field declared with the class
+  // type is still by-value (e.g. `self.value: Tile`). Dereference the pointer
+  // so the field receives the pointee struct rather than the address; without
+  // this the GOTO carries a `struct = pointer` assignment that crashes SMT
+  // encoding. Guarded by pointee/lvalue struct identity so genuine pointer
+  // fields are untouched.
+  if (rhs_type.is_pointer())
+  {
+    const typet lhs_follow = ns.follow(lhs_type);
+    if (lhs_follow.is_struct() && ns.follow(rhs_type.subtype()) == lhs_follow)
+    {
+      // V.3: build the deref in IREP2 (byte-identical round-trip; the helper
+      // restores the exact result type and falls back to legacy for dyn-array
+      // pointees).
+      rhs = python_expr::build_dereference(rhs, lhs_type);
+      return;
+    }
+  }
 
   // Case 1: Promote RHS integer constant to float if LHS expects a float
   if (
@@ -190,8 +380,14 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   {
     rhs = promote_to_complex(rhs);
   }
-  // Case 6: Align bit-widths between LHS and RHS if they differ
-  else if (lhs_type.width() != rhs_type.width())
+  // Case 6: Align bit-widths between LHS and RHS if they differ. Never
+  // "align" a tuple struct against a non-tuple: demoting the LHS symbol to
+  // the scalar's type corrupts already-emitted tuple member reads (see the
+  // fresh-alias gate in get_var_assign).
+  else if (
+    lhs_type.width() != rhs_type.width() &&
+    tuple_handler_->is_tuple_type(lhs_type) ==
+      tuple_handler_->is_tuple_type(rhs_type))
   {
     try
     {
@@ -331,6 +527,24 @@ void python_converter::handle_assignment_type_adjustments(
   if (target_is_subscript)
     return;
 
+  // Assigning to a struct member (self.attr = value): an unannotated parameter
+  // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
+  // empty) but holds an integer value round-tripped as (int*)n. Writing that
+  // into a non-pointer integer field aborts with2t's type-compat assertion.
+  // Cast the any-type RHS to the member's declared integer type, recovering the
+  // integer. Restricted to the empty-subtype carrier (matching is_any_ptr in
+  // converter_binop): a genuine pointer value (None, a class instance, a list)
+  // is left untouched so it is not silently reinterpreted as an integer, and a
+  // float member (which would need a bit-reinterpretation) is left unchanged.
+  if (
+    lhs.id() == "member" && rhs.type().is_pointer() &&
+    rhs.type().subtype().id() == "empty" &&
+    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()))
+  {
+    rhs = typecast_exprt(rhs, lhs.type());
+    return;
+  }
+
   // Handle assignment of function to function pointer variable
   if (
     lhs.type().is_pointer() && lhs.type().subtype().is_code() &&
@@ -385,36 +599,33 @@ void python_converter::handle_assignment_type_adjustments(
     // and annotated `x: Any = value`.
     // Preprocessor-generated AnnAssign nodes
     // with Any annotation are excluded.
+    // Constructor calls must fall through to the regular ctor machinery:
+    // returning early here would emit no constructor call at all, leaving a
+    // nil assignment that crashes the SMT encoder.
     if (
       ast_node.contains("_type") && ast_node["_type"] == "AnnAssign" &&
-      !ast_node.value("_inferred_annotation", false) && has_annotation &&
+      !ast_node.value("_inferred_annotation", false) &&
+      !ast_node.value("esbmc_synthesized", false) && has_annotation &&
       ast_node["annotation"].contains("id") &&
       ast_node["annotation"]["id"] == "Any" && lhs.type().is_pointer() &&
-      [this]() {
-        // Check if "from typing import Any" exists in the source file
-        const auto &body = (*ast_json)["body"];
-        for (const auto &stmt : body)
-        {
-          if (
-            stmt.contains("_type") && stmt["_type"] == "ImportFrom" &&
-            stmt.contains("module") && stmt["module"] == "typing" &&
-            stmt.contains("names"))
-          {
-            for (const auto &name : stmt["names"])
-            {
-              if (name.contains("name") && name["name"] == "Any")
-                return true;
-            }
-          }
-        }
-        return false;
-      }())
+      !is_ctor_call && !rhs.type().is_code() &&
+      json_utils::is_imported_from(*ast_json, "typing", "Any"))
     {
       if (rhs.type().is_array())
       {
         rhs = string_handler_.get_array_base_address(rhs);
         if (rhs.type() != lhs.type())
           rhs = typecast_exprt(rhs, lhs.type());
+      }
+      else if (rhs.type().is_struct() && lhs_symbol->get_value().is_nil())
+      {
+        // A struct value (e.g. a tuple read out of a dict) cannot round-trip
+        // through the void* cast below — every later component access would
+        // misread. Any is not a constraint, so adopt the rhs type. Only on
+        // the first binding: a re-annotation (`x: Any = 5; ...; x: Any =
+        // (1, 2)`) must not retype uses already emitted at the old type.
+        lhs_symbol->set_type(rhs.type());
+        lhs.type() = rhs.type();
       }
       else if (!rhs.type().is_pointer() && !rhs.type().is_empty())
       {
@@ -473,36 +684,81 @@ void python_converter::handle_assignment_type_adjustments(
     {
       if (!rhs.type().is_empty())
       {
-        // Prevent type change from scalar (int/float/bool) to string/array
-        // when a prior declaration exists with the scalar type, as this
-        // creates a type inconsistency in the GOTO program.
-        bool is_incompatible =
-          rhs.type().is_array() && !lhs_symbol->get_type().is_array() &&
-          !lhs_symbol->get_type().is_pointer() &&
-          !lhs_symbol->get_type().id().empty() &&
-          !lhs_symbol->get_type().is_nil() &&
-          lhs_symbol->get_type() != type_handler_.get_list_type();
-        if (!is_incompatible)
+        // An RHS typed any_type() (void*) means "type unknown" — e.g. an
+        // instance attribute of a class the scanner could not resolve — not
+        // "the object is a void*". Demoting a list-annotated LHS to void*
+        // makes the for-loop lowering fall back to the array protocol (raw
+        // __ESBMC_get_object_size + pointer indexing), which aborts symex on
+        // the PyListObj struct (#4805). Keep the annotated list type and
+        // cast the RHS instead.
+        if (
+          lhs.type() == type_handler_.get_list_type() &&
+          rhs.type() == any_type())
         {
-          lhs_symbol->set_type(rhs.type());
-          lhs.type() = rhs.type();
+          rhs = typecast_exprt(rhs, lhs.type());
+        }
+        else
+        {
+          // Prevent type change from scalar (int/float/bool) to string/array
+          // when a prior declaration exists with the scalar type, as this
+          // creates a type inconsistency in the GOTO program. A void-typed
+          // symbol (annotation pass could not infer, e.g. a tuple-unpack
+          // target) holds no prior scalar, so adopting the array type is the
+          // only consistent choice (#5571).
+          bool is_incompatible =
+            rhs.type().is_array() && !lhs_symbol->get_type().is_array() &&
+            !lhs_symbol->get_type().is_pointer() &&
+            !lhs_symbol->get_type().id().empty() &&
+            lhs_symbol->get_type().id() != "empty" &&
+            !lhs_symbol->get_type().is_nil() &&
+            lhs_symbol->get_type() != type_handler_.get_list_type();
+          if (!is_incompatible)
+          {
+            lhs_symbol->set_type(rhs.type());
+            lhs.type() = rhs.type();
+          }
         }
       }
     }
     else if (rhs.type() == none_type())
     {
-      // Adjust pointer_type() to pointer_typet(empty_typet())
-      lhs_symbol->set_type(rhs.type());
-      lhs.type() = rhs.type();
+      // None/Optional unification (#4796), step C: when the lvalue is already a
+      // class reference (`Class*` — a migrated instance), keep that type and
+      // store a typed NULL, so a later `x = Class(...)` construction allocates
+      // a properly-sized object. Retyping it to none_type() (pointer-to-bool)
+      // would shrink the pointee and corrupt the allocation.
+      if (is_user_class_pointer(lhs.type()))
+        rhs = typecast_exprt(rhs, lhs.type());
+      else
+      {
+        // Adjust pointer_type() to pointer_typet(empty_typet())
+        lhs_symbol->set_type(rhs.type());
+        lhs.type() = rhs.type();
+      }
     }
-    // No annotation or preprocessor-inferred Any: propagate rhs type to lhs.
+    // No annotation or an inferred Any: propagate rhs type to lhs. An "Any"
+    // annotation counts as inferred when flagged by the annotation pass,
+    // when the preprocessor marked it as synthesized (e.g. the items()-loop
+    // value variable `v: Any = ESBMC_vals_N[i]`), or when the module never
+    // imports typing.Any (then no top-level user annotation can be a live
+    // Any). Without this, the declared void* overrides a concrete rhs type —
+    // a tuple dict-value read then misfolds every component access (#5444
+    // latent item).
     else if (
       (!has_annotation ||
-       (ast_node.value("_inferred_annotation", false) &&
-        ast_node["annotation"].value("id", std::string()) == "Any")) &&
+       (ast_node["annotation"].value("id", std::string()) == "Any" &&
+        (ast_node.value("_inferred_annotation", false) ||
+         ast_node.value("esbmc_synthesized", false) ||
+         !json_utils::is_imported_from(*ast_json, "typing", "Any")))) &&
       !rhs.type().is_empty() && lhs.type() != rhs.type() &&
       !rhs.type().is_code() &&
-      !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty"))
+      !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty") &&
+      // Never re-type a tuple-struct symbol to a non-tuple in place — it
+      // corrupts already-emitted tuple member reads (see the fresh-alias
+      // gate in get_var_assign, which handles such rebinds on the
+      // straight-line spine); elsewhere keep the struct type.
+      !(tuple_handler_->is_tuple_type(lhs_symbol->get_type()) &&
+        !tuple_handler_->is_tuple_type(rhs.type())))
     {
       lhs_symbol->set_type(rhs.type());
       lhs.type() = rhs.type();
@@ -781,6 +1037,394 @@ exprt python_converter::get_rhs_with_dict_resolution(
     dict_expr, ast_node["value"]["slice"], target_type);
 }
 
+std::string python_converter::resolve_name_symbol_id(const std::string &name)
+{
+  symbol_id sid = create_symbol_id();
+  sid.set_object(name);
+  if (symbol_table_.find_symbol(sid.to_string()) != nullptr)
+    return sid.to_string();
+
+  sid.set_function("");
+  if (symbol_table_.find_symbol(sid.to_string()) != nullptr)
+    return sid.to_string();
+
+  return "";
+}
+
+std::string
+python_converter::root_name_from_subscript(const nlohmann::json &node) const
+{
+  if (!node.is_object() || !node.contains("_type"))
+    return "";
+
+  if (node["_type"] == "Name" && node.contains("id"))
+    return node["id"].get<std::string>();
+
+  if (node["_type"] == "Subscript" && node.contains("value"))
+    return root_name_from_subscript(node["value"]);
+
+  return "";
+}
+
+static bool json_contains_slice_node(const nlohmann::json &node)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+
+  if (node.is_object())
+  {
+    if (node.value("_type", "") == "Slice")
+      return true;
+
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (json_contains_slice_node(it.value()))
+        return true;
+  }
+  else
+  {
+    for (const auto &elem : node)
+      if (json_contains_slice_node(elem))
+        return true;
+  }
+
+  return false;
+}
+
+bool python_converter::is_basic_numpy_view_subscript(
+  const nlohmann::json &node) const
+{
+  if (
+    !node.is_object() || node.value("_type", "") != "Subscript" ||
+    !node.contains("value") || !node.contains("slice"))
+    return false;
+
+  auto is_basic_index = [&](const nlohmann::json &idx) {
+    const std::string type = idx.value("_type", "");
+    return type == "Constant" || type == "UnaryOp" || type == "Name" ||
+           type == "Slice";
+  };
+
+  const nlohmann::json &slice = node["slice"];
+  if (slice.value("_type", "") == "Tuple" && slice.contains("elts"))
+  {
+    for (const auto &idx : slice["elts"])
+      if (!is_basic_index(idx))
+        return false;
+    return true;
+  }
+
+  return is_basic_index(slice);
+}
+
+bool python_converter::contains_copied_numpy_view_name(
+  const nlohmann::json &node)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+
+  if (node.is_object())
+  {
+    if (node.value("_type", "") == "Name" && node.contains("id"))
+    {
+      const std::string id =
+        resolve_name_symbol_id(node["id"].get<std::string>());
+      return !id.empty() && numpy_view_copy_sources_.count(id) != 0;
+    }
+
+    if (
+      node.value("_type", "") == "Subscript" && node.contains("value") &&
+      node.contains("slice") && !json_contains_slice_node(node["slice"]) &&
+      contains_copied_numpy_view_name(node["value"]))
+      return contains_copied_numpy_view_name(node["slice"]);
+
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (contains_copied_numpy_view_name(it.value()))
+        return true;
+  }
+  else
+  {
+    for (const auto &elem : node)
+      if (contains_copied_numpy_view_name(elem))
+        return true;
+  }
+
+  return false;
+}
+
+std::optional<nlohmann::json> python_converter::select_return_value_for_call(
+  const nlohmann::json &call_node) const
+{
+  if (
+    !call_node.is_object() || call_node.value("_type", "") != "Call" ||
+    !call_node.contains("func") ||
+    call_node["func"].value("_type", "") != "Name" ||
+    !call_node.contains("args") || !call_node["args"].is_array() ||
+    (call_node.contains("keywords") && !call_node["keywords"].empty()))
+    return std::nullopt;
+
+  const std::string func_name = call_node["func"]["id"].get<std::string>();
+  const nlohmann::json func_node =
+    json_utils::try_find_function((*ast_json)["body"], func_name);
+  if (
+    func_node.empty() || !func_node.contains("body") ||
+    !func_node["body"].is_array() || !func_node.contains("args") ||
+    !func_node["args"].contains("args") ||
+    !func_node["args"]["args"].is_array())
+    return std::nullopt;
+
+  const nlohmann::json &params = func_node["args"]["args"];
+  if (params.size() != call_node["args"].size())
+    return std::nullopt;
+
+  auto is_trivial_arg = [](const nlohmann::json &node) {
+    return node.value("_type", "") == "Name" ||
+           node.value("_type", "") == "Constant";
+  };
+  for (const auto &arg : call_node["args"])
+    if (!is_trivial_arg(arg))
+      return std::nullopt;
+
+  auto param_index =
+    [&](const std::string &name) -> std::optional<std::size_t> {
+    for (std::size_t i = 0; i < params.size(); ++i)
+      if (params[i].value("arg", "") == name)
+        return i;
+    return std::nullopt;
+  };
+
+  auto bool_constant = [&](const nlohmann::json &node) -> std::optional<bool> {
+    if (
+      node.value("_type", "") == "Constant" && node.contains("value") &&
+      node["value"].is_boolean())
+      return node["value"].get<bool>();
+
+    if (node.value("_type", "") == "Name" && node.contains("id"))
+    {
+      std::optional<std::size_t> idx =
+        param_index(node["id"].get<std::string>());
+      if (!idx)
+        return std::nullopt;
+      const nlohmann::json &arg = call_node["args"][*idx];
+      if (
+        arg.value("_type", "") == "Constant" && arg.contains("value") &&
+        arg["value"].is_boolean())
+        return arg["value"].get<bool>();
+    }
+
+    return std::nullopt;
+  };
+
+  struct return_scan_result
+  {
+    bool invalid = false;
+    bool found = false;
+    nlohmann::json value;
+  };
+
+  std::function<return_scan_result(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &body) -> return_scan_result {
+    for (const auto &stmt : body)
+    {
+      if (stmt.value("_type", "") == "Return")
+      {
+        if (!stmt.contains("value") || stmt["value"].is_null())
+          return {true, false, nlohmann::json()};
+        return {false, true, stmt["value"]};
+      }
+
+      if (stmt.value("_type", "") == "If")
+      {
+        std::optional<bool> test_value = bool_constant(stmt["test"]);
+        if (!test_value)
+          return {true, false, nlohmann::json()};
+
+        const nlohmann::json &chosen =
+          *test_value ? stmt["body"] : stmt["orelse"];
+        if (chosen.is_array())
+        {
+          return_scan_result ret = scan(chosen);
+          if (ret.invalid || ret.found)
+            return ret;
+        }
+        continue;
+      }
+
+      return {true, false, nlohmann::json()};
+    }
+
+    return {};
+  };
+
+  return_scan_result result = scan(func_node["body"]);
+  if (result.invalid || !result.found)
+    return std::nullopt;
+  return result.value;
+}
+
+nlohmann::json python_converter::substitute_call_arguments(
+  const nlohmann::json &node,
+  const nlohmann::json &call_node) const
+{
+  if (
+    !call_node.is_object() || call_node.value("_type", "") != "Call" ||
+    !call_node.contains("func") ||
+    call_node["func"].value("_type", "") != "Name" ||
+    !call_node.contains("args") || !call_node["args"].is_array())
+    return node;
+
+  const std::string func_name = call_node["func"]["id"].get<std::string>();
+  const nlohmann::json func_node =
+    json_utils::try_find_function((*ast_json)["body"], func_name);
+  if (
+    func_node.empty() || !func_node.contains("args") ||
+    !func_node["args"].contains("args") ||
+    !func_node["args"]["args"].is_array())
+    return node;
+
+  const nlohmann::json &params = func_node["args"]["args"];
+  if (node.is_object())
+  {
+    if (node.value("_type", "") == "Name" && node.contains("id"))
+    {
+      const std::string name = node["id"].get<std::string>();
+      for (std::size_t i = 0; i < params.size() && i < call_node["args"].size();
+           ++i)
+        if (params[i].value("arg", "") == name)
+          return call_node["args"][i];
+    }
+
+    nlohmann::json out = node;
+    for (auto it = out.begin(); it != out.end(); ++it)
+      it.value() = substitute_call_arguments(it.value(), call_node);
+    return out;
+  }
+
+  if (node.is_array())
+  {
+    nlohmann::json out = nlohmann::json::array();
+    for (const auto &elem : node)
+      out.push_back(substitute_call_arguments(elem, call_node));
+    return out;
+  }
+
+  return node;
+}
+
+bool python_converter::return_value_uses_call_argument(
+  const nlohmann::json &return_value,
+  const nlohmann::json &call_node) const
+{
+  if (
+    !call_node.is_object() || call_node.value("_type", "") != "Call" ||
+    !call_node.contains("func") ||
+    call_node["func"].value("_type", "") != "Name")
+    return false;
+
+  const std::string func_name = call_node["func"]["id"].get<std::string>();
+  const nlohmann::json func_node =
+    json_utils::try_find_function((*ast_json)["body"], func_name);
+  if (
+    func_node.empty() || !func_node.contains("args") ||
+    !func_node["args"].contains("args") ||
+    !func_node["args"]["args"].is_array())
+    return false;
+
+  auto is_param_name = [&](const nlohmann::json &node) {
+    if (node.value("_type", "") != "Name" || !node.contains("id"))
+      return false;
+    const std::string name = node["id"].get<std::string>();
+    for (const auto &param : func_node["args"]["args"])
+      if (param.value("arg", "") == name)
+        return true;
+    return false;
+  };
+
+  if (is_param_name(return_value))
+    return true;
+
+  return return_value.value("_type", "") == "Subscript" &&
+         return_value.contains("value") && is_param_name(return_value["value"]);
+}
+
+void python_converter::reject_unsafe_numpy_view_target(
+  const nlohmann::json &target)
+{
+  if (!target.is_object() || target.value("_type", "") != "Subscript")
+    return;
+
+  const std::string root_name = root_name_from_subscript(target);
+  if (root_name.empty())
+    return;
+
+  const std::string root_id = resolve_name_symbol_id(root_name);
+  if (root_id.empty())
+    return;
+
+  if (numpy_view_copy_sources_.count(root_id) != 0)
+    throw std::runtime_error(
+      "TypeError: writing through a copied numpy view is not supported");
+
+  for (const auto &entry : numpy_view_copy_sources_)
+    if (entry.second == root_id)
+      throw std::runtime_error(
+        "TypeError: writing to a numpy array with a live copied view is not "
+        "supported");
+}
+
+void python_converter::record_numpy_view_copy(
+  const exprt &lhs,
+  const nlohmann::json &rhs_node)
+{
+  if (!lhs.is_symbol())
+    return;
+
+  nlohmann::json view_node = rhs_node;
+  if (rhs_node.value("_type", "") == "Call")
+  {
+    std::optional<nlohmann::json> ret_val =
+      select_return_value_for_call(rhs_node);
+    if (!ret_val)
+    {
+      clear_numpy_view_copy(lhs);
+      return;
+    }
+    if (!return_value_uses_call_argument(*ret_val, rhs_node))
+    {
+      clear_numpy_view_copy(lhs);
+      return;
+    }
+    view_node = substitute_call_arguments(*ret_val, rhs_node);
+  }
+
+  if (!is_basic_numpy_view_subscript(view_node))
+  {
+    clear_numpy_view_copy(lhs);
+    return;
+  }
+
+  const std::string root_name = root_name_from_subscript(view_node["value"]);
+  if (root_name.empty())
+  {
+    clear_numpy_view_copy(lhs);
+    return;
+  }
+
+  const std::string source_id = resolve_name_symbol_id(root_name);
+  if (source_id.empty())
+  {
+    clear_numpy_view_copy(lhs);
+    return;
+  }
+
+  numpy_view_copy_sources_[lhs.identifier().as_string()] = source_id;
+}
+
+void python_converter::clear_numpy_view_copy(const exprt &lhs)
+{
+  if (lhs.is_symbol())
+    numpy_view_copy_sources_.erase(lhs.identifier().as_string());
+}
+
 std::string python_converter::infer_type_from_any_annotation(
   const nlohmann::json &ast_node,
   const std::string &lhs_type)
@@ -860,6 +1504,168 @@ std::string python_converter::infer_type_from_any_annotation(
   return lhs_type;
 }
 
+typet python_converter::resolve_any_subscript_array_type(
+  const nlohmann::json &ast_node,
+  const typet &current_type)
+{
+  if (
+    current_type != any_type() || ast_node["value"].is_null() ||
+    ast_node["value"].value("_type", std::string()) != "Subscript")
+    return current_type;
+
+  // Evaluate the actual subscript result before deciding anything: a fully
+  // scalar access (`a[0, 0, 1]`) or an out-of-range/rank-mismatched index
+  // must fall through unchanged (resp. propagate its own real error) rather
+  // than be pre-empted by the 3-D source check below, which only applies
+  // once we know the result itself is an array.
+  exprt subscript_probe = get_expr(ast_node["value"]);
+  if (contains_cpp_throw(subscript_probe))
+    return current_type;
+
+  const typet probed_type = ns.follow(subscript_probe.type());
+  if (!probed_type.is_array())
+    return current_type;
+
+  // A supported N-D mixed slice/index tuple (exactly one full-slice axis `:`
+  // and every other axis a literal/resolvable integer, e.g. `a[:, 0, 0]` -
+  // see build_mixed_slice_tuple_select) legitimately produces a 1-D result
+  // from a 3-D+ source, so it must skip the depth check below rather than be
+  // rejected just because the source is deep.
+  bool is_supported_mixed_slice_tuple = false;
+  if (
+    ast_node["value"].contains("slice") &&
+    ast_node["value"]["slice"].value("_type", "") == "Tuple" &&
+    ast_node["value"]["slice"].contains("elts"))
+  {
+    auto is_full_slice = [](const nlohmann::json &node) {
+      if (node.value("_type", "") != "Slice")
+        return false;
+      auto absent = [&](const char *k) {
+        return !node.contains(k) || node[k].is_null();
+      };
+      return absent("lower") && absent("upper") && absent("step");
+    };
+    auto is_literal_int = [](const nlohmann::json &node) {
+      if (
+        node.value("_type", "") == "Constant" && node.contains("value") &&
+        node["value"].is_number_integer())
+        return true;
+      return node.value("_type", "") == "UnaryOp" && node.contains("op") &&
+             node["op"].value("_type", "") == "USub" &&
+             node.contains("operand") &&
+             node["operand"].value("_type", "") == "Constant" &&
+             node["operand"].contains("value") &&
+             node["operand"]["value"].is_number_integer();
+    };
+    auto is_supported_slice = [&](const nlohmann::json &node) {
+      if (is_full_slice(node))
+        return true;
+      for (const char *key : {"lower", "upper", "step"})
+        if (
+          node.contains(key) && !node[key].is_null() &&
+          !is_literal_int(node[key]))
+          return false;
+      return true;
+    };
+
+    std::size_t slice_count = 0;
+    bool all_slices_supported = true;
+    for (const auto &elt : ast_node["value"]["slice"]["elts"])
+    {
+      if (elt.value("_type", "") != "Slice")
+        continue;
+      ++slice_count;
+      if (!is_supported_slice(elt))
+        all_slices_supported = false;
+    }
+    is_supported_mixed_slice_tuple = slice_count != 0 && all_slices_supported;
+  }
+
+  // Reject a source array of more than 2 dimensions: n-D indexing is out of
+  // scope, and the resulting slice's nesting depth alone can't be told apart
+  // from a legitimate 2-D row/column/fancy/mask selection (both are a
+  // 2-level nested array), so the check has to look at the source instead.
+  const nlohmann::json &source_node = ast_node["value"]["value"];
+  exprt source_probe = get_expr(source_node);
+  if (!contains_cpp_throw(source_probe) && !is_supported_mixed_slice_tuple)
+  {
+    std::size_t source_depth = 0;
+    typet source_type = ns.follow(source_probe.type());
+    // A numpy array crossing a function boundary is pointer-to-array (e.g.
+    // int (*)[N][M]), not a plain array_typet; peel the pointer so the depth
+    // walk below still sees through to the real dimensionality instead of
+    // stopping at 0 and silently letting a 3-D+ source slip past.
+    if (source_type.is_pointer())
+      source_type = ns.follow(source_type.subtype());
+    while (source_type.is_array())
+    {
+      ++source_depth;
+      source_type = ns.follow(to_array_type(source_type).subtype());
+    }
+    if (source_depth > 2)
+    {
+      std::ostringstream msg;
+      msg << "TypeError: assigning a 3-D+ array-typed subscript result to "
+             "a variable is not supported";
+      const locationt loc = get_location_from_decl(ast_node);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+  }
+
+  // A materialized helper result (fancy/mask/column selection) is already a
+  // plain symbol and copies via a normal whole-array code_assignt; a bare
+  // `a[i]` chain is a raw index expression instead, which the final store
+  // must copy element by element (see the flag's doc comment).
+  any_subscript_array_needs_copy_ = !subscript_probe.is_symbol();
+
+  // Reuse this exact conversion as the RHS later instead of converting the
+  // same Subscript node again from scratch.
+  cached_any_subscript_rhs_ = subscript_probe;
+  has_cached_any_subscript_rhs_ = true;
+
+  return probed_type;
+}
+
+typet python_converter::resolve_call_argument_array_type(
+  const nlohmann::json &ast_node,
+  const typet &current_type)
+{
+  if (
+    ast_node["value"].is_null() ||
+    ast_node["value"].value("_type", std::string()) != "Call")
+    return current_type;
+
+  typet followed_current_type = ns.follow(current_type);
+  if (followed_current_type.is_array())
+    return current_type;
+
+  const nlohmann::json &call_node = ast_node["value"];
+  std::optional<nlohmann::json> ret_val =
+    select_return_value_for_call(call_node);
+  if (!ret_val || !return_value_uses_call_argument(*ret_val, call_node))
+    return current_type;
+
+  nlohmann::json substituted = substitute_call_arguments(*ret_val, call_node);
+  exprt call_probe = get_expr(substituted);
+  if (contains_cpp_throw(call_probe))
+    return current_type;
+
+  typet probed_type = ns.follow(call_probe.type());
+  if (probed_type.is_pointer())
+    probed_type = ns.follow(probed_type.subtype());
+
+  if (!probed_type.is_array())
+    return current_type;
+
+  any_subscript_array_needs_copy_ = !call_probe.is_symbol();
+  cached_any_subscript_rhs_ = call_probe;
+  has_cached_any_subscript_rhs_ = true;
+
+  return probed_type;
+}
+
 bool python_converter::handle_unpacking_assignment(
   const nlohmann::json &ast_node,
   const nlohmann::json &target,
@@ -927,7 +1733,8 @@ bool python_converter::handle_unpacking_assignment(
       pointed_type.id() == "struct" &&
       tuple_handler_->is_tuple_type(pointed_type))
     {
-      exprt tuple_value = dereference_exprt(rhs, pointed_type);
+      // V.3: build the deref in IREP2 (resolved tuple-struct pointee).
+      exprt tuple_value = python_expr::build_dereference(rhs, pointed_type);
       tuple_value.location() = rhs.location();
       tuple_handler_->handle_tuple_unpacking(
         ast_node, target, tuple_value, target_block);
@@ -1176,12 +1983,20 @@ void python_converter::handle_function_call_rhs(
   }
   else
   {
+    // The callee may not be in the symbol table yet when the called
+    // function is defined later in the module than its call site (a forward
+    // reference, e.g. `def f(): w = make()` with `make` defined afterwards).
+    // The block below only propagates instance-attribute type hints from the
+    // callee's return object to the LHS; it does not affect the GOTO call
+    // itself, which is built from the function identifier elsewhere. When the
+    // callee symbol is not available yet, skip the best-effort copy instead of
+    // aborting.
     symbolt *func_symbol =
       symbol_table_.find_symbol(rhs.op1().identifier().c_str());
-    assert(func_symbol);
-    if (!static_cast<const code_typet &>(func_symbol->get_type())
-           .return_type()
-           .is_empty())
+    if (
+      func_symbol && !static_cast<const code_typet &>(func_symbol->get_type())
+                        .return_type()
+                        .is_empty())
     {
       if (auto ret = get_return_from_func(func_symbol->id.c_str());
           !ret.is_nil())
@@ -1209,6 +2024,28 @@ void python_converter::handle_function_call_rhs(
           arg_ptr->identifier().as_string(), lhs_symbol->id.as_string());
       }
     }
+  }
+
+  // Stage 1 object-model migration (#3067): the callee now returns a class
+  // *reference* (`Cls*`), but the assignment target may still have been typed
+  // as the value struct `Cls` — the annotator infers a value-struct type for an
+  // RHS it cannot see through (an imported function, or a subscript dispatching
+  // to `__getitem__` that returns `self`). Binding `rhs.op0() = lhs` then stores
+  // a pointer into a struct slot, and the later `lhs.field` read trips
+  // value-set's make_member assertion (#4513/#4514, transitive-imports). Retype
+  // the target to the returned `Cls*` so the reference is bound directly and the
+  // field read auto-dereferences, matching the other migrated assignment paths.
+  // Restricted to a plain symbol target (`x = ...`): for a subscript/attribute
+  // target `lhs_symbol` is the *container/base* symbol while `lhs` is the
+  // element/member expression, so retyping `lhs_symbol` would corrupt the whole
+  // container — the sibling migrations guard on a Name target for the same
+  // reason.
+  if (
+    !is_ctor_call && lhs_symbol && lhs.is_symbol() &&
+    is_user_class_pointer(rhs.type()) && is_user_class_struct_type(lhs.type()))
+  {
+    lhs.type() = rhs.type();
+    lhs_symbol->set_type(rhs.type());
   }
 
   // Set return destination
@@ -1251,7 +2088,7 @@ void python_converter::handle_function_call_rhs(
       if (!func_name.empty())
       {
         const auto &func_def =
-          json_utils::find_function((*ast_json)["body"], func_name);
+          json_utils::try_find_function((*ast_json)["body"], func_name);
         if (
           !func_def.empty() && func_def.contains("returns") &&
           !func_def["returns"].is_null())
@@ -1366,6 +2203,46 @@ python_converter::extract_target_name(const nlohmann::json &target) const
     "Unsupported assignment target type: " + target_type.get<std::string>());
 }
 
+std::string python_converter::annotated_optional_class(
+  const nlohmann::json &annotation) const
+{
+  if (!annotation.is_object() || annotation.is_null())
+    return "";
+
+  std::string cls;
+  // Optional[Class] : Subscript(value=Name("Optional"), slice=Name(Class))
+  if (
+    annotation.value("_type", "") == "Subscript" &&
+    annotation.contains("value") && annotation["value"].contains("id") &&
+    annotation["value"]["id"] == "Optional" && annotation.contains("slice") &&
+    annotation["slice"].contains("id"))
+    cls = annotation["slice"]["id"].get<std::string>();
+  // `Class | None` (PEP 604) : BinOp(BitOr, left, right) with one side None.
+  else if (
+    annotation.value("_type", "") == "BinOp" && annotation.contains("op") &&
+    annotation["op"].value("_type", "") == "BitOr" &&
+    annotation.contains("left") && annotation.contains("right"))
+  {
+    auto is_none = [](const nlohmann::json &n) {
+      return n.value("_type", "") == "Constant" && n.contains("value") &&
+             n["value"].is_null();
+    };
+    auto name_id = [](const nlohmann::json &n) -> std::string {
+      return n.value("_type", "") == "Name" && n.contains("id")
+               ? n["id"].get<std::string>()
+               : std::string();
+    };
+    if (is_none(annotation["right"]))
+      cls = name_id(annotation["left"]);
+    else if (is_none(annotation["left"]))
+      cls = name_id(annotation["right"]);
+  }
+
+  if (cls.empty() || !json_utils::is_class(cls, *ast_json))
+    return "";
+  return cls;
+}
+
 void python_converter::preregister_global_variables(
   const nlohmann::json &ast_body)
 {
@@ -1412,22 +2289,64 @@ void python_converter::preregister_global_variables(
       continue;
 
     typet var_type;
-    try
+    // None/Optional unification (#4653/#4796), step B: a global annotated
+    // `Optional[Class]` / `Class | None` is a nullable class reference; register
+    // it as `Class*` (a zeroable NULL pointer) so it unifies with the pointer
+    // instances assigned to it, instead of the legacy pointer-width None handle.
+    // The class struct is completed by the main class-build loop; the global's
+    // own value (NULL) needs no complete struct, so no build is required here.
+    std::string opt_cls;
+    if (element.contains("annotation"))
+      opt_cls = annotated_optional_class(element["annotation"]);
+    if (!opt_cls.empty())
     {
-      var_type = extract_type_info(element).second;
+      typet st = type_handler_.get_typet(opt_cls);
+      if (st.id() == "symbol" || st.is_struct())
+        var_type = gen_pointer_type(st);
     }
-    catch (const std::exception &e)
+    // A default-constructed typet has an empty id (""), which is neither "nil"
+    // nor "empty"; the Optional path above only sets var_type for nullable
+    // class annotations. For every other annotated global, resolve its real
+    // type with extract_type_info so the symbol is pre-registered correctly:
+    // a method that references a module global declared later in the file
+    // (Python LEGB) must resolve to this symbol (e.g. `counter: int =
+    // nondet_int()` — github_3851_4), and a `str` global must be char[N], not
+    // an empty placeholder that later decays to char* and forces a runtime
+    // strlen on subscript (github_2885).
+    if (var_type.is_nil() || var_type.id().empty())
     {
-      // Type not yet resolvable (e.g., from an unprocessed import). Skip for
-      // now; the variable will be registered when the assignment is processed
-      // after imports are loaded.
-      log_warning(
-        "preregister_global_variables: skipping '{}' ({})",
-        element["target"].value("id", "<unknown>"),
-        e.what());
+      try
+      {
+        var_type = extract_type_info(element).second;
+      }
+      catch (const std::exception &e)
+      {
+        // Type not yet resolvable (e.g., from an unprocessed import). Skip for
+        // now; the variable will be registered when the assignment is processed
+        // after imports are loaded.
+        log_warning(
+          "preregister_global_variables: skipping '{}' ({})",
+          element["target"].value("id", "<unknown>"),
+          e.what());
+        continue;
+      }
+    }
+
+    // Object-model migration (#3067/#4773): a plain user-class global
+    // (`m: C`, whose value is a constructor/call/alias) is registered as a
+    // migrated `C*` reference by get_var_assign, NOT here. Pre-registering a
+    // speculative `C*` corrupts that construction — it surfaces as
+    // "Unexpected type in int/ptr typecast" at SMT encoding
+    // (github_4541/github_2997). Skip user-class structs and let get_var_assign
+    // register them. An Optional[C] global took the opt_cls pointer path above
+    // and is intentionally kept: it is a pointer, not a struct, so it is not
+    // caught here.
+    if (is_user_class_struct_type(var_type))
       continue;
-    }
-    if (var_type.is_nil() || var_type.is_empty())
+    // Skip when no usable type resolved (empty/nil placeholder, e.g. a bare
+    // annotation whose type is not yet known); get_var_assign registers it
+    // later with the real type.
+    if (var_type.is_nil() || var_type.is_empty() || var_type.id().empty())
       continue;
 
     locationt location = get_location_from_decl(element);
@@ -1488,10 +2407,159 @@ std::string python_converter::flow_rhs_class(const nlohmann::json &rhs) const
   return "";
 }
 
+std::string python_converter::call_return_class(const nlohmann::json &rhs) const
+{
+  if (
+    !rhs.is_object() || rhs.value("_type", "") != "Call" ||
+    !rhs.contains("func") || !rhs["func"].is_object() ||
+    rhs["func"].value("_type", "") != "Name" || !rhs["func"].contains("id") ||
+    !rhs["func"]["id"].is_string())
+    return "";
+
+  // Constructor calls (`Cls(...)`) are handled by the dedicated path above.
+  const std::string fname = rhs["func"]["id"].get<std::string>();
+  if (json_utils::is_class(fname, *ast_json))
+    return "";
+
+  const auto &fn = json_utils::try_find_function((*ast_json)["body"], fname);
+  if (fn.empty() || !fn.contains("returns") || fn["returns"].is_null())
+    return "";
+
+  // An @overload stub carries a single-class annotation (`-> Foo`) but the
+  // overload set is polymorphic — the real return type is resolved per call
+  // site from the argument types. try_find_function returns the first stub, so
+  // trusting its annotation would mis-type, e.g., a `Literal["bar"] -> Bar`
+  // result as `Foo*` (#3057). Leave such results to the existing call-site
+  // overload resolution rather than forcing a single Class* here.
+  if (json_utils::has_overload_decorator(fn))
+    return "";
+
+  // The return annotation may be a bare Name (`-> Cls`) or a forward-reference
+  // string (`-> "Cls"`).
+  const auto &ret = fn["returns"];
+  std::string cls;
+  if (ret.value("_type", "") == "Name" && ret.contains("id"))
+    cls = ret["id"].get<std::string>();
+  else if (
+    ret.value("_type", "") == "Constant" && ret.contains("value") &&
+    ret["value"].is_string())
+    cls = ret["value"].get<std::string>();
+
+  return json_utils::is_class(cls, *ast_json) ? cls : std::string();
+}
+
+void python_converter::get_tagged_scalar_assign(
+  const nlohmann::json &ast_node,
+  const std::string &name,
+  codet &target_block)
+{
+  symbol_id sid = create_symbol_id();
+  sid.set_object(name);
+  symbolt *tag_symbol = symbol_table_.find_symbol(sid.to_string());
+  assert(
+    tag_symbol &&
+    "tagged scalar symbol must already be declared before its branches are "
+    "converted");
+
+  exprt rhs = get_expr(ast_node["value"]);
+  locationt location = get_location_from_decl(ast_node);
+
+  exprt value_to_store = rhs;
+  if (rhs.type() == bool_type())
+    value_to_store = python_expr::build_typecast(
+      rhs, signedbv_typet(config.ansi_c.long_long_int_width));
+
+  symbolt &backing = create_tmp_symbol(
+    ast_node, "$scalar_tag$", value_to_store.type(), value_to_store);
+  code_declt backing_decl(python_expr::build_symbol(backing));
+  backing_decl.copy_to_operands(value_to_store);
+  backing_decl.location() = location;
+  target_block.copy_to_operands(backing_decl);
+
+  exprt elem_size = type_handler_.tagged_scalar_byte_size(value_to_store);
+
+  // `backing` goes DEAD at the end of this branch; copy its value into
+  // non-expiring storage first so `.value` stays valid past the join.
+  const symbolt *copy_func =
+    symbol_table_.find_symbol("c:@F@__python_scalar_tag_copy");
+
+  assert(copy_func && "__python_scalar_tag_copy not found in symbol table");
+
+  exprt backing_addr = python_expr::build_typecast(
+    python_expr::build_address_of(python_expr::build_symbol(backing)),
+    pointer_typet(empty_typet()));
+  exprt copy_call = python_expr::build_call_expr(
+    *copy_func, pointer_typet(empty_typet()), {backing_addr, elem_size});
+
+  exprt type_id_value = type_handler_.tagged_scalar_type_id(rhs.type());
+
+  exprt tag_expr = python_expr::build_symbol(*tag_symbol);
+
+  code_assignt value_assign(
+    python_expr::build_member(tag_expr, "value", pointer_typet(empty_typet())),
+    copy_call);
+  value_assign.location() = location;
+  target_block.copy_to_operands(value_assign);
+
+  code_assignt type_id_assign(
+    python_expr::build_member(tag_expr, "type_id", size_type()), type_id_value);
+  type_id_assign.location() = location;
+  target_block.copy_to_operands(type_id_assign);
+
+  code_assignt size_assign(
+    python_expr::build_member(tag_expr, "size", size_type()), elem_size);
+  size_assign.location() = location;
+  target_block.copy_to_operands(size_assign);
+
+  code_assignt float_idx_assign(
+    python_expr::build_member(tag_expr, "float_idx", size_type()),
+    from_integer(BigInt(0), size_type()));
+  float_idx_assign.location() = location;
+  target_block.copy_to_operands(float_idx_assign);
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  {
+    const std::string stmt_type = ast_node.value("_type", "");
+    nlohmann::json tag_target;
+    if (
+      stmt_type == "Assign" && ast_node.contains("targets") &&
+      ast_node["targets"].size() == 1)
+      tag_target = ast_node["targets"][0];
+    else if (stmt_type == "AnnAssign" && ast_node.contains("target"))
+      tag_target = ast_node["target"];
+
+    if (tag_target.is_object() && tag_target.value("_type", "") == "Name")
+    {
+      const std::string name = tag_target["id"].get<std::string>();
+      bool is_tagged = tagged_scalar_names_.count(name) > 0;
+      if (!is_tagged)
+      {
+        symbol_id sid = create_symbol_id();
+        sid.set_object(name);
+        const symbolt *sym = symbol_table_.find_symbol(sid.to_string());
+        is_tagged = sym && type_handler_.is_tagged_scalar_type(sym->get_type());
+      }
+
+      if (is_tagged)
+      {
+        if (
+          ast_node.contains("value") &&
+          ast_node["value"].value("_type", "") == "Constant")
+        {
+          get_tagged_scalar_assign(ast_node, name, target_block);
+          return;
+        }
+        throw std::runtime_error(
+          "assigning a non-literal value to a dynamically-typed variable is "
+          "not yet supported");
+      }
+    }
+  }
+
   // Extract type information
   auto [lhs_type, element_type] = extract_type_info(ast_node);
 
@@ -1504,6 +2572,8 @@ void python_converter::get_var_assign(
   }
 
   current_element_type = element_type;
+  any_subscript_array_needs_copy_ = false;
+  has_cached_any_subscript_rhs_ = false;
   typet annotated_type = element_type;
   std::vector<typet> annotation_types;
   bool can_emit_annotation_check = false;
@@ -1515,9 +2585,100 @@ void python_converter::get_var_assign(
   symbolt *lhs_symbol = nullptr;
   locationt location_begin;
   symbol_id sid = create_symbol_id();
+  // Set wherever a `code_declt` is already emitted for `lhs_symbol` during
+  // symbol creation below, so the any_subscript_array_needs_copy_ copy-loop
+  // further down (which needs its own decl when nothing declared the symbol
+  // yet, e.g. the plain-Assign path) does not emit a second one for the same
+  // symbol.
+  bool lhs_already_declared = false;
 
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
+
+  // Stage 1 object-model migration (#3067/#4773): a simple Name target bound to
+  // a class instance — either a constructor call `o = ClassName(...)` or an
+  // alias `b = a` of an existing instance — becomes a *reference* (pointer) to
+  // the object, matching CPython's reference semantics. This makes escaping
+  // objects survive their defining function and makes `b = a` a pointer copy
+  // (shared object) rather than a struct copy. Type the LHS as pointer-to-class
+  // up front, before the declaration is emitted below; function_call_expr then
+  // allocates the object and passes the pointer as `self`.
+  if (
+    ast_node.contains("value") && !ast_node["value"].is_null() &&
+    target.contains("_type") && target["_type"] == "Name")
+  {
+    std::string cls;
+    if (
+      type_handler_.is_constructor_call(ast_node["value"]) &&
+      ast_node["value"]["func"].contains("id"))
+      cls = ast_node["value"]["func"]["id"].get<std::string>();
+    else
+      cls = flow_rhs_class(ast_node["value"]); // aliasing: `b = a`
+    // `y = f(...)` where f returns a class: type y as `Cls*` so the returned
+    // reference is bound (not value-copied into a struct local).
+    if (cls.empty())
+      cls = call_return_class(ast_node["value"]);
+    // A target *explicitly annotated* as a user class (`v: Cls = obj.method()`)
+    // is an instance reference too: bind it as `Cls*` so a migrated class
+    // return is not value-copied into a struct slot (which mismatches the
+    // pointer the callee now returns and trips value-set's make_member
+    // assertion). This is the only path covering an annotated *method*-call
+    // return — call_return_class above handles only plain `Name` function calls.
+    //
+    // Gate on the *resolved* annotation type via is_user_class_struct_type — the
+    // same predicate the funcdef return migration uses — not on the annotation
+    // *name* through json_utils::is_class: the latter also matches the built-in
+    // model classes `Tuple`/`List`/`int`, so `coord: Coordinate`
+    // (= `Tuple[int, int]`) would be mistyped as a pointer-to-tuple and fault on
+    // read. And require a *user-written* annotation: the annotator injects an
+    // inferred `annotation` on plain assignments, naming a class for an RHS that
+    // yields no instance — `_ = B() + B()` infers `B` though `__add__` returns
+    // an int, `b = create("bar")` infers an overload's `Bar` though the callee
+    // returns a value (#3057/#3091/#3286/#3921).
+    if (
+      cls.empty() && ast_node.contains("annotation") &&
+      !ast_node["annotation"].is_null() &&
+      !ast_node.value("_inferred_annotation", false) &&
+      is_user_class_struct_type(current_element_type))
+      cls = lhs_type;
+    if (!cls.empty())
+    {
+      typet st = type_handler_.get_typet(cls);
+      if (st.id() == "symbol" || st.is_struct())
+      {
+        current_element_type = gen_pointer_type(st);
+        element_type = current_element_type;
+      }
+    }
+  }
+
+  // None/Optional unification (#4653/#4796), step B: a local target annotated
+  // `Optional[Class]` / `Class | None` is a nullable class reference — type it
+  // `Class*` (NULL for None) so it unifies with the pointer instances assigned
+  // to it. Build the class on demand first (process_forward_reference) so its
+  // struct symbol is complete, not a null/incomplete stub. Scoped to nullable
+  // annotations of user classes only, so non-Optional class variables and the
+  // object-lifetime flip are unaffected.
+  if (
+    target.contains("_type") && target["_type"] == "Name" &&
+    !current_element_type.is_pointer() && ast_node.contains("annotation"))
+  {
+    const std::string opt_cls =
+      annotated_optional_class(ast_node["annotation"]);
+    if (!opt_cls.empty())
+    {
+      nlohmann::json cls_ref;
+      cls_ref["_type"] = "Name";
+      cls_ref["id"] = opt_cls;
+      process_forward_reference(cls_ref, target_block);
+      typet st = type_handler_.get_typet(opt_cls);
+      if (st.id() == "symbol" || st.is_struct())
+      {
+        current_element_type = gen_pointer_type(st);
+        element_type = current_element_type;
+      }
+    }
+  }
 
   // Flow-sensitive class tracking (#4771/#4772): at an unconditional top-level
   // (depth-1) assignment, record the class most recently assigned to the target
@@ -1546,7 +2707,10 @@ void python_converter::get_var_assign(
             ++it;
         }
       }
-      const std::string cls = flow_rhs_class(ast_node["value"]);
+      std::string cls = flow_rhs_class(ast_node["value"]);
+      if (cls.empty())
+        cls =
+          call_return_class(ast_node["value"]); // `v = f()` returning a class
       if (!cls.empty())
         flow_class_map_[path] = cls;
       else
@@ -1570,6 +2734,8 @@ void python_converter::get_var_assign(
 
   if (target.contains("_type") && target["_type"] == "Subscript")
   {
+    reject_unsafe_numpy_view_target(target);
+
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
 
@@ -1601,19 +2767,40 @@ void python_converter::get_var_assign(
       return;
     }
 
-    // List slice assignment (a[i:j] = ...) is not modelled. Falling through to
-    // the generic store evaluates get_expr(a[i:j]) — a *copy* of the slice —
-    // and assigns into that temporary, leaving the original list unchanged. A
-    // later read then sees stale values, so ESBMC would report a buggy program
-    // as SUCCESSFUL (silent unsoundness). Reject it explicitly instead. Object
-    // slice __setitem__ is handled above; tuples raise TypeError above; dict
-    // subscripts are handled by handle_subscript_assignment_check earlier.
+    // List slice assignment (a[i:j:k] = ...) is lowered to the
+    // __ESBMC_list_slice_assign model, which mutates the target list in
+    // place with CPython semantics. Falling through to the generic store
+    // instead would evaluate get_expr(a[i:j]) — a *copy* of the slice — and
+    // assign into that temporary, leaving the original list unchanged; a
+    // later read then sees stale values, so ESBMC would report a buggy
+    // program as SUCCESSFUL (silent unsoundness). Reject non-list containers
+    // (e.g. strings) explicitly instead. Object slice __setitem__ is handled
+    // above; tuples raise TypeError above; dict subscripts are handled by
+    // handle_subscript_assignment_check earlier.
     if (
       target.contains("slice") && target["slice"].is_object() &&
       target["slice"].value("_type", "") == "Slice")
     {
+      const namespacet ns(symbol_table_);
+      const typet resolved_container = ns.follow(container_type);
+      const typet resolved_list = ns.follow(type_handler_.get_list_type());
+      const bool container_is_list =
+        resolved_container == resolved_list ||
+        (resolved_container.is_pointer() &&
+         ns.follow(resolved_container.subtype()) == resolved_list);
+
+      if (
+        container_is_list && ast_node.contains("value") &&
+        !ast_node["value"].is_null())
+      {
+        python_list list_handler(*this, target);
+        list_handler.handle_slice_assignment(
+          container_expr, target["slice"], ast_node["value"]);
+        return;
+      }
+
       throw std::runtime_error(
-        "List slice assignment (a[i:j] = ...) is not supported");
+        "Slice assignment is only supported on list targets");
     }
   }
 
@@ -1655,12 +2842,29 @@ void python_converter::get_var_assign(
       is_right = true;
       if (!ast_node["value"].is_null())
       {
-        // Skip getting expr for dict literals - handle specially later
-        if (!dict_handler_->is_dict_literal(ast_node["value"]))
+        // This RHS build only exists to probe rhs.type() for the Any/char*
+        // string adjustment below; the value is discarded and the real RHS is
+        // built again later. Skip it for kinds whose type is statically known
+        // and never a char* string, otherwise get_expr emits the whole
+        // construction a second time as dead code. Dict literals were already
+        // skipped (handled specially later); list literals and comprehensions
+        // matter most — eliding their dead duplicate roughly halves
+        // list-construction cost on construction-heavy programs (#5121).
+        const std::string rhs_kind =
+          ast_node["value"].value("_type", std::string());
+        const bool rhs_kind_skips_type_probe =
+          dict_handler_->is_dict_literal(ast_node["value"]) ||
+          rhs_kind == "List" || rhs_kind == "ListComp";
+        if (!rhs_kind_skips_type_probe)
         {
           if (ast_node["_type"] != "Call")
           {
+            // Discarded probe: suppress the ZeroDivisionError guard so a
+            // division here is not emitted (and its divisor not evaluated) an
+            // extra time; the real RHS build below emits it once.
+            in_rhs_type_probe_ = true;
             rhs = get_rhs_with_dict_resolution(ast_node, current_element_type);
+            in_rhs_type_probe_ = false;
           }
         }
       }
@@ -1682,6 +2886,18 @@ void python_converter::get_var_assign(
     {
       current_element_type = rhs.type();
     }
+
+    if (
+      current_element_type == any_type() &&
+      type_handler_.is_tagged_scalar_type(rhs.type()))
+    {
+      current_element_type = rhs.type();
+    }
+
+    current_element_type =
+      resolve_any_subscript_array_type(ast_node, current_element_type);
+    current_element_type =
+      resolve_call_argument_array_type(ast_node, current_element_type);
 
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);
@@ -1714,12 +2930,49 @@ void python_converter::get_var_assign(
       bool symbol_created = (lhs_symbol == nullptr);
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
 
+      // move_symbol_to_context() only overwrites an existing symbol's type
+      // when completing a forward declaration (a code/type/extern symbol
+      // gaining its real definition) — a plain variable rebound to a new
+      // value keeps its old, stale type otherwise. When that stale type is
+      // a non-class placeholder (None, a scalar literal, Any) being rebound
+      // to a fresh class-pointer binding — e.g. `g = None` or `g = 0`
+      // followed by `g = Service(...)` — retype it explicitly: otherwise
+      // the self-allocation in function_call_expr sizes the new instance
+      // from the stale type and overruns it as soon as the constructor
+      // writes a field (#6243).
+      //
+      // This must be an ALLOWLIST of safe placeholder types, not a denylist
+      // of unsafe ones: any struct-shaped existing type (tuple, dict, a
+      // migrated class instance, ...) is excluded even when its class
+      // differs from the new one, because an earlier statement may already
+      // have built an expression against that struct's layout (e.g.
+      // `x = t[0]` after `t = (1, 2)`), and retyping the symbol in place
+      // here without fixing up that expression corrupts it — confirmed to
+      // abort GOTO conversion (member2t) for a tuple/dict placeholder
+      // followed by a constructor rebind. A first version of this fix
+      // instead denylisted only existing class pointers (to protect the
+      // flow-sensitive class scanner, #4772, which deliberately drops its
+      // own tracking on `n1 = A(1); n1 = B()` — github_4117_attr_shadow)
+      // and missed this broader case.
+      const typet &existing_type = lhs_symbol->get_type();
+      const bool existing_is_safe_placeholder =
+        existing_type == none_type() ||
+        (existing_type.is_pointer() &&
+         existing_type.subtype().id() == "empty") ||
+        existing_type.is_signedbv() || existing_type.is_unsignedbv() ||
+        existing_type.is_floatbv() || existing_type.is_bool();
+      if (
+        !symbol_created && is_user_class_pointer(current_element_type) &&
+        existing_is_safe_placeholder && existing_type != current_element_type)
+        lhs_symbol->set_type(current_element_type);
+
       // Add declaration statement ONLY for newly created local variables
       if (symbol_created && !current_func_name_.empty() && !is_global)
       {
         code_declt decl(symbol_expr(*lhs_symbol));
         decl.location() = location_begin;
         target_block.copy_to_operands(decl);
+        lhs_already_declared = true;
       }
     }
 
@@ -1808,6 +3061,11 @@ void python_converter::get_var_assign(
         ast_node.contains("annotation") && !ast_node["annotation"].is_null() &&
         !current_element_type.is_empty())
       {
+        current_element_type =
+          resolve_any_subscript_array_type(ast_node, current_element_type);
+        current_element_type =
+          resolve_call_argument_array_type(ast_node, current_element_type);
+
         std::string module_name = location_begin.get_file().as_string();
         symbolt symbol = create_symbol(
           module_name,
@@ -1870,20 +3128,44 @@ void python_converter::get_var_assign(
   current_lhs = &lhs;
   is_converting_lhs = false;
 
+  if (
+    ast_node.contains("value") && ast_node["value"].is_object() &&
+    (ast_node["value"].value("_type", "") == "List" ||
+     ast_node["value"].value("_type", "") == "Tuple" ||
+     ast_node["value"].value("_type", "") == "Dict") &&
+    contains_copied_numpy_view_name(ast_node["value"]))
+  {
+    throw std::runtime_error(
+      "TypeError: storing a copied numpy view in a container is not "
+      "supported");
+  }
+
   // Get RHS
   exprt rhs;
   bool has_value = false;
   if (!ast_node["value"].is_null())
   {
-    is_converting_rhs = true;
-
-    if (lhs_symbol)
-      rhs = get_rhs_with_dict_resolution(ast_node, lhs_symbol->get_type());
+    if (has_cached_any_subscript_rhs_)
+    {
+      // Already converted once by resolve_any_subscript_array_type's type
+      // probe; reuse it rather than converting the same Subscript node (and
+      // re-emitting any temporaries it built) a second time.
+      rhs = cached_any_subscript_rhs_;
+      has_cached_any_subscript_rhs_ = false;
+    }
     else
-      rhs = get_expr(ast_node["value"]);
+    {
+      is_converting_rhs = true;
+
+      if (lhs_symbol)
+        rhs = get_rhs_with_dict_resolution(ast_node, lhs_symbol->get_type());
+      else
+        rhs = get_expr(ast_node["value"]);
+
+      is_converting_rhs = false;
+    }
 
     has_value = true;
-    is_converting_rhs = false;
 
     // Handle string literal conversion
     rhs = handle_string_literal_rhs(ast_node, lhs_type, rhs);
@@ -1956,23 +3238,33 @@ void python_converter::get_var_assign(
       return;
     }
 
-    // Straight-line dynamic retyping (#4770, #4774). A variable whose current
-    // static type is a numeric scalar is being reassigned a string value (or
-    // vice versa). The GOTO IR binds one type per symbol, so the new value
-    // cannot be stored in the old slot. At block_nesting_ == 1 (an
-    // unconditional top-level statement) there is no control-flow join that
-    // could leave the runtime type ambiguous, so we model the rebinding
-    // soundly: mint a fresh symbol of the new type, declare it, and redirect
-    // later loads of the name to it via retype_aliases_. We then fall through
-    // to the normal assignment path with the new, correctly typed symbol,
-    // reusing its function-call/type-adjustment handling. Deeper statements
-    // (function bodies, conditional bodies) are left to the existing fallback.
-    // Class bodies are also converted at nesting 1 (via python_class_builder)
-    // but their attribute symbols are managed separately, so exclude them: only
-    // module/imported-module top-level statements qualify.
+    // Dynamic retyping (#4770, #4774). A variable whose current static type is a
+    // numeric scalar is being reassigned a string value (or vice versa). The
+    // GOTO IR binds one type per symbol, so the new value cannot be stored in
+    // the old slot. We model the rebinding by minting a fresh symbol of the new
+    // type, declaring it, and redirecting later loads of the name to it via
+    // retype_aliases_ (keyed by the function-qualified symbol id, so aliases
+    // never leak between functions). We then fall through to the normal
+    // assignment path with the new, correctly typed symbol.
+    //
+    // On the unconditional spine (block_nesting_ == function_body_depth_ + 1)
+    // the alias persists for the rest of the body — there is no control-flow
+    // join that could leave the runtime type ambiguous. Inside an if/else/try
+    // body the same rebinding is applied for in-body reads, but get_block
+    // snapshots retype_aliases_ on body entry and restores it on exit, so the
+    // retype does not leak across the join (the post-join view keeps the
+    // pre-conditional type — see retype_str_cond_gated).
+    //
+    // Refused inside a while/for body (loop_body_depth_ > 0): a loop target
+    // variable leaks past the loop in Python, so the retyped value must remain
+    // visible after the body rather than be reverted at the join. Leaving the
+    // rebinding to the existing fallback there preserves the pre-#5716 verdict
+    // (see github_3647_15_fail). Class bodies are excluded via
+    // current_class_name_: their attribute symbols are managed separately by
+    // python_class_builder.
     if (
-      block_nesting_ == 1 && current_class_name_.empty() && lhs_symbol &&
-      lhs.is_symbol())
+      current_class_name_.empty() && lhs_symbol && lhs.is_symbol() &&
+      loop_body_depth_ == 0)
     {
       // The LHS lookup above returns the ORIGINAL symbol. If this variable was
       // already retyped, its live value lives in the alias target; resolve to
@@ -1992,7 +3284,21 @@ void python_converter::get_var_assign(
         }
       }
 
-      if (is_incompatible_scalar_string_retype(lhs.type(), rhs.type()))
+      // A tuple-struct variable (adopted from an explicit-Any binding) being
+      // rebound to a non-tuple value needs the same fresh slot: retyping the
+      // shared symbol would turn earlier member reads into member-of-scalar,
+      // which trips member2t's source-type assert at GOTO conversion.
+      // Code-typed and unknown (void*) rhs are excluded exactly as in the
+      // propagate branch of handle_assignment_type_adjustments: neither
+      // yields a usable alias slot type.
+      const bool tuple_to_nontuple_rebind =
+        tuple_handler_->is_tuple_type(lhs.type()) && !rhs.type().is_empty() &&
+        !tuple_handler_->is_tuple_type(rhs.type()) && !rhs.type().is_code() &&
+        !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
+
+      if (
+        is_incompatible_scalar_string_retype(lhs.type(), rhs.type()) ||
+        tuple_to_nontuple_rebind)
       {
         std::string new_id;
         unsigned gen = 1;
@@ -2048,7 +3354,12 @@ void python_converter::get_var_assign(
        lhs.type().is_unsignedbv() || lhs.type().is_bool()))
     {
       // Still emit the RHS as a void call so exceptions/side-effects are
-      // preserved (e.g. chr() out-of-range ValueError).
+      // preserved (e.g. chr() out-of-range ValueError, or a method that mutates
+      // `self` while returning a string that does not fit the annotated scalar
+      // slot, as in `n: int = obj.method_returning_str()`). The call reaches
+      // here either as a side_effect_function_call expression or as an
+      // already-lowered code_function_call statement (nil result); handle both,
+      // otherwise the call — and its side effects — would be dropped entirely.
       if (
         rhs.id() == "sideeffect" &&
         rhs.statement() == irep_idt("function_call"))
@@ -2058,6 +3369,15 @@ void python_converter::get_var_assign(
         code_function_callt void_call;
         void_call.function() = se.function();
         void_call.arguments() = se.arguments();
+        void_call.location() = rhs.location();
+        add_instruction(void_call);
+      }
+      else if (rhs.is_code() && rhs.statement() == irep_idt("function_call"))
+      {
+        const code_function_callt &cc = to_code_function_call(to_code(rhs));
+        code_function_callt void_call;
+        void_call.function() = cc.function();
+        void_call.arguments() = cc.arguments();
         void_call.location() = rhs.location();
         add_instruction(void_call);
       }
@@ -2111,7 +3431,8 @@ void python_converter::get_var_assign(
           !expected_base.empty() && !ctor_name.empty() &&
           !get_typechecker().class_derives_from(ctor_name, expected_base))
         {
-          code_assertt ctor_assert(gen_boolean(false));
+          // V.3: build the always-fail assert condition in IREP2.
+          code_assertt ctor_assert(migrate_expr_back(gen_false_expr()));
           ctor_assert.location() = location_begin;
           ctor_assert.location().comment(
             "Constructor '" + ctor_name +
@@ -2150,7 +3471,8 @@ void python_converter::get_var_assign(
       rhs.type().is_array() && !lhs.type().is_array() &&
       !lhs.type().is_pointer())
     {
-      code_assertt type_assert(gen_boolean(false));
+      // V.3: build the always-fail assert condition in IREP2.
+      code_assertt type_assert(migrate_expr_back(gen_false_expr()));
       type_assert.location() = location_begin;
       type_assert.location().comment(
         "Type violation: incompatible types in assignment");
@@ -2176,6 +3498,46 @@ void python_converter::get_var_assign(
       const std::string &rhs_identifier = rhs.identifier().as_string();
       python_list::copy_type_info(rhs_identifier, lhs_identifier);
 
+      // When rhs is dict_sym.keys / dict_sym.values (a member expression
+      // rather than a list symbol), rhs_identifier is empty and
+      // copy_type_info above is a no-op.  Look up the dict's internal
+      // keys-list or values-list symbol and propagate from there instead.
+      if (rhs_identifier.empty() && rhs.id() == exprt::member)
+      {
+        const exprt &dict_sym = rhs.op0();
+        // get_component_name() returns an irep_idt by value; bind the string
+        // by value so it is copied out before that temporary is destroyed
+        // (GCC -Wdangling-reference under -Werror).
+        const std::string component =
+          to_member_expr(rhs).get_component_name().as_string();
+        if (
+          dict_sym.is_symbol() &&
+          (component == "keys" || component == "values"))
+        {
+          const std::string &dict_id = dict_sym.identifier().as_string();
+          const std::string &src = python_dict_handler::get_internal_list_id(
+            dict_id, component == "keys");
+          if (!src.empty())
+          {
+            python_list::copy_type_info(src, lhs_identifier);
+            // Tuple values are recorded under the $dict_value_types$ key,
+            // not the values-list id (github_3719_4), so the copy above is
+            // a no-op for them. Propagate the stored tuple struct type so
+            // the generic list tuple-element read resolves it.
+            if (component == "values")
+            {
+              typet tuple_t =
+                dict_handler_->recorded_tuple_value_type(dict_sym);
+              if (
+                !tuple_t.is_nil() && !tuple_t.is_empty() &&
+                python_list::get_list_type_map_size(lhs_identifier) == 0)
+                python_list::add_type_info_entry(
+                  lhs_identifier, std::string(), tuple_t);
+            }
+          }
+        }
+      }
+
       if (lhs_symbol)
       {
         const symbolt *rhs_symbol = nullptr;
@@ -2189,11 +3551,12 @@ void python_converter::get_var_assign(
       rhs.type() != lhs.type() && lhs.type().is_array() &&
       !rhs.type().is_code())
     {
-#ifndef NDEBUG
-      const array_typet &thetype = lhs.type();
-      thetype.size().is_constant();
-      assert(thetype.size().is_nil());
-#endif
+      // Note: lhs.type() may be a fixed-size array (e.g. a string literal's
+      // char array) whose size is a constant, so no nil-size invariant holds
+      // here. The previous debug assert only passed because binding
+      // `const array_typet& = lhs.type()` constructed a throwaway array (with
+      // a nil size) rather than reinterpreting the real type; it asserted
+      // nothing meaningful and is removed.
       lhs_symbol->set_type(rhs.type());
 
       code_declt decl(symbol_expr(*lhs_symbol), rhs);
@@ -2210,6 +3573,57 @@ void python_converter::get_var_assign(
       current_lhs = nullptr;
       return;
     }
+
+    if (any_subscript_array_needs_copy_ && lhs.type().is_array())
+    {
+      any_subscript_array_needs_copy_ = false;
+
+      const array_typet &dst_type = to_array_type(lhs.type());
+      if (!dst_type.size().is_constant())
+        throw std::runtime_error(
+          "TypeError: assigning a symbolic-shape array-typed subscript "
+          "result to a variable is not supported");
+
+      if (!lhs_already_declared)
+      {
+        code_declt decl(symbol_expr(*lhs_symbol));
+        decl.location() = location_begin;
+        target_block.copy_to_operands(decl);
+      }
+
+      const typet elem_type = ns.follow(dst_type.subtype());
+      const BigInt len = binary2integer(dst_type.size().value().c_str(), false);
+      for (BigInt i = 0; i < len; ++i)
+      {
+        exprt idx = from_integer(i, size_type());
+        exprt src_elem = python_expr::build_index(rhs, idx, elem_type);
+        exprt dst_elem = python_expr::build_index(lhs, idx, elem_type);
+        code_assignt elem_assign(dst_elem, src_elem);
+        elem_assign.location() = location_begin;
+        target_block.copy_to_operands(elem_assign);
+      }
+
+      if (type_assertions_enabled() && can_emit_annotation_check)
+        get_typechecker().emit_type_annotation_assertion(
+          lhs,
+          annotated_type,
+          annotation_types,
+          annotated_name,
+          annotation_location,
+          target_block);
+      record_numpy_view_copy(lhs, ast_node["value"]);
+      current_lhs = nullptr;
+      return;
+    }
+
+    if (
+      ast_node.contains("value") && ast_node["value"].is_object() &&
+      (ast_node["value"].value("_type", "") == "Subscript" ||
+       ast_node["value"].value("_type", "") == "Call") &&
+      lhs.type().is_array())
+      record_numpy_view_copy(lhs, ast_node["value"]);
+    else
+      clear_numpy_view_copy(lhs);
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
@@ -2514,6 +3928,39 @@ bool python_converter::contains_named_expr(const nlohmann::json &node)
   return false;
 }
 
+std::unordered_set<std::string>
+python_converter::scalar_tag_candidates(const nlohmann::json &if_node)
+{
+  std::unordered_set<std::string> candidates;
+
+  if (!if_node.contains("body"))
+    return candidates;
+
+  auto then_types = classify_branch_literal_assigns(if_node["body"]);
+  if (then_types.empty())
+    return candidates;
+
+  if (!if_node.contains("orelse") || if_node["orelse"].empty())
+    return candidates;
+  auto else_types = classify_branch_literal_assigns(if_node["orelse"]);
+
+  for (const auto &[name, then_kind] : then_types)
+  {
+    auto it = else_types.find(name);
+    if (it == else_types.end() || it->second == then_kind)
+      continue;
+
+    symbol_id sid = create_symbol_id();
+    sid.set_object(name);
+    if (symbol_table_.find_symbol(sid.to_string()) != nullptr)
+      continue; // Pre-existing variable: leave to the current heuristic.
+
+    candidates.insert(name);
+  }
+
+  return candidates;
+}
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // A walrus in a `while` test re-evaluates every iteration, but get_named_expr
@@ -2604,12 +4051,16 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     exprt overall_cond = cond_tmp;
     if (is_wrapped_in_unary)
     {
-      overall_cond = exprt("not", bool_type());
-      overall_cond.copy_to_operands(cond_tmp);
+      // V.3: build the unary-not condition in IREP2.
+      expr2tc ct2;
+      migrate_expr(cond_tmp, ct2);
+      overall_cond = migrate_expr_back(not2tc(ct2));
     }
 
-    exprt break_cond("not", bool_type());
-    break_cond.copy_to_operands(overall_cond);
+    // V.3: build the break guard !cond in IREP2.
+    expr2tc oc2;
+    migrate_expr(overall_cond, oc2);
+    exprt break_cond = migrate_expr_back(not2tc(oc2));
 
     code_breakt break_stmt;
     break_stmt.location() = location;
@@ -2621,7 +4072,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
     exprt body_expr;
     if (ast_node["body"].is_array())
-      body_expr = get_block(ast_node["body"]);
+      body_expr = get_block(
+        ast_node["body"],
+        /*is_function_body=*/false,
+        /*is_loop_body=*/true);
     else
       body_expr = get_expr(ast_node["body"]);
     body_expr.location() = location;
@@ -2630,7 +4084,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     codet while_code;
     while_code.set_statement("while");
     while_code.location() = location;
-    while_code.copy_to_operands(gen_boolean(true), loop_body);
+    // V.3: build the `while True` condition in IREP2.
+    while_code.copy_to_operands(migrate_expr_back(gen_true_expr()), loop_body);
 
     transformed.copy_to_operands(while_code);
     current_element_type = t;
@@ -2687,18 +4142,22 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         throw std::runtime_error(
           "__ESBMC_list_size not found for list condition check");
 
-      side_effect_expr_function_callt size_call;
-      size_call.function() = symbol_expr(*size_func);
-      size_call.type() = size_type();
-      size_call.location() = get_location_from_decl(value_node);
-      if (value_expr.type().is_pointer())
-        size_call.arguments().push_back(value_expr);
-      else
-        size_call.arguments().push_back(address_of_exprt(value_expr));
-
-      exprt cond("notequal", bool_type());
-      cond.copy_to_operands(size_call, gen_zero(size_type()));
-      cond.location() = get_location_from_decl(value_node);
+      // V.3: build `__ESBMC_list_size(xs) != 0` in IREP2, back-migrating once
+      // (mirrors the list-condition path at converter_stmt.cpp:3216). The call
+      // is built directly in IREP2; it carries no IREP2 location, so the
+      // location is re-attached to the back-migrated operand below.
+      exprt size_arg = value_expr.type().is_pointer()
+                         ? value_expr
+                         : address_of_exprt(value_expr);
+      expr2tc size_arg2;
+      migrate_expr(size_arg, size_arg2);
+      expr2tc size_call2 = side_effect_function_call2tc(
+        migrate_type(size_type()), symbol_expr2tc(*size_func), {size_arg2});
+      exprt cond = migrate_expr_back(
+        notequal2tc(size_call2, gen_zero(migrate_type(size_type()))));
+      const locationt cond_loc = get_location_from_decl(value_node);
+      cond.location() = cond_loc;
+      cond.op0().location() = cond_loc;
       return cond;
     }
 
@@ -2761,9 +4220,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
           short_circuit_if.cond() = result_expr;
         else
         {
-          exprt not_result("not", bool_type());
-          not_result.copy_to_operands(result_expr);
-          short_circuit_if.cond() = not_result;
+          // V.1k keystone: `not result` over the bool short-circuit accumulator
+          // (a symbol) built in IREP2 (exact not2tc round-trip, matching the
+          // not2tc uses above).
+          expr2tc result2;
+          migrate_expr(result_expr, result2);
+          short_circuit_if.cond() = migrate_expr_back(not2tc(result2));
         }
         short_circuit_if.then_case() = next_operand_block;
         current_block->copy_to_operands(short_circuit_if);
@@ -2866,8 +4328,11 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
           if (symbolt *bool_method = find_dunder_method(class_name, "__bool__"))
           {
             exprt bool_object = cond;
-            // __bool__ expects self by address, so the condition must be an object.
-            if (!bool_object.is_symbol())
+            // __bool__ expects self by reference. A migrated instance is
+            // already a `Class*` pointer (pass it through); a by-value struct
+            // must be a named object whose address we take.
+            const bool object_is_ptr = bool_object.type().is_pointer();
+            if (!object_is_ptr && !bool_object.is_symbol())
               bool_object =
                 store_call_result(bool_object, location, "cond_obj");
             const code_typet &method_type =
@@ -2876,7 +4341,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
             bool_call.function() = symbol_expr(*bool_method);
             bool_call.type() = method_type.return_type();
             bool_call.location() = location;
-            bool_call.arguments().push_back(gen_address_of(bool_object));
+            bool_call.arguments().push_back(
+              object_is_ptr ? bool_object : gen_address_of(bool_object));
             cond = store_call_result(bool_call, location, "cond_bool");
             cond.location() = location;
           }
@@ -2899,18 +4365,20 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
         // Keep the size query inside the condition expression so constructs
         // like `while heap:` re-evaluate the current list size every iteration.
-        side_effect_expr_function_callt size_call;
-        size_call.function() = symbol_expr(*size_func);
-        if (cond.type().is_pointer())
-          size_call.arguments().push_back(cond);
-        else
-          size_call.arguments().push_back(address_of_exprt(cond));
-        size_call.type() = size_type();
-        size_call.location() = location;
-
-        cond = exprt("notequal", bool_type());
-        cond.copy_to_operands(size_call, gen_zero(size_type()));
+        // V.3: build `__ESBMC_list_size(xs) != 0` in IREP2, back-migrating
+        // once (mirrors the list-condition path at converter_binop.cpp:208).
+        // The call is built directly in IREP2; it carries no IREP2 location,
+        // so the location is re-attached to the back-migrated operand below.
+        exprt size_arg =
+          cond.type().is_pointer() ? cond : address_of_exprt(cond);
+        expr2tc size_arg2;
+        migrate_expr(size_arg, size_arg2);
+        expr2tc size_call2 = side_effect_function_call2tc(
+          migrate_type(size_type()), symbol_expr2tc(*size_func), {size_arg2});
+        cond = migrate_expr_back(
+          notequal2tc(size_call2, gen_zero(migrate_type(size_type()))));
         cond.location() = location;
+        cond.op0().location() = location;
       }
 
       // Python treats strings in conditions by their length: "" is falsy.
@@ -2921,16 +4389,20 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
           throw std::runtime_error(
             "strlen not found for string truthiness check");
 
-        side_effect_expr_function_callt strlen_call;
-        strlen_call.function() = symbol_expr(*strlen_sym);
-        strlen_call.arguments().push_back(
-          string_handler_.get_array_base_address(cond));
-        strlen_call.type() = size_type();
-        strlen_call.location() = location;
-
-        cond = exprt("notequal", bool_type());
-        cond.copy_to_operands(strlen_call, gen_zero(size_type()));
+        // V.3: build `strlen(s) != 0` in IREP2, back-migrating once (mirrors
+        // the string-truthiness path at converter_unop.cpp). The call is built
+        // directly in IREP2; it carries no IREP2 location, so the location is
+        // re-attached to the back-migrated operand below.
+        expr2tc strlen_arg2;
+        migrate_expr(string_handler_.get_array_base_address(cond), strlen_arg2);
+        expr2tc strlen_call2 = side_effect_function_call2tc(
+          migrate_type(size_type()),
+          symbol_expr2tc(*strlen_sym),
+          {strlen_arg2});
+        cond = migrate_expr_back(
+          notequal2tc(strlen_call2, gen_zero(migrate_type(size_type()))));
         cond.location() = location;
+        cond.op0().location() = location;
       }
     }
   }
@@ -2948,8 +4420,52 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // Recover type
   current_element_type = t;
 
+  // Declares the flagged variable's struct-typed symbol before either
+  // branch converts, so goto-symex's struct-merge resolves the join for
+  // free; get_var_assign fills in the fields per branch.
+  std::unordered_set<std::string> tag_candidates;
+  if (type == "If")
+    tag_candidates = scalar_tag_candidates(ast_node);
+
+  for (const auto &name : tag_candidates)
+  {
+    symbol_id tag_sid = create_symbol_id();
+    tag_sid.set_object(name);
+
+    locationt tag_location = get_location_from_decl(ast_node);
+    std::string tag_module_name = tag_location.get_file().as_string();
+    symbolt tag_symbol = create_symbol(
+      tag_module_name,
+      name,
+      tag_sid.to_string(),
+      tag_location,
+      type_handler_.get_tagged_object_type());
+    tag_symbol.lvalue = true;
+    tag_symbol.file_local = !current_func_name_.empty();
+    tag_symbol.is_extern = false;
+
+    symbolt *tag_symbol_ptr = symbol_table_.move_symbol_to_context(tag_symbol);
+
+    if (!current_func_name_.empty() && !is_global_variable(tag_sid))
+    {
+      code_declt tag_decl(python_expr::build_symbol(*tag_symbol_ptr));
+      tag_decl.location() = tag_location;
+      add_instruction(tag_decl);
+    }
+  }
+  tagged_scalar_scope_guard tag_scope_guard(
+    tagged_scalar_names_, tag_candidates);
+
   // Extract 'then' block from AST
   exprt then;
+
+  // A Python conditional expression `body if test else orelse` short-circuits:
+  // only the selected branch is evaluated. When a ternary branch emits
+  // side-effecting instructions (notably a subscript's IndexError raise), they
+  // must run only when that branch is taken. Capture each branch's side effects
+  // into its own block so they can be guarded by the condition below, instead of
+  // leaking unconditionally into the enclosing block.
+  code_blockt then_side_effects, else_side_effects;
 
   // Skip the 'then' block when the condition evaluates to false.
   if (cond.is_constant() && cond.value() == "false" && type != "IfExp")
@@ -2959,7 +4475,17 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   else
   {
     if (ast_node["body"].is_array())
-      then = get_block(ast_node["body"]);
+      then = get_block(
+        ast_node["body"],
+        /*is_function_body=*/false,
+        /*is_loop_body=*/type == "While");
+    else if (type == "IfExp")
+    {
+      code_blockt *saved_block = current_block;
+      current_block = &then_side_effects;
+      then = get_expr(ast_node["body"]);
+      current_block = saved_block;
+    }
     else
       then = get_expr(ast_node["body"]);
   }
@@ -2974,6 +4500,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     // Append 'else' block to the statement
     if (ast_node["orelse"].is_array())
       else_expr = get_block(ast_node["orelse"]);
+    else if (type == "IfExp")
+    {
+      code_blockt *saved_block = current_block;
+      current_block = &else_side_effects;
+      else_expr = get_expr(ast_node["orelse"]);
+      current_block = saved_block;
+    }
     else
       else_expr = get_expr(ast_node["orelse"]);
   }
@@ -3024,7 +4557,55 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       }
     }
 
-    // Create fully symbolic if expression
+    // When a branch emits side-effecting instructions (notably a subscript's
+    // IndexError raise, or a materialised nested access whose value expression
+    // references temps the branch declared), lower the ternary as a
+    // short-circuiting if/else into a result temp: each branch runs its own
+    // side effects and assigns its value to the temp, so ONLY the selected
+    // branch is evaluated — matching Python's short-circuit semantics. Emitting
+    // the value assignment inside the guarded branch keeps the branch's temps in
+    // scope (a flat value-select would reference them from outside their guard).
+    // Keep the pure value-select `if_expr` when neither branch has side effects
+    // (the common case), avoiding churn. A pure-expression context has no
+    // current_block to emit into, and there its branches carry no side effects.
+    if (
+      current_block && (!then_side_effects.operands().empty() ||
+                        !else_side_effects.operands().empty()))
+    {
+      symbolt result_symbol =
+        create_return_temp_variable(result_type, location, "ternary_result");
+      symbol_table_.add(result_symbol);
+      exprt result_expr = symbol_expr(result_symbol);
+
+      code_declt result_decl(result_expr);
+      result_decl.location() = location;
+      current_block->copy_to_operands(result_decl);
+
+      auto coerce = [&](const exprt &branch) -> exprt {
+        if (branch.type() == result_type)
+          return branch;
+        return typecast_exprt(branch, result_type);
+      };
+
+      code_assignt then_assign(result_expr, coerce(then));
+      then_assign.location() = location;
+      then_side_effects.copy_to_operands(then_assign);
+
+      code_assignt else_assign(result_expr, coerce(else_expr));
+      else_assign.location() = location;
+      else_side_effects.copy_to_operands(else_assign);
+
+      code_ifthenelset guard;
+      guard.location() = location;
+      guard.cond() = cond;
+      guard.then_case() = then_side_effects;
+      guard.else_case() = else_side_effects;
+      current_block->copy_to_operands(guard);
+
+      return result_expr;
+    }
+
+    // Create fully symbolic if expression (pure branches, no side effects)
     exprt if_expr("if", result_type);
     if_expr.copy_to_operands(cond, then, else_expr);
     return if_expr;
@@ -3047,6 +4628,72 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   return code;
 }
+exprt python_converter::box_value_on_heap(
+  const exprt &value,
+  const locationt &location,
+  codet &target_block)
+{
+  return box_value_on_heap(
+    value, location, target_block, current_func_return_type_);
+}
+
+exprt python_converter::box_value_on_heap(
+  const exprt &value,
+  const locationt &location,
+  codet &target_block,
+  const typet &ptr_type)
+{
+  const symbolt *new_obj_sym =
+    symbol_table_.find_symbol("c:@F@__ESBMC_new_object");
+  assert(new_obj_sym && "__ESBMC_new_object model required");
+
+  symbolt heap_symbol =
+    create_return_temp_variable(ptr_type, location, "ctor_box");
+  symbol_table_.add(heap_symbol);
+  exprt heap_ptr = symbol_expr(heap_symbol);
+
+  code_declt heap_decl(heap_ptr);
+  heap_decl.location() = location;
+  target_block.copy_to_operands(heap_decl);
+
+  code_function_callt alloc_call;
+  alloc_call.lhs() = heap_ptr;
+  alloc_call.function() = symbol_expr(*new_obj_sym);
+  alloc_call.location() = location;
+  target_block.copy_to_operands(alloc_call);
+
+  exprt deref("dereference", ptr_type.subtype());
+  deref.copy_to_operands(heap_ptr);
+
+  // Whole-array assignment through a dereference is rejected by the
+  // dereference layer ("Can't construct rvalue reference to array type"),
+  // so a boxed array of statically-known size is stored element-wise.
+  if (ptr_type.subtype().is_array())
+  {
+    const array_typet &arr_t = to_array_type(ptr_type.subtype());
+    assert(arr_t.size().is_constant());
+    const size_t n =
+      binary2integer(to_constant_expr(arr_t.size()).value().c_str(), false)
+        .to_uint64();
+    for (size_t i = 0; i < n; i++)
+    {
+      exprt idx = from_integer(i, index_type());
+      code_assignt store(
+        python_expr::build_index(deref, idx, arr_t.subtype()),
+        python_expr::build_index(value, idx, arr_t.subtype()));
+      store.location() = location;
+      target_block.copy_to_operands(store);
+    }
+    return heap_ptr;
+  }
+
+  code_assignt store(deref, value);
+  store.location() = location;
+  target_block.copy_to_operands(store);
+
+  return heap_ptr;
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -3069,10 +4716,22 @@ void python_converter::get_return_statements(
           wrap_in_optional(none_expr, current_func_return_type_);
       }
     }
+    // A bare `return` yields None. When the function returns None — either
+    // already typed none_type(), or still an empty placeholder that the funcdef
+    // will promote to none_type() (issue #5914) — give the RETURN an explicit
+    // None value so it matches the declared none_type() slot at the call site.
+    else if (
+      current_func_return_type_ == none_type() ||
+      current_func_return_type_.is_empty())
+      return_code.return_value() = gen_zero(none_type());
 
     target_block.copy_to_operands(return_code);
     return;
   }
+
+  if (contains_copied_numpy_view_name(ast_node["value"]))
+    throw std::runtime_error(
+      "TypeError: returning a copied numpy view is not supported");
 
   exprt return_value = get_expr(ast_node["value"]);
   locationt location = get_location_from_decl(ast_node);
@@ -3112,7 +4771,7 @@ void python_converter::get_return_statements(
       // Forward reference: function not yet processed
       // Look up return type from AST
       const auto &func_node =
-        json_utils::find_function((*ast_json)["body"], func_name);
+        json_utils::try_find_function((*ast_json)["body"], func_name);
 
       if (
         !func_node.empty() && func_node.contains("returns") &&
@@ -3165,9 +4824,18 @@ void python_converter::get_return_statements(
     // Add the function call statement to the block
     target_block.copy_to_operands(return_value);
 
-    // Wrap in Optional if the function returns Optional
     exprt ret_expr = temp_var_expr;
-    if (current_func_return_type_.is_struct())
+    // `return ClassName(...)` constructs into the stack-local value temp above;
+    // when the function returns a migrated class reference (Cls*, #3067), box
+    // that value onto a non-expiring heap object and return the pointer so the
+    // instance survives the frame (returning &temp would dangle). Mirrors the
+    // member/parameter return path's boxing in the else branch below.
+    if (
+      is_constructor && is_user_class_pointer(current_func_return_type_) &&
+      is_user_class_struct_type(temp_var_expr.type()))
+      ret_expr = box_value_on_heap(temp_var_expr, location, target_block);
+    // Wrap in Optional if the function returns Optional
+    else if (current_func_return_type_.is_struct())
     {
       const struct_typet &st = to_struct_type(current_func_return_type_);
       if (st.tag().as_string().starts_with("tag-Optional_"))
@@ -3211,40 +4879,45 @@ void python_converter::get_return_statements(
           str_content, string_type, string_constantt::k_default);
 
         // Get its address (converts array to pointer)
-        return_value = address_of_exprt(return_value);
+        // V.3: build the address-of in IREP2 (operand is a string constant).
+        return_value = python_expr::build_address_of(return_value);
+      }
+      else if (to_array_type(return_value.type()).size().is_constant())
+      {
+        // For non-constant arrays (variables), convert to pointer. The
+        // array is function-local (e.g. a string copied out of a tuple,
+        // #5571), so its storage expires with this frame: box the bytes
+        // onto a fresh non-expiring heap object first — the same model as
+        // returning a constructed class value (#3067) — and hand back a
+        // pointer into that.
+        exprt boxed = box_value_on_heap(
+          return_value,
+          location,
+          target_block,
+          gen_pointer_type(return_value.type()));
+        exprt deref("dereference", return_value.type());
+        deref.copy_to_operands(boxed);
+        return_value = string_handler_.get_array_base_address(deref);
       }
       else
       {
-        // For non-constant arrays (variables), convert to pointer
+        // Symbolic-size array: element-wise boxing needs a static count, so
+        // keep the plain decay (the pre-#5571 behaviour for this rare case).
         return_value = string_handler_.get_array_base_address(return_value);
       }
     }
 
-    // When returning a class-typed parameter (internally A*), dereference it
-    // so the return type matches the annotation (A).  This is needed because
-    // user-defined class parameters are modelled as pointers internally for
-    // Python object reference semantics, but callers expect a value return.
-    if (return_value.type().is_pointer())
-    {
-      typet ret_sub = return_value.type().subtype();
-      typet expected = current_func_return_type_;
-      if (ret_sub.id() == "symbol")
-        ret_sub = ns.follow(ret_sub);
-      if (expected.id() == "symbol")
-        expected = ns.follow(expected);
-      if (ret_sub.is_struct() && expected.is_struct())
-      {
-        const struct_typet &rs = to_struct_type(ret_sub);
-        const struct_typet &es = to_struct_type(expected);
-        if (rs.tag() == es.tag())
-        {
-          exprt deref("dereference");
-          deref.type() = return_value.type().subtype();
-          deref.copy_to_operands(return_value);
-          return_value = deref;
-        }
-      }
-    }
+    // `return ClassName(...)` lowers to a stack-local `$ctor_self$` *value*
+    // struct (function_call_expr's no-LHS constructor path), but the function
+    // now returns a class *reference* (Cls*). Box the constructed value onto a
+    // fresh non-expiring heap object and return the pointer, so the result
+    // survives the callee frame with reference identity (#3067) — the same
+    // model as `o = ClassName(...)`. Returning `&$ctor_self$` would instead
+    // hand back a dangling stack address.
+    if (
+      is_user_class_pointer(current_func_return_type_) &&
+      is_user_class_struct_type(return_value.type()))
+      return_value = box_value_on_heap(return_value, location, target_block);
 
     // Wrap return value in Optional if the function returns Optional
     if (current_func_return_type_.is_struct())
@@ -3262,13 +4935,30 @@ void python_converter::get_return_statements(
   }
 }
 
-exprt python_converter::get_block(const nlohmann::json &ast_block)
+exprt python_converter::get_block(
+  const nlohmann::json &ast_block,
+  bool is_function_body,
+  bool is_loop_body)
 {
-  // Track block nesting so straight-line retyping (#4770/#4774) only fires for
-  // unconditional top-level statements (depth 1). Every nested body -- function
-  // bodies, if/while/for bodies, try/except handlers -- is converted through a
-  // deeper get_block(), so this single guard covers them all.
-  block_nesting_guard nesting_guard(block_nesting_);
+  // Track block nesting (and the function-body / loop-body depths) so dynamic
+  // retyping (#4770/#4774) fires on the unconditional spine (the module body
+  // plus enclosing function bodies, block_nesting_ == function_body_depth_ + 1)
+  // and inside if/else/try bodies, but not inside a while/for body, where a
+  // retyped loop variable must keep leaking past the join (see get_var_assign).
+  block_nesting_guard nesting_guard(
+    block_nesting_,
+    is_function_body ? &function_body_depth_ : nullptr,
+    is_loop_body ? &loop_body_depth_ : nullptr);
+
+  // A conditional body is any block off the unconditional spine (the module
+  // body plus enclosing function bodies, block_nesting_ == function_body_depth_
+  // + 1). Inside an if/else/try body, dynamic retyping is applied locally for
+  // in-body reads but reverted on exit so it does not leak across the join. A
+  // loop body retypes nothing (refused in get_var_assign via loop_body_depth_),
+  // so the snapshot/restore is a no-op there and merely preserves any alias
+  // established before the loop.
+  const bool is_conditional_body = (block_nesting_ != function_body_depth_ + 1);
+  retype_alias_scope_guard retype_guard(retype_aliases_, is_conditional_body);
 
   // Entering any nested/conditional body (function, if/while/for, try/except):
   // straight-line flow-sensitive class tracking is no longer valid here, so
@@ -3325,6 +5015,35 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::ASSERT:
     {
+      // Fold whole-assertion tests that provably evaluate to True at
+      // conversion time (e.g. `f(GLOBAL) == [literal]` for a pure f). This
+      // bypasses operational-model loops (strlen/str-slice) whose unwinding
+      // would otherwise scale with the data size. Gated on the test containing
+      // a function call so plain symbolic asserts stay on the solver path;
+      // only a constant True short-circuits — False/unknown fall through so
+      // the solver still detects genuine violations. Disabled under any
+      // coverage mode, where the original assert/branches must be instrumented.
+      const bool coverage_active =
+        is_coverage_mode() ||
+        config.options.get_bool_option("assertion-coverage") ||
+        config.options.get_bool_option("assertion-coverage-claims");
+      if (
+        !coverage_active && element.contains("test") &&
+        ast_contains_call(element["test"]))
+      {
+        python_consteval evaluator(*ast_json);
+        auto folded = evaluator.try_eval_global_expr(element["test"]);
+        if (folded && folded->kind == PyConstValue::BOOL && folded->bool_val)
+        {
+          code_assertt proven;
+          proven.assertion() = gen_boolean(true);
+          proven.location() = get_location_from_decl(element);
+          proven.location().comment("assertion proven by constant evaluation");
+          block.move_to_operands(proven);
+          break;
+        }
+      }
+
       current_element_type = bool_type();
       exprt test = get_expr(element["test"]);
       if (test.statement() == "cpp-throw")
@@ -3374,9 +5093,12 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         block.copy_to_operands(size_call);
 
         // Replace test with: size != 0 (non-empty dict is truthy)
-        exprt is_not_empty("notequal", bool_type());
-        is_not_empty.copy_to_operands(
-          symbol_expr(size_result), gen_zero(size_type()));
+        // V.3: build `$dict_size$ != 0` in IREP2, back-migrating once
+        // (mirrors the list/string truthiness paths above).
+        expr2tc size2;
+        migrate_expr(symbol_expr(size_result), size2);
+        exprt is_not_empty = migrate_expr_back(
+          notequal2tc(size2, gen_zero(migrate_type(size_type()))));
         is_not_empty.location() = location;
         test = is_not_empty;
       }
@@ -3534,7 +5256,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     case StatementType::PASS:
     // Imports are handled by parser.py so we can just ignore here.
     case StatementType::IMPORT:
-      // TODO: Raises are ignored for now. Handling case to avoid calling abort() on default.
+      // PASS and IMPORT need no action here; break to avoid the default throw.
       break;
     case StatementType::UNKNOWN:
     default:
@@ -3605,6 +5327,41 @@ void python_converter::get_delete_statement(
       // of requiring a dict.
       if (dict_type == type_handler_.get_list_type())
       {
+        // del a[lower:upper] removes the slice — equivalent to a[lower:upper]
+        // = []. Desugaring to pop() (below) would pass the Slice node as a pop
+        // index, which is invalid; route slice deletes through the existing
+        // slice-assignment lowering with an empty replacement instead.
+        if (slice.contains("_type") && slice["_type"] == "Slice")
+        {
+          // Only a contiguous (absent / step-1) slice maps to a[i:j] = []. An
+          // extended-step delete is always legal in CPython, but `a[::k] = []`
+          // is not (the slice-assign model asserts a size match), so reject the
+          // strided form with a clean diagnostic rather than a misleading
+          // assignment-flavoured ValueError.
+          const nlohmann::json &step =
+            slice.contains("step") ? slice["step"] : nlohmann::json();
+          bool contiguous = step.is_null();
+          if (
+            !contiguous && step.is_object() &&
+            step.value("_type", "") == "Constant" && step.contains("value") &&
+            step["value"].is_number_integer() &&
+            step["value"].get<long long>() == 1)
+            contiguous = true;
+          if (!contiguous)
+            throw std::runtime_error(
+              "del on a strided list slice (step != 1) is not supported");
+
+          nlohmann::json empty_list;
+          empty_list["_type"] = "List";
+          empty_list["elts"] = nlohmann::json::array();
+          copy_location_fields_from_decl(ast_node, empty_list);
+          python_list list_handler(*this, target);
+          list_handler.handle_slice_assignment(dict_expr, slice, empty_list);
+          continue;
+        }
+
+        // del a[i] on a list removes (and shifts out) the element at index i.
+        // This is exactly list.pop(i) with the result discarded.
         nlohmann::json pop_call;
         pop_call["_type"] = "Call";
         pop_call["func"] = {

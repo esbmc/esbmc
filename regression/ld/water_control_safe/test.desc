@@ -1,0 +1,4 @@
+CORE
+water_control.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^VERIFICATION SUCCESSFUL$

@@ -5,7 +5,8 @@
 #include <fstream>
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
-#include <util/picosha2.h>
+#include <solvers/smt/smt_conv.h>
+#include <util/base/picosha2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include <boost/version.hpp>
@@ -192,6 +193,9 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
   else if (wp.type == waypoint::assumption)
     waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
              << "assumption";
+  else if (wp.type == waypoint::function_return)
+    waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+             << "function_return";
   else if (wp.type == waypoint::branching)
     waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
              << "branching";
@@ -208,6 +212,15 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
              << "c_expression";
     waypoint << YAML::EndMap;
   }
+  else if (wp.type == waypoint::function_return)
+  {
+    waypoint << YAML::Key << "constraint" << YAML::Value << YAML::BeginMap;
+    waypoint << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
+             << wp.value;
+    waypoint << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
+             << "ext_c_expression";
+    waypoint << YAML::EndMap;
+  }
   else if (wp.type == waypoint::branching)
   {
     waypoint << YAML::Key << "constraint" << YAML::Value << YAML::BeginMap;
@@ -216,7 +229,6 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
     waypoint << YAML::EndMap;
   }
 
-  // location
   waypoint << YAML::Key << "location" << YAML::Value << YAML::BeginMap;
   waypoint << YAML::Key << "file_name" << YAML::Value << YAML::DoubleQuoted
            << wp.file;
@@ -736,7 +748,6 @@ void _create_yaml_metadata_emitter(
   metadata << YAML::Key << "format_version" << YAML::Value << YAML::DoubleQuoted
            << "2.0";
 
-  // Uuid
   std::string uuid =
     boost::uuids::to_string(boost::uuids::random_generator()());
   metadata << YAML::Key << "uuid" << YAML::Value << YAML::DoubleQuoted << uuid;
@@ -755,7 +766,6 @@ void _create_yaml_metadata_emitter(
   metadata << YAML::Key << "creation_time" << YAML::Value << YAML::DoubleQuoted
            << timestr;
 
-  // Producer
   metadata << YAML::Key << "producer" << YAML::BeginMap;
   std::string producer_str = options.get_option("witness-producer");
   if (producer_str.empty())
@@ -776,24 +786,19 @@ void _create_yaml_metadata_emitter(
            << ESBMC_VERSION;
   metadata << YAML::EndMap;
 
-  // Task
   metadata << YAML::Key << "task" << YAML::BeginMap;
 
-  // Input_files
   metadata << YAML::Key << "input_files" << YAML::BeginSeq;
   metadata << YAML::DoubleQuoted << verifiedfile;
   metadata << YAML::EndSeq;
 
-  // Input_file_hashes
   std::string file_hash;
-  // sha256
   generate_sha256_hash_for_file(verifiedfile.c_str(), file_hash);
   metadata << YAML::Key << "input_file_hashes" << YAML::BeginMap;
   metadata << YAML::Key << YAML::DoubleQuoted << verifiedfile << YAML::Value
            << YAML::DoubleQuoted << file_hash;
   metadata << YAML::EndMap;
 
-  // Specification
   std::string spec;
   if (options.get_bool_option("overflow-check"))
     spec = "G ! overflow";
@@ -875,9 +880,6 @@ void create_violation_yaml_emitter(
 
 void check_replace_invalid_assignment(std::string &assignment)
 {
-  /* replace: SAME-OBJECT(&var1, &var2) into &var1 == &var2 (XXX check if should stay) */
-  //std::regex e ("SAME-OBJECT\\((&([a-zA-Z_0-9]+)), (&([a-zA-Z_0-9]+))\\)");
-  //assignment = std::regex_replace(assignment, e ,"$1 == $3");
   std::smatch m;
   /* looking for undesired in the assignment */
   if (
@@ -927,7 +929,7 @@ std::string get_formated_assignment(
 
 bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
 {
-  languagest languages(ns, language_idt::C);
+  languagest languages(ns, configured_language());
   std::string lhsexpr;
   languages.from_expr(
     migrate_expr_back(step.lhs), lhsexpr, presentationt::WITNESS);
@@ -942,7 +944,7 @@ bool is_valid_witness_expr(
   const namespacet &ns,
   const irep_container<expr2t> &exp)
 {
-  languagest languages(ns, language_idt::C);
+  languagest languages(ns, configured_language());
   std::string value;
   languages.from_expr(migrate_expr_back(exp), value, presentationt::WITNESS);
   return (value.find("__ESBMC") & value.find("stdin") & value.find("stdout") &
@@ -1122,8 +1124,8 @@ bool find_nondet_in_expr(const expr2tc &expr)
   return false;
 }
 
-#include <util/prefix.h>
-#include <util/c_types.h>
+#include <util/base/prefix.h>
+#include <util/lang/c_types.h>
 #include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
 #include <cassert>
 #include <goto-symex/slice.h>
@@ -1146,9 +1148,10 @@ bool find_nondet_in_expr(const expr2tc &expr)
 // struct, because smt_convt::get's member-id case skips the tuple
 // re-query when the result is struct-typed. When `value` isn't the
 // matching constant_* for an aggregate type, we re-resolve it via
-// get_by_ast on the converted root expression — that path goes
-// through the AST-based tuple_get which recurses through nested
-// tuple-selects and produces fully materialised leaves. This keeps
+// get_by_ast on the root expression — that AST-based path goes through
+// the tuple_get / get_array machinery which recurses through nested
+// tuple-selects and produces fully materialised leaves, and (unlike
+// get_by_type) accepts a non-symbol root such as a member access. This keeps
 // the multi-witness blocking clause sound: make_blocking_expr builds
 // equalities against value_expr, so any unresolved subterm there
 // would block nothing.
@@ -1163,8 +1166,7 @@ static expr2tc zero_fill_aggregate(
     const struct_type2t &st = to_struct_type(expected_type);
     expr2tc effective = value;
     if (!effective || !is_constant_struct2t(effective))
-      effective =
-        smt_conv.get_by_ast(expected_type, smt_conv.convert_ast(root_expr));
+      effective = smt_conv.get_by_ast(root_expr);
     const constant_struct2t *cs = (effective && is_constant_struct2t(effective))
                                     ? &to_constant_struct2t(effective)
                                     : nullptr;
@@ -1214,8 +1216,7 @@ static expr2tc zero_fill_aggregate(
     const array_type2t &at = to_array_type(expected_type);
     expr2tc effective = value;
     if (!effective || !is_constant_array2t(effective))
-      effective =
-        smt_conv.get_by_ast(expected_type, smt_conv.convert_ast(root_expr));
+      effective = smt_conv.get_by_ast(root_expr);
     if (effective && is_constant_array2t(effective))
     {
       const constant_array2t &ca = to_constant_array2t(effective);
@@ -1261,10 +1262,9 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
   std::vector<collected_nondet_value> results;
   std::unordered_set<std::string> seen_nondets;
 
-  // Use the EXACT same logic as generate_testcase
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     if (SSA_step.is_assignment())
@@ -1287,7 +1287,7 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
         continue;
       }
 
-      // Deduplicate by symbol name (same as generate_testcase)
+      // Deduplicate by symbol name
       if (seen_nondets.count(sym.thename.as_string()))
       {
         continue;

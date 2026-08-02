@@ -1,4 +1,4 @@
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
@@ -14,21 +14,22 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <llvm/Support/raw_os_ostream.h>
+#include <clang-c-frontend/clang_ast_dump.h>
 CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/message.h>
-#include <util/mp_arith.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
-#include <util/symbolic_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/message/message.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/symbolic_types.h>
 
 #include <boost/algorithm/string/replace.hpp>
 
@@ -294,6 +295,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
 
     ross << "unrecognized / unimplemented clang declaration "
          << decl.getDeclKindName() << "\n";
@@ -610,6 +612,22 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
       is_aggregate_type(vd.getType()) &&
       stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
 
+    // An array of a class type with a non-trivial constructor is an aggregate,
+    // but its CXXConstructExpr is not a no-op: every element must be
+    // constructed.  Keep the constructor call so static_lifetime_init (via
+    // clang_cpp_maint::adjust_init) can expand it into per-element calls;
+    // otherwise the element constructors are silently dropped and any side
+    // effect (e.g. a global counter bumped by the ctor) never happens.  See
+    // regression esbmc-cpp/gcc-template-tests/ctor2.
+    if (aggregate_without_init)
+    {
+      const auto &construct_expr =
+        static_cast<const clang::CXXConstructExpr &>(*stmt);
+      const clang::CXXConstructorDecl *ctor = construct_expr.getConstructor();
+      if (ctor && !ctor->isTrivial())
+        aggregate_without_init = false;
+    }
+
     if (vd.isStaticDataMember() && vd.isOutOfLine())
     {
       // Reorder to respect definition order for static_lifetime_init().
@@ -753,8 +771,26 @@ bool clang_c_convertert::get_function(
     }
   }
 
-  added_symbol.set_type(type);
-  new_expr.type() = type;
+  // Record the C++ exception specification (noexcept / dynamic throw(...)) as
+  // function-boundary metadata on the type. No-op for C.
+  annotate_exception_specification(fd, type);
+
+  // A bodyless re-declaration must not clobber the type of a function that is
+  // already defined. The definition's argument list carries the parameter
+  // identifiers symex uses to bind call arguments; replacing it with a
+  // prototype's nameless arguments silently breaks parameter passing. This
+  // surfaces when several frontends share one context and each prepends the
+  // same intrinsic prototypes — e.g. c2goto registers both the C and C++
+  // frontends, and clang_cpp re-declares the nameless
+  // __VERIFIER_nondet_memory prototype after the C definition with its named
+  // parameters was already converted (esbmc/esbmc#5298).
+  if (!fd.hasBody() && added_symbol.get_value().is_not_nil())
+    new_expr.type() = added_symbol.get_type();
+  else
+  {
+    added_symbol.set_type(type);
+    new_expr.type() = type;
+  }
 
   // We need: a type, a name, and an optional body.
   // Always call get_function_body so overrides (e.g. the C++ frontend) can
@@ -1414,6 +1450,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang type: \"";
     ross << the_type.getTypeClassName() << "\n";
     the_type.dump(ross, *ASTContext);
@@ -1843,6 +1880,7 @@ bool clang_c_convertert::get_builtin_type(
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
 
     ross << "Unrecognized clang builtin type "
          << bt.getName(clang::PrintingPolicy(clang::LangOptions())).str()
@@ -1854,7 +1892,7 @@ bool clang_c_convertert::get_builtin_type(
   }
   }
 
-  new_type.set("#cpp_type", c_type);
+  new_type.cpp_type(c_type);
   return false;
 }
 
@@ -1886,6 +1924,7 @@ bool clang_c_convertert::get_bitfield_type(
     log_error("Clang could not calculate bitfield width");
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     fd.getBitWidth()->dump(ross, *ASTContext);
     ross.flush();
     log_error("{}", oss.str());
@@ -1901,6 +1940,15 @@ bool clang_c_convertert::get_bitfield_type(
     return true;
 
   new_type = orig_type;
+  // A `bool` bitfield migrates to unsignedbv[N] (a bool has no fixed width the
+  // narrowing can key on), but its legacy id stays "bool", so gen_typecast_bool
+  // treats a read as already-bool and skips the cast -- leaving a non-bool
+  // operand in an &&/||/if that trips a goto-check type assertion. Base the
+  // bitfield on an unsigned bitvector, as integer bitfields already are, so the
+  // boolean-context coercion inserts the cast; the migrated type is unchanged
+  // (#6304).
+  if (new_type.id() == "bool")
+    new_type.id("unsignedbv");
   new_type.width(result.Val.getInt().getSExtValue());
   new_type.set("#bitfield", true);
   new_type.subtype() = orig_type;
@@ -1930,7 +1978,30 @@ bool clang_c_convertert::get_base_flattened_inits(
   std::vector<exprt> &flat)
 {
   const auto *cxxrd = init.getType()->getAsCXXRecordDecl();
-  if (!cxxrd || cxxrd->getNumBases() == 0)
+
+  // Under the nested base-subobject layout the derived struct carries one
+  // "@base@<id>" component per direct base, so a base initializer maps to a
+  // single element and must NOT be expanded into the base's fields (which is
+  // what the legacy flattened layout required). Detect the layout from the
+  // converted struct type. See #1866, #3894.
+  bool nested_layout = false;
+  if (cxxrd && cxxrd->getNumBases() != 0)
+  {
+    typet derived_t;
+    if (!get_type(init.getType(), derived_t))
+    {
+      const typet &followed = ns.follow(derived_t);
+      if (followed.is_struct())
+        for (const auto &c : to_struct_type(followed).components())
+          if (c.get_bool("is_base_subobject"))
+          {
+            nested_layout = true;
+            break;
+          }
+    }
+  }
+
+  if (!cxxrd || cxxrd->getNumBases() == 0 || nested_layout)
   {
     for (unsigned j = 0, n = init.getNumInits(); j < n; ++j)
     {
@@ -2273,7 +2344,42 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::UnaryExprOrTypeTraitExpr &unary =
       static_cast<const clang::UnaryExprOrTypeTraitExpr &>(stmt);
 
-    // Use clang to calculate sizeof/alignof
+    if (unary.getKind() == clang::UETT_SizeOf)
+    {
+      // Emit a `sizeof` node carrying the measured type T as the type of its
+      // first operand (a type_exprt), and — when clang can evaluate it — the
+      // authoritative byte-size constant as a second operand. Using clang's
+      // value rather than recomputing it from T keeps flexible-array-members,
+      // bitfields and friends in agreement with the source. VLAs leave the
+      // value operand off; adjust_sizeof fills it in with a namespace. This
+      // replaces the legacy sizeof-type side channel (esbmc/esbmc#5337).
+      typet measured;
+      if (get_type(unary.getTypeOfArgument(), measured))
+        return true;
+
+      if (measured.is_struct() || measured.is_union())
+      {
+        struct_union_typet t = to_struct_union_type(measured);
+        measured = symbol_typet(tag_prefix + t.tag().as_string());
+      }
+
+      exprt sizeof_expr("sizeof", size_type());
+      sizeof_expr.copy_to_operands(type_exprt(measured));
+
+      clang::Expr::EvalResult result;
+      if (unary.EvaluateAsInt(result, *ASTContext))
+        sizeof_expr.copy_to_operands(constant_exprt(
+          integer2binary(
+            result.Val.getInt().getZExtValue(), bv_width(size_type())),
+          integer2string(result.Val.getInt().getZExtValue()),
+          size_type()));
+
+      new_expr = sizeof_expr;
+      break;
+    }
+
+    // alignof / __alignof / _Alignof / vec_step: clang folds these to a
+    // constant; they carry no allocation type, so keep the folded value.
     clang::Expr::EvalResult result;
     if (unary.EvaluateAsInt(result, *ASTContext))
     {
@@ -2285,26 +2391,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
     else
     {
-      assert(unary.getKind() == clang::UETT_SizeOf);
-
-      typet t;
-      if (get_type(unary.getType(), t))
-        return true;
-
-      new_expr = exprt("sizeof", t);
-    }
-
-    typet size_type;
-    if (get_type(unary.getTypeOfArgument(), size_type))
+      log_error(
+        "Unsupported non-constant UnaryExprOrTypeTrait of kind {}",
+        static_cast<int>(unary.getKind()));
       return true;
-
-    if (size_type.is_struct() || size_type.is_union())
-    {
-      struct_union_typet t = to_struct_union_type(size_type);
-      size_type = symbol_typet(tag_prefix + t.tag().as_string());
     }
-
-    new_expr.set("#c_sizeof_type", size_type);
     break;
   }
 
@@ -2521,11 +2612,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     exprt then;
-    if (get_expr(*ternary_if.getTrueExpr(), then))
+    if (get_expr(*ternary_if.getTrueExpr()->IgnoreParens(), then))
       return true;
 
     exprt else_expr;
-    if (get_expr(*ternary_if.getFalseExpr(), else_expr))
+    if (get_expr(*ternary_if.getFalseExpr()->IgnoreParens(), else_expr))
       return true;
 
     typet t;
@@ -2534,6 +2625,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     exprt if_expr("if", t);
     if_expr.copy_to_operands(cond, then, else_expr);
+
+    // Record the column of the ? token on the expression location so that
+    // goto_sideeffects can propagate it to the IF instruction when lowering
+    // this ternary for branching waypoints.
+    clang::PresumedLoc qLoc;
+    get_presumed_location(ternary_if.getQuestionLoc(), qLoc);
+    if (!qLoc.isInvalid())
+      location.set_column(qLoc.getColumn());
 
     new_expr = if_expr;
     break;
@@ -2766,7 +2865,22 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       // struct components.
       std::vector<exprt> flat_inits;
       const auto *cxxrd = init_stmt.getType()->getAsCXXRecordDecl();
-      const bool has_bases = cxxrd && cxxrd->getNumBases() > 0;
+
+      // Under the nested base-subobject layout the target carries one
+      // "@base@<id>" component per direct base, so a base-typed argument maps
+      // to a single element and must NOT be expanded into the base's fields
+      // (which is what the legacy flattened layout required). See #1866, #3894.
+      bool nested_layout = false;
+      if (t.is_struct())
+        for (const auto &c : to_struct_type(t).components())
+          if (c.get_bool("is_base_subobject"))
+          {
+            nested_layout = true;
+            break;
+          }
+
+      const bool has_bases =
+        cxxrd && cxxrd->getNumBases() > 0 && !nested_layout;
       for (const clang::Expr *e : args)
       {
         if (has_bases)
@@ -3271,6 +3385,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       log_error("ESBMC currently does not support indirect gotos");
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
+      enable_ast_dump_colors(ross, *ASTContext);
       stmt.dump(ross, *ASTContext);
       ross.flush();
       log_error("{}", oss.str());
@@ -3308,6 +3423,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
+      enable_ast_dump_colors(ross, *ASTContext);
       ross << "ESBMC could not find the parent scope for "
            << "the following return statement:"
            << "\n";
@@ -3398,6 +3514,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
+      enable_ast_dump_colors(ross, *ASTContext);
       ross << "Conversion of unsupported value-dependent type-trait expr: \"";
       ross << stmt.getStmtClassName() << "\" to expression"
            << "\n";
@@ -3562,6 +3679,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang expr: \"";
     ross << stmt.getStmtClassName() << "\" to expression"
          << "\n";
@@ -3641,6 +3759,7 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 
   std::ostringstream oss;
   llvm::raw_os_ostream ross(oss);
+  enable_ast_dump_colors(ross, *ASTContext);
   ross << "Conversion of unsupported clang decl ref: \"";
   ross << d.getDeclKindName() << "\" to expression"
        << "\n";
@@ -3699,99 +3818,65 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_UncheckedDerivedToBase:
   case clang::CK_DerivedToBase:
   {
-    // For multiple inheritance, the base class sub-object may reside at a
-    // non-zero byte offset within the derived object. Compute the total
-    // offset by following the cast path through the class hierarchy, then
-    // adjust the pointer by that many bytes so that virtual dispatch via
-    // the base vtable uses the correct vtable pointer.
-    clang::QualType cur_qt = cast.getSubExpr()->getType();
-    if (cur_qt->isPointerType() || cur_qt->isReferenceType())
-      cur_qt = cur_qt->getPointeeType();
-
-    uint64_t total_offset = 0;
-    bool adjust = true;
+    // Route the derived->base conversion structurally through the nested
+    // base-subobject components ("@base@<id>") added by
+    // get_base_components_methods, rather than adjusting a byte offset. For a
+    // pointer we take the address of the subobject member; for an lvalue we
+    // select the subobject member directly. Multi-level bases chain one hop
+    // per CXXBaseSpecifier on the cast path. This is sound in ESBMC's
+    // dereference model (no char* arithmetic). See #1866, #3894.
+    bool routed = true;
+    exprt cur = expr;
+    const bool ptr_mode = cur.type().is_pointer();
     for (auto it = cast.path_begin(); it != cast.path_end(); ++it)
     {
       const clang::CXXBaseSpecifier *spec = *it;
-      if (spec->isVirtual())
-      {
-        // Virtual base offsets are dynamic; skip static adjustment.
-        adjust = false;
-        break;
-      }
-      const clang::CXXRecordDecl *cur_decl = cur_qt->getAsCXXRecordDecl();
       const clang::CXXRecordDecl *base_decl =
         spec->getType()->getAsCXXRecordDecl();
-      if (!cur_decl || !base_decl)
+      // Virtual bases have a dynamic offset and no static @base@ subobject
+      // yet; fall back to the plain typecast (handled below).
+      if (spec->isVirtual() || !base_decl)
       {
-        adjust = false;
+        routed = false;
         break;
       }
-      total_offset += ASTContext->getASTRecordLayout(cur_decl)
-                        .getBaseClassOffset(base_decl)
-                        .getQuantity();
-      cur_qt = spec->getType();
-    }
-
-    // Apply the byte-offset adjustment only when this cast is the implicit
-    // object of a CXXMemberCallExpr (i.e. parent is MemberExpr AND
-    // grandparent is CXXMemberCallExpr). This covers:
-    //   - 'this->B8::eval()' (CXXThisExpr sub-expr)
-    //   - 'ptr->eval()' (DeclRefExpr sub-expr via MemberExpr)
-    // and excludes:
-    //   - Field accesses like 'return j' via 'using Baz::j' — parent is
-    //     MemberExpr but grandparent is ReturnStmt, not CXXMemberCallExpr.
-    //     ESBMC uses named field access for inherited members, so adding a
-    //     byte offset here would corrupt the symbolic model.
-    //   - 'Base2 *o = new Derived()' — parent is not MemberExpr at all.
-    //     Must remain unadjusted for ESBMC's delete model.
-    //
-    // The check walks through transparent wrapper expressions (casts, parens)
-    // to handle cases like 'static_cast<B8*>(ptr)->eval()'.
-    bool is_method_receiver = false;
-    for (const clang::Stmt *node = &cast;;)
-    {
-      auto parents = ASTContext->getParents(*node);
-      if (parents.empty())
-        break;
-      const auto &parent = *parents.begin();
-      if (const auto *me = parent.get<clang::MemberExpr>())
+      std::string base_name, base_id;
+      get_decl_name(*base_decl, base_name, base_id);
+      const symbolt *base_sym = context.find_symbol(base_id);
+      if (!base_sym)
       {
-        auto grandparents = ASTContext->getParents(*me);
-        if (
-          !grandparents.empty() &&
-          grandparents.begin()->get<clang::CXXMemberCallExpr>())
-          is_method_receiver = true;
+        routed = false;
         break;
       }
-      const clang::Stmt *ps = parent.get<clang::Stmt>();
+      const typet base_t = symbol_typet(base_sym->id);
+      const irep_idt comp = base_subobject_name(base_id);
+      // Only route structurally when the current class actually carries the
+      // nested subobject: a hierarchy containing a virtual base keeps the
+      // legacy flattened layout, so fall back to the plain typecast there.
+      const typet cur_struct =
+        ns.follow(ptr_mode ? cur.type().subtype() : cur.type());
       if (
-        !ps ||
-        !(llvm::isa<clang::CastExpr>(ps) || llvm::isa<clang::ParenExpr>(ps)))
+        !cur_struct.is_struct() ||
+        !to_struct_type(cur_struct).has_component(comp))
+      {
+        routed = false;
         break;
-      node = ps;
+      }
+      if (ptr_mode)
+      {
+        dereference_exprt deref(cur, cur.type().subtype());
+        member_exprt m(deref, comp, base_t);
+        cur = address_of_exprt(m);
+      }
+      else
+        cur = member_exprt(cur, comp, base_t);
     }
 
-    // Preserve original behaviour: CK_DerivedToBase always called gen_typecast;
-    // CK_UncheckedDerivedToBase was a no-op (break) and should only typecast
-    // when we actually applied a byte-offset adjustment below.
-    bool do_typecast = (cast.getCastKind() == clang::CK_DerivedToBase);
-    if (
-      adjust && total_offset > 0 && is_method_receiver &&
-      expr.type().is_pointer())
-    {
-      // Cast to char*, add byte offset, then cast to the target pointer type.
-      // index_type() is signed address-width (ptrdiff_t), matching ESBMC's
-      // pointer arithmetic IR convention.
-      typet char_ptr = pointer_typet(char_type());
-      gen_typecast(ns, expr, char_ptr);
-      plus_exprt adjusted(expr, from_integer(total_offset, index_type()));
-      adjusted.type() = char_ptr;
-      expr = adjusted;
-      do_typecast = true;
-    }
-
-    if (do_typecast)
+    if (routed)
+      expr = cur;
+    else if (cast.getCastKind() == clang::CK_DerivedToBase)
+      // Preserve prior fallback: CK_DerivedToBase always typecast;
+      // CK_UncheckedDerivedToBase was a no-op.
       gen_typecast(ns, expr, type);
 
     break;
@@ -3942,6 +4027,7 @@ bool clang_c_convertert::get_cast_expr(
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang cast operator: \"";
     ross << cast.getCastKindName() << "\" to expression"
          << "\n";
@@ -4026,6 +4112,7 @@ bool clang_c_convertert::get_unary_operator_expr(
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang unary operator: \"";
     ross << clang::UnaryOperator::getOpcodeStr(uniop.getOpcode()).str()
          << "\" to expression"
@@ -4230,6 +4317,7 @@ bool clang_c_convertert::get_compound_assign_expr(
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang binary operator: \"";
     ross << compop.getOpcodeStr().str() << "\" to expression"
          << "\n";
@@ -4275,6 +4363,10 @@ bool clang_c_convertert::get_atomic_expr(
   std::string name;
   switch (atm.getOp())
   {
+  case clang::AtomicExpr::AO__c11_atomic_init:
+    name = "__c11_atomic_init";
+    break;
+
   case clang::AtomicExpr::AO__c11_atomic_load:
     name = "__c11_atomic_load";
     break;
@@ -4399,6 +4491,7 @@ bool clang_c_convertert::get_atomic_expr(
     log_error("Unknown Atomic expression");
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     atm.dump(ross, *ASTContext);
     ross.flush();
     log_error("{}", oss.str());
@@ -4671,6 +4764,7 @@ void clang_c_convertert::get_decl_name(
     {
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
+      enable_ast_dump_colors(ross, *ASTContext);
       nd.dump(ross);
       ross.flush();
       log_error("Declaration has an empty name:\n{}", oss.str());
@@ -4688,6 +4782,7 @@ void clang_c_convertert::get_decl_name(
   // Otherwise, abort
   std::ostringstream oss;
   llvm::raw_os_ostream ross(oss);
+  enable_ast_dump_colors(ross, *ASTContext);
   ross << "Unable to generate the USR for:\n";
   nd.dump(ross);
   ross.flush();
@@ -4760,12 +4855,13 @@ void clang_c_convertert::get_presumed_location(
 
   clang::SourceLocation FileLoc = sm->getFileLoc(loc);
   bool use_line_directives = true;
-#if ESBMC_SVCOMP
   /* Do not use #line directives, because the GraphML witness format appearently
    * wants to use the physical line in the pre-processed .i file; at least
    * CPAchecker and UAutomizer do. */
-  use_line_directives = false;
-#endif
+  if (
+    config.options.get_bool_option("sv-comp") &&
+    !config.options.get_bool_option("validate-violation-witness"))
+    use_line_directives = false;
   PLoc = sm->getPresumedLoc(FileLoc, use_line_directives);
 }
 
@@ -5101,6 +5197,7 @@ bool clang_c_convertert::get_APValue_expr(
     log_error("Unsupported APValue expression");
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     value.dump(ross, *ASTContext);
     ross.flush();
     log_error("{}", oss.str());

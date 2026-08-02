@@ -1,0 +1,90 @@
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.0"
+    uuid: 43f63f07-42c1-4c96-b0b6-f30b3205d7c0
+    creation_time: "2024-04-29T13:13:07+02:00"
+    producer:
+      name: "Paulina"
+      version: "thesis"
+    task:
+      input_files:
+      - "while.c"
+      input_file_hashes:
+        while.c: 9c05ddedcb07da7a4eb93e244e7b0495d270511cd41cd755861ccfa605097f8b
+      specification: "G ! call(reach_error())"
+      data_model: "LP64"
+      language: "C"
+  content:
+  - segment:
+    - waypoint:
+        type: "function_return"
+        action: "follow"
+        constraint:
+          value: "\\result == 0"
+          format: "acsl_expression"
+        location:
+          file_name: "while.c"
+          line: 16
+  - segment:
+    - waypoint:
+        type: "branching"
+        action: "follow"
+        constraint:
+          value: "true"
+        location:
+          file_name: "while.c"
+          line: 21
+  - segment:
+    - waypoint:
+        type: "function_return"
+        action: "follow"
+        constraint:
+          value: "\\result == 9"
+          format: "acsl_expression"
+        location:
+          file_name: "while.c"
+          line: 22
+  - segment:
+    - waypoint:
+        type: "branching"
+        action: "follow"
+        constraint:
+          value: "true"
+        location:
+          file_name: "while.c"
+          line: 21
+  - segment:
+    - waypoint:
+        type: "function_return"
+        action: "follow"
+        constraint:
+          value: "\\result == 3"
+          format: "acsl_expression"
+        location:
+          file_name: "while.c"
+          line: 22
+  - segment:
+    - waypoint:
+        type: "branching"
+        action: "avoid"
+        constraint:
+          value: "true"
+        location:
+          file_name: "while.c"
+          line: 21
+    - waypoint:
+        type: "branching"
+        action: "follow"
+        constraint:
+          value: "true"
+        location:
+          file_name: "while.c"
+          line: 28
+  - segment:
+    - waypoint:
+        type: "target"
+        action: "follow"
+        location:
+          file_name: "while.c"
+          line: 29
+

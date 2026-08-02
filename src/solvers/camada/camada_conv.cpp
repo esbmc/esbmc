@@ -1,8 +1,10 @@
 #include <solvers/solve.h>
 #include <solvers/smt/smt_array.h>
+#include <solvers/smt/smt_solver.h>
+#include <solvers/smt/tuple/smt_tuple.h>
 
-#include <util/ieee_float.h>
-#include <util/mp_arith.h>
+#include <util/arith/ieee_float.h>
+#include <util/arith/mp_arith.h>
 
 #include <camada/camada.h>
 #include <camada/camadafeatures.h>
@@ -74,12 +76,12 @@ public:
   using camada_expr::camada_expr;
 
   smt_astt update(
-    smt_convt *ctx,
+    smt_solver_baset *ctx,
     smt_astt value,
     unsigned int idx,
     const expr2tc &idx_expr) const override;
 
-  smt_astt project(smt_convt *ctx, unsigned int elem) const override;
+  smt_astt project(smt_solver_baset *ctx, unsigned int elem) const override;
 };
 
 #if CAMADA_HAVE_Z3
@@ -346,7 +348,7 @@ camada::SMTSolverRef create_esbmc_yices_solver(const optionst &options)
 #endif
 }
 
-class camada_convt : public smt_convt,
+class camada_convt : public smt_solver_baset,
                      public tuple_iface,
                      public array_iface,
                      public fp_convt
@@ -358,7 +360,7 @@ public:
     const namespacet &ns,
     const optionst &options,
     camada_backendt backend)
-    : smt_convt(ns, options),
+    : smt_solver_baset(ns, options),
       array_iface(true, true),
       fp_convt(this),
       backend(backend)
@@ -389,17 +391,17 @@ public:
 
   void push_ctx() override
   {
-    smt_convt::push_ctx();
+    smt_solver_baset::push_ctx();
     solver->push();
   }
 
   void pop_ctx() override
   {
-    smt_convt::pop_ctx();
+    smt_solver_baset::pop_ctx();
     solver->pop();
   }
 
-  resultt dec_solve() override
+  smt_resultt dec_solve() override
   {
     pre_solve();
 
@@ -420,7 +422,7 @@ public:
     solver->addConstraint(to_solver_smt_ast<camada_expr>(a)->a);
   }
 
-  bool get_bool(smt_astt a) override
+  tvt get_bool(smt_astt a) override
   {
     const auto value = expr(a);
     const auto kind = value->getKind();
@@ -430,7 +432,7 @@ public:
     {
       log_warning(
         "Skipping concrete model extraction for quantified boolean term");
-      return false;
+      return tvt(tvt::TV_UNKNOWN);
     }
 
     std::string dump;
@@ -442,12 +444,15 @@ public:
       log_warning(
         "Skipping concrete model extraction for boolean term containing "
         "quantifiers");
-      return false;
+      return tvt(tvt::TV_UNKNOWN);
     }
 
     auto result =
       unwrap_model_result(solver->getBool(value), "boolean model value");
-    return result.value_or(false);
+    if (!result)
+      return tvt(tvt::TV_UNKNOWN);
+
+    return tvt(*result);
   }
 
   BigInt get_bv(smt_astt a, bool is_signed) override
@@ -1416,7 +1421,7 @@ private:
 };
 
 smt_astt camada_tuple_ast::update(
-  smt_convt *ctx,
+  smt_solver_baset *ctx,
   smt_astt value,
   unsigned int idx,
   const expr2tc &idx_expr) const
@@ -1443,7 +1448,7 @@ smt_astt camada_tuple_ast::update(
   return cam_ctx->wrap(cam_ctx->solver->mkTuple(fields), sort);
 }
 
-smt_astt camada_tuple_ast::project(smt_convt *ctx, unsigned int elem) const
+smt_astt camada_tuple_ast::project(smt_solver_baset *ctx, unsigned int elem) const
 {
   auto *cam_ctx = static_cast<camada_convt *>(ctx);
   const std::vector<type2tc> &members =
@@ -1453,7 +1458,7 @@ smt_astt camada_tuple_ast::project(smt_convt *ctx, unsigned int elem) const
   return cam_ctx->wrap(cam_ctx->solver->mkTupleSelect(a, elem), idx_sort);
 }
 
-smt_convt *create_camada_solver(
+smt_solver_baset *create_camada_solver(
   camada_backendt backend,
   const optionst &options,
   const namespacet &ns,
@@ -1472,7 +1477,7 @@ smt_convt *create_camada_solver(
 
 } // namespace
 
-smt_convt *create_new_z3_solver(
+smt_solver_baset *create_new_z3_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
@@ -1483,7 +1488,7 @@ smt_convt *create_new_z3_solver(
     camada_backendt::z3, options, ns, tuple_api, array_api, fp_api);
 }
 
-smt_convt *create_new_cvc5_solver(
+smt_solver_baset *create_new_cvc5_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
@@ -1494,7 +1499,7 @@ smt_convt *create_new_cvc5_solver(
     camada_backendt::cvc5, options, ns, tuple_api, array_api, fp_api);
 }
 
-smt_convt *create_new_mathsat_solver(
+smt_solver_baset *create_new_mathsat_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
@@ -1505,7 +1510,7 @@ smt_convt *create_new_mathsat_solver(
     camada_backendt::mathsat, options, ns, tuple_api, array_api, fp_api);
 }
 
-smt_convt *create_new_yices_solver(
+smt_solver_baset *create_new_yices_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
@@ -1516,7 +1521,7 @@ smt_convt *create_new_yices_solver(
     camada_backendt::yices, options, ns, tuple_api, array_api, fp_api);
 }
 
-smt_convt *create_new_bitwuzla_solver(
+smt_solver_baset *create_new_bitwuzla_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,

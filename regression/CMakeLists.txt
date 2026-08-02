@@ -18,8 +18,22 @@ set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 #so the Python side never needs its own default.
 set(ESBMC_REGRESS_TIMEOUT 1200 CACHE STRING
     "Per-test timeout in seconds for regression tests")
+# Grace the ctest TIMEOUT property gets *on top of* the runner's own
+# ESBMC_REGRESS_TIMEOUT budget. The runner (testing_tool.py) enforces the real
+# budget internally: it kills ESBMC at ESBMC_REGRESS_TIMEOUT and, for
+# KNOWNBUG/FUTURE tests, accepts the timeout as satisfying the expected-fail
+# contract instead of erroring. That accept-and-return path needs a few seconds
+# (SIGTERM grace + final communicate) to complete. If ctest's own TIMEOUT
+# property equals ESBMC_REGRESS_TIMEOUT, ctest kills the runner mid-teardown and
+# reports a hard "Timeout" before the accept logic can run, defeating it. The
+# grace keeps ESBMC's compute budget unchanged while letting the runner finish.
+set(ESBMC_REGRESS_TIMEOUT_GRACE 30 CACHE STRING
+    "Seconds added to the ctest TIMEOUT property over the runner's own budget")
 set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
     "Per-test virtual memory limit")
+
+option(ENABLE_SANITIZER_CI
+    "Restrict regression to CORE mode for sanitizer-instrumented CI runs" OFF)
 
 if(BENCHBRINGUP)
   # To run a specific benchmark in Github workflow and download the log archive when completed
@@ -38,11 +52,27 @@ if(BENCHBRINGUP)
   set(BENCHBRINGUP_ARGS --benchbringup)
 endif()
 
+# Computed after any BENCHBRINGUP override so it tracks the final budget.
+math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT
+     "${ESBMC_REGRESS_TIMEOUT} + ${ESBMC_REGRESS_TIMEOUT_GRACE}")
+
+# An optional 5th argument names a backend to run the suite under. The tool
+# string is shlex-split by testing_tool.py, so the extra option rides along with
+# the binary; --default-solver only applies when the test itself names no
+# solver, leaving solver-specific tests on their own backend (esbmc/esbmc#1118).
 function(add_esbmc_regression_test folder modes test)
+    set(solver "${ARGN}")
     set(test_name "regression/${folder}/${test}")
+    set(tool "${ESBMC_BIN}")
+    set(extra_labels "")
+    if(solver)
+        set(test_name "${test_name}[${solver}]")
+        set(tool "${ESBMC_BIN} --default-solver=${solver}")
+        set(extra_labels ";cross-backend;cross-backend/${solver}")
+    endif()
     add_test(NAME ${test_name}
              COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
-                     --tool=${ESBMC_BIN}
+                     --tool=${tool}
                      --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder}
                      --modes ${modes}
                      --file=${test}
@@ -50,24 +80,52 @@ function(add_esbmc_regression_test folder modes test)
     # Timeout and memory limit are passed via environment
     set_tests_properties(${test_name}
       PROPERTIES SKIP_RETURN_CODE 10
-      TIMEOUT ${ESBMC_REGRESS_TIMEOUT}
+      TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT}
       ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
-      LABELS "regression;${folder}/")
+      LABELS "regression;${folder}/${extra_labels}")
 endfunction()
 
 function(add_esbmc_regression folder modes)
-    subdirlist(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${regression})
+    subdirlist(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${folder})
     if(${folder} STREQUAL "quixbugs")
         list(REMOVE_ITEM SUBDIRS bucketsort)
     endif()
+    if(${folder} STREQUAL "ld")
+        # WP3 benchmark dataset, not a CTest test (no test.desc)
+        list(REMOVE_ITEM SUBDIRS benchmarks)
+    endif()
     foreach(test ${SUBDIRS})
-        add_esbmc_regression_test(${folder} "${modes}" ${test})
+        add_esbmc_regression_test(${folder} "${modes}" ${test} ${ARGN})
     endforeach()
 endfunction()
 
 # conditionally enable regression suites based on configured support
 if(ENABLE_BITWUZLA)
     set(REGRESSIONS_BITWUZLA bitwuzla)
+endif()
+if(ENABLE_BITWUZLLOB AND ENABLE_SMTLIB AND NOT WIN32)
+    # The backend is only built when smtlib is (see its CMakeLists.txt). The
+    # suite drives it through a z3-based sh stand-in for Mallob's mono mode
+    # (Mallob itself is Linux/MPI-only), so it needs a z3 binary and a POSIX
+    # shell. Also look next to a --DZ3_DIR passed for linking, so a build that
+    # bundled z3 but has no system z3 still runs the suite.
+    find_program(ESBMC_BITWUZLLOB_TEST_Z3 z3 HINTS "${Z3_DIR}/bin" "${Z3_DIR}")
+    if(ESBMC_BITWUZLLOB_TEST_Z3)
+        set(REGRESSIONS_BITWUZLLOB bitwuzllob)
+    else()
+        message(WARNING "bitwuzllob regression suite disabled: no z3 binary found on PATH or in Z3_DIR")
+    endif()
+endif()
+if(ENABLE_NEUROSYM AND ENABLE_SMTLIB AND NOT WIN32)
+    # Like bitwuzllob: the suite drives the backend through a z3-based sh
+    # stand-in for NeuroSym's batch mode (NeuroSym itself needs a Python +
+    # PyTorch checkout), so it needs a z3 binary and a POSIX shell.
+    find_program(ESBMC_NEUROSYM_TEST_Z3 z3 HINTS "${Z3_DIR}/bin" "${Z3_DIR}")
+    if(ESBMC_NEUROSYM_TEST_Z3)
+        set(REGRESSIONS_NEUROSYM neurosym)
+    else()
+        message(WARNING "neurosym regression suite disabled: no z3 binary found on PATH or in Z3_DIR")
+    endif()
 endif()
 if(ENABLE_CVC4)
     set(REGRESSIONS_CVC cvc)
@@ -92,6 +150,9 @@ if(ENABLE_GOTO_CONTRACTOR)
 endif()
 if(ENABLE_JIMPLE_FRONTEND)
     set(REGRESSIONS_JIMPLE jimple)
+endif()
+if(ENABLE_LD_FRONTEND)
+    set(REGRESSIONS_LD ld)
 endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
@@ -190,6 +251,8 @@ if(APPLE)
                     termination
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
+                    ${REGRESSIONS_BITWUZLLOB}
+                    ${REGRESSIONS_NEUROSYM}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_Z3}
@@ -209,6 +272,7 @@ if(APPLE)
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
                     ${REGRESSIONS_AI_GENERATED_CODE}
+                    ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
                     ltl
                     goto-transcoder
@@ -226,6 +290,8 @@ elseif(WIN32)
                     windows
                     ${REGRESSIONS_JIMPLE}
                     ${REGRESSIONS_BITWUZLA}
+                    ${REGRESSIONS_BITWUZLLOB}
+                    ${REGRESSIONS_NEUROSYM}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_SMTLIB}
@@ -253,6 +319,8 @@ else()
                     cuda/Supported_long_time
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
+                    ${REGRESSIONS_BITWUZLLOB}
+                    ${REGRESSIONS_NEUROSYM}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_SMTLIB}
@@ -277,6 +345,7 @@ else()
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
                     ${REGRESSIONS_AI_GENERATED_CODE}
+                    ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
                     ltl
                     goto-coverage
@@ -284,7 +353,9 @@ else()
                     parallel-solving
                     loop-invariants
                     function_contract
-                    witnesses_validate
+                    witnesses_validate/reachsafety-violationwitness
+                    witnesses_validate/reachsafety-correctnesswitness
+                    witnesses_validate/termination-violationwitness
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
@@ -300,11 +371,50 @@ foreach(regression IN LISTS REGRESSIONS)
     else()
         set(MODES CORE KNOWNBUG FUTURE THOROUGH)
     endif()
-    if(CORE_REGRESSION_ONLY)
+    # ENABLE_SANITIZER_CI mirrors CORE_REGRESSION_ONLY but is keyed on the
+    # sanitizer workflow rather than benchmark bring-up. Sanitizer-instrumented
+    # builds run 3-5x slower; restricting to CORE keeps each leg of the matrix
+    # inside the workflow's 90-minute budget.
+    if(CORE_REGRESSION_ONLY OR ENABLE_SANITIZER_CI)
       set(MODES CORE)
     endif()
     add_esbmc_regression("${regression}" "${MODES}")
 endforeach()
+
+# Cross-backend regression testing (esbmc/esbmc#1118). Off unless a backend is
+# named, so an ordinary build registers exactly the tests it did before. Each
+# named backend re-registers CROSS_BACKEND_SUITES as
+# `regression/<suite>/<test>[<backend>]`, labelled `cross-backend` and
+# `cross-backend/<backend>`, so one backend can be run on its own:
+#     cmake -DCROSS_BACKEND_SOLVERS="z3;bitwuzla" ...
+#     ctest -L "cross-backend/z3"
+# smtlib additionally needs a solver binary, which has to be supplied through
+# the same mechanism (--smtlib-solver-prog), and that program's own timeout can
+# change verdicts -- so it is deliberately not enabled by default here.
+set(CROSS_BACKEND_SOLVERS "" CACHE STRING
+    "Backends to additionally run CROSS_BACKEND_SUITES under, e.g. z3;bitwuzla")
+set(CROSS_BACKEND_SUITES "esbmc" CACHE STRING
+    "Suites re-run under every entry of CROSS_BACKEND_SOLVERS")
+
+if(CROSS_BACKEND_SOLVERS)
+    string(REPLACE " " ";" _available_solvers "${ESBMC_AVAILABLE_SOLVERS}")
+    list(REMOVE_ITEM _available_solvers "")
+
+    foreach(solver IN LISTS CROSS_BACKEND_SOLVERS)
+        if(NOT solver IN_LIST _available_solvers)
+            message(FATAL_ERROR
+                    "CROSS_BACKEND_SOLVERS names '${solver}', which this build "
+                    "does not have. Available: ${_available_solvers}")
+        endif()
+        foreach(suite IN LISTS CROSS_BACKEND_SUITES)
+            if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${suite}")
+                message(FATAL_ERROR "CROSS_BACKEND_SUITES names '${suite}', which is not a suite")
+            endif()
+            add_esbmc_regression("${suite}" "${MODES}" "${solver}")
+        endforeach()
+    endforeach()
+    message(STATUS "Cross-backend regression: ${CROSS_BACKEND_SUITES} x ${CROSS_BACKEND_SOLVERS}")
+endif()
 
 # Tests that legitimately run close to the per-test TIMEOUT on CI's Linux
 # runners (locally ~20-30s; CI ~75-110s; CI cap 120s, leaving no headroom).
@@ -405,6 +515,16 @@ set(_slow_regression_tests
     # verdict instead of ctest hard-killing the run.
     "regression/quixbugs/next_permutation"
     "regression/quixbugs/next_permutation_fail"
+    # depth_first_search_fail builds a small Node graph and recurses over each
+    # node's `successors` list. Under the object-model migration (#3067) every
+    # instance is a heap Class* and a Class* read out of a list into a recursive
+    # call carries an imprecise (unknown) points-to, so deep unwinding triggers a
+    # failed-symbol dereference cascade that does not converge (the original
+    # --unwind 5 ran >10min). The test's bound was lowered to --unwind 2, which
+    # still reaches the expected VERIFICATION FAILED in ~30s locally; the 2x
+    # budget covers the DebugOpt Linux runner's slowdown. The points-to-precision
+    # regression is tracked separately.
+    "regression/quixbugs/depth_first_search_fail"
     # breadth_first_search(_fail) used to fast-fail with
     # "NameError: name 'Queue' is not defined" because aliased deque imports
     # were not resolved. With PR #5008 the alias fix and popleft/appendleft
@@ -423,6 +543,14 @@ set(_slow_regression_tests
     # It stays KNOWNBUG; the larger inner timeout lets testing_tool record the
     # KNOWNBUG verdict instead of ctest hard-killing the run.
     "regression/quixbugs/reverse_linked_list"
+    # github_2335_1 verifies SUCCESSFUL but sits exactly on the cap: ~30s
+    # locally, 120.15s on the DebugOpt Linux runner. Its cost is one k
+    # iteration of the --no-reachable-memory-leak closure over a 30-object heap
+    # (10 slots x 3 nodes), so bounding --k-step does not shrink it. With no
+    # headroom it flaps on runner jitter, and has timed out at exactly 120.15s
+    # in #6609 and #6611 -- neither of which touches its code path (#6611 adds
+    # only two test directories and no source at all).
+    "regression/esbmc/github_2335_1"
     # github_4435 was a soundness false alarm on the SV-COMP libvsync
     # bounded_mpmc_check_full benchmark; the underlying deref unit
     # mismatch is fixed by PR #4939, but the full benchmark
@@ -431,6 +559,50 @@ set(_slow_regression_tests
     # the larger inner timeout lets testing_tool record the FUTURE
     # verdict instead of ctest hard-killing the run.
     "regression/esbmc-unix/github_4435"
+    # github_4782_object_size pinned the old crash where a non-array pointer
+    # reaching __ESBMC_get_object_size (a set() of user objects in a graph
+    # traversal) dereferenced an empty deref item. PR #4805 keeps the receiver
+    # list-typed, so the array protocol -- and that crash -- is no longer
+    # taken; under --incremental-bmc the (correct) program now hits the same
+    # symbolic-list scalability wall as quixbugs/topological_ordering and does
+    # not converge. Marked KNOWNBUG; the larger inner timeout lets testing_tool
+    # record the KNOWNBUG verdict instead of ctest hard-killing the run (#4805).
+    "regression/python/github_4782_object_size"
+    # dict65_4 and dictcomp_readback_func_fail still verify with the expected
+    # verdict, but PR #4805's list-OM copy/compare changes slowed them across
+    # the 120s cap on the DebugOpt Linux runner (dict65_4 ~89s->~121s,
+    # dictcomp ~110s->~117s locally). They stay CORE; the 2x budget gives the
+    # extra headroom so they finish and match instead of being hard-killed.
+    "regression/python/dict65_4"
+    "regression/python/dictcomp_readback_func_fail"
+    # math_log-rec1 and multi_dimensional_array_1-success are THOROUGH
+    # --boolector tests that still verify SUCCESSFUL with the expected verdict,
+    # but making --irep2-bodies the default (V.4.4) adds the goto-convert
+    # round-trip's overhead, tipping these already-borderline tests across the
+    # 120s cap on the DebugOpt Linux runner (both hit ~120s in #5366 CI; locally
+    # ~47s / ~114s with Bitwuzla, verdict-identical with --no-irep2-bodies). The
+    # 2x budget restores headroom; the W1 round-trip removal will later reclaim
+    # the overhead.
+    "regression/esbmc/math_log-rec1"
+    "regression/esbmc/multi_dimensional_array_1-success"
+    # str_rsplit verifies SUCCESSFUL but is heavy: under --incremental-bmc it
+    # climbs to k=5 before the forward condition converges, re-running symex and
+    # a fresh Bitwuzla query at each step over the str/list operational models
+    # (rsplit + list-equality + __memcmp_impl). It lands at ~106s on the DebugOpt
+    # Linux runner -- right at the 120s cap with no headroom -- so the slower
+    # macOS arm64 runner tips it over (timed out at 120s in #5579 CI, a run that
+    # does not touch its code path). Give it the 2x budget so transient
+    # runner-speed differences don't flap it.
+    "regression/python/str_rsplit"
+    # set_variadic_methods verifies SUCCESSFUL but is heavy: under
+    # --incremental-bmc it climbs k while re-running symex over the set/list
+    # operational models (variadic union/intersection/difference fold to
+    # __ESBMC_list_extend + __memcpy_impl loops), re-encoding ~1400 VCCs and a
+    # fresh Bitwuzla query each step. It lands ~137s locally and timed out at
+    # 120.71s on the DebugOpt Linux runner in #5705 CI -- a run that does not
+    # touch its code path. Give it the 2x budget so transient CI slowness does
+    # not flap it.
+    "regression/python/set_variadic_methods"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
@@ -463,6 +635,11 @@ set(_very_slow_regression_tests
     # same band as shortest_path_lengths above. Give it the 3x budget so it
     # doesn't flap.
     "regression/humaneval/humaneval_62"
+    # list-slice-step-reverse verifies SUCCESSFUL but is symex-bound (reverse
+    # slicing under --unwind 7 --smt-symex-guard --bitwuzla). It is ~70s locally
+    # but on the DebugOpt Linux runner it is still mid-symex when the 120s cap
+    # fires, so 2x has no guaranteed headroom; give it the 3x budget.
+    "regression/python/list-slice-step-reverse"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)

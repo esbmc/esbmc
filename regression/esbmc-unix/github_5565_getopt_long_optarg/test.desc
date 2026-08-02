@@ -1,0 +1,4 @@
+CORE
+main.c
+--force-malloc-success --memory-leak-check --no-reachable-memory-leak --malloc-zero-is-null --incremental-bmc --unwind 5
+^VERIFICATION SUCCESSFUL$

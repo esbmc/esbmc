@@ -85,8 +85,15 @@ __ESBMC_HIDE:;
 void *calloc(size_t nmemb, size_t size)
 {
 __ESBMC_HIDE:;
+  // A zero element count or zero element size is a zero-byte request.
+  // Defer to malloc(0) so the result honours --force-malloc-success and
+  // --malloc-zero-is-null, exactly like a direct malloc(0).  Returning
+  // NULL unconditionally here ignored those options and made calloc(n, 0)
+  // inconsistent with malloc(0), producing false alarms when a zero-sized
+  // allocation (e.g. of an empty struct) feeds a NULL-check error path.
+  // Keeping the guard also protects the SIZE_MAX / size division below.
   if (!nmemb || !size)
-    return NULL;
+    return malloc(0);
 
   // Detect size_t multiplication overflow (e.g. nmemb=2^30, size=4 on
   // 32-bit wraps total_size to 0).  Real implementations (glibc, musl)
@@ -104,132 +111,224 @@ __ESBMC_HIDE:;
   return res;
 }
 
-long int strtol(const char *str, char **endptr, int base)
-{
-__ESBMC_HIDE:;
-  long int result = 0;
-  int sign = 1;
-
-  // Handle whitespace
-  while (isspace(*str))
-    str++;
-
-  // Handle sign
-  if (*str == '-')
-  {
-    sign = -1;
-    str++;
-  }
-  else if (*str == '+')
-    str++;
-
-  // Handle base
-  if (base == 0)
-  {
-    if (*str == '0')
-    {
-      base = 8;
-      if (tolower(str[1]) == 'x')
-      {
-        base = 16;
-        str += 2;
-      }
-      else
-        str++;
-    }
-    else
-      base = 10;
-  }
-  else if (base == 16 && *str == '0' && tolower(str[1]) == 'x')
-    str += 2;
-
-  // Convert digits
-  while (isdigit(*str) || (base == 16 && isxdigit(*str)))
-  {
-    int digit = tolower(*str) - '0';
-    if (digit > 9)
-      digit -= 7;
-    if (result > (LONG_MAX - digit) / base)
-      return sign == -1 ? LONG_MIN : LONG_MAX;
-    result = result * base + digit;
-    str++;
+/* C99 7.20.6.2: div, ldiv and lldiv were declared in stdlib.h but never
+ * defined, so both members of the returned struct were unconstrained. C's
+ * integer division already truncates toward zero, which is exactly the
+ * rounding the standard specifies, so quot*denom + rem == numer holds. */
+#define DIV_DEF(name, result_type, type)                                       \
+  result_type name(type numerator, type denominator)                           \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    result_type result;                                                        \
+    result.quot = numerator / denominator;                                     \
+    result.rem = numerator % denominator;                                      \
+    return result;                                                             \
   }
 
-  // Set end pointer
-  if (endptr != NULL)
-    *endptr = (char *)str;
+DIV_DEF(div, div_t, int)
+DIV_DEF(ldiv, ldiv_t, long int)
+DIV_DEF(lldiv, lldiv_t, long long int)
 
-  return sign * result;
-}
+#undef DIV_DEF
 
-float strtof(const char *str, char **endptr)
-{
-__ESBMC_HIDE:;
-  float result = 0.0f;
-  int sign = 1;
-  float decimal_factor = 0.1f;
-
-  while (isspace(*str))
-    str++;
-
-  if (*str == '-')
-  {
-    sign = -1;
-    str++;
-  }
-  else if (*str == '+')
-  {
-    str++;
-  }
-
-  while (isdigit(*str))
-  {
-    result = result * 10 + (*str - '0');
-    str++;
-  }
-
-  if (*str == '.')
-  {
-    str++;
-    while (isdigit(*str))
-    {
-      result += (*str - '0') * decimal_factor;
-      decimal_factor /= 10;
-      str++;
-    }
-  }
-
-  if (*str == 'e' || *str == 'E')
-  {
-    str++;
-    int exp_sign = 1;
-    if (*str == '-')
-    {
-      exp_sign = -1;
-      str++;
-    }
-    else if (*str == '+')
-    {
-      str++;
-    }
-
-    int exponent = 0;
-    while (isdigit(*str))
-    {
-      exponent = exponent * 10 + (*str - '0');
-      str++;
-    }
-
-    result *= pow(10, exp_sign * exponent);
+#define STRTOL_DEF(name, type, TYPE)                                           \
+  type name(const char *str, char **endptr, int base)                          \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    type result = 0;                                                           \
+    int sign = 1;                                                              \
+                                                                               \
+    /* Handle whitespace */                                                    \
+    while (isspace(*str))                                                      \
+      str++;                                                                   \
+                                                                               \
+    /* Handle sign */                                                          \
+    if (*str == '-')                                                           \
+    {                                                                          \
+      sign = -1;                                                               \
+      str++;                                                                   \
+    }                                                                          \
+    else if (*str == '+')                                                      \
+      str++;                                                                   \
+                                                                               \
+    /* Handle base */                                                          \
+    if (base == 0)                                                             \
+    {                                                                          \
+      if (*str == '0')                                                         \
+      {                                                                        \
+        base = 8;                                                              \
+        if (tolower(str[1]) == 'x')                                            \
+        {                                                                      \
+          base = 16;                                                           \
+          str += 2;                                                            \
+        }                                                                      \
+        else                                                                   \
+          str++;                                                               \
+      }                                                                        \
+      else                                                                     \
+        base = 10;                                                             \
+    }                                                                          \
+    else if (base == 16 && *str == '0' && tolower(str[1]) == 'x')              \
+      str += 2;                                                                \
+                                                                               \
+    /* Convert digits */                                                       \
+    while (isdigit(*str) || (base == 16 && isxdigit(*str)))                    \
+    {                                                                          \
+      int digit = isdigit(*str) ? *str - '0' : tolower(*str) - 'a' + 10;       \
+      if (result > (TYPE##_MAX - digit) / base)                                \
+        return sign == -1 ? TYPE##_MIN : TYPE##_MAX;                           \
+      result = result * base + digit;                                          \
+      str++;                                                                   \
+    }                                                                          \
+                                                                               \
+    /* Set end pointer */                                                      \
+    if (endptr != NULL)                                                        \
+      *endptr = (char *)str;                                                   \
+                                                                               \
+    return sign * result;                                                      \
   }
 
-  result *= sign;
+STRTOL_DEF(strtol, long int, LONG)
+STRTOL_DEF(strtoll, long long int, LLONG)
 
-  if (endptr != NULL)
-    *endptr = (char *)str;
+#undef STRTOL_DEF
 
-  return result;
-}
+/* Same shape as STRTOL_DEF, but C99 7.22.1.4p5 has the unsigned conversions
+ * negate a leading '-' in the return type rather than clamping, and there is
+ * no TYPE_MIN to saturate towards. */
+#define STRTOUL_DEF(name, type, TYPE)                                          \
+  type name(const char *str, char **endptr, int base)                          \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    type result = 0;                                                           \
+    int negate = 0;                                                            \
+                                                                               \
+    while (isspace(*str))                                                      \
+      str++;                                                                   \
+                                                                               \
+    if (*str == '-')                                                           \
+    {                                                                          \
+      negate = 1;                                                              \
+      str++;                                                                   \
+    }                                                                          \
+    else if (*str == '+')                                                      \
+      str++;                                                                   \
+                                                                               \
+    if (base == 0)                                                             \
+    {                                                                          \
+      if (*str == '0')                                                         \
+      {                                                                        \
+        base = 8;                                                              \
+        if (tolower(str[1]) == 'x')                                            \
+        {                                                                      \
+          base = 16;                                                           \
+          str += 2;                                                            \
+        }                                                                      \
+        else                                                                   \
+          str++;                                                               \
+      }                                                                        \
+      else                                                                     \
+        base = 10;                                                             \
+    }                                                                          \
+    else if (base == 16 && *str == '0' && tolower(str[1]) == 'x')              \
+      str += 2;                                                                \
+                                                                               \
+    while (isdigit(*str) || (base == 16 && isxdigit(*str)))                    \
+    {                                                                          \
+      int digit = isdigit(*str) ? *str - '0' : tolower(*str) - 'a' + 10;       \
+      if (result > (TYPE##_MAX - digit) / base)                                \
+        return TYPE##_MAX;                                                     \
+      result = result * base + digit;                                          \
+      str++;                                                                   \
+    }                                                                          \
+                                                                               \
+    if (endptr != NULL)                                                        \
+      *endptr = (char *)str;                                                   \
+                                                                               \
+    return negate ? (type)0 - result : result;                                 \
+  }
+
+STRTOUL_DEF(strtoul, unsigned long int, ULONG)
+STRTOUL_DEF(strtoull, unsigned long long int, ULLONG)
+
+#undef STRTOUL_DEF
+
+/* strtod and strtold were declared in stdlib.h but never defined, so they
+ * returned an unconstrained value (and an unconstrained endptr). Share the
+ * strtof body rather than duplicating it three times. The digit-by-digit
+ * accumulation is approximate for values that are not exactly representable,
+ * which is the accuracy strtof already had. */
+#define STRTOF_DEF(name, type, one_tenth)                                      \
+  type name(const char *str, char **endptr)                                    \
+  {                                                                            \
+  __ESBMC_HIDE:;                                                               \
+    type result = 0;                                                           \
+    int sign = 1;                                                              \
+    type decimal_factor = one_tenth;                                           \
+                                                                               \
+    while (isspace(*str))                                                      \
+      str++;                                                                   \
+                                                                               \
+    if (*str == '-')                                                           \
+    {                                                                          \
+      sign = -1;                                                               \
+      str++;                                                                   \
+    }                                                                          \
+    else if (*str == '+')                                                      \
+      str++;                                                                   \
+                                                                               \
+    while (isdigit(*str))                                                      \
+    {                                                                          \
+      result = result * 10 + (*str - '0');                                     \
+      str++;                                                                   \
+    }                                                                          \
+                                                                               \
+    if (*str == '.')                                                           \
+    {                                                                          \
+      str++;                                                                   \
+      while (isdigit(*str))                                                    \
+      {                                                                        \
+        result += (*str - '0') * decimal_factor;                               \
+        decimal_factor /= 10;                                                  \
+        str++;                                                                 \
+      }                                                                        \
+    }                                                                          \
+                                                                               \
+    if (*str == 'e' || *str == 'E')                                            \
+    {                                                                          \
+      str++;                                                                   \
+      int exp_sign = 1;                                                        \
+      if (*str == '-')                                                         \
+      {                                                                        \
+        exp_sign = -1;                                                         \
+        str++;                                                                 \
+      }                                                                        \
+      else if (*str == '+')                                                    \
+        str++;                                                                 \
+                                                                               \
+      int exponent = 0;                                                        \
+      while (isdigit(*str))                                                    \
+      {                                                                        \
+        exponent = exponent * 10 + (*str - '0');                               \
+        str++;                                                                 \
+      }                                                                        \
+                                                                               \
+      result *= pow(10, exp_sign * exponent);                                  \
+    }                                                                          \
+                                                                               \
+    result *= sign;                                                            \
+                                                                               \
+    if (endptr != NULL)                                                        \
+      *endptr = (char *)str;                                                   \
+                                                                               \
+    return result;                                                             \
+  }
+
+STRTOF_DEF(strtof, float, 0.1f)
+STRTOF_DEF(strtod, double, 0.1)
+STRTOF_DEF(strtold, long double, 0.1L)
+
+#undef STRTOF_DEF
 
 /* one plus the numeric value, rest is zero */
 static const unsigned char get_atoi_map(unsigned char pos)

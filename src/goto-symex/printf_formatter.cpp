@@ -1,10 +1,10 @@
 #include <goto-symex/printf_formatter.h>
 #include <sstream>
-#include <util/c_types.h>
-#include <util/config.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
 #include <irep2/irep2_utils.h>
-#include <util/format_constant.h>
-#include <util/type_byte_size.h>
+#include <util/arith/format_constant.h>
+#include <util/expr/type_byte_size.h>
 
 const expr2tc
 printf_formattert::make_type(const expr2tc &src, const type2tc &dest)
@@ -329,11 +329,33 @@ void printf_formattert::process_format(std::ostream &out)
     const expr2tc symbol2 = get_base_object(op);
     exprt char_array = migrate_expr_back(symbol2);
     if (char_array.id() == "string-constant")
+    {
       emit(char_array.value().as_string());
-    else
-      // A non-literal string argument has no statically-known length, so the
-      // total output length cannot be bounded.
-      bounded = false;
+      break;
+    }
+    // A non-literal %s: derive a sound upper bound from the pointed-to
+    // object's size when possible. If the argument points into a constant-size
+    // char array of N bytes, a valid C string there has strlen <= N-1 (the NUL
+    // must fit), and that holds for any starting offset within the array.
+    // Contribute N-1 to the maximum (the string may be empty, so the minimum is
+    // unchanged) and keep the result bounded. The restriction to a finite,
+    // 8-bit-element array keeps the byte size well-defined without a namespace
+    // and matches the C-string narrative; anything else (a bare pointer of
+    // unknown extent, an incomplete/VLA array, a non-char element type) has no
+    // statically-known bound, so the output is treated as unbounded.
+    if (
+      args_reliable && is_array_type(symbol2->type) &&
+      !array_or_vector_size_is_infinite(symbol2->type) &&
+      is_byte_type(to_array_type(symbol2->type).subtype))
+    {
+      const BigInt nbytes = type_byte_size_default(symbol2->type, BigInt(0));
+      if (nbytes > 0)
+      {
+        max_outlen += (nbytes - 1).to_uint64();
+        break;
+      }
+    }
+    bounded = false;
   }
   break;
 

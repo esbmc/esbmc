@@ -1,0 +1,4 @@
+CORE
+main.c
+--bitwuzllob --bitwuzllob-prog fake-mallob.sh
+^VERIFICATION SUCCESSFUL$

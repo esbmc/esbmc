@@ -1,20 +1,20 @@
 #include <cassert>
 #include <langapi/language_util.h>
 #include <pointer-analysis/value_set.h>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/context.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/symtab/context.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/prefix.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
-#include <util/type_byte_size.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/type_byte_size.h>
 
 thread_local object_numberingt value_sett::object_numbering;
 thread_local object_number_numberingt value_sett::obj_numbering_refset;
@@ -41,14 +41,8 @@ void value_sett::output(std::ostream &out) const
     }
     else
     {
-#if 0
-      const symbolt &symbol=ns.lookup(e.identifier);
-      display_name=symbol.display_name()+e.suffix;
-      identifier=symbol.name;
-#else
       identifier = e.identifier;
       display_name = identifier + e.suffix;
-#endif
     }
 
     out << display_name;
@@ -1098,8 +1092,9 @@ void value_sett::assign(
     return;
   }
 
-  // Must have concrete type.
-  assert(!is_symbol_type(lhs));
+  // Symbol (template) types have no concrete memory layout; skip silently.
+  if (is_symbol_type(lhs))
+    return;
   const type2tc &lhs_type = lhs->type;
 
   if (is_struct_type(lhs_type) || is_union_type(lhs_type))
@@ -1141,6 +1136,16 @@ void value_sett::assign(
 
       // ignore methods
       if (is_code_type(subtype))
+        continue;
+
+      // The rhs may carry a member that the lhs type does not have — e.g. a
+      // class-specific vtable-pointer component present in only one of two
+      // structurally-related struct declarations (a subclass/superclass pair,
+      // or the same tag declared across translation units). There is no
+      // storage on the lhs to assign into, so skip it rather than building an
+      // ill-formed member access (which trips a member2t component-lookup
+      // assertion and, in release builds, yields a malformed expression).
+      if (!struct_union_get_component_number(lhs_type, name).has_value())
         continue;
 
       expr2tc lhs_member = member2tc(subtype, lhs, name);

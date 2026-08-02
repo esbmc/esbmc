@@ -16,16 +16,16 @@
 #include <vector>
 #include <map>
 #include <queue>
-#include <util/context.h>
-#include <util/namespace.h>
-#include <util/std_types.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
-#include <util/symbolic_types.h>
-#include <util/expr_util.h>
+#include <util/expr/symbolic_types.h>
+#include <util/expr/expr_util.h>
 
 class solidity_convertert
 {
@@ -333,7 +333,6 @@ protected:
   bool is_sol_builin_symbol(const std::string &cname, const std::string &name);
   nlohmann::json reorder_arguments(
     const nlohmann::json &expr,
-    const nlohmann::json &src_ast_json,
     const nlohmann::json &callee_expr_json);
 
   // handle the non-contract definition, including struct/enum/error/event/abstract/...

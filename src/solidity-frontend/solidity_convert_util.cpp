@@ -8,14 +8,15 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_sizeof.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <regex>
 #include <optional>
 
@@ -46,8 +47,7 @@ void solidity_convertert::get_start_location_from_stmt(
   if (current_functionDecl)
     function_name = current_functionName;
 
-  // The src manager of Solidity AST JSON is too encryptic.
-  // For the time being we are setting it to "1".
+  // The line number is derived from the Solidity AST JSON source range.
   location.set_line(get_line_number(ast_node));
   location.set_file(
     absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
@@ -65,8 +65,7 @@ void solidity_convertert::get_final_location_from_stmt(
   if (current_functionDecl)
     function_name = current_functionName;
 
-  // The src manager of Solidity AST JSON is too encryptic.
-  // For the time being we are setting it to "1".
+  // The line number is derived from the Solidity AST JSON source range.
   location.set_line(get_line_number(ast_node, true));
   location.set_file(
     absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
@@ -465,14 +464,25 @@ bool solidity_convertert::is_dyn_array(const nlohmann::json &ast_node)
 
 void solidity_convertert::get_size_of_expr(const typet &t, exprt &size_of_expr)
 {
-  size_of_expr = exprt("sizeof", size_type());
+  // Emit a `sizeof` node carrying the measured type as the type of its first
+  // operand (a type_exprt) and the byte size as a second operand, mirroring the
+  // C frontend; the type lets get_alloc_type recover the allocated type and the
+  // value gives a sound, fully-evaluated size (esbmc/esbmc#5337).
   typet elem_type = t;
   if (elem_type.is_struct())
   {
     struct_union_typet st = to_struct_union_type(elem_type);
     elem_type = symbol_typet(prefix + st.tag().as_string());
   }
-  size_of_expr.set("#c_sizeof_type", elem_type);
+  exprt value = c_sizeof(elem_type, ns);
+  if (value.is_nil())
+  {
+    log_error("sizeof: type has no size, {}", elem_type.name());
+    abort();
+  }
+  size_of_expr = exprt("sizeof", size_type());
+  size_of_expr.copy_to_operands(type_exprt(elem_type));
+  size_of_expr.copy_to_operands(value);
 }
 
 // check if the abi.encodedSignature is the same

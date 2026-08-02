@@ -8,6 +8,7 @@ out
 .vscode
 CMakeSettings.json
 build*
+!building.md
 
 # eclipse
 .cproject
@@ -36,5 +37,5 @@ src/CPackSourceConfig.cmake
 *.dSYM/
 regression/**/test
 
-# Generated doxygen API reference (see .doxygen)
+# Generated doxygen API reference (see .config/Doxyfile)
 docs/html/

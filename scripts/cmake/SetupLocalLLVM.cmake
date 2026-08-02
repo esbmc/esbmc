@@ -18,6 +18,11 @@ if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL 
     PATHS ${LLVM_DIR}
     NO_DEFAULT_PATH
   )
+  # Snapshot the version from the LLVM_DIR tree: find_package(Clang) below
+  # transitively re-includes LLVMConfig and overwrites LLVM_VERSION with the
+  # Clang_DIR tree's version, masking a mismatched toolchain.
+  set(_ESBMC_LLVM_DIR_VERSION "${LLVM_VERSION}")
+  set(_ESBMC_LLVM_DIR_VERSION_MAJOR "${LLVM_VERSION_MAJOR}")
 
   find_package(Clang REQUIRED CONFIG
     PATHS ${Clang_DIR}
@@ -25,7 +30,24 @@ if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL 
   )
 else()
   find_package(LLVM REQUIRED CONFIG)
+  set(_ESBMC_LLVM_DIR_VERSION "${LLVM_VERSION}")
+  set(_ESBMC_LLVM_DIR_VERSION_MAJOR "${LLVM_VERSION_MAJOR}")
   find_package(Clang REQUIRED CONFIG)
+endif()
+
+# LLVM_DIR and Clang_DIR must resolve to the same toolchain. Mixing, e.g.,
+# libLLVM-16 with libclang-cpp-18 produces a cryptic link-time
+# "DSO missing from command line" failure late in the build (esbmc #6005).
+# Compare the major version: that is the shared-library soname boundary that
+# actually breaks linking, matching the MIN/MAX checks below.
+if(NOT _ESBMC_LLVM_DIR_VERSION_MAJOR EQUAL LLVM_VERSION_MAJOR)
+  message(FATAL_ERROR
+    "LLVM_DIR and Clang_DIR resolve to different toolchains "
+    "(LLVM ${_ESBMC_LLVM_DIR_VERSION} vs Clang ${LLVM_VERSION}). "
+    "Point both at the same LLVM/Clang install, e.g. "
+    "-DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm "
+    "-DClang_DIR=/usr/lib/llvm-18/lib/cmake/clang, "
+    "and reconfigure in a clean build directory.")
 endif()
 
 if(LLVM_PACKAGE_BUGREPORT STREQUAL https://github.com/CTSRD-CHERI/llvm-project/issues)
@@ -97,8 +119,10 @@ if(${LLVM_VERSION_MAJOR} GREATER ${MAX_SUPPORTED_LLVM_VERSION_MAJOR})
                   "supported (${MAX_SUPPORTED_LLVM_VERSION_MAJOR})")
 endif()
 
-if(${LLVM_VERSION_MAJOR} LESS 11)
-  message(FATAL_ERROR "Could not find LLVM/Clang >= 11.0 at all: please specify with -DLLVM_DIR/-DClang_DIR")
+if(${LLVM_VERSION_MAJOR} LESS ${MIN_SUPPORTED_LLVM_VERSION_MAJOR})
+  message(FATAL_ERROR "ESBMC requires LLVM/Clang >= ${MIN_SUPPORTED_LLVM_VERSION_MAJOR} "
+                      "(found ${LLVM_VERSION_MAJOR}): please install a newer toolchain and "
+                      "specify it with -DLLVM_DIR/-DClang_DIR")
 else()
   message(STATUS "LLVM version: ${LLVM_VERSION}")
 endif()

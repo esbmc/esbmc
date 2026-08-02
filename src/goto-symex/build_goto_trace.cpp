@@ -1,6 +1,7 @@
 #include <cassert>
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/witnesses.h>
+#include <solvers/smt/smt_conv.h>
 
 expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
 {
@@ -12,7 +13,6 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
   {
   case expr2t::index_id:
   {
-    // An array subscription
     index2t index = to_index2t(new_lhs);
 
     // Build new source value, it might be an index, in case of
@@ -54,25 +54,27 @@ expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
-  goto_tracet &goto_trace,
-  const bool &is_compact_trace)
+  goto_tracet &goto_trace)
 {
   unsigned step_nr = 0;
 
-  // The solver model is fixed for the duration of trace construction
-  // (no further solve / context change happens until we return), so
-  // memoise l_get() results. Guard ASTs recur across thousands of SSA
-  // steps and each l_get bottoms out in an O(formula) solver
-  // get_value(); the cache collapses repeated queries to one per
-  // distinct AST.
-  smt_convt::model_cache_scopet model_cache(smt_conv);
-
+  // l_get() memoises against the current model internally (the cache is
+  // cleared on every solve / context change), so the thousands of repeated
+  // guard-AST queries this loop issues collapse to one solver call each
+  // without any explicit scope management here.
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (SSA_step.hidden && is_compact_trace)
+    // Hidden steps are internal SSA bookkeeping (e.g. phi-merge nodes at
+    // control-flow joins). They carry a synthesised value and a source
+    // location borrowed from a branch, so surfacing them in the trace yields
+    // contradictory-looking states (see discussion #5701). They are never a
+    // user-visible source assignment, so drop them regardless of slicing.
+    if (SSA_step.hidden)
       continue;
 
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    // is_true() also drops steps whose guard the solver could not evaluate:
+    // such a step has no authentic state to report (see #6191).
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     goto_trace_stept goto_trace_step;
@@ -135,8 +137,16 @@ void build_goto_trace(
       }
     }
 
-    if (SSA_step.is_assert() || SSA_step.is_assume() || SSA_step.is_branching())
-      goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond_ast).is_false();
+    // An unevaluatable assertion condition (e.g. one still containing a
+    // quantifier) must render as violated, not as held: this is the assertion
+    // the solver already reported as failing. Hence is_true(), not !is_false().
+    if (SSA_step.is_assert())
+      goto_trace_step.guard = smt_conv.l_get(SSA_step.cond_expr).is_true();
+    // Keeps the opposite idiom on purpose: here guard is a direction bit, not
+    // a violation flag, so unknown has no fail-safe value and flipping would
+    // swap one invented branch direction for another.
+    else if (SSA_step.is_assume() || SSA_step.is_branching())
+      goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond).is_false();
 
     goto_trace.steps.push_back(goto_trace_step);
   }

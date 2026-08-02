@@ -5,8 +5,9 @@
 #include <ld-frontend/ir_gen/ld_converter.h>
 #include <ld-frontend/property/yaml_property_parser.h>
 #include <ld-frontend/property/property_encoder.h>
-#include <util/c_expr2string.h>
-#include <util/message.h>
+#include <util/lang/c_expr2string.h>
+#include <util/config/config.h>
+#include <util/message/message.h>
 #include <iostream>
 
 languaget *new_ld_language()
@@ -17,6 +18,11 @@ languaget *new_ld_language()
 bool ld_languaget::parse(const std::string &path)
 {
   log_debug("ld", "Parsing: {}", path);
+
+  // When driven by the esbmc CLI (not ld-verify), pick up the property file
+  // from the --ld-props option unless one was already set explicitly.
+  if (props_path_.empty())
+    props_path_ = config.options.get_option("ld-props");
 
   try
   {
@@ -70,6 +76,8 @@ bool ld_languaget::typecheck(contextt &context, const std::string & /*module*/)
     LdIR ir = builder.build(ast_);
 
     ld_converter converter(context, ir);
+    if (config.options.get_bool_option("ld-fault-injection"))
+      converter.enable_fault_injection(true);
     converter.convert();
 
     // Append property assertions into the scan-loop body of ld::scan_loop.
@@ -151,7 +159,37 @@ void ld_languaget::show_parse(std::ostream &out)
   {
     out << "Network '" << net.name << "': " << net.rungs.size() << " rungs\n";
     for (const auto &rung : net.rungs)
+    {
       out << "  Rung " << rung.id << ": " << rung.elements.size()
-          << " elements\n";
+          << " elements : ";
+      std::string contacts;
+      std::vector<std::pair<std::string, std::string>> coils;
+      bool first = true;
+      for (const auto &elem : rung.elements)
+      {
+        if (elem.kind == RungElementKind::Contact)
+        {
+          if (!first)
+            contacts += " && ";
+          first = false;
+          if (elem.contact.kind == ContactKind::NormallyClosed)
+            contacts += "!";
+          contacts += elem.contact.variable;
+        }
+        else if (elem.kind == RungElementKind::Coil)
+        {
+          std::string kind =
+            elem.coil.kind == CoilKind::Set
+              ? "SET"
+              : (elem.coil.kind == CoilKind::Reset ? "RESET" : "=");
+          coils.emplace_back(kind, elem.coil.variable);
+        }
+      }
+      if (coils.empty())
+        out << contacts << "  ->  (no coil)\n";
+      else
+        for (const auto &[kind, var] : coils)
+          out << contacts << "  ->  " << kind << " " << var << "\n";
+    }
   }
 }

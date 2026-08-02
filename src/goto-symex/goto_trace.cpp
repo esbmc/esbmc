@@ -7,9 +7,9 @@
 #include <regex>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
-#include <util/arith_tools.h>
-#include <util/cwe_mapping.h>
-#include <util/std_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/base/cwe_mapping.h>
+#include <util/irep/std_types.h>
 #include <ostream>
 
 void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
@@ -231,11 +231,13 @@ void show_goto_trace_gui(
   }
 }
 
-/* 
-   Return true if 
-   - the location's file_name matches the user input
+/*
+   Return true if
+   - the location's file_name matches the user input or one of the
+     user-supplied include files
    - the location is explicitly labeled as user_provided
    - the location is empty
+   - the location is the esbmc_intrinsics.h exception
 */
 bool input_file_check(const locationt &l)
 {
@@ -420,7 +422,7 @@ void violation_yaml_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
-        // Only emit assumptions for nondet variables
+        // Only emit waypoints for nondet variables
         if (is_nil_expr(step.rhs) || !find_nondet_in_expr(step.rhs))
           break;
 
@@ -428,10 +430,16 @@ void violation_yaml_goto_trace(
         if (assignment.empty())
           break;
 
+        // Extract just the value part ("lhs == value" → "value") for \result
+        std::string value_str;
+        auto eq_pos = assignment.find(" == ");
+        if (eq_pos != std::string::npos)
+          value_str = assignment.substr(eq_pos + 4);
+
         waypoint wp;
-        wp.type = waypoint::assumption;
+        wp.type = waypoint::function_return;
         wp.file = yml.verified_file;
-        wp.value = assignment;
+        wp.value = "\\result == " + value_str;
         wp.line = get_line_number(
           yml.verified_file,
           std::atoi(step.pc->location.get_line().c_str()),
@@ -506,31 +514,6 @@ void correctness_yaml_goto_trace(
   log_progress(
     "Generating Correctness Yaml Witness for: {}", yml.verified_file);
 
-#if 0
-  for (const auto &step : goto_trace.steps)
-  {
-    /* checking restrictions for correctness yaml */
-    if (
-      (!(is_valid_witness_step(ns, step))) ||
-      (!(step.is_assume() || step.is_assert())))
-      continue;
-
-    std::string invariant = get_invariant(
-      yml.verified_file,
-      std::atoi(step.pc->location.get_line().c_str()),
-      options);
-
-    if (invariant.empty())
-      continue; /* we don't have to consider this invariant */
-
-    std::string function = step.pc->location.get_function().c_str();
-    get_line_number(
-      yml.verified_file,
-      std::atoi(step.pc->location.get_line().c_str()),
-      options);
-  }
-#endif
-
   yml.generate_yaml(options);
 }
 
@@ -571,7 +554,8 @@ void show_simplified_location(std::ostream &out, const locationt &location)
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  bool reachability_trace)
 {
   unsigned prev_step_nr = 0;
   bool first_step = true;
@@ -590,8 +574,7 @@ void show_goto_trace(
       {
         show_state_header(
           out, step, step.pc->location, step.step_nr, simplify_trace);
-        out << "Violated property:"
-            << "\n";
+        out << (reachability_trace ? "Reached:" : "Violated property:") << "\n";
         if (!step.pc->location.is_nil())
         {
           if (simplify_trace)
@@ -622,14 +605,21 @@ void show_goto_trace(
         }
 
         out << "  " << step.comment << "\n";
-        std::string cwes = format_cwe_list(cwe_for(step.comment));
-        if (!cwes.empty())
-          out << "  CWE: " << cwes << "\n";
+        // A reached coverage probe carries no weakness: its guard is the
+        // constant `false` the instrumentation put there, not the program's
+        // own condition, so neither a CWE nor the guard text says anything
+        // about the program.
+        if (!reachability_trace)
+        {
+          std::string cwes = format_cwe_list(cwe_for(step.comment));
+          if (!cwes.empty())
+            out << "  CWE: " << cwes << "\n";
 
-        if (step.pc->is_assert())
-          out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
+          if (step.pc->is_assert())
+            out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
+        }
 
-        // Having printed a property violation, don't print more steps.
+        // The trace ends at the assert that terminated it.
         return;
       }
       break;

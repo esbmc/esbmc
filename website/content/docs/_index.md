@@ -39,6 +39,7 @@ thread interleavings. Each reported violation is annotated with its matching
 {{< card link="/docs/coverage" title="Coverage" >}}
 {{< card link="/docs/c-cpp" title="C / C++" >}}
 {{< card link="/docs/python" title="Python" >}}
+{{< card link="/docs/ld" title="Ladder Diagram" >}}
 {{< card link="/docs/solidity" title="Solidity" >}}
 {{< card link="/docs/cwe-mapping" title="CWE Mapping" >}}
 {{< card link="/docs/development" title="Development" >}} {{< /cards >}}

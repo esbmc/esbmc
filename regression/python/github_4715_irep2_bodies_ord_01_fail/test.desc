@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 4 --irep2-bodies
+^VERIFICATION FAILED$
+uncaught exception

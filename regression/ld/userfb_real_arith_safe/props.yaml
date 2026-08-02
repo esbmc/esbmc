@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Safe"
+    description: "FB body computes 1.0 + 2.0 * 3.0 == 7.0 (operator precedence, REAL)"

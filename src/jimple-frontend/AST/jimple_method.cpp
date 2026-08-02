@@ -1,13 +1,14 @@
 #include <jimple-frontend/AST/jimple_class_member.h>
-#include <util/std_code.h>
-#include <util/expr_util.h>
+#include <util/irep/std_code.h>
+#include <util/expr/expr_util.h>
 
 exprt jimple_method::to_exprt(
   contextt &ctx,
   const std::string &class_name,
   const std::string &) const
 {
-  // Dummy will be return expression. It will just hold the type
+  // Returned as an empty placeholder; the method symbol is registered via
+  // move_symbol_to_context below.
   exprt dummy;
   code_typet method_type;
   typet inner_type;

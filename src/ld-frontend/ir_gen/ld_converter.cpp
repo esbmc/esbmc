@@ -1,8 +1,11 @@
 #include <ld-frontend/ir_gen/ld_converter.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/symbol.h>
+#include <ld-frontend/ir_gen/st_fb_translator.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/symtab/symbol.h>
+#include <map>
 #include <stdexcept>
 
 ld_converter::ld_converter(contextt &context, const LdIR &ir)
@@ -24,14 +27,57 @@ typet ld_converter::int32_t_() const
   return int_type();
 }
 
+typet ld_converter::type_of_kind(VarKind kind) const
+{
+  switch (kind)
+  {
+  case VarKind::BOOL:
+    return bool_t();
+  case VarKind::REAL:
+    return double_type();
+  case VarKind::INT:
+  case VarKind::DINT:
+  case VarKind::TIME:
+    break;
+  }
+  return int32_t_();
+}
+
 exprt ld_converter::int_const(long long value) const
 {
   return from_integer(BigInt(value), int32_t_());
 }
 
+// Saturation bounds for CV, taken from the configured integer width rather than
+// assumed to be 32-bit.
+exprt ld_converter::int_max() const
+{
+  return to_signedbv_type(int32_t_()).largest_expr();
+}
+
+exprt ld_converter::int_min() const
+{
+  return to_signedbv_type(int32_t_()).smallest_expr();
+}
+
 static std::string ld_name(const std::string &var)
 {
   return "ld::" + var;
+}
+
+// plus_exprt/mult_exprt set no result type (the C frontend fills it in during
+// its adjust pass; the LD frontend builds final IR directly and has none), so
+// an untyped arith node migrates to a typeless add2t and trips the irep2
+// bit-width assertion.  Build arith nodes with an explicit result type.
+static exprt make_arith(
+  const irep_idt &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const typet &type)
+{
+  exprt e(op, type);
+  e.copy_to_operands(lhs, rhs);
+  return e;
 }
 
 symbol_exprt ld_converter::declare_variable(const VarDecl &v)
@@ -52,17 +98,20 @@ symbol_exprt ld_converter::declare_variable(const VarDecl &v)
   loc.set_column(v.loc.col);
   sym.location = loc;
 
+  sym.set_type(type_of_kind(v.kind));
   switch (v.kind)
   {
   case VarKind::BOOL:
-    sym.set_type(bool_t());
-    sym.set_value(false_exprt());
+    sym.set_value(v.init_value ? exprt(true_exprt()) : exprt(false_exprt()));
+    break;
+  case VarKind::REAL:
+    sym.set_value(
+      from_double(static_cast<double>(v.init_value), double_type()));
     break;
   case VarKind::INT:
   case VarKind::DINT:
   case VarKind::TIME:
-    sym.set_type(int32_t_());
-    sym.set_value(int_const(0));
+    sym.set_value(int_const(v.init_value));
     break;
   }
 
@@ -97,6 +146,35 @@ symbol_exprt ld_converter::declare_bool_shadow(const std::string &id)
   return symbol_exprt(id, bool_t());
 }
 
+// Declare an instance-scoped FB-local symbol (idempotent). Names are prefixed
+// per FB instance (e.g. ld::EQ_00__IN1) so they never collide with program
+// variables. static_lifetime gives them a defined zero/false initial value.
+symbol_exprt ld_converter::declare_scoped(const std::string &id, const typet &t)
+{
+  if (!context_.find_symbol(id))
+  {
+    symbolt sym;
+    static const std::string kPrefix = "ld::";
+    sym.id = id;
+    sym.name = (id.compare(0, kPrefix.size(), kPrefix) == 0)
+                 ? id.substr(kPrefix.size())
+                 : id;
+    sym.module = "ld";
+    sym.mode = "LD";
+    sym.lvalue = true;
+    sym.static_lifetime = true;
+    sym.file_local = false;
+    sym.is_extern = false;
+    sym.set_type(t);
+    sym.set_value(gen_zero(t)); // type-correct zero (REAL gets a float zero)
+    locationt loc;
+    loc.set_file(ir_.source_file);
+    sym.location = loc;
+    context_.move_symbol_to_context(sym);
+  }
+  return symbol_exprt(id, t);
+}
+
 symbol_exprt ld_converter::var_expr(const std::string &name) const
 {
   const symbolt *sym = context_.find_symbol(ld_name(name));
@@ -110,6 +188,14 @@ symbol_exprt ld_converter::var_expr(const std::string &name) const
 // Per-node translation
 // -----------------------------------------------------------------------
 
+// Coerce a numeric (INT/REAL) operand to a Boolean test (var != 0).
+exprt ld_converter::bool_value_of(const symbol_exprt &var) const
+{
+  if (var.type() == bool_t())
+    return var;
+  return not_exprt(equality_exprt(var, gen_zero(var.type())));
+}
+
 codet ld_converter::translate_contact(
   const LdIRNode &n,
   const exprt &pf_in,
@@ -122,9 +208,24 @@ codet ld_converter::translate_contact(
                  ? ContactKind::NormallyClosed
                  : ContactKind::NormallyOpen;
 
+  exprt base = bool_value_of(var);
+  // Transition-sensing contact (IEC 61131-3 §2.5.1.1): the edge is sensed on
+  // the operand, and the contact's polarity is applied to the result. The
+  // shadow holding the previous-scan sample is updated in the scan epilogue,
+  // not here, so every contact sensing the same operand agrees within a scan.
+  if (n.contact_edge != ContactEdge::None)
+  {
+    symbol_exprt prev =
+      declare_bool_shadow(ld_name("__edge_prev_" + n.variable));
+    edge_shadows_.insert({n.variable, prev});
+    base = (n.contact_edge == ContactEdge::Rising)
+             ? and_exprt(base, not_exprt(prev))
+             : and_exprt(not_exprt(base), prev);
+  }
+
   exprt contact_val = (eff_kind == ContactKind::NormallyClosed)
-                        ? static_cast<exprt>(not_exprt(var))
-                        : static_cast<exprt>(var);
+                        ? static_cast<exprt>(not_exprt(base))
+                        : base;
   pf_out = and_exprt(pf_in, contact_val);
   return code_skipt();
 }
@@ -136,17 +237,23 @@ codet ld_converter::translate_coil(const LdIRNode &n, const exprt &pf)
   if (fault_injection_)
     eff_kind = CoilKind::Output;
 
+  // A numeric (INT/REAL) coil receives the Boolean power-flow cast to its type.
+  const bool num = (var.type() != bool_t());
+  auto as_coil = [&](const exprt &b) -> exprt {
+    return num ? static_cast<exprt>(typecast_exprt(b, var.type())) : b;
+  };
+
   code_blockt blk;
   switch (eff_kind)
   {
   case CoilKind::Output:
-    blk.copy_to_operands(code_assignt(var, pf));
+    blk.copy_to_operands(code_assignt(var, as_coil(pf)));
     break;
   case CoilKind::Set:
   {
     code_ifthenelset ite;
     ite.cond() = pf;
-    ite.then_case() = code_assignt(var, true_exprt());
+    ite.then_case() = code_assignt(var, as_coil(true_exprt()));
     blk.copy_to_operands(ite);
     break;
   }
@@ -154,7 +261,7 @@ codet ld_converter::translate_coil(const LdIRNode &n, const exprt &pf)
   {
     code_ifthenelset ite;
     ite.cond() = pf;
-    ite.then_case() = code_assignt(var, false_exprt());
+    ite.then_case() = code_assignt(var, as_coil(false_exprt()));
     blk.copy_to_operands(ite);
     break;
   }
@@ -162,10 +269,15 @@ codet ld_converter::translate_coil(const LdIRNode &n, const exprt &pf)
   return blk;
 }
 
-// TimerStep: synchronous fixed-tick model
-//   TON: if IN then ET++ else ET:=0;  Q := (ET >= PT)
-//   TOF: if !IN then ET++ else ET:=0; Q := (ET < PT)
-//   TP:  simplified to TON semantics
+// TimerStep: synchronous fixed-tick model (§3.3) — one scan advances ET by one
+// tick, so PT is a dimensionless scan count. IEC 61131-3 §2.5.2.3.
+//
+//   TON: ET counts while IN holds; Q rises once ET reaches PT.
+//   TOF: Q follows IN up, then holds for PT scans after IN drops.
+//   TP:  a rising IN starts a PT-scan pulse that ignores IN until it expires.
+//
+// Every timer starts with Q false: at power-up the timer has not run, so the
+// elapsed count must not be read as an already-expired interval.
 codet ld_converter::translate_timer(const LdIRNode &n)
 {
   symbol_exprt et_sym = var_expr(n.timer_ET);
@@ -175,23 +287,78 @@ codet ld_converter::translate_timer(const LdIRNode &n)
 
   exprt one = gen_one(int32_t_());
   exprt zero = gen_zero(int32_t_());
+  exprt in_val = bool_value_of(in_sym);
+  exprt q_val = bool_value_of(q_sym);
 
-  exprt condition = (n.timer_kind == FBKind::TOF) ? not_exprt(in_sym)
-                                                  : static_cast<exprt>(in_sym);
-
-  code_ifthenelset et_step;
-  et_step.cond() = condition;
-  et_step.then_case() = code_assignt(et_sym, plus_exprt(et_sym, one));
-  et_step.else_case() = code_assignt(et_sym, zero);
-
-  exprt q_expr =
-    (n.timer_kind == FBKind::TOF)
-      ? binary_relation_exprt(et_sym, "<", pt_sym)
-      : static_cast<exprt>(binary_relation_exprt(et_sym, ">=", pt_sym));
+  // IEC 61131-3 §2.5.2.3.2 bounds ET by PT, so the count stops once the
+  // interval is up. Without the bound ET rises every scan IN holds and
+  // eventually overflows, which is UB and flips Q back to false.
+  code_ifthenelset advance_et;
+  advance_et.cond() = binary_relation_exprt(et_sym, "<", pt_sym);
+  advance_et.then_case() =
+    code_assignt(et_sym, make_arith(exprt::plus, et_sym, one, int32_t_()));
+  auto q_while_pending =
+    code_assignt(q_sym, binary_relation_exprt(et_sym, "<", pt_sym));
 
   code_blockt blk;
-  blk.copy_to_operands(et_step);
-  blk.copy_to_operands(code_assignt(q_sym, q_expr));
+
+  if (n.timer_kind == FBKind::TON)
+  {
+    code_ifthenelset et_step;
+    et_step.cond() = in_val;
+    et_step.then_case() = advance_et;
+    et_step.else_case() = code_assignt(et_sym, zero);
+    blk.copy_to_operands(et_step);
+    blk.copy_to_operands(code_assignt(
+      q_sym, and_exprt(in_val, binary_relation_exprt(et_sym, ">=", pt_sym))));
+    return blk;
+  }
+
+  // Both TOF and TP hold Q for PT scans once started, so they share the
+  // countdown arm and differ only in what starts it.
+  code_blockt countdown;
+  countdown.copy_to_operands(advance_et);
+  countdown.copy_to_operands(q_while_pending);
+
+  if (n.timer_kind == FBKind::TOF)
+  {
+    code_blockt energise;
+    energise.copy_to_operands(code_assignt(et_sym, zero));
+    energise.copy_to_operands(code_assignt(q_sym, true_exprt()));
+
+    code_ifthenelset step;
+    step.cond() = in_val;
+    step.then_case() = energise;
+
+    code_ifthenelset hold;
+    hold.cond() = q_val;
+    hold.then_case() = countdown;
+    step.else_case() = hold;
+
+    blk.copy_to_operands(step);
+    return blk;
+  }
+
+  // TP: retriggerable only once the pulse has expired, so the pulse start is
+  // gated on a rising edge of IN rather than on its level.
+  symbol_exprt in_prev =
+    declare_bool_shadow(ld_name("__timer_prev_" + n.timer_instance));
+
+  code_blockt start;
+  start.copy_to_operands(code_assignt(et_sym, zero));
+  start.copy_to_operands(code_assignt(q_sym, true_exprt()));
+
+  code_ifthenelset step;
+  step.cond() = q_val;
+  step.then_case() = countdown;
+
+  code_ifthenelset trigger;
+  trigger.cond() = and_exprt(in_val, not_exprt(in_prev));
+  trigger.then_case() = start;
+  step.else_case() = trigger;
+
+  blk.copy_to_operands(step);
+  blk.copy_to_operands(code_assignt(in_prev, in_val));
   return blk;
 }
 
@@ -213,8 +380,11 @@ codet ld_converter::translate_counter(const LdIRNode &n)
       declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
 
     code_ifthenelset cu_step;
-    cu_step.cond() = and_exprt(cu, not_exprt(cu_prev));
-    cu_step.then_case() = code_assignt(cv, plus_exprt(cv, one));
+    cu_step.cond() = and_exprt(
+      and_exprt(cu, not_exprt(cu_prev)),
+      binary_relation_exprt(cv, "<", int_max()));
+    cu_step.then_case() =
+      code_assignt(cv, make_arith(exprt::plus, cv, one, int32_t_()));
     blk.copy_to_operands(cu_step);
 
     if (!n.ctr_R.empty())
@@ -245,8 +415,11 @@ codet ld_converter::translate_counter(const LdIRNode &n)
       declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
 
     code_ifthenelset cd_step;
-    cd_step.cond() = and_exprt(cd, not_exprt(cd_prev));
-    cd_step.then_case() = code_assignt(cv, plus_exprt(cv, neg_one));
+    cd_step.cond() = and_exprt(
+      and_exprt(cd, not_exprt(cd_prev)),
+      binary_relation_exprt(cv, ">", int_min()));
+    cd_step.then_case() =
+      code_assignt(cv, make_arith(exprt::plus, cv, neg_one, int32_t_()));
     blk.copy_to_operands(cd_step);
 
     blk.copy_to_operands(code_assignt(cd_prev, cd));
@@ -265,27 +438,113 @@ codet ld_converter::translate_arith(const LdIRNode &n)
   switch (n.arith_kind)
   {
   case FBKind::ADD:
-    op_expr = plus_exprt(in1, var_expr(n.arith_IN2));
+    op_expr = make_arith(exprt::plus, in1, var_expr(n.arith_IN2), int32_t_());
     break;
   case FBKind::SUB:
-    op_expr = exprt(exprt::minus, int32_t_());
-    op_expr.copy_to_operands(in1, var_expr(n.arith_IN2));
+    op_expr = make_arith(exprt::minus, in1, var_expr(n.arith_IN2), int32_t_());
     break;
   case FBKind::MUL:
-    op_expr = mult_exprt(in1, var_expr(n.arith_IN2));
+    op_expr = make_arith(exprt::mult, in1, var_expr(n.arith_IN2), int32_t_());
     break;
   case FBKind::DIV:
-    op_expr = exprt(exprt::div, int32_t_());
-    op_expr.copy_to_operands(in1, var_expr(n.arith_IN2));
+    op_expr = make_arith(exprt::div, in1, var_expr(n.arith_IN2), int32_t_());
     break;
   case FBKind::MOVE:
-    op_expr = in1;
-    break;
   default:
     op_expr = in1;
     break;
   }
   return code_assignt(out, op_expr);
+}
+
+// Execute a user-defined FB body once per scan.  Inputs are sampled
+// nondeterministically (the open-world sensor model: the dataset's FB inputs
+// are program inputs), FB-local symbols are instance-scoped, and the body is
+// translated to native codet — crucially the WHILE stays a real loop so a
+// non-terminating Ladder Logic Bomb trips ESBMC's unwinding assertion.
+// On any translation failure the body is over-approximated (skipped), matching
+// the pre-existing "unsupported FB" behaviour (no regression).
+codet ld_converter::translate_user_fb(const UserFBExec &ex)
+{
+  const std::string prefix = "ld::" + ex.instance_name + "__";
+
+  // Map every declared FB input/local to its type so the resolver can honour
+  // it: a REAL FB variable must stay double, not be demoted to int.  Anything
+  // not declared (e.g. a temporary introduced by the body) defaults to int.
+  std::map<std::string, VarKind> declared_kinds;
+  for (const auto &v : ex.input_vars)
+    declared_kinds[v.name] = v.kind;
+  for (const auto &v : ex.local_vars)
+    declared_kinds[v.name] = v.kind;
+  declared_kinds[ex.output_var] = ex.output_kind;
+
+  st_fb_translator::resolver_t resolve =
+    [this, prefix, &declared_kinds](const std::string &nm) -> symbol_exprt {
+    const symbolt *s = context_.find_symbol(prefix + nm);
+    if (s)
+      return symbol_exprt(prefix + nm, s->get_type());
+    auto it = declared_kinds.find(nm);
+    const typet t =
+      (it != declared_kinds.end()) ? type_of_kind(it->second) : int32_t_();
+    return declare_scoped(prefix + nm, t);
+  };
+
+  // Declare the formal output with its declared type (REAL outputs stay
+  // double); other locals are declared on demand by the resolver above.
+  declare_scoped(prefix + ex.output_var, type_of_kind(ex.output_kind));
+
+  // Translate the body first.  If it uses constructs outside the supported ST
+  // subset (nested FB calls, REAL, MOD, library functions), it throws and we
+  // emit NOTHING — preserving the pre-existing "unsupported FB" behaviour
+  // exactly (no regression on benchmarks whose FBs we cannot model).
+  code_blockt body;
+  try
+  {
+    st_fb_translator translator(resolve);
+    body = translator.translate(ex.st_body);
+  }
+  catch (const std::exception &e)
+  {
+    log_warning(
+      "user FB '{}' body not translated ({}); over-approximating (no-op).",
+      ex.type_name,
+      e.what());
+    return code_skipt();
+  }
+  catch (...)
+  {
+    log_warning(
+      "user FB '{}' body not translated; over-approximating (no-op).",
+      ex.type_name);
+    return code_skipt();
+  }
+
+  // Success: sample inputs nondeterministically at scan entry, then run body.
+  code_blockt blk;
+  for (const auto &iv : ex.input_vars)
+  {
+    symbol_exprt s = resolve(iv.name);
+    blk.copy_to_operands(code_assignt(s, side_effect_expr_nondett(s.type())));
+  }
+  for (const auto &op : body.operands())
+    blk.copy_to_operands(static_cast<const codet &>(op));
+
+  // Wire FB output pins to the program variables that consume them, so a forged
+  // FB output (value/actuator-manipulation bomb) propagates into the program.
+  for (const auto &w : ex.out_wires)
+  {
+    const symbolt *pinsym = context_.find_symbol(prefix + w.pin);
+    const symbolt *pvsym = context_.find_symbol("ld::" + w.prog_var);
+    if (!pinsym || !pvsym)
+      continue;
+    symbol_exprt pin(prefix + w.pin, pinsym->get_type());
+    symbol_exprt pv("ld::" + w.prog_var, pvsym->get_type());
+    exprt rhs = (pin.type() == pv.type())
+                  ? static_cast<exprt>(pin)
+                  : static_cast<exprt>(typecast_exprt(pin, pv.type()));
+    blk.copy_to_operands(code_assignt(pv, rhs));
+  }
+  return blk;
 }
 
 // -----------------------------------------------------------------------
@@ -295,6 +554,19 @@ codet ld_converter::translate_arith(const LdIRNode &n)
 code_blockt ld_converter::build_scan_body(const exprt &)
 {
   code_blockt scan_body;
+
+  // READ_INPUTS (SOS cyclic-scan model, §3.3): at the start of every scan
+  // iteration each physical input is re-sampled nondeterministically.  Without
+  // this the inputs stay frozen at their initial value and every property
+  // verifies vacuously.
+  for (const auto &v : ir_.variables)
+  {
+    if (!v.is_input)
+      continue;
+    symbol_exprt input = var_expr(v.name);
+    scan_body.copy_to_operands(
+      code_assignt(input, side_effect_expr_nondett(input.type())));
+  }
 
   for (const auto &rung : ir_.rungs)
   {
@@ -343,6 +615,20 @@ code_blockt ld_converter::build_scan_body(const exprt &)
 
     scan_body.move_to_operands(rung_blk);
   }
+
+  // Execute user-defined FB bodies (carriers of hidden logic / LLBs).
+  for (const auto &ex : ir_.user_fbs)
+  {
+    codet fb = translate_user_fb(ex);
+    scan_body.move_to_operands(fb);
+  }
+
+  // Latch the operands sensed by edge contacts for the next scan's comparison.
+  // This runs after every rung so an edge contact sees the operand's value at
+  // the previous scan boundary rather than a mid-scan update.
+  for (const auto &[name, shadow] : edge_shadows_)
+    scan_body.copy_to_operands(
+      code_assignt(shadow, bool_value_of(var_expr(name))));
 
   return scan_body;
 }
@@ -445,6 +731,33 @@ void ld_converter::prepend_static_init()
 
 void ld_converter::convert()
 {
+  // REAL function-block arithmetic emits ieee_* operators, which reference
+  // c:@__ESBMC_rounding_mode. The C frontend declares this symbol; the LD
+  // frontend must supply it too, initialised to 0 (round-to-nearest-even).
+  // Otherwise the rounding mode is an unconstrained nondet input: the SMT
+  // backend must reason over every rounding mode, which makes even trivial REAL
+  // arithmetic blow up (and is unsound). prepend_static_init() picks this up
+  // and emits the initialisation at the top of __ESBMC_main.
+  if (!context_.find_symbol("c:@__ESBMC_rounding_mode"))
+  {
+    symbolt rm;
+    rm.id = "c:@__ESBMC_rounding_mode";
+    rm.name = "__ESBMC_rounding_mode";
+    // This mirrors the C frontend's intrinsic (C-mangled id, C mode), so it
+    // is not an LD-language symbol: tagging it module "ld" would break the
+    // invariant that every LD-module symbol has mode "LD"
+    // (unit/ld-frontend/test_ir_gen.cpp).
+    rm.module = "C";
+    rm.mode = "C";
+    rm.lvalue = true;
+    rm.static_lifetime = true;
+    rm.file_local = false;
+    rm.is_extern = false;
+    rm.set_type(int32_t_());
+    rm.set_value(int_const(0));
+    context_.move_symbol_to_context(rm);
+  }
+
   for (const auto &v : ir_.variables)
     declare_variable(v);
 

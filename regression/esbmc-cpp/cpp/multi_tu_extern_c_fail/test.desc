@@ -1,0 +1,4 @@
+CORE
+main.cpp
+first.cpp second.cpp
+^VERIFICATION FAILED$

@@ -6,6 +6,8 @@ set(ESBMC_ENABLE_cvc5 0)
 set(ESBMC_ENABLE_mathsat 0)
 set(ESBMC_ENABLE_yices 0)
 set(ESBMC_ENABLE_bitwuzla 0)
+set(ESBMC_ENABLE_bitwuzllob 0)
+set(ESBMC_ENABLE_neurosym 0)
 
 add_subdirectory(prop)
 add_subdirectory(smt)
@@ -28,6 +30,8 @@ add_subdirectory(camada)
 add_subdirectory(boolector)
 add_subdirectory(cvc4)
 add_subdirectory(smtlib)
+add_subdirectory(bitwuzllob) # after smtlib: reuses its library
+add_subdirectory(neurosym) # after smtlib: reuses its library
 
 if(ENABLE_CVC4)
     find_library(GMP_LIB gmp)

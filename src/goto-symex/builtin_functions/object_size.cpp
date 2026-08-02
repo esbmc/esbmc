@@ -1,13 +1,13 @@
 #include <cassert>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/std_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_types.h>
 
 void goto_symext::intrinsic_builtin_object_size(
   const code_function_call2t &func_call,
@@ -37,10 +37,11 @@ void goto_symext::intrinsic_builtin_object_size(
   bool use_zero_for_unknown = (type_value == 2 || type_value == 3);
   bool consider_offset = (type_value == 1 || type_value == 3);
 
-  // Helper lambda for creating fallback size values.
-  // GCC's __builtin_object_size returns:
-  //   - (size_t)-1 if the object cannot be determined (for type=0 or 1),
-  //   - 0 if the object cannot be determined (for type=2 or 3).
+  // Helper lambda for creating fallback size values when the object
+  // cannot be determined:
+  //   - type 0/1: an SSIZE_MAX-style cap, 2^(word_size-1)-1 (GCC itself
+  //     returns (size_t)-1),
+  //   - type 2/3: 0.
   // The type parameter encodes whether we want the full size (0/2)
   // or remaining size after pointer offset (1/3).
   auto create_fallback_size = [&](bool use_zero) {
@@ -54,10 +55,8 @@ void goto_symext::intrinsic_builtin_object_size(
 
   if (internal_deref_items.empty())
   {
-    // Unable to determine the underlying object.
-    // Fall back to GCC semantics depending on type:
-    //   type 0/1 → (size_t)-1
-    //   type 2/3 → 0
+    // Unable to determine the underlying object; use the fallback sizes
+    // described above.
     obj_size = create_fallback_size(use_zero_for_unknown);
   }
   else
@@ -182,22 +181,40 @@ void goto_symext::intrinsic_get_object_size(
   // or the resolved object is not an array, that count is undefined: reading
   // internal_deref_items.front() on an empty container is UB (SIGSEGV in
   // release) and to_array_type() on a non-array trips an assertion. The Python
-  // set/graph operational models can route such a pointer here (issues #4782,
-  // #4804, #4805). Emit a clean diagnostic instead of crashing. The array path
-  // below is byte-for-byte unchanged, so C/C++ callers — which always pass an
-  // array object — are unaffected.
+  // set/graph/bytes operational models can route such a pointer here (issues
+  // #4782, #4804, #4805, #5658) — e.g. a `bytes` function parameter has no
+  // compile-time array bound, so it decays to a plain pointer with nothing for
+  // internal_deref_items to resolve. Rather than aborting, model the count as
+  // an unconstrained non-negative nondet value: any concrete length the caller
+  // could have passed is covered by some assignment, matching how symex
+  // already treats other unresolvable-but-legal sizes (e.g. asprintf's
+  // unbounded %s, io.cpp). The array path below is byte-for-byte unchanged, so
+  // C/C++ callers — which always pass an array object — are unaffected.
+  expr2tc obj_size;
+
   if (
     internal_deref_items.empty() ||
     !is_array_type(internal_deref_items.front().object->type))
   {
-    log_error(
-      "__ESBMC_get_object_size: cannot determine the size of a non-array "
-      "object");
-    abort();
-  }
+    log_debug(
+      "goto-symex",
+      "__ESBMC_get_object_size: object is not a resolvable array; "
+      "modelling its size as an unconstrained nondet value");
 
-  const type2tc &obj_type = internal_deref_items.front().object->type;
-  expr2tc obj_size = to_array_type(obj_type).array_size;
+    obj_size = sideeffect2tc(
+      size_type2(),
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::allockind::nondet);
+    replace_nondet(obj_size);
+  }
+  else
+  {
+    const type2tc &obj_type = internal_deref_items.front().object->type;
+    obj_size = to_array_type(obj_type).array_size;
+  }
 
   expr2tc ret_ref = func_call.ret;
   if (!is_nil_expr(ret_ref))

@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--irep2-bodies --unwind 2 --no-unwinding-assertions
+^VERIFICATION FAILED$

@@ -1,0 +1,4 @@
+CORE
+cbmc_ctz_fail.goto
+--binary
+^VERIFICATION FAILED$

@@ -1,7 +1,6 @@
 """Advanced dataclass tests for Marco F (flags and inheritance)."""
 
 import ast
-import importlib.util
 import os
 import sys
 
@@ -14,18 +13,8 @@ if PY_FRONTEND_DIR not in sys.path:
     sys.path.insert(0, PY_FRONTEND_DIR)
 
 
-def _load_module(module_name, rel_path):
-    spec = importlib.util.spec_from_file_location(
-        module_name, os.path.join(ROOT, rel_path)
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-preprocessor_mod = _load_module(
-    "esbmc_preprocessor_dataclass_advanced", "src/python-frontend/preprocessor.py"
-)
+# pylint: disable=wrong-import-position
+import preprocessor as preprocessor_mod
 
 
 def _transform(src):

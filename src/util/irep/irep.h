@@ -1,0 +1,1440 @@
+#ifndef CPROVER_IREP_H
+#define CPROVER_IREP_H
+
+#include <cassert>
+#include <list>
+#include <map>
+#include <string>
+#include <vector>
+#include <mutex>
+
+#define SHARING
+
+#include <util/irep/irep_idt.h>
+
+typedef std::hash<irep_idt> irep_id_hash;
+
+#define forall_irep(it, irep)                                                  \
+  for (irept::subt::const_iterator it = (irep).begin(); it != (irep).end();    \
+       it++)
+
+#define Forall_irep(it, irep)                                                  \
+  for (irept::subt::iterator it = (irep).begin(); it != (irep).end(); it++)
+
+#define forall_named_irep(it, irep)                                            \
+  for (irept::named_subt::const_iterator it = (irep).begin();                  \
+       it != (irep).end();                                                     \
+       it++)
+
+#define Forall_named_irep(it, irep)                                            \
+  for (irept::named_subt::iterator it = (irep).begin(); it != (irep).end();    \
+       it++)
+
+class typet;
+
+class irept
+{
+public:
+  typedef std::vector<irept> subt;
+  //typedef std::list<irept> subt;
+
+  typedef std::map<irep_idt, irept> named_subt;
+
+  // Dump contents of irep to stdout. Debugging only.
+  void dump() const;
+
+  bool is_nil() const
+  {
+    return id() == "nil";
+  }
+  bool is_not_nil() const
+  {
+    return id() != "nil";
+  }
+
+  explicit irept(const irep_idt &_id);
+
+#ifdef SHARING
+  inline irept() : data(nullptr)
+  {
+  }
+
+  inline irept(const irept &irep)
+  {
+    // We only need to lock the source's data to safely read the pointer
+    // and increment its reference count.
+    dt *source_data = nullptr;
+    if (irep.data)
+    {
+      std::lock_guard<std::mutex> lock(irep.data->dt_mutex);
+      source_data = irep.data;
+      if (source_data)
+        source_data->ref_count++;
+    }
+    data = source_data;
+  }
+
+  inline irept &operator=(const irept &irep)
+  {
+    if (this == &irep)
+      return *this;
+
+    dt *new_data = nullptr;
+    if (irep.data)
+    {
+      std::lock_guard<std::mutex> lock(irep.data->dt_mutex);
+      new_data = irep.data;
+      if (new_data)
+        new_data->ref_count++;
+    }
+
+    dt *old_data = data;
+    data = new_data;
+    remove_ref(old_data);
+
+    return *this;
+  }
+
+  ~irept()
+  {
+    remove_ref(data);
+    data = nullptr;
+  }
+#else
+  irept()
+  {
+  }
+#endif
+
+  inline const irep_idt &id() const
+  {
+    return read().data;
+  }
+
+  inline const std::string &id_string() const
+  {
+    return read().data.as_string();
+  }
+
+  inline void id(const irep_idt &_data)
+  {
+    write().data = _data;
+  }
+
+  // These methods should be protected; however to make things play nice with
+  // the C++ frontend right now, they're made public.
+  //protected:
+  // This class has to be able to fiddle with ireps directly.
+  friend class irep_serializationt;
+
+  const irept &find(const irep_idt &name) const;
+  irept &add(const irep_idt &name);
+
+  const std::string &get_string(const irep_idt &name) const
+  {
+    return get(name).as_string();
+  }
+
+  const irep_idt &get(const irep_idt &name) const;
+  bool get_bool(const irep_idt &name) const;
+
+  inline void set(const irep_idt &name, const irep_idt &value)
+  {
+    add(name).id(value);
+  }
+
+  void set(const irep_idt &name, const long value);
+  void set(const irep_idt &name, const irept &irep);
+  //public:
+  void remove(const irep_idt &name);
+  void move_to_sub(irept &irep);
+  void move_to_named_sub(const irep_idt &name, irept &irep);
+
+  inline typet &type()
+  {
+    return (typet &)(add(s_type));
+  }
+  inline const typet &type() const
+  {
+    return (typet &)(find(s_type));
+  }
+
+  inline bool is_identifier_set() const
+  {
+    return (get(a_identifier) != "");
+  }
+
+  inline const irep_idt &identifier() const
+  {
+    return get(a_identifier);
+  }
+
+  inline const irep_idt &width() const
+  {
+    return get(a_width);
+  }
+
+  inline const irep_idt &statement() const
+  {
+    return get(a_statement);
+  }
+
+  inline const irep_idt &name() const
+  {
+    return get(a_name);
+  }
+
+  inline const irep_idt &component_name() const
+  {
+    return get(a_comp_name);
+  }
+
+  inline const irep_idt &tag() const
+  {
+    return get(a_tag);
+  }
+
+  inline const irep_idt &from() const
+  {
+    return get(a_from);
+  }
+
+  inline const irep_idt &file() const
+  {
+    return get(a_file);
+  }
+
+  inline const irep_idt &line() const
+  {
+    return get(a_line);
+  }
+
+  inline const irep_idt &function() const
+  {
+    return get(a_function);
+  }
+
+  inline const irept &function_irep() const
+  {
+    return find(a_function);
+  }
+
+  inline const irep_idt &column() const
+  {
+    return get(a_column);
+  }
+
+  inline const irep_idt &destination() const
+  {
+    return get(a_destination);
+  }
+
+  inline const irep_idt &access() const
+  {
+    return get(a_access);
+  }
+
+  inline const irep_idt &base_name() const
+  {
+    return get(a_base_name);
+  }
+
+  inline const irep_idt &comment() const
+  {
+    return get(a_comment);
+  }
+
+  inline const irep_idt &event() const
+  {
+    return get(a_event);
+  }
+
+  inline const irept &event_irep() const
+  {
+    return find(a_event);
+  }
+
+  inline const irep_idt &literal() const
+  {
+    return get(a_literal);
+  }
+
+  inline const irep_idt &loopid() const
+  {
+    return get(a_loopid);
+  }
+
+  inline const irep_idt &mode() const
+  {
+    return get(a_mode);
+  }
+
+  inline const irep_idt &module() const
+  {
+    return get(a_module);
+  }
+
+  inline const irep_idt &pretty_name() const
+  {
+    return get(a_pretty_name);
+  }
+
+  inline const irep_idt &derived_this_arg() const
+  {
+    return get(a_derived_this_arg);
+  }
+
+  inline bool base_ctor_derived() const
+  {
+    return get_bool(a_base_ctor_derived);
+  }
+
+  inline bool need_vptr_init() const
+  {
+    return get_bool(a_need_vptr_init);
+  }
+
+  inline const irep_idt &property() const
+  {
+    return get(a_property);
+  }
+
+  inline const irep_idt &size() const
+  {
+    return get(a_size);
+  }
+
+  inline const irept &size_irep() const
+  {
+    return find(a_size);
+  }
+
+  inline const irep_idt &integer_bits() const
+  {
+    return get(a_integer_bits);
+  }
+
+  inline const irep_idt &to() const
+  {
+    return get(a_to);
+  }
+
+  inline const irep_idt &failed_symbol() const
+  {
+    return get(a_failed_symbol);
+  }
+
+  inline const irep_idt &type_id() const
+  {
+    return get(a_type_id);
+  }
+
+  inline const irept &arguments() const
+  {
+    return find(s_arguments);
+  }
+
+  inline const irept &components() const
+  {
+    return find(s_components);
+  }
+
+  inline const irept &cmt_type() const
+  {
+    return find(a_cmt_type);
+  }
+
+  inline const irept &return_type() const
+  {
+    return find(s_return_type);
+  }
+
+  inline const irept &body() const
+  {
+    return find(s_body);
+  }
+
+  inline const irept &member_irep() const
+  {
+    return find(s_member);
+  }
+
+  inline const irept &labels_irep() const
+  {
+    return find(s_labels);
+  }
+
+  inline const irept &bv() const
+  {
+    return find(s_bv);
+  }
+
+  inline const irept &targets() const
+  {
+    return find(s_targets);
+  }
+
+  inline const irept &variables() const
+  {
+    return find(s_variables);
+  }
+
+  inline const irept &object_type() const
+  {
+    return find(a_object_type);
+  }
+
+  inline const irept &initializer() const
+  {
+    return find(s_initializer);
+  }
+
+  inline const irept &cmt_size() const
+  {
+    return find(a_cmt_size);
+  }
+
+  inline const irept &code() const
+  {
+    return find(a_code);
+  }
+
+  inline const irept &guard() const
+  {
+    return find(a_guard);
+  }
+
+  inline const irept &location() const
+  {
+    return find(a_location);
+  }
+
+  inline const irept &declaration_type() const
+  {
+    return find(s_declaration_type);
+  }
+
+  inline const irept &decl_value() const
+  {
+    return find(s_decl_value);
+  }
+
+  inline const irept &end_location() const
+  {
+    return find(a_end_location);
+  }
+
+  inline const irept &symvalue() const
+  {
+    return find(s_symvalue);
+  }
+
+  inline const irept &cmt_location() const
+  {
+    return find(s_cmt_location);
+  }
+
+  inline const irept &decl_ident() const
+  {
+    return find(s_decl_ident);
+  }
+
+  inline bool is_decl_ident_set() const
+  {
+    return (get(s_decl_ident) != "");
+  }
+
+  inline const irept &elements() const
+  {
+    return find(s_elements);
+  }
+
+  inline bool is_dynamic_set() const
+  {
+    const irep_idt &c = get(a_dynamic);
+    return (c != "");
+  }
+
+  inline bool dynamic() const
+  {
+    return get_bool(a_dynamic);
+  }
+
+  inline const irep_idt &cmt_base_name() const
+  {
+    return get(a_cmt_base_name);
+  }
+
+  inline const irep_idt &id_class() const
+  {
+    return get(a_id_class);
+  }
+
+  inline const irep_idt &cmt_identifier() const
+  {
+    return get(a_cmt_identifier);
+  }
+
+  inline const irep_idt &cformat() const
+  {
+    return get(a_cformat);
+  }
+
+  /// Owning class tag of a member function type, e.g. `tag-MyClass`.
+  /// Written by the clang-cpp, Solidity and Python frontends; read by
+  /// clang_cpp_adjust_code_gen to locate a constructor's class symbol.
+  /// Carriage stays on the legacy irep — see
+  /// docs/roadmap/scope-v2-w3-attribute-carriage.md.
+  inline const irep_idt &member_name() const
+  {
+    return get(a_member_name);
+  }
+
+  /// Source-level *spelling* of a type, e.g. `signed char`, `long long`.
+  /// Carries what IREP2's closed type system deliberately normalizes away, so
+  /// its three readers are all presentation consumers (counterexample text,
+  /// generated C, exception-id strings) rather than verifier core. Same
+  /// carriage note as member_name().
+  inline const irep_idt &cpp_type() const
+  {
+    return get(a_cpp_type);
+  }
+
+  inline const irep_idt &cmt_width() const
+  {
+    return get(a_cmt_width);
+  }
+
+  inline const irept &offsetof_type() const
+  {
+    return find(s_offsetof_type);
+  }
+
+  inline bool axiom() const
+  {
+    return get_bool(a_axiom);
+  }
+
+  inline bool cmt_constant() const
+  {
+    return get_bool(a_cmt_constant);
+  }
+
+  inline bool dfault() const
+  {
+    return get_bool(a_default);
+  }
+
+  inline bool ellipsis() const
+  {
+    return get_bool(a_ellipsis);
+  }
+
+  inline bool explict() const
+  {
+    return get_bool(a_explicit);
+  }
+
+  inline bool file_local() const
+  {
+    return get_bool(a_file_local);
+  }
+
+  inline bool hex_or_oct() const
+  {
+    return get_bool(a_hex_or_oct);
+  }
+
+  inline bool hide() const
+  {
+    return get_bool(a_hide);
+  }
+
+  inline bool implicit() const
+  {
+    return get_bool(a_implicit);
+  }
+
+  inline bool incomplete() const
+  {
+    return get_bool(a_incomplete);
+  }
+
+  inline bool initialization() const
+  {
+    return get_bool(a_initialization);
+  }
+
+  inline bool inlined() const
+  {
+    return get_bool(a_inlined);
+  }
+
+  inline bool invalid_object() const
+  {
+    return get_bool(a_invalid_object);
+  }
+
+  inline bool is_parameter() const
+  {
+    return get_bool(a_is_parameter);
+  }
+
+  inline bool is_expression() const
+  {
+    return get_bool(a_is_expression);
+  }
+
+  inline bool is_extern() const
+  {
+    return get_bool(a_is_extern);
+  }
+
+  inline bool is_macro() const
+  {
+    return get_bool(a_is_macro);
+  }
+
+  inline bool is_thread_local() const
+  {
+    return get_bool(a_is_thread_local);
+  }
+
+  inline bool is_type() const
+  {
+    return get_bool(a_is_type);
+  }
+
+  inline bool lvalue() const
+  {
+    return get_bool(a_lvalue);
+  }
+
+  inline bool reference() const
+  {
+    return get_bool(a_reference);
+  }
+
+  inline bool restricted() const
+  {
+    return get_bool(a_restricted);
+  }
+
+  inline bool static_lifetime() const
+  {
+    return get_bool(a_static_lifetime);
+  }
+
+  inline bool theorem() const
+  {
+    return get_bool(a_theorem);
+  }
+
+  inline bool cmt_unsigned() const
+  {
+    return get_bool(a_cmt_unsigned);
+  }
+
+  inline bool user_provided() const
+  {
+    return get_bool(a_user_provided);
+  }
+
+  inline bool cmt_volatile() const
+  {
+    return get_bool(a_cmt_volatile);
+  }
+
+  inline bool zero_initializer() const
+  {
+    return get_bool(a_zero_initializer);
+  }
+
+  inline void arguments(const irept &val)
+  {
+    set(s_arguments, val);
+  }
+
+  inline void decl_ident(const irept &val)
+  {
+    set(s_decl_ident, val);
+  }
+
+  inline void identifier(const irep_idt ident)
+  {
+    set(a_identifier, ident);
+  }
+
+  inline void statement(const irep_idt statm)
+  {
+    set(a_statement, statm);
+  }
+
+  inline void comment(const irep_idt cmt)
+  {
+    set(a_comment, cmt);
+  }
+
+  inline void component_name(const irep_idt name)
+  {
+    set(a_comp_name, name);
+  }
+
+  inline void hex_or_oct(const irep_idt which)
+  {
+    set(a_hex_or_oct, which);
+  }
+
+  inline void hex_or_oct(bool which)
+  {
+    set(a_hex_or_oct, which);
+  }
+
+  inline void cmt_width(const irep_idt width)
+  {
+    set(a_cmt_width, width);
+  }
+
+  inline void cmt_width(unsigned int width)
+  {
+    set(a_cmt_width, width);
+  }
+
+  inline void width(const irep_idt width)
+  {
+    set(a_width, width);
+  }
+
+  inline void width(unsigned int width)
+  {
+    set(a_width, width);
+  }
+
+  inline void cmt_unsigned(const irep_idt val)
+  {
+    set(a_cmt_unsigned, val);
+  }
+
+  inline void cmt_unsigned(bool val)
+  {
+    set(a_cmt_unsigned, val);
+  }
+
+  inline void property(const irep_idt prop)
+  {
+    set(a_property, prop);
+  }
+
+  inline void cmt_base_name(const irep_idt name)
+  {
+    set(a_cmt_base_name, name);
+  }
+
+  inline void name(const irep_idt val)
+  {
+    set(a_name, val);
+  }
+
+  inline void cformat(const irep_idt val)
+  {
+    set(a_cformat, val);
+  }
+
+  inline void member_name(const irep_idt val)
+  {
+    set(a_member_name, val);
+  }
+
+  inline void cpp_type(const irep_idt val)
+  {
+    set(a_cpp_type, val);
+  }
+
+  inline void remove_member_name()
+  {
+    remove(a_member_name);
+  }
+
+  inline void flavor(const irep_idt val)
+  {
+    set(a_flavor, val);
+  }
+
+  inline void function(const irep_idt val)
+  {
+    set(a_function, val);
+  }
+
+  inline void size(const irep_idt val)
+  {
+    set(a_size, val);
+  }
+
+  inline void size(const irept &val)
+  {
+    set(a_size, val);
+  }
+
+  inline void user_provided(const irep_idt val)
+  {
+    set(a_user_provided, val);
+  }
+
+  inline void user_provided(bool val)
+  {
+    set(a_user_provided, val);
+  }
+
+  inline void destination(const irep_idt val)
+  {
+    set(a_destination, val);
+  }
+
+  inline void cmt_constant(const irep_idt val)
+  {
+    set(a_cmt_constant, val);
+  }
+
+  inline void cmt_constant(bool val)
+  {
+    set(a_cmt_constant, val);
+  }
+
+  inline void cmt_active(const irep_idt val)
+  {
+    set(a_cmt_active, val);
+  }
+
+  inline void base_name(const irep_idt val)
+  {
+    set(a_base_name, val);
+  }
+
+  inline void code(const irept &val)
+  {
+    set(a_code, val);
+  }
+
+  inline void component(const irep_idt val)
+  {
+    set(a_component, val);
+  }
+
+  inline void component(unsigned int val)
+  {
+    set(a_component, val);
+  }
+
+  inline void dfault(bool val)
+  {
+    set(a_default, val);
+  }
+
+  inline void dynamic(bool val)
+  {
+    set(a_dynamic, val);
+  }
+
+  inline void end_location(const irept &val)
+  {
+    set(a_end_location, val);
+  }
+
+  inline void ellipsis(bool val)
+  {
+    set(a_ellipsis, val);
+  }
+
+  inline void axiom(bool val)
+  {
+    set(a_axiom, val);
+  }
+
+  inline void event(const irep_idt &val)
+  {
+    set(a_event, val);
+  }
+
+  inline void failed_symbol(const irep_idt val)
+  {
+    set(a_failed_symbol, val);
+  }
+
+  inline void file(const irep_idt val)
+  {
+    set(a_file, val);
+  }
+
+  inline void file_local(bool val)
+  {
+    set(a_file_local, val);
+  }
+
+  inline void guard(const irept &val)
+  {
+    set(a_guard, val);
+  }
+
+  inline void hide(bool val)
+  {
+    set(a_hide, val);
+  }
+
+  inline void id_class(unsigned int val)
+  {
+    set(a_id_class, val);
+  }
+
+  inline void cmt_identifier(const irep_idt val)
+  {
+    set(a_cmt_identifier, val);
+  }
+
+  inline void implicit(bool val)
+  {
+    set(a_implicit, val);
+  }
+
+  inline void incomplete(bool val)
+  {
+    set(a_incomplete, val);
+  }
+
+  inline void inlined(bool val)
+  {
+    set(a_inlined, val);
+  }
+
+  inline void invalid_object(bool val)
+  {
+    set(a_invalid_object, val);
+  }
+
+  inline void is_parameter(bool val)
+  {
+    set(a_is_parameter, val);
+  }
+
+  inline void is_expression(bool val)
+  {
+    set(a_is_expression, val);
+  }
+
+  inline void is_extern(bool val)
+  {
+    set(a_is_extern, val);
+  }
+
+  inline void is_macro(bool val)
+  {
+    set(a_is_macro, val);
+  }
+
+  inline void is_thread_local(bool val)
+  {
+    set(a_is_thread_local, val);
+  }
+
+  inline void is_type(bool val)
+  {
+    set(a_is_type, val);
+  }
+
+  inline void label(const irep_idt &val)
+  {
+    set(a_label, val);
+  }
+
+  inline void lhs(bool val)
+  {
+    set(a_lhs, val);
+  }
+
+  inline void line(const irep_idt &val)
+  {
+    set(a_line, val);
+  }
+
+  inline void line(unsigned int val)
+  {
+    set(a_line, val);
+  }
+
+  inline void location(const irept &val)
+  {
+    set(a_location, val);
+  }
+
+  inline void lvalue(bool val)
+  {
+    set(a_lvalue, val);
+  }
+
+  inline void mode(const irep_idt &val)
+  {
+    set(a_mode, val);
+  }
+
+  inline void module(const irep_idt &val)
+  {
+    set(a_module, val);
+  }
+
+  inline void object_type(const irept &val)
+  {
+    set(a_object_type, val);
+  }
+
+  inline void pretty_name(const irep_idt &val)
+  {
+    set(a_pretty_name, val);
+  }
+
+  inline void derived_this_arg(const irep_idt &val)
+  {
+    set(a_derived_this_arg, val);
+  }
+
+  inline void base_ctor_derived(bool val)
+  {
+    set(a_base_ctor_derived, val);
+  }
+
+  inline void need_vptr_init(bool val)
+  {
+    set(a_need_vptr_init, val);
+  }
+
+  inline void restricted(bool val)
+  {
+    set(a_restricted, val);
+  }
+
+  inline void cmt_size(const irept &val)
+  {
+    set(a_cmt_size, val);
+  }
+
+  inline void static_lifetime(bool val)
+  {
+    set(a_static_lifetime, val);
+  }
+
+  inline void tag(const irep_idt &val)
+  {
+    set(a_tag, val);
+  }
+
+  inline void theorem(bool val)
+  {
+    set(a_theorem, val);
+  }
+
+  inline void cmt_type(const irept &val)
+  {
+    set(a_cmt_type, val);
+  }
+
+  inline void type_id(unsigned int val)
+  {
+    set(a_type_id, val);
+  }
+
+  inline void cmt_volatile(bool val)
+  {
+    set(a_cmt_volatile, val);
+  }
+
+  inline void zero_initializer(bool val)
+  {
+    set(a_zero_initializer, val);
+  }
+
+  inline void components(const irept &val)
+  {
+    set(s_components, val);
+  }
+
+  inline void offsetof_type(const irept &val)
+  {
+    set(s_offsetof_type, val);
+  }
+
+  inline void declaration_type(const irept &val)
+  {
+    set(s_declaration_type, val);
+  }
+
+  inline void bv(const irept &val)
+  {
+    set(s_bv, val);
+  }
+
+  inline void initializer(const irept &val)
+  {
+    set(s_initializer, val);
+  }
+
+  inline void labels(const irept &val)
+  {
+    set(s_labels, val);
+  }
+
+  inline void symvalue(const irept &val)
+  {
+    set(s_symvalue, val);
+  }
+
+  inline void member_irep(const irept &val)
+  {
+    set(s_member, val);
+  }
+
+  inline void return_type(const irept &val)
+  {
+    set(s_return_type, val);
+  }
+
+  inline void variables(const irept &val)
+  {
+    set(s_variables, val);
+  }
+
+  inline void targets(const irept &val)
+  {
+    set(s_targets, val);
+  }
+
+  inline bool is_address_of() const
+  {
+    return id() == id_address_of;
+  }
+  inline bool is_and() const
+  {
+    return id() == id_and;
+  }
+  inline bool is_or() const
+  {
+    return id() == id_or;
+  }
+  inline bool is_array() const
+  {
+    return id() == id_array;
+  }
+  inline bool is_bool() const
+  {
+    return id() == id_bool;
+  }
+  inline bool is_code() const
+  {
+    return id() == id_code;
+  }
+  inline bool is_function_call() const
+  {
+    return is_code() && statement() == "function_call";
+  }
+  inline bool is_constant() const
+  {
+    return id() == id_constant;
+  }
+  inline bool is_dereference() const
+  {
+    return id() == id_dereference;
+  }
+  inline bool is_empty() const
+  {
+    return id() == id_empty;
+  }
+  inline bool is_fixedbv() const
+  {
+    return id() == id_fixedbv;
+  }
+  inline bool is_floatbv() const
+  {
+    return id() == id_floatbv;
+  }
+  inline bool is_incomplete_array() const
+  {
+    return id() == id_incomplete_array;
+  }
+  inline bool is_index() const
+  {
+    return id() == id_index;
+  }
+  inline bool is_member() const
+  {
+    return id() == id_member;
+  }
+  inline bool is_not() const
+  {
+    return id() == id_not;
+  }
+  inline bool is_notequal() const
+  {
+    return id() == id_notequal;
+  }
+  inline bool is_pointer() const
+  {
+    return id() == id_pointer;
+  }
+  inline bool is_signedbv() const
+  {
+    return id() == id_signedbv;
+  }
+  inline bool is_struct() const
+  {
+    return id() == id_struct;
+  }
+  inline bool is_symbol() const
+  {
+    return id() == id_symbol;
+  }
+  inline bool is_typecast() const
+  {
+    return id() == id_typecast;
+  }
+  inline bool is_union() const
+  {
+    return id() == id_union;
+  }
+  inline bool is_unsignedbv() const
+  {
+    return id() == id_unsignedbv;
+  }
+  inline bool is_vector() const
+  {
+    return id() == id_vector;
+  }
+  friend bool operator==(const irept &i1, const irept &i2);
+
+  friend inline bool operator!=(const irept &i1, const irept &i2)
+  {
+    return !(i1 == i2);
+  }
+
+  friend std::ostream &operator<<(std::ostream &out, const irept &irep);
+
+  std::string to_string() const;
+
+  void swap(irept &irep)
+  {
+    std::swap(irep.data, data);
+  }
+
+  friend bool operator<(const irept &i1, const irept &i2);
+  friend bool ordering(const irept &i1, const irept &i2);
+
+  int compare(const irept &i) const;
+
+  void clear();
+
+  void make_nil()
+  {
+    clear();
+    id("nil");
+  }
+
+  subt &get_sub()
+  {
+    return write().sub;
+  } // DANGEROUS
+  const subt &get_sub() const
+  {
+    return read().sub;
+  }
+  named_subt &get_named_sub()
+  {
+    return write().named_sub;
+  } // DANGEROUS
+  const named_subt &get_named_sub() const
+  {
+    return read().named_sub;
+  }
+  named_subt &get_comments()
+  {
+    return write().comments;
+  } // DANGEROUS
+  const named_subt &get_comments() const
+  {
+    return read().comments;
+  }
+
+  size_t hash() const;
+  size_t full_hash() const;
+
+  friend bool full_eq(const irept &a, const irept &b);
+
+  std::string pretty(unsigned indent = 0) const;
+
+protected:
+  static bool is_comment(const irep_idt &name)
+  {
+    return !name.empty() && name[0] == '#';
+  }
+
+public:
+  static const irep_idt s_type, s_arguments, s_components;
+  static const irep_idt s_return_type, s_body, s_member, s_labels;
+  static const irep_idt s_bv, s_targets, s_variables;
+  static const irep_idt s_initializer, s_declaration_type, s_decl_value;
+  static const irep_idt s_symvalue, s_cmt_location, s_decl_ident;
+  static const irep_idt s_elements, s_offsetof_type;
+  static const irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
+  static const irep_idt a_tag, a_from, a_file, a_line, a_function, a_column;
+  static const irep_idt a_access, a_destination, a_base_name, a_comment,
+    a_event;
+  static const irep_idt a_literal, a_loopid, a_mode, a_module;
+  static const irep_idt a_pretty_name, a_property, a_size, a_integer_bits, a_to;
+  static const irep_idt a_failed_symbol, a_dynamic, a_cmt_base_name, a_id_class;
+  static const irep_idt a_cmt_identifier, a_cformat, a_cmt_width, a_axiom;
+  static const irep_idt a_member_name, a_cpp_type;
+  static const irep_idt a_cmt_constant, a_default;
+  static const irep_idt a_ellipsis, a_explicit, a_file_local;
+  static const irep_idt a_hex_or_oct, a_hide, a_implicit, a_incomplete;
+  static const irep_idt a_initialization, a_inlined, a_invalid_object;
+  static const irep_idt a_is_parameter, a_is_expression;
+  static const irep_idt a_is_extern, a_is_macro, a_is_thread_local;
+  static const irep_idt a_is_type;
+  static const irep_idt a_lvalue, a_reference, a_static_lifetime, a_theorem;
+  static const irep_idt a_cmt_unsigned, a_user_provided, a_cmt_volatile;
+  static const irep_idt a_zero_initializer, a_restricted, a_flavor;
+  static const irep_idt a_cmt_active, a_code, a_component;
+  static const irep_idt a_end_location, a_guard, a_label, a_lhs, a_location;
+  static const irep_idt a_object_type, a_cmt_size, a_cmt, a_type_id;
+  static const irep_idt a_cmt_type;
+  // annotation for typecasting derived class `this` to base class type
+  static const irep_idt a_derived_this_arg, a_base_ctor_derived;
+  /*
+   * annotation to indicate whether virtual pointer(vptr) has been initialized in contrustor
+   * This is used by implicit IR generation in adjuster
+   */
+  static const irep_idt a_need_vptr_init;
+
+  static const irep_idt id_address_of, id_and, id_or, id_array, id_bool,
+    id_code;
+  static const irep_idt id_constant, id_dereference, id_empty, id_fixedbv;
+  static const irep_idt id_floatbv, id_incomplete_array, id_index, id_member;
+  static const irep_idt id_not, id_notequal, id_pointer, id_signedbv;
+  static const irep_idt id_struct, id_symbol, id_typecast, id_union;
+  static const irep_idt id_unsignedbv, id_vector;
+
+  class dt
+  {
+  public:
+#ifdef SHARING
+    unsigned ref_count;
+    mutable std::mutex dt_mutex;
+#endif
+
+    irep_idt data;
+
+    named_subt named_sub;
+    named_subt comments;
+    subt sub;
+
+    void clear()
+    {
+      data.clear();
+      sub.clear();
+      named_sub.clear();
+      comments.clear();
+    }
+
+    void swap(dt &d)
+    {
+      d.data.swap(data);
+      d.sub.swap(sub);
+      d.named_sub.swap(named_sub);
+      d.comments.swap(comments);
+    }
+
+#ifdef SHARING
+    dt() : ref_count(1)
+    {
+    }
+    dt(const irept::dt &other)
+      : ref_count(1),
+        data(other.data),
+        named_sub(other.named_sub),
+        comments(other.comments),
+        sub(other.sub)
+    {
+    }
+#else
+    dt()
+    {
+    }
+#endif
+  };
+
+protected:
+#ifdef SHARING
+  dt *data;
+
+  void remove_ref(dt *old_data);
+
+  const dt &read() const;
+
+  inline dt &write()
+  {
+    detatch();
+    return *data;
+  }
+
+  void detatch();
+#else
+  dt data;
+
+  inline const dt &read() const
+  {
+    return data;
+  }
+
+  inline dt &write()
+  {
+    return data;
+  }
+#endif
+};
+
+extern inline const std::string &id2string(const irep_idt &d)
+{
+  return d.as_string();
+}
+
+extern inline const std::string &name2string(const irep_idt &n)
+{
+  return n.as_string();
+}
+
+struct irep_hash
+{
+  size_t operator()(const irept &irep) const
+  {
+    return irep.hash();
+  }
+  bool operator()(const irept &i1, const irept &i2) const
+  {
+    return i1.hash() < i2.hash();
+  }
+};
+
+struct irep_full_hash
+{
+  size_t operator()(const irept &irep) const
+  {
+    return irep.full_hash();
+  }
+};
+
+struct irep_full_eq
+{
+  bool operator()(const irept &i1, const irept &i2) const
+  {
+    return full_eq(i1, i2);
+  }
+};
+
+const irept &get_nil_irep();
+
+#endif

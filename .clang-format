@@ -84,7 +84,7 @@ MaxEmptyLinesToKeep: '1'
 NamespaceIndentation: None
 PenaltyBreakString: 10000
 PointerAlignment: Right
-ReflowComments: 'false'
+ReflowComments: 'true'
 SortIncludes: 'false'
 SpaceAfterCStyleCast: 'false'
 SpaceBeforeAssignmentOperators: 'true'

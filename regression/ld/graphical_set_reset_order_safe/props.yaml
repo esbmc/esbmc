@@ -1,0 +1,11 @@
+properties:
+
+  # The set coil is drawn above the reset coil, so the resolver must emit it
+  # first and the reset must win within a scan (IEC 61131-3 evaluates a network
+  # in drawing order, and the later assignment stands). A resolver that emitted
+  # sinks in an arbitrary order, or that let two sinks on one variable share a
+  # power-flow accumulator, would break this.
+  - id: P1
+    kind: invariant
+    expression: "!b || !q"
+    description: "The reset path always wins in the scan it is energised"

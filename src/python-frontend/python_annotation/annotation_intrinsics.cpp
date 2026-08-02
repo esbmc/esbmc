@@ -31,7 +31,7 @@ const std::map<std::string, std::string> &builtin_functions()
     {"range", "range"},
     {"enumerate", "enumerate"},
     {"zip", "zip"},
-    {"reversed", "reversed"},
+    {"reversed", "list"},
     {"sorted", "list"},
 
     // I/O functions
@@ -82,6 +82,7 @@ const std::map<std::string, std::string> &builtin_functions()
     {"__pyt_join", "NoneType"},
     {"__pyt_terminate", "NoneType"},
     {"__ESBMC_pylock_block_and_check", "NoneType"},
+    {"__pyt_lock_release_waiters", "NoneType"},
 
     // Execution functions
     {"eval", "Any"},

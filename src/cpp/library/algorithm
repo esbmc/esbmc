@@ -1,7 +1,8 @@
 #ifndef STL_ALGORITHM
 #define STL_ALGORITHM
 
-//#include "iterator"
+#include "initializer_list" /* [algorithm.syn] opens with this include */
+#include "iterator" /* std::iterator_traits, used by the heap helpers below */
 #include "definitions.h"
 #include <utility>
 
@@ -465,26 +466,6 @@ FwdIt1 search(FwdIt1 first1, FwdIt1 last1, FwdIt2 first2, FwdIt2 last2, Pr pred)
   return last1;
 }
 
-template <class InputIterator, class Distance>
-void advance(InputIterator &i, Distance n)
-{
-  i = i + n;
-}
-
-template <class InputIterator>
-int distance(InputIterator first, InputIterator last)
-{
-  int i = 0;
-  int koef = first < last ? 1 : -1;
-  InputIterator pilgrim = first < last ? first : last;
-  while (pilgrim != last)
-  {
-    pilgrim = pilgrim + koef;
-    i++;
-  }
-  return i;
-}
-
 template <class FwdIt, class Diff, class Ty>
 FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty &value)
 {
@@ -558,15 +539,8 @@ BidIt2 copy_backward(BidIt1 first, BidIt1 last, BidIt2 dest)
   return dest;
 }
 
-#if __cplusplus < 201103L /* <type_traits> provides it for C++ >= 11 */
-template <class Ty>
-void swap(Ty &a, Ty &b)
-{
-  Ty c(a);
-  a = b;
-  b = c;
-}
-#endif
+/* swap is provided by <utility> (included above) for both C++03 and C++11+;
+   defining it here as well caused a redefinition error under -std=c++03. */
 
 template <class FwdIt1, class FwdIt2>
 FwdIt2 swap_ranges(FwdIt1 first1, FwdIt1 last1, FwdIt2 last2)
@@ -937,7 +911,7 @@ BidIt stable_partition(BidIt first, BidIt last, Pr pred)
   {
     if (pred(*next))
     {
-      auto tmp = *next;
+      typename std::iterator_traits<BidIt>::value_type tmp = *next;
       BidIt i = next;
       while (i != first)
       {
@@ -1421,26 +1395,31 @@ FwdIt lower_bound(FwdIt first, FwdIt last, const Ty &val)
 template <class FwdIt, class Ty, class Pr>
 FwdIt lower_bound(FwdIt first, FwdIt last, const Ty &val, Pr pred)
 {
+  /* [lower.bound]: the first it with !comp(*it, val). The previous form,
+   * comp(val, *it) || val == *it, also required Ty to have operator==, which
+   * the standard does not — a comparator-only type would not compile. */
   while (first != last)
   {
-    if (pred(val, *first) || val == *first)
+    if (!pred(*first, val))
       return first;
-    else
-      first++;
+    ++first;
   }
-  return first;
+  return last;
 }
 
 template <class FwdIt, class Ty>
 FwdIt upper_bound(FwdIt first, FwdIt last, const Ty &val)
 {
-  last--;
+  /* [upper.bound]: the FIRST iterator it in [first, last) with val < *it.
+   * The previous version scanned BACKWARDS from last-1 and returned the last
+   * position satisfying val <= *it, so on a sorted {1,2,3,4,5,6} it answered
+   * upper_bound(3) == &6 instead of &4 -- deterministically wrong rather than
+   * nondeterministic, which is why it looked plausible. */
   while (first != last)
   {
-    if (val <= *last)
-      return last;
-    else
-      last--;
+    if (val < *first)
+      return first;
+    ++first;
   }
   return last;
 }
@@ -1448,14 +1427,12 @@ FwdIt upper_bound(FwdIt first, FwdIt last, const Ty &val)
 template <class FwdIt, class Ty, class Pr>
 FwdIt upper_bound(FwdIt first, FwdIt last, const Ty &val, Pr pred)
 {
-  last--;
+  // [upper.bound]: the first it with comp(val, *it).
   while (first != last)
   {
-    // Return the iterator _before_ the predicate becomes true.
-    if (!pred(val, *last))
-      return ++last;
-    else
-      last--;
+    if (pred(val, *first))
+      return first;
+    ++first;
   }
   return last;
 }
@@ -2142,16 +2119,18 @@ template <class RanIt>
 void push_heap(RanIt first, RanIt last)
 {
   // Sift up the element at *(last - 1) within the max-heap [first, last).
-  auto n = last - first;
+  typedef typename std::iterator_traits<RanIt>::difference_type diff_t;
+  typedef typename std::iterator_traits<RanIt>::value_type val_t;
+  diff_t n = last - first;
   if (n <= 1)
     return;
-  auto child = n - 1;
+  diff_t child = n - 1;
   while (child > 0)
   {
-    auto parent = (child - 1) / 2;
+    diff_t parent = (child - 1) / 2;
     if (*(first + parent) < *(first + child))
     {
-      auto tmp = *(first + parent);
+      val_t tmp = *(first + parent);
       *(first + parent) = *(first + child);
       *(first + child) = tmp;
       child = parent;
@@ -2164,16 +2143,18 @@ void push_heap(RanIt first, RanIt last)
 template <class RanIt, class Pr>
 void push_heap(RanIt first, RanIt last, Pr pred)
 {
-  auto n = last - first;
+  typedef typename std::iterator_traits<RanIt>::difference_type diff_t;
+  typedef typename std::iterator_traits<RanIt>::value_type val_t;
+  diff_t n = last - first;
   if (n <= 1)
     return;
-  auto child = n - 1;
+  diff_t child = n - 1;
   while (child > 0)
   {
-    auto parent = (child - 1) / 2;
+    diff_t parent = (child - 1) / 2;
     if (pred(*(first + parent), *(first + child)))
     {
-      auto tmp = *(first + parent);
+      val_t tmp = *(first + parent);
       *(first + parent) = *(first + child);
       *(first + child) = tmp;
       child = parent;
@@ -2187,24 +2168,26 @@ template <class RanIt>
 void pop_heap(RanIt first, RanIt last)
 {
   // Move max to end, then sift down [first, last - 1).
-  auto n = last - first;
+  typedef typename std::iterator_traits<RanIt>::difference_type diff_t;
+  typedef typename std::iterator_traits<RanIt>::value_type val_t;
+  diff_t n = last - first;
   if (n <= 1)
     return;
-  auto tmp = *first;
+  val_t tmp = *first;
   *first = *(last - 1);
   *(last - 1) = tmp;
   --n;
-  decltype(n) parent = 0;
+  diff_t parent = 0;
   while (true)
   {
-    auto child = 2 * parent + 1;
+    diff_t child = 2 * parent + 1;
     if (child >= n)
       break;
     if (child + 1 < n && *(first + child) < *(first + child + 1))
       ++child;
     if (*(first + parent) < *(first + child))
     {
-      auto t = *(first + parent);
+      val_t t = *(first + parent);
       *(first + parent) = *(first + child);
       *(first + child) = t;
       parent = child;
@@ -2217,24 +2200,26 @@ void pop_heap(RanIt first, RanIt last)
 template <class RanIt, class Pr>
 void pop_heap(RanIt first, RanIt last, Pr pred)
 {
-  auto n = last - first;
+  typedef typename std::iterator_traits<RanIt>::difference_type diff_t;
+  typedef typename std::iterator_traits<RanIt>::value_type val_t;
+  diff_t n = last - first;
   if (n <= 1)
     return;
-  auto tmp = *first;
+  val_t tmp = *first;
   *first = *(last - 1);
   *(last - 1) = tmp;
   --n;
-  decltype(n) parent = 0;
+  diff_t parent = 0;
   while (true)
   {
-    auto child = 2 * parent + 1;
+    diff_t child = 2 * parent + 1;
     if (child >= n)
       break;
     if (child + 1 < n && pred(*(first + child), *(first + child + 1)))
       ++child;
     if (pred(*(first + parent), *(first + child)))
     {
-      auto t = *(first + parent);
+      val_t t = *(first + parent);
       *(first + parent) = *(first + child);
       *(first + child) = t;
       parent = child;
@@ -2247,12 +2232,14 @@ void pop_heap(RanIt first, RanIt last, Pr pred)
 template <class RanIt>
 void make_heap(RanIt first, RanIt last)
 {
-  auto n = last - first;
+  typedef typename std::iterator_traits<RanIt>::difference_type diff_t;
+  typedef typename std::iterator_traits<RanIt>::value_type val_t;
+  diff_t n = last - first;
 
   for (int i = (n / 2) - 1; i >= 0; --i)
   {
     int parent = i;
-    auto value = *(first + parent);
+    val_t value = *(first + parent);
     while (1)
     {
       int child = 2 * parent + 1;
@@ -2277,11 +2264,13 @@ void make_heap(RanIt first, RanIt last)
 template <class RanIt, class Pr>
 void make_heap(RanIt first, RanIt last, Pr pred)
 {
-  auto n = last - first;
+  typedef typename std::iterator_traits<RanIt>::difference_type diff_t;
+  typedef typename std::iterator_traits<RanIt>::value_type val_t;
+  diff_t n = last - first;
   for (int i = (n / 2) - 1; i >= 0; --i)
   {
     int parent = i;
-    auto value = *(first + parent);
+    val_t value = *(first + parent);
     while (true)
     {
       int child = 2 * parent + 1;
@@ -2733,6 +2722,125 @@ bool prev_permutation(BidIt *first, BidIt *last)
 
 template <class BidIt, class Pr>
 bool prev_permutation(BidIt first, BidIt last, Pr pred);
+
+/* The C++11 additions to <algorithm>. Naming any of these was a parse error;
+ * they are all linear, matching the style of the algorithms already here. */
+#if __cplusplus >= 201103L
+template <class InIt, class Pr>
+bool all_of(InIt first, InIt last, Pr pred)
+{
+  for (; first != last; ++first)
+    if (!pred(*first))
+      return false;
+  return true;
+}
+
+template <class InIt, class Pr>
+bool any_of(InIt first, InIt last, Pr pred)
+{
+  for (; first != last; ++first)
+    if (pred(*first))
+      return true;
+  return false;
+}
+
+template <class InIt, class Pr>
+bool none_of(InIt first, InIt last, Pr pred)
+{
+  for (; first != last; ++first)
+    if (pred(*first))
+      return false;
+  return true;
+}
+
+template <class InIt, class Pr>
+InIt find_if_not(InIt first, InIt last, Pr pred)
+{
+  for (; first != last; ++first)
+    if (!pred(*first))
+      return first;
+  return last;
+}
+
+template <class InIt, class OutIt, class Pr>
+OutIt copy_if(InIt first, InIt last, OutIt dest, Pr pred)
+{
+  for (; first != last; ++first)
+    if (pred(*first))
+    {
+      *dest = *first;
+      ++dest;
+    }
+  return dest;
+}
+
+// [alg.partitions]: true for an empty range, and once the predicate fails no
+// later element may satisfy it.
+template <class InIt, class Pr>
+bool is_partitioned(InIt first, InIt last, Pr pred)
+{
+  for (; first != last; ++first)
+    if (!pred(*first))
+      break;
+  for (; first != last; ++first)
+    if (pred(*first))
+      return false;
+  return true;
+}
+
+template <class FwdIt, class Pr>
+FwdIt partition_point(FwdIt first, FwdIt last, Pr pred)
+{
+  for (; first != last; ++first)
+    if (!pred(*first))
+      return first;
+  return last;
+}
+
+// [alg.min.max]: minmax returns (b, a) when b < a, so the pair is stable for
+// equivalent values.
+template <class Ty>
+pair<const Ty &, const Ty &> minmax(const Ty &a, const Ty &b)
+{
+  return b < a ? pair<const Ty &, const Ty &>(b, a)
+               : pair<const Ty &, const Ty &>(a, b);
+}
+
+/* minmax_element: the first smallest but the LAST largest element, per
+ * [alg.min.max] -- hence the strict `<` for the minimum and the non-strict
+ * `>=` comparison for the maximum. */
+template <class FwdIt>
+pair<FwdIt, FwdIt> minmax_element(FwdIt first, FwdIt last)
+{
+  FwdIt mn = first, mx = first;
+  if (first == last)
+    return pair<FwdIt, FwdIt>(first, last);
+  for (FwdIt it = first; it != last; ++it)
+  {
+    if (*it < *mn)
+      mn = it;
+    if (!(*it < *mx))
+      mx = it;
+  }
+  return pair<FwdIt, FwdIt>(mn, mx);
+}
+
+template <class RanIt>
+RanIt is_heap_until(RanIt first, RanIt last)
+{
+  typename iterator_traits<RanIt>::difference_type n = last - first;
+  for (typename iterator_traits<RanIt>::difference_type i = 1; i < n; ++i)
+    if (first[(i - 1) / 2] < first[i])
+      return first + i;
+  return last;
+}
+
+template <class RanIt>
+bool is_heap(RanIt first, RanIt last)
+{
+  return is_heap_until(first, last) == last;
+}
+#endif // __cplusplus >= 201103L
 
 } // namespace std
 

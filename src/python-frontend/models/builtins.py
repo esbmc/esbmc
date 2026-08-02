@@ -9,11 +9,6 @@
 # This module is itself the source of max() / min() for the verification
 # model. Rewriting the explicit branch forms here as max()/min() would
 # create a self-reference: the model would call into itself.
-# def abs(x:float) -> float:
-#     if x >= 0:
-#         return x
-#     else:
-#         return -x
 
 
 def all(iterable: list[Any]) -> bool:
@@ -390,4 +385,39 @@ def sorted_str(iterable: list[str], reverse: bool = False) -> list[str]:
             result[n - 1 - i] = t
             i = i + 1
 
+    return result
+
+
+def reversed(iterable: list[int]) -> list[int]:
+    """Return a new list with the items of iterable in reverse order.
+
+    CPython's reversed() yields a reverse iterator; modelling it as a freshly
+    built list is sound in every list-consuming context ESBMC handles (slice
+    assignment, list(), iteration), mirroring how sorted() returns a list.
+    """
+    result: list[int] = []
+    i: int = len(iterable) - 1
+    while i >= 0:
+        result.append(iterable[i])
+        i = i - 1
+    return result
+
+
+def reversed_float(iterable: list[float]) -> list[float]:
+    """Return a new list with the items of iterable in reverse order."""
+    result: list[float] = []
+    i: int = len(iterable) - 1
+    while i >= 0:
+        result.append(iterable[i])
+        i = i - 1
+    return result
+
+
+def reversed_str(iterable: list[str]) -> list[str]:
+    """Return a new list with the items of iterable in reverse order."""
+    result: list[str] = []
+    i: int = len(iterable) - 1
+    while i >= 0:
+        result.append(iterable[i])
+        i = i - 1
     return result
