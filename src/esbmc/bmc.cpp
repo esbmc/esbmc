@@ -631,6 +631,46 @@ void bmct::report_multi_property_trace(
   // list without realising it (#4311).
   if (stop_reason == enumeration_stop_reasont::CapHit)
     oss << "  NOTE: --max-witnesses cap reached; more witnesses may exist.\n\n";
+  // The inputs are the part that actually differs between witnesses, and they
+  // are what a reader needs first. Per-witness they sit one trace apart, so on
+  // a real program comparing them means paging through tens of kilobytes of
+  // near-identical trace. Collect them up front (#4311). ASCII only, for the
+  // same cp1252 reason as the header above.
+  {
+    bool any_inputs = false;
+    for (const witness_recordt &w : witnesses)
+      if (!w.nondet_inputs.empty())
+      {
+        any_inputs = true;
+        break;
+      }
+
+    if (any_inputs)
+    {
+      oss << "  Inputs by witness:\n";
+      for (size_t i = 0; i < witnesses.size(); ++i)
+      {
+        const witness_recordt &w = witnesses[i];
+        oss << "    #" << (i + 1) << " : ";
+        if (w.nondet_inputs.empty())
+          oss << "(none)";
+        else
+          for (size_t k = 0; k < w.nondet_inputs.size(); ++k)
+          {
+            if (k)
+              oss << ", ";
+            oss << "[" << k << "] = "
+                << from_expr(
+                     ns,
+                     "",
+                     w.nondet_inputs[k].value_expr,
+                     presentationt::WITNESS);
+          }
+        oss << "\n";
+      }
+      oss << "\n";
+    }
+  }
   for (size_t i = 0; i < witnesses.size(); ++i)
   {
     const witness_recordt &w = witnesses[i];
