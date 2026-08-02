@@ -182,8 +182,14 @@ protected:
    *  if-then-else list of concrete references that it might point at.
    *  @param expr Expression to eliminate dereferences from.
    *  @param mode The dereference mode.
+   *  @param block_assertions Suppress the pointer-safety claims this
+   *         dereference would otherwise record. Only for probing what a
+   *         pointer may designate before deciding whether the access happens.
    */
-  void dereference(expr2tc &expr, dereferencet::modet mode);
+  void dereference(
+    expr2tc &expr,
+    dereferencet::modet mode,
+    bool block_assertions = false);
 
   // symex
 
