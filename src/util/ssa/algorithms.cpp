@@ -12,6 +12,12 @@ bool goto_functions_algorithm::run(goto_functionst &goto_functions)
     runOnFunction(*it);
     if (it->second.body_available)
     {
+      // runOnFunction may have inserted instructions, and insert_swap does not
+      // renumber: fresh nodes keep location_number 0. goto_loopst classifies
+      // back edges by comparing location numbers, so it has to see current
+      // ones -- the update() below only runs once every function is done.
+      it->second.body.update();
+
       goto_loopst goto_loops(it->first, goto_functions, it->second);
       auto function_loops = goto_loops.get_loops();
       number_of_loops += function_loops.size();
