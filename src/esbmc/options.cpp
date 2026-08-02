@@ -348,7 +348,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"max-witnesses",
      boost::program_options::value<int>()->default_value(16)->value_name("n"),
      "Cap the number of witnesses reported per property "
-     "(default: 16; 0 = unlimited). Only meaningful with --all-witnesses."}}},
+     "(default: 16; 0 = unlimited). Only meaningful with --all-witnesses."},
+    {"full-traces",
+     NULL,
+     "Print every trace state in the multi-witness report instead of the "
+     "states closest to the failure. Only meaningful with --all-witnesses."}}},
   {"Output",
    {{"output-goto",
      boost::program_options::value<std::string>(),

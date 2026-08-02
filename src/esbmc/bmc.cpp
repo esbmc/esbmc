@@ -567,6 +567,46 @@ void bmct::clear_verified_claims_in_goto(
   }
 }
 
+namespace
+{
+/// States nearest the failure are the ones that explain it; the rest is
+/// prologue repeated almost verbatim across every witness (#4311). Keep the
+/// last @p keep of them and replace what precedes with a count, so the reader
+/// still knows the trace was shortened. Operates on the rendered text because
+/// that is what "states in the report" means -- show_goto_trace decides for
+/// itself which steps become states.
+std::string keep_last_trace_states(const std::string &rendered, size_t keep)
+{
+  // Rendered states start at column 0 with "State ".
+  std::vector<size_t> starts;
+  for (size_t pos = 0; pos != std::string::npos;)
+  {
+    size_t hit = rendered.compare(pos, 6, "State ") == 0
+                   ? pos
+                   : rendered.find("\nState ", pos);
+    if (hit == std::string::npos)
+      break;
+    if (rendered.compare(hit, 6, "State ") != 0)
+      ++hit; // skip the newline the search matched on
+    starts.push_back(hit);
+    pos = hit + 6;
+  }
+
+  if (starts.size() <= keep)
+    return rendered;
+
+  const size_t omitted = starts.size() - keep;
+  const size_t cut = starts[omitted];
+  return rendered.substr(0, starts.front()) + "... " + std::to_string(omitted) +
+         " earlier states omitted (--full-traces to show them) ...\n\n" +
+         rendered.substr(cut);
+}
+
+/// Matches the K=50 the issue proposes; large enough to keep the explanatory
+/// tail of a trace, small enough that N witnesses stay readable.
+constexpr size_t kMaxReportedStates = 50;
+} // namespace
+
 void bmct::report_multi_property_trace(
   const smt_resultt &res,
   const std::vector<witness_recordt> &witnesses,
@@ -702,6 +742,8 @@ void bmct::report_multi_property_trace(
       show_goto_trace(tr, ns, w.trace, reachability_trace);
       // Indent the trace under the box.
       std::string s = tr.str();
+      if (!options.get_bool_option("full-traces"))
+        s = keep_last_trace_states(s, kMaxReportedStates);
       std::string indented;
       indented.reserve(s.size() + 8);
       indented += "  │    ";
