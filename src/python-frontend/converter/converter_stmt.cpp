@@ -1323,6 +1323,26 @@ bool python_converter::contains_copied_numpy_view_name(
       return !id.empty() && numpy_view_copy_sources_.count(id) != 0;
     }
 
+    // An inline basic-indexing view used directly as a container literal
+    // element (x[0]) escapes just as much as one already bound to a name
+    // first — what makes it escape is the container literal, not whether
+    // an intermediate variable was involved. Scoped to the Subscript form
+    // only (not `.T`/`transpose`/`reshape`/`ravel` Call forms): probing
+    // those via get_expr here would convert them a second time, and
+    // unlike a plain index-into-a-symbol, their conversion is not free of
+    // side effects on converter state. The same Subscript AST shape also
+    // matches a plain scalar element read (x[0][0]), which is not a view,
+    // so confirm the expression is actually array-typed before treating
+    // it as an escape.
+    if (
+      is_basic_numpy_view_subscript(node) &&
+      !root_name_from_subscript(node["value"]).empty())
+    {
+      exprt probe = get_expr(node);
+      if (!contains_cpp_throw(probe) && probe.type().is_array())
+        return true;
+    }
+
     if (
       node.value("_type", "") == "Subscript" && node.contains("value") &&
       node.contains("slice") && !json_contains_slice_node(node["slice"]) &&
