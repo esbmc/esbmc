@@ -1,4 +1,4 @@
 THOROUGH
 main.c
 --data-races-check --context-bound 2 --cswitch-skip-readonly-globals
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION FAILED$
