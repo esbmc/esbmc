@@ -290,10 +290,7 @@ void execution_statet::symex_step(reachability_treet &art)
   {
   case END_FUNCTION:
     if (instruction.function == "__ESBMC_main")
-    {
       end_thread();
-      art1->main_thread_ended = true;
-    }
     else if (
       (instruction.function == "c:@F@main" ||
        instruction.function == "c:@F@main#") &&
