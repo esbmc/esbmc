@@ -117,17 +117,57 @@ Each regression test lives in `regression/cxl/<suite>/` with two files:
 ### test.desc
 
 ```
-CORE                       # line 1: test class (CORE, KNOWNBUG, FUTURE, THOROUGH)
-main.c                     # line 2: source file
-                           # line 3: ESBMC flags — MUST be present, empty if none
-^VERIFICATION SUCCESSFUL$  # line 4+: expected output (regex)
+THOROUGH                                    # line 1: test class
+main.c                                      # line 2: source file
+--memory-leak-check --overflow-check ...    # line 3: ESBMC flags
+^VERIFICATION SUCCESSFUL$                   # line 4+: expected output (regex)
 ```
 
-Line 3 is the ESBMC argument list, so it must exist even when the test passes
-no flags. Omitting it silently shifts the regex onto the flags line: ESBMC is
-invoked with `^VERIFICATION SUCCESSFUL$` as command-line arguments, bails out
-with `failed to figure out type of file`, and the test is left with no
-expected-output regex — so it passes without ever verifying anything.
+**Line 1 is `THOROUGH` for this suite.** The suite is opt-in and CI does not
+run it; see "Running the suite" below.
+
+**Line 3 must declare the properties the test checks — do not leave it empty.**
+ESBMC's leak, overflow and data-race checks are all opt-in, so a test with an
+empty flags line verifies only the defaults, whatever its comments claim. The
+suite ran that way for most of its life, and the first sweep with
+`--memory-leak-check` found a real CWE-401 leak in a test that had been passing.
+Treat this line as part of the test's specification:
+
+| If the test … | it declares |
+|---|---|
+| allocates, directly or through the model | `--memory-leak-check` |
+| computes addresses or sizes | `--overflow-check --unsigned-overflow-check` |
+| starts threads | `--data-races-check --context-bound 2 --cswitch-skip-readonly-globals` |
+
+The current suite passes all three of the first two on every test, so use that
+set as the floor for a new one.
+
+Line 3 must also *exist*, even if you somehow have no flags. Omitting it
+silently shifts the regex onto the flags line: ESBMC is invoked with
+`^VERIFICATION SUCCESSFUL$` as command-line arguments, bails out with `failed
+to figure out type of file`, and the test is left with no expected-output
+regex — so it passes without ever verifying anything.
+
+### Running the suite
+
+The suite is not registered by default. Configure with it enabled:
+
+```sh
+cmake -DENABLE_CXL_REGRESSION=On -Bbuild -S . && ctest -L cxl
+```
+
+### Does your test actually reach the model?
+
+A test that defines its own structs and driver functions verifies code in the
+test file, not `cxl_driver.c`, and would still pass if the model were deleted.
+Most of this suite is that shape. Check with:
+
+```sh
+scripts/cxl_model_coverage.py
+```
+
+If you are adding a test to cover a modelled function, make sure you are not
+shadowing it with a local definition of the same name.
 
 ### main.c
 

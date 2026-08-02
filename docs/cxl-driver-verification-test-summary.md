@@ -2,17 +2,21 @@
 
 ## Flags & Configuration
 
-All 27 tests share the same configuration:
+All 39 tests share the same configuration:
 
 | Property | Value |
 |---|---|
-| **test.desc mode** | `CORE` (no KNOWNBUG/FUTURE/THOROUGH tags) |
+| **test.desc mode** | `THOROUGH` — the suite is opt-in and CI does not run it (`-DENABLE_CXL_REGRESSION=On`) |
 | **ESBMC mode** | BMC (default, with automatic unwinding) |
-| **Additional flags** | None — line 3 of every `test.desc` is present but empty |
+| **Additional flags** | `--memory-leak-check --overflow-check --unsigned-overflow-check`; the five concurrency tests use `--data-races-check --context-bound 2 --cswitch-skip-readonly-globals` |
 | **Test runner env** | `ESBMC_REGRESS_TIMEOUT=1200`, `ESBMC_REGRESS_MEMORY_LIMIT=8192` |
 | **Expected verdicts** | `VERIFICATION SUCCESSFUL` (PASS tests) or `VERIFICATION FAILED` (FAIL tests) |
 
-**Assessment of flags:** The tests are **intentionally lightweight** — no `--unwind` overrides, no floating-point checks, no pointer checks, no concurrency (`--shared-variables`). This is appropriate for the small synthetic test programs (53–155 lines each) which exercise control flow, not large unrolled loops or complex data-race scenarios. The tests that use nondeterminism (`cxl_driver_irq_01`, `cxl_device_init_01`, and the two `cxl_mmio_readback_*` suites) are bounded — `cxl_driver_irq_01`'s loop runs 10 iterations — so BMC's default unwinding suffices.
+**Assessment of flags.** An earlier revision of this document argued the tests were "intentionally lightweight" and that leaving line 3 empty was appropriate for small synthetic programs. That was wrong, and measurably so: the first time `--memory-leak-check` was enabled across the suite it found a CWE-401 leak in `cxl_port_dport_01`, in a test committed green the same day. A test that does not declare the properties it checks is not guarding them.
+
+Every test now declares its flags, and all of them hold under leak and overflow checking. The cost is nil — the suite runs in ~75s either way, dominated by `cxl_driver_irq_01`.
+
+Unwinding is still left to BMC's default. The tests that use nondeterminism (`cxl_driver_irq_01`, `cxl_device_init_01`, the `cxl_mmio_readback_*` pair) are bounded — `cxl_driver_irq_01`'s loop runs 10 iterations — so that remains appropriate.
 
 > The empty line 3 is load-bearing. It is the ESBMC argument list; if it is
 > omitted, the expected-output regex slides onto it and is passed to ESBMC as
@@ -110,7 +114,36 @@ All 27 tests share the same configuration:
 
 | # | Suite | Lines | Strategy | Expected Verdict | What's Checked |
 |---|---|---|---|---|---|
-| 25 | `cxl_concurrent_01` | 89 | assert chain | **SUCCESSFUL** | Spinlock data-race freedom: 3 concurrent command submits + 1 error handler; `__ESBMC_atomic_begin/end` blocks enforce mutual exclusion; command_count==3, error_count==1, lock==false |
+| 25 | `cxl_concurrent_01` | 103 | threads + spinlock | **SUCCESSFUL** | Two submitter threads and an error handler contend for the same device state under a blocking spinlock; no update is lost and no access races. Mutation-checked: deleting the lock produces a W/W race on `command_count` |
+
+Until Phase 8 this test spawned no threads at all — it called `submit_command()` three times in sequence, where `command_count == 3` holds trivially, and its `spin_lock()` was a try-lock whose failure the test asserted away (sound only when nothing contends, which is what the test claimed to rule out).
+
+### Category 13: Model-facing lifecycle & geometry (8 tests)
+
+These call the operational model rather than harnesses defined in the test file.
+
+| # | Suite | Strategy | Expected Verdict | What's Checked |
+|---|---|---|---|---|
+| 26 | `cxl_memdev_01` | assert chain | **SUCCESSFUL** | `/dev/cxl/memN` lifecycle; id in range, fw_rev NUL-terminated |
+| 27 | `cxl_memdev_02` | bounds | **FAILED** | Unchecked `ida_alloc_range()` result used as a table index |
+| 28 | `cxl_region_01` | assert chain | **SUCCESSFUL** | Interleave encodings; each rejection branch independently reachable |
+| 29 | `cxl_region_02` | `__ESBMC_assert` | **FAILED** | Second region committed without an overlap check |
+| 30 | `cxl_mbox_ioctl_01` | assert chain | **SUCCESSFUL** | Opcode table lookup, payload bound, disabled-command rejection |
+| 31 | `cxl_mbox_ioctl_02` | bounds | **FAILED** | User length bounded against the mailbox limit, not the staging buffer |
+| 32 | `cxl_port_dport_01` | assert chain | **SUCCESSFUL** | dport register/find/remove; leak-checked on the bail-out path |
+| 33 | `cxl_port_dport_02` | use-after-free | **FAILED** | dport pointer cached across the port's removal |
+
+### Category 14: Concurrency (4 tests)
+
+| # | Suite | Strategy | Expected Verdict | What's Checked |
+|---|---|---|---|---|
+| 34 | `cxl_mbox_race_01` | threads + mutex | **SUCCESSFUL** | Mailbox submission serialised on the equivalent of `cxl_mailbox::mbox_mutex` |
+| 35 | `cxl_mbox_race_02` | threads, no lock | **FAILED** | W/W data race on the in-flight counter (CWE-362) |
+| 36 | `cxl_dma_coherent_01` | threads + handover | **SUCCESSFUL** | Coherent buffer with explicit ownership handover; device observes the CPU's write |
+| 37 | `cxl_dma_coherent_02` | threads, no handover | **FAILED** | W/W data race on the DMA buffer |
+
+Each pair is a patched and unpatched version of the same program, so it carries
+its own patch-and-reverify.
 
 ---
 
@@ -118,24 +151,29 @@ All 27 tests share the same configuration:
 
 | Verdict | Count | Tests | Pattern |
 |---|---|---|---|
-| **VERIFICATION SUCCESSFUL** | **18** | see list below | Correct driver behavior — all assertions hold, invariants preserved |
-| **VERIFICATION FAILED** | **9** | see list below | Intentional bugs — driver violates spec/contract |
+| **VERIFICATION SUCCESSFUL** | **24** | see list below | Correct driver behavior — all assertions hold, invariants preserved |
+| **VERIFICATION FAILED** | **15** | see list below | Intentional bugs — driver violates spec/contract |
 
-**SUCCESSFUL (18):** `cxl_aer_01`, `cxl_driver_aer_fatal_01`, `cxl_error_01`,
+**SUCCESSFUL (24):** `cxl_aer_01`, `cxl_driver_aer_fatal_01`, `cxl_error_01`,
 `cxl_hdm_01`, `cxl_driver_hdm_align_01`, `cxl_driver_probe_01`,
 `cxl_mailbox_state_01`, `cxl_security_01`, `cxl_mem_attach_01`,
 `cxl_partition_01`, `cxl_mmio_01`, `cxl_mmio_readback_01`, `cxl_pci_enum_01`,
 `cxl_port_enum_01`, `cxl_irq_01`, `cxl_driver_irq_01`, `cxl_device_init_01`,
-`cxl_concurrent_01`
+`cxl_concurrent_01`, `cxl_memdev_01`, `cxl_region_01`, `cxl_mbox_ioctl_01`,
+`cxl_port_dport_01`, `cxl_mbox_race_01`, `cxl_dma_coherent_01`
 
-**FAILED (9):** `cxl_irq_02` (double-free), `cxl_hdm_overlap_01` (missing
+**FAILED (15):** `cxl_irq_02` (double-free), `cxl_hdm_overlap_01` (missing
 overlap check), `cxl_driver_hdm_align_fail_01` (missing alignment check),
 `cxl_driver_remove_01` (missing IRQ cleanup), `cxl_mailbox_01` (unchecked
 return value), `cxl_security_02` (invalid state transition), `cxl_dma_01`
 (missing DMA sync), `cxl_pci_enum_02` (NULL pointer dereference),
-`cxl_mmio_readback_02` (unwritten register assumed fixed)
+`cxl_mmio_readback_02` (unwritten register assumed fixed),
+`cxl_memdev_02` (unchecked id allocation), `cxl_region_02` (missing overlap
+check), `cxl_mbox_ioctl_02` (unchecked payload size), `cxl_port_dport_02`
+(use-after-free), `cxl_mbox_race_02` (unsynchronised mailbox),
+`cxl_dma_coherent_02` (unsynchronised DMA buffer)
 
-18 + 9 = 27, matching `ctest -L cxl`.
+24 + 15 = 39, matching `ctest -L cxl` with `-DENABLE_CXL_REGRESSION=On`.
 
 ---
 
@@ -161,14 +199,14 @@ return value), `cxl_security_02` (invalid state transition), `cxl_dma_01`
 
 ### Recommendations
 
-1. **Roadmap statistics** are now 18 passing / 9 bug-detecting across 27 suites, matching `ctest -L cxl`.
+1. **Roadmap statistics** are now 24 passing / 15 bug-detecting across 39 suites. Note the figure that matters more: 22 of 105 modelled functions are exercised by any test (`scripts/cxl_model_coverage.py`). Test count is not coverage.
 
 2. **Flags are adequate but sparse.** No test uses:
    - `--z3` / `--bitwuzla` solver selection — all tests run with the default SMT solver
    - `--no-bmc` — not needed (BMC is the default and correct mode for these tests)
    - `--floats` — no floating-point code in any test
    - `--pointer-check` — pointer bugs are tested via `assert` (e.g., pci_enum_02), not the built-in pointer checker. For deeper pointer analysis (buffer overflows, OOB), this could be added.
-   - `--shared-variables` — concurrent_01 uses `__ESBMC_atomic_begin/end` instead of shared-variable interleaving. Both are valid; the atomic approach is simpler and sufficient for these small programs.
+   - `--data-races-check` — now used by the five concurrency tests. The claim in an earlier revision, that `__ESBMC_atomic_begin/end` was "simpler and sufficient", was mistaken: `cxl_concurrent_01` was single-threaded, so there were no interleavings for either approach to explore.
 
 3. **cxl_driver_irq_01** uses `__VERIFIER_nondet_int() % 3` to explore all 3 IRQ types over a 10-iteration loop — small enough that BMC unwinding won't explode. `cxl_irq_01`, despite the similar name, is fully deterministic and has no loop.
 
