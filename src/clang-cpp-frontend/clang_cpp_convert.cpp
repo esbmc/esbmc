@@ -18,6 +18,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/Support/raw_os_ostream.h>
+#include <clang-c-frontend/clang_ast_dump.h>
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
@@ -265,6 +266,7 @@ void clang_cpp_convertert::get_decl_name(
   // Otherwise, abort
   std::ostringstream oss;
   llvm::raw_os_ostream ross(oss);
+  enable_ast_dump_colors(ross, *ASTContext);
   ross << "Unable to generate the USR for:\n";
   nd.dump(ross);
   ross.flush();
@@ -1206,6 +1208,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
+      enable_ast_dump_colors(ross, *ASTContext);
       ross << "Conversion of unsupported value-dependent size-of-pack expr: \"";
       ross << stmt.getStmtClassName() << "\" to expression"
            << "\n";

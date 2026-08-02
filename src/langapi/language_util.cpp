@@ -2,6 +2,13 @@
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <util/message/message.h>
+#include <util/config/config.h>
+
+language_idt configured_language()
+{
+  return config.language.lid == language_idt::NONE ? language_idt::C
+                                                   : config.language.lid;
+}
 
 static language_idt language_id_from_mode(irep_idt mode)
 {
