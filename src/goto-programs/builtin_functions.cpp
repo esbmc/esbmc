@@ -548,6 +548,48 @@ static exprt *find_cpp_new_constructor(exprt &e)
   return nullptr;
 }
 
+// Zero the elements a value-initialising `new T[n]()` just allocated:
+//
+//   for (size_type i = 0; i < n; ++i)
+//     *(lhs + i) = <zero of T>;
+//
+// An assignment loop rather than a memset call: n need not be a compile-time
+// constant, and __ESBMC_memset falls back to a library body that is only linked
+// when the program itself calls memset.
+void goto_convertt::cpp_new_zero_fill(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &elem_count,
+  goto_programt &dest)
+{
+  const typet &subtype = ns.follow(rhs.type().subtype());
+
+  symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+
+  // Pointer arithmetic on lhs, for the reason spelled out at the element
+  // constructor loop below: &lhs[i] does not survive symex.
+  plus_exprt element_addr(lhs, index);
+  element_addr.type() = lhs.type();
+
+  exprt element("dereference", subtype);
+  element.copy_to_operands(element_addr);
+
+  code_assignt body(element, gen_zero(subtype));
+  body.location() = rhs.find_location();
+
+  plus_exprt next(index, from_integer(1, size_type()));
+  next.type() = size_type();
+
+  code_fort loop;
+  loop.init() = code_assignt(index, from_integer(0, size_type()));
+  loop.cond() = binary_relation_exprt(index, "<", elem_count);
+  loop.iter() = code_assignt(index, next);
+  loop.body() = body;
+  loop.location() = rhs.find_location();
+
+  convert(loop, dest);
+}
+
 void goto_convertt::cpp_new_initializer(
   const exprt &lhs,
   const exprt &rhs,
@@ -608,6 +650,18 @@ void goto_convertt::cpp_new_initializer(
   {
     if (rhs.statement() == "cpp_new[]")
     {
+      // The parenthesised and braced-empty forms value-initialise, which zeroes
+      // every element the constructor -- if any -- does not write itself
+      // ([expr.new]/24, github #6588). The frontend flags exactly those forms,
+      // so plain `new T[n]` keeps its indeterminate elements.
+      // An array element type (`new T[n][m]()`) is skipped: symex rejects a
+      // dereference yielding an array, and leaving those elements
+      // indeterminate stays sound.
+      if (
+        rhs.get_bool("zero_initialized") &&
+        !ns.follow(rhs.type().subtype()).is_array())
+        cpp_new_zero_fill(lhs, rhs, elem_count, dest);
+
       // Construct every element: what the scalar arm below does once, done for
       // each element of the allocated array. Leaving this unimplemented meant
       // `new T[n]` ran no constructor at all, so members initialised by T's
@@ -617,12 +671,6 @@ void goto_convertt::cpp_new_initializer(
       //
       //   for (size_type i = 0; i < n; ++i)
       //     <element constructor, with `this` = lhs + i>
-      //
-      // Only when there is a constructor to run. `new int[n]` has none, and
-      // the scalar arm's zero-fill is not worth an n-iteration loop: it would
-      // both change the existing behaviour (the array form has always left
-      // such elements nondeterministic) and, for a symbolic n, cost far more
-      // than it buys.
       exprt *ctor = find_cpp_new_constructor(initializer);
       if (ctor == nullptr)
         return;

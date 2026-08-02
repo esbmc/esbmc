@@ -1952,6 +1952,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         migrate_expr(alloc_function, fn);
         args.push_back(fn);
       }
+
+      // Value-initialisation of the elements (github #6588) rides in
+      // arguments[2], for the same reason as the two slots above.
+      if (expr.get_bool("zero_initialized"))
+      {
+        args.resize(2);
+        args.push_back(gen_true_expr());
+      }
     }
     else if (
       expr.statement() == "malloc" || expr.statement() == "realloc" ||
@@ -3796,12 +3804,15 @@ exprt migrate_expr_back(const expr2tc &ref)
       ref2.kind == sideeffect2t::allockind::cpp_new_arr)
     {
       // cpp_new has no operands in source form (size lives in the size field,
-      // handled below; the initializer, if any, is carried in arguments[0],
-      // and a replaced operator new in arguments[1]).
+      // handled below; the initializer, if any, is carried in arguments[0], a
+      // replaced operator new in arguments[1], and the value-initialisation
+      // marker in arguments[2]).
       if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
         theexpr.initializer(migrate_expr_back(ref2.arguments[0]));
       if (ref2.arguments.size() > 1 && !is_nil_expr(ref2.arguments[1]))
         theexpr.add("alloc_function") = migrate_expr_back(ref2.arguments[1]);
+      if (ref2.arguments.size() > 2 && !is_nil_expr(ref2.arguments[2]))
+        theexpr.set("zero_initialized", true);
     }
     else
     {
