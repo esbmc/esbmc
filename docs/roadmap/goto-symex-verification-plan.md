@@ -697,7 +697,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R18** | **High (false SUCCESSFUL, default configuration)** — **FIXED**, §15 M6 (fix); filed as **#6539**, fixed by **#6550** | **POR drops a racy interleaving when the write goes through a nested dereference.** `get_expr_globals` resolves *one* pointer level (`get_reference_set` on a single `dereference2tc`), so a write spelled `*(*gpp) = 1` is recorded against the intermediate pointer `gp` rather than its target `g`. A second thread writing `g` directly records `g`, the two keys do not alias, `check_mpor_dependency` returns *independent*, and the interleaving is pruned — **a real race missed in the default configuration, with no diagnostic**. Twelve lines reproduce it: writer does `*(*gpp) = 1`, `main` does `g = 2; seen = g;`, and `assert(seen == 2)` is reachable. Default reports **SUCCESSFUL**; `--no-por` reports FAILED. The mechanism is pinned by a decisive pair: with *both* threads using the nested form the race is found again (matching keys), while writer-nested/main-direct misses it. Splitting the nested access into `int *q = *gpp; *q = 1;` also restores detection, so the key depends on the syntactic nesting depth of the access rather than on the object touched. This is precisely the completeness direction H-A6's A6.2 names — a missed dependency — and it is **not** in the relation but upstream in the key construction feeding it. | `execution_statet::get_expr_globals`, `execution_state.cpp:868-918`; `check_mpor_dependency`, `:1050`; `mpor_set_conflicts`, `:231`; `regression/esbmc-unix/mpor_nested_deref_race` (KNOWNBUG) and `..._nopor` (CORE) | **H-A6**, **H-C4** | **Fixed in #6550** by following the chain and recording every shared object along it. The cost gate the entry called for was run: H-C4 agreement *rose* (258→259 on `--no-por`, 255→257 on `--state-hashing`) at 0 divergences, and the concurrency suite timing was unchanged (24.10 s vs 24.12 s). |
 | **R16** | **Medium (incompleteness under a non-default flag)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify` is not verdict-preserving: 10 corpus inputs where the default proves SUCCESSFUL and `--no-simplify` does not.** Nine report a spurious counterexample (`github_1174_{hex,lmod,oct,pass}`, `github_2341_3`, `github_2357_5`, `github_2566_1`, `github_785-2`, `realloc13`) and one returns UNKNOWN (`github_252`, under `--k-induction`). In every case the *default* leg matches the verdict the test's own `test.desc` expects, so the fault is in the `--no-simplify` configuration, not the default. Spot-confirmed on `github_2341_3`: `--no-simplify` reports a violated `assert(temp != NULL)` the default discharges. The noisy direction — P1 — but it means `do_simplify` is load-bearing for *correctness of the encoding*, not merely for formula size, which is not how an "optimisation" flag reads. | `oracle_flag_parity.py --b=--no-simplify` over `regression/esbmc` CORE | **H-C2** | Triage one input down to the expression shape the encoder mishandles unsimplified. Until then `--no-simplify` is a debugging aid, not a semantics-preserving flag. |
 | **R17** | **High (false SUCCESSFUL, default configuration)** — found by H-C2, §15 M5 (H-C2); **FIXED**, §15 M5 (R17 root cause) | **An allocation the address space cannot lay out is encoded as a contradiction instead of a failed allocation, so the whole formula goes UNSAT and every assertion is discharged vacuously.** Found as `void *b = malloc(-4); assert(0);` returning **`VERIFICATION SUCCESSFUL`** under `--no-simplify --no-slice`, and first recorded as a flag-*composition* defect. It is not one, and the sign is not the trigger: `malloc(0xFFFFFFFFFFFFFFFCUL)` reproduces it under `--no-slice` alone. `--no-simplify` merely disabled the pre-existing negative-size guard (`do_simplify` is a no-op under it, so the guard never saw a constant) and `--no-slice` merely kept the otherwise-dead allocation in the equation. The real boundary is a layout limit and is exact: `1UL<<63` is fine, every size `>= 2^64 - 16` is vacuous, because `init_pointer_obj` asserts `end == start + size` **and** `end >= start` while `start` is past the NULL object at address 0 and aligned to `max_alignment()` (16). Reached in the corpus via `github_1631_compact`, whose `--compact-trace` sets `no-slice` implicitly (`command_line_options.cpp:410`). **No flag is needed at all**: `github_1091` — a KNOWNBUG since 2023, listed unattributed in §16's inventory — is this defect on plain `--unwind 1`, because `malloc(strlen(filename) - 4)` underflows to a huge `size_t` whenever `strlen(filename) < 4`, and the result is *used*, so the slicer keeps it. The fix flips that test to CORE. | `smt_memspace.cpp` `init_pointer_obj`; fixed in `symex_mem`, `src/goto-symex/builtin_functions/memory_alloc.cpp`. `regression/esbmc/no_simplify_no_slice_huge_malloc` and `esbmc/github_1091` (both KNOWNBUG → **CORE**), `no_slice_unrepresentable_malloc` (CORE, positive literal), `..._malloc` (CORE control) | **H-C2** | Fixed: classify the request on an unconditionally simplified copy so `--no-simplify` cannot blind it, and fail any allocation the address space cannot lay out by returning NULL, as real allocators do. Residual **R24** covers the symbolic-size form. |
-| **R24** | **High (false SUCCESSFUL, under-approximation in the memory model)** — found while root-causing R17, §15 M5 (R17 root cause) | **The R17 vacuity is still reachable through a *symbolic* allocation size.** `size_t n = nondet_size(); __ESBMC_assume(n >= 0xFFFFFFFFFFFFFFF0UL); void *b = malloc(n); assert(0);` reports **`VERIFICATION SUCCESSFUL`** under `--no-slice`. The R17 fix cannot see this: no constant is available at symex time. Worse than R17's shape, because the address-space constraint does not merely kill the path — `end == start + n` with `end >= start` silently *constrains the program variable `n`*, pruning exactly the executions the program asked about. Any assumption that forces an unrepresentable size is therefore quietly discarded rather than reported. | `smt_memspace.cpp` `init_pointer_obj:409-421`; `regression/esbmc/no_slice_symbolic_unrepresentable_malloc` (KNOWNBUG) | R17 root-causing | The address-space range constraints are asserted unconditionally, so no symex-side guard can discharge this — the allocation's success condition has to reach the solver, or the model has to represent "object too large to lay out" explicitly. Pinned, not fixed. |
+| **R24** | **High (false SUCCESSFUL, default configuration)** — found while root-causing R17, §15 M5 (R17 root cause); **FIXED**, §15 M5 (R24) | **The R17 vacuity is also reachable through a *symbolic* allocation size, and no flag is needed.** `size_t n = nondet_size(); __ESBMC_assume(n >= 0xFFFFFFFFFFFFFFF0UL); char *b = malloc(n); if (b) b[0] = 1; assert(0);` reported **`VERIFICATION SUCCESSFUL`** on default flags — the pointer is used, so the slicer keeps the allocation. The R17 fix could not see it: no constant is available at symex time. Worse than R17's shape, because the address-space constraint does not merely kill the path — `end == start + n` with `end >= start` silently *constrains the program variable `n`*, so **every** symbolic allocation quietly discarded its top 16 sizes, not just ones an assumption forced there. | `smt_memspace.cpp` `init_pointer_obj:409-421`; fixed in `symex_mem`. `regression/esbmc/symbolic_unrepresentable_malloc` and `no_slice_symbolic_unrepresentable_malloc` (CORE), `symbolic_malloc_bounds_preserved` (CORE, anti-vacuity), `force_malloc_success_unrepresentable` (KNOWNBUG, residual) | R17 root-causing | Fixed: give the object size zero on the branch where the request does not fit, so it is always layable, and return NULL there. Under `--force-malloc-success` the bound is stated as an assumption instead — branching to NULL reintroduces the case split that flag exists to remove, and cost 22 s → >200 s on `github_1352-*-32bit`. That leaves the residual pinned above. |
 | **R23** | **High (false SUCCESSFUL *and* false FAILED, default configuration)** — **confirmed with a two-line reproducer** by M8 triage, §15 M8 (cont. 7); filed as **#6589** | **Compound assignment narrows the right operand to the left operand's type before the operation.** C11 **6.5.16.2p3**: "A compound assignment of the form E1 op= E2 is equivalent to the simple assignment expression E1 = E1 op (E2), except that the lvalue E1 is evaluated only once". ESBMC violates that equivalence for every left operand narrower than `int`. `char b; b += a;` emits `!overflow("+", (signed int)b, (signed int)((signed char)a))` — the right operand cast to `char` — where `b = b + a` correctly emits `!overflow("+", (signed int)b, a)`. Both directions are reachable and both are wrong: with `b = 3, a = INT_MAX`, `b += a` reports **SUCCESSFUL** (the overflow claim is unfalsifiable, a **missed bug**) while `b = b + a` reports FAILED; and with `char b = 100; int a = 256`, `b /= a` reports **FAILED "division by zero"** because the divisor narrows to `(char)256 == 0`, where C gives `100 / 256 == 0` and gcc/UBSan agree. Not bitfield-specific — `char`, `short`, struct members and bitfields all reproduce; the discriminator is *narrower than the promoted type*, not the member/bitfield spelling. This attributes `github_162_fail`, whose claim is vacuous for exactly this reason. **Frontend, not goto-symex**, so it is outside §2.3's scope, but it is a soundness defect in extremely common C. | `clang_c_convertert::get_compound_assign_expr`, `clang_c_convert.cpp:4258-4332`, specifically the unconditional `gen_typecast(ns, rhs, lhs.type())`; clang exposes `getComputationLHSType()`/`getComputationResultType()` for precisely this. `regression/esbmc/compound_assign_narrow_overflow` (KNOWNBUG), `..._explicit` (CORE control) and `compound_assign_narrow_divzero` (KNOWNBUG) | M8 triage | Perform the operation in `getComputationResultType()` and convert only the *result* back to the left operand's type. The explicit-form control pins the direction a fix must not break. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
@@ -1887,12 +1887,53 @@ for such a request. `no_simplify_no_slice_huge_malloc` flips KNOWNBUG → CORE,
 and `no_slice_unrepresentable_malloc` pins the positive-literal form that the
 entry above claimed did not reproduce.
 
-**A residual survives as R24.** The same vacuity is still reachable through a
-*symbolic* size (`__ESBMC_assume(n >= 0xFFFFFFFFFFFFFFF0UL)` then `malloc(n)`).
-A symex-time check cannot see it, and the address-space constraint then silently
-prunes the huge-`n` executions instead of failing the allocation — an
-under-approximation in the memory model itself. Pinned KNOWNBUG by
-`regression/esbmc/no_slice_symbolic_unrepresentable_malloc`.
+**A residual survived as R24**, since fixed — see the next entry. The same
+vacuity was reachable through a *symbolic* size
+(`__ESBMC_assume(n >= 0xFFFFFFFFFFFFFFF0UL)` then `malloc(n)`), which a
+constant-only symex check cannot see.
+
+### M5 (R24) — 2026-08-02, R24 fixed
+
+**Result: the symbolic form of R17 is fixed, it was a default-configuration
+false SUCCESSFUL too, and the first fix that worked had to be thrown away for
+costing 10x.**
+
+R24 is worse than R17 in scope. R17 needed a constant the size could be folded
+to; R24 needs nothing. Adding a use of the pointer is enough to stop the slicer
+dropping the allocation, and then plain `esbmc file.c` reports SUCCESSFUL on a
+reachable `assert(0)`. And the mechanism is not merely a dead path: because
+`init_pointer_obj` asserts `end == start + n` and `end >= start` over the
+*symbolic* `n`, **every** symbolic allocation in every program silently excluded
+its top 16 sizes. A program whose bug lives only there was unprovable rather
+than unproven.
+
+**The fix.** Give the object size zero on the branch where the request does not
+fit — a zero-size object always lays out, as `init_pointer_obj`'s own comment
+notes — and return NULL on that branch, folding the condition into the existing
+allocation guard.
+
+**The measurement that changed the design.** The first version applied that
+branch unconditionally, and `github_1352-fail-32bit` /
+`-success-32bit` went from 22 s to over 200 s — a timeout. Both run
+`--force-malloc-success`, and that flag's whole purpose is to delete the
+malloc-returns-NULL case split; reintroducing it under a different name
+reinstated the cost across every allocation in a loop nest. Under that flag the
+bound is now stated as an assumption instead. The same executions are excluded
+as before the fix, so `force_malloc_success_unrepresentable` stays KNOWNBUG —
+but they are excluded *visibly*, in the equation, rather than as an emergent
+property of an unsatisfiable layout constraint. Post-fix the pair runs in 23.8 s
+and 29.2 s.
+
+**Anti-vacuity.** `symbolic_malloc_bounds_preserved` pins the direction the fix
+could most plausibly have broken: with `10 <= n <= 100`, `b[n]` must still be
+caught out of bounds. Clamping a size that *does* fit would silently weaken
+every heap bounds check, and no other test in the sweep would have noticed.
+
+Verified with Bitwuzla and Z3 on both directions, and against the 476-test
+allocation subset (every regression source mentioning `malloc`/`calloc`/
+`realloc`/`alloca`); the two residual failures there,
+`esbmc-unix/03_boundedBuffer` and `esbmc-unix/github_5565_getopt_long_optarg`,
+reproduce on master.
 
 **One inference I made and had to retract**, recorded because it would have
 become a wrong bug report. The corpus reproducer needs `--compact-trace`, and I
@@ -2285,7 +2326,7 @@ documents; the rest are pre-existing and unattributed:
 | Test | Observed | Finding |
 |---|---|---|
 | `double_assign_check_local_array` | invariant stop | **R14** (I10 violated on a real input) |
-| `no_simplify_no_slice_huge_malloc` | SUCCESSFUL | **R17** (vacuous path, flag pair) |
+| `force_malloc_success_unrepresentable` | SUCCESSFUL | **R24** (residual under `--force-malloc-success`) |
 | `mpor_nested_deref_race` | SUCCESSFUL | **R18** (POR drops a race) |
 | `multi_property_smt_during_symex` | SUCCESSFUL | **R19** (per-property false PASSED) |
 | `03_inf2`, `github_1091`, `github_1175_9`, `github_1175_11`, `github_159_postdecrement_fail`, `github_162_fail`, `github_1626-no-free`, `03_circular_reduce` | SUCCESSFUL, expected FAILED | unattributed — the missed-bug direction |
@@ -2296,9 +2337,9 @@ documents; the rest are pre-existing and unattributed:
 from the R17 fix. `no_simplify_no_slice_huge_malloc` and `github_1091` are CORE
 — the latter was in the unattributed missed-bug row and turned out to *be* R17,
 which is how R17 was reclassified as a default-configuration defect. One pin
-replaces them: `no_slice_symbolic_unrepresentable_malloc` (SUCCESSFUL, **R24**),
-the symbolic-size residual the fix cannot reach. The inventory's point survives
-the churn — the masking is what generalises, not the count.
+replaces them: `force_malloc_success_unrepresentable` (SUCCESSFUL, **R24**
+residual under `--force-malloc-success`). The inventory's point survives the
+churn — the masking is what generalises, not the count.
 
 **One hypothesis tested and rejected.** `03_circular_reduce` is a concurrency test
 expecting FAILED that reports SUCCESSFUL, so R18 (POR pruning a racy
