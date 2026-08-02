@@ -628,6 +628,16 @@ figure; without it only the static analysis runs.
    in headers, so regression tests can override them with deterministic
    implementations for precise invariant checking.
 
+   This one has a cost that went unrecorded for most of the project's life.
+   Shadowing is what let most of the suite drift into verifying harnesses
+   written inside the test file: `cxl_mem_attach_01` and `cxl_port_enum_01`
+   both define local copies of functions the model provides, so the model's
+   own code never ran. That is the direct cause of `cxl_driver.c` calling a
+   `static __kmalloc()` through an implicit declaration undetected. Overriding
+   remains useful for pinning a specific invariant, but a test that overrides
+   is testing itself, and should not be counted as covering the model — which
+   is what `scripts/cxl_model_coverage.py` now measures.
+
 ## Dependencies
 
 - **Existing:** c2goto infrastructure, kernel headers, kernel.c operational model
