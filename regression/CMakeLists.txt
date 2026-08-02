@@ -585,13 +585,6 @@ set(_very_slow_regression_tests
     # but on the DebugOpt Linux runner it is still mid-symex when the 120s cap
     # fires, so 2x has no guaranteed headroom; give it the 3x budget.
     "regression/python/list-slice-step-reverse"
-    # github_2513_6 is a ~6000-line pthread benchmark proved at --unwind 5. It
-    # passed this job in 6.27s on 2026-07-31; the concurrency work merged since
-    # (#6576, #6605, #6607, #6608) explores schedules the old throttles pruned,
-    # and it now exceeds the 120s cap. Those extra schedules are the point of
-    # the fixes, so budget for them rather than weaken the bound back to a
-    # depth whose own unwinding assertions fail.
-    "regression/esbmc-unix/github_2513_6"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)
