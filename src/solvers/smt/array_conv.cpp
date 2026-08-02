@@ -150,7 +150,9 @@ smt_astt array_convt::mk_select(
   {
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned int intval = intref.value.to_uint64();
-    if (intval > ma->array_fields.size())
+    /* array_fields is indexed 0..size()-1, so an index equal to size() is
+     * already out of range; `>` let it through to an out-of-bounds read. */
+    if (intval >= ma->array_fields.size())
       // Return a fresh value.
       return ctx->mk_fresh(ressort, "array_mk_select_badidx::");
 
@@ -195,7 +197,8 @@ smt_astt array_convt::mk_store(
   {
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned int intval = intref.value.to_uint64();
-    if (intval > ma->array_fields.size())
+    // Same off-by-one as mk_select, except the access below is a write.
+    if (intval >= ma->array_fields.size())
       return ma;
 
     // Otherwise,
