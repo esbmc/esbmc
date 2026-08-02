@@ -43,20 +43,49 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 MODEL = REPO / "src/c2goto/library/cxl_driver.c"
 TESTS = REPO / "regression/cxl"
 
-# A definition at column 0 that is not static and not a bare declaration.
-DEF = re.compile(r"^(?!static\b)[A-Za-z_][\w \t\*]*?(\w+)\s*\($")
-DEF_ONELINE = re.compile(r"^(?!static\b)[A-Za-z_][\w \t\*]*?(\w+)\s*\([^;]*\)\s*$")
+# A definition at column 0: a return type, then whitespace or '*', then the
+# name. Requiring that separator matters — without it the leading character of
+# the name is consumed as if it were the type, which silently truncates every
+# signature whose return type sits on its own line (cxl_find_device ->
+# xl_find_device) and hides the `static` that should have excluded it.
+DEF = re.compile(r"^(?!static\b)[A-Za-z_][\w \t]*[\s\*]\s*(\w+)\s*\(")
+# A bare return type on its own line, continued on the next.
+TYPE_ONLY = re.compile(r"^[A-Za-z_][\w \t]*\*?\s*$")
 # A GOTO definition header: "name (c:@F@name):"
 GOTO_DEF = re.compile(r"^(\w+) \(c:@F@\1\):")
 
 
 def model_functions():
-    """Exported function names defined in the operational model."""
-    names = []
-    for line in MODEL.read_text(encoding="utf-8").splitlines():
-        if line.startswith((" ", "\t", "#", "/", "*", "}")) or line.endswith(";"):
+    """Exported function names defined in the operational model.
+
+    Joins a bare return type with the signature on the following line, so that
+    `struct cxl_dev *` / `cxl_find_device(...)` is read as one definition and
+    `static inline int` / `__esbmc_mmio_offset(...)` is correctly seen as
+    static.
+    """
+    raw = MODEL.read_text(encoding="utf-8").splitlines()
+    joined, i = [], 0
+    while i < len(raw):
+        line = raw[i]
+        if (
+            line
+            and not line[0].isspace()
+            and "(" not in line
+            and TYPE_ONLY.match(line)
+            and i + 1 < len(raw)
+            and re.match(r"^\w+\s*\(", raw[i + 1])
+        ):
+            joined.append(line.rstrip() + " " + raw[i + 1])
+            i += 2
             continue
-        m = DEF.match(line) or DEF_ONELINE.match(line)
+        joined.append(line)
+        i += 1
+
+    names = []
+    for line in joined:
+        if not line or line[0].isspace() or line[0] in "#/*}" or line.endswith(";"):
+            continue
+        m = DEF.match(line)
         if m:
             names.append(m.group(1))
     return sorted(set(names))

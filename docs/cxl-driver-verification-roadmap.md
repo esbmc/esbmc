@@ -448,7 +448,7 @@ declaration for its entire existence without any test noticing: **the model's
 own allocation code had never once executed.**
 
 `scripts/cxl_model_coverage.py` now reports this. The current figure is
-**20 of 107 modelled functions called by any test — 18%** — against 13 of 37
+**20 of 105 modelled functions called by any test — 19%** — against 13 of 37
 tests that call into the model at all. Track that number, not the test count.
 The script also reports GOTO linkage and documents why that figure
 over-reports (33 of 37) and must not be used as the coverage number.
@@ -667,13 +667,13 @@ currently poor:
 | Question | Today | Was |
 |---|---|---|
 | Real Linux driver functions verified | 4 | 4 |
-| Operational model functions exercised | 20 of 107 (18%) | not measured |
+| Operational model functions exercised | 20 of 105 (19%) | not measured |
 | Tests that execute the operational model | 13 of 37 | 11 of 35 |
 | Tests declaring the properties they check | 37 of 37 | 1 of 35 |
 | Tests that verify an interleaving | 2 of 37 | 0 of 35 |
 
 Phase 8.1 and 8.4 moved the last two; 8.2 made the second measurable for the
-first time, and at 18% it is the number most worth moving next. A rising test
+first time, and at 19% it is the number most worth moving next. A rising test
 count still should not be read as rising confidence.
 
 ## Current Statistics
