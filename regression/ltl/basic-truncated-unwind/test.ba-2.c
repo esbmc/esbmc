@@ -191,10 +191,10 @@ void ltl2ba_start_monitor(void)
 {
 	pthread_t t;
 
-//	__ESBMC_atomic_begin();
+	__ESBMC_atomic_begin();
 	pthread_create(&t, NULL, ltl2ba_thread, NULL);
 	__ESBMC_register_monitor(t);
-//	__ESBMC_atomic_end();
+	__ESBMC_atomic_end();
 
 	__ESBMC_switch_to_monitor();
 }
