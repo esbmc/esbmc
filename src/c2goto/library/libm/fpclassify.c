@@ -21,16 +21,20 @@ _signbit(float, _fdsign);
 /* MSVC's <math.h> builds isgreater() and the rest of the ordering macros on
  * these; unordered operands must yield 0, which the IEEE comparisons below
  * give for free since all three are false on NaN. */
-#  define _pcomp(type, name)                                                   \
+/* Compared at `cmp`, not at `type`: MSVC's long double *is* double, but the
+ * LLP64 data model gives it 128 bits here, and comparing at that width takes
+ * the quad-float path. _signbit above sidesteps the same thing by casting. */
+#  define _pcomp(type, name, cmp)                                              \
     int name(type x, type y)                                                   \
     {                                                                          \
     __ESBMC_HIDE:;                                                             \
-      return x < y ? _FP_LT : x > y ? _FP_GT : x == y ? _FP_EQ : 0;            \
+      cmp a = (cmp)x, b = (cmp)y;                                              \
+      return a < b ? _FP_LT : a > b ? _FP_GT : a == b ? _FP_EQ : 0;            \
     }
 
-_pcomp(double, _dpcomp);
-_pcomp(long double, _ldpcomp);
-_pcomp(float, _fdpcomp);
+_pcomp(double, _dpcomp, double);
+_pcomp(long double, _ldpcomp, double);
+_pcomp(float, _fdpcomp, float);
 #  undef _pcomp
 #else
 #  define classify_return_type int
