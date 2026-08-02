@@ -963,7 +963,7 @@ void goto_symext::pop_frame()
   if (!cur_state->guard.is_false())
     cur_state->guard = frame.entry_guard;
 
-  // clear locals from L2 renaming
+  // retire locals from L2 renaming
   for (auto const &it : frame.local_variables)
   {
     // Python objects are garbage-collected (issue #4773): keep user class
@@ -984,7 +984,7 @@ void goto_symext::pop_frame()
     // Erase from level 1 propagation
     cur_state->value_set.erase(to_symbol2t(l1_sym).get_symbol_name());
 
-    cur_state->level2.remove(it);
+    cur_state->level2.retire(it);
 
     // Construct an l1 name on the fly - this is a temporary hack for when
     // the value set is storing things in a not-an-irep-idt form.

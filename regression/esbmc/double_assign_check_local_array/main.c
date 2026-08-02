@@ -1,7 +1,7 @@
 // Copy of regression/esbmc/github_286_3/main.c, run with --double-assign-check.
-// Pins R14: symex emits two definitions of ...@F@getNumbers2@numbers2?1!0&0#1,
-// violating I10. KNOWNBUG states the verdict this should produce; today the run
-// trips the invariant at bmc.cpp and aborts instead.
+// Pins R14: the write through the returned dangling pointer must take a fresh
+// L2 index rather than re-issue ...@F@getNumbers2@numbers2?1!0&0#1, which the
+// declaration of numbers2 already defined.
 
 int array[10];
 
