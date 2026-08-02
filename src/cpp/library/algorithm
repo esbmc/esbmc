@@ -1,6 +1,7 @@
 #ifndef STL_ALGORITHM
 #define STL_ALGORITHM
 
+#include "initializer_list" /* [algorithm.syn] opens with this include */
 #include "iterator" /* std::iterator_traits, used by the heap helpers below */
 #include "definitions.h"
 #include <utility>

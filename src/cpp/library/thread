@@ -23,7 +23,7 @@
 // pointer, but that conversion operator is currently bodyless in the frontend
 // (independently of this header: `void (*f)() = []{ g = 5; }; f();` already
 // loses the write), so it yields a nondet pointer. std::this_thread::sleep_*
-// and yield are absent: ESBMC has no clock and interleaves at every step.
+// remain absent: ESBMC has no clock, and it interleaves at every step anyway.
 
 #if __cplusplus >= 201103L
 
@@ -143,6 +143,22 @@ struct hash<thread::id>
     return (size_t)v.__v;
   }
 };
+
+namespace this_thread
+{
+inline thread::id get_id() OM_NOEXCEPT
+{
+  return thread::id(pthread_self());
+}
+
+// A scheduling hint rather than a clock operation, so unlike sleep_* it has a
+// faithful model: __ESBMC_yield forces the context switch [thread.thread.this]
+// permits yield to make.
+inline void yield() OM_NOEXCEPT
+{
+  __ESBMC_yield();
+}
+} // namespace this_thread
 
 } // namespace std
 
