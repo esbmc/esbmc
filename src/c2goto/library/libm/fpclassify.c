@@ -17,6 +17,21 @@ _signbit(double, _dsign);
 _signbit(long double, _ldsign);
 _signbit(float, _fdsign);
 #  undef _signbit
+
+/* MSVC's <math.h> builds isgreater() and the rest of the ordering macros on
+ * these; unordered operands must yield 0, which the IEEE comparisons below
+ * give for free since all three are false on NaN. */
+#  define _pcomp(type, name)                                                   \
+    int name(type x, type y)                                                   \
+    {                                                                          \
+    __ESBMC_HIDE:;                                                             \
+      return x < y ? _FP_LT : x > y ? _FP_GT : x == y ? _FP_EQ : 0;            \
+    }
+
+_pcomp(double, _dpcomp);
+_pcomp(long double, _ldpcomp);
+_pcomp(float, _fdpcomp);
+#  undef _pcomp
 #else
 #  define classify_return_type int
 #endif
