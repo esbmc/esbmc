@@ -1,0 +1,122 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/cs01/schemas/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "results": [
+        {
+          "level": "note",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/home/rafaelsa/esbmc/regression/esbmc/cwe_dead_code_dead_store_sarif/main.c"
+                },
+                "region": {
+                  "startLine": 9
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "dead code: unreachable branch [guard: (_Bool)x]"
+          },
+          "ruleId": "dead-code",
+          "taxa": [
+            {
+              "id": "561",
+              "toolComponent": {
+                "name": "CWE"
+              }
+            }
+          ]
+        },
+        {
+          "level": "note",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/home/rafaelsa/esbmc/regression/esbmc/cwe_dead_code_dead_store_sarif/main.c"
+                },
+                "region": {
+                  "startLine": 8
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "dead store: assignment to unused never read"
+          },
+          "ruleId": "dead-store",
+          "taxa": [
+            {
+              "id": "563",
+              "toolComponent": {
+                "name": "CWE"
+              }
+            }
+          ]
+        }
+      ],
+      "taxonomies": [
+        {
+          "informationUri": "https://cwe.mitre.org/",
+          "name": "CWE",
+          "organization": "MITRE",
+          "shortDescription": {
+            "text": "Common Weakness Enumeration"
+          },
+          "taxa": [
+            {
+              "helpUri": "https://cwe.mitre.org/data/definitions/561.html",
+              "id": "561",
+              "shortDescription": {
+                "text": "Dead Code"
+              }
+            },
+            {
+              "helpUri": "https://cwe.mitre.org/data/definitions/563.html",
+              "id": "563",
+              "shortDescription": {
+                "text": "Assignment to Variable without Use"
+              }
+            }
+          ],
+          "version": "4.20"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://esbmc.org",
+          "name": "ESBMC",
+          "rules": [
+            {
+              "id": "dead-code",
+              "properties": {
+                "tags": [
+                  "external/cwe/cwe-561"
+                ]
+              },
+              "shortDescription": {
+                "text": "Dead code"
+              }
+            },
+            {
+              "id": "dead-store",
+              "properties": {
+                "tags": [
+                  "external/cwe/cwe-563"
+                ]
+              },
+              "shortDescription": {
+                "text": "Dead store"
+              }
+            }
+          ],
+          "version": "8.4.0"
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

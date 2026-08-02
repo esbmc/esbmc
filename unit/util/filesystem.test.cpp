@@ -8,6 +8,8 @@ Author: Rafael Sá Menezes
 #include <catch2/catch.hpp>
 #include <util/base/filesystem.h>
 #include <boost/filesystem.hpp>
+#include <fstream>
+#include <cstdlib>
 
 TEST_CASE(
   "tmp path should be unique between two runs",
@@ -86,3 +88,76 @@ TEST_CASE(
   }
   REQUIRE(!boost::filesystem::exists(path));
 }
+
+TEST_CASE(
+  "tmp file is created exclusively, not opened by name",
+  "[core][util][filesystem]")
+{
+  // unique_path() only invents a name; it does not stake a claim on it.
+  // Creating the file with fopen() therefore opened whatever already sat at
+  // that path -- including a symlink planted between the two steps -- and
+  // truncated it (CWE-377). Opening with O_EXCL|0600 instead is observable:
+  // the temporary is not group/world accessible.
+  auto file = file_operations::create_tmp_file("esbmc-test-%%%%");
+  const std::string path = file.path();
+  REQUIRE(boost::filesystem::is_regular_file(path));
+  REQUIRE(
+    !boost::filesystem::is_symlink(boost::filesystem::symlink_status(path)));
+
+#ifndef _WIN32
+  using boost::filesystem::perms;
+  const perms p = boost::filesystem::status(path).permissions();
+  REQUIRE((p & (perms::group_all | perms::others_all)) == perms::no_perms);
+#endif
+}
+
+#ifndef _WIN32
+TEST_CASE(
+  "an already-taken tmp name is never clobbered",
+  "[core][util][filesystem]")
+{
+  // A single '%' expands to one hex digit, so the format below has exactly 16
+  // candidate names. Occupy 15 of them and the only name create_tmp_file() can
+  // take is the sixteenth -- so the outcome is deterministic, and any run that
+  // truncates a sentinel or returns an occupied name is a regression. fopen()
+  // took the first name it drew, clobbering a sentinel 15 times out of 16.
+  namespace fs = boost::filesystem;
+  auto dir = file_operations::create_tmp_dir("esbmc-test-excl-%%%%");
+
+  // create_tmp_file() resolves the temp directory per call, so TMPDIR confines
+  // this test to `dir` and keeps it off the shared /tmp.
+  const char *saved = getenv("TMPDIR");
+  const std::string old_tmpdir = saved ? saved : "";
+  setenv("TMPDIR", dir.path().c_str(), 1);
+
+  const std::string free_name = "esbmc-test-slot-a";
+  for (const char *d = "0123456789abcdef"; *d; ++d)
+  {
+    const fs::path occupied =
+      fs::path(dir.path()) / ("esbmc-test-slot-" + std::string(1, *d));
+    if (occupied.filename().string() == free_name)
+      continue;
+    std::ofstream(occupied.string()) << "sentinel";
+  }
+  REQUIRE(!fs::exists(fs::path(dir.path()) / free_name));
+
+  {
+    auto taken = file_operations::create_tmp_file("esbmc-test-slot-%");
+    REQUIRE(fs::path(taken.path()).filename().string() == free_name);
+  }
+
+  for (const char *d = "0123456789abcdef"; *d; ++d)
+  {
+    const fs::path occupied =
+      fs::path(dir.path()) / ("esbmc-test-slot-" + std::string(1, *d));
+    if (occupied.filename().string() == free_name)
+      continue;
+    REQUIRE(fs::file_size(occupied) == 8);
+  }
+
+  if (saved)
+    setenv("TMPDIR", old_tmpdir.c_str(), 1);
+  else
+    unsetenv("TMPDIR");
+}
+#endif

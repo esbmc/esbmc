@@ -609,7 +609,7 @@ two configurations.
 | ID | Relation | Corpus | Detects |
 |---|---|---|---|
 | **H-C1** | verdict(default) == verdict(`--no-slice`) | `regression/esbmc` CORE (1430 of 1574 dirs) | Slicer unsoundness/incompleteness end-to-end. **Run, §15 M5: 1328 agreed, 0 diverged**, 67 inconclusive, 35 skipped |
-| **H-C2** | verdict(default) == verdict(`--no-simplify`) | same | Simplifier / constant-propagation semantic drift (P9). **Run, §15 M5: 1174 agreed, 11 diverged** — R16 (10, incompleteness) and R17 (1, false SUCCESSFUL, since **fixed**; the `--no-slice` composition turned out to be a symptom, and its residual is R24) |
+| **H-C2** | verdict(default) == verdict(`--no-simplify`) | same | Simplifier / constant-propagation semantic drift (P9). **Run, §15 M5: 1174 agreed, 11 diverged** — R16 (10, incompleteness) and R17 (1, false SUCCESSFUL, since **fixed**; the `--no-slice` composition turned out to be a symptom, and its residual is R25) |
 | **H-C3** | verdict(bitwuzla) == verdict(z3) | same | Encoding assumptions that only one solver tolerates. **Run, §15 M7: 1269 agreed, 0 diverged** |
 | **H-C4** | verdict(default) == verdict(`--no-por`) and == verdict(`--state-hashing`) | `regression/esbmc-unix`, `regression/esbmc` concurrency tests | POR / state-hashing over-pruning (I14, I15). **Run, §15 M6: 258/0 and 255/0 — clean, but the R18 witness is a program the corpus does not contain** |
 | **H-C5** | verdict(default) == verdict(`--no-interval-symex-guard`) | `regression/esbmc`, `regression/k-induction` | Interval-domain guard pruning (the documented hazard at `symex_goto.cpp:57-79`). **Run, §15 M7: 1360 agreed, 0 diverged** |
@@ -688,7 +688,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R14** | **Open (I10 violated on a real input)** — found by R5's repaired detector, §15 M4 | With `--double-assign-check` made to fail, `regression/esbmc/github_286_3` produces an equation that **defines one SSA name twice**: `…@F@getNumbers2@numbers2?1!0&0#1`, the L2 index 1 of a local array in a function that returns a dangling pointer to it. Two definitions of one name are two constraints `x#1 == e1` and `x#1 == e2` on the same variable; where the right-hand sides disagree the conjunction is unsatisfiable, which silently removes that path from the formula — the missed-bug direction. One input in ~900 swept. Not yet characterised: which two steps emit it, and whether the two right-hand sides can differ. | `symex_target_equationt::check_for_duplicate_assigns` under `--double-assign-check`; `regression/esbmc/double_assign_check_local_array` (KNOWNBUG) | H-B1 | Find the two emitting steps (the local's scope exit is the first suspect), then decide whether the second definition is a stale re-emission or a legitimate step that must take a fresh index. |
 | **R15** | **Low (reproducibility, latent collision)** — found by H-B2, §15 M4 (H-B2) | **Object numbering leaks across symex runs in one process.** `execution_statet::dynamic_counter` and `dereferencet::invalid_counter` are `static thread_local` and reset nowhere, so a second exploration in the same process names its objects from where the first stopped: the same program under the same options yields `symex_dynamic::dynamic_1_array` on the first run and `dynamic_2_array` on the second. The sibling `nondet_count` is a plain instance member the constructor zeroes, so the asymmetry is unintended rather than a design choice. The equation is therefore not a function of (program, options) alone. No wrong verdict follows — the names only need to be *fresh*, and monotonic counters are fresh — so this is a reproducibility defect, and objective 7's "byte-identical" wording is unachievable as stated. **Latent second-order risk:** `thread_local` means two threads each start at 0, so if symex is ever parallelised (§14.6) two threads would mint *colliding* object names into a shared context. | `execution_state.cpp:21`, `execution_state.h:583`; `dereference.cpp:23,538`, `dereference.h:281`; contrast `nondet_count` reset at `execution_state.cpp:104` | `unit/goto-symex/determinism.test.cpp` (Tier B, pinned) | Reset both counters per exploration — in `setup_for_new_explore`, **not** in the `execution_statet` constructor, which the reachability tree copies per interleaving and where a reset would mint colliding names. Expect churn in `test.desc` files whose expected output names a dynamic object; run the full corpus before landing. |
 | **R23** | **High (missed bug, default configuration)** — found by M8 triage, §15 M8 (cont. 6); filed as **#6558**, fixed by **#6571** | **A real race is lost when the guarded branch writes its own guard variable back to the falsifying value.** Nine lines: `t1` loops twice over `if (receive) { assert(i < 1); receive = 0; }` while `main` sets `receive = 1` after `pthread_create`. The racy schedule — `i=0` reads 0 and skips, `main` writes 1, `i=1` reads 1 and the assertion fires — is explored and reported when the branch body is empty, writes a *different* variable, or writes `receive = 1`. Only `receive = 0` loses it. **On that schedule the added write never executes before the violation**, since the body is skipped at `i=0` and the assertion fires before reaching the write at `i=1`, so provably-unexecuted code is removing a counterexample. **No flag recovers it:** `--no-por`, `--context-bound 8`, `--state-hashing`, `--no-slice` and `--no-interval-symex-guard` all still report SUCCESSFUL, which rules out POR, the context bound, state hashing, the slicer and the interval-domain guard pruning that was the natural suspect. **Narrowed further, §15 M8 (cont. 7):** the loss needs all three of — `t1` guards on X, `t1` writes X in the guarded body, and `main` writes X *exactly once*. Splitting the guard from the written variable in either direction restores detection, and so does giving `main` a second, redundant `receive = 1`. Since a duplicated identical write cannot change the formula's meaning but does add a scheduling point, the incompleteness is in the **interleaving set**, not the encoding. The GOTO programs of the detected and missed variants are instruction-for-instruction identical apart from the assignment target, so nothing upstream of symex differs. Mechanism still unknown. | discriminator table above; `regression/esbmc-unix/race_guard_self_clear` (CORE since #6571) and `race_guard_other_write` (CORE, different variable, caught today); `regression/esbmc-unix/03_circular_reduce` (pre-existing KNOWNBUG) | M8 triage | **Violability proven, gate hypothesis retracted, §15 M8 (cont. 8–9):** under `--data-races-check` the program reports FAILED **on the assertion itself**, so the schedule is reachable and the claim genuinely violable — the miss is a real incompleteness, not a modelling artefact. The `main_thread_ended` cutoff in `check_if_ileaves_blocked` was proposed as the cause and is **refuted**: keeping `main` alive past its write, with up to four further global writes, still reports SUCCESSFUL. `--data-races-check` both bypasses that gate *and* adds race instrumentation, so it does not isolate either. **Fixed by #6571**, which found three composing defects in the branch-merge path and flipped the pin to CORE. |
-| **R22** | **Medium–High (missed check, non-default flag)** — found by M8 triage, §15 M8 (cont. 3) | **`--overflow-check` does not check arithmetic on a bitfield member.** `struct { int a : 3; } b = {3}; b.a += nondet_int();` reports **SUCCESSFUL**, though `3 + INT_MAX` overflows. The same statement on a *plain* member of the same struct is checked and reports FAILED, as is a plain local (`int x = 3; x += nondet_int()`). The gap is the bitfield, not the union, the sign, or the operand: struct and union bitfields, signed and unsigned, all miss it, while struct and union plain members are all checked. Attributes the pre-existing `github_162_fail` KNOWNBUG. | boundary probes above; `regression/esbmc/overflow_bitfield_member` (KNOWNBUG) and `overflow_plain_member` (CORE, plain member, caught today); `regression/esbmc/github_162_fail` (pre-existing KNOWNBUG) | M8 triage | Determine whether the overflow instrumentation skips bitfield lvalues, or whether the check is emitted over the already-truncated value. Pinned, not fixed, not filed. |
+| **R22** | **Medium–High (missed check, non-default flag)** — found by M8 triage, §15 M8 (cont. 3) | **`--overflow-check` does not check arithmetic on a bitfield member.** `struct { int a : 3; } b = {3}; b.a += nondet_int();` reports **SUCCESSFUL**, though `3 + INT_MAX` overflows. The same statement on a *plain* member of the same struct is checked and reports FAILED, as is a plain local (`int x = 3; x += nondet_int()`). The gap is the bitfield, not the union, the sign, or the operand: struct and union bitfields, signed and unsigned, all miss it, while struct and union plain members are all checked. Attributes the pre-existing `github_162_fail` KNOWNBUG. | boundary probes above; `regression/esbmc/overflow_bitfield_member` (CORE, flipped from KNOWNBUG by R23's fix) and `overflow_plain_member` (CORE, plain member, caught today); `regression/esbmc/github_162_fail` (pre-existing KNOWNBUG) | M8 triage | Done, as a side effect of R23: the compound assignment was narrowing `b.a` to its 3-bit type before the addition, so the overflow claim was unfalsifiable. Performing the operation in the computation type emits `!overflow("+", (signed int)b.a, a)` and the check fires. |
 | **R21** | **Medium (incompleteness, default configuration)** — found by M8 triage, §15 M8 (cont.); filed as **#6545** | **Multiplying an address-derived integer loses object identity, so the reconstructed pointer is rejected.** `uintptr_t u = (uintptr_t)&s; u *= 2; u -= (uintptr_t)&s; *(int *)u = 3;` recovers `&s` exactly, yet reports **FAILED**. The boundary: an *additive* round-trip (`u += 4; u -= 4`) is tracked, multiplying a *pure integer* offset and adding it to an address is tracked, and `u = u * 1` folds away — only a genuine multiplication of an address-derived term defeats recovery. `offsetof` counts as address-derived, since it expands to `(size_t)&((S *)0)->m`: the same program with a literal `4` in place of `offsetof(struct S, y)` verifies, with `offsetof` it does not. Attributes three pre-existing KNOWNBUGs to one cause — `github_426_2` (multiplies an `offsetof`), `github_426_3` and `github_426_4` (multiply an address). Noisy direction, so P1: a spurious counterexample, not a missed bug — and the exact complement of R20, which *accepts* a computed address it should reject. | boundary probes above; `regression/esbmc/ptr_int_multiply_roundtrip` (KNOWNBUG) and `ptr_int_additive_roundtrip` (CORE); `regression/esbmc/github_426_{2,3,4}` (pre-existing KNOWNBUGs) | M8 triage; H-A10's `symex_dereference` obligation | Decide whether recovering object identity through a multiplicative term is worth the model complexity; if not, document it as a stated limitation so the three KNOWNBUGs stop reading as open defects. Pinned, not fixed; filed as #6545. |
 | **R20** | **Medium–High (missed bug, default configuration)** — found by M8 triage, §15 M8 (cont.); filed as **#6544** | **A dereference through a constant non-null integer address is unchecked.** One line reproduces it: `int *p = (int *)65; return *p;` reports **`VERIFICATION SUCCESSFUL`**. The boundary is narrow and is what makes this a defect rather than a modelling choice: `(int *)0` is caught by the null check, `(int *)nondet_ulong()` is caught, and `(int *)(unsigned long)&x` is correctly accepted as a valid round-trip — only the *constant* non-null address escapes, for reads and for writes alike. Attributes two pre-existing KNOWNBUGs to one cause: `github_1175_9` casts `'A'` (65) and `github_1175_11` casts a constant-folded `strlen("Hello")` (5). **The obvious mechanism is refuted:** `--no-propagation` and `--no-simplify`, together and separately, leave the verdict SUCCESSFUL, so constant propagation is not what loses the check. | one-line reproducer above; `regression/esbmc/deref_constant_int_address` (KNOWNBUG) and `deref_nondet_int_address` (CORE, nondet address, caught today); `regression/esbmc/github_1175_{9,11}` (pre-existing KNOWNBUGs) | M8 triage; belongs to H-A10's `symex_dereference` obligation | Find where a constant-integer pointer bypasses the `invalid_pointer` obligation that a nondet one receives. `src/pointer-analysis/dereference.cpp` is Tier D by §14.2, but symex's *use* of it is in scope. Pinned, not fixed; filed as #6544. |
 | **R19** | **High (per-property false PASSED, non-default flag pair)** — **confirmed with a minimal reproducer** by H-B8, §15 M7; filed as **#6540** | **With `--multi-property --smt-during-symex`, a violable claim that is not the last property is individually reported as `✓ PASSED`.** Seven lines reproduce it: two non-trivial properties where the violable one comes first. ESBMC prints `✓ PASSED` for the violable claim, `Properties: 2 verified ✓ 2 passed`, and `VERIFICATION SUCCESSFUL`. Swapping the two assertions so the violable one is **last** restores `FAILED`, so the defect is positional. Neither flag alone loses the counterexample — `--multi-property` alone and `--smt-during-symex` alone both report FAILED — making this a flag *composition* defect like R17. This is I13 exactly as H-B8 hypothesised it: the per-claim solve reuses a `runtime_encoded_equationt` whose context stack still carries the preceding claim's state, so a non-final claim is discharged against the wrong formula. Worse than a verdict flip: the per-property report actively asserts the claim holds. | `oracle_flag_parity.py --b=--smt-during-symex` (3 corpus divergences: `github_1408`, `github_1890_1`, `github_2629`, all `--multi-property` tests); reproducer in #6540; **no portable regression pin** — see §15 M7 (CI) | **H-B8** | Inspect `runtime_encoded_equationt`'s `push_ctx`/`pop_ctx` pairing across the per-claim loop in `bmc.cpp` — H-A8 assumes the caller balances them (§7.3). Pinned, not fixed. |
@@ -696,9 +696,10 @@ this document** — each is a prioritised target for the cited harness.
 | **R22** | **High (false SUCCESSFUL, default configuration)** — **confirmed with a minimal reproducer** by M8 triage, **confirmed and fixed**, §15 M8 (cont. 6) | **A shared write performed by a function's return-value assignment creates no interleaving point.** Six lines reproduce it: one thread runs `x = notify(); x = 2;` (`notify` returns `1`), another asserts `x != 1`. Default reports **SUCCESSFUL** — no schedule can observe the intermediate value, because no context switch is offered between the two writes. Three controls make the boundary exact: writing `x = 1; x = 2;` inline reports FAILED; splitting the call off the shared write (`int v = notify(); x = v; x = 2;`) reports FAILED; and inserting *any* other shared write between them (`x = notify(); g = 5; x = 2;`) reports FAILED. The value therefore reaches the equation — `x = notify();` alone reports FAILED, and an in-thread `assert(x == 1)` after it holds — so what is lost is the *scheduling point*, not the write. Not POR (`--no-por` unchanged), not the context bound (`--context-bound 10` unchanged), and not constant propagation (the split control propagates identically and still catches it). `x = notify()` lowers to a `FUNCTION_CALL` instruction carrying the lhs, so the write is performed by the `RETURN` case's `make_return_assignment` path; `execution_statet::symex_step` calls `analyze_assign(assign)` there **after** `symex_return(thecode)`, whose last statement is `cur_state->guard.make_false()`, and `analyze_assign` early-returns on a false guard. That is the same mistake #6558 fixed at `symex_goto`, and instrumentation confirms the reorder does exactly what the argument predicts — the `RETURN` step goes from `writes=0 cswitch=false` to `writes=1 cswitch=true`. **It is still not sufficient**, and the second half is now identified: `execute_guard` emits `assume(false)` and kills the interleaving whenever a switch is taken away from a thread whose guard is false, which `symex_return` guarantees at a return boundary. That is **#6558's defect at a second boundary** — the `last_transition.branch` arm chains the pre-branch guard for gotos and nothing does so for returns. Both halves must be fixed together; see §15 M8 (cont. 4) and (cont. 5). **Fixed in §15 M8 (cont. 6)**, where the two halves collapse into one change: a return parks its continuation exactly as a branch parks its sibling arm, so `symex_return` now records that parked path through the same hook `symex_goto` uses, and the existing branch arms in `execute_guard` and `preserve_last_paths` cover returns unchanged. Fixing only the first two halves exposed a third — the returning thread was marked `thread_ended` at the boundary — which the same change removes. | reproducer and controls above; `execution_statet::execute_guard`, `execution_state.cpp:712-755`; `execution_statet::symex_step` `RETURN` case, `execution_state.cpp:339-356`; `goto_symext::symex_return`, `symex_function.cpp:1041-1066`; `execution_statet::analyze_assign`, `execution_state.cpp:819-838`; `regression/esbmc-unix/symex_return_value_cswitch` (CORE, flipped from KNOWNBUG by the fix), `..._split` (CORE) and `..._resume` (CORE, added by the fix to pin the thread-survival half) | M8 triage; **H-A6**'s A6.2 completeness obligation | Done. All three pins are CORE and the whole `esbmc-unix` suite is clean. |
 | **R18** | **High (false SUCCESSFUL, default configuration)** — **FIXED**, §15 M6 (fix); filed as **#6539**, fixed by **#6550** | **POR drops a racy interleaving when the write goes through a nested dereference.** `get_expr_globals` resolves *one* pointer level (`get_reference_set` on a single `dereference2tc`), so a write spelled `*(*gpp) = 1` is recorded against the intermediate pointer `gp` rather than its target `g`. A second thread writing `g` directly records `g`, the two keys do not alias, `check_mpor_dependency` returns *independent*, and the interleaving is pruned — **a real race missed in the default configuration, with no diagnostic**. Twelve lines reproduce it: writer does `*(*gpp) = 1`, `main` does `g = 2; seen = g;`, and `assert(seen == 2)` is reachable. Default reports **SUCCESSFUL**; `--no-por` reports FAILED. The mechanism is pinned by a decisive pair: with *both* threads using the nested form the race is found again (matching keys), while writer-nested/main-direct misses it. Splitting the nested access into `int *q = *gpp; *q = 1;` also restores detection, so the key depends on the syntactic nesting depth of the access rather than on the object touched. This is precisely the completeness direction H-A6's A6.2 names — a missed dependency — and it is **not** in the relation but upstream in the key construction feeding it. | `execution_statet::get_expr_globals`, `execution_state.cpp:868-918`; `check_mpor_dependency`, `:1050`; `mpor_set_conflicts`, `:231`; `regression/esbmc-unix/mpor_nested_deref_race` (KNOWNBUG) and `..._nopor` (CORE) | **H-A6**, **H-C4** | **Fixed in #6550** by following the chain and recording every shared object along it. The cost gate the entry called for was run: H-C4 agreement *rose* (258→259 on `--no-por`, 255→257 on `--state-hashing`) at 0 divergences, and the concurrency suite timing was unchanged (24.10 s vs 24.12 s). |
 | **R16** | **Medium (incompleteness under a non-default flag)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify` is not verdict-preserving: 10 corpus inputs where the default proves SUCCESSFUL and `--no-simplify` does not.** Nine report a spurious counterexample (`github_1174_{hex,lmod,oct,pass}`, `github_2341_3`, `github_2357_5`, `github_2566_1`, `github_785-2`, `realloc13`) and one returns UNKNOWN (`github_252`, under `--k-induction`). In every case the *default* leg matches the verdict the test's own `test.desc` expects, so the fault is in the `--no-simplify` configuration, not the default. Spot-confirmed on `github_2341_3`: `--no-simplify` reports a violated `assert(temp != NULL)` the default discharges. The noisy direction — P1 — but it means `do_simplify` is load-bearing for *correctness of the encoding*, not merely for formula size, which is not how an "optimisation" flag reads. | `oracle_flag_parity.py --b=--no-simplify` over `regression/esbmc` CORE | **H-C2** | Triage one input down to the expression shape the encoder mishandles unsimplified. Until then `--no-simplify` is a debugging aid, not a semantics-preserving flag. |
-| **R17** | **High (false SUCCESSFUL, default configuration)** — found by H-C2, §15 M5 (H-C2); **FIXED**, §15 M5 (R17 root cause) | **An allocation the address space cannot lay out is encoded as a contradiction instead of a failed allocation, so the whole formula goes UNSAT and every assertion is discharged vacuously.** Found as `void *b = malloc(-4); assert(0);` returning **`VERIFICATION SUCCESSFUL`** under `--no-simplify --no-slice`, and first recorded as a flag-*composition* defect. It is not one, and the sign is not the trigger: `malloc(0xFFFFFFFFFFFFFFFCUL)` reproduces it under `--no-slice` alone. `--no-simplify` merely disabled the pre-existing negative-size guard (`do_simplify` is a no-op under it, so the guard never saw a constant) and `--no-slice` merely kept the otherwise-dead allocation in the equation. The real boundary is a layout limit and is exact: `1UL<<63` is fine, every size `>= 2^64 - 16` is vacuous, because `init_pointer_obj` asserts `end == start + size` **and** `end >= start` while `start` is past the NULL object at address 0 and aligned to `max_alignment()` (16). Reached in the corpus via `github_1631_compact`, whose `--compact-trace` sets `no-slice` implicitly (`command_line_options.cpp:410`). **No flag is needed at all**: `github_1091` — a KNOWNBUG since 2023, listed unattributed in §16's inventory — is this defect on plain `--unwind 1`, because `malloc(strlen(filename) - 4)` underflows to a huge `size_t` whenever `strlen(filename) < 4`, and the result is *used*, so the slicer keeps it. The fix flips that test to CORE. | `smt_memspace.cpp` `init_pointer_obj`; fixed in `symex_mem`, `src/goto-symex/builtin_functions/memory_alloc.cpp`. `regression/esbmc/no_simplify_no_slice_huge_malloc` and `esbmc/github_1091` (both KNOWNBUG → **CORE**), `no_slice_unrepresentable_malloc` (CORE, positive literal), `..._malloc` (CORE control) | **H-C2** | Fixed: classify the request on an unconditionally simplified copy so `--no-simplify` cannot blind it, and fail any allocation the address space cannot lay out by returning NULL, as real allocators do. Residual **R24** covers the symbolic-size form. |
-| **R24** | **High (false SUCCESSFUL, default configuration)** — found while root-causing R17, §15 M5 (R17 root cause); **FIXED**, §15 M5 (R24) | **The R17 vacuity is also reachable through a *symbolic* allocation size, and no flag is needed.** `size_t n = nondet_size(); __ESBMC_assume(n >= 0xFFFFFFFFFFFFFFF0UL); char *b = malloc(n); if (b) b[0] = 1; assert(0);` reported **`VERIFICATION SUCCESSFUL`** on default flags — the pointer is used, so the slicer keeps the allocation. The R17 fix could not see it: no constant is available at symex time. Worse than R17's shape, because the address-space constraint does not merely kill the path — `end == start + n` with `end >= start` silently *constrains the program variable `n`*, so **every** symbolic allocation quietly discarded its top 16 sizes, not just ones an assumption forced there. | `smt_memspace.cpp` `init_pointer_obj:409-421`; fixed in `symex_mem`. `regression/esbmc/symbolic_unrepresentable_malloc` and `no_slice_symbolic_unrepresentable_malloc` (CORE), `symbolic_malloc_bounds_preserved` (CORE, anti-vacuity), `force_malloc_success_unrepresentable` (KNOWNBUG, residual) | R17 root-causing | Fixed: give the object size zero on the branch where the request does not fit, so it is always layable, and return NULL there. Under `--force-malloc-success` the bound is stated as an assumption instead — branching to NULL reintroduces the case split that flag exists to remove, and cost 22 s → >200 s on `github_1352-*-32bit`. That leaves the residual pinned above. |
-| **R23** | **High (false SUCCESSFUL *and* false FAILED, default configuration)** — **confirmed with a two-line reproducer** by M8 triage, §15 M8 (cont. 7); filed as **#6589** | **Compound assignment narrows the right operand to the left operand's type before the operation.** C11 **6.5.16.2p3**: "A compound assignment of the form E1 op= E2 is equivalent to the simple assignment expression E1 = E1 op (E2), except that the lvalue E1 is evaluated only once". ESBMC violates that equivalence for every left operand narrower than `int`. `char b; b += a;` emits `!overflow("+", (signed int)b, (signed int)((signed char)a))` — the right operand cast to `char` — where `b = b + a` correctly emits `!overflow("+", (signed int)b, a)`. Both directions are reachable and both are wrong: with `b = 3, a = INT_MAX`, `b += a` reports **SUCCESSFUL** (the overflow claim is unfalsifiable, a **missed bug**) while `b = b + a` reports FAILED; and with `char b = 100; int a = 256`, `b /= a` reports **FAILED "division by zero"** because the divisor narrows to `(char)256 == 0`, where C gives `100 / 256 == 0` and gcc/UBSan agree. Not bitfield-specific — `char`, `short`, struct members and bitfields all reproduce; the discriminator is *narrower than the promoted type*, not the member/bitfield spelling. This attributes `github_162_fail`, whose claim is vacuous for exactly this reason. **Frontend, not goto-symex**, so it is outside §2.3's scope, but it is a soundness defect in extremely common C. | `clang_c_convertert::get_compound_assign_expr`, `clang_c_convert.cpp:4258-4332`, specifically the unconditional `gen_typecast(ns, rhs, lhs.type())`; clang exposes `getComputationLHSType()`/`getComputationResultType()` for precisely this. `regression/esbmc/compound_assign_narrow_overflow` (KNOWNBUG), `..._explicit` (CORE control) and `compound_assign_narrow_divzero` (KNOWNBUG) | M8 triage | Perform the operation in `getComputationResultType()` and convert only the *result* back to the left operand's type. The explicit-form control pins the direction a fix must not break. |
+| **R17** | **High (false SUCCESSFUL, default configuration)** — found by H-C2, §15 M5 (H-C2); **FIXED**, §15 M5 (R17 root cause) | **An allocation the address space cannot lay out is encoded as a contradiction instead of a failed allocation, so the whole formula goes UNSAT and every assertion is discharged vacuously.** Found as `void *b = malloc(-4); assert(0);` returning **`VERIFICATION SUCCESSFUL`** under `--no-simplify --no-slice`, and first recorded as a flag-*composition* defect. It is not one, and the sign is not the trigger: `malloc(0xFFFFFFFFFFFFFFFCUL)` reproduces it under `--no-slice` alone. `--no-simplify` merely disabled the pre-existing negative-size guard (`do_simplify` is a no-op under it, so the guard never saw a constant) and `--no-slice` merely kept the otherwise-dead allocation in the equation. The real boundary is a layout limit and is exact: `1UL<<63` is fine, every size `>= 2^64 - 16` is vacuous, because `init_pointer_obj` asserts `end == start + size` **and** `end >= start` while `start` is past the NULL object at address 0 and aligned to `max_alignment()` (16). Reached in the corpus via `github_1631_compact`, whose `--compact-trace` sets `no-slice` implicitly (`command_line_options.cpp:410`). **No flag is needed at all**: an underflowing size such as `malloc(len - 4)` with `len < 4` widens to a huge `size_t`, and when the result is *used* the slicer keeps the allocation, so plain `esbmc file.c` goes vacuous. `default_underflow_malloc` pins that. | `smt_memspace.cpp` `init_pointer_obj`; fixed in `symex_mem`, `src/goto-symex/builtin_functions/memory_alloc.cpp`. `regression/esbmc/no_simplify_no_slice_huge_malloc` (KNOWNBUG → **CORE**), `default_underflow_malloc` (CORE, default flags), `no_slice_unrepresentable_malloc` (CORE, positive literal), `..._malloc` (CORE control) | **H-C2** | Fixed: classify the request on an unconditionally simplified copy so `--no-simplify` cannot blind it, and fail any allocation the address space cannot lay out by returning NULL, as real allocators do. Residual **R25** covers the symbolic-size form. |
+| **R23** | **High (false SUCCESSFUL *and* false FAILED, default configuration)** — **confirmed with a two-line reproducer** by M8 triage, §15 M8 (cont. 7); filed as **#6589** | **Compound assignment narrows the right operand to the left operand's type before the operation.** C11 **6.5.16.2p3**: "A compound assignment of the form E1 op= E2 is equivalent to the simple assignment expression E1 = E1 op (E2), except that the lvalue E1 is evaluated only once". ESBMC violates that equivalence for every left operand narrower than `int`. `char b; b += a;` emits `!overflow("+", (signed int)b, (signed int)((signed char)a))` — the right operand cast to `char` — where `b = b + a` correctly emits `!overflow("+", (signed int)b, a)`. Both directions are reachable and both are wrong: with `b = 3, a = INT_MAX`, `b += a` reports **SUCCESSFUL** (the overflow claim is unfalsifiable, a **missed bug**) while `b = b + a` reports FAILED; and with `char b = 100; int a = 256`, `b /= a` reports **FAILED "division by zero"** because the divisor narrows to `(char)256 == 0`, where C gives `100 / 256 == 0` and gcc/UBSan agree. Not bitfield-specific — `char`, `short`, struct members and bitfields all reproduce; the discriminator is *narrower than the promoted type*, not the member/bitfield spelling. `github_162_fail` is where it was found, and its claim is vacuous for exactly this reason — but that entry is a *wrong test* independently of R23, see §15 M8 (cont. 8). **Frontend, not goto-symex**, so it is outside §2.3's scope, but it is a soundness defect in extremely common C. **Fixed, §15 M8 (cont. 8).** | `clang_c_convertert::get_compound_assign_expr`, `clang_c_convert.cpp:4258-4343`, specifically the unconditional `gen_typecast(ns, rhs, lhs.type())`, together with `goto_convertt::remove_assignment`, `goto_sideeffects.cpp:1714-1870`, which took the operation's type from `expr.op0()`. `regression/esbmc/compound_assign_narrow_overflow`, `..._explicit` (control) and `compound_assign_narrow_divzero`, all CORE | M8 triage | Done. The frontend records clang's `getComputationResultType()` on the side effect; `remove_assignment` performs the operation there and converts the result back on assignment. |
+| **R24** | **Medium (spurious counterexample, default configuration)** — **confirmed with a reproducer** by M8 triage, §15 M8 (cont. 10) | **`memset` does not constrain a struct's bitfield padding bits, so a type-punned read of the object is partly nondeterministic.** For `struct { int x : 12, y : 8; } s;`, `memset(&s, 0, sizeof s); s.x = -1; s.y = -1;` then reading `*(int *)&s` gives a value whose low 20 bits are correct — `(v & 0xFFFFF) == 0xFFFFF` verifies — but whose 12 padding bits are unconstrained: `(v >> 20) == 0` **fails**. gcc gives `0x000fffff` exactly, so the declared fields are laid out right and only the `memset`'s effect on the bits above them is lost. This is the direction an over-approximation produces (a false alarm, never a missed bug), and it is reachable with **no flags at all**, which is what separates it from the four flag-inadequacy entries triaged alongside it. Explains `github_732-1-1`, whose `sizeof(s) == 4` and `s.y == -1` assertions both hold and only whose type-punned assertion fails. | `regression/esbmc/bitfield_padding_memset` (KNOWNBUG) and `..._fields` (CORE control); `regression/esbmc/github_732-1-1` | M8 triage | Make `memset` (and struct zero-initialisation) constrain the padding bits of a bitfield-bearing struct, so a byte-level read of the object is fully determined. The control pins the low bits a fix must not regress. |
+| **R25** | **High (false SUCCESSFUL, default configuration)** — found while root-causing R17, §15 M5 (R17 root cause); **FIXED**, §15 M5 (R25) | **The R17 vacuity is also reachable through a *symbolic* allocation size, and no flag is needed.** `size_t n = nondet_size(); __ESBMC_assume(n >= 0xFFFFFFFFFFFFFFF0UL); char *b = malloc(n); if (b) b[0] = 1; assert(0);` reported **`VERIFICATION SUCCESSFUL`** on default flags — the pointer is used, so the slicer keeps the allocation. The R17 fix could not see it: no constant is available at symex time. Worse than R17's shape, because the address-space constraint does not merely kill the path — `end == start + n` with `end >= start` silently *constrains the program variable `n`*, so **every** symbolic allocation quietly discarded its top 16 sizes, not just ones an assumption forced there. | `smt_memspace.cpp` `init_pointer_obj:409-421`; fixed in `symex_mem`. `regression/esbmc/symbolic_unrepresentable_malloc` and `no_slice_symbolic_unrepresentable_malloc` (CORE), `symbolic_malloc_bounds_preserved` (CORE, anti-vacuity), `force_malloc_success_unrepresentable` (KNOWNBUG, residual) | R17 root-causing | Fixed: give the object size zero on the branch where the request does not fit, so it is always layable, and return NULL there. Under `--force-malloc-success` the bound is stated as an assumption instead — branching to NULL reintroduces the case split that flag exists to remove, and cost 22 s → >200 s on `github_1352-*-32bit`. That leaves the residual pinned above. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -808,13 +809,10 @@ tests. R20 (#6544) and R21 (#6545) attribute five of the twelve unattributed
 wrong-verdict entries. The Linux re-run (§15 M8 cont. 3) discharges the
 "re-measure the masked ones" half: masking drops to 5/28, six tests rejoin the
 inventory, and two of them produce **R22**. Triage of the resulting ten
-(§15 M8 cont. 7) attributes `github_162_fail` to **R23**, settles three as wrong
-tests — two of them fixed and retired from the inventory — and narrows
-`github_732-1-1` to bitfield layout under type punning. Five remain.
-inventory, and two of them produce **R22**. Ten unattributed entries remain.
-tests. All 13 wrong-verdict entries are now attributed: six are genuine defects
-(R20, R21, R22), two are wrong tests, three belong to other subsystems, one rests
-on an unshared premise, and `03_circular_reduce` remains unexplained.
+(§15 M8 cont. 7-10) closes the inventory: **R23** (found through `github_162_fail`,
+fixed) and **R24** (bitfield padding under type punning, pinned), with seven of
+the eleven entries turning out to be wrong tests rather than defects — six of
+those fixed and retired.
 
 Total ≈ 9 engineer-weeks for the verification track, plus ≈ 2 weeks for the
 ESBMC extension critical path (WI-1…WI-3, §13.6) running alongside it.
@@ -1867,16 +1865,23 @@ vacuously. Those constraints are asserted unconditionally, so the nondet
 malloc-failure branch does not rescue it.
 
 Third, and the reason this outranks the rest of the M5 haul, **no flag is
-needed**. Verifying the fix against the corpus flipped `github_1091`, a
-KNOWNBUG since 2023 that §16 still lists as unattributed in the missed-bug
+needed**. The corpus pointed this out: verifying the fix flipped `github_1091`,
+a KNOWNBUG since 2023 that §16 listed as unattributed in the missed-bug
 direction. It runs on plain `--unwind 1` and allocates
 `malloc(strlen(filename) - 4)`, which underflows to a huge `size_t` whenever
 `strlen(filename) < 4`; the result is *used*, so the slicer has no reason to
 drop it and the default configuration goes vacuous exactly as `--no-slice` did.
-Master reports SUCCESSFUL on it, the patched build reports FAILED, and the test
-was already asserting FAILED — so the flag pair in M5's table was never the
-defect's precondition, only the shape the sweep happened to surface it in. R17
-should be read as a default-configuration false SUCCESSFUL that Tier C found
+
+**That test is no longer the evidence, though it is how the evidence was
+found.** #6592 landed on master in the meantime, promoted `github_1091` to CORE
+at `--unwind 5`, and required an array-bounds violation — which the
+compound-assignment fix produces on its own, so the test now passes with or
+without the allocation fix and no longer discriminates. Re-measured on merged
+master: at `--unwind 5` it FAILS either way, but at `--unwind 1` it is *still*
+SUCCESSFUL without the allocation fix. The default-configuration claim therefore
+stands, and `default_underflow_malloc` pins it directly instead of relying on a
+corpus test whose flags move. R17 should be read as a default-configuration
+false SUCCESSFUL that Tier C found
 through a flag oracle, which is a stronger result for §7.4 than the composition
 reading it was first given.
 
@@ -1887,19 +1892,19 @@ for such a request. `no_simplify_no_slice_huge_malloc` flips KNOWNBUG → CORE,
 and `no_slice_unrepresentable_malloc` pins the positive-literal form that the
 entry above claimed did not reproduce.
 
-**A residual survived as R24**, since fixed — see the next entry. The same
+**A residual survived as R25**, since fixed — see the next entry. The same
 vacuity was reachable through a *symbolic* size
 (`__ESBMC_assume(n >= 0xFFFFFFFFFFFFFFF0UL)` then `malloc(n)`), which a
 constant-only symex check cannot see.
 
-### M5 (R24) — 2026-08-02, R24 fixed
+### M5 (R25) — 2026-08-02, R25 fixed
 
 **Result: the symbolic form of R17 is fixed, it was a default-configuration
 false SUCCESSFUL too, and the first fix that worked had to be thrown away for
 costing 10x.**
 
-R24 is worse than R17 in scope. R17 needed a constant the size could be folded
-to; R24 needs nothing. Adding a use of the pointer is enough to stop the slicer
+R25 is worse than R17 in scope. R17 needed a constant the size could be folded
+to; R25 needs nothing. Adding a use of the pointer is enough to stop the slicer
 dropping the allocation, and then plain `esbmc file.c` reports SUCCESSFUL on a
 reachable `assert(0)`. And the mechanism is not merely a dead path: because
 `init_pointer_obj` asserts `end == start + n` and `end >= start` over the
@@ -2326,7 +2331,7 @@ documents; the rest are pre-existing and unattributed:
 | Test | Observed | Finding |
 |---|---|---|
 | `double_assign_check_local_array` | invariant stop | **R14** (I10 violated on a real input) |
-| `force_malloc_success_unrepresentable` | SUCCESSFUL | **R24** (residual under `--force-malloc-success`) |
+| `force_malloc_success_unrepresentable` | SUCCESSFUL | **R25** (residual under `--force-malloc-success`) |
 | `mpor_nested_deref_race` | SUCCESSFUL | **R18** (POR drops a race) |
 | `multi_property_smt_during_symex` | SUCCESSFUL | **R19** (per-property false PASSED) |
 | `03_inf2`, `github_1091`, `github_1175_9`, `github_1175_11`, `github_159_postdecrement_fail`, `github_162_fail`, `github_1626-no-free`, `03_circular_reduce` | SUCCESSFUL, expected FAILED | unattributed — the missed-bug direction |
@@ -2334,12 +2339,14 @@ documents; the rest are pre-existing and unattributed:
 | `github_248` | UNKNOWN, expected SUCCESSFUL | unattributed |
 
 **Delta since the snapshot (2026-08-02).** Two rows above are now stale, both
-from the R17 fix. `no_simplify_no_slice_huge_malloc` and `github_1091` are CORE
-— the latter was in the unattributed missed-bug row and turned out to *be* R17,
-which is how R17 was reclassified as a default-configuration defect. One pin
-replaces them: `force_malloc_success_unrepresentable` (SUCCESSFUL, **R24**
-residual under `--force-malloc-success`). The inventory's point survives the
-churn — the masking is what generalises, not the count.
+from the R17 fix. `no_simplify_no_slice_huge_malloc` is CORE, and `github_1091`
+was promoted independently by #6592 — it was in the unattributed missed-bug row
+and R17 does affect it (still SUCCESSFUL at `--unwind 1` without the fix), but
+its current `--unwind 5` configuration no longer discriminates, so R17's own
+claim is pinned by `default_underflow_malloc` instead. One pin replaces them:
+`no_slice_symbolic_unrepresentable_malloc` (SUCCESSFUL, **R25**), the
+symbolic-size residual the fix cannot reach. The inventory's point survives
+the churn — the masking is what generalises, not the count.
 
 **One hypothesis tested and rejected.** `03_circular_reduce` is a concurrency test
 expecting FAILED that reports SUCCESSFUL, so R18 (POR pruning a racy
@@ -2799,6 +2806,149 @@ operation is performed in.
 `github_2572_2`, `github_1091`, `github_2513_6`, plus `github_732-1-1` narrowed
 as above and `github_248` (UNKNOWN under `--k-induction` on mutual infinite
 recursion, which may be plain incompleteness rather than a defect).
+
+### M8 (cont. 10) — 2026-07-31, the inventory closes: flags first, defect last
+
+**Result: the remaining five checked flags-against-property before assuming a
+defect, as (cont. 9) recommended. Four were the test asking for the wrong
+thing; exactly one is a real defect, R24. All ten are now resolved.**
+
+The lens has two halves, and both earned their keep:
+
+- an **under-approximation** (a bound) can hide a bug but cannot invent one, so
+  it is only a candidate for entries that expect FAILED and get SUCCESSFUL;
+- an **over-approximation** can invent a counterexample but cannot hide one, so
+  it is the candidate for the opposite direction.
+
+That split immediately sorted the five, and each was then confirmed by
+measurement rather than by the argument alone:
+
+| test | flags asked | property needs | outcome |
+|---|---|---|---|
+| `github_1091` | `--unwind 1`, expects FAILED | **`--unwind 5`** — 4 is still SUCCESSFUL; the bug is a heap overflow in `strcpy` from `malloc(strlen(f) - 4)` (CWE-122), and the bound truncates the OM's `strlen`/`strcpy` loops | fixed, CORE, message pinned |
+| `github_2513_6` | `--unwind 3`, expects SUCCESSFUL | **`--unwind 5`** — at 3 and 4 it fails its *own* unwinding assertions (loops 13 and 8), so it was asked to prove safety while bounded too tightly to discharge | fixed, CORE |
+| `github_248` | `--k-induction --function b`, expects SUCCESSFUL | **UNKNOWN** — issue #248 was a *segfault*, not a verdict. It no longer crashes: it warns "k-induction does not support recursion yet" and returns UNKNOWN, which is the honest answer for unbounded mutual recursion. The test pinned the wrong property. | fixed, CORE, now pins the warning + UNKNOWN |
+| `github_2572_2` | `--z3 --ir`, expects SUCCESSFUL | **`--ir-ieee`** — `--ir` is documented as *overapproximating*, so it cannot soundly prove IEEE-754 properties and produces a spurious counterexample on `0+f==f`, a true assertion (the source assumes `f` is neither NaN nor Inf). Its sibling `github_2572` proves the same property under `--ir-ieee`. | fixed, CORE |
+| `github_732-1-1` | no flags | nothing a flag can supply | **R24**, below |
+
+A trap avoided in that table: `github_2572_1` also runs `--z3 --ir` and expects
+FAILED, which reads like "the family already pins `--ir` as failing". It does
+not — that test's assertion is `0+f==-f`, which is simply **false**, so FAILED
+is correct there under any solver mode. The family splits by *property truth*,
+not by solver mode, and reading it the other way would have justified the wrong
+correction to `github_2572_2`.
+
+**R24 — the one real defect.** `github_732-1-1` has no flags, so neither
+approximation direction can explain it, and it survives to be a defect. After
+`memset(&s, 0, sizeof(s))` on a `struct { int x : 12, y : 8; }`, writing both
+fields and reading the object back through `*(int *)&s` gives a value whose
+**low 20 bits are correct** (`(v & 0xFFFFF) == 0xFFFFF` verifies) but whose
+**12 padding bits are unconstrained** (`(v >> 20) == 0` fails). gcc gives
+`0x000fffff` exactly. So the bitfield *layout* is right and the `memset`'s
+zeroing of the bits above the declared fields is not visible to a type-punned
+read. Pinned by `regression/esbmc/bitfield_padding_memset` (KNOWNBUG) and
+`..._fields` (CORE control, so a fix cannot regress the low bits).
+
+**M8's inventory is closed.** Of the ten unattributed wrong-verdict entries:
+one produced **R23** (fixed), one is **R24** (pinned, open), seven were wrong
+tests — six fixed and retired, one (`github_159_postdecrement_fail`) left
+KNOWNBUG because its intent needs a pointer-formation checker that does not
+exist — and `github_248`, carried separately as the UNKNOWN entry, was also a
+wrong test. **Seven of eleven entries were the test asking for the wrong
+thing, not ESBMC answering wrongly**, which is the single most useful number
+this milestone produced.
+
+### M8 (cont. 9) — 2026-07-31, two more wrong tests, both under-approximations
+
+**Result: `03_inf2` and `03_circular_reduce` are wrong tests, both fixed and
+retired. Neither is a defect: each asks ESBMC for less than the property needs
+and then expects the property to be found anyway. Seven of the ten are now
+resolved.**
+
+A correction to (cont. 7) first: it grouped `03_inf2` with `03_circular_reduce`
+as "the two concurrency entries". `03_inf2` lives in `regression/esbmc/` and has
+no threads at all — it is a `malloc` test. Only `03_circular_reduce` is
+concurrent.
+
+**`03_inf2` — the `github_1626-no-free` shape again.** Its two assertions are
+*unreachable*: `st1 = st_alloc(a, b)` with `a > 0 && b > 0` takes the arm that
+sets `t->z = NULL`, so `if (st1->z > 0)` is never taken. An
+`__ESBMC_assert(0, …)` probe in each of the two bodies reports SUCCESSFUL, and
+the same probe on the following `return` reports FAILED — so the probe fires
+when it should and the bodies really are dead. What the program *does* have is
+three unfreed `malloc`s, and `--memory-leak-check` reports
+`forgotten memory: dynamic_1_array` (CWE-401), which is the FAILED the test
+wants. Flag added, KNOWNBUG → CORE, with the leak message pinned so the test
+cannot pass on some unrelated failure.
+
+**`03_circular_reduce` — the context bound truncated the search by one switch.**
+The loop variable shadows the global `i`, so `assert(i < 1)` fails exactly when
+`receive` first becomes true on the second iteration, which needs
+main → t1 → main → t1: **three** context switches. The test asked for
+`--context-bound 2`:
+
+| configuration | verdict |
+|---|---|
+| sequential simulation of that schedule | FAILED — the property is violable |
+| `--context-bound 2` (as the test had it) | SUCCESSFUL |
+| `--context-bound 3` | FAILED |
+| `--no-por`, or no flags at all | FAILED |
+
+So the bug is found by default and the entry never was a symex defect. Bound
+corrected to 3 — the tight value, so the test still fails if a change loses a
+switch — and KNOWNBUG → CORE. Worth noting for R12's file: this is
+`--context-bound` behaving as designed (an under-approximation reported as
+`VERIFICATION SUCCESSFUL`) biting a test inside this repo's own suite, which is
+the same trap R12 records for `--no-unwinding-assertions`.
+
+**Still open in M8.** Three unattributed — `github_2572_2`, `github_1091`,
+`github_2513_6` — plus `github_732-1-1` (narrowed to bitfield layout under type
+punning) and `github_248` (UNKNOWN under `--k-induction` on mutual infinite
+recursion, likely incompleteness rather than a defect).
+
+### M8 (cont. 8) — 2026-07-31, R23 fixed, and its attribution corrected
+
+**Result: R23 is fixed. Fixing it also disproves half of what (cont. 7) said
+about it — `github_162_fail` is a wrong test, not an entry R23 attributes.**
+
+**The fix needs both ends.** (cont. 7) named the frontend's
+`gen_typecast(ns, rhs, lhs.type())`, but that is only where the right operand
+is narrowed. `goto_convertt::remove_assignment`, which turns the side effect
+into `E1 = E1 op E2`, independently sets the operation's type from
+`expr.op0().type()` — so fixing the frontend alone would still compute in E1's
+type. The frontend now records clang's `getComputationResultType()` on the side
+effect and casts the right operand to it; `remove_assignment` promotes E1 into
+that type, builds the operation there, and converts the result back on
+assignment. The `_Bool` arm is left first and the new arm made mutually
+exclusive with it: `rhs.make_typecast` rewraps `rhs`, so a later
+`rhs.op0()` would no longer be the operand the bool arm expects.
+
+| probe | before | after |
+|---|---|---|
+| `char b = 3; int a = INT_MAX; b += a` (`--overflow-check`) | SUCCESSFUL | **FAILED** |
+| same on a 3-bit bitfield | SUCCESSFUL | **FAILED** |
+| `char b = 100; int a = 256; b /= a` | FAILED, "division by zero" | **SUCCESSFUL** |
+| `b %= a` | FAILED | **SUCCESSFUL** |
+| `b = b + a` (control) | FAILED | FAILED |
+| `b = b / a` (control) | SUCCESSFUL | SUCCESSFUL |
+| `int c; c += a` (control) | FAILED | FAILED |
+
+The emitted claim for `char b; b += a` is now
+`!overflow("+", (signed int)b, a)` — byte-identical to the explicit form's,
+which is the property C11 6.5.16.2p3 actually asks for.
+
+**And the correction.** (cont. 7) recorded R23 as attributing
+`github_162_fail`. With the fix in, that test's claim becomes sound —
+`!overflow("+", (signed int)b.a, a)` — and it *still* reports SUCCESSFUL,
+correctly: its bitfield is a zero-initialised global, so the addition is
+`0 + a` and cannot overflow whatever the operand types are. Initialising it
+(`b.a = 3;`) makes the same program report FAILED. So the entry is a **wrong
+test** — the fourth of the ten — and R23 is a genuine defect that was *found
+through* it rather than one that explains it. Its expectation is corrected to
+SUCCESSFUL rather than its program rewritten: the program is the historical
+artefact, and `compound_assign_narrow_overflow` already pins the property the
+test was reaching for. The tally in (cont. 7) is unchanged at five resolved;
+only the reason for one of them moves.
 
 ### M7 (CI) — 2026-07-30, R19 pins withdrawn
 

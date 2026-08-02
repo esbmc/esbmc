@@ -214,6 +214,42 @@ def _run_check_file(check, base_dir):
 # e.g. that ESBMC refuses to overwrite a file it did not generate.
 SEED_FILE_KEYWORD = "SEED_FILE"
 
+# A test may only run where the host and the build actually support what it
+# exercises. Each name below is a capability the build system probes for and
+# passes in via --capabilities; a test naming one it does not get is reported
+# SKIPPED rather than failed. Names are validated against this set, so a typo
+# is a hard error instead of a test that quietly stops running.
+REQUIRES_KEYWORD = "REQUIRES"
+
+KNOWN_CAPABILITIES = {
+    # <uchar.h> is present. Not in the C standard library on macOS.
+    "uchar_h",
+    # The 32-bit target (--32) is usable: multi-arch headers exist and the
+    # frontend's type model matches them. See issue #1400.
+    "arch32",
+}
+
+
+def _is_requires_line(stripped):
+    """True iff the first whitespace-delimited token is REQUIRES."""
+    head = stripped.split(maxsplit=1)
+    return bool(head) and head[0] == REQUIRES_KEYWORD
+
+
+def _parse_requires(line):
+    """Parse one REQUIRES directive into a list of capability names."""
+    parts = line.split()
+    names = parts[1:]
+    if not names:
+        raise ValueError(f"REQUIRES expects: REQUIRES <capability>...; got: {line!r}")
+    unknown = [n for n in names if n not in KNOWN_CAPABILITIES]
+    if unknown:
+        raise ValueError(
+            f"unknown capability {', '.join(sorted(unknown))}; known names are "
+            f"{', '.join(sorted(KNOWN_CAPABILITIES))}"
+        )
+    return names
+
 
 def _is_seed_file_line(stripped):
     """True iff the first whitespace-delimited token is SEED_FILE."""
@@ -284,9 +320,15 @@ class TestCase:
             self.check_json = []
             self.check_file = []
             self.seed_file = []
+            self.requires = []
             for line in fp:
                 stripped = line.strip()
-                if _is_seed_file_line(stripped):
+                if _is_requires_line(stripped):
+                    try:
+                        self.requires.extend(_parse_requires(stripped))
+                    except ValueError as exc:
+                        raise ValueError(f"{self.test_dir}/test.desc: {exc}") from exc
+                elif _is_seed_file_line(stripped):
                     try:
                         self.seed_file.append(_parse_seed_file(stripped))
                     except ValueError as exc:
@@ -595,11 +637,20 @@ def _add_test(test_case, executor):
     return test
 
 
-def gen_one_test(base_dir: str, test: str, executor_path: str, modes):
+def gen_one_test(
+    base_dir: str, test: str, executor_path: str, modes, capabilities=None
+):
     executor = Executor(executor_path)
     test_case = TestCase(os.path.join(base_dir, test), test)
     if test_case.test_mode not in modes:
         exit(10)
+    # No --capabilities at all means the caller did not probe: run the test and
+    # let it fail loudly rather than silently dropping coverage.
+    if capabilities is not None:
+        missing = [c for c in test_case.requires if c not in capabilities]
+        if missing:
+            print(f"SKIP: {test} requires {', '.join(missing)}")
+            exit(10)
     test_func = _add_test(test_case, executor)
     setattr(RegressionBase, "test_{0}".format(test_case.name), test_func)
 
@@ -642,6 +693,13 @@ def _arg_parsing():
         type=int,
         help="Per-test virtual memory limit in megabytes",
     )
+    parser.add_argument(
+        "--capabilities",
+        required=False,
+        help="Comma/semicolon-separated capabilities this build and host "
+        "provide; a test whose REQUIRES names one that is absent is skipped. "
+        "Omitting the flag runs every test regardless of its REQUIRES.",
+    )
 
     main_args = parser.parse_args()
     if main_args.timeout:
@@ -663,7 +721,25 @@ def _arg_parsing():
         TestCase.RUN_ONLY = True
         TestCase.SMT_ONLY = True
 
-    gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)
+    capabilities = None
+    if main_args.capabilities is not None:
+        capabilities = {
+            c for c in re.split(r"[,;\s]+", main_args.capabilities.strip()) if c
+        }
+        unknown = capabilities - KNOWN_CAPABILITIES
+        assert not unknown, (
+            f"--capabilities names unknown capability "
+            f"{', '.join(sorted(unknown))}; known names are "
+            f"{', '.join(sorted(KNOWN_CAPABILITIES))}"
+        )
+
+    gen_one_test(
+        regression_path,
+        main_args.file,
+        main_args.tool,
+        main_args.modes,
+        capabilities,
+    )
 
 
 def main():

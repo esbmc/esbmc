@@ -847,7 +847,20 @@ private:
 
   bool is_basic_numpy_view_subscript(const nlohmann::json &node) const;
 
+  bool is_numpy_array_constructor_expr(const nlohmann::json &node) const;
+
+  bool is_numpy_view_copy_expr(const nlohmann::json &node) const;
+
+  std::string
+  root_name_from_numpy_view_copy_expr(const nlohmann::json &node) const;
+
   bool contains_copied_numpy_view_name(const nlohmann::json &node);
+
+  void reject_numpy_view_mutating_method_call(const nlohmann::json &node);
+
+  void reject_unknown_numpy_view_call(const nlohmann::json &node);
+
+  void reject_numpy_view_identity_query(const nlohmann::json &node);
 
   std::optional<nlohmann::json>
   select_return_value_for_call(const nlohmann::json &call_node) const;
@@ -865,6 +878,9 @@ private:
   void record_numpy_view_copy(const exprt &lhs, const nlohmann::json &rhs_node);
 
   void clear_numpy_view_copy(const exprt &lhs);
+
+  void
+  update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
 
   // =========================================================================
   // Unpacking helper methods
@@ -1264,6 +1280,7 @@ private:
   // instructions the probe emitted, e.g. for fancy/mask/column selection).
   exprt cached_any_subscript_rhs_;
   bool has_cached_any_subscript_rhs_ = false;
+  std::set<std::string> numpy_array_symbols_;
   std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
   bool is_loading_models = false;
   bool is_importing_module = false;

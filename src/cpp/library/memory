@@ -238,7 +238,14 @@ class unique_ptr
   D deleter;
 
 public:
-  explicit unique_ptr(T *p = nullptr, D del = D()) : ptr(p), deleter(del)
+  // [unique.ptr.single.ctor] p1: the default constructor is a separate,
+  // non-explicit one, so a unique_ptr member value-initialises inside an
+  // aggregate -- `std::array<std::unique_ptr<T>, N> a{};`.
+  constexpr unique_ptr() noexcept : ptr(nullptr), deleter(D())
+  {
+  }
+
+  explicit unique_ptr(T *p, D del = D()) : ptr(p), deleter(del)
   {
   }
 
@@ -370,7 +377,14 @@ class unique_ptr<T[], D>
   D deleter;
 
 public:
-  explicit unique_ptr(T *p = nullptr, D del = D()) : ptr(p), deleter(del)
+  // [unique.ptr.single.ctor] p1: the default constructor is a separate,
+  // non-explicit one, so a unique_ptr member value-initialises inside an
+  // aggregate -- `std::array<std::unique_ptr<T>, N> a{};`.
+  constexpr unique_ptr() noexcept : ptr(nullptr), deleter(D())
+  {
+  }
+
+  explicit unique_ptr(T *p, D del = D()) : ptr(p), deleter(del)
   {
   }
 

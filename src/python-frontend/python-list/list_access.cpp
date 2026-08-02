@@ -1,4 +1,7 @@
 #include "python_list_internal.h"
+#include <python-frontend/numpy/ndarray_descriptor.h>
+#include <algorithm>
+#include <optional>
 
 using namespace python_expr;
 using namespace python_list_detail;
@@ -653,6 +656,67 @@ bool try_get_literal_int(const nlohmann::json &node, BigInt &out)
   }
   return false;
 }
+
+std::optional<long long> literal_slice_length(
+  const nlohmann::json &slice_node,
+  long long source_len,
+  long long step)
+{
+  auto bound = [&](const char *name) -> std::optional<long long> {
+    if (!slice_node.contains(name) || slice_node[name].is_null())
+      return std::nullopt;
+
+    BigInt value;
+    if (!try_get_literal_int(slice_node[name], value))
+      return std::nullopt;
+    return value.to_int64();
+  };
+
+  std::optional<long long> lower = bound("lower");
+  std::optional<long long> upper = bound("upper");
+  const bool has_lower =
+    slice_node.contains("lower") && !slice_node["lower"].is_null();
+  const bool has_upper =
+    slice_node.contains("upper") && !slice_node["upper"].is_null();
+  if ((has_lower && !lower) || (has_upper && !upper))
+    return std::nullopt;
+
+  long long start = lower.value_or(step < 0 ? source_len - 1 : 0);
+  long long stop = upper.value_or(step < 0 ? -1 : source_len);
+
+  if (has_lower && start < 0)
+    start += source_len;
+  if (has_upper && stop < 0)
+    stop += source_len;
+
+  if (step < 0)
+  {
+    start = std::min(std::max(start, -1LL), source_len - 1);
+    stop = std::min(std::max(stop, -1LL), source_len - 1);
+    if (start <= stop)
+      return 0;
+    return ((start - stop - 1) / -step) + 1;
+  }
+
+  start = std::min(std::max(start, 0LL), source_len);
+  stop = std::min(std::max(stop, 0LL), source_len);
+  if (start >= stop)
+    return 0;
+  return ((stop - start - 1) / step) + 1;
+}
+
+void append_array_shape(const typet &type, std::vector<long long> &shape)
+{
+  if (!type.is_array())
+    return;
+
+  const array_typet &array_type = to_array_type(type);
+  if (array_type.size().is_nil() || !array_type.size().is_constant())
+    return;
+  shape.push_back(
+    binary2integer(array_type.size().value().c_str(), false).to_int64());
+  append_array_shape(array_type.subtype(), shape);
+}
 } // namespace
 
 exprt python_list::resolve_fixed_axis_index(
@@ -1293,22 +1357,22 @@ exprt python_list::handle_range_slice(
   bool has_step = slice_node.contains("step") && !slice_node["step"].is_null();
   long long step_val = 1;
   bool literal_zero_step = false;
+  bool literal_step = true;
   if (has_step)
   {
     const auto &step_node = slice_node["step"];
-    if (step_node["_type"] == "UnaryOp" && step_node["op"]["_type"] == "USub")
+    BigInt literal_value;
+    if (try_get_literal_int(step_node, literal_value))
     {
-      step_val = -(long long)step_node["operand"]["value"].get<std::int64_t>();
+      step_val = literal_value.to_int64();
+      if (step_val == 0)
+      {
+        literal_zero_step = true;
+        step_val = 1; // continue with valid value to keep IR consistent
+      }
     }
-    else if (step_node["_type"] == "Constant")
-    {
-      step_val = step_node["value"].get<std::int64_t>();
-    }
-    if (step_val == 0)
-    {
-      literal_zero_step = true;
-      step_val = 1; // continue with valid value to keep IR consistent
-    }
+    else
+      literal_step = false;
   }
   // Python raises ValueError on step==0. Raise it from the frontend (a
   // cpp-throw) so try/except ValueError can catch it — a code_assert would be
@@ -1421,6 +1485,10 @@ exprt python_list::handle_range_slice(
                       : array_len;
     }
 
+    if (!literal_step && elem_type != char_type())
+      throw std::runtime_error(
+        "TypeError: numpy view slicing requires a literal stride");
+
     // Process slice bounds (handles null, negative indices)
     auto process_bound =
       [&](const std::string &bound_name, const exprt &default_value) -> exprt {
@@ -1520,6 +1588,27 @@ exprt python_list::handle_range_slice(
     // over-count. Size the result accordingly.
     const bool needs_null_term = (elem_type == char_type());
     exprt result_size = slice_len;
+    if (literal_step)
+    {
+      const array_typet &src_type = to_array_type(resolved_array_type);
+      if (!src_type.size().is_nil() && src_type.size().is_constant())
+      {
+        const long long source_len =
+          binary2integer(src_type.size().value().c_str(), false).to_int64() -
+          (needs_null_term ? 1 : 0);
+        if (
+          std::optional<long long> static_slice_len =
+            literal_slice_length(slice_node, source_len, step_val))
+        {
+          result_size = from_integer(*static_slice_len, size_type());
+          std::vector<long long> view_shape;
+          view_shape.push_back(*static_slice_len);
+          append_array_shape(ns.follow(elem_type), view_shape);
+          ndarray_descriptor descriptor(view_shape, "", 0);
+          descriptor.validate();
+        }
+      }
+    }
     if (needs_null_term)
     {
       // slice_len and the literal are both size_type (built above), so this is

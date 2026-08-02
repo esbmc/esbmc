@@ -4,9 +4,15 @@
 #include <fstream>
 #include <vector>
 
-#ifndef _WIN32
+#include <fcntl.h>
+#include <sys/stat.h>
+
+#ifdef _WIN32
+#  include <io.h>
+#else
 #  include <csignal>
 #  include <sys/types.h>
+#  include <unistd.h>
 #endif
 
 using namespace file_operations;
@@ -124,6 +130,34 @@ FILE *tmp_file::file() noexcept
   return _file;
 }
 
+/* unique_path() only invents a name; it does not stake a claim on it. Opening
+ * that name with fopen() would happily follow a symlink planted there in the
+ * meantime and truncate whatever it points at (CWE-377). O_EXCL fails instead,
+ * which makes the caller's loop pick a new name. 0600 also stops the temporary
+ * from being world-readable, which fopen()'s 0666 & ~umask allowed. */
+static FILE *fopen_exclusive(const std::string &path, const char *mode)
+{
+#ifdef _WIN32
+  int fd =
+    _open(path.c_str(), _O_CREAT | _O_EXCL | _O_RDWR, _S_IREAD | _S_IWRITE);
+#else
+  int fd = open(path.c_str(), O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR);
+#endif
+  if (fd < 0)
+    return NULL;
+
+#ifdef _WIN32
+  FILE *f = _fdopen(fd, mode);
+  if (!f)
+    _close(fd);
+#else
+  FILE *f = fdopen(fd, mode);
+  if (!f)
+    close(fd);
+#endif
+  return f;
+}
+
 template <typename F>
 static inline std::string with_unique_tmp_path(F &&f, const std::string &format)
 {
@@ -142,7 +176,7 @@ file_operations::create_tmp_file(const std::string &format, const char *mode)
   FILE *r = NULL;
   std::string path = with_unique_tmp_path(
     [&r, mode](auto path) {
-      r = fopen(path.string().c_str(), mode);
+      r = fopen_exclusive(path.string(), mode);
       return r;
     },
     format);
@@ -161,30 +195,13 @@ tmp_path file_operations::create_tmp_dir(const std::string &format)
 const std::string
 file_operations::get_unique_tmp_path(const std::string &format)
 {
-  // Get the temp file dir
-  const boost::filesystem::path tmp_path =
-    boost::filesystem::temp_directory_path();
-
-  // Define the pattern for the name
-  const std::string pattern = (tmp_path / format.c_str()).string();
-  boost::filesystem::path path;
-
-  // Try to get a name that is not used already e.g. esbmc.0000-0000
-  do
-  {
-    path = boost::filesystem::unique_path(pattern);
-  } while (
-    boost::filesystem::exists(path)); // TODO: This may cause infinite loop
-
-  // If path folders doesn't exist, create then
-  boost::filesystem::create_directories(path);
-  if (!boost::filesystem::is_directory(path))
-  {
-    assert(!"Can't create temporary directory");
-    abort();
-  }
-
-  return path.string();
+  // create_directory() reports whether *this* call created the directory, so
+  // testing its result claims the name atomically. Testing exists() first and
+  // creating afterwards left a window in which another process could take the
+  // name between the two calls.
+  return with_unique_tmp_path(
+    [](const auto &path) { return boost::filesystem::create_directory(path); },
+    format);
 }
 
 void file_operations::create_path_and_write(

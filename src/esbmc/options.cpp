@@ -693,6 +693,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"restrict-check",
      NULL,
      "Check C restrict-qualified pointer parameters do not alias"},
+    {"restrict-assume",
+     NULL,
+     "Assume the entry function's C restrict-qualified pointer parameters do "
+     "not alias"},
     {"unsigned-overflow-check",
      NULL,
      "Enable arithmetic over- and underflow check for unsigned integers"},

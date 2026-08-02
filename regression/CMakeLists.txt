@@ -56,6 +56,29 @@ endif()
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT
      "${ESBMC_REGRESS_TIMEOUT} + ${ESBMC_REGRESS_TIMEOUT_GRACE}")
 
+# Capabilities this host and build actually provide. A test declaring
+# "REQUIRES <name>" in its test.desc is reported SKIPPED where the name is
+# absent, rather than failing for a reason that has nothing to do with ESBMC
+# (issue #1400). Keep these names in sync with KNOWN_CAPABILITIES in
+# testing_tool.py, which rejects any name it does not recognise.
+include(CheckIncludeFile)
+set(ESBMC_TEST_CAPABILITIES "")
+
+check_include_file(uchar.h ESBMC_HAVE_UCHAR_H)
+if(ESBMC_HAVE_UCHAR_H)
+    list(APPEND ESBMC_TEST_CAPABILITIES uchar_h)
+endif()
+
+# --32 needs multi-arch headers whose type model agrees with the frontend's
+# under -m32. That holds on x86 hosts carrying the 32-bit headers; on aarch64
+# it does not, which is the case issue #1400 was filed about.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86)$")
+    list(APPEND ESBMC_TEST_CAPABILITIES arch32)
+endif()
+
+string(REPLACE ";" "," ESBMC_TEST_CAPABILITIES_ARG "${ESBMC_TEST_CAPABILITIES}")
+message(STATUS "Regression capabilities: ${ESBMC_TEST_CAPABILITIES_ARG}")
+
 # An optional 5th argument names a backend to run the suite under. The tool
 # string is shlex-split by testing_tool.py, so the extra option rides along with
 # the binary; --default-solver only applies when the test itself names no
@@ -76,6 +99,7 @@ function(add_esbmc_regression_test folder modes test)
                      --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder}
                      --modes ${modes}
                      --file=${test}
+                     --capabilities=${ESBMC_TEST_CAPABILITIES_ARG}
                      ${BENCHBRINGUP_ARGS}) # additional args for BENCHBRINGUP workflow
     # Timeout and memory limit are passed via environment
     set_tests_properties(${test_name}

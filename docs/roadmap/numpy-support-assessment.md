@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-07-25.
+**Updated:** 2026-07-30.
 
 This file tracks what is **not yet implemented or broken** in the NumPy
 module. Completed items are in the git history and `regression/numpy/`.
@@ -11,6 +11,29 @@ Architectural decisions that gate specific pendencies here (referenced as
 
 ## Recently completed
 
+- **Conservative NumPy view aliasing protection (ADR-NP-003, etapa 1)** —
+  basic indexing, row/column slices, strided slices, `transpose`/`.T`,
+  `reshape`, and `ravel` are now classified as view-like when they can share
+  storage with a source array. Until the definitive shared-buffer descriptor
+  model lands, unsafe writes through a copied view, writes to a source array
+  while a live copied view exists, view escapes through returns/unknown calls,
+  and unsupported identity queries are rejected explicitly instead of producing
+  a false `VERIFICATION SUCCESSFUL`. Readonly consumers stay supported:
+  `len`, `.shape`, `.ndim`, scalar reads, allowed builtins, and supported
+  reducers such as `np.sum(row)`/`np.median(row)` over materialised row views.
+  Reassignment/lifetime tracking is conservative across control-flow joins,
+  and real copies (`copy`, `flatten`, boolean-mask copies) are kept
+  independent. See `regression/numpy/view_*`, `copy_*`, and
+  `descriptor_view_*`.
+- **Descriptor metadata for classified view copies** — literal slice metadata
+  now feeds the canonical `ndarray_descriptor` validation path for view
+  shape/rank, so empty views expose a stable logical shape (`shape[0] == 0`,
+  `ndim == 1`) instead of carrying a non-constant size expression into
+  `.shape`. Non-literal NumPy slice strides are rejected explicitly with
+  `TypeError: numpy view slicing requires a literal stride` rather than being
+  approximated as step `1`. This is still metadata wiring over the legacy
+  copy representation, not the final shared-buffer/offset/stride runtime
+  model.
 - **Canonical bounded ndarray descriptor (initial slice)** — new
   `ndarray_descriptor` class (shape/strides/capacity/offset/dtype/buffer_id
   + invariant validation), the frontend-side scaffolding ADR-NP-001 and
@@ -131,8 +154,8 @@ Architectural decisions that gate specific pendencies here (referenced as
 | Feature | Status | Notes |
 |---|---|---|
 | Returning a numpy array *out* of a function by value (general case: a sub-array, e.g. `def f(a): return a[0]`, or any non-trivial body) | Missing | Arrays aren't valid by-value return types in the current GOTO model. Only the narrow *identity*-return case is fixed (see "Recently completed") — the general case was attempted twice this round and reverted both times after hitting the same structural wall: **(1)** inlining the substituted return expression at every call site works for the eligibility check but the two-pass assignment machinery (`create_symbol_for_unannotated_assign` type-probes the RHS once, then `get_var_assign` converts it again "for real") evaluates a `Subscript` return expression twice, duplicating the bounds-check GOTO code it emits and corrupting the result (confirmed via `--goto-functions-only`: the second, discarded evaluation's DECLs still land in the block); a cross-call-node cache (keyed by the AST node's address, confirmed to see the same `current_block` on both hits) prevented the double-conversion but did *not* fix the wrong result, meaning the bug is elsewhere in that pipeline. **(2)** A single-member wrapper-struct return type (`struct { value: array_type }`, unwrapped right after a real, once-only function call via the existing `store_call_result` helper — mirroring how a returned tuple already works today) also hit a variant of the same issue: while building it, a separate pre-existing bug was found and fixed (a static Python-level pre-pass injects a wrong `-> Any` return annotation for `return a[0]`, decided *before* parameters are processed, which pre-empted the array-shape detection with a `double` default — now deferred to the post-body GOTO scan, which sees real converted types), but the wrapped struct still isn't reliably unwrapped before a variable's type is decided elsewhere in the same assignment pipeline, causing a segfault (`build_index` dereferencing a struct's `.subtype()`). Both attempts point at the same root cause: `y = f(...)`'s type is decided by more than one code path in `get_var_assign`/`create_symbol_for_unannotated_assign`, not uniformly from what `get_expr` returns. A real fix needs to understand and consolidate that pipeline first, not just work around it at the call site. |
-| View aliasing for basic indexing and transpose-like views | Missing | The frontend still uses conservative copies for many basic-indexing/view-like operations. Some unsafe view-copy/source-write cases are now guarded, but a general shared-buffer descriptor model is not wired into indexing and assignment yet. |
-| Higher-dimensional or symbolic slice bounds beyond the supported literal-copy cases | Missing | Bounded 2-D column slices and one-slice-axis mixed tuple indexing are supported for literal/fixed-shape cases. Multiple slice axes, symbolic slice bounds, and broader stride combinations remain rejected explicitly rather than silently approximated. |
+| View aliasing for basic indexing and transpose-like views | Partial | Stage-1 soundness protection is implemented: covered view-like operations are conservatively rejected on mutation/escape and allowed for readonly consumers. The runtime representation is still a copy, so the final shared-buffer descriptor model is still missing. |
+| Higher-dimensional or symbolic slice bounds beyond the supported literal-copy cases | Missing | Bounded 2-D column slices and one-slice-axis mixed tuple indexing are supported for literal/fixed-shape cases. Multiple slice axes, symbolic slice bounds, non-literal strides, and broader stride combinations remain rejected explicitly rather than silently approximated. |
 
 ---
 
@@ -146,7 +169,7 @@ Architectural decisions that gate specific pendencies here (referenced as
 | Linear algebra | `inv`/`solve` limited to 2×2/3×3; `norm` limited to vectors and Frobenius matrices; `eig`/`svd` limited to small concrete matrices |
 | Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes |
 | Structured arrays | Record dtypes |
-| Views / strides | No aliasing model — all ops copy; see "Soundness concerns" #4, this is a confirmed unsound gap, not just a missing feature |
+| Views / strides | Conservative guard model only; final shared-buffer alias semantics, writable views, offset/stride based assignment, and broad non-literal stride support remain missing |
 | Iteration | Writable `nditer`, advanced `op_flags`, multi-operand iteration, and mutation through `flat` |
 
 ---
@@ -162,28 +185,22 @@ Architectural decisions that gate specific pendencies here (referenced as
 3. **Scalability wall** (#5121): every array is a fully-unrolled value list.
    Large arrays explode. Symbolic shapes mitigate this via `--unwind` but do
    not eliminate the underlying state-explosion for large bounds.
-4. **Basic-indexing views are silently copied, not aliased — confirmed with
-   a concrete false-positive counterexample** (ADR-NP-003). NumPy's basic
-   indexing (`a[0]`) returns a *view* sharing the source's buffer; this
-   frontend always copies. Reproduced with no function call involved at
-   all:
+4. **Basic-indexing views still do not alias at runtime; covered mutations
+   are guarded conservatively** (ADR-NP-003). NumPy's basic indexing (`a[0]`)
+   returns a *view* sharing the source's buffer; this frontend still uses a
+   copy representation for the supported lowering paths. The former direct
+   false-success pattern is now rejected:
    ```python
    import numpy as np
    x = np.array([[1, 2], [3, 4]])
    row = x[0]
    row[0] = 999
-   assert x[0][0] == 1  # numpy: fails (row aliases x). ESBMC today: VERIFICATION SUCCESSFUL.
+   assert x[0][0] == 1  # rejected until writable shared-buffer views exist
    ```
-   ESBMC reports `VERIFICATION SUCCESSFUL` — a silently wrong verdict per
-   the ADR's own principle ("a subapproximation that could hide a bug is
-   not acceptable"). This is not a missing-feature gap, it's an existing,
-   reproducible unsoundness, and it predates and is independent of this
-   round's work (found while investigating whether a returned view needed
-   its own rejection — it turns out the *non-returned* case is equally
-   unsound today). See ADR-NP-003 "Etapa 1: protecao de solidez" for the
-   intended fix shape (reject conservatively on write-to-view,
-   write-to-source-with-live-view, or escape, until the definitive
-   descriptor-based model lands).
+   The remaining risk is coverage breadth: any view-like operation not yet
+   classified must be added to the guard layer or migrated directly to the
+   definitive descriptor-based alias model before writable semantics can be
+   considered sound.
 
 ---
 
@@ -197,16 +214,11 @@ No remaining KNOWNBUG in the targeted `dot6`/`dot7`/`transpose2`/
 
 ## Prioritised next steps
 
-1. **View/aliasing soundness protection** (ADR-NP-003 "Etapa 1") — the
-   highest-priority item: "Soundness concerns" #4 above is a confirmed,
-   reproducible false-`VERIFICATION SUCCESSFUL` with no function call or
-   other feature involved (`row = x[0]; row[0] = 999; assert x[0][0] == 1`
-   should fail and doesn't). Needs conservative rejection of write-to-view,
-   write-to-source-with-a-live-view, and view escape, until the definitive
-   descriptor-based model (buffer_id/offset/strides shared between a view
-   and its source) lands. The canonical descriptor scaffolding from
-   "Recently completed" is a starting point but isn't wired into the
-   general indexing/assignment path yet.
+1. **Definitive view descriptor model** — replace the current conservative
+   guard-over-copy approach with shared `ndarray_descriptor`
+   buffer_id/offset/stride metadata in indexing, assignment, transpose,
+   reshape/ravel, and escape checks. This is the path to writable views that
+   alias like NumPy instead of being rejected.
 2. **NumPy arrays as function return values, general case** — only the
    narrow identity-return pattern (a single-parameter function whose entire
    body is `return <that param>`) is fixed; a sub-array return
@@ -240,10 +252,10 @@ No remaining KNOWNBUG in the targeted `dot6`/`dot7`/`transpose2`/
 
 ## Suggested next PRs
 
-1. **View aliasing and descriptor wiring** — connect `ndarray_descriptor`
+1. **Shared-buffer view descriptors** — connect `ndarray_descriptor`
    buffer/offset/stride metadata to basic indexing, transpose, assignment,
-   and escape checks so supported views alias correctly and unsupported view
-   mutation is rejected consistently.
+   and escape checks so supported writable views alias correctly instead of
+   being rejected conservatively.
 2. **General array returns** — consolidate the assignment/type inference
    pipeline so user functions can return non-trivial NumPy arrays and
    sub-arrays without double conversion or wrapper-type confusion.
