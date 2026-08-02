@@ -715,6 +715,18 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     }
   }
 
+  // An operational model may implement what Python calls a class as a function
+  // (collections.deque -> list[int], defaultdict/OrderedDict -> dict). The name
+  // is still a legal annotation, so resolve it to the declared return type
+  // rather than rejecting it (#6639).
+  if (!is_defined)
+  {
+    const std::string ret =
+      json_utils::imported_function_return_type(ast_type, converter_.ast());
+    if (!ret.empty() && ret != ast_type)
+      return get_typet(ret, type_size);
+  }
+
   // If still not found, it's a NameError
   if (!is_defined)
   {

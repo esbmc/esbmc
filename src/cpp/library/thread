@@ -1,6 +1,7 @@
 #ifndef STL_THREAD
 #define STL_THREAD
 
+#include <functional> /* std::hash, specialized for thread::id below */
 #include <pthread.h>
 #include "OM_compiler_defs.h"
 
@@ -42,6 +43,8 @@ public:
   class id
   {
     pthread_t __v;
+
+    friend struct hash<id>;
 
   public:
     id() OM_NOEXCEPT : __v(0)
@@ -124,6 +127,20 @@ public:
   static unsigned hardware_concurrency() OM_NOEXCEPT
   {
     return 1;
+  }
+};
+
+// [thread.thread.id] p6: the specialization is required, and irep2.h relies on
+// it through std::hash<std::thread::id>.
+template <>
+struct hash<thread::id>
+{
+  typedef thread::id argument_type;
+  typedef size_t result_type;
+
+  size_t operator()(thread::id v) const OM_NOEXCEPT
+  {
+    return (size_t)v.__v;
   }
 };
 

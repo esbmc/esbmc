@@ -499,6 +499,13 @@ bool esbmc_parseoptionst::process_goto_program(
       add_restrict_assertions(context, goto_functions);
     }
 
+    if (cmdline.isset("restrict-assume"))
+    {
+      log_status("Assuming Restrict Parameters Do Not Alias");
+      add_restrict_assumptions(
+        context, goto_functions, config.main.empty() ? "main" : config.main);
+    }
+
     //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)
     if (
       cmdline.isset("assertion-coverage") ||
