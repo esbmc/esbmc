@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---k-induction --boolector
+--k-induction
 ^VERIFICATION SUCCESSFUL$

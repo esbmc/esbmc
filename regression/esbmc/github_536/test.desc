@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--smt-model -Wno-error=implicit-function-declaration
+^VERIFICATION FAILED$

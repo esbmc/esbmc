@@ -13,8 +13,6 @@
 solver_creator create_new_smtlib_solver;
 solver_creator create_new_z3_solver;
 solver_creator create_new_minisat_solver;
-solver_creator create_new_boolector_solver;
-solver_creator create_new_cvc_solver;
 solver_creator create_new_cvc5_solver;
 solver_creator create_new_mathsat_solver;
 solver_creator create_new_yices_solver;
@@ -31,12 +29,6 @@ static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
 #endif
 #ifdef MINISAT
   {"minisat", create_new_minisat_solver},
-#endif
-#ifdef BOOLECTOR
-  {"boolector", create_new_boolector_solver},
-#endif
-#ifdef USECVC
-  {"cvc4", create_new_cvc_solver},
 #endif
 #ifdef USECVC5
   {"cvc5", create_new_cvc5_solver},
@@ -66,10 +58,8 @@ static const std::string all_solvers[] = {
   "bitwuzllob",
   "neurosym",
   "bitwuzla",
-  "boolector",
   "z3",
   "minisat",
-  "cvc4",
   "cvc5",
   "mathsat",
   "yices"};
@@ -164,15 +154,15 @@ pick_solver(std::string &solver_name, const optionst &options)
   if (solver_name == "")
     solver_name = pick_default_solver();
 
-  // Integer/real encoding is incompatible with bit-vector-only backends
-  // (Bitwuzla, Boolector). Fail with a clear message and a clean exit instead
+  // Integer/real encoding is incompatible with bit-vector-only backends.
+  // Fail with a clear message and a clean exit instead
   // of letting the backend abort() at construction time (issue #5179). This is
   // reachable when Z3 is not built in, or when a bit-vector-only solver is
   // forced via --default-solver together with --ir / --ir-ieee.
   if (
     options.get_bool_option("int-encoding") &&
     (solver_name == "bitwuzla" || solver_name == "bitwuzllob" ||
-     solver_name == "neurosym" || solver_name == "boolector"))
+     solver_name == "neurosym"))
   {
     log_error(
       "Integer/real arithmetic (--ir / --ir-ieee) requires a solver that "

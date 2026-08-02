@@ -31,7 +31,6 @@ Additional optional CMake flags:
 - `-DENABLE_SOLIDITY_FRONTEND=On` — Solidity smart contract frontend
 - `-DENABLE_JIMPLE_FRONTEND=On` — Java/Kotlin frontend (requires JDK 11+)
 - `-DENABLE_BITWUZLA=On` — Bitwuzla solver backend
-- `-DENABLE_BOOLECTOR=On` — Boolector solver backend
 - Quality: `-DENABLE_WERROR=On`, `-DENABLE_CLANG_TIDY=On`, `-DENABLE_COVERAGE=On`
 
 See `scripts/build.sh` for full platform-specific dependency setup and solver configuration.

@@ -30,11 +30,9 @@ option(ENABLE_PYTHON_FRONTEND "Enable Python language frontend (default: OFF)" O
 # SOLVERS
 #############################
 option(ENABLE_SMTLIB "Use SMTLIB interface solver (default: ON)" ON)
-option(ENABLE_BOOLECTOR "Use Boolector solver (default: OFF)" OFF)
 option(ENABLE_Z3 "Use Z3 solver (default: OFF)" OFF)
 option(ENABLE_MATHSAT "Use MathSAT solver (default: OFF)" OFF)
 option(ENABLE_YICES "Use Yices solver (default: OFF)" OFF)
-option(ENABLE_CVC4 "Use CVC4 solver (default: OFF)" OFF)
 option(ENABLE_CVC5 "Use CVC5 solver (default: OFF)" OFF)
 option(ENABLE_BITWUZLA "Use Bitwuzla solver (default: OFF)" OFF)
 option(ENABLE_BITWUZLLOB "Use Bitwuzllob (Bitwuzla on the Mallob platform) via an external mallob binary (default: ON)" ON)

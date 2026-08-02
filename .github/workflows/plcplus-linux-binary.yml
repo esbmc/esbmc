@@ -47,7 +47,6 @@ jobs:
             -DCMAKE_C_COMPILER=gcc-12 \
             -DCMAKE_CXX_COMPILER=g++-12 \
             -DDOWNLOAD_DEPENDENCIES=On \
-            -DENABLE_BOOLECTOR=Off \
             -DENABLE_YICES=Off \
             -DENABLE_BITWUZLA=Off \
             -DENABLE_GOTO_CONTRACTOR=Off \
@@ -105,7 +104,6 @@ jobs:
             -DCMAKE_C_COMPILER=gcc-12 \
             -DCMAKE_CXX_COMPILER=g++-12 \
             -DDOWNLOAD_DEPENDENCIES=On \
-            -DENABLE_BOOLECTOR=Off \
             -DENABLE_YICES=Off \
             -DENABLE_BITWUZLA=Off \
             -DENABLE_GOTO_CONTRACTOR=Off \

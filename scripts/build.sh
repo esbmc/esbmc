@@ -35,7 +35,6 @@ BASE_ARGS=(
 )
 
 SOLVER_FLAGS=(
-  "-DENABLE_BOOLECTOR=On"
   "-DENABLE_YICES=Off"
   "-DENABLE_BITWUZLA=On"
   "-DENABLE_GOTO_CONTRACTOR=On"
@@ -613,9 +612,7 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
       # SV-COMP behaviour is now a runtime flag (--sv-comp, set by the
       # competition wrapper), so this only selects the competition solver set.
       SOLVER_FLAGS=(
-        "-DENABLE_BOOLECTOR=On"
         "-DENABLE_YICES=On"
-        "-DENABLE_CVC4=OFF"
         "-DENABLE_BITWUZLA=On"
         "-DENABLE_Z3=On"
         "-DENABLE_MATHSAT=ON"
@@ -646,7 +643,6 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
           "-DENABLE_PYTHON_FRONTEND=OFF"
         )
         SOLVER_FLAGS=(
-          "-DENABLE_BOOLECTOR=On"
           "-DENABLE_Z3=On"
         )
       fi
