@@ -11,11 +11,47 @@
 #  include <io.h>
 #else
 #  include <csignal>
+#  include <sys/file.h>
 #  include <sys/types.h>
 #  include <unistd.h>
 #endif
 
 using namespace file_operations;
+
+/* systemd-tmpfiles ages /tmp by wall-clock time, so a verification run that
+ * outlives the configured age -- or merely spans a suspend or a clock jump --
+ * can have its temporaries unlinked from under it. It takes a shared BSD lock
+ * on each directory it descends into and skips anything already locked, along
+ * with everything below it, which applications are explicitly invited to use to
+ * exclude a subtree (systemd.io/TEMPORARY_DIRECTORIES). Hold such a lock for as
+ * long as we own the path. Best effort: filesystems that do not implement
+ * flock() simply leave us unlocked, exactly as before. */
+static int lock_tmp_path([[maybe_unused]] const std::string &path)
+{
+#ifdef _WIN32
+  return -1;
+#else
+  int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
+  if (fd < 0)
+    return -1;
+
+  if (flock(fd, LOCK_SH | LOCK_NB))
+  {
+    close(fd);
+    return -1;
+  }
+  return fd;
+#endif
+}
+
+static void unlock_tmp_path(int &fd)
+{
+#ifndef _WIN32
+  if (fd >= 0)
+    close(fd); /* releases the lock */
+#endif
+  fd = -1;
+}
 
 static std::vector<std::string> registered_tmp_paths;
 static std::vector<long> registered_pgroups;
@@ -57,18 +93,28 @@ void file_operations::kill_registered_pgroups()
 }
 
 tmp_path::tmp_path(std::string path, bool keep)
-  : _path(std::move(path)), _keep(keep)
+  : _path(std::move(path)), _lock_fd(lock_tmp_path(_path)), _keep(keep)
 {
   assert(boost::filesystem::exists(_path));
 }
 
-tmp_path::tmp_path(tmp_path &&o) : tmp_path(std::move(o._path), o._keep)
+tmp_path::tmp_path(tmp_path &&o)
+  : _path(std::move(o._path)), _lock_fd(o._lock_fd), _keep(o._keep)
 {
+  /* Take over the lock rather than re-acquiring it: a second flock() on the
+   * same path from this process would silently succeed and leave the original
+   * descriptor leaked. */
+  o._lock_fd = -1;
   o._keep = true;
 }
 
 tmp_path::~tmp_path()
 {
+  /* Drop the lock whether or not we remove the path: keeping the descriptor
+   * open past our ownership would pin the inode and keep excluding it from
+   * ageing forever. */
+  unlock_tmp_path(_lock_fd);
+
   if (_keep)
     return;
   // Best-effort cleanup: the path may already be gone. create_tmp_dir() also

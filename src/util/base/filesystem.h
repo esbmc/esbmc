@@ -23,6 +23,9 @@ namespace file_operations
 class tmp_path
 {
   std::string _path;
+  /** Descriptor holding a BSD lock on the path; -1 when unlocked. Held for as
+   *  long as this object owns the path, so systemd-tmpfiles skips it. */
+  int _lock_fd = -1;
 
 protected:
   bool _keep = true;
@@ -42,6 +45,7 @@ public:
     using std::swap;
     swap(a._path, b._path);
     swap(a._keep, b._keep);
+    swap(a._lock_fd, b._lock_fd);
   }
 
   const std::string &path() const noexcept;
