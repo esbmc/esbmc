@@ -406,14 +406,14 @@ exist. The family table lists "pmu" under CXL Core while test 21 targets
 
 ---
 
-### Phase 8: Assurance (Planned — should precede more breadth)
+### Phase 8: Assurance (Started — should precede more breadth)
 
 **Goal:** make the suite establish what it appears to establish. Phases 1-7
 grew coverage outwards; this one closes the gap between the number of tests
 and the amount of assurance they provide. Each item below comes from a
 measured defect, not a stylistic preference.
 
-**1. Declare the properties each test verifies.**
+**1. Declare the properties each test verifies.** — Done.
 
 Every `test.desc` in this suite historically left the flags line empty, so all
 of them ran on ESBMC defaults. `--memory-leak-check`, `--overflow-check`,
@@ -423,12 +423,13 @@ a real CWE-401 leak in `cxl_port_dport_01` on its bail-out path, in a test
 that had been committed green the same day. A test that does not say which
 properties it checks is not guarding them.
 
-- Add leak checking to every test that allocates.
-- Add overflow checking to every test doing address arithmetic — the
-  `cxl_region_overlaps()` wraparound gap was exactly this class.
-- Treat the flags line as part of the test's specification in review.
+Every test now declares `--memory-leak-check --overflow-check
+--unsigned-overflow-check`. All 35 pre-existing tests hold under them, so the
+dport leak was the only latent bug of those classes, and the checks cost
+nothing measurable — the suite runs in ~75s either way. Treat the flags line
+as part of a test's specification in review from here on.
 
-**2. Measure model coverage, not test count.**
+**2. Measure model coverage, not test count.** — Done.
 
 Only 11 of the 35 tests ever call a modelled function without also defining
 it locally. The other 24 declare their own structs and driver functions and
@@ -444,9 +445,13 @@ tests exercised the model at all — the MMIO read-back pair and
 
 That is why `cxl_driver.c` called a `static __kmalloc()` through an implicit
 declaration for its entire existence without any test noticing: **the model's
-own allocation code had never once executed.** Track "modelled functions
-executed by at least one test" and treat it, not the test count, as the
-coverage number.
+own allocation code had never once executed.**
+
+`scripts/cxl_model_coverage.py` now reports this. The current figure is
+**20 of 107 modelled functions called by any test — 18%** — against 13 of 37
+tests that call into the model at all. Track that number, not the test count.
+The script also reports GOTO linkage and documents why that figure
+over-reports (33 of 37) and must not be used as the coverage number.
 
 **3. Get the real-driver harnesses into CI.**
 
@@ -456,7 +461,7 @@ The project's most valuable output is therefore its least protected, free to
 rot silently. Vendoring preprocessed translation units (`.i` files) for the
 verified functions would make Phase 5 reproducible without a kernel checkout.
 
-**4. Verify concurrency at all.**
+**4. Verify concurrency at all.** — Started.
 
 CXL exists to extend cache coherence across a link, and the Target Scope
 lists concurrent driver access and DMA coherence. Yet `cxl_concurrent_01` —
@@ -465,8 +470,15 @@ the suite's only "concurrent" test — spawns no threads. It calls
 trivially true. No test in the suite explores an interleaving, and Phase 7
 proposes no concurrency tests either.
 
-Needed: a genuinely threaded mailbox submission race, and a DMA-coherence
-test, both under `--data-races-check`.
+`cxl_mbox_race_01` / `cxl_mbox_race_02` close the first half of this. Two
+threads drive the single mailbox register set that `core/mbox.c` serialises on
+`cxl_mailbox::mbox_mutex`; without the lock ESBMC reports a W/W data race on
+the in-flight counter (CWE-362), and the passing variant is the same test with
+the mutex taken — so the pair is its own patch-and-reverify. Both run under
+`--data-races-check --context-bound 2`.
+
+Still needed: a DMA-coherence test, and `cxl_concurrent_01` should either
+become genuinely threaded or stop claiming to cover concurrency.
 
 **5. Require patch-and-reverify for every failing test.**
 
@@ -573,6 +585,16 @@ regression/cxl/
 └── cxl_port_dport_02/                # Dangling dport reference (FAIL)
 ```
 
+### Tooling
+
+```
+scripts/
+└── cxl_model_coverage.py             # modelled functions exercised by tests
+```
+
+Run it with `--esbmc build/src/esbmc/esbmc` to include the GOTO-linkage
+figure; without it only the static analysis runs.
+
 ## Key Design Decisions
 
 1. **Nondeterministic models.** Following the pattern of `socket_lib.c`, all
@@ -628,6 +650,9 @@ regression/cxl/
         `cxl_hdm_decode_init()` verified (see Phase 5); broad coverage pending
 - [x] Phase 6.1: User documentation published (user guide + roadmap + test summary)
 - [ ] Phase 6.2–6.3: Generic driver template and technical report — not started
+- [~] Phase 8: 8.1 (property flags) and 8.2 (coverage metric) done; 8.4
+        (concurrency) started — mailbox race pair landed, DMA coherence
+        pending; 8.3, 8.5, 8.6 not started
 - [~] Phase 7: two slices delivered — memdev id allocation, region
         interleave, the mailbox IOCTL path and downstream port lifetime,
         all modelled against the real driver's constraints (8 tests, 11
@@ -639,14 +664,17 @@ assurance, and this document has historically reported only those. Three
 figures say more about what is actually established, and two of them are
 currently poor:
 
-| Question | Today |
-|---|---|
-| Real Linux driver functions verified | 4 |
-| Tests that execute the operational model | 11 of 35 |
-| Tests declaring the properties they check | 1 of 35 |
+| Question | Today | Was |
+|---|---|---|
+| Real Linux driver functions verified | 4 | 4 |
+| Operational model functions exercised | 20 of 107 (18%) | not measured |
+| Tests that execute the operational model | 13 of 37 | 11 of 35 |
+| Tests declaring the properties they check | 37 of 37 | 1 of 35 |
+| Tests that verify an interleaving | 2 of 37 | 0 of 35 |
 
-The last two are what Phase 8 exists to fix. Until they move, a rising test
-count should not be read as rising confidence.
+Phase 8.1 and 8.4 moved the last two; 8.2 made the second measurable for the
+first time, and at 18% it is the number most worth moving next. A rising test
+count still should not be read as rising confidence.
 
 ## Current Statistics
 
@@ -667,10 +695,10 @@ Phase 8.2 raises model coverage, the suite becomes worth re-enabling.
 
 | Metric | Count |
 |--------|-------|
-| Total commits | 22 |
-| Total regression tests | 35 |
-| Passing tests | 22 |
-| Bug-detecting tests | 13 |
+| Total commits | 27 |
+| Total regression tests | 37 |
+| Passing tests | 23 |
+| Bug-detecting tests | 14 |
 | Kernel headers added | 6 |
 | Operational model lines | 1,637 |
 | Documentation pages | 3 |
