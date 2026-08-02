@@ -1225,7 +1225,11 @@ void execution_statet::calculate_mpor_constraints()
     if (j == active_thread)
       continue;
 
-    if (dependency_chain[j][active_thread] == 0)
+    // MPOR's rule is DCjj(k) == 0 -- "Tj has not run" -- not DCji(k) == 0. The
+    // two differ for a thread created after Tj last ran: its column is padded
+    // with 0, so testing it would skip the dependency below and drop the chain
+    // onto the new thread's first transition (A6.4).
+    if (dependency_chain[j][j] == 0)
     {
       // This thread hasn't been run; continue not having been run.
       new_dep_chain[j][active_thread] = 0;
