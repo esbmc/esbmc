@@ -1991,9 +1991,8 @@ exprt function_call_expr::handle_list_copy() const
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
 
-  // Delegate to python_list to build the copy operation
   python_list list_helper(converter_, call_);
-  return list_helper.build_copy_list_call(*list_symbol, call_);
+  return list_helper.build_shallow_copy_call(build_symbol(*list_symbol), call_);
 }
 
 exprt function_call_expr::handle_list_remove() const
