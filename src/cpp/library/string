@@ -545,9 +545,9 @@ public:
   // operator==/!=), not members: a member operator>(const char*) would be
   // ambiguous with the free operator>(basic_string&, const char*) for s > "lit".
   bool operator>=(basic_string<CharT, Traits, Alloc> &a);
-  bool operator>=(const char *lhs);
+  bool operator>=(const char *lhs) const;
   bool operator<=(basic_string<CharT, Traits, Alloc> &a);
-  bool operator<=(const char *lhs);
+  bool operator<=(const char *lhs) const;
   basic_string<CharT, Traits, Alloc> &
   operator=(basic_string<CharT, Traits, Alloc> &str);
   basic_string<CharT, Traits, Alloc> &operator=(const char *s);
@@ -1342,6 +1342,36 @@ __ESBMC_HIDE:
   return (unsigned char)lhs.str[i] < (unsigned char)rhs.str[i];
 }
 
+// [string.cmp]: all six comparisons are non-member and take const&. The <= and
+// >= members below cover only non-const operands -- a non-template member wins
+// the tie against these templates -- so without these two, comparing a pair of
+// const strings does not compile.
+template <typename CharT, typename Traits, typename Alloc>
+bool operator<=(
+  const basic_string<CharT, Traits, Alloc> &lhs,
+  const basic_string<CharT, Traits, Alloc> &rhs)
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(
+    lhs.str != NULL, "The first parameter must be different than NULL");
+  __ESBMC_assert(
+    rhs.str != NULL, "The second parameter must be different than NULL");
+  return strcmp(lhs.str, rhs.str) <= 0;
+}
+
+template <typename CharT, typename Traits, typename Alloc>
+bool operator>=(
+  const basic_string<CharT, Traits, Alloc> &lhs,
+  const basic_string<CharT, Traits, Alloc> &rhs)
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(
+    lhs.str != NULL, "The first parameter must be different than NULL");
+  __ESBMC_assert(
+    rhs.str != NULL, "The second parameter must be different than NULL");
+  return strcmp(lhs.str, rhs.str) >= 0;
+}
+
 template <typename CharT, typename Traits, typename Alloc>
 bool operator>(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs)
 {
@@ -1428,7 +1458,7 @@ __ESBMC_HIDE:
 }
 
 template <typename CharT, typename Traits, typename Alloc>
-bool basic_string<CharT, Traits, Alloc>::operator>=(const char *lhs)
+bool basic_string<CharT, Traits, Alloc>::operator>=(const char *lhs) const
 {
 __ESBMC_HIDE:
   __ESBMC_assert(lhs != NULL, "The parameter must be different than NULL");
@@ -1461,7 +1491,7 @@ __ESBMC_HIDE:
 }
 
 template <typename CharT, typename Traits, typename Alloc>
-bool basic_string<CharT, Traits, Alloc>::operator<=(const char *lhs)
+bool basic_string<CharT, Traits, Alloc>::operator<=(const char *lhs) const
 {
 __ESBMC_HIDE:
   __ESBMC_assert(lhs != NULL, "The parameter must be different than NULL");
@@ -1479,7 +1509,7 @@ __ESBMC_HIDE:
 // Free const char*-on-the-left overloads, so "lit" >= s / "lit" <= s resolve
 // (the member operators only cover s >= "lit" / s <= "lit").
 template <typename CharT, typename Traits, typename Alloc>
-bool operator>=(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs)
+bool operator>=(const char *lhs, const basic_string<CharT, Traits, Alloc> &rhs)
 {
 __ESBMC_HIDE:
   __ESBMC_assert(
@@ -1490,7 +1520,7 @@ __ESBMC_HIDE:
 }
 
 template <typename CharT, typename Traits, typename Alloc>
-bool operator<=(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs)
+bool operator<=(const char *lhs, const basic_string<CharT, Traits, Alloc> &rhs)
 {
 __ESBMC_HIDE:
   __ESBMC_assert(
