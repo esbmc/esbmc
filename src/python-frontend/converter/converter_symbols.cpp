@@ -1,5 +1,6 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
+#include <filesystem>
 #include <python-frontend/symbol_id.h>
 #include <util/arith/arith_tools.h>
 #include <util/message/message.h>
@@ -372,7 +373,22 @@ bool python_converter::is_imported_module(const std::string &module_name) const
   if (imported_modules.find(module_name) != imported_modules.end())
     return true;
 
+  // A module never imports itself, so its own name is not a module reference
+  // inside it and a variable may legitimately carry that name. The fallback
+  // below only asks whether a module of this name exists on disk, and the file
+  // being converted always does -- so without this, `foo` in foo.py resolves to
+  // the module and every method call on it fails to dispatch (#6639).
+  if (module_name == current_module_name())
+    return false;
+
   return json_utils::is_module(module_name, *ast_json);
+}
+
+/// Stem of the file being converted, i.e. the module name it would be imported
+/// under.
+std::string python_converter::current_module_name() const
+{
+  return std::filesystem::path(current_python_file).stem().string();
 }
 
 symbolt &python_converter::create_tmp_symbol(

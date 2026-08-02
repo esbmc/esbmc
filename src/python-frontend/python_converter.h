@@ -231,6 +231,7 @@ public:
   symbolt *find_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
+  std::string current_module_name() const;
 
   const std::string
   get_imported_module_path(const std::string &module_name) const
