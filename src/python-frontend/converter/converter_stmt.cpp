@@ -1316,7 +1316,21 @@ bool python_converter::contains_copied_numpy_view_name(
 
   if (node.is_object())
   {
-    if (node.value("_type", "") == "Name" && node.contains("id"))
+    const std::string node_type = node.value("_type", "");
+
+    // A comprehension/generator always builds a brand-new list/set/dict, so
+    // it cannot itself be a numpy view; and its element/key/value
+    // expressions reference the comprehension's own loop variable(s), which
+    // are not registered as real symbols outside of the comprehension's own
+    // conversion (handle_comprehension/_lower_listcomp) — probing a
+    // Subscript inside one here (e.g. `x[j]` for `for j in ...`) would look
+    // up `j` before it exists and abort the conversion.
+    if (
+      node_type == "GeneratorExp" || node_type == "ListComp" ||
+      node_type == "SetComp" || node_type == "DictComp")
+      return false;
+
+    if (node_type == "Name" && node.contains("id"))
     {
       const std::string id =
         resolve_name_symbol_id(node["id"].get<std::string>());
@@ -1334,17 +1348,31 @@ bool python_converter::contains_copied_numpy_view_name(
     // matches a plain scalar element read (x[0][0]), which is not a view,
     // so confirm the expression is actually array-typed before treating
     // it as an escape.
+    //
+    // The probe itself is not free of side effects either: a bounds-checked
+    // subscript (list index, when `--no-bounds-check` is not set) emits a
+    // size lookup and an IndexError-raise guard into current_block. This
+    // function can be reached while walking an AST subtree that has not
+    // been selected for evaluation yet (e.g. the untaken branch of a
+    // ternary, still being probed by contains_copied_numpy_view_name before
+    // get_conditional_stm's own short-circuit guard is built), so those
+    // instructions must not leak into the real block. Redirect them into a
+    // throwaway block for the duration of the probe.
     if (
       is_basic_numpy_view_subscript(node) &&
       !root_name_from_subscript(node["value"]).empty())
     {
+      code_blockt scratch_block;
+      code_blockt *saved_block = current_block;
+      current_block = &scratch_block;
       exprt probe = get_expr(node);
+      current_block = saved_block;
       if (!contains_cpp_throw(probe) && probe.type().is_array())
         return true;
     }
 
     if (
-      node.value("_type", "") == "Subscript" && node.contains("value") &&
+      node_type == "Subscript" && node.contains("value") &&
       node.contains("slice") && !json_contains_slice_node(node["slice"]) &&
       contains_copied_numpy_view_name(node["value"]))
       return contains_copied_numpy_view_name(node["slice"]);
