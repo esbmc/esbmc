@@ -1901,3 +1901,146 @@ __ESBMC_HIDE:;
 
   return (temp & PCI_DVSEC_CXL_MEM_INFO_VALID) ? 1 : 0;
 }
+
+/* ============================================================
+ *  Region config state, DAX/PMEM, RAS, MCE, EDAC, features,
+ *  PMU and EINJ models
+ * ============================================================ */
+
+u64 cxl_range_len(u64 start, u64 end)
+{
+__ESBMC_HIDE:;
+  /* struct resource is inclusive at both ends, so an empty range is not
+   * representable and end < start is not a valid resource. */
+  assert(end >= start);
+  return end - start + 1;
+}
+
+int cxl_dax_region_alloc(
+  const struct cxl_region_params *p,
+  u64 *hpa_start,
+  u64 *hpa_end)
+{
+__ESBMC_HIDE:;
+  assert(p != NULL);
+  assert(hpa_start != NULL);
+  assert(hpa_end != NULL);
+
+  if (p->state != CXL_CONFIG_COMMIT)
+    return -ENXIO;
+  if (p->res_end < p->res_start)
+    return -EINVAL;
+
+  *hpa_start = p->res_start;
+  *hpa_end = p->res_end;
+  return 0;
+}
+
+int cxl_pmem_region_alloc(const struct cxl_region_params *p)
+{
+__ESBMC_HIDE:;
+  assert(p != NULL);
+
+  if (p->state != CXL_CONFIG_COMMIT)
+    return -ENXIO;
+  /* kzalloc_flex(*cxlr_pmem, mapping, p->nr_targets): the flexible array is
+   * sized by a device-influenced count, so it has to be bounded first. */
+  if (p->nr_targets == 0 || p->nr_targets > CXL_REGION_MAX_TARGETS)
+    return -EINVAL;
+  return 0;
+}
+
+int cxl_handle_ras(u32 status, u32 ctrl_fe_index, u32 *fe)
+{
+__ESBMC_HIDE:;
+  assert(fe != NULL);
+
+  if (!(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK))
+    return 0;
+
+  /* With several errors latched, the header log describes the one named by
+   * the control register, not the whole status word. */
+  if (__builtin_popcount(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK) > 1)
+  {
+    __ESBMC_assume(ctrl_fe_index < 32);
+    *fe = 1U << ctrl_fe_index;
+  }
+  else
+    *fe = status & CXL_RAS_UNCORRECTABLE_STATUS_MASK;
+
+  return 1;
+}
+
+int cxl_mce_offline_page(u64 spa_alias, u64 *pfn)
+{
+__ESBMC_HIDE:;
+  assert(pfn != NULL);
+
+  /* The original page is the standard MCE handler's problem; only the alias
+   * is this notifier's, and not every SPA has one. */
+  if (spa_alias == CXL_SPA_NO_ALIAS)
+    return 0;
+
+  *pfn = spa_alias >> CXL_PAGE_SHIFT;
+  return 1;
+}
+
+int cxl_edac_set_patrol_scrub(u16 cycle_reg, u8 requested_hours, u16 *new_reg)
+{
+__ESBMC_HIDE:;
+  assert(new_reg != NULL);
+
+  u8 min_hours = (u8)((cycle_reg & CXL_SCRUB_CONTROL_MIN_CYCLE_MASK) >> 8);
+  if (requested_hours < min_hours)
+    return -EINVAL;
+
+  *new_reg = (u16)((cycle_reg & CXL_SCRUB_CONTROL_MIN_CYCLE_MASK) |
+                   (requested_hours & CXL_SCRUB_CONTROL_CYCLE_MASK));
+  return 0;
+}
+
+int cxl_feature_query(
+  const u8 *feature_ids,
+  unsigned int nr_features,
+  u8 wanted)
+{
+__ESBMC_HIDE:;
+  assert(feature_ids != NULL);
+
+  /* nr_features comes back from Get Supported Features; the table it indexes
+   * is the driver's, so the count has to be clamped to it. */
+  if (nr_features > CXL_FEAT_MAX)
+    nr_features = CXL_FEAT_MAX;
+
+  for (unsigned int i = 0; i < nr_features; i++)
+    if (feature_ids[i] == wanted)
+      return (int)i;
+
+  return -ENOENT;
+}
+
+unsigned int cxl_pmu_num_counters(u64 cap)
+{
+__ESBMC_HIDE:;
+  return (unsigned int)(cap & CXL_PMU_CAP_NUM_COUNTERS_MSK) + 1;
+}
+
+int einj_is_cxl_error_type(u64 type)
+{
+__ESBMC_HIDE:;
+  const u64 cxl_types =
+    ACPI_EINJ_CXL_CACHE_CORRECTABLE | ACPI_EINJ_CXL_CACHE_UNCORRECTABLE |
+    ACPI_EINJ_CXL_CACHE_FATAL | ACPI_EINJ_CXL_MEM_CORRECTABLE |
+    ACPI_EINJ_CXL_MEM_UNCORRECTABLE | ACPI_EINJ_CXL_MEM_FATAL;
+  return (type & cxl_types) != 0;
+}
+
+int einj_cxl_inject_rch_error(u64 rcrb, u64 type)
+{
+__ESBMC_HIDE:;
+  if (!einj_is_cxl_error_type(type))
+    return -EINVAL;
+  if (rcrb == 0)
+    return -EINVAL;
+  return 0;
+}

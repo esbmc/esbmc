@@ -430,4 +430,123 @@ unsigned int cxl_dvsec_hdm_count(u32 cap);
  */
 int cxl_dvsec_mem_range_valid(struct pci_dev *pdev, int dvsec, int id);
 
+/* ============================================================
+ *  Region config state, DAX/PMEM regions, RAS, MCE, EDAC,
+ *  features, PMU and EINJ — declared here, modelled in
+ *  cxl_driver.c
+ * ============================================================
+ *
+ * All transcribed from Linux 7.1.5:
+ *   core/region_dax.c, core/region_pmem.c  region config state gate
+ *   core/ras.c                             uncorrectable status handling
+ *   core/mce.c                             aliased-SPA offlining
+ *   core/edac.c                            patrol scrub cycle fields
+ *   core/features.c                        feature capability lookup
+ *   perf/cxl_pmu.c                         counter-count decode
+ *   acpi/apei/einj-cxl.c                   CXL error-type validation
+ */
+
+/* enum cxl_config_state (drivers/cxl/cxl.h) */
+enum cxl_config_state {
+  CXL_CONFIG_IDLE = 0,
+  CXL_CONFIG_INTERLEAVE_ACTIVE,
+  CXL_CONFIG_ACTIVE,
+  CXL_CONFIG_RESET_PENDING,
+  CXL_CONFIG_COMMIT,
+};
+
+#define CXL_REGION_MAX_TARGETS 16
+
+struct cxl_region_params {
+  enum cxl_config_state state;
+  unsigned int nr_targets;
+  u64 res_start;
+  u64 res_end;   /* inclusive, as struct resource is */
+};
+
+/* range_len(): the range is inclusive at both ends. */
+u64 cxl_range_len(u64 start, u64 end);
+
+/*
+ * Both region flavours refuse to build on a region that is not committed --
+ * `if (p->state != CXL_CONFIG_COMMIT) return -ENXIO`.  A region only reaches
+ * COMMIT once its geometry is fixed and its targets attached, so this is the
+ * gate that stops a half-configured region from being handed to DAX or
+ * LIBNVDIMM.  Return 0 or -ENXIO/-EINVAL.
+ */
+int cxl_dax_region_alloc(const struct cxl_region_params *p,
+                         u64 *hpa_start, u64 *hpa_end);
+int cxl_pmem_region_alloc(const struct cxl_region_params *p);
+
+/* core/ras.c: uncorrectable status register */
+#define CXL_RAS_UNCORRECTABLE_STATUS_MASK 0x1cfffU
+
+/*
+ * Returns 1 when an uncorrectable error was present and cleared, 0 otherwise.
+ * When several bits are set the first error is taken from the capability
+ * control register rather than from the status word; *fe receives whichever
+ * applies.
+ */
+int cxl_handle_ras(u32 status, u32 ctrl_fe_index, u32 *fe);
+
+/* core/mce.c: no alias exists for this SPA */
+#define CXL_SPA_NO_ALIAS (~0ULL)
+#define CXL_PAGE_SHIFT 12
+
+/*
+ * Offlines the page aliasing a poisoned SPA.  Returns 1 when a page was
+ * offlined and writes its PFN, 0 when there is no alias to take down.
+ */
+int cxl_mce_offline_page(u64 spa_alias, u64 *pfn);
+
+/* core/edac.c: scrub control register fields */
+#define CXL_SCRUB_CONTROL_CYCLE_MASK     0x00FFU
+#define CXL_SCRUB_CONTROL_MIN_CYCLE_MASK 0xFF00U
+
+/*
+ * Programs the patrol scrub cycle.  A cycle shorter than the device's
+ * advertised minimum is refused: the minimum is a property of the media,
+ * not a suggestion.  Returns 0 or -EINVAL.
+ */
+int cxl_edac_set_patrol_scrub(u16 cycle_reg, u8 requested_hours,
+                              u16 *new_reg);
+
+/* core/features.c: feature identifiers */
+#define CXL_FEAT_PATROL_SCRUB 0
+#define CXL_FEAT_ECS          1
+#define CXL_FEAT_SPPR         2
+#define CXL_FEAT_HPPR         3
+#define CXL_FEAT_MAX          4
+
+/*
+ * Looks a feature up in the device's supported-feature table.  Returns its
+ * index, or -ENOENT.  `nr_features` is device-reported and must be bounded
+ * against the table before it is used.
+ */
+int cxl_feature_query(const u8 *feature_ids, unsigned int nr_features,
+                      u8 wanted);
+
+/* perf/cxl_pmu.c */
+#define CXL_PMU_MAX_COUNTERS 64
+#define CXL_PMU_CAP_NUM_COUNTERS_MSK 0x3FU
+
+/*
+ * Decodes the counter count from the capability register.  The field is six
+ * bits and the driver adds one, so the result is 1..64 -- exactly
+ * CXL_PMU_MAX_COUNTERS.  Encoding and array agree here, unlike DVSEC's
+ * HDM_COUNT.
+ */
+unsigned int cxl_pmu_num_counters(u64 cap);
+
+/* acpi/apei/einj-cxl.c: ACPI_EINJ_CXL_* masks */
+#define ACPI_EINJ_CXL_CACHE_CORRECTABLE   0x1000U
+#define ACPI_EINJ_CXL_CACHE_UNCORRECTABLE 0x2000U
+#define ACPI_EINJ_CXL_CACHE_FATAL         0x4000U
+#define ACPI_EINJ_CXL_MEM_CORRECTABLE     0x8000U
+#define ACPI_EINJ_CXL_MEM_UNCORRECTABLE   0x10000U
+#define ACPI_EINJ_CXL_MEM_FATAL           0x20000U
+
+int einj_is_cxl_error_type(u64 type);
+int einj_cxl_inject_rch_error(u64 rcrb, u64 type);
+
 #endif /* _LINUX_CXL_H */
