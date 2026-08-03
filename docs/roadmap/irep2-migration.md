@@ -13,6 +13,16 @@ consolidated into this retrospective once everything landed. The
 commit log (`git log --all --grep "B2\\|IREP2\\|esbmc/esbmc#4715"`)
 preserves every per-stage plan and decision rationale.
 
+> **Reopened 2026-08-03 — see `docs/roadmap/frontends-to-irep2.md`.** The
+> project goal is now full IREP2 migration of *all five frontends*. That
+> supersedes B1 ("frontends stay legacy", Part I §"What is not changing"),
+> Part III §14's Solidity close-out, and Part V's V.1a/V.2/V.6 closures — by
+> **decision**, not because their arguments were wrong. This document remains
+> the record of what was done and why each boundary was originally drawn; the
+> forward plan for crossing them lives in the new roadmap. One correction there
+> is independent of the goal change: **§V.1's W1 row was stale** and is fixed
+> in place below.
+
 ## Headline
 
 `symbolt::type` and `symbolt::value` are now stored as `type2tc` /
@@ -1492,6 +1502,15 @@ attribute flexibility IREP2 removed, for no verifier-core benefit. The
 frontend → `type2tc` migration therefore remains, as in B1, **out of
 scope**; the durable boundary stays the `migrate_*` seam at goto-convert,
 and the Solidity frontend stays legacy by design.
+
+> **Reopened 2026-08-03.** Q-S1's mechanism finding stands — the reads are
+> value-carried, so a side table cannot serve them. What this section did not
+> separate out is a **third** option between the wrapper and a generic
+> attribute map: `SolType` is already a closed `enum class`
+> (`solidity_grammar.h:484`), so a *closed typed field* on the relevant
+> `type2t` kinds carries the classification with the value without reinstating
+> string-keyed flexibility. See `docs/roadmap/frontends-to-irep2.md` §5.2
+> (Option F), which is gated on a spike, not assumed.
 
 ---
 
@@ -3105,7 +3124,7 @@ here) sit **outside** `src/python-frontend`:
 
 | Wall | Statement | Anchor (re-verify) | Owner |
 |---|---|---|---|
-| **W1 (P1)** | IREP2 has the **flat goto-level** code kinds (`code_block`/`assign`/`decl`/`return`/`goto`/`skip`/`dead`/`free`/`expression`) but **no structured CF kinds** (`ifthenelse`/`while`/`for`/`switch`/`break`/`continue`/`label`); `goto_convert` reads the body as **legacy** `codet`. | `grep 'IREP2_EXPR(code' src/irep2/expr_kinds.inc`; `goto_convert_functions.cpp:116` | shared (all frontends) |
+| **W1 (P1)** | ~~IREP2 has the flat goto-level code kinds but **no structured CF kinds** (`ifthenelse`/`while`/`for`/`switch`/`break`/`continue`/`label`); `goto_convert` reads the body as legacy `codet`.~~ **STALE as stated — corrected 2026-08-03.** The structured kinds were added by #5265 and live at `expr_kinds.inc:129-139` with forward/back `migrate` arms; `goto_convert` consumes them natively via `convert_native_rec` (`goto_convert_functions.cpp:254`) with a per-function fallback, ≈78.7 % native. What remains of W1 is **dispatcher coverage**, not a representation gap. | `grep 'IREP2_EXPR(code' src/irep2/expr_kinds.inc`; `goto_convert_functions.cpp:254` | shared (all frontends) |
 | **W2 (P2 / F-P10 / F-P11)** | `member2t`/`index2t` assert a **resolved** struct/array source (`irep2_expr.h:1502`/`:1576`); the converter runs **before** `clang_cpp_adjust` follows `symbol`-typed bases; `migrate_expr` recurses into the assert (§16.1). | §16, §16.1 | shared (`clang_cpp_adjust`) |
 | **W3 (F-P5)** | `#cpp_type`/`#member_name`/`#cformat` are read off **legacy** nodes by `clang_cpp_adjust_expr.cpp:464`, `cpp_expr2string.cpp:138-140`, `goto2c/expr2c.cpp:169-174`. | §15.2 | shared |
 | **W4** | The counterexample C/C++ printer consumes `#cpp_type`/`#cformat` (Part II 2.7, "out of scope"). | Part II §2.7 | shared |
@@ -5304,3 +5323,11 @@ Two items, both sized and neither speculative:
 V.5 is closed rather than pending — see its scope doc. With those recorded, the
 V-track has no undocumented residue: every remaining item has a named owner
 document, a sized cost, and a stated reason it was not taken.
+
+> **Superseded 2026-08-03 as the program's stopping point.** The V-track closed
+> Part V; it did not close the migration, and the project goal is now full
+> frontend migration. `docs/roadmap/frontends-to-irep2.md` takes V.1a, V.2 and
+> V.6 forward as part of a five-frontend program, re-grounds the four walls
+> against the tree (two are dissolved, one is a coverage exercise, one is a
+> real design problem), and re-routes V.2 to Option F. Python's remaining
+> items above are unchanged and become that program's Phase 3.
