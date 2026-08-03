@@ -8,6 +8,11 @@ Author: Rafael Sá Menezes
 #include <catch2/catch.hpp>
 #include <util/base/filesystem.h>
 #include <boost/filesystem.hpp>
+#ifndef _WIN32
+#  include <fcntl.h>
+#  include <sys/file.h>
+#  include <unistd.h>
+#endif
 #include <fstream>
 #include <cstdlib>
 
@@ -159,5 +164,69 @@ TEST_CASE(
     setenv("TMPDIR", old_tmpdir.c_str(), 1);
   else
     unsetenv("TMPDIR");
+}
+#endif
+
+#ifndef _WIN32
+// Returns true iff an exclusive BSD lock can be taken on `path`, i.e. nobody
+// currently holds one. flock() conflicts across open file descriptions, so this
+// sees the lock tmp_path holds even though we are the same process.
+static bool can_lock_exclusively(const std::string &path)
+{
+  int fd = open(path.c_str(), O_RDONLY);
+  REQUIRE(fd >= 0);
+  bool free_to_lock = flock(fd, LOCK_EX | LOCK_NB) == 0;
+  if (free_to_lock)
+    flock(fd, LOCK_UN);
+  close(fd);
+  return free_to_lock;
+}
+
+TEST_CASE(
+  "a temporary directory is flocked against systemd-tmpfiles",
+  "[core][util][filesystem]")
+{
+  // systemd-tmpfiles ages /tmp by wall-clock time and would happily unlink a
+  // long run's temporaries; it skips any path holding a BSD lock. Without the
+  // lock this path would be lockable, so the check discriminates.
+  std::string path;
+  {
+    auto dir = file_operations::create_tmp_dir("esbmc-test-lock-%%%%");
+    path = dir.path();
+    REQUIRE(!can_lock_exclusively(path));
+  }
+  REQUIRE(!boost::filesystem::exists(path));
+}
+
+TEST_CASE(
+  "the temporary lock is released once the path is given up",
+  "[core][util][filesystem]")
+{
+  // Keeping the descriptor open past our ownership would pin the inode and
+  // exclude it from ageing for the rest of the process's life.
+  std::string path;
+  {
+    auto dir = file_operations::create_tmp_dir("esbmc-test-lock-%%%%");
+    path = dir.path();
+    dir.keep(true);
+  }
+  REQUIRE(boost::filesystem::exists(path));
+  REQUIRE(can_lock_exclusively(path));
+  boost::filesystem::remove_all(path);
+}
+
+TEST_CASE("moving a temporary path moves its lock", "[core][util][filesystem]")
+{
+  // The move must hand the descriptor over, not re-acquire: a second flock()
+  // from this process would succeed and leak the original descriptor.
+  std::string path;
+  {
+    auto dir = file_operations::create_tmp_dir("esbmc-test-lock-%%%%");
+    path = dir.path();
+    auto moved = std::move(dir);
+    REQUIRE(moved.path() == path);
+    REQUIRE(!can_lock_exclusively(path));
+  }
+  REQUIRE(!boost::filesystem::exists(path));
 }
 #endif
