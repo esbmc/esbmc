@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--memory-leak-check --overflow-check --unsigned-overflow-check --unwind 66
+^VERIFICATION FAILED$

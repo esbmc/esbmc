@@ -272,13 +272,13 @@ patterns for other device driver families.
 
 ---
 
-### Phase 7: Real Driver Coverage (Started)
+### Phase 7: Real Driver Coverage (Test plan complete)
 
 **Goal:** Extend the operational model and regression suite to cover the full
 Linux 7.1.5 CXL driver subsystem (~30 source files across 11 driver families),
 moving from synthetic primitives to real-driver-equivalent verification.
 
-**Status:** four slices are in; 16 of the 25 proposed tests are done.
+**Status:** complete. All 25 proposed tests are done (84 tests in the suite; the plan's 25 rows became 31 tests, since several PASS-only rows gained a failing partner).
 
 The third slice adds PMEM security (tests 11-12) and ACPI CEDT/CFMWS parsing
 (tests 13-14), both transcribed from the Linux 7.1.5 source rather than
@@ -321,6 +321,42 @@ register offsets, and the MEM_INFO_VALID gate — because the range-count bound
 it originally described is already covered by `cxl_pci_config_01/02`.
 
 Both failing tests were patch-and-reverified.
+
+The fifth slice finishes the plan: tests 5, 6 and 16-24. Four of them are
+built on one shared constraint that runs through `core/region_dax.c` and
+`core/region_pmem.c` -- `if (p->state != CXL_CONFIG_COMMIT) return -ENXIO`.
+A region reaches COMMIT only once its geometry is fixed and its targets are
+attached, so that gate is what stops a half-configured region being handed to
+DAX or LIBNVDIMM. The rest cover RAS first-error selection, MCE aliased-SPA
+offlining, EDAC scrub minimums, feature lookup, PMU counter decode and EINJ
+type validation.
+
+Six of the eleven rows were retargeted, because the one-line description in
+the plan did not survive contact with the source:
+
+- **16** was "patrol scrub enable/disable"; the register has no enable bit,
+  it carries a cycle and the device's advertised *minimum* cycle, and the
+  real check is that a request cannot go below the minimum.
+- **18/19** were "CPER error record processing"; `cxl_handle_ras()` is about
+  the uncorrectable status register, and its interesting behaviour is that
+  with several bits latched the first error comes from the capability control
+  register rather than the status word.
+- **21** was "PMU counter configuration". The verifiable property is the
+  decode: a six-bit field plus one gives 1..64, exactly
+  `CXL_PMU_MAX_COUNTERS`. Worth stating precisely because it is the *opposite*
+  of the DVSEC HDM_COUNT case in test 25, where the encoding can exceed the
+  array and the driver has to impose the bound itself.
+- **23** was "DAX on non-DAX region type", which the commit gate already
+  covers. The bug worth modelling is that `struct resource` is inclusive at
+  both ends, so a length computed as `end - start` is one byte short -- and on
+  a PMD-aligned region that shortfall breaks the alignment the DAX device is
+  created with.
+- **6** gained the flexible-array target count, which is the part of
+  `cxl_pmem_region_alloc()` that a device can influence.
+
+Five PASS-only rows gained a failing partner, so the plan's 25 rows became 31
+tests. Every failing test models a dropped return value or a confused
+encoding -- the two mistakes this whole suite keeps finding.
 
 **Status:** the first slice is in. `cxl_memdev_*` and `cxl_region_*` (tests 1-4
 below) are implemented and passing, along with the five operational-model
@@ -390,8 +426,10 @@ exist. The family table lists "pmu" under CXL Core while test 21 targets
 | 2 | `cxl_memdev_02` | `core/memdev.c` | memdev ID allocator overflow | FAIL — **done** |
 | 3 | `cxl_region_01` | `core/region.c` | Region interleave config | PASS — **done** |
 | 4 | `cxl_region_02` | `core/region.c` | Overlapping region targets | FAIL — **done** |
-| 5 | `cxl_region_dax_01` | `core/region_dax.c` | DAX region mapping | PASS |
-| 6 | `cxl_region_pmem_01` | `core/region_pmem.c` | PMEM region type | PASS |
+| 5 | `cxl_region_dax_01` | `core/region_dax.c` | Region commit gate + inclusive range length | PASS — **done** |
+| 5b | `cxl_region_dax_02` | `core/region_dax.c` | Range used on the -ENXIO path | FAIL — **done**, added |
+| 6 | `cxl_region_pmem_01` | `core/region_pmem.c` | Commit gate + flex-array target count | PASS — **done**, retargeted |
+| 6b | `cxl_region_pmem_02` | `core/region_pmem.c` | Only -ENXIO recognised as failure | FAIL — **done**, added |
 | 7 | `cxl_mbox_ioctl_01` | `core/mbox.c` | IOCTL command table lookup | PASS — **done** |
 | 8 | `cxl_mbox_ioctl_02` | `core/mbox.c` | Unchecked payload size via IOCTL | FAIL — **done**, retargeted |
 | 9 | `cxl_port_dport_01` | `port.c` | Downstream port traversal | PASS — **done** |
@@ -402,15 +440,15 @@ exist. The family table lists "pmu" under CXL Core while test 21 targets
 | 14 | `cxl_acpi_cedt_02` | `acpi.c` | EIW encoding read as a way count | FAIL — **done**, retargeted |
 | 15 | `cxl_cdat_01` | `core/pci.c` + `core/cdat.c` | CDAT checksum bound + entry length validation | PASS — **done**, retargeted |
 | 15b | `cxl_cdat_02` | `core/pci.c` | Checksum over the device-reported length | FAIL — **done**, not in the original plan |
-| 16 | `cxl_edac_01` | `core/edac.c` | Patrol scrub enable/disable | PASS |
-| 17 | `cxl_features_01` | `core/features.c` | Feature capability query | PASS |
-| 18 | `cxl_ras_01` | `core/ras.c` | CPER error record processing | PASS |
-| 19 | `cxl_ras_02` | `core/ras.c` | CPER uncorrectable fatal w/o recovery | FAIL |
-| 20 | `cxl_mce_01` | `core/mce.c` | MCE offlines aliased SPA page | PASS |
-| 21 | `cxl_pmu_01` | `perf/cxl_pmu.c` | PMU counter configuration | PASS |
-| 22 | `cxl_dax_01` | `dax/cxl.c` | DAX region device registration | PASS |
-| 23 | `cxl_dax_02` | `dax/cxl.c` | DAX on non-DAX region type | FAIL |
-| 24 | `cxl_einj_01` | `acpi/apei/einj-cxl.c` | EINJ error injection to CXL port | PASS |
+| 16 | `cxl_edac_01` | `core/edac.c` | Patrol scrub cycle vs advertised minimum | PASS — **done**, retargeted |
+| 17 | `cxl_features_01` | `core/features.c` | Feature capability query | PASS — **done** |
+| 18 | `cxl_ras_01` | `core/ras.c` | Uncorrectable status + first-error selection | PASS — **done**, retargeted |
+| 19 | `cxl_ras_02` | `core/ras.c` | First error decoded from a stale word | FAIL — **done**, retargeted |
+| 20 | `cxl_mce_01` | `core/mce.c` | MCE offlines aliased SPA page | PASS — **done** |
+| 21 | `cxl_pmu_01` | `perf/cxl_pmu.c` | Counter-count decode vs CXL_PMU_MAX_COUNTERS | PASS — **done**, retargeted |
+| 22 | `cxl_dax_01` | `dax/cxl.c` | DAX region device registration | PASS — **done** |
+| 23 | `cxl_dax_02` | `dax/cxl.c` | Inclusive range sized as exclusive | FAIL — **done**, retargeted |
+| 24 | `cxl_einj_01` | `acpi/apei/einj-cxl.c` | EINJ error injection to CXL port | PASS — **done** |
 | 25 | `cxl_dvsec_01` | `core/pci.c` | DVSEC HDM count decode + range offsets | PASS — **done** |
 | 25b | `cxl_dvsec_02` | `core/pci.c` | Range read before MEM_INFO_VALID | FAIL — **done**, not in the original plan |
 
@@ -894,10 +932,10 @@ currently poor:
 | Question | Today | Was |
 |---|---|---|
 | Real Linux driver functions verified | 4 | 4 |
-| Operational model functions exercised | 117 of 117 (100%) | 22 of 105 (21%) |
-| Tests that execute the operational model | 47 of 71 | 15 of 39 |
-| Tests declaring the properties they check | 71 of 71 | 1 of 35 |
-| Tests that verify an interleaving | 5 of 71 | 0 of 35 |
+| Operational model functions exercised | 127 of 127 (100%) | 22 of 105 (21%) |
+| Tests that execute the operational model | 60 of 84 | 15 of 39 |
+| Tests declaring the properties they check | 84 of 84 | 1 of 35 |
+| Tests that verify an interleaving | 5 of 84 | 0 of 35 |
 
 Phase 8.1 and 8.4 moved the last two; 8.2 made the second measurable for the
 first time. Raising it from 21% to 100% is what found the model defects listed
@@ -926,15 +964,15 @@ Phase 8.2 raises model coverage, the suite becomes worth re-enabling.
 | Metric | Count |
 |--------|-------|
 | Total commits | 38 |
-| Total regression tests | 71 |
-| Passing tests | 40 |
-| Bug-detecting tests | 31 |
+| Total regression tests | 84 |
+| Passing tests | 49 |
+| Bug-detecting tests | 35 |
 | Kernel headers added | 6 |
-| Operational model lines | 1903 |
+| Operational model lines | 2046 |
 | Documentation pages | 3 |
 | AER functions added | 4 |
 | Error injection functions added | 2 |
 | HDM constraints added | 2 (alignment + decoder limit) |
 | Real Linux driver files converted to GOTO | 1 |
 | Real Linux driver functions verified | 4 |
-| Model functions exercised by tests | 117 of 117 (100%) |
+| Model functions exercised by tests | 127 of 127 (100%) |
