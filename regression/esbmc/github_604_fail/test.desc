@@ -1,5 +1,4 @@
 CORE
 main.c
 
-REQUIRES bitint_wide
 ^VERIFICATION FAILED$

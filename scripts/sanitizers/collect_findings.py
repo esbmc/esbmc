@@ -65,9 +65,14 @@ _FRAME_RE = re.compile(
     r"(?:\s+(?P<loc>\S+:\d+(?::\d+)?))?")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class Finding:
-    """Single sanitizer finding (already comparable; used as dedup key)."""
+    """Single sanitizer finding; used as a dedup key and sorted for display.
+
+    ``order`` is what makes the count tie-break in render_markdown work: frozen
+    alone gives __eq__/__hash__ but no ordering, so two findings with the same
+    count made sorted() fall through to comparing Finding objects and raise.
+    """
     tool: str
     kind: str
     location: str
