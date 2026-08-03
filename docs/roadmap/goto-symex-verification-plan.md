@@ -1897,6 +1897,22 @@ vacuity was reachable through a *symbolic* size
 (`__ESBMC_assume(n >= 0xFFFFFFFFFFFFFFF0UL)` then `malloc(n)`), which a
 constant-only symex check cannot see.
 
+**One inference I made and had to retract**, recorded because it would have
+become a wrong bug report. The corpus reproducer needs `--compact-trace`, and I
+first read that as a *trace-formatting flag changing a verdict*, which would
+contradict §2.3's ranking of trace output as P3 and non-load-bearing for the
+verdict. Reading the option handling showed `--compact-trace` sets `no-slice`
+implicitly (`command_line_options.cpp:410`). §2.3's ranking stands; what the
+episode actually shows is that an output flag quietly enabling a *semantic* one
+makes flag-composition defects reachable without the user naming either.
+
+**H-C2's cost is the timeout tail, not the runs.** 156 of the 197 inconclusive
+are a timeout in the `--no-simplify` leg alone — unsimplified formulas are much
+harder, so the 15 s cap that suffices for H-C1 truncates ~11 % of this sweep.
+Those inputs are reported by name rather than folded into agreement, so the
+honest coverage figure is 1185 of 1382 compared, and a scheduled run should give
+this oracle a longer cap than its siblings.
+
 ### M5 (R25) — 2026-08-02, R25 fixed
 
 **Result: the symbolic form of R17 is fixed, it was a default-configuration
@@ -1918,16 +1934,15 @@ notes — and return NULL on that branch, folding the condition into the existin
 allocation guard.
 
 **The measurement that changed the design.** The first version applied that
-branch unconditionally, and `github_1352-fail-32bit` /
-`-success-32bit` went from 22 s to over 200 s — a timeout. Both run
-`--force-malloc-success`, and that flag's whole purpose is to delete the
-malloc-returns-NULL case split; reintroducing it under a different name
-reinstated the cost across every allocation in a loop nest. Under that flag the
-bound is now stated as an assumption instead. The same executions are excluded
-as before the fix, so `force_malloc_success_unrepresentable` stays KNOWNBUG —
-but they are excluded *visibly*, in the equation, rather than as an emergent
-property of an unsatisfiable layout constraint. Post-fix the pair runs in 23.8 s
-and 29.2 s.
+branch unconditionally, and `github_1352-fail-32bit` / `-success-32bit` went
+from 22 s to over 200 s — a timeout. Both run `--force-malloc-success`, and that
+flag's whole purpose is to delete the malloc-returns-NULL case split;
+reintroducing it under a different name reinstated the cost across every
+allocation in a loop nest. Under that flag the bound is now stated as an
+assumption instead. The same executions are excluded as before the fix, so
+`force_malloc_success_unrepresentable` stays KNOWNBUG — but they are excluded
+*visibly*, in the equation, rather than as an emergent property of an
+unsatisfiable layout constraint. Post-fix the pair runs in 23.8 s and 29.2 s.
 
 **Anti-vacuity.** `symbolic_malloc_bounds_preserved` pins the direction the fix
 could most plausibly have broken: with `10 <= n <= 100`, `b[n]` must still be
@@ -1939,22 +1954,6 @@ allocation subset (every regression source mentioning `malloc`/`calloc`/
 `realloc`/`alloca`); the two residual failures there,
 `esbmc-unix/03_boundedBuffer` and `esbmc-unix/github_5565_getopt_long_optarg`,
 reproduce on master.
-
-**One inference I made and had to retract**, recorded because it would have
-become a wrong bug report. The corpus reproducer needs `--compact-trace`, and I
-first read that as a *trace-formatting flag changing a verdict*, which would
-contradict §2.3's ranking of trace output as P3 and non-load-bearing for the
-verdict. Reading the option handling showed `--compact-trace` sets `no-slice`
-implicitly (`command_line_options.cpp:410`). §2.3's ranking stands; what the
-episode actually shows is that an output flag quietly enabling a *semantic* one
-makes flag-composition defects reachable without the user naming either.
-
-**H-C2's cost is the timeout tail, not the runs.** 156 of the 197 inconclusive
-are a timeout in the `--no-simplify` leg alone — unsimplified formulas are much
-harder, so the 15 s cap that suffices for H-C1 truncates ~11 % of this sweep.
-Those inputs are reported by name rather than folded into agreement, so the
-honest coverage figure is 1185 of 1382 compared, and a scheduled run should give
-this oracle a longer cap than its siblings.
 
 ### M5 (H-A4 / H-B3) — 2026-07-30, M5 closed
 
@@ -2331,7 +2330,7 @@ documents; the rest are pre-existing and unattributed:
 | Test | Observed | Finding |
 |---|---|---|
 | `double_assign_check_local_array` | invariant stop | **R14** (I10 violated on a real input) |
-| `force_malloc_success_unrepresentable` | SUCCESSFUL | **R25** (residual under `--force-malloc-success`) |
+| `no_simplify_no_slice_huge_malloc` | SUCCESSFUL | **R17** (vacuous path, flag pair) |
 | `mpor_nested_deref_race` | SUCCESSFUL | **R18** (POR drops a race) |
 | `multi_property_smt_during_symex` | SUCCESSFUL | **R19** (per-property false PASSED) |
 | `03_inf2`, `github_1091`, `github_1175_9`, `github_1175_11`, `github_159_postdecrement_fail`, `github_162_fail`, `github_1626-no-free`, `03_circular_reduce` | SUCCESSFUL, expected FAILED | unattributed — the missed-bug direction |
@@ -2344,9 +2343,9 @@ was promoted independently by #6592 — it was in the unattributed missed-bug ro
 and R17 does affect it (still SUCCESSFUL at `--unwind 1` without the fix), but
 its current `--unwind 5` configuration no longer discriminates, so R17's own
 claim is pinned by `default_underflow_malloc` instead. One pin replaces them:
-`no_slice_symbolic_unrepresentable_malloc` (SUCCESSFUL, **R25**), the
-symbolic-size residual the fix cannot reach. The inventory's point survives
-the churn — the masking is what generalises, not the count.
+`force_malloc_success_unrepresentable` (SUCCESSFUL), the residual R25's fix
+leaves under `--force-malloc-success`. The inventory's point survives the churn
+— the masking is what generalises, not the count.
 
 **One hypothesis tested and rejected.** `03_circular_reduce` is a concurrency test
 expecting FAILED that reports SUCCESSFUL, so R18 (POR pruning a racy
