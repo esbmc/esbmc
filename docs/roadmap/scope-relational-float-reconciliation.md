@@ -3,9 +3,9 @@
 > **Status: Phase 0 run 2026-08-03 — §4 confirmed for three of the four
 > witnesses, refuted for `sum_tuple`, which needs re-homing (§11); the
 > traffic-volume half is partially answered and lowers the gap-2 prior (§12);
-> **Phase 1 attempted three times and refuted. The aborting node is now
-> identified — `floatbv == bool` (§15) — and §14's "never reaches the
-> dispatch" is WITHDRAWN: its probe excluded bool, as did both fixes.**
+> **CLOSED (§16): the mechanism is downstream of the frontend, measured not
+> inferred. The investigation's shippable output is PR #6688 — a latent no-op
+> in `c_implicit_typecast_arithmetic` affecting five call sites.**
 > This is the owner document for the mechanism
 > `docs/roadmap/scope-coupled-arith-assign-conversion.md` §9.4 named the
 > "second mechanism" and §7 explicitly disowned:
@@ -448,3 +448,50 @@ Do **not** attempt a fourth widening. Determine, in order:
 
 Each is a one-line probe. Three attempts were spent on hypotheses that a probe
 would have killed in minutes.
+
+## 16. Resolved: the fix is not in the frontend (2026-08-04)
+
+§15.4 listed three probes and forbade a fourth widening before they were run.
+They were run. The answer is conclusive and closes this scope.
+
+### 16.1 The three probes
+
+| # | question | answer |
+|---|---|---|
+| 1 | Does the arm fire for the `floatbv == bool` node? | **Yes** — 6 times in `lambda15` |
+| 2 | Does `c_implicit_typecast_arithmetic` convert it? | **It did not, and that was a real bug** — the IREP2 `get_c_type` overload never classified `floatbv`, so it returned `OTHER`, outranking every arithmetic kind, and the helper converted neither operand. Fixed in **PR #6688** |
+| 3 | With the helper fixed, does the arm reconcile the node? | **Yes** — `before=floatbv/bool` → `after=floatbv/floatbv` |
+
+**And `lambda15` still aborts in `mk_eq`.**
+
+### 16.2 The conclusion
+
+Arm fires, helper converts, operands reconciled, abort unchanged. Therefore the
+equality that reaches the solver is **a different instance**, rebuilt after
+`python_adjust` runs. No admission rule at this dispatch can fix it — which is
+what §14 claimed for the wrong reason and §15 withdrew for a good one. The
+claim is now true and *measured*, not inferred.
+
+**This scope is closed.** The mechanism is downstream of the frontend, so it
+belongs to whoever owns the symex/SMT boundary, not to a `python_adjust`
+scope. The equality arm itself was implemented and works, but clears no test,
+so it was **not shipped**: a behaviour change to a flag-gated path with no
+demonstrated benefit is not worth its risk.
+
+### 16.3 What this investigation produced
+
+| output | status |
+|---|---|
+| **PR #6688** — `get_c_type` never classified `floatbv`, making `c_implicit_typecast_arithmetic` a silent no-op for five Python call sites, four on the **default** path | shipped |
+| `sum_tuple` refuted as a witness (§11) | recorded |
+| The aborting node identified as `floatbv == bool` (§15) | recorded |
+| The mechanism located downstream of the frontend (§16) | recorded |
+
+The scope's original hypothesis was wrong; chasing it found a real latent bug in
+a shared helper that nothing else had surfaced.
+
+### 16.4 For whoever takes the downstream mechanism
+
+Start at `smt_convt`'s `equality_id` case (`smt_solver.cpp:1320`) — probing
+there names the node in one build. Do **not** start in the frontend: four
+attempts there are recorded above, and all four are refuted.
