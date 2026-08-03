@@ -1,6 +1,7 @@
 #include <util/base/filesystem.h>
 #include <boost/filesystem.hpp>
 #include <algorithm>
+#include <cassert>
 #include <fstream>
 #include <vector>
 
@@ -91,6 +92,9 @@ void filesystemt::add_bundled(
   const char *data,
   size_t size)
 {
+  /* bundled_count() keys the overlay cache in esbmc_clang_vfs(), so silently
+   * replacing an entry would leave that cache stale. */
+  assert(!_bundled.count(path));
   _bundled[path] = std::string_view(data, size);
 }
 
@@ -104,7 +108,11 @@ std::optional<file_data> filesystemt::read(const std::string &path) const
   if (!in)
     return {};
 
-  std::string contents(static_cast<size_t>(in.tellg()), '\0');
+  std::streampos end = in.tellg();
+  if (end < 0) /* not seekable */
+    return {};
+
+  std::string contents(static_cast<size_t>(end), '\0');
   in.seekg(0);
   in.read(contents.data(), contents.size());
   contents.resize(in.gcount());
