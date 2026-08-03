@@ -562,7 +562,7 @@ bool goto_convert_functionst::convert_native_rec(
     // convert_return (goto_convert.cpp) emits, for the plain case, a RETURN
     // instruction (only when the function returns a value) followed by an
     // unconditional GOTO to the end-of-function target. Reproduce that exactly,
-    // and fall back on every shape convert_return transforms, deciding with the
+    // and delegate every shape convert_return transforms, deciding with the
     // same predicates on a throwaway legacy view of the return value:
     //  - a side-effect value (remove_sideeffects lowers it into extra instrs),
     //  - a cpp-throw return value (converted as a statement, no RETURN),
@@ -585,27 +585,32 @@ bool goto_convert_functionst::convert_native_rec(
     // twice. Any temp it allocates is covered by convert_function's
     // snapshot/restore on a later fallback; restore the value-operand locations
     // first as the legacy body round-trip does.
+    // Delegate every shape convert_return transforms statement-locally instead
+    // of failing the walk: convert_return owns the lowering, and delegating one
+    // statement leaves the rest of the function native.
+    auto delegate_to_legacy = [&]() {
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(ret.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    };
+
     for (const codet &d : targets.destructor_stack)
       if (d.get_statement() == "function_call")
-      {
-        exprt op = migrate_expr_back(code2);
-        restore_value_locations(
-          op, effective_location(ret.location, inherited));
-        convert(to_code(op), dest);
-        return true;
-      }
+        return delegate_to_legacy();
 
     exprt val = is_nil_expr(ret.operand) ? static_cast<exprt>(nil_exprt())
                                          : migrate_expr_back(ret.operand);
     if (
       val.is_not_nil() &&
       (has_sideeffect(val) || val.is_code() || val.id() == "if"))
-      return false;
+      return delegate_to_legacy();
 
     if (targets.has_return_value)
     {
+      // convert_return replaces a missing value with nondet
       if (val.is_nil())
-        return false; // convert_return replaces a missing value with nondet
+        return delegate_to_legacy();
       // The RETURN instruction convert_return emits is migrate_expr(code_returnt)
       // located at the statement; migrate_expr drops the value-operand location
       // restore_value_locations stamped, so it round-trips to code2 itself. Emit
