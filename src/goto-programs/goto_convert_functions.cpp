@@ -571,20 +571,20 @@ bool goto_convert_functionst::convert_native_rec(
     // A void function returning a value is a C/C++ constraint violation the
     // frontend rejects, so it never reaches here; only a valueless void return
     // does, which correctly emits just the end-of-function goto below.
-    // When the destructor stack holds a destructor FUNCTION_CALL, convert_return
-    // runs an unwind-before-RETURN (C++ [stmt.return]: capture the value into a
-    // temp, run the destructors, then return the temp; a constant value takes a
-    // simpler sub-path). Reproducing that natively would allocate a
-    // $tmp::tmp$ temp from the shared tmp_symbol counter -- the byte-identity
-    // hazard this dispatcher avoids -- so delegate the whole return statement to
-    // the legacy convert()/convert_return rather than fall back the entire
-    // function. convert_return leaves the destructor stack unchanged (its unwind
-    // is non-destructive and any return-temp entries are resized away) and emits
-    // a trailing unconditional goto, so the enclosing block handler's
-    // unreachable guard skips the scope-exit unwind and no destructor runs
-    // twice. Any temp it allocates is covered by convert_function's
-    // snapshot/restore on a later fallback; restore the value-operand locations
-    // first as the legacy body round-trip does.
+    // When the destructor stack holds a destructor FUNCTION_CALL,
+    // convert_return runs an unwind-before-RETURN (C++ [stmt.return]: capture
+    // the value into a temp, run the destructors, then return the temp; a
+    // constant value takes a simpler sub-path). Reproducing that natively would
+    // allocate a $tmp::tmp$ temp from the shared tmp_symbol counter -- the
+    // byte-identity hazard this dispatcher avoids -- so delegate the whole
+    // return statement to the legacy convert()/convert_return rather than fall
+    // back the entire function. convert_return leaves the destructor stack
+    // unchanged (its unwind is non-destructive and any return-temp entries are
+    // resized away) and emits a trailing unconditional goto, so the enclosing
+    // block handler's unreachable guard skips the scope-exit unwind and no
+    // destructor runs twice. Any temp it allocates is covered by
+    // convert_function's snapshot/restore on a later fallback; restore the
+    // value-operand locations first as the legacy body round-trip does.
     // Delegate every shape convert_return transforms statement-locally instead
     // of failing the walk: convert_return owns the lowering, and delegating one
     // statement leaves the rest of the function native.
