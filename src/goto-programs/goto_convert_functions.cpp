@@ -397,10 +397,18 @@ bool goto_convert_functionst::convert_native_rec(
 
     // Reproduce convert_expression() (goto_convert.cpp) verbatim on its
     // emitting branches. A top-level ternary is peeled unconditionally into
-    // convert_ifthenelse before remove_sideeffects runs; fall back on it.
+    // convert_ifthenelse before remove_sideeffects runs, and a nil operand has
+    // no native form; delegate the statement to convert_expression, which owns
+    // both, rather than failing the walk.
     exprt op = migrate_expr_back(expr_stmt.operand);
     if (op.is_nil() || op.id() == "if")
-      return false;
+    {
+      exprt stmt = migrate_expr_back(code2);
+      restore_value_locations(
+        stmt, effective_location(expr_stmt.location, inherited));
+      convert(to_code(stmt), dest);
+      return true;
+    }
 
     // convert_expression re-dispatches a code-typed operand straight through
     // the legacy convert(): the --irep2-bodies round-trip lowers an
