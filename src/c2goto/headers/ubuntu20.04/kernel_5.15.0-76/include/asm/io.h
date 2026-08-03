@@ -29,6 +29,7 @@ void writel(uint32_t val, const void *addr);
 void writeq(uint64_t val, const void *addr);
 
 /* Block reads/writes */
+void readsl(const void *addr, void *buf, unsigned long count);
 void writesl(const void *addr, const void *buf, unsigned long count);
 
 /* ============================================================
