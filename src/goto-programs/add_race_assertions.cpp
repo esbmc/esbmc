@@ -440,8 +440,8 @@ static std::set<irep_idt>
 compute_pre_thread_functions(const goto_functionst &goto_functions)
 {
   auto entry = goto_functions.function_map.find(goto_functions.main_id());
-  if (entry == goto_functions.function_map.end() ||
-      !entry->second.body_available)
+  if (
+    entry == goto_functions.function_map.end() || !entry->second.body_available)
     return {};
 
   // Callees of __ESBMC_main in program order, split at the first one from
