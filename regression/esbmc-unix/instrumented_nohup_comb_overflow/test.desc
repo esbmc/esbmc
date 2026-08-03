@@ -16,5 +16,20 @@ pre-existing defect:
     what():  Sizeof nondeterministically sized array encountered
 
 That crash is independent of the overflow encoding -- it reproduces with
---unsigned-overflow-check removed entirely. Re-enable this test as CORE once
-the dyn_sized_array_excp is fixed.
+--unsigned-overflow-check removed entirely. It is fixed separately, by
+routing __builtin_object_size() on a dynamically sized array into the
+"unknown size" answer this function already computes for unidentifiable
+objects (PR #6687).
+
+Fixing it is not sufficient to restore this test, however. With both
+changes in place the run no longer aborts, but it does not terminate
+either: --incremental-bmc --unlimited-k-steps over this file was still
+unwinding after 40 minutes and 10 GB. The false positive had been
+supplying an early exit, and without it there is no evidence this test
+ever reached a verdict on its own merits.
+
+Restoring it to CORE therefore needs a bound that makes it terminate --
+most likely a --k-step ceiling in place of --unlimited-k-steps, chosen so
+the expected VERIFICATION FAILED is actually reachable. That is a
+decision about what this test is meant to check, which is why it is left
+to whoever owns it rather than guessed at here.
