@@ -3671,8 +3671,19 @@ void python_converter::get_var_assign(
     const bool base_is_imported_module =
       method_base_name == "np" || method_base_name == "numpy" ||
       (!method_base_name.empty() && is_imported_module(method_base_name));
+    const std::string method_base_id =
+      method_base_name.empty() ? std::string()
+                               : resolve_name_symbol_id(method_base_name);
+    // A method name like sum()/max()/min() is not exclusive to numpy (e.g.
+    // Decimal.max(), a plain module-level function called through an
+    // aliased import); only rewrite when the receiver is actually a
+    // tracked numpy array, matching the check already used for copy()
+    // below.
+    const bool method_base_is_numpy_array =
+      !method_base_id.empty() &&
+      numpy_array_symbols_.count(method_base_id) != 0;
     const bool supported_view_method =
-      !base_is_imported_module &&
+      !base_is_imported_module && method_base_is_numpy_array &&
       (method_name == "transpose" || method_name == "reshape" ||
        method_name == "ravel");
     // flatten()/sum()/mean()/min()/max()/std()/var() are not view-like (see
@@ -3685,15 +3696,11 @@ void python_converter::get_var_assign(
       "flatten", "sum", "mean", "min", "max", "std", "var"};
     const bool supported_dispatch_rewrite_method =
       supported_view_method ||
-      (!base_is_imported_module &&
+      (!base_is_imported_module && method_base_is_numpy_array &&
        other_dispatch_rewrite_methods.count(method_name) != 0);
-    const std::string method_base_id =
-      method_base_name.empty() ? std::string()
-                               : resolve_name_symbol_id(method_base_name);
-    const bool supported_copy_method =
-      !base_is_imported_module && method_name == "copy" &&
-      !method_base_id.empty() &&
-      numpy_array_symbols_.count(method_base_id) != 0;
+    const bool supported_copy_method = !base_is_imported_module &&
+                                       method_name == "copy" &&
+                                       method_base_is_numpy_array;
     if (supported_copy_method)
     {
       effective_ast_node["value"] = ast_node["value"]["func"]["value"];
