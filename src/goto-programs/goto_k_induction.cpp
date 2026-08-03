@@ -529,7 +529,7 @@ bool calls_nondet_memory(const goto_functionst &goto_functions)
 }
 } // namespace
 
-bool goto_k_induction(goto_functionst &goto_functions, const namespacet &ns)
+bool goto_k_induction(goto_functionst &goto_functions, const namespacet &)
 {
   // Build the points-to fixpoint once, up front, on the pristine program, not
   // lazily from inside the loop (an earlier plain loop would already have been
