@@ -1579,6 +1579,71 @@ get_literal_numpy_array_arg(const nlohmann::json &node)
   return std::nullopt;
 }
 
+static std::optional<nlohmann::json>
+resolve_literal_numpy_row_view(nlohmann::json arg, python_converter &converter)
+{
+  if (arg.value("_type", std::string()) == "Name")
+  {
+    nlohmann::json decl = json_utils::find_var_decl(
+      arg["id"], converter.current_function_name(), converter.ast());
+    if (decl.contains("value") && decl["value"].is_object())
+      arg = decl["value"];
+  }
+
+  if (
+    !arg.is_object() || arg.value("_type", std::string()) != "Subscript" ||
+    !arg.contains("value") || !arg.contains("slice"))
+    return std::nullopt;
+
+  auto parse_index = [](const nlohmann::json &node) -> std::optional<int64_t> {
+    if (
+      node.is_object() && node.value("_type", std::string()) == "Constant" &&
+      node.contains("value") && node["value"].is_number_integer())
+      return node["value"].get<int64_t>();
+
+    if (
+      node.is_object() && node.value("_type", std::string()) == "UnaryOp" &&
+      node.contains("op") &&
+      node["op"].value("_type", std::string()) == "USub" &&
+      node.contains("operand") &&
+      node["operand"].value("_type", std::string()) == "Constant" &&
+      node["operand"].contains("value") &&
+      node["operand"]["value"].is_number_integer())
+      return -node["operand"]["value"].get<int64_t>();
+
+    return std::nullopt;
+  };
+
+  std::optional<int64_t> index = parse_index(arg["slice"]);
+  if (!index)
+    return std::nullopt;
+
+  nlohmann::json base = arg["value"];
+  if (base.value("_type", std::string()) == "Name")
+  {
+    nlohmann::json decl = json_utils::find_var_decl(
+      base["id"], converter.current_function_name(), converter.ast());
+    if (decl.contains("value") && decl["value"].is_object())
+      base = decl["value"];
+  }
+
+  std::optional<nlohmann::json> literal = get_literal_numpy_array_arg(base);
+  if (!literal || !literal->contains("elts") || !(*literal)["elts"].is_array())
+    return std::nullopt;
+
+  const auto &rows = (*literal)["elts"];
+  int64_t resolved_index = *index;
+  if (resolved_index < 0)
+    resolved_index += static_cast<int64_t>(rows.size());
+  if (resolved_index < 0 || resolved_index >= static_cast<int64_t>(rows.size()))
+    return std::nullopt;
+
+  const nlohmann::json &row = rows[static_cast<std::size_t>(resolved_index)];
+  if (row.is_object() && row.value("_type", std::string()) == "List")
+    return row;
+  return std::nullopt;
+}
+
 static bool is_sorted_numeric_list(
   const nlohmann::json &list,
   const std::string &diagnostic)
@@ -2439,6 +2504,10 @@ exprt numpy_call_expr::create_expr_from_call()
 
     nlohmann::json arg = call_["args"][0];
     resolve_var(arg);
+    if (
+      std::optional<nlohmann::json> row_view =
+        resolve_literal_numpy_row_view(arg, converter_))
+      arg = std::move(*row_view);
 
     std::vector<numeric_value> values_1d;
     std::vector<std::vector<numeric_value>> values_2d;
@@ -4563,6 +4632,10 @@ exprt numpy_call_expr::get()
 
     nlohmann::json arg = call_["args"][0];
     resolve_var(arg);
+    if (
+      std::optional<nlohmann::json> row_view =
+        resolve_literal_numpy_row_view(arg, converter_))
+      arg = std::move(*row_view);
 
     std::vector<numeric_value> values_1d;
     std::vector<std::vector<numeric_value>> values_2d;
@@ -5494,8 +5567,13 @@ exprt numpy_call_expr::get()
       }
     }
 
-    nlohmann::json arr_arg =
-      resolve_literal_numpy_array_input(call_["args"][0], function, true);
+    nlohmann::json arr_arg = call_["args"][0];
+    if (
+      std::optional<nlohmann::json> row_view =
+        resolve_literal_numpy_row_view(arr_arg, converter_))
+      arr_arg = std::move(*row_view);
+    else
+      arr_arg = resolve_literal_numpy_array_input(arr_arg, function, true);
 
     std::vector<std::size_t> shape;
     if (!get_literal_shape(arr_arg, shape))
@@ -5947,9 +6025,27 @@ exprt numpy_call_expr::get()
 
     std::vector<std::size_t> old_shape;
     if (!get_literal_shape(arr_arg, old_shape))
-      throw std::runtime_error(
-        "TypeError: numpy." + function +
-        "() currently supports only constant arrays");
+    {
+      nlohmann::json original_arg = call_["args"][0];
+      if (original_arg.is_object() && original_arg.value("_type", "") == "Name")
+      {
+        nlohmann::json decl = json_utils::find_var_decl(
+          original_arg["id"],
+          converter_.current_function_name(),
+          converter_.ast());
+        if (decl.contains("value"))
+        {
+          auto literal_arg = get_literal_numpy_array_arg(decl["value"]);
+          if (literal_arg.has_value())
+            arr_arg = std::move(*literal_arg);
+        }
+      }
+
+      if (!get_literal_shape(arr_arg, old_shape))
+        throw std::runtime_error(
+          "TypeError: numpy." + function +
+          "() currently supports only constant arrays");
+    }
 
     std::vector<nlohmann::json> flat;
     flatten_json_list(arr_arg, flat);
@@ -5959,6 +6055,33 @@ exprt numpy_call_expr::get()
     result["elts"] = nlohmann::json::array();
     for (const auto &elem : flat)
       result["elts"].push_back(elem);
+    return converter_.get_expr(result);
+  }
+
+  if (function == "expand_dims")
+  {
+    if (call_["args"].size() < 2)
+      throw std::runtime_error(
+        "TypeError: numpy.expand_dims() requires array and axis arguments");
+
+    nlohmann::json arr_arg = call_["args"][0];
+    resolve_numpy_var(arr_arg);
+
+    numeric_value axis_value;
+    if (
+      !try_extract_numeric_constant(call_["args"][1], axis_value) ||
+      !axis_value.is_int)
+      throw std::runtime_error(
+        "TypeError: numpy.expand_dims() axis must be a concrete integer");
+
+    if (axis_value.int_value != 0)
+      throw std::runtime_error(
+        "AxisError: axis " + std::to_string(axis_value.int_value) +
+        " is out of bounds for array of dimension 1");
+
+    nlohmann::json result;
+    result["_type"] = "List";
+    result["elts"] = nlohmann::json::array({arr_arg});
     return converter_.get_expr(result);
   }
 
@@ -5985,6 +6108,8 @@ exprt numpy_call_expr::get()
         elts.size() == 1 && elts[0].is_object() &&
         elts[0].value("_type", std::string()) == "List")
         return do_squeeze(elts[0]);
+      if (elts.size() == 1)
+        return do_squeeze(elts[0]);
       nlohmann::json out = node;
       out["elts"] = nlohmann::json::array();
       for (const auto &e : elts)
@@ -5994,6 +6119,48 @@ exprt numpy_call_expr::get()
 
     return converter_.get_expr(do_squeeze(arr_arg));
   }
+
+  if (function == "swapaxes" || function == "moveaxis")
+  {
+    if (call_["args"].size() < 3)
+      throw std::runtime_error(
+        "TypeError: numpy." + function +
+        "() requires array and axis arguments");
+
+    nlohmann::json arr_arg = call_["args"][0];
+    resolve_numpy_var(arr_arg);
+
+    std::vector<std::size_t> shape;
+    const std::size_t rank =
+      get_literal_shape(arr_arg, shape) ? shape.size() : 0;
+
+    for (std::size_t i = 1; i <= 2; ++i)
+    {
+      numeric_value axis_value;
+      if (
+        !try_extract_numeric_constant(call_["args"][i], axis_value) ||
+        !axis_value.is_int)
+        throw std::runtime_error(
+          "TypeError: numpy." + function +
+          "() axis must be a concrete integer");
+
+      long long axis = axis_value.int_value;
+      if (axis < 0)
+        axis += static_cast<long long>(rank);
+      if (rank != 0 && (axis < 0 || axis >= static_cast<long long>(rank)))
+        throw std::runtime_error(
+          "AxisError: axis " + std::to_string(axis_value.int_value) +
+          " is out of bounds for array of dimension " + std::to_string(rank));
+    }
+
+    throw std::runtime_error(
+      "TypeError: numpy." + function + " returns a view and is not supported");
+  }
+
+  if (function == "broadcast_to")
+    throw std::runtime_error(
+      "TypeError: numpy.broadcast_to returns a readonly view and is not "
+      "supported");
 
   // np.stack(arrays[, axis]) — join arrays along a new first axis.
   // Only axis=0 is fully supported; other axes are accepted but also lower

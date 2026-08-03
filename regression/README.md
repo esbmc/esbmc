@@ -81,3 +81,28 @@ descriptor in this shape passes even if the program under test is
 
 When adding a test, check that line 3 either starts with `-`, names another
 source file, or is empty.
+
+## Running a suite against another SMT backend
+
+`CROSS_BACKEND_SOLVERS` re-registers whole suites under additional backends, so
+the solver-agnostic tests can be checked for backend divergence rather than only
+against the default solver (esbmc/esbmc#1118):
+
+```sh
+cmake -Bbuild -S. -DCROSS_BACKEND_SOLVERS="z3;mathsat"   # plus the usual flags
+ctest -L cross-backend            # every extra backend
+ctest -L cross-backend/mathsat    # just one
+```
+
+The extra tests are named `regression/<suite>/<test>[<backend>]` and carry the
+labels `cross-backend` and `cross-backend/<backend>`. `CROSS_BACKEND_SUITES`
+selects which suites are duplicated (default `esbmc`). Naming a backend the
+build does not have is a configure-time error.
+
+The backend is passed as `--default-solver`, which ESBMC consults *only* when a
+test names no solver of its own, so solver-specific tests keep running on their
+own backend. Leaving `CROSS_BACKEND_SOLVERS` empty (the default) registers
+exactly the tests it always did.
+
+`smtlib` is not usable this way as-is: it needs a solver binary via
+`--smtlib-solver-prog`, and that program's own timeout can change verdicts.

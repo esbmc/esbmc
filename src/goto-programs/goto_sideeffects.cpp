@@ -1825,12 +1825,24 @@ void goto_convertt::remove_assignment(
     rhs.copy_to_operands(expr.op0(), expr.op1());
     rhs.type() = expr.op0().type();
 
+    // The C frontend records the type C says the operation runs in when it
+    // differs from E1's (#6589). Promote E1 into it and convert the result
+    // back on assignment, so `E1 op= E2` and `E1 = E1 op (E2)` agree.
+    const typet &computation_type =
+      static_cast<const typet &>(expr.find("computation_type"));
+
     if (rhs.op0().type().is_bool())
     {
       rhs.op0().make_typecast(int_type());
       rhs.op1().make_typecast(int_type());
       rhs.type() = int_type();
       rhs.make_typecast(typet("bool"));
+    }
+    else if (computation_type.is_not_nil() && computation_type != rhs.type())
+    {
+      rhs.op0().make_typecast(computation_type);
+      rhs.type() = computation_type;
+      rhs.make_typecast(expr.op0().type());
     }
 
     exprt lhs(expr.op0());

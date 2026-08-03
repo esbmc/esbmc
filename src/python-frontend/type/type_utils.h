@@ -174,22 +174,22 @@ public:
   // behaviour-preserving relocation, not a semantic change.
   static void set_cpp_type(typet &t, const irep_idt &value)
   {
-    t.set("#cpp_type", value);
+    t.cpp_type(value);
   }
 
   static irep_idt get_cpp_type(const typet &t)
   {
-    return t.get("#cpp_type");
+    return t.cpp_type();
   }
 
   static void set_member_name(typet &t, const irep_idt &value)
   {
-    t.set("#member_name", value);
+    t.member_name(value);
   }
 
   static void remove_member_name(typet &t)
   {
-    t.remove("#member_name");
+    t.remove_member_name();
   }
 
   static bool is_char_type(const typet &t)

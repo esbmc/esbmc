@@ -1,0 +1,173 @@
+#ifndef STL_SHARED_MUTEX
+#define STL_SHARED_MUTEX
+
+#include <mutex>
+#include <pthread.h>
+#include "OM_compiler_defs.h"
+
+// Model of <shared_mutex> over ESBMC's pthread rwlock model, so the C++
+// wrappers reach the same lock/unlock semantics -- including the deadlock
+// check -- that pthread_rwlock_* already implement. The lock-ownership tags
+// (defer_lock/try_to_lock/adopt_lock) come from <mutex>, as they do in the
+// standard headers.
+//
+// Not modelled: shared_timed_mutex's try_lock_for/_until and their shared
+// counterparts (ESBMC has no clock to block against).
+
+#if __cplusplus >= 201402L
+
+namespace std
+{
+class __shared_mutex_base
+{
+  pthread_rwlock_t __m;
+
+  __shared_mutex_base(const __shared_mutex_base &);
+  __shared_mutex_base &operator=(const __shared_mutex_base &);
+
+public:
+  __shared_mutex_base()
+  {
+    pthread_rwlock_init(&__m, OM_NULLPTR);
+  }
+
+  ~__shared_mutex_base()
+  {
+    pthread_rwlock_destroy(&__m);
+  }
+
+  void lock()
+  {
+    pthread_rwlock_wrlock(&__m);
+  }
+
+  bool try_lock()
+  {
+    return pthread_rwlock_trywrlock(&__m) == 0;
+  }
+
+  void unlock()
+  {
+    pthread_rwlock_unlock(&__m);
+  }
+
+  void lock_shared()
+  {
+    pthread_rwlock_rdlock(&__m);
+  }
+
+  bool try_lock_shared()
+  {
+    return pthread_rwlock_tryrdlock(&__m) == 0;
+  }
+
+  void unlock_shared()
+  {
+    pthread_rwlock_unlock(&__m);
+  }
+
+  typedef pthread_rwlock_t *native_handle_type;
+
+  native_handle_type native_handle()
+  {
+    return &__m;
+  }
+};
+
+class shared_timed_mutex : public __shared_mutex_base
+{
+};
+
+#  if __cplusplus >= 201703L
+class shared_mutex : public __shared_mutex_base
+{
+};
+#  endif
+
+template <class M>
+class shared_lock
+{
+  M *__m;
+  bool __owns;
+
+  shared_lock(const shared_lock &);
+  shared_lock &operator=(const shared_lock &);
+
+public:
+  typedef M mutex_type;
+
+  shared_lock() OM_NOEXCEPT : __m(OM_NULLPTR), __owns(false)
+  {
+  }
+
+  explicit shared_lock(M &m) : __m(&m), __owns(true)
+  {
+    __m->lock_shared();
+  }
+
+  shared_lock(M &m, defer_lock_t) OM_NOEXCEPT : __m(&m), __owns(false)
+  {
+  }
+
+  shared_lock(M &m, try_to_lock_t) : __m(&m), __owns(false)
+  {
+    __owns = __m->try_lock_shared();
+  }
+
+  shared_lock(M &m, adopt_lock_t) : __m(&m), __owns(true)
+  {
+  }
+
+  ~shared_lock()
+  {
+    if (__owns)
+      __m->unlock_shared();
+  }
+
+  void lock()
+  {
+    __m->lock_shared();
+    __owns = true;
+  }
+
+  bool try_lock()
+  {
+    __owns = __m->try_lock_shared();
+    return __owns;
+  }
+
+  void unlock()
+  {
+    __m->unlock_shared();
+    __owns = false;
+  }
+
+  M *release() OM_NOEXCEPT
+  {
+    M *r = __m;
+    __m = OM_NULLPTR;
+    __owns = false;
+    return r;
+  }
+
+  bool owns_lock() const OM_NOEXCEPT
+  {
+    return __owns;
+  }
+
+  operator bool() const OM_NOEXCEPT
+  {
+    return __owns;
+  }
+
+  M *mutex() const OM_NOEXCEPT
+  {
+    return __m;
+  }
+};
+
+} // namespace std
+
+#endif // __cplusplus >= 201402L
+
+#endif // STL_SHARED_MUTEX

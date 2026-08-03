@@ -51,12 +51,20 @@ typedef struct
   int __lock;
   /* Repurposed as this mutex's waiter count; see __ESBMC_mutex_waiters. */
   unsigned int __count;
+  /* Thread holding the mutex; only meaningful while __lock is 1. */
   int __owner;
+  /* PTHREAD_MUTEX_NORMAL / _RECURSIVE / _ERRORCHECK, from the attribute
+     passed to pthread_mutex_init. */
+  int __kind;
+  /* The owner's nesting depth, which only a recursive mutex takes above 1. */
+  unsigned int __depth;
 } pthread_mutex_t;
 
-/* Mutex initializer. */
-#define PTHREAD_MUTEX_INITIALIZER { 0, 0, 0, }
+/* Mutex initializer. PTHREAD_MUTEX_NORMAL is 0, so a statically initialised
+   mutex gets the default kind. */
+#define PTHREAD_MUTEX_INITIALIZER { 0, 0, 0, 0, 0, }
 
+/* __align holds the mutex kind; see __ESBMC_mutexattr_kind. */
 typedef union
 {
   int __align;

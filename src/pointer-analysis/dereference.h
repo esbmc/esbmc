@@ -550,6 +550,7 @@ private:
     const expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,
+    const guard2tc &guard,
     const expr2tc &accuml_guard,
     modet mode,
     std::list<std::pair<expr2tc, expr2tc>> &output);

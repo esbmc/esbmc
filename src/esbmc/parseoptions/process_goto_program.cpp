@@ -447,12 +447,15 @@ bool esbmc_parseoptionst::process_goto_program(
     bool has_enforce_all = cmdline.isset("enforce-all-contracts");
     bool has_replace_all = cmdline.isset("replace-all-contracts");
     if (has_enforce || has_replace || has_enforce_all || has_replace_all)
-      process_function_contracts(
-        goto_functions,
-        has_replace,
-        has_enforce,
-        has_enforce_all,
-        has_replace_all);
+    {
+      if (process_function_contracts(
+            goto_functions,
+            has_replace,
+            has_enforce,
+            has_enforce_all,
+            has_replace_all))
+        return true;
+    }
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
@@ -494,6 +497,13 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       log_status("Adding Restrict Aliasing Checks");
       add_restrict_assertions(context, goto_functions);
+    }
+
+    if (cmdline.isset("restrict-assume"))
+    {
+      log_status("Assuming Restrict Parameters Do Not Alias");
+      add_restrict_assumptions(
+        context, goto_functions, config.main.empty() ? "main" : config.main);
     }
 
     //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)

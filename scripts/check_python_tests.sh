@@ -139,6 +139,7 @@ ignored_dirs=(
   "range19-fail"
   "ternary_symbolic"
   "threading_thread_increment_race_fail"
+  "threading_thread_increment_race_no_flag_fail"
   "threading_thread_race_fail"
   "threading_thread_subclass_race_fail"
   "threading_thread_subclass_run_assert_fail"

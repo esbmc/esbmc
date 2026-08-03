@@ -282,6 +282,16 @@ template <size_t _Np>
 using make_index_sequence = make_integer_sequence<size_t, _Np>;
 #endif
 
+#if __cplusplus >= 202302L
+// Reaching this is undefined behaviour, which is what __ESBMC_unreachable()
+// already models: it claims the path is dead, reported under
+// --enable-unreachability-intrinsic.
+[[noreturn]] inline void unreachable()
+{
+  __ESBMC_unreachable();
+}
+#endif
+
 } // namespace std
 
 #endif // ESBMC_UTILITY

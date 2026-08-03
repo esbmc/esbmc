@@ -5,3 +5,6 @@ new_unit_test(frame-lifecycle-test "frame_lifecycle.test.cpp" "test_goto_factory
 new_unit_test(merge-test "merge.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
 new_unit_test(unwind-test "unwind.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
 new_unit_test(symex-invariant-test "invariant.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(determinism-test "determinism.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(slice-test "slice.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(mpor-test "mpor.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")

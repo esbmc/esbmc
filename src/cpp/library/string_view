@@ -1,6 +1,9 @@
 
 #pragma once
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include <cstddef> /* size_t */
 #include <cstdint> /* SIZE_MAX */
 #include <cstring>
@@ -168,3 +171,5 @@ public:
   friend bool operator>=(string_view lhs, string_view rhs) { return lhs.compare(rhs) >= 0; }
 };
 } // namespace std
+
+#endif // __cplusplus >= 201103L

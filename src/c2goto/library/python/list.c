@@ -223,7 +223,8 @@ static bool __ESBMC_list_push_shallow_sz(
   PyListObject *l,
   PyObject *o,
   size_t list_type_id,
-  size_t elem_size)
+  size_t elem_size,
+  size_t float_type_id)
 {
   assert(l != NULL);
   assert(o != NULL);
@@ -234,8 +235,9 @@ static bool __ESBMC_list_push_shallow_sz(
     return true;
   }
   if (elem_size != 0)
-    return __ESBMC_list_push(l, o->value, o->type_id, elem_size, 0, 0);
-  return __ESBMC_list_push_object(l, o, 0, 0);
+    return __ESBMC_list_push(
+      l, o->value, o->type_id, elem_size, float_type_id, 0);
+  return __ESBMC_list_push_object(l, o, float_type_id, 0);
 }
 
 bool __ESBMC_list_push_shallow(
@@ -243,7 +245,7 @@ bool __ESBMC_list_push_shallow(
   PyObject *o,
   size_t list_type_id)
 {
-  return __ESBMC_list_push_shallow_sz(l, o, list_type_id, 0);
+  return __ESBMC_list_push_shallow_sz(l, o, list_type_id, 0, 0);
 }
 
 // Store a dict pointer directly in the list without byte-copying.
@@ -983,14 +985,16 @@ PyListObject *__ESBMC_list_copy(const PyListObject *l)
 PyListObject *__ESBMC_list_copy_shallow_sz(
   PyListObject *l,
   size_t list_type_id,
-  size_t elem_size)
+  size_t elem_size,
+  size_t float_type_id)
 {
   __ESBMC_assert(l != NULL, "list_copy_shallow: list is null");
   PyListObject *copied = __ESBMC_list_create();
   size_t i = 0;
   while (i < l->size)
   {
-    __ESBMC_list_push_shallow_sz(copied, &l->items[i], list_type_id, elem_size);
+    __ESBMC_list_push_shallow_sz(
+      copied, &l->items[i], list_type_id, elem_size, float_type_id);
     i++;
   }
   return copied;
@@ -998,7 +1002,7 @@ PyListObject *__ESBMC_list_copy_shallow_sz(
 
 PyListObject *__ESBMC_list_copy_shallow(PyListObject *l, size_t list_type_id)
 {
-  return __ESBMC_list_copy_shallow_sz(l, list_type_id, 0);
+  return __ESBMC_list_copy_shallow_sz(l, list_type_id, 0, 0);
 }
 
 // Store `o` into an existing slot, with __ESBMC_list_push_shallow's sharing
@@ -1092,7 +1096,7 @@ bool __ESBMC_list_slice_assign(
   // Pass elem_size so the snapshot's scalar copies take the constant-size fast
   // path too (the writes below already do via __ESBMC_list_store_elem).
   if (src == l)
-    src = __ESBMC_list_copy_shallow_sz(l, list_type_id, elem_size);
+    src = __ESBMC_list_copy_shallow_sz(l, list_type_id, elem_size, 0);
 
   if (step == 1)
   {
