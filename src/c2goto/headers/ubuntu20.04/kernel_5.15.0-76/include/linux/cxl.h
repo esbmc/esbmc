@@ -23,6 +23,10 @@
 #ifndef _LINUX_CXL_H
 #define _LINUX_CXL_H
 
+/* size_t, for the CDAT declarations below: this header must stand on its own
+ * rather than rely on a translation unit having included <stddef.h> first. */
+#include <stddef.h>
+
 #include <ubuntu20.04/kernel_5.15.0-76/include/linux/pci.h>
 #include <ubuntu20.04/kernel_5.15.0-76/include/asm/io.h>
 
@@ -329,5 +333,101 @@ int eiw_to_ways(u8 eiw, unsigned int *ways);
  */
 int acpi_cedt_parse_cfmws(const struct acpi_cedt_cfmws *cfmws,
                           unsigned int *ways);
+
+/* ============================================================
+ *  CDAT (Coherent Device Attribute Table) — declared here,
+ *  modelled in cxl_driver.c
+ * ============================================================
+ *
+ * Layouts from include/acpi/actbl1.h; cdat_checksum() is the algorithm in
+ * drivers/cxl/core/pci.c and cdat_entry_validate() is the length check every
+ * handler in drivers/cxl/core/cdat.c performs before touching an entry.
+ *
+ * This is the synthetic counterpart to regression/cxl-linux's
+ * harness_cdat_checksum pair, which verifies the same property against the
+ * real source.
+ */
+
+/* enum acpi_cdat_type */
+#define ACPI_CDAT_TYPE_DSMAS   0
+#define ACPI_CDAT_TYPE_DSLBIS  1
+#define ACPI_CDAT_TYPE_DSMSCIS 2
+#define ACPI_CDAT_TYPE_DSIS    3
+#define ACPI_CDAT_TYPE_DSEMTS  4
+#define ACPI_CDAT_TYPE_SSLBIS  5
+
+struct acpi_cdat_header {
+  u8 type;
+  u8 reserved;
+  u16 length;
+};
+
+struct acpi_cdat_dsmas {
+  u8 dsmad_handle;
+  u8 flags;
+  u16 reserved;
+  u64 dpa_base_address;
+  u64 dpa_length;
+};
+
+/*
+ * Sums the bytes of a CDAT table modulo 256.  A well-formed table sums to
+ * zero; any non-zero result means the table is corrupt.  `size` must not
+ * exceed the buffer -- that bound is the caller's obligation, and is exactly
+ * what read_cdat_data() gets wrong when the DOE read reports back a length
+ * larger than the allocation.
+ */
+unsigned char cdat_checksum(const void *buf, size_t size);
+
+/*
+ * Reproduces the guard every cdat_*_handler() runs:
+ *   if (len != size || (unsigned long)hdr + len > end) reject
+ * Returns 0 if the entry is well-formed and wholly inside the table, or
+ * -EINVAL.
+ */
+int cdat_entry_validate(const struct acpi_cdat_header *hdr,
+                        size_t expected_size, const void *end);
+
+/* ============================================================
+ *  PCIe DVSEC for CXL Device — declared here, modelled in
+ *  cxl_driver.c
+ * ============================================================
+ *
+ * Offsets and field masks from include/uapi/linux/pci_regs.h (CXL r4.0
+ * §8.1.3); the enumeration mirrors cxl_dvsec_mem_range_valid() and
+ * cxl_dvsec_rr_decode() in drivers/cxl/core/pci.c.
+ *
+ * Note the shape of the trap: HDM_COUNT is a two-bit field, so the device
+ * can report 3, while dvsec_range[] holds CXL_DVSEC_RANGE_MAX == 2. The
+ * bound is not implied by the encoding -- the driver has to impose it.
+ */
+
+#define PCI_DVSEC_CXL_DEVICE     0
+#define PCI_DVSEC_CXL_CAP        0x0A
+#define PCI_DVSEC_CXL_MEM_CAPABLE (1U << 2)
+#define PCI_DVSEC_CXL_HDM_COUNT_SHIFT 4
+#define PCI_DVSEC_CXL_HDM_COUNT_MASK  (0x3U << PCI_DVSEC_CXL_HDM_COUNT_SHIFT)
+#define PCI_DVSEC_CXL_CTRL       0x0C
+#define PCI_DVSEC_CXL_MEM_ENABLE (1U << 2)
+
+#define PCI_DVSEC_CXL_RANGE_SIZE_HIGH(i) (0x18 + ((i) * 0x10))
+#define PCI_DVSEC_CXL_RANGE_SIZE_LOW(i)  (0x1C + ((i) * 0x10))
+#define PCI_DVSEC_CXL_MEM_INFO_VALID     (1U << 0)
+#define PCI_DVSEC_CXL_MEM_ACTIVE         (1U << 1)
+#define PCI_DVSEC_CXL_RANGE_BASE_HIGH(i) (0x20 + ((i) * 0x10))
+#define PCI_DVSEC_CXL_RANGE_BASE_LOW(i)  (0x24 + ((i) * 0x10))
+
+#define CXL_DVSEC_RANGE_MAX 2
+
+/* Decodes the HDM range count from a DVSEC capability register value. The
+ * result is 0..3 -- the field's full range, not the array's. */
+unsigned int cxl_dvsec_hdm_count(u32 cap);
+
+/*
+ * Reports whether range `id` has its MEM_INFO_VALID bit set, reading the
+ * size-low register at the offset the id dictates.  Returns 1 (valid),
+ * 0 (not yet valid) or -EINVAL when id is out of range.
+ */
+int cxl_dvsec_mem_range_valid(struct pci_dev *pdev, int dvsec, int id);
 
 #endif /* _LINUX_CXL_H */
