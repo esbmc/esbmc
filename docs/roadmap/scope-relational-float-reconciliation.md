@@ -3,9 +3,9 @@
 > **Status: Phase 0 run 2026-08-03 — §4 confirmed for three of the four
 > witnesses, refuted for `sum_tuple`, which needs re-homing (§11); the
 > traffic-volume half is partially answered and lowers the gap-2 prior (§12);
-> **Phase 1 attempted twice and refuted; the failing equality provably never
-> reaches this dispatch (§13-§14), so this scope's premise is wrong and it
-> should be re-scoped at the symex/SMT layer.**
+> **Phase 1 attempted three times and refuted. The aborting node is now
+> identified — `floatbv == bool` (§15) — and §14's "never reaches the
+> dispatch" is WITHDRAWN: its probe excluded bool, as did both fixes.**
 > This is the owner document for the mechanism
 > `docs/roadmap/scope-coupled-arith-assign-conversion.md` §9.4 named the
 > "second mechanism" and §7 explicitly disowned:
@@ -387,3 +387,64 @@ mechanism or two: an adjuster-visible float/int gap for two witnesses, and a
 downstream width gap for `lambda15`. Re-scoping is cheaper than another
 widening attempt, and §5's option table should be redrawn once the layer is
 known.
+
+## 15. The aborting node identified — and §14 corrected (2026-08-04)
+
+§14 concluded the failing equality never reaches `python_adjust`. **That
+conclusion was wrong, and the reason is a bug in its own probe.**
+
+### 15.1 The node
+
+Instrumenting `smt_convt`'s `equality_id` case (`smt_solver.cpp:1320`) to report
+operand types whenever the converted sorts disagree, `lambda15` yields exactly
+one line before the abort:
+
+```
+EQPROBE  w=64/1  s1=floatbv  s2=bool
+```
+
+The aborting node is an equality between a **64-bit floatbv and a 1-bit bool** —
+`assert is_even(4) is True`, where the lambda's result is monomorphised to
+float and compared against a Boolean literal.
+
+### 15.2 Why three probes and two fixes all missed it
+
+`is_bv_type` (`irep2_utils.h:13`) covers `unsignedbv_id` and `signedbv_id`
+**only**. Bool is not a bv type. Every artefact in §11-§14 keyed off that
+predicate:
+
+| artefact | guard | effect on a `bool` operand |
+|---|---|---|
+| §14's width probe | `w = (is_bv_type \|\| is_floatbv_type) ? width : 0`, logged only if `w0 && w1` | bool → 0 → **never logged**, hence the false "0 mismatches" |
+| §13 attempt 1 | `float_int_mix` = floatbv paired with `is_bv_type` | bool excluded |
+| §13 attempt 2 | `numeric` = `is_bv_type \|\| is_floatbv_type` | bool excluded |
+
+One predicate produced three independent false negatives. **§14's central claim
+— that the node is invisible to the dispatch — is withdrawn**: §11's own kind
+census had already logged `equality floatbv bool` for `lambda15`, and that
+evidence was mis-filed as an ordinary heterogeneous pair instead of the
+aborting shape.
+
+### 15.3 A third attempt, also refuted
+
+Admitting `bool`-paired-with-numeric for `equality`/`notequal` at the dispatch
+and calling `c_implicit_typecast_arithmetic` **does not clear the abort**;
+`lambda15` fails identically. So either the arm does not fire for this node, or
+the helper does not convert a Boolean operand, or the equality that reaches the
+solver is rebuilt after the adjuster runs. Reverted, not shipped.
+
+### 15.4 The next measurement, stated so it is not guessed again
+
+Do **not** attempt a fourth widening. Determine, in order:
+
+1. Does the arm fire for this node? Probe inside the guard, print on entry —
+   the discipline `frontends-to-irep2.md` §11.4 already requires and that this
+   investigation kept skipping.
+2. If it fires, does `c_implicit_typecast_arithmetic` change the operand types?
+   `get_c_type` maps bool to `BOOL` (`c_typecast.cpp:396`), which may rank below
+   the float and leave the pair unreconciled.
+3. If both hold, the node reaching the solver is a *different* instance —
+   rebuilt during symex — and the fix does not belong in the frontend at all.
+
+Each is a one-line probe. Three attempts were spent on hypotheses that a probe
+would have killed in minutes.
