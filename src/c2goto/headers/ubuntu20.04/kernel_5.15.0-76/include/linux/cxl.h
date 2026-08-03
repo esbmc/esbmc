@@ -287,4 +287,47 @@ struct cxl_dport *cxl_dport_find(struct cxl_port *port, int id);
 void cxl_dport_remove(struct cxl_port *port, int id);
 int cxl_dport_count(struct cxl_port *port);
 
+/* ============================================================
+ *  ACPI CEDT / CFMWS — declared here, modelled in cxl_driver.c
+ * ============================================================
+ *
+ * Mirrors cxl_acpi_cfmws_verify() in drivers/cxl/acpi.c and eiw_to_ways()
+ * in drivers/cxl/cxl.h.  These are the real encodings, not invented ones:
+ * the CFMWS interleave-ways field is an *encoded* value (EIW), not a count,
+ * and the 256 MB alignment is what the driver actually enforces.
+ */
+
+#define CXL_SZ_256M 0x10000000UL
+
+/* acpi_cedt_cfmws.interleave_arithmetic */
+#define ACPI_CEDT_CFMWS_ARITHMETIC_MODULO 0
+#define ACPI_CEDT_CFMWS_ARITHMETIC_XOR    1
+
+/* Largest ways any valid EIW encodes (EIW 4 -> 16). */
+#define CXL_CFMWS_MAX_WAYS 16
+
+struct acpi_cedt_cfmws {
+  u32 length;               /* header.length, in bytes */
+  u64 base_hpa;
+  u64 window_size;
+  u8 interleave_ways;       /* EIW encoding, not a count */
+  u8 interleave_arithmetic;
+  u16 granularity;          /* EIG encoding */
+  u32 restrictions;
+};
+
+/*
+ * CXL ECN "3, 6, 12 and 16-way memory Interleaving": EIW 0..4 encode
+ * 1,2,4,8,16 ways; EIW 8..10 encode 3,6,12.  Everything else is invalid.
+ * Returns 0 and writes *ways, or -EINVAL.
+ */
+int eiw_to_ways(u8 eiw, unsigned int *ways);
+
+/*
+ * Validates one CFMWS entry exactly as cxl_acpi_cfmws_verify() does.
+ * Returns 0, or -EINVAL naming the first violated rule.
+ */
+int acpi_cedt_parse_cfmws(const struct acpi_cedt_cfmws *cfmws,
+                          unsigned int *ways);
+
 #endif /* _LINUX_CXL_H */

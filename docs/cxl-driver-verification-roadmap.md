@@ -278,6 +278,27 @@ patterns for other device driver families.
 Linux 7.1.5 CXL driver subsystem (~30 source files across 11 driver families),
 moving from synthetic primitives to real-driver-equivalent verification.
 
+**Status:** three slices are in; 12 of the 25 proposed tests are done.
+
+The third slice adds PMEM security (tests 11-12) and ACPI CEDT/CFMWS parsing
+(tests 13-14), both transcribed from the Linux 7.1.5 source rather than
+invented. `cxl_pmem_security_flags()` reproduces the flag derivation in
+`cxl_pmem_get_security_state()` exactly -- including that the USER and MASTER
+views are computed independently -- and `eiw_to_ways()` /
+`acpi_cedt_parse_cfmws()` reproduce `drivers/cxl/cxl.h` and
+`cxl_acpi_cfmws_verify()`.
+
+Both failing tests were retargeted once their first formulation turned out
+not to model a reachable bug. Test 14 was originally "CFMWS alignment
+violation", which the validator already rejects; the interesting bug is that
+`interleave_ways` is an **EIW encoding, not a count**, and the two are not
+even ordered the same way -- EIW 8 decodes to 3 ways. A driver that sizes its
+target array from the decoded count (as `cxl_root_decoder_alloc()` does) and
+fills it from the raw field writes eight entries into three. The first
+attempt at that test passed vacuously because a 16-entry fixed array is
+larger than any raw EIW; only allocating by the decoded count makes the
+overflow reachable. Patch-and-reverified.
+
 **Status:** the first slice is in. `cxl_memdev_*` and `cxl_region_*` (tests 1-4
 below) are implemented and passing, along with the five operational-model
 functions they need. These are the first models written against the real
@@ -352,10 +373,10 @@ exist. The family table lists "pmu" under CXL Core while test 21 targets
 | 8 | `cxl_mbox_ioctl_02` | `core/mbox.c` | Unchecked payload size via IOCTL | FAIL — **done**, retargeted |
 | 9 | `cxl_port_dport_01` | `port.c` | Downstream port traversal | PASS — **done** |
 | 10 | `cxl_port_dport_02` | `port.c` | Dangling dport reference | FAIL — **done** |
-| 11 | `cxl_pmem_sec_01` | `pmem.c` + `security.c` | Set/get passphrase flow | PASS |
-| 12 | `cxl_pmem_sec_02` | `pmem.c` + `security.c` | Unlock before freeze (invalid order) | FAIL |
-| 13 | `cxl_acpi_cedt_01` | `acpi.c` | CEDT CFMWS window parsing | PASS |
-| 14 | `cxl_acpi_cedt_02` | `acpi.c` | CFMWS alignment violation | FAIL |
+| 11 | `cxl_pmem_sec_01` | `pmem.c` + `security.c` | Set/get passphrase flow | PASS — **done** |
+| 12 | `cxl_pmem_sec_02` | `pmem.c` + `security.c` | Unlock result dropped | FAIL — **done**, retargeted |
+| 13 | `cxl_acpi_cedt_01` | `acpi.c` | CEDT CFMWS window parsing | PASS — **done** |
+| 14 | `cxl_acpi_cedt_02` | `acpi.c` | EIW encoding read as a way count | FAIL — **done**, retargeted |
 | 15 | `cxl_cdat_01` | `core/cdat.c` | CDAT latency/bandwidth parsing | PASS |
 | 16 | `cxl_edac_01` | `core/edac.c` | Patrol scrub enable/disable | PASS |
 | 17 | `cxl_features_01` | `core/features.c` | Feature capability query | PASS |
@@ -381,8 +402,8 @@ exist. The family table lists "pmu" under CXL Core while test 21 targets
 | `cxl_mailbox_ioctl()` | IOCTL command dispatch — **done** |
 | `cxl_mbox_cmd_index()` | Command table lookup — **done**, not in the original plan |
 | `cxl_dport_add()`, `cxl_dport_find()`, `cxl_dport_remove()`, `cxl_dport_count()` | Port downstream traversal — **done**; `_walk()` was replaced by find/count |
-| `cxl_pmem_set_passphrase()`, `cxl_pmem_unlock()` | LIBNVDIMM passphrase bridge |
-| `acpi_cedt_parse_cfmws()` | CFMWS window parsing |
+| `cxl_pmem_security_flags()`, `cxl_pmem_set_passphrase()`, `cxl_pmem_unlock()`, `cxl_pmem_freeze()` | LIBNVDIMM passphrase bridge — **done**; `_flags()` and `_freeze()` were not in the original plan |
+| `acpi_cedt_parse_cfmws()`, `eiw_to_ways()` | CFMWS window parsing — **done**; `eiw_to_ways()` was not in the original plan |
 | `cdat_parse_entry()` | CDAT latency/bandwidth parsing |
 | `cxl_edac_set_patrol_scrub()` | EDAC patrol scrub control |
 | `cxl_feature_query()` | Feature capability table lookup |
@@ -848,10 +869,10 @@ currently poor:
 | Question | Today | Was |
 |---|---|---|
 | Real Linux driver functions verified | 4 | 4 |
-| Operational model functions exercised | 107 of 107 (100%) | 22 of 105 (21%) |
-| Tests that execute the operational model | 39 of 63 | 15 of 39 |
-| Tests declaring the properties they check | 63 of 63 | 1 of 35 |
-| Tests that verify an interleaving | 5 of 63 | 0 of 35 |
+| Operational model functions exercised | 113 of 113 (100%) | 22 of 105 (21%) |
+| Tests that execute the operational model | 43 of 67 | 15 of 39 |
+| Tests declaring the properties they check | 67 of 67 | 1 of 35 |
+| Tests that verify an interleaving | 5 of 67 | 0 of 35 |
 
 Phase 8.1 and 8.4 moved the last two; 8.2 made the second measurable for the
 first time. Raising it from 21% to 100% is what found the model defects listed
@@ -880,15 +901,15 @@ Phase 8.2 raises model coverage, the suite becomes worth re-enabling.
 | Metric | Count |
 |--------|-------|
 | Total commits | 38 |
-| Total regression tests | 63 |
-| Passing tests | 36 |
-| Bug-detecting tests | 27 |
+| Total regression tests | 67 |
+| Passing tests | 38 |
+| Bug-detecting tests | 29 |
 | Kernel headers added | 6 |
-| Operational model lines | 1644 |
+| Operational model lines | 1829 |
 | Documentation pages | 3 |
 | AER functions added | 4 |
 | Error injection functions added | 2 |
 | HDM constraints added | 2 (alignment + decoder limit) |
 | Real Linux driver files converted to GOTO | 1 |
 | Real Linux driver functions verified | 4 |
-| Model functions exercised by tests | 107 of 107 (100%) |
+| Model functions exercised by tests | 113 of 113 (100%) |
