@@ -1246,32 +1246,41 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_function_call2t &f = to_code_function_call2t(code2);
 
-    // Narrow slice: a bare "foo();" statement (return value unused, so no
+    auto delegate_to_legacy = [&]() {
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(f.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    };
+
+    // Native slice: a bare "foo();" statement (return value unused, so no
     // do_function_call temp-symbol machinery is ever entered) calling a
     // plain named symbol (not the dereference/if/typecast-callee shapes
     // do_function_call dispatches separately) with side-effect-free
-    // arguments (so its remove_sideeffects preamble is a no-op). Falls back
-    // on everything else, including every builtin name
-    // do_function_call_symbol special-cases (assume/assert/loop_invariant/
-    // etc.) — those are reached only when the callee symbol has no body,
-    // the same condition this handler excludes on below.
+    // arguments (so its remove_sideeffects preamble is a no-op). Everything
+    // else is delegated to convert_function_call, which owns the temp-symbol
+    // machinery and every builtin name do_function_call_symbol special-cases
+    // (assume/assert/loop_invariant/etc.) — those are reached only when the
+    // callee symbol has no body, the same condition this handler excludes on
+    // below. Any temp it allocates is covered by convert_function's
+    // snapshot/restore, exactly as for the return and declaration handlers.
     if (!is_nil_expr(f.ret) || !is_symbol2t(f.function))
-      return false;
+      return delegate_to_legacy();
 
     for (const expr2tc &arg : f.operands)
       if (has_sideeffect(arg))
-        return false;
+        return delegate_to_legacy();
 
     const symbol2t &fsym = to_symbol2t(f.function);
     symbolt *s = context.find_symbol(fsym.thename);
     if (!s || !s->get_type().is_code())
-      return false;
+      return delegate_to_legacy();
 
     bool skip_body =
       options.get_bool_option("enable-unreachability-intrinsic") &&
       (s->name == "reach_error" || s->name == "__VERIFIER_error");
     if (s->get_value().is_nil() || !s->get_value().has_operands() || skip_body)
-      return false;
+      return delegate_to_legacy();
 
     goto_programt::targett t = dest.add_instruction();
     t->make_function_call(code2);
