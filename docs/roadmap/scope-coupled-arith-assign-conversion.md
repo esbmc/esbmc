@@ -729,7 +729,9 @@ mechanisms it disowns. Neither had an owner; both now do.
 | blocker | owner | finding |
 |---|---|---|
 | the `github_5571` array-typecast pair (§14) | `scope-array-assignment-conversion.md` | every existing arm declines it because they all guard on a **pointer** target, while this shape casts to an **array** type |
-| the §9.4 second mechanism | `scope-relational-float-reconciliation.md` | all four tests share an integer meeting a floating-point operand at a comparison or bitwise assignment; the relational arm admits only `bv`/`bv` pairs (`python_adjust.cpp:406-409`) while the arithmetic arm admits floatbv too (`:449`) |
+| the §9.4 second mechanism | `scope-relational-float-reconciliation.md` | **hypothesis refuted, see that document's §11-§14.** `sum_tuple` has no heterogeneous comparison at all; and the equality that aborts `lambda15` in bitwuzla's `mk_eq` never reaches `python_adjust`'s comparison dispatch (0 width-mismatched nodes across all four witnesses), so no admission rule there can fix it. Likely two mechanisms, one of them downstream of the frontend |
 
-Both are recorded as hypotheses gated on a Phase 0 measurement, not as
-conclusions — this document's own §13→§14 reversal is the reason.
+Both were recorded as hypotheses gated on a Phase 0 measurement rather than as
+conclusions — this document's own §13→§14 reversal is the reason. That
+discipline paid: the second one's Phase 0 refuted it, at the cost of a census
+rather than a merged fix.
