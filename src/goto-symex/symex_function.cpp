@@ -666,6 +666,18 @@ static bool function_is_type_compatible(
   return true;
 }
 
+// Whether a dereferenced function pointer designates anything callable: the
+// two failed-symbol spellings mean the value-set had nothing to offer.
+static bool has_call_target(const expr2tc &expr)
+{
+  if (!is_symbol2t(expr))
+    return true;
+
+  const std::string &name = to_symbol2t(expr).thename.as_string();
+  return !has_prefix(name, "symex::invalid_object") &&
+         name.find("$object") == std::string::npos;
+}
+
 static std::list<std::pair<guard2tc, expr2tc>>
 get_function_list(const expr2tc &expr)
 {
@@ -742,6 +754,29 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
 
   // Generate a list of functions to call. We'll then proceed to call them,
   // and will later on merge them.
+  // Closed world: the program we were given is all there is, so a call with no
+  // compatible target cannot happen and its path is dead. Decide that on a
+  // throwaway copy with the pointer-safety claims suppressed -- the real
+  // dereference below records an invalid-pointer claim before we would
+  // otherwise learn there is no target, condemning the path first
+  // (esbmc/esbmc#604). When a target does exist nothing is skipped: we fall
+  // through to the unmodified path and its claims.
+  if (options.get_bool_option("closed-world-fnptr"))
+  {
+    expr2tc probe = call.function;
+    dereference(probe, dereferencet::READ, true);
+    if (!has_call_target(probe))
+    {
+      log_status(
+        "No target candidate for function call {}; assuming unreachable "
+        "(--closed-world-fnptr)",
+        from_expr(ns, "", call.function));
+      assume(gen_false_expr());
+      cur_state->source.pc++;
+      return;
+    }
+  }
+
   expr2tc func_ptr = call.function;
   dereference(func_ptr, dereferencet::READ);
 
@@ -758,6 +793,12 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     log_status(
       "No target candidate for function call {}",
       from_expr(ns, "", call.function));
+    // Open world by default: the definition may live in a translation unit we
+    // were not given, so the call is skipped and its result left havoc'd.
+    // Under --closed-world-fnptr the whole program is assumed present, so no
+    // such call can happen and the path is dead (esbmc/esbmc#604).
+    if (options.get_bool_option("closed-world-fnptr"))
+      assume(gen_false_expr());
     cur_state->source.pc++;
     return;
   }
@@ -862,7 +903,13 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   cur_state->top().orig_func_ptr_call = expr;
 
   if (!run_next_function_ptr_target(true))
+  {
+    // Same rationale as the failed-symbol case above: an empty target list
+    // means no compatible definition was found in what we were given.
+    if (options.get_bool_option("closed-world-fnptr"))
+      assume(gen_false_expr());
     cur_state->source.pc++;
+  }
 }
 
 bool goto_symext::run_next_function_ptr_target(bool first)
