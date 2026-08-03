@@ -1,6 +1,7 @@
 # Scope — relational/equality reconciliation over mixed float and integer operands
 
-> **Status: forward plan, opened 2026-08-03. Not started.**
+> **Status: Phase 0 run 2026-08-03 — §4 confirmed for three of the four
+> witnesses, refuted for `sum_tuple`, which needs re-homing. See §11.**
 > This is the owner document for the mechanism
 > `docs/roadmap/scope-coupled-arith-assign-conversion.md` §9.4 named the
 > "second mechanism" and §7 explicitly disowned:
@@ -164,3 +165,62 @@ assignment — and `python_adjust`'s relational arm admits only `bv`/`bv` pairs
 while its arithmetic arm admits floatbv too; the fix is a narrowed widening of
 that asymmetry, gated hard on the corpus-wide divergence that killed the
 general version.
+
+## 11. Phase 0 — results (2026-08-03): §4 is confirmed for three of four
+
+§4 was recorded as a hypothesis with instructions not to skip Phase 0. Phase 0
+was run, and it **partially refutes** the hypothesis. That changes the scope.
+
+### 11.1 Method
+
+The comparison dispatch in `python_adjust::adjust_expr` was widened to *observe*
+`equality2t`/`notequal2t` alongside the four ordering relations (observation
+only — equality still falls through unadjusted) and instrumented to log, per
+node: the kind, both operand type kinds, whether either side is floating point,
+whether both are `bv`, and whether the existing guard would admit it. Each
+witness was run under `--python-irep2-adjust-only --goto-functions-only` with
+its own `test.desc` flags. The instrumentation was reverted.
+
+### 11.2 Result
+
+**Every observed comparison has `admitted=0`** — across all four witnesses the
+existing relational guard never fires once. The homogeneous traffic
+(`signedbv signedbv`, `unsignedbv unsignedbv`, `floatbv floatbv`) is
+operational-model background and is identical across the four, so it is not
+what distinguishes them.
+
+The heterogeneous pairs — the ones §4 predicts — are:
+
+| witness | heterogeneous comparison pairs | §4 holds? |
+|---|---|---|
+| `chained-comparison2_fail` | `lessthan floatbv signedbv`, `lessthanequal floatbv signedbv`, `lessthanequal signedbv floatbv` | **yes** |
+| `lambda15` | `lessthanequal floatbv signedbv`, `equality floatbv bool` | **yes** |
+| `precedence2` | `equality floatbv signedbv` — an **equality**, which has no arm at all | **yes**, via the second half of §4 |
+| `sum_tuple` | **none** | **no** |
+
+### 11.3 What this changes
+
+1. **§4 is confirmed for three of the four.** A float/integer comparison
+   reaches the dispatch and no arm admits it. `precedence2`'s is an *equality*,
+   so the missing `equality2t`/`notequal2t` arm is load-bearing on its own and
+   not merely a tidiness gap — this scope must cover both halves.
+2. **`sum_tuple` is refuted and must be re-homed.** It contains no
+   heterogeneous comparison at all, so whatever it hits is a third mechanism,
+   distinct from both this scope and the array-typed assignment. It should be
+   removed from this scope's witness list rather than carried as a straggler —
+   the coupled scope's §7 made exactly that mistake in the other direction.
+3. **The `admitted=0`-everywhere result narrows Phase 1.** The existing
+   signedness-mismatch guard is inert on this traffic, so widening it cannot
+   regress these tests by changing what it already does; the risk is entirely
+   in what the *new* admission rule lets through. G2 (gap-2) remains the gate
+   that matters.
+
+### 11.4 Corrections to this document
+
+- §2's table lists `sum_tuple` as sharing the mixed-kind property. That is
+  **wrong** on measurement; the row should read "no heterogeneous comparison —
+  re-home".
+- §6 Phase 0's question 2 (how much corpus traffic a widened rule would touch)
+  is **not** answered here: only the four witnesses were censused, not a corpus
+  slice. Phase 1 still needs that number before the admission rule is chosen,
+  and G2 cannot be discharged without it.
