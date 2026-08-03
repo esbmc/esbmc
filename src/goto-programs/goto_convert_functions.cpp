@@ -317,9 +317,23 @@ bool goto_convert_functionst::convert_native_rec(
   if (is_code_assign2t(code2))
   {
     const code_assign2t &assign = to_code_assign2t(code2);
+
+    // Every shape below that this handler does not emit natively is delegated
+    // to convert_assign, which owns the side-effect lowering, the ternary peel
+    // and the convert_assign_atomic dispatch. On the fallback path that same
+    // function converted the statement anyway, so the instructions are
+    // unchanged; delegating keeps the rest of the function native.
+    auto delegate_to_legacy = [&]() {
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(
+        op, effective_location(assign.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    };
+
     exprt lhs = migrate_expr_back(assign.target);
     if (has_sideeffect(lhs) || lhs.id() == "if")
-      return false;
+      return delegate_to_legacy();
 
     // convert_assign()'s function-call special case (goto_convert.cpp)
     // dispatches a call-valued rhs straight to do_function_call(), bypassing
@@ -343,10 +357,10 @@ bool goto_convert_functionst::convert_native_rec(
     {
       const sideeffect2t &se = to_sideeffect2t(assign.source);
       if (has_sideeffect(se.operand))
-        return false;
+        return delegate_to_legacy();
       for (const expr2tc &arg : se.arguments)
         if (has_sideeffect(arg))
-          return false;
+          return delegate_to_legacy();
 
       exprt function_legacy = migrate_expr_back(se.operand);
       exprt::operandst args_legacy;
@@ -377,7 +391,7 @@ bool goto_convert_functionst::convert_native_rec(
     if (
       has_sideeffect(rhs) || rhs.id() == "if" || rhs.type().is_code() ||
       is_atomic_symbol(lhs, ns) || has_atomic_read(rhs, ns))
-      return false;
+      return delegate_to_legacy();
 
     // For side-effect-free operands the instruction convert_assign emits is
     // migrate_expr(code_assignt(lhs, rhs)) located at the statement — which
