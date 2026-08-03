@@ -549,13 +549,35 @@ done for `cxl_memdev_02`, `cxl_region_02`, `cxl_mbox_ioctl_02` and
 `cxl_port_dport_02`; make it the documented standard for new failing tests
 rather than an occasional courtesy.
 
-**6. Resolve the kernel-version incoherence.**
+**6. Resolve the kernel-version incoherence.** — Done; it was not what this
+item claimed.
 
-The model's headers live under `ubuntu20.04/kernel_5.15.0-76/` while the
-real-driver work targets Linux 7.1.5 — different kernel eras. Nothing states
-which is authoritative, or what is supposed to happen when the real driver
-API moves under the model. Pick one, say so, and record how the pin is
-updated.
+This item asserted that the model's headers being under
+`ubuntu20.04/kernel_5.15.0-76/` while real-driver work targets Linux 7.1.5
+was an unresolved incoherence needing a decision on which is authoritative.
+Checking it dissolved the question on three counts:
+
+- **The two header sets never meet.** No file includes both:
+  `regression/cxl-linux/` compiles against a real kernel tree's own headers,
+  `regression/cxl/` against the model's. There is no mechanism by which they
+  can drift into disagreement — the risk row that said otherwise was wrong.
+- **The CXL headers are not a pinned copy of anything.** Linux has no
+  `include/linux/cxl.h` in any version; the real declarations live in
+  `drivers/cxl/cxl.h` under different names. `cxl.h` and `cxlmem.h` here are
+  the synthetic API, in a directory named for a kernel they never came from.
+- **The directory predates this work.** It was created by `b074f63dab`
+  ("implement verificatin for kmalloc") and is shared with `kernel.c`. It is
+  simply where ESBMC keeps kernel operational-model headers; renaming it
+  would be an ESBMC-wide change, and a cosmetic one.
+
+So there was no version to pick. What there was is a path making a claim that
+is not true, now corrected where it can actually be read — in the header
+comments of `cxl.h` and `cxlmem.h`.
+
+The real question underneath is whether the model should mean the same thing
+as the Linux CXL API at all (`struct cxl_dev` vs `struct cxl_memdev`,
+`cxl_mailbox_send_cmd()` vs `cxl_internal_send_cmd()`). That is Phase 7's
+convergence work and is tracked there, not here.
 
 **7. Raise model coverage, and expect it to find defects.** — In progress.
 
@@ -738,7 +760,7 @@ figure; without it only the static analysis runs.
 | CXL spec changes | Model CXL 2.0 first; 3.0 additions are incremental |
 | Performance on real driver code | Start with minimal harnesses; scale up gradually |
 | Suite cost outgrowing its value | All cxl tests are THOROUGH and the suite is opt-in (`-DENABLE_CXL_REGRESSION=On`); one test accounts for most of the wall time |
-| Model and real driver drifting apart | Headers are pinned to kernel 5.15.0-76 while real-driver work targets 7.1.5; unresolved, see Phase 8.6 |
+| Model and real driver drifting apart | Not a live risk, and this row previously overstated it — no file includes both header sets, so they cannot disagree. What they *can* do is stay unrelated; closing that is Phase 7, not versioning. See Phase 8.6 |
 | Tests that pass without establishing anything | Phase 8.1-8.2: declare property flags per test, measure model coverage rather than test count |
 
 ## Success Metrics
@@ -757,14 +779,14 @@ figure; without it only the static analysis runs.
 - [x] Phase 6.1: User documentation published (user guide + roadmap + test summary)
 - [ ] Phase 6.2–6.3: Generic driver template and technical report — not started
 - [~] Phase 8: 8.1 (property flags), 8.2 (coverage metric), 8.4
-        (concurrency) and 8.5 (patch-and-reverify, by construction in the
-        race pairs) done; 8.3 (real-driver harnesses in CI) and 8.6 (kernel
-        version) not started
+        (concurrency), 8.5 (patch-and-reverify, by construction in the
+        race pairs) and 8.6 (kernel version — dissolved, see the item) done;
+        8.7 (coverage) in progress at 57%; 8.3 (real-driver harnesses in CI)
+        blocked on a kernel tree, vendoring ruled out
 - [~] Phase 7: two slices delivered — memdev id allocation, region
         interleave, the mailbox IOCTL path and downstream port lifetime,
         all modelled against the real driver's constraints (8 tests, 11
         model functions); remaining ~17 tests and ~9 functions pending
-- [ ] Phase 8: assurance — not started
 
 **On reading these numbers.** Test and line counts measure output, not
 assurance, and this document has historically reported only those. Three
