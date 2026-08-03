@@ -5217,7 +5217,7 @@ than left implicitly open.
 | V.1k | W2 | **done** | the relaxed `member2t`/`index2t` construction assert (round 3 breakthrough), then every width-hazard and deferred-operand site in the converter migrated — the working plan that tracked those sites was deleted once drained; §"V.3 close-out (2026-07-04)" is the surviving record |
 | V.1k (b) adjuster | — | **structurally done, flip blocked** | `docs/roadmap/scope-v1k-adjuster.md` §"Flip gate (2026-07-29)" |
 | V.1a | — | **not started** | type builders still `lower_to_seam`; blocked on V.2 by the dependency graph in §V.3 |
-| V.2 | W3 | **not started** | the three legacy `#cpp_type`/`#member_name`/`#cformat` consumers are unchanged |
+| V.2 | W3 | **re-scoped to Option D, which is complete; W3 not removed** | `docs/roadmap/scope-v2-w3-attribute-carriage.md` §9-§10. §V.2's symbol-keyed design is refuted there (§3); Option D seamed `#member_name`/`#cpp_type` repo-wide behind `irept::member_name()`/`irept::cpp_type()` instead. Carriage stays legacy by decision, so bar #4 is unmoved |
 | V.3 | — | **done for converter expression construction; bar #1/#2 not met** | §"V.3 close-out (2026-07-04)"; the residue is type/symbol-write surface, not expressions |
 | V.4 | W1 | **done** | V.4.0→V.4.4b landed; the deeper W1 removal reopened and completed as W1-loc, now default-on |
 | V.5 | W4 | **deferred, concluded** | see "Why V.5 is deferred" below — this is now the only record; its scope doc was deleted |
@@ -5278,11 +5278,15 @@ Two items, both sized and neither speculative:
    `docs/roadmap/scope-coupled-arith-assign-conversion.md`, which re-sizes it
    at 3 PRs (down from "multi-PR effort") on the finding that the
    usual-arithmetic-conversion engine already has native `expr2tc` overloads
-   that `python_adjust` already calls. **Phase 0 (reachability census) and
-   Phase 1 (the operand-level arm) have landed**; Phase 2 (the assignment
-   conversion) and Phase 3 (the flip) remain. Phase 0 also found that half the
-   flip-gate regressions are a *second* mechanism this scope does not clear, so
-   the flip needs one more scope than it looked like it did.
+   that `python_adjust` already calls. **Phases 0-2 have landed** — the
+   reachability census, the operand-level arm and the `code_assign2t`
+   assignment arm — and every gate this scope owns is discharged against the
+   corrected test lists of that document's §13.1. **Phase 3 (the flip) remains,
+   blocked on two mechanisms this scope does not own**: the §9.4 second
+   mechanism (`chained-comparison2_fail`, `lambda15`, `precedence2`,
+   `sum_tuple`) and the array-typecast class (the `github_5571` pair, §14).
+   Neither has an owner document yet, and G4/G5 have not been run.
+   `--python-irep2-adjust-only` therefore stays default-off.
 2. **V.2/W3 attribute carriage**, which V.1a and V.6 both depend on. The
    highest shared blast radius left in the program (`clang_cpp_adjust_expr`,
    `cpp_expr2string`, `goto2c/expr2c` serve C++ and Solidity too — and a fourth
