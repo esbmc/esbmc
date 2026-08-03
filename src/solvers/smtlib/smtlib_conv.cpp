@@ -142,22 +142,10 @@ static std::string unquote(const std::string_view &s)
 }
 #endif
 
-smt_solver_baset *create_new_smtlib_solver(
-  const optionst &options,
-  const namespacet &ns,
-  tuple_iface **tuple_api [[maybe_unused]],
-  array_iface **array_api,
-  fp_convt **fp_api)
-{
-  if (!options.get_bool_option("smt-formula-only"))
-    log_warning(
-      "[smtlib] the smtlib interface solving is unstable. Please, "
-      "use it with --smt-formula-only for production");
-  smtlib_convt *conv = new smtlib_convt(ns, options);
-  *array_api = static_cast<array_iface *>(conv);
-  *fp_api = static_cast<fp_convt *>(conv);
-  return conv;
-}
+/* create_new_smtlib_solver now lives in src/solvers/camada: the --smtlib
+ * backend is served by camada's SMT-LIB solver. What remains here is the
+ * smtlib_convt class itself, which bitwuzllob and neurosym still derive from
+ * for its serializer and one-shot subprocess plumbing. */
 
 std::string smtlib_convt::dump_smt()
 {

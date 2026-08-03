@@ -8,6 +8,7 @@
 
 #include <camada/camada.h>
 #include <camada/camadafeatures.h>
+#include <camada/smtlibsolver.h>
 #if CAMADA_HAVE_BITWUZLA
 #  include <camada/bitwuzlasolver.h>
 #endif
@@ -37,7 +38,8 @@ enum class camada_backendt
   cvc5,
   mathsat,
   yices,
-  bitwuzla
+  bitwuzla,
+  smtlib
 };
 
 bool backend_supports_tuples(camada_backendt backend)
@@ -46,6 +48,8 @@ bool backend_supports_tuples(camada_backendt backend)
   {
   case camada_backendt::z3:
   case camada_backendt::cvc5:
+  // TupleEncoding::Native emits SMT-LIB datatype tuples on the wire.
+  case camada_backendt::smtlib:
     return true;
   case camada_backendt::mathsat:
   case camada_backendt::yices:
@@ -235,7 +239,6 @@ std::string wrap_smtlib_dump(std::string smt_formula)
   return dest.str();
 }
 
-#if CAMADA_HAVE_MATHSAT || CAMADA_HAVE_YICES
 std::string pick_logic(const optionst &options, bool native_fp)
 {
   const bool has_quantifiers = options.get_bool_option("has-quantifiers");
@@ -248,7 +251,70 @@ std::string pick_logic(const optionst &options, bool native_fp)
 
   return has_quantifiers ? "AUFBVFP" : "QF_AUFBVFP";
 }
-#endif
+
+/* The SMT-LIB backend pipes to an interactive solver
+ * (--smtlib-solver-prog), writes the script out (--output, "-" for stdout),
+ * or both. With neither, camada's write-only mode still needs a sink, so
+ * default to stdout as the pre-camada backend's file_emitter did. */
+camada::SMTSolverRef create_esbmc_smtlib_solver(const optionst &options)
+{
+  const std::string prog = options.get_option("smtlib-solver-prog");
+  const std::string out = options.get_option("output");
+  /* The SMT-LIB script goes to an arbitrary external solver, so name the
+   * concrete fragment ESBMC's encoding produces rather than letting camada
+   * negotiate `ALL` -- several regression tests grep this line, and a child
+   * that only accepts concrete logics would otherwise get a retry it does
+   * not need. native_fp is false: nothing here promises FP theory support. */
+  const std::string logic = pick_logic(options, false);
+
+  if (prog.empty())
+    return std::make_unique<camada::SMTLIBSolver>(
+      out.empty() ? "-" : out, camada::TupleEncoding::Native, logic);
+
+  /* Camada spawns the child with execvp and no shell, so the command arrives
+   * as an argv. Split on whitespace: enough for the documented "solver
+   * executable and its flags" (e.g. "z3 -in"), and it keeps the child out of
+   * a shell's reach. Quoting and metacharacters are deliberately NOT
+   * interpreted -- the pre-camada backend ran the string through $SHELL -c,
+   * which made this option an arbitrary-command sink. */
+  if (prog.find_first_of("'\"\\$`|&;<>()*?") != std::string::npos)
+  {
+    log_error(
+      "--smtlib-solver-prog is executed directly (execvp), not through a "
+      "shell: '{}' contains shell metacharacters or quotes, which are not "
+      "interpreted. Pass the executable and its flags as plain "
+      "whitespace-separated words (e.g. \"z3 -in\").",
+      prog);
+    abort();
+  }
+
+  std::vector<std::string> argv;
+  for (size_t i = 0; i < prog.size();)
+  {
+    size_t b = prog.find_first_not_of(" \t", i);
+    if (b == std::string::npos)
+      break;
+    size_t e = prog.find_first_of(" \t", b);
+    if (e == std::string::npos)
+      e = prog.size();
+    argv.emplace_back(prog, b, e - b);
+    i = e;
+  }
+
+  /* Only mirror the script to a file when one was actually requested:
+   * defaulting to stdout here would dump the whole formula on every piped
+   * run. */
+  if (out.empty())
+    return std::make_unique<camada::SMTLIBSolver>(
+      camada::SMTLIBProcessTag{}, argv, camada::TupleEncoding::Native, logic);
+
+  return std::make_unique<camada::SMTLIBSolver>(
+    camada::SMTLIBProcessTag{},
+    argv,
+    out,
+    camada::TupleEncoding::Native,
+    logic);
+}
 
 camada::SMTSolverRef create_esbmc_z3_solver(const optionst &options)
 {
@@ -345,7 +411,10 @@ public:
     const namespacet &ns,
     const optionst &options,
     camada_backendt backend)
-    : smt_solver_baset(ns, options), array_iface(true, true), fp_convt(this)
+    : smt_solver_baset(ns, options),
+      array_iface(true, true),
+      fp_convt(this),
+      backend(backend)
   {
     switch (backend)
     {
@@ -367,6 +436,9 @@ public:
 #else
       unsupported("Bitwuzla support in Camada");
 #endif
+      break;
+    case camada_backendt::smtlib:
+      solver = create_esbmc_smtlib_solver(options);
       break;
     }
   }
@@ -1216,6 +1288,23 @@ public:
 
   std::string dump_smt() override
   {
+    /* Camada's SMT-LIB backend streams the script to its sink as it is built
+     * rather than buffering it, so there is nothing to hand back. Complete the
+     * script with the (check-sat) that --smt-formula-only never reaches via
+     * dec_solve() -- in write-only mode check() just emits it and answers
+     * UNKNOWN -- then return empty so bmc.cpp does not reopen the same path
+     * and overwrite what camada wrote (issue #6059). */
+    if (backend == camada_backendt::smtlib)
+    {
+      solver->check();
+      const std::string path = options.get_option("output");
+      if (path.empty() || path == "-")
+        log_status("SMT formula written to standard output");
+      else
+        log_status("SMT formula written to output file {}", path);
+      return "";
+    }
+
     std::string smt_formula;
     solver->dump(smt_formula);
     return wrap_smtlib_dump(std::move(smt_formula));
@@ -1243,6 +1332,7 @@ public:
 
 private:
   std::unique_ptr<camada::SMTSolver> solver;
+  const camada_backendt backend;
 
   static camada::SMTExprRef expr(smt_astt a)
   {
@@ -1480,4 +1570,20 @@ smt_solver_baset *create_new_bitwuzla_solver(
 {
   return create_camada_solver(
     camada_backendt::bitwuzla, options, ns, tuple_api, array_api, fp_api);
+}
+
+smt_solver_baset *create_new_smtlib_solver(
+  const optionst &options,
+  const namespacet &ns,
+  tuple_iface **tuple_api,
+  array_iface **array_api,
+  fp_convt **fp_api)
+{
+  if (!options.get_bool_option("smt-formula-only"))
+    log_warning(
+      "[smtlib] the smtlib interface solving is unstable. Please, "
+      "use it with --smt-formula-only for production");
+
+  return create_camada_solver(
+    camada_backendt::smtlib, options, ns, tuple_api, array_api, fp_api);
 }

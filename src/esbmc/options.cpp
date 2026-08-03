@@ -608,7 +608,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"smtlib-solver-prog",
 
      boost::program_options::value<std::string>(),
-     "Path to the SMT-LIB solver executable"},
+     "SMT-LIB solver executable and its flags, whitespace-separated (e.g. "
+     "\"z3 -in\"). Run directly, not through a shell: quotes and shell "
+     "metacharacters are not interpreted"},
     {"output",
      boost::program_options::value<std::string>()->value_name("<filename>"),
      "Output VCCs in SMT lib format to given file (or stdout if it is '-')"},
