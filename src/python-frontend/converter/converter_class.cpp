@@ -653,9 +653,34 @@ void python_converter::get_attributes_from_self(
           stmt["annotation"]["value"].contains("id") &&
           stmt["annotation"]["value"]["id"] == "Callable";
 
-        typet type = member_is_callable
-                       ? type_handler_.get_typet(std::string("Callable"))
-                       : get_type_from_annotation(stmt["annotation"], stmt);
+        typet type;
+        if (member_is_callable)
+        {
+          // Carry the signature when it is spelled: `Callable[[A, B], R]`
+          // parses as Subscript(slice=Tuple([List([A, B]), R])). A member
+          // typed `R (*)(A, B)` lets a call through it recover the return
+          // type; the bare pointer would leave the result nondet. Anything
+          // else (bare `Callable`, `Callable[..., R]`) keeps the generic
+          // function pointer.
+          code_typet fn_type;
+          fn_type.return_type() = empty_typet();
+          const auto &slice = stmt["annotation"]["slice"];
+          if (
+            slice.is_object() && slice.value("_type", "") == "Tuple" &&
+            slice.contains("elts") && slice["elts"].size() == 2 &&
+            slice["elts"][0].value("_type", "") == "List")
+          {
+            for (const auto &arg : slice["elts"][0]["elts"])
+              fn_type.arguments().push_back(
+                code_typet::argumentt(get_type_from_annotation(arg, stmt)));
+            fn_type.return_type() = get_type_from_annotation(slice["elts"][1], stmt);
+          }
+          type = fn_type.return_type().is_nil()
+                   ? type_handler_.get_typet(std::string("Callable"))
+                   : gen_pointer_type(fn_type);
+        }
+        else
+          type = get_type_from_annotation(stmt["annotation"], stmt);
         if (type.is_nil() || type.is_empty())
         {
           log_warning(
