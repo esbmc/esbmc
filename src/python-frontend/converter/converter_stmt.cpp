@@ -2580,6 +2580,19 @@ python_converter::extract_target_name(const nlohmann::json &target) const
     // Recurse through nested Subscripts (e.g. board[0][0] = x) to reach the
     // root container's Name/Attribute, which carries the symbol id.
     return extract_target_name(target["value"]);
+  else if (
+    target_type == "Call" && target.contains("func") &&
+    target["func"].is_object() &&
+    target["func"].value("_type", "") == "Attribute" &&
+    target["func"].value("attr", "") == "ravel")
+    // a.flat[i] = x: the preprocessor rewrites every .flat read, including
+    // the one implicit in this assignment's target, to np.ravel(a) — so the
+    // target here is really Subscript(value=Call(ravel(a))), which has no
+    // symbol id to extract. np.ravel(a)[i] = x written directly hits the
+    // same shape and is equally unsupported for the same reason (ravel's
+    // result is a copy, not a writable view of a).
+    throw std::runtime_error(
+      "TypeError: mutation through .flat is not supported");
 
   throw std::runtime_error(
     "Unsupported assignment target type: " + target_type.get<std::string>());
