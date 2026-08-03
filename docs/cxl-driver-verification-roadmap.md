@@ -278,7 +278,7 @@ patterns for other device driver families.
 Linux 7.1.5 CXL driver subsystem (~30 source files across 11 driver families),
 moving from synthetic primitives to real-driver-equivalent verification.
 
-**Status:** three slices are in; 12 of the 25 proposed tests are done.
+**Status:** four slices are in; 16 of the 25 proposed tests are done.
 
 The third slice adds PMEM security (tests 11-12) and ACPI CEDT/CFMWS parsing
 (tests 13-14), both transcribed from the Linux 7.1.5 source rather than
@@ -298,6 +298,29 @@ fills it from the raw field writes eight entries into three. The first
 attempt at that test passed vacuously because a 16-entry fixed array is
 larger than any raw EIW; only allocating by the decoded count makes the
 overflow reachable. Patch-and-reverified.
+
+The fourth slice closes the loop the project has been missing: tests 15 and 25
+are the synthetic counterparts of harnesses that already exist in
+`regression/cxl-linux/`. `cdat_checksum()` is transcribed from
+`drivers/cxl/core/pci.c`, and `cxl_cdat_02` models the same out-of-bounds read
+that `harness_cdat_checksum_fail` finds at `pci.c:554` — so for the first time
+the same property is checked on both sides, once against the model and once
+against the real source.
+
+`cxl_cdat_02` is worth reading for the bug itself. `read_cdat_data()` sizes its
+buffer for the length it asked for, saves that as `table_length`, then passes
+`&length` to `cxl_cdat_read_table()`, which may write back a different one. The
+driver warns when they differ — "discarding trailing data" — and then checksums
+`length` bytes anyway. The warning only describes `length < table_length`;
+nothing rules out the other direction.
+
+Test 15 was retargeted from "latency/bandwidth parsing" to the checksum and
+entry-length bound, which is what the real code actually defends. Test 25 was
+narrowed to DVSEC *enumeration* — the two-bit HDM_COUNT field, the range
+register offsets, and the MEM_INFO_VALID gate — because the range-count bound
+it originally described is already covered by `cxl_pci_config_01/02`.
+
+Both failing tests were patch-and-reverified.
 
 **Status:** the first slice is in. `cxl_memdev_*` and `cxl_region_*` (tests 1-4
 below) are implemented and passing, along with the five operational-model
@@ -377,7 +400,8 @@ exist. The family table lists "pmu" under CXL Core while test 21 targets
 | 12 | `cxl_pmem_sec_02` | `pmem.c` + `security.c` | Unlock result dropped | FAIL — **done**, retargeted |
 | 13 | `cxl_acpi_cedt_01` | `acpi.c` | CEDT CFMWS window parsing | PASS — **done** |
 | 14 | `cxl_acpi_cedt_02` | `acpi.c` | EIW encoding read as a way count | FAIL — **done**, retargeted |
-| 15 | `cxl_cdat_01` | `core/cdat.c` | CDAT latency/bandwidth parsing | PASS |
+| 15 | `cxl_cdat_01` | `core/pci.c` + `core/cdat.c` | CDAT checksum bound + entry length validation | PASS — **done**, retargeted |
+| 15b | `cxl_cdat_02` | `core/pci.c` | Checksum over the device-reported length | FAIL — **done**, not in the original plan |
 | 16 | `cxl_edac_01` | `core/edac.c` | Patrol scrub enable/disable | PASS |
 | 17 | `cxl_features_01` | `core/features.c` | Feature capability query | PASS |
 | 18 | `cxl_ras_01` | `core/ras.c` | CPER error record processing | PASS |
@@ -387,7 +411,8 @@ exist. The family table lists "pmu" under CXL Core while test 21 targets
 | 22 | `cxl_dax_01` | `dax/cxl.c` | DAX region device registration | PASS |
 | 23 | `cxl_dax_02` | `dax/cxl.c` | DAX on non-DAX region type | FAIL |
 | 24 | `cxl_einj_01` | `acpi/apei/einj-cxl.c` | EINJ error injection to CXL port | PASS |
-| 25 | `cxl_dvsec_01` | `core/pci.c` | PCIe DVSEC register enumeration | PASS |
+| 25 | `cxl_dvsec_01` | `core/pci.c` | DVSEC HDM count decode + range offsets | PASS — **done** |
+| 25b | `cxl_dvsec_02` | `core/pci.c` | Range read before MEM_INFO_VALID | FAIL — **done**, not in the original plan |
 
 **New operational model functions (~18):**
 
@@ -404,7 +429,7 @@ exist. The family table lists "pmu" under CXL Core while test 21 targets
 | `cxl_dport_add()`, `cxl_dport_find()`, `cxl_dport_remove()`, `cxl_dport_count()` | Port downstream traversal — **done**; `_walk()` was replaced by find/count |
 | `cxl_pmem_security_flags()`, `cxl_pmem_set_passphrase()`, `cxl_pmem_unlock()`, `cxl_pmem_freeze()` | LIBNVDIMM passphrase bridge — **done**; `_flags()` and `_freeze()` were not in the original plan |
 | `acpi_cedt_parse_cfmws()`, `eiw_to_ways()` | CFMWS window parsing — **done**; `eiw_to_ways()` was not in the original plan |
-| `cdat_parse_entry()` | CDAT latency/bandwidth parsing |
+| `cdat_checksum()`, `cdat_entry_validate()` | CDAT checksum and entry validation — **done**; replaces the planned `cdat_parse_entry()` |
 | `cxl_edac_set_patrol_scrub()` | EDAC patrol scrub control |
 | `cxl_feature_query()` | Feature capability table lookup |
 | `cper_process_cxl()` | CXL CPER error record |
@@ -412,7 +437,7 @@ exist. The family table lists "pmu" under CXL Core while test 21 targets
 | `cxl_pmu_config_counter()` | PMU hardware config |
 | `cxl_dax_region_register()` | DAX device registration |
 | `einj_inject_cxl_error()` | ACPI EINJ error injection |
-| `pci_cxl_dvsec_enum()` | DVSEC discovery |
+| `cxl_dvsec_hdm_count()`, `cxl_dvsec_mem_range_valid()` | DVSEC discovery — **done**; replaces the planned `pci_cxl_dvsec_enum()` |
 
 **Projection after Phase 7:**
 
@@ -869,10 +894,10 @@ currently poor:
 | Question | Today | Was |
 |---|---|---|
 | Real Linux driver functions verified | 4 | 4 |
-| Operational model functions exercised | 113 of 113 (100%) | 22 of 105 (21%) |
-| Tests that execute the operational model | 43 of 67 | 15 of 39 |
-| Tests declaring the properties they check | 67 of 67 | 1 of 35 |
-| Tests that verify an interleaving | 5 of 67 | 0 of 35 |
+| Operational model functions exercised | 117 of 117 (100%) | 22 of 105 (21%) |
+| Tests that execute the operational model | 47 of 71 | 15 of 39 |
+| Tests declaring the properties they check | 71 of 71 | 1 of 35 |
+| Tests that verify an interleaving | 5 of 71 | 0 of 35 |
 
 Phase 8.1 and 8.4 moved the last two; 8.2 made the second measurable for the
 first time. Raising it from 21% to 100% is what found the model defects listed
@@ -901,15 +926,15 @@ Phase 8.2 raises model coverage, the suite becomes worth re-enabling.
 | Metric | Count |
 |--------|-------|
 | Total commits | 38 |
-| Total regression tests | 67 |
-| Passing tests | 38 |
-| Bug-detecting tests | 29 |
+| Total regression tests | 71 |
+| Passing tests | 40 |
+| Bug-detecting tests | 31 |
 | Kernel headers added | 6 |
-| Operational model lines | 1829 |
+| Operational model lines | 1903 |
 | Documentation pages | 3 |
 | AER functions added | 4 |
 | Error injection functions added | 2 |
 | HDM constraints added | 2 (alignment + decoder limit) |
 | Real Linux driver files converted to GOTO | 1 |
 | Real Linux driver functions verified | 4 |
-| Model functions exercised by tests | 113 of 113 (100%) |
+| Model functions exercised by tests | 117 of 117 (100%) |

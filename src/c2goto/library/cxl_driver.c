@@ -1827,3 +1827,77 @@ __ESBMC_HIDE:;
 
   return 0;
 }
+
+/* ============================================================
+ *  CDAT models
+ * ============================================================
+ *
+ * cdat_checksum() is the algorithm from drivers/cxl/core/pci.c;
+ * cdat_entry_validate() is the guard shared by every handler in
+ * drivers/cxl/core/cdat.c.  Both are transcriptions -- the point of these
+ * is that regression/cxl-linux verifies the same properties against the
+ * real source, so the two halves can be compared.
+ * ============================================================ */
+
+unsigned char cdat_checksum(const void *buf, size_t size)
+{
+__ESBMC_HIDE:;
+  assert(buf != NULL);
+  const unsigned char *data = (const unsigned char *)buf;
+  unsigned char sum = 0;
+  for (size_t i = 0; i < size; i++)
+    sum += data[i];
+  return sum;
+}
+
+int cdat_entry_validate(
+  const struct acpi_cdat_header *hdr,
+  size_t expected_size,
+  const void *end)
+{
+__ESBMC_HIDE:;
+  assert(hdr != NULL);
+  assert(end != NULL);
+
+  /* An entry must be exactly the size its type dictates, and must lie wholly
+   * inside the table -- the second half is what stops a truncated table from
+   * being walked off the end. */
+  if (hdr->length != expected_size)
+    return -EINVAL;
+  if ((const char *)hdr + hdr->length > (const char *)end)
+    return -EINVAL;
+  return 0;
+}
+
+/* ============================================================
+ *  PCIe DVSEC for CXL Device models
+ * ============================================================
+ *
+ * Mirrors cxl_dvsec_mem_range_valid() in drivers/cxl/core/pci.c against the
+ * register layout in include/uapi/linux/pci_regs.h.
+ * ============================================================ */
+
+unsigned int cxl_dvsec_hdm_count(u32 cap)
+{
+__ESBMC_HIDE:;
+  return (cap & PCI_DVSEC_CXL_HDM_COUNT_MASK) >> PCI_DVSEC_CXL_HDM_COUNT_SHIFT;
+}
+
+int cxl_dvsec_mem_range_valid(struct pci_dev *pdev, int dvsec, int id)
+{
+__ESBMC_HIDE:;
+  assert(pdev != NULL);
+
+  /* The driver's own bound, transcribed as-is.  Note it admits id ==
+   * CXL_DVSEC_RANGE_MAX: that is safe here because id only picks a config
+   * offset, but a caller reusing it as an array index would be off by one. */
+  if (id > CXL_DVSEC_RANGE_MAX)
+    return -EINVAL;
+
+  u32 temp;
+  if (pci_read_config_dword(
+        pdev, dvsec + PCI_DVSEC_CXL_RANGE_SIZE_LOW(id), &temp))
+    return -EINVAL;
+
+  return (temp & PCI_DVSEC_CXL_MEM_INFO_VALID) ? 1 : 0;
+}
