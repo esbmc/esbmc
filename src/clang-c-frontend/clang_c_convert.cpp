@@ -14,6 +14,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <llvm/Support/raw_os_ostream.h>
+#include <clang-c-frontend/clang_ast_dump.h>
 CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
@@ -294,6 +295,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
 
     ross << "unrecognized / unimplemented clang declaration "
          << decl.getDeclKindName() << "\n";
@@ -1448,6 +1450,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang type: \"";
     ross << the_type.getTypeClassName() << "\n";
     the_type.dump(ross, *ASTContext);
@@ -1877,6 +1880,7 @@ bool clang_c_convertert::get_builtin_type(
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
 
     ross << "Unrecognized clang builtin type "
          << bt.getName(clang::PrintingPolicy(clang::LangOptions())).str()
@@ -1920,6 +1924,7 @@ bool clang_c_convertert::get_bitfield_type(
     log_error("Clang could not calculate bitfield width");
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     fd.getBitWidth()->dump(ross, *ASTContext);
     ross.flush();
     log_error("{}", oss.str());
@@ -3380,6 +3385,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       log_error("ESBMC currently does not support indirect gotos");
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
+      enable_ast_dump_colors(ross, *ASTContext);
       stmt.dump(ross, *ASTContext);
       ross.flush();
       log_error("{}", oss.str());
@@ -3417,6 +3423,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
+      enable_ast_dump_colors(ross, *ASTContext);
       ross << "ESBMC could not find the parent scope for "
            << "the following return statement:"
            << "\n";
@@ -3507,6 +3514,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
+      enable_ast_dump_colors(ross, *ASTContext);
       ross << "Conversion of unsupported value-dependent type-trait expr: \"";
       ross << stmt.getStmtClassName() << "\" to expression"
            << "\n";
@@ -3671,6 +3679,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang expr: \"";
     ross << stmt.getStmtClassName() << "\" to expression"
          << "\n";
@@ -3750,6 +3759,7 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 
   std::ostringstream oss;
   llvm::raw_os_ostream ross(oss);
+  enable_ast_dump_colors(ross, *ASTContext);
   ross << "Conversion of unsupported clang decl ref: \"";
   ross << d.getDeclKindName() << "\" to expression"
        << "\n";
@@ -4017,6 +4027,7 @@ bool clang_c_convertert::get_cast_expr(
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang cast operator: \"";
     ross << cast.getCastKindName() << "\" to expression"
          << "\n";
@@ -4101,6 +4112,7 @@ bool clang_c_convertert::get_unary_operator_expr(
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang unary operator: \"";
     ross << clang::UnaryOperator::getOpcodeStr(uniop.getOpcode()).str()
          << "\" to expression"
@@ -4305,6 +4317,7 @@ bool clang_c_convertert::get_compound_assign_expr(
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang binary operator: \"";
     ross << compop.getOpcodeStr().str() << "\" to expression"
          << "\n";
@@ -4327,7 +4340,18 @@ bool clang_c_convertert::get_compound_assign_expr(
     return true;
 
   if (!lhs.type().is_pointer())
-    gen_typecast(ns, rhs, lhs.type());
+  {
+    // C11 6.5.16.2p3: `E1 op= E2` is equivalent to `E1 = E1 op (E2)`, so the
+    // operation runs in the type the usual arithmetic conversions produce, not
+    // in E1's. Narrowing E2 to E1's type makes the overflow claim on a narrow
+    // E1 unfalsifiable, and can turn a valid divisor into zero (#6589).
+    typet computation_type;
+    if (get_type(compop.getComputationResultType(), computation_type))
+      return true;
+
+    gen_typecast(ns, rhs, computation_type);
+    new_expr.add("computation_type") = computation_type;
+  }
 
   new_expr.copy_to_operands(lhs, rhs);
   return false;
@@ -4478,6 +4502,7 @@ bool clang_c_convertert::get_atomic_expr(
     log_error("Unknown Atomic expression");
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     atm.dump(ross, *ASTContext);
     ross.flush();
     log_error("{}", oss.str());
@@ -4750,6 +4775,7 @@ void clang_c_convertert::get_decl_name(
     {
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
+      enable_ast_dump_colors(ross, *ASTContext);
       nd.dump(ross);
       ross.flush();
       log_error("Declaration has an empty name:\n{}", oss.str());
@@ -4767,6 +4793,7 @@ void clang_c_convertert::get_decl_name(
   // Otherwise, abort
   std::ostringstream oss;
   llvm::raw_os_ostream ross(oss);
+  enable_ast_dump_colors(ross, *ASTContext);
   ross << "Unable to generate the USR for:\n";
   nd.dump(ross);
   ross.flush();
@@ -5181,6 +5208,7 @@ bool clang_c_convertert::get_APValue_expr(
     log_error("Unsupported APValue expression");
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     value.dump(ross, *ASTContext);
     ross.flush();
     log_error("{}", oss.str());

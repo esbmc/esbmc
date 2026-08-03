@@ -929,7 +929,7 @@ std::string get_formated_assignment(
 
 bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
 {
-  languagest languages(ns, language_idt::C);
+  languagest languages(ns, configured_language());
   std::string lhsexpr;
   languages.from_expr(
     migrate_expr_back(step.lhs), lhsexpr, presentationt::WITNESS);
@@ -944,7 +944,7 @@ bool is_valid_witness_expr(
   const namespacet &ns,
   const irep_container<expr2t> &exp)
 {
-  languagest languages(ns, language_idt::C);
+  languagest languages(ns, configured_language());
   std::string value;
   languages.from_expr(migrate_expr_back(exp), value, presentationt::WITNESS);
   return (value.find("__ESBMC") & value.find("stdin") & value.find("stdout") &

@@ -762,4 +762,59 @@ bool has_overload_decorator(const JsonType &func_node)
   return false;
 }
 
+/// The declared return-type name of a function `name` defined in a module this
+/// AST imports, or "" if there is none. Some operational models implement what
+/// Python calls a class as a function (collections.deque -> list[int]), and
+/// such a name is still legal in an annotation; resolving it to the return type
+/// is what makes `d: collections.deque` usable (#6639). Only imported modules
+/// are scanned, so a user function never shadows a type name this way.
+template <typename JsonType>
+std::string
+imported_function_return_type(const std::string &name, const JsonType &ast_json)
+{
+  if (!ast_json.contains("ast_output_dir") || !ast_json.contains("body"))
+    return "";
+
+  const std::string output_dir =
+    ast_json["ast_output_dir"].template get<std::string>();
+
+  auto lookup = [&](const std::string &module_name) -> std::string {
+    std::ifstream f(output_dir + "/" + dotted_to_path(module_name) + ".json");
+    if (!f.is_open())
+      return "";
+    JsonType module_json;
+    f >> module_json;
+    if (!module_json.contains("body"))
+      return "";
+    JsonType fn = try_find_function(module_json["body"], name);
+    if (fn.empty() || !fn.contains("returns") || fn["returns"].is_null())
+      return "";
+    return get_annotation_type_name(fn["returns"]);
+  };
+
+  for (const auto &obj : ast_json["body"])
+  {
+    if (obj["_type"] == "ImportFrom")
+    {
+      if (obj["module"].is_null())
+        continue;
+      const std::string r = lookup(obj["module"].template get<std::string>());
+      if (!r.empty())
+        return r;
+    }
+    else if (obj["_type"] == "Import")
+    {
+      for (const auto &imported : obj["names"])
+      {
+        const std::string r =
+          lookup(imported["name"].template get<std::string>());
+        if (!r.empty())
+          return r;
+      }
+    }
+  }
+
+  return "";
+}
+
 } // namespace json_utils

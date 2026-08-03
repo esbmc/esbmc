@@ -150,7 +150,9 @@ smt_astt array_convt::mk_select(
   {
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned int intval = intref.value.to_uint64();
-    if (intval > ma->array_fields.size())
+    /* array_fields is indexed 0..size()-1, so an index equal to size() is
+     * already out of range; `>` let it through to an out-of-bounds read. */
+    if (intval >= ma->array_fields.size())
       // Return a fresh value.
       return ctx->mk_fresh(ressort, "array_mk_select_badidx::");
 
@@ -195,7 +197,8 @@ smt_astt array_convt::mk_store(
   {
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned int intval = intref.value.to_uint64();
-    if (intval > ma->array_fields.size())
+    // Same off-by-one as mk_select, except the access below is a write.
+    if (intval >= ma->array_fields.size())
       return ma;
 
     // Otherwise,
@@ -256,7 +259,16 @@ smt_astt array_convt::mk_unbounded_select(
   {
     if (it->idx == real_idx)
     {
-      // Aha.
+      // Aha -- unless this is still the placeholder inserted below, meaning a
+      // re-entrant select: convert_ast() on the index has led back here before
+      // apply_new_selects() could fill the value in. That entry is what breaks
+      // the cycle, so we must not recurse to compute it. Hand out a free value
+      // and let apply_new_selects() bind it by equality, which it already does
+      // for an entry that arrives pre-filled. Returning the placeholder as-is
+      // handed NULL to callers that use the result immediately, such as
+      // finalize_pointer_chain() (esbmc/esbmc#595).
+      if (it->val == nullptr)
+        it->val = ctx->mk_fresh(ressort, "array_deferred_select::");
       return it->val;
     }
   }

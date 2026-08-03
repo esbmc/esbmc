@@ -34,7 +34,6 @@ reachability_treet::reachability_treet(
   schedule = options.get_bool_option("schedule");
   smt_during_symex = options.get_bool_option("smt-during-symex");
   por = !options.get_bool_option("no-por");
-  main_thread_ended = false;
   cs_bound_pruned = false;
   target_template = std::move(target);
 
@@ -464,6 +463,8 @@ void reachability_treet::create_next_state()
 
   if (next_thread_id != ex_state.threads_state.size())
   {
+    get_cur_scheduler_frame().mark_explored(next_thread_id);
+
     auto new_state = ex_state.clone();
     exploration_frames.push_back({new_state, scheduler_framet{}});
 
@@ -683,10 +684,13 @@ void reachability_treet::mark_active_thread_explored()
   get_cur_scheduler_frame().mark_explored(get_cur_state().active_thread);
 }
 
+// Pure: whether tid is still an unexplored, runnable switch target on this
+// frame. Marking it explored is create_next_state's job, once the switch is
+// actually taken -- deciding is not the same as going, and get_next_formula
+// can bail between the two (#4482).
 bool reachability_treet::dfs_explore_thread(unsigned int tid)
 {
-  scheduler_framet &frame = get_cur_scheduler_frame();
-  if (frame.is_explored(tid))
+  if (get_cur_scheduler_frame().is_explored(tid))
     return false;
 
   if (get_cur_state().threads_state.at(tid).call_stack.empty())
@@ -695,7 +699,6 @@ bool reachability_treet::dfs_explore_thread(unsigned int tid)
   if (get_cur_state().threads_state.at(tid).thread_ended)
     return false;
 
-  frame.mark_explored(tid);
   return true;
 }
 

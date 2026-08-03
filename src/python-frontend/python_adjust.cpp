@@ -7,6 +7,7 @@
 #include <util/message/message.h>
 #include <util/irep/migrate.h>
 #include <util/base/prefix.h>
+#include <util/irep/pad_names.h>
 #include <vector>
 
 python_adjust::python_adjust(contextt &_context)
@@ -157,17 +158,6 @@ bool is_resolved_aggregate(const type2tc &t)
          is_vector_type(t);
 }
 
-// The four reserved pad-member names add_padding assigns (padding.cpp). The
-// exact-prefix match matters: `$` cannot appear in a Python identifier, but
-// OM struct tags originate from C/C++ headers where Clang accepts `$` as an
-// extension — a substring test could misfire on a legitimate member.
-bool is_padding_member_name(const std::string &name)
-{
-  return has_prefix(name, "anon_pad$") ||
-         has_prefix(name, "anon_bit_field_pad$") ||
-         has_prefix(name, "ext_int_pad$") || name == "$pad";
-}
-
 // Re-flag every pad member in the whole legacy type tree. add_padding recurses
 // into component types (padding.cpp:71), so a nested aggregate that is already
 // padded is re-padded unless *its* pad members carry #is_padding too — flagging
@@ -185,7 +175,7 @@ void restore_padding_flags(typet &type)
 
   for (auto &comp : to_struct_union_type(type).components())
   {
-    if (is_padding_member_name(comp.get_name().as_string()))
+    if (is_padding_name(comp.get_name().as_string()))
       comp.set_is_padding(true);
     restore_padding_flags(comp.type());
   }
@@ -237,8 +227,7 @@ std::vector<expr2tc>
 pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops)
 {
   for (size_t i = 0; i < st.members.size(); i++)
-    if (
-      i <= ops.size() && is_padding_member_name(st.member_names[i].as_string()))
+    if (i <= ops.size() && is_padding_name(st.member_names[i].as_string()))
       ops.insert(ops.begin() + i, gen_zero(st.members[i]));
   return ops;
 }
@@ -743,7 +732,7 @@ void python_adjust::adjust_expr(expr2tc &expr)
   {
     // A literal already retyped to a resolved struct but left with fewer
     // operands than components — the converter built an Optional/union literal
-    // (e.g. `int | None`: `{ is_none, anon_pad$, value }`) without its padding
+    // (e.g. `int | None`: `{ is_none, anon_pad#, value }`) without its padding
     // operand, and no legacy adjust_struct ran to insert it. Pad it the same
     // way as the by-name S2 arm above; the type is already resolved so no
     // follow is needed. A residual mismatch is left for the exit invariant.

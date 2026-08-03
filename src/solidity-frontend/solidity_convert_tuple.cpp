@@ -446,7 +446,7 @@ bool solidity_convertert::construct_tuple_assigments(
   {
     std::string cname = comp.get_name().as_string();
     rhs_by_name[cname] = comp;
-    // Skip padding components (anon_pad$N)
+    // Skip padding components (anon_pad#N)
     if (cname.find("anon_pad") == std::string::npos)
       rhs_by_pos.push_back(comp);
   }

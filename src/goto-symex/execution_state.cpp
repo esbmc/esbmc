@@ -290,10 +290,7 @@ void execution_statet::symex_step(reachability_treet &art)
   {
   case END_FUNCTION:
     if (instruction.function == "__ESBMC_main")
-    {
       end_thread();
-      art1->main_thread_ended = true;
-    }
     else if (
       (instruction.function == "c:@F@main" ||
        instruction.function == "c:@F@main#") &&
@@ -504,10 +501,16 @@ bool execution_statet::check_if_ileaves_blocked()
     // and to what thread.
     return true;
 
+  // Don't generate further interleavings since the __ESBMC_main thread has
+  // ended. Whether it has is a property of *this* state, not of the search:
+  // the reachability tree's own flag is set once and never cleared on
+  // backtracking, so a single branch running main to completion used to
+  // disable interleaving for every branch explored afterwards -- which is
+  // where the racy schedules live (#4584).
   if (
-    art1->main_thread_ended && !options.get_bool_option("deadlock-check") &&
+    !threads_state.empty() && threads_state[0].thread_ended &&
+    !options.get_bool_option("deadlock-check") &&
     !options.get_bool_option("data-races-check"))
-    // Don't generate further interleavings since __ESBMC_main thread has ended.
     return true;
 
   // The monitor never counts: it is stepped by directed switches, so it does
@@ -1219,7 +1222,11 @@ void execution_statet::calculate_mpor_constraints()
     if (j == active_thread)
       continue;
 
-    if (dependency_chain[j][active_thread] == 0)
+    // MPOR's rule is DCjj(k) == 0 -- "Tj has not run" -- not DCji(k) == 0. The
+    // two differ for a thread created after Tj last ran: its column is padded
+    // with 0, so testing it would skip the dependency below and drop the chain
+    // onto the new thread's first transition (A6.4).
+    if (dependency_chain[j][j] == 0)
     {
       // This thread hasn't been run; continue not having been run.
       new_dep_chain[j][active_thread] = 0;

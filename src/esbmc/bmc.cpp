@@ -410,7 +410,7 @@ void bmct::show_program(const symex_target_equationt &eq)
   if (config.options.get_bool_option("ssa-symbol-table"))
     ::show_symbol_table_plain(ns, oss);
 
-  languagest languages(ns, language_idt::C);
+  languagest languages(ns, configured_language());
 
   oss << "\nProgram constraints: \n";
 
@@ -625,6 +625,12 @@ void bmct::report_multi_property_trace(
   oss << (reachability_trace ? "\n[Reachability traces - "
                              : "\n[Counterexamples - ")
       << witnesses.size() << " witnesses]\n\n";
+  // Say up front that this is a truncated enumeration. The same fact reaches
+  // the Summary footer below, but that sits after every witness block -- tens
+  // of kilobytes on a real program -- so a reader can easily act on a partial
+  // list without realising it (#4311).
+  if (stop_reason == enumeration_stop_reasont::CapHit)
+    oss << "  NOTE: --max-witnesses cap reached; more witnesses may exist.\n\n";
   for (size_t i = 0; i < witnesses.size(); ++i)
   {
     const witness_recordt &w = witnesses[i];

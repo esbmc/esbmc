@@ -427,6 +427,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Disable the removal of NO-OP instructions in GOTO programs"},
     {"partial-loops", NULL, "Permit paths with partial loops"},
+    {"closed-world-fnptr",
+     NULL,
+     "Treat a function-pointer call with no compatible target as unreachable "
+     "rather than assuming an external definition may supply one"},
     {"no-slice", NULL, "Do not remove unused equations"},
     {"multi-fail-fast",
      boost::program_options::value<int>()->value_name("n"),
@@ -693,6 +697,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"restrict-check",
      NULL,
      "Check C restrict-qualified pointer parameters do not alias"},
+    {"restrict-assume",
+     NULL,
+     "Assume the entry function's C restrict-qualified pointer parameters do "
+     "not alias"},
     {"unsigned-overflow-check",
      NULL,
      "Enable arithmetic over- and underflow check for unsigned integers"},

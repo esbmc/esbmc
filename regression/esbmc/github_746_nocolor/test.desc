@@ -1,0 +1,5 @@
+CORE
+main.c
+--color never
+^.*CONVERSION ERROR$
+\A(?!(?s:.)*\x1b\[0;1;35m)
