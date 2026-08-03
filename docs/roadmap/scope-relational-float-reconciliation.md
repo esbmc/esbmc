@@ -3,8 +3,9 @@
 > **Status: Phase 0 run 2026-08-03 — §4 confirmed for three of the four
 > witnesses, refuted for `sum_tuple`, which needs re-homing (§11); the
 > traffic-volume half is partially answered and lowers the gap-2 prior (§12);
-> **Phase 1 attempted twice and refuted — the failing equality does not pass
-> through this dispatch at all (§13).**
+> **Phase 1 attempted twice and refuted; the failing equality provably never
+> reaches this dispatch (§13-§14), so this scope's premise is wrong and it
+> should be re-scoped at the symex/SMT layer.**
 > This is the owner document for the mechanism
 > `docs/roadmap/scope-coupled-arith-assign-conversion.md` §9.4 named the
 > "second mechanism" and §7 explicitly disowned:
@@ -330,3 +331,59 @@ is the measurement this phase actually needs, and it is cheap.
 2. Locate where the mismatched equality is *built* — converter, a list/dict
    model, or a post-adjust pass — rather than assuming the adjuster can see it.
 3. Only then choose the layer, as §5 requires.
+
+## 14. §13.2 measured, and the scope's premise is wrong (2026-08-03)
+
+§13.4 asked for the width measurement over the witnesses before any further
+attempt. It was run, and it settles the question against this scope.
+
+### 14.1 The measurement
+
+The comparison dispatch was instrumented to log any node whose two operands
+have different bit widths, and each witness run under
+`--python-irep2-adjust-only --goto-functions-only` with its own flags:
+
+| witness | width-mismatched comparisons reaching `adjust_expr` |
+|---|---|
+| `lambda15` | **0** |
+| `chained-comparison2_fail` | **0** |
+| `precedence2` | **0** |
+| `sum_tuple` | **0** |
+
+Not one, in any of them — while the same dispatch sees ~1 300 comparison nodes
+per run, so the walk is reaching the traffic. §13.2's inference is now a
+measurement.
+
+### 14.2 What that means for this scope
+
+**The equality that aborts `mk_eq` is not something `python_adjust` can fix.**
+It is not in the comparison traffic the adjuster walks, so no admission rule at
+that dispatch — narrow, wide, or unconditional — can reconcile it. §5's
+premise ("the fix is a narrowed widening of the relational asymmetry") is
+refuted for the shape that actually aborts.
+
+The abort surfaces during *"Encoding remaining VCC(s)"*, i.e. after symex, which
+leaves two candidates:
+
+1. the node is in the GOTO but outside what `adjust_expr` walks, or
+2. it is synthesised during symex — renaming, dereferencing or a container
+   model's index arithmetic.
+
+The census used `--goto-functions-only` and so cannot distinguish them: it stops
+before symex runs. That is the next probe, and it belongs at the symex/SMT
+boundary, not in the frontend.
+
+### 14.3 Status of the four witnesses
+
+| witness | standing |
+|---|---|
+| `sum_tuple` | refuted in §11 — no heterogeneous comparison at all |
+| `lambda15` | aborts in `mk_eq`; **not reachable from this dispatch** |
+| `chained-comparison2_fail`, `precedence2` | do contain float/int comparisons this dispatch sees (§11), but whether reconciling them clears the tests is **untested** — both attempts aborted first on `lambda15`'s shape |
+
+**This scope should not proceed to Phase 1 as written.** The honest next step is
+to re-triage the group at the symex/SMT layer and decide whether it is one
+mechanism or two: an adjuster-visible float/int gap for two witnesses, and a
+downstream width gap for `lambda15`. Re-scoping is cheaper than another
+widening attempt, and §5's option table should be redrawn once the layer is
+known.
