@@ -10,40 +10,7 @@ static std::string prog_command(const optionst &options)
   return cmd.empty() ? "mallob -mono=%f -mono-app=SMT" : cmd;
 }
 
-smt_solver_baset *create_new_bitwuzllob_solver(
-  const optionst &options,
-  const namespacet &ns,
-  tuple_iface **tuple_api [[maybe_unused]],
-  array_iface **array_api,
-  fp_convt **fp_api)
-{
-  /* Mallob's mono mode processes a single task and terminates; strategies
-   * that solve repeatedly or incrementally cannot be served by it. */
-  static const char *incompatible[] = {
-    "incremental-bmc",
-    "falsification",
-    "k-induction",
-    "k-induction-parallel",
-    "termination",
-    "smt-during-symex",
-    "multi-property",
-    "parallel-solving"};
-  for (const char *opt : incompatible)
-    if (options.get_bool_option(opt))
-    {
-      log_error(
-        "the bitwuzllob backend runs Mallob in one-shot mono mode and does "
-        "not support --{}; use a linked solver (e.g. --bitwuzla) for "
-        "incremental strategies",
-        opt);
-      abort();
-    }
-
-  bitwuzllob_convt *conv = new bitwuzllob_convt(ns, options);
-  *array_api = static_cast<array_iface *>(conv);
-  *fp_api = static_cast<fp_convt *>(conv);
-  return conv;
-}
+/* create_new_bitwuzllob_solver now lives in src/solvers/camada. */
 
 bitwuzllob_convt::bitwuzllob_convt(
   const namespacet &ns,

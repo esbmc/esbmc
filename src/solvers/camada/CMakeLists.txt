@@ -294,7 +294,7 @@ endforeach()
 # Build the ESBMC solvercamada bridge library and register it.
 #-----------------------------------------------------------------------------#
 
-add_library(solvercamada camada_conv.cpp)
+add_library(solvercamada camada_conv.cpp oneshot_options.cpp)
 
 # Camada and its dependencies (cvc5, etc.) are consumed via IMPORTED targets,
 # whose include directories CMake propagates as SYSTEM by default. That
@@ -317,7 +317,7 @@ endif()
 # them here keeps the archive self-contained regardless of the order the
 # `solvers` interface lib hands its members to the linker.
 target_link_libraries(solvercamada
-  PUBLIC fmt::fmt camada::camada smtfp smttuple prop)
+  PUBLIC fmt::fmt camada::camada smtfp smttuple prop filesystem)
 target_link_libraries(solvers INTERFACE solvercamada)
 
 # Advertise each enabled solver to the rest of ESBMC.

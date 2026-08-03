@@ -10,40 +10,7 @@ static std::string prog_command(const optionst &options)
   return cmd.empty() ? "python main.py %f" : cmd;
 }
 
-smt_solver_baset *create_new_neurosym_solver(
-  const optionst &options,
-  const namespacet &ns,
-  tuple_iface **tuple_api [[maybe_unused]],
-  array_iface **array_api [[maybe_unused]],
-  fp_convt **fp_api [[maybe_unused]])
-{
-  /* NeuroSym solves a single formula per invocation; strategies that solve
-   * repeatedly or incrementally cannot be served by it. */
-  static const char *incompatible[] = {
-    "incremental-bmc",
-    "falsification",
-    "k-induction",
-    "k-induction-parallel",
-    "termination",
-    "smt-during-symex",
-    "multi-property",
-    "parallel-solving"};
-  for (const char *opt : incompatible)
-    if (options.get_bool_option(opt))
-    {
-      log_error(
-        "the neurosym backend runs NeuroSym in one-shot batch mode and does "
-        "not support --{}; use a linked solver (e.g. --bitwuzla) for "
-        "incremental strategies",
-        opt);
-      abort();
-    }
-
-  /* NeuroSym is QF_BV-only: leaving the tuple/array/fp interfaces unset makes
-   * create_solver() install the flatteners that lower structs, arrays and
-   * floating-point to pure bit-vectors before they reach the serializer. */
-  return new neurosym_convt(ns, options);
-}
+/* create_new_neurosym_solver now lives in src/solvers/camada. */
 
 neurosym_convt::neurosym_convt(const namespacet &ns, const optionst &options)
   : neurosym_convt(

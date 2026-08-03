@@ -2,6 +2,8 @@
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple.h>
+#include <solvers/camada/oneshot_options.h>
+#include <util/base/filesystem.h>
 
 #include <util/arith/ieee_float.h>
 #include <util/arith/mp_arith.h>
@@ -39,7 +41,9 @@ enum class camada_backendt
   mathsat,
   yices,
   bitwuzla,
-  smtlib
+  smtlib,
+  bitwuzllob,
+  neurosym
 };
 
 bool backend_supports_tuples(camada_backendt backend)
@@ -54,6 +58,10 @@ bool backend_supports_tuples(camada_backendt backend)
   case camada_backendt::mathsat:
   case camada_backendt::yices:
   case camada_backendt::bitwuzla:
+  /* Mallob is handed a QF_AUFBV script; ESBMC's flattener lowers tuples. */
+  case camada_backendt::bitwuzllob:
+  /* NeuroSym parses pure QF_BV only, so everything is flattened. */
+  case camada_backendt::neurosym:
     return false;
   }
 
@@ -316,6 +324,76 @@ camada::SMTSolverRef create_esbmc_smtlib_solver(const optionst &options)
     logic);
 }
 
+/* Re-scan a one-shot run's captured output with camada's own strict scanner
+ * (last verdict wins, as in the live scan) so a solver that decided nothing
+ * can be told apart from one that emitted no verdict at all. Substring
+ * matching would misread a log line mentioning "unsat core". */
+std::optional<camada::checkResult> tail_verdict(const std::string &tail)
+{
+  std::optional<camada::checkResult> found;
+  size_t pos = 0;
+  while (pos <= tail.size())
+  {
+    const size_t nl = tail.find('\n', pos);
+    const size_t end = nl == std::string::npos ? tail.size() : nl;
+    if (auto v = camada::parseOneShotVerdictLine(tail.substr(pos, end - pos)))
+      found = v;
+    if (nl == std::string::npos)
+      break;
+    pos = nl + 1;
+  }
+  return found;
+}
+
+/* Shared construction for the one-shot subprocess backends: the script goes
+ * to formula_path, an external program is run on it once (%f -> the path),
+ * and an optional local interactive solver is fed the same script in parallel
+ * to serve get-value queries after a sat verdict. */
+camada::SMTSolverRef create_esbmc_oneshot_solver(
+  const optionst &options,
+  const char *name,
+  const std::string &formula_path,
+  const std::string &prog,
+  const std::string &logic)
+{
+  /* --smt-formula-only dumps the script and returns before dec_solve() (see
+   * bmc.cpp), so no external solver ever runs. Build a write-only solver:
+   * its check() emits the trailing (check-sat) and answers UNKNOWN without
+   * spawning anything, which is exactly what the dump path needs. Camada's
+   * one-shot check() fuses emitting and running, so asking for one-shot mode
+   * here would launch the solver from the dump. */
+  if (options.get_bool_option("smt-formula-only"))
+    return std::make_unique<camada::SMTLIBSolver>(
+      formula_path, camada::TupleEncoding::Native, logic);
+
+  std::vector<std::string> model_argv;
+  const std::string model = oneshot_options::model_prog(options, name);
+  for (size_t i = 0; i < model.size();)
+  {
+    size_t b = model.find_first_not_of(" \t", i);
+    if (b == std::string::npos)
+      break;
+    size_t e = model.find_first_of(" \t", b);
+    if (e == std::string::npos)
+      e = model.size();
+    model_argv.emplace_back(model, b, e - b);
+    i = e;
+  }
+
+  /* Register the child's process group so the timeout and signal handlers
+   * tear down the whole solver subtree: they finish with _exit(), which runs
+   * neither destructors nor atexit handlers, so camada's own cleanup cannot
+   * cover those paths (an orphaned mpirun job would keep running). */
+  return std::make_unique<camada::SMTLIBSolver>(
+    camada::SMTLIBOneShotTag{},
+    formula_path,
+    prog,
+    model_argv,
+    [](long pgid) { file_operations::register_pgroup_for_cleanup(pgid); },
+    camada::TupleEncoding::Native,
+    logic);
+}
+
 camada::SMTSolverRef create_esbmc_z3_solver(const optionst &options)
 {
 #if CAMADA_HAVE_Z3
@@ -440,6 +518,27 @@ public:
     case camada_backendt::smtlib:
       solver = create_esbmc_smtlib_solver(options);
       break;
+    case camada_backendt::bitwuzllob:
+    case camada_backendt::neurosym:
+    {
+      const bool is_neurosym = backend == camada_backendt::neurosym;
+      oneshot_name = is_neurosym ? "neurosym" : "bitwuzllob";
+      oneshot_display = is_neurosym ? "NeuroSym" : "Bitwuzllob";
+      oneshot_prog = options.get_option(std::string(oneshot_name) + "-prog");
+      if (oneshot_prog.empty())
+        oneshot_prog =
+          is_neurosym ? "python main.py %f" : "mallob -mono=%f -mono-app=SMT";
+      /* NeuroSym natively parses only QF_BV and QF_LIA; the factory leaves
+       * the tuple/array/fp interfaces unset so ESBMC's flatteners lower
+       * everything to bit-vectors, and the emitted logic must match. */
+      const std::string logic =
+        is_neurosym ? "QF_BV" : pick_logic(options, false);
+      formula_path =
+        oneshot_options::choose_formula_path(options, oneshot_name);
+      solver = create_esbmc_oneshot_solver(
+        options, oneshot_name, formula_path, oneshot_prog, logic);
+      break;
+    }
     }
   }
 
@@ -457,6 +556,9 @@ public:
 
   smt_resultt dec_solve() override
   {
+    if (oneshot_name)
+      return oneshot_dec_solve();
+
     pre_solve();
 
     switch (solver->check())
@@ -469,6 +571,100 @@ public:
       return P_ERROR;
     }
     std::unreachable();
+  }
+
+  /* The one-shot solver answers with a verdict and then exits, so it cannot
+   * serve (get-value): a satisfiable formula needs the parallel local model
+   * solver to build a counterexample. Camada reports both verdicts and the
+   * run's diagnostics; the policy and the messages stay here. */
+  smt_resultt oneshot_dec_solve()
+  {
+    if (solved)
+    {
+      log_error(
+        "the {} backend supports a single (check-sat) query per run; "
+        "incremental strategies are not supported",
+        oneshot_name);
+      abort();
+    }
+    solved = true;
+
+    pre_solve();
+
+    auto *smtlib = static_cast<camada::SMTLIBSolver *>(solver.get());
+    const camada::checkResult res = smtlib->check();
+
+    if (res != camada::checkResult::SAT)
+    {
+      if (res != camada::checkResult::UNKNOWN)
+        return P_UNSATISFIABLE;
+
+      /* Camada answers UNKNOWN for three distinct outcomes; they are worth
+       * different reports, and the exit status tells them apart. */
+      const camada::OneShotDiagnostics &d = smtlib->oneShotDiagnostics();
+      const bool signalled = d.ExitStatus.compare(0, 7, "signal ") == 0;
+
+      if (signalled)
+        /* A verdict from a solver that died on a signal (crash, OOM kill, a
+         * wrapper tearing the job down) cannot be trusted; camada already
+         * discarded it. Non-zero exit codes stay accepted -- SAT-competition
+         * style solvers exit 10/20. */
+        log_error(
+          "{}: solver command \"{}\" died with {}; discarding its verdict",
+          oneshot_name,
+          d.Command,
+          d.ExitStatus);
+      else if (tail_verdict(d.OutputTail) == camada::checkResult::UNKNOWN)
+        /* The solver decided nothing and said so. */
+        log_error("{}: solver returned unknown", oneshot_name);
+      else
+        log_error(
+          "{}: no sat/unsat verdict in the output of \"{}\" ({}); last output "
+          "lines:\n{}",
+          oneshot_name,
+          d.Command,
+          d.ExitStatus,
+          d.OutputTail);
+
+      return P_ERROR;
+    }
+
+    /* Check for divergence first: camada drops a model solver that disagrees
+     * (it has no model to serve), so this must be distinguished from one that
+     * never started or died -- otherwise a wrong-answer bug in the one-shot
+     * solver is reported as a missing model. */
+    const std::optional<camada::checkResult> model =
+      smtlib->oneShotModelVerdict();
+    if (model && *model != camada::checkResult::SAT)
+    {
+      log_error(
+        "{}: {} reported sat but the local model solver did not; refusing to "
+        "build a counterexample from a diverging model",
+        oneshot_name,
+        oneshot_display);
+      abort();
+    }
+
+    if (!smtlib->oneShotModelSolverLive())
+    {
+      if (options.get_bool_option("result-only"))
+        return P_SATISFIABLE;
+      if (options.get_option(std::string(oneshot_name) + "-model-prog").empty())
+        log_error(
+          "{}: formula is satisfiable, but building the counterexample "
+          "requires a local interactive SMT-LIB2 solver; re-run with "
+          "--{}-model-prog <cmd> (e.g. \"z3 -in\") or with --result-only",
+          oneshot_name,
+          oneshot_name);
+      else
+        log_error(
+          "{}: the local model solver is unavailable; cannot build a "
+          "counterexample",
+          oneshot_name);
+      return P_ERROR;
+    }
+
+    return P_SATISFIABLE;
   }
 
   void assert_ast(smt_astt a) override
@@ -1281,8 +1477,19 @@ public:
     return wrap(value, from_camada_sort(value->Sort));
   }
 
+  ~camada_convt() override
+  {
+    /* A temporary formula file is ours to remove; a --output path is the
+     * user's. The signal/timeout paths skip this via _exit(), which is why
+     * choose_formula_path() also registers the temp for cleanup there. */
+    if (oneshot_name && oneshot_options::uses_temp_formula(options))
+      remove(formula_path.c_str());
+  }
+
   const std::string solver_text() override
   {
+    if (oneshot_name)
+      return std::string(oneshot_display) + " '" + oneshot_prog + "'";
     return solver->getSolverNameAndVersion();
   }
 
@@ -1302,6 +1509,28 @@ public:
         log_status("SMT formula written to standard output");
       else
         log_status("SMT formula written to output file {}", path);
+      return "";
+    }
+
+    if (oneshot_name)
+    {
+      /* Under --smt-formula-only no solve follows, so close the script here;
+       * the solver is write-only in that mode, so check() only emits the
+       * trailing (check-sat). Under --smt-formula-too our dec_solve() emits
+       * it instead: a second one would hand the external solver a script
+       * containing two. Either way camada already wrote the formula, so
+       * return empty to keep bmc.cpp from overwriting it (issue #6059). */
+      if (options.get_bool_option("smt-formula-only"))
+      {
+        solver->check();
+        if (formula_path == "-")
+          log_status("SMT formula written to standard output");
+        else
+          log_status("SMT formula written to output file {}", formula_path);
+        return "";
+      }
+
+      log_status("SMT formula written to {}", formula_path);
       return "";
     }
 
@@ -1333,6 +1562,12 @@ public:
 private:
   std::unique_ptr<camada::SMTSolver> solver;
   const camada_backendt backend;
+  /* One-shot backends only (bitwuzllob, neurosym). */
+  const char *oneshot_name = nullptr;
+  const char *oneshot_display = nullptr;
+  std::string oneshot_prog;
+  std::string formula_path;
+  bool solved = false;
 
   static camada::SMTExprRef expr(smt_astt a)
   {
@@ -1510,8 +1745,13 @@ smt_solver_baset *create_camada_solver(
   *tuple_api = backend_supports_tuples(backend)
                  ? static_cast<tuple_iface *>(solver)
                  : nullptr;
-  *array_api = solver;
-  *fp_api = solver;
+
+  /* NeuroSym is QF_BV-only: leaving the array and fp interfaces unset too
+   * makes create_solver() install the flatteners that lower arrays and
+   * floating-point to bit-vectors before anything reaches the serializer. */
+  const bool bv_only = backend == camada_backendt::neurosym;
+  *array_api = bv_only ? nullptr : solver;
+  *fp_api = bv_only ? nullptr : solver;
   return solver;
 }
 
@@ -1586,4 +1826,62 @@ smt_solver_baset *create_new_smtlib_solver(
 
   return create_camada_solver(
     camada_backendt::smtlib, options, ns, tuple_api, array_api, fp_api);
+}
+
+/* The one-shot solvers process a single task and terminate; strategies that
+ * solve repeatedly or incrementally cannot be served by them. */
+void reject_incremental_strategies(
+  const optionst &options,
+  const char *name,
+  const char *mode)
+{
+  static const char *incompatible[] = {
+    "incremental-bmc",
+    "falsification",
+    "k-induction",
+    "k-induction-parallel",
+    "termination",
+    "smt-during-symex",
+    "multi-property",
+    "parallel-solving"};
+
+  for (const char *opt : incompatible)
+    if (options.get_bool_option(opt))
+    {
+      log_error(
+        "the {} backend runs {} and does not support --{}; use a linked "
+        "solver (e.g. --bitwuzla) for incremental strategies",
+        name,
+        mode,
+        opt);
+      abort();
+    }
+}
+
+smt_solver_baset *create_new_bitwuzllob_solver(
+  const optionst &options,
+  const namespacet &ns,
+  tuple_iface **tuple_api,
+  array_iface **array_api,
+  fp_convt **fp_api)
+{
+  reject_incremental_strategies(
+    options, "bitwuzllob", "Mallob in one-shot mono mode");
+
+  return create_camada_solver(
+    camada_backendt::bitwuzllob, options, ns, tuple_api, array_api, fp_api);
+}
+
+smt_solver_baset *create_new_neurosym_solver(
+  const optionst &options,
+  const namespacet &ns,
+  tuple_iface **tuple_api,
+  array_iface **array_api,
+  fp_convt **fp_api)
+{
+  reject_incremental_strategies(
+    options, "neurosym", "NeuroSym in one-shot batch mode");
+
+  return create_camada_solver(
+    camada_backendt::neurosym, options, ns, tuple_api, array_api, fp_api);
 }
