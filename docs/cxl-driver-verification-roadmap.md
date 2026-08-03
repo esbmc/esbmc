@@ -581,7 +581,7 @@ convergence work and is tracked there, not here.
 
 **7. Raise model coverage, and expect it to find defects.** — In progress.
 
-Coverage went from 22 of 105 (21%) to 61 of 107 (57%) by writing five test
+Coverage went from 22 of 105 (21%) to 63 of 107 (58%) by writing six test
 pairs against the surfaces nothing had ever called: PCI probe/teardown, PCI
 config space, MSI/IRQ lifetime, streaming DMA, and AER. Reaching them for the
 first time is what exposed the following, all of which had shipped green:
@@ -613,11 +613,34 @@ first time is what exposed the following, all of which had shipped green:
 Two of these mean a modelled function could not have worked for any caller.
 That is the argument for coverage over test count, in one line.
 
+The port-enumeration pair (`cxl_port_walk_01/02`) found a second batch, and
+one recurring mistake:
+
+- **Signed nondet through `%` (four sites).** `__VERIFIER_nondet_int() % N`
+  keeps the sign of the dividend, so it yields negative values. It reached
+  `cxl_find_device()` as a negative array index, gave `cxl_dev::dev_type`
+  values of 0 and -1, and made `cxl_get_security_state()` return 5 — not a
+  member of `enum cxl_security_state`, whose range is 0..4. All four now
+  draw an unsigned nondet and constrain it with `__ESBMC_assume()`.
+- **`cxl_enumerate_ports()` called `kmalloc(0)`** whenever it reported a
+  bridge with no downstream devices, tripping `kmalloc()`'s own precondition.
+- **`cxl_free_ports()` leaked the device array** (CWE-401): it freed each
+  device and the bridge, but never the array holding them.
+- **Sizing an allocation by a symbolic count is unaffordable.** Every later
+  `devices[i]` becomes a bounds check against a nondeterministically sized
+  object; a four-device walk did not solve in 280 s. Allocating the array at
+  a fixed size and reporting a symbolic `num_devices` brings the same test to
+  9 s. Worth knowing before modelling any other variable-length structure.
+
+The device cap also dropped from 4 to 2. Two is enough to exercise "more than
+one port", and the cap is paid for in solver time by every test that walks the
+topology.
+
 **Acceptance criteria:**
 - Every test declares its property flags; the leak and overflow classes are
   checked wherever they apply.
 - A model-coverage figure exists and is reported alongside the test count, and
-  is moving: 21% -> 57%.
+  is moving: 21% -> 58%.
 - Phase 5's harness verdicts are checked by a script rather than asserted in
   prose (`run_all.sh`); running them in CI still needs a prepared kernel tree.
 - At least two genuinely concurrent tests exist and pass under
@@ -781,7 +804,7 @@ figure; without it only the static analysis runs.
 - [~] Phase 8: 8.1 (property flags), 8.2 (coverage metric), 8.4
         (concurrency), 8.5 (patch-and-reverify, by construction in the
         race pairs) and 8.6 (kernel version — dissolved, see the item) done;
-        8.7 (coverage) in progress at 57%; 8.3 (real-driver harnesses in CI)
+        8.7 (coverage) in progress at 58%; 8.3 (real-driver harnesses in CI)
         blocked on a kernel tree, vendoring ruled out
 - [~] Phase 7: two slices delivered — memdev id allocation, region
         interleave, the mailbox IOCTL path and downstream port lifetime,
@@ -795,15 +818,14 @@ currently poor:
 
 | Question | Today | Was |
 |---|---|---|
-| Real Linux driver functions verified | 4 |
-| Model functions exercised by tests | 61 of 107 (57%) | 4 |
-| Operational model functions exercised | 61 of 107 (57%) | 22 of 105 (21%) |
-| Tests that execute the operational model | 25 of 49 | 15 of 39 |
-| Tests declaring the properties they check | 49 of 49 | 1 of 35 |
-| Tests that verify an interleaving | 5 of 49 | 0 of 35 |
+| Real Linux driver functions verified | 4 | 4 |
+| Operational model functions exercised | 63 of 107 (58%) | 22 of 105 (21%) |
+| Tests that execute the operational model | 27 of 51 | 15 of 39 |
+| Tests declaring the properties they check | 51 of 51 | 1 of 35 |
+| Tests that verify an interleaving | 5 of 51 | 0 of 35 |
 
 Phase 8.1 and 8.4 moved the last two; 8.2 made the second measurable for the
-first time. Raising it from 21% to 57% is what found the model defects listed
+first time. Raising it from 21% to 58% is what found the model defects listed
 under Phase 8.7 — the PCI and AER surfaces had never been executed, and three
 of them did not work at all. A rising test count still should not be read as
 rising confidence; a rising coverage figure is worth more, because reaching a
@@ -829,9 +851,9 @@ Phase 8.2 raises model coverage, the suite becomes worth re-enabling.
 | Metric | Count |
 |--------|-------|
 | Total commits | 34 |
-| Total regression tests | 49 |
-| Passing tests | 29 |
-| Bug-detecting tests | 20 |
+| Total regression tests | 51 |
+| Passing tests | 30 |
+| Bug-detecting tests | 21 |
 | Kernel headers added | 6 |
 | Operational model lines | 1611 |
 | Documentation pages | 3 |
@@ -840,4 +862,4 @@ Phase 8.2 raises model coverage, the suite becomes worth re-enabling.
 | HDM constraints added | 2 (alignment + decoder limit) |
 | Real Linux driver files converted to GOTO | 1 |
 | Real Linux driver functions verified | 4 |
-| Model functions exercised by tests | 61 of 107 (57%) |
+| Model functions exercised by tests | 63 of 107 (58%) |
