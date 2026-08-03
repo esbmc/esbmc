@@ -3,7 +3,10 @@
 L=/var/home/rafaelsa/Documents/linux-7.1.5
 B=/var/home/rafaelsa/Documents/linux-build-cxl
 E=/var/home/rafaelsa/Documents/esbmc-cxl/build/src/esbmc/esbmc
-HARNESS="$1"; shift
+# Resolve before the cd: the include paths below are relative to the kernel
+# tree, so we have to run from there, which would otherwise strip the meaning
+# out of a harness path relative to the caller's directory.
+HARNESS="$(realpath "$1")"; shift
 cd "$L" || exit 1
 exec "$E" "$HARNESS" \
   --fms-extensions \
