@@ -1,7 +1,8 @@
 # Scope — relational/equality reconciliation over mixed float and integer operands
 
 > **Status: Phase 0 run 2026-08-03 — §4 confirmed for three of the four
-> witnesses, refuted for `sum_tuple`, which needs re-homing. See §11.**
+> witnesses, refuted for `sum_tuple`, which needs re-homing (§11); the
+> traffic-volume half is partially answered and lowers the gap-2 prior (§12).**
 > This is the owner document for the mechanism
 > `docs/roadmap/scope-coupled-arith-assign-conversion.md` §9.4 named the
 > "second mechanism" and §7 explicitly disowned:
@@ -224,3 +225,52 @@ The heterogeneous pairs — the ones §4 predicts — are:
   is **not** answered here: only the four witnesses were censused, not a corpus
   slice. Phase 1 still needs that number before the admission rule is chosen,
   and G2 cannot be discharged without it.
+
+## 12. Phase 0 part 2 — the traffic-volume question (2026-08-03)
+
+§11.4 recorded that the corpus-slice half of Phase 0 was unanswered and that G2
+could not be discharged without it. Partially answered here.
+
+### 12.1 Method and sample
+
+The same instrumentation, reduced to two booleans per comparison node —
+`mixed` (one operand floatbv, the other bv) and `samekind_widthdiff` (both bv,
+same signedness, different widths, the shape gap-2 says must stay untouched) —
+run over an unbiased stride slice of `regression/python` under
+`--python-irep2-adjust-only --goto-functions-only`, plus a trivial
+`assert True` program as the operational-model baseline.
+
+**Sample: 14 corpus tests and the baseline.** That is small, and the reason is
+recorded rather than hidden: each Python test spawns the parser subprocess, and
+the dev machine was contended for most of this session. The slice was unbiased
+(stride over the directory listing), not a prefix.
+
+### 12.2 Result
+
+| population | comparison nodes | `mixed=1` | `samekind_widthdiff=1` |
+|---|---:|---:|---:|
+| OM baseline (`assert True`) | 1 296 | **0** | **0** |
+| 14-test corpus slice | ~18 700 | **0** | **0** |
+| the three confirmed witnesses (§11.2) | — | present | — |
+
+### 12.3 What it means for G2
+
+**The gap-2 risk to a float/integer admission rule looks low, on this sample.**
+gap-2 killed the *general* relational mirror because it diverged over the
+operational-model bodies. Those bodies produce **1 296 comparison nodes and not
+one mixed pair** — the OM traffic a float/int rule would newly admit is, on this
+evidence, empty. The mixed pairs are concentrated in the witnesses.
+
+Equally, the `samekind_widthdiff` count is zero everywhere, so the char-vs-int
+promotions gap-2 protects are not reached by this dispatch at all in the sample
+— which suggests the narrowed rule §5 asks for may not even need a separate
+exclusion clause.
+
+### 12.4 What this does *not* discharge
+
+**G2 is not discharged.** A zero over 14 tests bounds the *frequency* of the
+traffic, not the *behaviour* of a widened rule on the tests that do have it. G2
+remains a verdict-parity gate over a proper corpus run and must be executed
+against a real implementation, on a machine that can complete it. What §12 buys
+is a prior: the rule is unlikely to be corpus-wide destructive, so Phase 1 is
+worth attempting rather than being blocked on the fear that killed gap-2.
