@@ -136,6 +136,9 @@ void goto_symext::symex_dead(const expr2tc &code)
     symex_free(code_free2tc(l1_sym));
 
   // Erase from level 1 propagation
+  // A cached resolution may designate the object going out of scope while its
+  // key names only the pointer, so there is nothing finer to key on here.
+  clear_deref_cache();
   cur_state->value_set.erase(to_symbol2t(l1_sym).get_symbol_name());
 
   // Erase from local_variables map

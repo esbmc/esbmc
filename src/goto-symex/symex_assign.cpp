@@ -571,8 +571,12 @@ void goto_symext::symex_assign(
       filtered.insert(entry);
     }
     if (!filtered.empty())
+    {
+      // Rewrites the value set behind assignment()'s back.
+      clear_deref_cache();
       cur_state->value_set.get_entry(is_ptr_havoc_l1_name, "").object_map =
         filtered;
+    }
   }
 
   // Note: an earlier prototype also emitted an explicit
@@ -676,6 +680,11 @@ void goto_symext::symex_assign_symbol(
 
   expr2tc renamed_lhs = lhs;
   cur_state->rename_type(renamed_lhs);
+
+  // Before the state moves: a resolved dereference was derived from the value
+  // set this assignment is about to update.
+  invalidate_deref_cache(renamed_lhs);
+
   cur_state->assignment(renamed_lhs, rhs);
 
   // Special case when the lhs is an array access, we need to get the

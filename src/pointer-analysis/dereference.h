@@ -152,6 +152,37 @@ public:
    *  @return True if variable is alive
    *  */
   virtual bool is_live_variable(const expr2tc &sym) = 0;
+
+  /** Optional memoisation of dereference resolution.
+   *
+   *  Resolving a pointer builds a case split over everything it may designate
+   *  and records that access's safety claims; straight-line code that reads
+   *  the same l-value repeatedly redoes all of it. A callback that can tell
+   *  when nothing the resolution depends on has moved may answer from a
+   *  cache, in which case the claims are not re-recorded -- so an entry must
+   *  only be reused under the guard it was built with.
+   *
+   *  Defaults to no caching. */
+  virtual bool deref_cache_lookup(
+    const expr2tc &src [[maybe_unused]],
+    const type2tc &type [[maybe_unused]],
+    unsigned mode_bits [[maybe_unused]],
+    const expr2tc &offset [[maybe_unused]],
+    const expr2tc &guard [[maybe_unused]],
+    expr2tc &out [[maybe_unused]])
+  {
+    return false;
+  }
+
+  virtual void deref_cache_store(
+    const expr2tc &src [[maybe_unused]],
+    const type2tc &type [[maybe_unused]],
+    unsigned mode_bits [[maybe_unused]],
+    const expr2tc &offset [[maybe_unused]],
+    const expr2tc &guard [[maybe_unused]],
+    const expr2tc &result [[maybe_unused]])
+  {
+  }
 };
 
 /** Class containing expression dereference logic.
@@ -251,6 +282,14 @@ public:
    *         the assertions that are generated.
    */
   virtual void dereference_expr(expr2tc &expr, guard2tc &guard, modet mode);
+
+  /// Uncached body of dereference(); see deref_cache_lookup().
+  expr2tc dereference_impl(
+    const expr2tc &orig_src,
+    const type2tc &to_type,
+    const guard2tc &guard,
+    modet mode,
+    const expr2tc &lexical_offset);
 
   virtual expr2tc dereference(
     const expr2tc &dest,

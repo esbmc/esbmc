@@ -214,6 +214,46 @@ bool symex_dereference_statet::is_live_variable(const expr2tc &symbol)
   return false;
 }
 
+static bool expr_names_symbol(const expr2tc &e, const std::string &name)
+{
+  if (is_nil_expr(e))
+    return false;
+
+  if (is_symbol2t(e) && to_symbol2t(e).get_symbol_name() == name)
+    return true;
+
+  bool found = false;
+  e->foreach_operand([&found, &name](const expr2tc &op) {
+    found = found || expr_names_symbol(op, name);
+  });
+  return found;
+}
+
+void goto_symext::invalidate_deref_cache(const expr2tc &l1_lhs)
+{
+  if (deref_cache.empty())
+    return;
+
+  // A store through a pointer can retarget a pointer the keys never mention,
+  // so there is nothing finer to be done than dropping everything.
+  if (!is_symbol2t(l1_lhs))
+  {
+    deref_cache.clear();
+    return;
+  }
+
+  const std::string name = to_symbol2t(l1_lhs).get_symbol_name();
+  for (auto it = deref_cache.begin(); it != deref_cache.end();)
+  {
+    if (
+      expr_names_symbol(it->first.src, name) ||
+      expr_names_symbol(it->first.offset, name))
+      it = deref_cache.erase(it);
+    else
+      ++it;
+  }
+}
+
 void goto_symext::dereference(
   expr2tc &expr,
   dereferencet::modet mode,
@@ -246,4 +286,51 @@ void goto_symext::dereference(
   }
   else
     dereference.dereference_expr(expr, guard, mode);
+}
+
+goto_symext::deref_cache_keyt symex_dereference_statet::build_deref_key(
+  const expr2tc &src,
+  const type2tc &type,
+  unsigned mode_bits,
+  const expr2tc &offset,
+  const expr2tc &guard) const
+{
+  goto_symext::deref_cache_keyt key;
+  key.src = src;
+  key.type = type;
+  key.offset = offset;
+  key.deref_guard = guard;
+  key.path_guard = goto_symex.cur_state->guard.as_expr();
+  key.mode_bits = mode_bits;
+  return key;
+}
+
+bool symex_dereference_statet::deref_cache_lookup(
+  const expr2tc &src,
+  const type2tc &type,
+  unsigned mode_bits,
+  const expr2tc &offset,
+  const expr2tc &guard,
+  expr2tc &out)
+{
+  const auto it = goto_symex.deref_cache.find(
+    build_deref_key(src, type, mode_bits, offset, guard));
+
+  if (it == goto_symex.deref_cache.end())
+    return false;
+
+  out = it->second;
+  return true;
+}
+
+void symex_dereference_statet::deref_cache_store(
+  const expr2tc &src,
+  const type2tc &type,
+  unsigned mode_bits,
+  const expr2tc &offset,
+  const expr2tc &guard,
+  const expr2tc &result)
+{
+  goto_symex.deref_cache.emplace(
+    build_deref_key(src, type, mode_bits, offset, guard), result);
 }

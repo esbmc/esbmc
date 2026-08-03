@@ -459,6 +459,9 @@ expr2tc execution_statet::get_guard_identifier()
 
 void execution_statet::switch_to_thread(unsigned int i)
 {
+  // Each thread carries its own value sets.
+  clear_deref_cache();
+
   last_active_thread = active_thread;
   active_thread = i;
   cur_state = &threads_state[active_thread];

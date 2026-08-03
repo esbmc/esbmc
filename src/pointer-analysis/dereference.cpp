@@ -449,6 +449,36 @@ expr2tc dereferencet::dereference(
   modet mode,
   const expr2tc &lexical_offset)
 {
+  // INTERNAL reports through internal_items rather than the return value, and
+  // a suppressed-assertion resolution must not be reused where assertions are
+  // wanted, so neither is memoised.
+  if (is_internal(mode) || block_assertions)
+    return dereference_impl(orig_src, to_type, guard, mode, lexical_offset);
+
+  const unsigned mode_bits = (unsigned(mode.op) << 1) | unsigned(mode.unaligned);
+  const expr2tc guard_expr = guard.as_expr();
+
+  expr2tc cached;
+  if (dereference_callback.deref_cache_lookup(
+        orig_src, to_type, mode_bits, lexical_offset, guard_expr, cached))
+    return cached;
+
+  expr2tc result =
+    dereference_impl(orig_src, to_type, guard, mode, lexical_offset);
+
+  dereference_callback.deref_cache_store(
+    orig_src, to_type, mode_bits, lexical_offset, guard_expr, result);
+
+  return result;
+}
+
+expr2tc dereferencet::dereference_impl(
+  const expr2tc &orig_src,
+  const type2tc &to_type,
+  const guard2tc &guard,
+  modet mode,
+  const expr2tc &lexical_offset)
+{
   internal_items.clear();
 
   // Awkwardly, the pointer might not be of pointer type, for example with

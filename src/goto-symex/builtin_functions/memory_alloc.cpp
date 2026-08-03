@@ -774,6 +774,11 @@ void goto_symext::track_new_pointer(
 
 void goto_symext::symex_free(const expr2tc &expr)
 {
+  // A resolved dereference carries that access's validity claims. Freeing
+  // changes which objects are still valid without touching the value set of
+  // any pointer, so no key names what just changed.
+  clear_deref_cache();
+
   // expr is any 1-op code kind: code_free (from symex_other) or
   // code_cpp_delete / code_cpp_del_array (delegated via symex_cpp_delete).
   // All have exactly one sub-expression — the pointer being freed.

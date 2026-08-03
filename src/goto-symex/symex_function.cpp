@@ -596,6 +596,10 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 
   // produce a new frame
   assert(!cur_state->call_stack.empty());
+  // A new frame renumbers level-1 names and changes which locals are live,
+  // both of which the cached resolutions were derived from.
+  clear_deref_cache();
+
   goto_symex_statet::framet &frame =
     cur_state->new_frame(cur_state->source.thread_nr);
 
@@ -999,6 +1003,9 @@ bool goto_symext::is_python_gc_object(const symbolt *base) const
 
 void goto_symext::pop_frame()
 {
+  // Locals of the frame being torn down stop being live.
+  clear_deref_cache();
+
   assert(!cur_state->call_stack.empty());
 
   statet::framet &frame = cur_state->top();

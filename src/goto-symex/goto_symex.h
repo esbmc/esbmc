@@ -191,6 +191,74 @@ protected:
     dereferencet::modet mode,
     bool block_assertions = false);
 
+  /** Memoises dereference().
+   *
+   *  Resolving `p->a[i]` builds an if-then-else over everything `p` may
+   *  designate and records that access's pointer-safety claims. Straight-line
+   *  code that reads the same l-value repeatedly redoes all of it, which is
+   *  the bulk of symex time on pointer-heavy programs.
+   *
+   *  What the result depends on, and therefore what the key covers: the
+   *  level-1 expression, the mode, whether claims were suppressed, and the
+   *  path guard -- a hit skips re-recording the claims, so reusing one taken
+   *  under a weaker guard would drop a check.
+   *
+   *  What the key cannot cover is the value set the resolution reads. Entries
+   *  are dropped instead whenever it may have moved: see
+   *  invalidate_deref_cache().
+   */
+  struct deref_cache_keyt
+  {
+    expr2tc src;
+    type2tc type;
+    expr2tc offset;
+    expr2tc deref_guard;
+    expr2tc path_guard;
+    unsigned mode_bits;
+
+    bool operator==(const deref_cache_keyt &o) const
+    {
+      return mode_bits == o.mode_bits && src == o.src && type == o.type &&
+             offset == o.offset && deref_guard == o.deref_guard &&
+             path_guard == o.path_guard;
+    }
+  };
+
+  struct deref_cache_hasht
+  {
+    std::size_t operator()(const deref_cache_keyt &k) const
+    {
+      auto mix = [](std::size_t h, std::size_t v) {
+        return h ^ (v + 0x9e3779b9 + (h << 6) + (h >> 2));
+      };
+      std::size_t h = irep2_hash{}(k.src);
+      h = mix(h, type2_hash{}(k.type));
+      if (k.offset)
+        h = mix(h, irep2_hash{}(k.offset));
+      if (k.deref_guard)
+        h = mix(h, irep2_hash{}(k.deref_guard));
+      if (k.path_guard)
+        h = mix(h, irep2_hash{}(k.path_guard));
+      return mix(h, k.mode_bits);
+    }
+  };
+
+  std::unordered_map<deref_cache_keyt, expr2tc, deref_cache_hasht> deref_cache;
+
+  /** Drop the entries an assignment to \p l1_lhs could have invalidated.
+   *
+   *  A write to a pointer moves the value set the cached resolution was
+   *  derived from, so every entry naming that symbol has to go. A write
+   *  *through* a pointer can retarget a pointer this never names, so it
+   *  clears the lot.
+   */
+  void invalidate_deref_cache(const expr2tc &l1_lhs);
+
+  void clear_deref_cache()
+  {
+    deref_cache.clear();
+  }
+
   // symex
 
   /**
@@ -1444,6 +1512,30 @@ protected:
   void
   dump_internal_state(const std::list<struct internal_item> &data) override;
   bool is_live_variable(const expr2tc &sym) override;
+
+  bool deref_cache_lookup(
+    const expr2tc &src,
+    const type2tc &type,
+    unsigned mode_bits,
+    const expr2tc &offset,
+    const expr2tc &guard,
+    expr2tc &out) override;
+
+  void deref_cache_store(
+    const expr2tc &src,
+    const type2tc &type,
+    unsigned mode_bits,
+    const expr2tc &offset,
+    const expr2tc &guard,
+    const expr2tc &result) override;
+
+private:
+  goto_symext::deref_cache_keyt build_deref_key(
+    const expr2tc &src,
+    const type2tc &type,
+    unsigned mode_bits,
+    const expr2tc &offset,
+    const expr2tc &guard) const;
 };
 
 namespace goto_symex_utils
