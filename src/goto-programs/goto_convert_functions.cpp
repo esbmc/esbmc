@@ -489,8 +489,8 @@ bool goto_convert_functionst::convert_native_rec(
     //    generator — exclude all arrays conservatively.
     // A destructible type or an initializer needing lowering is delegated the
     // same way just below; everything else is convert_decl's plain path
-    // (a DECL, an optional side-effect-free ASSIGN, and one scope-exit code_dead)
-    // reproduced natively after that.
+    // (a DECL, an optional side-effect-free ASSIGN, and one scope-exit
+    // code_dead) reproduced natively after that.
     if (
       s->static_lifetime || s->get_type().is_code() || s->get_type().is_array())
       return delegate_to_legacy();
