@@ -109,6 +109,12 @@ __esbmc_mmio_offset(const void *addr, size_t width, size_t *off)
 {
 __ESBMC_HIDE:;
   const char *p = (const char *)addr;
+  /* Relational comparison of pointers into different objects is undefined, so
+   * the same-object test has to come first -- a harness that maps its own
+   * register block rather than going through pci_iomap() otherwise trips
+   * CWE-469 here, in the very branch meant to reject it gracefully. */
+  if (!__ESBMC_same_object(p, esbmc_mmio_space))
+    return 0;
   if (
     p < esbmc_mmio_space ||
     p > esbmc_mmio_space + (ESBMC_MMIO_SPACE_SIZE - width))
@@ -444,6 +450,13 @@ __ESBMC_HIDE:;
   size_t size = (size_t)(__VERIFIER_nondet_ulong() & ~0xFFFUL);
   if (size == 0)
     size = 4096;
+  /* A BAR cannot wrap the address space: its last byte is addressable, so
+   * the window has to fit above `start`.  Without this the nondet size runs
+   * the addition over the top of resource_size_t. */
+  if (size > (resource_size_t)-1 - start)
+    size = (resource_size_t)-1 - start;
+  if (size == 0)
+    return start;
   return start + size - 1;
 }
 
@@ -796,7 +809,9 @@ u64 cxl_read_dev_ctrl(struct cxl_dev *cxld)
 __ESBMC_HIDE:;
   assert(cxld != NULL);
   assert(cxld->regs != NULL);
-  return (u64)readl(cxld->regs);
+  /* 64-bit: cxl_write_dev_ctrl() writes this register with writeq(), and a
+   * 32-bit read here cannot see back what a 64-bit write put there. */
+  return readq(cxld->regs);
 }
 
 void cxl_write_dev_ctrl(struct cxl_dev *cxld, u64 val)
@@ -844,8 +859,14 @@ __ESBMC_HIDE:;
   if (cmd->payload_out != NULL && cmd->payload_out_size > 0)
   {
     memset(cmd->payload_out, 0, cmd->payload_out_size);
-    /* First 4 bytes are non-deterministic */
-    ((uint32_t *)cmd->payload_out)[0] = __VERIFIER_nondet_uint();
+    /* Fill what the caller actually offered.  Writing a fixed four bytes
+     * overruns any reply buffer shorter than that, and several CXL opcodes
+     * return one or two. */
+    uint32_t nd = __VERIFIER_nondet_uint();
+    size_t n = cmd->payload_out_size;
+    if (n > sizeof(nd))
+      n = sizeof(nd);
+    memcpy(cmd->payload_out, &nd, n);
   }
 
   return 0;
