@@ -720,3 +720,16 @@ onto §12's guard.
 This supersedes §13's "cannot reach" framing. G3's re-homing still stands — the
 pair is not cleared by Phases 1-2 as built — but the follow-up belongs to this
 scope's family, not to an unrelated one.
+
+## 15. Both flip blockers now have owner documents (2026-08-03)
+
+§13.1 discharges every gate this scope owns and leaves Phase 3 blocked on two
+mechanisms it disowns. Neither had an owner; both now do.
+
+| blocker | owner | finding |
+|---|---|---|
+| the `github_5571` array-typecast pair (§14) | `scope-array-assignment-conversion.md` | every existing arm declines it because they all guard on a **pointer** target, while this shape casts to an **array** type |
+| the §9.4 second mechanism | `scope-relational-float-reconciliation.md` | all four tests share an integer meeting a floating-point operand at a comparison or bitwise assignment; the relational arm admits only `bv`/`bv` pairs (`python_adjust.cpp:406-409`) while the arithmetic arm admits floatbv too (`:449`) |
+
+Both are recorded as hypotheses gated on a Phase 0 measurement, not as
+conclusions — this document's own §13→§14 reversal is the reason.
