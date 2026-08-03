@@ -3634,14 +3634,18 @@ void python_converter::get_var_assign(
       !base_is_imported_module &&
       (method_name == "transpose" || method_name == "reshape" ||
        method_name == "ravel");
-    // flatten() is copy-like, not view-like (see is_numpy_view_copy_expr,
-    // which deliberately excludes it), but the method form still needs the
-    // same np.flatten(a, ...)-shaped rewrite below to dispatch to the
-    // existing numpy.flatten() handler — the only form that method-call
-    // dispatch resolves through here at all is the function-call shape.
+    // flatten()/sum()/mean()/min()/max()/std()/var() are not view-like (see
+    // is_numpy_view_copy_expr, which deliberately excludes them), but the
+    // method form still needs the same np.<name>(a, ...)-shaped rewrite
+    // below to dispatch to the existing np.<name>() handler — the only form
+    // that method-call dispatch resolves through here at all is the
+    // function-call shape.
+    static const std::set<std::string> other_dispatch_rewrite_methods = {
+      "flatten", "sum", "mean", "min", "max", "std", "var"};
     const bool supported_dispatch_rewrite_method =
       supported_view_method ||
-      (!base_is_imported_module && method_name == "flatten");
+      (!base_is_imported_module &&
+       other_dispatch_rewrite_methods.count(method_name) != 0);
     const std::string method_base_id =
       method_base_name.empty() ? std::string()
                                : resolve_name_symbol_id(method_base_name);
