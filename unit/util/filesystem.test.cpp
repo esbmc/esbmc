@@ -95,7 +95,7 @@ TEST_CASE(
 {
   auto f =
     file_operations::file_data::bundled(bundled_bytes, sizeof(bundled_bytes));
-  // The whole point of bundling: the view aliases .rodata rather than a copy.
+  // Aliases .rodata rather than copying it.
   REQUIRE(f.view().data() == bundled_bytes);
   REQUIRE(f.size() == 5);
   REQUIRE(f.is_bundled());
@@ -153,8 +153,7 @@ TEST_CASE(
   "an empty file read from disk is not bundled",
   "[core][util][filesystem]")
 {
-  // is_bundled() must not be inferred from emptiness: a zero-byte file on
-  // disk is legitimate and is still not a bundled file.
+  // A zero-byte file on disk is legitimate and still not a bundled file.
   auto f = file_operations::file_data::owned("");
   REQUIRE(!f.is_bundled());
   REQUIRE(f.size() == 0);
@@ -183,7 +182,7 @@ TEST_CASE("bundled files resolve by path", "[core][util][filesystem]")
   REQUIRE(f.has_value());
   REQUIRE(f->is_bundled());
   REQUIRE(f->view() == "int a;");
-  // Borrowed, not copied: the registry hands back the .rodata pointer.
+  // Borrowed, not copied.
   REQUIRE(f->view().data() == hdr_bytes);
 
   REQUIRE(fs.exists(root + "/lib/sub/b.c"));
@@ -220,6 +219,20 @@ TEST_CASE("list walks a prefix recursively", "[core][util][filesystem]")
   REQUIRE(fs.list(root + "/absent").empty());
 }
 
+TEST_CASE("list matches whole path components", "[core][util][filesystem]")
+{
+  auto &fs = file_operations::filesystemt::get();
+  std::string root = std::string(file_operations::ESBMC_VFS_ROOT) + "/boundary";
+  fs.add_bundled(root + "/lib/a.c", src_bytes, sizeof(src_bytes) - 1);
+  fs.add_bundled(root + "/libcxx/b.c", src_bytes, sizeof(src_bytes) - 1);
+  // '-' sorts below '/', so this one is scanned before root + "/lib/a.c".
+  fs.add_bundled(root + "/lib-old/c.c", src_bytes, sizeof(src_bytes) - 1);
+
+  auto lib = fs.list(root + "/lib");
+  REQUIRE(lib.size() == 1);
+  REQUIRE(lib[0] == root + "/lib/a.c");
+}
+
 TEST_CASE("materialize reproduces the tree on disk", "[core][util][filesystem]")
 {
   auto &fs = file_operations::filesystemt::get();
@@ -227,7 +240,7 @@ TEST_CASE("materialize reproduces the tree on disk", "[core][util][filesystem]")
 
   const std::string dir = fs.materialize(root, "esbmc-test-%%%%");
 
-  // Nested parents are created on demand, and contents match byte for byte.
+  // Nested parents are created on demand.
   REQUIRE(boost::filesystem::exists(dir + "/include/a.h"));
   REQUIRE(boost::filesystem::exists(dir + "/lib/sub/b.c"));
   REQUIRE(boost::filesystem::file_size(dir + "/lib/sub/b.c") == 6);

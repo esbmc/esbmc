@@ -14,30 +14,18 @@
 
 namespace file_operations
 {
-/**
- * @brief Root of the bundled path namespace, e.g. /esbmc-vfs/clang/include.
- *
- * A path rather than a URI scheme, because consumers that resolve these
- * strings understand path syntax and nothing else. Reserved, so it never
- * names anything on the real filesystem.
- */
+/** @brief Root of the bundled path namespace, e.g. /esbmc-vfs/clang/include.
+ *         Reserved, so it never names anything on the real filesystem. */
 inline constexpr const char *ESBMC_VFS_ROOT = "/esbmc-vfs";
 
 /**
  * @brief Read-only contents of a file, either bundled into the ESBMC binary
  *        or read from disk.
  *
- * Files bundled by scripts/flail.py are already resident in the binary's
- * .rodata, so view() borrows them directly and reading one costs no
- * allocation. Contents read from disk are held in an internal buffer that
- * view() borrows from instead. Either way the view stays valid for as long as
- * the file_data does.
- *
- * view() is null-terminated at view().size(), which clang's Lexer requires of
- * any buffer handed to it directly. std::string provides that for owned
- * contents; for bundled ones it comes from the NUL sentinel flail appends past
- * the end of each array. Copying is disabled so that contents read from disk,
- * which may be large, are never duplicated by accident.
+ * Bundled contents are borrowed from .rodata, so reading one costs no
+ * allocation; contents read from disk are owned. Either way view() is
+ * NUL-terminated at size(), which clang's Lexer requires of buffers handed to
+ * it directly -- for bundled files that comes from the sentinel flail appends.
  */
 class file_data
 {
@@ -201,20 +189,12 @@ void unregister_pgroup(long pgid);
 void kill_registered_pgroups();
 
 /**
- * @brief ESBMC's filesystem: files bundled into the binary, overlaid on the
- *        real one.
+ * @brief Files bundled into the binary, overlaid on the real filesystem.
  *
- * Every file scripts/flail.py bundles is registered here under a path below
- * ESBMC_VFS_ROOT. Lookups resolve by path: the registry first, the real
- * filesystem on a miss. Callers therefore need not know, and cannot tell,
- * which of the two answered.
- *
- * Bundled files still have to be written out for anything ESBMC cannot reach
- * into: a forked python3 or solc has its own address space and can only read
- * real files. materialize() serves those.
- *
- * The readers are read() and list(). ESBMC main() registers up-front. c2goto
- * has its own main() and doesn't register upfront, but on access.
+ * Files scripts/flail.py bundles are registered under ESBMC_VFS_ROOT. read()
+ * checks the registry first and falls back to disk, so callers cannot tell
+ * which layer answered. materialize() writes a subtree out for consumers that
+ * cannot read ESBMC's memory: a forked python3 or solc.
  */
 class filesystemt
 {
@@ -228,13 +208,16 @@ class filesystemt
          it != _bundled.end() &&
          it->first.compare(0, prefix.size(), prefix) == 0;
          ++it)
-      f(it->first, it->second);
+      /* Whole components only: "/x/libc" must not select "/x/libcxx/y". */
+      if (it->first.size() == prefix.size() || it->first[prefix.size()] == '/')
+        f(it->first, it->second);
   }
 
 public:
   static filesystemt &get();
 
-  /** @brief Registers static file contents; see file_data::bundled(). */
+  /** @brief Registers static file contents; see file_data::bundled().
+   *         `path` must not already be registered. */
   void add_bundled(const std::string &path, const char *data, size_t size);
 
   /** @brief Contents of `path`, or nothing if it is neither bundled nor a
@@ -247,21 +230,15 @@ public:
    *         change means new registrations arrived. */
   size_t bundled_count() const noexcept;
 
-  /**
-   * @brief Every bundled path below `prefix`, at any depth.
-   *
-   * Paths are keys of a flat map, so directories exist only as structure
-   * within them and the walk is inherently recursive.
-   */
+  /** @brief Every bundled path below `prefix`, at any depth. */
   std::vector<std::string> list(const std::string &prefix) const;
 
   /**
    * @brief Writes every bundled file below `prefix` into a fresh temporary
    *        directory named after `format`, and returns that directory.
    *
-   * The result is cached per prefix, so a subtree is written at most once per
-   * run and later calls just return the path. The directory is removed when
-   * ESBMC exits.
+   * Cached per prefix, so a subtree is written at most once per run. The
+   * directory is removed when ESBMC exits.
    */
   const std::string &
   materialize(const std::string &prefix, const std::string &format);
