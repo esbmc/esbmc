@@ -116,20 +116,6 @@ public:
     return camada::Z3Solver::context();
   }
 
-  z3::solver &solver()
-  {
-    return camada::Z3Solver::solver();
-  }
-
-  camada::SMTExprRef
-  wrap_expr(const camada::SMTSortRef &sort, const z3::expr &value)
-  {
-    // camada v0.11 dropped newExprRefImpl; use the public arena allocator
-    // makeExprRef<SolverExpr>(Kind, args...), which forwards to Z3Expr's ctor.
-    return makeExprRef<camada::Z3Expr>(
-      camada::SMTExprKind::Unknown, &camada::Z3Solver::context(), sort, value);
-  }
-
 private:
   // Pre-camada the Z3 backend built its solver from the same simplify ->
   // solve-eqs -> simplify -> smt tactic pipeline. The plain z3::solver(c)
@@ -286,10 +272,9 @@ camada::SMTSolverRef create_esbmc_z3_solver(const optionst &options)
       cfg.set("stats", "true");
       cfg.set("type_check", "true");
       cfg.set("well_sorted_check", "true");
-      cfg.set("smtlib2_compliant", "true");
     }
 
-    if (smtlib2_compliant)
+    if (z3_debug || smtlib2_compliant)
       cfg.set("smtlib2_compliant", "true");
 
     return z3::context(cfg);
@@ -360,10 +345,7 @@ public:
     const namespacet &ns,
     const optionst &options,
     camada_backendt backend)
-    : smt_solver_baset(ns, options),
-      array_iface(true, true),
-      fp_convt(this),
-      backend(backend)
+    : smt_solver_baset(ns, options), array_iface(true, true), fp_convt(this)
   {
     switch (backend)
     {
@@ -613,62 +595,40 @@ public:
   }
   smt_astt mk_bvnot(smt_astt a) override
   {
-    if (int_encoding && backend == camada_backendt::z3)
-      return z3_int_bitwise_unary(a, [](const z3::expr &v) { return ~v; });
+    if (int_encoding)
+      return int_bitwise_unary(
+        a, [this](const camada::SMTExprRef &v) { return solver->mkBVNot(v); });
     return wrap(solver->mkBVNot(expr(a)), a->sort);
   }
   smt_astt mk_bvxor(smt_astt a, smt_astt b) override
   {
-    if (int_encoding && backend == camada_backendt::z3)
-      return z3_int_bitwise_binary(
-        a, b, [](const z3::expr &lhs, const z3::expr &rhs) {
-          return lhs ^ rhs;
+    if (int_encoding)
+      return int_bitwise_binary(
+        a, b, [this](const camada::SMTExprRef &l, const camada::SMTExprRef &r) {
+          return solver->mkBVXor(l, r);
         });
     return wrap(solver->mkBVXor(expr(a), expr(b)), a->sort);
   }
   smt_astt mk_bvor(smt_astt a, smt_astt b) override
   {
-    if (int_encoding && backend == camada_backendt::z3)
-      return z3_int_bitwise_binary(
-        a, b, [](const z3::expr &lhs, const z3::expr &rhs) {
-          return lhs | rhs;
+    if (int_encoding)
+      return int_bitwise_binary(
+        a, b, [this](const camada::SMTExprRef &l, const camada::SMTExprRef &r) {
+          return solver->mkBVOr(l, r);
         });
     return wrap(solver->mkBVOr(expr(a), expr(b)), a->sort);
   }
   smt_astt mk_bvand(smt_astt a, smt_astt b) override
   {
-    if (int_encoding && backend == camada_backendt::z3)
-      return z3_int_bitwise_binary(
-        a, b, [](const z3::expr &lhs, const z3::expr &rhs) {
-          return lhs & rhs;
+    if (int_encoding)
+      return int_bitwise_binary(
+        a, b, [this](const camada::SMTExprRef &l, const camada::SMTExprRef &r) {
+          return solver->mkBVAnd(l, r);
         });
     return wrap(solver->mkBVAnd(expr(a), expr(b)), a->sort);
   }
   smt_astt mk_implies(smt_astt a, smt_astt b) override
   {
-#if CAMADA_HAVE_Z3
-    if (backend == camada_backendt::z3)
-    {
-      auto lhs = z3_expr(a);
-      auto rhs = z3_expr(b);
-      if (!lhs.is_bool() || !rhs.is_bool())
-      {
-        log_error(
-          "Camada mk_implies received non-bool operand(s): lhs sort kind {}, "
-          "rhs sort kind {}, lhs is_bool {}, rhs is_bool {}, lhs z3 sort '{}', "
-          "rhs z3 sort '{}', lhs '{}', rhs '{}'",
-          static_cast<int>(expr(a)->Sort->getSortKind()),
-          static_cast<int>(expr(b)->Sort->getSortKind()),
-          lhs.is_bool(),
-          rhs.is_bool(),
-          lhs.get_sort().to_string(),
-          rhs.get_sort().to_string(),
-          lhs.to_string(),
-          rhs.to_string());
-        abort();
-      }
-    }
-#endif
     return wrap(solver->mkImplies(expr(a), expr(b)), boolean_sort);
   }
   smt_astt mk_xor(smt_astt a, smt_astt b) override
@@ -1283,29 +1243,10 @@ public:
 
 private:
   std::unique_ptr<camada::SMTSolver> solver;
-  const camada_backendt backend;
 
   static camada::SMTExprRef expr(smt_astt a)
   {
     return to_solver_smt_ast<camada_expr>(a)->a;
-  }
-
-  esbmc_z3_solver &z3_solver()
-  {
-    assert(backend == camada_backendt::z3);
-    return *static_cast<esbmc_z3_solver *>(solver.get());
-  }
-
-  z3::expr z3_expr(smt_astt a)
-  {
-    const auto &za = camada::toSolverExpr<camada::Z3Expr>(*expr(a));
-    return z3::to_expr(z3_solver().context(), za.Expr);
-  }
-
-  smt_astt wrap_z3_expr(const z3::expr &value, smt_sortt sort)
-  {
-    auto zsort = to_solver_smt_sort<camada::SMTSortRef>(sort)->s;
-    return wrap(z3_solver().wrap_expr(zsort, value), sort);
   }
 
   camada::FPEncoding fp_encoding() const
@@ -1314,21 +1255,26 @@ private:
                                               : camada::FPEncoding::Native;
   }
 
+  /* SMT-LIB's Int/Real theory has no bitwise operations, but ESBMC still
+   * routes C's &/|/^/~ through the mk_bv* entry points in integer mode (see
+   * the bitand_id case in smt_solver.cpp). Bridge by converting to a
+   * bit-vector of the signed word width, applying the bit-vector operation,
+   * and converting back. */
   template <typename Fn>
-  smt_astt z3_int_bitwise_unary(smt_astt a, Fn &&op)
+  smt_astt int_bitwise_unary(smt_astt a, Fn &&op)
   {
-    std::size_t bit_width = signed_size_type2()->get_width();
-    z3::expr a_bv = z3::int2bv(bit_width, z3_expr(a));
-    return wrap_z3_expr(z3::bv2int(op(a_bv), true), mk_int_sort());
+    const unsigned width = signed_size_type2()->get_width();
+    auto a_bv = solver->mkInt2BV(width, expr(a));
+    return wrap(solver->mkBV2Int(op(a_bv), true), mk_int_sort());
   }
 
   template <typename Fn>
-  smt_astt z3_int_bitwise_binary(smt_astt a, smt_astt b, Fn &&op)
+  smt_astt int_bitwise_binary(smt_astt a, smt_astt b, Fn &&op)
   {
-    std::size_t bit_width = signed_size_type2()->get_width();
-    z3::expr a_bv = z3::int2bv(bit_width, z3_expr(a));
-    z3::expr b_bv = z3::int2bv(bit_width, z3_expr(b));
-    return wrap_z3_expr(z3::bv2int(op(a_bv, b_bv), true), mk_int_sort());
+    const unsigned width = signed_size_type2()->get_width();
+    auto a_bv = solver->mkInt2BV(width, expr(a));
+    auto b_bv = solver->mkInt2BV(width, expr(b));
+    return wrap(solver->mkBV2Int(op(a_bv, b_bv), true), mk_int_sort());
   }
 
   static smt_sortt from_camada_sort(const camada::SMTSortRef &sort)
@@ -1377,6 +1323,10 @@ private:
       unsupported("tuple sort conversion without ESBMC type");
     case SMTSortKind::Function:
       unsupported("function sorts");
+    case SMTSortKind::FXP:
+      // ESBMC lowers fixedbv to a plain BV (mk_fbv_sort), so camada never
+      // hands one back here.
+      unsupported("fixed-point sorts");
     }
 
     unsupported("unknown Camada sort kind");
