@@ -2,13 +2,13 @@
 
 ## Flags & Configuration
 
-All 39 tests share the same configuration:
+All 49 tests share the same configuration:
 
 | Property | Value |
 |---|---|
 | **test.desc mode** | `THOROUGH` — the suite is opt-in and CI does not run it (`-DENABLE_CXL_REGRESSION=On`) |
 | **ESBMC mode** | BMC (default, with automatic unwinding) |
-| **Additional flags** | `--memory-leak-check --overflow-check --unsigned-overflow-check`; the five concurrency tests use `--data-races-check --context-bound 2 --cswitch-skip-readonly-globals` |
+| **Additional flags** | `--memory-leak-check --overflow-check --unsigned-overflow-check`; the five concurrency tests use `--data-races-check --context-bound 2 --cswitch-skip-readonly-globals`; four tests add an explicit `--unwind` (see below) |
 | **Test runner env** | `ESBMC_REGRESS_TIMEOUT=1200`, `ESBMC_REGRESS_MEMORY_LIMIT=8192` |
 | **Expected verdicts** | `VERIFICATION SUCCESSFUL` (PASS tests) or `VERIFICATION FAILED` (FAIL tests) |
 
@@ -16,7 +16,7 @@ All 39 tests share the same configuration:
 
 Every test now declares its flags, and all of them hold under leak and overflow checking. The cost is nil — the suite runs in ~75s either way, dominated by `cxl_driver_irq_01`.
 
-Unwinding is still left to BMC's default. The tests that use nondeterminism (`cxl_driver_irq_01`, `cxl_device_init_01`, the `cxl_mmio_readback_*` pair) are bounded — `cxl_driver_irq_01`'s loop runs 10 iterations — so that remains appropriate.
+Unwinding is left to BMC's default where the loops are concretely bounded (`cxl_driver_irq_01`'s runs 10 iterations, `cxl_device_init_01` and the `cxl_mmio_readback_*` pair likewise). Four tests must state an `--unwind` instead, and the reason is worth knowing: a loop whose bound is a *mutable counter* in the model — `esbmc_irq_count`, or a device-supplied register value — stops being concrete as soon as a failure path merges, and symex then unwinds it indefinitely rather than solving the guard. `cxl_pci_config_01/02` use `--unwind 4` and `cxl_irq_msi_01/02` use `--unwind 2`. Unwinding assertions are left **on** in all four, so the bound is proved rather than assumed.
 
 > The empty line 3 is load-bearing. It is the ESBMC argument list; if it is
 > omitted, the expected-output regex slides onto it and is passed to ESBMC as
@@ -173,7 +173,7 @@ check), `cxl_mbox_ioctl_02` (unchecked payload size), `cxl_port_dport_02`
 (use-after-free), `cxl_mbox_race_02` (unsynchronised mailbox),
 `cxl_dma_coherent_02` (unsynchronised DMA buffer)
 
-24 + 15 = 39, matching `ctest -L cxl` with `-DENABLE_CXL_REGRESSION=On`.
+29 + 20 = 49, matching `ctest -L cxl` with `-DENABLE_CXL_REGRESSION=On`.
 
 ---
 
@@ -199,7 +199,7 @@ check), `cxl_mbox_ioctl_02` (unchecked payload size), `cxl_port_dport_02`
 
 ### Recommendations
 
-1. **Roadmap statistics** are now 24 passing / 15 bug-detecting across 39 suites. Note the figure that matters more: 22 of 105 modelled functions are exercised by any test (`scripts/cxl_model_coverage.py`). Test count is not coverage.
+1. **Roadmap statistics** are now 29 passing / 20 bug-detecting across 49 suites. Note the figure that matters more: 61 of 107 modelled functions are exercised by any test, up from 22 of 105 (`scripts/cxl_model_coverage.py`). Test count is not coverage.
 
 2. **Flags are adequate but sparse.** No test uses:
    - `--z3` / `--bitwuzla` solver selection — all tests run with the default SMT solver
