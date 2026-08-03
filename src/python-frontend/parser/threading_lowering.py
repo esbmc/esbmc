@@ -347,12 +347,57 @@ def _collect_scope_statements(body: list[ast.stmt]) -> list[ast.stmt]:
 
 
 def _declared_outer_names(body: list[ast.stmt]) -> set[str]:
-    """Return the names a scope rebinds outside itself via ``global``/``nonlocal``."""
+    """Return names bound outside a scope via ``global``/``nonlocal``, nested scopes included.
+
+    Nested declarations count. ``Global``/``Nonlocal`` hold their names
+    as plain strings, so the hoist's ``Name`` rename cannot rewrite
+    them: an inner ``nonlocal w`` would survive pointing at a name the
+    rename has just retired.
+    """
     names: set[str] = set()
-    for stmt in _collect_scope_statements(body):
-        if isinstance(stmt, (ast.Global, ast.Nonlocal)):
-            names.update(stmt.names)
+    for stmt in body:
+        for node in ast.walk(stmt):
+            if isinstance(node, (ast.Global, ast.Nonlocal)):
+                names.update(node.names)
     return names
+
+
+_SCOPE_NODES = (
+    ast.FunctionDef,
+    ast.AsyncFunctionDef,
+    ast.ClassDef,
+    ast.Lambda,
+    ast.ListComp,
+    ast.SetComp,
+    ast.DictComp,
+    ast.GeneratorExp,
+)
+
+
+def _iter_scope_nodes(body: list[ast.stmt]) -> Iterator[ast.AST]:
+    """Yield every node reachable from ``body`` without crossing a scope boundary."""
+    stack: list[ast.AST] = [stmt for stmt in body if not isinstance(stmt, _SCOPE_NODES)]
+    while stack:
+        node = stack.pop()
+        yield node
+        stack.extend(child for child in ast.iter_child_nodes(node)
+                     if not isinstance(child, _SCOPE_NODES))
+
+
+def _iter_scope_stmt_lists(body: list[ast.stmt]) -> Iterator[list[ast.stmt]]:
+    """Yield ``body`` and every statement list nested below it in the same scope."""
+    yield body
+    for stmt in body:
+        if isinstance(stmt, _SCOPE_NODES):
+            continue
+        for field in ("body", "orelse", "finalbody"):
+            inner = getattr(stmt, field, None)
+            if isinstance(inner, list) and inner and isinstance(inner[0], ast.stmt):
+                yield from _iter_scope_stmt_lists(inner)
+        for handler in getattr(stmt, "handlers", None) or []:
+            yield from _iter_scope_stmt_lists(handler.body)
+        for case in getattr(stmt, "cases", None) or []:
+            yield from _iter_scope_stmt_lists(case.body)
 
 
 def _parent_map(tree: ast.AST) -> dict[int, ast.AST]:
@@ -611,13 +656,20 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
     # tracking gives C6's two failure modes inline. Function-scope
     # bindings are accepted: the lowering hoists them to a module global
     # so the spawned trampoline can still read the instance.
+    #
+    # The accept set must match what the lowering can collect, or an
+    # unsupported shape lowers to nothing and reaches the frontend with
+    # a `.start()` on a base-stripped class. Module scope is therefore
+    # limited to direct `tree.body` children (what _collect_subclass_sites
+    # walks); function scopes descend control flow, as their collector does.
     subclass_names: set[str] = set(subclass_defs)
     subclass_binding_call_ids: set[int] = set()
     if subclass_names:
         for body in _scope_bodies(tree):
+            is_module = body is tree.body
             subclass_var_names: set[str] = set()
-            outer_names = set() if body is tree.body else _declared_outer_names(body)
-            for stmt in _collect_scope_statements(body):
+            outer_names = set() if is_module else _declared_outer_names(body)
+            for stmt in (body if is_module else _collect_scope_statements(body)):
                 target_name, value = _extract_name_binding(stmt)
                 if target_name is None:
                     continue
@@ -652,6 +704,21 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
                         "spawned trampoline would observe the rebound value "
                         "rather than the subclass instance.",
                     )
+            # The hoist turns the local binding into a write to a module
+            # global, and the frontend drops such a write when the scope
+            # also defines a nested function or class: the global keeps
+            # its initial NULL and the trampoline dereferences it. Refuse
+            # the shape rather than emit a false NULL-dereference report.
+            if subclass_var_names and not is_module:
+                for stmt in _collect_scope_statements(body):
+                    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                        fail(
+                            stmt.lineno,
+                            f"`{stmt.name}` is defined in the same function "
+                            "that constructs a Thread subclass instance, "
+                            "which is not supported. Move the nested "
+                            "definition to module scope.",
+                        )
 
     # C2: every subclass constructor in the tree must be one of the
     # bindings we just registered.
@@ -903,20 +970,6 @@ def _collect_func_subclass_sites(
     return sites, next_id
 
 
-def _iter_stmt_lists(body: list[ast.stmt]) -> Iterator[list[ast.stmt]]:
-    """Yield ``body`` and every statement list nested below it, defs included."""
-    yield body
-    for stmt in body:
-        for field in ("body", "orelse", "finalbody"):
-            inner = getattr(stmt, field, None)
-            if isinstance(inner, list) and inner and isinstance(inner[0], ast.stmt):
-                yield from _iter_stmt_lists(inner)
-        for handler in getattr(stmt, "handlers", None) or []:
-            yield from _iter_stmt_lists(handler.body)
-        for case in getattr(stmt, "cases", None) or []:
-            yield from _iter_stmt_lists(case.body)
-
-
 def _hoist_func_subclass_binding(
     scope_body: list[ast.stmt],
     var_name: str,
@@ -927,22 +980,30 @@ def _hoist_func_subclass_binding(
     The spawned trampoline runs at module scope and can only reach the
     instance through a global, so the local binding is renamed rather
     than copied: one object, no aliasing question about whether the
-    frontend assigns instances by reference. ``<name>: X = X()`` is
-    demoted to a plain assignment first — an annotated target cannot
-    also be declared ``global``.
+    frontend assigns instances by reference.
+
+    Both passes stop at nested scope boundaries — an inner ``def``'s
+    parameter or local of the same name is a different variable, and
+    renaming it would either orphan the parameter or redirect the inner
+    binding at this scope's thread object.
+
+    Annotations on the target are dropped: a name cannot be both
+    annotated and ``global``, and re-annotating inside the function
+    would restore the value type that :func:`_build_obj_declaration`
+    exists to avoid.
     """
-    for stmts in _iter_stmt_lists(scope_body):
+    for stmts in _iter_scope_stmt_lists(scope_body):
         for i, stmt in enumerate(stmts):
-            if (isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name)
-                    and stmt.target.id == var_name and stmt.value is not None):
-                stmts[i] = ast.Assign(
-                    targets=[ast.Name(id=var_name, ctx=ast.Store())],
-                    value=stmt.value,
-                )
-    for stmt in scope_body:
-        for node in ast.walk(stmt):
-            if isinstance(node, ast.Name) and node.id == var_name:
-                node.id = obj_name
+            if not (isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name)
+                    and stmt.target.id == var_name):
+                continue
+            stmts[i] = (ast.Pass() if stmt.value is None else ast.Assign(
+                targets=[ast.Name(id=var_name, ctx=ast.Store())],
+                value=stmt.value,
+            ))
+    for node in _iter_scope_nodes(scope_body):
+        if isinstance(node, ast.Name) and node.id == var_name:
+            node.id = obj_name
     scope_body.insert(0, ast.Global(names=[obj_name]))
 
 
@@ -1364,6 +1425,20 @@ def lower_threading_thread_usage(tree: ast.Module, source_filename: str) -> None
     sites_by_scope, next_id = _collect_thread_var_sites(tree, module_aliases, thread_aliases)
     subclass_sites, next_id = _collect_subclass_sites(tree, set(subclass_defs), next_id)
     func_subclass_sites, next_id = _collect_func_subclass_sites(tree, set(subclass_defs), next_id)
+
+    # The validator's accept set must equal what we just collected. A
+    # constructor it passed but we did not site would lower to nothing and
+    # reach the frontend as `.start()` on a base-stripped class — a false
+    # AttributeError rather than the clean parse-time refusal. Fail loud.
+    sited_ctors = {id(call) for _, call in subclass_sites.values()}
+    for scope_sites in func_subclass_sites.values():
+        sited_ctors.update(id(call) for _, call in scope_sites.values())
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call) and _is_subclass_constructor(node, set(subclass_defs))
+                and id(node) not in sited_ctors):
+            raise RuntimeError(f"Thread subclass `{_call_class_name(node)}` construction at "
+                               f"line {node.lineno} passed validation but was assigned no "
+                               "lowering site; validator gap")
 
     if not sites_by_scope and not subclass_sites and not func_subclass_sites:
         return
