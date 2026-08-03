@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR:.*`bump` is defined in the same function that constructs a Thread subclass instance

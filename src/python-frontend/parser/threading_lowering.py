@@ -704,21 +704,6 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
                         "spawned trampoline would observe the rebound value "
                         "rather than the subclass instance.",
                     )
-            # The hoist turns the local binding into a write to a module
-            # global, and the frontend drops such a write when the scope
-            # also defines a nested function or class: the global keeps
-            # its initial NULL and the trampoline dereferences it. Refuse
-            # the shape rather than emit a false NULL-dereference report.
-            if subclass_var_names and not is_module:
-                for stmt in _collect_scope_statements(body):
-                    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                        fail(
-                            stmt.lineno,
-                            f"`{stmt.name}` is defined in the same function "
-                            "that constructs a Thread subclass instance, "
-                            "which is not supported. Move the nested "
-                            "definition to module scope.",
-                        )
 
     # C2: every subclass constructor in the tree must be one of the
     # bindings we just registered.
