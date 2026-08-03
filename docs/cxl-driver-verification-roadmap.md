@@ -557,10 +557,45 @@ which is authoritative, or what is supposed to happen when the real driver
 API moves under the model. Pick one, say so, and record how the pin is
 updated.
 
+**7. Raise model coverage, and expect it to find defects.** — In progress.
+
+Coverage went from 22 of 105 (21%) to 61 of 107 (57%) by writing five test
+pairs against the surfaces nothing had ever called: PCI probe/teardown, PCI
+config space, MSI/IRQ lifetime, streaming DMA, and AER. Reaching them for the
+first time is what exposed the following, all of which had shipped green:
+
+- **`pci_get_device()` divided by zero (CWE-369).** It fell back to
+  `nondet % esbmc_pci_count` when the id did not match, and `esbmc_pci_count`
+  was *never incremented anywhere* — the device table had no population API at
+  all, so it was permanently 0. The fallback was also unsound in its own right:
+  it returned a device that did not match the requested vendor/device id.
+  Removed, and `esbmc_pci_register_device()` added so a harness can populate
+  the table.
+- **The entire AER layer was dead code.** `__esbmc_get_aer_cap()` looked state
+  up by comparing `&esbmc_pci_devices[i] == dev`, but callers pass their own
+  `struct pci_dev`, which is not in that table. The lookup could therefore
+  never match: `pci_enable_aer()` leaked a fresh slot on every call, and
+  `pci_aer_get_first_error()` / `pci_aer_clear_first_error()` always returned
+  `-ENODEV`. All four AER functions were unusable.
+- **Side-table lookups were unaffordable.** Keying AER state on a scan of a
+  16-slot array cost a symbolic pointer comparison per slot per call, and a
+  seven-call test did not solve in 300 s. AER state now lives in
+  `struct pci_dev`, as it does in Linux; the same test solves in 0.14 s.
+- **Loops bounded by mutable counters go symbolic.** `esbmc_simulate_irq()`
+  and the old AER scan loop are bounded by a static counter, which stops being
+  concrete as soon as a failure path merges — symex then unwinds them
+  indefinitely. Tests touching them need an explicit `--unwind` (and the AER
+  scan was rewritten to a compile-time bound). This is the same trap that made
+  Phase 5's HDM harness unreproducible, in a second place.
+
+Two of these mean a modelled function could not have worked for any caller.
+That is the argument for coverage over test count, in one line.
+
 **Acceptance criteria:**
 - Every test declares its property flags; the leak and overflow classes are
   checked wherever they apply.
-- A model-coverage figure exists and is reported alongside the test count.
+- A model-coverage figure exists and is reported alongside the test count, and
+  is moving: 21% -> 57%.
 - Phase 5's harness verdicts are checked by a script rather than asserted in
   prose (`run_all.sh`); running them in CI still needs a prepared kernel tree.
 - At least two genuinely concurrent tests exist and pass under
@@ -738,15 +773,19 @@ currently poor:
 
 | Question | Today | Was |
 |---|---|---|
-| Real Linux driver functions verified | 4 | 4 |
-| Operational model functions exercised | 22 of 105 (21%) | not measured |
-| Tests that execute the operational model | 15 of 39 | 11 of 35 |
-| Tests declaring the properties they check | 39 of 39 | 1 of 35 |
-| Tests that verify an interleaving | 5 of 39 | 0 of 35 |
+| Real Linux driver functions verified | 4 |
+| Model functions exercised by tests | 61 of 107 (57%) | 4 |
+| Operational model functions exercised | 61 of 107 (57%) | 22 of 105 (21%) |
+| Tests that execute the operational model | 25 of 49 | 15 of 39 |
+| Tests declaring the properties they check | 49 of 49 | 1 of 35 |
+| Tests that verify an interleaving | 5 of 49 | 0 of 35 |
 
 Phase 8.1 and 8.4 moved the last two; 8.2 made the second measurable for the
-first time, and at 21% it is still the number most worth moving next. A rising test
-count still should not be read as rising confidence.
+first time. Raising it from 21% to 57% is what found the model defects listed
+under Phase 8.7 — the PCI and AER surfaces had never been executed, and three
+of them did not work at all. A rising test count still should not be read as
+rising confidence; a rising coverage figure is worth more, because reaching a
+function is what exposes it.
 
 ## Current Statistics
 
@@ -767,15 +806,16 @@ Phase 8.2 raises model coverage, the suite becomes worth re-enabling.
 
 | Metric | Count |
 |--------|-------|
-| Total commits | 30 |
-| Total regression tests | 39 |
-| Passing tests | 24 |
-| Bug-detecting tests | 15 |
+| Total commits | 34 |
+| Total regression tests | 49 |
+| Passing tests | 29 |
+| Bug-detecting tests | 20 |
 | Kernel headers added | 6 |
-| Operational model lines | 1,637 |
+| Operational model lines | 1611 |
 | Documentation pages | 3 |
 | AER functions added | 4 |
 | Error injection functions added | 2 |
 | HDM constraints added | 2 (alignment + decoder limit) |
 | Real Linux driver files converted to GOTO | 1 |
 | Real Linux driver functions verified | 4 |
+| Model functions exercised by tests | 61 of 107 (57%) |

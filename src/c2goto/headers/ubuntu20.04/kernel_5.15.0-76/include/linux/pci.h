@@ -72,6 +72,20 @@ struct pci_dev {
   /* Driver model */
   void *driver_data;
   struct pci_driver *driver;
+
+  /* PCIe AER capability state.  Linux keeps this in struct pci_dev as well
+   * (dev->aer_cap, dev->aer_info), and holding it here rather than in a
+   * side table keeps lookup O(1): a scan keyed on the device pointer costs
+   * a symbolic comparison per slot on every AER call.
+   *
+   * A harness that fabricates a struct pci_dev must zero it before use --
+   * a real one comes from the bus already zeroed, and these fields decide
+   * whether reporting is enabled. */
+  int aer_enabled;
+  int aer_severity;
+  u64 aer_corr_count;
+  u64 aer_non_fatal_count;
+  u64 aer_fatal_count;
 };
 
 /* PCI driver */
@@ -97,6 +111,12 @@ struct pci_device_id {
 /* ============================================================
  *  PCI API — declared here, modelled in cxl_driver.c
  * ============================================================ */
+
+/* Harness setup: pci_get_device() enumerates only devices registered here, so
+ * a harness that wants enumeration to find anything must register it first.
+ * The table stores the pointer, not a copy. */
+int esbmc_pci_register_device(struct pci_dev *dev);
+void esbmc_pci_reset_devices(void);
 
 /* Device enumeration */
 struct pci_dev *pci_get_device(u16 vendor, u16 device, struct pci_dev *from);

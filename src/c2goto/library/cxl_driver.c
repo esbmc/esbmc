@@ -72,8 +72,10 @@ static char esbmc_mmio_written[ESBMC_MMIO_SPACE_SIZE];
 static char esbmc_dma_space[ESBMC_DMA_SPACE_SIZE];
 static int esbmc_dma_used[ESBMC_DMA_SPACE_SIZE]; /* tracking for assertions */
 
-/* PCI device table */
-static struct pci_dev esbmc_pci_devices[ESBMC_PCI_DEVICES_MAX];
+/* PCI device table.  Holds caller-supplied pointers rather than copies, so a
+ * device found by pci_get_device() is the same object the harness set up and
+ * per-device state (AER, driver_data) keyed on the pointer stays consistent. */
+static struct pci_dev *esbmc_pci_devices[ESBMC_PCI_DEVICES_MAX];
 static int esbmc_pci_count = 0;
 
 /* IRQ handler table */
@@ -313,16 +315,33 @@ void outl(uint32_t val, unsigned long port)
  *  PCI device models
  * ============================================================ */
 
+int esbmc_pci_register_device(struct pci_dev *dev)
+{
+__ESBMC_HIDE:;
+  assert(dev != NULL);
+  if (esbmc_pci_count >= ESBMC_PCI_DEVICES_MAX)
+    return -ENOSPC;
+  esbmc_pci_devices[esbmc_pci_count++] = dev;
+  return 0;
+}
+
+void esbmc_pci_reset_devices(void)
+{
+  esbmc_pci_count = 0;
+}
+
 static struct pci_dev *
 __esbmc_pci_find_by_id(u16 vendor, u16 device, struct pci_dev *from)
 {
   int start = 0;
   if (from != NULL)
   {
-    /* Find index of 'from' in the table */
+    /* Resume after 'from', per pci_get_device()'s iteration contract. A 'from'
+     * that is not in the table ends the walk rather than restarting it. */
+    start = esbmc_pci_count;
     for (int i = 0; i < esbmc_pci_count; i++)
     {
-      if (&esbmc_pci_devices[i] == from)
+      if (esbmc_pci_devices[i] == from)
       {
         start = i + 1;
         break;
@@ -335,10 +354,10 @@ __esbmc_pci_find_by_id(u16 vendor, u16 device, struct pci_dev *from)
   for (int i = start; i < esbmc_pci_count; i++)
   {
     if (
-      (vendor == 0 || esbmc_pci_devices[i].vendor == vendor) &&
-      (device == 0 || esbmc_pci_devices[i].device == device))
+      (vendor == 0 || esbmc_pci_devices[i]->vendor == vendor) &&
+      (device == 0 || esbmc_pci_devices[i]->device == device))
     {
-      return &esbmc_pci_devices[i];
+      return esbmc_pci_devices[i];
     }
   }
   return NULL;
@@ -347,17 +366,7 @@ __esbmc_pci_find_by_id(u16 vendor, u16 device, struct pci_dev *from)
 struct pci_dev *pci_get_device(u16 vendor, u16 device, struct pci_dev *from)
 {
 __ESBMC_HIDE:;
-  struct pci_dev *dev = __esbmc_pci_find_by_id(vendor, device, from);
-  if (dev == NULL)
-  {
-    /* Non-deterministic: may or may not find a device */
-    if (__VERIFIER_nondet_int() == 0)
-      return NULL;
-    /* Return a non-deterministic device from the table */
-    int idx = __VERIFIER_nondet_int() % esbmc_pci_count;
-    return &esbmc_pci_devices[idx];
-  }
-  return dev;
+  return __esbmc_pci_find_by_id(vendor, device, from);
 }
 
 struct pci_dev *pci_get_bus_device(u32 domain, u8 bus, u8 devfn)
@@ -368,8 +377,9 @@ __ESBMC_HIDE:;
   (void)devfn;
   if (esbmc_pci_count == 0)
     return NULL;
-  int idx = __VERIFIER_nondet_int() % esbmc_pci_count;
-  return &esbmc_pci_devices[idx];
+  int idx = __VERIFIER_nondet_int();
+  __ESBMC_assume(idx >= 0 && idx < esbmc_pci_count);
+  return esbmc_pci_devices[idx];
 }
 
 void pci_put_device(struct pci_dev *dev)
@@ -595,49 +605,16 @@ void pci_unregister_driver(struct pci_driver *drv)
  * Reference: PCIe r4.0 §7.10, Linux drivers/pci/pcie/aer/
  * ============================================================ */
 
-/* AER capability state per PCI device */
-struct aer_cap
-{
-  int enabled;
-  int severity; /* current error severity */
-  uint64_t corr_count;
-  uint64_t non_fatal_count;
-  uint64_t fatal_count;
-};
-
-/* Simple array to track AER state for registered devices */
-static struct aer_cap esbmc_aer_cap[ESBMC_PCI_DEVICES_MAX];
-static int esbmc_aer_count = 0;
-
-static struct aer_cap *__esbmc_get_aer_cap(struct pci_dev *dev)
-{
-  for (int i = 0; i < esbmc_aer_count; i++)
-  {
-    if (&esbmc_pci_devices[i] == dev)
-      return &esbmc_aer_cap[i];
-  }
-  return NULL;
-}
-
 int pci_enable_aer(struct pci_dev *dev)
 {
 __ESBMC_HIDE:;
   assert(dev != NULL);
 
-  /* Find or allocate AER state for this device */
-  struct aer_cap *cap = __esbmc_get_aer_cap(dev);
-  if (cap == NULL)
-  {
-    if (esbmc_aer_count >= ESBMC_PCI_DEVICES_MAX)
-      return -ENOMEM;
-    cap = &esbmc_aer_cap[esbmc_aer_count++];
-    memset(cap, 0, sizeof(*cap));
-  }
-
-  cap->enabled = 1;
-  cap->corr_count = 0;
-  cap->non_fatal_count = 0;
-  cap->fatal_count = 0;
+  dev->aer_enabled = 1;
+  dev->aer_severity = AER_CORRECTABLE;
+  dev->aer_corr_count = 0;
+  dev->aer_non_fatal_count = 0;
+  dev->aer_fatal_count = 0;
   return 0;
 }
 
@@ -645,28 +622,27 @@ void pci_aer_clear(struct pci_dev *dev, int severity)
 {
 __ESBMC_HIDE:;
   assert(dev != NULL);
-  struct aer_cap *cap = __esbmc_get_aer_cap(dev);
-  if (cap == NULL || !cap->enabled)
+  if (!dev->aer_enabled)
     return;
 
   switch (severity)
   {
   case AER_CORRECTABLE:
-    cap->corr_count = 0;
-    cap->severity = AER_CORRECTABLE;
+    dev->aer_corr_count = 0;
+    dev->aer_severity = AER_CORRECTABLE;
     break;
   case AER_NON_FATAL:
-    cap->non_fatal_count = 0;
-    cap->severity = AER_NON_FATAL;
+    dev->aer_non_fatal_count = 0;
+    dev->aer_severity = AER_NON_FATAL;
     break;
   case AER_FATAL:
-    cap->fatal_count = 0;
-    cap->severity = AER_FATAL;
+    dev->aer_fatal_count = 0;
+    dev->aer_severity = AER_FATAL;
     break;
   default:
-    cap->corr_count = 0;
-    cap->non_fatal_count = 0;
-    cap->fatal_count = 0;
+    dev->aer_corr_count = 0;
+    dev->aer_non_fatal_count = 0;
+    dev->aer_fatal_count = 0;
     break;
   }
 }
@@ -677,8 +653,7 @@ __ESBMC_HIDE:;
   assert(dev != NULL);
   assert(severity != NULL);
 
-  struct aer_cap *cap = __esbmc_get_aer_cap(dev);
-  if (cap == NULL || !cap->enabled)
+  if (!dev->aer_enabled)
     return -ENODEV;
 
   /* Return non-deterministic severity from available error types */
@@ -693,16 +668,15 @@ int pci_aer_clear_first_error(struct pci_dev *dev)
 __ESBMC_HIDE:;
   assert(dev != NULL);
 
-  struct aer_cap *cap = __esbmc_get_aer_cap(dev);
-  if (cap == NULL || !cap->enabled)
+  if (!dev->aer_enabled)
     return -ENODEV;
 
   /* Clear and return the current severity */
-  int severity = cap->severity;
-  cap->corr_count = 0;
-  cap->non_fatal_count = 0;
-  cap->fatal_count = 0;
-  cap->severity = AER_CORRECTABLE;
+  int severity = dev->aer_severity;
+  dev->aer_corr_count = 0;
+  dev->aer_non_fatal_count = 0;
+  dev->aer_fatal_count = 0;
+  dev->aer_severity = AER_CORRECTABLE;
   return severity;
 }
 
