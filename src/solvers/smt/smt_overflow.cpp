@@ -9,7 +9,13 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
   expr2tc zero = gen_zero(side1->type);
 
   // Guess whether we're performing a signed or unsigned comparison.
-  bool is_signed = (is_signedbv_type(side1) || is_signedbv_type(side2));
+  // For a shift only the shifted operand's signedness matters: the count is a
+  // separate operand whose type says nothing about the range of the result.
+  // Including it sends `(u64)x << 32` -- whose count is a plain signed int --
+  // down the signed path, which reports overflow for any result >= 2^63.
+  bool is_signed = is_shl2t(overflow.operand)
+                     ? is_signedbv_type(side1)
+                     : (is_signedbv_type(side1) || is_signedbv_type(side2));
 
   switch (overflow.operand->expr_id)
   {
