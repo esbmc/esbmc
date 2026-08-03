@@ -124,7 +124,7 @@ def _run_check_json(check, base_dir):
     if not os.path.isfile(path):
         return False, f"CHECK_JSON file not found: {file}"
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as exc:
         return False, f"CHECK_JSON read/parse failed for {file}: {exc}"
@@ -197,7 +197,7 @@ def _run_check_file(check, base_dir):
     if not os.path.isfile(path):
         return False, f"CHECK_FILE file not found: {file}"
     try:
-        with open(path, errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             content = f.read()
     except OSError as exc:
         return False, f"CHECK_FILE read failed for {file}: {exc}"
@@ -282,7 +282,7 @@ def _run_seed_file(seed, base_dir):
     file, content = seed
     path = os.path.join(base_dir, file)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(content + "\n" if content else "")
 
 
@@ -297,7 +297,9 @@ class TestCase:
 
     def _initialize_test_case(self):
         """Reads test description and initialize this object"""
-        with open(os.path.join(self.test_dir, "test.desc")) as fp:
+        with open(
+            os.path.join(self.test_dir, "test.desc"), encoding="utf-8"
+        ) as fp:
             # First line - TEST MODE
             self.test_mode = fp.readline().strip()
             assert (
@@ -398,7 +400,7 @@ class TestCase:
         """Replaces original test with the current configuration"""
         test_desc_path = os.path.join(self.test_dir, "test.desc")
         assert os.path.isfile(test_desc_path)
-        with open(test_desc_path, "w") as f:
+        with open(test_desc_path, "w", encoding="utf-8") as f:
             f.write(f"{self.test_mode}\n")
             f.write(f"{self.test_file}\n")
             f.write(f"{self.test_args}\n")
@@ -592,7 +594,7 @@ def _add_test(test_case, executor):
                 destination = os.path.join(log_dir, f"{suite}_{test_case.name}")
                 # Overwrite on every run — accumulating across ctest invocations
                 # would corrupt downstream stat-counting (e.g. summing VCCs).
-                with open(destination, "w") as f:
+                with open(destination, "w", encoding="utf-8") as f:
                     f.write("ESBMC args: " + test_case.test_args + "\n\n")
                     f.write(output_to_validate)
 
