@@ -696,21 +696,35 @@ __ESBMC_HIDE:;
   if (bridge == NULL)
     return NULL;
 
-  bridge->num_devices = __VERIFIER_nondet_int() % 8;
-  __ESBMC_assume(bridge->num_devices <= 4);
-  bridge->devices = (struct cxl_dev **)kmalloc(
-    bridge->num_devices * sizeof(struct cxl_dev *), GFP_KERNEL);
+  /* The array is always allocated at full size and only `num_devices` of it
+   * is reported as populated.  Sizing the allocation by the symbolic count
+   * instead would make every later `devices[i]` a bounds check against a
+   * nondeterministically sized object, which does not solve: a four-device
+   * walk did not finish in 280s that way, and finishes in under a second
+   * this way.  A bridge with no devices still gets no array, because
+   * kmalloc(0) trips kmalloc()'s own precondition. */
+  unsigned int n = __VERIFIER_nondet_uint();
+  __ESBMC_assume(n <= CXL_MAX_DOWNSTREAM_PORTS);
+  bridge->num_devices = n;
+  bridge->devices = NULL;
+  if (n == 0)
+    return bridge;
 
-  for (unsigned int i = 0; i < bridge->num_devices; i++)
+  bridge->devices = (struct cxl_dev *)kmalloc(
+    CXL_MAX_DOWNSTREAM_PORTS * sizeof(struct cxl_dev), GFP_KERNEL);
+  if (bridge->devices == NULL)
   {
-    bridge->devices[i] =
-      (struct cxl_dev *)kmalloc(sizeof(struct cxl_dev), GFP_KERNEL);
-    if (bridge->devices[i])
-    {
-      bridge->devices[i]->dev_type = (__VERIFIER_nondet_int() % 3) + 1;
-      bridge->devices[i]->regs = esbmc_mmio_space;
-      bridge->devices[i]->port = NULL;
-    }
+    bridge->num_devices = 0;
+    return bridge;
+  }
+
+  for (unsigned int i = 0; i < CXL_MAX_DOWNSTREAM_PORTS; i++)
+  {
+    unsigned int t = __VERIFIER_nondet_uint();
+    __ESBMC_assume(t >= CXL_TYPE_FPMEM && t <= CXL_TYPE_RAM);
+    bridge->devices[i].dev_type = t;
+    bridge->devices[i].regs = esbmc_mmio_space;
+    bridge->devices[i].port = NULL;
   }
 
   return bridge;
@@ -720,13 +734,7 @@ void cxl_free_ports(struct cxl_host_bridge *bridge)
 {
   if (bridge == NULL)
     return;
-  if (bridge->devices)
-  {
-    for (unsigned int i = 0; i < bridge->num_devices; i++)
-    {
-      kfree(bridge->devices[i]);
-    }
-  }
+  kfree(bridge->devices);
   kfree(bridge);
 }
 
@@ -739,8 +747,11 @@ __ESBMC_HIDE:;
   (void)device;
   if (bridge->num_devices == 0)
     return NULL;
-  int idx = __VERIFIER_nondet_int() % bridge->num_devices;
-  return bridge->devices[idx];
+  /* Constrain rather than take a modulus: __VERIFIER_nondet_int() may be
+   * negative, and C's % keeps the sign of the dividend. */
+  unsigned int idx = __VERIFIER_nondet_uint();
+  __ESBMC_assume(idx < bridge->num_devices);
+  return &bridge->devices[idx];
 }
 
 int cxl_device_init(struct cxl_dev *cxld)
@@ -848,8 +859,8 @@ enum cxl_security_state cxl_get_security_state(struct cxl_dev *cxld)
 {
 __ESBMC_HIDE:;
   assert(cxld != NULL);
-  int state = __VERIFIER_nondet_int() % 6;
-  __ESBMC_assume(state >= 0 && state <= 5);
+  int state = __VERIFIER_nondet_int();
+  __ESBMC_assume(state >= CXL_SEC_NONE && state <= CXL_SEC_PASSPHRASE_SET);
   return (enum cxl_security_state)state;
 }
 
@@ -1066,7 +1077,9 @@ __ESBMC_HIDE:;
   assert(max_regions > 0);
 
   /* Non-deterministic number of regions (1 to max_regions) */
-  unsigned int n = __VERIFIER_nondet_int() % max_regions + 1;
+  /* Constrain rather than take a modulus of a signed nondet: C's % keeps the
+   * sign of the dividend, so `nondet_int() % max + 1` reaches 0 and below. */
+  unsigned int n = __VERIFIER_nondet_uint();
   __ESBMC_assume(n >= 1 && n <= max_regions);
 
   for (unsigned int i = 0; i < n; i++)

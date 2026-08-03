@@ -62,9 +62,19 @@ struct cxl_dev {
 };
 
 /* CXL host bridge — top-level container */
+/* Downstream ports a modelled host bridge may report. The array is always
+ * allocated at this size; num_devices says how much of it is populated.
+ * Two is enough to exercise "more than one port" -- raising it costs solver
+ * time in every test that walks the topology, for no extra behaviour. */
+#define CXL_MAX_DOWNSTREAM_PORTS 2
+
 struct cxl_host_bridge {
   struct pci_dev *pdev;
-  struct cxl_dev **devices;
+  /* One contiguous array, not an array of separately allocated pointers.
+   * The latter costs a distinct heap object per downstream device, and the
+   * alias reasoning over a symbolically indexed array of those makes any
+   * test that walks the topology unsolvable -- 120s+ for four devices. */
+  struct cxl_dev *devices;
   unsigned int num_devices;
 };
 
