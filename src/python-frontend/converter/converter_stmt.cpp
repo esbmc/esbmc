@@ -3634,6 +3634,14 @@ void python_converter::get_var_assign(
       !base_is_imported_module &&
       (method_name == "transpose" || method_name == "reshape" ||
        method_name == "ravel");
+    // flatten() is copy-like, not view-like (see is_numpy_view_copy_expr,
+    // which deliberately excludes it), but the method form still needs the
+    // same np.flatten(a, ...)-shaped rewrite below to dispatch to the
+    // existing numpy.flatten() handler — the only form that method-call
+    // dispatch resolves through here at all is the function-call shape.
+    const bool supported_dispatch_rewrite_method =
+      supported_view_method ||
+      (!base_is_imported_module && method_name == "flatten");
     const std::string method_base_id =
       method_base_name.empty() ? std::string()
                                : resolve_name_symbol_id(method_base_name);
@@ -3645,7 +3653,7 @@ void python_converter::get_var_assign(
     {
       effective_ast_node["value"] = ast_node["value"]["func"]["value"];
     }
-    else if (supported_view_method)
+    else if (supported_dispatch_rewrite_method)
     {
       std::string numpy_alias = "np";
       for (const auto &entry : imported_modules)
