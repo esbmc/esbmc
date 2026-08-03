@@ -698,7 +698,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R16** | **Medium (incompleteness under a non-default flag)** — found by H-C2, §15 M5 (H-C2) | **`--no-simplify` is not verdict-preserving: 10 corpus inputs where the default proves SUCCESSFUL and `--no-simplify` does not.** Nine report a spurious counterexample (`github_1174_{hex,lmod,oct,pass}`, `github_2341_3`, `github_2357_5`, `github_2566_1`, `github_785-2`, `realloc13`) and one returns UNKNOWN (`github_252`, under `--k-induction`). In every case the *default* leg matches the verdict the test's own `test.desc` expects, so the fault is in the `--no-simplify` configuration, not the default. Spot-confirmed on `github_2341_3`: `--no-simplify` reports a violated `assert(temp != NULL)` the default discharges. The noisy direction — P1 — but it means `do_simplify` is load-bearing for *correctness of the encoding*, not merely for formula size, which is not how an "optimisation" flag reads. | `oracle_flag_parity.py --b=--no-simplify` over `regression/esbmc` CORE | **H-C2** | Triage one input down to the expression shape the encoder mishandles unsimplified. Until then `--no-simplify` is a debugging aid, not a semantics-preserving flag. |
 | **R17** | **High (false SUCCESSFUL, default configuration)** — found by H-C2, §15 M5 (H-C2); **FIXED**, §15 M5 (R17 root cause) | **An allocation the address space cannot lay out is encoded as a contradiction instead of a failed allocation, so the whole formula goes UNSAT and every assertion is discharged vacuously.** Found as `void *b = malloc(-4); assert(0);` returning **`VERIFICATION SUCCESSFUL`** under `--no-simplify --no-slice`, and first recorded as a flag-*composition* defect. It is not one, and the sign is not the trigger: `malloc(0xFFFFFFFFFFFFFFFCUL)` reproduces it under `--no-slice` alone. `--no-simplify` merely disabled the pre-existing negative-size guard (`do_simplify` is a no-op under it, so the guard never saw a constant) and `--no-slice` merely kept the otherwise-dead allocation in the equation. The real boundary is a layout limit and is exact: `1UL<<63` is fine, every size `>= 2^64 - 16` is vacuous, because `init_pointer_obj` asserts `end == start + size` **and** `end >= start` while `start` is past the NULL object at address 0 and aligned to `max_alignment()` (16). Reached in the corpus via `github_1631_compact`, whose `--compact-trace` sets `no-slice` implicitly (`command_line_options.cpp:410`). **No flag is needed at all**: an underflowing size such as `malloc(len - 4)` with `len < 4` widens to a huge `size_t`, and when the result is *used* the slicer keeps the allocation, so plain `esbmc file.c` goes vacuous. `default_underflow_malloc` pins that. | `smt_memspace.cpp` `init_pointer_obj`; fixed in `symex_mem`, `src/goto-symex/builtin_functions/memory_alloc.cpp`. `regression/esbmc/no_simplify_no_slice_huge_malloc` (KNOWNBUG → **CORE**), `default_underflow_malloc` (CORE, default flags), `no_slice_unrepresentable_malloc` (CORE, positive literal), `..._malloc` (CORE control) | **H-C2** | Fixed: classify the request on an unconditionally simplified copy so `--no-simplify` cannot blind it, and fail any allocation the address space cannot lay out by returning NULL, as real allocators do. Residual **R25** covers the symbolic-size form. |
 | **R23** | **High (false SUCCESSFUL *and* false FAILED, default configuration)** — **confirmed with a two-line reproducer** by M8 triage, §15 M8 (cont. 7); filed as **#6589** | **Compound assignment narrows the right operand to the left operand's type before the operation.** C11 **6.5.16.2p3**: "A compound assignment of the form E1 op= E2 is equivalent to the simple assignment expression E1 = E1 op (E2), except that the lvalue E1 is evaluated only once". ESBMC violates that equivalence for every left operand narrower than `int`. `char b; b += a;` emits `!overflow("+", (signed int)b, (signed int)((signed char)a))` — the right operand cast to `char` — where `b = b + a` correctly emits `!overflow("+", (signed int)b, a)`. Both directions are reachable and both are wrong: with `b = 3, a = INT_MAX`, `b += a` reports **SUCCESSFUL** (the overflow claim is unfalsifiable, a **missed bug**) while `b = b + a` reports FAILED; and with `char b = 100; int a = 256`, `b /= a` reports **FAILED "division by zero"** because the divisor narrows to `(char)256 == 0`, where C gives `100 / 256 == 0` and gcc/UBSan agree. Not bitfield-specific — `char`, `short`, struct members and bitfields all reproduce; the discriminator is *narrower than the promoted type*, not the member/bitfield spelling. `github_162_fail` is where it was found, and its claim is vacuous for exactly this reason — but that entry is a *wrong test* independently of R23, see §15 M8 (cont. 8). **Frontend, not goto-symex**, so it is outside §2.3's scope, but it is a soundness defect in extremely common C. **Fixed, §15 M8 (cont. 8).** | `clang_c_convertert::get_compound_assign_expr`, `clang_c_convert.cpp:4258-4343`, specifically the unconditional `gen_typecast(ns, rhs, lhs.type())`, together with `goto_convertt::remove_assignment`, `goto_sideeffects.cpp:1714-1870`, which took the operation's type from `expr.op0()`. `regression/esbmc/compound_assign_narrow_overflow`, `..._explicit` (control) and `compound_assign_narrow_divzero`, all CORE | M8 triage | Done. The frontend records clang's `getComputationResultType()` on the side effect; `remove_assignment` performs the operation there and converts the result back on assignment. |
-| **R24** | **Medium (spurious counterexample, default configuration)** — **confirmed with a reproducer** by M8 triage, §15 M8 (cont. 10) | **`memset` does not constrain a struct's bitfield padding bits, so a type-punned read of the object is partly nondeterministic.** For `struct { int x : 12, y : 8; } s;`, `memset(&s, 0, sizeof s); s.x = -1; s.y = -1;` then reading `*(int *)&s` gives a value whose low 20 bits are correct — `(v & 0xFFFFF) == 0xFFFFF` verifies — but whose 12 padding bits are unconstrained: `(v >> 20) == 0` **fails**. gcc gives `0x000fffff` exactly, so the declared fields are laid out right and only the `memset`'s effect on the bits above them is lost. This is the direction an over-approximation produces (a false alarm, never a missed bug), and it is reachable with **no flags at all**, which is what separates it from the four flag-inadequacy entries triaged alongside it. Explains `github_732-1-1`, whose `sizeof(s) == 4` and `s.y == -1` assertions both hold and only whose type-punned assertion fails. | `regression/esbmc/bitfield_padding_memset` (KNOWNBUG) and `..._fields` (CORE control); `regression/esbmc/github_732-1-1` | M8 triage | Make `memset` (and struct zero-initialisation) constrain the padding bits of a bitfield-bearing struct, so a byte-level read of the object is fully determined. The control pins the low bits a fix must not regress. |
+| **R24** | **Medium (spurious counterexample, default configuration)** — **confirmed with a reproducer** by M8 triage, §15 M8 (cont. 10); **FIXED**, §15 M8 (R24) | **`memset` does not constrain a struct's bitfield padding bits, so a type-punned read of the object is partly nondeterministic.** For `struct { int x : 12, y : 8; } s;`, `memset(&s, 0, sizeof s); s.x = -1; s.y = -1;` then reading `*(int *)&s` gives a value whose low 20 bits are correct — `(v & 0xFFFFF) == 0xFFFFF` verifies — but whose 12 padding bits are unconstrained: `(v >> 20) == 0` **fails**. gcc gives `0x000fffff` exactly, so the declared fields are laid out right and only the `memset`'s effect on the bits above them is lost. This is the direction an over-approximation produces (a false alarm, never a missed bug), and it is reachable with **no flags at all**, which is what separates it from the four flag-inadequacy entries triaged alongside it. Explains `github_732-1-1`, whose `sizeof(s) == 4` and `s.y == -1` assertions both hold and only whose type-punned assertion fails. | `regression/esbmc/bitfield_padding_memset`, `..._fields`, `..._fill` and `..._fail`, and `regression/esbmc/github_732-1-1` — all CORE, the first and last flipped from KNOWNBUG by the fix | M8 triage | Fixed: the optimised `memset` charged each member `type_byte_size()` bytes, which over-counts a bitfield, so a 4-byte struct's trailing member was written with zero bytes and kept its old value. `gen_value_by_byte` now declines any struct with a sub-byte member and leaves it to `__memset_impl`, whose byte-wise model gets the padding right. |
 | **R25** | **High (false SUCCESSFUL, under-approximation in the memory model)** — found while root-causing R17, §15 M5 (R17 root cause) | **The R17 vacuity is still reachable through a *symbolic* allocation size.** `size_t n = nondet_size(); __ESBMC_assume(n >= 0xFFFFFFFFFFFFFFF0UL); void *b = malloc(n); assert(0);` reports **`VERIFICATION SUCCESSFUL`** under `--no-slice`. The R17 fix cannot see this: no constant is available at symex time. Worse than R17's shape, because the address-space constraint does not merely kill the path — `end == start + n` with `end >= start` silently *constrains the program variable `n`*, pruning exactly the executions the program asked about. Any assumption that forces an unrepresentable size is therefore quietly discarded rather than reported. | `smt_memspace.cpp` `init_pointer_obj:409-421`; `regression/esbmc/no_slice_symbolic_unrepresentable_malloc` (KNOWNBUG) | R17 root-causing | The address-space range constraints are asserted unconditionally, so no symex-side guard can discharge this — the allocation's success condition has to reach the solver, or the model has to represent "object too large to lay out" explicitly. Pinned, not fixed. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
@@ -809,8 +809,8 @@ tests. R20 (#6544) and R21 (#6545) attribute five of the twelve unattributed
 wrong-verdict entries. The Linux re-run (§15 M8 cont. 3) discharges the
 "re-measure the masked ones" half: masking drops to 5/28, six tests rejoin the
 inventory, and two of them produce **R22**. Triage of the resulting ten
-(§15 M8 cont. 7-10) closes the inventory: **R23** (found through `github_162_fail`,
-fixed) and **R24** (bitfield padding under type punning, pinned), with seven of
+(§15 M8 cont. 7-10) closes the inventory: **R23** (found through `github_162_fail`)
+and **R24** (bitfield padding under type punning), both since fixed, with seven of
 the eleven entries turning out to be wrong tests rather than defects — six of
 those fixed and retired.
 
@@ -2809,13 +2809,62 @@ read. Pinned by `regression/esbmc/bitfield_padding_memset` (KNOWNBUG) and
 `..._fields` (CORE control, so a fix cannot regress the low bits).
 
 **M8's inventory is closed.** Of the ten unattributed wrong-verdict entries:
-one produced **R23** (fixed), one is **R24** (pinned, open), seven were wrong
+one produced **R23** (fixed), one is **R24** (fixed, see below), seven were wrong
 tests — six fixed and retired, one (`github_159_postdecrement_fail`) left
 KNOWNBUG because its intent needs a pointer-formation checker that does not
 exist — and `github_248`, carried separately as the UNKNOWN entry, was also a
 wrong test. **Seven of eleven entries were the test asking for the wrong
 thing, not ESBMC answering wrongly**, which is the single most useful number
 this milestone produced.
+
+### M8 (R24) — 2026-08-03, R24 fixed
+
+**Result: R24 is a byte-accounting error, not the modelling gap the entry
+assumed, and the counterexample said so all along.**
+
+The entry proposed teaching `memset` to constrain padding bits. That was the
+wrong target. `memset`'s optimised path already writes every member; it just
+runs out of bytes before reaching the last one. The counterexample names the
+culprit directly — `s = { .x=0, .y=0, .anon_bit_field_pad#2=0, .anon_pad#3=255 }`
+— three members zeroed and the fourth untouched, which is not what "padding is
+unconstrained" would look like.
+
+`struct { int x : 12, y : 8; }` lowers to four members; `gen_value_by_byte`'s
+struct walk charges each one `type_byte_size()`, which rounds a sub-byte member
+up to a whole byte:
+
+| member | width | `type_byte_size` | bytes written | `bytes_left` after |
+|---|---|---|---|---|
+| `x` | 12 bits | 2 | 2 | 2 |
+| `y` | 8 bits | 1 | 1 | 1 |
+| `anon_bit_field_pad#2` | 4 bits | 1 | 1 | **0** |
+| `anon_pad#3` | 8 bits | 1 | **0** | 0 |
+
+The three bitfield members occupy 3 bytes but are charged 4, so the whole
+4-byte budget is spent before `anon_pad#3`, and `gen_value_by_byte` returns it
+unchanged — i.e. nondet. Nothing about padding *semantics* is wrong; the walk
+simply cannot decompose a sub-byte layout into bytes.
+
+**The fix** declines the struct rather than repairing the arithmetic: a struct
+with any sub-byte member returns `expr2tc()`, which the caller already treats
+as "bump to `__memset_impl`", whose byte-wise dereference model gets the
+padding right. The existing guard at that spot was reaching for the same thing
+and was dead — it tested `has_prefix(name, "bit_field_pad$")` while the
+frontend mints `anon_bit_field_pad#`, so it never fired on any struct.
+
+**Cost is not a concern, and the first measurement of it was wrong.** Forcing
+the fallback with `--no-simplify` did not terminate in 10 minutes, which looked
+like the fallback being unaffordable. That was the `--no-simplify` leg's own
+timeout tail (R16), not `__memset_impl`: with the patch in and simplification
+on, both pins verify in 0.46 s.
+
+**Anti-vacuity.** `..._fail` asserts the object is `0x000FFFFE` and must stay
+FAILED — the object really is `0x000FFFFF`, so a fix that made the read
+unconstrained in the *other* direction would pass it. `..._fill` pins a
+non-zero fill (`memset(&s, 0xFF, …)` giving `0xFFFFFFFF`), since a fix that
+only special-cased zeroing would satisfy the other three pins. Both values are
+what gcc produces. Verified pre-patch as FAILED and post-patch as SUCCESSFUL,
+under Bitwuzla and Z3, with `github_732-1-1` flipping KNOWNBUG → CORE.
 
 ### M8 (cont. 9) — 2026-07-31, two more wrong tests, both under-approximations
 
