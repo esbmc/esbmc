@@ -1,7 +1,0 @@
-
-State 1 file /home/rafaelsa/esbmc/regression/esbmc/github_654/main.c line 7 column 5 function main thread 0
-----------------------------------------------------
-Violated property:
-  file /home/rafaelsa/esbmc/regression/esbmc/github_654/main.c line 7 column 5 function main
-  foo
-  0
