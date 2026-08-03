@@ -157,13 +157,9 @@ tmp_path create_tmp_dir(const std::string &format = "esbmc.%%%%-%%%%-%%%%");
 void create_path_and_write(const std::string &path, const char *s, size_t n);
 
 /**
- * @brief The register_*() registries below are process-global and
- *        unsynchronised.
- *
- * Each only appends; the reader is named with the registry. Registration must
- * be complete before that reader can run, and nothing makes a write safe
- * against a reader observing it half-done -- for the two consumed from signal
- * handlers, that means a signal landing mid-call.
+ * @brief The register_*() registries below are process-global, append-only and
+ *        unsynchronised; each is read by the function named alongside it. A
+ *        signal landing mid-append can observe a half-written registry.
  */
 
 /** @brief Temporary paths, read by cleanup_registered_tmps() from the signal

@@ -32,11 +32,9 @@ void clang_c_languaget::register_bundled()
 const std::string &clang_c_languaget::clang_resource_dir()
 {
 #ifdef ESBMC_CLANG_HEADERS_BUNDLED
-  // c2goto is a second executable and does not run esbmc's main(), so the
-  // accessors register on demand rather than relying on early init.
+  // c2goto has its own main(), so accessors register on demand.
   register_bundled();
-  // A path inside esbmc_clang_vfs(), never on disk: clang reads these headers
-  // straight out of .rodata.
+  // Inside esbmc_clang_vfs(), never on disk.
   return vfs_prefix;
 #else
   // clang headers not bundled, return the path set at compile time

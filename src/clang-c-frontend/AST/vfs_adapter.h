@@ -7,12 +7,10 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 /**
- * @brief A clang filesystem serving ESBMC's bundled files, overlaid on the
- *        real one.
+ * @brief A clang filesystem serving ESBMC's bundled files straight from
+ *        .rodata, overlaid on the real one.
  *
- * Headers and operational models bundled by scripts/flail.py are served
- * straight from the binary's .rodata: clang reads them without their ever
- * being written to disk. Anything else falls through to the real filesystem,
- * so a user's sources and system headers resolve as usual.
+ * Anything not bundled falls through, so user sources and system headers
+ * resolve as usual.
  */
 llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> esbmc_clang_vfs();

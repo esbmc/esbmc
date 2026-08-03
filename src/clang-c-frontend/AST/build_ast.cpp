@@ -63,7 +63,6 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   const std::string &intrinsics,
   const std::vector<std::string> &compiler_args)
 {
-  // Bundled headers are served from .rodata; everything else from disk.
   llvm::IntrusiveRefCntPtr<clang::FileManager> Files(
     new clang::FileManager(clang::FileSystemOptions(), esbmc_clang_vfs()));
 
@@ -149,17 +148,12 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
     llvm::errs() << "\n";
   }
 
-  /* Inject ESBMC's intrinsics as a forced include ahead of any the user asked
-   * for. They must land after the builtin #defines they rely on but before the
-   * first forced include, which can transitively reach ESBMC's own models and
-   * would otherwise see nondet_* / __ESBMC_* undeclared (github #5868).
-   * Forced includes are emitted into the predefines buffer in order, after all
-   * -D macros, so being first satisfies both constraints. */
+  /* Must precede any user -include: those can transitively reach ESBMC's own
+   * models, which would then see nondet_* / __ESBMC_* undeclared (#5868). */
   const std::string intrinsics_path = clang_vfs_root() + "/esbmc_intrinsics.h";
   clang::PreprocessorOptions &PPOpts = Invocation->getPreprocessorOpts();
-  /* getMemBufferCopy, not getMemBuffer: `intrinsics` belongs to the caller and
-   * does not outlive the returned ASTUnit. Ownership of the copy passes to
-   * clang, which frees it (RetainRemappedFileBuffers defaults to false). */
+  /* Copy: `intrinsics` does not outlive the ASTUnit. clang frees the buffer,
+   * RetainRemappedFileBuffers being false. */
   PPOpts.addRemappedFile(
     intrinsics_path,
     llvm::MemoryBuffer::getMemBufferCopy(intrinsics, intrinsics_path)
@@ -175,10 +169,8 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
       DiagOpts,
 #endif
       Diagnostics,
-      /* Raw pointer: clang 21 and earlier declare this parameter as
-       * FileManager *, clang 22 as IntrusiveRefCntPtr<FileManager>, and the
-       * latter converts implicitly from the former (retaining, so the returned
-       * ASTUnit keeps the manager alive past this scope). */
+      /* Raw pointer: FileManager * up to clang 21, IntrusiveRefCntPtr in 22,
+       * which converts implicitly and retains. */
       Files.get()));
   assert(unit);
 

@@ -13,10 +13,7 @@ llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> esbmc_clang_vfs()
   static llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> cached;
   static size_t cached_count = 0;
 
-  /* Frontends register their bundled files lazily, so the overlay is rebuilt
-   * whenever more have arrived since it was last built. Without this a
-   * translation unit parsed before, say, the libc registers would see a stale
-   * filesystem. */
+  /* Frontends can register lazily, so rebuild whenever more have arrived. */
   auto &fs = file_operations::filesystemt::get();
   if (cached && cached_count == fs.bundled_count())
     return cached;
@@ -27,10 +24,7 @@ llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> esbmc_clang_vfs()
   for (const std::string &path : fs.list(clang_vfs_root()))
   {
     std::optional<file_operations::file_data> contents = fs.read(path);
-    /* Everything under the VFS root is bundled, so the bytes live in .rodata:
-     * getMemBuffer borrows them rather than copying, and the buffer stays
-     * valid after `contents` goes out of scope. A non-bundled entry would not
-     * survive that, hence the guard. */
+    /* getMemBuffer borrows, so only .rodata bytes outlive `contents`. */
     if (!contents || !contents->is_bundled())
       continue;
 

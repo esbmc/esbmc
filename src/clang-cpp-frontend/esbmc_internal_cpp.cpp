@@ -26,6 +26,6 @@ void esbmct::register_bundled_cpp()
 const std::string &esbmct::abstract_cpp_includes()
 {
   register_bundled_cpp();
-  // A path inside esbmc_clang_vfs(), never on disk.
+  // Inside esbmc_clang_vfs(), never on disk.
   return vfs_prefix;
 }
