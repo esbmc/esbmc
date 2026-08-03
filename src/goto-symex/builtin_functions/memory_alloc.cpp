@@ -268,7 +268,9 @@ bool goto_symext::handle_realloc_zero_size(
 {
   expr2tc zero_size = gen_zero(realloc_size->type);
   expr2tc is_zero_size = equality2tc(realloc_size, zero_size);
-  do_simplify(is_zero_size);
+  // Classify unconditionally: --no-simplify selects a formula representation,
+  // it must not decide whether realloc(p, 0) frees p and returns NULL.
+  simplify(is_zero_size);
 
   if (is_true(is_zero_size))
   {
