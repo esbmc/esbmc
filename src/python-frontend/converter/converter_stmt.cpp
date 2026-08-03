@@ -5557,9 +5557,18 @@ exprt python_converter::get_block(
     }
     case StatementType::FUNC_DEFINITION:
     {
+      // A nested def is converted in the middle of its enclosing function, so
+      // save and restore rather than clear: the inner body's own `global`
+      // declarations must not outlive it, and the enclosing scope's must
+      // survive it. Clearing dropped the enclosing `global x`, after which
+      // every later `x = ...` in the outer body bound a fresh local and the
+      // module global kept its initial value (#6669). At module scope the
+      // saved state is empty, so this matches the previous behaviour.
+      std::vector<std::string> saved_globals = global_declarations;
+      std::vector<std::string> saved_loads = local_loads;
       get_function_definition(element);
-      global_declarations.clear();
-      local_loads.clear();
+      global_declarations = std::move(saved_globals);
+      local_loads = std::move(saved_loads);
       break;
     }
     case StatementType::RETURN:
