@@ -4,11 +4,38 @@ Unlike `regression/cxl/`, which is a synthetic suite against an invented
 CXL-like API, the harnesses here compile and verify **actual Linux kernel
 source** from `drivers/cxl/`. They need a kernel tree and a configured kernel
 build on the machine, so they are deliberately **not registered with ctest**
-(`regression/CMakeLists.txt` lists suites explicitly) and do not run in CI.
+(`regression/CMakeLists.txt` lists suites explicitly). They run in CI via
+`.github/workflows/cxl-linux.yml`, which prepares the tree first.
 
 ## Prerequisites
 
-A kernel source tree (developed against Linux 7.1.5) and generated headers.
+A kernel source tree (pinned to Linux 7.1.5) with its generated headers. The
+quickest route is the script CI uses:
+
+```sh
+./scripts/cxl_prepare_kernel.sh ~/linux-7.1.5 ~/linux-build-cxl
+```
+
+It fetches the pinned tarball if the source directory is absent, configures out
+of tree, runs `make prepare`, and checks the generated headers actually
+appeared. It never builds the kernel.
+
+Then point the harness scripts at both directories:
+
+```sh
+export CXL_LINUX_SRC=~/linux-7.1.5
+export CXL_LINUX_BUILD=~/linux-build-cxl
+export ESBMC=$PWD/build/src/esbmc/esbmc
+cd regression/cxl-linux && ./run_all.sh
+```
+
+`run_all.sh` checks every row of the verdict table below and exits non-zero on
+a mismatch; `MEMLIMIT` and `TIMEOUT` override its per-run resource caps.
+`.github/workflows/cxl-linux.yml` runs exactly this, weekly and on changes to
+this directory. It is non-blocking while it settles.
+
+### Doing it by hand
+
 Configure **out of tree** so the source stays pristine:
 
 ```sh
@@ -27,7 +54,9 @@ failure is harmless here: every generated header ESBMC needs
 (`include/generated/autoconf.h`, `asm-offsets.h`, the `arch/x86/include/generated`
 wrappers) is produced before objtool is built.
 
-Point `run_esbmc.sh` at both directories by editing `L` and `B`, then:
+`run_esbmc.sh` reads `CXL_LINUX_SRC`, `CXL_LINUX_BUILD` and `ESBMC` from the
+environment; the defaults baked into it are one developer's layout and are
+expected to be wrong for everyone else. With those exported:
 
 ```sh
 ./run_esbmc.sh harness_cdat_checksum.c --unwind 12 --no-unwinding-assertions
@@ -110,8 +139,18 @@ Verifying against undefined kernel functions makes every stub an assumption:
 - `harness_decoder.flags` must carry `CXL_DECODER_F_RAM`, otherwise the match
   callback returns before `range_contains()` and the negative harness passes
   vacuously.
+- `__counted_by()` is expanded to nothing. `CONFIG_CC_HAS_COUNTED_BY` is a
+  compiler-capability probe, so whether kernel structs carry
+  `__attribute__((__counted_by__(m)))` depends on whichever compiler ran
+  `defconfig` — not on the pinned kernel version. ESBMC cannot convert the
+  resulting `CountAttributedType` and every harness dies before verifying
+  anything, so `scripts/cxl_prepare_kernel.sh` clears the define. This drops a
+  bounds *annotation*, not a bounds *check*: the attribute feeds only
+  `CONFIG_UBSAN_BOUNDS` and `CONFIG_FORTIFY_SOURCE`, neither of which this
+  config enables. It is still an assumption, and it is the one that makes these
+  results reproducible on a machine other than the author's.
 
-The last two are worth dwelling on: both were real defects in an earlier version
+`device_find_child()` and `harness_decoder.flags` are worth dwelling on: both were real defects in an earlier version
 of this harness that made the negative case pass for the wrong reason. A negative
 harness that does not fail is not evidence of correctness — it is evidence the
 harness is wrong.

@@ -1,0 +1,80 @@
+name: CXL real-driver harnesses
+
+# Verifies regression/cxl-linux/ — the only part of the CXL work that compiles
+# actual Linux kernel source. Those harnesses need a configured kernel tree, so
+# they are not registered with ctest and have never run in CI; this workflow
+# prepares the tree and runs them.
+#
+# Why not vendor the preprocessed source instead, and skip the kernel entirely?
+# Measured, not guessed: one preprocessed harness is 2.9 MB / 67,943 lines,
+# ESBMC rejects the gcc-preprocessed .i with a parse error at
+# drivers/cxl/core/pci.c:582, and drivers/cxl/core/pci.c is GPL-2.0-only while
+# ESBMC's COPYING already describes a complex licensing situation. See Phase 8.3
+# in docs/cxl-driver-verification-roadmap.md.
+#
+# Bring-up note: `continue-on-error: true` is set so a finding does not block
+# master while this settles. The harnesses depend on line-level properties of a
+# pinned kernel, so the first few bumps of CXL_KERNEL_VERSION are the risk.
+# Drop the flag once it has been green across a version bump.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly. The kernel is pinned and the ESBMC side changes far more often
+    # than the harnesses do, so per-push would spend ~15 minutes of runner time
+    # to re-establish the same result.
+    - cron: '0 4 * * 1'
+  push:
+    branches: [master]
+    paths:
+      - 'regression/cxl-linux/**'
+      - 'scripts/cxl_prepare_kernel.sh'
+      - '.github/workflows/cxl-linux.yml'
+
+jobs:
+  harnesses:
+    name: cxl-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    continue-on-error: true
+    env:
+      CXL_KERNEL_VERSION: '7.1.5'
+      CXL_LINUX_SRC: ${{ github.workspace }}/linux-src
+      CXL_LINUX_BUILD: ${{ github.workspace }}/linux-build-cxl
+      ESBMC: ${{ github.workspace }}/build/src/esbmc/esbmc
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kernel build prerequisites
+        run: |
+          sudo apt-get update
+          # bc, flex, bison and libelf are what `make prepare` needs; libssl is
+          # for the certs target that defconfig pulls in.
+          sudo apt-get install -y --no-install-recommends \
+            bc flex bison libelf-dev libssl-dev
+
+      # The tree is ~1.5 GB unpacked and the fetch plus `make prepare` is the
+      # slowest part of the job, so key the cache on the pinned version.
+      - name: Cache prepared kernel tree
+        id: kernel-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.CXL_LINUX_SRC }}
+            ${{ env.CXL_LINUX_BUILD }}
+          key: cxl-linux-${{ env.CXL_KERNEL_VERSION }}-${{ hashFiles('scripts/cxl_prepare_kernel.sh') }}
+
+      - name: Prepare kernel tree
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        run: ./scripts/cxl_prepare_kernel.sh "$CXL_LINUX_SRC" "$CXL_LINUX_BUILD"
+
+      - name: Build ESBMC
+        run: ./scripts/build.sh -b RelWithDebInfo
+
+      - name: Run the harnesses
+        run: |
+          cd regression/cxl-linux
+          # run_all.sh caps each run with --memlimit/--timeout: an unguarded
+          # harness took a 30 GiB developer machine down to 3 GiB free, and a
+          # runner has far less headroom.
+          MEMLIMIT=6g TIMEOUT=600 ./run_all.sh
