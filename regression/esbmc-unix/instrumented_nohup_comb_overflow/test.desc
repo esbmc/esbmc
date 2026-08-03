@@ -1,4 +1,20 @@
-CORE
+KNOWNBUG
 main.i
---no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets --no-align-check --k-step 2 --floatbv --unlimited-k-steps --no-vla-size-check --64  --no-por --context-bound 3 --no-pointer-check --no-bounds-check --unsigned-overflow-check --no-assertions --incremental-bmc 
+--no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets --no-align-check --k-step 2 --floatbv --unlimited-k-steps --no-vla-size-check --64  --no-por --context-bound 3 --no-pointer-check --no-bounds-check --unsigned-overflow-check --no-assertions --incremental-bmc
 ^VERIFICATION FAILED$
+--
+This test's VERIFICATION FAILED was an artefact of a false positive in the
+unsigned shl overflow check: overflow_arith() derived signedness from either
+operand, so the SHA-512 table constants `(N_UL << 32) + M_UL` (main.i:3443+)
+took the signed path and were reported as overflowing for any N >= 2^31, even
+though every result is representable in u64.
+
+With that fixed, symex gets further into the file and hits a separate,
+pre-existing defect:
+
+  terminate called after throwing an instance of 'array_type2t::dyn_sized_array_excp'
+    what():  Sizeof nondeterministically sized array encountered
+
+That crash is independent of the overflow encoding -- it reproduces with
+--unsigned-overflow-check removed entirely. Re-enable this test as CORE once
+the dyn_sized_array_excp is fixed.
