@@ -249,7 +249,7 @@ Phase 7.
 
 ---
 
-### Phase 6: Generalization & Documentation (Partially completed)
+### Phase 6: Generalization & Documentation (Completed)
 
 **Goal:** Make CXL verification accessible to other users and generalize
 patterns for other device driver families.
@@ -262,13 +262,23 @@ patterns for other device driver families.
    - How to extend the models for new CXL features.
    - User guide: `docs/cxl-driver-verification-guide.md`.
 
-2. **Generalize patterns for other drivers.** — Not started.
-   - The MMIO, DMA, and IRQ modeling patterns are generic.
-   - Create a template for NVMe, USB, and other PCIe driver verification.
+2. **Generalize patterns for other drivers.** — Done.
+   - `docs/pcie-driver-verification-template.md`. The MMIO, DMA and IRQ models
+     are generic PCIe infrastructure and reusable as-is; the template covers
+     the rest — structure, the traps that each produced a green test
+     establishing nothing, the two recurring driver bug shapes, and a
+     checklist. It is written from what actually went wrong here rather than
+     from general advice.
 
-3. **Publish a technical report.** — Not started.
-   - Document the methodology and findings.
-   - Target a verification conference (CAV, TACAS, etc.).
+3. **Publish a technical report.** — Written, not submitted.
+   - `docs/cxl-verification-report.md` documents the methodology and findings,
+     including a threats-to-validity section and an explicit list of what
+     publication would require that does not yet exist: more real driver
+     functions across more files, and a ground-truth evaluation against known
+     fixed CXL kernel bugs. Neither exists today, so the report is an internal
+     write-up. The methodological finding — that unexecuted verification code
+     is routinely non-functional, and that coverage rather than test count
+     detects it — is the part that stands on its own.
 
 ---
 
@@ -936,7 +946,9 @@ figure; without it only the static analysis runs.
         `cxl_pci_get_latency()`, `cxl_dvsec_rr_decode()` and
         `cxl_hdm_decode_init()` verified (see Phase 5); broad coverage pending
 - [x] Phase 6.1: User documentation published (user guide + roadmap + test summary)
-- [ ] Phase 6.2–6.3: Generic driver template and technical report — not started
+- [x] Phase 6.2: Generic PCIe driver template published
+- [~] Phase 6.3: Technical report written (`docs/cxl-verification-report.md`);
+        not submitted — see its §7 for what that would require
 - [~] Phase 8: 8.1 (property flags), 8.2 (coverage metric), 8.4
         (concurrency), 8.5 (patch-and-reverify, by construction in the
         race pairs) and 8.6 (kernel version — dissolved, see the item) done;
