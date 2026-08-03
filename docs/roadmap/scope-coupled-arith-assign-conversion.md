@@ -720,3 +720,10 @@ onto §12's guard.
 This supersedes §13's "cannot reach" framing. G3's re-homing still stands — the
 pair is not cleared by Phases 1-2 as built — but the follow-up belongs to this
 scope's family, not to an unrelated one.
+
+**Owner document opened 2026-08-03:**
+`docs/roadmap/scope-array-assignment-conversion.md`. It carries the §14
+diagnosis forward, adds the tree reads showing *why* every existing arm
+declines the shape (they all guard on a pointer target), and gates the choice
+of layer on a Phase 0 measurement rather than assuming an adjuster-side fix.
+The §9.4 second mechanism remains unowned.
