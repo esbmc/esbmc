@@ -2,7 +2,9 @@
 
 > **Status: Phase 0 run 2026-08-03 — §4 confirmed for three of the four
 > witnesses, refuted for `sum_tuple`, which needs re-homing (§11); the
-> traffic-volume half is partially answered and lowers the gap-2 prior (§12).**
+> traffic-volume half is partially answered and lowers the gap-2 prior (§12);
+> **Phase 1 attempted twice and refuted — the failing equality does not pass
+> through this dispatch at all (§13).**
 > This is the owner document for the mechanism
 > `docs/roadmap/scope-coupled-arith-assign-conversion.md` §9.4 named the
 > "second mechanism" and §7 explicitly disowned:
@@ -274,3 +276,57 @@ remains a verdict-parity gate over a proper corpus run and must be executed
 against a real implementation, on a machine that can complete it. What §12 buys
 is a prior: the rule is unlikely to be corpus-wide destructive, so Phase 1 is
 worth attempting rather than being blocked on the fear that killed gap-2.
+
+## 13. Phase 1 attempt 1 — refuted (2026-08-03)
+
+Phase 1 was attempted twice and **neither widening clears the witnesses**. Both
+attempts were reverted. This section records what they rule out, because the
+result redirects the phase.
+
+### 13.1 What was tried
+
+| # | change | result on `lambda15` under the hop-off |
+|---|---|---|
+| 1 | admit a float/integer pair at the relational dispatch, and route `equality2t`/`notequal2t` through it for that case | still aborts |
+| 2 | additionally reconcile `equality`/`notequal` whenever both operands are numeric and their types differ | still aborts |
+
+The abort in both cases:
+
+```
+Assertion failed: (a->sort->get_data_width() == b->sort->get_data_width()),
+  function mk_eq, file bitwuzla_conv.cpp, line 470
+```
+
+### 13.2 What it rules out
+
+The failing node is an **equality between two operands of different bit
+widths** that reaches the solver unreconciled. Attempt 2 reconciles exactly
+that shape at `python_adjust`'s comparison dispatch and the abort survives, so:
+
+> The mismatched equality **does not pass through
+> `python_adjust::adjust_expr`'s comparison arm** — it is either created after
+> the adjuster runs, or it lives somewhere the walk does not visit.
+
+Widening this dispatch further is therefore the wrong move, and §5's framing —
+"the fix is a narrowed widening of the relational asymmetry" — is **too narrow
+a diagnosis** for at least `lambda15`.
+
+### 13.3 Correction to §11's method
+
+§11 classified witness operands by *kind* (`floatbv`, `signedbv`, …) and found
+heterogeneous pairs in three witnesses. That classification **cannot see a
+same-kind, different-width pair** — two `signedbv` operands of 32 and 64 bits
+report identical kinds. The `mk_eq` abort is exactly that shape, so §11's
+"confirmed for three of four" understates what those tests contain. §12's
+corpus census used a `samekind_widthdiff` flag and correctly returned zero for
+the corpus, but it was never run against the witnesses themselves.
+
+**Re-run the §12 flags over the four witnesses before Phase 1 attempt 2.** That
+is the measurement this phase actually needs, and it is cheap.
+
+### 13.4 Revised Phase 1 entry condition
+
+1. Measure `samekind_widthdiff` on the witnesses (§13.3).
+2. Locate where the mismatched equality is *built* — converter, a list/dict
+   model, or a post-adjust pass — rather than assuming the adjuster can see it.
+3. Only then choose the layer, as §5 requires.
