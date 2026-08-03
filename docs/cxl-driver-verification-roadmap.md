@@ -453,13 +453,63 @@ tests that call into the model at all. Track that number, not the test count.
 The script also reports GOTO linkage and documents why that figure
 over-reports (33 of 37) and must not be used as the coverage number.
 
-**3. Get the real-driver harnesses into CI.**
+**3. Get the real-driver harnesses into CI.** — Partly done; the original
+plan is ruled out.
 
 `regression/cxl-linux/` holds the only work that touches real kernel source —
 and it is unregistered with ctest because it needs a configured kernel tree.
 The project's most valuable output is therefore its least protected, free to
-rot silently. Vendoring preprocessed translation units (`.i` files) for the
-verified functions would make Phase 5 reproducible without a kernel checkout.
+rot silently.
+
+This item originally proposed vendoring preprocessed translation units (`.i`
+files) so Phase 5 would reproduce without a kernel checkout. That is not
+viable, on three counts measured rather than guessed:
+
+- **Size.** One preprocessed harness is 2.9 MB / 67,943 lines. Eight of those
+  is a larger payload than the rest of `regression/` combined, for eight
+  verified functions.
+- **ESBMC cannot parse them.** Feeding the gcc-preprocessed `.i` back in gives
+  `ERROR: PARSING ERROR` at `./drivers/cxl/core/pci.c:582`, on
+  `} else if (((uport)->bus == &pci_bus_type)) {`. The vendored artefact would
+  not even run.
+- **Licence.** `drivers/cxl/core/pci.c` is `SPDX-License-Identifier:
+  GPL-2.0-only`. ESBMC's `COPYING` already calls its licensing situation
+  complex; copying kernel source into the tree makes that worse for no gain.
+
+What is done instead: the harness verdicts are now executable rather than
+prose. `regression/cxl-linux/run_all.sh` encodes the README's
+harness→flags→expected-verdict table — eight verdict cases, an unwinding
+soundness case (the bounded harnesses must still hold with unwinding
+assertions *on*, or the bound is an artefact of truncation), and the
+conversion check for `core/pci.c`. It exits non-zero on any mismatch, so the
+table can no longer drift from reality unnoticed.
+
+Making the table executable found two defects in it straight away, which is
+the argument for the exercise:
+
+- `run_esbmc.sh` `cd`s into the kernel tree before resolving the harness path,
+  so **the README's own documented invocation could not work as written**.
+  Fixed with `realpath`.
+- The two HDM rows recorded no `--unwind` bound. Both harnesses cap
+  `info.ranges` with `__ESBMC_assume()`, but an assumption constrains the
+  value, not the unwinding — `cxl_hdm_decode_init()`'s loop over
+  `info->ranges` (`pci.c:428`) still unwinds syntactically, reaching iteration
+  4562 and exhausting 12 GB. As written the row was unreproducible. With
+  `--unwind 3` / `--unwind 5` (one past each harness's assumed maximum, and
+  with unwinding assertions **on**, so the bound is proved) both verdicts
+  reproduce exactly as claimed, in under a second each.
+
+The second is the more uncomfortable of the two: a verdict recorded without
+the flags that produce it is not a result, and this one sat in the docs
+unchallenged since Phase 5. `run_all.sh` also caps every run with
+`--memlimit`/`--timeout`, after an unguarded run took this 30 GiB machine down
+to 3 GiB free.
+
+All ten checks now pass.
+
+What remains: this still needs a kernel tree, so it is a local gate, not a CI
+one. The viable CI route is a separate non-blocking workflow that prepares a
+kernel tree, not vendoring.
 
 **4. Verify concurrency at all.** — Done.
 
@@ -511,7 +561,8 @@ updated.
 - Every test declares its property flags; the leak and overflow classes are
   checked wherever they apply.
 - A model-coverage figure exists and is reported alongside the test count.
-- Phase 5's harnesses run in CI without a kernel checkout.
+- Phase 5's harness verdicts are checked by a script rather than asserted in
+  prose (`run_all.sh`); running them in CI still needs a prepared kernel tree.
 - At least two genuinely concurrent tests exist and pass under
   `--data-races-check`.
 - No failing test is added without a recorded patch-and-reverify.

@@ -56,16 +56,29 @@ instead, because ESBMC has no `-include` (its equivalent is `--include-file`).
 | `harness_latency_contract.c` | same, callee contract modelled | SUCCESSFUL |
 | `harness_dvsec_rr_decode.c` | `cxl_dvsec_rr_decode()` | SUCCESSFUL |
 | `harness_dvsec_rr_decode_fail.c` | same, asserting `ranges <= 1` | FAILED — 2 ranges are reachable |
-| `harness_hdm_decode_init.c` `-DRANGES_BOUNDED` | `cxl_hdm_decode_init()` | SUCCESSFUL |
-| `harness_hdm_decode_init.c` | same, caller contract dropped | FAILED — out of bounds at `range.h:20` |
+| `harness_hdm_decode_init.c --unwind 3` `-DRANGES_BOUNDED` | `cxl_hdm_decode_init()` | SUCCESSFUL |
+| `harness_hdm_decode_init.c --unwind 5` | same, caller contract dropped | FAILED — out of bounds at `range.h:20` |
+
+Run them with `./run_all.sh`, which checks every row of this table and exits
+non-zero on any mismatch. A prose table is not a test.
 
 The `cdat_checksum` pair is the two-tier pattern: the positive harness proves
 the loop stays in bounds for `size <= sizeof(buf)`, and the negative one relaxes
 exactly that bound so the checker is shown to be live rather than vacuous.
 
-Run the two `--unwind`-bounded harnesses **without** `--no-unwinding-assertions`
-as well. Both still report SUCCESSFUL, which is what makes the bound sound
-rather than an artefact of truncated unwinding.
+Run the `cdat_checksum` pair **without** `--no-unwinding-assertions` as well.
+Both still report SUCCESSFUL, which is what makes the bound sound rather than
+an artefact of truncated unwinding.
+
+The HDM pair needs `--unwind` for a less obvious reason. Both harnesses cap
+`info.ranges` with `__ESBMC_assume()`, but an assumption constrains the
+*value*, not the *unwinding*: symbolic execution still walks
+`for (i = 0; i < info->ranges; i++)` (`pci.c:428`) syntactically, and with no
+bound it does so forever — an unbounded run reached iteration 4562 and
+exhausted 12 GB before failing. Each bound below is one past the harness's
+assumed maximum, and unwinding assertions are left **on**, so ESBMC proves the
+loop cannot exceed it. With the bound in place both harnesses finish in under
+a second.
 
 ## The two DVSEC functions, and the contract between them
 
