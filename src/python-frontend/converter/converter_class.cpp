@@ -673,7 +673,8 @@ void python_converter::get_attributes_from_self(
             for (const auto &arg : slice["elts"][0]["elts"])
               fn_type.arguments().push_back(
                 code_typet::argumentt(get_type_from_annotation(arg, stmt)));
-            fn_type.return_type() = get_type_from_annotation(slice["elts"][1], stmt);
+            fn_type.return_type() =
+              get_type_from_annotation(slice["elts"][1], stmt);
           }
           type = fn_type.return_type().is_nil()
                    ? type_handler_.get_typet(std::string("Callable"))
