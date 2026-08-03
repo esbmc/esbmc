@@ -317,9 +317,23 @@ bool goto_convert_functionst::convert_native_rec(
   if (is_code_assign2t(code2))
   {
     const code_assign2t &assign = to_code_assign2t(code2);
+
+    // Every shape below that this handler does not emit natively is delegated
+    // to convert_assign, which owns the side-effect lowering, the ternary peel
+    // and the convert_assign_atomic dispatch. On the fallback path that same
+    // function converted the statement anyway, so the instructions are
+    // unchanged; delegating keeps the rest of the function native.
+    auto delegate_to_legacy = [&]() {
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(
+        op, effective_location(assign.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    };
+
     exprt lhs = migrate_expr_back(assign.target);
     if (has_sideeffect(lhs) || lhs.id() == "if")
-      return false;
+      return delegate_to_legacy();
 
     // convert_assign()'s function-call special case (goto_convert.cpp)
     // dispatches a call-valued rhs straight to do_function_call(), bypassing
@@ -343,10 +357,10 @@ bool goto_convert_functionst::convert_native_rec(
     {
       const sideeffect2t &se = to_sideeffect2t(assign.source);
       if (has_sideeffect(se.operand))
-        return false;
+        return delegate_to_legacy();
       for (const expr2tc &arg : se.arguments)
         if (has_sideeffect(arg))
-          return false;
+          return delegate_to_legacy();
 
       exprt function_legacy = migrate_expr_back(se.operand);
       exprt::operandst args_legacy;
@@ -377,7 +391,7 @@ bool goto_convert_functionst::convert_native_rec(
     if (
       has_sideeffect(rhs) || rhs.id() == "if" || rhs.type().is_code() ||
       is_atomic_symbol(lhs, ns) || has_atomic_read(rhs, ns))
-      return false;
+      return delegate_to_legacy();
 
     // For side-effect-free operands the instruction convert_assign emits is
     // migrate_expr(code_assignt(lhs, rhs)) located at the statement — which
@@ -397,10 +411,18 @@ bool goto_convert_functionst::convert_native_rec(
 
     // Reproduce convert_expression() (goto_convert.cpp) verbatim on its
     // emitting branches. A top-level ternary is peeled unconditionally into
-    // convert_ifthenelse before remove_sideeffects runs; fall back on it.
+    // convert_ifthenelse before remove_sideeffects runs, and a nil operand has
+    // no native form; delegate the statement to convert_expression, which owns
+    // both, rather than failing the walk.
     exprt op = migrate_expr_back(expr_stmt.operand);
     if (op.is_nil() || op.id() == "if")
-      return false;
+    {
+      exprt stmt = migrate_expr_back(code2);
+      restore_value_locations(
+        stmt, effective_location(expr_stmt.location, inherited));
+      convert(to_code(stmt), dest);
+      return true;
+    }
 
     // convert_expression re-dispatches a code-typed operand straight through
     // the legacy convert(): the --irep2-bodies round-trip lowers an
@@ -562,7 +584,7 @@ bool goto_convert_functionst::convert_native_rec(
     // convert_return (goto_convert.cpp) emits, for the plain case, a RETURN
     // instruction (only when the function returns a value) followed by an
     // unconditional GOTO to the end-of-function target. Reproduce that exactly,
-    // and fall back on every shape convert_return transforms, deciding with the
+    // and delegate every shape convert_return transforms, deciding with the
     // same predicates on a throwaway legacy view of the return value:
     //  - a side-effect value (remove_sideeffects lowers it into extra instrs),
     //  - a cpp-throw return value (converted as a statement, no RETURN),
@@ -571,41 +593,46 @@ bool goto_convert_functionst::convert_native_rec(
     // A void function returning a value is a C/C++ constraint violation the
     // frontend rejects, so it never reaches here; only a valueless void return
     // does, which correctly emits just the end-of-function goto below.
-    // When the destructor stack holds a destructor FUNCTION_CALL, convert_return
-    // runs an unwind-before-RETURN (C++ [stmt.return]: capture the value into a
-    // temp, run the destructors, then return the temp; a constant value takes a
-    // simpler sub-path). Reproducing that natively would allocate a
-    // $tmp::tmp$ temp from the shared tmp_symbol counter -- the byte-identity
-    // hazard this dispatcher avoids -- so delegate the whole return statement to
-    // the legacy convert()/convert_return rather than fall back the entire
-    // function. convert_return leaves the destructor stack unchanged (its unwind
-    // is non-destructive and any return-temp entries are resized away) and emits
-    // a trailing unconditional goto, so the enclosing block handler's
-    // unreachable guard skips the scope-exit unwind and no destructor runs
-    // twice. Any temp it allocates is covered by convert_function's
-    // snapshot/restore on a later fallback; restore the value-operand locations
-    // first as the legacy body round-trip does.
+    // When the destructor stack holds a destructor FUNCTION_CALL,
+    // convert_return runs an unwind-before-RETURN (C++ [stmt.return]: capture
+    // the value into a temp, run the destructors, then return the temp; a
+    // constant value takes a simpler sub-path). Reproducing that natively would
+    // allocate a $tmp::tmp$ temp from the shared tmp_symbol counter -- the
+    // byte-identity hazard this dispatcher avoids -- so delegate the whole
+    // return statement to the legacy convert()/convert_return rather than fall
+    // back the entire function. convert_return leaves the destructor stack
+    // unchanged (its unwind is non-destructive and any return-temp entries are
+    // resized away) and emits a trailing unconditional goto, so the enclosing
+    // block handler's unreachable guard skips the scope-exit unwind and no
+    // destructor runs twice. Any temp it allocates is covered by
+    // convert_function's snapshot/restore on a later fallback; restore the
+    // value-operand locations first as the legacy body round-trip does.
+    // Delegate every shape convert_return transforms statement-locally instead
+    // of failing the walk: convert_return owns the lowering, and delegating one
+    // statement leaves the rest of the function native.
+    auto delegate_to_legacy = [&]() {
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(ret.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    };
+
     for (const codet &d : targets.destructor_stack)
       if (d.get_statement() == "function_call")
-      {
-        exprt op = migrate_expr_back(code2);
-        restore_value_locations(
-          op, effective_location(ret.location, inherited));
-        convert(to_code(op), dest);
-        return true;
-      }
+        return delegate_to_legacy();
 
     exprt val = is_nil_expr(ret.operand) ? static_cast<exprt>(nil_exprt())
                                          : migrate_expr_back(ret.operand);
     if (
       val.is_not_nil() &&
       (has_sideeffect(val) || val.is_code() || val.id() == "if"))
-      return false;
+      return delegate_to_legacy();
 
     if (targets.has_return_value)
     {
+      // convert_return replaces a missing value with nondet
       if (val.is_nil())
-        return false; // convert_return replaces a missing value with nondet
+        return delegate_to_legacy();
       // The RETURN instruction convert_return emits is migrate_expr(code_returnt)
       // located at the statement; migrate_expr drops the value-operand location
       // restore_value_locations stamped, so it round-trips to code2 itself. Emit
