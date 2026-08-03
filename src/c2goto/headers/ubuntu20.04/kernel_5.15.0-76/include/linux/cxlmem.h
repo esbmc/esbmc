@@ -123,4 +123,59 @@ int cxl_memdev_id_alloc(void);
 struct cxl_memdev *cxl_memdev_create(struct cxl_dev *cxld);
 void cxl_memdev_destroy(struct cxl_memdev *cxlmd);
 
+/* ============================================================
+ *  CXL PMEM security — declared here, modelled in cxl_driver.c
+ * ============================================================
+ *
+ * Mirrors drivers/cxl/security.c against the real device flags in
+ * drivers/cxl/cxlmem.h.  Unlike the invented cxl_security_state enum in
+ * cxl.h, these are the actual CXL 2.0 §8.2.9.8.6 Get Security State bits
+ * and the actual nvdimm flags security.c derives from them.
+ */
+
+/* drivers/cxl/cxlmem.h: device-reported security state */
+#define CXL_PMEM_SEC_STATE_USER_PASS_SET   0x01
+#define CXL_PMEM_SEC_STATE_MASTER_PASS_SET 0x02
+#define CXL_PMEM_SEC_STATE_LOCKED          0x04
+#define CXL_PMEM_SEC_STATE_FROZEN          0x08
+#define CXL_PMEM_SEC_STATE_USER_PLIMIT     0x10
+#define CXL_PMEM_SEC_STATE_MASTER_PLIMIT   0x20
+
+/* include/linux/libnvdimm.h: flags security.c reports upwards */
+#define NVDIMM_SECURITY_DISABLED  0x01
+#define NVDIMM_SECURITY_UNLOCKED  0x02
+#define NVDIMM_SECURITY_LOCKED    0x04
+#define NVDIMM_SECURITY_FROZEN    0x08
+
+/* nvdimm_passphrase_type */
+#define NVDIMM_USER   0
+#define NVDIMM_MASTER 1
+
+/* Maximum passphrase length (CXL 2.0 §8.2.9.8.6.2) */
+#define CXL_PMEM_PASSPHRASE_LEN 32
+
+struct cxl_pmem_security
+{
+  u32 state;                                /* CXL_PMEM_SEC_STATE_* */
+  char user_pass[CXL_PMEM_PASSPHRASE_LEN];  /* valid iff USER_PASS_SET */
+  char master_pass[CXL_PMEM_PASSPHRASE_LEN];/* valid iff MASTER_PASS_SET */
+};
+
+/*
+ * Derives the nvdimm security flags from the device-reported state, exactly
+ * as cxl_pmem_get_security_state() does.  ptype selects the USER or MASTER
+ * view; they report independently.
+ */
+unsigned long cxl_pmem_security_flags(u32 sec_state, int ptype);
+
+/*
+ * Passphrase operations.  Each returns 0 or a negative errno, and each is
+ * refused when the device state forbids it -- a frozen device accepts no
+ * passphrase change, and an unlock needs the passphrase to match.
+ */
+int cxl_pmem_set_passphrase(struct cxl_pmem_security *sec, int ptype,
+                            const char *old_pass, const char *new_pass);
+int cxl_pmem_unlock(struct cxl_pmem_security *sec, const char *pass);
+int cxl_pmem_freeze(struct cxl_pmem_security *sec);
+
 #endif /* _LINUX_CXLMEM_H */

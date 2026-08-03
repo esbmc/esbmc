@@ -1643,3 +1643,187 @@ __ESBMC_HIDE:;
       n++;
   return n;
 }
+
+/* ============================================================
+ *  CXL PMEM security models
+ * ============================================================
+ *
+ * Models drivers/cxl/security.c.  The flag derivation below is a
+ * transcription of cxl_pmem_get_security_state(), not an invention: the
+ * USER and MASTER views are computed independently, and the interesting
+ * property is that LOCKED and UNLOCKED are mutually exclusive while FROZEN
+ * is orthogonal to both.
+ * ============================================================ */
+
+unsigned long cxl_pmem_security_flags(u32 sec_state, int ptype)
+{
+__ESBMC_HIDE:;
+  unsigned long flags = 0;
+
+  if (ptype == NVDIMM_MASTER)
+  {
+    if (sec_state & CXL_PMEM_SEC_STATE_MASTER_PASS_SET)
+      flags |= NVDIMM_SECURITY_UNLOCKED;
+    else
+      flags |= NVDIMM_SECURITY_DISABLED;
+    if (sec_state & CXL_PMEM_SEC_STATE_MASTER_PLIMIT)
+      flags |= NVDIMM_SECURITY_FROZEN;
+    return flags;
+  }
+
+  if (sec_state & CXL_PMEM_SEC_STATE_USER_PASS_SET)
+  {
+    if (
+      sec_state & CXL_PMEM_SEC_STATE_FROZEN ||
+      sec_state & CXL_PMEM_SEC_STATE_USER_PLIMIT)
+      flags |= NVDIMM_SECURITY_FROZEN;
+
+    if (sec_state & CXL_PMEM_SEC_STATE_LOCKED)
+      flags |= NVDIMM_SECURITY_LOCKED;
+    else
+      flags |= NVDIMM_SECURITY_UNLOCKED;
+  }
+  else
+    flags |= NVDIMM_SECURITY_DISABLED;
+
+  return flags;
+}
+
+int cxl_pmem_set_passphrase(
+  struct cxl_pmem_security *sec,
+  int ptype,
+  const char *old_pass,
+  const char *new_pass)
+{
+__ESBMC_HIDE:;
+  assert(sec != NULL);
+  assert(new_pass != NULL);
+
+  /* CXL 2.0 §8.2.9.8.6.3: Set Passphrase is refused once security is frozen
+   * or the passphrase attempt limit is reached. */
+  if (sec->state & CXL_PMEM_SEC_STATE_FROZEN)
+    return -EACCES;
+
+  if (ptype == NVDIMM_MASTER)
+  {
+    if (sec->state & CXL_PMEM_SEC_STATE_MASTER_PLIMIT)
+      return -EACCES;
+    if (sec->state & CXL_PMEM_SEC_STATE_MASTER_PASS_SET)
+    {
+      if (
+        old_pass == NULL ||
+        memcmp(old_pass, sec->master_pass, CXL_PMEM_PASSPHRASE_LEN) != 0)
+        return -EACCES;
+    }
+    memcpy(sec->master_pass, new_pass, CXL_PMEM_PASSPHRASE_LEN);
+    sec->state |= CXL_PMEM_SEC_STATE_MASTER_PASS_SET;
+    return 0;
+  }
+
+  if (sec->state & CXL_PMEM_SEC_STATE_USER_PLIMIT)
+    return -EACCES;
+  if (sec->state & CXL_PMEM_SEC_STATE_USER_PASS_SET)
+  {
+    if (
+      old_pass == NULL ||
+      memcmp(old_pass, sec->user_pass, CXL_PMEM_PASSPHRASE_LEN) != 0)
+      return -EACCES;
+  }
+  memcpy(sec->user_pass, new_pass, CXL_PMEM_PASSPHRASE_LEN);
+  sec->state |= CXL_PMEM_SEC_STATE_USER_PASS_SET;
+  return 0;
+}
+
+int cxl_pmem_unlock(struct cxl_pmem_security *sec, const char *pass)
+{
+__ESBMC_HIDE:;
+  assert(sec != NULL);
+  assert(pass != NULL);
+
+  /* Nothing to unlock unless a user passphrase is set and the device is
+   * actually locked. */
+  if (!(sec->state & CXL_PMEM_SEC_STATE_USER_PASS_SET))
+    return -EINVAL;
+  if (!(sec->state & CXL_PMEM_SEC_STATE_LOCKED))
+    return 0;
+
+  if (memcmp(pass, sec->user_pass, CXL_PMEM_PASSPHRASE_LEN) != 0)
+  {
+    /* A wrong passphrase counts against the attempt limit; reaching it is
+     * what makes the device permanently refuse further attempts. */
+    sec->state |= CXL_PMEM_SEC_STATE_USER_PLIMIT;
+    return -EACCES;
+  }
+
+  sec->state &= ~(u32)CXL_PMEM_SEC_STATE_LOCKED;
+  return 0;
+}
+
+int cxl_pmem_freeze(struct cxl_pmem_security *sec)
+{
+__ESBMC_HIDE:;
+  assert(sec != NULL);
+  /* Freeze is idempotent and irreversible for the life of the device. */
+  sec->state |= CXL_PMEM_SEC_STATE_FROZEN;
+  return 0;
+}
+
+/* ============================================================
+ *  ACPI CEDT / CFMWS models
+ * ============================================================
+ *
+ * Transcribes eiw_to_ways() (drivers/cxl/cxl.h) and
+ * cxl_acpi_cfmws_verify() (drivers/cxl/acpi.c).  The interleave-ways field
+ * is an encoding rather than a count, which is the whole point: a firmware
+ * table carrying 5 there does not describe a 5-way interleave, it describes
+ * nothing valid.
+ * ============================================================ */
+
+int eiw_to_ways(u8 eiw, unsigned int *ways)
+{
+__ESBMC_HIDE:;
+  assert(ways != NULL);
+  if (eiw <= 4)
+  {
+    *ways = 1U << eiw;
+    return 0;
+  }
+  if (eiw >= 8 && eiw <= 10)
+  {
+    *ways = 3U << (eiw - 8);
+    return 0;
+  }
+  return -EINVAL;
+}
+
+int acpi_cedt_parse_cfmws(
+  const struct acpi_cedt_cfmws *cfmws,
+  unsigned int *ways)
+{
+__ESBMC_HIDE:;
+  assert(cfmws != NULL);
+  assert(ways != NULL);
+
+  if (
+    cfmws->interleave_arithmetic != ACPI_CEDT_CFMWS_ARITHMETIC_MODULO &&
+    cfmws->interleave_arithmetic != ACPI_CEDT_CFMWS_ARITHMETIC_XOR)
+    return -EINVAL;
+
+  if (cfmws->base_hpa % CXL_SZ_256M != 0)
+    return -EINVAL;
+
+  if (cfmws->window_size % CXL_SZ_256M != 0)
+    return -EINVAL;
+
+  if (eiw_to_ways(cfmws->interleave_ways, ways))
+    return -EINVAL;
+
+  /* struct_size(cfmws, interleave_targets, ways): the entry has to be long
+   * enough to actually carry one target per way, or the targets the driver
+   * goes on to read are off the end of the table. */
+  u32 expected_len = 36U + 4U * (u32)*ways;
+  if (cfmws->length < expected_len)
+    return -EINVAL;
+
+  return 0;
+}
