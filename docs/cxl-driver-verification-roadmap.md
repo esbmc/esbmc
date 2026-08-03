@@ -537,8 +537,8 @@ tests that call into the model at all. Track that number, not the test count.
 The script also reports GOTO linkage and documents why that figure
 over-reports (33 of 37) and must not be used as the coverage number.
 
-**3. Get the real-driver harnesses into CI.** — Partly done; the original
-plan is ruled out.
+**3. Get the real-driver harnesses into CI.** — Done; the original plan was
+ruled out and replaced.
 
 `regression/cxl-linux/` holds the only work that touches real kernel source —
 and it is unregistered with ctest because it needs a configured kernel tree.
@@ -591,9 +591,31 @@ to 3 GiB free.
 
 All ten checks now pass.
 
-What remains: this still needs a kernel tree, so it is a local gate, not a CI
-one. The viable CI route is a separate non-blocking workflow that prepares a
-kernel tree, not vendoring.
+**Now done.** `.github/workflows/cxl-linux.yml` prepares a kernel tree and runs
+`run_all.sh` — weekly, on changes to `regression/cxl-linux/`, and on demand.
+`scripts/cxl_prepare_kernel.sh` fetches the pinned tarball, configures out of
+tree, runs `make prepare` and verifies the generated headers appeared; the
+prepared tree is cached on the pinned version so the slow part runs once. The
+harness scripts take their paths from `CXL_LINUX_SRC`, `CXL_LINUX_BUILD` and
+`ESBMC` rather than the hardcoded developer layout they had. The workflow is
+non-blocking (`continue-on-error`) while it settles, matching the precedent set
+by `sanitizers.yml`.
+
+Building it found the reason these results had never been reproducible off the
+author's machine. `CONFIG_CC_HAS_COUNTED_BY` is a *compiler-capability probe*,
+so whether kernel structs carry `__attribute__((__counted_by__(m)))` depends on
+whichever compiler ran `defconfig` — not on the pinned kernel version. ESBMC
+cannot convert the resulting `CountAttributedType`, and every harness dies with
+a conversion error before verifying anything. The original build tree happened
+to be configured by a compiler without the feature; a freshly prepared tree on
+the same machine had it, and all ten checks failed. `cxl_prepare_kernel.sh`
+now clears the define, which drops a bounds *annotation* rather than a bounds
+*check* (the attribute feeds only `CONFIG_UBSAN_BOUNDS` and
+`CONFIG_FORTIFY_SOURCE`, neither enabled here). Recorded in the README's stub
+surface, because it is an assumption like any other.
+
+Verified end to end: a build tree produced solely by the script, on a different
+path from the original, passes all ten checks.
 
 **4. Verify concurrency at all.** — Done.
 
@@ -755,7 +777,8 @@ case for coverage over test count does not need restating.
 - A model-coverage figure exists and is reported alongside the test count, and
   reached 100%: 21% -> 58% -> 107 of 107.
 - Phase 5's harness verdicts are checked by a script rather than asserted in
-  prose (`run_all.sh`); running them in CI still needs a prepared kernel tree.
+  prose (`run_all.sh`), and that script runs in CI against a tree the CI
+  prepares.
 - At least two genuinely concurrent tests exist and pass under
   `--data-races-check`.
 - No failing test is added without a recorded patch-and-reverify.
@@ -917,8 +940,7 @@ figure; without it only the static analysis runs.
 - [~] Phase 8: 8.1 (property flags), 8.2 (coverage metric), 8.4
         (concurrency), 8.5 (patch-and-reverify, by construction in the
         race pairs) and 8.6 (kernel version — dissolved, see the item) done;
-        8.7 (coverage) done at 100%; 8.3 (real-driver harnesses in CI)
-        blocked on a kernel tree, vendoring ruled out
+        8.7 (coverage) done at 100%; 8.3 (real-driver harnesses in CI) done
 - [~] Phase 7: two slices delivered — memdev id allocation, region
         interleave, the mailbox IOCTL path and downstream port lifetime,
         all modelled against the real driver's constraints (8 tests, 11
