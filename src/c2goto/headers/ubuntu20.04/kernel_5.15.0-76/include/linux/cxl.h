@@ -4,6 +4,21 @@
  *
  * This header provides declarations for the CXL core driver API surface.
  * Function bodies are modeled in src/c2goto/library/cxl_driver.c.
+ *
+ * The CXL API declared here is SYNTHETIC -- it is a CXL-like surface invented
+ * for this work, not a copy of any kernel's. Linux has no include/linux/cxl.h
+ * at all; the real declarations live in drivers/cxl/cxl.h, and the real names
+ * differ (struct cxl_memdev / cxl_dev_state, cxl_internal_send_cmd(), ...).
+ *
+ * The kernel_5.15.0-76 path is therefore NOT a version pin for this file. It
+ * is where ESBMC already keeps its kernel operational-model headers -- the
+ * directory predates this work and is shared with kernel.c. Nothing here
+ * tracks 5.15, and nothing needs to be updated when a kernel moves.
+ *
+ * Real Linux CXL source is verified separately, in regression/cxl-linux/,
+ * against a real kernel tree's own headers. No file includes both, so the two
+ * cannot drift into disagreement; they simply do not meet. Making them mean
+ * the same thing is Phase 7 work, not a versioning question.
  */
 #ifndef _LINUX_CXL_H
 #define _LINUX_CXL_H

@@ -4,6 +4,9 @@
  *
  * This header provides declarations for the CXL memory device driver API.
  * Function bodies are modeled in src/c2goto/library/cxl_driver.c.
+ *
+ * Synthetic, and not version-pinned: see the header comment in cxl.h for what
+ * the kernel_5.15.0-76 path does and does not mean.
  */
 #ifndef _LINUX_CXLMEM_H
 #define _LINUX_CXLMEM_H
