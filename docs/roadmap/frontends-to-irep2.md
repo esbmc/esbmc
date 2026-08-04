@@ -722,3 +722,44 @@ deleting the round-trip and the fallback path.
 `--error-label` site is invisible otherwise, and it is one of only two genuine
 sites C has left.
 
+
+## 17. Post-series census — §15.3's prediction confirmed (2026-08-04)
+
+§15.3 predicted that with #6679 merged, Python's two `code_ifthenelse`
+scope-leak sites — 55 of its 57 genuine declines at the time — would clear, and
+flagged it explicitly as a prediction rather than a measurement. The whole
+dispatcher series is now on master. Measured.
+
+### 17.1 Result
+
+Five Python tests, current master, all eight dispatcher patches merged:
+
+| site | count | class |
+|---|---:|---|
+| `code_block` | 197 | cascade |
+| **`code_expression` — statement with no usable location** | **155** | genuine |
+| `code_ifthenelse` — lone-`assert(false)` fold | 25 | genuine |
+| `code_assert` | 2 | genuine |
+
+**Both scope-leak sites are gone.** The only `code_ifthenelse` decline left is
+the assert-fold — the same residue C and C++ carry (§12.2). §15.3's prediction
+holds.
+
+### 17.2 The dominant cause is fixed but unmerged
+
+`code_expression` at 155 is the unlocated-statement site §13 identified, and
+**#6695 takes it to zero** — measured at 31 → 0 on `casting31`. It is open at
+the time of writing. So the top Python decline cause on master today is
+addressed by a pending PR, not by undiagnosed work.
+
+Projected residue once #6695 lands: the assert-fold and `code_assert`, plus
+cascade. That is the same shape C and C++ already reached, and it would mean
+**all three C-family/Python suites are drained to the same two narrow sites.**
+
+### 17.3 Caveat on comparing censuses
+
+Numbers from different configurations are not directly comparable. Fixing one
+site changes what is *reachable*, so a later site's count can rise even as the
+program improves — more statements convert natively, so more branches are
+attempted and more of them get the chance to decline. Compare like with like:
+same tests, same patch set, and prefer the per-site breakdown over the total.
