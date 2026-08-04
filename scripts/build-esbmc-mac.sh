@@ -30,7 +30,6 @@ cd build
 echo "Installing ESBMC dependencies..."
 brew install boost
 brew install z3 
-brew install bison 
 brew install clang 
 brew install llvm@18
 

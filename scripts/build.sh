@@ -235,8 +235,6 @@ collect_ubuntu_packages() {
     libcsmith-dev
     gperf
     cmake
-    bison
-    flex
     llvm
     linux-libc-dev
     libboost-date-time-dev
@@ -289,8 +287,6 @@ collect_macos_formulae() {
     ninja
     python@3.12
     automake
-    bison
-    flex
     "llvm@$CLANG_VERSION"
   )
 }
