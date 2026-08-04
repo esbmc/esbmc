@@ -176,9 +176,14 @@ void filesystemt::add_bundled(
   size_t size)
 {
   /* bundled_count() keys the overlay cache in esbmc_clang_vfs(), so silently
-   * replacing an entry would leave that cache stale. */
-  assert(!_bundled.count(path));
-  _bundled[path] = std::string_view(data, size);
+   * replacing an entry would leave that cache stale. Not an assert: this must
+   * still fire in a release build, where the stale cache would serve the old
+   * contents for the rest of the run. */
+  if (!_bundled.emplace(path, std::string_view(data, size)).second)
+  {
+    fprintf(stderr, "ERROR: bundled file registered twice: %s\n", path.c_str());
+    abort();
+  }
 }
 
 std::optional<file_data> filesystemt::read(const std::string &path) const
