@@ -1240,7 +1240,8 @@ bool python_converter::is_numpy_array_constructor_expr(
     return false;
 
   static const std::set<std::string> constructors = {
-    "array", "zeros", "ones", "full", "empty", "arange"};
+    "array", "zeros", "ones", "full", "empty", "arange", "eye", "identity",
+    "linspace"};
   return constructors.count(node["func"].value("attr", "")) != 0;
 }
 
