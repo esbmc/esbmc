@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -139,15 +140,32 @@ bool is_module(const std::string &module_name, const JsonType &ast)
   if (!ast.contains("ast_output_dir"))
     return false;
 
-  const std::string path = ast["ast_output_dir"].template get<std::string>() +
-                           "/" + dotted_to_path(module_name) + ".json";
+  const std::string rel = dotted_to_path(module_name) + ".json";
+  const std::string dir = ast["ast_output_dir"].template get<std::string>();
+  const std::string path = dir + "/" + rel;
 
   auto it = is_module_cache.find(path);
   if (it != is_module_cache.end())
     return it->second;
 
-  std::ifstream file(path);
-  bool result = file.is_open();
+  // Opening the path is not enough to decide the name *is* a module: on a
+  // case-insensitive filesystem (macOS, Windows) `Queue.json` opens
+  // `queue.json`, so the class `Queue` imported from `queue` is taken for a
+  // module and every method call on it fails to dispatch. Require a directory
+  // entry that matches byte-for-byte.
+  const std::filesystem::path full(path);
+  std::error_code ec;
+  bool result = false;
+  for (std::filesystem::directory_iterator dit(full.parent_path(), ec), end;
+       !ec && dit != end;
+       dit.increment(ec))
+  {
+    if (dit->path().filename() == full.filename())
+    {
+      result = true;
+      break;
+    }
+  }
   is_module_cache.emplace(path, result);
   return result;
 }
