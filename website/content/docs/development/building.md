@@ -26,7 +26,7 @@ For a build with several solvers, or CHERI/fuzzing support, see
 
 ```sh
 sudo apt-get update
-sudo apt-get install -y build-essential cmake ninja-build git bison flex python3 libboost-all-dev g++-multilib
+sudo apt-get install -y build-essential cmake ninja-build git python3 libboost-all-dev g++-multilib
 ```
 
 LLVM/Clang, Z3 and the libraries fmt, nlohmann-json, yaml-cpp and immer are
@@ -71,7 +71,7 @@ For Python, Solidity or IBEX support see
 ### Install prerequisites
 
 ```sh
-sudo dnf install gcc-c++ cmake ninja-build git bison flex python3 boost-devel z3-devel glibc-devel.i686 libstdc++-devel.i686
+sudo dnf install gcc-c++ cmake ninja-build git python3 boost-devel z3-devel glibc-devel.i686 libstdc++-devel.i686
 ```
 
 LLVM/Clang, fmt, nlohmann-json, yaml-cpp and immer are fetched by
@@ -112,7 +112,7 @@ For Python, Solidity or IBEX support see
 ### Install prerequisites
 
 ```sh
-brew install llvm@21 z3 boost cmake ninja python bison
+brew install llvm@21 z3 boost cmake ninja python
 ```
 
 > [!NOTE] On macOS, `-DDOWNLOAD_DEPENDENCIES` must be combined with `-DLLVM_DIR`
@@ -138,7 +138,7 @@ ninja -C build
 
 {{% details title="Easiest: use the helper script" closed="true" %}} The
 repository ships `scripts/build-esbmc-mac.sh`, which creates the build folder,
-optionally installs Boolector/Bitwuzla, and installs `esbmc` globally:
+optionally installs Bitwuzla, and installs `esbmc` globally:
 
 ```sh
 ./scripts/build-esbmc-mac.sh
@@ -163,7 +163,7 @@ A build that ends up with no SDK fails while generating the libc models, with
 ### Install prerequisites
 
 ```sh
-pkg install git cmake ninja python3 z3 bison flex boost-all
+pkg install git cmake ninja python3 z3 boost-all
 ```
 
 ESBMC needs 32-bit libraries on FreeBSD — make sure the `lib32` set is
@@ -207,7 +207,7 @@ ninja -C build
 
 ```bat
 vcpkg.exe install boost-filesystem:x64-windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows
-choco install winflexbison gnuwin32-coreutils.portable
+choco install gnuwin32-coreutils.portable
 ```
 
 Also obtain [Z3](https://github.com/Z3Prover/z3/releases) and a prebuilt
@@ -264,8 +264,6 @@ building LLVM from source.
 | clang     | yes      | 18.0.0          |
 | boost     | yes      | 1.77            |
 | CMake     | yes      | 3.18.0          |
-| Boolector | no       | 3.2.2           |
-| CVC4      | no       | 1.8             |
 | CVC5      | no       | 1.1.2           |
 | MathSAT   | no       | 5.5.4           |
 | Yices     | no       | 2.6.4           |
@@ -381,14 +379,6 @@ fresh build directory — a stale `CMakeCache.txt` keeps the old paths.
 
 ### Build the solvers
 
-{{% details title="Boolector" closed="true" %}}
-
-```sh
-git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd ../..
-```
-
-{{% /details %}}
-
 {{% details title="Z3" closed="true" %}}
 
 ```sh
@@ -406,14 +396,6 @@ brew install z3 && cp -rp $(brew info z3 | egrep "/usr[/a-zA-Z\.0-9]+ " -o) z3
 
 ```sh
 git clone --depth=1 --branch=0.9.0 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install && cd ../..
-```
-
-{{% /details %}}
-
-{{% details title="CVC4 (Linux only)" closed="true" %}}
-
-```sh
-pip3 install toml && git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j4 && make install && cd ../..
 ```
 
 {{% /details %}}
@@ -455,9 +437,9 @@ skipped.
 ```sh
 cd esbmc && cmake -GNinja -Bbuild -DBUILD_TESTING=On -DENABLE_REGRESSION=On \
   $ESBMC_CLANG -DBUILD_STATIC=${ESBMC_STATIC:-ON} \
-  -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 \
+  -DENABLE_Z3=On -DZ3_DIR=$PWD/../z3 \
   -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../mathsat \
-  -DENABLE_YICES=On -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 \
+  -DENABLE_YICES=On -DYices_DIR=$PWD/../yices \
   -DGMP_DIR=$PWD/../gmp -DBitwuzla_DIR=$PWD/../bitwuzla-release \
   -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
 ninja -C build && ninja -C build install
@@ -530,7 +512,7 @@ Debian-based image that builds ESBMC with Z3, letting
 ```dockerfile
 FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      build-essential cmake ninja-build git bison flex \
+      build-essential cmake ninja-build git \
       python3 libboost-all-dev g++-multilib \
     && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth=1 https://github.com/esbmc/esbmc.git /esbmc
