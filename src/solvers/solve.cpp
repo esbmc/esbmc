@@ -7,7 +7,6 @@
 
 solver_creator create_new_smtlib_solver;
 solver_creator create_new_z3_solver;
-solver_creator create_new_minisat_solver;
 solver_creator create_new_cvc5_solver;
 solver_creator create_new_mathsat_solver;
 solver_creator create_new_yices_solver;
@@ -19,9 +18,6 @@ static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
 #endif
 #ifdef Z3
   {"z3", create_new_z3_solver},
-#endif
-#ifdef MINISAT
-  {"minisat", create_new_minisat_solver},
 #endif
 #ifdef USECVC5
   {"cvc5", create_new_cvc5_solver},
@@ -44,7 +40,6 @@ static const std::string all_solvers[] = {
   "smtlib",
   "bitwuzla",
   "z3",
-  "minisat",
   "cvc5",
   "mathsat",
   "yices"};

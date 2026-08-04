@@ -65,8 +65,8 @@ this pipeline and are worth a skim:
 |------|----------|
 | `smt/` | Solver-agnostic core: `smt_convt`, `smt_ast`, `smt_sort`, byte ops, casts, memory model, overflow encoding |
 | `smt/fp/` | Interval encoding for integer/real float mode (`ir_ieee_convt`) |
-| `prop/` | Shared with SAT backends: `literal.h`, `pointer_logic.{cpp,h}` |
-| `camada/`, `minisat/`, `sat/` | Per-backend subclasses |
+| `prop/` | `pointer_logic.{cpp,h}`, the address-space bookkeeping the memory model uses |
+| `camada/` | The backend: every solver camada supports, plus its SMT-LIB text mode |
 | `solve.{cpp,h}` | Factory that picks and instantiates a backend |
 | `solver_config.h.in` | Compile-time configuration (`#cmakedefine` per solver) |
 

@@ -8,7 +8,6 @@
 #include <memory>
 #include <mutex>
 #include <unordered_set>
-#include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
 #include <solvers/smt/smt_ast.h>
 #include <solvers/smt/smt_result.h>

@@ -2,10 +2,6 @@
 #define Z3
 #endif
 
-#if @ESBMC_ENABLE_minisat@
-#define MINISAT
-#endif
-
 #if @ESBMC_ENABLE_cvc5@
 #define USECVC5
 #endif

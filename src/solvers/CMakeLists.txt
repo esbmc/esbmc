@@ -1,5 +1,4 @@
 set(ESBMC_ENABLE_z3 0)
-set(ESBMC_ENABLE_minisat 0)
 set(ESBMC_ENABLE_cvc5 0)
 set(ESBMC_ENABLE_mathsat 0)
 set(ESBMC_ENABLE_yices 0)
