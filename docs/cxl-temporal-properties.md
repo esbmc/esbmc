@@ -175,10 +175,47 @@ So the honest accounting of combining ltl2ba with this work:
 | Generator, validated against ltl2ba | delivered, reusable |
 | A real temporal CXL property, encoded | delivered |
 | Ability to catch the bug it describes | **none** |
+| Safety reformulation (`G !p`) as a way round it | tables correct, but transient propositions are missed |
 
 The test pair is kept anyway, with both expectations set to `LTL_FAILING` and
 headers saying why. It is a tripwire: if ESBMC's LTL support ever distinguishes
 them, the pair fails and someone finds out.
+
+### Follow-up: the concurrent invariant, and why it also fails
+
+The obvious next move was a property that is temporal *but still safety*, so
+that a finite counterexample exists and `LTL_BAD` becomes reachable — mailbox
+mutual exclusion:
+
+    G !(t1_inflight & t2_inflight)
+
+`scripts/ltl_response_ba.py --absence` emits that automaton. Unlike the
+response tables it is **constructed rather than transcribed**, so it is
+validated empirically by `--self-test-absence`, and the validation passes:
+
+| Program | `a && b` | Outcome |
+|---|---|---|
+| stably true | always | `LTL_BAD` |
+| stably false | never | `LTL_SUCCEEDING` |
+
+So the automaton is right. But the case that matters is neither of those:
+
+| Program | `a && b` | Outcome |
+|---|---|---|
+| **transiently true** inside a loop | briefly | `LTL_SUCCEEDING` ✗ |
+
+A proposition that holds only in the window between two assignments is
+**missed**, and `--context-bound 2/4/8` does not change it. That is precisely
+the mutual-exclusion case: `t1_inflight & t2_inflight` is true only in a
+narrow interleaving window, which is the entire point of checking it.
+
+This retracts the argument for `--ltl` I made in the previous revision of this
+document. I claimed the monitor "samples at every interleaving point, unlike a
+placed assert". The evidence says otherwise: `add_monitor_exprs()` does
+instrument every instruction, but the monitor thread does not reliably observe
+transient valuations, so an LTL monitor is a *worse* mutual-exclusion checker
+than an assertion placed in the critical section. No concurrent LTL test was
+added, because it would have passed while checking nothing.
 
 ### What this implies for the approach
 
