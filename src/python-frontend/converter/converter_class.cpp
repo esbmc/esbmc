@@ -637,7 +637,51 @@ void python_converter::get_attributes_from_self(
         // or PEP 604 union BinOp like int | None (get_type_from_annotation
         // already maps `T | None` to gen_pointer_type(T), the same shape it
         // produces for Optional[T]).
-        typet type = get_type_from_annotation(stmt["annotation"], stmt);
+        //
+        // `Callable[...]` is mapped here rather than inside
+        // get_type_from_annotation: as a *member* it has to be the function
+        // pointer the bare `Callable` spelling yields, because struct layout
+        // cannot compute the width of the bare code type it otherwise keeps,
+        // and aborts with symbolic_type_excp (#4566). A *parameter* annotated
+        // `Callable[...]` is resolved on a different path that the pointer
+        // form breaks (regression/python/callable4), so the mapping stays
+        // local to members.
+        const bool member_is_callable =
+          stmt["annotation"]["_type"] == "Subscript" &&
+          stmt["annotation"].contains("value") &&
+          stmt["annotation"]["value"].is_object() &&
+          stmt["annotation"]["value"].contains("id") &&
+          stmt["annotation"]["value"]["id"] == "Callable";
+
+        typet type;
+        if (member_is_callable)
+        {
+          // Carry the signature when it is spelled: `Callable[[A, B], R]`
+          // parses as Subscript(slice=Tuple([List([A, B]), R])). A member
+          // typed `R (*)(A, B)` lets a call through it recover the return
+          // type; the bare pointer would leave the result nondet. Anything
+          // else (bare `Callable`, `Callable[..., R]`) keeps the generic
+          // function pointer.
+          code_typet fn_type;
+          fn_type.return_type() = empty_typet();
+          const auto &slice = stmt["annotation"]["slice"];
+          if (
+            slice.is_object() && slice.value("_type", "") == "Tuple" &&
+            slice.contains("elts") && slice["elts"].size() == 2 &&
+            slice["elts"][0].value("_type", "") == "List")
+          {
+            for (const auto &arg : slice["elts"][0]["elts"])
+              fn_type.arguments().push_back(
+                code_typet::argumentt(get_type_from_annotation(arg, stmt)));
+            fn_type.return_type() =
+              get_type_from_annotation(slice["elts"][1], stmt);
+          }
+          type = fn_type.return_type().is_nil()
+                   ? type_handler_.get_typet(std::string("Callable"))
+                   : gen_pointer_type(fn_type);
+        }
+        else
+          type = get_type_from_annotation(stmt["annotation"], stmt);
         if (type.is_nil() || type.is_empty())
         {
           log_warning(

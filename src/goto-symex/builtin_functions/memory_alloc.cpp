@@ -268,7 +268,9 @@ bool goto_symext::handle_realloc_zero_size(
 {
   expr2tc zero_size = gen_zero(realloc_size->type);
   expr2tc is_zero_size = equality2tc(realloc_size, zero_size);
-  do_simplify(is_zero_size);
+  // Classify unconditionally: --no-simplify selects a formula representation,
+  // it must not decide whether realloc(p, 0) frees p and returns NULL.
+  simplify(is_zero_size);
 
   if (is_true(is_zero_size))
   {
@@ -565,6 +567,8 @@ expr2tc goto_symext::symex_mem(
   type2tc type = code.alloctype;
   expr2tc size = code.size;
   bool size_is_one = false;
+  // Nil unless a symbolic size needs bounding to the address space.
+  expr2tc fits;
 
   if (is_nil_type(type))
     type = char_type2();
@@ -624,6 +628,32 @@ expr2tc goto_symext::symex_mem(
         size_is_one = true;
       else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
         return symbol2tc(pointer_type2tc(type), "NULL");
+    }
+    else if (
+      is_malloc && is_unsignedbv_type(size->type) &&
+      size->type->get_width() >= ptraddr_type2()->get_width())
+    {
+      // A symbolic request can exceed the address space too, and the layout
+      // constraints are asserted unconditionally, so leaving it unbounded makes
+      // the formula UNSAT — silently pruning the executions the program asked
+      // about instead of failing the allocation.
+      const BigInt lim = BigInt::power2m1(ptraddr_type2()->get_width()) -
+                         config.ansi_c.max_alignment();
+      fits = lessthanequal2tc(size, constant_int2tc(size->type, lim));
+
+      if (options.get_bool_option("force-malloc-success"))
+      {
+        // Branching to NULL here would reintroduce exactly the case split this
+        // flag exists to remove, at a cost measured in minutes on
+        // allocation-heavy inputs. State the bound as an assumption instead:
+        // the same executions are excluded as before, but visibly.
+        assume(fits);
+        fits = expr2tc();
+      }
+      else
+        // Give the object size zero on the failing branch so it is always
+        // representable, and hand back NULL for it below.
+        size = if2tc(size->type, fits, size, gen_zero(size->type));
     }
   }
 
@@ -688,6 +718,14 @@ expr2tc goto_symext::symex_mem(
   expr2tc rhs = rhs_addrof;
   expr2tc ptr_rhs = rhs;
   guard2tc alloc_guard = cur_state->guard;
+
+  if (!is_nil_expr(fits))
+  {
+    expr2tc null_sym = symbol2tc(rhs->type, "NULL");
+    alloc_guard.add(fits);
+    rhs = if2tc(rhs->type, fits, rhs, null_sym);
+    ptr_rhs = rhs;
+  }
 
   if (options.get_bool_option("malloc-zero-is-null"))
   {
