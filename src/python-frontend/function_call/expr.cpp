@@ -3977,6 +3977,10 @@ exprt function_call_expr::handle_general_function_call()
   if (std::optional<exprt> indirect = try_indirect_variable_call())
     return *indirect;
 
+  // Same, for a function pointer held in an instance field: `self.cb(x)`.
+  if (std::optional<exprt> indirect = try_indirect_member_call())
+    return *indirect;
+
   // Get function symbol id - use actual_func_name for typed dispatch
   std::string func_symbol_id;
   if (actual_func_name != func_name)
@@ -4644,6 +4648,72 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
     }
   }
   return std::nullopt;
+}
+
+std::optional<exprt> function_call_expr::try_indirect_member_call()
+{
+  const auto &func_json = call_["func"];
+  if (node_type_of(func_json) != "Attribute" || !func_json.contains("attr"))
+    return std::nullopt;
+  if (!func_json.contains("value") || !func_json["value"].is_object())
+    return std::nullopt;
+
+  const std::string attr = func_json["attr"].get<std::string>();
+
+  // Decide from the receiver's *type* before evaluating it. get_expr can emit
+  // instructions (temporaries, constructor calls), so probing with it and then
+  // declining would duplicate them into the enclosing block -- which broke
+  // class10/class13/inheritance2 when this ran on every attribute call.
+  std::string class_name = function_id_.get_class();
+  if (class_name.rfind("tag-", 0) == 0)
+    class_name = class_name.substr(4);
+  if (class_name.empty())
+    return std::nullopt;
+
+  const symbolt *class_sym = converter_.find_symbol("tag-" + class_name);
+  if (!class_sym || !class_sym->get_type().is_struct())
+    return std::nullopt;
+
+  const struct_typet &st = to_struct_type(class_sym->get_type());
+  if (!st.has_component(attr))
+    return std::nullopt;
+
+  // Only a member that actually holds a function pointer routes here; a
+  // regular method is not a component of the struct at all, so ordinary
+  // dispatch is untouched.
+  const typet &field_type = st.get_component(attr).type();
+  if (!field_type.is_pointer() || !field_type.subtype().is_code())
+    return std::nullopt;
+
+  exprt recv = converter_.get_expr(func_json["value"]);
+  typet recv_type = recv.type();
+  if (recv_type.is_pointer())
+    recv_type = recv_type.subtype();
+  if (recv_type.id() == "symbol")
+    recv_type = converter_.ns.follow(recv_type);
+  if (!recv_type.is_struct())
+    return std::nullopt;
+
+  expr2tc recv2;
+  migrate_expr(recv, recv2);
+  if (recv.type().is_pointer())
+    recv2 = dereference2tc(migrate_type(recv_type), recv2);
+  exprt member =
+    migrate_expr_back(member2tc(migrate_type(field_type), recv2, attr));
+
+  side_effect_expr_function_callt call;
+  call.location() = converter_.get_location_from_decl(call_);
+  call.function() = member;
+  call.type() = to_code_type(field_type.subtype()).return_type();
+
+  for (const auto &arg_node : call_["args"])
+  {
+    exprt arg = converter_.get_expr(arg_node);
+    if (arg.type().is_code() && arg.is_symbol())
+      arg = build_address_of(arg);
+    call.arguments().push_back(arg);
+  }
+  return call;
 }
 
 std::optional<exprt> function_call_expr::resolve_missing_function_symbol(

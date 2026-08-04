@@ -610,6 +610,9 @@ private:
    */
   std::optional<exprt> try_indirect_variable_call();
 
+  /// Indirect call through a function pointer held in an instance field.
+  std::optional<exprt> try_indirect_member_call();
+
   /*
    * Resolves the callee when the direct symbol lookup failed: dataclass
    * __post_init__ forward refs, base-class method resolution for
