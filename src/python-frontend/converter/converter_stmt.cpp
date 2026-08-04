@@ -3781,6 +3781,13 @@ void python_converter::get_var_assign(
           call_node["args"].push_back(arg);
       call_node["keywords"] =
         ast_node["value"].value("keywords", nlohmann::json::array());
+      // numpy.reshape(a, newshape, order='C') has no split-dimension form
+      // (a third positional argument is `order`, not another dimension);
+      // only the method form a.reshape(d1, d2, ...) is equivalent to
+      // a.reshape((d1, d2, ...)). Mark this rewrite so the reshape handler
+      // can tell the two shapes apart and reject a genuine
+      // np.reshape(a, 2, 3) call instead of silently accepting it.
+      call_node["_numpy_method_form"] = true;
       copy_location_fields_from_decl(ast_node["value"], call_node);
       copy_location_fields_from_decl(ast_node["value"], call_node["func"]);
       effective_ast_node["value"] = call_node;

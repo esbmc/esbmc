@@ -5936,7 +5936,18 @@ exprt numpy_call_expr::get()
       // (a.reshape(d1, d2, ...)), equivalent to a.reshape((d1, d2, ...)).
       // Only reachable here (not the single-tuple-arg branch above) because
       // a single dimension can't be split into more than one argument, so
-      // more than one argument past the array itself always means this form.
+      // more than one argument past the array itself always means this
+      // form -- for the method-form rewrite. A genuine module-function call
+      // numpy.reshape(a, 2, 3) has no such form: numpy's real signature is
+      // reshape(a, newshape, order='C'), so the third positional argument
+      // is `order`, not another dimension. Reject that case explicitly
+      // instead of silently reinterpreting it as split dimensions.
+      if (!call_.value("_numpy_method_form", false))
+        throw std::runtime_error(
+          "TypeError: numpy.reshape() does not accept dimensions as "
+          "separate positional arguments; pass a tuple, or use the "
+          "a.reshape(d1, d2, ...) method form");
+
       for (std::size_t i = 1; i < call_["args"].size(); ++i)
       {
         int64_t d = parse_reshape_dim(call_["args"][i]);
