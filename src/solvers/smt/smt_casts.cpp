@@ -169,19 +169,19 @@ smt_astt smt_solver_baset::convert_typecast_to_fpbv(const typecast2t &cast)
   }
 
   if (is_unsignedbv_type(cast.from))
-    return fp_api->mk_smt_typecast_ubv_to_fpbv(
+    return mk_smt_typecast_ubv_to_fpbv(
       convert_ast(cast.from),
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
 
   if (is_signedbv_type(cast.from))
-    return fp_api->mk_smt_typecast_sbv_to_fpbv(
+    return mk_smt_typecast_sbv_to_fpbv(
       convert_ast(cast.from),
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
 
   if (is_floatbv_type(cast.from))
-    return fp_api->mk_smt_typecast_from_fpbv_to_fpbv(
+    return mk_smt_typecast_from_fpbv_to_fpbv(
       convert_ast(cast.from),
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
@@ -193,15 +193,15 @@ smt_astt smt_solver_baset::convert_typecast_to_fpbv(const typecast2t &cast)
 smt_astt smt_solver_baset::convert_typecast_from_fpbv(const typecast2t &cast)
 {
   if (is_unsignedbv_type(cast.type))
-    return fp_api->mk_smt_typecast_from_fpbv_to_ubv(
+    return mk_smt_typecast_from_fpbv_to_ubv(
       convert_ast(cast.from), cast.type->get_width());
 
   if (is_signedbv_type(cast.type))
-    return fp_api->mk_smt_typecast_from_fpbv_to_sbv(
+    return mk_smt_typecast_from_fpbv_to_sbv(
       convert_ast(cast.from), cast.type->get_width());
 
   if (is_floatbv_type(cast.type))
-    return fp_api->mk_smt_typecast_from_fpbv_to_fpbv(
+    return mk_smt_typecast_from_fpbv_to_fpbv(
       convert_ast(cast.from),
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));

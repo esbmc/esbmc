@@ -1,11 +1,8 @@
 #include <solve.h>
 #include <solver_config.h>
-#include <solvers/smt/array_conv.h>
-#include <solvers/smt/fp/fp_conv.h>
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_solver.h>
-#include <solvers/smt/tuple/smt_tuple_node.h>
 
 #include <unordered_map>
 
@@ -192,34 +189,18 @@ smt_convt *create_solver(
 {
   tuple_iface *tuple_api = nullptr;
   array_iface *array_api = nullptr;
-  fp_convt *fp_api = nullptr;
 
   solver_creator &factory = pick_solver(solver_name, options);
-  smt_solver_baset *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api);
+  smt_solver_baset *ctx = factory(options, ns, &tuple_api, &array_api);
 
-  bool node_flat = options.get_bool_option("tuple-node-flattener");
-
-  /* Use the solver's native tuples when it has them and nothing was asked
-     for; otherwise flatten to per-field symbols. */
-  if (tuple_api != nullptr && !node_flat)
-    ctx->set_tuple_iface(tuple_api);
-  else
-    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
-
-  /* --array-flattener is honoured by the backend: camada's Ackermann encoding
-     keeps arrays out of the solver's array theory, so the interface is served
-     either way and our own flattener is only needed by a backend that offers
-     no arrays at all. */
-  if (array_api != nullptr)
-    ctx->set_array_iface(array_api);
-  else
-    ctx->set_array_iface(new array_convt(ctx));
-
-  /* Every backend serves the FP interface itself: camada encodes
-     floating-point natively or bit-blasts it (FPEncoding::BV, selected by
-     --fp2bv), so ESBMC's software lowering is never installed. */
-  assert(fp_api != nullptr);
-  ctx->set_fp_conv(fp_api);
+  /* Both interfaces are served by the backend. Camada encodes tuples and
+     arrays natively where the solver has the theory, and lowers them itself
+     otherwise -- --tuple-node-flattener and --array-flattener select those
+     lowerings (TupleEncoding::Camada, ArrayEncoding::Ackermann) rather than
+     installing an ESBMC-side flattener. */
+  assert(tuple_api != nullptr && array_api != nullptr);
+  ctx->set_tuple_iface(tuple_api);
+  ctx->set_array_iface(array_api);
 
   ctx->smt_post_init();
   return new smt_convt(std::unique_ptr<smt_solver_baset>(ctx));

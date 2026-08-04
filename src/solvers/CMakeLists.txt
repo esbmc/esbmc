@@ -11,7 +11,7 @@ add_subdirectory(smt)
 
 
 add_library(solve solve.cpp)
-target_link_libraries(solve PUBLIC smt PRIVATE smttuple smtfp fmt::fmt)
+target_link_libraries(solve PUBLIC smt PRIVATE fmt::fmt)
 target_include_directories(solve
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
@@ -19,7 +19,7 @@ target_include_directories(solve
 )
 
 add_library(solvers INTERFACE)
-target_link_libraries(solvers INTERFACE solve smttuple smtfp smt prop)
+target_link_libraries(solvers INTERFACE solve smt prop)
 
 add_subdirectory(camada)
 

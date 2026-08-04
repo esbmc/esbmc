@@ -81,7 +81,6 @@ smt_solver_baset::smt_solver_baset(
   ir_ieee = options.get_bool_option("ir-ieee");
   tuple_api = nullptr;
   array_api = nullptr;
-  fp_api = nullptr;
   ra_api = nullptr;
   ir_ieee_api = std::make_unique<ir_ieee_convt>(this);
 
@@ -137,12 +136,6 @@ void smt_solver_baset::set_array_iface(array_iface *iface)
 {
   assert(array_api == nullptr && "set_array_iface should only be called once");
   array_api = iface;
-}
-
-void smt_solver_baset::set_fp_conv(fp_convt *iface)
-{
-  assert(fp_api == NULL && "set_fp_iface should only be called once");
-  fp_api = iface;
 }
 
 void smt_solver_baset::set_ra_conv(ra_apit *iface)
@@ -784,7 +777,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
       a = ir_ieee_api->encode_ieee_add(expr);
     else
-      a = fp_api->mk_smt_fpbv_add(
+      a = mk_smt_fpbv_add(
         convert_ast(to_ieee_add2t(expr).side_1),
         convert_ast(to_ieee_add2t(expr).side_2),
         convert_rounding_mode(to_ieee_add2t(expr).rounding_mode));
@@ -796,7 +789,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
       a = ir_ieee_api->encode_ieee_sub(expr);
     else
-      a = fp_api->mk_smt_fpbv_sub(
+      a = mk_smt_fpbv_sub(
         convert_ast(to_ieee_sub2t(expr).side_1),
         convert_ast(to_ieee_sub2t(expr).side_2),
         convert_rounding_mode(to_ieee_sub2t(expr).rounding_mode));
@@ -808,7 +801,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
       a = ir_ieee_api->encode_ieee_mul(expr);
     else
-      a = fp_api->mk_smt_fpbv_mul(
+      a = mk_smt_fpbv_mul(
         convert_ast(to_ieee_mul2t(expr).side_1),
         convert_ast(to_ieee_mul2t(expr).side_2),
         convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode));
@@ -820,7 +813,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
       a = ir_ieee_api->encode_ieee_div(expr);
     else
-      a = fp_api->mk_smt_fpbv_div(
+      a = mk_smt_fpbv_div(
         convert_ast(to_ieee_div2t(expr).side_1),
         convert_ast(to_ieee_div2t(expr).side_2),
         convert_rounding_mode(to_ieee_div2t(expr).rounding_mode));
@@ -832,7 +825,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
       a = ir_ieee_api->encode_ieee_fma(expr);
     else
-      a = fp_api->mk_smt_fpbv_fma(
+      a = mk_smt_fpbv_fma(
         convert_ast(to_ieee_fma2t(expr).value_1),
         convert_ast(to_ieee_fma2t(expr).value_2),
         convert_ast(to_ieee_fma2t(expr).value_3),
@@ -962,7 +955,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else
     {
-      a = fp_api->mk_smt_fpbv_sqrt(
+      a = mk_smt_fpbv_sqrt(
         convert_ast(to_ieee_sqrt2t(expr).value),
         convert_rounding_mode(to_ieee_sqrt2t(expr).rounding_mode));
     }
@@ -1185,7 +1178,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else
     {
-      a = fp_api->mk_smt_nearbyint_from_float(
+      a = mk_smt_nearbyint_from_float(
         convert_ast(to_nearbyint2t(expr).from),
         convert_rounding_mode(to_nearbyint2t(expr).rounding_mode));
     }
@@ -1322,7 +1315,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 
     if (
       is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2) && !int_encoding)
-      a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
+      a = mk_smt_fpbv_eq(args[0], args[1]);
     else
       a = args[0]->eq(this, args[1]);
     if (
@@ -1341,7 +1334,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (
       is_floatbv_type(neq.side_1) && is_floatbv_type(neq.side_2) &&
       !int_encoding)
-      a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
+      a = mk_smt_fpbv_eq(args[0], args[1]);
     else
       a = args[0]->eq(this, args[1]);
     a = mk_not(a);
@@ -1436,7 +1429,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_floatbv_type(abs.value) && !int_encoding)
     {
-      a = fp_api->mk_smt_fpbv_abs(args[0]);
+      a = mk_smt_fpbv_abs(args[0]);
     }
     else
     {
@@ -1515,7 +1508,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_floatbv_type(lt.side_1) && is_floatbv_type(lt.side_2))
     {
-      a = fp_api->mk_smt_fpbv_lt(args[0], args[1]);
+      a = mk_smt_fpbv_lt(args[0], args[1]);
     }
     else if (is_fixedbv_type(lt.side_1) && is_fixedbv_type(lt.side_2))
     {
@@ -1548,7 +1541,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_floatbv_type(lte.side_1) && is_floatbv_type(lte.side_2))
     {
-      a = fp_api->mk_smt_fpbv_lte(args[0], args[1]);
+      a = mk_smt_fpbv_lte(args[0], args[1]);
     }
     else if (is_fixedbv_type(lte.side_1) && is_fixedbv_type(lte.side_2))
     {
@@ -1581,7 +1574,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_floatbv_type(gt.side_1) && is_floatbv_type(gt.side_2))
     {
-      a = fp_api->mk_smt_fpbv_gt(args[0], args[1]);
+      a = mk_smt_fpbv_gt(args[0], args[1]);
     }
     else if (is_fixedbv_type(gt.side_1) && is_fixedbv_type(gt.side_2))
     {
@@ -1614,7 +1607,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_floatbv_type(gte.side_1) && is_floatbv_type(gte.side_2))
     {
-      a = fp_api->mk_smt_fpbv_gte(args[0], args[1]);
+      a = mk_smt_fpbv_gte(args[0], args[1]);
     }
     else if (is_fixedbv_type(gte.side_1) && is_fixedbv_type(gte.side_2))
     {
@@ -1687,7 +1680,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_floatbv_type(neg.value))
     {
-      a = fp_api->mk_smt_fpbv_neg(args[0]);
+      a = mk_smt_fpbv_neg(args[0]);
     }
     else
     {
@@ -2097,14 +2090,14 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     unsigned int fraction_width = to_floatbv_type(thereal.type).fraction;
     unsigned int exponent_width = to_floatbv_type(thereal.type).exponent;
     if (thereal.value.is_NaN())
-      return fp_api->mk_smt_fpbv_nan(
+      return mk_smt_fpbv_nan(
         thereal.value.get_sign(), exponent_width, fraction_width + 1);
 
     bool sign = thereal.value.get_sign();
     if (thereal.value.is_infinity())
-      return fp_api->mk_smt_fpbv_inf(sign, exponent_width, fraction_width + 1);
+      return mk_smt_fpbv_inf(sign, exponent_width, fraction_width + 1);
 
-    return fp_api->mk_smt_fpbv(thereal.value);
+    return mk_smt_fpbv(thereal.value);
   }
   case expr2t::constant_bool_id:
   {
@@ -3292,7 +3285,7 @@ expr2tc smt_solver_baset::get_by_ast(const type2tc &type, smt_astt a)
       }
       return expr2tc();
     }
-    return constant_floatbv2tc(fp_api->get_fpbv(a));
+    return constant_floatbv2tc(get_fpbv(a));
 
   case type2t::complex_id:
   case type2t::struct_id:

@@ -155,8 +155,7 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
 
     // from bitvectors should go through the fp api
     if (is_bv_type(new_from) || is_union_type(new_from))
-      return fp_api->mk_from_bv_to_fp(
-        convert_ast(new_from), convert_sort(to_type));
+      return mk_from_bv_to_fp(convert_ast(new_from), convert_sort(to_type));
   }
   else if (is_fixedbv_type(to_type))
   {
@@ -181,7 +180,7 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
       return convert_ast(typecast2tc(to_type, from));
 
     if (is_floatbv_type(from))
-      return fp_api->mk_from_fp_to_bv(convert_ast(from));
+      return mk_from_fp_to_bv(convert_ast(from));
 
     if (is_fixedbv_type(from))
       return convert_ast(from);

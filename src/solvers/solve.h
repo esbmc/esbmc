@@ -7,7 +7,6 @@
 #include <util/message/message.h>
 
 class array_iface;
-class fp_convt;
 class smt_convt;
 class smt_solver_baset;
 class tuple_iface;
@@ -16,8 +15,7 @@ typedef smt_solver_baset *(solver_creator)(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
-  array_iface **array_api,
-  fp_convt **fp_api);
+  array_iface **array_api);
 
 smt_convt *create_solver(
   std::string solver_name,

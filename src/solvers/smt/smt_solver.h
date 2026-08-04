@@ -87,14 +87,12 @@
  */
 
 // Forward dec.
-class fp_convt;
 class ir_ieee_convt;
 class smt_solver_baset;
 class ra_apit;
 
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/tuple/smt_tuple.h>
-#include <solvers/smt/fp/fp_conv.h>
 
 /** The base SMT-conversion class/interface.
  *  smt_solver_baset handles a number of decisions that must be made when
@@ -394,7 +392,7 @@ public:
     if (config.ansi_c.use_fixed_for_float)
       return mk_fbv_sort(ew + sw);
 
-    return fp_api->mk_fpbv_sort(ew, sw);
+    return mk_fpbv_sort(ew, sw);
   }
 
   /** Create a bool sort */
@@ -808,7 +806,225 @@ public:
   /** Stores handle for the array interface. */
   void set_array_iface(array_iface *iface);
   /** Stores handle for the floating-point interface. */
-  void set_fp_conv(fp_convt *iface);
+  /* ---- Floating-point ----
+   * Implemented by the backend: camada encodes floating-point natively or
+   * bit-blasts it (FPEncoding::BV, selected by --fp2bv), so there is no
+   * separate lowering object to install. */
+
+  /** Create a floating point bitvector
+   *  @param thereal the floating-point number
+   *  @param ew Exponent width, in bits, of the bitvector to create.
+   *  @param sw Significand width, in bits, of the bitvector to create.
+   *  @return The newly created terminal smt_ast of this bitvector. */
+  virtual smt_astt mk_smt_fpbv(const ieee_floatt &thereal) = 0;
+
+  /** Create a sort representing a floating-point number.
+   *  @param ew Exponent width, in bits, of the bitvector to create.
+   *  @param sw Significand width, in bits, of the bitvector to create.
+   *  @return The floating-point representation of the type, wrapped in an
+   * smt_sort. */
+  virtual smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw) = 0;
+
+  /** Create a sort representing a floating-point rounding mode.
+   *  @return The floating-point rounding mode representation of the type,
+   *  wrapped in an smt_sort. */
+  virtual smt_sortt mk_fpbv_rm_sort() = 0;
+
+  /** Create a NaN floating point bitvector
+   *  @param ew Exponent width, in bits, of the bitvector to create.
+   *  @param sw Significand width, in bits, of the bitvector to create.
+   *  @return The newly created terminal smt_ast of this bitvector. */
+  virtual smt_astt mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw) = 0;
+
+  /** Create a (+/-)inf floating point bitvector
+   *  @param sgn Whether this bitvector is negative or positive.
+   *  @param ew Exponent width, in bits, of the bitvector to create.
+   *  @param sw Significand width, in bits, of the bitvector to create.
+   *  @return The newly created terminal smt_ast of this bitvector. */
+  virtual smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw) = 0;
+
+  /** Create a rounding mode to be used by floating point cast and arith ops
+   *  @param rm the kind of rounding mode
+   *  @return The newly created rounding mode smt_ast. */
+  virtual smt_astt mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm) = 0;
+
+  /** Typecast from a floating point
+   *  @param from the floating point being casted to unsigned bitvector
+   *  @param to the unsigned bitvector resulting type
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt
+  mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width) = 0;
+
+  /** Typecast from a floating point
+   *  @param from the floating point being casted to signed bitvector
+   *  @param to the signed bitvector resulting type
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt
+  mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width) = 0;
+
+  /** Typecast from a floating point
+   *  @param from the floating point being casted to floating-point
+   *  @param to the floating-point resulting type
+   *  @param rm the rounding mode
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_typecast_from_fpbv_to_fpbv(
+    smt_astt from,
+    smt_sortt to,
+    smt_astt rm) = 0;
+
+  /** Typecast to a floating point
+   *  @param from the unsigned bitvector being casted to a floating-point
+   *  @param cast the floating-point resulting type
+   *  @param rm the rounding mode
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt
+  mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm) = 0;
+
+  /** Typecast to a floating point
+   *  @param from the signed bitvector being casted to a floating-point
+   *  @param cast the floating-point resulting type
+   *  @param rm the rounding mode
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt
+  mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm) = 0;
+
+  /** Calculate the nearby int from a floating point, considering the rounding
+   * mode
+   *  @param from the floating-point
+   *  @param rm the rounding mode
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm) = 0;
+
+  /** Convert a ieee addition
+   *  @param lhs left hand side of the addition
+   *  @param rhs right hand side of the addition
+   *  @param rm the rounding mode
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm) = 0;
+
+  /** Convert a ieee subtraction
+   *  @param lhs left hand side of the subtraction
+   *  @param rhs right hand side of the subtraction
+   *  @param rm the rounding mode
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm) = 0;
+
+  /** Convert a ieee multiplication
+   *  @param lhs left hand side of the multiplication
+   *  @param rhs right hand side of the multiplication
+   *  @param rm the rounding mode
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm) = 0;
+
+  /** Convert the ieee division
+   *  @param lhs left hand side of the division
+   *  @param rhs right hand side of the division
+   *  @param rm the rounding mode
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm) = 0;
+
+  /** Convert the ieee arithmetic square-root (sqrt)
+   *  @param op the sqrt radicand
+   *  @param rm the rounding mode
+   *  @return The newly created sqrt smt_ast */
+  virtual smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm) = 0;
+
+  /** Convert the ieee arithmetic fused-multiply add (fma): round((v1 * v2) +
+   * v3)
+   *  @param v1 in the equation
+   *  @param v2 in the equation
+   *  @param v3 in the equation
+   *  @param rm the rounding mode
+   *  @return The newly created fma smt_ast */
+  virtual smt_astt
+  mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm) = 0;
+
+  /** Convert an ieee equality
+   *  @param lhs left hand side
+   *  @param rhs right hand side
+   *  @return The newly created fp.eq smt_ast. */
+  virtual smt_astt mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs) = 0;
+
+  /** Convert an ieee greater than
+   *  @param lhs left hand side
+   *  @param rhs right hand side
+   *  @return The newly created fp.gt smt_ast. */
+  virtual smt_astt mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs) = 0;
+
+  /** Convert an ieee less than
+   *  @param lhs left hand side
+   *  @param rhs right hand side
+   *  @return The newly created fp.lt smt_ast. */
+  virtual smt_astt mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs) = 0;
+
+  /** Convert an ieee greater than or equal
+   *  @param lhs left hand side
+   *  @param rhs right hand side
+   *  @return The newly created fp.gt smt_ast. */
+  virtual smt_astt mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs) = 0;
+
+  /** Convert an ieee less than or equal
+   *  @param lhs left hand side
+   *  @param rhs right hand side
+   *  @return The newly created fp.lt smt_ast. */
+  virtual smt_astt mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs) = 0;
+
+  /** Convert an ieee is_nan operation
+   *  @param op the operand
+   *  @return The newly created fp.isNaN smt_ast. */
+  virtual smt_astt mk_smt_fpbv_is_nan(smt_astt op) = 0;
+
+  /** Convert an ieee is_inf operation
+   *  @param op the operand
+   *  @return The newly created fp.isInfinite smt_ast. */
+  virtual smt_astt mk_smt_fpbv_is_inf(smt_astt op) = 0;
+
+  /** Convert an ieee is_normal operation
+   *  @param op the operand
+   *  @return The newly created fp.isNormal smt_ast. */
+  virtual smt_astt mk_smt_fpbv_is_normal(smt_astt op) = 0;
+
+  /** Convert an ieee is_zero operation
+   *  @param op the operand
+   *  @return The newly created fp.isZero smt_ast. */
+  virtual smt_astt mk_smt_fpbv_is_zero(smt_astt op) = 0;
+
+  /** Convert an ieee is_neg operation
+   *  @param op the operand
+   *  @return The newly created fp.isNegative smt_ast. */
+  virtual smt_astt mk_smt_fpbv_is_negative(smt_astt op) = 0;
+
+  /** Convert an ieee is_pos operation
+   *  @param op the operand
+   *  @return The newly created fp.isPositive smt_ast. */
+  virtual smt_astt mk_smt_fpbv_is_positive(smt_astt op) = 0;
+
+  /** Convert an ieee abs operation
+   *  @param op the operand
+   *  @return The newly created fp.abs smt_ast. */
+  virtual smt_astt mk_smt_fpbv_abs(smt_astt op) = 0;
+
+  /** Convert an ieee negation operation
+   *  @param op the operand
+   *  @return The newly created fp.neg smt_ast. */
+  virtual smt_astt mk_smt_fpbv_neg(smt_astt op) = 0;
+
+  /** Extract the assignment to a floating-point from the SMT solvers model.
+   *  @param a the AST whos value we wish to know.
+   *  @return the ieee floating-point */
+  virtual ieee_floatt get_fpbv(smt_astt a) = 0;
+
+  /** Convert BV to FP
+   * @param op the bitvector
+   * @param to the floating-point type
+   */
+  virtual smt_astt mk_from_bv_to_fp(smt_astt op, smt_sortt to) = 0;
+
+  /** Convert FP to BV
+   * @param op the floating-point
+   */
+  virtual smt_astt mk_from_fp_to_bv(smt_astt op) = 0;
+
   /** Stores handle for the real-arithmetic/enclosure interface. */
   void set_ra_conv(ra_apit *iface);
 
@@ -1055,7 +1271,6 @@ public:
 
   tuple_iface *tuple_api;
   array_iface *array_api;
-  fp_convt *fp_api;
   ra_apit *ra_api;
   std::unique_ptr<ir_ieee_convt> ir_ieee_api;
 

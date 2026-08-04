@@ -43,16 +43,14 @@ SCENARIO(
   options.set_option("int-encoding", true);
   tuple_iface *tuple_api = nullptr;
   array_iface *array_api = nullptr;
-  fp_convt *fp_api = nullptr;
   std::unique_ptr<smt_solver_baset> solver{
-    create_new_z3_solver(options, ns, &tuple_api, &array_api, &fp_api)};
+    create_new_z3_solver(options, ns, &tuple_api, &array_api)};
   REQUIRE(solver != nullptr);
 
   // create_solver() does this wiring plus smt_post_init(); replicate the part
   // mk_eq / assert_ast need (boolean_sort and the address-space scaffolding).
   solver->set_tuple_iface(tuple_api);
   solver->set_array_iface(array_api);
-  solver->set_fp_conv(fp_api);
   solver->smt_post_init();
 
   // Round-trip a BigInt through the solver: assert x == mk_smt_int(v), solve,

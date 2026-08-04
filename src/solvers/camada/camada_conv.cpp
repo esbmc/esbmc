@@ -45,24 +45,6 @@ enum class camada_backendt
   smtlib
 };
 
-bool backend_supports_tuples(camada_backendt backend)
-{
-  switch (backend)
-  {
-  case camada_backendt::z3:
-  case camada_backendt::cvc5:
-  // TupleEncoding::Native emits SMT-LIB datatype tuples on the wire.
-  case camada_backendt::smtlib:
-    return true;
-  case camada_backendt::mathsat:
-  case camada_backendt::yices:
-  case camada_backendt::bitwuzla:
-    return false;
-  }
-
-  std::unreachable();
-}
-
 using camada_sort = solver_smt_sort<camada::SMTSortRef>;
 using camada_expr = solver_smt_ast<camada::SMTExprRef>;
 
@@ -272,6 +254,16 @@ std::string wrap_smtlib_dump(std::string smt_formula)
  * arrays. That is camada's Ackermann encoding: every select becomes a fresh
  * element variable tied to the array's other reads by congruence axioms, so
  * arrays never reach the solver. */
+/* --tuple-node-flattener asks for tuples lowered to per-field symbols instead
+ * of the backend's datatypes. That is camada's TupleEncoding::Camada, the same
+ * lowering it already applies to backends without native datatype support. */
+camada::TupleEncoding pick_tuple_encoding(const optionst &options)
+{
+  return options.get_bool_option("tuple-node-flattener")
+           ? camada::TupleEncoding::Camada
+           : camada::TupleEncoding::Native;
+}
+
 camada::ArrayEncoding pick_array_encoding(const optionst &options)
 {
   return options.get_bool_option("array-flattener")
@@ -310,7 +302,7 @@ camada::SMTSolverRef create_esbmc_smtlib_solver(const optionst &options)
   if (prog.empty())
     return std::make_unique<camada::SMTLIBSolver>(
       out.empty() ? "-" : out,
-      camada::TupleEncoding::Native,
+      pick_tuple_encoding(options),
       logic,
       pick_array_encoding(options));
 
@@ -351,7 +343,7 @@ camada::SMTSolverRef create_esbmc_smtlib_solver(const optionst &options)
     return std::make_unique<camada::SMTLIBSolver>(
       camada::SMTLIBProcessTag{},
       argv,
-      camada::TupleEncoding::Native,
+      pick_tuple_encoding(options),
       logic,
       pick_array_encoding(options));
 
@@ -359,7 +351,7 @@ camada::SMTSolverRef create_esbmc_smtlib_solver(const optionst &options)
     camada::SMTLIBProcessTag{},
     argv,
     out,
-    camada::TupleEncoding::Native,
+    pick_tuple_encoding(options),
     logic,
     pick_array_encoding(options));
 }
@@ -405,7 +397,7 @@ camada::SMTSolverRef create_esbmc_oneshot_solver(
   if (options.get_bool_option("smt-formula-only"))
     return std::make_unique<camada::SMTLIBSolver>(
       formula_path,
-      camada::TupleEncoding::Native,
+      pick_tuple_encoding(options),
       logic,
       pick_array_encoding(options));
 
@@ -433,7 +425,7 @@ camada::SMTSolverRef create_esbmc_oneshot_solver(
     prog,
     model_argv,
     [](long pgid) { file_operations::register_pgroup_for_cleanup(pgid); },
-    camada::TupleEncoding::Native,
+    pick_tuple_encoding(options),
     logic,
     pick_array_encoding(options));
 }
@@ -526,8 +518,7 @@ camada::SMTSolverRef create_esbmc_yices_solver(const optionst &options)
 
 class camada_convt : public smt_solver_baset,
                      public tuple_iface,
-                     public array_iface,
-                     public fp_convt
+                     public array_iface
 {
   friend class camada_tuple_ast;
 
@@ -539,7 +530,6 @@ public:
     bool oneshot = false)
     : smt_solver_baset(ns, options),
       array_iface(true, true),
-      fp_convt(this),
       backend(backend),
       oneshot(oneshot)
   {
@@ -1802,22 +1792,15 @@ smt_solver_baset *create_camada_solver(
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
-  fp_convt **fp_api,
   bool oneshot = false)
 {
   auto *solver = new camada_convt(ns, options, backend, oneshot);
-  /* A one-shot script is flattened; only the interactive SMT-LIB backend
-   * gets camada's native datatype tuples. */
-  *tuple_api = (backend_supports_tuples(backend) && !oneshot)
-                 ? static_cast<tuple_iface *>(solver)
-                 : nullptr;
-
-  /* Camada encodes arrays and floating-point itself -- natively, or lowered
-   * to bit-vectors when the chosen logic has no such sort -- so the backend
-   * always serves both interfaces and ESBMC's flatteners stay out of the way.
-   */
+  /* Camada encodes tuples and arrays itself: natively where the backend has
+   * the theory, and lowered to per-field BV/Bool symbols or Ackermann
+   * congruence axioms where it does not (SMTSolverImpl dispatches on
+   * nativeTupleSupport()). So the backend always serves both interfaces. */
+  *tuple_api = solver;
   *array_api = solver;
-  *fp_api = solver;
   return solver;
 }
 
@@ -1827,55 +1810,50 @@ smt_solver_baset *create_new_z3_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
-  array_iface **array_api,
-  fp_convt **fp_api)
+  array_iface **array_api)
 {
   return create_camada_solver(
-    camada_backendt::z3, options, ns, tuple_api, array_api, fp_api);
+    camada_backendt::z3, options, ns, tuple_api, array_api);
 }
 
 smt_solver_baset *create_new_cvc5_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
-  array_iface **array_api,
-  fp_convt **fp_api)
+  array_iface **array_api)
 {
   return create_camada_solver(
-    camada_backendt::cvc5, options, ns, tuple_api, array_api, fp_api);
+    camada_backendt::cvc5, options, ns, tuple_api, array_api);
 }
 
 smt_solver_baset *create_new_mathsat_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
-  array_iface **array_api,
-  fp_convt **fp_api)
+  array_iface **array_api)
 {
   return create_camada_solver(
-    camada_backendt::mathsat, options, ns, tuple_api, array_api, fp_api);
+    camada_backendt::mathsat, options, ns, tuple_api, array_api);
 }
 
 smt_solver_baset *create_new_yices_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
-  array_iface **array_api,
-  fp_convt **fp_api)
+  array_iface **array_api)
 {
   return create_camada_solver(
-    camada_backendt::yices, options, ns, tuple_api, array_api, fp_api);
+    camada_backendt::yices, options, ns, tuple_api, array_api);
 }
 
 smt_solver_baset *create_new_bitwuzla_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
-  array_iface **array_api,
-  fp_convt **fp_api)
+  array_iface **array_api)
 {
   return create_camada_solver(
-    camada_backendt::bitwuzla, options, ns, tuple_api, array_api, fp_api);
+    camada_backendt::bitwuzla, options, ns, tuple_api, array_api);
 }
 
 /* The one-shot command processes a single task and exits; strategies that
@@ -1907,8 +1885,7 @@ smt_solver_baset *create_new_smtlib_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
-  array_iface **array_api,
-  fp_convt **fp_api)
+  array_iface **array_api)
 {
   /* --smtlib-oneshot-prog selects the write-a-file-and-run-a-program shape;
    * without it the script goes to an interactive solver or to --output. */
@@ -1926,6 +1903,5 @@ smt_solver_baset *create_new_smtlib_solver(
     ns,
     tuple_api,
     array_api,
-    fp_api,
     oneshot);
 }

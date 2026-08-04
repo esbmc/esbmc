@@ -653,7 +653,7 @@ smt_astt smt_solver_baset::convert_is_nan(const expr2tc &expr)
   }
 
   smt_astt operand = convert_ast(isnan.value);
-  return fp_api->mk_smt_fpbv_is_nan(operand);
+  return mk_smt_fpbv_is_nan(operand);
 }
 
 // Returns the max-normal SMT real for single/double floatbv, or nullptr for
@@ -719,7 +719,7 @@ smt_astt smt_solver_baset::convert_is_inf(const expr2tc &expr)
   }
 
   smt_astt operand = convert_ast(isinf.value);
-  return fp_api->mk_smt_fpbv_is_inf(operand);
+  return mk_smt_fpbv_is_inf(operand);
 }
 
 smt_astt smt_solver_baset::convert_is_normal(const expr2tc &expr)
@@ -766,7 +766,7 @@ smt_astt smt_solver_baset::convert_is_normal(const expr2tc &expr)
   }
 
   smt_astt operand = convert_ast(isnormal.value);
-  return fp_api->mk_smt_fpbv_is_normal(operand);
+  return mk_smt_fpbv_is_normal(operand);
 }
 
 smt_astt smt_solver_baset::convert_is_finite(const expr2tc &expr)
@@ -806,8 +806,8 @@ smt_astt smt_solver_baset::convert_is_finite(const expr2tc &expr)
   smt_astt value = convert_ast(isfinite.value);
 
   // isfinite = !(isinf || isnan)
-  smt_astt isinf = fp_api->mk_smt_fpbv_is_inf(value);
-  smt_astt isnan = fp_api->mk_smt_fpbv_is_nan(value);
+  smt_astt isinf = mk_smt_fpbv_is_inf(value);
+  smt_astt isnan = mk_smt_fpbv_is_nan(value);
 
   smt_astt or_op = mk_or(isinf, isnan);
   return mk_not(or_op);
@@ -865,22 +865,22 @@ smt_astt smt_solver_baset::convert_rounding_mode(const expr2tc &expr)
     switch (raw_rm)
     {
     case ieee_floatt::ROUND_TO_EVEN:
-      return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
+      return mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
     case ieee_floatt::ROUND_TO_AWAY:
-      return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_AWAY);
+      return mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_AWAY);
     case ieee_floatt::ROUND_TO_PLUS_INF:
-      return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_PLUS_INF);
+      return mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_PLUS_INF);
     case ieee_floatt::ROUND_TO_MINUS_INF:
-      return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF);
+      return mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF);
     case ieee_floatt::ROUND_TO_ZERO:
-      return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
+      return mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
     default:
       // Preserve the historical fallback behavior of this conversion path.
       log_warning(
         "unsupported constant rounding mode value {}: falling back to "
         "ROUND_TO_ZERO",
         raw_rm);
-      return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
+      return mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
     }
   }
 
@@ -896,7 +896,7 @@ smt_astt smt_solver_baset::convert_rounding_mode(const expr2tc &expr)
       "unsupported symbolic rounding mode sort {}: falling back to "
       "ROUND_TO_ZERO",
       static_cast<int>(symbol->sort->id));
-    return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
+    return mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
   }
 
   const auto width = symbol->sort->get_data_width();
@@ -911,11 +911,11 @@ smt_astt smt_solver_baset::convert_rounding_mode(const expr2tc &expr)
   smt_astt is_3 = is_mode(ieee_floatt::ROUND_TO_MINUS_INF);
   smt_astt is_4 = is_mode(ieee_floatt::ROUND_TO_ZERO);
 
-  smt_astt ne = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
-  smt_astt na = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_AWAY);
-  smt_astt mi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF);
-  smt_astt pi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_PLUS_INF);
-  smt_astt ze = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
+  smt_astt ne = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
+  smt_astt na = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_AWAY);
+  smt_astt mi = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF);
+  smt_astt pi = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_PLUS_INF);
+  smt_astt ze = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
 
   // Keep an explicit map for all supported modes:
   // 0 -> nearest-even, 1 -> nearest-away, 2 -> +inf, 3 -> -inf, 4 -> zero.

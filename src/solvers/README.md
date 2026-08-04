@@ -64,10 +64,10 @@ this pipeline and are worth a skim:
 | Path | Contents |
 |------|----------|
 | `smt/` | Solver-agnostic core: `smt_convt`, `smt_ast`, `smt_sort`, byte ops, casts, memory model, overflow encoding |
-| `smt/tuple/` | Tuple flattening for solvers that lack native tuples (node-based and symbol-based variants) |
-| `smt/fp/` | Floating-point flattening (`fp_convt`) for solvers without native FP |
+| `smt/tuple/` | `tuple_iface`, the interface a backend implements for tuples |
+| `smt/fp/` | Interval encoding for integer/real float mode (`ir_ieee_convt`) |
 | `prop/` | Shared with SAT backends: `literal.h`, `pointer_logic.{cpp,h}` |
-| `bitwuzla/`, `z3/`, `boolector/`, `cvc4/`, `cvc5/`, `mathsat/`, `yices/`, `smtlib/`, `minisat/`, `sat/` | Per-backend subclasses |
+| `camada/`, `minisat/`, `sat/` | Per-backend subclasses |
 | `solve.{cpp,h}` | Factory that picks and instantiates a backend |
 | `solver_config.h.in` | Compile-time configuration (`#cmakedefine` per solver) |
 
@@ -93,9 +93,8 @@ a backend opt in to native handling where the solver supports it:
 
 | Interface | If implemented | Fallback |
 |-----------|----------------|----------|
-| `array_iface` | Solver's native arrays | `array_conv` (Kroening's decision procedure) |
-| `tuple_iface` | Solver's native tuples / datatypes | `smt_tuple_node` |
-| `fp_convt` (subclassed) | Solver's native FP theory | IEEE 754 bit-vector encoding |
+| `array_iface` | Solver's native arrays | camada's `ArrayEncoding::Ackermann` (`--array-flattener`) |
+| `tuple_iface` | Solver's native tuples / datatypes | camada's `TupleEncoding::Camada` (`--tuple-node-flattener`) |
 
 If you find yourself flattening anything *more* than the items above —
 for instance, anything that touches pointer dereferencing, control-flow
@@ -170,8 +169,8 @@ reference and the wiki as background.
 2. Declare your AST wrapper:
    `class <name>_smt_ast : public solver_smt_ast<NativeTerm>`.
 3. Declare your converter:
-   `class <name>_convt : public smt_convt, public array_iface, public fp_convt`
-   (mirror `bitwuzla_convt`).  Drop `array_iface` / `fp_convt` if the
+   `class <name>_convt : public smt_solver_baset, public array_iface`
+   (mirror `camada_convt`).  Drop `array_iface` if the
    solver lacks native arrays / FP and you intend to use the fall-backs.
 4. Implement the overrides.  The base class declares ~50 virtual methods;
    build them up in this order — each stage produces a backend that can
@@ -270,8 +269,8 @@ The in-tree exemplar is the `--ir-ieee` real-arithmetic FP mode
   `smt_func_kind` entries, and the encoding hook itself.
 - `src/util/expr/expr_simplifier.cpp` — simplification rules for new operators,
   if any.
-- Each affected backend — typically `bitwuzla/`, `boolector/`, and the
-  text backend `smtlib/smtlib_conv.cpp`.
+- `camada/camada_conv.cpp` — the one backend, covering every solver camada
+  supports plus its SMT-LIB text mode.
 
 ## Real-arithmetic FP mode (`--ir-ieee`)
 
