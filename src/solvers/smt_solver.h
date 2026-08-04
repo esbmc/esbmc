@@ -7,7 +7,7 @@
 #include <boost/multi_index_container.hpp>
 #include <memory>
 #include <mutex>
-#include <unordered_set>
+#include <unordered_map>
 #include <solvers/pointer_logic.h>
 #include <solvers/smt_result.h>
 #include <solvers/smt_sort.h>
@@ -16,119 +16,50 @@
 #include <util/symtab/namespace.h>
 #include <util/base/threeval.h>
 
-/** @file smt_conv.h
- *  SMT conversion tools and utilities.
- *  smt_solver_baset is the base class for everything that attempts to convert
- * the contents of an SSA program into something else, generally SMT or SAT
- * based.
+/** @file smt_solver.h
+ *  Converting an SSA program into SMT.
  *
- *  The class itself does various accounting and structuring of the conversion,
- *  however the challenge is that as we convert the SSA program into anything
- *  else, we must deal with the fact that expressions in ESBMC are somewhat
- *  bespoke, and don't follow any particular formalism or logic. Therefore
- *  a lot of translation has to occur to reduce it to the desired logic, a
- *  process that Kroening refers to in CBMC as 'Flattenning'.
+ *  An SSA program held by symex_target_equationt becomes a series of boolean
+ *  propositions in a solver context; those are asserted, the solver is asked
+ *  whether the conjunction is satisfiable, and if it is, the values of symbols
+ *  can be read back to build a counterexample.
  *
- *  The conceptual data flow is that an SSA program held by
- *  symex_target_equationt is converted into a series of boolean propositions
- *  in some kind of solver context, the handle to which are objects of class
- *  smt_ast. These are then asserted as appropriate (or conjoined or
- *  disjuncted), after which the solver may be asked whether the formula is
- *  or not. If it is, the value of symbols in the formula may be retrieved
- *  from the solver.
+ *  ESBMC's expressions (irep2) follow no particular formalism, so reaching a
+ *  decidable logic takes a lot of translation -- what Kroening calls
+ *  'flattening' in CBMC. smt_solver_baset does that work and encodes the result
+ *  through camada, which owns the solver-specific part: expressions and sorts
+ *  are camada handles (see smt_sort.h), and camada uses each solver's own
+ *  theories where it has them and lowers where it does not.
  *
- *  To do that, the user must allocate a solver converter object, which extends
- *  the class smt_solver_baset. Currently, create_solver() will do this, in the
- *  factory-pattern manner (ish). Each solver converter implements all the
- *  abstract methods of smt_solver_baset. When handed an expression to convert,
- *  smt_solver_baset deconstructs it into a series of function applications,
- * which it creates by calling various abstract methods implemented by the
- * converter (in particular mk_func_app).
- *
- *  The actual function applications are in smt_ast objects. Following the
- *  SMTLIB definition, these are basically a term.
- *
- *  In no particular order, the following expression translation problems exist
- *  and are solved at various layers:
- *
- *  For all solvers, the following problems are flattenned:
+ *  Flattened here, for every backend:
  *    * The C memory address space
  *    * Representation of pointer types
  *    * Casts
  *    * Byte operations on objects (extract/update)
  *    * FixedBV representation of floats
  *    * Unions -> something else
+ *    * Bit-vector integer overflow detection
  *
- *  While these problems are supported by some SMT solvers, but are flattened
- *  in others (as SMT doesn't support these):
- *    * Bitvector integer overflow detection
- *    * Tuple representation (and arrays of them)
+ *  Lowered by camada rather than here, natively supported or not:
+ *    * Tuples (and arrays of them) -- TupleEncoding
+ *    * Arrays -- ArrayEncoding, either the solver's theory or Ackermann
+ *      congruence axioms
+ *    * Floating-point -- FPEncoding, native or bit-blasted (--fp2bv)
  *
- *  SAT solvers have the following aspects flattened:
- *    * Arrays (using Kroenings array decision procedure)
- *    * First order logic bitvector calculations to boolean formulas
- *    * Boolean formulas to CNF
- *
- *  If you find yourself having to make the SMT translation translate more than
- *  these things, ask yourself whether what you're doing is better handled at
- *  a different layer, such as symbolic execution. A nonexhaustive list of these
- *  include:
+ *  If you find yourself making the SMT translation do more than this, ask
+ *  whether it belongs at another layer, such as symbolic execution:
  *    * Anything involving pointer dereferencing at all
  *    * Anything that considers the control flow guard at any point
  *    * Pointer liveness or dynamic allocation consideration
  *
- *  A reasonable amount of SMT conversion complexity comes from the
- *  eccentricities of different solvers. This is a necessary part of working in
- *  the tar pit.
- *
  *  @see smt_solver_baset
  *  @see symex_target_equationt
  *  @see create_solver
- *  @see smt_solver_baset::mk_func_app
  */
 
 // Forward dec.
 class ir_ieee_convt;
 class smt_solver_baset;
-class ra_apit;
-
-/** The base SMT-conversion class/interface.
- *  smt_solver_baset handles a number of decisions that must be made when
- *  deconstructing ESBMC expressions down into SMT representation. See
- *  smt_conv.h for more high level documentation of this.
- *
- *  The basic flow is thus: a class that can create SMT formula in some solver
- *  subclasses smt_solver_baset, implementing abstract methods, in particular
- *  mk_func_app. The rest of ESBMC then calls convert with an expression, and
- *  this class deconstructs it into a series of applications, as documented by
- *  the smt_func_kind enumeration. These are then created via mk_func_app or
- *  some more specific method calls. Boolean sorted ASTs are then asserted
- *  into the solver context.
- *
- *  The exact lifetime of smt asts here is currently undefined, unfortunately,
- *  although smt_solver_baset posesses a cache, so they generally have a
- * reference in there. This will probably be fixed in the future.
- *
- *  In theory this class supports pushing and popping of solver contexts,
- *  although of course that depends too on the subclass supporting it. However,
- *  this hasn't really been tested since everything here was rewritten from
- *  The Old Way, so don't trust it.
- *
- *  While mk_func_app is supposed to be the primary interface to making SMT
- *  function applications, in some cases we want to introduce some
- *  abstractions, and this becomes unweildy. Thus, tuple and array operations
- *  are performed via function calls. By default, array operations are
- *  then passed through to mk_func_app, while tuples are decomposed into sets
- *  of variables which are then created through mk_func_app. If this isn't
- *  what a solver wants to happen, it can override this and handle that itself.
- *  The idea is that, in the manner of metaSMT, you can then compose a series
- *  of subclasses that perform the desired amount of flattening, and then work
- *  from there. (Some of this is still WIP though).
- *
- *  NB: the whole smt_asts-are-const situation needs to be resolved too.
- *
- *  @see smt_conv.h
- *  @see smt_func_kind */
 // True iff the given type lowers to a tuple sort in the SMT layer:
 // struct (incl. C++ class data), pointer (as the (object, offset)
 // pair lowered via pointer_struct), code (function pointer payload),
@@ -157,21 +88,30 @@ inline bool is_tuple_array_ast_type(const type2tc &t)
   return is_tuple_ast_type(range);
 }
 
+/** Converts irep2 expressions into camada SMT expressions.
+ *
+ *  convert_ast() is the entry point: it deconstructs an expression, encodes the
+ *  pieces through camada, and caches the result against the expression and the
+ *  current context level. Boolean results are asserted with assert_ast().
+ *
+ *  One concrete class, no subclasses -- camada supplies the per-solver part, so
+ *  create_solver() hands the constructor a built camada solver rather than
+ *  selecting behaviour by inheritance.
+ *
+ *  push_ctx()/pop_ctx() bracket a solver scope. They save and restore what
+ *  camada cannot know about: the caches keyed on irep2 expressions, and the C
+ *  memory model (address space, pointer logic, renumbering).
+ *
+ *  @see create_solver
+ */
 class smt_solver_baset
 {
   /* Holds a back-pointer to us and encodes through the same camada solver. */
   friend class ir_ieee_convt;
 
 public:
-  /** Shorthand for a vector of smt_ast's */
+  /** Shorthand for a vector of SMT expressions */
   typedef std::vector<smt_astt> ast_vec;
-
-  template <typename the_solver_ast>
-  smt_astt
-  new_solver_ast(typename the_solver_ast::solver_ast_type ast, smt_sortt sort)
-  {
-    return new the_solver_ast(this, ast, sort);
-  }
 
   /** Primary constructor. After construction, smt_post_init must be called
    *  before the object is used as a solver converter.
@@ -994,7 +934,6 @@ public:
   smt_astt mk_from_fp_to_bv(smt_astt op);
 
   /** Stores handle for the real-arithmetic/enclosure interface. */
-  void set_ra_conv(ra_apit *iface);
 
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
@@ -1230,7 +1169,6 @@ public:
   typedef std::map<std::string, smt_astt> renumber_mapt;
   std::vector<renumber_mapt> renumber_map;
 
-  ra_apit *ra_api;
   std::unique_ptr<ir_ieee_convt> ir_ieee_api;
 
   // Workaround for integer shifts. This is an array of the powers of two,

@@ -92,7 +92,6 @@ smt_solver_baset::smt_solver_baset(
 {
   int_encoding = options.get_bool_option("int-encoding");
   ir_ieee = options.get_bool_option("ir-ieee");
-  ra_api = nullptr;
   ir_ieee_api = std::make_unique<ir_ieee_convt>(this);
 
   std::vector<type2tc> members;
@@ -142,12 +141,6 @@ smt_solver_baset::~smt_solver_baset()
    * choose_formula_path() also registers the temp for cleanup there. */
   if (oneshot && oneshot_options::uses_temp_formula(options))
     remove(formula_path.c_str());
-}
-
-void smt_solver_baset::set_ra_conv(ra_apit *iface)
-{
-  assert(ra_api == NULL && "set_ra_conv should only be called once");
-  ra_api = iface;
 }
 
 void smt_solver_baset::smt_post_init()
