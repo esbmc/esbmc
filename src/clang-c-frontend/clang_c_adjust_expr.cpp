@@ -136,6 +136,18 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     adjust_expr_unary_complex(expr);
     adjust_reference(expr);
   }
+  else if (expr.id() == "unary-" || expr.id() == "bitnot")
+  {
+    adjust_operands(expr);
+
+    // C11 6.5.3.3: the operand undergoes integer promotion, so a boolean one
+    // -- a comparison, || or && -- becomes int. Left boolean, it reaches the
+    // solver where a bitvector is wanted (issue #4078).
+    if (
+      expr.operands().size() == 1 && expr.op0().type().id() == "bool" &&
+      expr.type().id() != "bool")
+      gen_typecast(ns, expr.op0(), expr.type());
+  }
   else if (expr.id() == "shl" || expr.id() == "shr")
   {
     adjust_expr_shifts(expr);
