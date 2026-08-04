@@ -1094,7 +1094,9 @@ public:
 
   smt_sortt mk_fbv_sort(std::size_t width) override
   {
-    return new camada_sort(SMT_SORT_FIXEDBV, solver->mkBVSort(width), width);
+    /* ESBMC's fixedbv lowers to a plain bit-vector for now; camada has an FXP
+     * sort but nothing here reads the distinction back. */
+    return new camada_sort(SMT_SORT_BV, solver->mkBVSort(width), width);
   }
 
   smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw) override
@@ -1342,8 +1344,7 @@ public:
       field_sorts.push_back(
         to_solver_smt_sort<camada::SMTSortRef>(convert_sort(member))->s);
 
-    return new camada_sort(
-      SMT_SORT_STRUCT, solver->mkTupleSort(field_sorts), type);
+    return new camada_sort(SMT_SORT_STRUCT, solver->mkTupleSort(field_sorts));
   }
 
   smt_astt mk_extract(smt_astt a, unsigned int high, unsigned int low) override
@@ -1754,11 +1755,12 @@ smt_astt camada_tuple_ast::update(
   assert(is_nil_expr(idx_expr));
 
   auto *cam_ctx = static_cast<camada_convt *>(ctx);
-  const std::vector<type2tc> &members =
-    struct_union_members(sort->get_tuple_type());
+  const std::size_t nfields = to_solver_smt_sort<camada::SMTSortRef>(sort)
+                                ->s->getTupleElementSorts()
+                                .size();
   std::vector<camada::SMTExprRef> fields;
-  fields.reserve(members.size());
-  for (std::size_t i = 0; i < members.size(); ++i)
+  fields.reserve(nfields);
+  for (std::size_t i = 0; i < nfields; ++i)
   {
     if (i == idx)
       fields.push_back(to_solver_smt_ast<camada_expr>(value)->a);
@@ -1773,11 +1775,12 @@ smt_astt
 camada_tuple_ast::project(smt_solver_baset *ctx, unsigned int elem) const
 {
   auto *cam_ctx = static_cast<camada_convt *>(ctx);
-  const std::vector<type2tc> &members =
-    struct_union_members(sort->get_tuple_type());
+  const std::vector<camada::SMTSortRef> &members =
+    to_solver_smt_sort<camada::SMTSortRef>(sort)->s->getTupleElementSorts();
   assert(elem < members.size());
-  const smt_sort *idx_sort = ctx->convert_sort(members[elem]);
-  return cam_ctx->wrap(cam_ctx->solver->mkTupleSelect(a, elem), idx_sort);
+  return cam_ctx->wrap(
+    cam_ctx->solver->mkTupleSelect(a, elem),
+    camada_convt::from_camada_sort(members[elem]));
 }
 
 smt_solver_baset *create_camada_solver(

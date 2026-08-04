@@ -12,7 +12,6 @@ enum smt_sort_kind
   SMT_SORT_INT,
   SMT_SORT_REAL,
   SMT_SORT_BV,
-  SMT_SORT_FIXEDBV,
   SMT_SORT_ARRAY,
   SMT_SORT_BOOL,
   SMT_SORT_STRUCT,
@@ -50,20 +49,12 @@ public:
     assert(id != SMT_SORT_ARRAY);
   }
 
-  smt_sort(smt_sort_kind i, const type2tc &type)
-    : id(i),
-      data_width(0),
-      secondary_width(0),
-      range_sort(nullptr),
-      tupletype(type)
-  {
-    assert(i == SMT_SORT_STRUCT);
-  }
-
   smt_sort(smt_sort_kind i, std::size_t width)
     : id(i), data_width(width), secondary_width(0), range_sort(nullptr)
   {
-    assert(id >= SMT_SORT_BV || id <= SMT_SORT_FIXEDBV);
+    assert(
+      id == SMT_SORT_BV || id == SMT_SORT_BOOL || id == SMT_SORT_FPBV_RM ||
+      id == SMT_SORT_BVFP_RM);
   }
 
   smt_sort(smt_sort_kind i, std::size_t width, std::size_t sigwidth)
@@ -76,20 +67,6 @@ public:
     : id(i), data_width(dom_width), secondary_width(0), range_sort(range_sort)
   {
     assert(id == SMT_SORT_ARRAY);
-  }
-
-  smt_sort(
-    smt_sort_kind i,
-    const type2tc &type,
-    std::size_t dom_width,
-    smt_sortt range_sort)
-    : id(i),
-      data_width(dom_width),
-      secondary_width(0),
-      range_sort(range_sort),
-      tupletype(type)
-  {
-    assert(i == SMT_SORT_ARRAY);
   }
 
   size_t get_data_width() const
@@ -126,12 +103,6 @@ public:
     return (exp_top - exp_bot);
   }
 
-  const type2tc &get_tuple_type() const
-  {
-    assert(!is_nil_type(tupletype));
-    return tupletype;
-  }
-
   virtual ~smt_sort() = default;
 
 private:
@@ -151,11 +122,6 @@ private:
    * For everything else, undefined */
   smt_sortt range_sort;
 
-  /** Type of the tuple
-   * For structs, this is the actual type (struct or array of structs) of a
-   * tuple that's been flattened For everything else, undefined
-   */
-  const type2tc tupletype;
 };
 
 template <typename solver_sort>
@@ -163,11 +129,6 @@ class solver_smt_sort : public smt_sort
 {
 public:
   solver_smt_sort(smt_sort_kind i, solver_sort _s) : smt_sort(i), s(_s)
-  {
-  }
-
-  solver_smt_sort(smt_sort_kind i, solver_sort _s, const type2tc &_tupletype)
-    : smt_sort(i, _tupletype), s(_s)
   {
   }
 
@@ -191,16 +152,6 @@ public:
     std::size_t dw,
     const smt_sort *_rangesort)
     : smt_sort(i, dw, _rangesort), s(_s)
-  {
-  }
-
-  solver_smt_sort(
-    smt_sort_kind i,
-    solver_sort _s,
-    const type2tc &type,
-    std::size_t width,
-    smt_sortt range_sort)
-    : smt_sort(i, type, width, range_sort), s(_s)
   {
   }
 
