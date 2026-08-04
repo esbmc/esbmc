@@ -574,7 +574,7 @@ inspect the produced `symex_target_equationt`.
 | **H-B3** | **Slicer equisatisfiability** (P0, I11) | Build equation; clone; slice the clone; solve both per-claim with the real backend; assert identical per-claim verdicts on ≥ 30 small programs incl. arrays with symbolic indices. **Discharged by H-C1 instead, §15 M5 (H-A4/H-B3)**: 1328 corpus inputs at 0 divergences beats 30 programs; the per-claim residue moves to H-C7 | Slicer unsoundness on real formulas — the honest complement to H-A4 |
 | **H-B4** | **Renaming round-trip** (I3/I4) | For each `SSA_stept`, `get_original_name` of `lhs` equals the L0 symbol; `rename` is idempotent; the level never decreases along the step list | `fixup_renamed_type` / `rename_address` regressions |
 | **H-B5** | **Phi laws** (I8) | For 2-branch programs: the set of *program variables* receiving a phi == the set written by at least one arm; **zero** phi for untouched variables. **Corrected, §15 M4 (H-B5)**: this row originally said "written *differently* in both", which the code does not do — `phi_function` filters on the L2 index differing, not the value | Over- and under-generation of phi nodes |
-| **H-B6** | **Value-set merge monotonicity** (I9) | After `merge_value_sets`, assert the result ⊇ both inputs (using `value_sett` API) | An accidental intersection — a silent unsoundness |
+| **H-B6** | **Value-set merge monotonicity** (I9) | After `merge_value_sets`, assert the result ⊇ both inputs (using `value_sett` API). **Run, §15 M9: I9 discharged, no defect** — `unit/goto-symex/value_set_merge.test.cpp`; an *intersecting* `make_union` is caught by 3 of 5 cases, while *deleting* the union is caught by none, and cannot be | An accidental intersection — a silent unsoundness |
 | **H-B7** | **Assumption-discharge suite** (§6.1 rule 3) | For each Tier-A assumption in §7.3, an assertion on the real engine that it holds over the corpus | Over-constrained Tier-A proofs |
 | **H-B8** | **Incremental-equation parity** (I13) | Same program with and without `--smt-during-symex`; assert identical claim count and per-claim verdicts. **Run at Tier C instead, §15 M7: 1358 agreed, 3 diverged → R19**, a per-property false PASSED | `runtime_encoded_equationt` ctx-stack bugs |
 
@@ -812,6 +812,12 @@ inventory, and two of them produce **R22**. Triage of the resulting ten
 and **R24** (bitfield padding under type punning), both since fixed, with seven of
 the eleven entries turning out to be wrong tests rather than defects — six of
 those fixed and retired.
+
+**M9 — The Tier-B remainder (0.5 wk).** H-B6, the one row §7.2 never scheduled
+under a milestone. **Closed, §15 M9.** I9 discharged on the real engine with no
+defect found; the entry records why the obvious mutant (deleting the union) is
+undetectable and the meaningful one (intersecting it) is caught. H-B7 remains,
+and is scoped by whatever §7.3 rows survive.
 
 Total ≈ 9 engineer-weeks for the verification track, plus ≈ 2 weeks for the
 ESBMC extension critical path (WI-1…WI-3, §13.6) running alongside it.
@@ -3501,6 +3507,47 @@ discriminator isolating the trigger to writing the guard variable inside its own
 branch; proof the counterexample is real (`--data-races-check` reports the
 assertion itself); the exact divergent access and scheduling decision; and five
 eliminated mechanisms. All of it is in #6558 apart from this last round.
+
+### M9 (H-B6) — 2026-08-04, I9 discharged
+
+H-B6 was the last Tier-B row never run. `unit/goto-symex/value_set_merge.test.cpp`
+runs it on the real engine: three end-to-end programs whose joins give one global
+pointer two targets, plus two cases exercising `value_sett::make_union` directly.
+All five pass, and the assertions name the objects (`c:@a`, `c:@b`) rather than
+counting them — a global pointer's map already holds its zero-initialiser, so a
+cardinality of two is reached without any merge occurring, and an earlier
+count-based version of these cases passed without ever inspecting a target.
+
+**The verdict rests on separating two mutants, which is the substance of this
+entry.** Deleting the `make_union` call from `merge_value_sets` leaves all five
+cases green. Replacing it with an intersection fails three of them. Both mutants
+were built and run; the second is I9's actual content, so I9 is discharged and
+the surviving deletion mutant is not evidence against the harness.
+
+Why deletion cannot be caught here, from instrumenting the call on the
+`early_exit` program (an `if` arm leaving by its own `goto`, so the arms reach
+the join by different routes): the union arm runs three times and reports
+`changed == false` every time, and the `guard.is_false()` replacement arm above
+it — the only arm that can drop entries — is never taken. Guarded assignment
+*adds* to a pointer's object map rather than replacing it, and `cur_state`'s
+value set is never rewound when a branch is abandoned, so both targets are
+present before any join runs. The union is therefore redundant at every join
+reachable at this tier, and is load-bearing only against a future change making
+value sets path-sensitive. This also answers, negatively, the question the
+harness's first draft left open — that a shape whose arms diverge at the join
+would make the merge observable. `early_exit` is that shape, and it does not.
+
+**Not covered, and deliberately.** `make_union`'s `keepnew` parameter decides
+whether an entry present only in the source survives; `merge_value_sets` passes
+`true`, but `value_set_domaint::merge` — the static analysis, outside
+goto-symex — passes the caller's choice, and with `false` an entry that is
+neither a `value_set::dynamic_object` nor `value_set::return_value` is dropped
+(`value_set.cpp:133-149`). That is a documented asymmetry in a different
+subsystem, not an I9 violation, and no case here constrains it.
+
+R9's three "sound over-approximation" claims remain open: H-B6 checks that a
+merge does not shrink the set, not that a *deliberate* narrowing elsewhere keeps
+only `unknown`/`invalid` entries, as §14 already records.
 
 ---
 
