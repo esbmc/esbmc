@@ -23,7 +23,6 @@ extern "C"
 #include <goto-symex/sarif.h>
 #include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
-#include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <charconv>

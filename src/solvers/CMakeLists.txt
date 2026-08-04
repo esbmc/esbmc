@@ -4,6 +4,7 @@ set(ESBMC_ENABLE_cvc5 0)
 set(ESBMC_ENABLE_mathsat 0)
 set(ESBMC_ENABLE_yices 0)
 set(ESBMC_ENABLE_bitwuzla 0)
+set(ESBMC_ENABLE_smtlib 0)
 set(ESBMC_ENABLE_bitwuzllob 0)
 set(ESBMC_ENABLE_neurosym 0)
 
@@ -22,12 +23,7 @@ target_include_directories(solve
 add_library(solvers INTERFACE)
 target_link_libraries(solvers INTERFACE solve smttuple smtfp smt prop)
 
-# Logic for each of these are duplicated -- cmake doesn't have indirect function
-# calling, so it's hard to structure it how I want
 add_subdirectory(camada)
-add_subdirectory(smtlib)
-add_subdirectory(bitwuzllob) # after smtlib: reuses its library
-add_subdirectory(neurosym) # after smtlib: reuses its library
 
 set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS}" PARENT_SCOPE)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/solver_config.h.in"

@@ -345,6 +345,18 @@ foreach(_solver z3 cvc5 mathsat yices bitwuzla)
     list(APPEND _camada_solvers ${_solver})
   endif()
 endforeach()
+
+# The SMT-LIB-based backends need no solver library of their own: smtlib pipes
+# to (or dumps a script for) whatever the user names, and bitwuzllob/neurosym
+# run an external program on that script. Camada's SMT-LIB backend serves all
+# three, so they are available whenever camada is.
+foreach(_solver smtlib bitwuzllob neurosym)
+  string(TOUPPER ${_solver} _SOLVER)
+  if(ENABLE_${_SOLVER})
+    set(ESBMC_ENABLE_${_solver} 1 PARENT_SCOPE)
+    list(APPEND _camada_solvers ${_solver})
+  endif()
+endforeach()
 list(REMOVE_DUPLICATES _camada_solvers)
 list(JOIN _camada_solvers " " _camada_solvers_str)
 set(ESBMC_AVAILABLE_SOLVERS "${_camada_solvers_str}" PARENT_SCOPE)

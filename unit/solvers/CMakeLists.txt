@@ -19,10 +19,6 @@ if(ENABLE_Z3)
                 "solvers;util_esbmc;bigint")
 endif()
 
-if(ENABLE_SMTLIB)
-  # Verdict scanner shared by the one-shot subprocess backends (bitwuzllob,
-  # neurosym); lives in the smtlib library. util_esbmc supplies the logging
-  # and filesystem symbols the rest of the translation unit pulls in.
-  new_unit_test(oneshot_verdict_test "oneshot_verdict.test.cpp"
-                "smtlib;filesystem;util_esbmc;fmt::fmt")
-endif()
+# The one-shot verdict scanner's contract is camada's now
+# (camada::parseOneShotVerdictLine, covered by camada's own regression suite),
+# so the test that pinned ESBMC's copy went with the smtlib backend.
