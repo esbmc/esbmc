@@ -5771,7 +5771,16 @@ exprt python_converter::get_block(
         // body dispatcher declines an unlocated expression statement, and that
         // was ~87 % of the Python corpus's genuine declines
         // (docs/roadmap/frontends-to-irep2.md §13).
-        code_stmt.location() = get_location_from_decl(element);
+        //
+        // Fill in only when the statement has no usable location of its own.
+        // Assigning unconditionally clobbers one that is already set, and a
+        // locationt carries more than a position: __ESBMC_assert's message
+        // rides in its comment field, so overwriting it turns a modelled
+        // rejection ("Counter.most_common is not modelled") into a bare
+        // "assertion 0".
+        const locationt &here = code_stmt.location();
+        if (here.is_nil() || here.get_file().empty())
+          code_stmt.location() = get_location_from_decl(element);
         block.move_to_operands(code_stmt);
       }
 
