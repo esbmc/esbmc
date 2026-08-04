@@ -655,14 +655,23 @@ bool goto_convert_functionst::convert_native_rec(
 
     // A side-effecting guard needs remove_sideeffects (goto_convert.cpp),
     // which this kind doesn't reproduce; the condition-coverage options
-    // suppress that call regardless, so fall back on those too.
+    // suppress that call regardless, so delegate on those too. Delegating the
+    // whole if-statement to convert_ifthenelse (rather than failing the walk)
+    // keeps the statements around it native; the branches convert legacy-side,
+    // and any labels/cases/temps they register ride the shared `targets` and
+    // convert_function's snapshot exactly as the try/catch delegation does.
     if (
       has_sideeffect(ite.cond) ||
       options.get_bool_option("condition-coverage") ||
       options.get_bool_option("condition-coverage-claims") ||
       options.get_bool_option("condition-coverage-rm") ||
       options.get_bool_option("condition-coverage-claims-rm"))
-      return false;
+    {
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(ite.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    }
 
     bool has_else = !is_nil_expr(ite.else_case);
 
