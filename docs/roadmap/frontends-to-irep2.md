@@ -400,3 +400,70 @@ Delegations added *before* any native attempt (#6668, #6672, #6674, #6677,
   exercise different frontends and may reach sites this corpus never did.
 - Only then does deleting the round-trip and the fallback path become the
   measurable next step §"Phase 1" describes.
+
+## 15. Solidity and Jimple are not measurable here; Python re-censused (2026-08-04)
+
+§13.5 left three suites open. Two cannot be measured on this machine, and the
+third was re-measured after the §14 investigation produced a working fix.
+
+### 15.1 Solidity and Jimple — blocked, not zero
+
+| suite | attempt | outcome |
+|---|---|---|
+| `esbmc-solidity` | tests ship pre-generated `.solast`, so `solc`'s absence is not itself fatal | **conversion fails** — `ERROR: \`' is not a goto-binary`. Nothing is converted, so a decline census measures nothing |
+| `jimple` | — | **frontend not built**: `ERROR: frontend for Jimple was not built on this version of ESBMC` |
+
+A first pass reported "14 Solidity tests, 0 declines". **That figure is void** —
+zero because nothing ran, not because nothing declines. It is recorded here
+because it is exactly the failure mode §12.3's methodology note and §14.2's rule
+are about: a census must show the thing under test executed before its zero
+means anything. Both suites need Linux CI (Solidity) or a build with
+`-DENABLE_JIMPLE_FRONTEND=On` (Jimple).
+
+### 15.2 Python, re-censused with the §14 fix
+
+The docstring-location fix (#6695) applied, same instrumentation, the five tests
+the earlier samples covered:
+
+| | before (§13) | after #6695 |
+|---|---:|---:|
+| declines per test | ~75 | **~27** |
+| `code_expression` (unlocated statement) | 93 / 225 | **0** |
+
+**The dominant site is gone entirely.** What remains, ranked:
+
+| site | count | class |
+|---|---:|---|
+| `code_block` | 67 | cascade |
+| `code_ifthenelse` — then-branch scope-exit leak | 30 | genuine |
+| `code_ifthenelse` — else-branch scope-exit leak | 25 | genuine |
+| `code_ifthenelse` — then-branch cascade | 10 | cascade |
+| `code_assert` | 2 | genuine |
+
+### 15.3 The remaining Python residue is already fixed, pending merge
+
+The two genuine `code_ifthenelse` sites — 55 of the 57 genuine declines — are
+**precisely what PR #6679 addresses**: it delegates a branch that leaks
+scope-exit state instead of failing the walk, with the `tmp_symbol`/`context`/
+`targets` rollback that made it byte-identical. #6679 is open at the time of
+writing; the rest of the dispatcher series has merged.
+
+So the Python picture after #6695 and #6679 together should be dominated by
+cascade alone, with `code_assert` the only genuine site left in this sample.
+**That is a prediction, not a measurement** — it needs re-running once #6679
+lands.
+
+### 15.4 Phase 1 exit criterion
+
+| suite | status |
+|---|---|
+| `esbmc-cpp` | drained; residue is the assert-fold |
+| `esbmc` (C) | drained; 4 declines / 60 tests |
+| `python` | dominant site fixed (#6695); residue predicted to clear with #6679 |
+| `esbmc-solidity` | **not measurable here** — needs Linux CI |
+| `jimple` | **not measurable here** — frontend not built |
+
+"0 fallbacks corpus-wide" remains unclaimable, but for a different reason than
+in §13: the C-family and Python causes are addressed or identified, and what
+blocks the claim now is **measurement access to two frontends**, not unknown
+defects.
