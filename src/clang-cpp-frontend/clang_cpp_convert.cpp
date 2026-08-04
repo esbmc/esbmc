@@ -403,9 +403,13 @@ bool clang_cpp_convertert::get_method(
   // Copy assignment Operator/Move assignment Operator
   // A compiler-generated default ctor/dtor is considered implicit, but we have
   // to parse it.
+  // A captureless lambda's conversion-to-function-pointer operator and the
+  // static invoker it returns are implicit too, and skipping them left the
+  // conversion bodyless, so the pointer it yielded was invalid (issue #4077).
   if (
     md.isImplicit() && !is_ConstructorOrDestructor(md) &&
-    !is_CopyOrMoveOperator(md))
+    !is_CopyOrMoveOperator(md) && !md.isLambdaStaticInvoker() &&
+    !(md.getParent()->isLambda() && llvm::isa<clang::CXXConversionDecl>(md)))
     return false;
 
   if (clang_c_convertert::get_function(md, new_expr))
@@ -1985,11 +1989,80 @@ bool clang_cpp_convertert::build_destructor_chain(
   return false;
 }
 
+bool clang_cpp_convertert::build_lambda_static_invoker(
+  const clang::CXXMethodDecl &invoker,
+  exprt &new_expr)
+{
+  const clang::CXXRecordDecl *closure = invoker.getParent();
+  const clang::CXXMethodDecl *call_op = closure->getLambdaCallOperator();
+  if (call_op == nullptr)
+    return true;
+
+  typet closure_type;
+#if CLANG_VERSION_MAJOR >= 22
+  clang::QualType closure_qual_type =
+    closure->getASTContext().getCanonicalTagType(closure);
+  if (get_type(*closure_qual_type.getTypePtr(), closure_type))
+#else
+  if (get_type(*closure->getTypeForDecl(), closure_type))
+#endif
+    return true;
+
+  exprt callee;
+  if (get_decl_ref(*call_op, callee))
+    return true;
+
+  // The lambda is captureless -- that is the only way a static invoker is
+  // formed -- so the closure carries no state and a fresh one is as good as
+  // the original.
+  symbolt &obj = anon_symbol.new_symbol(context, closure_type, "lambda_self");
+  obj.lvalue = true;
+  obj.file_local = true;
+
+  side_effect_expr_function_callt call;
+  call.function() = callee;
+  call.type() = static_cast<const code_typet &>(callee.type()).return_type();
+  call.arguments().push_back(address_of_exprt(symbol_expr(obj)));
+  for (const auto *param : invoker.parameters())
+  {
+    exprt arg;
+    if (get_decl_ref(*param, arg))
+      return true;
+    call.arguments().push_back(arg);
+  }
+
+  code_blockt body;
+  body.copy_to_operands(code_declt(symbol_expr(obj)));
+  if (call.type().is_empty())
+  {
+    codet expr_stmt("expression");
+    expr_stmt.copy_to_operands(call);
+    body.move_to_operands(expr_stmt);
+  }
+  else
+  {
+    code_returnt ret;
+    ret.return_value() = call;
+    body.copy_to_operands(ret);
+  }
+
+  new_expr = body;
+  return false;
+}
+
 bool clang_cpp_convertert::get_function_body(
   const clang::FunctionDecl &fd,
   exprt &new_expr,
   const code_typet &ftype)
 {
+  // Clang leaves a lambda's static invoker bodyless in the AST -- the
+  // forwarding body is synthesised in CodeGen, which never runs here -- so a
+  // captureless lambda converted to a function pointer called into an empty
+  // function (issue #4077).
+  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+    if (md->isLambdaStaticInvoker())
+      return build_lambda_static_invoker(*md, new_expr);
+
   // For implicit or explicitly-defaulted destructors, Clang does not
   // synthesise a body (hasBody() returns false), leaving symbol.value as nil.
   // Start with an empty block; the member/base destructor chain is appended

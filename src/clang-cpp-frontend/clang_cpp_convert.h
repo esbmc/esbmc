@@ -94,6 +94,12 @@ protected:
     exprt &new_expr,
     const code_typet &ftype) override;
 
+  /** Body for a lambda's static invoker: forward to the closure's
+   *  operator(). Clang synthesises this in CodeGen, so the AST has none. */
+  bool build_lambda_static_invoker(
+    const clang::CXXMethodDecl &invoker,
+    exprt &new_expr);
+
   /**
    *  Get function params for C++
    *  contains conversion routines specific to C++ class member functions
