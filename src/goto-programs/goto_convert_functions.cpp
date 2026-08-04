@@ -497,18 +497,25 @@ bool goto_convert_functionst::convert_native_rec(
     if (s == nullptr)
       return false;
 
-    // Fall back on the two convert_decl shapes this handler neither reproduces
-    // natively nor delegates, so flag-on stays byte-identical:
+    auto delegate_to_legacy = [&]() {
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(decl.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    };
+
+    // Delegate the two convert_decl shapes this handler does not reproduce
+    // natively:
     //  - a static-lifetime or code-typed symbol is a no-op SKIP,
     //  - an array type may be a VLA needing rewrite_vla_decl / a dynamic-size
     //    generator — exclude all arrays conservatively.
-    // A destructible type or an initializer needing lowering is delegated to
-    // convert_decl just below; everything else is convert_decl's plain path
-    // (a DECL, an optional side-effect-free ASSIGN, and one scope-exit code_dead)
-    // reproduced natively after that.
+    // A destructible type or an initializer needing lowering is delegated the
+    // same way just below; everything else is convert_decl's plain path
+    // (a DECL, an optional side-effect-free ASSIGN, and one scope-exit
+    // code_dead) reproduced natively after that.
     if (
       s->static_lifetime || s->get_type().is_code() || s->get_type().is_array())
-      return false;
+      return delegate_to_legacy();
 
     exprt initializer = is_nil_expr(decl.init) ? static_cast<exprt>(nil_exprt())
                                                : migrate_expr_back(decl.init);
@@ -537,12 +544,7 @@ bool goto_convert_functionst::convert_native_rec(
       (initializer.is_not_nil() &&
        (has_sideeffect(initializer) || initializer.id() == "if"));
     if (needs_convert_decl)
-    {
-      exprt op = migrate_expr_back(code2);
-      restore_value_locations(op, effective_location(decl.location, inherited));
-      convert(to_code(op), dest);
-      return true;
-    }
+      return delegate_to_legacy();
 
     // Emit exactly as convert_decl does: copy() migrates the freshly-built
     // legacy node, so the DECL/ASSIGN instructions match byte-for-byte. Build the
