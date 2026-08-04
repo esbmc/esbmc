@@ -228,7 +228,58 @@ liveness is out of reach, and the CXL obligations that matter most —
 `!cxl_hot_add_event` and its siblings — are safety properties an assertion
 already checks exactly.
 
-## 8. What would justify `--ltl`
+## 8. Converting the FSMs to C: the vacuity, as a counterexample
+
+`scripts/smv2c.py` translates a NuSMV model into C: enumerated variables become
+enums, `next(x) := case ... esac` becomes a switch (with `{a, b}` sets as
+nondeterministic choice), free variables are drawn fresh each step, and
+`INVARSPEC` / `LTLSPEC G φ` become assertions. CTL is skipped with a comment,
+since it has no ESBMC equivalent.
+
+The interesting part is what it **cannot** carry. NuSMV's `INVAR p` and
+`TRANS p` are *constraints* — they shrink the state space to the part
+satisfying `p`. C has no such construct: a program's reachable states follow
+from its statements. So the translation drops them, and lists them in a comment
+at the top of the generated file.
+
+That turns §2's argument into an experiment. Running it on
+`intent-obligation-model.smv` (45 vars, 42 state machines, 2 constraints
+dropped):
+
+```
+$ esbmc obl.c --unwind 5
+Violated property:
+  assertion !obl_hotplug_allow_network_pcie_only_violation
+VERIFICATION FAILED
+```
+
+with the witness
+
+| variable | value |
+|---|---|
+| `observed_event` | `hotplug_insert` |
+| `endpoint_kind` | `root_complex_integrated_endpoint` |
+| `endpoint_class` | `unknown_class` |
+
+**The property NuSMV reports as PASS is false of the state machines.** A
+hot-plug insert on a root-complex-integrated endpoint satisfies
+`violation := hotplug_event & !(pcie_endpoint_context & network_class_context)`
+in a single step. It passes in NuSMV only because `INVAR !violation` removed
+those states from the model before checking whether they exist.
+
+So the vacuity is no longer an argument from reading the source — it is a
+counterexample trace. And note what the model *does* deny: the three
+`INVARSPEC !(obl_hotplug_event & endpoint_kind = ...)` exclusion obligations
+name `non_pcie_endpoint`, `root_complex_integrated_endpoint` and
+`pcie_endpoint & other_class` — the very combination ESBMC just produced. Those
+exclusions are also only true under the same constraint.
+
+The comparison you would run against NuSMV itself needs the binary, which is
+not installed here (`NuSMV`, `nusmv`, `nuXmv` all absent; Seccom shells out to
+a path you supply). It is not needed for this result: the informative direction
+is the unconstrained one, and that is the side ESBMC provides.
+
+## 9. What would justify `--ltl`
 
 A property that is genuinely temporal *and* grounded in code — an ordering or
 eventuality constraint that no single-state assertion captures. Candidates
@@ -245,11 +296,12 @@ output: the eight CXL obligations are all invariants. Establishing whether one
 exists among the 3,327 generated state machines is a separate exercise, and
 should start by discarding the edges whose `linux_source_hint` is fabricated.
 
-## 9. Reproducing
+## 10. Reproducing
 
 ```sh
 cmake -DENABLE_CXL_REGRESSION=On -Bbuild -S . && ctest -R cxl_fabric_lockdown
 ctest -R cxl_ltl_doorbell                     # the LTL pair
 python3 scripts/ltl_response_ba.py --self-test # generator vs ltl2ba output
+python3 scripts/smv2c.py <model>.smv -o m.c && esbmc m.c --unwind 5
 ctest -R 'regression/ltl/'                     # ESBMC's own LTL tests
 ```
