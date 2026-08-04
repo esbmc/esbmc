@@ -401,6 +401,73 @@ Delegations added *before* any native attempt (#6668, #6672, #6674, #6677,
 - Only then does deleting the round-trip and the fallback path become the
   measurable next step §"Phase 1" describes.
 
+## 16. Option F spike — Phase 0 answered from the tree (2026-08-04)
+
+§6 Phase 0 gates the whole B-4 half of this program on prototyping Option F and
+answering three questions. §5.2 called the equality asymmetry "a sharp edge" and
+the phase's first question. **Two of the three are answered by reading the tree,
+and the answer is favourable enough that the prototype is smaller than sized.**
+
+### 16.1 Does the field participate in equality and hashing?
+
+**No — provided it is omitted from the kind's `fields` tuple, and there is a
+compile-time-checked mechanism for saying so.**
+
+Every IREP2 kind declares e.g.
+
+```cpp
+static constexpr auto fields = std::make_tuple(&signedbv_type2t::width);
+```
+
+and `cmp`/`crc`/`hash`/`tostring` are generated over exactly that tuple
+(`irep2.h:1050-1075`). A member absent from it does not enter value identity.
+
+`fields_cover_class<K>()` would normally reject a missed member at compile time
+— but the codebase already provides the escape for deliberate exclusions:
+
+```cpp
+static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+```
+
+`irep2.h:1077-1088` documents the rationale, and it is **the same rationale
+Option F needs**:
+
+> Source locations must travel with the statement for `goto_convert`, but must
+> not enter value identity.
+
+Substitute "spelling" for "source location" and that is Option F. The mechanism
+is in use at eight sites in `irep2_expr.h` (the V.4 structured-CF kinds,
+`code_block2t`'s `end_location`, `if2t`'s ternary position, the loop kinds'
+`pragma_unroll_count`).
+
+### 16.2 Is the spelling lost when two types compare equal?
+
+**No — IREP2 does not intern or hash-cons types.** A grep for a type cache /
+interning / hash-consing in `irep2_type.h` and `irep2.cpp` returns nothing; the
+`fields`-derived hash exists for hashing containers, not for deduplicating
+nodes. So two `signedbv_type2t`s of the same width with different spellings are
+distinct objects that merely compare equal — each keeps its own spelling.
+
+This was the risk §5.2 raised implicitly ("two types identical in width and
+signedness may now differ in a spelling field") and it does not materialise.
+
+### 16.3 What is still to be prototyped
+
+Question 3 — verdict **and counterexample-text** parity over `esbmc-cpp` — still
+requires the prototype and a run. Nothing above substitutes for it. But the two
+design risks that made Option F look speculative are retired:
+
+| §5.2 concern | status |
+|---|---|
+| the field leaks into `type2t` equality and changes verdicts | **retired** — omit from `fields`, declare `excluded_field_bytes` |
+| `long` vs `long long` stop unifying in the solver | **retired** — same mechanism; they remain equal and unhashed apart |
+| spelling lost to canonicalisation | **retired** — no interning |
+| presentation concerns in the verifier IR | unchanged, and answered on merit in §5.2: `clang_cpp_adjust_expr` uses `#cpp_type` for **exception catch-matching**, which is semantics, not presentation |
+
+**Revised sizing for Phase 0:** the spike is now "add one excluded field to two
+kinds, repoint one reader, run the suite" rather than "discover whether the type
+system can tolerate this at all". §10's "days, high confidence" stands, and the
+no-go branch it hedged against is much less likely.
 ## 13. The Python suite censused — and it is not like C (2026-08-04)
 
 §12.3 named Python as the notable remaining gap: the largest frontend and the
