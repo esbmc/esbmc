@@ -1773,16 +1773,12 @@ smt_solver_baset *create_camada_solver(
                  ? static_cast<tuple_iface *>(solver)
                  : nullptr;
 
-  /* A caller-named logic is a promise about what the external solver parses.
-   * When it carries neither arrays nor floating-point (QF_BV, say), leave the
-   * array and fp interfaces unset so create_solver() installs the flatteners
-   * that lower both to bit-vectors before anything reaches the serializer. */
-  const std::string forced_logic = options.get_option("smtlib-logic");
-  const bool bv_only = !forced_logic.empty() &&
-                       forced_logic.find("A") == std::string::npos &&
-                       forced_logic.find("FP") == std::string::npos;
-  *array_api = bv_only ? nullptr : solver;
-  *fp_api = bv_only ? nullptr : solver;
+  /* Camada encodes arrays and floating-point itself -- natively, or lowered
+   * to bit-vectors when the chosen logic has no such sort -- so the backend
+   * always serves both interfaces and ESBMC's flatteners stay out of the way.
+   */
+  *array_api = solver;
+  *fp_api = solver;
   return solver;
 }
 

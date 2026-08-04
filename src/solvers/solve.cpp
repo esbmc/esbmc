@@ -217,14 +217,11 @@ smt_convt *create_solver(
   else
     ctx->set_array_iface(new array_convt(ctx));
 
-  /* --fp2bv is handled by the backend when it can bit-blast floating-point
-     itself (camada's FPEncoding::BV), so it is not a reason to install our own
-     software lowering; that is only needed when the backend offers no FP at
-     all. */
-  if (fp_api == nullptr)
-    ctx->set_fp_conv(new fp_convt(ctx));
-  else
-    ctx->set_fp_conv(fp_api);
+  /* Every backend serves the FP interface itself: camada encodes
+     floating-point natively or bit-blasts it (FPEncoding::BV, selected by
+     --fp2bv), so ESBMC's software lowering is never installed. */
+  assert(fp_api != nullptr);
+  ctx->set_fp_conv(fp_api);
 
   ctx->smt_post_init();
   return new smt_convt(std::unique_ptr<smt_solver_baset>(ctx));
