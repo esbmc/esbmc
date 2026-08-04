@@ -6,14 +6,11 @@
 #include <util/symtab/namespace.h>
 #include <util/message/message.h>
 
-class array_iface;
 class smt_convt;
 class smt_solver_baset;
 
-typedef smt_solver_baset *(solver_creator)(
-  const optionst &options,
-  const namespacet &ns,
-  array_iface **array_api);
+typedef smt_solver_baset *(
+  solver_creator)(const optionst &options, const namespacet &ns);
 
 smt_convt *create_solver(
   std::string solver_name,

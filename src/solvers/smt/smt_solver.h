@@ -10,7 +10,9 @@
 #include <unordered_set>
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
+#include <solvers/smt/smt_ast.h>
 #include <solvers/smt/smt_result.h>
+#include <solvers/smt/smt_sort.h>
 #include <irep2/irep2_utils.h>
 #include <util/message/message.h>
 #include <util/symtab/namespace.h>
@@ -91,7 +93,6 @@ class ir_ieee_convt;
 class smt_solver_baset;
 class ra_apit;
 
-#include <solvers/smt/smt_array.h>
 
 /** The base SMT-conversion class/interface.
  *  smt_solver_baset handles a number of decisions that must be made when
@@ -894,7 +895,48 @@ public:
   }
 
   /** Stores handle for the array interface. */
-  void set_array_iface(array_iface *iface);
+  /* ---- Arrays ----
+   * Implemented by the backend: camada uses the solver's theory of arrays
+   * where it has one and lowers to Ackermann congruence axioms where it does
+   * not, so there is no separate flattener to install. */
+  virtual smt_astt mk_array_symbol(
+    const std::string &name,
+    smt_sortt sort,
+    smt_sortt subtype) = 0;
+
+  /** Extract an element from the model of an array, at an explicit index.
+   *  @param array AST representing the array we are extracting from
+   *  @param index The index of the element we wish to expect
+   *  @param subtype The type of the element we are extracting, i.e., array
+   * range
+   *  @return Expression representation of the element */
+  virtual expr2tc
+  get_array_elem(smt_astt a, uint64_t idx, const type2tc &subtype) = 0;
+
+  /** Create an array with a single initializer. This may be a small, fixed
+   *  size array, or it may be a nondeterministically sized array with a
+   *  word-sized domain. Default implementation is to repeatedly store into
+   *  the array for as many elements as necessary; subclassing class should
+   *  override if it has a more efficient method.
+   *  Nondeterministically sized memory with an initializer is very rare;
+   *  the only real users of this are fixed-sized (but large) static arrays
+   *  that are zero initialized, or some infinite-domain modelling arrays
+   *  used in ESBMC.
+   *  @param init_val The value to initialize each element with.
+   *  @param domain_width The size of the array to create, in domain bits.
+   *  @return An AST representing the created constant array. */
+  virtual smt_astt
+  convert_array_of(smt_astt init_val, unsigned long domain_width) = 0;
+
+  virtual void add_array_constraints_for_solving()
+  {
+  }
+  virtual void push_array_ctx()
+  {
+  }
+  virtual void pop_array_ctx()
+  {
+  }
   /** Stores handle for the floating-point interface. */
   /* ---- Floating-point ----
    * Implemented by the backend: camada encodes floating-point natively or
@@ -1359,7 +1401,6 @@ public:
    *  back to that point. */
   std::vector<unsigned int> live_asts_sizes;
 
-  array_iface *array_api;
   ra_apit *ra_api;
   std::unique_ptr<ir_ieee_convt> ir_ieee_api;
 

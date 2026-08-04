@@ -79,7 +79,6 @@ smt_solver_baset::smt_solver_baset(
 {
   int_encoding = options.get_bool_option("int-encoding");
   ir_ieee = options.get_bool_option("ir-ieee");
-  array_api = nullptr;
   ra_api = nullptr;
   ir_ieee_api = std::make_unique<ir_ieee_convt>(this);
 
@@ -124,12 +123,6 @@ smt_solver_baset::smt_solver_baset(
 }
 
 smt_solver_baset::~smt_solver_baset() = default;
-
-void smt_solver_baset::set_array_iface(array_iface *iface)
-{
-  assert(array_api == nullptr && "set_array_iface should only be called once");
-  array_api = iface;
-}
 
 void smt_solver_baset::set_ra_conv(ra_apit *iface)
 {
@@ -176,7 +169,7 @@ void smt_solver_baset::push_ctx()
   l_get_cache.clear();
 
   push_tuple_ctx();
-  array_api->push_array_ctx();
+  push_array_ctx();
 
   addr_space_data.push_back(addr_space_data.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
@@ -268,7 +261,7 @@ void smt_solver_baset::pop_ctx()
   live_asts.resize(live_asts_sizes.back());
   live_asts_sizes.pop_back();
 
-  array_api->pop_array_ctx();
+  pop_array_ctx();
   pop_tuple_ctx();
 }
 
@@ -630,20 +623,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::constant_array_of_id:
   {
     const array_type2t &arr = to_array_type(expr->type);
-    if (!array_api->can_init_infinite_arrays && arr.size_is_infinite)
-    {
-      smt_sortt sort = convert_sort(expr->type);
-
-      // Don't honor inifinite sized array initializers. Modelling only.
-      // If we have an array of tuples and no tuple support, use tuple_fresh.
-      // Otherwise, mk_fresh.
-      if (is_tuple_ast_type(arr.subtype))
-        a = tuple_fresh(sort);
-      else
-        a = mk_fresh(sort, "inf_array", convert_sort(arr.subtype));
-      break;
-    }
-
     expr2tc flat_expr = expr;
     if (
       is_array_type(to_array_type(expr->type).subtype) &&
@@ -1902,17 +1881,7 @@ smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
       break;
     }
 
-    // Work around QF_AUFBV demanding arrays of bitvectors.
-    smt_sortt r;
-    if (is_bool_type(range) && !array_api->supports_bools_in_arrays)
-    {
-      r = mk_int_bv_sort(1);
-    }
-    else
-    {
-      r = convert_sort(range);
-    }
-    result = mk_array_sort(d, r);
+    result = mk_array_sort(d, convert_sort(range));
     break;
   }
   case type2t::union_id:
@@ -2133,7 +2102,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     if (is_array_type(expr))
     {
       smt_sortt subtype = convert_sort(get_flattened_array_subtype(sym.type));
-      return array_api->mk_array_symbol(name, sort, subtype);
+      return mk_array_symbol(name, sort, subtype);
     }
 
     smt_astt sym_ast = mk_smt_symbol(name, sort);
@@ -2193,7 +2162,7 @@ smt_astt smt_solver_baset::mk_fresh(
     assert(
       array_subtype != nullptr &&
       "Must call mk_fresh for arrays with a subtype");
-    return array_api->mk_array_symbol(newname, s, array_subtype);
+    return mk_array_symbol(newname, s, array_subtype);
   }
 
   return mk_smt_symbol(newname, s);
@@ -2784,9 +2753,6 @@ smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
     is_vector_type(index.source_value->type)
       ? to_vector_type(index.source_value->type).subtype
       : to_array_type(index.source_value->type).subtype;
-  if (is_bool_type(arrsubtype) && !array_api->supports_bools_in_arrays)
-    return make_bit_bool(a);
-
   return a;
 }
 
@@ -2816,16 +2782,7 @@ smt_astt smt_solver_baset::convert_array_store(const expr2tc &expr)
   smt_astt src, update;
   const array_type2t &arrtype = to_array_type(expr->type);
 
-  // Workaround for bools-in-arrays.
-  if (is_bool_type(arrtype.subtype) && !array_api->supports_bools_in_arrays)
-  {
-    expr2tc cast = typecast2tc(get_uint_type(1), update_val);
-    update = convert_ast(cast);
-  }
-  else
-  {
-    update = convert_ast(update_val);
-  }
+  update = convert_ast(update_val);
 
   src = convert_ast(with.source_value);
   return src->update(this, update, 0, newidx);
@@ -2974,7 +2931,7 @@ void smt_solver_baset::pre_solve()
   // arrays too, and might end up generating more ASTs to be encoded in
   // the array api class.
   add_tuple_constraints_for_solving();
-  array_api->add_array_constraints_for_solving();
+  add_array_constraints_for_solving();
 }
 
 expr2tc smt_solver_baset::get(const expr2tc &expr)
@@ -3029,7 +2986,7 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
         res = tuple_get_array_elem(
           array, to_constant_int2t(idx).value.to_uint64(), res->type);
       else
-        res = array_api->get_array_elem(
+        res = get_array_elem(
           array,
           to_constant_int2t(idx).value.to_uint64(),
           get_flattened_array_subtype(res->type));
@@ -3573,7 +3530,7 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
     if (uses_tuple_api)
       elem = tuple_get_array_elem(array, i, to_array_type(type).subtype);
     else
-      elem = array_api->get_array_elem(array, i, ar.subtype);
+      elem = get_array_elem(array, i, ar.subtype);
     fields.push_back(elem);
   }
 
@@ -3625,9 +3582,7 @@ smt_astt smt_solver_baset::array_create(const expr2tc &expr)
     expr2tc init = members[i];
 
     // Workaround for bools-in-arrays
-    if (
-      is_bool_type(members[i]->type) && !int_encoding &&
-      !array_api->supports_bools_in_arrays)
+    if (is_bool_type(members[i]->type) && !int_encoding && false)
       init = typecast2tc(unsignedbv_type2tc(1), init);
 
     newsym_ast = newsym_ast->update(this, convert_ast(init), i);
@@ -3651,7 +3606,7 @@ smt_astt smt_solver_baset::convert_array_of_prep(const expr2tc &expr)
     // Convert the inner array_of initializer directly (recursive)
     smt_astt inner = convert_ast(arrof.initializer);
     array_size = array_domain_width_or_word_size(arrtype);
-    return array_api->convert_array_of(inner, array_size);
+    return convert_array_of(inner, array_size);
   }
 
   // So: we have an array_of, that we have to convert into a bunch of stores.
@@ -3720,35 +3675,7 @@ smt_astt smt_solver_baset::convert_array_of_prep(const expr2tc &expr)
   if (is_pointer_type(base_init->type))
     return pointer_array_of(base_init, array_size);
   else
-    return array_api->convert_array_of(convert_ast(base_init), array_size);
-}
-
-smt_astt array_iface::default_convert_array_of(
-  smt_astt init_val,
-  unsigned long array_size,
-  smt_solver_baset *ctx)
-{
-  // We now an initializer, and a size of array to build. So:
-  // Repeatedly store things into this.
-  // XXX int mode
-
-  if (init_val->sort->id == SMT_SORT_BOOL && !supports_bools_in_arrays)
-  {
-    smt_astt zero = ctx->mk_smt_bv(BigInt(0), 1);
-    smt_astt one = ctx->mk_smt_bv(BigInt(0), 1);
-    init_val = ctx->mk_ite(init_val, one, zero);
-  }
-
-  smt_sortt domwidth = ctx->mk_int_bv_sort(array_size);
-  smt_sortt arrsort = ctx->mk_array_sort(domwidth, init_val->sort);
-  smt_astt newsym_ast =
-    ctx->mk_fresh(arrsort, "default_array_of::", init_val->sort);
-
-  unsigned long long sz = 1ULL << array_size;
-  for (unsigned long long i = 0; i < sz; i++)
-    newsym_ast = newsym_ast->update(ctx, init_val, i);
-
-  return newsym_ast;
+    return convert_array_of(convert_ast(base_init), array_size);
 }
 
 smt_astt smt_solver_baset::pointer_array_of(

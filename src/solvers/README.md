@@ -92,7 +92,6 @@ a backend opt in to native handling where the solver supports it:
 
 | Interface | If implemented | Fallback |
 |-----------|----------------|----------|
-| `array_iface` | Solver's native arrays | camada's `ArrayEncoding::Ackermann` (`--array-flattener`) |
 
 If you find yourself flattening anything *more* than the items above —
 for instance, anything that touches pointer dereferencing, control-flow

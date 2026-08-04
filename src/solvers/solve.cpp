@@ -1,6 +1,5 @@
 #include <solve.h>
 #include <solver_config.h>
-#include <solvers/smt/smt_array.h>
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_solver.h>
 
@@ -187,18 +186,13 @@ smt_convt *create_solver(
   const namespacet &ns,
   const optionst &options)
 {
-  array_iface *array_api = nullptr;
-
+  /* The backend implements tuples, arrays and floating-point itself. Camada
+     uses the solver's own theories where it has them and lowers otherwise --
+     --tuple-node-flattener, --array-flattener and --fp2bv select those
+     lowerings (TupleEncoding::Camada, ArrayEncoding::Ackermann,
+     FPEncoding::BV) rather than installing an ESBMC-side flattener. */
   solver_creator &factory = pick_solver(solver_name, options);
-  smt_solver_baset *ctx = factory(options, ns, &array_api);
-
-  /* Both interfaces are served by the backend. Camada encodes tuples and
-     arrays natively where the solver has the theory, and lowers them itself
-     otherwise -- --tuple-node-flattener and --array-flattener select those
-     lowerings (TupleEncoding::Camada, ArrayEncoding::Ackermann) rather than
-     installing an ESBMC-side flattener. */
-  assert(tuple_api != nullptr && array_api != nullptr);
-  ctx->set_array_iface(array_api);
+  smt_solver_baset *ctx = factory(options, ns);
 
   ctx->smt_post_init();
   return new smt_convt(std::unique_ptr<smt_solver_baset>(ctx));
