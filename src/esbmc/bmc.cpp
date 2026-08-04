@@ -567,6 +567,46 @@ void bmct::clear_verified_claims_in_goto(
   }
 }
 
+namespace
+{
+/// States nearest the failure are the ones that explain it; the rest is
+/// prologue repeated almost verbatim across every witness (#4311). Keep the
+/// last @p keep of them and replace what precedes with a count, so the reader
+/// still knows the trace was shortened. Operates on the rendered text because
+/// that is what "states in the report" means -- show_goto_trace decides for
+/// itself which steps become states.
+std::string keep_last_trace_states(const std::string &rendered, size_t keep)
+{
+  // Rendered states start at column 0 with "State ".
+  std::vector<size_t> starts;
+  for (size_t pos = 0; pos != std::string::npos;)
+  {
+    size_t hit = rendered.compare(pos, 6, "State ") == 0
+                   ? pos
+                   : rendered.find("\nState ", pos);
+    if (hit == std::string::npos)
+      break;
+    if (rendered.compare(hit, 6, "State ") != 0)
+      ++hit; // skip the newline the search matched on
+    starts.push_back(hit);
+    pos = hit + 6;
+  }
+
+  if (starts.size() <= keep)
+    return rendered;
+
+  const size_t omitted = starts.size() - keep;
+  const size_t cut = starts[omitted];
+  return rendered.substr(0, starts.front()) + "... " + std::to_string(omitted) +
+         " earlier states omitted (--full-traces to show them) ...\n\n" +
+         rendered.substr(cut);
+}
+
+/// Matches the K=50 the issue proposes; large enough to keep the explanatory
+/// tail of a trace, small enough that N witnesses stay readable.
+constexpr size_t kMaxReportedStates = 50;
+} // namespace
+
 void bmct::report_multi_property_trace(
   const smt_resultt &res,
   const std::vector<witness_recordt> &witnesses,
@@ -631,6 +671,46 @@ void bmct::report_multi_property_trace(
   // list without realising it (#4311).
   if (stop_reason == enumeration_stop_reasont::CapHit)
     oss << "  NOTE: --max-witnesses cap reached; more witnesses may exist.\n\n";
+  // The inputs are the part that actually differs between witnesses, and they
+  // are what a reader needs first. Per-witness they sit one trace apart, so on
+  // a real program comparing them means paging through tens of kilobytes of
+  // near-identical trace. Collect them up front (#4311). ASCII only, for the
+  // same cp1252 reason as the header above.
+  {
+    bool any_inputs = false;
+    for (const witness_recordt &w : witnesses)
+      if (!w.nondet_inputs.empty())
+      {
+        any_inputs = true;
+        break;
+      }
+
+    if (any_inputs)
+    {
+      oss << "  Inputs by witness:\n";
+      for (size_t i = 0; i < witnesses.size(); ++i)
+      {
+        const witness_recordt &w = witnesses[i];
+        oss << "    #" << (i + 1) << " : ";
+        if (w.nondet_inputs.empty())
+          oss << "(none)";
+        else
+          for (size_t k = 0; k < w.nondet_inputs.size(); ++k)
+          {
+            if (k)
+              oss << ", ";
+            oss << "[" << k << "] = "
+                << from_expr(
+                     ns,
+                     "",
+                     w.nondet_inputs[k].value_expr,
+                     presentationt::WITNESS);
+          }
+        oss << "\n";
+      }
+      oss << "\n";
+    }
+  }
   for (size_t i = 0; i < witnesses.size(); ++i)
   {
     const witness_recordt &w = witnesses[i];
@@ -662,6 +742,8 @@ void bmct::report_multi_property_trace(
       show_goto_trace(tr, ns, w.trace, reachability_trace);
       // Indent the trace under the box.
       std::string s = tr.str();
+      if (!options.get_bool_option("full-traces"))
+        s = keep_last_trace_states(s, kMaxReportedStates);
       std::string indented;
       indented.reserve(s.size() + 8);
       indented += "  │    ";
@@ -2553,22 +2635,26 @@ smt_resultt bmct::multi_property_check(
           claim.claim_cstr,
           is ? property_verdictt::Unknown : property_verdictt::Failed,
           is ? "inductive step could not prove this claim" : "");
-      else if (is_cov_goal)
+      else
       {
-        // No answer at all: neither reached nor unreached. Recorded so the
-        // goal still gets a line and the run closes as INCOMPLETE.
-        goto_functionst::property_verdicts.record(
-          claim.claim_cstr, property_verdictt::Unknown);
-        if (solver_result == P_SMTLIB)
-          note_undecided_cov_goal("SMT formula only, no solving performed");
-        else
-        {
-          // The verdict a coverage run suppresses was the only thing
-          // reporting this, so say it here.
+        // No answer at all. A coverage run suppresses the verdict that would
+        // have reported this; a plain multi-property run reports it nowhere,
+        // and a SAT claim elsewhere buries it entirely — so name the claim
+        // either way (issue #5934).
+        if (solver_result == P_ERROR)
           log_error(
             "SMT solver failed on '{}'",
             prettify_solidity_expr(claim.claim_cstr));
-          note_undecided_cov_goal("the solver failed on at least one goal");
+        if (is_cov_goal)
+        {
+          // Neither reached nor unreached. Recorded so the goal still gets a
+          // line and the run closes as INCOMPLETE.
+          goto_functionst::property_verdicts.record(
+            claim.claim_cstr, property_verdictt::Unknown);
+          note_undecided_cov_goal(
+            solver_result == P_SMTLIB
+              ? "SMT formula only, no solving performed"
+              : "the solver failed on at least one goal");
         }
       }
     }
@@ -2584,6 +2670,23 @@ smt_resultt bmct::multi_property_check(
     }
 
     solver_stats.total_time_ms.fetch_add(solve_stop - solve_start);
+
+    // A claim that reached no verdict — a backend failure (P_ERROR) or an
+    // SMTLIB-only emission (P_SMTLIB) — would otherwise leave final_result at
+    // its P_UNSATISFIABLE seed, which reads as "every claim discharged" and
+    // closes the run SUCCESSFUL over an analysis that never happened. Surface
+    // it instead; P_SATISFIABLE still wins, a witnessed violation being a
+    // verdict either way (issue #5934).
+    if (solver_result == P_ERROR || solver_result == P_SMTLIB)
+    {
+      // Set even when a SAT claim dominates below: the verdict is right in
+      // that case, but the summary is still short a claim and nothing else
+      // would say so.
+      report_incomplete = true;
+      std::lock_guard lock(result_mutex);
+      if (final_result != P_SATISFIABLE)
+        final_result = solver_result;
+    }
 
     // If an assertion instance is verified to be violated
     if (solver_result == P_SATISFIABLE)
