@@ -6,7 +6,6 @@
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
-#include <solvers/smt/tuple/smt_tuple_sym.h>
 
 #include <unordered_map>
 
@@ -199,21 +198,12 @@ smt_convt *create_solver(
   smt_solver_baset *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
-  bool sym_flat = options.get_bool_option("tuple-sym-flattener");
   bool array_flat = options.get_bool_option("array-flattener");
-  bool fp_to_bv = options.get_bool_option("fp2bv");
 
-  // Pick a tuple flattener to use. If the solver has native support, and no
-  // options were given, use that by default
-  if (tuple_api != nullptr && !node_flat && !sym_flat)
+  /* Use the solver's native tuples when it has them and nothing was asked
+     for; otherwise flatten to per-field symbols. */
+  if (tuple_api != nullptr && !node_flat)
     ctx->set_tuple_iface(tuple_api);
-  // Use the node flattener if specified
-  else if (node_flat)
-    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
-  // Use the symbol flattener if specified
-  else if (sym_flat)
-    ctx->set_tuple_iface(new smt_tuple_sym_flattener(ctx, ns));
-  // Default: node flattener
   else
     ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
 
@@ -227,7 +217,11 @@ smt_convt *create_solver(
   else
     ctx->set_array_iface(new array_convt(ctx));
 
-  if (fp_api == nullptr || fp_to_bv)
+  /* --fp2bv is handled by the backend when it can bit-blast floating-point
+     itself (camada's FPEncoding::BV), so it is not a reason to install our own
+     software lowering; that is only needed when the backend offers no FP at
+     all. */
+  if (fp_api == nullptr)
     ctx->set_fp_conv(new fp_convt(ctx));
   else
     ctx->set_fp_conv(fp_api);

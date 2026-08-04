@@ -1593,10 +1593,15 @@ private:
     return to_solver_smt_ast<camada_expr>(a)->a;
   }
 
+  /* --fp2bv asks for floating-point encoded as bit-vectors, which is exactly
+   * camada's FPEncoding::BV; let it bit-blast rather than swapping in ESBMC's
+   * own software lowering. Keyed off fp2bv, not floatbv: the latter is set by
+   * default for anything that is not --fixedbv, so reading it made every run
+   * bit-blast and native FP unreachable. */
   camada::FPEncoding fp_encoding() const
   {
-    return options.get_bool_option("floatbv") ? camada::FPEncoding::BV
-                                              : camada::FPEncoding::Native;
+    return options.get_bool_option("fp2bv") ? camada::FPEncoding::BV
+                                            : camada::FPEncoding::Native;
   }
 
   /* SMT-LIB's Int/Real theory has no bitwise operations, but ESBMC still

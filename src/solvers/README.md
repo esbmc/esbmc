@@ -94,7 +94,7 @@ a backend opt in to native handling where the solver supports it:
 | Interface | If implemented | Fallback |
 |-----------|----------------|----------|
 | `array_iface` | Solver's native arrays | `array_conv` (Kroening's decision procedure) |
-| `tuple_iface` | Solver's native tuples / datatypes | `smt_tuple_node` or `smt_tuple_sym` |
+| `tuple_iface` | Solver's native tuples / datatypes | `smt_tuple_node` |
 | `fp_convt` (subclassed) | Solver's native FP theory | IEEE 754 bit-vector encoding |
 
 If you find yourself flattening anything *more* than the items above —
