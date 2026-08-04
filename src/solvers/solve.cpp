@@ -7,7 +7,10 @@ namespace
 {
 struct backendt
 {
+  /** Flag and --default-solver spelling. */
   const char *name;
+  /** How the solver names itself in user-facing messages. */
+  const char *display_name;
   bool built_in;
   /** Which camada solver to build; null for smtlib, whose factory branches. */
   camada_buildert build;
@@ -21,16 +24,27 @@ struct backendt
 /* Order is default priority: the first built-in backend that can be chosen
  * implicitly wins when the user names no solver. */
 const backendt backends[] = {
-  {"smtlib", ESBMC_ENABLE_smtlib, nullptr, true, true},
+  {"smtlib", "SMTLIB", ESBMC_ENABLE_smtlib, nullptr, true, true},
   {"bitwuzla",
+   "bitwuzla",
    ESBMC_ENABLE_bitwuzla,
    create_esbmc_bitwuzla_solver,
    false,
    false},
-  {"z3", ESBMC_ENABLE_z3, create_esbmc_z3_solver, true, false},
-  {"cvc5", ESBMC_ENABLE_cvc5, create_esbmc_cvc5_solver, true, false},
-  {"mathsat", ESBMC_ENABLE_mathsat, create_esbmc_mathsat_solver, true, false},
-  {"yices", ESBMC_ENABLE_yices, create_esbmc_yices_solver, true, false}};
+  {"z3", "Z3", ESBMC_ENABLE_z3, create_esbmc_z3_solver, true, false},
+  {"cvc5", "CVC5", ESBMC_ENABLE_cvc5, create_esbmc_cvc5_solver, true, false},
+  {"mathsat",
+   "MathSAT",
+   ESBMC_ENABLE_mathsat,
+   create_esbmc_mathsat_solver,
+   true,
+   false},
+  {"yices",
+   "Yices",
+   ESBMC_ENABLE_yices,
+   create_esbmc_yices_solver,
+   true,
+   false}};
 
 const backendt *find_backend(const std::string &name)
 {
@@ -79,7 +93,8 @@ const backendt &pick_solver(const optionst &options)
       if (b.built_in && !b.needs_config && b.int_real)
       {
         log_status(
-          "Using integer/real arithmetic mode; defaulting to {}", b.name);
+          "Using integer/real arithmetic mode; defaulting to {}",
+          b.display_name);
         name = b.name;
         break;
       }
@@ -93,7 +108,7 @@ const backendt &pick_solver(const optionst &options)
     for (const backendt &b : backends)
       if (b.built_in && !b.needs_config)
       {
-        log_status("No solver specified; defaulting to {}", b.name);
+        log_status("No solver specified; defaulting to {}", b.display_name);
         name = b.name;
         break;
       }

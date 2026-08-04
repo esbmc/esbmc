@@ -1415,11 +1415,33 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       // surrounding all-distinct + abs-difference chain, while the xor
       // form mixes the sign bit into bitvector arithmetic and seems to
       // defeat term-graph sharing in this pattern.
-      expr2tc ge = greaterthanequal2tc(abs.value, gen_zero(abs.value->type));
-      expr2tc neg = neg2tc(abs.value->type, abs.value);
-      expr2tc ite = if2tc(abs.type, ge, abs.value, neg);
+      // Encoded directly rather than by building `if2tc(x >= 0, x, -x)` and
+      // re-entering convert_ast: that route rebuilds three irep2 nodes and
+      // starts a nested conversion walk to reach the same three camada calls.
+      // The branches below mirror the greaterthanequal_id and neg_id cases for
+      // the types that reach here (unsigned and native-FP are handled above).
+      smt_astt zero = convert_ast(gen_zero(abs.value->type));
+      smt_astt is_nonneg;
+      smt_astt negated;
+      if (int_encoding)
+      {
+        is_nonneg = mk_ge(args[0], zero);
+        negated = mk_neg(args[0]);
+        if (ir_ieee && is_floatbv_type(abs.value))
+        {
+          is_nonneg =
+            ir_ieee_api->apply_nan_cmp(is_nonneg, args[0], zero, false);
+          ir_ieee_api->propagate_nan_pred(negated, args[0]);
+        }
+      }
+      else
+      {
+        // fixedbv and signedbv both compare and negate as signed bit-vectors.
+        is_nonneg = mk_bvsge(args[0], zero);
+        negated = solver->mkBVNeg(args[0]);
+      }
 
-      a = convert_ast(ite);
+      a = solver->mkIte(is_nonneg, args[0], negated);
       if (ir_ieee && is_floatbv_type(abs.value))
         ir_ieee_api->propagate_nan_pred(a, args[0]);
     }
