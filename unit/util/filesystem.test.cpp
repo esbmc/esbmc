@@ -211,6 +211,22 @@ TEST_CASE("reads fall back to the real filesystem", "[core][util][filesystem]")
   REQUIRE(fs.exists(tmp.path()));
 }
 
+TEST_CASE(
+  "operational-model sources are told apart from user code",
+  "[core][util][filesystem]")
+{
+  // remove_exceptions relies on this to keep the C++ exception OM's own
+  // try/catch from counting as user exception flow, which would decline every
+  // concurrent C++ program as unlowerable.
+  using file_operations::is_bundled_source;
+  REQUIRE(is_bundled_source("/esbmc-vfs/cpp/thread"));
+  REQUIRE(is_bundled_source("C:/esbmc-vfs/cpp/thread"));
+  REQUIRE(is_bundled_source("C:\\esbmc-vfs\\cpp\\thread"));
+  REQUIRE(is_bundled_source("/home/u/esbmc/src/c2goto/library/stdlib.c"));
+  REQUIRE(!is_bundled_source("/home/u/main.cpp"));
+  REQUIRE(!is_bundled_source("/usr/include/math.h"));
+}
+
 TEST_CASE("list walks a prefix recursively", "[core][util][filesystem]")
 {
   auto &fs = file_operations::filesystemt::get();

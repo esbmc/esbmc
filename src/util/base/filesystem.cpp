@@ -123,6 +123,15 @@ bool file_data::is_bundled() const noexcept
   return _bundled;
 }
 
+bool file_operations::is_bundled_source(std::string_view file)
+{
+  // Matched without its leading separator: on Windows the root is spelled
+  // "C:/esbmc-vfs" and clang may hand the rest of the path back native.
+  std::string_view root = std::string_view(ESBMC_VFS_ROOT).substr(1);
+  return file.find(root) != std::string_view::npos ||
+         file.find("c2goto/library/") != std::string_view::npos;
+}
+
 filesystemt &filesystemt::get()
 {
   static filesystemt instance;
