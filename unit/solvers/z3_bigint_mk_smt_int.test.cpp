@@ -1,4 +1,4 @@
-// Precision contract for create_new_z3_solver()->mk_smt_int on out-of-int64
+// Precision contract for the Z3 backend's mk_smt_int on out-of-int64
 // BigInts (issue #4642).
 //
 // Pre-camada this lived in z3_convt::mk_smt_int and the fix routed values
@@ -22,10 +22,8 @@
 #include <solvers/smt_solver.h>
 #include <solvers/solve.h>
 
-extern solver_creator create_new_z3_solver;
-
 SCENARIO(
-  "create_new_z3_solver()->mk_smt_int preserves BigInt precision and sign",
+  "the Z3 backend's mk_smt_int preserves BigInt precision and sign",
   "[z3][bigint]")
 {
   // Drive ESBMC's overload through camada's Z3 backend so a regression that
@@ -41,7 +39,8 @@ SCENARIO(
   // mk_smt_int returns an Int sort, which only works in integer-encoding
   // mode. Without this the solver would reject the assert below.
   options.set_option("int-encoding", true);
-  std::unique_ptr<smt_solver_baset> solver{create_new_z3_solver(options, ns)};
+  std::unique_ptr<smt_solver_baset> solver =
+    create_linked_solver(options, ns, create_esbmc_z3_solver);
   REQUIRE(solver != nullptr);
 
   // create_solver() does this wiring plus smt_post_init(); replicate the part

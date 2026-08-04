@@ -401,6 +401,27 @@ camada::SMTSolverRef create_esbmc_oneshot_solver(
     pick_array_encoding(options));
 }
 
+} // namespace
+
+/* Declared in solve.h: the selection table in solve.cpp points at these, so
+ * they need external linkage. Everything above stays file-local. */
+
+camada::SMTSolverRef create_esbmc_cvc5_solver(const optionst &options)
+{
+  return camada::createCVC5Solver(
+    camada::UnsatAssumptionsMode::Off, pick_array_encoding(options));
+}
+
+camada::SMTSolverRef create_esbmc_bitwuzla_solver(const optionst &options)
+{
+#if CAMADA_HAVE_BITWUZLA
+  return std::make_unique<esbmc_bitwuzla_solver>(pick_array_encoding(options));
+#else
+  (void)options;
+  unsupported("Bitwuzla support in Camada");
+#endif
+}
+
 camada::SMTSolverRef create_esbmc_z3_solver(const optionst &options)
 {
 #if CAMADA_HAVE_Z3
@@ -487,6 +508,8 @@ camada::SMTSolverRef create_esbmc_yices_solver(const optionst &options)
 #endif
 }
 
+namespace
+{
 /* Sort widths, read straight from camada rather than from a copy kept in the
  * camada. Only a native FP sort carries FP structure there; mk_bvfp_sort
  * builds a plain bit-vector, whose significand and exponent are never read
@@ -1308,67 +1331,24 @@ smt_astt smt_solver_baset::fp_sign_test(smt_astt op, bool negative)
 }
 
 /* Every backend below knows which camada solver it wants, so it builds it and
- * hands it over; there is no backend tag to switch on. `streams_script` is the
- * one behavioural difference the caller has to declare: camada's SMT-LIB
- * backend writes the script as it goes, so dump_smt() has nothing to return. */
-smt_solver_baset *make_solver(
+ * hands it over; there is no backend tag to switch on. Everything else the
+ * solver needs it reads from `options` itself. */
+std::unique_ptr<smt_solver_baset> make_solver(
   const optionst &options,
   const namespacet &ns,
   std::unique_ptr<camada::SMTSolver> solver,
-  bool oneshot = false,
-  bool streams_script = false,
-  std::string oneshot_prog = {},
-  std::string formula_path = {})
+  bool streams_script = false)
 {
-  return new smt_solver_baset(
-    ns,
-    options,
-    std::move(solver),
-    oneshot,
-    streams_script,
-    std::move(oneshot_prog),
-    std::move(formula_path));
+  return std::make_unique<smt_solver_baset>(
+    ns, options, std::move(solver), streams_script);
 }
 
-smt_solver_baset *
-create_new_z3_solver(const optionst &options, const namespacet &ns)
+std::unique_ptr<smt_solver_baset> create_linked_solver(
+  const optionst &options,
+  const namespacet &ns,
+  camada_buildert build)
 {
-  return make_solver(options, ns, create_esbmc_z3_solver(options));
-}
-
-smt_solver_baset *
-create_new_cvc5_solver(const optionst &options, const namespacet &ns)
-{
-  return make_solver(
-    options,
-    ns,
-    camada::createCVC5Solver(
-      camada::UnsatAssumptionsMode::Off, pick_array_encoding(options)));
-}
-
-smt_solver_baset *
-create_new_mathsat_solver(const optionst &options, const namespacet &ns)
-{
-  return make_solver(options, ns, create_esbmc_mathsat_solver(options));
-}
-
-smt_solver_baset *
-create_new_yices_solver(const optionst &options, const namespacet &ns)
-{
-  return make_solver(options, ns, create_esbmc_yices_solver(options));
-}
-
-smt_solver_baset *
-create_new_bitwuzla_solver(const optionst &options, const namespacet &ns)
-{
-#if CAMADA_HAVE_BITWUZLA
-  return make_solver(
-    options,
-    ns,
-    std::make_unique<esbmc_bitwuzla_solver>(pick_array_encoding(options)));
-#else
-  unsupported("Bitwuzla support in Camada");
-#endif
+  return make_solver(options, ns, build(options));
 }
 
 /* The one-shot command processes a single task and exits; strategies that
@@ -1396,7 +1376,7 @@ void reject_incremental_strategies(const optionst &options)
     }
 }
 
-smt_solver_baset *
+std::unique_ptr<smt_solver_baset>
 create_new_smtlib_solver(const optionst &options, const namespacet &ns)
 {
   /* --smtlib-oneshot-prog selects the write-a-file-and-run-a-program shape;
@@ -1412,7 +1392,6 @@ create_new_smtlib_solver(const optionst &options, const namespacet &ns)
       options,
       ns,
       create_esbmc_smtlib_solver(options),
-      /*oneshot=*/false,
       /*streams_script=*/true);
   }
 
@@ -1432,11 +1411,7 @@ create_new_smtlib_solver(const optionst &options, const namespacet &ns)
       "smtlib",
       formula_path,
       oneshot_prog,
-      logic.empty() ? pick_logic(options, false) : logic),
-    /*oneshot=*/true,
-    /*streams_script=*/false,
-    oneshot_prog,
-    formula_path);
+      logic.empty() ? pick_logic(options, false) : logic));
 }
 
 smt_astt smt_solver_baset::mk_eq(smt_astt a, smt_astt b)

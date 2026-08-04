@@ -76,18 +76,19 @@ smt_solver_baset::smt_solver_baset(
   const namespacet &_ns,
   const optionst &_options,
   std::unique_ptr<camada::SMTSolver> _solver,
-  bool _oneshot,
-  bool _streams_script,
-  std::string _oneshot_prog,
-  std::string _formula_path)
+  bool _streams_script)
   : ctx_level(0),
     ns(_ns),
     options(_options),
     solver(std::move(_solver)),
-    oneshot(_oneshot),
+    /* --smtlib-oneshot-prog names the program to run; its presence is what
+     * selects the write-a-file-and-run-a-program shape. */
+    oneshot_prog(options.get_option("smtlib-oneshot-prog")),
+    oneshot(!oneshot_prog.empty()),
     streams_script(_streams_script),
-    oneshot_prog(std::move(_oneshot_prog)),
-    formula_path(std::move(_formula_path))
+    formula_path(
+      oneshot ? oneshot_options::choose_formula_path(options, "smtlib")
+              : std::string())
 {
   int_encoding = options.get_bool_option("int-encoding");
   ir_ieee = options.get_bool_option("ir-ieee");

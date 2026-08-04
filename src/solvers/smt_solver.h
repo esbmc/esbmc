@@ -180,20 +180,16 @@ public:
    *  @param _options Provide all the needed parameters to configure the solver.
    *  @param _solver The camada solver to encode into. Each create_new_*_solver
    *         builds the one it wants, so there is no backend tag to switch on.
-   *  @param _oneshot The SMT-LIB backend is driving an external one-shot
-   *         program, which answers a single query and exits.
    *  @param _streams_script Camada's SMT-LIB backend writes the script to its
    *         sink as it is built rather than buffering it, so dump_smt() has
-   *         nothing to hand back.
+   *         nothing to hand back. This is a property of which camada solver was
+   *         built, not of the options, so it cannot be derived here.
    */
   smt_solver_baset(
     const namespacet &_ns,
     const optionst &_options,
     std::unique_ptr<camada::SMTSolver> _solver,
-    bool _oneshot = false,
-    bool _streams_script = false,
-    std::string _oneshot_prog = {},
-    std::string _formula_path = {});
+    bool _streams_script = false);
 
   ~smt_solver_baset();
 
@@ -1249,15 +1245,21 @@ private:
   /** The camada solver every mk_* method encodes into. */
   std::unique_ptr<camada::SMTSolver> solver;
 
+  /** The external one-shot program named by --smtlib-oneshot-prog, empty when
+   *  that option was not given. Declared before `oneshot`, which is derived
+   *  from it: members initialise in declaration order. */
+  const std::string oneshot_prog;
+
   /** Set when the SMT-LIB backend drives an external one-shot program. */
-  const bool oneshot = false;
+  const bool oneshot;
 
   /** Camada's SMT-LIB backend streams the script to its sink as it is built
    *  rather than buffering it, so dump_smt() has nothing to return. */
   const bool streams_script = false;
 
-  std::string oneshot_prog;
-  std::string formula_path;
+  /** Where the one-shot script is written; empty unless `oneshot`. */
+  const std::string formula_path;
+
   bool solved = false;
 
   const char *oneshot_label() const;

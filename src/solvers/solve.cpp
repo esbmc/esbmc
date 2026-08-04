@@ -3,20 +3,14 @@
 #include <solvers/smt_solver.h>
 #include <solver_config.h>
 
-solver_creator create_new_smtlib_solver;
-solver_creator create_new_z3_solver;
-solver_creator create_new_cvc5_solver;
-solver_creator create_new_mathsat_solver;
-solver_creator create_new_yices_solver;
-solver_creator create_new_bitwuzla_solver;
-
 namespace
 {
 struct backendt
 {
   const char *name;
   bool built_in;
-  solver_creator *create;
+  /** Which camada solver to build; null for smtlib, whose factory branches. */
+  camada_buildert build;
   /** Supports the Int/Real sorts that --ir and --ir-ieee emit. */
   bool int_real;
   /** Needs an external program the user must name, so it is never chosen
@@ -27,12 +21,16 @@ struct backendt
 /* Order is default priority: the first built-in backend that can be chosen
  * implicitly wins when the user names no solver. */
 const backendt backends[] = {
-  {"smtlib", ESBMC_ENABLE_smtlib, create_new_smtlib_solver, true, true},
-  {"bitwuzla", ESBMC_ENABLE_bitwuzla, create_new_bitwuzla_solver, false, false},
-  {"z3", ESBMC_ENABLE_z3, create_new_z3_solver, true, false},
-  {"cvc5", ESBMC_ENABLE_cvc5, create_new_cvc5_solver, true, false},
-  {"mathsat", ESBMC_ENABLE_mathsat, create_new_mathsat_solver, true, false},
-  {"yices", ESBMC_ENABLE_yices, create_new_yices_solver, true, false}};
+  {"smtlib", ESBMC_ENABLE_smtlib, nullptr, true, true},
+  {"bitwuzla",
+   ESBMC_ENABLE_bitwuzla,
+   create_esbmc_bitwuzla_solver,
+   false,
+   false},
+  {"z3", ESBMC_ENABLE_z3, create_esbmc_z3_solver, true, false},
+  {"cvc5", ESBMC_ENABLE_cvc5, create_esbmc_cvc5_solver, true, false},
+  {"mathsat", ESBMC_ENABLE_mathsat, create_esbmc_mathsat_solver, true, false},
+  {"yices", ESBMC_ENABLE_yices, create_esbmc_yices_solver, true, false}};
 
 const backendt *find_backend(const std::string &name)
 {
@@ -161,15 +159,21 @@ void check_solver_availability(const optionst &options)
     not_built_in(name);
 }
 
-smt_convt *create_solver(const namespacet &ns, const optionst &options)
+std::unique_ptr<smt_convt>
+create_solver(const namespacet &ns, const optionst &options)
 {
   /* The backend implements tuples, arrays and floating-point itself. Camada
      uses the solver's own theories where it has them and lowers otherwise --
      --tuple-node-flattener, --array-flattener and --fp2bv select those
      lowerings (TupleEncoding::Camada, ArrayEncoding::Ackermann,
      FPEncoding::BV) rather than installing an ESBMC-side flattener. */
-  smt_solver_baset *ctx = pick_solver(options).create(options, ns);
+  const backendt &backend = pick_solver(options);
+  /* smtlib is the only backend whose construction branches; the rest differ
+   * only in which camada solver they build. */
+  std::unique_ptr<smt_solver_baset> ctx =
+    backend.build ? create_linked_solver(options, ns, backend.build)
+                  : create_new_smtlib_solver(options, ns);
 
   ctx->smt_post_init();
-  return new smt_convt(std::unique_ptr<smt_solver_baset>(ctx));
+  return std::make_unique<smt_convt>(std::move(ctx));
 }
