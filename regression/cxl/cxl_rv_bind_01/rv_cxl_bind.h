@@ -40,7 +40,11 @@ static void rv_cxl_bind_event(enum rv_cxl_bind_event ev)
   assert((unsigned)ev < RV_CXL_BIND_EVENTS);
   enum rv_cxl_bind_state next =
     (enum rv_cxl_bind_state)rv_cxl_bind_function[rv_cxl_bind_cur][ev];
-  /* include/rv/da_monitor.h:690 -- the monitor's whole obligation. */
+  /* The monitor's whole obligation, from include/rv/da_monitor.h:
+   * an event with no transition drives the automaton to INVALID_STATE
+   * and the monitor reacts. No line number is cited -- the check moved
+   * between 6.15 and 7.1.5, and is written with the sense inverted in
+   * the older one. */
   assert(next != RV_CXL_BIND_INVALID);
   rv_cxl_bind_cur = next;
 }

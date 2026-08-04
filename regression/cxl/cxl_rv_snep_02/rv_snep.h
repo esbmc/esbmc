@@ -37,7 +37,11 @@ static void rv_snep_event(enum rv_snep_event ev)
   assert((unsigned)ev < RV_SNEP_EVENTS);
   enum rv_snep_state next =
     (enum rv_snep_state)rv_snep_function[rv_snep_cur][ev];
-  /* include/rv/da_monitor.h:690 -- the monitor's whole obligation. */
+  /* The monitor's whole obligation, from include/rv/da_monitor.h:
+   * an event with no transition drives the automaton to INVALID_STATE
+   * and the monitor reacts. No line number is cited -- the check moved
+   * between 6.15 and 7.1.5, and is written with the sense inverted in
+   * the older one. */
   assert(next != RV_SNEP_INVALID);
   rv_snep_cur = next;
 }

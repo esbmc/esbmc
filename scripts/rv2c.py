@@ -8,10 +8,15 @@ an enum of states, an enum of events, and a transition table
     unsigned char function[state_max][event_max];
 
 with unreachable entries set to INVALID_STATE. The monitor's obligation is
-stated in include/rv/da_monitor.h:
+stated in include/rv/da_monitor.h, in one of two spellings depending on the
+kernel:
 
-    next_state = model_get_next_state(curr_state, event);
-    if (next_state == INVALID_STATE) { react(...); return false; }
+    /* 7.1.5 */  if (next_state == INVALID_STATE) { react(...); return false; }
+    /* 6.15  */  if (next_state != INVALID_STATE) { ...advance... }
+
+Same obligation either way. Line numbers are deliberately not cited: they
+differ between releases, and a stale citation in generated output is worse
+than none.
 
 i.e. `G (state != INVALID_STATE)` -- a safety property, so an assertion
 discharges it exactly. No Buchi automaton and no --ltl are involved.
@@ -149,7 +154,11 @@ def generate(name, states, events, table, initial, source) -> str:
     a("  enum rv_%s_state next =" % name)
     a("    (enum rv_%s_state)rv_%s_function[rv_%s_cur][ev];"
       % (name, name, name))
-    a("  /* include/rv/da_monitor.h:690 -- the monitor's whole obligation. */")
+    a("  /* The monitor's whole obligation, from include/rv/da_monitor.h:")
+    a("   * an event with no transition drives the automaton to INVALID_STATE")
+    a("   * and the monitor reacts. No line number is cited -- the check moved")
+    a("   * between 6.15 and 7.1.5, and is written with the sense inverted in")
+    a("   * the older one. */")
     a("  assert(next != RV_%s_INVALID);" % name.upper())
     a("  rv_%s_cur = next;" % name)
     a("}")
