@@ -507,7 +507,11 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
   }
 
   // If none of the above, match invalid.
-  smt_astt was_matched = make_n_ary_or(guards);
+  /* Empty address space cannot match anything. */
+  smt_astt was_matched =
+    guards.empty() ? solver->mkBool(false) : guards.front();
+  for (std::size_t g = 1; g < guards.size(); ++g)
+    was_matched = solver->mkOr(was_matched, guards[g]);
   smt_astt not_matched = mk_not(was_matched);
 
   smt_astt id = convert_terminal(

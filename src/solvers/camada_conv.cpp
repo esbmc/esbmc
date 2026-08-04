@@ -1437,11 +1437,6 @@ create_new_smtlib_solver(const optionst &options, const namespacet &ns)
     formula_path);
 }
 
-smt_astt smt_solver_baset::mk_and(smt_astt a, smt_astt b)
-{
-  return solver->mkAnd(a, b);
-}
-
 smt_astt smt_solver_baset::mk_eq(smt_astt a, smt_astt b)
 {
   return solver->mkEqual(a, b);

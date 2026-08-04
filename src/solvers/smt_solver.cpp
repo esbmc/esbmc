@@ -2483,32 +2483,6 @@ smt_astt smt_solver_baset::make_bit_bool(smt_astt a)
  *  Takes a vector of smt_ast's, and creates a single
  *  function app over all the smt_ast's.
  */
-template <typename Object, typename Method>
-static smt_astt
-make_n_ary(const Object o, const Method m, const smt_solver_baset::ast_vec &v)
-{
-  assert(!v.empty());
-
-  // Chain these.
-  smt_astt result = v.front();
-  for (std::size_t i = 1; i < v.size(); ++i)
-    result = (o->*m)(result, v[i]);
-
-  return result;
-}
-
-smt_astt smt_solver_baset::make_n_ary_and(const ast_vec &v)
-{
-  return v.empty() ? solver->mkBool(true) // empty conjunction is true
-                   : make_n_ary(this, &smt_solver_baset::mk_and, v);
-}
-
-smt_astt smt_solver_baset::make_n_ary_or(const ast_vec &v)
-{
-  return v.empty() ? solver->mkBool(false) // empty disjunction is false
-                   : make_n_ary(this, &smt_solver_baset::mk_or, v);
-}
-
 expr2tc
 smt_solver_baset::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
 {

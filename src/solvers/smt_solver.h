@@ -252,9 +252,6 @@ public:
    *  dump without ever touching smt_astt. */
   void dump_expr(const expr2tc &expr);
 
-  smt_astt make_n_ary_and(const ast_vec &v);
-  smt_astt make_n_ary_or(const ast_vec &v);
-
   /** Create the inverse of an smt_ast. Equivalent to a 'not' operation.
    *  @param a The ast to invert. Must be boolean sorted.
    *  @return The inverted piece of AST. */
@@ -377,11 +374,8 @@ public:
   smt_astt mk_bvsge(smt_astt a, smt_astt b);
   smt_astt mk_neq(smt_astt a, smt_astt b);
 
-  /* These four stay methods rather than becoming direct solver-> calls:
-   * mk_and/mk_or are taken by pointer-to-member in make_n_ary_and/or, and
-   * mk_eq/mk_int_sort/mk_smt_symbol are driven by the unit tests from outside
-   * the class, where `solver` is private. */
-  smt_astt mk_and(smt_astt a, smt_astt b);
+  /* mk_eq/mk_int_sort/mk_smt_symbol are the surface the unit tests drive from
+   * outside the class, where `solver` is private. */
   smt_astt mk_eq(smt_astt a, smt_astt b);
   smt_sortt mk_int_sort();
   smt_astt mk_smt_symbol(const std::string &name, smt_sortt s);
