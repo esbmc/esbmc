@@ -38,11 +38,6 @@ expr2tc smt_convt::get(const expr2tc &expr)
   return solver_impl->get(expr);
 }
 
-expr2tc smt_convt::get_by_type(const expr2tc &expr)
-{
-  return solver_impl->get_by_type(expr);
-}
-
 expr2tc smt_convt::get_by_ast(const expr2tc &expr)
 {
   return solver_impl->get_by_ast(expr);

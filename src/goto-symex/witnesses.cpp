@@ -1078,7 +1078,8 @@ void generate_testcase_metadata()
     std::to_string(config.ansi_c.word_size) + "bit");
 
   // Conversion to string using the ISO 8601.
-  // Source: https://www.boost.org/doc/libs/1_49_0/doc/html/date_time/posix_time.html
+  // Source:
+  // https://www.boost.org/doc/libs/1_49_0/doc/html/date_time/posix_time.html
   boost::posix_time::ptime creation_time =
     boost::posix_time::microsec_clock::universal_time();
 
@@ -1105,8 +1106,9 @@ bool find_nondet_in_expr(const expr2tc &expr)
 {
   // Returns true if any sub-expression of expr is a nondet symbol.
   // Recurses through all operands via get_sub_expr so compound expressions
-  // (arithmetic, bitwise, casts, etc.) are handled without enumerating expr_ids.
-  // Unlike get_nondet_symbol, non-nondet symbols do not cause early return.
+  // (arithmetic, bitwise, casts, etc.) are handled without enumerating
+  // expr_ids. Unlike get_nondet_symbol, non-nondet symbols do not cause early
+  // return.
   if (!expr)
     return false;
 
@@ -1150,8 +1152,8 @@ bool find_nondet_in_expr(const expr2tc &expr)
 // matching constant_* for an aggregate type, we re-resolve it via
 // get_by_ast on the root expression — that AST-based path goes through
 // the tuple_get / get_array machinery which recurses through nested
-// tuple-selects and produces fully materialised leaves, and (unlike
-// get_by_type) accepts a non-symbol root such as a member access. This keeps
+// tuple-selects and produces fully materialised leaves, and accepts a
+// non-symbol root such as a member access. This keeps
 // the multi-witness blocking clause sound: make_blocking_expr builds
 // equalities against value_expr, so any unresolved subterm there
 // would block nothing.

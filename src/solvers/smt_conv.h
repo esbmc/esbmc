@@ -54,7 +54,6 @@ public:
 
   /** Fetch the model value of an expression. */
   expr2tc get(const expr2tc &expr);
-  expr2tc get_by_type(const expr2tc &expr);
   expr2tc get_by_ast(const expr2tc &expr);
 
   /** Boolean model value of an expression. */

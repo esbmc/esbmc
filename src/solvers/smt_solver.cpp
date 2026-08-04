@@ -3059,7 +3059,7 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
   case expr2t::pointer_offset_id:
   case expr2t::same_object_id:
   case expr2t::symbol_id:
-    return get_by_type(res);
+    return get_by_ast(res);
 
   case expr2t::member_id:
   {
@@ -3068,11 +3068,11 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
 
     if (is_symbol2t(mem_src) && !is_pointer_type(expr) && !is_struct_type(expr))
     {
-      return get_by_type(res);
+      return get_by_ast(res);
     }
     else if (is_array_type(expr))
     {
-      return get_by_type(res);
+      return get_by_ast(res);
     }
 
     simplify(res);
@@ -3267,12 +3267,21 @@ expr2tc smt_solver_baset::get_by_ast(const type2tc &type, smt_astt a)
         fmt::underlying(type->type_id));
       abort();
     }
-    else
+    else if (!is_code_type(type))
     {
       log_warning(
         "Unimplemented type'd expression ({}) in smt get. Returning zero!",
         fmt::underlying(type->type_id));
       return gen_zero(type);
+    }
+    else
+    {
+      /* gen_zero() has no meaning for a function type, so report "no value"
+       * rather than inventing one. */
+      log_warning(
+        "Unimplemented type'd expression ({}) in smt get. Returning nil!",
+        fmt::underlying(type->type_id));
+      return expr2tc();
     }
   }
 }
@@ -3436,51 +3445,6 @@ double smt_solver_baset::convert_rational_to_double(
     result = -result;
 
   return result;
-}
-
-expr2tc smt_solver_baset::get_by_type(const expr2tc &expr)
-{
-  switch (expr->type->type_id)
-  {
-  case type2t::bool_id:
-  case type2t::unsignedbv_id:
-  case type2t::signedbv_id:
-  case type2t::fixedbv_id:
-  case type2t::floatbv_id:
-  case type2t::union_id:
-    return get_by_ast(expr->type, convert_ast(expr));
-
-  case type2t::array_id:
-    return get_array(expr);
-
-  case type2t::complex_id:
-  case type2t::struct_id:
-  case type2t::pointer_id:
-    return tuple_get(expr);
-
-  default:
-    if (!options.get_bool_option("non-supported-models-as-zero"))
-    {
-      log_error(
-        "Unimplemented type'd expression ({}) in smt get",
-        fmt::underlying(expr->type->type_id));
-      abort();
-    }
-    else if (!is_code_type(expr))
-    {
-      log_warning(
-        "Unimplemented type'd expression ({}) in smt get. Returning zero!",
-        fmt::underlying(expr->type->type_id));
-      return gen_zero(expr->type);
-    }
-    else
-    {
-      log_warning(
-        "Unimplemented type'd expression ({}) in smt get. Returning nil!",
-        fmt::underlying(expr->type->type_id));
-      return expr2tc();
-    }
-  }
 }
 
 expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)

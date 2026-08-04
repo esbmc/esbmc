@@ -216,13 +216,6 @@ public:
 
   void pre_solve();
 
-  /** Get the satisfying assignment using the type.
-   *  @param expr Variable to get the value of. Must be a symbol expression.
-   *  @return Explicit assigned value of expr in the solver. May be nil, in
-   *          which case the solver did not assign a value to it for some
-   *          reason. */
-  expr2tc get_by_type(const expr2tc &expr);
-
   /** Get the satisfying assignment using the ast.
    *  @param a Variable to get the value of.
    *  @param type The variable type.
@@ -231,11 +224,10 @@ public:
    *          reason. */
   expr2tc get_by_ast(const type2tc &type, smt_astt a);
 
-  /** Resolve @p expr's model value through its converted AST. Unlike
-   *  get_by_type, the struct/pointer case goes through the AST-based
-   *  tuple getter, so @p expr need not be a symbol (it may be a member /
-   *  index access). Lets external callers fetch aggregate values without
-   *  ever naming smt_astt. */
+  /** Resolve @p expr's model value: converts it, then dispatches on its type
+   *  exactly as the overload above does. @p expr need not be a symbol -- a
+   *  member or index access works too. Lets callers fetch aggregate values
+   *  without ever naming smt_astt. */
   expr2tc get_by_ast(const expr2tc &expr);
 
   /** Builds the bitvector based on the value retrieved from the solver.
