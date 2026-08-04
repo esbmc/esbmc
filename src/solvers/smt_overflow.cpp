@@ -293,7 +293,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
     abort();
   }
 
-  return nullptr;
+  return {};
 }
 
 smt_astt smt_solver_baset::overflow_cast(const expr2tc &expr)

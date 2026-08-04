@@ -142,7 +142,7 @@ smt_astt smt_solver_baset::convert_pointer_arith(
       {
         // Update field in tuple.
         smt_astt the_ptr = convert_ast(side1);
-        return the_ptr->update(this, convert_ast(the_ptr_offs), 1);
+        return ast_update(the_ptr, convert_ast(the_ptr_offs), 1);
       }
 
       // C11 6.5.6p9: both operands of a pointer difference must point to
@@ -234,7 +234,7 @@ smt_astt smt_solver_baset::convert_pointer_arith(
     simplify(newexpr);
 
     // That calculated the offset; update field in pointer.
-    return the_ptr->update(this, convert_ast(newexpr), 1);
+    return ast_update(the_ptr, convert_ast(newexpr), 1);
   }
   }
 
@@ -268,7 +268,7 @@ void smt_solver_baset::renumber_symbol_address(
 
     // Now merge with the old value for all future address-of's
 
-    it->second = output->ite(this, convert_ast(guard), it->second);
+    it->second = mk_ite(convert_ast(guard), output, it->second);
   }
   else
   {
@@ -357,7 +357,7 @@ smt_astt smt_solver_baset::convert_identifier_pointer(
     }
 
     smt_astt output = init_pointer_obj(obj_num, size, type);
-    assert_ast(a->eq(this, output));
+    assert_ast(ast_eq(a, output));
   }
 
   // Insert canonical address-of this expression.
@@ -544,7 +544,7 @@ smt_astt smt_solver_baset::convert_addr_of(const expr2tc &expr)
 
     /* constant 1 refers to member 'pointer_offset' of 'pointer_struct' */
     // Update pointer offset to offset to that field.
-    return a->update(this, convert_ast(offs), 1);
+    return ast_update(a, convert_ast(offs), 1);
   }
 
   if (is_symbol2t(obj.ptr_obj))

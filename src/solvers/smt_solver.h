@@ -9,7 +9,6 @@
 #include <mutex>
 #include <unordered_set>
 #include <solvers/pointer_logic.h>
-#include <solvers/smt_ast.h>
 #include <solvers/smt_result.h>
 #include <solvers/smt_sort.h>
 #include <irep2/irep2_utils.h>
@@ -118,7 +117,7 @@ class ra_apit;
  *  While mk_func_app is supposed to be the primary interface to making SMT
  *  function applications, in some cases we want to introduce some
  *  abstractions, and this becomes unweildy. Thus, tuple and array operations
- *  are performed via virtual function calls. By default, array operations are
+ *  are performed via function calls. By default, array operations are
  *  then passed through to mk_func_app, while tuples are decomposed into sets
  *  of variables which are then created through mk_func_app. If this isn't
  *  what a solver wants to happen, it can override this and handle that itself.
@@ -176,10 +175,24 @@ public:
    *
    *  @param _ns Namespace for looking up the type of certain symbols.
    *  @param _options Provide all the needed parameters to configure the solver.
+   *  @param _solver The camada solver to encode into. Each create_new_*_solver
+   *         builds the one it wants, so there is no backend tag to switch on.
+   *  @param _oneshot The SMT-LIB backend is driving an external one-shot
+   *         program, which answers a single query and exits.
+   *  @param _streams_script Camada's SMT-LIB backend writes the script to its
+   *         sink as it is built rather than buffering it, so dump_smt() has
+   *         nothing to hand back.
    */
-  smt_solver_baset(const namespacet &_ns, const optionst &_options);
+  smt_solver_baset(
+    const namespacet &_ns,
+    const optionst &_options,
+    std::unique_ptr<camada::SMTSolver> _solver,
+    bool _oneshot = false,
+    bool _streams_script = false,
+    std::string _oneshot_prog = {},
+    std::string _formula_path = {});
 
-  virtual ~smt_solver_baset();
+  ~smt_solver_baset();
 
   /** Post-constructor setup method. We must create various pieces of memory
    *  model data for tracking, however can't do it from the constructor because
@@ -193,9 +206,9 @@ public:
    *  @name External API to smt_solver_baset. */
 
   /** Push one context on the SMT assertion stack. */
-  virtual void push_ctx();
+  void push_ctx();
   /** Pop one context on the SMT assertion stack. */
-  virtual void pop_ctx();
+  void pop_ctx();
 
   /** Main interface to SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
@@ -255,7 +268,7 @@ public:
    *  assignment it attempts to produce, the formula corresponding to the
    *  smt_ast argument must evaluate to true.
    *  @param a A handle to the formula that must be true. */
-  virtual void assert_ast(smt_astt a) = 0;
+  void assert_ast(smt_astt a);
 
   /** Solve the formula given to the solver. The solver will attempt to produce
    *  a satisfying assignment for all of the variables / symbols used in the
@@ -263,7 +276,7 @@ public:
    *  unsat (the formula is inconsistent), sat (an assignment exists), or that
    *  an error occurred.
    *  @return Result code of the call to the solver. */
-  virtual smt_resultt dec_solve() = 0;
+  smt_resultt dec_solve();
 
   void pre_solve();
 
@@ -272,7 +285,7 @@ public:
    *  @return Explicit assigned value of expr in the solver. May be nil, in
    *          which case the solver did not assign a value to it for some
    *          reason. */
-  virtual expr2tc get_by_type(const expr2tc &expr);
+  expr2tc get_by_type(const expr2tc &expr);
 
   /** Get the satisfying assignment using the ast.
    *  @param a Variable to get the value of.
@@ -280,7 +293,7 @@ public:
    *  @return Explicit assigned value of expr in the solver. May be nil, in
    *          which case the solver did not assign a value to it for some
    *          reason. */
-  virtual expr2tc get_by_ast(const type2tc &type, smt_astt a);
+  expr2tc get_by_ast(const type2tc &type, smt_astt a);
 
   /** Resolve @p expr's model value through its converted AST. Unlike
    *  get_by_type, the struct/pointer case goes through the AST-based
@@ -302,15 +315,7 @@ public:
    *  @param denominator Output parameter for the denominator of the rational.
    *  @return True if the rational value was successfully extracted, false
    * otherwise. */
-  virtual bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
-  {
-    // Default implementation returns false - solver-specific implementations
-    // should override this
-    (void)a;
-    (void)numerator;
-    (void)denominator;
-    return false;
-  }
+  bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator);
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
    *  to symbols / variables used in the formula. This method retrieves the
@@ -319,19 +324,19 @@ public:
    *  @return Explicit assigned value of expr in the solver. May be nil, in
    *          which case the solver did not assign a value to it for some
    *          reason. */
-  virtual expr2tc get(const expr2tc &expr);
+  expr2tc get(const expr2tc &expr);
 
   /** Solver name fetcher. Returns a string naming the solver being used, and
    *  potentially it's version, if available.
    *  @return The name of the solver this smt_solver_baset uses. */
-  virtual const std::string solver_text() = 0;
+  const std::string solver_text();
 
   /** Fetch the value of a boolean sorted smt_ast. (The 'l' is for literal, and
    *  is historic). Returns a three valued result, of true, false, or
    *  unassigned.
    *  @param a The boolean sorted ast to fetch the value of.
    *  @return A three-valued return val, of the assignment to a. */
-  virtual tvt l_get(smt_astt a);
+  tvt l_get(smt_astt a);
 
   /** Fetch the value of a boolean expression from the current model. */
   tvt l_get(const expr2tc &expr);
@@ -342,60 +347,85 @@ public:
    *  @name Internal conversion API between smt_solver_baset and solver
    * converter */
 
-  virtual smt_astt mk_add(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvadd(smt_astt a, smt_astt b);
-  virtual smt_astt mk_sub(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvsub(smt_astt a, smt_astt b);
-  virtual smt_astt mk_mul(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvmul(smt_astt a, smt_astt b);
-  virtual smt_astt mk_mod(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvsmod(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvumod(smt_astt a, smt_astt b);
-  virtual smt_astt mk_div(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvsdiv(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvudiv(smt_astt a, smt_astt b);
-  virtual smt_astt mk_shl(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvshl(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvashr(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvlshr(smt_astt a, smt_astt b);
-  virtual smt_astt mk_neg(smt_astt a);
-  virtual smt_astt mk_bvneg(smt_astt a);
-  virtual smt_astt mk_bvnot(smt_astt a);
-  virtual smt_astt mk_bvxor(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvor(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvand(smt_astt a, smt_astt b);
-  virtual smt_astt mk_implies(smt_astt a, smt_astt b);
-  virtual smt_astt mk_xor(smt_astt a, smt_astt b);
-  virtual smt_astt mk_or(smt_astt a, smt_astt b);
-  virtual smt_astt mk_and(smt_astt a, smt_astt b);
-  virtual smt_astt mk_not(smt_astt a);
-  virtual smt_astt mk_lt(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvult(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvslt(smt_astt a, smt_astt b);
-  virtual smt_astt mk_gt(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvugt(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvsgt(smt_astt a, smt_astt b);
-  virtual smt_astt mk_le(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvule(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvsle(smt_astt a, smt_astt b);
-  virtual smt_astt mk_ge(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvuge(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvsge(smt_astt a, smt_astt b);
-  virtual smt_astt mk_eq(smt_astt a, smt_astt b);
-  virtual smt_astt mk_neq(smt_astt a, smt_astt b);
-  virtual smt_astt mk_store(smt_astt a, smt_astt b, smt_astt c);
-  virtual smt_astt mk_select(smt_astt a, smt_astt b);
-  virtual smt_astt mk_real2int(smt_astt a);
-  virtual smt_astt mk_int2real(smt_astt a);
-  virtual smt_astt mk_isint(smt_astt a);
-  virtual smt_astt
-  mk_quantifier(bool is_forall, std::vector<smt_astt> lhs, smt_astt rhs)
-  {
-    (void)is_forall;
-    (void)lhs;
-    (void)rhs;
-    abort();
-  }
+  smt_astt mk_add(smt_astt a, smt_astt b);
+  smt_astt mk_bvadd(smt_astt a, smt_astt b);
+  smt_astt mk_sub(smt_astt a, smt_astt b);
+  smt_astt mk_bvsub(smt_astt a, smt_astt b);
+  smt_astt mk_mul(smt_astt a, smt_astt b);
+  smt_astt mk_bvmul(smt_astt a, smt_astt b);
+  smt_astt mk_mod(smt_astt a, smt_astt b);
+  smt_astt mk_bvsmod(smt_astt a, smt_astt b);
+  smt_astt mk_bvumod(smt_astt a, smt_astt b);
+  smt_astt mk_div(smt_astt a, smt_astt b);
+  smt_astt mk_bvsdiv(smt_astt a, smt_astt b);
+  smt_astt mk_bvudiv(smt_astt a, smt_astt b);
+  smt_astt mk_shl(smt_astt a, smt_astt b);
+  smt_astt mk_bvshl(smt_astt a, smt_astt b);
+  smt_astt mk_bvashr(smt_astt a, smt_astt b);
+  smt_astt mk_bvlshr(smt_astt a, smt_astt b);
+  smt_astt mk_neg(smt_astt a);
+  smt_astt mk_bvneg(smt_astt a);
+  smt_astt mk_bvnot(smt_astt a);
+  smt_astt mk_bvxor(smt_astt a, smt_astt b);
+  smt_astt mk_bvor(smt_astt a, smt_astt b);
+  smt_astt mk_bvand(smt_astt a, smt_astt b);
+  smt_astt mk_implies(smt_astt a, smt_astt b);
+  smt_astt mk_xor(smt_astt a, smt_astt b);
+  smt_astt mk_or(smt_astt a, smt_astt b);
+  smt_astt mk_and(smt_astt a, smt_astt b);
+  smt_astt mk_not(smt_astt a);
+  smt_astt mk_lt(smt_astt a, smt_astt b);
+  smt_astt mk_bvult(smt_astt a, smt_astt b);
+  smt_astt mk_bvslt(smt_astt a, smt_astt b);
+  smt_astt mk_gt(smt_astt a, smt_astt b);
+  smt_astt mk_bvugt(smt_astt a, smt_astt b);
+  smt_astt mk_bvsgt(smt_astt a, smt_astt b);
+  smt_astt mk_le(smt_astt a, smt_astt b);
+  smt_astt mk_bvule(smt_astt a, smt_astt b);
+  smt_astt mk_bvsle(smt_astt a, smt_astt b);
+  smt_astt mk_ge(smt_astt a, smt_astt b);
+  smt_astt mk_bvuge(smt_astt a, smt_astt b);
+  smt_astt mk_bvsge(smt_astt a, smt_astt b);
+  smt_astt mk_eq(smt_astt a, smt_astt b);
+  smt_astt mk_neq(smt_astt a, smt_astt b);
+  smt_astt mk_store(smt_astt a, smt_astt b, smt_astt c);
+  smt_astt mk_select(smt_astt a, smt_astt b);
+  smt_astt mk_real2int(smt_astt a);
+  smt_astt mk_int2real(smt_astt a);
+  smt_astt mk_isint(smt_astt a);
+
+  /** @{
+   *  @name Sort-directed operations.
+   *  These dispatch on the operand's sort rather than on a C++ type: tuples and
+   *  arrays need different encodings for the same source-level operation. They
+   *  were virtuals on smt_ast until that wrapper was replaced by camada's
+   *  expression handle. */
+
+  /** Equality that does the right thing for scalars, tuples and arrays. */
+  smt_astt ast_eq(smt_astt a, smt_astt b);
+
+  /** Assign @p value to @p sym. Defaults to asserting an equality. */
+  void ast_assign(smt_astt value, smt_astt sym);
+
+  /** An array 'with' or a tuple 'with'.
+   *  @param idx Array index or tuple field number.
+   *  @param idx_expr For arrays, the expression giving the index. */
+  smt_astt ast_update(
+    smt_astt a,
+    smt_astt value,
+    unsigned int idx,
+    const expr2tc &idx_expr = expr2tc());
+
+  /** Select from an array, whether of scalars or of tuples. */
+  smt_astt ast_select(smt_astt a, const expr2tc &idx);
+
+  /** Project a member from a struct, or a field-array from a struct array.
+   *  Only meaningful for tuple sorts, so the base implementation errors. */
+  smt_astt ast_project(smt_astt a, unsigned int elem);
+
+  /** @} */
+  smt_astt
+  mk_quantifier(bool is_forall, std::vector<smt_astt> lhs, smt_astt rhs);
 
   smt_astt convert_concat_int_mode(
     smt_astt left_ast,
@@ -427,34 +457,34 @@ public:
   }
 
   /** Create a bool sort */
-  virtual smt_sortt mk_bool_sort();
+  smt_sortt mk_bool_sort();
 
   /** Create a real sort */
-  virtual smt_sortt mk_real_sort();
+  smt_sortt mk_real_sort();
 
   /** Create a int sort */
-  virtual smt_sortt mk_int_sort();
+  smt_sortt mk_int_sort();
 
   /** Create a bv sort */
-  virtual smt_sortt mk_bv_sort(std::size_t width);
+  smt_sortt mk_bv_sort(std::size_t width);
 
   /** Create a fixed-point sort */
-  virtual smt_sortt mk_fbv_sort(std::size_t width);
+  smt_sortt mk_fbv_sort(std::size_t width);
 
   /** Create a floating-point sort, using bitvectors */
-  virtual smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw);
+  smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw);
 
   /** Create a floating-point rounding mode sort, using bitvectors */
-  virtual smt_sortt mk_bvfp_rm_sort();
+  smt_sortt mk_bvfp_rm_sort();
 
   /** Create an array sort */
-  virtual smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range);
+  smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range);
 
   /** Create an integer smt_ast. That is, an integer in QF_AUFLIRA, rather than
    *  a bitvector.
    *  @param theint BigInt representation of the number to create.
    *  @return The newly created terminal smt_ast of this integer. */
-  virtual smt_astt mk_smt_int(const BigInt &theint) = 0;
+  smt_astt mk_smt_int(const BigInt &theint);
 
   /** Create a real in a smt_ast.
    *  @param str String representation of the real, to be parsed by the solver.
@@ -471,7 +501,7 @@ public:
    *  this call unless the value is known to be one this call site
    *  exclusively owns; mint a fresh symbol (mk_fresh) and constrain it
    *  equal to the desired real value instead. */
-  virtual smt_astt mk_smt_real(const std::string &str) = 0;
+  smt_astt mk_smt_real(const std::string &str);
 
   // Returns SMT AST representing real zero
   smt_astt get_zero_real();
@@ -526,7 +556,7 @@ public:
    *         in the stored integer should be ignored.
    *  @param w Width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bv(const BigInt &theint, std::size_t w)
+  smt_astt mk_smt_bv(const BigInt &theint, std::size_t w)
   {
     return mk_smt_bv(theint, mk_int_bv_sort(w));
   }
@@ -536,12 +566,12 @@ public:
    *  @param theint Integer representation of the bitvector. Any excess bits
    *         in the stored integer should be ignored.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) = 0;
+  smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s);
 
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.
    *  @return The newly created terminal smt_ast of this boolean. */
-  virtual smt_astt mk_smt_bool(bool val) = 0;
+  smt_astt mk_smt_bool(bool val);
 
   /** Create a symbol / variable. These correspond to renamed SSA variables in
    *  the SSA program, although any other names can be used too, so long as they
@@ -549,7 +579,7 @@ public:
    *  @param name Textual name of the symbol to create.
    *  @param s The sort of the symbol we're creating.
    *  @param The newly created terminal smt_ast of this symbol. */
-  virtual smt_astt mk_smt_symbol(const std::string &name, smt_sortt s) = 0;
+  smt_astt mk_smt_symbol(const std::string &name, smt_sortt s);
 
   /** Apply an uninterpreted function. Declares (or reuses) a solver function
    *  symbol named @p name whose domain is the sorts of @p args and whose range
@@ -565,7 +595,7 @@ public:
    *  @param args The already-converted argument asts.
    *  @param rangesort The sort of the function's result.
    *  @return The ast denoting name(args). */
-  virtual smt_astt mk_smt_uninterpreted_function(
+  smt_astt mk_smt_uninterpreted_function(
     const std::string &name,
     const std::vector<smt_astt> &args,
     smt_sortt rangesort);
@@ -577,44 +607,43 @@ public:
    *  @param a The source piece of ast to extract a value from.
    *  @param high The topmost bit to select from the source, down to low.
    *  @param low The lowest bit to select from the source. */
-  virtual smt_astt
-  mk_extract(smt_astt a, unsigned int high, unsigned int low) = 0;
+  smt_astt mk_extract(smt_astt a, unsigned int high, unsigned int low);
 
   /** Given a signed, upwards cast, extends the sign of the given AST to the
    *  desired length.
    *  @param a The bitvector to upcast.
    *  @param topwidth The number of bits to extend the input by
    *  @return A bitvector with topwidth more bits, of the appropriate sign. */
-  virtual smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) = 0;
+  smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth);
 
   /** Identical to mk_sign_ext, but extends AST with zeros */
-  virtual smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) = 0;
+  smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth);
 
   /** Concatenate two smt expressions
    * @param a the first part of the concatenation
    * @param b the second part of the concatenation
    * @return the concatenation of a and b */
-  virtual smt_astt mk_concat(smt_astt a, smt_astt b) = 0;
+  smt_astt mk_concat(smt_astt a, smt_astt b);
 
   /** Create an ite operation
    * @param cond the ite condition
    * @param t the true case
    * @param f the false case
    * @return an ite expression */
-  virtual smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) = 0;
+  smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f);
 
   /** Extract the assignment to a boolean variable from the SMT solver's model.
    *  @param a The AST whose value we wish to know.
    *  @return a's value, or tvt::TV_UNKNOWN when the solver cannot reduce it to
    *          a ground boolean. That is an expected outcome for terms that still
    *          contain a quantifier: callers must not invent a value for it. */
-  virtual tvt get_bool(smt_astt a) = 0;
+  tvt get_bool(smt_astt a);
 
   /** Extract the assignment to a bitvector from the SMT solver's model.
    *  @param a The AST whose value we wish to know.
    *  @param is_signed whether the bitvector is signed
    *  @return Expression representation of a's value */
-  virtual BigInt get_bv(smt_astt a, bool is_signed) = 0;
+  BigInt get_bv(smt_astt a, bool is_signed);
 
   /** Reduction or: equals bit0 iff all bits are 0
    * @param op the expr to be reduced
@@ -639,14 +668,14 @@ public:
    *  underflow.
    *  @param expr Expression to test for arithmetic overflows in.
    *  @return Boolean valued AST representing whether an overflow occurs. */
-  virtual smt_astt overflow_arith(const expr2tc &expr);
+  smt_astt overflow_arith(const expr2tc &expr);
 
   /** Detect integer overflows in a cast. Takes a typecast2tc as an argument,
    *  and if it causes a decrease in integer width, then encodes a test that
    *  the dropped bits are never significant / used.
    *  @param expr Cast to test for dropped / overflowed data in.
    *  @return Boolean valued AST representing whether an overflow occurs. */
-  virtual smt_astt overflow_cast(const expr2tc &expr);
+  smt_astt overflow_cast(const expr2tc &expr);
 
   /** Detects integer overflows in negation. This only tests for the case where
    *  MIN_INT is being negated, in which case there is no positive
@@ -654,7 +683,7 @@ public:
    *  if that can occur in the operand.
    *  @param expr A neg2tc to test for overflows in.
    *  @return Boolean valued AST representing whether an overflow occurs. */
-  virtual smt_astt overflow_neg(const expr2tc &expr);
+  smt_astt overflow_neg(const expr2tc &expr);
 
   /** Applies IEEE 754 floating-point semantics to a real arithmetic result.
    *  Handles overflow, underflow, and subnormal number behaviors that are
@@ -679,17 +708,17 @@ public:
    *  @param rounding_mode The rounding mode expr2tc from the IR operation node;
    *         typically a constant_int2t or the __ESBMC_rounding_mode symbol.
    *  @return SMT AST representing the result with IEEE 754 semantics applied */
-  virtual smt_astt apply_ieee754_semantics(
+  smt_astt apply_ieee754_semantics(
     smt_astt real_result,
     const floatbv_type2t &fbv_type,
-    smt_astt operand_zero_check = nullptr,
+    smt_astt operand_zero_check = {},
     const expr2tc &rounding_mode = expr2tc());
 
   /** Method to dump the SMT formula */
-  virtual std::string dump_smt();
+  std::string dump_smt();
 
   /** Method to print the SMT model */
-  virtual void print_model();
+  void print_model();
 
   /** @} */
 
@@ -702,13 +731,13 @@ public:
    *  XXX, why is this virtual?
    *  @param expr An index2tc expression to convert to an SMT AST.
    *  @return An AST representing the index operation in the expression. */
-  virtual smt_astt convert_array_index(const expr2tc &expr);
+  smt_astt convert_array_index(const expr2tc &expr);
 
   /** Partner method to convert_array_index, for stores.
    *  XXX, why is this virtual?
    *  @param expr with2tc operation to convert to SMT.
    *  @return AST representing the result of evaluating expr. */
-  virtual smt_astt convert_array_store(const expr2tc &expr);
+  smt_astt convert_array_store(const expr2tc &expr);
 
   /** @} */
 
@@ -717,8 +746,7 @@ public:
 
   /** Create a free variable with the given sort, and a unique name, with the
    *  prefix given in 'tag' */
-  virtual smt_astt
-  mk_fresh(smt_sortt s, const std::string &tag, smt_sortt st = {});
+  smt_astt mk_fresh(smt_sortt s, const std::string &tag, smt_sortt st = {});
   /** Create a previously un-used variable name with the prefix given in tag */
   std::string mk_fresh_name(const std::string &tag);
 
@@ -850,25 +878,25 @@ public:
    *  yet. If solvers don't support tuples, implement this to abort.
    *  @param type The struct type to create a tuple representation of.
    *  @return The tuple representation of the type, wrapped in an smt_sort. */
-  virtual smt_sortt mk_struct_sort(const type2tc &type) = 0;
+  smt_sortt mk_struct_sort(const type2tc &type);
 
   /** Create a new tuple from a struct definition.
    *  @param structdef A constant_struct2tc, describing all the members of the
    *         tuple to create.
    *  @return AST representing the created tuple */
-  virtual smt_astt tuple_create(const expr2tc &structdef) = 0;
+  smt_astt tuple_create(const expr2tc &structdef);
 
   /** Create a fresh tuple, with freely valued fields.
    *  @param s Sort of the tuple to create
    *  @return AST representing the created tuple */
-  virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "") = 0;
+  smt_astt tuple_fresh(smt_sortt s, std::string name = "");
 
   // XXX XXX XXX docs gap
-  virtual smt_astt tuple_array_create(
+  smt_astt tuple_array_create(
     const type2tc &array_type,
     smt_astt *inputargs,
     bool const_array,
-    smt_sortt domain) = 0;
+    smt_sortt domain);
 
   /** Create a potentially /large/ array of tuples. This is called when we
    *  encounter an array_of operation, with a very large array size, of tuple
@@ -876,32 +904,30 @@ public:
    *  @param Expression of tuple value to populate this array with.
    *  @param domain_width The size of array to create, in domain bits.
    *  @return An AST representing an array of the tuple value, init_value. */
-  virtual smt_astt
-  tuple_array_of(const expr2tc &init_value, unsigned long domain_width) = 0;
+  smt_astt
+  tuple_array_of(const expr2tc &init_value, unsigned long domain_width);
 
   /** Convert a symbol to a tuple_smt_ast */
-  virtual smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) = 0;
+  smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s);
 
   /** Like mk_tuple_symbol, but for arrays */
-  virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr) = 0;
+  smt_astt mk_tuple_array_symbol(const expr2tc &expr);
 
   /** Extract the assignment to a tuple-typed symbol from the SMT solvers
    *  model */
-  virtual expr2tc tuple_get(const expr2tc &expr) = 0;
-  virtual expr2tc tuple_get(const type2tc &type, smt_astt a) = 0;
+  expr2tc tuple_get(const expr2tc &expr);
+  expr2tc tuple_get(const type2tc &type, smt_astt a);
 
-  virtual expr2tc tuple_get_array_elem(
-    smt_astt array,
-    uint64_t index,
-    const type2tc &subtype) = 0;
+  expr2tc
+  tuple_get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype);
 
-  virtual void add_tuple_constraints_for_solving()
+  void add_tuple_constraints_for_solving()
   {
   }
-  virtual void push_tuple_ctx()
+  void push_tuple_ctx()
   {
   }
-  virtual void pop_tuple_ctx()
+  void pop_tuple_ctx()
   {
   }
 
@@ -910,10 +936,8 @@ public:
    * Implemented by the backend: camada uses the solver's theory of arrays
    * where it has one and lowers to Ackermann congruence axioms where it does
    * not, so there is no separate flattener to install. */
-  virtual smt_astt mk_array_symbol(
-    const std::string &name,
-    smt_sortt sort,
-    smt_sortt subtype) = 0;
+  smt_astt
+  mk_array_symbol(const std::string &name, smt_sortt sort, smt_sortt subtype);
 
   /** Extract an element from the model of an array, at an explicit index.
    *  @param array AST representing the array we are extracting from
@@ -921,8 +945,7 @@ public:
    *  @param subtype The type of the element we are extracting, i.e., array
    * range
    *  @return Expression representation of the element */
-  virtual expr2tc
-  get_array_elem(smt_astt a, uint64_t idx, const type2tc &subtype) = 0;
+  expr2tc get_array_elem(smt_astt a, uint64_t idx, const type2tc &subtype);
 
   /** Create an array with a single initializer. This may be a small, fixed
    *  size array, or it may be a nondeterministically sized array with a
@@ -936,16 +959,15 @@ public:
    *  @param init_val The value to initialize each element with.
    *  @param domain_width The size of the array to create, in domain bits.
    *  @return An AST representing the created constant array. */
-  virtual smt_astt
-  convert_array_of(smt_astt init_val, unsigned long domain_width) = 0;
+  smt_astt convert_array_of(smt_astt init_val, unsigned long domain_width);
 
-  virtual void add_array_constraints_for_solving()
+  void add_array_constraints_for_solving()
   {
   }
-  virtual void push_array_ctx()
+  void push_array_ctx()
   {
   }
-  virtual void pop_array_ctx()
+  void pop_array_ctx()
   {
   }
   /** Stores handle for the floating-point interface. */
@@ -959,118 +981,114 @@ public:
    *  @param ew Exponent width, in bits, of the bitvector to create.
    *  @param sw Significand width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_fpbv(const ieee_floatt &thereal) = 0;
+  smt_astt mk_smt_fpbv(const ieee_floatt &thereal);
 
   /** Create a sort representing a floating-point number.
    *  @param ew Exponent width, in bits, of the bitvector to create.
    *  @param sw Significand width, in bits, of the bitvector to create.
    *  @return The floating-point representation of the type, wrapped in an
    * smt_sort. */
-  virtual smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw) = 0;
+  smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw);
 
   /** Create a sort representing a floating-point rounding mode.
    *  @return The floating-point rounding mode representation of the type,
    *  wrapped in an smt_sort. */
-  virtual smt_sortt mk_fpbv_rm_sort() = 0;
+  smt_sortt mk_fpbv_rm_sort();
 
   /** Create a NaN floating point bitvector
    *  @param ew Exponent width, in bits, of the bitvector to create.
    *  @param sw Significand width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw) = 0;
+  smt_astt mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw);
 
   /** Create a (+/-)inf floating point bitvector
    *  @param sgn Whether this bitvector is negative or positive.
    *  @param ew Exponent width, in bits, of the bitvector to create.
    *  @param sw Significand width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw) = 0;
+  smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw);
 
   /** Create a rounding mode to be used by floating point cast and arith ops
    *  @param rm the kind of rounding mode
    *  @return The newly created rounding mode smt_ast. */
-  virtual smt_astt mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm) = 0;
+  smt_astt mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm);
 
   /** Typecast from a floating point
    *  @param from the floating point being casted to unsigned bitvector
    *  @param to the unsigned bitvector resulting type
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt
-  mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width) = 0;
+  smt_astt mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width);
 
   /** Typecast from a floating point
    *  @param from the floating point being casted to signed bitvector
    *  @param to the signed bitvector resulting type
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt
-  mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width) = 0;
+  smt_astt mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width);
 
   /** Typecast from a floating point
    *  @param from the floating point being casted to floating-point
    *  @param to the floating-point resulting type
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_typecast_from_fpbv_to_fpbv(
-    smt_astt from,
-    smt_sortt to,
-    smt_astt rm) = 0;
+  smt_astt
+  mk_smt_typecast_from_fpbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm);
 
   /** Typecast to a floating point
    *  @param from the unsigned bitvector being casted to a floating-point
    *  @param cast the floating-point resulting type
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt
-  mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm) = 0;
+  smt_astt
+  mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm);
 
   /** Typecast to a floating point
    *  @param from the signed bitvector being casted to a floating-point
    *  @param cast the floating-point resulting type
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt
-  mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm) = 0;
+  smt_astt
+  mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm);
 
   /** Calculate the nearby int from a floating point, considering the rounding
    * mode
    *  @param from the floating-point
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm) = 0;
+  smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm);
 
   /** Convert a ieee addition
    *  @param lhs left hand side of the addition
    *  @param rhs right hand side of the addition
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm) = 0;
+  smt_astt mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm);
 
   /** Convert a ieee subtraction
    *  @param lhs left hand side of the subtraction
    *  @param rhs right hand side of the subtraction
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm) = 0;
+  smt_astt mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm);
 
   /** Convert a ieee multiplication
    *  @param lhs left hand side of the multiplication
    *  @param rhs right hand side of the multiplication
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm) = 0;
+  smt_astt mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm);
 
   /** Convert the ieee division
    *  @param lhs left hand side of the division
    *  @param rhs right hand side of the division
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm) = 0;
+  smt_astt mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm);
 
   /** Convert the ieee arithmetic square-root (sqrt)
    *  @param op the sqrt radicand
    *  @param rm the rounding mode
    *  @return The newly created sqrt smt_ast */
-  virtual smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm) = 0;
+  smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm);
 
   /** Convert the ieee arithmetic fused-multiply add (fma): round((v1 * v2) +
    * v3)
@@ -1079,94 +1097,93 @@ public:
    *  @param v3 in the equation
    *  @param rm the rounding mode
    *  @return The newly created fma smt_ast */
-  virtual smt_astt
-  mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm) = 0;
+  smt_astt mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm);
 
   /** Convert an ieee equality
    *  @param lhs left hand side
    *  @param rhs right hand side
    *  @return The newly created fp.eq smt_ast. */
-  virtual smt_astt mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs) = 0;
+  smt_astt mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs);
 
   /** Convert an ieee greater than
    *  @param lhs left hand side
    *  @param rhs right hand side
    *  @return The newly created fp.gt smt_ast. */
-  virtual smt_astt mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs) = 0;
+  smt_astt mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs);
 
   /** Convert an ieee less than
    *  @param lhs left hand side
    *  @param rhs right hand side
    *  @return The newly created fp.lt smt_ast. */
-  virtual smt_astt mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs) = 0;
+  smt_astt mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs);
 
   /** Convert an ieee greater than or equal
    *  @param lhs left hand side
    *  @param rhs right hand side
    *  @return The newly created fp.gt smt_ast. */
-  virtual smt_astt mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs) = 0;
+  smt_astt mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs);
 
   /** Convert an ieee less than or equal
    *  @param lhs left hand side
    *  @param rhs right hand side
    *  @return The newly created fp.lt smt_ast. */
-  virtual smt_astt mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs) = 0;
+  smt_astt mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs);
 
   /** Convert an ieee is_nan operation
    *  @param op the operand
    *  @return The newly created fp.isNaN smt_ast. */
-  virtual smt_astt mk_smt_fpbv_is_nan(smt_astt op) = 0;
+  smt_astt mk_smt_fpbv_is_nan(smt_astt op);
 
   /** Convert an ieee is_inf operation
    *  @param op the operand
    *  @return The newly created fp.isInfinite smt_ast. */
-  virtual smt_astt mk_smt_fpbv_is_inf(smt_astt op) = 0;
+  smt_astt mk_smt_fpbv_is_inf(smt_astt op);
 
   /** Convert an ieee is_normal operation
    *  @param op the operand
    *  @return The newly created fp.isNormal smt_ast. */
-  virtual smt_astt mk_smt_fpbv_is_normal(smt_astt op) = 0;
+  smt_astt mk_smt_fpbv_is_normal(smt_astt op);
 
   /** Convert an ieee is_zero operation
    *  @param op the operand
    *  @return The newly created fp.isZero smt_ast. */
-  virtual smt_astt mk_smt_fpbv_is_zero(smt_astt op) = 0;
+  smt_astt mk_smt_fpbv_is_zero(smt_astt op);
 
   /** Convert an ieee is_neg operation
    *  @param op the operand
    *  @return The newly created fp.isNegative smt_ast. */
-  virtual smt_astt mk_smt_fpbv_is_negative(smt_astt op) = 0;
+  smt_astt mk_smt_fpbv_is_negative(smt_astt op);
 
   /** Convert an ieee is_pos operation
    *  @param op the operand
    *  @return The newly created fp.isPositive smt_ast. */
-  virtual smt_astt mk_smt_fpbv_is_positive(smt_astt op) = 0;
+  smt_astt mk_smt_fpbv_is_positive(smt_astt op);
 
   /** Convert an ieee abs operation
    *  @param op the operand
    *  @return The newly created fp.abs smt_ast. */
-  virtual smt_astt mk_smt_fpbv_abs(smt_astt op) = 0;
+  smt_astt mk_smt_fpbv_abs(smt_astt op);
 
   /** Convert an ieee negation operation
    *  @param op the operand
    *  @return The newly created fp.neg smt_ast. */
-  virtual smt_astt mk_smt_fpbv_neg(smt_astt op) = 0;
+  smt_astt mk_smt_fpbv_neg(smt_astt op);
 
   /** Extract the assignment to a floating-point from the SMT solvers model.
    *  @param a the AST whos value we wish to know.
    *  @return the ieee floating-point */
-  virtual ieee_floatt get_fpbv(smt_astt a) = 0;
+  ieee_floatt get_fpbv(smt_astt a);
 
   /** Convert BV to FP
    * @param op the bitvector
    * @param to the floating-point type
    */
-  virtual smt_astt mk_from_bv_to_fp(smt_astt op, smt_sortt to) = 0;
+  smt_astt mk_from_bv_to_fp(smt_astt op, smt_sortt to);
 
   /** Convert FP to BV
    * @param op the floating-point
    */
-  virtual smt_astt mk_from_fp_to_bv(smt_astt op) = 0;
+  smt_astt mk_from_fp_to_bv(smt_astt op);
 
   /** Stores handle for the real-arithmetic/enclosure interface. */
   void set_ra_conv(ra_apit *iface);
@@ -1271,8 +1288,6 @@ public:
   expr2tc get_array(const type2tc &type, smt_astt array);
   expr2tc get_array(const expr2tc &expr);
 
-  void delete_all_asts();
-
   /** @} */
 
   // Types
@@ -1312,9 +1327,10 @@ public:
   /** Model-value cache for l_get(). Holds the current model's boolean
    *  assignments; cleared on every model-changing transition (pre_solve,
    *  push_ctx, pop_ctx) so a hit always reflects the latest solve. Keyed
-   *  by the boolean smt_ast pointer (solver ASTs are hash-consed, so
-   *  identical pointer ⇒ identical term ⇒ identical model value). */
-  std::unordered_map<smt_astt, tvt> l_get_cache;
+   *  by the arena-owned expression behind the boolean smt_astt (solver ASTs
+   *  are hash-consed, so identical pointer ⇒ identical term ⇒ identical
+   *  model value). */
+  std::unordered_map<const camada::SMTExpr *, tvt> l_get_cache;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */
@@ -1344,7 +1360,7 @@ public:
   smt_astt invalid_ptr_ast;
 
   /** Counter for generating unique bound-variable names in quantifiers. */
-  size_t quantifier_counter = 0;
+  size_t quantifier_counter;
 
   /** One recorded uninterpreted-function application in the Ackermannisation
    *  fallback: the argument asts, the fresh result ast, and the context level
@@ -1364,7 +1380,7 @@ public:
   std::unordered_map<std::string, std::vector<uf_ackermann_entry>>
     uf_ackermann_history;
   /** Counter for the fresh result symbols minted by the Ackermann fallback. */
-  size_t uf_ackermann_counter = 0;
+  size_t uf_ackermann_counter;
 
   /** Map from SSA symbol name to its forall/exists irep2 expression.
    *  Populated in convert_assign when a symbol is assigned a quantifier
@@ -1406,14 +1422,6 @@ public:
   typedef std::map<std::string, smt_astt> renumber_mapt;
   std::vector<renumber_mapt> renumber_map;
 
-  /** Lifetime tracking of smt ast's. When a context is pop'd, all the ASTs
-   *  created in that context are freed. */
-  std::vector<smt_astt> live_asts;
-  /** Accounting of live_asts for push/pop. Records the number of pointers
-   *  contained when a push occurred. On pop, the live_asts vector is reset
-   *  back to that point. */
-  std::vector<unsigned int> live_asts_sizes;
-
   ra_apit *ra_api;
   std::unique_ptr<ir_ieee_convt> ir_ieee_api;
 
@@ -1425,6 +1433,49 @@ private:
   double convert_rational_to_double(
     const BigInt &numerator,
     const BigInt &denominator);
+
+  /** The camada solver every mk_* method encodes into. */
+  std::unique_ptr<camada::SMTSolver> solver;
+
+  /** Set when the SMT-LIB backend drives an external one-shot program. */
+  const bool oneshot = false;
+
+  /** Camada's SMT-LIB backend streams the script to its sink as it is built
+   *  rather than buffering it, so dump_smt() has nothing to return. */
+  const bool streams_script = false;
+
+  std::string oneshot_prog;
+  std::string formula_path;
+  bool solved = false;
+
+  const char *oneshot_label() const;
+  camada::FPEncoding fp_encoding() const;
+  camada::SMTExprRef
+  make_index_expr(const camada::SMTSortRef &sort, uint64_t index);
+  smt_astt fp_sign_test(smt_astt op, bool negative);
+  smt_resultt oneshot_dec_solve();
+
+  /* SMT-LIB's Int/Real theory has no bitwise operations, but ESBMC still
+   * routes C's &/|/^/~ through the mk_bv* entry points in integer mode (see
+   * the bitand_id case in smt_solver.cpp). Bridge by converting to a
+   * bit-vector of the signed word width, applying the bit-vector operation,
+   * and converting back. */
+  template <typename Fn>
+  smt_astt int_bitwise_unary(smt_astt a, Fn &&op)
+  {
+    const unsigned width = signed_size_type2()->get_width();
+    auto a_bv = solver->mkInt2BV(width, a);
+    return solver->mkBV2Int(op(a_bv), true);
+  }
+
+  template <typename Fn>
+  smt_astt int_bitwise_binary(smt_astt a, smt_astt b, Fn &&op)
+  {
+    const unsigned width = signed_size_type2()->get_width();
+    auto a_bv = solver->mkInt2BV(width, a);
+    auto b_bv = solver->mkInt2BV(width, b);
+    return solver->mkBV2Int(op(a_bv, b_bv), true);
+  }
 };
 
 /** Given an array type, create a type2tc representing its domain. */
@@ -1435,14 +1486,6 @@ type2tc make_array_domain_type(const array_type2t &arr);
  *  every valid index.  For VLA, dynamic, or infinite arrays the size is not
  *  statically known, so the machine word size is returned as a safe default. */
 unsigned long array_domain_width_or_word_size(const array_type2t &arr);
-
-// Define here to enable inlining
-inline smt_ast::smt_ast(smt_solver_baset *ctx, smt_sortt s)
-  : sort(s), context(ctx)
-{
-  assert(static_cast<bool>(sort));
-  ctx->live_asts.push_back(this);
-}
 
 /* Type for push/pop-aware symbol table cache, required by some solvers */
 

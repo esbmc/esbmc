@@ -76,7 +76,7 @@ per-backend subdirectories the old structure was built around are gone.
 | `smt_memspace.cpp`, `pointer_logic.{cpp,h}` | The C memory address space and its bookkeeping |
 | `smt_fp_conv.cpp` | IEEE754 constants, semantics and FP predicates |
 | `ir_ieee_conv.{cpp,h}` | Real-arithmetic FP encoding (`--ir --ir-ieee`) |
-| `smt_ast.h`, `smt_sort.h`, `smt_result.h` | Solver-handle and result vocabulary |
+| `smt_sort.h`, `smt_result.h` | Solver-handle and result vocabulary |
 | `camada_conv.cpp` | The backend |
 | `oneshot_options.{cpp,h}` | Option and temp-file policy for `--smtlib-oneshot-prog` |
 | `solve.{cpp,h}` | Factory that picks and instantiates a backend |
@@ -90,10 +90,12 @@ Three abstract classes carry the design:
   the memory model, byte-op lowering, casts, union flattening, FP
   fall-backs, and the dispatcher `mk_func_app`.  Each backend subclasses
   it and implements solver-specific function/sort/literal builders.
-- **`smt_ast`** — wraps a single term in the backend's native AST type.
-  The backend subclasses the templated helper `solver_smt_ast<NativeTerm>`
-  (see `camada_expr` in `camada_conv.cpp`).
-- **`smt_sort`** — wraps a sort; `camada_sort` is the counterpart.
+- **`smt_astt`** / **`smt_sortt`** — aliases for camada's own `SMTExprRef`
+  and `SMTSortRef` handles (`smt_sort.h`), not ESBMC wrappers around them.
+  A camada expression carries its own sort, so nothing here stores one.
+  Operations that depend on the operand's sort rather than its C++ type
+  (`ast_eq`, `ast_assign`, `ast_update`, `ast_select`, `ast_project`) are
+  methods on `smt_solver_baset`.
 
 `smt_convt` flattens, *for every backend*: the C memory address space,
 pointer representation, casts, byte extract/update, fixed-bv float

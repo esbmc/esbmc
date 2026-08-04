@@ -532,9 +532,9 @@ smt_solver_baset::convert_byte_update_bv_mode(const byte_update2t &data)
     top = mk_extract(src_value, width_op0 - 1, top_of_update);
 
   smt_astt middle;
-  if (top == value)
+  if (top.get() == value.get())
   {
-    middle = nullptr;
+    middle = {};
   }
   else
   {
@@ -544,7 +544,7 @@ smt_solver_baset::convert_byte_update_bv_mode(const byte_update2t &data)
   smt_astt bottom;
   if (src_offset == 0)
   {
-    middle = nullptr;
+    middle = {};
     bottom = value;
   }
   else
@@ -556,7 +556,7 @@ smt_solver_baset::convert_byte_update_bv_mode(const byte_update2t &data)
   // Concatenate the top and bottom, and possible middle, together.
   smt_astt concat;
 
-  if (middle != nullptr)
+  if (middle)
     concat = mk_concat(top, middle);
   else
     concat = top;

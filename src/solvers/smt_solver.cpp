@@ -2,6 +2,7 @@
 #include <cfloat>
 #include <iomanip>
 #include <solvers/smt_solver.h>
+#include <solvers/oneshot_options.h>
 #include <solvers/ir_ieee_conv.h>
 #include <solvers/smt_fp_rounding_utils.h>
 #include <sstream>
@@ -73,8 +74,20 @@ unsigned int smt_solver_baset::get_member_name_field(
 
 smt_solver_baset::smt_solver_baset(
   const namespacet &_ns,
-  const optionst &_options)
-  : ctx_level(0), ns(_ns), options(_options)
+  const optionst &_options,
+  std::unique_ptr<camada::SMTSolver> _solver,
+  bool _oneshot,
+  bool _streams_script,
+  std::string _oneshot_prog,
+  std::string _formula_path)
+  : ctx_level(0),
+    ns(_ns),
+    options(_options),
+    solver(std::move(_solver)),
+    oneshot(_oneshot),
+    streams_script(_streams_script),
+    oneshot_prog(std::move(_oneshot_prog)),
+    formula_path(std::move(_formula_path))
 {
   int_encoding = options.get_bool_option("int-encoding");
   ir_ieee = options.get_bool_option("ir-ieee");
@@ -121,20 +134,19 @@ smt_solver_baset::smt_solver_baset(
   ptr_foo_inited = false;
 }
 
-smt_solver_baset::~smt_solver_baset() = default;
+smt_solver_baset::~smt_solver_baset()
+{
+  /* A temporary formula file is ours to remove; a --output path is the user's.
+   * The signal/timeout paths skip this via _exit(), which is why
+   * choose_formula_path() also registers the temp for cleanup there. */
+  if (oneshot && oneshot_options::uses_temp_formula(options))
+    remove(formula_path.c_str());
+}
 
 void smt_solver_baset::set_ra_conv(ra_apit *iface)
 {
   assert(ra_api == NULL && "set_ra_conv should only be called once");
   ra_api = iface;
-}
-
-void smt_solver_baset::delete_all_asts()
-{
-  // Erase all the remaining asts in the live ast vector.
-  for (auto *ast : live_asts)
-    delete ast;
-  live_asts.clear();
 }
 
 void smt_solver_baset::smt_post_init()
@@ -175,9 +187,8 @@ void smt_solver_baset::push_ctx()
   pointer_logic.push_back(pointer_logic.back());
   renumber_map.push_back(renumber_map.back());
 
-  live_asts_sizes.push_back(live_asts.size());
-
   ctx_level++;
+  solver->push();
 }
 
 /** Replace all occurrences of the named symbol @p lhs with @p replacement
@@ -251,28 +262,25 @@ void smt_solver_baset::pop_ctx()
 
   ctx_level--;
 
-  // Go through all the asts created since the last push and delete them.
-
-  for (unsigned int idx = live_asts_sizes.back(); idx < live_asts.size(); idx++)
-    delete live_asts[idx];
-
-  // And reset the storage back to that point.
-  live_asts.resize(live_asts_sizes.back());
-  live_asts_sizes.pop_back();
+  /* Expressions created since the matching push are not freed here: camada's
+   * arena owns them for the solver's lifetime, and its own pop deliberately
+   * keeps them (it re-asserts lazy axioms about them at the outer level). */
 
   pop_array_ctx();
   pop_tuple_ctx();
+
+  solver->pop();
 }
 
 smt_astt smt_solver_baset::invert_ast(smt_astt a)
 {
-  assert(a->sort->isBoolSort());
+  assert(a->Sort->isBoolSort());
   return mk_not(a);
 }
 
 smt_astt smt_solver_baset::imply_ast(smt_astt a, smt_astt b)
 {
-  assert(a->sort->isBoolSort() && b->sort->isBoolSort());
+  assert(a->Sort->isBoolSort() && b->Sort->isBoolSort());
   return mk_implies(a, b);
 }
 
@@ -341,7 +349,7 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
 
   smt_astt side1 = convert_ast(eq.side_1); // LHS
   smt_astt side2 = convert_ast(eq.side_2); // RHS
-  side2->assign(this, side1);
+  ast_assign(side2, side1);
 
   // Put that into the smt cache, thus preserving the value of the assigned
   // symbols. IMPORTANT: the cache is now a fundamental part of how some
@@ -915,8 +923,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       }
       if (!interval_lifted)
       {
-        smt_astt pos_result =
-          apply_ieee754_semantics(sqrt_pos, fbv_type, nullptr, rounding_mode);
+        smt_astt pos_result = apply_ieee754_semantics(
+          sqrt_pos, fbv_type, smt_astt{}, rounding_mode);
         a = mk_ite(op_nonneg, pos_result, sqrt_nan);
       }
       if (ir_ieee)
@@ -984,7 +992,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
         "Assigned tuple member has type mismatch");
 #endif
 
-      a = srcval->update(this, convert_ast(with.update_value), idx);
+      a = ast_update(srcval, convert_ast(with.update_value), idx);
     }
     else if (is_union_type(expr))
     {
@@ -1036,8 +1044,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::same_object_id:
   {
     // Two projects, then comparison.
-    args[0] = args[0]->project(this, 0);
-    args[1] = args[1]->project(this, 0);
+    args[0] = ast_project(args[0], 0);
+    args[1] = ast_project(args[1], 0);
     a = mk_eq(args[0], args[1]);
     break;
   }
@@ -1049,7 +1057,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     while (is_typecast2t(*ptr) && !is_pointer_type(*ptr))
       ptr = &to_typecast2t(*ptr).from;
 
-    a = convert_ast(*ptr)->project(this, 1);
+    a = ast_project(convert_ast(*ptr), 1);
     break;
   }
   case expr2t::pointer_object_id:
@@ -1060,7 +1068,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
       ptr = &to_typecast2t(*ptr).from;
 
-    a = convert_ast(*ptr)->project(this, 0);
+    a = ast_project(convert_ast(*ptr), 0);
     break;
   }
   case expr2t::pointer_capability_id:
@@ -1072,7 +1080,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
       ptr = &to_typecast2t(*ptr).from;
 
-    a = convert_ast(*ptr)->project(this, 2);
+    a = ast_project(convert_ast(*ptr), 2);
     break;
   }
   case expr2t::typecast_id:
@@ -1163,7 +1171,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     args[0] = convert_ast(if_ref.cond);
     args[1] = convert_ast(if_ref.true_value);
     args[2] = convert_ast(if_ref.false_value);
-    a = args[1]->ite(this, args[0], args[2]);
+    a = mk_ite(args[0], args[1], args[2]);
     if (ir_ieee && is_floatbv_type(expr->type))
     {
       smt_astt np_t = ir_ieee_api->get_nan_pred(args[1]);
@@ -1289,7 +1297,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2) && !int_encoding)
       a = mk_smt_fpbv_eq(args[0], args[1]);
     else
-      a = args[0]->eq(this, args[1]);
+      a = ast_eq(args[0], args[1]);
     if (
       ir_ieee && int_encoding && is_floatbv_type(eq.side_1) &&
       is_floatbv_type(eq.side_2))
@@ -1308,7 +1316,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       !int_encoding)
       a = mk_smt_fpbv_eq(args[0], args[1]);
     else
-      a = args[0]->eq(this, args[1]);
+      a = ast_eq(args[0], args[1]);
     a = mk_not(a);
     if (
       ir_ieee && int_encoding && is_floatbv_type(neq.side_1) &&
@@ -1331,7 +1339,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     {
       // Raise 2^shift, then multiply first operand by that value. If it's
       // negative, what to do? FIXME.
-      smt_astt powval = int_shift_op_array->select(this, shl.side_2);
+      smt_astt powval = ast_select(int_shift_op_array, shl.side_2);
       args[1] = powval;
       a = mk_mul(args[0], args[1]);
     }
@@ -1356,7 +1364,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     {
       // Raise 2^shift, then divide first operand by that value. If it's
       // negative, I suspect the correct operation is to latch to -1,
-      smt_astt powval = int_shift_op_array->select(this, ashr.side_2);
+      smt_astt powval = ast_select(int_shift_op_array, ashr.side_2);
       args[1] = powval;
       a = mk_div(args[0], args[1]);
     }
@@ -1381,7 +1389,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     {
       // Raise 2^shift, then divide first operand by that value. If it's
       // negative, I suspect the correct operation is to latch to -1,
-      smt_astt powval = int_shift_op_array->select(this, lshr.side_2);
+      smt_astt powval = ast_select(int_shift_op_array, lshr.side_2);
       args[1] = powval;
       a = mk_div(args[0], args[1]);
     }
@@ -2162,9 +2170,7 @@ smt_astt smt_solver_baset::mk_fresh(
 
   if (s->isArraySort())
   {
-    assert(
-      array_subtype != nullptr &&
-      "Must call mk_fresh for arrays with a subtype");
+    assert(array_subtype && "Must call mk_fresh for arrays with a subtype");
     return mk_array_symbol(newname, s, array_subtype);
   }
 
@@ -2309,7 +2315,7 @@ smt_astt smt_solver_baset::convert_member(const expr2tc &expr)
     get_member_name_field(member.source_value->type, member.member);
 
   smt_astt src = convert_ast(member.source_value);
-  return src->project(this, idx);
+  return ast_project(src, idx);
 }
 
 smt_astt smt_solver_baset::round_real_to_int(smt_astt a)
@@ -2446,7 +2452,7 @@ smt_astt smt_solver_baset::round_fixedbv_to_int(
 smt_astt smt_solver_baset::make_bool_bit(smt_astt a)
 {
   assert(
-    a->sort->isBoolSort() &&
+    a->Sort->isBoolSort() &&
     "Wrong sort fed to "
     "smt_solver_baset::make_bool_bit");
   smt_astt one =
@@ -2459,8 +2465,8 @@ smt_astt smt_solver_baset::make_bool_bit(smt_astt a)
 smt_astt smt_solver_baset::make_bit_bool(smt_astt a)
 {
   assert(
-    ((!int_encoding && a->sort->isBVSort()) ||
-     (int_encoding && a->sort->isIntSort())) &&
+    ((!int_encoding && a->Sort->isBVSort()) ||
+     (int_encoding && a->Sort->isIntSort())) &&
     "Wrong sort fed to smt_solver_baset::make_bit_bool");
 
   smt_astt one =
@@ -2746,11 +2752,11 @@ smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
   if (is_constant_string2t(index.source_value))
   {
     smt_astt tmp = convert_ast(src_value);
-    return tmp->select(this, newidx);
+    return ast_select(tmp, newidx);
   }
 
   smt_astt a = convert_ast(src_value);
-  a = a->select(this, newidx);
+  a = ast_select(a, newidx);
 
   return a;
 }
@@ -2783,7 +2789,7 @@ smt_astt smt_solver_baset::convert_array_store(const expr2tc &expr)
   update = convert_ast(update_val);
 
   src = convert_ast(with.source_value);
-  return src->update(this, update, 0, newidx);
+  return ast_update(src, update, 0, newidx);
 }
 
 type2tc smt_solver_baset::flatten_array_type(const type2tc &type)
@@ -3495,7 +3501,7 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
 
   // Fetch the array bounds, if it's huge then assume this is a 1024 element
   // array. Then fetch all elements and formulate a constant_array.
-  size_t w = array->sort->getIndexSort()->getWidth();
+  size_t w = array->Sort->getIndexSort()->getWidth();
   if (w > 10)
     w = 10;
 
@@ -3585,7 +3591,7 @@ smt_astt smt_solver_baset::array_create(const expr2tc &expr)
     if (is_bool_type(members[i]->type) && !int_encoding && false)
       init = typecast2tc(unsignedbv_type2tc(1), init);
 
-    newsym_ast = newsym_ast->update(this, convert_ast(init), i);
+    newsym_ast = ast_update(newsym_ast, convert_ast(init), i);
   }
 
   return newsym_ast;
@@ -3767,80 +3773,26 @@ void smt_solver_baset::rewrite_ptrs_to_structs(type2tc &type)
   type->Foreach_subtype(delegate);
 }
 
-// Default behaviors for SMT AST's
+// Sort-directed operations. These dispatch on the operand's sort: a tuple and
+// an array need different encodings for the same source-level operation.
 
-void smt_ast::assign(smt_solver_baset *ctx, smt_astt sym) const
+void smt_solver_baset::ast_assign(smt_astt value, smt_astt sym)
 {
-  ctx->assert_ast(eq(ctx, sym));
+  assert_ast(ast_eq(value, sym));
 }
 
-smt_astt
-smt_ast::ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const
+smt_astt smt_solver_baset::ast_eq(smt_astt a, smt_astt b)
 {
-  return ctx->mk_ite(cond, this, falseop);
+  return mk_eq(a, b);
 }
 
-smt_astt smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const
-{
-  // Simple approach: this is a leaf piece of SMT, compute a basic equality.
-  return ctx->mk_eq(this, other);
-}
-
-smt_astt smt_ast::update(
-  smt_solver_baset *ctx,
-  smt_astt value,
-  unsigned int idx,
-  const expr2tc &idx_expr) const
-{
-  // If we're having an update applied to us, then the only valid situation
-  // this can occur in is if we're an array.
-  assert(sort->isArraySort());
-
-  // We're an array; just generate a 'with' operation.
-  expr2tc index;
-  if (is_nil_expr(idx_expr))
-  {
-    size_t dom_width = ctx->int_encoding ? config.ansi_c.int_width
-                                         : sort->getIndexSort()->getWidth();
-    index = constant_int2tc(unsignedbv_type2tc(dom_width), BigInt(idx));
-  }
-  else
-  {
-    index = idx_expr;
-  }
-
-  return ctx->mk_store(this, ctx->convert_ast(index), value);
-}
-
-smt_astt smt_ast::select(smt_solver_baset *ctx, const expr2tc &idx) const
+smt_astt smt_solver_baset::ast_select(smt_astt a, const expr2tc &idx)
 {
   assert(
-    sort->isArraySort() && "Select operation applied to non-array scalar AST");
+    a->Sort->isArraySort() &&
+    "Select operation applied to non-array scalar AST");
 
-  smt_astt args[2];
-  args[0] = this;
-  args[1] = ctx->convert_ast(idx);
-  return ctx->mk_select(args[0], args[1]);
-}
-
-smt_astt smt_ast::project(
-  smt_solver_baset *ctx [[maybe_unused]],
-  unsigned int idx [[maybe_unused]]) const
-{
-  log_error("Projecting from non-tuple based AST");
-  abort();
-}
-
-std::string smt_solver_baset::dump_smt()
-{
-  log_error("SMT dump not implemented for {}", solver_text());
-  abort();
-}
-
-void smt_solver_baset::print_model()
-{
-  log_error("SMT model printing not implemented for {}", solver_text());
-  abort();
+  return mk_select(a, convert_ast(idx));
 }
 
 tvt smt_solver_baset::l_get(smt_astt a)
@@ -3851,11 +3803,11 @@ tvt smt_solver_baset::l_get(smt_astt a)
   // recur across thousands of SSA steps during trace building and each
   // miss bottoms out in an O(formula) get_bool(), so this collapses
   // repeated queries to one solver call per distinct AST.
-  auto it = l_get_cache.find(a);
+  auto it = l_get_cache.find(a.get());
   if (it != l_get_cache.end())
     return it->second;
   tvt res = get_bool(a);
-  l_get_cache.emplace(a, res);
+  l_get_cache.emplace(a.get(), res);
   return res;
 }
 
@@ -3921,59 +3873,11 @@ expr2tc smt_solver_baset::get_by_value(const type2tc &type, BigInt value)
   abort();
 }
 
-smt_sortt smt_solver_baset::mk_bool_sort()
-{
-  log_error("Chosen solver doesn't support boolean sorts");
-  abort();
-}
-
-smt_sortt smt_solver_baset::mk_real_sort()
-{
-  log_error("Chosen solver doesn't support real sorts");
-  abort();
-}
-
-smt_sortt smt_solver_baset::mk_int_sort()
-{
-  log_error("Chosen solver doesn't support integer sorts");
-  abort();
-}
-
-smt_sortt smt_solver_baset::mk_bv_sort(std::size_t)
-{
-  log_error("Chosen solver doesn't support bit vector sorts");
-  abort();
-}
-
-smt_sortt smt_solver_baset::mk_fbv_sort(std::size_t)
-{
-  log_error("Chosen solver doesn't support bit vector sorts");
-  abort();
-}
-
-smt_sortt smt_solver_baset::mk_array_sort(smt_sortt, smt_sortt)
-{
-  log_error("Chosen solver doesn't support array sorts");
-  abort();
-}
-
-smt_sortt smt_solver_baset::mk_bvfp_sort(std::size_t, std::size_t)
-{
-  log_error("Chosen solver doesn't support bit vector sorts");
-  abort();
-}
-
-smt_sortt smt_solver_baset::mk_bvfp_rm_sort()
-{
-  log_error("Chosen solver doesn't support bit vector sorts");
-  abort();
-}
-
 smt_astt smt_solver_baset::mk_bvredor(smt_astt op)
 {
   // bvredor = bvnot(bvcomp(x,0)) ? bv1 : bv0;
 
-  smt_astt comp = mk_eq(op, mk_smt_bv(BigInt(0), op->sort->getWidth()));
+  smt_astt comp = mk_eq(op, mk_smt_bv(BigInt(0), op->Sort->getWidth()));
 
   smt_astt ncomp = mk_not(comp);
 
@@ -3986,296 +3890,10 @@ smt_astt smt_solver_baset::mk_bvredand(smt_astt op)
   // bvredand = bvcomp(x,-1) ? bv1 : bv0;
 
   smt_astt comp =
-    mk_eq(op, mk_smt_bv(BigInt(ULLONG_MAX), op->sort->getWidth()));
+    mk_eq(op, mk_smt_bv(BigInt(ULLONG_MAX), op->Sort->getWidth()));
 
   // If it's true, return 1. Return 0, othewise.
   return mk_ite(comp, mk_smt_bv(1, 1), mk_smt_bv(BigInt(0), 1));
-}
-
-smt_astt smt_solver_baset::mk_add(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvadd(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_sub(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvsub(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_mul(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvmul(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_mod(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvsmod(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvumod(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_div(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvsdiv(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvudiv(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_shl(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvshl(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvashr(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvlshr(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_neg(smt_astt a)
-{
-  (void)a;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvneg(smt_astt a)
-{
-  (void)a;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvnot(smt_astt a)
-{
-  (void)a;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvxor(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvor(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvand(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_implies(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_xor(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_or(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_and(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_not(smt_astt a)
-{
-  (void)a;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_lt(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvult(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvslt(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_gt(smt_astt a, smt_astt b)
-{
-  assert(a->sort->isArithSort());
-  assert(b->sort->isArithSort());
-  return mk_lt(b, a);
-}
-
-smt_astt smt_solver_baset::mk_bvugt(smt_astt a, smt_astt b)
-{
-  assert(!a->sort->isArithSort());
-  assert(!b->sort->isArithSort());
-  assert(a->sort->getWidth() == b->sort->getWidth());
-  return mk_not(mk_bvule(a, b));
-}
-
-smt_astt smt_solver_baset::mk_bvsgt(smt_astt a, smt_astt b)
-{
-  assert(!a->sort->isArithSort());
-  assert(!b->sort->isArithSort());
-  assert(a->sort->getWidth() == b->sort->getWidth());
-  return mk_not(mk_bvsle(a, b));
-}
-
-smt_astt smt_solver_baset::mk_le(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvule(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_bvsle(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_ge(smt_astt a, smt_astt b)
-{
-  assert(!a->sort->isArithSort());
-  assert(!b->sort->isArithSort());
-  assert(a->sort->getWidth() == b->sort->getWidth());
-  return mk_not(mk_lt(a, b));
-}
-
-smt_astt smt_solver_baset::mk_bvuge(smt_astt a, smt_astt b)
-{
-  assert(!a->sort->isArithSort());
-  assert(!b->sort->isArithSort());
-  assert(a->sort->getWidth() == b->sort->getWidth());
-  return mk_not(mk_bvult(a, b));
-}
-
-smt_astt smt_solver_baset::mk_bvsge(smt_astt a, smt_astt b)
-{
-  assert(!a->sort->isArithSort());
-  assert(!b->sort->isArithSort());
-  assert(a->sort->getWidth() == b->sort->getWidth());
-  return mk_not(mk_bvslt(a, b));
-}
-
-smt_astt smt_solver_baset::mk_eq(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_neq(smt_astt a, smt_astt b)
-{
-  return mk_not(mk_eq(a, b));
 }
 
 smt_astt smt_solver_baset::mk_smt_uninterpreted_function(
@@ -4314,37 +3932,4 @@ smt_astt smt_solver_baset::mk_smt_uninterpreted_function(
 
   history.push_back({args, result, ctx_level});
   return result;
-}
-
-smt_astt smt_solver_baset::mk_store(smt_astt a, smt_astt b, smt_astt c)
-{
-  (void)a;
-  (void)b;
-  (void)c;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_select(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_real2int(smt_astt a)
-{
-  (void)a;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_int2real(smt_astt a)
-{
-  (void)a;
-  abort();
-}
-
-smt_astt smt_solver_baset::mk_isint(smt_astt a)
-{
-  (void)a;
-  abort();
 }

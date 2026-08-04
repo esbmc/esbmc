@@ -33,18 +33,6 @@
 
 namespace
 {
-enum class camada_backendt
-{
-  z3,
-  cvc5,
-  mathsat,
-  yices,
-  bitwuzla,
-  smtlib
-};
-
-using camada_expr = solver_smt_ast<camada::SMTExprRef>;
-
 /* A model value that could not be read. `oneshot_name` is set when the model
  * comes from an external one-shot model solver: there, a failed read means
  * that process can no longer answer, and returning a default would invent
@@ -70,20 +58,6 @@ static std::optional<T> unwrap_model_result(
   log_warning("Failed to extract {}: {}", what, result.error().Message);
   return std::nullopt;
 }
-
-class camada_tuple_ast : public camada_expr
-{
-public:
-  using camada_expr::camada_expr;
-
-  smt_astt update(
-    smt_solver_baset *ctx,
-    smt_astt value,
-    unsigned int idx,
-    const expr2tc &idx_expr) const override;
-
-  smt_astt project(smt_solver_baset *ctx, unsigned int elem) const override;
-};
 
 #if CAMADA_HAVE_Z3
 static void z3_error_handler(Z3_context c, Z3_error_code e)
@@ -513,1244 +487,1099 @@ camada::SMTSolverRef create_esbmc_yices_solver(const optionst &options)
 #endif
 }
 
-class camada_convt : public smt_solver_baset
+/* Sort widths, read straight from camada rather than from a copy kept in the
+ * camada. Only a native FP sort carries FP structure there; mk_bvfp_sort
+ * builds a plain bit-vector, whose significand and exponent are never read
+ * back. */
+static unsigned sort_fp_ew(smt_sortt s)
 {
-  friend class camada_tuple_ast;
-
-public:
-  explicit camada_convt(
-    const namespacet &ns,
-    const optionst &options,
-    camada_backendt backend,
-    bool oneshot = false)
-    : smt_solver_baset(ns, options), backend(backend), oneshot(oneshot)
-  {
-    switch (backend)
-    {
-    case camada_backendt::z3:
-      solver = create_esbmc_z3_solver(options);
-      break;
-    case camada_backendt::cvc5:
-      solver = camada::createCVC5Solver(
-        camada::UnsatAssumptionsMode::Off, pick_array_encoding(options));
-      break;
-    case camada_backendt::mathsat:
-      solver = create_esbmc_mathsat_solver(options);
-      break;
-    case camada_backendt::yices:
-      solver = create_esbmc_yices_solver(options);
-      break;
-    case camada_backendt::bitwuzla:
-#if CAMADA_HAVE_BITWUZLA
-      solver =
-        std::make_unique<esbmc_bitwuzla_solver>(pick_array_encoding(options));
-#else
-      unsupported("Bitwuzla support in Camada");
-#endif
-      break;
-    case camada_backendt::smtlib:
-      if (!oneshot)
-      {
-        solver = create_esbmc_smtlib_solver(options);
-        break;
-      }
-      oneshot_prog = options.get_option("smtlib-oneshot-prog");
-      formula_path = oneshot_options::choose_formula_path(options, "smtlib");
-      /* An explicit --smtlib-logic is the user telling us what the external
-       * solver accepts; otherwise follow the encoding. */
-      const std::string logic = options.get_option("smtlib-logic");
-      solver = create_esbmc_oneshot_solver(
-        options,
-        "smtlib",
-        formula_path,
-        oneshot_prog,
-        logic.empty() ? pick_logic(options, false) : logic);
-      break;
-    }
-  }
-
-  void push_ctx() override
-  {
-    smt_solver_baset::push_ctx();
-    solver->push();
-  }
-
-  void pop_ctx() override
-  {
-    smt_solver_baset::pop_ctx();
-    solver->pop();
-  }
-
-  smt_resultt dec_solve() override
-  {
-    if (oneshot)
-      return oneshot_dec_solve();
-
-    pre_solve();
-
-    switch (solver->check())
-    {
-    case camada::checkResult::SAT:
-      return P_SATISFIABLE;
-    case camada::checkResult::UNSAT:
-      return P_UNSATISFIABLE;
-    case camada::checkResult::UNKNOWN:
-      return P_ERROR;
-    }
-    std::unreachable();
-  }
-
-  /* The one-shot solver answers with a verdict and then exits, so it cannot
-   * serve (get-value): a satisfiable formula needs the parallel local model
-   * solver to build a counterexample. Camada reports both verdicts and the
-   * run's diagnostics; the policy and the messages stay here. */
-  smt_resultt oneshot_dec_solve()
-  {
-    if (solved)
-    {
-      log_error(
-        "the {} backend supports a single (check-sat) query per run; "
-        "incremental strategies are not supported",
-        "smtlib");
-      abort();
-    }
-    solved = true;
-
-    pre_solve();
-
-    auto *smtlib = static_cast<camada::SMTLIBSolver *>(solver.get());
-    const camada::checkResult res = smtlib->check();
-
-    if (res != camada::checkResult::SAT)
-    {
-      if (res != camada::checkResult::UNKNOWN)
-        return P_UNSATISFIABLE;
-
-      /* Camada answers UNKNOWN for three distinct outcomes; they are worth
-       * different reports, and the exit status tells them apart. */
-      const camada::OneShotDiagnostics &d = smtlib->oneShotDiagnostics();
-      const bool signalled = d.ExitStatus.compare(0, 7, "signal ") == 0;
-
-      if (signalled)
-        /* A verdict from a solver that died on a signal (crash, OOM kill, a
-         * wrapper tearing the job down) cannot be trusted; camada already
-         * discarded it. Non-zero exit codes stay accepted -- SAT-competition
-         * style solvers exit 10/20. */
-        log_error(
-          "{}: solver command \"{}\" died with {}; discarding its verdict",
-          "smtlib",
-          d.Command,
-          d.ExitStatus);
-      else if (tail_verdict(d.OutputTail) == camada::checkResult::UNKNOWN)
-        /* The solver decided nothing and said so. */
-        log_error("{}: solver returned unknown", "smtlib");
-      else
-        log_error(
-          "{}: no sat/unsat verdict in the output of \"{}\" ({}); last output "
-          "lines:\n{}",
-          "smtlib",
-          d.Command,
-          d.ExitStatus,
-          d.OutputTail);
-
-      return P_ERROR;
-    }
-
-    /* Check for divergence first: camada drops a model solver that disagrees
-     * (it has no model to serve), so this must be distinguished from one that
-     * never started or died -- otherwise a wrong-answer bug in the one-shot
-     * solver is reported as a missing model. */
-    const std::optional<camada::checkResult> model =
-      smtlib->oneShotModelVerdict();
-    if (model && *model != camada::checkResult::SAT)
-    {
-      log_error(
-        "{}: {} reported sat but the local model solver did not; refusing to "
-        "build a counterexample from a diverging model",
-        "smtlib",
-        oneshot_prog);
-      abort();
-    }
-
-    /* A solver that agreed and then went away is not "unavailable": the
-     * verdict stands, and the readout paths report the death via
-     * external_process_died when the counterexample is built. */
-    if (
-      !smtlib->oneShotModelSolverLive() &&
-      smtlib->oneShotModelVerdict() != camada::checkResult::SAT)
-    {
-      if (options.get_bool_option("result-only"))
-        return P_SATISFIABLE;
-      if (options.get_option("smtlib-oneshot-model-prog").empty())
-        log_error(
-          "{}: formula is satisfiable, but building the counterexample "
-          "requires a local interactive SMT-LIB2 solver; re-run with "
-          "--smtlib-oneshot-model-prog <cmd> (e.g. \"z3 -in\") or with "
-          "--result-only",
-          "smtlib");
-      else
-        log_error(
-          "{}: the local model solver is unavailable; cannot build a "
-          "counterexample",
-          "smtlib");
-      return P_ERROR;
-    }
-
-    return P_SATISFIABLE;
-  }
-
-  void assert_ast(smt_astt a) override
-  {
-    solver->addConstraint(to_solver_smt_ast<camada_expr>(a)->a);
-  }
-
-  /* Non-null only when the model comes from an external one-shot model
-   * solver, whose disappearance must be reported rather than defaulted. */
-  const char *oneshot_label() const
-  {
-    return oneshot ? "smtlib" : nullptr;
-  }
-
-  tvt get_bool(smt_astt a) override
-  {
-    const auto value = expr(a);
-    const auto kind = value->getKind();
-    if (
-      kind == camada::SMTExprKind::Forall ||
-      kind == camada::SMTExprKind::Exists)
-    {
-      log_warning(
-        "Skipping concrete model extraction for quantified boolean term");
-      return tvt(tvt::TV_UNKNOWN);
-    }
-
-    std::string dump;
-    value->dump(dump);
-    if (
-      dump.find("(forall ") != std::string::npos ||
-      dump.find("(exists ") != std::string::npos)
-    {
-      log_warning(
-        "Skipping concrete model extraction for boolean term containing "
-        "quantifiers");
-      return tvt(tvt::TV_UNKNOWN);
-    }
-
-    auto result = unwrap_model_result(
-      solver->getBool(value), "boolean model value", oneshot_label());
-    if (!result)
-      return tvt(tvt::TV_UNKNOWN);
-
-    return tvt(*result);
-  }
-
-  BigInt get_bv(smt_astt a, bool is_signed) override
-  {
-    const auto exp = to_solver_smt_ast<camada_expr>(a)->a;
-    if (int_encoding)
-    {
-      if (exp->isRealSort())
-      {
-        auto result = unwrap_model_result(
-          solver->getRational(exp), "rational model value", oneshot_label());
-        if (!result)
-          return BigInt(0);
-
-        BigInt num = string2integer(result->first);
-        BigInt den = string2integer(result->second);
-        return num / den;
-      }
-
-      auto result = unwrap_model_result(
-        solver->getInt(exp), "integer model value", oneshot_label());
-      return result ? string2integer(*result) : BigInt(0);
-    }
-
-    auto result = unwrap_model_result(
-      solver->getBVInBin(exp), "bit-vector model value", oneshot_label());
-    return result ? binary2integer(*result, is_signed) : BigInt(0);
-  }
-
-  ieee_floatt get_fpbv(smt_astt a) override
-  {
-    auto model_result = unwrap_model_result(
-      solver->getFPInBin(to_solver_smt_ast<camada_expr>(a)->a),
-      "floating-point model value",
-      oneshot_label());
-    if (!model_result)
-      return ieee_floatt(
-        ieee_float_spect(sort_fp_sw(a->sort), sort_fp_ew(a->sort)));
-
-    std::string bits = *model_result;
-    const auto ew = sort_fp_ew(a->sort);
-    const auto sw = sort_fp_sw(a->sort);
-    ieee_floatt result(ieee_float_spect(sw, ew));
-    result.unpack(binary2integer(bits, false));
-    return result;
-  }
-
-  bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator) override
-  {
-    auto result = unwrap_model_result(
-      solver->getRational(to_solver_smt_ast<camada_expr>(a)->a),
-      "rational model value",
-      oneshot_label());
-    if (!result)
-      return false;
-
-    numerator = BigInt(result->first.c_str(), 10);
-    denominator = BigInt(result->second.c_str(), 10);
-    return true;
-  }
-
-  expr2tc get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
-    override
-  {
-    const auto *array_ast = to_solver_smt_ast<camada_expr>(array);
-    const auto index_sort = array_ast->a->Sort->getIndexSort();
-    auto idx = make_index_expr(index_sort, index);
-    auto elem = solver->getArrayElement(array_ast->a, idx);
-    auto elem_sort = convert_sort(subtype);
-    return get_by_ast(subtype, new camada_expr(this, elem, elem_sort));
-  }
-
-  smt_astt mk_add(smt_astt a, smt_astt b) override
-  {
-    return wrap_binary(a, b, [this](const auto &lhs, const auto &rhs) {
-      return lhs->isArithSort() ? solver->mkArithAdd(lhs, rhs)
-                                : solver->mkBVAdd(lhs, rhs);
-    });
-  }
-
-  smt_astt mk_bvadd(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVAdd(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_sub(smt_astt a, smt_astt b) override
-  {
-    return wrap_binary(a, b, [this](const auto &lhs, const auto &rhs) {
-      return lhs->isArithSort() ? solver->mkArithSub(lhs, rhs)
-                                : solver->mkBVSub(lhs, rhs);
-    });
-  }
-  smt_astt mk_bvsub(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVSub(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_mul(smt_astt a, smt_astt b) override
-  {
-    return wrap_binary(a, b, [this](const auto &lhs, const auto &rhs) {
-      return lhs->isArithSort() ? solver->mkArithMul(lhs, rhs)
-                                : solver->mkBVMul(lhs, rhs);
-    });
-  }
-  smt_astt mk_bvmul(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVMul(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_mod(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkArithMod(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_bvsmod(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVSRem(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_bvumod(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVURem(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_div(smt_astt a, smt_astt b) override
-  {
-    return wrap_binary(a, b, [this](const auto &lhs, const auto &rhs) {
-      return lhs->isArithSort() ? solver->mkArithDiv(lhs, rhs)
-                                : solver->mkBVUDiv(lhs, rhs);
-    });
-  }
-  smt_astt mk_bvsdiv(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVSDiv(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_bvudiv(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVUDiv(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_shl(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkArithShl(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_bvshl(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVShl(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_bvashr(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVAshr(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_bvlshr(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVLshr(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_neg(smt_astt a) override
-  {
-    auto ea = expr(a);
-    return wrap(
-      ea->isArithSort() ? solver->mkArithNeg(ea) : solver->mkBVNeg(ea),
-      a->sort);
-  }
-  smt_astt mk_bvneg(smt_astt a) override
-  {
-    return wrap(solver->mkBVNeg(expr(a)), a->sort);
-  }
-  smt_astt mk_bvnot(smt_astt a) override
-  {
-    if (int_encoding)
-      return int_bitwise_unary(
-        a, [this](const camada::SMTExprRef &v) { return solver->mkBVNot(v); });
-    return wrap(solver->mkBVNot(expr(a)), a->sort);
-  }
-  smt_astt mk_bvxor(smt_astt a, smt_astt b) override
-  {
-    if (int_encoding)
-      return int_bitwise_binary(
-        a, b, [this](const camada::SMTExprRef &l, const camada::SMTExprRef &r) {
-          return solver->mkBVXor(l, r);
-        });
-    return wrap(solver->mkBVXor(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_bvor(smt_astt a, smt_astt b) override
-  {
-    if (int_encoding)
-      return int_bitwise_binary(
-        a, b, [this](const camada::SMTExprRef &l, const camada::SMTExprRef &r) {
-          return solver->mkBVOr(l, r);
-        });
-    return wrap(solver->mkBVOr(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_bvand(smt_astt a, smt_astt b) override
-  {
-    if (int_encoding)
-      return int_bitwise_binary(
-        a, b, [this](const camada::SMTExprRef &l, const camada::SMTExprRef &r) {
-          return solver->mkBVAnd(l, r);
-        });
-    return wrap(solver->mkBVAnd(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_implies(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkImplies(expr(a), expr(b)), boolean_sort);
-  }
-  smt_astt mk_xor(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkXor(expr(a), expr(b)), boolean_sort);
-  }
-  smt_astt mk_or(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkOr(expr(a), expr(b)), boolean_sort);
-  }
-  smt_astt mk_and(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkAnd(expr(a), expr(b)), boolean_sort);
-  }
-  smt_astt mk_not(smt_astt a) override
-  {
-    return wrap(solver->mkNot(expr(a)), boolean_sort);
-  }
-  smt_astt mk_lt(smt_astt a, smt_astt b) override
-  {
-    return wrap_binary(
-      a,
-      b,
-      [this](const auto &lhs, const auto &rhs) {
-        return lhs->isArithSort() ? solver->mkArithLt(lhs, rhs)
-                                  : solver->mkBVUlt(lhs, rhs);
-      },
-      boolean_sort);
-  }
-  smt_astt mk_bvult(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVUlt(expr(a), expr(b)), boolean_sort);
-  }
-  smt_astt mk_bvslt(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVSlt(expr(a), expr(b)), boolean_sort);
-  }
-  smt_astt mk_gt(smt_astt a, smt_astt b) override
-  {
-    return wrap_binary(
-      a,
-      b,
-      [this](const auto &lhs, const auto &rhs) {
-        return lhs->isArithSort() ? solver->mkArithGt(lhs, rhs)
-                                  : solver->mkBVUgt(lhs, rhs);
-      },
-      boolean_sort);
-  }
-  smt_astt mk_bvugt(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVUgt(expr(a), expr(b)), boolean_sort);
-  }
-  smt_astt mk_bvsgt(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVSgt(expr(a), expr(b)), boolean_sort);
-  }
-  smt_astt mk_le(smt_astt a, smt_astt b) override
-  {
-    return wrap_binary(
-      a,
-      b,
-      [this](const auto &lhs, const auto &rhs) {
-        return lhs->isArithSort() ? solver->mkArithLe(lhs, rhs)
-                                  : solver->mkBVUle(lhs, rhs);
-      },
-      boolean_sort);
-  }
-  smt_astt mk_bvule(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVUle(expr(a), expr(b)), boolean_sort);
-  }
-  smt_astt mk_bvsle(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVSle(expr(a), expr(b)), boolean_sort);
-  }
-  smt_astt mk_ge(smt_astt a, smt_astt b) override
-  {
-    return wrap_binary(
-      a,
-      b,
-      [this](const auto &lhs, const auto &rhs) {
-        return lhs->isArithSort() ? solver->mkArithGe(lhs, rhs)
-                                  : solver->mkBVUge(lhs, rhs);
-      },
-      boolean_sort);
-  }
-  smt_astt mk_bvuge(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVUge(expr(a), expr(b)), boolean_sort);
-  }
-  smt_astt mk_bvsge(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkBVSge(expr(a), expr(b)), boolean_sort);
-  }
-  smt_astt mk_eq(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkEqual(expr(a), expr(b)), boolean_sort);
-  }
-  smt_astt mk_neq(smt_astt a, smt_astt b) override
-  {
-    return wrap(solver->mkNot(solver->mkEqual(expr(a), expr(b))), boolean_sort);
-  }
-  smt_astt mk_store(smt_astt a, smt_astt b, smt_astt c) override
-  {
-    return wrap(solver->mkArrayStore(expr(a), expr(b), expr(c)), a->sort);
-  }
-  smt_astt mk_select(smt_astt a, smt_astt b) override
-  {
-    return wrap(
-      solver->mkArraySelect(expr(a), expr(b)), a->sort->getElementSort());
-  }
-  smt_astt mk_real2int(smt_astt a) override
-  {
-    return wrap(solver->mkReal2Int(expr(a)), mk_int_sort());
-  }
-  smt_astt mk_int2real(smt_astt a) override
-  {
-    return wrap(solver->mkInt2Real(expr(a)), mk_real_sort());
-  }
-  smt_astt mk_isint(smt_astt a) override
-  {
-    return wrap(solver->mkIsInt(expr(a)), boolean_sort);
-  }
-
-  smt_sortt mk_bool_sort() override
-  {
-    return solver->mkBoolSort();
-  }
-
-  smt_sortt mk_real_sort() override
-  {
-    return solver->mkRealSort();
-  }
-
-  smt_sortt mk_int_sort() override
-  {
-    return solver->mkIntSort();
-  }
-
-  smt_sortt mk_bv_sort(std::size_t width) override
-  {
-    return solver->mkBVSort(width);
-  }
-
-  smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range) override
-  {
-    return solver->mkArraySort(domain, range);
-  }
-
-  smt_sortt mk_fbv_sort(std::size_t width) override
-  {
-    /* ESBMC's fixedbv lowers to a plain bit-vector for now; camada has an FXP
-     * sort but nothing here reads the distinction back. */
-    return solver->mkBVSort(width);
-  }
-
-  /* Sort widths, read straight from camada rather than from a copy kept in the
-   * camada. Only a native FP sort carries FP structure there; mk_bvfp_sort
-   * builds a plain bit-vector, whose significand and exponent are never read
-   * back. */
-  static unsigned sort_fp_ew(smt_sortt s)
-  {
-    return s->getFPExponentWidth();
-  }
-
-  static unsigned sort_fp_sw(smt_sortt s)
-  {
-    return s->getFPSignificandWidth();
-  }
-
-  smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw) override
-  {
-    auto sort = solver->mkBVSort(ew + sw + 1);
-    return sort;
-  }
-
-  smt_sortt mk_bvfp_rm_sort() override
-  {
-    auto sort = solver->mkBVSort(3);
-    return sort;
-  }
-
-  smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw) override
-  {
-    auto sort = solver->mkFPSort(ew, sw, fp_encoding());
-    return sort;
-  }
-
-  smt_sortt mk_fpbv_rm_sort() override
-  {
-    return solver->mkRMSort(fp_encoding());
-  }
-
-  smt_astt mk_smt_int(const BigInt &theint) override
-  {
-    return wrap(solver->mkInt(integer2string(theint, 10)), mk_int_sort());
-  }
-
-  smt_astt mk_smt_real(const std::string &str) override
-  {
-    return wrap(solver->mkReal(str), mk_real_sort());
-  }
-
-  smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override
-  {
-    return wrap(
-      solver->mkBVFromBin(integer2binary(theint, s->getWidth()), s), s);
-  }
-
-  smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override
-  {
-    std::string bits = integer2binary(thereal.pack(), thereal.spec.width());
-    return wrap(
-      solver->mkFPFromBin(bits, thereal.spec.e, fp_encoding()),
-      mk_fpbv_sort(thereal.spec.e, thereal.spec.f));
-  }
-
-  smt_astt mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw) override
-  {
-    return wrap(
-      solver->mkNaN(sgn, ew, sw, fp_encoding()), mk_fpbv_sort(ew, sw - 1));
-  }
-
-  smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw) override
-  {
-    return wrap(
-      solver->mkInf(sgn, ew, sw, fp_encoding()), mk_fpbv_sort(ew, sw - 1));
-  }
-
-  smt_astt mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm) override
-  {
-    auto sort = mk_fpbv_rm_sort();
-    return wrap(solver->mkRM(to_camada_rm(rm), fp_encoding()), sort);
-  }
-
-  smt_astt
-  mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm) override
-  {
-    return wrap(
-      solver->mkFPFMA(expr(v1), expr(v2), expr(v3), expr(rm)), v1->sort);
-  }
-
-  smt_astt
-  mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width) override
-  {
-    return wrap(solver->mkFPtoUBV(expr(from), width), mk_bv_sort(width));
-  }
-
-  smt_astt
-  mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width) override
-  {
-    return wrap(solver->mkFPtoSBV(expr(from), width), mk_bv_sort(width));
-  }
-
-  smt_astt mk_smt_typecast_from_fpbv_to_fpbv(
-    smt_astt from,
-    smt_sortt to,
-    smt_astt rm) override
-  {
-    return wrap(solver->mkFPtoFP(expr(from), to, expr(rm)), to);
-  }
-
-  smt_astt
-  mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm) override
-  {
-    return wrap(solver->mkUBVtoFP(expr(from), to, expr(rm)), to);
-  }
-
-  smt_astt
-  mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm) override
-  {
-    return wrap(solver->mkSBVtoFP(expr(from), to, expr(rm)), to);
-  }
-
-  smt_astt mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm) override
-  {
-    return wrap(solver->mkFPAdd(expr(lhs), expr(rhs), expr(rm)), lhs->sort);
-  }
-  smt_astt mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm) override
-  {
-    return wrap(solver->mkFPSub(expr(lhs), expr(rhs), expr(rm)), lhs->sort);
-  }
-  smt_astt mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm) override
-  {
-    return wrap(solver->mkFPMul(expr(lhs), expr(rhs), expr(rm)), lhs->sort);
-  }
-  smt_astt mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm) override
-  {
-    return wrap(solver->mkFPDiv(expr(lhs), expr(rhs), expr(rm)), lhs->sort);
-  }
-  smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm) override
-  {
-    return wrap(solver->mkFPtoIntegral(expr(from), expr(rm)), from->sort);
-  }
-  smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm) override
-  {
-    return wrap(solver->mkFPSqrt(expr(rd), expr(rm)), rd->sort);
-  }
-
-  smt_astt mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs) override
-  {
-    return wrap(solver->mkFPEqual(expr(lhs), expr(rhs)), boolean_sort);
-  }
-  smt_astt mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs) override
-  {
-    return wrap(solver->mkFPGt(expr(lhs), expr(rhs)), boolean_sort);
-  }
-  smt_astt mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs) override
-  {
-    return wrap(solver->mkFPLt(expr(lhs), expr(rhs)), boolean_sort);
-  }
-  smt_astt mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs) override
-  {
-    return wrap(solver->mkFPGe(expr(lhs), expr(rhs)), boolean_sort);
-  }
-  smt_astt mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs) override
-  {
-    return wrap(solver->mkFPLe(expr(lhs), expr(rhs)), boolean_sort);
-  }
-  smt_astt mk_smt_fpbv_is_nan(smt_astt op) override
-  {
-    return wrap(solver->mkFPIsNaN(expr(op)), boolean_sort);
-  }
-  smt_astt mk_smt_fpbv_is_inf(smt_astt op) override
-  {
-    return wrap(solver->mkFPIsInfinite(expr(op)), boolean_sort);
-  }
-  smt_astt mk_smt_fpbv_is_normal(smt_astt op) override
-  {
-    return wrap(solver->mkFPIsNormal(expr(op)), boolean_sort);
-  }
-  smt_astt mk_smt_fpbv_is_zero(smt_astt op) override
-  {
-    return wrap(solver->mkFPIsZero(expr(op)), boolean_sort);
-  }
-  smt_astt mk_smt_fpbv_is_negative(smt_astt op) override
-  {
-    return fp_sign_test(op, true);
-  }
-  smt_astt mk_smt_fpbv_is_positive(smt_astt op) override
-  {
-    return fp_sign_test(op, false);
-  }
-  smt_astt mk_smt_fpbv_abs(smt_astt op) override
-  {
-    return wrap(solver->mkFPAbs(expr(op)), op->sort);
-  }
-  smt_astt mk_smt_fpbv_neg(smt_astt op) override
-  {
-    return wrap(solver->mkFPNeg(expr(op)), op->sort);
-  }
-
-  smt_astt mk_from_bv_to_fp(smt_astt op, smt_sortt to) override
-  {
-    return wrap(solver->mkBVToIEEEFP(expr(op), to), to);
-  }
-
-  smt_astt mk_from_fp_to_bv(smt_astt op) override
-  {
-    auto to = mk_bvfp_sort(sort_fp_ew(op->sort), sort_fp_sw(op->sort));
-    return wrap(solver->mkIEEEFPToBV(expr(op)), to);
-  }
-
-  smt_astt mk_smt_bool(bool val) override
-  {
-    return wrap(solver->mkBool(val), boolean_sort);
-  }
-
-  smt_astt
-  mk_array_symbol(const std::string &name, smt_sortt sort, smt_sortt) override
-  {
-    return mk_smt_symbol(name, sort);
-  }
-
-  smt_astt mk_smt_symbol(const std::string &name, smt_sortt s) override
-  {
-    return wrap(solver->mkSymbol(name, s), s);
-  }
-
-  smt_sortt mk_struct_sort(const type2tc &type) override
-  {
-    if (is_array_type(type))
-    {
-      const array_type2t &arrtype = to_array_type(type);
-      smt_sortt subtypesort = convert_sort(arrtype.subtype);
-      smt_sortt d =
-        mk_int_bv_sort(make_array_domain_type(arrtype)->get_width());
-      return mk_array_sort(d, subtypesort);
-    }
-
-    const std::vector<type2tc> &members = struct_union_members(type);
-    std::vector<camada::SMTSortRef> field_sorts;
-    field_sorts.reserve(members.size());
-    for (const auto &member : members)
-      field_sorts.push_back(convert_sort(member));
-
-    return solver->mkTupleSort(field_sorts);
-  }
-
-  smt_astt mk_extract(smt_astt a, unsigned int high, unsigned int low) override
-  {
-    // If it's a floatbv, convert it to bv first so callers extracting bytes
-    // out of structs/unions containing floats encode against the IEEE bit
-    // pattern instead of triggering a sort mismatch.
-    if (a->sort->isFPSort())
-      a = mk_from_fp_to_bv(a);
-    return wrap(
-      solver->mkBVExtract(high, low, expr(a)), mk_bv_sort(high - low + 1));
-  }
-
-  smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override
-  {
-    return wrap(
-      solver->mkBVSignExt(topwidth, expr(a)),
-      mk_bv_sort(a->sort->getWidth() + topwidth));
-  }
-
-  smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override
-  {
-    return wrap(
-      solver->mkBVZeroExt(topwidth, expr(a)),
-      mk_bv_sort(a->sort->getWidth() + topwidth));
-  }
-
-  smt_astt mk_concat(smt_astt a, smt_astt b) override
-  {
-    return wrap(
-      solver->mkBVConcat(expr(a), expr(b)),
-      mk_bv_sort(a->sort->getWidth() + b->sort->getWidth()));
-  }
-
-  smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override
-  {
-    return wrap(solver->mkIte(expr(cond), expr(t), expr(f)), t->sort);
-  }
-
-  smt_astt tuple_create(const expr2tc &structdef) override
-  {
-    const constant_struct2t &strct = to_constant_struct2t(structdef);
-    std::vector<camada::SMTExprRef> fields;
-    fields.reserve(strct.datatype_members.size());
-    for (const auto &member : strct.datatype_members)
-      fields.push_back(expr(convert_ast(member)));
-
-    return wrap(solver->mkTuple(fields), mk_struct_sort(structdef->type));
-  }
-
-  smt_astt tuple_fresh(smt_sortt s, std::string name = "") override
-  {
-    if (name.empty())
-      name = mk_fresh_name("camada_convt::tuple_fresh");
-    return wrap(solver->mkSymbol(name, s), s);
-  }
-
-  smt_astt tuple_array_create(
-    const type2tc &array_type,
-    smt_astt *input_args,
-    bool const_array,
-    smt_sortt domain) override
-  {
-    const array_type2t &arrtype = to_array_type(array_type);
-    smt_sortt elem_sort = mk_struct_sort(arrtype.subtype);
-    smt_sortt array_sort = mk_array_sort(domain, elem_sort);
-
-    if (const_array)
-    {
-      return wrap(solver->mkArrayConst(domain, expr(*input_args)), array_sort);
-    }
-
-    assert(!is_nil_expr(arrtype.array_size));
-    assert(is_constant_int2t(arrtype.array_size));
-
-    auto result = solver->mkSymbol(
-      mk_fresh_name("camada_convt::tuple_array_create"), array_sort);
-    auto domain_sort = domain;
-
-    for (std::size_t i = 0;
-         i < to_constant_int2t(arrtype.array_size).as_ulong();
-         ++i)
-    {
-      result = solver->mkArrayStore(
-        result, make_index_expr(domain_sort, i), expr(input_args[i]));
-    }
-
-    return wrap(result, array_sort);
-  }
-
-  smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) override
-  {
-    if (name == "NULL")
-      return null_ptr_ast;
-
-    if (name == "INVALID")
-      return invalid_ptr_ast;
-
-    return mk_smt_symbol(name, s);
-  }
-
-  smt_astt mk_tuple_array_symbol(const expr2tc &expr) override
-  {
-    const symbol2t &sym = to_symbol2t(expr);
-    return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
-  }
-
-  smt_astt
-  tuple_array_of(const expr2tc &init_value, unsigned long domain_width) override
-  {
-    return convert_array_of(convert_ast(init_value), domain_width);
-  }
-
-  expr2tc tuple_get(const expr2tc &expr) override
-  {
-    return tuple_get(expr->type, convert_ast(expr));
-  }
-
-  expr2tc tuple_get(const type2tc &type, smt_astt sym) override
-  {
-    // Pointer types lower to pointer_struct in SMT; struct_union_members(type)
-    // would throw on the raw pointer type, so dispatch the pointer case first.
-    const std::vector<type2tc> &members =
-      struct_union_members(is_pointer_type(type) ? pointer_struct : type);
-
-    if (is_pointer_type(type))
-    {
-      smt_astt object =
-        wrap(solver->mkTupleSelect(expr(sym), 0), convert_sort(members[0]));
-      smt_astt offset =
-        wrap(solver->mkTupleSelect(expr(sym), 1), convert_sort(members[1]));
-
-      unsigned int num =
-        get_bv(object, is_signedbv_type(members[0])).to_uint64();
-      unsigned int offs =
-        get_bv(offset, is_signedbv_type(members[1])).to_uint64();
-      pointer_logict::pointert p(num, BigInt(offs));
-      return pointer_logic.back().pointer_expr(p, type);
-    }
-
-    std::vector<expr2tc> outmem;
-    outmem.reserve(members.size());
-    for (std::size_t i = 0; i < members.size(); ++i)
-    {
-      outmem.push_back(get_by_ast(
-        members[i],
-        wrap(solver->mkTupleSelect(expr(sym), i), convert_sort(members[i]))));
-    }
-
-    return constant_struct2tc(type, std::move(outmem));
-  }
-
-  expr2tc tuple_get_array_elem(
-    smt_astt array,
-    uint64_t index,
-    const type2tc &subtype) override
-  {
-    return get_array_elem(array, index, get_flattened_array_subtype(subtype));
-  }
-
-  smt_astt
-  convert_array_of(smt_astt init_val, unsigned long domain_width) override
-  {
-    auto idx_sort = int_encoding
-                      ? solver->mkIntSort()
-                      : solver->mkBVSort(domain_width == 0 ? 1 : domain_width);
-    auto value = solver->mkArrayConst(idx_sort, expr(init_val));
-    return wrap(value, value->Sort);
-  }
-
-  ~camada_convt() override
-  {
-    /* A temporary formula file is ours to remove; a --output path is the
-     * user's. The signal/timeout paths skip this via _exit(), which is why
-     * choose_formula_path() also registers the temp for cleanup there. */
-    if (oneshot && oneshot_options::uses_temp_formula(options))
-      remove(formula_path.c_str());
-  }
-
-  const std::string solver_text() override
-  {
-    if (oneshot)
-      return "one-shot '" + oneshot_prog + "'";
-    return solver->getSolverNameAndVersion();
-  }
-
-  std::string dump_smt() override
-  {
-    /* Camada's SMT-LIB backend streams the script to its sink as it is built
-     * rather than buffering it, so there is nothing to hand back. Complete the
-     * script with the (check-sat) that --smt-formula-only never reaches via
-     * dec_solve() -- in write-only mode check() just emits it and answers
-     * UNKNOWN -- then return empty so bmc.cpp does not reopen the same path
-     * and overwrite what camada wrote (issue #6059). */
-    if (backend == camada_backendt::smtlib && !oneshot)
-    {
-      solver->check();
-      const std::string path = options.get_option("output");
-      if (path.empty() || path == "-")
-        log_status("SMT formula written to standard output");
-      else
-        log_status("SMT formula written to output file {}", path);
-      return "";
-    }
-
-    if (oneshot)
-    {
-      /* Under --smt-formula-only no solve follows, so close the script here;
-       * the solver is write-only in that mode, so check() only emits the
-       * trailing (check-sat). Under --smt-formula-too our dec_solve() emits
-       * it instead: a second one would hand the external solver a script
-       * containing two. Either way camada already wrote the formula, so
-       * return empty to keep bmc.cpp from overwriting it (issue #6059). */
-      if (options.get_bool_option("smt-formula-only"))
-      {
-        solver->check();
-        if (formula_path == "-")
-          log_status("SMT formula written to standard output");
-        else
-          log_status("SMT formula written to output file {}", formula_path);
-        return "";
-      }
-
-      log_status("SMT formula written to {}", formula_path);
-      return "";
-    }
-
-    std::string smt_formula;
-    solver->dump(smt_formula);
-    return wrap_smtlib_dump(std::move(smt_formula));
-  }
-
-  void print_model() override
-  {
-    solver->dumpModel();
-  }
-
-  smt_astt mk_quantifier(
-    bool is_forall,
-    std::vector<smt_astt> lhs,
-    smt_astt rhs) override
-  {
-    std::vector<camada::SMTExprRef> vars;
-    vars.reserve(lhs.size());
-    for (const auto &var : lhs)
-      vars.push_back(expr(var));
-
-    auto q = is_forall ? solver->mkForall(vars, expr(rhs))
-                       : solver->mkExists(vars, expr(rhs));
-    return wrap(q, boolean_sort);
-  }
-
-private:
-  std::unique_ptr<camada::SMTSolver> solver;
-  const camada_backendt backend;
-  /* Set when the SMT-LIB backend drives an external one-shot program. */
-  const bool oneshot = false;
-  std::string oneshot_prog;
-  std::string formula_path;
-  bool solved = false;
-
-  static camada::SMTExprRef expr(smt_astt a)
-  {
-    return to_solver_smt_ast<camada_expr>(a)->a;
-  }
-
-  /* --fp2bv asks for floating-point encoded as bit-vectors, which is exactly
-   * camada's FPEncoding::BV; let it bit-blast rather than swapping in ESBMC's
-   * own software lowering. Keyed off fp2bv, not floatbv: the latter is set by
-   * default for anything that is not --fixedbv, so reading it made every run
-   * bit-blast and native FP unreachable. */
-  camada::FPEncoding fp_encoding() const
-  {
-    return options.get_bool_option("fp2bv") ? camada::FPEncoding::BV
-                                            : camada::FPEncoding::Native;
-  }
-
-  /* SMT-LIB's Int/Real theory has no bitwise operations, but ESBMC still
-   * routes C's &/|/^/~ through the mk_bv* entry points in integer mode (see
-   * the bitand_id case in smt_solver.cpp). Bridge by converting to a
-   * bit-vector of the signed word width, applying the bit-vector operation,
-   * and converting back. */
-  template <typename Fn>
-  smt_astt int_bitwise_unary(smt_astt a, Fn &&op)
-  {
-    const unsigned width = signed_size_type2()->get_width();
-    auto a_bv = solver->mkInt2BV(width, expr(a));
-    return wrap(solver->mkBV2Int(op(a_bv), true), mk_int_sort());
-  }
-
-  template <typename Fn>
-  smt_astt int_bitwise_binary(smt_astt a, smt_astt b, Fn &&op)
-  {
-    const unsigned width = signed_size_type2()->get_width();
-    auto a_bv = solver->mkInt2BV(width, expr(a));
-    auto b_bv = solver->mkInt2BV(width, expr(b));
-    return wrap(solver->mkBV2Int(op(a_bv, b_bv), true), mk_int_sort());
-  }
-
-  smt_astt wrap(const camada::SMTExprRef &value, smt_sortt sort)
-  {
-    if (sort->isTupleSort())
-      return new camada_tuple_ast(this, value, sort);
-    return new camada_expr(this, value, sort);
-  }
-
-  template <typename Fn>
-  smt_astt wrap_binary(smt_astt a, smt_astt b, Fn &&fn, smt_sortt sort = {})
-  {
-    if (!sort)
-      sort = a->sort;
-    return wrap(fn(expr(a), expr(b)), sort);
-  }
-
-  camada::SMTExprRef
-  make_index_expr(const camada::SMTSortRef &sort, uint64_t index)
-  {
-    if (sort->isBVSort())
-      return solver->mkBVFromDec(static_cast<int64_t>(index), sort);
-    if (sort->isIntSort())
-      return solver->mkInt(static_cast<int64_t>(index));
-    if (sort->isRealSort())
-      return solver->mkReal(static_cast<int64_t>(index));
-    unsupported("array index sort");
-  }
-
-  smt_astt fp_sign_test(smt_astt op, bool negative)
-  {
-    auto as_bv = solver->mkIEEEFPToBV(expr(op));
-    auto sign = solver->mkBVExtract(
-      op->sort->getWidth() - 1, op->sort->getWidth() - 1, as_bv);
-    auto expected = solver->mkBVFromDec(negative ? 1 : 0, 1);
-    return wrap(solver->mkEqual(sign, expected), boolean_sort);
-  }
-};
-
-smt_astt camada_tuple_ast::update(
-  smt_solver_baset *ctx,
-  smt_astt value,
-  unsigned int idx,
-  const expr2tc &idx_expr) const
-{
-  if (sort->isArraySort())
-    return smt_ast::update(ctx, value, idx, idx_expr);
-
-  assert(sort->isTupleSort());
-  assert(is_nil_expr(idx_expr));
-
-  auto *cam_ctx = static_cast<camada_convt *>(ctx);
-  const std::size_t nfields = sort->getTupleElementSorts().size();
-  std::vector<camada::SMTExprRef> fields;
-  fields.reserve(nfields);
-  for (std::size_t i = 0; i < nfields; ++i)
-  {
-    if (i == idx)
-      fields.push_back(to_solver_smt_ast<camada_expr>(value)->a);
-    else
-      fields.push_back(cam_ctx->solver->mkTupleSelect(a, i));
-  }
-
-  return cam_ctx->wrap(cam_ctx->solver->mkTuple(fields), sort);
+  return s->getFPExponentWidth();
 }
 
-smt_astt
-camada_tuple_ast::project(smt_solver_baset *ctx, unsigned int elem) const
+static unsigned sort_fp_sw(smt_sortt s)
 {
-  auto *cam_ctx = static_cast<camada_convt *>(ctx);
-  const std::vector<camada::SMTSortRef> &members = sort->getTupleElementSorts();
-  assert(elem < members.size());
-  return cam_ctx->wrap(cam_ctx->solver->mkTupleSelect(a, elem), members[elem]);
-}
-
-smt_solver_baset *create_camada_solver(
-  camada_backendt backend,
-  const optionst &options,
-  const namespacet &ns,
-  bool oneshot = false)
-{
-  auto *solver = new camada_convt(ns, options, backend, oneshot);
-  /* Camada encodes tuples and arrays itself: natively where the backend has
-   * the theory, and lowered to per-field BV/Bool symbols or Ackermann
-   * congruence axioms where it does not (SMTSolverImpl dispatches on
-   * nativeTupleSupport()). So the backend always serves both interfaces. */
-  return solver;
+  return s->getFPSignificandWidth();
 }
 
 } // namespace
 
+smt_resultt smt_solver_baset::dec_solve()
+{
+  if (oneshot)
+    return oneshot_dec_solve();
+
+  pre_solve();
+
+  switch (solver->check())
+  {
+  case camada::checkResult::SAT:
+    return P_SATISFIABLE;
+  case camada::checkResult::UNSAT:
+    return P_UNSATISFIABLE;
+  case camada::checkResult::UNKNOWN:
+    return P_ERROR;
+  }
+  std::unreachable();
+}
+
+/* The one-shot solver answers with a verdict and then exits, so it cannot
+ * serve (get-value): a satisfiable formula needs the parallel local model
+ * solver to build a counterexample. Camada reports both verdicts and the
+ * run's diagnostics; the policy and the messages stay here. */
+smt_resultt smt_solver_baset::oneshot_dec_solve()
+{
+  if (solved)
+  {
+    log_error(
+      "the {} backend supports a single (check-sat) query per run; "
+      "incremental strategies are not supported",
+      "smtlib");
+    abort();
+  }
+  solved = true;
+
+  pre_solve();
+
+  auto *smtlib = static_cast<camada::SMTLIBSolver *>(solver.get());
+  const camada::checkResult res = smtlib->check();
+
+  if (res != camada::checkResult::SAT)
+  {
+    if (res != camada::checkResult::UNKNOWN)
+      return P_UNSATISFIABLE;
+
+    /* Camada answers UNKNOWN for three distinct outcomes; they are worth
+     * different reports, and the exit status tells them apart. */
+    const camada::OneShotDiagnostics &d = smtlib->oneShotDiagnostics();
+    const bool signalled = d.ExitStatus.compare(0, 7, "signal ") == 0;
+
+    if (signalled)
+      /* A verdict from a solver that died on a signal (crash, OOM kill, a
+       * wrapper tearing the job down) cannot be trusted; camada already
+       * discarded it. Non-zero exit codes stay accepted -- SAT-competition
+       * style solvers exit 10/20. */
+      log_error(
+        "{}: solver command \"{}\" died with {}; discarding its verdict",
+        "smtlib",
+        d.Command,
+        d.ExitStatus);
+    else if (tail_verdict(d.OutputTail) == camada::checkResult::UNKNOWN)
+      /* The solver decided nothing and said so. */
+      log_error("{}: solver returned unknown", "smtlib");
+    else
+      log_error(
+        "{}: no sat/unsat verdict in the output of \"{}\" ({}); last output "
+        "lines:\n{}",
+        "smtlib",
+        d.Command,
+        d.ExitStatus,
+        d.OutputTail);
+
+    return P_ERROR;
+  }
+
+  /* Check for divergence first: camada drops a model solver that disagrees
+   * (it has no model to serve), so this must be distinguished from one that
+   * never started or died -- otherwise a wrong-answer bug in the one-shot
+   * solver is reported as a missing model. */
+  const std::optional<camada::checkResult> model =
+    smtlib->oneShotModelVerdict();
+  if (model && *model != camada::checkResult::SAT)
+  {
+    log_error(
+      "{}: {} reported sat but the local model solver did not; refusing to "
+      "build a counterexample from a diverging model",
+      "smtlib",
+      oneshot_prog);
+    abort();
+  }
+
+  /* A solver that agreed and then went away is not "unavailable": the
+   * verdict stands, and the readout paths report the death via
+   * external_process_died when the counterexample is built. */
+  if (
+    !smtlib->oneShotModelSolverLive() &&
+    smtlib->oneShotModelVerdict() != camada::checkResult::SAT)
+  {
+    if (options.get_bool_option("result-only"))
+      return P_SATISFIABLE;
+    if (options.get_option("smtlib-oneshot-model-prog").empty())
+      log_error(
+        "{}: formula is satisfiable, but building the counterexample "
+        "requires a local interactive SMT-LIB2 solver; re-run with "
+        "--smtlib-oneshot-model-prog <cmd> (e.g. \"z3 -in\") or with "
+        "--result-only",
+        "smtlib");
+    else
+      log_error(
+        "{}: the local model solver is unavailable; cannot build a "
+        "counterexample",
+        "smtlib");
+    return P_ERROR;
+  }
+
+  return P_SATISFIABLE;
+}
+
+void smt_solver_baset::assert_ast(smt_astt a)
+{
+  solver->addConstraint(a);
+}
+
+/* Non-null only when the model comes from an external one-shot model
+ * solver, whose disappearance must be reported rather than defaulted. */
+const char *smt_solver_baset::oneshot_label() const
+{
+  return oneshot ? "smtlib" : nullptr;
+}
+
+tvt smt_solver_baset::get_bool(smt_astt a)
+{
+  const auto value = a;
+  const auto kind = value->getKind();
+  if (
+    kind == camada::SMTExprKind::Forall || kind == camada::SMTExprKind::Exists)
+  {
+    log_warning(
+      "Skipping concrete model extraction for quantified boolean term");
+    return tvt(tvt::TV_UNKNOWN);
+  }
+
+  std::string dump;
+  value->dump(dump);
+  if (
+    dump.find("(forall ") != std::string::npos ||
+    dump.find("(exists ") != std::string::npos)
+  {
+    log_warning(
+      "Skipping concrete model extraction for boolean term containing "
+      "quantifiers");
+    return tvt(tvt::TV_UNKNOWN);
+  }
+
+  auto result = unwrap_model_result(
+    solver->getBool(value), "boolean model value", oneshot_label());
+  if (!result)
+    return tvt(tvt::TV_UNKNOWN);
+
+  return tvt(*result);
+}
+
+BigInt smt_solver_baset::get_bv(smt_astt a, bool is_signed)
+{
+  const auto exp = a;
+  if (int_encoding)
+  {
+    if (exp->isRealSort())
+    {
+      auto result = unwrap_model_result(
+        solver->getRational(exp), "rational model value", oneshot_label());
+      if (!result)
+        return BigInt(0);
+
+      BigInt num = string2integer(result->first);
+      BigInt den = string2integer(result->second);
+      return num / den;
+    }
+
+    auto result = unwrap_model_result(
+      solver->getInt(exp), "integer model value", oneshot_label());
+    return result ? string2integer(*result) : BigInt(0);
+  }
+
+  auto result = unwrap_model_result(
+    solver->getBVInBin(exp), "bit-vector model value", oneshot_label());
+  return result ? binary2integer(*result, is_signed) : BigInt(0);
+}
+
+ieee_floatt smt_solver_baset::get_fpbv(smt_astt a)
+{
+  auto model_result = unwrap_model_result(
+    solver->getFPInBin(a), "floating-point model value", oneshot_label());
+  if (!model_result)
+    return ieee_floatt(
+      ieee_float_spect(sort_fp_sw(a->Sort), sort_fp_ew(a->Sort)));
+
+  std::string bits = *model_result;
+  const auto ew = sort_fp_ew(a->Sort);
+  const auto sw = sort_fp_sw(a->Sort);
+  ieee_floatt result(ieee_float_spect(sw, ew));
+  result.unpack(binary2integer(bits, false));
+  return result;
+}
+
+bool smt_solver_baset::get_rational(
+  smt_astt a,
+  BigInt &numerator,
+  BigInt &denominator)
+{
+  auto result = unwrap_model_result(
+    solver->getRational(a), "rational model value", oneshot_label());
+  if (!result)
+    return false;
+
+  numerator = BigInt(result->first.c_str(), 10);
+  denominator = BigInt(result->second.c_str(), 10);
+  return true;
+}
+
+expr2tc smt_solver_baset::get_array_elem(
+  smt_astt array,
+  uint64_t index,
+  const type2tc &subtype)
+{
+  auto idx = make_index_expr(array->Sort->getIndexSort(), index);
+  auto elem = solver->getArrayElement(array, idx);
+  auto elem_sort = convert_sort(subtype);
+  return get_by_ast(subtype, elem);
+}
+
+smt_astt smt_solver_baset::mk_add(smt_astt a, smt_astt b)
+{
+  return a->isArithSort() ? solver->mkArithAdd(a, b) : solver->mkBVAdd(a, b);
+}
+
+smt_astt smt_solver_baset::mk_bvadd(smt_astt a, smt_astt b)
+{
+  return solver->mkBVAdd(a, b);
+}
+smt_astt smt_solver_baset::mk_sub(smt_astt a, smt_astt b)
+{
+  return a->isArithSort() ? solver->mkArithSub(a, b) : solver->mkBVSub(a, b);
+}
+smt_astt smt_solver_baset::mk_bvsub(smt_astt a, smt_astt b)
+{
+  return solver->mkBVSub(a, b);
+}
+smt_astt smt_solver_baset::mk_mul(smt_astt a, smt_astt b)
+{
+  return a->isArithSort() ? solver->mkArithMul(a, b) : solver->mkBVMul(a, b);
+}
+smt_astt smt_solver_baset::mk_bvmul(smt_astt a, smt_astt b)
+{
+  return solver->mkBVMul(a, b);
+}
+smt_astt smt_solver_baset::mk_mod(smt_astt a, smt_astt b)
+{
+  return solver->mkArithMod(a, b);
+}
+smt_astt smt_solver_baset::mk_bvsmod(smt_astt a, smt_astt b)
+{
+  return solver->mkBVSRem(a, b);
+}
+smt_astt smt_solver_baset::mk_bvumod(smt_astt a, smt_astt b)
+{
+  return solver->mkBVURem(a, b);
+}
+smt_astt smt_solver_baset::mk_div(smt_astt a, smt_astt b)
+{
+  return a->isArithSort() ? solver->mkArithDiv(a, b) : solver->mkBVUDiv(a, b);
+}
+smt_astt smt_solver_baset::mk_bvsdiv(smt_astt a, smt_astt b)
+{
+  return solver->mkBVSDiv(a, b);
+}
+smt_astt smt_solver_baset::mk_bvudiv(smt_astt a, smt_astt b)
+{
+  return solver->mkBVUDiv(a, b);
+}
+smt_astt smt_solver_baset::mk_shl(smt_astt a, smt_astt b)
+{
+  return solver->mkArithShl(a, b);
+}
+smt_astt smt_solver_baset::mk_bvshl(smt_astt a, smt_astt b)
+{
+  return solver->mkBVShl(a, b);
+}
+smt_astt smt_solver_baset::mk_bvashr(smt_astt a, smt_astt b)
+{
+  return solver->mkBVAshr(a, b);
+}
+smt_astt smt_solver_baset::mk_bvlshr(smt_astt a, smt_astt b)
+{
+  return solver->mkBVLshr(a, b);
+}
+smt_astt smt_solver_baset::mk_neg(smt_astt a)
+{
+  auto ea = a;
+  return ea->isArithSort() ? solver->mkArithNeg(ea) : solver->mkBVNeg(ea);
+}
+smt_astt smt_solver_baset::mk_bvneg(smt_astt a)
+{
+  return solver->mkBVNeg(a);
+}
+smt_astt smt_solver_baset::mk_bvnot(smt_astt a)
+{
+  if (int_encoding)
+    return int_bitwise_unary(
+      a, [this](const camada::SMTExprRef &v) { return solver->mkBVNot(v); });
+  return solver->mkBVNot(a);
+}
+smt_astt smt_solver_baset::mk_bvxor(smt_astt a, smt_astt b)
+{
+  if (int_encoding)
+    return int_bitwise_binary(
+      a, b, [this](const camada::SMTExprRef &l, const camada::SMTExprRef &r) {
+        return solver->mkBVXor(l, r);
+      });
+  return solver->mkBVXor(a, b);
+}
+smt_astt smt_solver_baset::mk_bvor(smt_astt a, smt_astt b)
+{
+  if (int_encoding)
+    return int_bitwise_binary(
+      a, b, [this](const camada::SMTExprRef &l, const camada::SMTExprRef &r) {
+        return solver->mkBVOr(l, r);
+      });
+  return solver->mkBVOr(a, b);
+}
+smt_astt smt_solver_baset::mk_bvand(smt_astt a, smt_astt b)
+{
+  if (int_encoding)
+    return int_bitwise_binary(
+      a, b, [this](const camada::SMTExprRef &l, const camada::SMTExprRef &r) {
+        return solver->mkBVAnd(l, r);
+      });
+  return solver->mkBVAnd(a, b);
+}
+smt_astt smt_solver_baset::mk_implies(smt_astt a, smt_astt b)
+{
+  return solver->mkImplies(a, b);
+}
+smt_astt smt_solver_baset::mk_xor(smt_astt a, smt_astt b)
+{
+  return solver->mkXor(a, b);
+}
+smt_astt smt_solver_baset::mk_or(smt_astt a, smt_astt b)
+{
+  return solver->mkOr(a, b);
+}
+smt_astt smt_solver_baset::mk_and(smt_astt a, smt_astt b)
+{
+  return solver->mkAnd(a, b);
+}
+smt_astt smt_solver_baset::mk_not(smt_astt a)
+{
+  return solver->mkNot(a);
+}
+smt_astt smt_solver_baset::mk_lt(smt_astt a, smt_astt b)
+{
+  return a->isArithSort() ? solver->mkArithLt(a, b) : solver->mkBVUlt(a, b);
+}
+smt_astt smt_solver_baset::mk_bvult(smt_astt a, smt_astt b)
+{
+  return solver->mkBVUlt(a, b);
+}
+smt_astt smt_solver_baset::mk_bvslt(smt_astt a, smt_astt b)
+{
+  return solver->mkBVSlt(a, b);
+}
+smt_astt smt_solver_baset::mk_gt(smt_astt a, smt_astt b)
+{
+  return a->isArithSort() ? solver->mkArithGt(a, b) : solver->mkBVUgt(a, b);
+}
+smt_astt smt_solver_baset::mk_bvugt(smt_astt a, smt_astt b)
+{
+  return solver->mkBVUgt(a, b);
+}
+smt_astt smt_solver_baset::mk_bvsgt(smt_astt a, smt_astt b)
+{
+  return solver->mkBVSgt(a, b);
+}
+smt_astt smt_solver_baset::mk_le(smt_astt a, smt_astt b)
+{
+  return a->isArithSort() ? solver->mkArithLe(a, b) : solver->mkBVUle(a, b);
+}
+smt_astt smt_solver_baset::mk_bvule(smt_astt a, smt_astt b)
+{
+  return solver->mkBVUle(a, b);
+}
+smt_astt smt_solver_baset::mk_bvsle(smt_astt a, smt_astt b)
+{
+  return solver->mkBVSle(a, b);
+}
+smt_astt smt_solver_baset::mk_ge(smt_astt a, smt_astt b)
+{
+  return a->isArithSort() ? solver->mkArithGe(a, b) : solver->mkBVUge(a, b);
+}
+smt_astt smt_solver_baset::mk_bvuge(smt_astt a, smt_astt b)
+{
+  return solver->mkBVUge(a, b);
+}
+smt_astt smt_solver_baset::mk_bvsge(smt_astt a, smt_astt b)
+{
+  return solver->mkBVSge(a, b);
+}
+smt_astt smt_solver_baset::mk_eq(smt_astt a, smt_astt b)
+{
+  return solver->mkEqual(a, b);
+}
+smt_astt smt_solver_baset::mk_neq(smt_astt a, smt_astt b)
+{
+  return solver->mkNot(solver->mkEqual(a, b));
+}
+smt_astt smt_solver_baset::mk_store(smt_astt a, smt_astt b, smt_astt c)
+{
+  return solver->mkArrayStore(a, b, c);
+}
+smt_astt smt_solver_baset::mk_select(smt_astt a, smt_astt b)
+{
+  return solver->mkArraySelect(a, b);
+}
+smt_astt smt_solver_baset::mk_real2int(smt_astt a)
+{
+  return solver->mkReal2Int(a);
+}
+smt_astt smt_solver_baset::mk_int2real(smt_astt a)
+{
+  return solver->mkInt2Real(a);
+}
+smt_astt smt_solver_baset::mk_isint(smt_astt a)
+{
+  return solver->mkIsInt(a);
+}
+
+smt_sortt smt_solver_baset::mk_bool_sort()
+{
+  return solver->mkBoolSort();
+}
+
+smt_sortt smt_solver_baset::mk_real_sort()
+{
+  return solver->mkRealSort();
+}
+
+smt_sortt smt_solver_baset::mk_int_sort()
+{
+  return solver->mkIntSort();
+}
+
+smt_sortt smt_solver_baset::mk_bv_sort(std::size_t width)
+{
+  return solver->mkBVSort(width);
+}
+
+smt_sortt smt_solver_baset::mk_array_sort(smt_sortt domain, smt_sortt range)
+{
+  return solver->mkArraySort(domain, range);
+}
+
+smt_sortt smt_solver_baset::mk_fbv_sort(std::size_t width)
+{
+  /* ESBMC's fixedbv lowers to a plain bit-vector for now; camada has an FXP
+   * sort but nothing here reads the distinction back. */
+  return solver->mkBVSort(width);
+}
+
+smt_sortt smt_solver_baset::mk_bvfp_sort(std::size_t ew, std::size_t sw)
+{
+  auto sort = solver->mkBVSort(ew + sw + 1);
+  return sort;
+}
+
+smt_sortt smt_solver_baset::mk_bvfp_rm_sort()
+{
+  auto sort = solver->mkBVSort(3);
+  return sort;
+}
+
+smt_sortt smt_solver_baset::mk_fpbv_sort(const unsigned ew, const unsigned sw)
+{
+  auto sort = solver->mkFPSort(ew, sw, fp_encoding());
+  return sort;
+}
+
+smt_sortt smt_solver_baset::mk_fpbv_rm_sort()
+{
+  return solver->mkRMSort(fp_encoding());
+}
+
+smt_astt smt_solver_baset::mk_smt_int(const BigInt &theint)
+{
+  return solver->mkInt(integer2string(theint, 10));
+}
+
+smt_astt smt_solver_baset::mk_smt_real(const std::string &str)
+{
+  return solver->mkReal(str);
+}
+
+smt_astt smt_solver_baset::mk_smt_bv(const BigInt &theint, smt_sortt s)
+{
+  return solver->mkBVFromBin(integer2binary(theint, s->getWidth()), s);
+}
+
+smt_astt smt_solver_baset::mk_smt_fpbv(const ieee_floatt &thereal)
+{
+  std::string bits = integer2binary(thereal.pack(), thereal.spec.width());
+  return solver->mkFPFromBin(bits, thereal.spec.e, fp_encoding());
+}
+
+smt_astt smt_solver_baset::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
+{
+  return solver->mkNaN(sgn, ew, sw, fp_encoding());
+}
+
+smt_astt smt_solver_baset::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  return solver->mkInf(sgn, ew, sw, fp_encoding());
+}
+
+smt_astt smt_solver_baset::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
+{
+  auto sort = mk_fpbv_rm_sort();
+  return solver->mkRM(to_camada_rm(rm), fp_encoding());
+}
+
+smt_astt smt_solver_baset::mk_smt_fpbv_fma(
+  smt_astt v1,
+  smt_astt v2,
+  smt_astt v3,
+  smt_astt rm)
+{
+  return solver->mkFPFMA(v1, v2, v3, rm);
+}
+
+smt_astt smt_solver_baset::mk_smt_typecast_from_fpbv_to_ubv(
+  smt_astt from,
+  std::size_t width)
+{
+  return solver->mkFPtoUBV(from, width);
+}
+
+smt_astt smt_solver_baset::mk_smt_typecast_from_fpbv_to_sbv(
+  smt_astt from,
+  std::size_t width)
+{
+  return solver->mkFPtoSBV(from, width);
+}
+
+smt_astt smt_solver_baset::mk_smt_typecast_from_fpbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  return solver->mkFPtoFP(from, to, rm);
+}
+
+smt_astt smt_solver_baset::mk_smt_typecast_ubv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  return solver->mkUBVtoFP(from, to, rm);
+}
+
+smt_astt smt_solver_baset::mk_smt_typecast_sbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  return solver->mkSBVtoFP(from, to, rm);
+}
+
+smt_astt
+smt_solver_baset::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return solver->mkFPAdd(lhs, rhs, rm);
+}
+smt_astt
+smt_solver_baset::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return solver->mkFPSub(lhs, rhs, rm);
+}
+smt_astt
+smt_solver_baset::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return solver->mkFPMul(lhs, rhs, rm);
+}
+smt_astt
+smt_solver_baset::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return solver->mkFPDiv(lhs, rhs, rm);
+}
+smt_astt
+smt_solver_baset::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
+{
+  return solver->mkFPtoIntegral(from, rm);
+}
+smt_astt smt_solver_baset::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
+{
+  return solver->mkFPSqrt(rd, rm);
+}
+
+smt_astt smt_solver_baset::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
+{
+  return solver->mkFPEqual(lhs, rhs);
+}
+smt_astt smt_solver_baset::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
+{
+  return solver->mkFPGt(lhs, rhs);
+}
+smt_astt smt_solver_baset::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
+{
+  return solver->mkFPLt(lhs, rhs);
+}
+smt_astt smt_solver_baset::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
+{
+  return solver->mkFPGe(lhs, rhs);
+}
+smt_astt smt_solver_baset::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
+{
+  return solver->mkFPLe(lhs, rhs);
+}
+smt_astt smt_solver_baset::mk_smt_fpbv_is_nan(smt_astt op)
+{
+  return solver->mkFPIsNaN(op);
+}
+smt_astt smt_solver_baset::mk_smt_fpbv_is_inf(smt_astt op)
+{
+  return solver->mkFPIsInfinite(op);
+}
+smt_astt smt_solver_baset::mk_smt_fpbv_is_normal(smt_astt op)
+{
+  return solver->mkFPIsNormal(op);
+}
+smt_astt smt_solver_baset::mk_smt_fpbv_is_zero(smt_astt op)
+{
+  return solver->mkFPIsZero(op);
+}
+smt_astt smt_solver_baset::mk_smt_fpbv_is_negative(smt_astt op)
+{
+  return fp_sign_test(op, true);
+}
+smt_astt smt_solver_baset::mk_smt_fpbv_is_positive(smt_astt op)
+{
+  return fp_sign_test(op, false);
+}
+smt_astt smt_solver_baset::mk_smt_fpbv_abs(smt_astt op)
+{
+  return solver->mkFPAbs(op);
+}
+smt_astt smt_solver_baset::mk_smt_fpbv_neg(smt_astt op)
+{
+  return solver->mkFPNeg(op);
+}
+
+smt_astt smt_solver_baset::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
+{
+  return solver->mkBVToIEEEFP(op, to);
+}
+
+smt_astt smt_solver_baset::mk_from_fp_to_bv(smt_astt op)
+{
+  auto to = mk_bvfp_sort(sort_fp_ew(op->Sort), sort_fp_sw(op->Sort));
+  return solver->mkIEEEFPToBV(op);
+}
+
+smt_astt smt_solver_baset::mk_smt_bool(bool val)
+{
+  return solver->mkBool(val);
+}
+
+smt_astt smt_solver_baset::mk_array_symbol(
+  const std::string &name,
+  smt_sortt sort,
+  smt_sortt)
+{
+  return mk_smt_symbol(name, sort);
+}
+
+smt_astt smt_solver_baset::mk_smt_symbol(const std::string &name, smt_sortt s)
+{
+  return solver->mkSymbol(name, s);
+}
+
+smt_sortt smt_solver_baset::mk_struct_sort(const type2tc &type)
+{
+  if (is_array_type(type))
+  {
+    const array_type2t &arrtype = to_array_type(type);
+    smt_sortt subtypesort = convert_sort(arrtype.subtype);
+    smt_sortt d = mk_int_bv_sort(make_array_domain_type(arrtype)->get_width());
+    return mk_array_sort(d, subtypesort);
+  }
+
+  const std::vector<type2tc> &members = struct_union_members(type);
+  std::vector<camada::SMTSortRef> field_sorts;
+  field_sorts.reserve(members.size());
+  for (const auto &member : members)
+    field_sorts.push_back(convert_sort(member));
+
+  return solver->mkTupleSort(field_sorts);
+}
+
+smt_astt
+smt_solver_baset::mk_extract(smt_astt a, unsigned int high, unsigned int low)
+{
+  // If it's a floatbv, convert it to bv first so callers extracting bytes
+  // out of structs/unions containing floats encode against the IEEE bit
+  // pattern instead of triggering a sort mismatch.
+  if (a->Sort->isFPSort())
+    a = mk_from_fp_to_bv(a);
+  return solver->mkBVExtract(high, low, a);
+}
+
+smt_astt smt_solver_baset::mk_sign_ext(smt_astt a, unsigned int topwidth)
+{
+  return solver->mkBVSignExt(topwidth, a);
+}
+
+smt_astt smt_solver_baset::mk_zero_ext(smt_astt a, unsigned int topwidth)
+{
+  return solver->mkBVZeroExt(topwidth, a);
+}
+
+smt_astt smt_solver_baset::mk_concat(smt_astt a, smt_astt b)
+{
+  return solver->mkBVConcat(a, b);
+}
+
+smt_astt smt_solver_baset::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
+{
+  return solver->mkIte(cond, t, f);
+}
+
+smt_astt smt_solver_baset::tuple_create(const expr2tc &structdef)
+{
+  const constant_struct2t &strct = to_constant_struct2t(structdef);
+  std::vector<camada::SMTExprRef> fields;
+  fields.reserve(strct.datatype_members.size());
+  for (const auto &member : strct.datatype_members)
+    fields.push_back(convert_ast(member));
+
+  return solver->mkTuple(fields);
+}
+
+smt_astt smt_solver_baset::tuple_fresh(smt_sortt s, std::string name)
+{
+  if (name.empty())
+    name = mk_fresh_name("smt_solver_baset::tuple_fresh");
+  return solver->mkSymbol(name, s);
+}
+
+smt_astt smt_solver_baset::tuple_array_create(
+  const type2tc &array_type,
+  smt_astt *input_args,
+  bool const_array,
+  smt_sortt domain)
+{
+  const array_type2t &arrtype = to_array_type(array_type);
+  smt_sortt elem_sort = mk_struct_sort(arrtype.subtype);
+  smt_sortt array_sort = mk_array_sort(domain, elem_sort);
+
+  if (const_array)
+  {
+    return solver->mkArrayConst(domain, *input_args);
+  }
+
+  assert(!is_nil_expr(arrtype.array_size));
+  assert(is_constant_int2t(arrtype.array_size));
+
+  auto result = solver->mkSymbol(
+    mk_fresh_name("smt_solver_baset::tuple_array_create"), array_sort);
+  auto domain_sort = domain;
+
+  for (std::size_t i = 0; i < to_constant_int2t(arrtype.array_size).as_ulong();
+       ++i)
+  {
+    result = solver->mkArrayStore(
+      result, make_index_expr(domain_sort, i), input_args[i]);
+  }
+
+  return result;
+}
+
+smt_astt smt_solver_baset::mk_tuple_symbol(const std::string &name, smt_sortt s)
+{
+  if (name == "NULL")
+    return null_ptr_ast;
+
+  if (name == "INVALID")
+    return invalid_ptr_ast;
+
+  return mk_smt_symbol(name, s);
+}
+
+smt_astt smt_solver_baset::mk_tuple_array_symbol(const expr2tc &expr)
+{
+  const symbol2t &sym = to_symbol2t(expr);
+  return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
+}
+
+smt_astt smt_solver_baset::tuple_array_of(
+  const expr2tc &init_value,
+  unsigned long domain_width)
+{
+  return convert_array_of(convert_ast(init_value), domain_width);
+}
+
+expr2tc smt_solver_baset::tuple_get(const expr2tc &expr)
+{
+  return tuple_get(expr->type, convert_ast(expr));
+}
+
+expr2tc smt_solver_baset::tuple_get(const type2tc &type, smt_astt sym)
+{
+  // Pointer types lower to pointer_struct in SMT; struct_union_members(type)
+  // would throw on the raw pointer type, so dispatch the pointer case first.
+  const std::vector<type2tc> &members =
+    struct_union_members(is_pointer_type(type) ? pointer_struct : type);
+
+  if (is_pointer_type(type))
+  {
+    smt_astt object = solver->mkTupleSelect(sym, 0);
+    smt_astt offset = solver->mkTupleSelect(sym, 1);
+
+    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
+    unsigned int offs =
+      get_bv(offset, is_signedbv_type(members[1])).to_uint64();
+    pointer_logict::pointert p(num, BigInt(offs));
+    return pointer_logic.back().pointer_expr(p, type);
+  }
+
+  std::vector<expr2tc> outmem;
+  outmem.reserve(members.size());
+  for (std::size_t i = 0; i < members.size(); ++i)
+  {
+    outmem.push_back(get_by_ast(members[i], solver->mkTupleSelect(sym, i)));
+  }
+
+  return constant_struct2tc(type, std::move(outmem));
+}
+
+expr2tc smt_solver_baset::tuple_get_array_elem(
+  smt_astt array,
+  uint64_t index,
+  const type2tc &subtype)
+{
+  return get_array_elem(array, index, get_flattened_array_subtype(subtype));
+}
+
+smt_astt smt_solver_baset::convert_array_of(
+  smt_astt init_val,
+  unsigned long domain_width)
+{
+  auto idx_sort = int_encoding
+                    ? solver->mkIntSort()
+                    : solver->mkBVSort(domain_width == 0 ? 1 : domain_width);
+  auto value = solver->mkArrayConst(idx_sort, init_val);
+  return value;
+}
+
+const std::string smt_solver_baset::solver_text()
+{
+  if (oneshot)
+    return "one-shot '" + oneshot_prog + "'";
+  return solver->getSolverNameAndVersion();
+}
+
+std::string smt_solver_baset::dump_smt()
+{
+  /* Camada's SMT-LIB backend streams the script to its sink as it is built
+   * rather than buffering it, so there is nothing to hand back. Complete the
+   * script with the (check-sat) that --smt-formula-only never reaches via
+   * dec_solve() -- in write-only mode check() just emits it and answers
+   * UNKNOWN -- then return empty so bmc.cpp does not reopen the same path
+   * and overwrite what camada wrote (issue #6059). */
+  if (streams_script)
+  {
+    solver->check();
+    const std::string path = options.get_option("output");
+    if (path.empty() || path == "-")
+      log_status("SMT formula written to standard output");
+    else
+      log_status("SMT formula written to output file {}", path);
+    return "";
+  }
+
+  if (oneshot)
+  {
+    /* Under --smt-formula-only no solve follows, so close the script here;
+     * the solver is write-only in that mode, so check() only emits the
+     * trailing (check-sat). Under --smt-formula-too our dec_solve() emits
+     * it instead: a second one would hand the external solver a script
+     * containing two. Either way camada already wrote the formula, so
+     * return empty to keep bmc.cpp from overwriting it (issue #6059). */
+    if (options.get_bool_option("smt-formula-only"))
+    {
+      solver->check();
+      if (formula_path == "-")
+        log_status("SMT formula written to standard output");
+      else
+        log_status("SMT formula written to output file {}", formula_path);
+      return "";
+    }
+
+    log_status("SMT formula written to {}", formula_path);
+    return "";
+  }
+
+  std::string smt_formula;
+  solver->dump(smt_formula);
+  return wrap_smtlib_dump(std::move(smt_formula));
+}
+
+void smt_solver_baset::print_model()
+{
+  solver->dumpModel();
+}
+
+smt_astt smt_solver_baset::mk_quantifier(
+  bool is_forall,
+  std::vector<smt_astt> lhs,
+  smt_astt rhs)
+{
+  std::vector<camada::SMTExprRef> vars;
+  vars.reserve(lhs.size());
+  for (const auto &var : lhs)
+    vars.push_back(var);
+
+  auto q =
+    is_forall ? solver->mkForall(vars, rhs) : solver->mkExists(vars, rhs);
+  return q;
+}
+
+std::unique_ptr<camada::SMTSolver> solver;
+/* Set when the SMT-LIB backend drives an external one-shot program. */
+const bool oneshot = false;
+/* Camada's SMT-LIB backend streams the script to its sink as it is built
+ * rather than buffering it, so dump_smt() has nothing to hand back. */
+const bool streams_script = false;
+std::string oneshot_prog;
+std::string formula_path;
+bool solved = false;
+
+/* --fp2bv asks for floating-point encoded as bit-vectors, which is exactly
+ * camada's FPEncoding::BV; let it bit-blast rather than swapping in ESBMC's
+ * own software lowering. Keyed off fp2bv, not floatbv: the latter is set by
+ * default for anything that is not --fixedbv, so reading it made every run
+ * bit-blast and native FP unreachable. */
+camada::FPEncoding smt_solver_baset::fp_encoding() const
+{
+  return options.get_bool_option("fp2bv") ? camada::FPEncoding::BV
+                                          : camada::FPEncoding::Native;
+}
+
+camada::SMTExprRef smt_solver_baset::make_index_expr(
+  const camada::SMTSortRef &sort,
+  uint64_t index)
+{
+  if (sort->isBVSort())
+    return solver->mkBVFromDec(static_cast<int64_t>(index), sort);
+  if (sort->isIntSort())
+    return solver->mkInt(static_cast<int64_t>(index));
+  if (sort->isRealSort())
+    return solver->mkReal(static_cast<int64_t>(index));
+  unsupported("array index sort");
+}
+
+smt_astt smt_solver_baset::ast_update(
+  smt_astt a,
+  smt_astt value,
+  unsigned int idx,
+  const expr2tc &idx_expr)
+{
+  if (a->Sort->isTupleSort())
+  {
+    assert(is_nil_expr(idx_expr));
+    return solver->mkTupleUpdate(a, idx, value);
+  }
+
+  assert(a->Sort->isArraySort());
+
+  expr2tc index;
+  if (is_nil_expr(idx_expr))
+  {
+    size_t dom_width = int_encoding ? config.ansi_c.int_width
+                                    : a->Sort->getIndexSort()->getWidth();
+    index = constant_int2tc(unsignedbv_type2tc(dom_width), BigInt(idx));
+  }
+  else
+  {
+    index = idx_expr;
+  }
+
+  return mk_store(a, convert_ast(index), value);
+}
+
+smt_astt smt_solver_baset::ast_project(smt_astt a, unsigned int elem)
+{
+  assert(elem < a->Sort->getTupleElementSorts().size());
+  return solver->mkTupleSelect(a, elem);
+}
+
+smt_astt smt_solver_baset::fp_sign_test(smt_astt op, bool negative)
+{
+  auto as_bv = solver->mkIEEEFPToBV(op);
+  auto sign = solver->mkBVExtract(
+    op->Sort->getWidth() - 1, op->Sort->getWidth() - 1, as_bv);
+  auto expected = solver->mkBVFromDec(negative ? 1 : 0, 1);
+  return solver->mkEqual(sign, expected);
+}
+
+/* Every backend below knows which camada solver it wants, so it builds it and
+ * hands it over; there is no backend tag to switch on. `streams_script` is the
+ * one behavioural difference the caller has to declare: camada's SMT-LIB
+ * backend writes the script as it goes, so dump_smt() has nothing to return. */
+smt_solver_baset *make_solver(
+  const optionst &options,
+  const namespacet &ns,
+  std::unique_ptr<camada::SMTSolver> solver,
+  bool oneshot = false,
+  bool streams_script = false,
+  std::string oneshot_prog = {},
+  std::string formula_path = {})
+{
+  return new smt_solver_baset(
+    ns,
+    options,
+    std::move(solver),
+    oneshot,
+    streams_script,
+    std::move(oneshot_prog),
+    std::move(formula_path));
+}
+
 smt_solver_baset *
 create_new_z3_solver(const optionst &options, const namespacet &ns)
 {
-  return create_camada_solver(camada_backendt::z3, options, ns);
+  return make_solver(options, ns, create_esbmc_z3_solver(options));
 }
 
 smt_solver_baset *
 create_new_cvc5_solver(const optionst &options, const namespacet &ns)
 {
-  return create_camada_solver(camada_backendt::cvc5, options, ns);
+  return make_solver(
+    options,
+    ns,
+    camada::createCVC5Solver(
+      camada::UnsatAssumptionsMode::Off, pick_array_encoding(options)));
 }
 
 smt_solver_baset *
 create_new_mathsat_solver(const optionst &options, const namespacet &ns)
 {
-  return create_camada_solver(camada_backendt::mathsat, options, ns);
+  return make_solver(options, ns, create_esbmc_mathsat_solver(options));
 }
 
 smt_solver_baset *
 create_new_yices_solver(const optionst &options, const namespacet &ns)
 {
-  return create_camada_solver(camada_backendt::yices, options, ns);
+  return make_solver(options, ns, create_esbmc_yices_solver(options));
 }
 
 smt_solver_baset *
 create_new_bitwuzla_solver(const optionst &options, const namespacet &ns)
 {
-  return create_camada_solver(camada_backendt::bitwuzla, options, ns);
+#if CAMADA_HAVE_BITWUZLA
+  return make_solver(
+    options,
+    ns,
+    std::make_unique<esbmc_bitwuzla_solver>(pick_array_encoding(options)));
+#else
+  unsupported("Bitwuzla support in Camada");
+#endif
 }
 
 /* The one-shot command processes a single task and exits; strategies that
@@ -1784,12 +1613,39 @@ create_new_smtlib_solver(const optionst &options, const namespacet &ns)
   /* --smtlib-oneshot-prog selects the write-a-file-and-run-a-program shape;
    * without it the script goes to an interactive solver or to --output. */
   const bool oneshot = !options.get_option("smtlib-oneshot-prog").empty();
-  if (oneshot)
-    reject_incremental_strategies(options);
-  else if (!options.get_bool_option("smt-formula-only"))
-    log_warning(
-      "[smtlib] the smtlib interface solving is unstable. Please, "
-      "use it with --smt-formula-only for production");
+  if (!oneshot)
+  {
+    if (!options.get_bool_option("smt-formula-only"))
+      log_warning(
+        "[smtlib] the smtlib interface solving is unstable. Please, "
+        "use it with --smt-formula-only for production");
+    return make_solver(
+      options,
+      ns,
+      create_esbmc_smtlib_solver(options),
+      /*oneshot=*/false,
+      /*streams_script=*/true);
+  }
 
-  return create_camada_solver(camada_backendt::smtlib, options, ns, oneshot);
+  reject_incremental_strategies(options);
+
+  const std::string oneshot_prog = options.get_option("smtlib-oneshot-prog");
+  const std::string formula_path =
+    oneshot_options::choose_formula_path(options, "smtlib");
+  /* An explicit --smtlib-logic is the user telling us what the external
+   * solver accepts; otherwise follow the encoding. */
+  const std::string logic = options.get_option("smtlib-logic");
+  return make_solver(
+    options,
+    ns,
+    create_esbmc_oneshot_solver(
+      options,
+      "smtlib",
+      formula_path,
+      oneshot_prog,
+      logic.empty() ? pick_logic(options, false) : logic),
+    /*oneshot=*/true,
+    /*streams_script=*/false,
+    oneshot_prog,
+    formula_path);
 }

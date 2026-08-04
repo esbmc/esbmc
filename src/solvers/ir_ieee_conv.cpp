@@ -10,9 +10,9 @@ ir_ieee_convt::ir_ieee_convt(smt_solver_baset *ctx) : ctx(ctx)
 
 void ir_ieee_convt::propagate_interval(smt_astt lhs, smt_astt rhs)
 {
-  auto it = ir_ra_interval_map.find(rhs);
+  auto it = ir_ra_interval_map.find(rhs.get());
   if (it != ir_ra_interval_map.end())
-    ir_ra_interval_map[lhs] = it->second;
+    ir_ra_interval_map[lhs.get()] = it->second;
 }
 
 void ir_ieee_convt::assert_symbol_range(
@@ -44,49 +44,49 @@ void ir_ieee_convt::assert_symbol_range(
 
 ir_ieee_convt::ra_interval_t ir_ieee_convt::get_interval(smt_astt t) const
 {
-  auto it = ir_ra_interval_map.find(t);
+  auto it = ir_ra_interval_map.find(t.get());
   return it != ir_ra_interval_map.end() ? it->second : ra_interval_t{t, t};
 }
 
 void ir_ieee_convt::store_interval(smt_astt t, smt_astt lo, smt_astt hi)
 {
-  ir_ra_interval_map[t] = {lo, hi};
+  ir_ra_interval_map[t.get()] = {lo, hi};
 }
 
 void ir_ieee_convt::store_nan_pred(smt_astt t, smt_astt nan_pred)
 {
-  ir_ieee_nan_map[t] = nan_pred;
+  ir_ieee_nan_map[t.get()] = nan_pred;
 }
 
 smt_astt ir_ieee_convt::get_nan_pred(smt_astt t) const
 {
-  auto it = ir_ieee_nan_map.find(t);
-  return it != ir_ieee_nan_map.end() ? it->second : nullptr;
+  auto it = ir_ieee_nan_map.find(t.get());
+  return it != ir_ieee_nan_map.end() ? it->second : smt_astt{};
 }
 
 void ir_ieee_convt::propagate_nan_pred(smt_astt lhs, smt_astt rhs)
 {
-  auto it = ir_ieee_nan_map.find(rhs);
+  auto it = ir_ieee_nan_map.find(rhs.get());
   if (it != ir_ieee_nan_map.end())
-    ir_ieee_nan_map[lhs] = it->second;
+    ir_ieee_nan_map[lhs.get()] = it->second;
 }
 
 void ir_ieee_convt::store_neg_zero_pred(smt_astt t, smt_astt neg_zero_pred)
 {
-  ir_ieee_neg_zero_map[t] = neg_zero_pred;
+  ir_ieee_neg_zero_map[t.get()] = neg_zero_pred;
 }
 
 smt_astt ir_ieee_convt::get_neg_zero_pred(smt_astt t) const
 {
-  auto it = ir_ieee_neg_zero_map.find(t);
-  return it != ir_ieee_neg_zero_map.end() ? it->second : nullptr;
+  auto it = ir_ieee_neg_zero_map.find(t.get());
+  return it != ir_ieee_neg_zero_map.end() ? it->second : smt_astt{};
 }
 
 void ir_ieee_convt::propagate_neg_zero_pred(smt_astt lhs, smt_astt rhs)
 {
-  auto it = ir_ieee_neg_zero_map.find(rhs);
+  auto it = ir_ieee_neg_zero_map.find(rhs.get());
   if (it != ir_ieee_neg_zero_map.end())
-    ir_ieee_neg_zero_map[lhs] = it->second;
+    ir_ieee_neg_zero_map[lhs.get()] = it->second;
 }
 
 void ir_ieee_convt::propagate_neg_zero_through_ite(
@@ -102,7 +102,7 @@ void ir_ieee_convt::propagate_neg_zero_through_ite(
 smt_astt ir_ieee_convt::combine_nan_preds(smt_astt a, smt_astt b) const
 {
   if (!a && !b)
-    return nullptr;
+    return {};
   if (!a)
     return b;
   if (!b)
@@ -166,7 +166,7 @@ std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rne_enclosure(
 {
   const auto double_spec = ieee_float_spect::double_precision();
   const auto single_spec = ieee_float_spect::single_precision();
-  smt_astt eps_rel = nullptr, eps_abs = nullptr;
+  smt_astt eps_rel = {}, eps_abs = {};
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
   {
     eps_rel = ctx->get_double_eps_rel();
@@ -221,7 +221,7 @@ std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rna_enclosure(
 {
   const auto double_spec = ieee_float_spect::double_precision();
   const auto single_spec = ieee_float_spect::single_precision();
-  smt_astt eps_rel = nullptr, eps_abs = nullptr;
+  smt_astt eps_rel = {}, eps_abs = {};
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
   {
     eps_rel = ctx->get_double_eps_rel();
@@ -276,7 +276,7 @@ std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rup_enclosure(
 {
   const auto double_spec = ieee_float_spect::double_precision();
   const auto single_spec = ieee_float_spect::single_precision();
-  smt_astt eps_rel_dir = nullptr, eps_abs = nullptr;
+  smt_astt eps_rel_dir = {}, eps_abs = {};
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
   {
     eps_rel_dir = ctx->get_double_eps_up();
@@ -326,7 +326,7 @@ std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rdn_enclosure(
 {
   const auto double_spec = ieee_float_spect::double_precision();
   const auto single_spec = ieee_float_spect::single_precision();
-  smt_astt eps_rel_dir = nullptr, eps_abs = nullptr;
+  smt_astt eps_rel_dir = {}, eps_abs = {};
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
   {
     eps_rel_dir = ctx->get_double_eps_up();
@@ -376,7 +376,7 @@ std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rtz_enclosure(
 {
   const auto double_spec = ieee_float_spect::double_precision();
   const auto single_spec = ieee_float_spect::single_precision();
-  smt_astt eps_rel_dir = nullptr, eps_abs = nullptr;
+  smt_astt eps_rel_dir = {}, eps_abs = {};
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
   {
     eps_rel_dir = ctx->get_double_eps_up();
@@ -521,7 +521,7 @@ smt_astt ir_ieee_convt::encode_ieee_add(const expr2tc &expr)
     return flushed;
   }
   return ctx->apply_ieee754_semantics(
-    real_result, fbv_type, nullptr, rounding_mode);
+    real_result, fbv_type, smt_astt{}, rounding_mode);
 }
 
 smt_astt ir_ieee_convt::encode_ieee_sub(const expr2tc &expr)
@@ -561,7 +561,7 @@ smt_astt ir_ieee_convt::encode_ieee_sub(const expr2tc &expr)
     return flushed;
   }
   return ctx->apply_ieee754_semantics(
-    real_result, fbv_type, nullptr, rounding_mode);
+    real_result, fbv_type, smt_astt{}, rounding_mode);
 }
 
 smt_astt ir_ieee_convt::encode_ieee_mul(const expr2tc &expr)
@@ -612,8 +612,8 @@ smt_astt ir_ieee_convt::encode_ieee_mul(const expr2tc &expr)
     // When both operands are the same value it can be neither zero nor
     // infinite at once, so the term is unsatisfiable; skipping it also avoids
     // feeding the huge max-normal constant into Z3's nonlinear reasoning.
-    smt_astt invalid_op_nan = nullptr;
-    if (side1 != side2)
+    smt_astt invalid_op_nan = {};
+    if (side1.get() != side2.get())
     {
       smt_astt s1_inf = is_inf_real(side1, fbv_type);
       smt_astt s2_inf = is_inf_real(side2, fbv_type);
@@ -655,7 +655,7 @@ smt_astt ir_ieee_convt::encode_ieee_div(const expr2tc &expr)
   {
     smt_astt real_result = ctx->mk_div(side1, side2);
     return ctx->apply_ieee754_semantics(
-      real_result, fbv_type, nullptr, to_ieee_div2t(expr).rounding_mode);
+      real_result, fbv_type, smt_astt{}, to_ieee_div2t(expr).rounding_mode);
   }
 
   smt_astt sentinel = ctx->get_double_inf_sentinel();
@@ -745,8 +745,8 @@ smt_astt ir_ieee_convt::encode_ieee_div(const expr2tc &expr)
     return a;
   }
 
-  smt_astt ieee_result =
-    ctx->apply_ieee754_semantics(real_result, fbv_type, nullptr, rounding_mode);
+  smt_astt ieee_result = ctx->apply_ieee754_semantics(
+    real_result, fbv_type, smt_astt{}, rounding_mode);
   smt_astt result = ctx->mk_ite(div_by_zero, inf_result, ieee_result);
   // `result` is a further ite over `ieee_result`, not `ieee_result` itself.
   propagate_neg_zero_through_ite(result, ieee_result, ctx->mk_not(div_by_zero));
@@ -847,5 +847,5 @@ smt_astt ir_ieee_convt::encode_ieee_fma(const expr2tc &expr)
   }
 
   return ctx->apply_ieee754_semantics(
-    real_result, fbv_type, nullptr, rounding_mode);
+    real_result, fbv_type, smt_astt{}, rounding_mode);
 }

@@ -470,11 +470,11 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
   std::string newname = mk_fresh_name("smt_solver_baset::int_to_ptr");
   expr2tc output_sym = symbol2tc(cast.type, newname);
   smt_astt output = convert_ast(output_sym);
-  smt_astt output_obj = output->project(this, 0);
-  smt_astt output_offs = output->project(this, 1);
+  smt_astt output_obj = ast_project(output, 0);
+  smt_astt output_offs = ast_project(output, 1);
   if (config.ansi_c.cheri)
   {
-    smt_astt output_cap = output->project(this, 2);
+    smt_astt output_cap = ast_project(output, 2);
     expr2tc other_cap;
     if (can_carry_provenance(cast.from->type))
       other_cap =
@@ -482,7 +482,7 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     else
       other_cap = gen_zero(int_type);
     smt_astt other_cap_ast = convert_ast(other_cap);
-    assert_ast(other_cap_ast->eq(this, output_cap));
+    assert_ast(ast_eq(other_cap_ast, output_cap));
   }
 
   ast_vec guards;
@@ -498,8 +498,8 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     smt_astt this_obj = obj_ids[i];
     smt_astt this_offs = offs;
 
-    smt_astt obj_eq = this_obj->eq(this, output_obj);
-    smt_astt offs_eq = this_offs->eq(this, output_offs);
+    smt_astt obj_eq = ast_eq(this_obj, output_obj);
+    smt_astt offs_eq = ast_eq(this_offs, output_offs);
     smt_astt is_eq = mk_and(obj_eq, offs_eq);
 
     smt_astt in_range = is_in_range[i];
@@ -544,12 +544,12 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     expr2tc address = add2tc(
       ptraddr_type2(), from_start, typecast2tc(ptraddr_type2(), ptr_offs));
     smt_astt addr = convert_ast(address);
-    assert_ast(mk_implies(not_matched, addr->eq(this, target)));
+    assert_ast(mk_implies(not_matched, ast_eq(addr, target)));
     return output;
   }
 
-  smt_astt obj_eq = inv_obj->eq(this, output_obj);
-  smt_astt offs_eq = inv_offs->eq(this, output_offs);
+  smt_astt obj_eq = ast_eq(inv_obj, output_obj);
+  smt_astt offs_eq = ast_eq(inv_offs, output_offs);
   smt_astt is_inv = mk_and(obj_eq, offs_eq);
 
   assert_ast(mk_implies(not_matched, is_inv));
@@ -651,9 +651,9 @@ smt_astt smt_solver_baset::convert_typecast_to_struct(const typecast2t &cast)
     for (; i2 < struct_type_to.members.size(); i2++)
     {
       smt_astt args[2];
-      args[0] = src_ast->project(this, i2);
-      args[1] = fresh->project(this, i2);
-      assert_ast(args[0]->eq(this, args[1]));
+      args[0] = ast_project(src_ast, i2);
+      args[1] = ast_project(fresh, i2);
+      assert_ast(ast_eq(args[0], args[1]));
     }
   }
   else
@@ -681,10 +681,10 @@ smt_astt smt_solver_baset::convert_typecast_to_struct(const typecast2t &cast)
       // complain mightily if we get it wrong.
 
       smt_astt args[2];
-      args[0] = src_ast->project(this, i3);
-      args[1] = fresh->project(this, i2);
+      args[0] = ast_project(src_ast, i3);
+      args[1] = ast_project(fresh, i2);
 
-      assert_ast(args[0]->eq(this, args[1]));
+      assert_ast(ast_eq(args[0], args[1]));
       i2++;
     }
   }

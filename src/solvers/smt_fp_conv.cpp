@@ -124,7 +124,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       //
       // TODO: extend to non-standard FP formats beyond single and double.
 
-      smt_astt eps_rel = nullptr, eps_abs = nullptr;
+      smt_astt eps_rel = {}, eps_abs = {};
       if (!select_nearest_eps(eps_rel, eps_abs))
       {
         // TODO: theorem-driven bounds for non-standard formats are not yet
@@ -221,7 +221,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       //   ROUND_TO_PLUS_INF; the bound shape is the mirror image.
 
       smt_sortt rs = mk_real_sort();
-      smt_astt eps_rel_dir = nullptr, eps_abs = nullptr;
+      smt_astt eps_rel_dir = {}, eps_abs = {};
       if (!select_directed_eps(eps_rel_dir, eps_abs))
       {
         // Unsupported format: fall back to unconstrained weak enclosure.
@@ -274,7 +274,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       //   epsilon
 
       smt_sortt rs = mk_real_sort();
-      smt_astt eps_rel_dir = nullptr, eps_abs = nullptr;
+      smt_astt eps_rel_dir = {}, eps_abs = {};
       if (!select_directed_eps(eps_rel_dir, eps_abs))
       {
         // Unsupported format: fall back to unconstrained weak enclosure.
@@ -339,7 +339,7 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       // This is expected and correct -- the bound is identical.
 
       smt_sortt rs = mk_real_sort();
-      smt_astt eps_rel = nullptr, eps_abs = nullptr;
+      smt_astt eps_rel = {}, eps_abs = {};
       if (!select_nearest_eps(eps_rel, eps_abs))
       {
         // Unsupported format: fall back to unconstrained weak enclosure.
@@ -675,7 +675,7 @@ get_max_normal(smt_solver_baset &conv, const floatbv_type2t &fbv_type)
     return conv.get_single_max_normal();
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
     return conv.get_double_max_normal();
-  return nullptr;
+  return {};
 }
 
 // Returns the min-normal SMT real for single/double floatbv, or nullptr.
@@ -688,7 +688,7 @@ get_min_normal(smt_solver_baset &conv, const floatbv_type2t &fbv_type)
     return conv.get_single_min_normal();
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
     return conv.get_double_min_normal();
-  return nullptr;
+  return {};
 }
 
 smt_astt smt_solver_baset::convert_is_inf(const expr2tc &expr)
@@ -847,7 +847,7 @@ smt_astt smt_solver_baset::convert_signbit(const expr2tc &expr)
   else
   {
     // In bitvector mode, extract the sign bit
-    const auto width = value->sort->getWidth();
+    const auto width = value->Sort->getWidth();
     is_neg =
       mk_eq(mk_extract(value, width - 1, width - 1), mk_smt_bv(BigInt(1), 1));
   }
@@ -864,7 +864,7 @@ smt_astt smt_solver_baset::convert_rounding_mode(const expr2tc &expr)
   // We don't actually care about rounding mode when in integer/real mode, as
   // it is discarded when encoding it in SMT
   if (int_encoding)
-    return nullptr;
+    return {};
 
   // Easy case, we know the rounding mode
   if (is_constant_int2t(expr))
@@ -898,16 +898,16 @@ smt_astt smt_solver_baset::convert_rounding_mode(const expr2tc &expr)
   // ROUND_TO_MINUS_INF=3, ROUND_TO_ZERO=4.
 
   smt_astt symbol = convert_ast(expr);
-  if (!symbol->sort->isBVSort())
+  if (!symbol->Sort->isBVSort())
   {
     log_warning(
       "unsupported symbolic rounding mode sort {}: falling back to "
       "ROUND_TO_ZERO",
-      static_cast<int>(symbol->sort->getSortKind()));
+      static_cast<int>(symbol->Sort->getSortKind()));
     return mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
   }
 
-  const auto width = symbol->sort->getWidth();
+  const auto width = symbol->Sort->getWidth();
 
   auto is_mode = [this, &symbol, width](int value) -> smt_astt {
     return mk_eq(symbol, mk_smt_bv(BigInt(value), width));

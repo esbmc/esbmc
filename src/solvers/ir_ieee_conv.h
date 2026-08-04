@@ -1,7 +1,8 @@
 #ifndef SOLVERS_SMT_FP_IR_IEEE_CONV_H_
 #define SOLVERS_SMT_FP_IR_IEEE_CONV_H_
 
-#include <solvers/smt_ast.h>
+#include <solvers/smt_sort.h>
+
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
 #include <string>
@@ -173,17 +174,28 @@ public:
 private:
   smt_solver_baset *ctx;
 
-  /** Map from exact-real-result AST pointer to its enclosure interval.
-   *  Keyed by pointer identity (SSA variables are hash-consed in smt_cache).
-   *  Missing entries fall back to the point interval {t, t}. */
-  std::unordered_map<const smt_ast *, ra_interval_t> ir_ra_interval_map;
+  /** Key for the AST-indexed maps below: the arena-owned expression behind an
+   *  smt_astt. Camada's handle has no operator== or std::hash by design, and
+   *  the identity these maps want is the underlying expression's anyway.
+   *
+   *  Camada's arena owns expressions for the solver's whole lifetime, so
+   *  (unlike the deleted smt_ast wrapper, which pop_ctx() freed) a key here
+   *  cannot dangle after a pop. Entries are still never pruned, so a popped
+   *  expression's metadata lingers; that is wasted space, not a dangling read.
+   */
+  using ast_keyt = const camada::SMTExpr *;
 
-  /** Map from AST pointer to its NaN predicate (a boolean SMT term that is
+  /** Map from exact-real-result AST to its enclosure interval.
+   *  Keyed by identity (SSA variables are hash-consed in smt_cache).
+   *  Missing entries fall back to the point interval {t, t}. */
+  std::unordered_map<ast_keyt, ra_interval_t> ir_ra_interval_map;
+
+  /** Map from AST to its NaN predicate (a boolean SMT term that is
    *  true iff the value is NaN).  Only populated for sqrt results where
    *  the operand may be negative. */
-  std::unordered_map<const smt_ast *, smt_astt> ir_ieee_nan_map;
+  std::unordered_map<ast_keyt, smt_astt> ir_ieee_nan_map;
 
-  /** Map from AST pointer to its negative-zero predicate (a boolean SMT
+  /** Map from AST to its negative-zero predicate (a boolean SMT
    *  term that is true iff the value stands for IEEE 754 -0.0). Predicates
    *  originate when a negative subnormal-range result is flushed to zero
    *  (smt_solver_baset::mk_subnormal_flush) and when a literal
@@ -191,18 +203,8 @@ private:
    *  (smt_solver_baset::convert_terminal's constant_floatbv_id case), and
    *  may subsequently be propagated through assignments or wrapper terms;
    *  an absent entry means that no negative-zero metadata is recorded for
-   *  the value.
-   *
-   *  Lifetime: keyed on raw AST pointers and never pruned, but
-   *  smt_solver_baset::pop_ctx() deletes every AST created since the
-   *  matching push_ctx(). A pop can therefore leave both a key and its
-   *  stored predicate value dangling; a later lookup that hits such an
-   *  entry would hand a freed AST to a consumer. This exposure predates
-   *  this map (ir_ieee_nan_map above has the same shape and is subject
-   *  to the same limitation) and is not specific to negative-zero
-   *  tracking, but is noted here since this map's population grows with
-   *  every literal negative-zero constant converted. */
-  std::unordered_map<const smt_ast *, smt_astt> ir_ieee_neg_zero_map;
+   *  the value. */
+  std::unordered_map<ast_keyt, smt_astt> ir_ieee_neg_zero_map;
 
   /** Set of symbol names that have already received integer range assertions,
    *  preventing duplicate constraints for the same SSA variable. */
