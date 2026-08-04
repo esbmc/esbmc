@@ -400,3 +400,58 @@ Delegations added *before* any native attempt (#6668, #6672, #6674, #6677,
   exercise different frontends and may reach sites this corpus never did.
 - Only then does deleting the round-trip and the fallback path become the
   measurable next step §"Phase 1" describes.
+
+## 12. The C suite censused (2026-08-04)
+
+§11.5 recorded that "0 fallbacks corpus-wide" was **not** claimable because only
+`esbmc-cpp` had been measured, and that the other frontends "may reach sites
+this corpus never did". The C suite has now been measured, with all eight
+dispatcher patches applied.
+
+### 12.1 Result
+
+**60 `regression/esbmc` tests, 4 declines in total.**
+
+| site | count | class |
+|---|---:|---|
+| `code_block` | 2 | cascade from the two below |
+| `code_label` — the `--error-label` shape | 1 | genuine, flag-specific |
+| `code_ifthenelse` — the lone-`assert(false)` fold | 1 | genuine |
+
+Against a 28 243-decline `esbmc-cpp` baseline before the patches, C lands at
+essentially zero. **The patches were developed entirely against C++ and drain C
+too** — expected, since `convert_native_rec` is frontend-agnostic, but worth
+measuring rather than assuming, which is what §11.5 refused to do.
+
+### 12.2 The residue is the same class in both suites
+
+- **the assert-fold** — `generate_ifthenelse` folds a branch that reduces to a
+  lone `assert(false)` into the guard; the dispatcher declines rather than
+  reproduce the fold. Present in both suites.
+- **`--error-label`** — `convert_label` turns a matching label into an
+  `ASSERT(false)` carrying property metadata. Fires only under that flag, so it
+  is invisible to any census that does not replay `test.desc` flags. It never
+  appeared in the C++ corpus.
+
+Both are candidates for the same statement-local delegation the eight patches
+use; neither is a representation gap.
+
+### 12.3 What the Phase 1 exit criterion still needs
+
+| suite | censused | result |
+|---|---|---|
+| `esbmc-cpp` | yes | 28 243 → ~1 324, residue = assert-fold |
+| `esbmc` (C) | **yes, here** | 4 declines / 60 tests |
+| `python` | no | — |
+| `esbmc-solidity` | no | macOS-blocked (no `solc`); rides Linux CI |
+| `jimple` | no | — |
+
+Python is the notable gap: the largest frontend, and the one whose converter
+differs most from the C/C++ path. "0 fallbacks corpus-wide" cannot be claimed
+until all four are measured — and per §11.5 that claim is the precondition for
+deleting the round-trip and the fallback path.
+
+**Methodology note.** Replay each test's own `test.desc` flags. The
+`--error-label` site is invisible otherwise, and it is one of only two genuine
+sites C has left.
+
