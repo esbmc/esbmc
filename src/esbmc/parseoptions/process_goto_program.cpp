@@ -17,6 +17,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <limits>
+#include <util/arith/ieee_float.h>
 #include <util/expr/expr_util.h>
 #include <iostream>
 #include <fstream>
@@ -76,6 +77,65 @@
 #  include <goto-programs/goto_contractor.h>
 #endif
 
+/* The --round-to-* flags select the IEEE 754 rounding mode (esbmc/esbmc#2763).
+ * Floating-point operations read it from __ESBMC_rounding_mode, a global whose
+ * zero-initialiser __ESBMC_main performs; rewriting that initialiser leaves
+ * fesetround() free to change the mode again later. */
+static bool
+apply_rounding_mode(goto_functionst &goto_functions, const cmdlinet &cmdline)
+{
+  static const struct
+  {
+    const char *flag;
+    ieee_floatt::rounding_modet mode;
+  } modes[] = {
+    {"round-to-nearest", ieee_floatt::ROUND_TO_EVEN},
+    {"round-to-even", ieee_floatt::ROUND_TO_EVEN},
+    {"round-to-plus-inf", ieee_floatt::ROUND_TO_PLUS_INF},
+    {"round-to-minus-inf", ieee_floatt::ROUND_TO_MINUS_INF},
+    {"round-to-zero", ieee_floatt::ROUND_TO_ZERO}};
+
+  const char *selected_flag = nullptr;
+  ieee_floatt::rounding_modet selected = ieee_floatt::ROUND_TO_EVEN;
+  for (const auto &m : modes)
+  {
+    if (!cmdline.isset(m.flag))
+      continue;
+    if (selected_flag && selected != m.mode)
+    {
+      log_error("--{} and --{} are mutually exclusive", selected_flag, m.flag);
+      return true;
+    }
+    selected_flag = m.flag;
+    selected = m.mode;
+  }
+
+  if (!selected_flag)
+    return false;
+
+  goto_functionst::function_mapt::iterator main =
+    goto_functions.function_map.find("__ESBMC_main");
+  if (main != goto_functions.function_map.end())
+    for (auto &i : main->second.body.instructions)
+    {
+      if (!i.is_assign())
+        continue;
+      const code_assign2t &assign = to_code_assign2t(i.code);
+      if (
+        !is_symbol2t(assign.target) ||
+        to_symbol2t(assign.target).thename != "c:@__ESBMC_rounding_mode")
+        continue;
+      i.code = code_assign2tc(
+        assign.target, constant_int2tc(assign.source->type, BigInt(selected)));
+      return false;
+    }
+
+  log_warning(
+    "--{} has no effect: this program performs no floating-point rounding",
+    selected_flag);
+  return false;
+}
+
 // This method performs various analyses and transformations
 // on the given GOTO program. They involve all the techniques that we class
 // as "static analyses" - performed on the given GOTO program before it is
@@ -96,6 +156,9 @@ bool esbmc_parseoptionst::process_goto_program(
   try
   {
     namespacet ns(context);
+
+    if (apply_rounding_mode(goto_functions, cmdline))
+      return true;
 
     bool is_mul =
       cmdline.isset("multi-property") || cmdline.isset("parallel-solving");
