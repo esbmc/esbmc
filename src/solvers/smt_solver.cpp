@@ -3066,7 +3066,15 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
     const member2t &mem = to_member2t(res);
     expr2tc mem_src = mem.source_value;
 
-    if (is_symbol2t(mem_src) && !is_pointer_type(expr) && !is_struct_type(expr))
+    /* Re-query the model for the member itself. convert_member() lowers a
+     * struct/complex/pointer member to a tuple-select, which get_by_ast()
+     * expands via tuple_get(), so aggregates materialise here too; falling
+     * through to simplify() instead would leave the member's own operands in
+     * the result (e.g. `o2.in` reported as `{ .in=o1.in, .t=0 }` -- an
+     * unresolved subterm, and the outer struct's type rather than the
+     * member's). Pointers keep the old path: their model value comes from
+     * pointer_logic, which needs the simplified expression. */
+    if (is_symbol2t(mem_src) && !is_pointer_type(expr))
     {
       return get_by_ast(res->type, convert_ast(res));
     }
