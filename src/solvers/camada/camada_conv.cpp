@@ -42,9 +42,43 @@ enum class camada_backendt
   yices,
   bitwuzla,
   smtlib,
-  bitwuzllob,
-  neurosym
+  /* Any external program that reads an SMT-LIB2 file and prints a verdict.
+   * Which one is data (oneshot_configt), not a distinct backend. */
+  oneshot
 };
+
+/* Everything that distinguishes one external one-shot solver from another.
+ * Adding a solver means adding one of these plus a factory -- no new code
+ * path, which is the point of driving them all through SMT-LIB. */
+struct oneshot_configt
+{
+  /* Option prefix: --<name>-prog, --<name>-model-prog. */
+  const char *name;
+  /* How the solver is named in messages. */
+  const char *display;
+  /* Command run on the formula file; %f is the path, appended when absent. */
+  const char *default_prog;
+  /* What this solver can parse: bv_only leaves the array/fp/tuple interfaces
+   * unset so ESBMC's flatteners lower everything to bit-vectors, and pins the
+   * emitted logic to QF_BV. Otherwise the logic follows ESBMC's encoding. */
+  bool bv_only;
+  /* Named in the "does not support --<strategy>" rejection. */
+  const char *mode;
+};
+
+const oneshot_configt oneshot_bitwuzllob{
+  "bitwuzllob",
+  "Bitwuzllob",
+  "mallob -mono=%f -mono-app=SMT",
+  false,
+  "Mallob in one-shot mono mode"};
+
+const oneshot_configt oneshot_neurosym{
+  "neurosym",
+  "NeuroSym",
+  "python main.py %f",
+  true,
+  "NeuroSym in one-shot batch mode"};
 
 bool backend_supports_tuples(camada_backendt backend)
 {
@@ -58,10 +92,8 @@ bool backend_supports_tuples(camada_backendt backend)
   case camada_backendt::mathsat:
   case camada_backendt::yices:
   case camada_backendt::bitwuzla:
-  /* Mallob is handed a QF_AUFBV script; ESBMC's flattener lowers tuples. */
-  case camada_backendt::bitwuzllob:
-  /* NeuroSym parses pure QF_BV only, so everything is flattened. */
-  case camada_backendt::neurosym:
+  /* The external solvers are handed a flattened script. */
+  case camada_backendt::oneshot:
     return false;
   }
 
@@ -488,11 +520,13 @@ public:
   explicit camada_convt(
     const namespacet &ns,
     const optionst &options,
-    camada_backendt backend)
+    camada_backendt backend,
+    const oneshot_configt *oneshot = nullptr)
     : smt_solver_baset(ns, options),
       array_iface(true, true),
       fp_convt(this),
-      backend(backend)
+      backend(backend),
+      oneshot(oneshot)
   {
     switch (backend)
     {
@@ -518,25 +552,20 @@ public:
     case camada_backendt::smtlib:
       solver = create_esbmc_smtlib_solver(options);
       break;
-    case camada_backendt::bitwuzllob:
-    case camada_backendt::neurosym:
+    case camada_backendt::oneshot:
     {
-      const bool is_neurosym = backend == camada_backendt::neurosym;
-      oneshot_name = is_neurosym ? "neurosym" : "bitwuzllob";
-      oneshot_display = is_neurosym ? "NeuroSym" : "Bitwuzllob";
-      oneshot_prog = options.get_option(std::string(oneshot_name) + "-prog");
+      assert(oneshot);
+      oneshot_prog = options.get_option(std::string(oneshot->name) + "-prog");
       if (oneshot_prog.empty())
-        oneshot_prog =
-          is_neurosym ? "python main.py %f" : "mallob -mono=%f -mono-app=SMT";
-      /* NeuroSym natively parses only QF_BV and QF_LIA; the factory leaves
-       * the tuple/array/fp interfaces unset so ESBMC's flatteners lower
-       * everything to bit-vectors, and the emitted logic must match. */
-      const std::string logic =
-        is_neurosym ? "QF_BV" : pick_logic(options, false);
+        oneshot_prog = oneshot->default_prog;
       formula_path =
-        oneshot_options::choose_formula_path(options, oneshot_name);
+        oneshot_options::choose_formula_path(options, oneshot->name);
       solver = create_esbmc_oneshot_solver(
-        options, oneshot_name, formula_path, oneshot_prog, logic);
+        options,
+        oneshot->name,
+        formula_path,
+        oneshot_prog,
+        oneshot->bv_only ? "QF_BV" : pick_logic(options, false));
       break;
     }
     }
@@ -556,7 +585,7 @@ public:
 
   smt_resultt dec_solve() override
   {
-    if (oneshot_name)
+    if (oneshot)
       return oneshot_dec_solve();
 
     pre_solve();
@@ -584,7 +613,7 @@ public:
       log_error(
         "the {} backend supports a single (check-sat) query per run; "
         "incremental strategies are not supported",
-        oneshot_name);
+        oneshot->name);
       abort();
     }
     solved = true;
@@ -611,17 +640,17 @@ public:
          * style solvers exit 10/20. */
         log_error(
           "{}: solver command \"{}\" died with {}; discarding its verdict",
-          oneshot_name,
+          oneshot->name,
           d.Command,
           d.ExitStatus);
       else if (tail_verdict(d.OutputTail) == camada::checkResult::UNKNOWN)
         /* The solver decided nothing and said so. */
-        log_error("{}: solver returned unknown", oneshot_name);
+        log_error("{}: solver returned unknown", oneshot->name);
       else
         log_error(
           "{}: no sat/unsat verdict in the output of \"{}\" ({}); last output "
           "lines:\n{}",
-          oneshot_name,
+          oneshot->name,
           d.Command,
           d.ExitStatus,
           d.OutputTail);
@@ -640,8 +669,8 @@ public:
       log_error(
         "{}: {} reported sat but the local model solver did not; refusing to "
         "build a counterexample from a diverging model",
-        oneshot_name,
-        oneshot_display);
+        oneshot->name,
+        oneshot->display);
       abort();
     }
 
@@ -649,18 +678,19 @@ public:
     {
       if (options.get_bool_option("result-only"))
         return P_SATISFIABLE;
-      if (options.get_option(std::string(oneshot_name) + "-model-prog").empty())
+      if (options.get_option(std::string(oneshot->name) + "-model-prog")
+            .empty())
         log_error(
           "{}: formula is satisfiable, but building the counterexample "
           "requires a local interactive SMT-LIB2 solver; re-run with "
           "--{}-model-prog <cmd> (e.g. \"z3 -in\") or with --result-only",
-          oneshot_name,
-          oneshot_name);
+          oneshot->name,
+          oneshot->name);
       else
         log_error(
           "{}: the local model solver is unavailable; cannot build a "
           "counterexample",
-          oneshot_name);
+          oneshot->name);
       return P_ERROR;
     }
 
@@ -1482,14 +1512,14 @@ public:
     /* A temporary formula file is ours to remove; a --output path is the
      * user's. The signal/timeout paths skip this via _exit(), which is why
      * choose_formula_path() also registers the temp for cleanup there. */
-    if (oneshot_name && oneshot_options::uses_temp_formula(options))
+    if (oneshot && oneshot_options::uses_temp_formula(options))
       remove(formula_path.c_str());
   }
 
   const std::string solver_text() override
   {
-    if (oneshot_name)
-      return std::string(oneshot_display) + " '" + oneshot_prog + "'";
+    if (oneshot)
+      return std::string(oneshot->display) + " '" + oneshot_prog + "'";
     return solver->getSolverNameAndVersion();
   }
 
@@ -1512,7 +1542,7 @@ public:
       return "";
     }
 
-    if (oneshot_name)
+    if (oneshot)
     {
       /* Under --smt-formula-only no solve follows, so close the script here;
        * the solver is write-only in that mode, so check() only emits the
@@ -1562,9 +1592,8 @@ public:
 private:
   std::unique_ptr<camada::SMTSolver> solver;
   const camada_backendt backend;
-  /* One-shot backends only (bitwuzllob, neurosym). */
-  const char *oneshot_name = nullptr;
-  const char *oneshot_display = nullptr;
+  /* Set only for camada_backendt::oneshot. */
+  const oneshot_configt *oneshot = nullptr;
   std::string oneshot_prog;
   std::string formula_path;
   bool solved = false;
@@ -1739,17 +1768,18 @@ smt_solver_baset *create_camada_solver(
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
-  fp_convt **fp_api)
+  fp_convt **fp_api,
+  const oneshot_configt *oneshot = nullptr)
 {
-  auto *solver = new camada_convt(ns, options, backend);
+  auto *solver = new camada_convt(ns, options, backend, oneshot);
   *tuple_api = backend_supports_tuples(backend)
                  ? static_cast<tuple_iface *>(solver)
                  : nullptr;
 
-  /* NeuroSym is QF_BV-only: leaving the array and fp interfaces unset too
-   * makes create_solver() install the flatteners that lower arrays and
+  /* A bv-only solver gets the array and fp interfaces left unset too, so
+   * create_solver() installs the flatteners that lower arrays and
    * floating-point to bit-vectors before anything reaches the serializer. */
-  const bool bv_only = backend == camada_backendt::neurosym;
+  const bool bv_only = oneshot && oneshot->bv_only;
   *array_api = bv_only ? nullptr : solver;
   *fp_api = bv_only ? nullptr : solver;
   return solver;
@@ -1858,6 +1888,19 @@ void reject_incremental_strategies(
     }
 }
 
+smt_solver_baset *create_oneshot_solver(
+  const oneshot_configt &cfg,
+  const optionst &options,
+  const namespacet &ns,
+  tuple_iface **tuple_api,
+  array_iface **array_api,
+  fp_convt **fp_api)
+{
+  reject_incremental_strategies(options, cfg.name, cfg.mode);
+  return create_camada_solver(
+    camada_backendt::oneshot, options, ns, tuple_api, array_api, fp_api, &cfg);
+}
+
 smt_solver_baset *create_new_bitwuzllob_solver(
   const optionst &options,
   const namespacet &ns,
@@ -1865,11 +1908,8 @@ smt_solver_baset *create_new_bitwuzllob_solver(
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  reject_incremental_strategies(
-    options, "bitwuzllob", "Mallob in one-shot mono mode");
-
-  return create_camada_solver(
-    camada_backendt::bitwuzllob, options, ns, tuple_api, array_api, fp_api);
+  return create_oneshot_solver(
+    oneshot_bitwuzllob, options, ns, tuple_api, array_api, fp_api);
 }
 
 smt_solver_baset *create_new_neurosym_solver(
@@ -1879,9 +1919,6 @@ smt_solver_baset *create_new_neurosym_solver(
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  reject_incremental_strategies(
-    options, "neurosym", "NeuroSym in one-shot batch mode");
-
-  return create_camada_solver(
-    camada_backendt::neurosym, options, ns, tuple_api, array_api, fp_api);
+  return create_oneshot_solver(
+    oneshot_neurosym, options, ns, tuple_api, array_api, fp_api);
 }
