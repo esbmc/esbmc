@@ -597,7 +597,7 @@ discharge or an explicit, reviewed waiver.
 | H-A2 | Incoming merge guards may overlap (no disjointness assumed) | by construction (not assumed) |
 | H-A4 | Every `with2t` store the slicer elides has a `symbol2t` source and constant index | **Discharged**, §15 M9 (H-B7) — `assumption_discharge.test.cpp` checks it on every elided store and censuses the excluded shapes; struct member stores are excluded by their `constant_string2t` field, which the census now pins |
 | H-A6 | `thread_last_reads/writes` contain *all* accesses of the last transition, including through pointers | **Refuted and fixed**, not discharged: R11 → **R18**, a one-level `get_expr_globals` resolution that lost a nested-dereference write, fixed by **#6550**. What holds post-fix is that pointer *chains* are followed; no harness asserts completeness for every access shape, so this row stays open in the weaker form |
-| H-A8 | `push_ctx`/`pop_ctx` calls are balanced by the caller (`reachability_treet`) | **Open**, scoped by §15 M9 (H-B7): the balance rests on the explicit `targ->push_ctx()` in `setup_for_new_explore` (`reachability_tree.cpp:339`, "Start with a depth of 1") pairing with `~dfs_execution_statet`'s pop, and only under `--smt-during-symex`. An unbalanced pop is UB, not a diagnostic — `runtime_encoded_equationt::pop_ctx` reads `scoped_end_points.back()` unchecked on a list the constructor leaves empty |
+| H-A8 | `push_ctx`/`pop_ctx` calls are balanced by the caller (`reachability_treet`) | **Discharged**, §15 M9 (H-A8) — `context_stack.test.cpp` on a real `runtime_encoded_equationt` over a real solver: an exhausted 49-interleaving exploration lands back on depth 0, having reached 9. Deleting the setup `push_ctx` fails it *and* SIGSEGVs, which is the UB the row's failure mode predicted |
 | all Tier A | `nondet` solver answers are *sound* (no wrong TRUE/FALSE) | out of scope — solver backends are Tier D |
 
 ### 7.4 Tier C — whole-tool metamorphic oracles
@@ -817,9 +817,11 @@ those fixed and retired.
 scheduled under a milestone. **Closed, §15 M9.** I9 discharged on the real engine
 with no defect found; the entry records why the obvious mutant (deleting the
 union) is undetectable and the meaningful one (intersecting it) is caught. H-B7
-then closed three of §7.3's seven rows and sharpened the rest: two were already
-discharged elsewhere, one is refuted-and-fixed rather than discharged (R18), and
-**H-A8 is the one live residual**, carrying a stated UB consequence.
+then closed three of §7.3's seven rows and sharpened the rest, and H-A8 — the
+row it left live — is closed by a third entry on a real `runtime_encoded_equationt`.
+What remains is not backed by a live harness: H-A2's guard algebra is a
+cross-document dependency, and H-A6 is refuted-and-fixed (R18) rather than
+discharged.
 
 Total ≈ 9 engineer-weeks for the verification track, plus ≈ 2 weeks for the
 ESBMC extension critical path (WI-1…WI-3, §13.6) running alongside it.
@@ -3597,8 +3599,8 @@ completeness over every access shape, and the row stays open in that weaker
 form. H-A2's guard-algebra row remains a cross-document dependency on the irep2
 plan.
 
-**The live residual is H-A8**, and the audit gives it a consequence it did not
-have. The balance of `push_ctx`/`pop_ctx` rests on one explicit call —
+**The live residual is H-A8** — closed by the next entry — and the audit gives it
+a consequence it did not have. The balance of `push_ctx`/`pop_ctx` rests on one explicit call —
 `targ->push_ctx()` at `reachability_tree.cpp:339`, commented "Start with a depth
 of 1" — pairing with `~dfs_execution_statet`'s pop, since the initial execution
 state is constructed rather than cloned and so has no push of its own. Both are
@@ -3609,6 +3611,44 @@ not a diagnostic: `runtime_encoded_equationt::pop_ctx` takes
 real `runtime_encoded_equationt` over a real `smt_convt` — §6.1's no-doubles rule
 forbids a counting subclass standing in for the equation — which is the next
 piece of work rather than a gap in this one.
+
+### M9 (H-A8) — 2026-08-04, the last register row closes
+
+`unit/goto-symex/context_stack.test.cpp` drives a real `runtime_encoded_equationt`
+over a real `smt_convt` from `create_solver`, per §6.1: a counting subclass would
+be a double, and would not exercise the stack at issue. Three cases, and the
+first exists because the obvious way to write this test measures nothing.
+
+**The template is not the equation.** `setup_for_new_explore` *clones* the target
+it was given and pushes on the clone (`reachability_tree.cpp:330-339`,
+`symex_target_equation.cpp:633-645`), so the object the caller constructed —
+the one `bmc.cpp:143-152` builds and the one a test naturally holds — stays at
+depth 0 for the whole run. The balance has to be read off the equation the
+exploration returns in its `symex_resultt`. The first draft of this file
+asserted on the template and reported an imbalance that was purely its own.
+
+**The balance holds, and its shape is not what the row implied.** One push at
+setup, one per clone, one pop per destruction; the initial state is destroyed
+like any other, so an *exhausted* exploration lands on **0**, not on the setup
+push. That push is exactly the partner for the initial state's own pop — the
+state is constructed rather than cloned, so it has no push of its own. On
+`TWO_WRITERS` the exploration runs 49 interleavings (the same count
+`mpor.test.cpp` reports) and reaches depth 9 before returning to 0. A second
+draft asserted the exploration ends at depth 1 and failed at 7, which is not an
+imbalance either: it stopped at a 32-interleaving cap, so the remaining depth
+was the live DFS stack. Only an exhausted exploration says anything, and the
+case now requires exhaustion before it reads the depth.
+
+**Mutation.** Deleting `targ->push_ctx()` fails the sequential case (depth 0
+where 1 is required) and then **SIGSEGVs** — `pop_ctx` taking
+`scoped_end_points.back()` on the empty list, which is the failure mode
+§7.3's row was given on inspection in the previous entry and is now observed.
+That is also why this file is allowed to fail by crashing: with the pairing
+broken there is no diagnostic to produce.
+
+With this row closed, §7.3 has no open assumption backed by a live harness:
+H-A2's guard algebra remains a cross-document dependency on the irep2 plan, and
+H-A6 stays refuted-and-fixed (R18/#6550) rather than discharged.
 
 ---
 
