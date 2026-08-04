@@ -966,10 +966,10 @@ currently poor:
 | Question | Today | Was |
 |---|---|---|
 | Real Linux driver functions verified | 4 | 4 |
-| Operational model functions exercised | 127 of 127 (100%) | 22 of 105 (21%) |
-| Tests that execute the operational model | 60 of 84 | 15 of 39 |
-| Tests declaring the properties they check | 84 of 84 | 1 of 35 |
-| Tests that verify an interleaving | 5 of 84 | 0 of 35 |
+| Operational model functions exercised | 131 of 131 (100%) | 22 of 105 (21%) |
+| Tests that execute the operational model | 62 of 86 | 15 of 39 |
+| Tests declaring the properties they check | 86 of 86 | 1 of 35 |
+| Tests that verify an interleaving | 5 of 86 | 0 of 35 |
 
 Phase 8.1 and 8.4 moved the last two; 8.2 made the second measurable for the
 first time. Raising it from 21% to 100% is what found the model defects listed
@@ -998,15 +998,15 @@ Phase 8.2 raises model coverage, the suite becomes worth re-enabling.
 | Metric | Count |
 |--------|-------|
 | Total commits | 38 |
-| Total regression tests | 84 |
-| Passing tests | 49 |
-| Bug-detecting tests | 35 |
+| Total regression tests | 86 |
+| Passing tests | 50 |
+| Bug-detecting tests | 36 |
 | Kernel headers added | 6 |
-| Operational model lines | 2046 |
+| Operational model lines | 2136 |
 | Documentation pages | 3 |
 | AER functions added | 4 |
 | Error injection functions added | 2 |
 | HDM constraints added | 2 (alignment + decoder limit) |
 | Real Linux driver files converted to GOTO | 1 |
 | Real Linux driver functions verified | 4 |
-| Model functions exercised by tests | 127 of 127 (100%) |
+| Model functions exercised by tests | 131 of 131 (100%) |

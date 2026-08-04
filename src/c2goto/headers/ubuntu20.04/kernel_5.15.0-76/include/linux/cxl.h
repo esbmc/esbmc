@@ -549,4 +549,68 @@ unsigned int cxl_pmu_num_counters(u64 cap);
 int einj_is_cxl_error_type(u64 type);
 int einj_cxl_inject_rch_error(u64 rcrb, u64 type);
 
+/* ============================================================
+ *  CXL Fabric Manager binding / hot-add lockdown — declared
+ *  here, modelled in cxl_driver.c
+ * ============================================================
+ *
+ * Models the CXL 4.0 §14.7.7 bind sequence and the policy gate that a
+ * lockdown intent imposes on it. The state names are the ones the CXL 4.0
+ * spec uses for binding a pooled SLD to a vPPB:
+ *
+ *   bind_initiated -> host_recognizes_hot_added_sld -> host_enumerates_sld
+ *                  -> fm_indicates_vcs_binding -> bind_complete
+ *
+ * The obligations this supports come from an external intent decomposition
+ * (Seccom): "deny any hot add of any new CXL endpoints at runtime", which
+ * yields three safety clauses -- !cxl_hot_add_event (§14.7.5),
+ * !switching_binding_event (§14.7.7) and !runtime_config_trigger (§14.7).
+ * Each is an invariant over the event stream once the fabric is locked
+ * down, not a liveness property; see docs/cxl-temporal-properties.md for
+ * why that distinction decides whether ESBMC's --ltl mode is needed.
+ */
+
+enum cxl_fm_bind_state {
+  CXL_FM_IDLE = 0,
+  CXL_FM_BIND_INITIATED,
+  CXL_FM_HOST_RECOGNIZES_SLD,
+  CXL_FM_HOST_ENUMERATES_SLD,
+  CXL_FM_VCS_BINDING_INDICATED,
+  CXL_FM_BIND_COMPLETE,
+};
+
+/* Events the lockdown policy must exclude. */
+enum cxl_fm_event {
+  CXL_FM_EV_NONE = 0,
+  CXL_FM_EV_HOT_ADD,       /* §14.7.5 */
+  CXL_FM_EV_BIND,          /* §14.7.7 */
+  CXL_FM_EV_UNBIND,        /* §14.7.7 */
+  CXL_FM_EV_RUNTIME_CONFIG /* §14.7   */
+};
+
+struct cxl_fabric {
+  enum cxl_fm_bind_state state;
+  int locked;            /* set once the fabric enters runtime */
+  unsigned int endpoints; /* bound endpoints */
+  unsigned int denied;    /* events refused by the policy gate */
+};
+
+#define CXL_FABRIC_MAX_ENDPOINTS 4
+
+void cxl_fabric_init(struct cxl_fabric *f);
+
+/* Enters runtime, after which the three obligations must hold. Irreversible,
+ * as a lockdown that can be lifted is not one. */
+void cxl_fabric_lockdown(struct cxl_fabric *f);
+
+/*
+ * The policy gate. Returns 0 if the event is permitted and was applied, or
+ * -EPERM if the lockdown forbids it. A caller that ignores the result is the
+ * bug the paired negative test models.
+ */
+int cxl_fabric_submit(struct cxl_fabric *f, enum cxl_fm_event ev);
+
+/* True when the fabric is in a state only reachable by completing a bind. */
+int cxl_fabric_bind_completed(const struct cxl_fabric *f);
+
 #endif /* _LINUX_CXL_H */

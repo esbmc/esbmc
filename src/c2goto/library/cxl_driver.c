@@ -2044,3 +2044,93 @@ __ESBMC_HIDE:;
     return -EINVAL;
   return 0;
 }
+
+/* ============================================================
+ *  CXL Fabric Manager binding / hot-add lockdown models
+ * ============================================================
+ *
+ * The bind sequence is CXL 4.0 §14.7.7's, and the gate is the policy an
+ * external intent decomposition imposes on it. The gate is deliberately the
+ * only way to advance the state machine: a model that let callers write
+ * f->state directly would make the obligations unfalsifiable.
+ * ============================================================ */
+
+void cxl_fabric_init(struct cxl_fabric *f)
+{
+__ESBMC_HIDE:;
+  assert(f != NULL);
+  f->state = CXL_FM_IDLE;
+  f->locked = 0;
+  f->endpoints = 0;
+  f->denied = 0;
+}
+
+void cxl_fabric_lockdown(struct cxl_fabric *f)
+{
+__ESBMC_HIDE:;
+  assert(f != NULL);
+  f->locked = 1;
+}
+
+int cxl_fabric_submit(struct cxl_fabric *f, enum cxl_fm_event ev)
+{
+__ESBMC_HIDE:;
+  assert(f != NULL);
+
+  /* The three safety obligations, as one gate. Each names the CXL 4.0
+   * section the clause was derived from. */
+  if (f->locked)
+  {
+    switch (ev)
+    {
+    case CXL_FM_EV_HOT_ADD:        /* !cxl_hot_add_event      §14.7.5 */
+    case CXL_FM_EV_BIND:           /* !switching_binding_event §14.7.7 */
+    case CXL_FM_EV_UNBIND:         /* !switching_binding_event §14.7.7 */
+    case CXL_FM_EV_RUNTIME_CONFIG: /* !runtime_config_trigger  §14.7   */
+      f->denied++;
+      return -EPERM;
+    default:
+      break;
+    }
+  }
+
+  switch (ev)
+  {
+  case CXL_FM_EV_HOT_ADD:
+    if (f->endpoints >= CXL_FABRIC_MAX_ENDPOINTS)
+      return -ENOSPC;
+    f->state = CXL_FM_HOST_RECOGNIZES_SLD;
+    return 0;
+
+  case CXL_FM_EV_BIND:
+    /* The §14.7.7 sequence runs to completion or not at all; partial binds
+     * leave a vPPB the host has enumerated but the FM has not confirmed. */
+    f->state = CXL_FM_BIND_INITIATED;
+    f->state = CXL_FM_HOST_RECOGNIZES_SLD;
+    f->state = CXL_FM_HOST_ENUMERATES_SLD;
+    f->state = CXL_FM_VCS_BINDING_INDICATED;
+    f->state = CXL_FM_BIND_COMPLETE;
+    f->endpoints++;
+    return 0;
+
+  case CXL_FM_EV_UNBIND:
+    if (f->endpoints == 0)
+      return -EINVAL;
+    f->endpoints--;
+    f->state = CXL_FM_IDLE;
+    return 0;
+
+  case CXL_FM_EV_RUNTIME_CONFIG:
+    return 0;
+
+  default:
+    return 0;
+  }
+}
+
+int cxl_fabric_bind_completed(const struct cxl_fabric *f)
+{
+__ESBMC_HIDE:;
+  assert(f != NULL);
+  return f->state == CXL_FM_BIND_COMPLETE;
+}

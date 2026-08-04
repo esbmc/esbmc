@@ -2,7 +2,7 @@
 
 ## Flags & Configuration
 
-All 84 tests share the same configuration:
+All 86 tests share the same configuration:
 
 | Property | Value |
 |---|---|
@@ -173,7 +173,7 @@ check), `cxl_mbox_ioctl_02` (unchecked payload size), `cxl_port_dport_02`
 (use-after-free), `cxl_mbox_race_02` (unsynchronised mailbox),
 `cxl_dma_coherent_02` (unsynchronised DMA buffer)
 
-49 + 35 = 84, matching `ctest -L cxl` with `-DENABLE_CXL_REGRESSION=On`.
+50 + 36 = 86, matching `ctest -L cxl` with `-DENABLE_CXL_REGRESSION=On`.
 
 ---
 
@@ -199,7 +199,7 @@ check), `cxl_mbox_ioctl_02` (unchecked payload size), `cxl_port_dport_02`
 
 ### Recommendations
 
-1. **Roadmap statistics** are now 49 passing / 35 bug-detecting across 84 suites. Note the figure that matters more: all 127 modelled functions are now exercised by some test, up from 22 of 105 (`scripts/cxl_model_coverage.py`). Test count is not coverage.
+1. **Roadmap statistics** are now 50 passing / 36 bug-detecting across 86 suites. Note the figure that matters more: all 131 modelled functions are now exercised by some test, up from 22 of 105 (`scripts/cxl_model_coverage.py`). Test count is not coverage.
 
 2. **Flags are adequate but sparse.** No test uses:
    - `--z3` / `--bitwuzla` solver selection — all tests run with the default SMT solver
