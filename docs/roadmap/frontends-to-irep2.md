@@ -400,3 +400,325 @@ Delegations added *before* any native attempt (#6668, #6672, #6674, #6677,
   exercise different frontends and may reach sites this corpus never did.
 - Only then does deleting the round-trip and the fallback path become the
   measurable next step §"Phase 1" describes.
+
+## 15. Solidity and Jimple are not measurable here; Python re-censused (2026-08-04)
+
+§13.5 left three suites open. Two cannot be measured on this machine, and the
+third was re-measured after the §14 investigation produced a working fix.
+
+### 15.1 Solidity and Jimple — blocked, not zero
+
+| suite | attempt | outcome |
+|---|---|---|
+| `esbmc-solidity` | tests ship pre-generated `.solast`, so `solc`'s absence is not itself fatal | **conversion fails** — `ERROR: \`' is not a goto-binary`. Nothing is converted, so a decline census measures nothing |
+| `jimple` | — | **frontend not built**: `ERROR: frontend for Jimple was not built on this version of ESBMC` |
+
+A first pass reported "14 Solidity tests, 0 declines". **That figure is void** —
+zero because nothing ran, not because nothing declines. It is recorded here
+because it is exactly the failure mode §12.3's methodology note and §14.2's rule
+are about: a census must show the thing under test executed before its zero
+means anything. Both suites need Linux CI (Solidity) or a build with
+`-DENABLE_JIMPLE_FRONTEND=On` (Jimple).
+
+### 15.2 Python, re-censused with the §14 fix
+
+The docstring-location fix (#6695) applied, same instrumentation, the five tests
+the earlier samples covered:
+
+| | before (§13) | after #6695 |
+|---|---:|---:|
+| declines per test | ~75 | **~27** |
+| `code_expression` (unlocated statement) | 93 / 225 | **0** |
+
+**The dominant site is gone entirely.** What remains, ranked:
+
+| site | count | class |
+|---|---:|---|
+| `code_block` | 67 | cascade |
+| `code_ifthenelse` — then-branch scope-exit leak | 30 | genuine |
+| `code_ifthenelse` — else-branch scope-exit leak | 25 | genuine |
+| `code_ifthenelse` — then-branch cascade | 10 | cascade |
+| `code_assert` | 2 | genuine |
+
+### 15.3 The remaining Python residue is already fixed, pending merge
+
+The two genuine `code_ifthenelse` sites — 55 of the 57 genuine declines — are
+**precisely what PR #6679 addresses**: it delegates a branch that leaks
+scope-exit state instead of failing the walk, with the `tmp_symbol`/`context`/
+`targets` rollback that made it byte-identical. #6679 is open at the time of
+writing; the rest of the dispatcher series has merged.
+
+So the Python picture after #6695 and #6679 together should be dominated by
+cascade alone, with `code_assert` the only genuine site left in this sample.
+**That is a prediction, not a measurement** — it needs re-running once #6679
+lands.
+
+### 15.4 Phase 1 exit criterion
+
+| suite | status |
+|---|---|
+| `esbmc-cpp` | drained; residue is the assert-fold |
+| `esbmc` (C) | drained; 4 declines / 60 tests |
+| `python` | dominant site fixed (#6695); residue predicted to clear with #6679 |
+| `esbmc-solidity` | **not measurable here** — needs Linux CI |
+| `jimple` | **not measurable here** — frontend not built |
+
+"0 fallbacks corpus-wide" remains unclaimable, but for a different reason than
+in §13: the C-family and Python causes are addressed or identified, and what
+blocks the claim now is **measurement access to two frontends**, not unknown
+defects.
+## 16. Option F spike — Phase 0 answered from the tree (2026-08-04)
+
+§6 Phase 0 gates the whole B-4 half of this program on prototyping Option F and
+answering three questions. §5.2 called the equality asymmetry "a sharp edge" and
+the phase's first question. **Two of the three are answered by reading the tree,
+and the answer is favourable enough that the prototype is smaller than sized.**
+
+### 16.1 Does the field participate in equality and hashing?
+
+**No — provided it is omitted from the kind's `fields` tuple, and there is a
+compile-time-checked mechanism for saying so.**
+
+Every IREP2 kind declares e.g.
+
+```cpp
+static constexpr auto fields = std::make_tuple(&signedbv_type2t::width);
+```
+
+and `cmp`/`crc`/`hash`/`tostring` are generated over exactly that tuple
+(`irep2.h:1050-1075`). A member absent from it does not enter value identity.
+
+`fields_cover_class<K>()` would normally reject a missed member at compile time
+— but the codebase already provides the escape for deliberate exclusions:
+
+```cpp
+static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+```
+
+`irep2.h:1077-1088` documents the rationale, and it is **the same rationale
+Option F needs**:
+
+> Source locations must travel with the statement for `goto_convert`, but must
+> not enter value identity.
+
+Substitute "spelling" for "source location" and that is Option F. The mechanism
+is in use at eight sites in `irep2_expr.h` (the V.4 structured-CF kinds,
+`code_block2t`'s `end_location`, `if2t`'s ternary position, the loop kinds'
+`pragma_unroll_count`).
+
+### 16.2 Is the spelling lost when two types compare equal?
+
+**No — IREP2 does not intern or hash-cons types.** A grep for a type cache /
+interning / hash-consing in `irep2_type.h` and `irep2.cpp` returns nothing; the
+`fields`-derived hash exists for hashing containers, not for deduplicating
+nodes. So two `signedbv_type2t`s of the same width with different spellings are
+distinct objects that merely compare equal — each keeps its own spelling.
+
+This was the risk §5.2 raised implicitly ("two types identical in width and
+signedness may now differ in a spelling field") and it does not materialise.
+
+### 16.3 What is still to be prototyped
+
+Question 3 — verdict **and counterexample-text** parity over `esbmc-cpp` — still
+requires the prototype and a run. Nothing above substitutes for it. But the two
+design risks that made Option F look speculative are retired:
+
+| §5.2 concern | status |
+|---|---|
+| the field leaks into `type2t` equality and changes verdicts | **retired** — omit from `fields`, declare `excluded_field_bytes` |
+| `long` vs `long long` stop unifying in the solver | **retired** — same mechanism; they remain equal and unhashed apart |
+| spelling lost to canonicalisation | **retired** — no interning |
+| presentation concerns in the verifier IR | unchanged, and answered on merit in §5.2: `clang_cpp_adjust_expr` uses `#cpp_type` for **exception catch-matching**, which is semantics, not presentation |
+
+**Revised sizing for Phase 0:** the spike is now "add one excluded field to two
+kinds, repoint one reader, run the suite" rather than "discover whether the type
+system can tolerate this at all". §10's "days, high confidence" stands, and the
+no-go branch it hedged against is much less likely.
+## 13. The Python suite censused — and it is not like C (2026-08-04)
+
+§12.3 named Python as the notable remaining gap: the largest frontend and the
+converter furthest from the C/C++ path. It was measured, and §11.5's warning
+that the other frontends "may reach sites this corpus never did" is **confirmed
+in the strongest form so far**.
+
+### 13.1 Result
+
+Two independent stride samples over `regression/python`, all eight dispatcher
+patches applied, each test replaying its own `test.desc` flags (§12.3's
+methodology note). ~7 tests, **480 declines**:
+
+| site | count | class |
+|---|---:|---|
+| `code_block` (cascade) | 249 | cascade |
+| **`code_expression` — statement with no usable location** | **200** | **genuine, dominant** |
+| `code_ifthenelse` — lone-`assert(false)` fold | 30 | genuine, shared with C/C++ |
+| `code_assert` | 1 | genuine |
+
+**~75 declines per test**, against **4 declines across 60 tests** for C. Python
+is not close to drained; C effectively is.
+
+### 13.2 The dominant site
+
+```cpp
+// The OTHER carries the statement location directly; without a usable one
+// the legacy path would instead locate it at an enclosing block.
+if (expr_stmt.location.is_nil() || expr_stmt.location.get_file().empty())
+  return false;
+```
+
+An expression statement with **no usable source location** declines outright.
+That is rare in C and C++, where nearly every statement comes from a source
+line — and common in Python, whose converter emits synthetic statements
+(operational-model calls, desugared constructs) carrying no location.
+
+This is the clearest vindication of §11.5's refusal to extrapolate from one
+suite: eight patches tuned on C++ drove that corpus down 95 % and left C at
+essentially zero, while Python's single largest cause was never touched because
+C++ never produced it.
+
+### 13.3 Candidate fix, not yet attempted
+
+The sibling branch immediately above it already threads `inherited` down for
+exactly this problem, and the handler has `effective_location(expr_stmt.location,
+inherited)` available. Using it here instead of declining is the obvious
+candidate.
+
+It is **not** a free change: it assigns a location where the legacy path would
+have used the enclosing block's, so it must be gated on the byte-identical
+`--goto-functions-only` A/B rather than verdict parity — location fidelity is
+the whole subject of the W1-loc work, and `restore_value_locations` exists
+because of it.
+
+### 13.4 Sample size
+
+~7 tests across two independent stride samples, consistent between them. Small,
+and the reason is recorded rather than hidden: each Python test spawns the
+parser subprocess and the dev machine was contended throughout. The *ranking* is
+unambiguous at this size — one site is 200 of 231 genuine declines — but the
+absolute per-test figure should be re-measured on a quiet machine before it is
+quoted as a corpus rate.
+
+### 13.5 Phase 1 exit criterion
+
+| suite | censused | result |
+|---|---|---|
+| `esbmc-cpp` | yes | 28 243 → ~1 324, residue = assert-fold |
+| `esbmc` (C) | yes | 4 declines / 60 tests |
+| `python` | **yes, here** | ~75 declines/test; one dominant unfixed site |
+| `esbmc-solidity` | no | macOS-blocked; rides Linux CI |
+| `jimple` | no | — |
+
+Phase 1 is **not** near its exit criterion. C and C++ are drained; Python has a
+large, single, well-localised cause that no existing patch addresses.
+
+## 14. §13.3's candidate fix is refuted (2026-08-04)
+
+§13.3 proposed using `effective_location(expr_stmt.location, inherited)` instead
+of declining, on the reasoning that the sibling branch already threads
+`inherited` for exactly this problem. **It was implemented and it never fires.**
+
+### 14.1 The measurement
+
+A probe placed inside the new branch — printing only when the statement's *own*
+location is unusable, i.e. exactly the case the change exists to serve — was run
+on `casting31`, one of the tests the §13 census recorded at ~75 declines:
+
+| build | firings |
+|---|---|
+| master + the change | **0** |
+| all eight dispatcher patches + the change | **0** |
+
+Zero in both. So `effective_location` returns something equally unusable:
+**these statements have no usable location anywhere in their ancestry**, not
+merely none of their own. The guard still declines, and the change is dead code.
+
+### 14.2 The gate that nearly passed it
+
+The change was A/B'd first and came back **byte-identical on six tests,
+including all three of the decline-heavy ones**. That looked like a clean
+behaviour-preservation result. It was vacuous: the output is identical because
+the code never ran.
+
+This is the same trap recorded at §11.4 and hit repeatedly on this track — *a
+passing gate is not evidence unless the thing under test is shown to execute*.
+Byte-identity is especially prone to it, because a no-op scores perfectly.
+**Probe that the change fires before, not after, running the A/B.**
+
+### 14.3 What this means for the Python residue
+
+The dominant Python site is not a location-plumbing gap. Whatever emits these
+statements gives them no location and places them where no enclosing statement
+has one either. So the fix must either:
+
+1. give the synthetic statements a location at the point the Python converter
+   emits them — the OM-call and desugaring sites; or
+2. reproduce what the legacy path does for a wholly unlocated OTHER, which the
+   §13.2 comment says is to locate it at an enclosing *block* — a construct the
+   dispatcher does not track, and which `inherited` evidently is not.
+
+Option 1 is the more promising and is frontend work, not dispatcher work.
+Neither has been attempted.
+
+`fix/native-expr-inherited-location` (#6692) should be closed unmerged: it is
+inert by measurement.
+## 12. The C suite censused (2026-08-04)
+
+§11.5 recorded that "0 fallbacks corpus-wide" was **not** claimable because only
+`esbmc-cpp` had been measured, and that the other frontends "may reach sites
+this corpus never did". The C suite has now been measured, with all eight
+dispatcher patches applied.
+
+### 12.1 Result
+
+**60 `regression/esbmc` tests, 4 declines in total.**
+
+| site | count | class |
+|---|---:|---|
+| `code_block` | 2 | cascade from the two below |
+| `code_label` — the `--error-label` shape | 1 | genuine, flag-specific |
+| `code_ifthenelse` — the lone-`assert(false)` fold | 1 | genuine |
+
+Against a 28 243-decline `esbmc-cpp` baseline before the patches, C lands at
+essentially zero. **The patches were developed entirely against C++ and drain C
+too** — expected, since `convert_native_rec` is frontend-agnostic, but worth
+measuring rather than assuming, which is what §11.5 refused to do.
+
+### 12.2 The residue is the same class in both suites
+
+- **the assert-fold** — `generate_ifthenelse` folds a branch that reduces to a
+  lone `assert(false)` into the guard; the dispatcher declines rather than
+  reproduce the fold. Present in both suites.
+- **`--error-label`** — `convert_label` turns a matching label into an
+  `ASSERT(false)` carrying property metadata. Fires only under that flag, so it
+  is invisible to any census that does not replay `test.desc` flags. It never
+  appeared in the C++ corpus.
+
+Both are candidates for the same statement-local delegation the eight patches
+use; neither is a representation gap.
+
+### 12.3 What the Phase 1 exit criterion still needs
+
+| suite | censused | result |
+|---|---|---|
+| `esbmc-cpp` | yes | 28 243 → ~1 324, residue = assert-fold |
+| `esbmc` (C) | yes | 4 declines / 60 tests |
+| `python` | **yes, here** | ~75 declines/test; one dominant unfixed site |
+| `esbmc-solidity` | no | macOS-blocked; rides Linux CI |
+| `jimple` | no | — |
+
+Phase 1 is **not** near its exit criterion. C and C++ are drained; Python has a
+large, single, well-localised cause that no existing patch addresses.
+| `esbmc` (C) | **yes, here** | 4 declines / 60 tests |
+| `python` | no | — |
+| `esbmc-solidity` | no | macOS-blocked (no `solc`); rides Linux CI |
+| `jimple` | no | — |
+
+Python is the notable gap: the largest frontend, and the one whose converter
+differs most from the C/C++ path. "0 fallbacks corpus-wide" cannot be claimed
+until all four are measured — and per §11.5 that claim is the precondition for
+deleting the round-trip and the fallback path.
+
+**Methodology note.** Replay each test's own `test.desc` flags. The
+`--error-label` site is invisible otherwise, and it is one of only two genuine
+sites C has left.
+
