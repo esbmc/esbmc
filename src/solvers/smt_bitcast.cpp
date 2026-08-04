@@ -156,7 +156,7 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
 
     // from bitvectors should go through the fp api
     if (is_bv_type(new_from) || is_union_type(new_from))
-      return mk_from_bv_to_fp(convert_ast(new_from), convert_sort(to_type));
+      return solver->mkBVToIEEEFP(convert_ast(new_from), convert_sort(to_type));
   }
   else if (is_fixedbv_type(to_type))
   {

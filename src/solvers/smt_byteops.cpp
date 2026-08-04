@@ -17,7 +17,7 @@ smt_astt smt_solver_baset::convert_byte_extract(const expr2tc &expr)
   if (src_width == 0)
   {
     smt_sortt s = mk_int_bv_sort(8);
-    return mk_smt_symbol("out_of_bounds_byte_extract", s);
+    return solver->mkSymbol("out_of_bounds_byte_extract", s);
   }
 
   if (int_encoding)
@@ -103,8 +103,8 @@ smt_astt smt_solver_baset::convert_byte_extract_int_mode(
       if (byte_offset >= total_bytes)
       {
         // Out of bounds access
-        smt_sortt s = mk_int_sort();
-        return mk_smt_symbol("out_of_bounds_byte_extract", s);
+        smt_sortt s = solver->mkIntSort();
+        return solver->mkSymbol("out_of_bounds_byte_extract", s);
       }
       shift_amount = (total_bytes - 1 - byte_offset) * config.ansi_c.char_width;
     }
@@ -195,7 +195,7 @@ smt_astt smt_solver_baset::convert_byte_extract_bv_mode(
   if (width <= upper)
   {
     smt_sortt s = mk_int_bv_sort(8);
-    return mk_smt_symbol("out_of_bounds_byte_extract", s);
+    return solver->mkSymbol("out_of_bounds_byte_extract", s);
   }
 
   if (bv_result)
@@ -557,9 +557,9 @@ smt_solver_baset::convert_byte_update_bv_mode(const byte_update2t &data)
   smt_astt concat;
 
   if (middle)
-    concat = mk_concat(top, middle);
+    concat = solver->mkBVConcat(top, middle);
   else
     concat = top;
 
-  return mk_concat(concat, bottom);
+  return solver->mkBVConcat(concat, bottom);
 }

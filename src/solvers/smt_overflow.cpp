@@ -31,7 +31,8 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
         implies2tc(both_pos, greaterthanequal2tc(overflow.operand, zero));
       expr2tc nounderflow =
         implies2tc(both_neg, lessthanequal2tc(overflow.operand, zero));
-      return mk_not(mk_and(convert_ast(nooverflow), convert_ast(nounderflow)));
+      return mk_not(
+        solver->mkAnd(convert_ast(nooverflow), convert_ast(nounderflow)));
     }
     else if (int_encoding)
     {
@@ -87,7 +88,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
     // Just ensure the result is >= both operands.
     expr2tc ge1 = greaterthanequal2tc(overflow.operand, side1);
     expr2tc ge2 = greaterthanequal2tc(overflow.operand, side2);
-    return mk_not(mk_and(convert_ast(ge1), convert_ast(ge2)));
+    return mk_not(solver->mkAnd(convert_ast(ge1), convert_ast(ge2)));
   }
 
   case expr2t::sub_id:
@@ -166,7 +167,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       expr2tc is_minus_one = equality2tc(minus_one, side2);
 
       // Return overflow condition for signed division
-      return mk_and(convert_ast(is_minus_one), convert_ast(is_min_int));
+      return solver->mkAnd(convert_ast(is_minus_one), convert_ast(is_min_int));
     }
 
     // Detect unsigned integer overflow for division and modulus
@@ -219,8 +220,8 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
     {
       // If not using int_encoding, fallback to original behavior (bvmul and
       // bvshl)
-      result = is_mul2t(overflow.operand) ? mk_bvmul(arg1_ext, arg2_ext)
-                                          : mk_bvshl(arg1_ext, arg2_ext);
+      result = is_mul2t(overflow.operand) ? solver->mkBVMul(arg1_ext, arg2_ext)
+                                          : solver->mkBVShl(arg1_ext, arg2_ext);
     }
 
     if (is_signed && !int_encoding)
@@ -236,9 +237,10 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       smt_astt allonesvector = convert_ast(allonesexpr);
 
       // It should either be zero or all one's;
-      smt_astt all_ones = mk_eq(toppart, allonesvector);
+      smt_astt all_ones = solver->mkEqual(toppart, allonesvector);
 
-      smt_astt all_zeros = mk_eq(toppart, convert_ast(gen_zero(newtype)));
+      smt_astt all_zeros =
+        solver->mkEqual(toppart, convert_ast(gen_zero(newtype)));
 
       smt_astt lor = mk_or(all_ones, all_zeros);
       return mk_not(lor);
@@ -284,7 +286,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
     smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz);
 
     // It should be zero; if not, overflow
-    smt_astt iseq = mk_eq(toppart, convert_ast(zero));
+    smt_astt iseq = solver->mkEqual(toppart, convert_ast(zero));
     return mk_not(iseq);
   }
 
@@ -314,7 +316,7 @@ smt_astt smt_solver_baset::overflow_cast(const expr2tc &expr)
 
   // Overflow is only relevant for signed/unsigned integers
   if (is_bool_type(ocast.operand->type))
-    return mk_smt_bool(false);
+    return solver->mkBool(false);
 
   // Define unsigned bounds for the destination width
   expr2tc lower_bound = constant_int2tc(ocast.operand->type, 0);

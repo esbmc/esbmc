@@ -151,7 +151,7 @@ void smt_solver_baset::set_ra_conv(ra_apit *iface)
 
 void smt_solver_baset::smt_post_init()
 {
-  boolean_sort = mk_bool_sort();
+  boolean_sort = solver->mkBoolSort();
 
   init_addr_space_array();
 
@@ -665,7 +665,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else
     {
-      a = mk_bvadd(args[0], args[1]);
+      a = solver->mkBVAdd(args[0], args[1]);
     }
     break;
   }
@@ -684,7 +684,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else
     {
-      a = mk_bvsub(args[0], args[1]);
+      a = solver->mkBVSub(args[0], args[1]);
     }
     break;
   }
@@ -701,7 +701,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       args[0] = mk_sign_ext(convert_ast(mul.side_1), fraction_bits);
       args[1] = mk_sign_ext(convert_ast(mul.side_2), fraction_bits);
 
-      a = mk_bvmul(args[0], args[1]);
+      a = solver->mkBVMul(args[0], args[1]);
       a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits);
     }
     else if (int_encoding)
@@ -710,7 +710,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else
     {
-      a = mk_bvmul(args[0], args[1]);
+      a = solver->mkBVMul(args[0], args[1]);
     }
     break;
   }
@@ -730,7 +730,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       smt_astt zero = mk_smt_bv(BigInt(0), fraction_bits);
       smt_astt op0 = convert_ast(d.side_1);
 
-      args[0] = mk_concat(op0, zero);
+      args[0] = solver->mkBVConcat(op0, zero);
 
       // Sorts.
       a = mk_bvsdiv(args[0], args[1]);
@@ -742,7 +742,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_unsignedbv_type(d.side_1) && is_unsignedbv_type(d.side_2))
     {
-      a = mk_bvudiv(args[0], args[1]);
+      a = solver->mkBVUDiv(args[0], args[1]);
     }
     else
     {
@@ -757,7 +757,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
       a = ir_ieee_api->encode_ieee_add(expr);
     else
-      a = mk_smt_fpbv_add(
+      a = solver->mkFPAdd(
         convert_ast(to_ieee_add2t(expr).side_1),
         convert_ast(to_ieee_add2t(expr).side_2),
         convert_rounding_mode(to_ieee_add2t(expr).rounding_mode));
@@ -781,7 +781,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
       a = ir_ieee_api->encode_ieee_mul(expr);
     else
-      a = mk_smt_fpbv_mul(
+      a = solver->mkFPMul(
         convert_ast(to_ieee_mul2t(expr).side_1),
         convert_ast(to_ieee_mul2t(expr).side_2),
         convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode));
@@ -805,7 +805,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
       a = ir_ieee_api->encode_ieee_fma(expr);
     else
-      a = mk_smt_fpbv_fma(
+      a = solver->mkFPFMA(
         convert_ast(to_ieee_fma2t(expr).value_1),
         convert_ast(to_ieee_fma2t(expr).value_2),
         convert_ast(to_ieee_fma2t(expr).value_3),
@@ -840,16 +840,17 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       // the result so that floating-point comparisons involving this value
       // can apply IEEE 754 NaN comparison semantics (ordered comparisons
       // return false; != returns true).
-      smt_sortt rs = mk_real_sort();
-      smt_astt zero = mk_smt_real("0.0");
+      smt_sortt rs = solver->mkRealSort();
+      smt_astt zero = solver->mkReal("0.0");
       smt_astt op_nonneg = mk_le(zero, operand);
 
       smt_astt sqrt_pos = mk_fresh(rs, "ra_sqrt::", {});
       // operand >= 0 → sqrt_pos >= 0
       assert_ast(mk_or(mk_not(op_nonneg), mk_le(zero, sqrt_pos)));
       // operand >= 0 → sqrt_pos² = operand
-      assert_ast(
-        mk_or(mk_not(op_nonneg), mk_eq(mk_mul(sqrt_pos, sqrt_pos), operand)));
+      assert_ast(mk_or(
+        mk_not(op_nonneg),
+        solver->mkEqual(mk_mul(sqrt_pos, sqrt_pos), operand)));
 
       // Unconstrained result used when operand < 0.
       smt_astt sqrt_nan = mk_fresh(rs, "ra_sqrt_nan::", {});
@@ -883,15 +884,15 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
           // can make iv.lo slightly negative (by eps_abs) even when the float
           // operand is always non-negative.  sqrt is only defined for x >= 0,
           // so we tighten to max(0, iv.lo) and max(0, iv.hi).
-          smt_astt iv_lo_pos = mk_ite(mk_lt(iv.lo, zero), zero, iv.lo);
-          smt_astt iv_hi_pos = mk_ite(mk_lt(iv.hi, zero), zero, iv.hi);
+          smt_astt iv_lo_pos = solver->mkIte(mk_lt(iv.lo, zero), zero, iv.lo);
+          smt_astt iv_hi_pos = solver->mkIte(mk_lt(iv.hi, zero), zero, iv.hi);
 
           smt_astt lo_r = mk_fresh(rs, "ra_sqrt_lo::", {});
           smt_astt hi_r = mk_fresh(rs, "ra_sqrt_hi::", {});
           assert_ast(mk_le(zero, lo_r));
-          assert_ast(mk_eq(mk_mul(lo_r, lo_r), iv_lo_pos));
+          assert_ast(solver->mkEqual(mk_mul(lo_r, lo_r), iv_lo_pos));
           assert_ast(mk_le(zero, hi_r));
-          assert_ast(mk_eq(mk_mul(hi_r, hi_r), iv_hi_pos));
+          assert_ast(solver->mkEqual(mk_mul(hi_r, hi_r), iv_hi_pos));
 
           // Enclosure is applied to sqrt_pos, not to the final ITE result.
           // The containment assertions (ra_lo <= sqrt_pos <= ra_hi) therefore
@@ -913,9 +914,10 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
             bounds = ir_ieee_api->apply_ieee754_rtz_enclosure(
               sqrt_pos, lo_r, hi_r, fbv_type);
 
-          smt_astt sqrt_result = mk_ite(op_nonneg, sqrt_pos, sqrt_nan);
-          smt_astt map_lo = mk_ite(op_nonneg, bounds.first, sqrt_result);
-          smt_astt map_hi = mk_ite(op_nonneg, bounds.second, sqrt_result);
+          smt_astt sqrt_result = solver->mkIte(op_nonneg, sqrt_pos, sqrt_nan);
+          smt_astt map_lo = solver->mkIte(op_nonneg, bounds.first, sqrt_result);
+          smt_astt map_hi =
+            solver->mkIte(op_nonneg, bounds.second, sqrt_result);
           ir_ieee_api->store_interval(sqrt_result, map_lo, map_hi);
           a = sqrt_result;
           interval_lifted = true;
@@ -925,7 +927,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       {
         smt_astt pos_result = apply_ieee754_semantics(
           sqrt_pos, fbv_type, smt_astt{}, rounding_mode);
-        a = mk_ite(op_nonneg, pos_result, sqrt_nan);
+        a = solver->mkIte(op_nonneg, pos_result, sqrt_nan);
       }
       if (ir_ieee)
         ir_ieee_api->store_nan_pred(
@@ -951,7 +953,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
     {
-      a = mk_bvsmod(args[0], args[1]);
+      a = solver->mkBVSRem(args[0], args[1]);
     }
     else if (is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2))
     {
@@ -960,7 +962,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else
     {
       assert(is_signedbv_type(m.side_1) || is_signedbv_type(m.side_2));
-      a = mk_bvsmod(args[0], args[1]);
+      a = solver->mkBVSRem(args[0], args[1]);
     }
     break;
   }
@@ -1046,7 +1048,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     // Two projects, then comparison.
     args[0] = ast_project(args[0], 0);
     args[1] = ast_project(args[1], 0);
-    a = mk_eq(args[0], args[1]);
+    a = solver->mkEqual(args[0], args[1]);
     break;
   }
   case expr2t::pointer_offset_id:
@@ -1097,15 +1099,15 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       const expr2tc &rm = ni.rounding_mode;
       smt_astt operand = convert_ast(ni.from);
 
-      smt_astt zero = mk_smt_real("0");
-      smt_astt one = mk_smt_real("1");
-      smt_astt half = mk_smt_real("0.5");
+      smt_astt zero = solver->mkReal("0");
+      smt_astt one = solver->mkReal("1");
+      smt_astt half = solver->mkReal("0.5");
 
       // floor(x): SMT real2int rounds toward -inf; lift back to Real.
-      smt_astt floor_v = mk_int2real(mk_real2int(operand));
+      smt_astt floor_v = mk_int2real(solver->mkReal2Int(operand));
       // ceil(x): floor+1 unless x is already integral.
       smt_astt ceil_v =
-        mk_ite(mk_isint(operand), operand, mk_add(floor_v, one));
+        solver->mkIte(solver->mkIsInt(operand), operand, mk_add(floor_v, one));
       // Fractional part in [0,1) for all real x (also negative).
       smt_astt frac = mk_sub(operand, floor_v);
 
@@ -1127,29 +1129,30 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
         // Round half to even: tie goes to whichever of floor, floor+1 is even.
         // floor/2 is an integer iff floor is even — works for negative floors
         // too (e.g. -2/2 = -1: integer = even; -3/2 = -1.5: not integer = odd).
-        smt_astt two = mk_smt_real("2");
-        smt_astt floor_is_even = mk_isint(mk_div(floor_v, two));
-        smt_astt tie_rte = mk_ite(floor_is_even, floor_v, mk_add(floor_v, one));
-        a = mk_ite(
+        smt_astt two = solver->mkReal("2");
+        smt_astt floor_is_even = solver->mkIsInt(mk_div(floor_v, two));
+        smt_astt tie_rte =
+          solver->mkIte(floor_is_even, floor_v, mk_add(floor_v, one));
+        a = solver->mkIte(
           mk_lt(frac, half),
           floor_v,
-          mk_ite(mk_gt(frac, half), mk_add(floor_v, one), tie_rte));
+          solver->mkIte(mk_gt(frac, half), mk_add(floor_v, one), tie_rte));
       }
       else if (smt_fp_rounding_utils::is_round_to_away(rm))
       {
         // At a 0.5 tie, round toward the integer farther from zero:
         //   x >= 0: ceil is farther  -> use strict-less so tie picks ceil.
         //   x <  0: floor is farther -> use <=      so tie picks floor.
-        smt_astt away_pos = mk_ite(mk_lt(frac, half), floor_v, ceil_v);
-        smt_astt away_neg = mk_ite(mk_le(frac, half), floor_v, ceil_v);
-        a = mk_ite(mk_le(zero, operand), away_pos, away_neg);
+        smt_astt away_pos = solver->mkIte(mk_lt(frac, half), floor_v, ceil_v);
+        smt_astt away_neg = solver->mkIte(mk_le(frac, half), floor_v, ceil_v);
+        a = solver->mkIte(mk_le(zero, operand), away_pos, away_neg);
       }
       else
       {
         // Symbolic or unsupported rounding mode: produce an unconstrained
         // integer-valued Real (sound but non-deterministically chosen).
-        smt_astt fresh = mk_fresh(mk_real_sort(), "ra_nearbyint::", {});
-        assert_ast(mk_isint(fresh));
+        smt_astt fresh = mk_fresh(solver->mkRealSort(), "ra_nearbyint::", {});
+        assert_ast(solver->mkIsInt(fresh));
         a = fresh;
       }
 
@@ -1158,7 +1161,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else
     {
-      a = mk_smt_nearbyint_from_float(
+      a = solver->mkFPtoIntegral(
         convert_ast(to_nearbyint2t(expr).from),
         convert_rounding_mode(to_nearbyint2t(expr).rounding_mode));
     }
@@ -1171,16 +1174,16 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     args[0] = convert_ast(if_ref.cond);
     args[1] = convert_ast(if_ref.true_value);
     args[2] = convert_ast(if_ref.false_value);
-    a = mk_ite(args[0], args[1], args[2]);
+    a = solver->mkIte(args[0], args[1], args[2]);
     if (ir_ieee && is_floatbv_type(expr->type))
     {
       smt_astt np_t = ir_ieee_api->get_nan_pred(args[1]);
       smt_astt np_f = ir_ieee_api->get_nan_pred(args[2]);
       if (np_t || np_f)
       {
-        smt_astt t = np_t ? np_t : mk_smt_bool(false);
-        smt_astt f = np_f ? np_f : mk_smt_bool(false);
-        ir_ieee_api->store_nan_pred(a, mk_ite(args[0], t, f));
+        smt_astt t = np_t ? np_t : solver->mkBool(false);
+        smt_astt f = np_f ? np_f : solver->mkBool(false);
+        ir_ieee_api->store_nan_pred(a, solver->mkIte(args[0], t, f));
       }
     }
     break;
@@ -1295,7 +1298,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 
     if (
       is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2) && !int_encoding)
-      a = mk_smt_fpbv_eq(args[0], args[1]);
+      a = solver->mkFPEqual(args[0], args[1]);
     else
       a = ast_eq(args[0], args[1]);
     if (
@@ -1314,7 +1317,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (
       is_floatbv_type(neq.side_1) && is_floatbv_type(neq.side_2) &&
       !int_encoding)
-      a = mk_smt_fpbv_eq(args[0], args[1]);
+      a = solver->mkFPEqual(args[0], args[1]);
     else
       a = ast_eq(args[0], args[1]);
     a = mk_not(a);
@@ -1345,7 +1348,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else
     {
-      a = mk_bvshl(args[0], args[1]);
+      a = solver->mkBVShl(args[0], args[1]);
     }
     break;
   }
@@ -1395,7 +1398,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else
     {
-      a = mk_bvlshr(args[0], args[1]);
+      a = solver->mkBVLshr(args[0], args[1]);
     }
     break;
   }
@@ -1488,11 +1491,11 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_floatbv_type(lt.side_1) && is_floatbv_type(lt.side_2))
     {
-      a = mk_smt_fpbv_lt(args[0], args[1]);
+      a = solver->mkFPLt(args[0], args[1]);
     }
     else if (is_fixedbv_type(lt.side_1) && is_fixedbv_type(lt.side_2))
     {
-      a = mk_bvslt(args[0], args[1]);
+      a = solver->mkBVSlt(args[0], args[1]);
     }
     else if (is_unsignedbv_type(lt.side_1) && is_unsignedbv_type(lt.side_2))
     {
@@ -1501,7 +1504,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else
     {
       assert(is_signedbv_type(lt.side_1) && is_signedbv_type(lt.side_2));
-      a = mk_bvslt(args[0], args[1]);
+      a = solver->mkBVSlt(args[0], args[1]);
     }
     break;
   }
@@ -1521,11 +1524,11 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_floatbv_type(lte.side_1) && is_floatbv_type(lte.side_2))
     {
-      a = mk_smt_fpbv_lte(args[0], args[1]);
+      a = solver->mkFPLe(args[0], args[1]);
     }
     else if (is_fixedbv_type(lte.side_1) && is_fixedbv_type(lte.side_2))
     {
-      a = mk_bvsle(args[0], args[1]);
+      a = solver->mkBVSle(args[0], args[1]);
     }
     else if (is_unsignedbv_type(lte.side_1) && is_unsignedbv_type(lte.side_2))
     {
@@ -1534,7 +1537,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else
     {
       assert(is_signedbv_type(lte.side_1) && is_signedbv_type(lte.side_2));
-      a = mk_bvsle(args[0], args[1]);
+      a = solver->mkBVSle(args[0], args[1]);
     }
     break;
   }
@@ -1562,7 +1565,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_unsignedbv_type(gt.side_1) && is_unsignedbv_type(gt.side_2))
     {
-      a = mk_bvugt(args[0], args[1]);
+      a = solver->mkBVUgt(args[0], args[1]);
     }
     else
     {
@@ -1595,7 +1598,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_unsignedbv_type(gte.side_1) && is_unsignedbv_type(gte.side_2))
     {
-      a = mk_bvuge(args[0], args[1]);
+      a = solver->mkBVUge(args[0], args[1]);
     }
     else
     {
@@ -1609,7 +1612,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
       return convert_concat_int_mode(args[0], args[1], expr);
     else
-      a = mk_concat(args[0], args[1]);
+      a = solver->mkBVConcat(args[0], args[1]);
     break;
   }
   case expr2t::implies_id:
@@ -1660,17 +1663,17 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_floatbv_type(neg.value))
     {
-      a = mk_smt_fpbv_neg(args[0]);
+      a = solver->mkFPNeg(args[0]);
     }
     else
     {
-      a = mk_bvneg(args[0]);
+      a = solver->mkBVNeg(args[0]);
     }
     break;
   }
   case expr2t::and_id:
   {
-    a = mk_and(args[0], args[1]);
+    a = solver->mkAnd(args[0], args[1]);
     break;
   }
   case expr2t::or_id:
@@ -1680,7 +1683,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   }
   case expr2t::xor_id:
   {
-    a = mk_xor(args[0], args[1]);
+    a = solver->mkXor(args[0], args[1]);
     break;
   }
   case expr2t::bitcast_id:
@@ -1870,7 +1873,7 @@ smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
         type2tc t = make_array_domain_type(arrtype);
         smt_sortt d = mk_int_bv_sort(t->get_width());
         smt_sortt r = convert_sort(arrtype.subtype);
-        result = mk_array_sort(d, r);
+        result = solver->mkArraySort(d, r);
         break;
       }
     }
@@ -1892,7 +1895,7 @@ smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
       break;
     }
 
-    result = mk_array_sort(d, convert_sort(range));
+    result = solver->mkArraySort(d, convert_sort(range));
     break;
   }
   case type2t::union_id:
@@ -1972,7 +1975,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     {
       std::string val = thereal.value.to_expr().value().as_string();
       std::string result = fixed_point(val, thereal.value.spec.width);
-      return mk_smt_real(result);
+      return solver->mkReal(result);
     }
 
     assert(
@@ -2006,7 +2009,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
         // zero, alongside the subnormal-flush case handled by
         // mk_subnormal_flush. Reuse the same neg_zero_pred side-channel
         // rather than adding new tracking machinery -- but tag a fresh
-        // symbol constrained equal to zero, not the shared mk_smt_real("0")
+        // symbol constrained equal to zero, not the shared solver->mkReal("0")
         // AST directly: nothing guarantees mk_smt_real returns a distinct
         // pointer per call (see its declaration), so tagging the literal
         // itself could let an ordinary +0.0 silently inherit this
@@ -2016,24 +2019,24 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
         if (ir_ieee && thereal.value.get_sign())
         {
           smt_astt neg_zero_ast =
-            mk_fresh(mk_real_sort(), "ir_ieee::neg_zero_const::", {});
-          smt_astt is_zero = mk_eq(neg_zero_ast, mk_smt_real("0"));
+            mk_fresh(solver->mkRealSort(), "ir_ieee::neg_zero_const::", {});
+          smt_astt is_zero = solver->mkEqual(neg_zero_ast, solver->mkReal("0"));
           assert_ast(is_zero);
           ir_ieee_api->store_neg_zero_pred(neg_zero_ast, is_zero);
           return neg_zero_ast;
         }
-        return mk_smt_real("0");
+        return solver->mkReal("0");
       }
       if (thereal.value.is_NaN())
       {
         if (ir_ieee)
         {
           smt_astt nan_var =
-            mk_fresh(mk_real_sort(), "ir_ieee::nan_const::", {});
-          ir_ieee_api->store_nan_pred(nan_var, mk_smt_bool(true));
+            mk_fresh(solver->mkRealSort(), "ir_ieee::nan_const::", {});
+          ir_ieee_api->store_nan_pred(nan_var, solver->mkBool(true));
           return nan_var;
         }
-        return mk_smt_real("0");
+        return solver->mkReal("0");
       }
       if (thereal.value.is_infinity())
       {
@@ -2058,7 +2061,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
         result = integer2string(frac) + "/" + integer2string(power(2, -exp));
       if (thereal.value.get_sign())
         result = "-" + result;
-      return mk_smt_real(result);
+      return solver->mkReal(result);
     }
 
     unsigned int fraction_width = to_floatbv_type(thereal.type).fraction;
@@ -2076,7 +2079,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
   case expr2t::constant_bool_id:
   {
     const constant_bool2t &thebool = to_constant_bool2t(expr);
-    return mk_smt_bool(thebool.value);
+    return solver->mkBool(thebool.value);
   }
   case expr2t::symbol_id:
   {
@@ -2117,7 +2120,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
       return mk_array_symbol(name, sort, subtype);
     }
 
-    smt_astt sym_ast = mk_smt_symbol(name, sort);
+    smt_astt sym_ast = solver->mkSymbol(name, sort);
 
     ir_ieee_api->assert_symbol_range(name, sym_ast, sym);
 
@@ -2125,7 +2128,8 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
       ir_ieee && is_floatbv_type(sym.type) &&
       name.rfind("nondet$symex::nondet", 0) == 0)
     {
-      smt_astt nan_pred = mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", {});
+      smt_astt nan_pred =
+        mk_fresh(solver->mkBoolSort(), "ir_ieee::nondet_nan::", {});
       ir_ieee_api->store_nan_pred(sym_ast, nan_pred);
 
       // A nondet float is otherwise an unconstrained real. Without this,
@@ -2137,8 +2141,8 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
       // back to its magnitude-only threshold, which is the correct (not
       // merely conservative) check here.
       const floatbv_type2t &fbv_type = to_floatbv_type(sym.type);
-      assert_ast(
-        mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
+      assert_ast(solver->mkEqual(
+        sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
     }
 
     return sym_ast;
@@ -2174,7 +2178,7 @@ smt_astt smt_solver_baset::mk_fresh(
     return mk_array_symbol(newname, s, array_subtype);
   }
 
-  return mk_smt_symbol(newname, s);
+  return solver->mkSymbol(newname, s);
 }
 
 smt_astt smt_solver_baset::convert_popcount(const expr2tc &expr)
@@ -2324,20 +2328,20 @@ smt_astt smt_solver_baset::round_real_to_int(smt_astt a)
   // the same. (Technically, it's also platform dependant). To get around this,
   // add one to the result in all circumstances, except where the value was
   // already an integer.
-  smt_astt is_lt_zero = mk_lt(a, mk_smt_real("0"));
+  smt_astt is_lt_zero = mk_lt(a, solver->mkReal("0"));
 
   // The actual conversion
-  smt_astt as_int = mk_real2int(a);
+  smt_astt as_int = solver->mkReal2Int(a);
 
   smt_astt one = mk_smt_int(BigInt(1));
   smt_astt plus_one = mk_add(one, as_int);
 
   // If it's an integer, just keep it's untruncated value.
-  smt_astt is_int = mk_isint(a);
-  smt_astt selected = mk_ite(is_int, as_int, plus_one);
+  smt_astt is_int = solver->mkIsInt(a);
+  smt_astt selected = solver->mkIte(is_int, as_int, plus_one);
 
   // Switch on whether it's > or < 0.
-  return mk_ite(is_lt_zero, selected, as_int);
+  return solver->mkIte(is_lt_zero, selected, as_int);
 }
 
 smt_astt smt_solver_baset::round_int_to_fp(
@@ -2363,7 +2367,7 @@ smt_astt smt_solver_baset::round_int_to_fp(
 
   smt_astt zero_i = mk_smt_int(BigInt(0));
   smt_astt is_neg = mk_lt(int_val, zero_i);
-  smt_astt abs_val = mk_ite(is_neg, mk_neg(int_val), int_val);
+  smt_astt abs_val = solver->mkIte(is_neg, mk_neg(int_val), int_val);
 
   // Base: exact conversion for values below the precision threshold.
   smt_astt result_abs = abs_val;
@@ -2391,21 +2395,22 @@ smt_astt smt_solver_baset::round_int_to_fp(
     // Tie-breaking: when remainder == ulp/2, choose the even neighbour
     // (the one whose index floor_val/ulp is even).
     smt_astt quotient = mk_div(floor_val, ulp_expr);
-    smt_astt floor_even = mk_eq(mk_mod(quotient, two), zero_i);
-    smt_astt tie_val = mk_ite(floor_even, floor_val, ceil_val);
+    smt_astt floor_even = solver->mkEqual(mk_mod(quotient, two), zero_i);
+    smt_astt tie_val = solver->mkIte(floor_even, floor_val, ceil_val);
 
-    smt_astt quantized = mk_ite(
-      mk_eq(remainder, zero_i),
+    smt_astt quantized = solver->mkIte(
+      solver->mkEqual(remainder, zero_i),
       abs_val, // exactly on a representable value
-      mk_ite(
+      solver->mkIte(
         mk_lt(remainder, half_expr),
         floor_val, // closer to floor
-        mk_ite(mk_gt(remainder, half_expr), ceil_val, tie_val)));
+        solver->mkIte(mk_gt(remainder, half_expr), ceil_val, tie_val)));
 
-    result_abs = mk_ite(mk_le(lo_expr, abs_val), quantized, result_abs);
+    result_abs = solver->mkIte(mk_le(lo_expr, abs_val), quantized, result_abs);
   }
 
-  smt_astt signed_result = mk_ite(is_neg, mk_neg(result_abs), result_abs);
+  smt_astt signed_result =
+    solver->mkIte(is_neg, mk_neg(result_abs), result_abs);
   return mk_int2real(signed_result);
 }
 
@@ -2431,7 +2436,7 @@ smt_astt smt_solver_baset::round_fixedbv_to_int(
   // Data for inspecting fraction part
   smt_astt frac_part = mk_extract(a, frac_width - 1, 0);
   smt_astt zero = mk_smt_bv(BigInt(0), frac_width);
-  smt_astt is_zero_frac = mk_eq(frac_part, zero);
+  smt_astt is_zero_frac = solver->mkEqual(frac_part, zero);
 
   // So, we have a base number (the magnitude), and need to decide whether to
   // round up or down. If it's positive, round down towards zero. If it's neg
@@ -2439,14 +2444,14 @@ smt_astt smt_solver_baset::round_fixedbv_to_int(
 
   // We may need a value + 1.
   smt_astt one = mk_smt_bv(BigInt(1), towidth);
-  smt_astt intvalue_plus_one = mk_bvadd(intvalue, one);
+  smt_astt intvalue_plus_one = solver->mkBVAdd(intvalue, one);
 
-  smt_astt neg_val = mk_ite(is_zero_frac, intvalue, intvalue_plus_one);
+  smt_astt neg_val = solver->mkIte(is_zero_frac, intvalue, intvalue_plus_one);
 
-  smt_astt is_neg = mk_eq(true_bit, is_neg_bit);
+  smt_astt is_neg = solver->mkEqual(true_bit, is_neg_bit);
 
   // final switch
-  return mk_ite(is_neg, neg_val, intvalue);
+  return solver->mkIte(is_neg, neg_val, intvalue);
 }
 
 smt_astt smt_solver_baset::make_bool_bit(smt_astt a)
@@ -2459,7 +2464,7 @@ smt_astt smt_solver_baset::make_bool_bit(smt_astt a)
     (int_encoding) ? mk_smt_int(BigInt(1)) : mk_smt_bv(BigInt(1), 1);
   smt_astt zero =
     (int_encoding) ? mk_smt_int(BigInt(0)) : mk_smt_bv(BigInt(0), 1);
-  return mk_ite(a, one, zero);
+  return solver->mkIte(a, one, zero);
 }
 
 smt_astt smt_solver_baset::make_bit_bool(smt_astt a)
@@ -2471,7 +2476,7 @@ smt_astt smt_solver_baset::make_bit_bool(smt_astt a)
 
   smt_astt one =
     (int_encoding) ? mk_smt_int(BigInt(1)) : mk_smt_bv(BigInt(1), 1);
-  return mk_eq(a, one);
+  return solver->mkEqual(a, one);
 }
 
 /** Make an n-ary function application.
@@ -2494,13 +2499,13 @@ make_n_ary(const Object o, const Method m, const smt_solver_baset::ast_vec &v)
 
 smt_astt smt_solver_baset::make_n_ary_and(const ast_vec &v)
 {
-  return v.empty() ? mk_smt_bool(true) // empty conjunction is true
+  return v.empty() ? solver->mkBool(true) // empty conjunction is true
                    : make_n_ary(this, &smt_solver_baset::mk_and, v);
 }
 
 smt_astt smt_solver_baset::make_n_ary_or(const ast_vec &v)
 {
-  return v.empty() ? mk_smt_bool(false) // empty disjunction is false
+  return v.empty() ? solver->mkBool(false) // empty disjunction is false
                    : make_n_ary(this, &smt_solver_baset::mk_or, v);
 }
 
@@ -3783,7 +3788,7 @@ void smt_solver_baset::ast_assign(smt_astt value, smt_astt sym)
 
 smt_astt smt_solver_baset::ast_eq(smt_astt a, smt_astt b)
 {
-  return mk_eq(a, b);
+  return solver->mkEqual(a, b);
 }
 
 smt_astt smt_solver_baset::ast_select(smt_astt a, const expr2tc &idx)
@@ -3877,12 +3882,13 @@ smt_astt smt_solver_baset::mk_bvredor(smt_astt op)
 {
   // bvredor = bvnot(bvcomp(x,0)) ? bv1 : bv0;
 
-  smt_astt comp = mk_eq(op, mk_smt_bv(BigInt(0), op->Sort->getWidth()));
+  smt_astt comp =
+    solver->mkEqual(op, mk_smt_bv(BigInt(0), op->Sort->getWidth()));
 
   smt_astt ncomp = mk_not(comp);
 
   // If it's true, return 1. Return 0, othewise.
-  return mk_ite(ncomp, mk_smt_bv(1, 1), mk_smt_bv(BigInt(0), 1));
+  return solver->mkIte(ncomp, mk_smt_bv(1, 1), mk_smt_bv(BigInt(0), 1));
 }
 
 smt_astt smt_solver_baset::mk_bvredand(smt_astt op)
@@ -3890,10 +3896,10 @@ smt_astt smt_solver_baset::mk_bvredand(smt_astt op)
   // bvredand = bvcomp(x,-1) ? bv1 : bv0;
 
   smt_astt comp =
-    mk_eq(op, mk_smt_bv(BigInt(ULLONG_MAX), op->Sort->getWidth()));
+    solver->mkEqual(op, mk_smt_bv(BigInt(ULLONG_MAX), op->Sort->getWidth()));
 
   // If it's true, return 1. Return 0, othewise.
-  return mk_ite(comp, mk_smt_bv(1, 1), mk_smt_bv(BigInt(0), 1));
+  return solver->mkIte(comp, mk_smt_bv(1, 1), mk_smt_bv(BigInt(0), 1));
 }
 
 smt_astt smt_solver_baset::mk_smt_uninterpreted_function(
@@ -3906,7 +3912,7 @@ smt_astt smt_solver_baset::mk_smt_uninterpreted_function(
   // application of the same function. This asserts only a valid property of any
   // function (equal arguments imply an equal result), so it prunes no
   // behaviour. Solvers that expose UFs override this and never reach here.
-  smt_astt result = mk_smt_symbol(
+  smt_astt result = solver->mkSymbol(
     "__esbmc_uf_ackermann::" + name + "$" +
       std::to_string(uf_ackermann_counter++),
     rangesort);
@@ -3923,11 +3929,12 @@ smt_astt smt_solver_baset::mk_smt_uninterpreted_function(
 
     // Build (a0 == p0) && (a1 == p1) && ...; an empty argument list leaves the
     // guard tautological, so two nullary applications are simply made equal.
-    smt_astt args_equal = mk_smt_bool(true);
+    smt_astt args_equal = solver->mkBool(true);
     for (std::size_t i = 0; i < args.size(); ++i)
-      args_equal = mk_and(args_equal, mk_eq(args[i], prev.args[i]));
+      args_equal =
+        solver->mkAnd(args_equal, solver->mkEqual(args[i], prev.args[i]));
 
-    assert_ast(mk_implies(args_equal, mk_eq(result, prev.result)));
+    assert_ast(mk_implies(args_equal, solver->mkEqual(result, prev.result)));
   }
 
   history.push_back({args, result, ctx_level});

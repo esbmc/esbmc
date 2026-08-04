@@ -739,33 +739,17 @@ smt_astt smt_solver_baset::mk_add(smt_astt a, smt_astt b)
   return a->isArithSort() ? solver->mkArithAdd(a, b) : solver->mkBVAdd(a, b);
 }
 
-smt_astt smt_solver_baset::mk_bvadd(smt_astt a, smt_astt b)
-{
-  return solver->mkBVAdd(a, b);
-}
 smt_astt smt_solver_baset::mk_sub(smt_astt a, smt_astt b)
 {
   return a->isArithSort() ? solver->mkArithSub(a, b) : solver->mkBVSub(a, b);
-}
-smt_astt smt_solver_baset::mk_bvsub(smt_astt a, smt_astt b)
-{
-  return solver->mkBVSub(a, b);
 }
 smt_astt smt_solver_baset::mk_mul(smt_astt a, smt_astt b)
 {
   return a->isArithSort() ? solver->mkArithMul(a, b) : solver->mkBVMul(a, b);
 }
-smt_astt smt_solver_baset::mk_bvmul(smt_astt a, smt_astt b)
-{
-  return solver->mkBVMul(a, b);
-}
 smt_astt smt_solver_baset::mk_mod(smt_astt a, smt_astt b)
 {
   return solver->mkArithMod(a, b);
-}
-smt_astt smt_solver_baset::mk_bvsmod(smt_astt a, smt_astt b)
-{
-  return solver->mkBVSRem(a, b);
 }
 smt_astt smt_solver_baset::mk_bvumod(smt_astt a, smt_astt b)
 {
@@ -779,34 +763,18 @@ smt_astt smt_solver_baset::mk_bvsdiv(smt_astt a, smt_astt b)
 {
   return solver->mkBVSDiv(a, b);
 }
-smt_astt smt_solver_baset::mk_bvudiv(smt_astt a, smt_astt b)
-{
-  return solver->mkBVUDiv(a, b);
-}
 smt_astt smt_solver_baset::mk_shl(smt_astt a, smt_astt b)
 {
   return solver->mkArithShl(a, b);
-}
-smt_astt smt_solver_baset::mk_bvshl(smt_astt a, smt_astt b)
-{
-  return solver->mkBVShl(a, b);
 }
 smt_astt smt_solver_baset::mk_bvashr(smt_astt a, smt_astt b)
 {
   return solver->mkBVAshr(a, b);
 }
-smt_astt smt_solver_baset::mk_bvlshr(smt_astt a, smt_astt b)
-{
-  return solver->mkBVLshr(a, b);
-}
 smt_astt smt_solver_baset::mk_neg(smt_astt a)
 {
   auto ea = a;
   return ea->isArithSort() ? solver->mkArithNeg(ea) : solver->mkBVNeg(ea);
-}
-smt_astt smt_solver_baset::mk_bvneg(smt_astt a)
-{
-  return solver->mkBVNeg(a);
 }
 smt_astt smt_solver_baset::mk_bvnot(smt_astt a)
 {
@@ -846,17 +814,9 @@ smt_astt smt_solver_baset::mk_implies(smt_astt a, smt_astt b)
 {
   return solver->mkImplies(a, b);
 }
-smt_astt smt_solver_baset::mk_xor(smt_astt a, smt_astt b)
-{
-  return solver->mkXor(a, b);
-}
 smt_astt smt_solver_baset::mk_or(smt_astt a, smt_astt b)
 {
   return solver->mkOr(a, b);
-}
-smt_astt smt_solver_baset::mk_and(smt_astt a, smt_astt b)
-{
-  return solver->mkAnd(a, b);
 }
 smt_astt smt_solver_baset::mk_not(smt_astt a)
 {
@@ -870,17 +830,9 @@ smt_astt smt_solver_baset::mk_bvult(smt_astt a, smt_astt b)
 {
   return solver->mkBVUlt(a, b);
 }
-smt_astt smt_solver_baset::mk_bvslt(smt_astt a, smt_astt b)
-{
-  return solver->mkBVSlt(a, b);
-}
 smt_astt smt_solver_baset::mk_gt(smt_astt a, smt_astt b)
 {
   return a->isArithSort() ? solver->mkArithGt(a, b) : solver->mkBVUgt(a, b);
-}
-smt_astt smt_solver_baset::mk_bvugt(smt_astt a, smt_astt b)
-{
-  return solver->mkBVUgt(a, b);
 }
 smt_astt smt_solver_baset::mk_bvsgt(smt_astt a, smt_astt b)
 {
@@ -894,74 +846,25 @@ smt_astt smt_solver_baset::mk_bvule(smt_astt a, smt_astt b)
 {
   return solver->mkBVUle(a, b);
 }
-smt_astt smt_solver_baset::mk_bvsle(smt_astt a, smt_astt b)
-{
-  return solver->mkBVSle(a, b);
-}
 smt_astt smt_solver_baset::mk_ge(smt_astt a, smt_astt b)
 {
   return a->isArithSort() ? solver->mkArithGe(a, b) : solver->mkBVUge(a, b);
-}
-smt_astt smt_solver_baset::mk_bvuge(smt_astt a, smt_astt b)
-{
-  return solver->mkBVUge(a, b);
 }
 smt_astt smt_solver_baset::mk_bvsge(smt_astt a, smt_astt b)
 {
   return solver->mkBVSge(a, b);
 }
-smt_astt smt_solver_baset::mk_eq(smt_astt a, smt_astt b)
-{
-  return solver->mkEqual(a, b);
-}
 smt_astt smt_solver_baset::mk_neq(smt_astt a, smt_astt b)
 {
   return solver->mkNot(solver->mkEqual(a, b));
-}
-smt_astt smt_solver_baset::mk_store(smt_astt a, smt_astt b, smt_astt c)
-{
-  return solver->mkArrayStore(a, b, c);
 }
 smt_astt smt_solver_baset::mk_select(smt_astt a, smt_astt b)
 {
   return solver->mkArraySelect(a, b);
 }
-smt_astt smt_solver_baset::mk_real2int(smt_astt a)
-{
-  return solver->mkReal2Int(a);
-}
 smt_astt smt_solver_baset::mk_int2real(smt_astt a)
 {
   return solver->mkInt2Real(a);
-}
-smt_astt smt_solver_baset::mk_isint(smt_astt a)
-{
-  return solver->mkIsInt(a);
-}
-
-smt_sortt smt_solver_baset::mk_bool_sort()
-{
-  return solver->mkBoolSort();
-}
-
-smt_sortt smt_solver_baset::mk_real_sort()
-{
-  return solver->mkRealSort();
-}
-
-smt_sortt smt_solver_baset::mk_int_sort()
-{
-  return solver->mkIntSort();
-}
-
-smt_sortt smt_solver_baset::mk_bv_sort(std::size_t width)
-{
-  return solver->mkBVSort(width);
-}
-
-smt_sortt smt_solver_baset::mk_array_sort(smt_sortt domain, smt_sortt range)
-{
-  return solver->mkArraySort(domain, range);
 }
 
 smt_sortt smt_solver_baset::mk_fbv_sort(std::size_t width)
@@ -999,11 +902,6 @@ smt_astt smt_solver_baset::mk_smt_int(const BigInt &theint)
   return solver->mkInt(integer2string(theint, 10));
 }
 
-smt_astt smt_solver_baset::mk_smt_real(const std::string &str)
-{
-  return solver->mkReal(str);
-}
-
 smt_astt smt_solver_baset::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   return solver->mkBVFromBin(integer2binary(theint, s->getWidth()), s);
@@ -1031,118 +929,36 @@ smt_astt smt_solver_baset::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
   return solver->mkRM(to_camada_rm(rm), fp_encoding());
 }
 
-smt_astt smt_solver_baset::mk_smt_fpbv_fma(
-  smt_astt v1,
-  smt_astt v2,
-  smt_astt v3,
-  smt_astt rm)
-{
-  return solver->mkFPFMA(v1, v2, v3, rm);
-}
-
-smt_astt smt_solver_baset::mk_smt_typecast_from_fpbv_to_ubv(
-  smt_astt from,
-  std::size_t width)
-{
-  return solver->mkFPtoUBV(from, width);
-}
-
-smt_astt smt_solver_baset::mk_smt_typecast_from_fpbv_to_sbv(
-  smt_astt from,
-  std::size_t width)
-{
-  return solver->mkFPtoSBV(from, width);
-}
-
-smt_astt smt_solver_baset::mk_smt_typecast_from_fpbv_to_fpbv(
-  smt_astt from,
-  smt_sortt to,
-  smt_astt rm)
-{
-  return solver->mkFPtoFP(from, to, rm);
-}
-
-smt_astt smt_solver_baset::mk_smt_typecast_ubv_to_fpbv(
-  smt_astt from,
-  smt_sortt to,
-  smt_astt rm)
-{
-  return solver->mkUBVtoFP(from, to, rm);
-}
-
-smt_astt smt_solver_baset::mk_smt_typecast_sbv_to_fpbv(
-  smt_astt from,
-  smt_sortt to,
-  smt_astt rm)
-{
-  return solver->mkSBVtoFP(from, to, rm);
-}
-
-smt_astt
-smt_solver_baset::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
-{
-  return solver->mkFPAdd(lhs, rhs, rm);
-}
 smt_astt
 smt_solver_baset::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
 {
   return solver->mkFPSub(lhs, rhs, rm);
 }
 smt_astt
-smt_solver_baset::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
-{
-  return solver->mkFPMul(lhs, rhs, rm);
-}
-smt_astt
 smt_solver_baset::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
 {
   return solver->mkFPDiv(lhs, rhs, rm);
-}
-smt_astt
-smt_solver_baset::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
-{
-  return solver->mkFPtoIntegral(from, rm);
 }
 smt_astt smt_solver_baset::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
 {
   return solver->mkFPSqrt(rd, rm);
 }
 
-smt_astt smt_solver_baset::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
-{
-  return solver->mkFPEqual(lhs, rhs);
-}
 smt_astt smt_solver_baset::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
 {
   return solver->mkFPGt(lhs, rhs);
-}
-smt_astt smt_solver_baset::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
-{
-  return solver->mkFPLt(lhs, rhs);
 }
 smt_astt smt_solver_baset::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
 {
   return solver->mkFPGe(lhs, rhs);
 }
-smt_astt smt_solver_baset::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
-{
-  return solver->mkFPLe(lhs, rhs);
-}
 smt_astt smt_solver_baset::mk_smt_fpbv_is_nan(smt_astt op)
 {
   return solver->mkFPIsNaN(op);
 }
-smt_astt smt_solver_baset::mk_smt_fpbv_is_inf(smt_astt op)
-{
-  return solver->mkFPIsInfinite(op);
-}
 smt_astt smt_solver_baset::mk_smt_fpbv_is_normal(smt_astt op)
 {
   return solver->mkFPIsNormal(op);
-}
-smt_astt smt_solver_baset::mk_smt_fpbv_is_zero(smt_astt op)
-{
-  return solver->mkFPIsZero(op);
 }
 smt_astt smt_solver_baset::mk_smt_fpbv_is_negative(smt_astt op)
 {
@@ -1156,15 +972,6 @@ smt_astt smt_solver_baset::mk_smt_fpbv_abs(smt_astt op)
 {
   return solver->mkFPAbs(op);
 }
-smt_astt smt_solver_baset::mk_smt_fpbv_neg(smt_astt op)
-{
-  return solver->mkFPNeg(op);
-}
-
-smt_astt smt_solver_baset::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
-{
-  return solver->mkBVToIEEEFP(op, to);
-}
 
 smt_astt smt_solver_baset::mk_from_fp_to_bv(smt_astt op)
 {
@@ -1172,22 +979,12 @@ smt_astt smt_solver_baset::mk_from_fp_to_bv(smt_astt op)
   return solver->mkIEEEFPToBV(op);
 }
 
-smt_astt smt_solver_baset::mk_smt_bool(bool val)
-{
-  return solver->mkBool(val);
-}
-
 smt_astt smt_solver_baset::mk_array_symbol(
   const std::string &name,
   smt_sortt sort,
   smt_sortt)
 {
-  return mk_smt_symbol(name, sort);
-}
-
-smt_astt smt_solver_baset::mk_smt_symbol(const std::string &name, smt_sortt s)
-{
-  return solver->mkSymbol(name, s);
+  return solver->mkSymbol(name, sort);
 }
 
 smt_sortt smt_solver_baset::mk_struct_sort(const type2tc &type)
@@ -1197,7 +994,7 @@ smt_sortt smt_solver_baset::mk_struct_sort(const type2tc &type)
     const array_type2t &arrtype = to_array_type(type);
     smt_sortt subtypesort = convert_sort(arrtype.subtype);
     smt_sortt d = mk_int_bv_sort(make_array_domain_type(arrtype)->get_width());
-    return mk_array_sort(d, subtypesort);
+    return solver->mkArraySort(d, subtypesort);
   }
 
   const std::vector<type2tc> &members = struct_union_members(type);
@@ -1230,16 +1027,6 @@ smt_astt smt_solver_baset::mk_zero_ext(smt_astt a, unsigned int topwidth)
   return solver->mkBVZeroExt(topwidth, a);
 }
 
-smt_astt smt_solver_baset::mk_concat(smt_astt a, smt_astt b)
-{
-  return solver->mkBVConcat(a, b);
-}
-
-smt_astt smt_solver_baset::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
-{
-  return solver->mkIte(cond, t, f);
-}
-
 smt_astt smt_solver_baset::tuple_create(const expr2tc &structdef)
 {
   const constant_struct2t &strct = to_constant_struct2t(structdef);
@@ -1266,7 +1053,7 @@ smt_astt smt_solver_baset::tuple_array_create(
 {
   const array_type2t &arrtype = to_array_type(array_type);
   smt_sortt elem_sort = mk_struct_sort(arrtype.subtype);
-  smt_sortt array_sort = mk_array_sort(domain, elem_sort);
+  smt_sortt array_sort = solver->mkArraySort(domain, elem_sort);
 
   if (const_array)
   {
@@ -1298,13 +1085,13 @@ smt_astt smt_solver_baset::mk_tuple_symbol(const std::string &name, smt_sortt s)
   if (name == "INVALID")
     return invalid_ptr_ast;
 
-  return mk_smt_symbol(name, s);
+  return solver->mkSymbol(name, s);
 }
 
 smt_astt smt_solver_baset::mk_tuple_array_symbol(const expr2tc &expr)
 {
   const symbol2t &sym = to_symbol2t(expr);
-  return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
+  return solver->mkSymbol(sym.get_symbol_name(), convert_sort(sym.type));
 }
 
 smt_astt smt_solver_baset::tuple_array_of(
@@ -1500,7 +1287,7 @@ smt_astt smt_solver_baset::ast_update(
     index = idx_expr;
   }
 
-  return mk_store(a, convert_ast(index), value);
+  return solver->mkArrayStore(a, convert_ast(index), value);
 }
 
 smt_astt smt_solver_baset::ast_project(smt_astt a, unsigned int elem)
@@ -1648,4 +1435,24 @@ create_new_smtlib_solver(const optionst &options, const namespacet &ns)
     /*streams_script=*/false,
     oneshot_prog,
     formula_path);
+}
+
+smt_astt smt_solver_baset::mk_and(smt_astt a, smt_astt b)
+{
+  return solver->mkAnd(a, b);
+}
+
+smt_astt smt_solver_baset::mk_eq(smt_astt a, smt_astt b)
+{
+  return solver->mkEqual(a, b);
+}
+
+smt_sortt smt_solver_baset::mk_int_sort()
+{
+  return solver->mkIntSort();
+}
+
+smt_astt smt_solver_baset::mk_smt_symbol(const std::string &name, smt_sortt s)
+{
+  return solver->mkSymbol(name, s);
 }

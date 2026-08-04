@@ -75,7 +75,7 @@ smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_bv(
 
   // Make all zeros fraction bits
   smt_astt zero_fracbits = mk_smt_bv(BigInt(0), to_fraction_bits);
-  return mk_concat(frontpart, zero_fracbits);
+  return solver->mkBVConcat(frontpart, zero_fracbits);
 }
 
 smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_bool(
@@ -90,10 +90,10 @@ smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_bool(
 
   smt_astt zero = mk_smt_bv(BigInt(0), to_integer_bits);
   smt_astt one = mk_smt_bv(BigInt(1), to_integer_bits);
-  smt_astt switched = mk_ite(a, one, zero);
+  smt_astt switched = solver->mkIte(a, one, zero);
 
   smt_astt zero_fracbits = mk_smt_bv(BigInt(0), fbvt.width - to_integer_bits);
-  return mk_concat(switched, zero_fracbits);
+  return solver->mkBVConcat(switched, zero_fracbits);
 }
 
 smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_fixedbv(
@@ -148,11 +148,11 @@ smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_fixedbv(
     smt_astt zeros =
       mk_smt_bv(BigInt(0), to_fraction_bits - from_fraction_bits);
 
-    fraction = mk_concat(src_fraction, zeros);
+    fraction = solver->mkBVConcat(src_fraction, zeros);
   }
 
   // Finally, concatenate the adjusted magnitude / fraction
-  return mk_concat(magnitude, fraction);
+  return solver->mkBVConcat(magnitude, fraction);
 }
 
 smt_astt smt_solver_baset::convert_typecast_to_fpbv(const typecast2t &cast)
@@ -162,26 +162,26 @@ smt_astt smt_solver_baset::convert_typecast_to_fpbv(const typecast2t &cast)
   {
     // For bools, there is no direct conversion, so the cast is
     // transformed into fpa = b ? 1 : 0;
-    return mk_ite(
+    return solver->mkIte(
       convert_ast(cast.from),
       convert_ast(gen_one(cast.type)),
       convert_ast(gen_zero(cast.type)));
   }
 
   if (is_unsignedbv_type(cast.from))
-    return mk_smt_typecast_ubv_to_fpbv(
+    return solver->mkUBVtoFP(
       convert_ast(cast.from),
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
 
   if (is_signedbv_type(cast.from))
-    return mk_smt_typecast_sbv_to_fpbv(
+    return solver->mkSBVtoFP(
       convert_ast(cast.from),
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
 
   if (is_floatbv_type(cast.from))
-    return mk_smt_typecast_from_fpbv_to_fpbv(
+    return solver->mkFPtoFP(
       convert_ast(cast.from),
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
@@ -193,15 +193,13 @@ smt_astt smt_solver_baset::convert_typecast_to_fpbv(const typecast2t &cast)
 smt_astt smt_solver_baset::convert_typecast_from_fpbv(const typecast2t &cast)
 {
   if (is_unsignedbv_type(cast.type))
-    return mk_smt_typecast_from_fpbv_to_ubv(
-      convert_ast(cast.from), cast.type->get_width());
+    return solver->mkFPtoUBV(convert_ast(cast.from), cast.type->get_width());
 
   if (is_signedbv_type(cast.type))
-    return mk_smt_typecast_from_fpbv_to_sbv(
-      convert_ast(cast.from), cast.type->get_width());
+    return solver->mkFPtoSBV(convert_ast(cast.from), cast.type->get_width());
 
   if (is_floatbv_type(cast.type))
-    return mk_smt_typecast_from_fpbv_to_fpbv(
+    return solver->mkFPtoFP(
       convert_ast(cast.from),
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
@@ -263,11 +261,11 @@ smt_solver_baset::convert_typecast_to_ints_intmode(const typecast2t &cast)
     }
     else
     {
-      zero = mk_smt_real("0");
-      one = mk_smt_real("1");
+      zero = solver->mkReal("0");
+      one = solver->mkReal("1");
     }
 
-    return mk_ite(a, one, zero);
+    return solver->mkIte(a, one, zero);
   }
 
   // Otherwise, we're looking at a cast between reals and int sorts.
@@ -356,7 +354,7 @@ smt_solver_baset::convert_typecast_to_ints_from_bool(const typecast2t &cast)
   zero = mk_smt_bv(BigInt(0), width);
   one = mk_smt_bv(BigInt(1), width);
 
-  return mk_ite(a, one, zero);
+  return solver->mkIte(a, one, zero);
 }
 
 static bool can_carry_provenance(const type2tc &t)
@@ -447,17 +445,17 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
 
     std::stringstream ss1, ss2;
     ss1 << "__ESBMC_ptr_obj_start_" << id;
-    smt_astt ptr_start = mk_smt_symbol(ss1.str(), int_sort);
+    smt_astt ptr_start = solver->mkSymbol(ss1.str(), int_sort);
     ss2 << "__ESBMC_ptr_obj_end_" << id;
-    smt_astt ptr_end = mk_smt_symbol(ss2.str(), int_sort);
+    smt_astt ptr_end = solver->mkSymbol(ss2.str(), int_sort);
 
     obj_starts[i] = ptr_start;
 
-    smt_astt ge =
-      int_encoding ? mk_ge(target, ptr_start) : mk_bvuge(target, ptr_start);
+    smt_astt ge = int_encoding ? mk_ge(target, ptr_start)
+                               : solver->mkBVUge(target, ptr_start);
     smt_astt le =
       int_encoding ? mk_le(target, ptr_end) : mk_bvule(target, ptr_end);
-    smt_astt theand = mk_and(ge, le);
+    smt_astt theand = solver->mkAnd(ge, le);
     is_in_range[i] = theand;
   }
 
@@ -493,14 +491,14 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
 
     // Calculate ptr offset were it this
     smt_astt offs = int_encoding ? mk_sub(target, obj_starts[i])
-                                 : mk_bvsub(target, obj_starts[i]);
+                                 : solver->mkBVSub(target, obj_starts[i]);
 
     smt_astt this_obj = obj_ids[i];
     smt_astt this_offs = offs;
 
     smt_astt obj_eq = ast_eq(this_obj, output_obj);
     smt_astt offs_eq = ast_eq(this_offs, output_offs);
-    smt_astt is_eq = mk_and(obj_eq, offs_eq);
+    smt_astt is_eq = solver->mkAnd(obj_eq, offs_eq);
 
     smt_astt in_range = is_in_range[i];
     guards.push_back(in_range);
@@ -516,7 +514,8 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
 
   smt_astt one = convert_terminal(constant_int2tc(int_type, BigInt(1)));
-  smt_astt offs = int_encoding ? mk_sub(target, one) : mk_bvsub(target, one);
+  smt_astt offs =
+    int_encoding ? mk_sub(target, one) : solver->mkBVSub(target, one);
   smt_astt inv_obj = id;
   smt_astt inv_offs = offs;
 
@@ -550,7 +549,7 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
 
   smt_astt obj_eq = ast_eq(inv_obj, output_obj);
   smt_astt offs_eq = ast_eq(inv_offs, output_offs);
-  smt_astt is_inv = mk_and(obj_eq, offs_eq);
+  smt_astt is_inv = solver->mkAnd(obj_eq, offs_eq);
 
   assert_ast(mk_implies(not_matched, is_inv));
   return output;
@@ -722,7 +721,7 @@ smt_astt smt_solver_baset::convert_typecast(const expr2tc &expr)
       smt_astt int_val = round_real_to_int(from_real);
       smt_astt zero = mk_smt_int(BigInt(0));
       smt_astt is_negative = mk_lt(int_val, zero);
-      return mk_ite(is_negative, zero, int_val);
+      return solver->mkIte(is_negative, zero, int_val);
     }
   }
 
