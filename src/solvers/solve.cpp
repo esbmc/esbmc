@@ -198,7 +198,6 @@ smt_convt *create_solver(
   smt_solver_baset *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
-  bool array_flat = options.get_bool_option("array-flattener");
 
   /* Use the solver's native tuples when it has them and nothing was asked
      for; otherwise flatten to per-field symbols. */
@@ -207,13 +206,12 @@ smt_convt *create_solver(
   else
     ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
 
-  // Pick an array flattener to use. Again, pick the solver native one by
-  // default, or the one specified, or if none of the above then use the built
-  // in arrays -> to BV flattener.
-  if (array_api != nullptr && !array_flat)
+  /* --array-flattener is honoured by the backend: camada's Ackermann encoding
+     keeps arrays out of the solver's array theory, so the interface is served
+     either way and our own flattener is only needed by a backend that offers
+     no arrays at all. */
+  if (array_api != nullptr)
     ctx->set_array_iface(array_api);
-  else if (array_flat)
-    ctx->set_array_iface(new array_convt(ctx));
   else
     ctx->set_array_iface(new array_convt(ctx));
 
