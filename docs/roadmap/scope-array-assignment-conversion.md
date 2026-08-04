@@ -160,3 +160,62 @@ unconverted, where a synthesised array-to-array typecast meets a
 `convert_typecast` with no array arm — the coupled scope's defect class with an
 array type, declined by every existing arm because they all guard on a pointer
 target.
+
+## 11. Phase 0 — the layer is the adjuster (2026-08-04)
+
+§6 Phase 0 asks one question before any code: **is the `char[1]` literal wrong,
+or is the missing conversion wrong?** §5 lists three candidate layers and
+forbids choosing before this is answered.
+
+### 11.1 Measurement
+
+`github_5571_tuple_str_annotation`, `--goto-functions-only`, both paths:
+
+```
+legacy:   DECL signed char [0] s;   ASSIGN s = (signed char [16])(&{ 0 }[0]);
+hop-off:  DECL signed char [0] s;   ASSIGN s = { 0 };
+```
+
+§2's inherited diff is reproduced exactly, and G0 is discharged.
+
+The `char[0]` declaration looks like the defect at first glance — three widths
+are in play (declared 0, cast target 16, literal 1). **It is not.** The control
+settles it:
+
+| test | declares `s` as | default path |
+|---|---|---|
+| `github_5571` | `signed char [0]` | **passes** |
+| `github_5571_fail` | `signed char [0]` | passes (as a `_fail`) |
+| `github_5571_tuple_str_annotation` | `signed char [0]` | passes; **aborts only under the hop-off** |
+
+Every variant declares `char[0]`, including the ones that verify correctly on
+the legacy path. So the zero-width declaration is the intended representation —
+the assignment's cast is what carries the real width — and it is not what
+distinguishes the failing configuration.
+
+### 11.2 Answer
+
+**The missing conversion is the defect; the literal and the declaration are
+both fine.** The only difference between a working run and an aborting one is
+that legacy emits the decay-then-cast at the assignment seam and the hop-off
+emits neither.
+
+That selects **§5 Option A — an array-aware assignment arm in `python_adjust`**,
+and rules out Option C (a correctly-sized literal at the converter), which would
+change a representation the working path depends on. Option B (an array arm in
+`convert_typecast`) remains available but is now clearly the wrong layer to
+start at: it would make the solver tolerate a cast the frontend should not be
+failing to emit.
+
+### 11.3 What Phase 1 must reproduce
+
+Unchanged from §4, now with the layer fixed:
+
+```
+(signed char [16])(&{ 0 }[0])
+```
+
+a cast of a **pointer** to an **array** type, assigned to a `char[0]`-declared
+variable. §4's warning stands — the existing decay arm emits an `address_of`
+and cannot produce this — as does R1: getting the shape wrong risks the
+array/pointer mismatch at symex rename that the decay arms were added to fix.
