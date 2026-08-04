@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--overflow-check --unwind 5
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,15 @@
+digraph state_automaton {
+	{node [shape = plaintext, style=invis, label=""] "__init_mbox_idle"};
+	{node [shape = doublecircle] "mbox_idle"};
+	{node [shape = circle] "mbox_busy"};
+	"__init_mbox_idle" -> "mbox_idle";
+	"mbox_idle" [label = "mbox_idle"];
+	"mbox_idle" -> "mbox_busy" [ label = "mbox_submit" ];
+	"mbox_busy" [label = "mbox_busy"];
+	"mbox_busy" -> "mbox_idle" [ label = "doorbell_clear" ];
+	"mbox_busy" -> "mbox_idle" [ label = "mbox_timeout" ];
+	{ rank = min ;
+		"__init_mbox_idle";
+		"mbox_idle";
+	}
+}
