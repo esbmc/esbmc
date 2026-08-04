@@ -609,16 +609,6 @@ bool goto_convert_functionst::convert_native_rec(
     // destructor runs twice. Any temp it allocates is covered by
     // convert_function's snapshot/restore on a later fallback; restore the
     // value-operand locations first as the legacy body round-trip does.
-    // Delegate every shape convert_return transforms statement-locally instead
-    // of failing the walk: convert_return owns the lowering, and delegating one
-    // statement leaves the rest of the function native.
-    auto delegate_to_legacy = [&]() {
-      exprt op = migrate_expr_back(code2);
-      restore_value_locations(op, effective_location(ret.location, inherited));
-      convert(to_code(op), dest);
-      return true;
-    };
-
     for (const codet &d : targets.destructor_stack)
       if (d.get_statement() == "function_call")
         return delegate_to_legacy();
