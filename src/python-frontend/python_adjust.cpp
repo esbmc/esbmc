@@ -635,8 +635,8 @@ void python_adjust::adjust_expr(expr2tc &expr)
       // established that the conversion is the defect, not the literal or the
       // char[0] declaration that every passing variant also carries.
       const type2tc &elem = to_array_type(a.source->type).subtype;
-      expr2tc decayed = address_of2tc(
-        elem, index2tc(elem, a.source, gen_zero(index_type2())));
+      expr2tc decayed =
+        address_of2tc(elem, index2tc(elem, a.source, gen_zero(index_type2())));
       expr = code_assign2tc(
         a.target, typecast2tc(a.target->type, decayed), a.location);
     }
