@@ -1,0 +1,5 @@
+THOROUGH
+main.c
+--ltl monitor.ba.c -DLTL_PREFIX_BOUND=10
+^VERIFICATION SUCCESSFUL$
+^Final lowest outcome: LTL_FAILING$

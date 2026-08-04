@@ -6,8 +6,14 @@ about the part that can.
 
 **Short answer:** the safety obligations transfer and are now checked
 (`regression/cxl/cxl_fabric_lockdown_01/02`). The branching-time properties —
-which are the large majority — do not transfer at all, and ESBMC's `--ltl` mode
-was not needed for the part that does.
+which are the large majority — do not transfer at all.
+
+`--ltl` has since been wired up too (§7): `scripts/ltl_response_ba.py`
+generates the Büchi monitor ESBMC needs, validated byte-equivalent against
+ltl2ba's own output. Applied to a real temporal CXL property — the mailbox
+doorbell wait — it produces **the same verdict for a correct driver and a
+hanging one**, because bounded model checking cannot refute liveness. The
+tooling works; the property class is out of reach.
 
 ---
 
@@ -119,7 +125,73 @@ the obligations unfalsifiable.
 `--ltl` was not used, and using it would have added a Büchi automaton and a
 prefix bound to check something an assertion checks exactly.
 
-## 7. What would justify `--ltl`
+## 7. Wiring in ltl2ba: what it cost and what it bought
+
+`--ltl` needs a Büchi automaton emitted as C, and the patched `ltl2ba` that
+produces that format is neither in this tree nor publicly available (checked:
+no `esbmc/ltl2ba`, no `ssvlab/ltl2ba`). `scripts/ltl_response_ba.py` closes
+that gap for one pattern:
+
+    G (p -> F q)      the response pattern
+
+It is **not** an LTL-to-Buchi translator — it emits one fixed two-state
+automaton with the atomic propositions substituted in, and would silently
+produce the wrong monitor for any other formula, because it does not parse a
+formula at all. What makes it trustworthy is `--self-test`: it regenerates the
+monitor for `regression/ltl/basic`'s formula and compares against the
+committed ltl2ba output, which it reproduces **byte-equivalently modulo
+whitespace**.
+
+### The property
+
+`cxl_pci_mbox_wait_for_doorbell()` (`drivers/cxl/pci.c:57`) submits a mailbox
+command by setting the doorbell, polls until the device clears it, and gives
+up after `CXL_MAILBOX_TIMEOUT_MS` (CXL 2.0 §8.2.8.4). The obligation is
+genuinely temporal:
+
+    G (doorbell_busy -> F mbox_settled)
+
+No single-state assertion expresses it. This is the property I said in the
+previous revision of this document did not exist in the Seccom output — it
+does not; it comes from the driver source instead.
+
+### The result, which is negative
+
+`regression/cxl/cxl_ltl_doorbell_01` has the timeout. `_02` is the same driver
+with the timeout removed — an unbounded wait on a device that may never answer,
+a real bug. **ESBMC reports the same outcome for both: `LTL_FAILING`.**
+
+The reason is structural, not a defect in the encoding. `G (p -> F q)` is pure
+liveness: it has no finite counterexample, so the generated automaton's
+`_ltl2ba_bad_prefix_states` is `{false, false}` and `LTL_BAD` is unreachable
+whatever the program does. Bounded model checking cannot refute liveness, and
+the four-valued output does not distinguish a correct driver from a hanging
+one.
+
+So the honest accounting of combining ltl2ba with this work:
+
+| | |
+|---|---|
+| Generator, validated against ltl2ba | delivered, reusable |
+| A real temporal CXL property, encoded | delivered |
+| Ability to catch the bug it describes | **none** |
+
+The test pair is kept anyway, with both expectations set to `LTL_FAILING` and
+headers saying why. It is a tripwire: if ESBMC's LTL support ever distinguishes
+them, the pair fails and someone finds out.
+
+### What this implies for the approach
+
+Bounded LTL adds value over `assert()` only where a property is **temporal but
+still safety** — has a finite bad prefix. Examples: bounded response ("q within
+N steps"), ordering ("`INIT` never re-asserted before `ENABLE`"), and any
+invariant over a *concurrent* program, where the monitor samples at every
+interleaving point instead of only where an assertion was placed. Unbounded
+liveness is out of reach, and the CXL obligations that matter most —
+`!cxl_hot_add_event` and its siblings — are safety properties an assertion
+already checks exactly.
+
+## 8. What would justify `--ltl`
 
 A property that is genuinely temporal *and* grounded in code — an ordering or
 eventuality constraint that no single-state assertion captures. Candidates
@@ -136,9 +208,11 @@ output: the eight CXL obligations are all invariants. Establishing whether one
 exists among the 3,327 generated state machines is a separate exercise, and
 should start by discarding the edges whose `linux_source_hint` is fabricated.
 
-## 8. Reproducing
+## 9. Reproducing
 
 ```sh
 cmake -DENABLE_CXL_REGRESSION=On -Bbuild -S . && ctest -R cxl_fabric_lockdown
-ctest -R 'regression/ltl/'    # ESBMC's own LTL mode, for comparison
+ctest -R cxl_ltl_doorbell                     # the LTL pair
+python3 scripts/ltl_response_ba.py --self-test # generator vs ltl2ba output
+ctest -R 'regression/ltl/'                     # ESBMC's own LTL tests
 ```
