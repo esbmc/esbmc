@@ -1084,6 +1084,21 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
     if (!elided && clang_c_convertert::get_expr(stmt, new_expr))
       return true;
+
+    // An lvalue conditional denotes an object, not a copy of one. The C path
+    // types the `if` from getType(), which drops the reference, so both
+    // branches were dereferenced into a temporary and an assignment through
+    // the conditional left the original untouched (issue #6717).
+    if (
+      !elided && ternary.isLValue() && new_expr.id() == "if" &&
+      new_expr.operands().size() == 3 &&
+      (is_reference(new_expr.op1().type()) ||
+       is_reference(new_expr.op2().type())))
+    {
+      typet ref = reference_typet();
+      ref.subtype() = new_expr.type();
+      new_expr.type() = ref;
+    }
     break;
   }
 
