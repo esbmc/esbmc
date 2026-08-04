@@ -279,7 +279,78 @@ not installed here (`NuSMV`, `nusmv`, `nuXmv` all absent; Seccom shells out to
 a path you supply). It is not needed for this result: the informative direction
 is the unconstrained one, and that is the side ESBMC provides.
 
-## 9. What would justify `--ltl`
+## 9. Linux Runtime Verifier: the one that converts cleanly
+
+Linux RV (`kernel/trace/rv/`) specifies monitors as deterministic automata in
+`.dot`, translated by `tools/verification/rvgen` into a C header holding an
+enum of states, an enum of events, and a transition table with rejected entries
+set to `INVALID_STATE`. The obligation is stated outright in
+`include/rv/da_monitor.h:690`:
+
+```c
+next_state = model_get_next_state(curr_state, event);
+if (next_state == INVALID_STATE) { react(curr_state, event); return false; }
+```
+
+That is `G (state != INVALID_STATE)` — safety, so an assertion discharges it
+exactly. `scripts/rv2c.py` turns either an rvgen monitor header or plain
+`dot2c` output into that assertion.
+
+Compared with the Seccom models, everything that made those hard is absent:
+the artefact is already C, the events are real tracepoints, and the property is
+explicit rather than buried under an `INVAR` that assumes it.
+
+**What this adds over RV itself.** RV observes the sequences a running kernel
+happened to produce. Feeding the same automaton to ESBMC makes the event
+producer *symbolic*, so every sequence the code could emit is covered at once.
+Runtime verification cannot answer that question; bounded model checking can,
+up to its bound.
+
+### Demonstrated twice
+
+`cxl_rv_snep_01/02` use **`snep`**, an unmodified kernel monitor
+(`kernel/trace/rv/monitors/snep/`, 2 states, 4 events, 4 of 8 transitions
+rejected). The passing test's producer respects the protocol; the failing one
+toggles preemption inside scheduling context and trips
+`assert(next != RV_SNEP_INVALID)` — the kernel's own obligation, checked
+statically.
+
+`cxl_rv_mbox_01/02` go the other way: `cxl_mbox.dot` is a **new** automaton for
+the CXL mailbox doorbell protocol (CXL 2.0 §8.2.8.4, as transcribed at
+`drivers/cxl/pci.c:210`), passed through the kernel's own `dot2c`. The same
+`.dot` could generate a live kernel monitor and this static check. The failing
+variant submits a second command without verifying the doorbell is clear —
+step 1 of the spec sequence — which on hardware loses or corrupts a command
+rather than crashing, and so survives testing.
+
+This is the first artefact here shared between the kernel's runtime verifier
+and ESBMC's static one.
+
+### On the kernel's own ltl2ba
+
+`tools/verification/rvgen/rvgen/ltl2ba.py` is a real LTL-to-Büchi translator —
+568 lines implementing Gerth, Peled, Vardi and Wolper (1996), with a full
+grammar (`always`, `eventually`, `next`, `until`, `imply`, …). Kernel models
+use it: `models/rtapp/pagefault.ltl` is `RULE = always (RT imply not PAGEFAULT)`.
+
+| | Linux `rvgen/ltl2ba.py` | ESBMC's ltl2ba |
+|---|---|---|
+| Available | **yes, in-tree, GPL-2.0** | no — absent and unpublished |
+| Algorithm | Gerth et al. 1996, cited | unknown; only its output survives |
+| Output | kernel monitor: `enum ltl_atom`, `enum ltl_buchi_state`, transition fn | C monitor *thread* + four-valued acceptance tables |
+| Semantics | infinite-trace Büchi, judged at runtime | four-valued RV-LTL over bounded finite prefixes |
+
+Adapting it to emit ESBMC's format is plausible — it already builds the
+automaton, and `ltl2k.py` shows how a backend is written. The work is not the
+automaton but the **four-valued tables** (`stutter_accept`,
+`good_prefix_excluded`, `bad_prefix_states`), which encode finite-prefix
+semantics the kernel version has no reason to compute. That, rather than my
+hand-rolled `ltl_response_ba.py`, is where a general solution should start.
+
+(It could not be run here: `rvgen` needs the `ply` package, which is not
+installed. `dot2c` does not, which is why the automaton path above works.)
+
+## 10. What would justify `--ltl`
 
 A property that is genuinely temporal *and* grounded in code — an ordering or
 eventuality constraint that no single-state assertion captures. Candidates
@@ -296,7 +367,7 @@ output: the eight CXL obligations are all invariants. Establishing whether one
 exists among the 3,327 generated state machines is a separate exercise, and
 should start by discarding the edges whose `linux_source_hint` is fabricated.
 
-## 10. Reproducing
+## 11. Reproducing
 
 ```sh
 cmake -DENABLE_CXL_REGRESSION=On -Bbuild -S . && ctest -R cxl_fabric_lockdown

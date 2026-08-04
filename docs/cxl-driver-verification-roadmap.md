@@ -968,7 +968,7 @@ currently poor:
 | Real Linux driver functions verified | 4 | 4 |
 | Operational model functions exercised | 131 of 131 (100%) | 22 of 105 (21%) |
 | Tests that execute the operational model | 62 of 88 | 15 of 39 |
-| Tests declaring the properties they check | 88 of 88 | 1 of 35 |
+| Tests declaring the properties they check | 92 of 92 | 1 of 35 |
 | Tests that verify an interleaving | 5 of 88 | 0 of 35 |
 
 Phase 8.1 and 8.4 moved the last two; 8.2 made the second measurable for the
@@ -998,9 +998,9 @@ Phase 8.2 raises model coverage, the suite becomes worth re-enabling.
 | Metric | Count |
 |--------|-------|
 | Total commits | 38 |
-| Total regression tests | 88 |
-| Passing tests | 52 |
-| Bug-detecting tests | 36 |
+| Total regression tests | 92 |
+| Passing tests | 54 |
+| Bug-detecting tests | 38 |
 | Kernel headers added | 6 |
 | Operational model lines | 2136 |
 | Documentation pages | 3 |
