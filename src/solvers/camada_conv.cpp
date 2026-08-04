@@ -1366,7 +1366,7 @@ public:
     // If it's a floatbv, convert it to bv first so callers extracting bytes
     // out of structs/unions containing floats encode against the IEEE bit
     // pattern instead of triggering a sort mismatch.
-    if (a->sort->id == SMT_SORT_FPBV)
+    if (a->sort->is_fp())
       a = mk_from_fp_to_bv(a);
     return wrap(
       solver->mkBVExtract(high, low, expr(a)), mk_bv_sort(high - low + 1));
@@ -1712,7 +1712,7 @@ private:
 
   smt_astt wrap(const camada::SMTExprRef &value, smt_sortt sort)
   {
-    if (sort->id == SMT_SORT_STRUCT)
+    if (sort->is_tuple())
       return new camada_tuple_ast(this, value, sort);
     return new camada_expr(this, value, sort);
   }
@@ -1754,10 +1754,10 @@ smt_astt camada_tuple_ast::update(
   unsigned int idx,
   const expr2tc &idx_expr) const
 {
-  if (sort->id == SMT_SORT_ARRAY)
+  if (sort->is_array())
     return smt_ast::update(ctx, value, idx, idx_expr);
 
-  assert(sort->id == SMT_SORT_STRUCT);
+  assert(sort->is_tuple());
   assert(is_nil_expr(idx_expr));
 
   auto *cam_ctx = static_cast<camada_convt *>(ctx);

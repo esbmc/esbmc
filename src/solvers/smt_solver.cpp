@@ -266,13 +266,13 @@ void smt_solver_baset::pop_ctx()
 
 smt_astt smt_solver_baset::invert_ast(smt_astt a)
 {
-  assert(a->sort->id == SMT_SORT_BOOL);
+  assert(a->sort->is_bool());
   return mk_not(a);
 }
 
 smt_astt smt_solver_baset::imply_ast(smt_astt a, smt_astt b)
 {
-  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  assert(a->sort->is_bool() && b->sort->is_bool());
   return mk_implies(a, b);
 }
 
@@ -2158,10 +2158,10 @@ smt_astt smt_solver_baset::mk_fresh(
 {
   std::string newname = mk_fresh_name(tag);
 
-  if (s->id == SMT_SORT_STRUCT)
+  if (s->is_tuple())
     return mk_tuple_symbol(newname, s);
 
-  if (s->id == SMT_SORT_ARRAY)
+  if (s->is_array())
   {
     assert(
       array_subtype != nullptr &&
@@ -2447,7 +2447,7 @@ smt_astt smt_solver_baset::round_fixedbv_to_int(
 smt_astt smt_solver_baset::make_bool_bit(smt_astt a)
 {
   assert(
-    a->sort->id == SMT_SORT_BOOL &&
+    a->sort->is_bool() &&
     "Wrong sort fed to "
     "smt_solver_baset::make_bool_bit");
   smt_astt one =
@@ -2460,8 +2460,8 @@ smt_astt smt_solver_baset::make_bool_bit(smt_astt a)
 smt_astt smt_solver_baset::make_bit_bool(smt_astt a)
 {
   assert(
-    ((!int_encoding && a->sort->id == SMT_SORT_BV) ||
-     (int_encoding && a->sort->id == SMT_SORT_INT)) &&
+    ((!int_encoding && a->sort->is_bv()) ||
+     (int_encoding && a->sort->is_int())) &&
     "Wrong sort fed to smt_solver_baset::make_bit_bool");
 
   smt_astt one =
@@ -3795,7 +3795,7 @@ smt_astt smt_ast::update(
 {
   // If we're having an update applied to us, then the only valid situation
   // this can occur in is if we're an array.
-  assert(sort->id == SMT_SORT_ARRAY);
+  assert(sort->is_array());
 
   // We're an array; just generate a 'with' operation.
   expr2tc index;
@@ -3816,8 +3816,7 @@ smt_astt smt_ast::update(
 smt_astt smt_ast::select(smt_solver_baset *ctx, const expr2tc &idx) const
 {
   assert(
-    sort->id == SMT_SORT_ARRAY &&
-    "Select operation applied to non-array scalar AST");
+    sort->is_array() && "Select operation applied to non-array scalar AST");
 
   smt_astt args[2];
   args[0] = this;
@@ -4202,23 +4201,23 @@ smt_astt smt_solver_baset::mk_bvslt(smt_astt a, smt_astt b)
 
 smt_astt smt_solver_baset::mk_gt(smt_astt a, smt_astt b)
 {
-  assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
-  assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->is_arith());
+  assert(b->sort->is_arith());
   return mk_lt(b, a);
 }
 
 smt_astt smt_solver_baset::mk_bvugt(smt_astt a, smt_astt b)
 {
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(!a->sort->is_arith());
+  assert(!b->sort->is_arith());
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   return mk_not(mk_bvule(a, b));
 }
 
 smt_astt smt_solver_baset::mk_bvsgt(smt_astt a, smt_astt b)
 {
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(!a->sort->is_arith());
+  assert(!b->sort->is_arith());
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   return mk_not(mk_bvsle(a, b));
 }
@@ -4246,24 +4245,24 @@ smt_astt smt_solver_baset::mk_bvsle(smt_astt a, smt_astt b)
 
 smt_astt smt_solver_baset::mk_ge(smt_astt a, smt_astt b)
 {
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(!a->sort->is_arith());
+  assert(!b->sort->is_arith());
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   return mk_not(mk_lt(a, b));
 }
 
 smt_astt smt_solver_baset::mk_bvuge(smt_astt a, smt_astt b)
 {
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(!a->sort->is_arith());
+  assert(!b->sort->is_arith());
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   return mk_not(mk_bvult(a, b));
 }
 
 smt_astt smt_solver_baset::mk_bvsge(smt_astt a, smt_astt b)
 {
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(!a->sort->is_arith());
+  assert(!b->sort->is_arith());
   assert(a->sort->get_data_width() == b->sort->get_data_width());
   return mk_not(mk_bvslt(a, b));
 }

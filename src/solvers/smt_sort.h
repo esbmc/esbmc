@@ -62,6 +62,40 @@ public:
     assert(id == SMT_SORT_ARRAY);
   }
 
+  /** True for the Int and Real sorts, i.e. the integer/real encoding's
+   *  arithmetic sorts as opposed to bit-vectors. Mirrors camada's
+   *  SMTSort::isArithSort(). */
+  bool is_arith() const
+  {
+    return id == SMT_SORT_INT || id == SMT_SORT_REAL;
+  }
+
+  /* The remaining kind predicates, named after camada's. */
+  bool is_bool() const
+  {
+    return id == SMT_SORT_BOOL;
+  }
+  bool is_int() const
+  {
+    return id == SMT_SORT_INT;
+  }
+  bool is_bv() const
+  {
+    return id == SMT_SORT_BV;
+  }
+  bool is_array() const
+  {
+    return id == SMT_SORT_ARRAY;
+  }
+  bool is_tuple() const
+  {
+    return id == SMT_SORT_STRUCT;
+  }
+  bool is_fp() const
+  {
+    return id == SMT_SORT_FPBV;
+  }
+
   size_t get_data_width() const
   {
     if (id == SMT_SORT_ARRAY)

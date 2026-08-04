@@ -898,7 +898,7 @@ smt_astt smt_solver_baset::convert_rounding_mode(const expr2tc &expr)
   // ROUND_TO_MINUS_INF=3, ROUND_TO_ZERO=4.
 
   smt_astt symbol = convert_ast(expr);
-  if (symbol->sort->id != SMT_SORT_BV)
+  if (!symbol->sort->is_bv())
   {
     log_warning(
       "unsupported symbolic rounding mode sort {}: falling back to "
