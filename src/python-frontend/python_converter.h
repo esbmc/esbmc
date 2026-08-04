@@ -863,6 +863,10 @@ private:
 
   void reject_numpy_view_identity_query(const nlohmann::json &node);
 
+  void reject_copied_numpy_view_in_container(
+    const nlohmann::json &ast_node,
+    const std::set<std::string> &container_types);
+
   std::optional<nlohmann::json>
   select_return_value_for_call(const nlohmann::json &call_node) const;
 

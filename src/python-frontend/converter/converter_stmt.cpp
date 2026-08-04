@@ -1504,6 +1504,31 @@ void python_converter::reject_numpy_view_identity_query(
   }
 }
 
+// dict_handler_ intercepts a Dict-literal assignment before the generic
+// List/Tuple/Dict escape check further down the caller ever runs, so a
+// copied-view escape into a dict literal (named or inline, e.g.
+// {"row": x[0]}) has to be caught here too, or the view ends up embedded in
+// the dict's runtime representation in a way that crashes SMT encoding
+// instead of producing a diagnostic (mismatched sort widths in
+// z3_convt::mk_eq).
+void python_converter::reject_copied_numpy_view_in_container(
+  const nlohmann::json &ast_node,
+  const std::set<std::string> &container_types)
+{
+  if (!ast_node.contains("value") || !ast_node["value"].is_object())
+    return;
+
+  const nlohmann::json &value_node = ast_node["value"];
+  if (
+    container_types.count(value_node.value("_type", "")) == 0 ||
+    !contains_copied_numpy_view_name(value_node))
+    return;
+
+  throw std::runtime_error(
+    "TypeError: storing a copied numpy view in a container is not "
+    "supported");
+}
+
 std::optional<nlohmann::json> python_converter::select_return_value_for_call(
   const nlohmann::json &call_node) const
 {
@@ -3476,20 +3501,7 @@ void python_converter::get_var_assign(
     // Create LHS expression
     lhs = create_lhs_expression(target, lhs_symbol, location_begin);
 
-    // A dict literal containing a copied numpy view (named or inline, e.g.
-    // {"row": x[0]}) is handled entirely by dict_handler_ below, which
-    // never routes through the generic List/Tuple/Dict escape check further
-    // down this function (dict_handler_ returns before reaching it) — so it
-    // has to be caught here too, or the view ends up embedded in the dict's
-    // runtime representation in a way that crashes SMT encoding instead of
-    // producing a diagnostic (mismatched sort widths in z3_convt::mk_eq).
-    if (
-      ast_node.contains("value") && ast_node["value"].is_object() &&
-      ast_node["value"].value("_type", "") == "Dict" &&
-      contains_copied_numpy_view_name(ast_node["value"]))
-      throw std::runtime_error(
-        "TypeError: storing a copied numpy view in a container is not "
-        "supported");
+    reject_copied_numpy_view_in_container(ast_node, {"Dict"});
 
     // Handle dict literal assignment specially - after LHS is created
     if (dict_handler_->handle_literal_assignment_check(*this, ast_node, lhs))
@@ -3521,16 +3533,7 @@ void python_converter::get_var_assign(
 
     bool is_global = is_global_variable(sid);
 
-    // Same reasoning as the annotated-assignment dict check above: this
-    // path also hands off to dict_handler_ before the generic container
-    // escape check further down ever runs.
-    if (
-      ast_node.contains("value") && ast_node["value"].is_object() &&
-      ast_node["value"].value("_type", "") == "Dict" &&
-      contains_copied_numpy_view_name(ast_node["value"]))
-      throw std::runtime_error(
-        "TypeError: storing a copied numpy view in a container is not "
-        "supported");
+    reject_copied_numpy_view_in_container(ast_node, {"Dict"});
 
     // Handle unannotated dict literal assignment
     if (
@@ -3615,17 +3618,7 @@ void python_converter::get_var_assign(
   current_lhs = &lhs;
   is_converting_lhs = false;
 
-  if (
-    ast_node.contains("value") && ast_node["value"].is_object() &&
-    (ast_node["value"].value("_type", "") == "List" ||
-     ast_node["value"].value("_type", "") == "Tuple" ||
-     ast_node["value"].value("_type", "") == "Dict") &&
-    contains_copied_numpy_view_name(ast_node["value"]))
-  {
-    throw std::runtime_error(
-      "TypeError: storing a copied numpy view in a container is not "
-      "supported");
-  }
+  reject_copied_numpy_view_in_container(ast_node, {"List", "Tuple", "Dict"});
 
   // Get RHS
   nlohmann::json effective_ast_node = ast_node;
