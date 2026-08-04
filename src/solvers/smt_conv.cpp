@@ -40,7 +40,8 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
 expr2tc smt_convt::get_by_ast(const expr2tc &expr)
 {
-  return solver_impl->get_by_ast(expr);
+  /* Converts here so callers (witnesses.cpp) never name smt_astt. */
+  return solver_impl->get_by_ast(expr->type, solver_impl->convert_ast(expr));
 }
 
 tvt smt_convt::l_get(const expr2tc &expr)

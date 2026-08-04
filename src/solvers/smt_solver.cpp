@@ -3059,7 +3059,7 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
   case expr2t::pointer_offset_id:
   case expr2t::same_object_id:
   case expr2t::symbol_id:
-    return get_by_ast(res);
+    return get_by_ast(res->type, convert_ast(res));
 
   case expr2t::member_id:
   {
@@ -3068,11 +3068,11 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
 
     if (is_symbol2t(mem_src) && !is_pointer_type(expr) && !is_struct_type(expr))
     {
-      return get_by_ast(res);
+      return get_by_ast(res->type, convert_ast(res));
     }
     else if (is_array_type(expr))
     {
-      return get_by_ast(res);
+      return get_by_ast(res->type, convert_ast(res));
     }
 
     simplify(res);
@@ -3495,12 +3495,6 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
   return constant_array2tc(arr_type, fields);
 }
 
-expr2tc smt_solver_baset::get_array(const expr2tc &expr)
-{
-  smt_astt array = convert_ast(expr);
-  return get_array(expr->type, array);
-}
-
 smt_astt smt_solver_baset::array_create(const expr2tc &expr)
 {
   if (is_constant_array_of2t(expr))
@@ -3772,11 +3766,6 @@ tvt smt_solver_baset::l_get(const expr2tc &expr)
 void smt_solver_baset::dump_expr(const expr2tc &expr)
 {
   convert_ast(expr)->dump();
-}
-
-expr2tc smt_solver_baset::get_by_ast(const expr2tc &expr)
-{
-  return get_by_ast(expr->type, convert_ast(expr));
 }
 
 expr2tc smt_solver_baset::get_by_value(const type2tc &type, BigInt value)

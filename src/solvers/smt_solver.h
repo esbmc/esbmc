@@ -224,12 +224,6 @@ public:
    *          reason. */
   expr2tc get_by_ast(const type2tc &type, smt_astt a);
 
-  /** Resolve @p expr's model value: converts it, then dispatches on its type
-   *  exactly as the overload above does. @p expr need not be a symbol -- a
-   *  member or index access works too. Lets callers fetch aggregate values
-   *  without ever naming smt_astt. */
-  expr2tc get_by_ast(const expr2tc &expr);
-
   /** Builds the bitvector based on the value retrieved from the solver.
    *  @param type the type (fixedbv or (un)signedbv),
    *  @param value the value retrieved from the solver.
@@ -1025,7 +1019,6 @@ public:
   /** Given an array expression, attempt to extract its valuation from the
    *  solver model, computing a constant_array2tc by calling get_array_elem. */
   expr2tc get_array(const type2tc &type, smt_astt array);
-  expr2tc get_array(const expr2tc &expr);
 
   /** @} */
 
