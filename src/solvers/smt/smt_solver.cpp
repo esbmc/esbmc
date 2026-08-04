@@ -79,7 +79,6 @@ smt_solver_baset::smt_solver_baset(
 {
   int_encoding = options.get_bool_option("int-encoding");
   ir_ieee = options.get_bool_option("ir-ieee");
-  tuple_api = nullptr;
   array_api = nullptr;
   ra_api = nullptr;
   ir_ieee_api = std::make_unique<ir_ieee_convt>(this);
@@ -125,12 +124,6 @@ smt_solver_baset::smt_solver_baset(
 }
 
 smt_solver_baset::~smt_solver_baset() = default;
-
-void smt_solver_baset::set_tuple_iface(tuple_iface *iface)
-{
-  assert(tuple_api == nullptr && "set_tuple_iface should only be called once");
-  tuple_api = iface;
-}
 
 void smt_solver_baset::set_array_iface(array_iface *iface)
 {
@@ -182,7 +175,7 @@ void smt_solver_baset::push_ctx()
   // Any context change can change the model; drop memoised l_get values.
   l_get_cache.clear();
 
-  tuple_api->push_tuple_ctx();
+  push_tuple_ctx();
   array_api->push_array_ctx();
 
   addr_space_data.push_back(addr_space_data.back());
@@ -276,7 +269,7 @@ void smt_solver_baset::pop_ctx()
   live_asts_sizes.pop_back();
 
   array_api->pop_array_ctx();
-  tuple_api->pop_tuple_ctx();
+  pop_tuple_ctx();
 }
 
 smt_astt smt_solver_baset::invert_ast(smt_astt a)
@@ -601,7 +594,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   }
   case expr2t::constant_struct_id:
   {
-    a = tuple_api->tuple_create(expr);
+    a = tuple_create(expr);
     break;
   }
   case expr2t::constant_union_id:
@@ -645,7 +638,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       // If we have an array of tuples and no tuple support, use tuple_fresh.
       // Otherwise, mk_fresh.
       if (is_tuple_ast_type(arr.subtype))
-        a = tuple_api->tuple_fresh(sort);
+        a = tuple_fresh(sort);
       else
         a = mk_fresh(sort, "inf_array", convert_sort(arr.subtype));
       break;
@@ -1840,12 +1833,12 @@ smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
 
   case type2t::complex_id:
   case type2t::struct_id:
-    result = tuple_api->mk_struct_sort(type);
+    result = mk_struct_sort(type);
     break;
 
   case type2t::code_id:
   case type2t::pointer_id:
-    result = tuple_api->mk_struct_sort(pointer_struct);
+    result = mk_struct_sort(pointer_struct);
     break;
 
   case type2t::unsignedbv_id:
@@ -1905,7 +1898,7 @@ smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
     {
       type2tc thetype = flatten_array_type(type);
       rewrite_ptrs_to_structs(thetype);
-      result = tuple_api->mk_struct_sort(thetype);
+      result = mk_struct_sort(thetype);
       break;
     }
 
@@ -2121,8 +2114,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
 
     // Special case for tuple symbols
     if (is_tuple_ast_type(expr))
-      return tuple_api->mk_tuple_symbol(
-        sym.get_symbol_name(), convert_sort(sym.type));
+      return mk_tuple_symbol(sym.get_symbol_name(), convert_sort(sym.type));
 
     if (is_array_type(expr))
     {
@@ -2131,7 +2123,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
 
       // If this is an array of structs, we have a tuple array sym.
       if (is_tuple_ast_type(range))
-        return tuple_api->mk_tuple_array_symbol(expr);
+        return mk_tuple_array_symbol(expr);
     }
 
     // Just a normal symbol. Possibly an array symbol.
@@ -2194,7 +2186,7 @@ smt_astt smt_solver_baset::mk_fresh(
   std::string newname = mk_fresh_name(tag);
 
   if (s->id == SMT_SORT_STRUCT)
-    return tuple_api->mk_tuple_symbol(newname, s);
+    return mk_tuple_symbol(newname, s);
 
   if (s->id == SMT_SORT_ARRAY)
   {
@@ -2981,7 +2973,7 @@ void smt_solver_baset::pre_solve()
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in
   // the array api class.
-  tuple_api->add_tuple_constraints_for_solving();
+  add_tuple_constraints_for_solving();
   array_api->add_array_constraints_for_solving();
 }
 
@@ -3034,7 +3026,7 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
 
       // Retrieve the element
       if (is_tuple_array_ast_type(src_value->type))
-        res = tuple_api->tuple_get_array_elem(
+        res = tuple_get_array_elem(
           array, to_constant_int2t(idx).value.to_uint64(), res->type);
       else
         res = array_api->get_array_elem(
@@ -3290,7 +3282,7 @@ expr2tc smt_solver_baset::get_by_ast(const type2tc &type, smt_astt a)
   case type2t::complex_id:
   case type2t::struct_id:
   case type2t::pointer_id:
-    return tuple_api->tuple_get(type, a);
+    return tuple_get(type, a);
 
   case type2t::union_id:
   {
@@ -3514,7 +3506,7 @@ expr2tc smt_solver_baset::get_by_type(const expr2tc &expr)
   case type2t::complex_id:
   case type2t::struct_id:
   case type2t::pointer_id:
-    return tuple_api->tuple_get(expr);
+    return tuple_get(expr);
 
   default:
     if (!options.get_bool_option("non-supported-models-as-zero"))
@@ -3579,8 +3571,7 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
   {
     expr2tc elem;
     if (uses_tuple_api)
-      elem =
-        tuple_api->tuple_get_array_elem(array, i, to_array_type(type).subtype);
+      elem = tuple_get_array_elem(array, i, to_array_type(type).subtype);
     else
       elem = array_api->get_array_elem(array, i, ar.subtype);
     fields.push_back(elem);
@@ -3725,7 +3716,7 @@ smt_astt smt_solver_baset::convert_array_of_prep(const expr2tc &expr)
   }
 
   if (is_struct_type(base_init->type))
-    return tuple_api->tuple_array_of(base_init, array_size);
+    return tuple_array_of(base_init, array_size);
   if (is_pointer_type(base_init->type))
     return pointer_array_of(base_init, array_size);
   else
@@ -3786,7 +3777,7 @@ smt_astt smt_solver_baset::pointer_array_of(
   operands.push_back(zero_val);
 
   expr2tc strct = constant_struct2tc(pointer_struct, std::move(operands));
-  return tuple_api->tuple_array_of(strct, array_width);
+  return tuple_array_of(strct, array_width);
 }
 
 smt_astt smt_solver_baset::tuple_array_create_despatch(
@@ -3805,7 +3796,7 @@ smt_astt smt_solver_baset::tuple_array_create_despatch(
     const constant_array_of2t &arr = to_constant_array_of2t(expr);
     smt_astt arg = convert_ast(arr.initializer);
 
-    return tuple_api->tuple_array_create(arr_type, &arg, true, domain);
+    return tuple_array_create(arr_type, &arg, true, domain);
   }
 
   assert(is_constant_array2t(expr));
@@ -3818,7 +3809,7 @@ smt_astt smt_solver_baset::tuple_array_create_despatch(
     i++;
   }
 
-  return tuple_api->tuple_array_create(arr_type, args.data(), false, domain);
+  return tuple_array_create(arr_type, args.data(), false, domain);
 }
 
 void smt_solver_baset::rewrite_ptrs_to_structs(type2tc &type)

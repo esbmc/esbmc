@@ -64,7 +64,6 @@ this pipeline and are worth a skim:
 | Path | Contents |
 |------|----------|
 | `smt/` | Solver-agnostic core: `smt_convt`, `smt_ast`, `smt_sort`, byte ops, casts, memory model, overflow encoding |
-| `smt/tuple/` | `tuple_iface`, the interface a backend implements for tuples |
 | `smt/fp/` | Interval encoding for integer/real float mode (`ir_ieee_convt`) |
 | `prop/` | Shared with SAT backends: `literal.h`, `pointer_logic.{cpp,h}` |
 | `camada/`, `minisat/`, `sat/` | Per-backend subclasses |
@@ -94,7 +93,6 @@ a backend opt in to native handling where the solver supports it:
 | Interface | If implemented | Fallback |
 |-----------|----------------|----------|
 | `array_iface` | Solver's native arrays | camada's `ArrayEncoding::Ackermann` (`--array-flattener`) |
-| `tuple_iface` | Solver's native tuples / datatypes | camada's `TupleEncoding::Camada` (`--tuple-node-flattener`) |
 
 If you find yourself flattening anything *more* than the items above —
 for instance, anything that touches pointer dereferencing, control-flow

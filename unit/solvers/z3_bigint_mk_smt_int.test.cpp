@@ -41,15 +41,13 @@ SCENARIO(
   // mk_smt_int returns an Int sort, which only works in integer-encoding
   // mode. Without this the solver would reject the assert below.
   options.set_option("int-encoding", true);
-  tuple_iface *tuple_api = nullptr;
   array_iface *array_api = nullptr;
   std::unique_ptr<smt_solver_baset> solver{
-    create_new_z3_solver(options, ns, &tuple_api, &array_api)};
+    create_new_z3_solver(options, ns, &array_api)};
   REQUIRE(solver != nullptr);
 
   // create_solver() does this wiring plus smt_post_init(); replicate the part
   // mk_eq / assert_ast need (boolean_sort and the address-space scaffolding).
-  solver->set_tuple_iface(tuple_api);
   solver->set_array_iface(array_api);
   solver->smt_post_init();
 

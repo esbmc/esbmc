@@ -306,7 +306,7 @@ smt_astt smt_solver_baset::convert_identifier_pointer(
       // For null, other pieces of code will have already initialized its
       // value, so we can just refer to a symbol.
       type2tc t = pointer_type2tc(get_empty_type());
-      a = tuple_api->mk_tuple_symbol(symbol, convert_sort(t));
+      a = mk_tuple_symbol(symbol, convert_sort(t));
 
       return a;
     }
@@ -334,7 +334,7 @@ smt_astt smt_solver_baset::convert_identifier_pointer(
 
   // Produce a symbol representing this.
   type2tc t = pointer_type2tc(get_empty_type());
-  a = tuple_api->mk_tuple_symbol(symbol, convert_sort(t));
+  a = mk_tuple_symbol(symbol, convert_sort(t));
 
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
@@ -380,7 +380,7 @@ smt_astt smt_solver_baset::init_pointer_obj(
     membs.push_back(
       constant_int2tc(ptr_struct.members[2], BigInt(0))); /* CHERI-TODO */
   expr2tc ptr_val_s = constant_struct2tc(pointer_struct, membs);
-  smt_astt ptr_val = tuple_api->tuple_create(ptr_val_s);
+  smt_astt ptr_val = tuple_create(ptr_val_s);
 
   type2tc ptr_loc_type = ptraddr_type2();
 

@@ -92,7 +92,6 @@ class smt_solver_baset;
 class ra_apit;
 
 #include <solvers/smt/smt_array.h>
-#include <solvers/smt/tuple/smt_tuple.h>
 
 /** The base SMT-conversion class/interface.
  *  smt_solver_baset handles a number of decisions that must be made when
@@ -131,6 +130,34 @@ class ra_apit;
  *
  *  @see smt_conv.h
  *  @see smt_func_kind */
+// True iff the given type lowers to a tuple sort in the SMT layer:
+// struct (incl. C++ class data), pointer (as the (object, offset)
+// pair lowered via pointer_struct), code (function pointer payload),
+// or complex (the (real, imag) pair).
+inline bool is_tuple_ast_type(const type2tc &t)
+{
+  return is_struct_type(t) || is_pointer_type(t) || is_code_type(t) ||
+         is_complex_type(t);
+}
+
+inline bool is_tuple_ast_type(const expr2tc &e)
+{
+  return is_tuple_ast_type(e->type);
+}
+
+inline bool is_tuple_array_ast_type(const type2tc &t)
+{
+  if (!is_array_type(t))
+    return false;
+
+  const array_type2t &arr_type = to_array_type(t);
+  type2tc range = arr_type.subtype;
+  while (is_array_type(range))
+    range = to_array_type(range).subtype;
+
+  return is_tuple_ast_type(range);
+}
+
 class smt_solver_baset
 {
 public:
@@ -802,7 +829,70 @@ public:
    *  up the symbols / addresses of 'NULL', '0', and the invalid pointer */
   void init_addr_space_array();
   /** Stores handle for the tuple interface. */
-  void set_tuple_iface(tuple_iface *iface);
+  /* ---- Tuples ----
+   * Implemented by the backend: camada uses the solver's datatypes where it
+   * has them and lowers to per-field symbols where it does not, so there is
+   * no separate flattener to install. */
+  /** Create a sort representing a struct. i.e., a tuple. Ideally this should
+   *  actually be part of the overridden tuple api, but due to history it isn't
+   *  yet. If solvers don't support tuples, implement this to abort.
+   *  @param type The struct type to create a tuple representation of.
+   *  @return The tuple representation of the type, wrapped in an smt_sort. */
+  virtual smt_sortt mk_struct_sort(const type2tc &type) = 0;
+
+  /** Create a new tuple from a struct definition.
+   *  @param structdef A constant_struct2tc, describing all the members of the
+   *         tuple to create.
+   *  @return AST representing the created tuple */
+  virtual smt_astt tuple_create(const expr2tc &structdef) = 0;
+
+  /** Create a fresh tuple, with freely valued fields.
+   *  @param s Sort of the tuple to create
+   *  @return AST representing the created tuple */
+  virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "") = 0;
+
+  // XXX XXX XXX docs gap
+  virtual smt_astt tuple_array_create(
+    const type2tc &array_type,
+    smt_astt *inputargs,
+    bool const_array,
+    smt_sortt domain) = 0;
+
+  /** Create a potentially /large/ array of tuples. This is called when we
+   *  encounter an array_of operation, with a very large array size, of tuple
+   *  sort.
+   *  @param Expression of tuple value to populate this array with.
+   *  @param domain_width The size of array to create, in domain bits.
+   *  @return An AST representing an array of the tuple value, init_value. */
+  virtual smt_astt
+  tuple_array_of(const expr2tc &init_value, unsigned long domain_width) = 0;
+
+  /** Convert a symbol to a tuple_smt_ast */
+  virtual smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) = 0;
+
+  /** Like mk_tuple_symbol, but for arrays */
+  virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr) = 0;
+
+  /** Extract the assignment to a tuple-typed symbol from the SMT solvers
+   *  model */
+  virtual expr2tc tuple_get(const expr2tc &expr) = 0;
+  virtual expr2tc tuple_get(const type2tc &type, smt_astt a) = 0;
+
+  virtual expr2tc tuple_get_array_elem(
+    smt_astt array,
+    uint64_t index,
+    const type2tc &subtype) = 0;
+
+  virtual void add_tuple_constraints_for_solving()
+  {
+  }
+  virtual void push_tuple_ctx()
+  {
+  }
+  virtual void pop_tuple_ctx()
+  {
+  }
+
   /** Stores handle for the array interface. */
   void set_array_iface(array_iface *iface);
   /** Stores handle for the floating-point interface. */
@@ -1269,7 +1359,6 @@ public:
    *  back to that point. */
   std::vector<unsigned int> live_asts_sizes;
 
-  tuple_iface *tuple_api;
   array_iface *array_api;
   ra_apit *ra_api;
   std::unique_ptr<ir_ieee_convt> ir_ieee_api;

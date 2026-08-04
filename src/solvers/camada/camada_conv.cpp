@@ -1,7 +1,6 @@
 #include <solvers/solve.h>
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/smt_solver.h>
-#include <solvers/smt/tuple/smt_tuple.h>
 #include <solvers/camada/oneshot_options.h>
 #include <solvers/smt/external_process_died.h>
 #include <util/base/filesystem.h>
@@ -516,9 +515,7 @@ camada::SMTSolverRef create_esbmc_yices_solver(const optionst &options)
 #endif
 }
 
-class camada_convt : public smt_solver_baset,
-                     public tuple_iface,
-                     public array_iface
+class camada_convt : public smt_solver_baset, public array_iface
 {
   friend class camada_tuple_ast;
 
@@ -1790,7 +1787,6 @@ smt_solver_baset *create_camada_solver(
   camada_backendt backend,
   const optionst &options,
   const namespacet &ns,
-  tuple_iface **tuple_api,
   array_iface **array_api,
   bool oneshot = false)
 {
@@ -1799,7 +1795,6 @@ smt_solver_baset *create_camada_solver(
    * the theory, and lowered to per-field BV/Bool symbols or Ackermann
    * congruence axioms where it does not (SMTSolverImpl dispatches on
    * nativeTupleSupport()). So the backend always serves both interfaces. */
-  *tuple_api = solver;
   *array_api = solver;
   return solver;
 }
@@ -1809,51 +1804,42 @@ smt_solver_baset *create_camada_solver(
 smt_solver_baset *create_new_z3_solver(
   const optionst &options,
   const namespacet &ns,
-  tuple_iface **tuple_api,
   array_iface **array_api)
 {
-  return create_camada_solver(
-    camada_backendt::z3, options, ns, tuple_api, array_api);
+  return create_camada_solver(camada_backendt::z3, options, ns, array_api);
 }
 
 smt_solver_baset *create_new_cvc5_solver(
   const optionst &options,
   const namespacet &ns,
-  tuple_iface **tuple_api,
   array_iface **array_api)
 {
-  return create_camada_solver(
-    camada_backendt::cvc5, options, ns, tuple_api, array_api);
+  return create_camada_solver(camada_backendt::cvc5, options, ns, array_api);
 }
 
 smt_solver_baset *create_new_mathsat_solver(
   const optionst &options,
   const namespacet &ns,
-  tuple_iface **tuple_api,
   array_iface **array_api)
 {
-  return create_camada_solver(
-    camada_backendt::mathsat, options, ns, tuple_api, array_api);
+  return create_camada_solver(camada_backendt::mathsat, options, ns, array_api);
 }
 
 smt_solver_baset *create_new_yices_solver(
   const optionst &options,
   const namespacet &ns,
-  tuple_iface **tuple_api,
   array_iface **array_api)
 {
-  return create_camada_solver(
-    camada_backendt::yices, options, ns, tuple_api, array_api);
+  return create_camada_solver(camada_backendt::yices, options, ns, array_api);
 }
 
 smt_solver_baset *create_new_bitwuzla_solver(
   const optionst &options,
   const namespacet &ns,
-  tuple_iface **tuple_api,
   array_iface **array_api)
 {
   return create_camada_solver(
-    camada_backendt::bitwuzla, options, ns, tuple_api, array_api);
+    camada_backendt::bitwuzla, options, ns, array_api);
 }
 
 /* The one-shot command processes a single task and exits; strategies that
@@ -1884,7 +1870,6 @@ void reject_incremental_strategies(const optionst &options)
 smt_solver_baset *create_new_smtlib_solver(
   const optionst &options,
   const namespacet &ns,
-  tuple_iface **tuple_api,
   array_iface **array_api)
 {
   /* --smtlib-oneshot-prog selects the write-a-file-and-run-a-program shape;
@@ -1901,7 +1886,6 @@ smt_solver_baset *create_new_smtlib_solver(
     camada_backendt::smtlib,
     options,
     ns,
-    tuple_api,
     array_api,
     oneshot);
 }

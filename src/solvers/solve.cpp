@@ -187,11 +187,10 @@ smt_convt *create_solver(
   const namespacet &ns,
   const optionst &options)
 {
-  tuple_iface *tuple_api = nullptr;
   array_iface *array_api = nullptr;
 
   solver_creator &factory = pick_solver(solver_name, options);
-  smt_solver_baset *ctx = factory(options, ns, &tuple_api, &array_api);
+  smt_solver_baset *ctx = factory(options, ns, &array_api);
 
   /* Both interfaces are served by the backend. Camada encodes tuples and
      arrays natively where the solver has the theory, and lowers them itself
@@ -199,7 +198,6 @@ smt_convt *create_solver(
      lowerings (TupleEncoding::Camada, ArrayEncoding::Ackermann) rather than
      installing an ESBMC-side flattener. */
   assert(tuple_api != nullptr && array_api != nullptr);
-  ctx->set_tuple_iface(tuple_api);
   ctx->set_array_iface(array_api);
 
   ctx->smt_post_init();
