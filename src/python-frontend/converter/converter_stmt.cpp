@@ -1365,7 +1365,16 @@ bool python_converter::contains_copied_numpy_view_name(
       code_blockt scratch_block;
       code_blockt *saved_block = current_block;
       current_block = &scratch_block;
-      exprt probe = get_expr(node);
+      exprt probe;
+      try
+      {
+        probe = get_expr(node);
+      }
+      catch (...)
+      {
+        current_block = saved_block;
+        throw;
+      }
       current_block = saved_block;
       if (!contains_cpp_throw(probe) && probe.type().is_array())
         return true;
