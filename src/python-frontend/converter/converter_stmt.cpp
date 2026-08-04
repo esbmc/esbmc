@@ -1093,7 +1093,8 @@ exprt python_converter::get_rhs_with_dict_resolution(
     dict_expr, ast_node["value"]["slice"], target_type);
 }
 
-std::string python_converter::resolve_name_symbol_id(const std::string &name)
+std::string
+python_converter::resolve_name_symbol_id(const std::string &name) const
 {
   symbol_id sid = create_symbol_id();
   sid.set_object(name);
@@ -2630,6 +2631,41 @@ bool python_converter::is_global_variable(const symbol_id &sid) const
   return false;
 }
 
+bool python_converter::is_numpy_ravel_receiver(
+  const nlohmann::json &ravel_call) const
+{
+  if (!ravel_call["func"].contains("value"))
+    return false;
+
+  const nlohmann::json &func_value = ravel_call["func"]["value"];
+  const bool is_module_form =
+    func_value.is_object() && func_value.value("_type", "") == "Name" &&
+    is_imported_numpy_module_alias(*ast_json, func_value.value("id", ""));
+
+  // np.ravel(a): the array is the call's first argument (this is the shape
+  // the preprocessor's .flat rewrite always produces). a.ravel(): the array
+  // is the Attribute's own receiver.
+  nlohmann::json receiver;
+  if (is_module_form)
+  {
+    if (
+      ravel_call.contains("args") && ravel_call["args"].is_array() &&
+      !ravel_call["args"].empty())
+      receiver = ravel_call["args"][0];
+  }
+  else
+    receiver = func_value;
+
+  const std::string receiver_name = root_name_from_subscript(receiver);
+  if (receiver_name.empty())
+    return false;
+
+  const std::string receiver_id = resolve_name_symbol_id(receiver_name);
+  return !receiver_id.empty() &&
+         (numpy_array_symbols_.count(receiver_id) != 0 ||
+          numpy_view_copy_sources_.count(receiver_id) != 0);
+}
+
 std::string
 python_converter::extract_target_name(const nlohmann::json &target) const
 {
@@ -2647,13 +2683,16 @@ python_converter::extract_target_name(const nlohmann::json &target) const
     target_type == "Call" && target.contains("func") &&
     target["func"].is_object() &&
     target["func"].value("_type", "") == "Attribute" &&
-    target["func"].value("attr", "") == "ravel")
+    target["func"].value("attr", "") == "ravel" &&
+    is_numpy_ravel_receiver(target))
     // a.flat[i] = x: the preprocessor rewrites every .flat read, including
     // the one implicit in this assignment's target, to np.ravel(a) — so the
     // target here is really Subscript(value=Call(ravel(a))), which has no
     // symbol id to extract. np.ravel(a)[i] = x written directly hits the
     // same shape and is equally unsupported for the same reason (ravel's
-    // result is a copy, not a writable view of a).
+    // result is a copy, not a writable view of a). Gated on the receiver
+    // actually being a tracked numpy array/view so an unrelated class with
+    // its own ravel() method does not get this numpy-specific diagnostic.
     throw std::runtime_error(
       "TypeError: mutation through .flat is not supported");
 

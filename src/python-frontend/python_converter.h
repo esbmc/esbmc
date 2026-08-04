@@ -842,7 +842,7 @@ private:
     const nlohmann::json &ast_node,
     const typet &current_type);
 
-  std::string resolve_name_symbol_id(const std::string &name);
+  std::string resolve_name_symbol_id(const std::string &name) const;
 
   std::string root_name_from_subscript(const nlohmann::json &node) const;
 
@@ -866,6 +866,8 @@ private:
   void reject_copied_numpy_view_in_container(
     const nlohmann::json &ast_node,
     const std::set<std::string> &container_types);
+
+  bool is_numpy_ravel_receiver(const nlohmann::json &ravel_call) const;
 
   std::optional<nlohmann::json>
   select_return_value_for_call(const nlohmann::json &call_node) const;
