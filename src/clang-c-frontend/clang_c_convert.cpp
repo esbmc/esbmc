@@ -7,6 +7,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/ExprCXX.h> /* clang::TypeTraitExpr */
 #include <clang/AST/ParentMapContext.h>
 #include <clang/AST/RecordLayout.h>
+#include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/QualTypeNames.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/Version.inc>
@@ -812,6 +813,44 @@ bool clang_c_convertert::get_function(
   return false;
 }
 
+namespace
+{
+class addr_label_collectort
+  : public clang::RecursiveASTVisitor<addr_label_collectort>
+{
+public:
+  explicit addr_label_collectort(std::vector<const clang::LabelDecl *> &labels)
+    : labels(labels)
+  {
+  }
+
+  bool VisitAddrLabelExpr(clang::AddrLabelExpr *e)
+  {
+    if (std::find(labels.begin(), labels.end(), e->getLabel()) == labels.end())
+      labels.push_back(e->getLabel());
+    return true;
+  }
+
+private:
+  std::vector<const clang::LabelDecl *> &labels;
+};
+} // namespace
+
+/// The value standing for the address of the `index`-th address-taken label.
+static exprt label_address(std::size_t index)
+{
+  const BigInt id(index + 1);
+  return constant_exprt(
+    integer2binary(id, bv_width(size_type())), integer2string(id), size_type());
+}
+
+void clang_c_convertert::collect_address_taken_labels(const clang::Stmt &body)
+{
+  address_taken_labels.clear();
+  addr_label_collectort(address_taken_labels)
+    .TraverseStmt(const_cast<clang::Stmt *>(&body));
+}
+
 bool clang_c_convertert::get_function_body(
   const clang::FunctionDecl &fd,
   exprt &new_expr,
@@ -820,8 +859,18 @@ bool clang_c_convertert::get_function_body(
   if (!fd.hasBody())
     return false;
 
+  // A nested body -- a lambda's call operator, a local class method -- is
+  // converted while the enclosing body is still mid-conversion, so the label
+  // set has to be stacked rather than merely reset: clearing it would leave
+  // the enclosing function's later `&&L` with nothing to resolve against.
+  std::vector<const clang::LabelDecl *> outer_labels;
+  outer_labels.swap(address_taken_labels);
+  collect_address_taken_labels(*fd.getBody());
+
   exprt body_exprt;
-  if (get_expr(*fd.getBody(), body_exprt))
+  const bool failed = get_expr(*fd.getBody(), body_exprt);
+  address_taken_labels.swap(outer_labels);
+  if (failed)
     return true; // return true if failing to parse function body
 
   new_expr = body_exprt;
@@ -2534,11 +2583,24 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::AddrLabelExpr &addrlabelExpr =
       static_cast<const clang::AddrLabelExpr &>(stmt);
 
-    exprt label;
-    if (get_decl(*addrlabelExpr.getLabel(), label))
+    auto it = std::find(
+      address_taken_labels.begin(),
+      address_taken_labels.end(),
+      addrlabelExpr.getLabel());
+    if (it == address_taken_labels.end())
+    {
+      log_error(
+        "address taken of label '{}' outside a converted function body",
+        addrlabelExpr.getLabel()->getName().str());
+      return true;
+    }
+
+    typet t;
+    if (get_type(addrlabelExpr.getType(), t))
       return true;
 
-    new_expr = address_of_exprt(label);
+    new_expr = typecast_exprt(
+      label_address(std::distance(address_taken_labels.begin(), it)), t);
     break;
   }
 
@@ -3382,23 +3444,30 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
     else
     {
-      log_error("ESBMC currently does not support indirect gotos");
-      std::ostringstream oss;
-      llvm::raw_os_ostream ross(oss);
-      enable_ast_dump_colors(ross, *ASTContext);
-      stmt.dump(ross, *ASTContext);
-      ross.flush();
-      log_error("{}", oss.str());
-      return true;
-
       exprt target;
       if (get_expr(*goto_stmt.getTarget(), target))
         return true;
 
-      codet code_goto("gcc_goto");
-      code_goto.copy_to_operands(target);
+      // Dispatch over every address-taken label. A label address is the only
+      // value the target can legally hold, so the chain is exhaustive; the
+      // trailing assertion catches the programs where it is not.
+      code_blockt dispatch;
+      for (std::size_t i = 0; i < address_taken_labels.size(); ++i)
+      {
+        code_ifthenelset branch;
+        branch.cond() = equality_exprt(
+          target, typecast_exprt(label_address(i), target.type()));
+        branch.then_case() =
+          code_gotot(address_taken_labels[i]->getName().str());
+        dispatch.copy_to_operands(branch);
+      }
 
-      new_expr = code_goto;
+      code_assertt unreached{false_exprt()};
+      get_start_location_from_stmt(stmt, unreached.location());
+      unreached.location().comment("invalid computed goto target");
+      dispatch.copy_to_operands(unreached);
+
+      new_expr = dispatch;
     }
 
     break;
