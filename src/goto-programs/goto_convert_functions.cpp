@@ -779,6 +779,14 @@ bool goto_convert_functionst::convert_native_rec(
     const code_while2t &w = to_code_while2t(code2);
     const locationt &location = w.location;
 
+    // Snapshot before anything is lowered: a side-effecting condition already
+    // allocates temps through generate_conditional_branch, so a snapshot taken
+    // after it would leave those in place and the delegated convert_while would
+    // number its own temps one past them.
+    unsigned tmp_before = tmp_symbol.counter;
+    irep_idt ctx_before = context.mark();
+    targetst targets_before = targets;
+
     // convert_while saves/restores the break/continue targets around the
     // body regardless of whether the body ends up using them; do the same so
     // the code_break2t/code_continue2t arms below (which read
@@ -847,7 +855,10 @@ bool goto_convert_functionst::convert_native_rec(
 
     // Same defensive check as the if/else branches: a body that isn't itself
     // a code_block2t could in principle leak a scope-exit code_dead with no
-    // enclosing block to unwind it.
+    // enclosing block to unwind it. Either way the whole loop is delegated to
+    // convert_while rather than failing the enclosing walk -- rolling back what
+    // the abandoned attempt allocated first, or the delegated conversion
+    // numbers its temps from where that attempt stopped.
     destructor_stackt stack_before_body = targets.destructor_stack;
     goto_programt tmp_x;
     bool body_ok = convert_native_rec(
@@ -857,8 +868,13 @@ bool goto_convert_functionst::convert_native_rec(
 
     if (!body_ok || targets.destructor_stack.size() != stack_before_body.size())
     {
-      targets.destructor_stack = stack_before_body;
-      return false;
+      tmp_symbol.counter = tmp_before;
+      context.erase_since(ctx_before);
+      targets = targets_before;
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(w.location, inherited));
+      convert(to_code(op), dest);
+      return true;
     }
 
     y->make_goto(v);
@@ -968,6 +984,12 @@ bool goto_convert_functionst::convert_native_rec(
       return false;
 
     const locationt &here = effective_location(f.location, inherited);
+    // As for the while body: any sub-conversion that fails delegates the whole
+    // loop to convert_for, after rolling back what the abandoned attempt
+    // allocated from the shared tmp_symbol counter.
+    unsigned tmp_before = tmp_symbol.counter;
+    irep_idt ctx_before = context.mark();
+    targetst targets_before = targets;
     destructor_stackt stack_before = targets.destructor_stack;
 
     //    for(A; c; B) P;
@@ -1053,8 +1075,13 @@ bool goto_convert_functionst::convert_native_rec(
 
     if (!body_ok || targets.destructor_stack.size() != stack_before_body.size())
     {
-      targets.destructor_stack = stack_before;
-      return false;
+      tmp_symbol.counter = tmp_before;
+      context.erase_since(ctx_before);
+      targets = targets_before;
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(f.location, inherited));
+      convert(to_code(op), dest);
+      return true;
     }
 
     goto_programt tmp_y;
