@@ -441,6 +441,19 @@ bool goto_cse::runOnFunction(std::pair<const irep_idt, goto_functiont> &F)
     switch (it->type)
     {
     case GOTO:
+      // A loop guard is left alone. goto_k_induction rewrites the loop head
+      // into `havoc the loop variables; assume(entry condition)', and it takes
+      // that entry condition from this guard -- so a symbol standing in for
+      // `i < len' lands in the assume while its defining assignment stays
+      // below, past the havoc. The assume then constrains the value the
+      // symbol held before the havoc and says nothing about the fresh `i',
+      // leaving the body free to run with the loop guard violated.
+      //
+      // Nothing is lost by skipping these: step 1 collects candidates from
+      // `code' only, so a guard is only ever a replacement site, never the
+      // reason an expression became a candidate.
+      break;
+
     case ASSUME:
     case ASSERT:
       replace_max_sub_expr(it->guard, expr2symbol, it, matched_pre_expressions);
