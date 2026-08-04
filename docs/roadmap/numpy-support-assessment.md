@@ -251,6 +251,32 @@ Architectural decisions that gate specific pendencies here (referenced as
    while checking which other methods could safely gain dispatch rewrite
    support alongside this PR; not fixed here since it is unrelated to
    view/dispatch work and needs its own root-cause investigation.
+6. **`.transpose()`/`np.transpose(a)` fails for a variable built by a
+   non-literal constructor** (`np.zeros`, `np.eye`, `np.identity` — `ones`/
+   `full`/`arange` untested) — confirmed by direct execution:
+   ```python
+   import numpy as np
+   a = np.zeros((2, 2))
+   b = a.transpose()
+   ```
+   raises `Unsupported Numpy call: transpose` instead of transposing, even
+   though the identical code with `a = np.array([[1, 2], [3, 4]])` (a
+   literal) works (see `regression/numpy/view_function_transpose_method_success`).
+   Pre-existing — `zeros` was already tracked in `numpy_array_symbols_`
+   before this PR, so this is not a dispatch-rewrite gap; the `Name`-typed
+   argument branch in `numpy_call_expr.cpp`'s transpose handler does not
+   handle whatever type shape a non-literal constructor produces. Found
+   while adding `eye`/`identity`/`linspace` to the dispatch-rewrite
+   constructor set; not fixed here — out of scope for that fix.
+7. **`.mean()` and `.sum()`/`.flatten()` compute a wrong numeric result for
+   some non-literal-constructed arrays** — confirmed by direct execution:
+   `c = np.identity(2); c.mean()` asserts `!= 0.5` (wrong; `.sum()` on the
+   same array correctly returns `2.0`), and separately
+   `e = np.linspace(0.0, 4.0, 5); e.sum()` and `e.flatten()[i]` both compute
+   wrong values even though raw indexing (`e[0]`, `e[4]`) and `.copy()` on
+   the same `e` are correct. Two distinct confirmed-wrong cases, root cause
+   not yet investigated for either. Found alongside the `.transpose()` gap
+   above; not fixed here.
 
 ---
 
