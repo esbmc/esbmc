@@ -5,9 +5,19 @@
 
 ESBMC's --ltl mode does not take an LTL string. It takes a C file containing a
 precomputed Buchi automaton plus the four-valued acceptance tables that
-ltl2ba emits (see regression/ltl/basic/test.ba-2.c). The patched ltl2ba that
-produces those files is not in this tree and is not publicly available, so
-this script generates the one pattern the CXL work needs.
+ltl2ba emits (see regression/ltl/basic/test.ba-2.c).
+
+PREFER THE REAL TOOL: https://github.com/esbmc/libltl2ba (`ltl2ba -O c`).
+An earlier version of this docstring said it was not publicly available; that
+was wrong, and this script exists only because of that mistake. It handles one
+pattern where libltl2ba handles all of LTL.
+
+The one thing to know before switching: the current libltl2ba emits
+`pthread_t ltl2ba_start_monitor(void)` and `ltl2ba_finish_monitor(pthread_t)`,
+while src/esbmc/parseoptions/property_monitors.cpp inserts no-argument calls to
+both. Its output therefore yields no outcome at all until that skew is fixed --
+see docs/cxl-temporal-properties.md §7.1. The committed .ba-N.c files predate
+the change, which is why this script, transcribed from them, works.
 
 SCOPE, stated plainly: this is not an LTL-to-Buchi translator. It emits a
 single, fixed two-state automaton -- the standard one for the response
