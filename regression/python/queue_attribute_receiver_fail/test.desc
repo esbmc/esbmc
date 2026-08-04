@@ -1,4 +1,4 @@
 CORE
-main.c
---no-slice
+main.py
+--incremental-bmc
 ^VERIFICATION FAILED$

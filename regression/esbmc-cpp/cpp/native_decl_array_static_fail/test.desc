@@ -1,4 +1,5 @@
 CORE
-main.c
---no-slice
+main.cpp
+
 ^VERIFICATION FAILED$
+dtor_runs == 3
