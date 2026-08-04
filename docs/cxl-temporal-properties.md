@@ -347,8 +347,58 @@ automaton but the **four-valued tables** (`stutter_accept`,
 semantics the kernel version has no reason to compute. That, rather than my
 hand-rolled `ltl_response_ba.py`, is where a general solution should start.
 
-(It could not be run here: `rvgen` needs the `ply` package, which is not
-installed. `dot2c` does not, which is why the automaton path above works.)
+### Could ESBMC use the kernel's ltl2ba? Yes, and the gap is well defined
+
+Run for real (`ply` in a venv), `rvgen monitor -c ltl` on
+`RULE = always (MBOX_SUBMIT imply not MBOX_BUSY)` emits:
+
+```c
+enum ltl_atom { LTL_MBOX_BUSY, LTL_MBOX_SUBMIT, LTL_NUM_ATOM };
+enum ltl_buchi_state { S0, RV_NUM_BA_STATES };
+
+static void ltl_start(struct task_struct *, struct ltl_monitor *mon);
+static void ltl_possible_next_states(struct ltl_monitor *mon,
+                                     unsigned int state, unsigned long *next);
+```
+
+Comparing that with ESBMC's `.ba-N.c`:
+
+| | Linux | ESBMC |
+|---|---|---|
+| Atoms | `test_bit(LTL_X, mon->atoms)`, set from tracepoints | `_ltl2ba_cexpr_N_status()` — a C expression over program globals |
+| Nondeterminism | subset construction: a **bitset** of possible states | one state, advanced by solver `choice` + `__ESBMC_assume(guard)` |
+| Execution | called by the RV core per event | a pthread interleaved with the program |
+| Acceptance | Büchi over infinite runtime traces | **four-valued RV-LTL over finite prefixes** |
+
+**What transfers unchanged.** The expensive part is already done and reusable:
+`ltl2ba.py` parses the formula and builds the automaton by Gerth et al., with
+`GraphNode` exposing `incoming`, `outgoing`, `labels` and `init`. Retargeting
+the atoms is a substitution — `test_bit(LTL_X, mon->atoms)` becomes whatever C
+expression the user supplies. The state encoding is a backend choice: the
+bitset form compiles perfectly well in C, so ESBMC's single-state-plus-assume
+shape is not required.
+
+**What has to be added — the whole of the real work.** ESBMC's three tables,
+which the kernel has no reason to compute because it judges infinite traces
+rather than prefixes. Each is a standard analysis over the graph
+`ltl2ba.py` already builds:
+
+| Table | Computation |
+|---|---|
+| `bad_prefix_states[s]` | per-state **emptiness**: no accepting continuation exists from `s` |
+| `good_prefix_excluded_states[s]` | the dual: every continuation from `s` is accepting |
+| `stutter_accept[sym][s]` | is an accepting cycle reachable from `s` under the *constant* letter `sym` |
+
+No new theory — emptiness, universality, and accepting-cycle-under-a-fixed-
+letter. That is where a general solution should start, and it would supersede
+`scripts/ltl_response_ba.py` entirely, which handles one pattern and would
+silently mistranslate anything else.
+
+**The obstacle is not technical.** `ltl2ba.py` is GPL-2.0-only, and ESBMC's
+`COPYING` already describes its licensing as complex — the same objection that
+ruled out vendoring kernel source in Phase 8.3. Reimplementing Gerth et al.
+independently, or invoking `rvgen` as an external tool the way ESBMC already
+expects an external `ltl2ba`, both avoid it; importing the file does not.
 
 ## 10. What would justify `--ltl`
 
