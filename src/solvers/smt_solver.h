@@ -1273,14 +1273,6 @@ private:
    * bit-vector of the signed word width, applying the bit-vector operation,
    * and converting back. */
   template <typename Fn>
-  smt_astt int_bitwise_unary(smt_astt a, Fn &&op)
-  {
-    const unsigned width = signed_size_type2()->get_width();
-    auto a_bv = solver->mkInt2BV(width, a);
-    return solver->mkBV2Int(op(a_bv), true);
-  }
-
-  template <typename Fn>
   smt_astt int_bitwise_binary(smt_astt a, smt_astt b, Fn &&op)
   {
     const unsigned width = signed_size_type2()->get_width();

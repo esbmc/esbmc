@@ -779,8 +779,10 @@ smt_astt smt_solver_baset::mk_neg(smt_astt a)
 smt_astt smt_solver_baset::mk_bvnot(smt_astt a)
 {
   if (int_encoding)
-    return int_bitwise_unary(
-      a, [this](const camada::SMTExprRef &v) { return solver->mkBVNot(v); });
+  {
+    const unsigned width = signed_size_type2()->get_width();
+    return solver->mkBV2Int(solver->mkBVNot(solver->mkInt2BV(width, a)), true);
+  }
   return solver->mkBVNot(a);
 }
 smt_astt smt_solver_baset::mk_bvxor(smt_astt a, smt_astt b)
