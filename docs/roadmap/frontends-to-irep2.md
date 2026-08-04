@@ -293,6 +293,114 @@ the program proceeds, and its output — the declined-shape histogram — is the
 single most informative artefact available about how far frontend construction
 actually is from native.
 
+## 11. Phase 1 — what it measured (2026-08-03)
+
+§10 called the declined-shape histogram "the single most informative artefact
+available". It was produced; this section records it, the eight patches it
+drove, and the two bounds the work discovered. §1-§10 are the forward plan,
+unchanged.
+
+### 11.1 The census, and the cascade correction
+
+`convert_native_rec`'s `return false` sites were instrumented with a
+`__LINE__`-tagged logger and the `esbmc-cpp/cpp` suite run under
+`--goto-functions-only` (sound here: the dispatcher runs before symex, and it
+takes each test off its solve timeout).
+
+**The first ranking was wrong, and the correction is the reusable part.**
+Ranking by raw count puts `code_block` first at 13 799 — but a block declines
+only because a child did. Sites split into:
+
+- **cascade** — `code_block`, `code_while`, `code_dowhile`, `code_switch`,
+  `code_switch_case`, and 3 of 4 `code_for` sites. They clear for free when the
+  genuine causes do, and fixing them directly is wasted work.
+- **genuine** — everything else.
+
+Classify before picking a target: a site is cascade if its guard tests the
+result of a nested `convert_native_rec`. Ranking cascade sites by count sent
+one iteration at `code_while` before the handler was read; `code_while` already
+lowers side-effecting conditions natively and has no genuine cause of its own.
+
+### 11.2 Result
+
+| | declines (stride-4 `esbmc-cpp`) |
+|---|---:|
+| baseline | 28 243 |
+| after the eight patches below | **1 324** |
+
+**−95.3 %.** Of the 1 324 remaining, all but ~160 were cascade; the last genuine
+leaf was the scope-leak check, which the final two patches target. All eight
+branches merge into one another with **zero conflicts**.
+
+| PR | site | share of its kind |
+|---|---|---|
+| #6668 | `code_return`, side-effect value | 100 % |
+| #6671 | `code_ifthenelse`, side-effecting guard | 76 % |
+| #6672 | `code_decl`, static/code-typed/array | 100 % |
+| #6674 | `code_expression`, top-level ternary or nil | 100 % |
+| #6677 | `code_function_call`, bodyless callee | 100 % |
+| #6678 | `code_assign`, generic rhs guard | 100 % |
+| #6679 | `code_ifthenelse`, leaked scope-exit state | the last genuine leaf |
+| #6681 | `code_while`/`code_for`, body did not convert | cascade collapse |
+
+Five of the eight censuses landed **100 % on a single guard**. Census before
+patching: the distribution is far more concentrated than reading the handler
+suggests.
+
+### 11.3 The delegation pattern, and its two bounds
+
+Not one fix reproduced a construct natively. Every one routed the decline to
+the legacy converter that already owns that statement's lowering
+(`convert_return`, `convert_ifthenelse`, `convert_decl`, `convert_expression`,
+`convert_function_call`, `convert_assign`) — the route the try/catch handler
+established. The soundness argument is uniform: **on the fallback path that
+same function converted the statement anyway**, so the emitted instructions are
+unchanged; what changes is that the *rest of the function* stays native.
+
+The pattern has two bounds, both found by the A/B gate and neither visible to
+the regression suite:
+
+1. **Delegating after a partial native attempt drifts temp numbering.** The
+   abandoned attempt has already allocated from the shared `tmp_symbol`
+   counter, so the delegated conversion numbers its temps one past it — 20 of
+   51 sampled tests diverged on `tmp$N`. Fix: snapshot `tmp_symbol.counter`,
+   `context.mark()` and `targets` before the attempt and restore before
+   delegating, exactly as `convert_function` does on a whole-function fallback.
+2. **The snapshot must precede *everything* the handler lowers, not just the
+   body.** A side-effecting loop condition allocates temps through
+   `generate_conditional_branch`; a snapshot taken after it leaves those in
+   place and 17 of 51 tests still diverged. Taken at the top of the handler,
+   0 diverge.
+
+Delegations added *before* any native attempt (#6668, #6672, #6674, #6677,
+#6678) need neither.
+
+### 11.4 Gates that earned their place
+
+- **`--goto-functions-only` A/B against `--no-irep2-native-body`** — compares
+  the native path with the pure-legacy path on the *same* binary, so it needs
+  no control build. This is what caught both bounds above. Byte-identical GOTO
+  is a stronger claim than verdict parity: no `test.desc` asserts temp names,
+  so all three near-misses would have passed the whole suite.
+- **Prove the A/B discriminates** before trusting a zero: under the census env
+  var the native arm must log declines and the legacy arm none. A test with no
+  declines proves nothing either way.
+- **Probe that a regression test reaches the fixed site.** Three candidate
+  tests fired the delegation zero times — clang decomposes `x = y++` and
+  `p = new int(9)` before goto-convert, and wraps a single-statement branch in
+  an implicit block. The shapes that reach these sites arrive through the
+  container operational models, so the tests that pin them use `std::vector`.
+  A passing test is not evidence it exercises the patch.
+
+### 11.5 What remains
+
+- The `esbmc-cpp` corpus is drained to the assert-fold sites (~4 declines).
+  **Phase 1's "0 fallbacks corpus-wide" is not yet claimable**: only
+  `esbmc-cpp` has been censused. The C, Python, Solidity and Jimple suites
+  exercise different frontends and may reach sites this corpus never did.
+- Only then does deleting the round-trip and the fallback path become the
+  measurable next step §"Phase 1" describes.
+
 ## 13. The Python suite censused — and it is not like C (2026-08-04)
 
 §12.3 named Python as the notable remaining gap: the largest frontend and the
@@ -369,3 +477,4 @@ quoted as a corpus rate.
 
 Phase 1 is **not** near its exit criterion. C and C++ are drained; Python has a
 large, single, well-localised cause that no existing patch addresses.
+

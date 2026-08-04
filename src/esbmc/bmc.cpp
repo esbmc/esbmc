@@ -2635,22 +2635,26 @@ smt_resultt bmct::multi_property_check(
           claim.claim_cstr,
           is ? property_verdictt::Unknown : property_verdictt::Failed,
           is ? "inductive step could not prove this claim" : "");
-      else if (is_cov_goal)
+      else
       {
-        // No answer at all: neither reached nor unreached. Recorded so the
-        // goal still gets a line and the run closes as INCOMPLETE.
-        goto_functionst::property_verdicts.record(
-          claim.claim_cstr, property_verdictt::Unknown);
-        if (solver_result == P_SMTLIB)
-          note_undecided_cov_goal("SMT formula only, no solving performed");
-        else
-        {
-          // The verdict a coverage run suppresses was the only thing
-          // reporting this, so say it here.
+        // No answer at all. A coverage run suppresses the verdict that would
+        // have reported this; a plain multi-property run reports it nowhere,
+        // and a SAT claim elsewhere buries it entirely — so name the claim
+        // either way (issue #5934).
+        if (solver_result == P_ERROR)
           log_error(
             "SMT solver failed on '{}'",
             prettify_solidity_expr(claim.claim_cstr));
-          note_undecided_cov_goal("the solver failed on at least one goal");
+        if (is_cov_goal)
+        {
+          // Neither reached nor unreached. Recorded so the goal still gets a
+          // line and the run closes as INCOMPLETE.
+          goto_functionst::property_verdicts.record(
+            claim.claim_cstr, property_verdictt::Unknown);
+          note_undecided_cov_goal(
+            solver_result == P_SMTLIB
+              ? "SMT formula only, no solving performed"
+              : "the solver failed on at least one goal");
         }
       }
     }
@@ -2666,6 +2670,23 @@ smt_resultt bmct::multi_property_check(
     }
 
     solver_stats.total_time_ms.fetch_add(solve_stop - solve_start);
+
+    // A claim that reached no verdict — a backend failure (P_ERROR) or an
+    // SMTLIB-only emission (P_SMTLIB) — would otherwise leave final_result at
+    // its P_UNSATISFIABLE seed, which reads as "every claim discharged" and
+    // closes the run SUCCESSFUL over an analysis that never happened. Surface
+    // it instead; P_SATISFIABLE still wins, a witnessed violation being a
+    // verdict either way (issue #5934).
+    if (solver_result == P_ERROR || solver_result == P_SMTLIB)
+    {
+      // Set even when a SAT claim dominates below: the verdict is right in
+      // that case, but the summary is still short a claim and nothing else
+      // would say so.
+      report_incomplete = true;
+      std::lock_guard lock(result_mutex);
+      if (final_result != P_SATISFIABLE)
+        final_result = solver_result;
+    }
 
     // If an assertion instance is verified to be violated
     if (solver_result == P_SATISFIABLE)

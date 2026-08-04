@@ -395,9 +395,16 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
   }
   else if (is_bool_type(type))
     return BOOL;
-  else if (is_fixedbv_type(type))
+  else if (is_fixedbv_type(type) || is_floatbv_type(type))
   {
-    unsigned width = to_fixedbv_type(type).width;
+    // The legacy typet overload above classifies "floatbv" and "fixedbv"
+    // together; this one only ever handled fixedbv, so every floatbv fell
+    // through to OTHER. OTHER outranks every arithmetic kind, so
+    // implicit_typecast_arithmetic promoted both operands to a type its switch
+    // has no case for and silently converted neither -- making the whole
+    // helper a no-op on any expr2tc pair with a floating-point operand.
+    unsigned width = is_fixedbv_type(type) ? to_fixedbv_type(type).width
+                                           : to_floatbv_type(type).get_width();
     if (width <= config.ansi_c.single_width)
       return SINGLE;
     else if (width <= config.ansi_c.double_width)

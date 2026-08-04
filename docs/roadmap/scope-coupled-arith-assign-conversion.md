@@ -720,3 +720,18 @@ onto §12's guard.
 This supersedes §13's "cannot reach" framing. G3's re-homing still stands — the
 pair is not cleared by Phases 1-2 as built — but the follow-up belongs to this
 scope's family, not to an unrelated one.
+
+## 15. Both flip blockers now have owner documents (2026-08-03)
+
+§13.1 discharges every gate this scope owns and leaves Phase 3 blocked on two
+mechanisms it disowns. Neither had an owner; both now do.
+
+| blocker | owner | finding |
+|---|---|---|
+| the `github_5571` array-typecast pair (§14) | `scope-array-assignment-conversion.md` | every existing arm declines it because they all guard on a **pointer** target, while this shape casts to an **array** type |
+| the §9.4 second mechanism | `scope-relational-float-reconciliation.md` | **hypothesis refuted, see that document's §11-§14.** `sum_tuple` has no heterogeneous comparison at all; and the equality that aborts `lambda15` in bitwuzla's `mk_eq` never reaches `python_adjust`'s comparison dispatch (0 width-mismatched nodes across all four witnesses), so no admission rule there can fix it. Likely two mechanisms, one of them downstream of the frontend |
+
+Both were recorded as hypotheses gated on a Phase 0 measurement rather than as
+conclusions — this document's own §13→§14 reversal is the reason. That
+discipline paid: the second one's Phase 0 refuted it, at the cost of a census
+rather than a merged fix.
