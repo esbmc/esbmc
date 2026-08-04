@@ -179,9 +179,6 @@ void smt_solver_baset::push_ctx()
   // Any context change can change the model; drop memoised l_get values.
   l_get_cache.clear();
 
-  push_tuple_ctx();
-  push_array_ctx();
-
   addr_space_data.push_back(addr_space_data.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
   pointer_logic.push_back(pointer_logic.back());
@@ -242,9 +239,8 @@ void smt_solver_baset::pop_ctx()
   smt_cachet::nth_index<1>::type &cache_numindex = smt_cache.get<1>();
   cache_numindex.erase(ctx_level);
 
-  // Drop Ackermann-fallback history recorded at this level; pop_ctx is about to
-  // delete the asts those entries point at (see below), so they must not be
-  // referenced by a later application of the same function.
+  // Drop Ackermann-fallback history recorded at this level, so an entry from a
+  // popped scope is not reused by a later application of the same function.
   for (auto it = uf_ackermann_history.begin();
        it != uf_ackermann_history.end();)
   {
@@ -265,9 +261,6 @@ void smt_solver_baset::pop_ctx()
   /* Expressions created since the matching push are not freed here: camada's
    * arena owns them for the solver's lifetime, and its own pop deliberately
    * keeps them (it re-asserts lazy axioms about them at the outer level). */
-
-  pop_array_ctx();
-  pop_tuple_ctx();
 
   solver->pop();
 }

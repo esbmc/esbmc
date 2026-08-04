@@ -854,13 +854,6 @@ public:
   void add_tuple_constraints_for_solving()
   {
   }
-  void push_tuple_ctx()
-  {
-  }
-  void pop_tuple_ctx()
-  {
-  }
-
   /** Stores handle for the array interface. */
   /* ---- Arrays ----
    * Implemented by the backend: camada uses the solver's theory of arrays
@@ -892,12 +885,6 @@ public:
   smt_astt convert_array_of(smt_astt init_val, unsigned long domain_width);
 
   void add_array_constraints_for_solving()
-  {
-  }
-  void push_array_ctx()
-  {
-  }
-  void pop_array_ctx()
   {
   }
   /** Stores handle for the floating-point interface. */
