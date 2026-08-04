@@ -1,0 +1,4 @@
+CORE
+main.c
+--bitwuzllob --bitwuzllob-prog always-sat-mallob.sh --bitwuzllob-model-prog readout-death-model.sh
+^ERROR: SMT solver process failed

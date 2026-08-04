@@ -1,4 +1,5 @@
 CORE
 main.c
 --bitwuzllob --bitwuzllob-prog always-sat-mallob.sh --bitwuzllob-model-prog cutoff-model.sh
-^ERROR: SMT solver process failed
+^ERROR: bitwuzllob: the local model solver is unavailable
+^ERROR: SMT solver failed

@@ -2,6 +2,7 @@
 #define _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H
 
 #include <list>
+#include <solvers/smt/external_process_died.h>
 #include <solvers/smt/smt_solver.h>
 #include <string>
 #ifndef _WIN32
@@ -398,13 +399,6 @@ public:
 
   static const std::string temp_prefix;
 
-  /** Thrown when the external solver process can no longer provide a usable
-   *  answer: a write hit EPIPE (the process died) or its response could not be
-   *  parsed (typically EOF from a dead process). */
-  struct external_process_died : std::runtime_error
-  {
-    using std::runtime_error::runtime_error;
-  };
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H */

@@ -1108,7 +1108,7 @@ int smtliberror(int startsym [[maybe_unused]], const std::string &error)
    * cleanup, so the parser/lexer must not be re-entered after this throw; no
    * caller does — each abandons the solver on failure. */
   log_error("SMTLIB response parsing: \"{}\"", error);
-  throw smtlib_convt::external_process_died(error);
+  throw external_process_died(error);
 }
 
 void smtlib_convt::push_ctx()

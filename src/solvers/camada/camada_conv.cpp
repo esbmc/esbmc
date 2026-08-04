@@ -3,6 +3,7 @@
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple.h>
 #include <solvers/camada/oneshot_options.h>
+#include <solvers/smt/external_process_died.h>
 #include <util/base/filesystem.h>
 
 #include <util/arith/ieee_float.h>
@@ -98,12 +99,27 @@ bool backend_supports_tuples(camada_backendt backend)
 using camada_sort = solver_smt_sort<camada::SMTSortRef>;
 using camada_expr = solver_smt_ast<camada::SMTExprRef>;
 
+/* A model value that could not be read. `oneshot_name` is set when the model
+ * comes from an external one-shot model solver: there, a failed read means
+ * that process can no longer answer, and returning a default would invent
+ * counterexample values, so report the dead process instead. Linked solvers
+ * keep the historical warn-and-default behaviour. */
 template <typename T>
-static std::optional<T>
-unwrap_model_result(const camada::SMTResult<T> &result, std::string_view what)
+static std::optional<T> unwrap_model_result(
+  const camada::SMTResult<T> &result,
+  std::string_view what,
+  const char *oneshot_name = nullptr)
 {
   if (result)
     return result.value();
+
+  if (oneshot_name)
+    throw external_process_died(
+      std::string(oneshot_name) +
+      ": the local model solver stopped answering "
+      "while the counterexample was being read "
+      "out (" +
+      result.error().Message + ")");
 
   log_warning("Failed to extract {}: {}", what, result.error().Message);
   return std::nullopt;
@@ -668,7 +684,12 @@ public:
       abort();
     }
 
-    if (!smtlib->oneShotModelSolverLive())
+    /* A solver that agreed and then went away is not "unavailable": the
+     * verdict stands, and the readout paths report the death via
+     * external_process_died when the counterexample is built. */
+    if (
+      !smtlib->oneShotModelSolverLive() &&
+      smtlib->oneShotModelVerdict() != camada::checkResult::SAT)
     {
       if (options.get_bool_option("result-only"))
         return P_SATISFIABLE;
@@ -696,6 +717,13 @@ public:
     solver->addConstraint(to_solver_smt_ast<camada_expr>(a)->a);
   }
 
+  /* Non-null only when the model comes from an external one-shot model
+   * solver, whose disappearance must be reported rather than defaulted. */
+  const char *oneshot_label() const
+  {
+    return oneshot ? oneshot->name : nullptr;
+  }
+
   tvt get_bool(smt_astt a) override
   {
     const auto value = expr(a);
@@ -721,8 +749,8 @@ public:
       return tvt(tvt::TV_UNKNOWN);
     }
 
-    auto result =
-      unwrap_model_result(solver->getBool(value), "boolean model value");
+    auto result = unwrap_model_result(
+      solver->getBool(value), "boolean model value", oneshot_label());
     if (!result)
       return tvt(tvt::TV_UNKNOWN);
 
@@ -736,8 +764,8 @@ public:
     {
       if (exp->isRealSort())
       {
-        auto result =
-          unwrap_model_result(solver->getRational(exp), "rational model value");
+        auto result = unwrap_model_result(
+          solver->getRational(exp), "rational model value", oneshot_label());
         if (!result)
           return BigInt(0);
 
@@ -746,13 +774,13 @@ public:
         return num / den;
       }
 
-      auto result =
-        unwrap_model_result(solver->getInt(exp), "integer model value");
+      auto result = unwrap_model_result(
+        solver->getInt(exp), "integer model value", oneshot_label());
       return result ? string2integer(*result) : BigInt(0);
     }
 
-    auto result =
-      unwrap_model_result(solver->getBVInBin(exp), "bit-vector model value");
+    auto result = unwrap_model_result(
+      solver->getBVInBin(exp), "bit-vector model value", oneshot_label());
     return result ? binary2integer(*result, is_signed) : BigInt(0);
   }
 
@@ -760,7 +788,8 @@ public:
   {
     auto model_result = unwrap_model_result(
       solver->getFPInBin(to_solver_smt_ast<camada_expr>(a)->a),
-      "floating-point model value");
+      "floating-point model value",
+      oneshot_label());
     if (!model_result)
       return ieee_floatt(ieee_float_spect(
         a->sort->get_significand_width() - 1, a->sort->get_exponent_width()));
@@ -777,7 +806,8 @@ public:
   {
     auto result = unwrap_model_result(
       solver->getRational(to_solver_smt_ast<camada_expr>(a)->a),
-      "rational model value");
+      "rational model value",
+      oneshot_label());
     if (!result)
       return false;
 
