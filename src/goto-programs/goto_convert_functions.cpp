@@ -464,14 +464,21 @@ bool goto_convert_functionst::convert_native_rec(
       return true;
     }
 
-    // The OTHER carries the statement location directly; without a usable one
-    // the legacy path would instead locate it at an enclosing block.
-    if (expr_stmt.location.is_nil() || expr_stmt.location.get_file().empty())
+    // The OTHER carries the statement location directly. When the statement has
+    // none, fall back on the enclosing statement's -- which is what `inherited`
+    // threads down for the side-effect branch above, and where the legacy path
+    // locates it anyway. Python's converter emits synthetic statements
+    // (operational-model calls, desugared constructs) with no location of their
+    // own, and declining them was ~87 % of that corpus's genuine declines
+    // (docs/roadmap/frontends-to-irep2.md §13). Still decline when even the
+    // inherited location is unusable: there is then nothing to locate it at.
+    const locationt &here = effective_location(expr_stmt.location, inherited);
+    if (here.is_nil() || here.get_file().empty())
       return false;
 
     goto_programt::targett t = dest.add_instruction(OTHER);
     t->code = code2;
-    t->location = expr_stmt.location;
+    t->location = here;
     return true;
   }
 
