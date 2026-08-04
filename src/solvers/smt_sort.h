@@ -43,28 +43,21 @@ public:
    *  for example. */
   smt_sort_kind id;
 
-  smt_sort(smt_sort_kind i)
-    : id(i), data_width(0), secondary_width(0), range_sort(nullptr)
+  smt_sort(smt_sort_kind i) : id(i), data_width(0), range_sort(nullptr)
   {
     assert(id != SMT_SORT_ARRAY);
   }
 
   smt_sort(smt_sort_kind i, std::size_t width)
-    : id(i), data_width(width), secondary_width(0), range_sort(nullptr)
+    : id(i), data_width(width), range_sort(nullptr)
   {
     assert(
       id == SMT_SORT_BV || id == SMT_SORT_BOOL || id == SMT_SORT_FPBV_RM ||
       id == SMT_SORT_BVFP_RM);
   }
 
-  smt_sort(smt_sort_kind i, std::size_t width, std::size_t sigwidth)
-    : id(i), data_width(width), secondary_width(sigwidth), range_sort(nullptr)
-  {
-    assert(id == SMT_SORT_BVFP || id == SMT_SORT_FPBV);
-  }
-
   smt_sort(smt_sort_kind i, std::size_t dom_width, smt_sortt range_sort)
-    : id(i), data_width(dom_width), secondary_width(0), range_sort(range_sort)
+    : id(i), data_width(dom_width), range_sort(range_sort)
   {
     assert(id == SMT_SORT_ARRAY);
   }
@@ -89,20 +82,6 @@ public:
     return range_sort;
   }
 
-  size_t get_significand_width() const
-  {
-    assert(id == SMT_SORT_BVFP || id == SMT_SORT_FPBV);
-    return secondary_width;
-  }
-
-  size_t get_exponent_width() const
-  {
-    assert(id == SMT_SORT_BVFP || id == SMT_SORT_FPBV);
-    std::size_t exp_top = get_data_width() - 2;
-    std::size_t exp_bot = get_significand_width() - 2;
-    return (exp_top - exp_bot);
-  }
-
   virtual ~smt_sort() = default;
 
 private:
@@ -111,11 +90,6 @@ private:
    * for arrays, the domain (index) bit width,
    * For everything else, undefined */
   size_t data_width;
-
-  /** Secondary width
-   * For floating-points, this is the significand width,
-   * For everything else, undefined */
-  size_t secondary_width;
 
   /** Range sort
    * For arrays, this is the type of the element
@@ -134,15 +108,6 @@ public:
 
   solver_smt_sort(smt_sort_kind i, solver_sort _s, unsigned int w)
     : smt_sort(i, w), s(_s)
-  {
-  }
-
-  solver_smt_sort(
-    smt_sort_kind i,
-    solver_sort _s,
-    unsigned int w,
-    unsigned int sw)
-    : smt_sort(i, w, sw), s(_s)
   {
   }
 

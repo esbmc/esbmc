@@ -779,12 +779,12 @@ public:
       "floating-point model value",
       oneshot_label());
     if (!model_result)
-      return ieee_floatt(ieee_float_spect(
-        a->sort->get_significand_width() - 1, a->sort->get_exponent_width()));
+      return ieee_floatt(
+        ieee_float_spect(sort_fp_sw(a->sort), sort_fp_ew(a->sort)));
 
     std::string bits = *model_result;
-    const auto ew = a->sort->get_exponent_width();
-    const auto sw = a->sort->get_significand_width() - 1;
+    const auto ew = sort_fp_ew(a->sort);
+    const auto sw = sort_fp_sw(a->sort);
     ieee_floatt result(ieee_float_spect(sw, ew));
     result.unpack(binary2integer(bits, false));
     return result;
@@ -1099,10 +1099,25 @@ public:
     return new camada_sort(SMT_SORT_BV, solver->mkBVSort(width), width);
   }
 
+  /* Sort widths, read straight from camada rather than from a copy kept in the
+   * ESBMC wrapper. Only native FP sorts (SMT_SORT_FPBV) carry FP structure in
+   * camada; SMT_SORT_BVFP is a plain bit-vector there, and nothing reads its
+   * significand or exponent back. */
+  static unsigned sort_fp_ew(smt_sortt s)
+  {
+    return to_solver_smt_sort<camada::SMTSortRef>(s)->s->getFPExponentWidth();
+  }
+
+  static unsigned sort_fp_sw(smt_sortt s)
+  {
+    return to_solver_smt_sort<camada::SMTSortRef>(s)
+      ->s->getFPSignificandWidth();
+  }
+
   smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw) override
   {
     auto sort = solver->mkBVSort(ew + sw + 1);
-    return new camada_sort(SMT_SORT_BVFP, sort, ew + sw + 1, sw + 1);
+    return new camada_sort(SMT_SORT_BVFP, sort, ew + sw + 1);
   }
 
   smt_sortt mk_bvfp_rm_sort() override
@@ -1114,7 +1129,7 @@ public:
   smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw) override
   {
     auto sort = solver->mkFPSort(ew, sw, fp_encoding());
-    return new camada_sort(SMT_SORT_FPBV, sort, ew + sw + 1, sw + 1);
+    return new camada_sort(SMT_SORT_FPBV, sort, ew + sw + 1);
   }
 
   smt_sortt mk_fpbv_rm_sort() override
@@ -1304,8 +1319,7 @@ public:
 
   smt_astt mk_from_fp_to_bv(smt_astt op) override
   {
-    auto to = mk_bvfp_sort(
-      op->sort->get_exponent_width(), op->sort->get_significand_width() - 1);
+    auto to = mk_bvfp_sort(sort_fp_ew(op->sort), sort_fp_sw(op->sort));
     return wrap(solver->mkIEEEFPToBV(expr(op)), to);
   }
 
@@ -1663,19 +1677,11 @@ private:
     case SMTSortKind::BV:
       return new camada_sort(SMT_SORT_BV, sort, sort->getWidth());
     case SMTSortKind::FP:
-      return new camada_sort(
-        SMT_SORT_FPBV,
-        sort,
-        sort->getWidth(),
-        sort->getFPSignificandWidth() + 1);
+      return new camada_sort(SMT_SORT_FPBV, sort, sort->getWidth());
     case SMTSortKind::RM:
       return new camada_sort(SMT_SORT_FPBV_RM, sort, sort->getWidth());
     case SMTSortKind::BVFP:
-      return new camada_sort(
-        SMT_SORT_BVFP,
-        sort,
-        sort->getWidth(),
-        sort->getFPSignificandWidth() + 1);
+      return new camada_sort(SMT_SORT_BVFP, sort, sort->getWidth());
     case SMTSortKind::BVRM:
       return new camada_sort(SMT_SORT_BVFP_RM, sort, sort->getWidth());
     case SMTSortKind::Array:

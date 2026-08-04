@@ -2753,10 +2753,6 @@ smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
   smt_astt a = convert_ast(src_value);
   a = a->select(this, newidx);
 
-  const type2tc &arrsubtype =
-    is_vector_type(index.source_value->type)
-      ? to_vector_type(index.source_value->type).subtype
-      : to_array_type(index.source_value->type).subtype;
   return a;
 }
 
@@ -2784,7 +2780,6 @@ smt_astt smt_solver_baset::convert_array_store(const expr2tc &expr)
 
   assert(is_array_type(expr->type));
   smt_astt src, update;
-  const array_type2t &arrtype = to_array_type(expr->type);
 
   update = convert_ast(update_val);
 
