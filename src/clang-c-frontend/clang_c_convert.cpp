@@ -3224,12 +3224,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       break;
     }
 
-    const clang::Stmt *cond_expr = ifstmt.getConditionVariableDeclStmt();
-    if (cond_expr == nullptr)
-      cond_expr = ifstmt.getCond();
-
+    // A condition that declares a variable keeps the declaration in
+    // getConditionVariableDeclStmt() and the contextual conversion to bool in
+    // getCond(). Taking the declaration as the condition drops the
+    // conversion, handing the backend a class-typed condition (issue #4078).
     exprt cond;
-    if (get_expr(*cond_expr, cond))
+    if (get_expr(*ifstmt.getCond(), cond))
       return true;
 
     exprt then;
@@ -3253,18 +3253,34 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if_expr.copy_to_operands(else_expr);
     }
 
-    // C++17 init-statement: `if (init; cond)`. Wrap the init and the
-    // resulting if in a block so the init's side-effects (in particular,
-    // the initialiser of any variable declared there) are emitted.
+    // C++17 init-statement: `if (init; cond)`, and a condition that declares
+    // a variable: `if (T v = e)`. Both put statements before the branch, so
+    // wrap them and the resulting if in a block; the init runs first.
+    code_blockt block;
+    bool needs_block = false;
+
     if (const clang::Stmt *init_stmt = ifstmt.getInit())
     {
       exprt init;
       if (get_expr(*init_stmt, init))
         return true;
       convert_expression_to_code(init);
-
-      code_blockt block;
       block.move_to_operands(init);
+      needs_block = true;
+    }
+
+    if (const clang::Stmt *cond_decl = ifstmt.getConditionVariableDeclStmt())
+    {
+      exprt decl;
+      if (get_expr(*cond_decl, decl))
+        return true;
+      convert_expression_to_code(decl);
+      block.move_to_operands(decl);
+      needs_block = true;
+    }
+
+    if (needs_block)
+    {
       block.copy_to_operands(if_expr);
       new_expr = block;
     }
@@ -3320,12 +3336,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::WhileStmt &while_stmt =
       static_cast<const clang::WhileStmt &>(stmt);
 
-    const clang::Stmt *cond_expr = while_stmt.getConditionVariableDeclStmt();
-    if (cond_expr == nullptr)
-      cond_expr = while_stmt.getCond();
-
     exprt cond;
-    if (get_expr(*cond_expr, cond))
+    if (get_expr(*while_stmt.getCond(), cond))
       return true;
 
     codet body = code_skipt();
@@ -3335,8 +3347,36 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     convert_expression_to_code(body);
 
     code_whilet code_while;
-    code_while.cond() = cond;
-    code_while.body() = body;
+
+    // `while (T v = e)` declares v afresh on every iteration and tests its
+    // conversion to bool, so the declaration belongs at the top of the body
+    // -- which is also where continue lands -- rather than in the condition,
+    // where it would displace the conversion (issue #4078).
+    if (
+      const clang::Stmt *cond_decl = while_stmt.getConditionVariableDeclStmt())
+    {
+      exprt decl;
+      if (get_expr(*cond_decl, decl))
+        return true;
+      convert_expression_to_code(decl);
+
+      code_ifthenelset leave;
+      leave.cond() = gen_not(cond);
+      leave.then_case() = code_breakt();
+
+      code_blockt guarded;
+      guarded.move_to_operands(decl);
+      guarded.copy_to_operands(leave);
+      guarded.copy_to_operands(body);
+
+      code_while.cond() = true_exprt();
+      code_while.body() = guarded;
+    }
+    else
+    {
+      code_while.cond() = cond;
+      code_while.body() = body;
+    }
 
     new_expr = code_while;
     break;
@@ -3381,13 +3421,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         return true;
 
     convert_expression_to_code(init);
-    const clang::Stmt *cond_expr = for_stmt.getConditionVariableDeclStmt();
-    if (cond_expr == nullptr)
-      cond_expr = for_stmt.getCond();
 
     exprt cond = true_exprt();
-    if (cond_expr)
-      if (get_expr(*cond_expr, cond))
+    if (const clang::Stmt *c = for_stmt.getCond())
+      if (get_expr(*c, cond))
         return true;
 
     codet inc = code_skipt();
@@ -3410,6 +3447,32 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     code_for.cond() = cond;
     code_for.iter() = inc;
     code_for.body() = body;
+
+    // `for (a; T v = e; b)` re-declares v each iteration. Moving the
+    // declaration and the test into the body keeps the loop a code_fort, so
+    // continue still reaches the increment (goto_convertt::convert_for sets
+    // the continue target there) while v is rebuilt on every pass -- putting
+    // the declaration in the condition would drop its conversion to bool,
+    // and putting it in the init would evaluate it once (issue #4078).
+    if (const clang::Stmt *cond_decl = for_stmt.getConditionVariableDeclStmt())
+    {
+      exprt decl;
+      if (get_expr(*cond_decl, decl))
+        return true;
+      convert_expression_to_code(decl);
+
+      code_ifthenelset leave;
+      leave.cond() = gen_not(cond);
+      leave.then_case() = code_breakt();
+
+      code_blockt guarded;
+      guarded.move_to_operands(decl);
+      guarded.copy_to_operands(leave);
+      guarded.copy_to_operands(body);
+
+      code_for.cond() = true_exprt();
+      code_for.body() = guarded;
+    }
 
     new_expr = code_for;
     break;
