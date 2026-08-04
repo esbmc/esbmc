@@ -48,6 +48,22 @@ if(DEFINED CAMADA_DOWNLOAD_DIR)
   camada_register_deps_tree("${CAMADA_DOWNLOAD_DIR}/build/deps/install")
 endif()
 
+# A hand-built camada (CAMADA_DIR) exports absolute paths to its own
+# dependency tree, and names cvc5::cvc5 / stp as imported targets when built
+# with those solvers. Register that tree too, or find_package(camada) fails on
+# the missing targets. CAMADA_DEPS_DIR overrides the guess for an install
+# whose build tree is not a sibling of the prefix.
+if(NOT DEFINED CAMADA_DOWNLOAD_DIR)
+  set(CAMADA_DEPS_DIR "" CACHE PATH
+      "camada's dependency install tree (…/build/deps/install)")
+  if(CAMADA_DEPS_DIR)
+    camada_register_deps_tree("${CAMADA_DEPS_DIR}")
+  else()
+    camada_register_deps_tree("${CAMADA_DIR}/build/deps/install")
+    camada_register_deps_tree("${CAMADA_DIR}/../camada/build/deps/install")
+  endif()
+endif()
+
 # If the user bumped ESBMC_CAMADA_NAME and a stale install from a previous
 # version is still in the download dir, wipe it so the rebuild path below
 # kicks in. Otherwise find_package would happily pick up the old install
