@@ -1874,6 +1874,19 @@ bool function_call_expr::is_dict_method_call() const
 bool function_call_expr::receiver_is_non_dict_object() const
 {
   const auto &recv = call_["func"]["value"];
+
+  // An attribute receiver (`self.q.get()`) carries no name to resolve, but
+  // build_function_id has already typed the chain, so reuse its answer. A
+  // genuine dict attribute types as "__python_dict__" and still defers to the
+  // dict handler.
+  if (node_type_of(recv) == "Attribute")
+  {
+    std::string cls = function_id_.get_class();
+    if (cls.rfind("tag-", 0) == 0)
+      cls = cls.substr(4);
+    return !cls.empty() && cls != "__python_dict__";
+  }
+
   if (recv["_type"] != "Name" || !recv.contains("id"))
     return false;
 
