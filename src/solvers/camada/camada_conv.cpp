@@ -41,10 +41,7 @@ enum class camada_backendt
   mathsat,
   yices,
   bitwuzla,
-  smtlib,
-  /* Any external program that reads an SMT-LIB2 file and prints a verdict.
-   * Which one is data (oneshot_configt), not a distinct backend. */
-  oneshot
+  smtlib
 };
 
 /* Everything that distinguishes one external one-shot solver from another.
@@ -92,8 +89,6 @@ bool backend_supports_tuples(camada_backendt backend)
   case camada_backendt::mathsat:
   case camada_backendt::yices:
   case camada_backendt::bitwuzla:
-  /* The external solvers are handed a flattened script. */
-  case camada_backendt::oneshot:
     return false;
   }
 
@@ -550,11 +545,11 @@ public:
 #endif
       break;
     case camada_backendt::smtlib:
-      solver = create_esbmc_smtlib_solver(options);
-      break;
-    case camada_backendt::oneshot:
-    {
-      assert(oneshot);
+      if (!oneshot)
+      {
+        solver = create_esbmc_smtlib_solver(options);
+        break;
+      }
       oneshot_prog = options.get_option(std::string(oneshot->name) + "-prog");
       if (oneshot_prog.empty())
         oneshot_prog = oneshot->default_prog;
@@ -567,7 +562,6 @@ public:
         oneshot_prog,
         oneshot->bv_only ? "QF_BV" : pick_logic(options, false));
       break;
-    }
     }
   }
 
@@ -1531,7 +1525,7 @@ public:
      * dec_solve() -- in write-only mode check() just emits it and answers
      * UNKNOWN -- then return empty so bmc.cpp does not reopen the same path
      * and overwrite what camada wrote (issue #6059). */
-    if (backend == camada_backendt::smtlib)
+    if (backend == camada_backendt::smtlib && !oneshot)
     {
       solver->check();
       const std::string path = options.get_option("output");
@@ -1592,7 +1586,7 @@ public:
 private:
   std::unique_ptr<camada::SMTSolver> solver;
   const camada_backendt backend;
-  /* Set only for camada_backendt::oneshot. */
+  /* Set when the SMT-LIB backend drives an external one-shot program. */
   const oneshot_configt *oneshot = nullptr;
   std::string oneshot_prog;
   std::string formula_path;
@@ -1772,7 +1766,9 @@ smt_solver_baset *create_camada_solver(
   const oneshot_configt *oneshot = nullptr)
 {
   auto *solver = new camada_convt(ns, options, backend, oneshot);
-  *tuple_api = backend_supports_tuples(backend)
+  /* A one-shot script is flattened; only the interactive SMT-LIB backend
+   * gets camada's native datatype tuples. */
+  *tuple_api = (backend_supports_tuples(backend) && !oneshot)
                  ? static_cast<tuple_iface *>(solver)
                  : nullptr;
 
@@ -1898,7 +1894,7 @@ smt_solver_baset *create_oneshot_solver(
 {
   reject_incremental_strategies(options, cfg.name, cfg.mode);
   return create_camada_solver(
-    camada_backendt::oneshot, options, ns, tuple_api, array_api, fp_api, &cfg);
+    camada_backendt::smtlib, options, ns, tuple_api, array_api, fp_api, &cfg);
 }
 
 smt_solver_baset *create_new_bitwuzllob_solver(
