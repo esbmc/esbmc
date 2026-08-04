@@ -1,4 +1,4 @@
-#include <solvers/smt/smt_solver.h>
+#include <solvers/smt_solver.h>
 #include <util/expr/type_byte_size.h>
 
 smt_astt smt_solver_baset::convert_byte_extract(const expr2tc &expr)
@@ -182,14 +182,14 @@ smt_astt smt_solver_baset::convert_byte_extract_bv_mode(
   unsigned int upper, lower;
   if (!data.big_endian)
   {
-    lower = intref.value.to_uint64() * 8; //i*8
-    upper = lower + out_width - 1;        //i*8 + w - 1
+    lower = intref.value.to_uint64() * 8; // i*8
+    upper = lower + out_width - 1;        // i*8 + w - 1
   }
   else
   {
     unsigned int max = width - 1;
-    upper = max - (intref.value.to_uint64() * 8); //max-(i*8)
-    lower = upper - (out_width - 1);              //upper-(w-1)
+    upper = max - (intref.value.to_uint64() * 8); // max-(i*8)
+    lower = upper - (out_width - 1);              // upper-(w-1)
   }
 
   if (width <= upper)
@@ -225,7 +225,8 @@ smt_solver_baset::create_int_right_shift(expr2tc source, expr2tc shift_amount)
 
   expr2tc result = source;
 
-  // Create conditional chain for shift amounts up to pointer width (architecture-dependent)
+  // Create conditional chain for shift amounts up to pointer width
+  // (architecture-dependent)
   for (size_t i = config.ansi_c.char_width; i <= config.ansi_c.pointer_width();
        i += config.ansi_c.char_width) // Only byte-aligned shifts for efficiency
   {
@@ -366,8 +367,8 @@ expr2tc smt_solver_baset::convert_byte_update_int_mode_expr(
     // Calculate bit offset for this byte position
     unsigned int shift_amount = byte_pos * config.ansi_c.char_width;
 
-    // For integer encoding, we use mathematical operations instead of bitwise operations
-    // to clear and set bytes
+    // For integer encoding, we use mathematical operations instead of bitwise
+    // operations to clear and set bytes
 
     // Calculate the value of the byte at the target position
     expr2tc byte_divisor;

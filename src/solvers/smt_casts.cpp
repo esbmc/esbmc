@@ -1,4 +1,4 @@
-#include <solvers/smt/smt_solver.h>
+#include <solvers/smt_solver.h>
 #include <sstream>
 #include <util/expr/base_type.h>
 #include <util/expr/expr_util.h>
@@ -696,9 +696,10 @@ smt_astt smt_solver_baset::convert_typecast(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
 
-  // Under integer encoding (--ir/--ir-ieee), fp values are represented as reals.
-  // The following three cases handle fp<->int casts explicitly because the
-  // generic bitvector-based path is incorrect when operands are real-encoded.
+  // Under integer encoding (--ir/--ir-ieee), fp values are represented as
+  // reals. The following three cases handle fp<->int casts explicitly because
+  // the generic bitvector-based path is incorrect when operands are
+  // real-encoded.
 
   // fp -> fp: reals are exact, no conversion needed
   if (

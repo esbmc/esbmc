@@ -1,4 +1,4 @@
-#include <solvers/smt/smt_solver.h>
+#include <solvers/smt_solver.h>
 
 smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
 {
@@ -100,7 +100,8 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       // Compute the subtraction result
       expr2tc sub_result = sub2tc(side1->type, side1, side2);
 
-      // Overflow condition: (a > 0 && b < 0 && result < 0) || (a < 0 && b > 0 && result > 0)
+      // Overflow condition: (a > 0 && b < 0 && result < 0) || (a < 0 && b > 0
+      // && result > 0)
       expr2tc a_pos = greaterthan2tc(side1, zero);        // a > 0
       expr2tc b_neg = lessthan2tc(side2, zero);           // b < 0
       expr2tc result_neg = lessthan2tc(sub_result, zero); // result < 0
@@ -172,7 +173,8 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
     // Overflow occurs when dividing by zero
     expr2tc is_div_by_zero = equality2tc(side2, zero);
 
-    // Overflow occurs if the dividend is greater than the maximum representable value
+    // Overflow occurs if the dividend is greater than the maximum representable
+    // value
     expr2tc max_unsigned = constant_int2tc(
       side1->type, BigInt::power2(side1->type->get_width()) - 1);
     expr2tc is_overflow = greaterthan2tc(side1, max_unsigned);
@@ -207,14 +209,16 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
     smt_astt result;
     if (int_encoding)
     {
-      // If using int_encoding, use mk_mul and mk_shl for multiplication and shift left
+      // If using int_encoding, use mk_mul and mk_shl for multiplication and
+      // shift left
       result = is_mul2t(overflow.operand)
                  ? mk_mul(arg1_ext, arg2_ext)  // Use mk_mul for multiplication
                  : mk_shl(arg1_ext, arg2_ext); // Use mk_shl for shift left
     }
     else
     {
-      // If not using int_encoding, fallback to original behavior (bvmul and bvshl)
+      // If not using int_encoding, fallback to original behavior (bvmul and
+      // bvshl)
       result = is_mul2t(overflow.operand) ? mk_bvmul(arg1_ext, arg2_ext)
                                           : mk_bvshl(arg1_ext, arg2_ext);
     }

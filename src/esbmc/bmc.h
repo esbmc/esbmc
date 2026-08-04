@@ -12,7 +12,7 @@
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
-#include <solvers/smt/smt_result.h>
+#include <solvers/smt_result.h>
 #include <solvers/solve.h>
 #include <util/config/options.h>
 #include <util/ssa/algorithms.h>

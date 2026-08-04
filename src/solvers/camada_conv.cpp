@@ -1,7 +1,7 @@
 #include <solvers/solve.h>
-#include <solvers/smt/smt_solver.h>
-#include <solvers/camada/oneshot_options.h>
-#include <solvers/smt/external_process_died.h>
+#include <solvers/smt_solver.h>
+#include <solvers/oneshot_options.h>
+#include <solvers/external_process_died.h>
 #include <util/base/filesystem.h>
 
 #include <util/arith/ieee_float.h>
@@ -524,9 +524,7 @@ public:
     const optionst &options,
     camada_backendt backend,
     bool oneshot = false)
-    : smt_solver_baset(ns, options),
-      backend(backend),
-      oneshot(oneshot)
+    : smt_solver_baset(ns, options), backend(backend), oneshot(oneshot)
   {
     switch (backend)
     {
@@ -1771,7 +1769,8 @@ smt_astt camada_tuple_ast::update(
   return cam_ctx->wrap(cam_ctx->solver->mkTuple(fields), sort);
 }
 
-smt_astt camada_tuple_ast::project(smt_solver_baset *ctx, unsigned int elem) const
+smt_astt
+camada_tuple_ast::project(smt_solver_baset *ctx, unsigned int elem) const
 {
   auto *cam_ctx = static_cast<camada_convt *>(ctx);
   const std::vector<type2tc> &members =
@@ -1865,9 +1864,5 @@ create_new_smtlib_solver(const optionst &options, const namespacet &ns)
       "[smtlib] the smtlib interface solving is unstable. Please, "
       "use it with --smt-formula-only for production");
 
-  return create_camada_solver(
-    camada_backendt::smtlib,
-    options,
-    ns,
-    oneshot);
+  return create_camada_solver(camada_backendt::smtlib, options, ns, oneshot);
 }

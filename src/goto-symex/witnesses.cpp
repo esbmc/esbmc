@@ -5,7 +5,7 @@
 #include <fstream>
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt_conv.h>
 #include <util/base/picosha2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 

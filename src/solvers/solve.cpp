@@ -1,7 +1,7 @@
 #include <solve.h>
 #include <solver_config.h>
-#include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_solver.h>
+#include <solvers/smt_conv.h>
+#include <solvers/smt_solver.h>
 
 #include <unordered_map>
 

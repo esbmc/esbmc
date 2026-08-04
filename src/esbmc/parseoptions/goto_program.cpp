@@ -6,7 +6,7 @@
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/sarif.h>
 #include <util/base/cwe_mapping.h>
-#include <solvers/smt/smt_result.h>
+#include <solvers/smt_result.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <charconv>

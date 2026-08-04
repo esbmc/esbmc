@@ -1,9 +1,9 @@
 #include "irep2/irep2_expr.h"
 #include <cfloat>
 #include <iomanip>
-#include <solvers/smt/smt_solver.h>
-#include <solvers/smt/fp/ir_ieee_conv.h>
-#include <solvers/smt/smt_fp_rounding_utils.h>
+#include <solvers/smt_solver.h>
+#include <solvers/ir_ieee_conv.h>
+#include <solvers/smt_fp_rounding_utils.h>
 #include <sstream>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
@@ -343,10 +343,11 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   smt_astt side2 = convert_ast(eq.side_2); // RHS
   side2->assign(this, side1);
 
-  // Put that into the smt cache, thus preserving the value of the assigned symbols.
-  // IMPORTANT: the cache is now a fundamental part of how some flatteners work,
-  // in that one can choose to create a set of expressions and their ASTs, then
-  // store them in the cache, rather than have a more sophisticated conversion.
+  // Put that into the smt cache, thus preserving the value of the assigned
+  // symbols. IMPORTANT: the cache is now a fundamental part of how some
+  // flatteners work, in that one can choose to create a set of expressions and
+  // their ASTs, then store them in the cache, rather than have a more
+  // sophisticated conversion.
   {
     const smt_cache_entryt e = {eq.side_1, side2, ctx_level};
     // Lock automatically released when it goes out of scope
@@ -479,10 +480,10 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       return (cache_result->ast);
   }
 
-  // A sizeof(T) node lowers to its eagerly-computed byte-size value. do_simplify
-  // normally folds it away, but under --no-simplify it survives to here, so
-  // lower it explicitly rather than hitting the unrecognised-format abort
-  // (esbmc/esbmc#5337).
+  // A sizeof(T) node lowers to its eagerly-computed byte-size value.
+  // do_simplify normally folds it away, but under --no-simplify it survives to
+  // here, so lower it explicitly rather than hitting the unrecognised-format
+  // abort (esbmc/esbmc#5337).
   if (is_sizeof2t(expr))
     return convert_ast(to_sizeof2t(expr).value);
   /* Vectors!
@@ -494,7 +495,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
    * The simplification module take care of all the operations, but if
    * for some reason we would like to run ESBMC without simplifications
    * then we need to apply it here.
-  */
+   */
   if (is_vector_type(expr))
   {
     if (is_neg2t(expr))
@@ -1116,8 +1117,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       else if (smt_fp_rounding_utils::is_nearest_rounding_mode(rm))
       {
         // Round half to even: tie goes to whichever of floor, floor+1 is even.
-        // floor/2 is an integer iff floor is even — works for negative floors too
-        // (e.g. -2/2 = -1: integer = even; -3/2 = -1.5: not integer = odd).
+        // floor/2 is an integer iff floor is even — works for negative floors
+        // too (e.g. -2/2 = -1: integer = even; -3/2 = -1.5: not integer = odd).
         smt_astt two = mk_smt_real("2");
         smt_astt floor_is_even = mk_isint(mk_div(floor_v, two));
         smt_astt tie_rte = mk_ite(floor_is_even, floor_v, mk_add(floor_v, one));
@@ -1690,12 +1691,13 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   }
   case expr2t::code_comma_id:
   {
-    /* 
+    /*
       TODO: for some reason comma expressions survive when they are under
       * RETURN statements. They should have been taken care of at the GOTO
       * level. Remove this code once we do!
 
-      the expression on the right side will become the value of the entire comma-separated expression.
+      the expression on the right side will become the value of the entire
+      comma-separated expression.
 
       e.g.
         return side_1, side_2;
@@ -1711,7 +1713,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::exists_id:
   {
     // TODO: technically the forall could be a list of symbols
-    // TODO: how to support other assertions inside it? e.g., buffer-overflow, arithmetic-overflow, etc...
+    // TODO: how to support other assertions inside it? e.g., buffer-overflow,
+    // arithmetic-overflow, etc...
     expr2tc symbol;
     expr2tc predicate;
 
@@ -1726,7 +1729,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       predicate = to_exists2t(expr).side_2;
     }
 
-    // We only want expressions of typecast(address_of(symbol)) or address_of(symbol).
+    // We only want expressions of typecast(address_of(symbol)) or
+    // address_of(symbol).
     {
       if (const typecast2t *tc = try_to_typecast2t(symbol);
           tc && is_address_of2t(tc->from))
@@ -1891,9 +1895,10 @@ smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
 
   case type2t::empty_id:
     // Empty type can appear during Solidity nested mapping encoding
-    // when the 'with' expression generates intermediate void-typed subexpressions.
-    // Return a minimal sort as placeholder — these are never directly used in
-    // solver queries and the verification result is unaffected.
+    // when the 'with' expression generates intermediate void-typed
+    // subexpressions. Return a minimal sort as placeholder — these are never
+    // directly used in solver queries and the verification result is
+    // unaffected.
     result = mk_int_bv_sort(1);
     break;
 
@@ -3013,7 +3018,7 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
       decompose_store_chain(expr, update_val);
     }
 
-    /* Try to construct a constant struct when we handle  
+    /* Try to construct a constant struct when we handle
      * struct type "with" expr2tc
      *
      * Simplify the source value. If it is a constant,
@@ -3311,7 +3316,8 @@ double smt_solver_baset::convert_rational_to_double(
 
         if (result != nullptr)
         {
-          // 1a) as_string returns a pointer to the first digit; copy it forward.
+          // 1a) as_string returns a pointer to the first digit; copy it
+          // forward.
           size_t len = strnlen(result, buffer.size());
           if (len > 0 && len < buffer.size())
           {
@@ -3504,7 +3510,8 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
 
   expr2tc arr_size;
   if (type == flat_type && !ar.size_is_infinite)
-    // avoid handelling the flattend multidimensional and malloc arrays(assume size is infinite)
+    // avoid handelling the flattend multidimensional and malloc arrays(assume
+    // size is infinite)
     arr_size = to_array_type(flat_type).array_size;
   else
     arr_size = constant_int2tc(index_type2(), BigInt(1ULL << w));
@@ -3890,7 +3897,8 @@ expr2tc smt_solver_baset::get_by_value(const type2tc &type, BigInt value)
   {
     // Build the fixedbv from its spec + raw bit pattern directly, mirroring
     // fixedbvt::from_expr (spec from the type, v = the value's signed binary
-    // round-trip) without staging a legacy constant_exprt / type back-migration.
+    // round-trip) without staging a legacy constant_exprt / type
+    // back-migration.
     fixedbvt fbv(fixedbv_spect(to_fixedbv_type(type)));
     fbv.set_value(
       binary2integer(integer2binary(value, type->get_width()), true));

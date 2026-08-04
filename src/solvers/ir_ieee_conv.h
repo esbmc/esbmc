@@ -1,7 +1,7 @@
 #ifndef SOLVERS_SMT_FP_IR_IEEE_CONV_H_
 #define SOLVERS_SMT_FP_IR_IEEE_CONV_H_
 
-#include <solvers/smt/smt_ast.h>
+#include <solvers/smt_ast.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
 #include <string>
@@ -47,7 +47,8 @@ public:
     smt_astt sym_ast,
     const symbol2t &sym);
 
-  /** Look up the tracked interval for t; fall back to the point interval {t, t}.
+  /** Look up the tracked interval for t; fall back to the point interval {t,
+   * t}.
    *  Used by both encode_ieee_* methods and the sqrt case in smt_solver.cpp. */
   ra_interval_t get_interval(smt_astt t) const;
 
@@ -214,10 +215,12 @@ private:
   /** Returns the max-normal threshold for the given float precision. */
   smt_astt get_max_normal_real(const floatbv_type2t &fbv_type) const;
 
-  /** True iff x > max_normal (positive infinity in the real-arithmetic encoding). */
+  /** True iff x > max_normal (positive infinity in the real-arithmetic
+   * encoding). */
   smt_astt is_pos_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const;
 
-  /** True iff x < −max_normal (negative infinity in the real-arithmetic encoding). */
+  /** True iff x < −max_normal (negative infinity in the real-arithmetic
+   * encoding). */
   smt_astt is_neg_inf_real(smt_astt x, const floatbv_type2t &fbv_type) const;
 
   /** True iff |x| > max_normal (either sign of infinity). */

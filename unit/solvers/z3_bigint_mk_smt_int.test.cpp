@@ -19,7 +19,7 @@
 #include <util/arith/mp_arith.h>
 #include <util/symtab/namespace.h>
 #include <util/config/options.h>
-#include <solvers/smt/smt_solver.h>
+#include <solvers/smt_solver.h>
 #include <solvers/solve.h>
 
 extern solver_creator create_new_z3_solver;

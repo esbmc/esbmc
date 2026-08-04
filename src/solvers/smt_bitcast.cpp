@@ -1,4 +1,4 @@
-#include <solvers/smt/smt_solver.h>
+#include <solvers/smt_solver.h>
 #include <util/expr/type_byte_size.h>
 
 /**
@@ -144,7 +144,8 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
       new_from = flatten_to_bitvector(new_from);
 
     // When int_encoding is true, integer types are represented as integers
-    // in the SMT solver, but fp_api expects bitvectors. Fall back to value-based conversion.
+    // in the SMT solver, but fp_api expects bitvectors. Fall back to
+    // value-based conversion.
     if (
       int_encoding &&
       (is_signedbv_type(new_from) || is_unsignedbv_type(new_from)))
@@ -174,8 +175,8 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
   }
   else if (is_bv_type(to_type))
   {
-    // Under integer encoding (--ir/--ir-ieee), fixed- and floating-point values are
-    // real-encoded; fall back to value-based typecast.
+    // Under integer encoding (--ir/--ir-ieee), fixed- and floating-point values
+    // are real-encoded; fall back to value-based typecast.
     if (int_encoding && (is_fixedbv_type(from) || is_floatbv_type(from)))
       return convert_ast(typecast2tc(to_type, from));
 

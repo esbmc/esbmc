@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <sstream>
 #include <utility>
-#include <solvers/smt/smt_solver.h>
+#include <solvers/smt_solver.h>
 #include <util/message/format.h>
 #include <util/expr/type_byte_size.h>
 
@@ -424,7 +424,8 @@ smt_astt smt_solver_baset::init_pointer_obj(
    * [basic.align]), so constrain the base address to it. This covers both an
    * explicit alignas and the natural alignment every other object has; without
    * the latter, `(uintptr_t)&x % alignof(T) == 0` is satisfiably false and
-   * yields a spurious counterexample. Types of alignment 1 constrain nothing. */
+   * yields a spurious counterexample. Types of alignment 1 constrain nothing.
+   */
   if (type)
   {
     const BigInt a = alignment(*type, ns);
@@ -508,9 +509,9 @@ void smt_solver_baset::finalize_pointer_chain(unsigned int objnum)
 
       // Tong: When a dynamic object gets registered/freed in __ESBMC_alloc by
       // symex_malloc()/symex_free(), the alloc bit "alive" is assigned to 1/0.
-      // However, in dataraces check we introduce infinite array to store the address of
-      // shared objects, and if they are not dynamically managed by symex_malloc()/symex_free(),
-      // and it's alloc bit is always 0 by default.
+      // However, in dataraces check we introduce infinite array to store the
+      // address of shared objects, and if they are not dynamically managed by
+      // symex_malloc()/symex_free(), and it's alloc bit is always 0 by default.
       // For now, we just modify the races check.
 
       if (options.get_bool_option("data-races-check") && cur_dynamic)

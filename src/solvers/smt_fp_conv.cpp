@@ -1,7 +1,7 @@
 #include "irep2/irep2_expr.h"
-#include <solvers/smt/smt_solver.h>
-#include <solvers/smt/smt_fp_rounding_utils.h>
-#include <solvers/smt/fp/ir_ieee_conv.h>
+#include <solvers/smt_solver.h>
+#include <solvers/smt_fp_rounding_utils.h>
+#include <solvers/ir_ieee_conv.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
@@ -142,12 +142,13 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       smt_astt ra_lo_expr = mk_sub(real_result, bound);
       smt_astt ra_hi_expr = mk_add(real_result, bound);
 
-      // Introduce named enclosure variables and pin them to the bound expressions
-      // via bidirectional inequalities.  A plain mk_eq(ra_lo, ra_lo_expr) is
-      // correct but the Z3 tactic pipeline (solve-eqs) eliminates definitional
-      // equalities from the visible assertion set, making them invisible in the
-      // SMT output.  Two mk_le assertions are logically equivalent and are not
-      // targeted by solve-eqs, so they survive in the final formula.
+      // Introduce named enclosure variables and pin them to the bound
+      // expressions via bidirectional inequalities.  A plain mk_eq(ra_lo,
+      // ra_lo_expr) is correct but the Z3 tactic pipeline (solve-eqs)
+      // eliminates definitional equalities from the visible assertion set,
+      // making them invisible in the SMT output.  Two mk_le assertions are
+      // logically equivalent and are not targeted by solve-eqs, so they survive
+      // in the final formula.
       smt_astt ra_lo = mk_fresh(rs, "ra_lo::", nullptr);
       smt_astt ra_hi = mk_fresh(rs, "ra_hi::", nullptr);
       assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo <= r - B(r)
@@ -170,7 +171,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       //   fl_RUP(r) >= r  (exact lower bound; round-up never undershoots)
       //   fl_RUP(r) <= r + B_dir(r)
       // where B_dir(r) = eps_rel_dir * |r| + eps_abs
-      //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- the full machine epsilon
+      //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- the full machine
+      //   epsilon
 
       smt_sortt rs = mk_real_sort();
       smt_astt eps_up, eps_abs;
@@ -188,7 +190,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       smt_astt ra_hi_expr = mk_add(real_result, b_dir);
 
       // Introduce named enclosure variables. Use bidirectional inequalities to
-      // survive Z3's solve-eqs tactic (same technique as the nearest-mode path).
+      // survive Z3's solve-eqs tactic (same technique as the nearest-mode
+      // path).
       smt_astt ra_lo = mk_fresh(rs, "ra_lo_up::", nullptr);
       smt_astt ra_hi = mk_fresh(rs, "ra_hi_up::", nullptr);
 
@@ -233,7 +236,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       smt_astt ra_lo_expr = mk_sub(real_result, b_dir); // r - B_dir(r)
 
       // Introduce named enclosure variables. Use bidirectional inequalities to
-      // survive Z3's solve-eqs tactic (same technique as the other tight paths).
+      // survive Z3's solve-eqs tactic (same technique as the other tight
+      // paths).
       smt_astt ra_lo = mk_fresh(rs, "ra_lo_dn::", nullptr);
       smt_astt ra_hi = mk_fresh(rs, "ra_hi_dn::", nullptr);
 
@@ -256,7 +260,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
     {
       // Asymmetric tight enclosure for ROUND_TO_ZERO (truncation toward zero).
       //
-      // RTZ is sign-dependent: it rounds down for r >= 0 and rounds up for r < 0.
+      // RTZ is sign-dependent: it rounds down for r >= 0 and rounds up for r <
+      // 0.
       //   r >= 0:  fl_RTZ(r) in [r - B_dir(r),  r]   (same shape as RDN)
       //   r <  0:  fl_RTZ(r) in [r,  r + B_dir(r)]   (same shape as RUP)
       //
@@ -265,7 +270,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       //   ra_hi = ite(r >= 0,  r,              r + B_dir(r))
       //
       // where B_dir(r) = eps_rel_dir * |r| + eps_abs
-      //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon
+      //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine
+      //   epsilon
 
       smt_sortt rs = mk_real_sort();
       smt_astt eps_rel_dir = nullptr, eps_abs = nullptr;
@@ -291,7 +297,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
         mk_ite(r_nonneg, real_result, mk_add(real_result, b_dir));
 
       // Introduce named enclosure variables. Use bidirectional inequalities to
-      // survive Z3's solve-eqs tactic (same technique as the other tight paths).
+      // survive Z3's solve-eqs tactic (same technique as the other tight
+      // paths).
       smt_astt ra_lo = mk_fresh(rs, "ra_lo_tz::", nullptr);
       smt_astt ra_hi = mk_fresh(rs, "ra_hi_tz::", nullptr);
 
@@ -347,7 +354,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       smt_astt ra_hi_expr = mk_add(real_result, bound);
 
       // Introduce named enclosure variables. Use bidirectional inequalities to
-      // survive Z3's solve-eqs tactic (same technique as the other tight paths).
+      // survive Z3's solve-eqs tactic (same technique as the other tight
+      // paths).
       smt_astt ra_lo = mk_fresh(rs, "ra_lo_aw::", nullptr);
       smt_astt ra_hi = mk_fresh(rs, "ra_hi_aw::", nullptr);
 
@@ -824,8 +832,8 @@ smt_astt smt_solver_baset::convert_signbit(const expr2tc &expr)
 
   if (int_encoding)
   {
-    // In integer/real encoding mode, floating-point values are represented as reals
-    // We can't extract bits, so check the sign mathematically
+    // In integer/real encoding mode, floating-point values are represented as
+    // reals We can't extract bits, so check the sign mathematically
     is_neg = mk_lt(value, mk_smt_real("0"));
 
     // A value flushed to zero from a negative subnormal-range result, or

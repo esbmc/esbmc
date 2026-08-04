@@ -1,6 +1,6 @@
-#include <solvers/smt/fp/ir_ieee_conv.h>
-#include <solvers/smt/smt_solver.h>
-#include <solvers/smt/smt_fp_rounding_utils.h>
+#include <solvers/ir_ieee_conv.h>
+#include <solvers/smt_solver.h>
+#include <solvers/smt_fp_rounding_utils.h>
 #include <irep2/irep2_type.h>
 #include <util/arith/ieee_float.h>
 

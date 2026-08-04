@@ -32,7 +32,7 @@
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt_conv.h>
 #include <sstream>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>

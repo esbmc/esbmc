@@ -1,5 +1,5 @@
-#include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_solver.h>
+#include <solvers/smt_conv.h>
+#include <solvers/smt_solver.h>
 
 smt_convt::smt_convt(std::unique_ptr<smt_solver_baset> impl)
   : solver_impl(std::move(impl))
