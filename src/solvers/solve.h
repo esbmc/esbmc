@@ -1,7 +1,6 @@
 #ifndef _ESBMC_SOLVERS_SOLVE_H_
 #define _ESBMC_SOLVERS_SOLVE_H_
 
-#include <string>
 #include <util/config/config.h>
 #include <util/symtab/namespace.h>
 #include <util/message/message.h>
@@ -12,10 +11,7 @@ class smt_solver_baset;
 typedef smt_solver_baset *(
   solver_creator)(const optionst &options, const namespacet &ns);
 
-smt_convt *create_solver(
-  std::string solver_name,
-  const namespacet &ns,
-  const optionst &options);
+smt_convt *create_solver(const namespacet &ns, const optionst &options);
 
 /// Abort early if the user explicitly selected an SMT solver that was not
 /// built into this ESBMC binary. Safe to call before parsing the program;
