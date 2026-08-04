@@ -718,7 +718,7 @@ public:
   /** Create a free variable with the given sort, and a unique name, with the
    *  prefix given in 'tag' */
   virtual smt_astt
-  mk_fresh(smt_sortt s, const std::string &tag, smt_sortt st = nullptr);
+  mk_fresh(smt_sortt s, const std::string &tag, smt_sortt st = {});
   /** Create a previously un-used variable name with the prefix given in tag */
   std::string mk_fresh_name(const std::string &tag);
 
@@ -1440,7 +1440,7 @@ unsigned long array_domain_width_or_word_size(const array_type2t &arr);
 inline smt_ast::smt_ast(smt_solver_baset *ctx, smt_sortt s)
   : sort(s), context(ctx)
 {
-  assert(sort != nullptr);
+  assert(static_cast<bool>(sort));
   ctx->live_asts.push_back(this);
 }
 

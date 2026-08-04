@@ -198,8 +198,8 @@ std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rne_enclosure(
   smt_astt ra_lo_expr = ctx->mk_sub(lo_r, bound_lo);
   smt_astt ra_hi_expr = ctx->mk_add(hi_r, bound_hi);
 
-  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo::", nullptr);
-  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi::", nullptr);
+  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo::", {});
+  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi::", {});
 
   ctx->assert_ast(ctx->mk_le(ra_lo, ra_lo_expr));
   ctx->assert_ast(ctx->mk_le(ra_lo_expr, ra_lo));
@@ -253,8 +253,8 @@ std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rna_enclosure(
   smt_astt ra_lo_expr = ctx->mk_sub(lo_r, bound_lo);
   smt_astt ra_hi_expr = ctx->mk_add(hi_r, bound_hi);
 
-  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo_aw::", nullptr);
-  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi_aw::", nullptr);
+  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo_aw::", {});
+  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi_aw::", {});
 
   ctx->assert_ast(ctx->mk_le(ra_lo, ra_lo_expr));
   ctx->assert_ast(ctx->mk_le(ra_lo_expr, ra_lo));
@@ -302,8 +302,8 @@ std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rup_enclosure(
   smt_astt bound_hi = ctx->mk_add(ctx->mk_mul(eps_rel_dir, abs_hi), eps_abs);
   smt_astt ra_hi_expr = ctx->mk_add(hi_r, bound_hi);
 
-  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo_up::", nullptr);
-  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi_up::", nullptr);
+  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo_up::", {});
+  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi_up::", {});
 
   ctx->assert_ast(ctx->mk_le(ra_lo, lo_r));
   ctx->assert_ast(ctx->mk_le(lo_r, ra_lo));
@@ -352,8 +352,8 @@ std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rdn_enclosure(
   smt_astt bound_lo = ctx->mk_add(ctx->mk_mul(eps_rel_dir, abs_lo), eps_abs);
   smt_astt ra_lo_expr = ctx->mk_sub(lo_r, bound_lo);
 
-  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo_dn::", nullptr);
-  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi_dn::", nullptr);
+  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo_dn::", {});
+  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi_dn::", {});
 
   ctx->assert_ast(ctx->mk_le(ra_lo, ra_lo_expr));
   ctx->assert_ast(ctx->mk_le(ra_lo_expr, ra_lo));
@@ -422,8 +422,8 @@ std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rtz_enclosure(
     ctx->mk_ite(
       hi_nonpos, ctx->mk_add(hi_r, bound_hi), ctx->mk_add(hi_r, bound_max)));
 
-  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo_tz::", nullptr);
-  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi_tz::", nullptr);
+  smt_astt ra_lo = ctx->mk_fresh(rs, "ra_lo_tz::", {});
+  smt_astt ra_hi = ctx->mk_fresh(rs, "ra_hi_tz::", {});
 
   ctx->assert_ast(ctx->mk_le(ra_lo, ra_lo_expr));
   ctx->assert_ast(ctx->mk_le(ra_lo_expr, ra_lo));

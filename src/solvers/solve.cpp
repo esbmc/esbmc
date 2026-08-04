@@ -1,7 +1,10 @@
 #include <solve.h>
-#include <solver_config.h>
 #include <solvers/smt_conv.h>
 #include <solvers/smt_solver.h>
+/* Last: solver_config.h #defines bare names (Z3, SMTLIB, ...) that collide with
+ * camada's SMTBackendKind enumerators, so it must not precede camada headers.
+ */
+#include <solver_config.h>
 
 #include <unordered_map>
 

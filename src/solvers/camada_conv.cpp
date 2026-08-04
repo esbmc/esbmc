@@ -43,7 +43,6 @@ enum class camada_backendt
   smtlib
 };
 
-using camada_sort = solver_smt_sort<camada::SMTSortRef>;
 using camada_expr = solver_smt_ast<camada::SMTExprRef>;
 
 /* A model value that could not be read. `oneshot_name` is set when the model
@@ -1048,7 +1047,7 @@ public:
   smt_astt mk_select(smt_astt a, smt_astt b) override
   {
     return wrap(
-      solver->mkArraySelect(expr(a), expr(b)), a->sort->get_range_sort());
+      solver->mkArraySelect(expr(a), expr(b)), a->sort->getElementSort());
   }
   smt_astt mk_real2int(smt_astt a) override
   {
@@ -1065,77 +1064,71 @@ public:
 
   smt_sortt mk_bool_sort() override
   {
-    return new camada_sort(SMT_SORT_BOOL, solver->mkBoolSort(), 1);
+    return solver->mkBoolSort();
   }
 
   smt_sortt mk_real_sort() override
   {
-    return new camada_sort(SMT_SORT_REAL, solver->mkRealSort());
+    return solver->mkRealSort();
   }
 
   smt_sortt mk_int_sort() override
   {
-    return new camada_sort(SMT_SORT_INT, solver->mkIntSort());
+    return solver->mkIntSort();
   }
 
   smt_sortt mk_bv_sort(std::size_t width) override
   {
-    return new camada_sort(SMT_SORT_BV, solver->mkBVSort(width), width);
+    return solver->mkBVSort(width);
   }
 
   smt_sortt mk_array_sort(smt_sortt domain, smt_sortt range) override
   {
-    auto cam_domain = to_solver_smt_sort<camada::SMTSortRef>(domain)->s;
-    auto cam_range = to_solver_smt_sort<camada::SMTSortRef>(range)->s;
-    auto sort = solver->mkArraySort(cam_domain, cam_range);
-    return new camada_sort(
-      SMT_SORT_ARRAY, sort, domain->get_data_width(), range);
+    return solver->mkArraySort(domain, range);
   }
 
   smt_sortt mk_fbv_sort(std::size_t width) override
   {
     /* ESBMC's fixedbv lowers to a plain bit-vector for now; camada has an FXP
      * sort but nothing here reads the distinction back. */
-    return new camada_sort(SMT_SORT_BV, solver->mkBVSort(width), width);
+    return solver->mkBVSort(width);
   }
 
   /* Sort widths, read straight from camada rather than from a copy kept in the
-   * ESBMC wrapper. Only native FP sorts (SMT_SORT_FPBV) carry FP structure in
-   * camada; SMT_SORT_BVFP is a plain bit-vector there, and nothing reads its
-   * significand or exponent back. */
+   * camada. Only a native FP sort carries FP structure there; mk_bvfp_sort
+   * builds a plain bit-vector, whose significand and exponent are never read
+   * back. */
   static unsigned sort_fp_ew(smt_sortt s)
   {
-    return to_solver_smt_sort<camada::SMTSortRef>(s)->s->getFPExponentWidth();
+    return s->getFPExponentWidth();
   }
 
   static unsigned sort_fp_sw(smt_sortt s)
   {
-    return to_solver_smt_sort<camada::SMTSortRef>(s)
-      ->s->getFPSignificandWidth();
+    return s->getFPSignificandWidth();
   }
 
   smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw) override
   {
     auto sort = solver->mkBVSort(ew + sw + 1);
-    return new camada_sort(SMT_SORT_BVFP, sort, ew + sw + 1);
+    return sort;
   }
 
   smt_sortt mk_bvfp_rm_sort() override
   {
     auto sort = solver->mkBVSort(3);
-    return new camada_sort(SMT_SORT_BVFP_RM, sort, 3);
+    return sort;
   }
 
   smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw) override
   {
     auto sort = solver->mkFPSort(ew, sw, fp_encoding());
-    return new camada_sort(SMT_SORT_FPBV, sort, ew + sw + 1);
+    return sort;
   }
 
   smt_sortt mk_fpbv_rm_sort() override
   {
-    return new camada_sort(
-      SMT_SORT_FPBV_RM, solver->mkRMSort(fp_encoding()), 3);
+    return solver->mkRMSort(fp_encoding());
   }
 
   smt_astt mk_smt_int(const BigInt &theint) override
@@ -1151,10 +1144,7 @@ public:
   smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override
   {
     return wrap(
-      solver->mkBVFromBin(
-        integer2binary(theint, s->get_data_width()),
-        to_solver_smt_sort<camada::SMTSortRef>(s)->s),
-      s);
+      solver->mkBVFromBin(integer2binary(theint, s->getWidth()), s), s);
   }
 
   smt_astt mk_smt_fpbv(const ieee_floatt &thereal) override
@@ -1207,28 +1197,19 @@ public:
     smt_sortt to,
     smt_astt rm) override
   {
-    return wrap(
-      solver->mkFPtoFP(
-        expr(from), to_solver_smt_sort<camada::SMTSortRef>(to)->s, expr(rm)),
-      to);
+    return wrap(solver->mkFPtoFP(expr(from), to, expr(rm)), to);
   }
 
   smt_astt
   mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm) override
   {
-    return wrap(
-      solver->mkUBVtoFP(
-        expr(from), to_solver_smt_sort<camada::SMTSortRef>(to)->s, expr(rm)),
-      to);
+    return wrap(solver->mkUBVtoFP(expr(from), to, expr(rm)), to);
   }
 
   smt_astt
   mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm) override
   {
-    return wrap(
-      solver->mkSBVtoFP(
-        expr(from), to_solver_smt_sort<camada::SMTSortRef>(to)->s, expr(rm)),
-      to);
+    return wrap(solver->mkSBVtoFP(expr(from), to, expr(rm)), to);
   }
 
   smt_astt mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm) override
@@ -1311,10 +1292,7 @@ public:
 
   smt_astt mk_from_bv_to_fp(smt_astt op, smt_sortt to) override
   {
-    return wrap(
-      solver->mkBVToIEEEFP(
-        expr(op), to_solver_smt_sort<camada::SMTSortRef>(to)->s),
-      to);
+    return wrap(solver->mkBVToIEEEFP(expr(op), to), to);
   }
 
   smt_astt mk_from_fp_to_bv(smt_astt op) override
@@ -1334,10 +1312,9 @@ public:
     return mk_smt_symbol(name, sort);
   }
 
-  smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override
+  smt_astt mk_smt_symbol(const std::string &name, smt_sortt s) override
   {
-    return wrap(
-      solver->mkSymbol(name, to_solver_smt_sort<camada::SMTSortRef>(s)->s), s);
+    return wrap(solver->mkSymbol(name, s), s);
   }
 
   smt_sortt mk_struct_sort(const type2tc &type) override
@@ -1355,10 +1332,9 @@ public:
     std::vector<camada::SMTSortRef> field_sorts;
     field_sorts.reserve(members.size());
     for (const auto &member : members)
-      field_sorts.push_back(
-        to_solver_smt_sort<camada::SMTSortRef>(convert_sort(member))->s);
+      field_sorts.push_back(convert_sort(member));
 
-    return new camada_sort(SMT_SORT_STRUCT, solver->mkTupleSort(field_sorts));
+    return solver->mkTupleSort(field_sorts);
   }
 
   smt_astt mk_extract(smt_astt a, unsigned int high, unsigned int low) override
@@ -1366,7 +1342,7 @@ public:
     // If it's a floatbv, convert it to bv first so callers extracting bytes
     // out of structs/unions containing floats encode against the IEEE bit
     // pattern instead of triggering a sort mismatch.
-    if (a->sort->is_fp())
+    if (a->sort->isFPSort())
       a = mk_from_fp_to_bv(a);
     return wrap(
       solver->mkBVExtract(high, low, expr(a)), mk_bv_sort(high - low + 1));
@@ -1376,21 +1352,21 @@ public:
   {
     return wrap(
       solver->mkBVSignExt(topwidth, expr(a)),
-      mk_bv_sort(a->sort->get_data_width() + topwidth));
+      mk_bv_sort(a->sort->getWidth() + topwidth));
   }
 
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override
   {
     return wrap(
       solver->mkBVZeroExt(topwidth, expr(a)),
-      mk_bv_sort(a->sort->get_data_width() + topwidth));
+      mk_bv_sort(a->sort->getWidth() + topwidth));
   }
 
   smt_astt mk_concat(smt_astt a, smt_astt b) override
   {
     return wrap(
       solver->mkBVConcat(expr(a), expr(b)),
-      mk_bv_sort(a->sort->get_data_width() + b->sort->get_data_width()));
+      mk_bv_sort(a->sort->getWidth() + b->sort->getWidth()));
   }
 
   smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) override
@@ -1409,19 +1385,18 @@ public:
     return wrap(solver->mkTuple(fields), mk_struct_sort(structdef->type));
   }
 
-  smt_astt tuple_fresh(const smt_sort *s, std::string name = "") override
+  smt_astt tuple_fresh(smt_sortt s, std::string name = "") override
   {
     if (name.empty())
       name = mk_fresh_name("camada_convt::tuple_fresh");
-    return wrap(
-      solver->mkSymbol(name, to_solver_smt_sort<camada::SMTSortRef>(s)->s), s);
+    return wrap(solver->mkSymbol(name, s), s);
   }
 
   smt_astt tuple_array_create(
     const type2tc &array_type,
     smt_astt *input_args,
     bool const_array,
-    const smt_sort *domain) override
+    smt_sortt domain) override
   {
     const array_type2t &arrtype = to_array_type(array_type);
     smt_sortt elem_sort = mk_struct_sort(arrtype.subtype);
@@ -1429,19 +1404,15 @@ public:
 
     if (const_array)
     {
-      return wrap(
-        solver->mkArrayConst(
-          to_solver_smt_sort<camada::SMTSortRef>(domain)->s, expr(*input_args)),
-        array_sort);
+      return wrap(solver->mkArrayConst(domain, expr(*input_args)), array_sort);
     }
 
     assert(!is_nil_expr(arrtype.array_size));
     assert(is_constant_int2t(arrtype.array_size));
 
     auto result = solver->mkSymbol(
-      mk_fresh_name("camada_convt::tuple_array_create"),
-      to_solver_smt_sort<camada::SMTSortRef>(array_sort)->s);
-    auto domain_sort = to_solver_smt_sort<camada::SMTSortRef>(domain)->s;
+      mk_fresh_name("camada_convt::tuple_array_create"), array_sort);
+    auto domain_sort = domain;
 
     for (std::size_t i = 0;
          i < to_constant_int2t(arrtype.array_size).as_ulong();
@@ -1531,7 +1502,7 @@ public:
                       ? solver->mkIntSort()
                       : solver->mkBVSort(domain_width == 0 ? 1 : domain_width);
     auto value = solver->mkArrayConst(idx_sort, expr(init_val));
-    return wrap(value, from_camada_sort(value->Sort));
+    return wrap(value, value->Sort);
   }
 
   ~camada_convt() override
@@ -1663,65 +1634,17 @@ private:
     return wrap(solver->mkBV2Int(op(a_bv, b_bv), true), mk_int_sort());
   }
 
-  static smt_sortt from_camada_sort(const camada::SMTSortRef &sort)
-  {
-    using namespace camada;
-    switch (sort->getSortKind())
-    {
-    case SMTSortKind::Bool:
-      return new camada_sort(SMT_SORT_BOOL, sort, 1);
-    case SMTSortKind::Int:
-      return new camada_sort(SMT_SORT_INT, sort);
-    case SMTSortKind::Real:
-      return new camada_sort(SMT_SORT_REAL, sort);
-    case SMTSortKind::BV:
-      return new camada_sort(SMT_SORT_BV, sort, sort->getWidth());
-    case SMTSortKind::FP:
-      return new camada_sort(SMT_SORT_FPBV, sort, sort->getWidth());
-    case SMTSortKind::RM:
-      return new camada_sort(SMT_SORT_FPBV_RM, sort, sort->getWidth());
-    case SMTSortKind::BVFP:
-      return new camada_sort(SMT_SORT_BVFP, sort, sort->getWidth());
-    case SMTSortKind::BVRM:
-      return new camada_sort(SMT_SORT_BVFP_RM, sort, sort->getWidth());
-    case SMTSortKind::Array:
-    {
-      unsigned index_width = 0;
-      auto index_sort = sort->getIndexSort();
-      if (index_sort->isBVSort())
-        index_width = index_sort->getWidth();
-
-      return new camada_sort(
-        SMT_SORT_ARRAY,
-        sort,
-        index_width,
-        from_camada_sort(sort->getElementSort()));
-    }
-    case SMTSortKind::Tuple:
-      unsupported("tuple sort conversion without ESBMC type");
-    case SMTSortKind::Function:
-      unsupported("function sorts");
-    case SMTSortKind::FXP:
-      // ESBMC lowers fixedbv to a plain BV (mk_fbv_sort), so camada never
-      // hands one back here.
-      unsupported("fixed-point sorts");
-    }
-
-    unsupported("unknown Camada sort kind");
-  }
-
   smt_astt wrap(const camada::SMTExprRef &value, smt_sortt sort)
   {
-    if (sort->is_tuple())
+    if (sort->isTupleSort())
       return new camada_tuple_ast(this, value, sort);
     return new camada_expr(this, value, sort);
   }
 
   template <typename Fn>
-  smt_astt
-  wrap_binary(smt_astt a, smt_astt b, Fn &&fn, smt_sortt sort = nullptr)
+  smt_astt wrap_binary(smt_astt a, smt_astt b, Fn &&fn, smt_sortt sort = {})
   {
-    if (sort == nullptr)
+    if (!sort)
       sort = a->sort;
     return wrap(fn(expr(a), expr(b)), sort);
   }
@@ -1742,7 +1665,7 @@ private:
   {
     auto as_bv = solver->mkIEEEFPToBV(expr(op));
     auto sign = solver->mkBVExtract(
-      op->sort->get_data_width() - 1, op->sort->get_data_width() - 1, as_bv);
+      op->sort->getWidth() - 1, op->sort->getWidth() - 1, as_bv);
     auto expected = solver->mkBVFromDec(negative ? 1 : 0, 1);
     return wrap(solver->mkEqual(sign, expected), boolean_sort);
   }
@@ -1754,16 +1677,14 @@ smt_astt camada_tuple_ast::update(
   unsigned int idx,
   const expr2tc &idx_expr) const
 {
-  if (sort->is_array())
+  if (sort->isArraySort())
     return smt_ast::update(ctx, value, idx, idx_expr);
 
-  assert(sort->is_tuple());
+  assert(sort->isTupleSort());
   assert(is_nil_expr(idx_expr));
 
   auto *cam_ctx = static_cast<camada_convt *>(ctx);
-  const std::size_t nfields = to_solver_smt_sort<camada::SMTSortRef>(sort)
-                                ->s->getTupleElementSorts()
-                                .size();
+  const std::size_t nfields = sort->getTupleElementSorts().size();
   std::vector<camada::SMTExprRef> fields;
   fields.reserve(nfields);
   for (std::size_t i = 0; i < nfields; ++i)
@@ -1781,12 +1702,9 @@ smt_astt
 camada_tuple_ast::project(smt_solver_baset *ctx, unsigned int elem) const
 {
   auto *cam_ctx = static_cast<camada_convt *>(ctx);
-  const std::vector<camada::SMTSortRef> &members =
-    to_solver_smt_sort<camada::SMTSortRef>(sort)->s->getTupleElementSorts();
+  const std::vector<camada::SMTSortRef> &members = sort->getTupleElementSorts();
   assert(elem < members.size());
-  return cam_ctx->wrap(
-    cam_ctx->solver->mkTupleSelect(a, elem),
-    camada_convt::from_camada_sort(members[elem]));
+  return cam_ctx->wrap(cam_ctx->solver->mkTupleSelect(a, elem), members[elem]);
 }
 
 smt_solver_baset *create_camada_solver(

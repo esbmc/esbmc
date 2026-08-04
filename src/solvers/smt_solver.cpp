@@ -74,7 +74,7 @@ unsigned int smt_solver_baset::get_member_name_field(
 smt_solver_baset::smt_solver_baset(
   const namespacet &_ns,
   const optionst &_options)
-  : ctx_level(0), boolean_sort(nullptr), ns(_ns), options(_options)
+  : ctx_level(0), ns(_ns), options(_options)
 {
   int_encoding = options.get_bool_option("int-encoding");
   ir_ieee = options.get_bool_option("ir-ieee");
@@ -266,13 +266,13 @@ void smt_solver_baset::pop_ctx()
 
 smt_astt smt_solver_baset::invert_ast(smt_astt a)
 {
-  assert(a->sort->is_bool());
+  assert(a->sort->isBoolSort());
   return mk_not(a);
 }
 
 smt_astt smt_solver_baset::imply_ast(smt_astt a, smt_astt b)
 {
-  assert(a->sort->is_bool() && b->sort->is_bool());
+  assert(a->sort->isBoolSort() && b->sort->isBoolSort());
   return mk_implies(a, b);
 }
 
@@ -836,7 +836,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       smt_astt zero = mk_smt_real("0.0");
       smt_astt op_nonneg = mk_le(zero, operand);
 
-      smt_astt sqrt_pos = mk_fresh(rs, "ra_sqrt::", nullptr);
+      smt_astt sqrt_pos = mk_fresh(rs, "ra_sqrt::", {});
       // operand >= 0 → sqrt_pos >= 0
       assert_ast(mk_or(mk_not(op_nonneg), mk_le(zero, sqrt_pos)));
       // operand >= 0 → sqrt_pos² = operand
@@ -844,7 +844,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
         mk_or(mk_not(op_nonneg), mk_eq(mk_mul(sqrt_pos, sqrt_pos), operand)));
 
       // Unconstrained result used when operand < 0.
-      smt_astt sqrt_nan = mk_fresh(rs, "ra_sqrt_nan::", nullptr);
+      smt_astt sqrt_nan = mk_fresh(rs, "ra_sqrt_nan::", {});
 
       // Interval-lifted enclosure for ieee_sqrt (--ir-ieee only).
       // sqrt is monotone increasing on [0, ∞), so the exact hull is:
@@ -878,8 +878,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
           smt_astt iv_lo_pos = mk_ite(mk_lt(iv.lo, zero), zero, iv.lo);
           smt_astt iv_hi_pos = mk_ite(mk_lt(iv.hi, zero), zero, iv.hi);
 
-          smt_astt lo_r = mk_fresh(rs, "ra_sqrt_lo::", nullptr);
-          smt_astt hi_r = mk_fresh(rs, "ra_sqrt_hi::", nullptr);
+          smt_astt lo_r = mk_fresh(rs, "ra_sqrt_lo::", {});
+          smt_astt hi_r = mk_fresh(rs, "ra_sqrt_hi::", {});
           assert_ast(mk_le(zero, lo_r));
           assert_ast(mk_eq(mk_mul(lo_r, lo_r), iv_lo_pos));
           assert_ast(mk_le(zero, hi_r));
@@ -1140,7 +1140,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       {
         // Symbolic or unsupported rounding mode: produce an unconstrained
         // integer-valued Real (sound but non-deterministically chosen).
-        smt_astt fresh = mk_fresh(mk_real_sort(), "ra_nearbyint::", nullptr);
+        smt_astt fresh = mk_fresh(mk_real_sort(), "ra_nearbyint::", {});
         assert_ast(mk_isint(fresh));
         a = fresh;
       }
@@ -1806,7 +1806,7 @@ smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
     return it->second;
   }
 
-  smt_sortt result = nullptr;
+  smt_sortt result = {};
   switch (type->type_id)
   {
   case type2t::bool_id:
@@ -2008,7 +2008,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
         if (ir_ieee && thereal.value.get_sign())
         {
           smt_astt neg_zero_ast =
-            mk_fresh(mk_real_sort(), "ir_ieee::neg_zero_const::", nullptr);
+            mk_fresh(mk_real_sort(), "ir_ieee::neg_zero_const::", {});
           smt_astt is_zero = mk_eq(neg_zero_ast, mk_smt_real("0"));
           assert_ast(is_zero);
           ir_ieee_api->store_neg_zero_pred(neg_zero_ast, is_zero);
@@ -2021,7 +2021,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
         if (ir_ieee)
         {
           smt_astt nan_var =
-            mk_fresh(mk_real_sort(), "ir_ieee::nan_const::", nullptr);
+            mk_fresh(mk_real_sort(), "ir_ieee::nan_const::", {});
           ir_ieee_api->store_nan_pred(nan_var, mk_smt_bool(true));
           return nan_var;
         }
@@ -2117,8 +2117,7 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
       ir_ieee && is_floatbv_type(sym.type) &&
       name.rfind("nondet$symex::nondet", 0) == 0)
     {
-      smt_astt nan_pred =
-        mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", nullptr);
+      smt_astt nan_pred = mk_fresh(mk_bool_sort(), "ir_ieee::nondet_nan::", {});
       ir_ieee_api->store_nan_pred(sym_ast, nan_pred);
 
       // A nondet float is otherwise an unconstrained real. Without this,
@@ -2158,10 +2157,10 @@ smt_astt smt_solver_baset::mk_fresh(
 {
   std::string newname = mk_fresh_name(tag);
 
-  if (s->is_tuple())
+  if (s->isTupleSort())
     return mk_tuple_symbol(newname, s);
 
-  if (s->is_array())
+  if (s->isArraySort())
   {
     assert(
       array_subtype != nullptr &&
@@ -2447,7 +2446,7 @@ smt_astt smt_solver_baset::round_fixedbv_to_int(
 smt_astt smt_solver_baset::make_bool_bit(smt_astt a)
 {
   assert(
-    a->sort->is_bool() &&
+    a->sort->isBoolSort() &&
     "Wrong sort fed to "
     "smt_solver_baset::make_bool_bit");
   smt_astt one =
@@ -2460,8 +2459,8 @@ smt_astt smt_solver_baset::make_bool_bit(smt_astt a)
 smt_astt smt_solver_baset::make_bit_bool(smt_astt a)
 {
   assert(
-    ((!int_encoding && a->sort->is_bv()) ||
-     (int_encoding && a->sort->is_int())) &&
+    ((!int_encoding && a->sort->isBVSort()) ||
+     (int_encoding && a->sort->isIntSort())) &&
     "Wrong sort fed to smt_solver_baset::make_bit_bool");
 
   smt_astt one =
@@ -2506,7 +2505,7 @@ smt_solver_baset::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
     return idx;
 
   smt_sortt s = convert_sort(arr_sort);
-  size_t domain_width = s->get_domain_width();
+  size_t domain_width = s->getIndexSort()->getWidth();
 
   // Otherwise, we need to extract the lower bits out of this.
   return typecast2tc(
@@ -3496,7 +3495,7 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
 
   // Fetch the array bounds, if it's huge then assume this is a 1024 element
   // array. Then fetch all elements and formulate a constant_array.
-  size_t w = array->sort->get_domain_width();
+  size_t w = array->sort->getIndexSort()->getWidth();
   if (w > 10)
     w = 10;
 
@@ -3795,14 +3794,14 @@ smt_astt smt_ast::update(
 {
   // If we're having an update applied to us, then the only valid situation
   // this can occur in is if we're an array.
-  assert(sort->is_array());
+  assert(sort->isArraySort());
 
   // We're an array; just generate a 'with' operation.
   expr2tc index;
   if (is_nil_expr(idx_expr))
   {
-    size_t dom_width =
-      ctx->int_encoding ? config.ansi_c.int_width : sort->get_domain_width();
+    size_t dom_width = ctx->int_encoding ? config.ansi_c.int_width
+                                         : sort->getIndexSort()->getWidth();
     index = constant_int2tc(unsignedbv_type2tc(dom_width), BigInt(idx));
   }
   else
@@ -3816,7 +3815,7 @@ smt_astt smt_ast::update(
 smt_astt smt_ast::select(smt_solver_baset *ctx, const expr2tc &idx) const
 {
   assert(
-    sort->is_array() && "Select operation applied to non-array scalar AST");
+    sort->isArraySort() && "Select operation applied to non-array scalar AST");
 
   smt_astt args[2];
   args[0] = this;
@@ -3974,7 +3973,7 @@ smt_astt smt_solver_baset::mk_bvredor(smt_astt op)
 {
   // bvredor = bvnot(bvcomp(x,0)) ? bv1 : bv0;
 
-  smt_astt comp = mk_eq(op, mk_smt_bv(BigInt(0), op->sort->get_data_width()));
+  smt_astt comp = mk_eq(op, mk_smt_bv(BigInt(0), op->sort->getWidth()));
 
   smt_astt ncomp = mk_not(comp);
 
@@ -3987,7 +3986,7 @@ smt_astt smt_solver_baset::mk_bvredand(smt_astt op)
   // bvredand = bvcomp(x,-1) ? bv1 : bv0;
 
   smt_astt comp =
-    mk_eq(op, mk_smt_bv(BigInt(ULLONG_MAX), op->sort->get_data_width()));
+    mk_eq(op, mk_smt_bv(BigInt(ULLONG_MAX), op->sort->getWidth()));
 
   // If it's true, return 1. Return 0, othewise.
   return mk_ite(comp, mk_smt_bv(1, 1), mk_smt_bv(BigInt(0), 1));
@@ -4201,24 +4200,24 @@ smt_astt smt_solver_baset::mk_bvslt(smt_astt a, smt_astt b)
 
 smt_astt smt_solver_baset::mk_gt(smt_astt a, smt_astt b)
 {
-  assert(a->sort->is_arith());
-  assert(b->sort->is_arith());
+  assert(a->sort->isArithSort());
+  assert(b->sort->isArithSort());
   return mk_lt(b, a);
 }
 
 smt_astt smt_solver_baset::mk_bvugt(smt_astt a, smt_astt b)
 {
-  assert(!a->sort->is_arith());
-  assert(!b->sort->is_arith());
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  assert(!a->sort->isArithSort());
+  assert(!b->sort->isArithSort());
+  assert(a->sort->getWidth() == b->sort->getWidth());
   return mk_not(mk_bvule(a, b));
 }
 
 smt_astt smt_solver_baset::mk_bvsgt(smt_astt a, smt_astt b)
 {
-  assert(!a->sort->is_arith());
-  assert(!b->sort->is_arith());
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  assert(!a->sort->isArithSort());
+  assert(!b->sort->isArithSort());
+  assert(a->sort->getWidth() == b->sort->getWidth());
   return mk_not(mk_bvsle(a, b));
 }
 
@@ -4245,25 +4244,25 @@ smt_astt smt_solver_baset::mk_bvsle(smt_astt a, smt_astt b)
 
 smt_astt smt_solver_baset::mk_ge(smt_astt a, smt_astt b)
 {
-  assert(!a->sort->is_arith());
-  assert(!b->sort->is_arith());
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  assert(!a->sort->isArithSort());
+  assert(!b->sort->isArithSort());
+  assert(a->sort->getWidth() == b->sort->getWidth());
   return mk_not(mk_lt(a, b));
 }
 
 smt_astt smt_solver_baset::mk_bvuge(smt_astt a, smt_astt b)
 {
-  assert(!a->sort->is_arith());
-  assert(!b->sort->is_arith());
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  assert(!a->sort->isArithSort());
+  assert(!b->sort->isArithSort());
+  assert(a->sort->getWidth() == b->sort->getWidth());
   return mk_not(mk_bvult(a, b));
 }
 
 smt_astt smt_solver_baset::mk_bvsge(smt_astt a, smt_astt b)
 {
-  assert(!a->sort->is_arith());
-  assert(!b->sort->is_arith());
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  assert(!a->sort->isArithSort());
+  assert(!b->sort->isArithSort());
+  assert(a->sort->getWidth() == b->sort->getWidth());
   return mk_not(mk_bvslt(a, b));
 }
 

@@ -46,8 +46,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
         fbv_type.exponent,
         fbv_type.fraction);
       smt_sortt rs = mk_real_sort();
-      smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
-      smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", {});
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", {});
       assert_ast(mk_le(ra_lo, real_result));
       assert_ast(mk_le(real_result, ra_hi));
       assert_ast(mk_le(ra_lo, ra_hi));
@@ -149,8 +149,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       // making them invisible in the SMT output.  Two mk_le assertions are
       // logically equivalent and are not targeted by solve-eqs, so they survive
       // in the final formula.
-      smt_astt ra_lo = mk_fresh(rs, "ra_lo::", nullptr);
-      smt_astt ra_hi = mk_fresh(rs, "ra_hi::", nullptr);
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo::", {});
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi::", {});
       assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo <= r - B(r)
       assert_ast(
         mk_le(ra_lo_expr, ra_lo)); // r - B(r) <= ra_lo  =>  ra_lo == r - B(r)
@@ -192,8 +192,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       // Introduce named enclosure variables. Use bidirectional inequalities to
       // survive Z3's solve-eqs tactic (same technique as the nearest-mode
       // path).
-      smt_astt ra_lo = mk_fresh(rs, "ra_lo_up::", nullptr);
-      smt_astt ra_hi = mk_fresh(rs, "ra_hi_up::", nullptr);
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_up::", {});
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_up::", {});
 
       // Pin ra_lo = r (the exact lower bound for round-up)
       assert_ast(mk_le(ra_lo, real_result)); // ra_lo <= r
@@ -238,8 +238,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       // Introduce named enclosure variables. Use bidirectional inequalities to
       // survive Z3's solve-eqs tactic (same technique as the other tight
       // paths).
-      smt_astt ra_lo = mk_fresh(rs, "ra_lo_dn::", nullptr);
-      smt_astt ra_hi = mk_fresh(rs, "ra_hi_dn::", nullptr);
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_dn::", {});
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_dn::", {});
 
       // Pin ra_lo = r - B_dir(r)  (the computed lower bound)
       assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo <= r - B_dir(r)
@@ -299,8 +299,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       // Introduce named enclosure variables. Use bidirectional inequalities to
       // survive Z3's solve-eqs tactic (same technique as the other tight
       // paths).
-      smt_astt ra_lo = mk_fresh(rs, "ra_lo_tz::", nullptr);
-      smt_astt ra_hi = mk_fresh(rs, "ra_hi_tz::", nullptr);
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_tz::", {});
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_tz::", {});
 
       // Pin ra_lo = ite(r >= 0, r - B_dir(r), r)
       assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo <= ra_lo_expr
@@ -356,8 +356,8 @@ smt_astt smt_solver_baset::apply_ieee754_semantics(
       // Introduce named enclosure variables. Use bidirectional inequalities to
       // survive Z3's solve-eqs tactic (same technique as the other tight
       // paths).
-      smt_astt ra_lo = mk_fresh(rs, "ra_lo_aw::", nullptr);
-      smt_astt ra_hi = mk_fresh(rs, "ra_hi_aw::", nullptr);
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_aw::", {});
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_aw::", {});
 
       // Pin ra_lo = r - B(r)
       assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo <= r - B(r)
@@ -847,7 +847,7 @@ smt_astt smt_solver_baset::convert_signbit(const expr2tc &expr)
   else
   {
     // In bitvector mode, extract the sign bit
-    const auto width = value->sort->get_data_width();
+    const auto width = value->sort->getWidth();
     is_neg =
       mk_eq(mk_extract(value, width - 1, width - 1), mk_smt_bv(BigInt(1), 1));
   }
@@ -898,16 +898,16 @@ smt_astt smt_solver_baset::convert_rounding_mode(const expr2tc &expr)
   // ROUND_TO_MINUS_INF=3, ROUND_TO_ZERO=4.
 
   smt_astt symbol = convert_ast(expr);
-  if (!symbol->sort->is_bv())
+  if (!symbol->sort->isBVSort())
   {
     log_warning(
       "unsupported symbolic rounding mode sort {}: falling back to "
       "ROUND_TO_ZERO",
-      static_cast<int>(symbol->sort->id));
+      static_cast<int>(symbol->sort->getSortKind()));
     return mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
   }
 
-  const auto width = symbol->sort->get_data_width();
+  const auto width = symbol->sort->getWidth();
 
   auto is_mode = [this, &symbol, width](int value) -> smt_astt {
     return mk_eq(symbol, mk_smt_bv(BigInt(value), width));
