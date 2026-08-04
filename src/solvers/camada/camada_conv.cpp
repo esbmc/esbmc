@@ -45,39 +45,6 @@ enum class camada_backendt
   smtlib
 };
 
-/* Everything that distinguishes one external one-shot solver from another.
- * Adding a solver means adding one of these plus a factory -- no new code
- * path, which is the point of driving them all through SMT-LIB. */
-struct oneshot_configt
-{
-  /* Option prefix: --<name>-prog, --<name>-model-prog. */
-  const char *name;
-  /* How the solver is named in messages. */
-  const char *display;
-  /* Command run on the formula file; %f is the path, appended when absent. */
-  const char *default_prog;
-  /* What this solver can parse: bv_only leaves the array/fp/tuple interfaces
-   * unset so ESBMC's flatteners lower everything to bit-vectors, and pins the
-   * emitted logic to QF_BV. Otherwise the logic follows ESBMC's encoding. */
-  bool bv_only;
-  /* Named in the "does not support --<strategy>" rejection. */
-  const char *mode;
-};
-
-const oneshot_configt oneshot_bitwuzllob{
-  "bitwuzllob",
-  "Bitwuzllob",
-  "mallob -mono=%f -mono-app=SMT",
-  false,
-  "Mallob in one-shot mono mode"};
-
-const oneshot_configt oneshot_neurosym{
-  "neurosym",
-  "NeuroSym",
-  "python main.py %f",
-  true,
-  "NeuroSym in one-shot batch mode"};
-
 bool backend_supports_tuples(camada_backendt backend)
 {
   switch (backend)
@@ -532,7 +499,7 @@ public:
     const namespacet &ns,
     const optionst &options,
     camada_backendt backend,
-    const oneshot_configt *oneshot = nullptr)
+    bool oneshot = false)
     : smt_solver_baset(ns, options),
       array_iface(true, true),
       fp_convt(this),
@@ -566,17 +533,17 @@ public:
         solver = create_esbmc_smtlib_solver(options);
         break;
       }
-      oneshot_prog = options.get_option(std::string(oneshot->name) + "-prog");
-      if (oneshot_prog.empty())
-        oneshot_prog = oneshot->default_prog;
-      formula_path =
-        oneshot_options::choose_formula_path(options, oneshot->name);
+      oneshot_prog = options.get_option("smtlib-oneshot-prog");
+      formula_path = oneshot_options::choose_formula_path(options, "smtlib");
+      /* An explicit --smtlib-logic is the user telling us what the external
+       * solver accepts; otherwise follow the encoding. */
+      const std::string logic = options.get_option("smtlib-logic");
       solver = create_esbmc_oneshot_solver(
         options,
-        oneshot->name,
+        "smtlib",
         formula_path,
         oneshot_prog,
-        oneshot->bv_only ? "QF_BV" : pick_logic(options, false));
+        logic.empty() ? pick_logic(options, false) : logic);
       break;
     }
   }
@@ -623,7 +590,7 @@ public:
       log_error(
         "the {} backend supports a single (check-sat) query per run; "
         "incremental strategies are not supported",
-        oneshot->name);
+        "smtlib");
       abort();
     }
     solved = true;
@@ -650,17 +617,17 @@ public:
          * style solvers exit 10/20. */
         log_error(
           "{}: solver command \"{}\" died with {}; discarding its verdict",
-          oneshot->name,
+          "smtlib",
           d.Command,
           d.ExitStatus);
       else if (tail_verdict(d.OutputTail) == camada::checkResult::UNKNOWN)
         /* The solver decided nothing and said so. */
-        log_error("{}: solver returned unknown", oneshot->name);
+        log_error("{}: solver returned unknown", "smtlib");
       else
         log_error(
           "{}: no sat/unsat verdict in the output of \"{}\" ({}); last output "
           "lines:\n{}",
-          oneshot->name,
+          "smtlib",
           d.Command,
           d.ExitStatus,
           d.OutputTail);
@@ -679,8 +646,8 @@ public:
       log_error(
         "{}: {} reported sat but the local model solver did not; refusing to "
         "build a counterexample from a diverging model",
-        oneshot->name,
-        oneshot->display);
+        "smtlib",
+        oneshot_prog);
       abort();
     }
 
@@ -693,19 +660,18 @@ public:
     {
       if (options.get_bool_option("result-only"))
         return P_SATISFIABLE;
-      if (options.get_option(std::string(oneshot->name) + "-model-prog")
-            .empty())
+      if (options.get_option("smtlib-oneshot-model-prog").empty())
         log_error(
           "{}: formula is satisfiable, but building the counterexample "
           "requires a local interactive SMT-LIB2 solver; re-run with "
-          "--{}-model-prog <cmd> (e.g. \"z3 -in\") or with --result-only",
-          oneshot->name,
-          oneshot->name);
+          "--smtlib-oneshot-model-prog <cmd> (e.g. \"z3 -in\") or with "
+          "--result-only",
+          "smtlib");
       else
         log_error(
           "{}: the local model solver is unavailable; cannot build a "
           "counterexample",
-          oneshot->name);
+          "smtlib");
       return P_ERROR;
     }
 
@@ -721,7 +687,7 @@ public:
    * solver, whose disappearance must be reported rather than defaulted. */
   const char *oneshot_label() const
   {
-    return oneshot ? oneshot->name : nullptr;
+    return oneshot ? "smtlib" : nullptr;
   }
 
   tvt get_bool(smt_astt a) override
@@ -1543,7 +1509,7 @@ public:
   const std::string solver_text() override
   {
     if (oneshot)
-      return std::string(oneshot->display) + " '" + oneshot_prog + "'";
+      return "one-shot '" + oneshot_prog + "'";
     return solver->getSolverNameAndVersion();
   }
 
@@ -1617,7 +1583,7 @@ private:
   std::unique_ptr<camada::SMTSolver> solver;
   const camada_backendt backend;
   /* Set when the SMT-LIB backend drives an external one-shot program. */
-  const oneshot_configt *oneshot = nullptr;
+  const bool oneshot = false;
   std::string oneshot_prog;
   std::string formula_path;
   bool solved = false;
@@ -1793,7 +1759,7 @@ smt_solver_baset *create_camada_solver(
   tuple_iface **tuple_api,
   array_iface **array_api,
   fp_convt **fp_api,
-  const oneshot_configt *oneshot = nullptr)
+  bool oneshot = false)
 {
   auto *solver = new camada_convt(ns, options, backend, oneshot);
   /* A one-shot script is flattened; only the interactive SMT-LIB backend
@@ -1802,10 +1768,14 @@ smt_solver_baset *create_camada_solver(
                  ? static_cast<tuple_iface *>(solver)
                  : nullptr;
 
-  /* A bv-only solver gets the array and fp interfaces left unset too, so
-   * create_solver() installs the flatteners that lower arrays and
-   * floating-point to bit-vectors before anything reaches the serializer. */
-  const bool bv_only = oneshot && oneshot->bv_only;
+  /* A caller-named logic is a promise about what the external solver parses.
+   * When it carries neither arrays nor floating-point (QF_BV, say), leave the
+   * array and fp interfaces unset so create_solver() installs the flatteners
+   * that lower both to bit-vectors before anything reaches the serializer. */
+  const std::string forced_logic = options.get_option("smtlib-logic");
+  const bool bv_only = !forced_logic.empty() &&
+                       forced_logic.find("A") == std::string::npos &&
+                       forced_logic.find("FP") == std::string::npos;
   *array_api = bv_only ? nullptr : solver;
   *fp_api = bv_only ? nullptr : solver;
   return solver;
@@ -1868,28 +1838,9 @@ smt_solver_baset *create_new_bitwuzla_solver(
     camada_backendt::bitwuzla, options, ns, tuple_api, array_api, fp_api);
 }
 
-smt_solver_baset *create_new_smtlib_solver(
-  const optionst &options,
-  const namespacet &ns,
-  tuple_iface **tuple_api,
-  array_iface **array_api,
-  fp_convt **fp_api)
-{
-  if (!options.get_bool_option("smt-formula-only"))
-    log_warning(
-      "[smtlib] the smtlib interface solving is unstable. Please, "
-      "use it with --smt-formula-only for production");
-
-  return create_camada_solver(
-    camada_backendt::smtlib, options, ns, tuple_api, array_api, fp_api);
-}
-
-/* The one-shot solvers process a single task and terminate; strategies that
- * solve repeatedly or incrementally cannot be served by them. */
-void reject_incremental_strategies(
-  const optionst &options,
-  const char *name,
-  const char *mode)
+/* The one-shot command processes a single task and exits; strategies that
+ * solve repeatedly or incrementally cannot be served by it. */
+void reject_incremental_strategies(const optionst &options)
 {
   static const char *incompatible[] = {
     "incremental-bmc",
@@ -1905,46 +1856,36 @@ void reject_incremental_strategies(
     if (options.get_bool_option(opt))
     {
       log_error(
-        "the {} backend runs {} and does not support --{}; use a linked "
-        "solver (e.g. --bitwuzla) for incremental strategies",
-        name,
-        mode,
+        "--smtlib-oneshot-prog runs the solver once and cannot serve --{}; "
+        "use a linked solver (e.g. --bitwuzla) for incremental strategies",
         opt);
       abort();
     }
 }
 
-smt_solver_baset *create_oneshot_solver(
-  const oneshot_configt &cfg,
+smt_solver_baset *create_new_smtlib_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
   array_iface **array_api,
   fp_convt **fp_api)
 {
-  reject_incremental_strategies(options, cfg.name, cfg.mode);
+  /* --smtlib-oneshot-prog selects the write-a-file-and-run-a-program shape;
+   * without it the script goes to an interactive solver or to --output. */
+  const bool oneshot = !options.get_option("smtlib-oneshot-prog").empty();
+  if (oneshot)
+    reject_incremental_strategies(options);
+  else if (!options.get_bool_option("smt-formula-only"))
+    log_warning(
+      "[smtlib] the smtlib interface solving is unstable. Please, "
+      "use it with --smt-formula-only for production");
+
   return create_camada_solver(
-    camada_backendt::smtlib, options, ns, tuple_api, array_api, fp_api, &cfg);
-}
-
-smt_solver_baset *create_new_bitwuzllob_solver(
-  const optionst &options,
-  const namespacet &ns,
-  tuple_iface **tuple_api,
-  array_iface **array_api,
-  fp_convt **fp_api)
-{
-  return create_oneshot_solver(
-    oneshot_bitwuzllob, options, ns, tuple_api, array_api, fp_api);
-}
-
-smt_solver_baset *create_new_neurosym_solver(
-  const optionst &options,
-  const namespacet &ns,
-  tuple_iface **tuple_api,
-  array_iface **array_api,
-  fp_convt **fp_api)
-{
-  return create_oneshot_solver(
-    oneshot_neurosym, options, ns, tuple_api, array_api, fp_api);
+    camada_backendt::smtlib,
+    options,
+    ns,
+    tuple_api,
+    array_api,
+    fp_api,
+    oneshot);
 }

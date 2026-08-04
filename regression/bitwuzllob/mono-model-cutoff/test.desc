@@ -1,5 +1,5 @@
 CORE
 main.c
---bitwuzllob --bitwuzllob-prog always-sat-mallob.sh --bitwuzllob-model-prog cutoff-model.sh
-^ERROR: bitwuzllob: the local model solver is unavailable
+--smtlib --smtlib-oneshot-prog always-sat-mallob.sh --smtlib-oneshot-model-prog cutoff-model.sh
+^ERROR: smtlib: the local model solver is unavailable
 ^ERROR: SMT solver failed

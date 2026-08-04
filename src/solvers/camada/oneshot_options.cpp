@@ -42,13 +42,12 @@ std::string choose_formula_path(const optionst &options, const char *name)
 
 std::string model_prog(const optionst &options, const char *name)
 {
-  std::string prog = options.get_option(std::string(name) + "-model-prog");
+  std::string prog = options.get_option("smtlib-oneshot-model-prog");
   if (!prog.empty() && options.get_bool_option("result-only"))
   {
     log_warning(
-      "{}: ignoring --{}-model-prog: --result-only never builds a "
+      "{}: ignoring --smtlib-oneshot-model-prog: --result-only never builds a "
       "counterexample, so no model solver is needed",
-      name,
       name);
     return "";
   }

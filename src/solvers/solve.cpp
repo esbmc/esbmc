@@ -17,8 +17,6 @@ solver_creator create_new_cvc5_solver;
 solver_creator create_new_mathsat_solver;
 solver_creator create_new_yices_solver;
 solver_creator create_new_bitwuzla_solver;
-solver_creator create_new_bitwuzllob_solver;
-solver_creator create_new_neurosym_solver;
 
 static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
 #ifdef SMTLIB
@@ -42,21 +40,13 @@ static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
 #ifdef BITWUZLA
   {"bitwuzla", create_new_bitwuzla_solver},
 #endif
-#ifdef BITWUZLLOB
-  {"bitwuzllob", create_new_bitwuzllob_solver},
-#endif
-#ifdef NEUROSYM
-  {"neurosym", create_new_neurosym_solver}
-#endif
 };
 
 // Order encodes default priority: the first compiled-in entry that is not
-// smtlib, bitwuzllob or neurosym is selected when no solver is explicitly
-// requested (those three depend on external programs; see pick_default_solver).
+// smtlib is selected when no solver is explicitly requested (smtlib needs an
+// external program the user must name; see pick_default_solver).
 static const std::string all_solvers[] = {
   "smtlib",
-  "bitwuzllob",
-  "neurosym",
   "bitwuzla",
   "z3",
   "minisat",
@@ -68,11 +58,9 @@ static std::string pick_default_solver()
 {
   for (const std::string &name : all_solvers)
   {
-    // smtlib, bitwuzllob and neurosym depend on external programs the user
-    // must configure, so they are never picked implicitly.
-    if (
-      name == "smtlib" || name == "bitwuzllob" || name == "neurosym" ||
-      !esbmc_solvers.count(name))
+    // smtlib depends on an external program the user must configure, so it is
+    // never picked implicitly.
+    if (name == "smtlib" || !esbmc_solvers.count(name))
       continue;
     log_status("No solver specified; defaulting to {}", name);
     return name;
@@ -159,10 +147,7 @@ pick_solver(std::string &solver_name, const optionst &options)
   // of letting the backend abort() at construction time (issue #5179). This is
   // reachable when Z3 is not built in, or when a bit-vector-only solver is
   // forced via --default-solver together with --ir / --ir-ieee.
-  if (
-    options.get_bool_option("int-encoding") &&
-    (solver_name == "bitwuzla" || solver_name == "bitwuzllob" ||
-     solver_name == "neurosym"))
+  if (options.get_bool_option("int-encoding") && solver_name == "bitwuzla")
   {
     log_error(
       "Integer/real arithmetic (--ir / --ir-ieee) requires a solver that "
@@ -171,6 +156,24 @@ pick_solver(std::string &solver_name, const optionst &options)
       "Z3 into ESBMC.",
       solver_name);
     exit(1);
+  }
+
+  /* --smtlib-logic names the fragment the external solver accepts; a
+   * quantifier-free bit-vector one cannot express the Int sorts --ir emits.
+   * Reject the combination rather than hand the solver a script it will not
+   * parse. */
+  if (options.get_bool_option("int-encoding") && solver_name == "smtlib")
+  {
+    const std::string logic = options.get_option("smtlib-logic");
+    if (!logic.empty() && logic.find("I") == std::string::npos)
+    {
+      log_error(
+        "Integer/real arithmetic (--ir / --ir-ieee) needs a logic with the "
+        "Int sort, but --smtlib-logic is '{}'. Drop --smtlib-logic to let the "
+        "encoding pick one, or name an integer-capable logic.",
+        logic);
+      exit(1);
+    }
   }
 
   auto it = esbmc_solvers.find(solver_name);

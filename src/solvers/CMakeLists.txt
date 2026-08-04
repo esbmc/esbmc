@@ -5,8 +5,6 @@ set(ESBMC_ENABLE_mathsat 0)
 set(ESBMC_ENABLE_yices 0)
 set(ESBMC_ENABLE_bitwuzla 0)
 set(ESBMC_ENABLE_smtlib 0)
-set(ESBMC_ENABLE_bitwuzllob 0)
-set(ESBMC_ENABLE_neurosym 0)
 
 add_subdirectory(prop)
 add_subdirectory(smt)

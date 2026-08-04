@@ -1,4 +1,4 @@
 CORE
 main.c
---bitwuzllob --bitwuzllob-prog fake-mallob.sh --result-only
+--smtlib --smtlib-oneshot-prog fake-mallob.sh --result-only
 ^VERIFICATION FAILED$

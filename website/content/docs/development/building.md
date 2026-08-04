@@ -315,15 +315,15 @@ alongside ESBMC (requires `doxygen` and `graphviz`). See the
 
 ## Building with all solvers
 
-ESBMC supports **Bitwuzla**, **Boolector**, **CVC4**, **CVC5**, **MathSAT**,
-**Yices 2** and **Z3**. All are optional, but without at least one solver ESBMC
-cannot verify most programs. For a single-solver build, the platform tabs above
-are enough.
+ESBMC supports **Bitwuzla**, **CVC5**, **MathSAT**, **Yices 2** and **Z3**. All
+are optional, but without at least one solver ESBMC cannot verify most
+programs. For a single-solver build, the platform tabs above are enough.
 
-ESBMC can additionally drive **Bitwuzllob** — Bitwuzla running on the massively
-parallel [Mallob](https://satres.kikit.kit.edu/) platform — as an external
-process; see [Using Bitwuzllob](#using-bitwuzllob) below. It needs no build-time
-setup (the backend is enabled by default, `-DENABLE_BITWUZLLOB=ON`).
+Solvers ESBMC does not link against can still be driven over SMT-LIB2 — either
+interactively or as a one-shot external process; see
+[Using external solvers](#using-external-solvers) below. That needs no
+build-time setup beyond the SMT-LIB backend, which is on by default
+(`-DENABLE_SMTLIB=ON`).
 
 The recipe below mirrors the multi-solver build used in ESBMC's CI: build each
 solver into the project directory, then point the configure step at them. Build
@@ -468,31 +468,58 @@ enable ESBMC's internal assertions.
 
 {{% /steps %}}
 
-## Using Bitwuzllob
+## Using external solvers
 
-Bitwuzllob (Schreiber, Niemetz, Preiner — TACAS'26) integrates Bitwuzla into
-the massively parallel Mallob platform, distributing the bit-blasted SAT
-queries across hundreds of cores. Mallob is an MPI program that cannot be
-linked into ESBMC, so the `--bitwuzllob` backend writes the verification
-condition to an SMT-LIB2 file and runs Mallob's one-shot *mono* mode on it as
-an external process. Notes:
+The SMT-LIB backend drives any solver ESBMC is not linked against. Two shapes:
 
-- **Linux only** (Mallob supports x86/ARM Linux). Build Mallob with the SMT
-  application engine following the artifact of the TACAS'26 paper
-  (https://doi.org/10.5281/zenodo.17478480), and make sure the `mallob` binary
-  and its MPI runtime are available.
-- The command is configurable via `--bitwuzllob-prog`; every `%f` is replaced
-  by the formula file (default: `mallob -mono=%f -mono-app=SMT`). For example:
-  `esbmc file.c --bitwuzllob --bitwuzllob-prog "mpirun -np 8 mallob -mono=%f -mono-app=SMT"`.
-- A terminated mono process cannot answer model queries, so building a
-  counterexample additionally needs a local interactive SMT-LIB2 solver via
-  `--bitwuzllob-model-prog` (e.g. `"z3 -in"` or `"bitwuzla"`); it replays the
-  same formula and serves the `(get-value ...)` queries. Alternatively pass
-  `--result-only` to skip the counterexample.
-- One-shot mono mode serves a single `(check-sat)`, so incremental strategies
+**Interactive.** `--smtlib --smtlib-solver-prog "z3 -in"` pipes the script to a
+solver that speaks SMT-LIB2 on stdin and stays alive to answer model queries.
+The command is executed directly, not through a shell, so quotes and shell
+metacharacters in it are not interpreted.
+
+**One-shot.** `--smtlib --smtlib-oneshot-prog CMD` writes the formula to a file
+and runs `CMD` on it once, reading the verdict from its output. This suits
+solvers that cannot be linked in or driven interactively. Every `%f` in `CMD`
+is replaced by the formula file (appended when absent), and the command *is*
+run through a shell, so do not build it from untrusted input.
+
+Two examples of solvers used this way:
+
+- **Bitwuzllob** (Schreiber, Niemetz, Preiner — TACAS'26) integrates Bitwuzla
+  into the massively parallel [Mallob](https://satres.kikit.kit.edu/) platform,
+  distributing the bit-blasted SAT queries across hundreds of cores. Mallob is
+  an MPI program, Linux-only; build it with the SMT application engine
+  following the artifact of the TACAS'26 paper
+  (https://doi.org/10.5281/zenodo.17478480):
+
+  ```sh
+  esbmc file.c --smtlib \
+    --smtlib-oneshot-prog "mpirun -np 8 mallob -mono=%f -mono-app=SMT"
+  ```
+
+- **NeuroSym**, a neural-guided solver (a GAN proposes candidate models, with a
+  Z3 fallback preserving soundness), parses only QF_BV and QF_LIA, so name the
+  fragment explicitly:
+
+  ```sh
+  esbmc file.c --smtlib --smtlib-oneshot-prog "python main.py %f" \
+    --smtlib-logic QF_BV
+  ```
+
+Notes that apply to any one-shot solver:
+
+- The process exits with its verdict and cannot answer `(get-value ...)`, so
+  building a counterexample additionally needs a local interactive SMT-LIB2
+  solver via `--smtlib-oneshot-model-prog` (e.g. `"z3 -in"`); it replays the
+  same formula and serves the model queries. Alternatively pass `--result-only`
+  to skip the counterexample.
+- A single `(check-sat)` is served, so incremental strategies
   (`--incremental-bmc`, `--k-induction`, ...) are rejected — use a linked
-  solver such as `--bitwuzla` for those. Like Bitwuzla, Bitwuzllob is
-  bit-vector-only and cannot serve `--ir`/`--ir-ieee`.
+  solver such as `--bitwuzla` for those.
+- `--smtlib-logic` overrides the logic ESBMC derives from the encoding. One
+  without the array or floating-point sorts (`QF_BV`, say) also makes ESBMC
+  flatten both away before serializing, and cannot serve `--ir`/`--ir-ieee`.
+- The SMT-LIB backend is never selected implicitly; it must be asked for.
 
 ## Advanced
 

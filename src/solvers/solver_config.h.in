@@ -26,10 +26,3 @@
 #define SMTLIB
 #endif
 
-#if @ESBMC_ENABLE_bitwuzllob@
-#define BITWUZLLOB
-#endif
-
-#if @ESBMC_ENABLE_neurosym@
-#define NEUROSYM
-#endif
