@@ -328,6 +328,29 @@ class Main(unittest.TestCase):
         rc = cf.main([])
         self.assertEqual(rc, 1)
 
+    def test_heap_addresses_do_not_split_one_finding(self):
+        """UBSan embeds the faulting address mid-message, and those messages
+        carry no colon for the kind-split to cut at. Left in the dedup key,
+        one recurring defect reported as thousands of distinct findings and
+        the summary outgrew the 1 MB job-summary limit."""
+        addrs = ["0x5555aaaa", "0x7777bbbb", "0x9999cccc"]
+        _write(
+            self.dir, "sanitizer.600", "".join(
+                "a.cpp:1:2: runtime error: member access within address "
+                f"{a} with insufficient space for an object of type X\n"
+                for a in addrs))
+        findings = cf.parse_log(self.dir / "sanitizer.600")
+        self.assertEqual(len(findings), len(addrs))
+        self.assertEqual(len(set(findings)), 1)
+        self.assertIn("0xADDR", next(iter(set(findings))).kind)
+
+    def test_kind_split_still_trims_at_the_colon(self):
+        _write(
+            self.dir, "sanitizer.601",
+            "b.cpp:3:4: runtime error: signed integer overflow: 1 + 2\n")
+        findings = cf.parse_log(self.dir / "sanitizer.601")
+        self.assertEqual(findings[0].kind, "signed integer overflow")
+
     def test_missing_arg_errors(self):
         with self.assertRaises(SystemExit) as ctx:
             cf.main([])
