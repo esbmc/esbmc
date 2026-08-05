@@ -32,11 +32,17 @@ typedef struct
 #  define WEOF ((wint_t)-1)
 #endif
 
-#ifndef WCHAR_MIN
-#  define WCHAR_MIN 0
-#endif
+// Take the limits from the target. <stdint.h> guards its own copies the same
+// way, so a literal here would win on include order and disagree with wchar_t.
 #ifndef WCHAR_MAX
-#  define WCHAR_MAX 0x7fff
+#  define WCHAR_MAX __WCHAR_MAX__
+#endif
+#ifndef WCHAR_MIN
+#  if L'\0' - 1 > 0
+#    define WCHAR_MIN (L'\0' + 0)
+#  else
+#    define WCHAR_MIN (-WCHAR_MAX - 1)
+#  endif
 #endif
 
 // Only the routines with a model in library/wchar.c are declared. Declaring a

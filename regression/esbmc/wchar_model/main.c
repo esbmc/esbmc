@@ -41,5 +41,14 @@ int main(void)
 
   mbstate_t st = {0};
   __ESBMC_assert(mbsinit(&st), "a zeroed state is the initial one");
+
+  // The limits must bound wchar_t itself: too narrow a value would still win
+  // over <stdint.h>'s on include order, and check a program at the wrong width.
+  __ESBMC_assert(
+    (wchar_t)((long long)WCHAR_MAX + 1) != (long long)WCHAR_MAX + 1,
+    "WCHAR_MAX is the largest wchar_t");
+  __ESBMC_assert(
+    (wchar_t)((long long)WCHAR_MIN - 1) != (long long)WCHAR_MIN - 1,
+    "WCHAR_MIN is the smallest wchar_t");
   return 0;
 }
