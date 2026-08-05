@@ -376,11 +376,19 @@ endfunction()
 # Absolute model-source paths -> the VFS paths c2goto is handed instead, so no
 # build-tree path is baked into the goto binary. Mirrors the prefixes
 # register_bundled_libc() registers them under.
+if(WIN32)
+  # Must track clang_vfs_path(): the registry keys carry the drive letter there,
+  # so a bare "/esbmc-vfs/..." would miss every lookup.
+  set(vfs_root "C:/esbmc-vfs")
+else()
+  set(vfs_root "/esbmc-vfs")
+endif()
+
 function(model_vfs_paths output)
   set(result "")
   foreach(f ${ARGN})
     file(RELATIVE_PATH rel "${CMAKE_CURRENT_SOURCE_DIR}/library" "${f}")
-    list(APPEND result "/esbmc-vfs/libc/library/${rel}")
+    list(APPEND result "${vfs_root}/libc/library/${rel}")
   endforeach()
   set(${output} "${result}" PARENT_SCOPE)
 endfunction()
