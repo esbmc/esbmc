@@ -18,6 +18,7 @@ class PreprocessorStateMixin:
         self.functionKwonlyParams = {}
         self.functionVarargs = set()
         self._vararg_func_defs = {}
+        self._vararg_module_defs = set()
         self._vararg_specializations = {}
         self._vararg_dropped_defs = set()
         self.listcomp_counter = 0

@@ -6,15 +6,25 @@ import copy
 
 class VarargMixin:
 
+    def _scan_module_vararg_defs(self, node):
+        """Mark the variadic defs that live directly in the module body.
+
+        Specializations are injected at module level, so only a def at that
+        level can be copied: a nested one would lose the scope it closes over.
+        """
+        self._vararg_module_defs = {
+            id(stmt)
+            for stmt in node.body if isinstance(stmt, ast.FunctionDef) and stmt.args.vararg
+        }
+
     def _record_vararg_function(self, node, qualified_name):
         if node.args.vararg:
             self.functionVarargs.add(qualified_name)
-            if "." not in qualified_name:
-                self._vararg_func_defs[qualified_name] = node
-                # The variadic definition itself has no lowering; only its
-                # fixed-arity specializations reach the converter.
-                if self._name_is_used(node.body, node.args.vararg.arg):
-                    self._vararg_dropped_defs.add(id(node))
+            # Registered only once visited, since a specialization is a copy of
+            # the body as the converter will see it -- an unvisited body still
+            # holds constructs (`for`, comprehensions) with no lowering there.
+            if id(node) in self._vararg_module_defs:
+                self._vararg_func_defs[node.name] = node
         else:
             self.functionVarargs.discard(qualified_name)
             self._vararg_func_defs.pop(qualified_name, None)
@@ -42,7 +52,7 @@ class VarargMixin:
                 for stmt in func_def.body for inner in ast.walk(stmt)):
             return False
         # A recursive call inside the copied body would still target the
-        # variadic original, which is dropped from the module.
+        # variadic original, so the copy would not be self-contained.
         return not self._name_is_used(func_def.body, func_def.name)
 
     def _specialize_vararg_call(self, node):
@@ -60,6 +70,7 @@ class VarargMixin:
             self._vararg_specializations[spec_name] = self._build_vararg_specialization(
                 func_def, spec_name, extra)
         node.func = ast.Name(id=spec_name, ctx=ast.Load())
+        self._vararg_dropped_defs.add(id(func_def))
         ast.fix_missing_locations(node)
 
     def _build_vararg_specialization(self, func_def, spec_name, extra):
@@ -71,10 +82,7 @@ class VarargMixin:
         spec.args.vararg = None
         spec.args.kwarg = None
         elts = [ast.Name(id=name, ctx=ast.Load()) for name in pad]
-        # An empty tuple cannot be iterated or subscripted by the converter, so
-        # the zero-argument specialization binds an empty list instead.
-        packed = ast.List(elts=[], ctx=ast.Load()) if not elts else ast.Tuple(
-            elts=elts, ctx=ast.Load())
+        packed = ast.Tuple(elts=elts, ctx=ast.Load())
         pack = ast.Assign(targets=[ast.Name(id=vararg_name, ctx=ast.Store())], value=packed)
         spec.body = [pack] + spec.body
         self.functionParams[spec_name] = [arg.arg for arg in spec.args.args]
@@ -85,8 +93,17 @@ class VarargMixin:
     def _inject_vararg_specializations(self, node):
         if not self._vararg_dropped_defs:
             return
-        node.body = [stmt for stmt in node.body if id(stmt) not in self._vararg_dropped_defs]
         specializations = list(self._vararg_specializations.values())
+        survivors = [stmt for stmt in node.body if id(stmt) not in self._vararg_dropped_defs]
+        # A variadic def is dead only once every reference to it has been
+        # rewritten; a call this pass cannot lower (`*` unpacking, an alias, a
+        # caller in another module) must keep the original, so the frontend
+        # reports the unsupported construct rather than a call to a function
+        # that no longer exists.
+        node.body = [
+            stmt for stmt in node.body if id(stmt) not in self._vararg_dropped_defs
+            or self._name_is_used(survivors + specializations, stmt.name)
+        ]
         for spec in specializations:
             self.ensure_all_locations(spec)
             ast.fix_missing_locations(spec)
