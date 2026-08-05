@@ -255,6 +255,9 @@ set(REGRESSIONS_CPP17 esbmc-cpp17/cpp
 # list of C++20 test suites
 set(REGRESSIONS_CPP20 esbmc-cpp20/cpp)
 
+# list of C++23 test suites
+set(REGRESSIONS_CPP23 esbmc-cpp23/cpp)
+
 # enable test case geeneration
 set(TEST_GENERATION witnesses/test_case_generation)
 
@@ -286,6 +289,7 @@ if(APPLE)
                     ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP17}
                     ${REGRESSIONS_CPP20}
+                    ${REGRESSIONS_CPP23}
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
@@ -350,6 +354,7 @@ else()
                     ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
                     incremental-smt
+                    ${REGRESSIONS_CPP23}
                     ${REGRESSIONS_CPP20}
                     ${REGRESSIONS_CPP17}
                     ${REGRESSIONS_CPP14}
