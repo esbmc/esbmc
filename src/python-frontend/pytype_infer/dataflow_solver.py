@@ -67,7 +67,7 @@ def analyze_function(func_node: ast.FunctionDef, max_iters=50):
             for stmt in stmts:
                 if isinstance(stmt, ast.Assign):
                     print(ast.dump(stmt, indent=2))
-                    targets = stmt.targets if hasattr(stmt,'targets') else [stmt.target]
+                    targets = stmt.targets
                     if len(targets)>=1 and isinstance(targets[0], ast.Name):
                         name = targets[0].id
                         val = stmt.value
@@ -78,6 +78,20 @@ def analyze_function(func_node: ast.FunctionDef, max_iters=50):
                             env[name] = env[name].join(t)
                         else:
                             env[name] = t
+                    elif (len(targets) >=1 and isinstance(targets[0], ast.Subscript) and isinstance(targets[0].value, ast.Name)):
+                        dict_name = targets[0].value.id
+                        key_type = infer_type_from_expr(targets[0].slice, env)
+                        value_type = infer_type_from_expr(stmt.value, env)
+                        cur = env.get(dict_name)
+                        if isinstance(cur, DictType):
+                            env[dict_name] = DictType(cur.key_t.join(key_type), cur.val_t.join(value_type))
+                        elif isinstance(cur, Unknown):
+                            if isinstance(key_type, StrType):
+                                env[dict_name] = DictType(key_type, value_type)
+                            else:
+                                env[dict_name] = Unknown()
+                        else:
+                            env[dict_name] = Unknown()                
                 elif isinstance(stmt, ast.AnnAssign):
                     target = stmt.target
                     if isinstance(target, ast.Name):
@@ -508,6 +522,8 @@ def infer_type_from_expr(expr, env):
             t = env.get(name, Unknown())
             if isinstance(t, ListType):
                 return t.elem
+            if isinstance(t, DictType):
+                return t.val_t
         return Unknown()
     if isinstance(expr, ast.Call):
        func = expr.func
