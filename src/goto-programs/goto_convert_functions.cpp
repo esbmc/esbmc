@@ -602,10 +602,9 @@ bool goto_convert_functionst::convert_native_rec(
     //  - a side-effect value (remove_sideeffects lowers it into extra instrs),
     //  - a cpp-throw return value (converted as a statement, no RETURN),
     //  - a top-level ternary (remove_sideeffects lowers `c ? a : b`),
-    //  - a missing value in a value-returning function (nondet replacement).
-    // A void function returning a value is a C/C++ constraint violation the
-    // frontend rejects, so it never reaches here; only a valueless void return
-    // does, which correctly emits just the end-of-function goto below.
+    //  - a missing value in a value-returning function (nondet replacement),
+    //  - a value returned from a void function (a diagnostic convert_return
+    //    emits; C/C++ reject that shape, Solidity does not).
     // When the destructor stack holds a destructor FUNCTION_CALL,
     // convert_return runs an unwind-before-RETURN (C++ [stmt.return]: capture
     // the value into a temp, run the destructors, then return the temp; a
@@ -652,6 +651,8 @@ bool goto_convert_functionst::convert_native_rec(
       r->code = code2;
       r->location = emitted_location(ret.location);
     }
+    else if (val.is_not_nil() && val.type().id() != "empty")
+      return delegate_to_legacy();
 
     goto_programt::targett g = dest.add_instruction();
     g->make_goto(targets.return_target, gen_true_expr());
