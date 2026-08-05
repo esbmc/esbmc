@@ -410,7 +410,7 @@ void bmct::show_program(const symex_target_equationt &eq)
   if (config.options.get_bool_option("ssa-symbol-table"))
     ::show_symbol_table_plain(ns, oss);
 
-  languagest languages(ns, language_idt::C);
+  languagest languages(ns, configured_language());
 
   oss << "\nProgram constraints: \n";
 
@@ -567,6 +567,46 @@ void bmct::clear_verified_claims_in_goto(
   }
 }
 
+namespace
+{
+/// States nearest the failure are the ones that explain it; the rest is
+/// prologue repeated almost verbatim across every witness (#4311). Keep the
+/// last @p keep of them and replace what precedes with a count, so the reader
+/// still knows the trace was shortened. Operates on the rendered text because
+/// that is what "states in the report" means -- show_goto_trace decides for
+/// itself which steps become states.
+std::string keep_last_trace_states(const std::string &rendered, size_t keep)
+{
+  // Rendered states start at column 0 with "State ".
+  std::vector<size_t> starts;
+  for (size_t pos = 0; pos != std::string::npos;)
+  {
+    size_t hit = rendered.compare(pos, 6, "State ") == 0
+                   ? pos
+                   : rendered.find("\nState ", pos);
+    if (hit == std::string::npos)
+      break;
+    if (rendered.compare(hit, 6, "State ") != 0)
+      ++hit; // skip the newline the search matched on
+    starts.push_back(hit);
+    pos = hit + 6;
+  }
+
+  if (starts.size() <= keep)
+    return rendered;
+
+  const size_t omitted = starts.size() - keep;
+  const size_t cut = starts[omitted];
+  return rendered.substr(0, starts.front()) + "... " + std::to_string(omitted) +
+         " earlier states omitted (--full-traces to show them) ...\n\n" +
+         rendered.substr(cut);
+}
+
+/// Matches the K=50 the issue proposes; large enough to keep the explanatory
+/// tail of a trace, small enough that N witnesses stay readable.
+constexpr size_t kMaxReportedStates = 50;
+} // namespace
+
 void bmct::report_multi_property_trace(
   const smt_resultt &res,
   const std::vector<witness_recordt> &witnesses,
@@ -625,6 +665,52 @@ void bmct::report_multi_property_trace(
   oss << (reachability_trace ? "\n[Reachability traces - "
                              : "\n[Counterexamples - ")
       << witnesses.size() << " witnesses]\n\n";
+  // Say up front that this is a truncated enumeration. The same fact reaches
+  // the Summary footer below, but that sits after every witness block -- tens
+  // of kilobytes on a real program -- so a reader can easily act on a partial
+  // list without realising it (#4311).
+  if (stop_reason == enumeration_stop_reasont::CapHit)
+    oss << "  NOTE: --max-witnesses cap reached; more witnesses may exist.\n\n";
+  // The inputs are the part that actually differs between witnesses, and they
+  // are what a reader needs first. Per-witness they sit one trace apart, so on
+  // a real program comparing them means paging through tens of kilobytes of
+  // near-identical trace. Collect them up front (#4311). ASCII only, for the
+  // same cp1252 reason as the header above.
+  {
+    bool any_inputs = false;
+    for (const witness_recordt &w : witnesses)
+      if (!w.nondet_inputs.empty())
+      {
+        any_inputs = true;
+        break;
+      }
+
+    if (any_inputs)
+    {
+      oss << "  Inputs by witness:\n";
+      for (size_t i = 0; i < witnesses.size(); ++i)
+      {
+        const witness_recordt &w = witnesses[i];
+        oss << "    #" << (i + 1) << " : ";
+        if (w.nondet_inputs.empty())
+          oss << "(none)";
+        else
+          for (size_t k = 0; k < w.nondet_inputs.size(); ++k)
+          {
+            if (k)
+              oss << ", ";
+            oss << "[" << k << "] = "
+                << from_expr(
+                     ns,
+                     "",
+                     w.nondet_inputs[k].value_expr,
+                     presentationt::WITNESS);
+          }
+        oss << "\n";
+      }
+      oss << "\n";
+    }
+  }
   for (size_t i = 0; i < witnesses.size(); ++i)
   {
     const witness_recordt &w = witnesses[i];
@@ -656,6 +742,8 @@ void bmct::report_multi_property_trace(
       show_goto_trace(tr, ns, w.trace, reachability_trace);
       // Indent the trace under the box.
       std::string s = tr.str();
+      if (!options.get_bool_option("full-traces"))
+        s = keep_last_trace_states(s, kMaxReportedStates);
       std::string indented;
       indented.reserve(s.size() + 8);
       indented += "  │    ";
@@ -1532,7 +1620,11 @@ void bmct::report_result(smt_resultt &res)
         !options.get_bool_option("kind-violation-found") &&
         !(is && options.get_bool_option("disable-inductive-step")))
       {
-        if (vacuity_detected || ltl_uninstrumented)
+        // A bounded round proves nothing on its own: the driver decides the
+        // verdict once the search becomes exhaustive.
+        if (options.get_bool_option("suppress-bounded-success"))
+          log_status("No violation found within the current context bound");
+        else if (vacuity_detected || ltl_uninstrumented)
           report_unknown();
         else
           report_success();
@@ -1626,6 +1718,10 @@ smt_resultt bmct::start_bmc()
     sarif_goto_trace(options, ns, empty_trace, dead_store_advisories);
     dead_store_sarif_written = true;
   }
+
+  if (symex)
+    cs_bound_pruned = symex->cs_bound_pruned;
+
   return res;
 }
 
@@ -2125,48 +2221,81 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
     Type{"LTL_SUCCEEDING", ltl_res_succeeding},
   };
 
-  size_t total_asserts = 0;
+  auto is_prefix_assert = [](const irep_idt &comment) {
+    for (const auto &[which, _] : seq)
+      if (comment == which)
+        return true;
+    return false;
+  };
 
-  for (const auto &[which, check] : seq)
-  {
+  /* Solve `equation` with only the assertions `keep` selects enabled; the rest
+   * become skips and are restored before returning. Yields the solver result
+   * and how many assertions were actually left to check. */
+  auto solve_only = [&](auto keep) {
+    std::vector<symex_target_equationt::SSA_stepst::iterator> masked;
     size_t num_asserts = 0;
-
-    /* Start by turning all assertions that aren't the sought prefix assertion
-     * into skips. */
-    for (auto &SSA_step : equation.SSA_steps)
-      if (SSA_step.is_assert())
+    for (auto it = equation.SSA_steps.begin(); it != equation.SSA_steps.end();
+         ++it)
+      if (it->is_assert())
       {
-        if (SSA_step.comment != which)
-          SSA_step.type = goto_trace_stept::SKIP;
+        if (keep(it->comment))
+          num_asserts++;
         else
         {
-          num_asserts++;
-          total_asserts++;
+          masked.push_back(it);
+          it->type = goto_trace_stept::SKIP;
         }
       }
 
     smt_resultt solver_result = P_UNSATISFIABLE;
     std::unique_ptr<smt_convt> smt_conv;
-    log_status("Checking for {}", which);
     if (num_asserts != 0)
     {
       smt_conv.reset(create_solver("", ns, options));
       solver_result = run_decision_procedure(*smt_conv, equation);
-      if (solver_result == P_SATISFIABLE)
-        log_status("Found trace satisfying {}", which);
     }
-    else
-      log_warning("Couldn't find {} assertion", which);
 
-    /* Turn skip steps back into assertions. */
-    for (auto &SSA_step : equation.SSA_steps)
-      if (SSA_step.is_skip())
-        for (const auto &[which2, _] : seq)
-          if (SSA_step.comment == which2)
-          {
-            SSA_step.type = goto_trace_stept::ASSERT;
-            break;
-          }
+    for (auto &it : masked)
+      it->type = goto_trace_stept::ASSERT;
+
+    return std::make_tuple(solver_result, num_asserts, std::move(smt_conv));
+  };
+
+  /* A prefix verdict only describes the program if the monitor ran to
+   * completion. Everything that is not a prefix assertion -- the unwinding
+   * assertions and libltl2ba's own "Unwind bound ... insufficient" guard
+   * included -- is masked out below, so check it first: a violation there
+   * means the automaton was truncated and no prefix claim follows (#6547). */
+  log_status("Checking LTL monitor preconditions");
+  smt_resultt guard_result = std::get<0>(
+    solve_only([&](const irep_idt &c) { return !is_prefix_assert(c); }));
+  switch (guard_result)
+  {
+  case P_SATISFIABLE:
+    log_warning(
+      "LTL monitor preconditions violated, the automaton did not run to "
+      "completion; prefix outcome is inconclusive");
+    return ltl_res_uninstrumented;
+  case P_ERROR:
+    return -2;
+  case P_SMTLIB:
+    return -1;
+  case P_UNSATISFIABLE:
+    break;
+  }
+
+  size_t total_prefix_asserts = 0;
+  for (const auto &[which, check] : seq)
+  {
+    log_status("Checking for {}", which);
+    auto [solver_result, num_asserts, smt_conv] =
+      solve_only([&](const irep_idt &c) { return c == which; });
+    total_prefix_asserts += num_asserts;
+
+    if (num_asserts == 0)
+      log_warning("Couldn't find {} assertion", which);
+    else if (solver_result == P_SATISFIABLE)
+      log_status("Found trace satisfying {}", which);
 
     switch (solver_result)
     {
@@ -2188,7 +2317,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
   /* Every prefix assertion was absent rather than discharged, so this formula
    * carries no monitor instrumentation and says nothing about the property.
    * Reporting the top of the lattice here would claim a proof we never ran. */
-  if (total_asserts == 0)
+  if (total_prefix_asserts == 0)
     return ltl_res_uninstrumented;
 
   /* Otherwise, we just got a good prefix. */
@@ -2204,7 +2333,10 @@ smt_resultt bmct::multi_property_check(
   // Initial values
   smt_resultt final_result = P_UNSATISFIABLE;
   std::mutex result_mutex;
-  std::unordered_set<size_t> jobs;
+  // Solved in claim order: an unordered container would make the per-claim
+  // solve order — and which claim a shared-solver bug lands on — vary by
+  // standard library.
+  std::vector<size_t> jobs;
 
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
@@ -2288,7 +2420,7 @@ smt_resultt bmct::multi_property_check(
 
   // TODO: This is the place to check a cache
   for (size_t i = 1; i <= remaining_claims; i++)
-    jobs.emplace(i);
+    jobs.push_back(i);
 
   /* This is a JOB that will:
    * 1. Generate a solver instance for a specific claim (@parameter i)
@@ -2420,6 +2552,26 @@ smt_resultt bmct::multi_property_check(
       solver_ptr = new_solver.get();
     }
 
+    // --smt-during-symex shares one persistent solver across every claim.
+    // Scope this claim's re-encoded formula in a context frame; without it
+    // the negated assertion stays asserted forever, and once one claim's
+    // negation is unsatisfiable every later claim solves UNSAT and is
+    // misreported as PASSED (issue #6540).
+    struct solver_ctx_framet
+    {
+      smt_convt *conv;
+      explicit solver_ctx_framet(smt_convt *c) : conv(c)
+      {
+        if (conv)
+          conv->push_ctx();
+      }
+      ~solver_ctx_framet()
+      {
+        if (conv)
+          conv->pop_ctx();
+      }
+    } ctx_frame(new_solver ? nullptr : solver_ptr);
+
     // Store solver name initially but not again
     std::call_once(solver_stats.name_flag, [&]() {
       solver_stats.name = solver_ptr->solver_text();
@@ -2483,22 +2635,26 @@ smt_resultt bmct::multi_property_check(
           claim.claim_cstr,
           is ? property_verdictt::Unknown : property_verdictt::Failed,
           is ? "inductive step could not prove this claim" : "");
-      else if (is_cov_goal)
+      else
       {
-        // No answer at all: neither reached nor unreached. Recorded so the
-        // goal still gets a line and the run closes as INCOMPLETE.
-        goto_functionst::property_verdicts.record(
-          claim.claim_cstr, property_verdictt::Unknown);
-        if (solver_result == P_SMTLIB)
-          note_undecided_cov_goal("SMT formula only, no solving performed");
-        else
-        {
-          // The verdict a coverage run suppresses was the only thing
-          // reporting this, so say it here.
+        // No answer at all. A coverage run suppresses the verdict that would
+        // have reported this; a plain multi-property run reports it nowhere,
+        // and a SAT claim elsewhere buries it entirely — so name the claim
+        // either way (issue #5934).
+        if (solver_result == P_ERROR)
           log_error(
             "SMT solver failed on '{}'",
             prettify_solidity_expr(claim.claim_cstr));
-          note_undecided_cov_goal("the solver failed on at least one goal");
+        if (is_cov_goal)
+        {
+          // Neither reached nor unreached. Recorded so the goal still gets a
+          // line and the run closes as INCOMPLETE.
+          goto_functionst::property_verdicts.record(
+            claim.claim_cstr, property_verdictt::Unknown);
+          note_undecided_cov_goal(
+            solver_result == P_SMTLIB
+              ? "SMT formula only, no solving performed"
+              : "the solver failed on at least one goal");
         }
       }
     }
@@ -2514,6 +2670,23 @@ smt_resultt bmct::multi_property_check(
     }
 
     solver_stats.total_time_ms.fetch_add(solve_stop - solve_start);
+
+    // A claim that reached no verdict — a backend failure (P_ERROR) or an
+    // SMTLIB-only emission (P_SMTLIB) — would otherwise leave final_result at
+    // its P_UNSATISFIABLE seed, which reads as "every claim discharged" and
+    // closes the run SUCCESSFUL over an analysis that never happened. Surface
+    // it instead; P_SATISFIABLE still wins, a witnessed violation being a
+    // verdict either way (issue #5934).
+    if (solver_result == P_ERROR || solver_result == P_SMTLIB)
+    {
+      // Set even when a SAT claim dominates below: the verdict is right in
+      // that case, but the summary is still short a claim and nothing else
+      // would say so.
+      report_incomplete = true;
+      std::lock_guard lock(result_mutex);
+      if (final_result != P_SATISFIABLE)
+        final_result = solver_result;
+    }
 
     // If an assertion instance is verified to be violated
     if (solver_result == P_SATISFIABLE)

@@ -10,6 +10,7 @@
 #include <util/config/config.h>
 #include <util/irep/std_expr.h>
 #include <util/expr/type_byte_size.h>
+#include <util/irep/pad_names.h>
 
 static struct_typet::componentst::iterator pad_bit_field(
   struct_typet::componentst &components,
@@ -19,8 +20,8 @@ static struct_typet::componentst::iterator pad_bit_field(
   const unsignedbv_typet padding_type(pad_bits);
 
   std::string index = std::to_string(where - components.begin());
-  struct_typet::componentt component(
-    "anon_bit_field_pad$" + index, "anon_bit_field_pad$" + index, padding_type);
+  std::string name = std::string(pad_bit_field_prefix) + index;
+  struct_typet::componentt component(name, name, padding_type);
 
   component.type().set("#bitfield", true);
   component.set_is_padding(true);
@@ -36,8 +37,8 @@ static struct_typet::componentst::iterator pad_ext_int_after(
   const unsignedbv_typet padding_type(pad_bits);
 
   std::string index = std::to_string(where - components.begin());
-  struct_typet::componentt component(
-    "ext_int_pad$" + index, "anon_ext_int_pad$" + index, padding_type);
+  std::string name = std::string(pad_ext_int_prefix) + index;
+  struct_typet::componentt component(name, name, padding_type);
 
   component.type().set("#extint", true);
   component.set_is_padding(true);
@@ -52,8 +53,8 @@ static struct_typet::componentst::iterator pad(
   const unsignedbv_typet padding_type(pad_bits);
 
   std::string index = std::to_string(where - components.begin());
-  struct_typet::componentt component(
-    "anon_pad$" + index, "anon_pad$" + index, padding_type);
+  std::string name = std::string(pad_prefix) + index;
+  struct_typet::componentt component(name, name, padding_type);
 
   component.set_is_padding(true);
   return std::next(components.insert(where, component));
@@ -339,7 +340,7 @@ static void add_padding(union_typet &type, const namespacet &ns)
 
     struct_typet::componentt component;
     component.type() = padding_type;
-    component.set_name("$pad");
+    component.set_name(std::string(pad_union_name));
     component.set_is_padding(true);
 
     type.components().push_back(component);

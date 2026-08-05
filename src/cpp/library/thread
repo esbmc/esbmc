@@ -1,6 +1,7 @@
 #ifndef STL_THREAD
 #define STL_THREAD
 
+#include <functional> /* std::hash, specialized for thread::id below */
 #include <pthread.h>
 #include "OM_compiler_defs.h"
 
@@ -22,7 +23,7 @@
 // pointer, but that conversion operator is currently bodyless in the frontend
 // (independently of this header: `void (*f)() = []{ g = 5; }; f();` already
 // loses the write), so it yields a nondet pointer. std::this_thread::sleep_*
-// and yield are absent: ESBMC has no clock and interleaves at every step.
+// remain absent: ESBMC has no clock, and it interleaves at every step anyway.
 
 #if __cplusplus >= 201103L
 
@@ -42,6 +43,8 @@ public:
   class id
   {
     pthread_t __v;
+
+    friend struct hash<id>;
 
   public:
     id() OM_NOEXCEPT : __v(0)
@@ -126,6 +129,36 @@ public:
     return 1;
   }
 };
+
+// [thread.thread.id] p6: the specialization is required, and irep2.h relies on
+// it through std::hash<std::thread::id>.
+template <>
+struct hash<thread::id>
+{
+  typedef thread::id argument_type;
+  typedef size_t result_type;
+
+  size_t operator()(thread::id v) const OM_NOEXCEPT
+  {
+    return (size_t)v.__v;
+  }
+};
+
+namespace this_thread
+{
+inline thread::id get_id() OM_NOEXCEPT
+{
+  return thread::id(pthread_self());
+}
+
+// A scheduling hint rather than a clock operation, so unlike sleep_* it has a
+// faithful model: __ESBMC_yield forces the context switch [thread.thread.this]
+// permits yield to make.
+inline void yield() OM_NOEXCEPT
+{
+  __ESBMC_yield();
+}
+} // namespace this_thread
 
 } // namespace std
 

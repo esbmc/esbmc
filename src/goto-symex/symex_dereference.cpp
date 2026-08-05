@@ -214,11 +214,16 @@ bool symex_dereference_statet::is_live_variable(const expr2tc &symbol)
   return false;
 }
 
-void goto_symext::dereference(expr2tc &expr, dereferencet::modet mode)
+void goto_symext::dereference(
+  expr2tc &expr,
+  dereferencet::modet mode,
+  bool block_assertions)
 {
   symex_dereference_statet symex_dereference_state(*this, *cur_state);
 
   dereferencet dereference(ns, new_context, options, symex_dereference_state);
+  if (block_assertions)
+    dereference.set_block_assertions();
 
   // needs to be renamed to level 1
   assert(!cur_state->call_stack.empty());

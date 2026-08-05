@@ -29,4 +29,19 @@ void add_restrict_assertions(
   contextt &context,
   goto_functionst &goto_functions);
 
+/// The dual, for the *entry* function only: assume the same disjointness of its
+/// `restrict` pointer parameters rather than assert it. A conforming caller may
+/// not pass aliasing restrict pointers (C11 6.7.3.1p4), but ESBMC synthesises
+/// the caller when the entry point takes parameters, so it is free to pick
+/// aliasing values and report a counterexample the standard forbids
+/// (esbmc/esbmc#1146). Opt-in via `--restrict-assume`.
+///
+/// Restricted to @p entry (a function base name) on purpose: assuming this
+/// program-wide would discard genuinely aliasing internal call sites, which are
+/// exactly the undefined behaviour `--restrict-check` exists to find.
+void add_restrict_assumptions(
+  contextt &context,
+  goto_functionst &goto_functions,
+  const std::string &entry);
+
 #endif

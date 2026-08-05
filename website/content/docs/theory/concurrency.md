@@ -37,6 +37,30 @@ in practice, many concurrency bugs manifest within a small number of context
 switches, so a small bound finds them cheaply while keeping the formula
 tractable. The default is unbounded (`-1`).
 
+### Iterative deepening on the bound
+
+```sh
+esbmc file.c --incremental-context-bound
+```
+
+Unbounded exploration is a depth-first search: it runs one schedule to full
+depth before backtracking, so a bug needing only a few context switches can sit
+far away in search order. `--incremental-context-bound` re-explores with the
+bound raised by one each round, visiting schedules in order of switch count —
+the shallow bug is found first, without you having to guess `K`.
+
+A violation at any bound is genuine, so the search stops there. Success is only
+reported once a round completes without the bound having cut an available
+switch, so a clean result is not relative to a bound the way a plain
+`--context-bound K` result is. `--max-context-bound N` caps how far the
+deepening goes (default 20).
+
+Both flags are opt-in; the default search order is unchanged. Because the
+deepening owns the outer verification loop, it is rejected with an error
+alongside the unwinding strategies that drive an outer loop of their own —
+`--termination`, `--incremental-bmc`, `--falsification`, `--k-induction`,
+`--k-induction-parallel` and `--loop-invariant`.
+
 ## Partial-order reduction
 
 Many interleavings differ only in the order of operations that do not interact
@@ -74,11 +98,30 @@ interleaving), ESBMC offers concurrency-specific checks:
 | Check | Flag |
 |---|---|
 | Data races (unsynchronised conflicting accesses to shared state) | `--data-races-check` |
-| Deadlock (global and local, over mutexes) | `--deadlock-check` |
+| Deadlock (global and local, over mutexes and read/write locks) | `--deadlock-check` |
 | Lock-acquisition ordering | `--lock-order-check` |
 | Atomicity at visible assignments | `--atomicity-check` |
 
 `--data-races-check-only` narrows the run to race checks to reduce overhead.
+
+## Modelled synchronisation primitives
+
+The checks above reason over ESBMC's operational model of the threading API
+rather than the host implementation. On the POSIX side that model covers:
+
+| Primitive | Notes |
+|---|---|
+| Mutexes | `PTHREAD_MUTEX_NORMAL`, `PTHREAD_MUTEX_RECURSIVE` and `PTHREAD_MUTEX_ERRORCHECK`, selected through `pthread_mutexattr_settype`. A recursive re-lock by the owner is not a deadlock; an error-checking one returns `EDEADLK` |
+| Read/write locks | `pthread_rwlock_rdlock` / `wrlock` participate in the wait graph, so a genuine rwlock deadlock is reported |
+| Barriers | `pthread_barrier_init` / `wait` / `destroy`, with waiter accounting |
+| Spinlocks | `pthread_spin_lock` / `trylock` / `unlock` |
+| Condition variables, semaphores | `pthread_cond_*`, `sem_*` |
+
+C11 `<threads.h>` (`thrd_*`, `mtx_*`, `cnd_*`, `tss_*`) is lowered onto the same
+model, as are C++'s `<thread>`, `<mutex>`, `<shared_mutex>` and
+`<condition_variable>`. Python lowers `threading.Thread` and `threading.Lock`
+only, and its `Lock` is invisible to `--deadlock-check` — see
+[Python Limitations](/docs/python/limitations#concurrency).
 
 ## Soundness note
 

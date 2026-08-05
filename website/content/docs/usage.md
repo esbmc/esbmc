@@ -371,6 +371,41 @@ algorithm works, see
 `--max-k-step N` caps the unwind bound (default 50); `--k-step N` changes the
 increment granularity.
 
+## Selecting the floating-point rounding mode
+
+Under `--floatbv`, every floating-point operation reads its rounding mode from
+the global `__ESBMC_rounding_mode`, which starts at round-to-nearest-even. Five
+flags change that initial value:
+
+| Flag | IEEE 754 mode |
+|---|---|
+| `--round-to-nearest`, `--round-to-even` | Nearest, ties to even (default) |
+| `--round-to-plus-inf` | Toward +∞ |
+| `--round-to-minus-inf` | Toward −∞ |
+| `--round-to-zero` | Toward zero (truncation) |
+
+```sh
+esbmc file.c --floatbv --round-to-zero
+```
+
+Only the initial value is rewritten, so a program calling `fesetround()` still
+changes the mode from that point on.
+
+## Function-pointer calls with no target
+
+A call through a function pointer whose value matches no function in the program
+is, by default, assumed to reach some external definition, so ESBMC keeps the
+path alive. `--closed-world-fnptr` instead treats such a call as unreachable:
+
+```sh
+esbmc file.c --closed-world-fnptr
+```
+
+Use it when the program under verification is the whole program — no dynamic
+loading, no linker-supplied implementations — so a pointer with no compatible
+target genuinely cannot be called. It is off by default because assuming the
+world is closed can prune real behaviour when it is not.
+
 ## Verifying modules that span multiple files
 
 ESBMC can verify code that relies on existing infrastructure. Consider a program
@@ -490,6 +525,22 @@ verifies successfully. Its scope and known limitations:
   and `const`-qualified targets are not exempt (a `const` access path is still
   undefined once the shared object is modified by any means).
 
+### Assuming the contract instead of checking it
+
+`--restrict-assume` is the dual of `--restrict-check`: instead of asserting the
+contract, it *assumes* the entry function's `restrict` pointer parameters do not
+alias. Use it when verifying a function in isolation, where non-aliasing is a
+precondition the callers must honour rather than something the function can
+establish:
+
+```sh
+esbmc file.c --function f --restrict-assume
+```
+
+The assumption is scoped to the entry point only, and it does not imply the
+parameters are distinct pointers: `f(NULL, NULL)` is a conforming call
+(C11 6.7.3.1p4), so `a != b` still does not follow.
+
 ## Multiple Property Verification
 
 ```sh
@@ -506,6 +557,12 @@ continues until all bugs are found. Relevant options:
 - `--keep-verified-claims` — do not skip verified claims (assertions inside a loop body are then re-verified during unwinding).
 - `--all-witnesses` — after a property is violated, enumerate further inputs that also violate it (implies `--multi-property`; see below).
 - `--max-witnesses N` — cap witnesses per property (default 16; 0 = unlimited).
+- `--full-traces` — print every trace state per witness instead of the 50 nearest the failure (only meaningful with `--all-witnesses`).
+
+A claim the solver never decided — an error, or a formula handed off without an
+answer under `--smt-formula-only` — is no longer folded into
+`VERIFICATION SUCCESSFUL`; a solver error additionally names the claim it failed
+on.
 
 Verdicts accumulate across the whole run and each property is reported exactly
 once at the end, with *failed* dominating *unknown* dominating *passed* — so a
@@ -541,15 +598,25 @@ int main(void) {
 `esbmc file.c --all-witnesses` reports both witnesses:
 
 ```
-[Counterexamples – 2 witnesses]
+[Counterexamples - 2 witnesses]
 
-  Witness 1 of 2
-    Inputs : [0] = -1
-  Witness 2 of 2
-    Inputs : [0] = 1
+  Inputs by witness:
+    #1 : [0] = -1
+    #2 : [0] = 1
 
-Summary: 2 distinct input tuples violate this property
-         (enumeration stopped: UNSAT after 2 witnesses)
+  ┌─ Witness 1 of 2 ─────────────────────────────
+  │  Inputs : [0] = -1
+  │  Trace  :
+  │    ...
+  └──────────────────────────────────────────────
+
+  ┌─ Witness 2 of 2 ─────────────────────────────
+  │  Inputs : [0] = 1
+  │  Trace  :
+  │    ...
+  └──────────────────────────────────────────────
+
+Summary: 2 distinct input tuples violate this property (enumeration stopped: UNSAT after 2 witnesses)
 ```
 
 Internally the same SMT instance is re-solved with a blocking clause over the
@@ -572,10 +639,14 @@ different k-induction phases or k-steps do not overwrite each other. Enumeration
 inductive step of k-induction (a SAT result there means UNKNOWN, not a real
 counterexample).
 
-**Scaling caveat.** The textual report dumps each witness's full goto trace; with
-`--no-slice` on a deeply unrolled program this grows quickly. If you only need the
-violating inputs, the per-witness `Inputs : ...` line is usually enough, and the
-machine-readable per-witness files give the full data without the noise.
+**Reading a multi-witness report.** Every witness's inputs are collected in the
+`Inputs by witness:` block under the header, before the first trace, since that
+is what differs between them; if the list was cut short by `--max-witnesses`,
+the header says so rather than leaving it to the footer. Each trace is then
+truncated to the 50 states nearest the failure, with a count of what was
+dropped — pass `--full-traces` for the whole trace. If you only need the
+violating inputs, that first block is usually enough, and the machine-readable
+per-witness files give the full data without the noise.
 
 Formally this is *bounded projected model enumeration* for a fixed property: the
 blocking-clause loop from SAT all-solutions algorithms, lifted to SMT and

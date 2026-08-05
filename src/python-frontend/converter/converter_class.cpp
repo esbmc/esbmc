@@ -599,6 +599,38 @@ void python_converter::get_attributes_from_self(
     }
   }
 
+  auto is_callable_annotation = [](const nlohmann::json &annotation) {
+    return annotation.is_object() &&
+           annotation.value("_type", "") == "Subscript" &&
+           annotation.contains("value") && annotation["value"].is_object() &&
+           annotation["value"].value("id", "") == "Callable";
+  };
+
+  // Carry the signature when it is spelled: `Callable[[A, B], R]` parses as
+  // Subscript(slice=Tuple([List([A, B]), R])). A member typed `R (*)(A, B)`
+  // lets a call through it recover the return type; the bare pointer would
+  // leave the result nondet. Anything else (bare `Callable`, or an unspelled
+  // signature) keeps the generic function pointer.
+  auto callable_member_type =
+    [&](const nlohmann::json &annotation, const nlohmann::json &stmt) -> typet {
+    code_typet fn_type;
+    fn_type.return_type() = empty_typet();
+    const auto &slice = annotation["slice"];
+    if (
+      slice.is_object() && slice.value("_type", "") == "Tuple" &&
+      slice.contains("elts") && slice["elts"].size() == 2 &&
+      slice["elts"][0].value("_type", "") == "List")
+    {
+      for (const auto &arg : slice["elts"][0]["elts"])
+        fn_type.arguments().push_back(
+          code_typet::argumentt(get_type_from_annotation(arg, stmt)));
+      fn_type.return_type() = get_type_from_annotation(slice["elts"][1], stmt);
+    }
+    return fn_type.return_type().is_nil()
+             ? type_handler_.get_typet(std::string("Callable"))
+             : gen_pointer_type(fn_type);
+  };
+
   for (const auto &stmt : method_body)
   {
     if (
@@ -637,7 +669,18 @@ void python_converter::get_attributes_from_self(
         // or PEP 604 union BinOp like int | None (get_type_from_annotation
         // already maps `T | None` to gen_pointer_type(T), the same shape it
         // produces for Optional[T]).
-        typet type = get_type_from_annotation(stmt["annotation"], stmt);
+        //
+        // `Callable[...]` is mapped here rather than inside
+        // get_type_from_annotation: as a *member* it has to be the function
+        // pointer the bare `Callable` spelling yields, because struct layout
+        // cannot compute the width of the bare code type it otherwise keeps,
+        // and aborts with symbolic_type_excp (#4566). A *parameter* annotated
+        // `Callable[...]` is resolved on a different path that the pointer
+        // form breaks (regression/python/callable4), so the mapping stays
+        // local to members.
+        typet type = is_callable_annotation(stmt["annotation"])
+                       ? callable_member_type(stmt["annotation"], stmt)
+                       : get_type_from_annotation(stmt["annotation"], stmt);
         if (type.is_nil() || type.is_empty())
         {
           log_warning(
@@ -781,6 +824,21 @@ void python_converter::get_attributes_from_self(
           rhs_is_aliased_name && type.id() == "symbol" &&
           json_utils::is_class(annotated_type, *ast_json))
           type = gen_pointer_type(type);
+
+        // A bare `Callable` is what the annotation pass infers for an
+        // unannotated `self.fn = fn`; the signature is lost because the
+        // inference carries a type *name*. Recover it from the parameter the
+        // RHS names, so a call through the member resolves rather than being
+        // reported as an AttributeError (esbmc/esbmc#6640).
+        if (annotated_type == "Callable" && rhs_is_aliased_name)
+        {
+          auto param =
+            param_annotations.find(stmt["value"].value("id", std::string()));
+          if (
+            param != param_annotations.end() &&
+            is_callable_annotation(param->second))
+            type = callable_member_type(param->second, stmt);
+        }
       }
 
       if (!clazz.has_component(attr_name))
@@ -804,6 +862,7 @@ void python_converter::get_attributes_from_self(
       // A member is initialized with something that might be not annotated
       typet type = any_type();
       const std::string &attr_name = stmt["targets"][0]["attr"];
+
       if (!clazz.has_component(attr_name))
       {
         struct_typet::componentt comp = python_frontend::build_component(

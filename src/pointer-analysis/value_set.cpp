@@ -1389,6 +1389,16 @@ void value_sett::assign_rec(
   {
     assign_rec(to_byte_extract2t(lhs).source_value, values_rhs, suffix, true);
   }
+  else if (is_if2t(lhs))
+  {
+    // A conditional assignment target: which arm receives the value is not
+    // known here, so update both weakly. Killing either would drop a value the
+    // other branch can still hold. Without this the whole analysis aborts, so
+    // every consumer loses its points-to data on any program that lowers an
+    // assignment this way (github #6610).
+    assign_rec(to_if2t(lhs).true_value, values_rhs, suffix, true);
+    assign_rec(to_if2t(lhs).false_value, values_rhs, suffix, true);
+  }
   else
   {
     log_error("[VSA] assign NYI: `{}'", get_expr_id(lhs));

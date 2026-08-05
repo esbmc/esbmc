@@ -1145,9 +1145,14 @@ std::optional<exprt> dispatch_decode_join_method(
 
   if (method_name == "join")
   {
-    ensure_allowed_keywords(method_name, keyword_values, {});
+    // str.join takes exactly one iterable, so any other arity is not a string
+    // method at all. Decline instead of throwing, or an object with its own
+    // join() -- queue.Queue.join(), threading's Thread.join() -- never reaches
+    // instance dispatch, because every attribute call is offered to the string
+    // handler first (#6639).
     if (args.size() != 1)
-      throw std::runtime_error("join() takes exactly one argument");
+      return std::nullopt;
+    ensure_allowed_keywords(method_name, keyword_values, {});
     return self.handle_str_join(call_json);
   }
 

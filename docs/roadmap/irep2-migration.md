@@ -13,6 +13,16 @@ consolidated into this retrospective once everything landed. The
 commit log (`git log --all --grep "B2\\|IREP2\\|esbmc/esbmc#4715"`)
 preserves every per-stage plan and decision rationale.
 
+> **Reopened 2026-08-03 — see `docs/roadmap/frontends-to-irep2.md`.** The
+> project goal is now full IREP2 migration of *all five frontends*. That
+> supersedes B1 ("frontends stay legacy", Part I §"What is not changing"),
+> Part III §14's Solidity close-out, and Part V's V.1a/V.2/V.6 closures — by
+> **decision**, not because their arguments were wrong. This document remains
+> the record of what was done and why each boundary was originally drawn; the
+> forward plan for crossing them lives in the new roadmap. One correction there
+> is independent of the goal change: **§V.1's W1 row was stale** and is fixed
+> in place below.
+
 ## Headline
 
 `symbolt::type` and `symbolt::value` are now stored as `type2tc` /
@@ -1492,6 +1502,15 @@ attribute flexibility IREP2 removed, for no verifier-core benefit. The
 frontend → `type2tc` migration therefore remains, as in B1, **out of
 scope**; the durable boundary stays the `migrate_*` seam at goto-convert,
 and the Solidity frontend stays legacy by design.
+
+> **Reopened 2026-08-03.** Q-S1's mechanism finding stands — the reads are
+> value-carried, so a side table cannot serve them. What this section did not
+> separate out is a **third** option between the wrapper and a generic
+> attribute map: `SolType` is already a closed `enum class`
+> (`solidity_grammar.h:484`), so a *closed typed field* on the relevant
+> `type2t` kinds carries the classification with the value without reinstating
+> string-keyed flexibility. See `docs/roadmap/frontends-to-irep2.md` §5.2
+> (Option F), which is gated on a spike, not assumed.
 
 ---
 
@@ -3105,7 +3124,7 @@ here) sit **outside** `src/python-frontend`:
 
 | Wall | Statement | Anchor (re-verify) | Owner |
 |---|---|---|---|
-| **W1 (P1)** | IREP2 has the **flat goto-level** code kinds (`code_block`/`assign`/`decl`/`return`/`goto`/`skip`/`dead`/`free`/`expression`) but **no structured CF kinds** (`ifthenelse`/`while`/`for`/`switch`/`break`/`continue`/`label`); `goto_convert` reads the body as **legacy** `codet`. | `grep 'IREP2_EXPR(code' src/irep2/expr_kinds.inc`; `goto_convert_functions.cpp:116` | shared (all frontends) |
+| **W1 (P1)** | ~~IREP2 has the flat goto-level code kinds but **no structured CF kinds** (`ifthenelse`/`while`/`for`/`switch`/`break`/`continue`/`label`); `goto_convert` reads the body as legacy `codet`.~~ **STALE as stated — corrected 2026-08-03.** The structured kinds were added by #5265 and live at `expr_kinds.inc:129-139` with forward/back `migrate` arms; `goto_convert` consumes them natively via `convert_native_rec` (`goto_convert_functions.cpp:254`) with a per-function fallback, ≈78.7 % native. What remains of W1 is **dispatcher coverage**, not a representation gap. | `grep 'IREP2_EXPR(code' src/irep2/expr_kinds.inc`; `goto_convert_functions.cpp:254` | shared (all frontends) |
 | **W2 (P2 / F-P10 / F-P11)** | `member2t`/`index2t` assert a **resolved** struct/array source (`irep2_expr.h:1502`/`:1576`); the converter runs **before** `clang_cpp_adjust` follows `symbol`-typed bases; `migrate_expr` recurses into the assert (§16.1). | §16, §16.1 | shared (`clang_cpp_adjust`) |
 | **W3 (F-P5)** | `#cpp_type`/`#member_name`/`#cformat` are read off **legacy** nodes by `clang_cpp_adjust_expr.cpp:464`, `cpp_expr2string.cpp:138-140`, `goto2c/expr2c.cpp:169-174`. | §15.2 | shared |
 | **W4** | The counterexample C/C++ printer consumes `#cpp_type`/`#cformat` (Part II 2.7, "out of scope"). | Part II §2.7 | shared |
@@ -5217,7 +5236,7 @@ than left implicitly open.
 | V.1k | W2 | **done** | the relaxed `member2t`/`index2t` construction assert (round 3 breakthrough), then every width-hazard and deferred-operand site in the converter migrated — the working plan that tracked those sites was deleted once drained; §"V.3 close-out (2026-07-04)" is the surviving record |
 | V.1k (b) adjuster | — | **structurally done, flip blocked** | `docs/roadmap/scope-v1k-adjuster.md` §"Flip gate (2026-07-29)" |
 | V.1a | — | **not started** | type builders still `lower_to_seam`; blocked on V.2 by the dependency graph in §V.3 |
-| V.2 | W3 | **not started** | the three legacy `#cpp_type`/`#member_name`/`#cformat` consumers are unchanged |
+| V.2 | W3 | **re-scoped to Option D, which is complete; W3 not removed** | `docs/roadmap/scope-v2-w3-attribute-carriage.md` §9-§10. §V.2's symbol-keyed design is refuted there (§3); Option D seamed `#member_name`/`#cpp_type` repo-wide behind `irept::member_name()`/`irept::cpp_type()` instead. Carriage stays legacy by decision, so bar #4 is unmoved |
 | V.3 | — | **done for converter expression construction; bar #1/#2 not met** | §"V.3 close-out (2026-07-04)"; the residue is type/symbol-write surface, not expressions |
 | V.4 | W1 | **done** | V.4.0→V.4.4b landed; the deeper W1 removal reopened and completed as W1-loc, now default-on |
 | V.5 | W4 | **deferred, concluded** | see "Why V.5 is deferred" below — this is now the only record; its scope doc was deleted |
@@ -5272,21 +5291,43 @@ per-shape dispatcher coverage rather than a fidelity impossibility.
 Two items, both sized and neither speculative:
 
 1. **The coupled arithmetic-conversion effort** (operand-level reconciliation,
-   then the assignment conversion) — the sole remaining blocker on the
+   then the assignment conversion) — the remaining blocker on the
    `python_adjust` flip. `scope-v1k-adjuster.md` proves that shipping either
    half alone is unsound. Owner document:
    `docs/roadmap/scope-coupled-arith-assign-conversion.md`, which re-sizes it
    at 3 PRs (down from "multi-PR effort") on the finding that the
    usual-arithmetic-conversion engine already has native `expr2tc` overloads
-   that `python_adjust` already calls.
-2. **V.2/W3 attribute carriage**, which V.1a and V.6 both depend on. Untouched;
-   the highest shared blast radius left in the program (`clang_cpp_adjust_expr`,
+   that `python_adjust` already calls. **Phases 0-2 have landed** — the
+   reachability census, the operand-level arm and the `code_assign2t`
+   assignment arm — and every gate this scope owns is discharged against the
+   corrected test lists of that document's §13.1. **Phase 3 (the flip) remains,
+   blocked on two mechanisms this scope does not own**: the §9.4 second
+   mechanism (`chained-comparison2_fail`, `lambda15`, `precedence2`,
+   `sum_tuple`) and the array-typecast class (the `github_5571` pair, §14).
+   Neither has an owner document yet, and G4/G5 have not been run.
+   `--python-irep2-adjust-only` therefore stays default-off.
+2. **V.2/W3 attribute carriage**, which V.1a and V.6 both depend on. The
+   highest shared blast radius left in the program (`clang_cpp_adjust_expr`,
    `cpp_expr2string`, `goto2c/expr2c` serve C++ and Solidity too — and a fourth
    reader, `clang_cpp_adjust_code_gen`, that §V.2 does not name). Owner
    document: `docs/roadmap/scope-v2-w3-attribute-carriage.md`, which finds
    §V.2's prescribed design refuted by Part III's own Q-S1 argument and
-   recommends re-scoping.
+   re-scopes to Option D (encapsulate the raw writers; decline W3 removal on a
+   recorded rationale). **All three Option D steps have landed** —
+   `#member_name` and `#cpp_type` are seamed repo-wide behind
+   `irept::member_name()` / `irept::cpp_type()`, and only `irep.cpp` still
+   spells either key. Option D deliberately does **not** move bar #4, so V.1a
+   and V.6 stay blocked; what changed is that the blockage now rests on a
+   recorded rationale (§3 of the scope doc) rather than an unexamined plan.
 
 V.5 is closed rather than pending — see its scope doc. With those recorded, the
 V-track has no undocumented residue: every remaining item has a named owner
 document, a sized cost, and a stated reason it was not taken.
+
+> **Superseded 2026-08-03 as the program's stopping point.** The V-track closed
+> Part V; it did not close the migration, and the project goal is now full
+> frontend migration. `docs/roadmap/frontends-to-irep2.md` takes V.1a, V.2 and
+> V.6 forward as part of a five-frontend program, re-grounds the four walls
+> against the tree (two are dissolved, one is a coverage exercise, one is a
+> real design problem), and re-routes V.2 to Option F. Python's remaining
+> items above are unchanged and become that program's Phase 3.

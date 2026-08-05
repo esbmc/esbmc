@@ -249,6 +249,16 @@ class Render(unittest.TestCase):
         once_pos = out.index("| 1 | ASan |")
         self.assertLess(many_pos, once_pos)
 
+    def test_equal_counts_tie_break(self):
+        # Equal counts make sorted() fall through to comparing Finding objects.
+        # Frozen dataclasses are hashable but not ordered, so without
+        # order=True this raised TypeError instead of rendering.
+        b = cf.Finding("UBSan", "shift", "src/b.cc:1")
+        a = cf.Finding("ASan", "heap-buffer-overflow", "src/a.cc:1")
+        out = cf.render_markdown([b, a])
+        self.assertLess(
+            out.index("| 1 | ASan |"), out.index("| 1 | UBSan |"))
+
 
 class WriteSummary(unittest.TestCase):
     """write_summary appends to $GITHUB_STEP_SUMMARY when set."""

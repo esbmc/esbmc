@@ -15,6 +15,15 @@ if(ENABLE_Z3)
                 "solverz3;smt;smttuple;smtfp;prop;util_esbmc;bigint")
   target_include_directories(z3_bigint_test
     PRIVATE ${Z3_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src/solvers/z3)
+
+  # Drives array_convt's bounded select/store directly: the boundary they guard
+  # is unreachable from C input, so only a unit test can pin it. Z3 serves
+  # merely as a concrete backend for the flattener to sit on.
+  new_unit_test(array_conv_bounded_index_test
+                "array_conv_bounded_index.test.cpp"
+                "solverz3;smt;smttuple;smtfp;prop;util_esbmc;bigint")
+  target_include_directories(array_conv_bounded_index_test
+    PRIVATE ${Z3_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src/solvers/z3)
 endif()
 
 if(ENABLE_SMTLIB)

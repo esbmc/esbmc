@@ -7,6 +7,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/ExprCXX.h> /* clang::TypeTraitExpr */
 #include <clang/AST/ParentMapContext.h>
 #include <clang/AST/RecordLayout.h>
+#include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/QualTypeNames.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/Version.inc>
@@ -14,6 +15,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <llvm/Support/raw_os_ostream.h>
+#include <clang-c-frontend/clang_ast_dump.h>
 CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
@@ -102,18 +104,13 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
   switch (decl.getKind())
   {
-  // Label declaration
+  // GNU local label: `__label__ l;` only scopes the name, and the label
+  // itself is placed by the LabelStmt, so the declaration emits nothing. It
+  // reaches here inside a DeclStmt, whose operands must be statements --
+  // yielding an expression made goto-convert abort on "label" (issue #4076).
   case clang::Decl::Label:
-  {
-    const clang::LabelDecl &ld = static_cast<const clang::LabelDecl &>(decl);
-
-    exprt label("label", empty_typet());
-    label.identifier(ld.getName().str());
-    label.cmt_base_name(ld.getName().str());
-
-    new_expr = label;
+    new_expr = code_skipt();
     break;
-  }
 
   // Declaration of variables
   case clang::Decl::Var:
@@ -294,6 +291,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
 
     ross << "unrecognized / unimplemented clang declaration "
          << decl.getDeclKindName() << "\n";
@@ -810,6 +808,44 @@ bool clang_c_convertert::get_function(
   return false;
 }
 
+namespace
+{
+class addr_label_collectort
+  : public clang::RecursiveASTVisitor<addr_label_collectort>
+{
+public:
+  explicit addr_label_collectort(std::vector<const clang::LabelDecl *> &labels)
+    : labels(labels)
+  {
+  }
+
+  bool VisitAddrLabelExpr(clang::AddrLabelExpr *e)
+  {
+    if (std::find(labels.begin(), labels.end(), e->getLabel()) == labels.end())
+      labels.push_back(e->getLabel());
+    return true;
+  }
+
+private:
+  std::vector<const clang::LabelDecl *> &labels;
+};
+} // namespace
+
+/// The value standing for the address of the `index`-th address-taken label.
+static exprt label_address(std::size_t index)
+{
+  const BigInt id(index + 1);
+  return constant_exprt(
+    integer2binary(id, bv_width(size_type())), integer2string(id), size_type());
+}
+
+void clang_c_convertert::collect_address_taken_labels(const clang::Stmt &body)
+{
+  address_taken_labels.clear();
+  addr_label_collectort(address_taken_labels)
+    .TraverseStmt(const_cast<clang::Stmt *>(&body));
+}
+
 bool clang_c_convertert::get_function_body(
   const clang::FunctionDecl &fd,
   exprt &new_expr,
@@ -818,8 +854,18 @@ bool clang_c_convertert::get_function_body(
   if (!fd.hasBody())
     return false;
 
+  // A nested body -- a lambda's call operator, a local class method -- is
+  // converted while the enclosing body is still mid-conversion, so the label
+  // set has to be stacked rather than merely reset: clearing it would leave
+  // the enclosing function's later `&&L` with nothing to resolve against.
+  std::vector<const clang::LabelDecl *> outer_labels;
+  outer_labels.swap(address_taken_labels);
+  collect_address_taken_labels(*fd.getBody());
+
   exprt body_exprt;
-  if (get_expr(*fd.getBody(), body_exprt))
+  const bool failed = get_expr(*fd.getBody(), body_exprt);
+  address_taken_labels.swap(outer_labels);
+  if (failed)
     return true; // return true if failing to parse function body
 
   new_expr = body_exprt;
@@ -1448,6 +1494,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang type: \"";
     ross << the_type.getTypeClassName() << "\n";
     the_type.dump(ross, *ASTContext);
@@ -1877,6 +1924,7 @@ bool clang_c_convertert::get_builtin_type(
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
 
     ross << "Unrecognized clang builtin type "
          << bt.getName(clang::PrintingPolicy(clang::LangOptions())).str()
@@ -1888,7 +1936,7 @@ bool clang_c_convertert::get_builtin_type(
   }
   }
 
-  new_type.set("#cpp_type", c_type);
+  new_type.cpp_type(c_type);
   return false;
 }
 
@@ -1920,6 +1968,7 @@ bool clang_c_convertert::get_bitfield_type(
     log_error("Clang could not calculate bitfield width");
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     fd.getBitWidth()->dump(ross, *ASTContext);
     ross.flush();
     log_error("{}", oss.str());
@@ -2529,11 +2578,24 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::AddrLabelExpr &addrlabelExpr =
       static_cast<const clang::AddrLabelExpr &>(stmt);
 
-    exprt label;
-    if (get_decl(*addrlabelExpr.getLabel(), label))
+    auto it = std::find(
+      address_taken_labels.begin(),
+      address_taken_labels.end(),
+      addrlabelExpr.getLabel());
+    if (it == address_taken_labels.end())
+    {
+      log_error(
+        "address taken of label '{}' outside a converted function body",
+        addrlabelExpr.getLabel()->getName().str());
+      return true;
+    }
+
+    typet t;
+    if (get_type(addrlabelExpr.getType(), t))
       return true;
 
-    new_expr = address_of_exprt(label);
+    new_expr = typecast_exprt(
+      label_address(std::distance(address_taken_labels.begin(), it)), t);
     break;
   }
 
@@ -3157,12 +3219,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       break;
     }
 
-    const clang::Stmt *cond_expr = ifstmt.getConditionVariableDeclStmt();
-    if (cond_expr == nullptr)
-      cond_expr = ifstmt.getCond();
-
+    // A condition that declares a variable keeps the declaration in
+    // getConditionVariableDeclStmt() and the contextual conversion to bool in
+    // getCond(). Taking the declaration as the condition drops the
+    // conversion, handing the backend a class-typed condition (issue #4078).
     exprt cond;
-    if (get_expr(*cond_expr, cond))
+    if (get_expr(*ifstmt.getCond(), cond))
       return true;
 
     exprt then;
@@ -3186,18 +3248,34 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if_expr.copy_to_operands(else_expr);
     }
 
-    // C++17 init-statement: `if (init; cond)`. Wrap the init and the
-    // resulting if in a block so the init's side-effects (in particular,
-    // the initialiser of any variable declared there) are emitted.
+    // C++17 init-statement: `if (init; cond)`, and a condition that declares
+    // a variable: `if (T v = e)`. Both put statements before the branch, so
+    // wrap them and the resulting if in a block; the init runs first.
+    code_blockt block;
+    bool needs_block = false;
+
     if (const clang::Stmt *init_stmt = ifstmt.getInit())
     {
       exprt init;
       if (get_expr(*init_stmt, init))
         return true;
       convert_expression_to_code(init);
-
-      code_blockt block;
       block.move_to_operands(init);
+      needs_block = true;
+    }
+
+    if (const clang::Stmt *cond_decl = ifstmt.getConditionVariableDeclStmt())
+    {
+      exprt decl;
+      if (get_expr(*cond_decl, decl))
+        return true;
+      convert_expression_to_code(decl);
+      block.move_to_operands(decl);
+      needs_block = true;
+    }
+
+    if (needs_block)
+    {
       block.copy_to_operands(if_expr);
       new_expr = block;
     }
@@ -3253,12 +3331,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::WhileStmt &while_stmt =
       static_cast<const clang::WhileStmt &>(stmt);
 
-    const clang::Stmt *cond_expr = while_stmt.getConditionVariableDeclStmt();
-    if (cond_expr == nullptr)
-      cond_expr = while_stmt.getCond();
-
     exprt cond;
-    if (get_expr(*cond_expr, cond))
+    if (get_expr(*while_stmt.getCond(), cond))
       return true;
 
     codet body = code_skipt();
@@ -3268,8 +3342,36 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     convert_expression_to_code(body);
 
     code_whilet code_while;
-    code_while.cond() = cond;
-    code_while.body() = body;
+
+    // `while (T v = e)` declares v afresh on every iteration and tests its
+    // conversion to bool, so the declaration belongs at the top of the body
+    // -- which is also where continue lands -- rather than in the condition,
+    // where it would displace the conversion (issue #4078).
+    if (
+      const clang::Stmt *cond_decl = while_stmt.getConditionVariableDeclStmt())
+    {
+      exprt decl;
+      if (get_expr(*cond_decl, decl))
+        return true;
+      convert_expression_to_code(decl);
+
+      code_ifthenelset leave;
+      leave.cond() = gen_not(cond);
+      leave.then_case() = code_breakt();
+
+      code_blockt guarded;
+      guarded.move_to_operands(decl);
+      guarded.copy_to_operands(leave);
+      guarded.copy_to_operands(body);
+
+      code_while.cond() = true_exprt();
+      code_while.body() = guarded;
+    }
+    else
+    {
+      code_while.cond() = cond;
+      code_while.body() = body;
+    }
 
     new_expr = code_while;
     break;
@@ -3314,13 +3416,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         return true;
 
     convert_expression_to_code(init);
-    const clang::Stmt *cond_expr = for_stmt.getConditionVariableDeclStmt();
-    if (cond_expr == nullptr)
-      cond_expr = for_stmt.getCond();
 
     exprt cond = true_exprt();
-    if (cond_expr)
-      if (get_expr(*cond_expr, cond))
+    if (const clang::Stmt *c = for_stmt.getCond())
+      if (get_expr(*c, cond))
         return true;
 
     codet inc = code_skipt();
@@ -3343,6 +3442,32 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     code_for.cond() = cond;
     code_for.iter() = inc;
     code_for.body() = body;
+
+    // `for (a; T v = e; b)` re-declares v each iteration. Moving the
+    // declaration and the test into the body keeps the loop a code_fort, so
+    // continue still reaches the increment (goto_convertt::convert_for sets
+    // the continue target there) while v is rebuilt on every pass -- putting
+    // the declaration in the condition would drop its conversion to bool,
+    // and putting it in the init would evaluate it once (issue #4078).
+    if (const clang::Stmt *cond_decl = for_stmt.getConditionVariableDeclStmt())
+    {
+      exprt decl;
+      if (get_expr(*cond_decl, decl))
+        return true;
+      convert_expression_to_code(decl);
+
+      code_ifthenelset leave;
+      leave.cond() = gen_not(cond);
+      leave.then_case() = code_breakt();
+
+      code_blockt guarded;
+      guarded.move_to_operands(decl);
+      guarded.copy_to_operands(leave);
+      guarded.copy_to_operands(body);
+
+      code_for.cond() = true_exprt();
+      code_for.body() = guarded;
+    }
 
     new_expr = code_for;
     break;
@@ -3377,22 +3502,30 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
     else
     {
-      log_error("ESBMC currently does not support indirect gotos");
-      std::ostringstream oss;
-      llvm::raw_os_ostream ross(oss);
-      stmt.dump(ross, *ASTContext);
-      ross.flush();
-      log_error("{}", oss.str());
-      return true;
-
       exprt target;
       if (get_expr(*goto_stmt.getTarget(), target))
         return true;
 
-      codet code_goto("gcc_goto");
-      code_goto.copy_to_operands(target);
+      // Dispatch over every address-taken label. A label address is the only
+      // value the target can legally hold, so the chain is exhaustive; the
+      // trailing assertion catches the programs where it is not.
+      code_blockt dispatch;
+      for (std::size_t i = 0; i < address_taken_labels.size(); ++i)
+      {
+        code_ifthenelset branch;
+        branch.cond() = equality_exprt(
+          target, typecast_exprt(label_address(i), target.type()));
+        branch.then_case() =
+          code_gotot(address_taken_labels[i]->getName().str());
+        dispatch.copy_to_operands(branch);
+      }
 
-      new_expr = code_goto;
+      code_assertt unreached{false_exprt()};
+      get_start_location_from_stmt(stmt, unreached.location());
+      unreached.location().comment("invalid computed goto target");
+      dispatch.copy_to_operands(unreached);
+
+      new_expr = dispatch;
     }
 
     break;
@@ -3417,6 +3550,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
+      enable_ast_dump_colors(ross, *ASTContext);
       ross << "ESBMC could not find the parent scope for "
            << "the following return statement:"
            << "\n";
@@ -3507,6 +3641,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
+      enable_ast_dump_colors(ross, *ASTContext);
       ross << "Conversion of unsupported value-dependent type-trait expr: \"";
       ross << stmt.getStmtClassName() << "\" to expression"
            << "\n";
@@ -3671,6 +3806,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang expr: \"";
     ross << stmt.getStmtClassName() << "\" to expression"
          << "\n";
@@ -3750,6 +3886,7 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 
   std::ostringstream oss;
   llvm::raw_os_ostream ross(oss);
+  enable_ast_dump_colors(ross, *ASTContext);
   ross << "Conversion of unsupported clang decl ref: \"";
   ross << d.getDeclKindName() << "\" to expression"
        << "\n";
@@ -3765,9 +3902,13 @@ void clang_c_convertert::rewrite_builtin_ref(
 {
   static const std::list<std::string> builtins_to_rewrite = {
     "__builtin_malloc",
+    "__builtin_calloc",
     "__builtin_memcpy",
     "__builtin_memmove",
+    "__builtin_memset",
+    "__builtin_memcmp",
     "__builtin_strcpy",
+    "__builtin_strncpy",
     "__builtin_strcmp",
     "__builtin_free",
     "__builtin_strlen",
@@ -4017,6 +4158,7 @@ bool clang_c_convertert::get_cast_expr(
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang cast operator: \"";
     ross << cast.getCastKindName() << "\" to expression"
          << "\n";
@@ -4101,6 +4243,7 @@ bool clang_c_convertert::get_unary_operator_expr(
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang unary operator: \"";
     ross << clang::UnaryOperator::getOpcodeStr(uniop.getOpcode()).str()
          << "\" to expression"
@@ -4305,6 +4448,7 @@ bool clang_c_convertert::get_compound_assign_expr(
   {
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     ross << "Conversion of unsupported clang binary operator: \"";
     ross << compop.getOpcodeStr().str() << "\" to expression"
          << "\n";
@@ -4327,7 +4471,18 @@ bool clang_c_convertert::get_compound_assign_expr(
     return true;
 
   if (!lhs.type().is_pointer())
-    gen_typecast(ns, rhs, lhs.type());
+  {
+    // C11 6.5.16.2p3: `E1 op= E2` is equivalent to `E1 = E1 op (E2)`, so the
+    // operation runs in the type the usual arithmetic conversions produce, not
+    // in E1's. Narrowing E2 to E1's type makes the overflow claim on a narrow
+    // E1 unfalsifiable, and can turn a valid divisor into zero (#6589).
+    typet computation_type;
+    if (get_type(compop.getComputationResultType(), computation_type))
+      return true;
+
+    gen_typecast(ns, rhs, computation_type);
+    new_expr.add("computation_type") = computation_type;
+  }
 
   new_expr.copy_to_operands(lhs, rhs);
   return false;
@@ -4478,6 +4633,7 @@ bool clang_c_convertert::get_atomic_expr(
     log_error("Unknown Atomic expression");
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     atm.dump(ross, *ASTContext);
     ross.flush();
     log_error("{}", oss.str());
@@ -4750,6 +4906,7 @@ void clang_c_convertert::get_decl_name(
     {
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
+      enable_ast_dump_colors(ross, *ASTContext);
       nd.dump(ross);
       ross.flush();
       log_error("Declaration has an empty name:\n{}", oss.str());
@@ -4767,6 +4924,7 @@ void clang_c_convertert::get_decl_name(
   // Otherwise, abort
   std::ostringstream oss;
   llvm::raw_os_ostream ross(oss);
+  enable_ast_dump_colors(ross, *ASTContext);
   ross << "Unable to generate the USR for:\n";
   nd.dump(ross);
   ross.flush();
@@ -5181,6 +5339,7 @@ bool clang_c_convertert::get_APValue_expr(
     log_error("Unsupported APValue expression");
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
+    enable_ast_dump_colors(ross, *ASTContext);
     value.dump(ross, *ASTContext);
     ross.flush();
     log_error("{}", oss.str());
