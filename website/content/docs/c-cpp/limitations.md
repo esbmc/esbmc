@@ -51,6 +51,13 @@ inheritance/polymorphism regressions remain marked `KNOWNBUG`
 ([#4399](https://github.com/esbmc/esbmc/issues/4399)), as do some of the
 `gcc-template-tests` ([#4398](https://github.com/esbmc/esbmc/issues/4398)).
 
+## Expressions
+
+An lvalue conditional over reference *variables* — `(c ? ra : rb).x = 2` —
+aborts the frontend, and a conditional over pointers to members is unsupported
+([#6717](https://github.com/esbmc/esbmc/issues/6717)). The reference-returning
+call shape works.
+
 ## Standard library
 
 - Headers listed under

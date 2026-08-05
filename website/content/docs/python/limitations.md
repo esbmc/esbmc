@@ -137,6 +137,10 @@ weight: 4
 - Type inference for class attributes requires values with clear, determinable types; complex expressions may require explicit type annotations.
 - Recovering a self-referential attribute's type from constructor arguments (the linked-list / tree pattern, e.g. `self.successor = successor` set via `Node(2, a)`) works both within a module and across the module boundary for an imported class (`from node import Node`). It relies on unifying against module-level `ClassName(...)` instantiations: if the class is never instantiated at module scope with the relevant positional argument, the attribute type cannot be recovered and an explicit annotation is required.
 
+## Callable Attributes
+
+- A callable member's signature is recovered from an explicit `Callable[...]` annotation or from the parameter an unannotated `self.fn = fn` names. A callable chosen at runtime (the assigned value varies by path) and a container of callables such as `List[Callable]` are not supported.
+
 ## Missing Return Detection
 
 - Does not analyze return statements inside lambda expressions within the main function body.

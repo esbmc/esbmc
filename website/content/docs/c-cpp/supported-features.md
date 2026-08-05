@@ -146,6 +146,9 @@ case. See [Limitations](./limitations#constructor-and-destructor-ordering).
 - Move constructors and move assignment operators
 - Address-of distributes over a conditional lvalue; class-typed conditionals
   elide their temporaries; a reference parameter binds to the selected arm
+- An lvalue conditional over reference-returning calls stays a reference rather
+  than being copied into a temporary, so a write through it — `(c ? get(v) :
+  get(w)).x = 2;` — reaches the selected object
 
 ### Lambdas
 

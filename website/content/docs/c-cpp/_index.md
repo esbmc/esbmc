@@ -27,6 +27,13 @@ spinlocks, read/write locks, and the recursive and error-checking mutex kinds
 selected through `pthread_mutexattr_settype` — see
 [Concurrency](/docs/theory/concurrency).
 
+Clang's `__builtin_` spellings of the memory and string routines — including
+`__builtin_memset`, `__builtin_memcmp`, `__builtin_strncpy` and
+`__builtin_calloc` — are rewritten to the names ESBMC models, so they behave as
+the plain calls do instead of going nondeterministic. A rewritten call runs the
+modelled loop, so a builtin applied to a large object needs an adequate
+`--unwind`.
+
 {{< cards >}}
   {{< card link="/docs/c-cpp/supported-features" title="C++ Support" subtitle="Which C++ language and STL features ESBMC supports." >}}
   {{< card link="/docs/c-cpp/limitations" title="C++ Limitations" subtitle="What ESBMC's C++ frontend does not yet handle, and the workarounds." >}}
