@@ -73,6 +73,7 @@ Regression test format (`test.desc`): line 1 is `CORE`/`KNOWNBUG`/`FUTURE`/`THOR
 - Always run the project's test suite. If tests fail, fix the failures before committing — never commit broken or untested code.
 - **Regression suite cap.** When running the full regression suite, cap the run at **5 minutes** (300000 ms) — pass the timeout to the `Bash` tool's `timeout` parameter, or wrap the invocation with `timeout 5m …`. If the suite cannot complete in 5 minutes, narrow the scope (e.g. run only the affected subset) or ask the user before extending the limit.
 - **Lint and typecheck.** Run lint and typecheckers and fix any errors. For Python code, use `pylint`. For C++ code, ensure clang-format compliance (CI enforces this).
+- **Cyclomatic complexity.** `python3 scripts/complexity/ccn_report.py --gate` reports what the branch adds against its merge base, the same check the Complexity workflow runs on the PR (needs `pip install lizard==1.23.0`). It is advisory while the thresholds are being calibrated.
 
 ## Branching
 
