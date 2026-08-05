@@ -35,6 +35,15 @@ set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
 option(ENABLE_SANITIZER_CI
     "Restrict regression to CORE mode for sanitizer-instrumented CI runs" OFF)
 
+# The cxl suite is opt-in and off by default. Its tests are all THOROUGH:
+# they are slow relative to what they establish (one test alone accounts for
+# most of the suite's wall time), and the great majority verify harnesses
+# written inside the test file rather than the CXL operational model. Keeping
+# them out of the default run keeps CI budget on suites that guard shipped
+# behaviour. Enable with -DENABLE_CXL_REGRESSION=On to run them locally.
+option(ENABLE_CXL_REGRESSION
+    "Register the CXL driver-verification regression suite (opt-in)" OFF)
+
 if(BENCHBRINGUP)
   # To run a specific benchmark in Github workflow and download the log archive when completed
   #   - BENCHMARK_TO_RUN: user-specified benchmark to run
@@ -126,6 +135,9 @@ endfunction()
 # conditionally enable regression suites based on configured support
 if(ENABLE_BITWUZLA)
     set(REGRESSIONS_BITWUZLA bitwuzla)
+endif()
+if(ENABLE_CXL_REGRESSION)
+    set(REGRESSIONS_CXL cxl)
 endif()
 if(ENABLE_BITWUZLLOB AND ENABLE_SMTLIB AND NOT WIN32)
     # The backend is only built when smtlib is (see its CMakeLists.txt). The
@@ -365,6 +377,7 @@ else()
                     extensions
                     cuda/COM_sanity_checks
                     linux
+                    ${REGRESSIONS_CXL}
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
                     ${REGRESSIONS_PYTHON_INTENSIVE}

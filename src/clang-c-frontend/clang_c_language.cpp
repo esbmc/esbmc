@@ -213,6 +213,9 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back(inc);
   }
 
+  if (config.options.get_bool_option("fms-extensions"))
+    compiler_args.emplace_back("-fms-extensions");
+
   for (auto const &inc : config.ansi_c.forces)
     compiler_args.push_back("-f" + inc);
 
@@ -646,10 +649,6 @@ void __ESBMC_loop_assigns_impl(const void *, ...);
 #define __ESBMC_loop_assigns_5(a,b,c,d,e) __ESBMC_loop_assigns_impl(&(a),&(b),&(c),&(d),&(e))
 #define __ESBMC_loop_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_loop_assigns_##N
 #define __ESBMC_loop_assigns(...) __ESBMC_loop_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
-
-#define __builtin_offsetof(type, member) \
-    ((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))
-
 
 #define __builtin_object_size(ptr, type) \
     __ESBMC_builtin_object_size(ptr, type)

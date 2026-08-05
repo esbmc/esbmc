@@ -1,0 +1,23 @@
+digraph state_automaton {
+	{node [shape = plaintext, style=invis, label=""] "__init_unbound"};
+	{node [shape = doublecircle] "unbound"};
+	{node [shape = circle] "bind_initiated"};
+	{node [shape = circle] "host_recognized"};
+	{node [shape = circle] "host_enumerated"};
+	{node [shape = circle] "bound"};
+	"__init_unbound" -> "unbound";
+	"unbound" [label = "unbound"];
+	"unbound" -> "bind_initiated" [ label = "fm_bind" ];
+	"bind_initiated" [label = "bind_initiated"];
+	"bind_initiated" -> "host_recognized" [ label = "host_recognize" ];
+	"host_recognized" [label = "host_recognized"];
+	"host_recognized" -> "host_enumerated" [ label = "host_enumerate" ];
+	"host_enumerated" [label = "host_enumerated"];
+	"host_enumerated" -> "bound" [ label = "fm_confirm" ];
+	"bound" [label = "bound"];
+	"bound" -> "unbound" [ label = "fm_unbind" ];
+	{ rank = min ;
+		"__init_unbound";
+		"unbound";
+	}
+}

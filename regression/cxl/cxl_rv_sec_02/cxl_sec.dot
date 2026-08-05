@@ -1,0 +1,24 @@
+digraph state_automaton {
+	{node [shape = plaintext, style=invis, label=""] "__init_sec_disabled"};
+	{node [shape = doublecircle] "sec_disabled"};
+	{node [shape = circle] "sec_unlocked"};
+	{node [shape = circle] "sec_locked"};
+	{node [shape = circle] "sec_frozen"};
+	"__init_sec_disabled" -> "sec_disabled";
+	"sec_disabled" [label = "sec_disabled"];
+	"sec_disabled" -> "sec_unlocked" [ label = "set_passphrase" ];
+	"sec_disabled" -> "sec_frozen" [ label = "freeze" ];
+	"sec_unlocked" [label = "sec_unlocked"];
+	"sec_unlocked" -> "sec_unlocked" [ label = "set_passphrase" ];
+	"sec_unlocked" -> "sec_locked" [ label = "lock" ];
+	"sec_unlocked" -> "sec_frozen" [ label = "freeze" ];
+	"sec_unlocked" -> "sec_disabled" [ label = "disable_passphrase" ];
+	"sec_locked" [label = "sec_locked"];
+	"sec_locked" -> "sec_unlocked" [ label = "unlock" ];
+	"sec_locked" -> "sec_frozen" [ label = "freeze" ];
+	"sec_frozen" [label = "sec_frozen"];
+	{ rank = min ;
+		"__init_sec_disabled";
+		"sec_disabled";
+	}
+}

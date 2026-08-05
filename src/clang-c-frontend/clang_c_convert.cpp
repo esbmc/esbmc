@@ -273,6 +273,11 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // C++20 concept definitions: clang evaluates the constraint at template
   // instantiation time, so the ConceptDecl itself has no runtime form.
   case clang::Decl::Concept:
+
+  // File-scope assembly, e.g. the Linux kernel's EXPORT_SYMBOL(). It emits
+  // section/symbol metadata rather than C-level semantics, and in-body asm is
+  // already ignored above (GCCAsmStmtClass), so skip it for consistency.
+  case clang::Decl::FileScopeAsm:
     break;
 
   // We pretty much ignore this information, clang does the expansion for us.
@@ -4760,6 +4765,25 @@ void clang_c_convertert::get_default_symbol(
   symbol.id = id;
 }
 
+/* Anonymous records are named after their presumed (expansion) location. Two
+ * of them expanded from one macro therefore share a name, and the inner one's
+ * symbol resolves to the outer, which makes add_padding() recurse forever.
+ * The spelling location differs per declaration inside the macro body, so
+ * appending it disambiguates within an expansion while the presumed location
+ * still separates distinct expansion sites. Linux's __DECLARE_FLEX_ARRAY()
+ * (include/uapi/linux/stddef.h) is the motivating case. */
+static std::string anon_macro_suffix(
+  const clang::SourceManager &sm,
+  const clang::SourceLocation loc)
+{
+  if (!loc.isMacroID())
+    return "";
+
+  const clang::SourceLocation spelling = sm.getSpellingLoc(loc);
+  return "_m" + std::to_string(sm.getSpellingLineNumber(spelling)) + "_" +
+         std::to_string(sm.getSpellingColumnNumber(spelling));
+}
+
 std::string clang_c_convertert::get_decl_name(const clang::NamedDecl &nd)
 {
   if (const clang::IdentifierInfo *identifier = nd.getIdentifier())
@@ -4840,6 +4864,8 @@ void clang_c_convertert::get_decl_name(
                                        "_" + location_begin.line().as_string() +
                                        "_" +
                                        location_begin.column().as_string();
+      location_begin_str +=
+        anon_macro_suffix(ASTContext->getSourceManager(), rd.getLocation());
       std::string kind_name = rd.getKindName().str();
       name = kind_name + " __anon_" + kind_name + "_at_" + location_begin_str;
       std::replace(name.begin(), name.end(), '.', '_');
@@ -4855,6 +4881,8 @@ void clang_c_convertert::get_decl_name(
                                        "_" + location_begin.line().as_string() +
                                        "_" +
                                        location_begin.column().as_string();
+      location_begin_str +=
+        anon_macro_suffix(ASTContext->getSourceManager(), rd.getLocation());
       std::string kind_name = rd.getKindName().str();
 #if CLANG_VERSION_MAJOR >= 22
       std::string tag_name = getFullyQualifiedName(
