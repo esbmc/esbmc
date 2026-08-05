@@ -3,9 +3,9 @@ coverage:
   round: down
   range: "50...80"
 
-# Vendored and generated sources, which the coverage jobs in
-# .github/workflows/{push,pull_request}.yml do not strip: their lcov --remove
-# filters cover only /usr/* and */build/*.
+# Codecov-side exclusions. The coverage jobs (pull_request.yml, push.yml) strip
+# only '/usr/*' and '*/build/*' via lcov --remove, so everything else is
+# filtered here rather than in the uploaded report.
 ignore:
   - "src/ansi-c/cpp/**"
   - "src/clang-c-frontend/headers/**"
