@@ -165,10 +165,9 @@ effective_location(const locationt &own, const locationt &inherited)
 // which materialises an empty -- and so not nil -- "#location" when the
 // statement carries none. Reproduce that rather than pass a nil location2t
 // through, which renders "no location" where the round-trip renders blank.
-static const locationt &emitted_location(const locationt &own)
+static locationt emitted_location(const locationt &own)
 {
-  static const locationt materialised_empty;
-  return own.is_nil() ? materialised_empty : own;
+  return own.is_nil() ? locationt() : own;
 }
 
 // A statement's own location field, i.e. exactly what migrate_expr_back writes
@@ -573,15 +572,9 @@ bool goto_convert_functionst::convert_native_rec(
     if (initializer.is_not_nil())
     {
       code_assignt assign(var, initializer);
-      // convert_decl reads the ASSIGN location through codet's *mutable*
-      // location() accessor, which materialises an empty (id "", non-nil)
-      // #location when the declaration has none -- whereas code_decl2t::location
-      // stays properly nil, which the GOTO dump renders as "no location" rather
-      // than blank. Reproduce the materialised form so an unlocated declaration
-      // (e.g. a compound literal) stays byte-identical. The DECL above keeps the
-      // nil location: convert_decl emits it before the mutable access happens.
-      assign.location() =
-        decl.location.is_nil() ? locationt() : locationt(decl.location);
+      // The DECL above keeps its nil location: convert_decl emits it before the
+      // mutable access emitted_location reproduces.
+      assign.location() = emitted_location(decl.location);
       copy(assign, ASSIGN, dest);
     }
 
