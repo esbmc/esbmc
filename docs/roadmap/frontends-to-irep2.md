@@ -939,8 +939,9 @@ Two consequences:
 2. A nondeterministic synthetic location is a defect in its own right,
    independent of the dispatcher — it is reachable with the native path off.
 
-Neither is fixed here. Both predate the dispatcher: the fix in §19.1 can only
-turn a nil location into a blank one, so it cannot produce a line-number
+Neither is fixed here; they are filed as #6759 (the stable divergence) and
+#6760 (the nondeterminism). Both predate the dispatcher: the fix in §19.1 can
+only turn a nil location into a blank one, so it cannot produce a line-number
 difference, and it cannot introduce nondeterminism.
 
 ### 19.4 Reproduction
