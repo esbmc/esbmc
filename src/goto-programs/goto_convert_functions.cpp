@@ -217,25 +217,24 @@ static const locationt &statement_location(const expr2tc &code2)
 // partial `dest`, so a failed walk never corrupts the fallback body. So far:
 // the structural leaves (block/skip), the single-instruction value statements
 // (assign/expression) that reduce to one ASSIGN/OTHER with nothing to lower,
-// trivial-type declarations (DECL + optional side-effect-free ASSIGN + scope-exit
-// DEAD, the block managing the destructor stack as convert_block does; a
-// declaration whose type has a destructor or whose initializer needs lowering
-// is instead delegated to convert_decl via convert(), so a local object no
-// longer forces a whole-function fallback), a value
-// return (RETURN + unconditional GOTO to the function's end), a
-// side-effect-free `if`/`if-else` whose branches convert natively (the
-// general, unfolded branch shape only — see the assert-fold guard below), a
-// side-effecting expression statement of any shape (assignment, compound
-// assignment, `++`/`--`, discarded call result — all delegated to the inherited
-// remove_sideeffects after the statement location is stamped onto the operand), a
-// side-effect-free `while` whose body converts natively (`v: if(!c) goto z;
-// x: P; y: goto v; z: ;`), its `do`/`while` counterpart (`w: P; y: if(c) goto
-// w; z: ;`), the `for` loop that `while` shape desugars from (init, then the
-// same shape with the iteration statement at the continue target), a
-// side-effect-free `switch` whose body converts natively (the LOCATION node,
-// the case-guard chain, the arms, and the trailing break target), and
-// `break`/`continue` (an unconditional GOTO to
-// the nearest enclosing loop's break/continue target, preceded by
+// trivial-type declarations (DECL + optional side-effect-free ASSIGN +
+// scope-exit DEAD, the block managing the destructor stack as convert_block
+// does; a declaration whose type has a destructor or whose initializer needs
+// lowering is instead delegated to convert_decl via convert(), so a local
+// object no longer forces a whole-function fallback), a value return (RETURN +
+// unconditional GOTO to the function's end), a side-effect-free `if`/`if-else`
+// whose branches convert natively (the general, unfolded branch shape only —
+// see the assert-fold guard below), a side-effecting expression statement of
+// any shape (assignment, compound assignment, `++`/`--`, discarded call result
+// — all delegated to the inherited remove_sideeffects after the statement
+// location is stamped onto the operand), a side-effect-free `while` whose body
+// converts natively (`v: if(!c) goto z; x: P; y: goto v; z: ;`), its
+// `do`/`while` counterpart (`w: P; y: if(c) goto w; z: ;`), the `for` loop that
+// `while` shape desugars from (init, then the same shape with the iteration
+// statement at the continue target), a side-effect-free `switch` whose body
+// converts natively (the LOCATION node, the case-guard chain, the arms, and the
+// trailing break target), and `break`/`continue` (an unconditional GOTO to the
+// nearest enclosing loop's break/continue target, preceded by
 // unwind_destructor_stack's DEAD instructions for whatever was pushed since
 // that loop was entered — the inherited goto_convertt method is called
 // directly, already stack-neutral by design), and a bare "foo();" call
@@ -243,14 +242,14 @@ static const locationt &statement_location(const expr2tc &code2)
 // arguments (a single FUNCTION_CALL; the return-unused requirement means
 // do_function_call's temp-symbol machinery is never entered, so this kind
 // carries no shared-counter byte-identity risk), an expression statement whose
-// operand is a code cpp-throw (a `throw ...;`), which is delegated to the legacy
-// convert() exactly as convert_expression's is_code branch does so a throw no
-// longer forces a whole-function fallback, and a source-level try/catch
-// (code_cpp_catch2t), delegated to the legacy convert()/convert_catch so the
-// statements around it convert natively. Each reads its own
-// code_*2t fields directly (no legacy round-trip) and carries the
-// statement's own location, matching goto_convertt::convert() byte-for-byte
-// on this subset.
+// operand is a code cpp-throw (a `throw ...;`), which is delegated to the
+// legacy convert() exactly as convert_expression's is_code branch does so a
+// throw no longer forces a whole-function fallback, a throw in statement
+// position (code_cpp_throw2t), delegated the same way, and a source-level
+// try/catch (code_cpp_catch2t), delegated to the legacy convert()/convert_catch
+// so the statements around it convert natively. Each reads its own code_*2t
+// fields directly (no legacy round-trip) and carries the statement's own
+// location, matching goto_convertt::convert() byte-for-byte on this subset.
 bool goto_convert_functionst::convert_native_rec(
   const expr2tc &code2,
   goto_programt &dest,
@@ -1407,6 +1406,27 @@ bool goto_convert_functionst::convert_native_rec(
     dest.destructive_append(tmp);
     targets.labels.insert({l.label, {target, targets.destructor_stack}});
     target->labels.push_front(l.label);
+    return true;
+  }
+
+  if (is_code_cpp_throw2t(code2))
+  {
+    const code_cpp_throw2t &t = to_code_cpp_throw2t(code2);
+
+    // A throw in statement position, which the Jimple frontend emits directly
+    // (jimple_statement.cpp builds a bare codet("cpp-throw")). The
+    // code_expression arm above delegates the expression-statement spelling the
+    // C++ frontend produces; this is the same delegation for the shape that
+    // arrives unwrapped, so a throw no longer takes its whole function down
+    // with it. convert()/convert_throw owns the stack unwind and the
+    // thrown-object lowering, and migrate_expr_back carries this statement's
+    // own location. The restore_value_locations pass is a no-op on Jimple's
+    // throw, which carries no thrown value (the operand is a frontend TODO),
+    // but the round-trip drops operand locations for one that does, so it is
+    // needed for byte-identity the moment a value is attached.
+    exprt op = migrate_expr_back(code2);
+    restore_value_locations(op, effective_location(t.location, inherited));
+    convert(to_code(op), dest);
     return true;
   }
 
