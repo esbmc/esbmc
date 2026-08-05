@@ -352,7 +352,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"full-traces",
      NULL,
      "Print every trace state in the multi-witness report instead of the "
-     "states closest to the failure. Only meaningful with --all-witnesses."}}},
+     "states closest to the failure. Only meaningful with --all-witnesses."},
+    {"ascii-report",
+     NULL,
+     "Draw the multi-witness report with ASCII instead of box-drawing "
+     "characters. Detected automatically from the locale; this forces it."}}},
   {"Output",
    {{"output-goto",
      boost::program_options::value<std::string>(),

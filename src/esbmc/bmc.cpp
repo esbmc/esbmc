@@ -2,6 +2,8 @@
 #include <memory>
 #include <sys/types.h>
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <thread>
 #include <chrono>
 
@@ -569,6 +571,34 @@ void bmct::clear_verified_claims_in_goto(
 
 namespace
 {
+/// True when the multi-witness report must avoid box-drawing glyphs. A console
+/// that is not reading UTF-8 renders them as mojibake on every line of the
+/// report (esbmc/esbmc#4311); Windows' default cp1252 console is the common
+/// case, and a POSIX shell in a non-UTF-8 locale the other. An unset locale is
+/// treated as UTF-8 so the common CI shape keeps the richer output.
+bool ascii_report(const optionst &options)
+{
+  if (options.get_bool_option("ascii-report"))
+    return true;
+#ifdef _WIN32
+  return true;
+#else
+  for (const char *var : {"LC_ALL", "LC_CTYPE", "LANG"})
+  {
+    const char *val = std::getenv(var);
+    if (!val || !*val)
+      continue;
+    std::string v(val);
+    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+      return std::tolower(c);
+    });
+    return v.find("utf-8") == std::string::npos &&
+           v.find("utf8") == std::string::npos;
+  }
+  return false;
+#endif
+}
+
 /// States nearest the failure are the ones that explain it; the rest is
 /// prologue repeated almost verbatim across every witness (#4311). Keep the
 /// last @p keep of them and replace what precedes with a count, so the reader
@@ -721,12 +751,24 @@ void bmct::report_multi_property_trace(
       oss << "\n";
     }
   }
+  // Box-drawing glyphs are mojibake'd by a console that is not reading UTF-8
+  // -- Windows' default cp1252 above all -- which at N witnesses corrupts
+  // every line of the report (esbmc/esbmc#4311).
+  const bool ascii = ascii_report(options);
+  const std::string bar = ascii ? "|" : "│";
+  const std::string head_open = ascii ? "  +- " : "  ┌─ ";
+  const std::string head_fill =
+    ascii ? " -----------------------------" : " ─────────────────────────────";
+  const std::string foot =
+    ascii ? "  +---------------------------------------------\n\n"
+          : "  └──────────────────────────────────────────────\n\n";
+
   for (size_t i = 0; i < witnesses.size(); ++i)
   {
     const witness_recordt &w = witnesses[i];
-    oss << "  ┌─ Witness " << (i + 1) << " of " << witnesses.size()
-        << " ─────────────────────────────\n";
-    oss << "  │  Inputs : ";
+    oss << head_open << "Witness " << (i + 1) << " of " << witnesses.size()
+        << head_fill << "\n";
+    oss << "  " << bar << "  Inputs : ";
     if (w.nondet_inputs.empty())
     {
       oss << "(none)\n";
@@ -746,7 +788,7 @@ void bmct::report_multi_property_trace(
       }
       oss << "\n";
     }
-    oss << "  │  Trace  :\n";
+    oss << "  " << bar << "  Trace  :\n";
     {
       std::ostringstream tr;
       show_goto_trace(tr, ns, w.trace, reachability_trace);
@@ -756,16 +798,17 @@ void bmct::report_multi_property_trace(
         s = keep_last_trace_states(s, kMaxReportedStates);
       std::string indented;
       indented.reserve(s.size() + 8);
-      indented += "  │    ";
+      const std::string lead = "  " + bar + "    ";
+      indented += lead;
       for (char c : s)
       {
         indented += c;
         if (c == '\n')
-          indented += "  │    ";
+          indented += lead;
       }
       oss << indented << "\n";
     }
-    oss << "  └──────────────────────────────────────────────\n\n";
+    oss << foot;
   }
 
   oss << "Summary: " << witnesses.size()
