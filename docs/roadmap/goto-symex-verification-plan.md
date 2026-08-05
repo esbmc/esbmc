@@ -574,7 +574,7 @@ inspect the produced `symex_target_equationt`.
 | **H-B3** | **Slicer equisatisfiability** (P0, I11) | Build equation; clone; slice the clone; solve both per-claim with the real backend; assert identical per-claim verdicts on ≥ 30 small programs incl. arrays with symbolic indices. **Discharged by H-C1 instead, §15 M5 (H-A4/H-B3)**: 1328 corpus inputs at 0 divergences beats 30 programs; the per-claim residue moves to H-C7 | Slicer unsoundness on real formulas — the honest complement to H-A4 |
 | **H-B4** | **Renaming round-trip** (I3/I4) | For each `SSA_stept`, `get_original_name` of `lhs` equals the L0 symbol; `rename` is idempotent; the level never decreases along the step list | `fixup_renamed_type` / `rename_address` regressions |
 | **H-B5** | **Phi laws** (I8) | For 2-branch programs: the set of *program variables* receiving a phi == the set written by at least one arm; **zero** phi for untouched variables. **Corrected, §15 M4 (H-B5)**: this row originally said "written *differently* in both", which the code does not do — `phi_function` filters on the L2 index differing, not the value | Over- and under-generation of phi nodes |
-| **H-B6** | **Value-set merge monotonicity** (I9) | After `merge_value_sets`, assert the result ⊇ both inputs (using `value_sett` API) | An accidental intersection — a silent unsoundness |
+| **H-B6** | **Value-set merge monotonicity** (I9) | After `merge_value_sets`, assert the result ⊇ both inputs (using `value_sett` API). **Run, §15 M9: I9 discharged, no defect** — `unit/goto-symex/value_set_merge.test.cpp`; an *intersecting* `make_union` is caught by 3 of 5 cases, while *deleting* the union is caught by none, and cannot be | An accidental intersection — a silent unsoundness |
 | **H-B7** | **Assumption-discharge suite** (§6.1 rule 3) | For each Tier-A assumption in §7.3, an assertion on the real engine that it holds over the corpus | Over-constrained Tier-A proofs |
 | **H-B8** | **Incremental-equation parity** (I13) | Same program with and without `--smt-during-symex`; assert identical claim count and per-claim verdicts. **Run at Tier C instead, §15 M7: 1358 agreed, 3 diverged → R19**, a per-property false PASSED | `runtime_encoded_equationt` ctx-stack bugs |
 
@@ -592,12 +592,12 @@ discharge or an explicit, reviewed waiver.
 
 | Assumption used by | Statement | Discharged by |
 |---|---|---|
-| H-A1, H-A9 | The L2 `name_record` key is stable across `make_assignment`'s inner `rename` (I2) | H-B7 assertion on the real `level2t` |
+| H-A1, H-A9 | The L2 `name_record` key is stable across `make_assignment`'s inner `rename` (I2) | **Discharged**, §15 M9 (H-B7) — `renaming.test.cpp`'s "make_assignment publishes a fresh increasing L2 index" asserts the entry `coveredinbees` updated is the one keyed by the caller's key, over five successive publications |
 | H-A2 | `guard2tc::operator-=` satisfies `(g_cur ∨ g_mrg) → (diff ↔ g_mrg)` | **irep2 plan** H-A9/H-B4 — cross-document dependency |
 | H-A2 | Incoming merge guards may overlap (no disjointness assumed) | by construction (not assumed) |
-| H-A4 | Every `with2t` store the slicer elides has a `symbol2t` source and constant index | H-B7 counts the shapes reaching that branch |
-| H-A6 | `thread_last_reads/writes` contain *all* accesses of the last transition, including through pointers | H-B7 + `get_expr_globals` audit (**open risk**, R11) |
-| H-A8 | `push_ctx`/`pop_ctx` calls are balanced by the caller (`reachability_treet`) | H-B8 |
+| H-A4 | Every `with2t` store the slicer elides has a `symbol2t` source and constant index | **Discharged**, §15 M9 (H-B7) — `assumption_discharge.test.cpp` checks it on every elided store and censuses the excluded shapes; struct member stores are excluded by their `constant_string2t` field, which the census now pins |
+| H-A6 | `thread_last_reads/writes` contain *all* accesses of the last transition, including through pointers | **Refuted and fixed**, not discharged: R11 → **R18**, a one-level `get_expr_globals` resolution that lost a nested-dereference write, fixed by **#6550**. What holds post-fix is that pointer *chains* are followed; no harness asserts completeness for every access shape, so this row stays open in the weaker form |
+| H-A8 | `push_ctx`/`pop_ctx` calls are balanced by the caller (`reachability_treet`) | **Open**, scoped by §15 M9 (H-B7): the balance rests on the explicit `targ->push_ctx()` in `setup_for_new_explore` (`reachability_tree.cpp:339`, "Start with a depth of 1") pairing with `~dfs_execution_statet`'s pop, and only under `--smt-during-symex`. An unbalanced pop is UB, not a diagnostic — `runtime_encoded_equationt::pop_ctx` reads `scoped_end_points.back()` unchecked on a list the constructor leaves empty |
 | all Tier A | `nondet` solver answers are *sound* (no wrong TRUE/FALSE) | out of scope — solver backends are Tier D |
 
 ### 7.4 Tier C — whole-tool metamorphic oracles
@@ -812,6 +812,14 @@ inventory, and two of them produce **R22**. Triage of the resulting ten
 and **R24** (bitfield padding under type punning), both since fixed, with seven of
 the eleven entries turning out to be wrong tests rather than defects — six of
 those fixed and retired.
+
+**M9 — The Tier-B remainder (0.5 wk).** H-B6 and H-B7, the two rows §7.2 never
+scheduled under a milestone. **Closed, §15 M9.** I9 discharged on the real engine
+with no defect found; the entry records why the obvious mutant (deleting the
+union) is undetectable and the meaningful one (intersecting it) is caught. H-B7
+then closed three of §7.3's seven rows and sharpened the rest: two were already
+discharged elsewhere, one is refuted-and-fixed rather than discharged (R18), and
+**H-A8 is the one live residual**, carrying a stated UB consequence.
 
 Total ≈ 9 engineer-weeks for the verification track, plus ≈ 2 weeks for the
 ESBMC extension critical path (WI-1…WI-3, §13.6) running alongside it.
@@ -3501,6 +3509,106 @@ discriminator isolating the trigger to writing the guard variable inside its own
 branch; proof the counterexample is real (`--data-races-check` reports the
 assertion itself); the exact divergent access and scheduling decision; and five
 eliminated mechanisms. All of it is in #6558 apart from this last round.
+
+### M9 (H-B6) — 2026-08-04, I9 discharged
+
+H-B6 was the last Tier-B row never run. `unit/goto-symex/value_set_merge.test.cpp`
+runs it on the real engine: three end-to-end programs whose joins give one global
+pointer two targets, plus two cases exercising `value_sett::make_union` directly.
+All five pass, and the assertions name the objects (`c:@a`, `c:@b`) rather than
+counting them — a global pointer's map already holds its zero-initialiser, so a
+cardinality of two is reached without any merge occurring, and an earlier
+count-based version of these cases passed without ever inspecting a target.
+
+**The verdict rests on separating two mutants, which is the substance of this
+entry.** Deleting the `make_union` call from `merge_value_sets` leaves all five
+cases green. Replacing it with an intersection fails three of them. Both mutants
+were built and run; the second is I9's actual content, so I9 is discharged and
+the surviving deletion mutant is not evidence against the harness.
+
+Why deletion cannot be caught here, from instrumenting the call on the
+`early_exit` program (an `if` arm leaving by its own `goto`, so the arms reach
+the join by different routes): the union arm runs three times and reports
+`changed == false` every time, and the `guard.is_false()` replacement arm above
+it — the only arm that can drop entries — is never taken. Guarded assignment
+*adds* to a pointer's object map rather than replacing it, and `cur_state`'s
+value set is never rewound when a branch is abandoned, so both targets are
+present before any join runs. The union is therefore redundant at every join
+reachable at this tier, and is load-bearing only against a future change making
+value sets path-sensitive. This also answers, negatively, the question the
+harness's first draft left open — that a shape whose arms diverge at the join
+would make the merge observable. `early_exit` is that shape, and it does not.
+
+**Not covered, and deliberately.** `make_union`'s `keepnew` parameter decides
+whether an entry present only in the source survives; `merge_value_sets` passes
+`true`, but `value_set_domaint::merge` — the static analysis, outside
+goto-symex — passes the caller's choice, and with `false` an entry that is
+neither a `value_set::dynamic_object` nor `value_set::return_value` is dropped
+(`value_set.cpp:133-149`). That is a documented asymmetry in a different
+subsystem, not an I9 violation, and no case here constrains it.
+
+R9's three "sound over-approximation" claims remain open: H-B6 checks that a
+merge does not shrink the set, not that a *deliberate* narrowing elsewhere keeps
+only `unknown`/`invalid` entries, as §14 already records.
+
+### M9 (H-B7) — 2026-08-04, the assumption register audited
+
+H-B7 is not a harness so much as a pass over §7.3, whose rule is that a row may
+not be closed without a Tier-B discharge or a reviewed waiver. Seven rows; the
+audit closes three, and the interesting part is that only one of them needed new
+code.
+
+**Already discharged, cited rather than rebuilt.** The I2 key-stability row
+(H-A1/H-A9) is asserted by `renaming.test.cpp`'s "make_assignment publishes a
+fresh increasing L2 index", which checks that the entry `coveredinbees` updates
+is the one keyed by the caller's key across five successive publications — the
+row was written before that test existed and was never revisited. H-A2's
+overlap row was already marked "by construction".
+
+**New: H-A4's shape row**, in `unit/goto-symex/assumption_discharge.test.cpp`.
+The assumption reads "every `with2t` store the slicer elides has a `symbol2t`
+source and constant index", which the guard at `slice.cpp:249-254` makes true of
+whatever it admits — so the check that carries information is over the shapes it
+*excludes*, which is what §7.3 asked for. Four cases: the assumption checked on
+every elided store of a program where the elision demonstrably fires; a census
+showing symbolic-index stores never qualify; a control showing constant-index
+stores do; and the one worth keeping —
+
+> **A struct member store must never reach that branch.** `symex_assign` spells
+> it `s' == s WITH ["f" := v]` with a `constant_string2t` field
+> (`symex_assign.cpp:958-970`), so `is_constant_int2t(update_field)` excludes it
+> today. It matters because `index_reads`, the read-set the elision consults, is
+> populated *only* from `index2t` reads (`slice.cpp:104-118`): a member read is a
+> `member2t` and records nothing. A member store that qualified would find its
+> field "never read" and be dropped as dead. The unsoundness would arrive
+> through a change to how member updates are spelled — a change no one would
+> file under "slicer" — which is exactly the kind of coupling a register row is
+> for.
+
+An anti-vacuity guard earned its place while writing this: the first version of
+the elision program read the array through its return value, and every store was
+removed wholesale by `ignore` without the branch firing at all, so
+`REQUIRE(elided > 0)` failed rather than the case passing empty.
+
+**Sharpened, not closed.** H-A6's row cited R11 as an open risk; R11 became
+**R18** and was fixed by **#6550**, so the row is refuted-and-fixed rather than
+discharged — pointer chains are now followed, but no harness asserts
+completeness over every access shape, and the row stays open in that weaker
+form. H-A2's guard-algebra row remains a cross-document dependency on the irep2
+plan.
+
+**The live residual is H-A8**, and the audit gives it a consequence it did not
+have. The balance of `push_ctx`/`pop_ctx` rests on one explicit call —
+`targ->push_ctx()` at `reachability_tree.cpp:339`, commented "Start with a depth
+of 1" — pairing with `~dfs_execution_statet`'s pop, since the initial execution
+state is constructed rather than cloned and so has no push of its own. Both are
+conditional on `--smt-during-symex`. If that pairing ever breaks, the failure is
+not a diagnostic: `runtime_encoded_equationt::pop_ctx` takes
+`scoped_end_points.back()` unchecked, on a list its constructor leaves empty
+(`symex_target_equation.cpp:527-537, 596-609`). Checking this at Tier B needs a
+real `runtime_encoded_equationt` over a real `smt_convt` — §6.1's no-doubles rule
+forbids a counting subclass standing in for the equation — which is the next
+piece of work rather than a gap in this one.
 
 ---
 
