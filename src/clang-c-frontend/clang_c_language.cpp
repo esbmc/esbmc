@@ -507,6 +507,21 @@ extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
+/* CBMC memory primitives (esbmc/esbmc#2457). Without these declarations the
+ * names are implicitly declared as int-returning functions and havoc'd, so a
+ * program written against CBMC verifies against nondet rather than against the
+ * memory model. Bodies live in src/c2goto/library/builtin_libs.c. */
+__SIZE_TYPE__ __CPROVER_POINTER_OBJECT(const void *);
+__PTRDIFF_TYPE__ __CPROVER_POINTER_OFFSET(const void *);
+_Bool __CPROVER_same_object(const void *, const void *);
+__SIZE_TYPE__ __CPROVER_OBJECT_SIZE(const void *);
+_Bool __CPROVER_DYNAMIC_OBJECT(const void *);
+_Bool __CPROVER_LIVE_OBJECT(const void *);
+_Bool __CPROVER_WRITEABLE_OBJECT(const void *);
+_Bool __CPROVER_r_ok(const void *, __SIZE_TYPE__);
+_Bool __CPROVER_w_ok(const void *, __SIZE_TYPE__);
+_Bool __CPROVER_rw_ok(const void *, __SIZE_TYPE__);
+
 // Contract predicate: indicates that a pointer points to freshly allocated memory
 // Signature: __ESBMC_is_fresh(p, size)
 // - p: The pointer itself, passed bare. const so that const-qualified pointer
