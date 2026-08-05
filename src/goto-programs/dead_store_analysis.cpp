@@ -76,10 +76,10 @@ void collect_address_taken(const expr2tc &expr, std::set<irep_idt> &out)
 /// present.
 bool is_reportable_location(const locationt &loc)
 {
-  const std::string file = loc.get_file().as_string();
-  if (file.empty() || file == "<built-in>" || file == "<builtin>")
-    return false;
-  if (file_operations::is_bundled_source(file))
+  const std::string &file = loc.get_file().as_string();
+  if (
+    file.empty() || file == "<built-in>" || file == "<builtin>" ||
+    file_operations::is_bundled_source(file))
     return false;
   // System headers across platforms. There is no location system-header flag,
   // so this is a best-effort path heuristic: Linux (/usr/include, but NOT the

@@ -215,9 +215,7 @@ TEST_CASE(
   "operational-model sources are told apart from user code",
   "[core][util][filesystem]")
 {
-  // remove_exceptions relies on this to keep the C++ exception OM's own
-  // try/catch from counting as user exception flow, which would decline every
-  // concurrent C++ program as unlowerable.
+  // remove_exceptions and dead_store_analysis both key off this.
   using file_operations::is_bundled_source;
   REQUIRE(is_bundled_source("/esbmc-vfs/cpp/thread"));
   REQUIRE(is_bundled_source("C:/esbmc-vfs/cpp/thread"));
@@ -226,8 +224,6 @@ TEST_CASE(
   REQUIRE(!is_bundled_source("/home/u/main.cpp"));
   REQUIRE(!is_bundled_source("/usr/include/math.h"));
 
-  // Both spellings are anchored, so user code that merely contains the words
-  // is still user code.
   REQUIRE(!is_bundled_source("/home/u/esbmc-vfs/main.c"));
   REQUIRE(!is_bundled_source("/esbmc-vfs-notes/main.c"));
   REQUIRE(!is_bundled_source("/home/u/proj/c2goto/library/main.c"));

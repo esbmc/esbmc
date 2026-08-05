@@ -128,40 +128,24 @@ static bool is_sep(char c)
   return c == '/' || c == '\\';
 }
 
-/* Whether `want` occupies whole components of `path` starting at `at`. Both
- * separators are accepted: clang hands VFS paths back native on Windows. */
-static bool
-components_match(std::string_view path, size_t at, std::string_view want)
-{
-  if (path.size() - at < want.size())
-    return false;
-  for (size_t i = 0; i < want.size(); ++i)
-    if (path[at + i] != want[i] && !(is_sep(path[at + i]) && want[i] == '/'))
-      return false;
-  size_t end = at + want.size();
-  return end == path.size() || is_sep(path[end]);
-}
-
 bool file_operations::is_bundled_source(std::string_view file)
 {
   /* clang_vfs_path() spells the root "C:/esbmc-vfs" on Windows, where a bare
-   * "/esbmc-vfs" would not satisfy clang's absolute-path grammar. */
-  std::string_view rooted = file;
-  if (rooted.size() > 1 && rooted[1] == ':')
-    rooted.remove_prefix(2);
-  if (components_match(rooted, 0, ESBMC_VFS_ROOT))
+   * "/esbmc-vfs" would not satisfy clang's absolute-path grammar, and clang
+   * hands the rest of the path back with native separators. */
+  if (file.size() > 1 && file[1] == ':')
+    file.remove_prefix(2);
+
+  constexpr std::string_view root = std::string_view(ESBMC_VFS_ROOT).substr(1);
+  if (
+    file.size() > root.size() + 1 && is_sep(file[0]) &&
+    file.compare(1, root.size(), root) == 0 && is_sep(file[root.size() + 1]))
     return true;
 
   /* The c2goto library arrives the other way round: it is compiled into the
    * goto binary at build time, so its symbols carry whatever absolute path the
-   * build tree had. With no prefix to anchor against, require the component
-   * sequence -- only an ESBMC checkout has one. */
-  for (size_t at = 0; at < file.size(); ++at)
-    if (
-      (at == 0 || is_sep(file[at - 1])) &&
-      components_match(file, at, "src/c2goto/library"))
-      return true;
-  return false;
+   * build tree had. The surrounding separators are what anchor the match. */
+  return file.find("/src/c2goto/library/") != std::string_view::npos;
 }
 
 filesystemt &filesystemt::get()
@@ -176,9 +160,8 @@ void filesystemt::add_bundled(
   size_t size)
 {
   /* bundled_count() keys the overlay cache in esbmc_clang_vfs(), so silently
-   * replacing an entry would leave that cache stale. Not an assert: this must
-   * still fire in a release build, where the stale cache would serve the old
-   * contents for the rest of the run. */
+   * replacing an entry would leave that cache stale -- in release builds too,
+   * hence not an assert. */
   if (!_bundled.emplace(path, std::string_view(data, size)).second)
   {
     fprintf(stderr, "ERROR: bundled file registered twice: %s\n", path.c_str());

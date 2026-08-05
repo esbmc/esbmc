@@ -18,14 +18,8 @@ namespace file_operations
  *         Reserved, so it never names anything on the real filesystem. */
 inline constexpr const char *ESBMC_VFS_ROOT = "/esbmc-vfs";
 
-/**
- * @brief True if @p file names one of ESBMC's own operational-model or library
- *        sources rather than user code.
- *
- * Two spellings reach a symbol's location: the operational models and internal
- * libc headers clang reads out of the VFS, and the c2goto library sources,
- * which are compiled at build time and so carry a build-tree path.
- */
+/** @brief True if @p file names one of ESBMC's own operational-model or
+ *         library sources rather than user code. */
 bool is_bundled_source(std::string_view file);
 
 /**
