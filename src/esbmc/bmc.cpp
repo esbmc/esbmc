@@ -664,7 +664,17 @@ void bmct::report_multi_property_trace(
   // tracked separately (#4311).
   oss << (reachability_trace ? "\n[Reachability traces - "
                              : "\n[Counterexamples - ")
-      << witnesses.size() << " witnesses]\n\n";
+      << witnesses.size() << " witnesses";
+  // An incremental run already enumerates at every failing k, not just the
+  // first, so without the bound a reader cannot tell which unwinding produced
+  // a block -- or that two blocks are different unwindings rather than a
+  // repeat (esbmc/esbmc#4314). Plain BMC has one bound, where this is noise.
+  if (options.get_bool_option("incremental-bmc"))
+  {
+    const std::string k = options.get_option("unwind");
+    oss << " at k = " << (k.empty() ? "0" : k);
+  }
+  oss << "]\n\n";
   // Say up front that this is a truncated enumeration. The same fact reaches
   // the Summary footer below, but that sits after every witness block -- tens
   // of kilobytes on a real program -- so a reader can easily act on a partial
