@@ -10,10 +10,23 @@
 // Conversion state for the multibyte routines. The models below never leave
 // the initial state -- they do not implement a shift encoding -- so a single
 // flag is the whole representation.
+//
+// C11 7.28 has <uchar.h> define mbstate_t too and ESBMC does not shadow that
+// header, so both can reach one translation unit. Honour every libc's guard
+// and set them all, so whichever header comes second stands down.
+#if !defined(__mbstate_t_defined) /* glibc */ &&                               \
+  !defined(_MBSTATE_T) /* Darwin */ &&                                         \
+  !defined(_MBSTATE_T_DECLARED) /* BSD */ &&                                   \
+  !defined(__DEFINED_mbstate_t) /* musl */
+#  define __mbstate_t_defined 1
+#  define _MBSTATE_T
+#  define _MBSTATE_T_DECLARED
+#  define __DEFINED_mbstate_t
 typedef struct
 {
   int __count;
 } mbstate_t;
+#endif
 
 #ifndef WEOF
 #  define WEOF ((wint_t)-1)
