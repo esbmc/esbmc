@@ -146,7 +146,10 @@ public:
   class name_record
   {
   public:
-    name_record() = default;
+    name_record()
+    {
+      compute_hash();
+    }
 
     name_record(const symbol2t &sym)
       : base_name(sym.thename),
@@ -154,12 +157,7 @@ public:
         l1_num(sym.level1_num),
         t_num(sym.thread_num)
     {
-      size_t seed = 0;
-      esbmct::hash_combine(seed, base_name.get_no());
-      esbmct::hash_combine(seed, (uint8_t)lev);
-      esbmct::hash_combine(seed, l1_num);
-      esbmct::hash_combine(seed, t_num);
-      hash = seed;
+      compute_hash();
     }
 
     int compare(const name_record &ref) const
@@ -207,13 +205,25 @@ public:
     }
 
     irep_idt base_name;
-    symbol2t::renaming_level lev;
-    unsigned int l1_num;
-    unsigned int t_num;
+    symbol2t::renaming_level lev = symbol2t::renaming_level::level0;
+    unsigned int l1_num = 0;
+    unsigned int t_num = 0;
 
     // Derived from the fields above; used as the fast-path primary key in
-    // compare() and by name_rec_hash.
-    size_t hash;
+    // compare() and by name_rec_hash. compare() short-circuits on it, so it
+    // must stay a pure function of them — compute_hash() is the only writer.
+    size_t hash = 0;
+
+  private:
+    void compute_hash()
+    {
+      size_t seed = 0;
+      esbmct::hash_combine(seed, base_name.get_no());
+      esbmct::hash_combine(seed, (uint8_t)lev);
+      esbmct::hash_combine(seed, l1_num);
+      esbmct::hash_combine(seed, t_num);
+      hash = seed;
+    }
   };
 
   struct name_rec_hash
