@@ -191,6 +191,19 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 
     cur_state->rename(member);
 
+    // `&C::m` written inline reaches here as the address of a symbol named
+    // after the member, whereas one that has gone through a pointer-to-member
+    // variable arrives as a member_ref because renaming substitutes the
+    // variable's value. Normalise the first spelling onto the second so both
+    // resolve through the same path (issue #6717).
+    if (is_address_of2t(member))
+    {
+      const expr2tc &inner = to_address_of2t(member).ptr_obj;
+      if (is_symbol2t(inner))
+        member =
+          member_ref2tc(member->type, to_symbol2t(inner).get_symbol_name());
+    }
+
     if (is_member_ref2t(member))
     {
       const member_ref2t &ref = to_member_ref2t(member);

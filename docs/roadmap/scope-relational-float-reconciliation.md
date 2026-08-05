@@ -3,9 +3,10 @@
 > **Status: Phase 0 run 2026-08-03 — §4 confirmed for three of the four
 > witnesses, refuted for `sum_tuple`, which needs re-homing (§11); the
 > traffic-volume half is partially answered and lowers the gap-2 prior (§12);
-> **CLOSED (§16): the mechanism is downstream of the frontend, measured not
-> inferred. The investigation's shippable output is PR #6688 — a latent no-op
-> in `c_implicit_typecast_arithmetic` affecting five call sites.**
+> **REOPENED (§17): §16's closure was wrong. `lambda15` passes with two arms
+> (equality-with-bool + ordering-with-float); it had two defects queued, and
+> every earlier attempt fixed at most one. The widening still needs narrowing
+> to §12's measured traffic before it is shippable.**
 > This is the owner document for the mechanism
 > `docs/roadmap/scope-coupled-arith-assign-conversion.md` §9.4 named the
 > "second mechanism" and §7 explicitly disowned:
@@ -495,3 +496,62 @@ a shared helper that nothing else had surfaced.
 Start at `smt_convt`'s `equality_id` case (`smt_solver.cpp:1320`) — probing
 there names the node in one build. Do **not** start in the frontend: four
 attempts there are recorded above, and all four are refuted.
+
+## 17. §16 is wrong — `lambda15` *is* frontend-fixable (2026-08-04)
+
+§16 closed this scope on the conclusion that the aborting equality is "a
+different instance, rebuilt after `python_adjust`", so no admission rule at that
+dispatch could fix it. **That conclusion is refuted by measurement.**
+`lambda15` now passes under `--python-irep2-adjust-only`.
+
+### 17.1 What §16 got wrong
+
+§16's evidence was: the arm fires, the helper converts, the abort is unchanged.
+All three observations were correct. The inference was not — because
+**`lambda15` has two independent defects, and every attempt fixed at most one**:
+
+| # | node | needs |
+|---|---|---|
+| 1 | `floatbv == bool` (`mk_eq` sort-width abort) | an **equality** arm admitting a Boolean paired with a number |
+| 2 | `lessthanequal` with mixed operands (`convert_ast_node` signedbv assert) | the **ordering** arm admitting a float/integer pair |
+
+Fixing only #1 leaves #2 aborting, and vice versa. Every earlier attempt
+(§13.1's two, §15.3's third) used `is_bv_type` in its guard, which **excludes
+bool** (§15.2) — so none of them cleared #1, and the run never reached #2. The
+abort never moved, which read as "the fix does not apply" and was actually
+"a second defect is queued behind the first".
+
+The tell was available and missed: when the equality arm finally admitted bool,
+**the abort message changed** — from `mk_eq` to `convert_ast_node:1563`. A
+changed failure is progress; an unchanged one is not. That distinction is worth
+checking explicitly whenever a fix "does nothing".
+
+### 17.2 Measurement
+
+With both arms present:
+
+| witness | expected | hop-off |
+|---|---|---|
+| `lambda15` | SUCCESSFUL | **SUCCESSFUL** |
+| `chained-comparison2_fail` | FAILED | still aborts |
+| `precedence2` | SUCCESSFUL | FAILED |
+| `sum_tuple` | SUCCESSFUL | still aborts |
+
+`neural-net_fail` (`--fixedbv`) still reports **FAILED**, so the anti-masking
+gate holds against both arms.
+
+### 17.3 Status, honestly
+
+One of four witnesses clears. §4's original hypothesis — that the relational
+arm's `bv`-only admission is implicated — is **partly vindicated**, having been
+prematurely written off in §14 and §16. The scope should be **reopened**, not
+closed.
+
+**What is not yet done, and must be before any of this ships:** the ordering-arm
+widening used to obtain this result is deliberately broad (any two differing
+numeric types), which is precisely the shape gap-2 rejected for diverging
+corpus-wide over the operational-model bodies. §12's census says the *mixed
+float/integer* traffic is empty in the OM bodies, but that census did not cover
+the same-kind-different-width traffic this broad rule also admits. **The rule
+must be narrowed to what §12 actually measured, and G2 re-run, before it is a
+patch rather than an experiment.** Nothing from §17 has been shipped.

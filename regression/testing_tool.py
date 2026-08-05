@@ -424,7 +424,10 @@ class TestCase:
         assert os.path.exists(test_dir)
         assert os.path.exists(os.path.join(test_dir, "test.desc"))
         self.name = name
-        self.test_dir = test_dir
+        # A CHECK_JSON / CHECK_FILE / SEED_FILE test runs ESBMC in a private
+        # temporary cwd, where a test_dir relative to the invoking cwd no longer
+        # resolves. Anchor it here so every derived path survives the chdir.
+        self.test_dir = os.path.abspath(test_dir)
         self.test_args = None
         self.test_file = None
         self.test_mode = "CORE"
