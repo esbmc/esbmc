@@ -205,6 +205,10 @@ static const locationt &statement_location(const expr2tc &code2)
     return to_code_goto2t(code2).location;
   case expr2t::code_label_id:
     return to_code_label2t(code2).location;
+  case expr2t::code_cpp_throw_id:
+    return to_code_cpp_throw2t(code2).location;
+  case expr2t::code_cpp_catch_id:
+    return to_code_cpp_catch2t(code2).location;
   default:
     return static_cast<const locationt &>(get_nil_irep());
   }
@@ -1413,17 +1417,11 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_cpp_throw2t &t = to_code_cpp_throw2t(code2);
 
-    // A throw in statement position, which the Jimple frontend emits directly
-    // (jimple_statement.cpp builds a bare codet("cpp-throw")). The
-    // code_expression arm above delegates the expression-statement spelling the
-    // C++ frontend produces; this is the same delegation for the shape that
-    // arrives unwrapped, so a throw no longer takes its whole function down
-    // with it. convert()/convert_throw owns the stack unwind and the
-    // thrown-object lowering, and migrate_expr_back carries this statement's
-    // own location. The restore_value_locations pass is a no-op on Jimple's
-    // throw, which carries no thrown value (the operand is a frontend TODO),
-    // but the round-trip drops operand locations for one that does, so it is
-    // needed for byte-identity the moment a value is attached.
+    // Jimple emits a throw unwrapped (jimple_statement.cpp:368 builds a bare
+    // codet("cpp-throw"), its value deliberately unattached); the
+    // code_expression arm above is this same delegation for the C++ frontend's
+    // expression-statement spelling. restore_value_locations is inert while
+    // that operand is nil, but convert_throw reads it once a value is attached.
     exprt op = migrate_expr_back(code2);
     restore_value_locations(op, effective_location(t.location, inherited));
     convert(to_code(op), dest);

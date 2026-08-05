@@ -230,9 +230,11 @@ established scope-doc pattern: census, phased decomposition, gates, risks.
 **Inherited harness rules — non-optional.** Every census on this track has been
 invalidated at least once by harness artifacts. Reuse them verbatim:
 
-1. Normalise the whole temp-path segment (`s@/esbmc[-._][^/ ]*@/TMPD@g`), not
-   individual prefixes — four spellings exist; partial normalisation reports
-   ~90 % false divergence.
+1. Normalise every temp *name*, not just temp paths
+   (`s@esbmc[-._][A-Za-z0-9._-]*@TMPD@g`) — several spellings exist and partial
+   normalisation reports ~90 % false divergence. Do not anchor on a leading
+   slash: `--gcc-nested-functions` synthesises `esbmc-nested.<hash>.c`, which
+   appears inside a symbol id with no path separator (§20.3).
 2. Strip timing lines (`completed in:|time:|Runtime|Elapsed`) — 46 false
    divergences out of 106 from `0.000s` vs `0.001s` alone.
 3. Exclude or serialize `--k-induction-parallel` tests — UNSTABLE against
@@ -882,9 +884,10 @@ Both numbers come from temporary instrumentation — one `fprintf` at each of
 which is exactly the site name §12/§13/§17's tables use. There is no census
 switch in the tree; §11.4's "census env var" describes a build that was never
 merged. The byte-identity sweep needs no instrumentation at all — it is the
-A/B, normalised. Normalise `/tmp/esbmc*` broadly: the C driver's temp dir is
+A/B, normalised. Normalise `esbmc*` broadly: the C driver's temp dir is
 `esbmc.<hash>` and Solidity's is `esbmc_solidity_temp-<hash>`, and a pattern
-that catches one and not the other reports a false divergence.
+that catches one and not the other reports a false divergence. Match the name
+wherever it appears, not only after a `/` — see §7 rule 1 and §20.3.
 
 ## 20. §18.2's Jimple site closed — and what its mutants say about the gates (2026-08-05)
 
