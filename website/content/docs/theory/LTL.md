@@ -36,7 +36,7 @@ the implementation diverges from [1].
 | Incompatible strategies | `--k-induction`, `--incremental-bmc`, `--termination` |
 | Monitor prefix bound | `-DLTL_PREFIX_BOUND=N`, **required in practice** (default is 2³¹) |
 | Other properties in the same run | **None** — safety and unwinding assertions are masked |
-| Regression coverage | 11 `CORE` tests in `regression/ltl/`, run on Linux, macOS and Windows |
+| Regression coverage | 13 `CORE` tests in `regression/ltl/`, run on Linux, macOS and Windows |
 | Minimum translator version | libltl2ba `master` at [`b810033`](https://github.com/esbmc/libltl2ba/commit/b81003333) or later ([libltl2ba#4](https://github.com/esbmc/libltl2ba/pull/4)) — **later than the v2.1 tag** |
 
 ## The four-valued verdict
@@ -296,9 +296,20 @@ A monitor emitted by a libltl2ba older than
 `__ESBMC_switch_to_monitor()` and `__ESBMC_switch_from_monitor()` commented out.
 Since the monitor is never scheduled the ordinary way,
 such a monitor never steps at all, and every run reports
-`VERIFICATION UNKNOWN` rather than a wrong verdict. If a formula that should
-decide keeps coming back without a verdict, check the generated file for those
-two calls first.
+`VERIFICATION UNKNOWN` rather than a wrong verdict. ESBMC names that cause while
+collecting the property monitors
+([#6582](https://github.com/esbmc/esbmc/issues/6582)):
+
+```
+WARNING: monitor has no __ESBMC_switch_from_monitor() call; regenerate it with
+libltl2ba master (>= b810033), the v2.1 release predates the fix for
+esbmc/esbmc#6546
+```
+
+The warning is emitted with or without `--ltl`, so it distinguishes this route to
+`VERIFICATION UNKNOWN` from the three below. It is suppressed under
+`--full-inlining`, where the monitor's body is dropped rather than inlined and
+the call's absence proves nothing.
 
 Note that the monitor now advances one automaton step per monitored assignment,
 so a program has to be long enough for the automaton to reach a decisive state.
@@ -413,9 +424,11 @@ Check safety properties and bound adequacy in a separate run without `--ltl`.
   wired up.
 - **`ltl2ba` is not bundled.** libltl2ba must be built and installed separately,
   and from `master` — the newest tagged release, v2.1 (April 2024), predates the
-  context-switch emission this version of ESBMC requires. Nothing checks the
-  pairing, and the resulting `VERIFICATION UNKNOWN` does not name the cause.
-- **Test coverage is thin.** `regression/ltl/` holds eleven tests. The two
+  context-switch emission this version of ESBMC requires. ESBMC does not check
+  the version, but it does warn when the monitor is missing the
+  `__ESBMC_switch_from_monitor()` call the older releases comment out, so the
+  resulting `VERIFICATION UNKNOWN` names its cause.
+- **Test coverage is thin.** `regression/ltl/` holds thirteen tests. The two
   automata shipped by the original three exercise only ⊥ᵖ, ⊤ᵖ and the
   no-verdict cases, because both formulas have an empty bad-prefix state set
   and mark every state as excluded from being a good prefix; `github_6546`
@@ -469,11 +482,13 @@ against the program in [Limitations](#violations-were-missed-fixed-in-840).
 | `regression/ltl/basic-func` | same automaton, propositions via `_ltl2ba_cexpr_N_status()` accessors | `LTL_FAILING`, `VERIFICATION FAILED` |
 | `regression/ltl/basic-success` | automaton for the negated formula | `LTL_SUCCEEDING`, `VERIFICATION SUCCESSFUL` |
 | `regression/ltl/github_6546` | automaton for `F {s != 0}` | `LTL_BAD`, `VERIFICATION FAILED` |
+| `regression/ltl/github_6582` | a v2.1-style monitor, switch calls commented out | warning naming the missing call, then `VERIFICATION UNKNOWN` |
+| `regression/ltl/github_6582_no_ltl` | the same monitor without `--ltl` | the same warning, then `VERIFICATION SUCCESSFUL` |
 | `regression/ltl/basic-no-monitor` | none | `VERIFICATION UNKNOWN` |
 | `regression/ltl/basic-truncated-unwind` | same automaton, `--unwind 1` | `VERIFICATION UNKNOWN` |
 | `regression/ltl/uninstrumented-unknown` | same automaton, `--k-induction` | `VERIFICATION UNKNOWN` |
 
-All eleven are `CORE` and pass:
+All thirteen are `CORE` and pass:
 
 ```bash
 ctest -R "regression/ltl/" --output-on-failure
