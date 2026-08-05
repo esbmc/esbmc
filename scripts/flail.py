@@ -160,17 +160,16 @@ class Flail:
 
     def _step_6(self, content, output, header, macro : str):
         name = self.obtain_var_name()
-        output.write('const char %s[] = {\n' % name)
+        output.write(f'const char {name}[] = {{\n')
         output.writelines(content)
         output.write('0\n};\n')
-        output.write('const unsigned int %s_size = sizeof(%s) - 1;\n' % (name, name))
+        output.write(f'const unsigned int {name}_size = sizeof({name}) - 1;\n')
         if header is not None:
             if macro is None:
-                header.write('extern const char %s[];\n' % name)
-                header.write('extern const unsigned int %s_size;\n' % name)
+                header.write(f'extern const char {name}[];\n')
+                header.write(f'extern const unsigned int {name}_size;\n')
             else:
-                header.write('%s(%s, %s_size, %s)\n' % (macro, name, name,
-                                                        self.filepath))
+                header.write(f'{macro}({name}, {name}_size, {self.filepath})\n')
 
     def run(self, output_file, header = None, macro : str = None):
         step_2 = self.custom_od()
@@ -250,6 +249,9 @@ if __name__ == "__main__":
 # `python3 -m unittest flail`
 
 class TestFlail(unittest.TestCase):
+    # The _step_N methods are the units under test.
+    # pylint: disable=protected-access
+
     # Since the objdump result may be system dependent, this will test the transformations
 
     OBJDUMP = ["0000000  35 105 102 110 100 101 102  32  95  95  69  83  66  77  67  95",
