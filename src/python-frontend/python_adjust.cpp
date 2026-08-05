@@ -653,6 +653,30 @@ void python_adjust::adjust_expr(expr2tc &expr)
       if (source != a.source)
         expr = code_assign2tc(a.target, source, a.location);
     }
+    else if (
+      is_array_type(a.target->type) && is_array_type(a.source->type) &&
+      is_constant_array2t(a.source))
+    {
+      // An array-typed source into an array-typed target, which every arm above
+      // declines because they all guard on a pointer target. `s = ""` where `s`
+      // carries the #5571 fixed-width tuple-string representation assigns a
+      // char[1] literal to a char[16]; the hop-off leaves the bare
+      // constant_array, and symex then synthesises the array-to-array typecast
+      // that convert_typecast has no arm for.
+      //
+      // Reproduce legacy's two steps at this seam -- decay the literal to
+      // &lit[0], then cast that pointer to the target array type -- which is
+      // the shape clang_c_adjust emits and the only one the working default
+      // path produces. Phase 1 of
+      // docs/roadmap/scope-array-assignment-conversion.md; its Phase 0
+      // established that the conversion is the defect, not the literal or the
+      // char[0] declaration that every passing variant also carries.
+      const type2tc &elem = to_array_type(a.source->type).subtype;
+      expr2tc decayed =
+        address_of2tc(elem, index2tc(elem, a.source, gen_zero(index_type2())));
+      expr = code_assign2tc(
+        a.target, typecast2tc(a.target->type, decayed), a.location);
+    }
   }
   else if (
     is_code_ifthenelse2t(expr) &&
