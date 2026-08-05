@@ -911,6 +911,15 @@ The delegation needs no `tmp_symbol`/`context`/`targets` snapshot: like #6668,
 #6672, #6674, #6677 and #6678 it runs *before* any native attempt on the
 statement, so §11.3's two bounds do not apply.
 
+The two tests added here do **not** execute the new arm — they pass
+`--no-irep2-native-body`, which short-circuits `try_convert_body_native`
+before the dispatcher is entered. They are the *legacy half* of an A/B pair
+whose native half already exists (`github_4715_irep2_bodies_jimple_01{,_fail}`
+carry byte-identical inputs on the default path), so what they make durable is
+native/legacy verdict agreement on a throw-bearing body. Coverage of the arm
+itself comes from the twelve pre-existing tests, measured by the census, not
+from anything this patch adds.
+
 ### 20.2 The mutants, and which gate caught which
 
 Three mutants were run rather than assumed, because §11.4 and §14.2 both turn
@@ -919,7 +928,7 @@ on the difference between a gate passing and a gate discriminating:
 | mutant | what it breaks | caught by |
 |---|---|---|
 | M1 — arm absent (`return false`) | nothing observable; falls back | **only the decline census** |
-| M2 — arm present, conversion dropped | the throw disappears | **5 regression tests** + A/B 12/15 |
+| M2 — arm present, conversion dropped | the throw disappears | **6 regression tests** + A/B 12/15 |
 | M3 — `restore_value_locations` given a nil stamp | nothing observable | **nothing** |
 
 M1 is the honest limit of this patch class: the delegation is
@@ -927,6 +936,13 @@ behaviour-preserving by construction, so *no verdict test can distinguish an
 arm that exists from one that does not.* Only the census can. Do not ask a
 `test.desc` to pin arm presence; ask it to pin arm correctness, which M2 shows
 it does.
+
+Read M2's kill list off ctest's full output, not its tail: the first run of
+this table said five, because `tail -8` cut the head of the failure list. The
+sixth is `github_4715_irep2_bodies_jimple_01_fail`, whose input is
+byte-identical to `kt-hello-false` and whose `--irep2-bodies` flag is a
+documented no-op, so it takes the native path like the other five. Six of the
+twelve throw-bearing tests expect FAILED, and all six flip.
 
 M3 is a live coverage note rather than dead code. `restore_value_locations`
 iterates operands, and Jimple's throw has none — `jimple_statement.cpp:368`
