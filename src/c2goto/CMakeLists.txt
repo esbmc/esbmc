@@ -1,11 +1,21 @@
 add_subdirectory(headers)
 
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr)
-file(TOUCH ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libc.h
-           ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libm.h)
+# c2goto reads the model sources it compiles out of the same VFS that ESBMC
+# serves them from, so the goto binary records /esbmc-vfs paths rather than this
+# machine's build tree. That needs the real bundled lists, not the blank ones a
+# tool that must not *link* a C library would otherwise get.
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/headers)
-file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/headers/libc_hdr.h
-           "#include \"${CMAKE_CURRENT_BINARY_DIR}/headers/libc_hdr.h\"")
+set(c2goto_bundled_lists libc libm libmusl libmuslhdr libcpp headers/libc_hdr)
+if(ENABLE_PYTHON_FRONTEND)
+  list(APPEND c2goto_bundled_lists libpython libpythonhdr)
+endif()
+if(ENABLE_SOLIDITY_FRONTEND)
+  list(APPEND c2goto_bundled_lists libsolidity libsolidityhdr)
+endif()
+foreach(lst ${c2goto_bundled_lists})
+  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/${lst}.h
+             "#include \"${CMAKE_CURRENT_BINARY_DIR}/${lst}.h\"")
+endforeach()
 
 add_executable(c2goto c2goto.cpp cprover_blank_library.cpp cprover_libc_sources.cpp)
 target_include_directories(c2goto
@@ -186,8 +196,9 @@ function(mangle_clib output)
       list(APPEND in_flags -I "${cheri_compressed_cap_SOURCE_DIR}")
     endif()
 
+    model_vfs_paths(inputs_vfs ${inputs_c})
     set(run_c2goto c2goto ${multiarch_flags} ${OS_C2GOTO_FLAGS}
-                   ${inputs_c} ${in_flags} --output ${out_goto})
+                   ${inputs_vfs} ${in_flags} --output ${out_goto})
 
     # Convert a list of C operational models (e.g. *.c) into a single goto binary file (e.g. clib32.goto) at CMake build time
     add_custom_command(OUTPUT ${out_goto}
@@ -225,6 +236,32 @@ function(mangle_clib output)
          PREFIX esbmc_libm_
          MACRO ESBMC_FLAIL
          ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libm.h)
+  # Kept out of libm.h: add_bundled_library_sources() parses that list, and musl
+  # is compiled into the clib but has never been part of the parsed fallback.
+  mangle(${CMAKE_CURRENT_BINARY_DIR}/libmusl.c
+         ${CMAKE_CURRENT_SOURCE_DIR}/library/libm/musl
+         WILDCARD *.c
+         SINGLE
+         PREFIX esbmc_libmusl_
+         MACRO ESBMC_FLAIL
+         ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libmusl.h)
+  # musl's sources include each other by relative path, so its private headers
+  # have to sit beside them in the VFS. Separate list because flail.py drops the
+  # extension when it derives a symbol name, so exp2f_data.{c,h} would collide.
+  mangle(${CMAKE_CURRENT_BINARY_DIR}/libmuslhdr.c
+         ${CMAKE_CURRENT_SOURCE_DIR}/library/libm/musl
+         WILDCARD *.h
+         SINGLE
+         PREFIX esbmc_libmuslhdr_
+         MACRO ESBMC_FLAIL
+         ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libmuslhdr.h)
+  mangle(${CMAKE_CURRENT_BINARY_DIR}/libcpp.c
+         ${CMAKE_CURRENT_SOURCE_DIR}/library/cpp
+         WILDCARD *.cpp
+         SINGLE
+         PREFIX esbmc_libcpp_
+         MACRO ESBMC_FLAIL
+         ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libcpp.h)
 
   if(ENABLE_PYTHON_FRONTEND)
     mangle(${CMAKE_CURRENT_BINARY_DIR}/libpython.c
@@ -234,10 +271,21 @@ function(mangle_clib output)
            PREFIX esbmc_python_
            MACRO ESBMC_FLAIL
            ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libpython.h)
+    # Separate list for the same reason as libmuslhdr: the models include
+    # python_types.h by relative path, and flail.py keys symbols on the stem.
+    mangle(${CMAKE_CURRENT_BINARY_DIR}/libpythonhdr.c
+           ${CMAKE_CURRENT_SOURCE_DIR}/library/python
+           WILDCARD *.h
+           SINGLE
+           PREFIX esbmc_pythonhdr_
+           MACRO ESBMC_FLAIL
+           ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libpythonhdr.h)
 
     list(APPEND result
       ${CMAKE_CURRENT_BINARY_DIR}/libpython.c
-      ${CMAKE_CURRENT_BINARY_DIR}/libpython.h)
+      ${CMAKE_CURRENT_BINARY_DIR}/libpython.h
+      ${CMAKE_CURRENT_BINARY_DIR}/libpythonhdr.c
+      ${CMAKE_CURRENT_BINARY_DIR}/libpythonhdr.h)
   endif()
 
   if(ENABLE_SOLIDITY_FRONTEND)
@@ -248,6 +296,15 @@ function(mangle_clib output)
            PREFIX esbmc_solidity_
            MACRO ESBMC_FLAIL
            ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libsolidity.h)
+    # Separate list, as for libmuslhdr: solidity_types.h shares no stem with a
+    # .c model today, but keeping headers apart makes that a non-issue.
+    mangle(${CMAKE_CURRENT_BINARY_DIR}/libsolidityhdr.c
+           ${CMAKE_CURRENT_SOURCE_DIR}/library/solidity
+           WILDCARD *.h
+           SINGLE
+           PREFIX esbmc_solidityhdr_
+           MACRO ESBMC_FLAIL
+           ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libsolidityhdr.h)
 
     # Build a separate goto binary for Solidity operational models (sol64.goto)
     # This is loaded at runtime instead of the full clib64.goto for performance.
@@ -271,7 +328,10 @@ function(mangle_clib output)
       set(sol64_unified_c "${CMAKE_CURRENT_BINARY_DIR}/sol64_unified.c")
       set(sol64_unified_body
         "/* Auto-generated by CMake: amalgamation of solidity *.c models. */\n")
-      foreach(_f ${c2goto_solidity_files})
+      # VFS paths, so the models' symbols carry no build-tree path. The
+      # amalgamation itself contributes no code, so its own path never appears.
+      model_vfs_paths(sol64_vfs ${c2goto_solidity_files})
+      foreach(_f ${sol64_vfs})
         string(APPEND sol64_unified_body "#include \"${_f}\"\n")
       endforeach()
       file(WRITE ${sol64_unified_c} "${sol64_unified_body}")
@@ -299,17 +359,53 @@ function(mangle_clib output)
     list(APPEND result
       ${CMAKE_CURRENT_BINARY_DIR}/libsolidity.c
       ${CMAKE_CURRENT_BINARY_DIR}/libsolidity.h
+      ${CMAKE_CURRENT_BINARY_DIR}/libsolidityhdr.c
+      ${CMAKE_CURRENT_BINARY_DIR}/libsolidityhdr.h
       ${sol64_c})
   endif()
 
 
   list(APPEND result ${CMAKE_CURRENT_BINARY_DIR}/libc.c
-                     ${CMAKE_CURRENT_BINARY_DIR}/libm.c)
+                     ${CMAKE_CURRENT_BINARY_DIR}/libm.c
+                     ${CMAKE_CURRENT_BINARY_DIR}/libmusl.c
+                     ${CMAKE_CURRENT_BINARY_DIR}/libmuslhdr.c
+                     ${CMAKE_CURRENT_BINARY_DIR}/libcpp.c)
+  set(${output} "${result}" PARENT_SCOPE)
+endfunction()
+
+# Absolute model-source paths -> the VFS paths c2goto is handed instead, so no
+# build-tree path is baked into the goto binary. Mirrors the prefixes
+# register_bundled_libc() registers them under.
+function(model_vfs_paths output)
+  set(result "")
+  foreach(f ${ARGN})
+    file(RELATIVE_PATH rel "${CMAKE_CURRENT_SOURCE_DIR}/library" "${f}")
+    list(APPEND result "/esbmc-vfs/libc/library/${rel}")
+  endforeach()
   set(${output} "${result}" PARENT_SCOPE)
 endfunction()
 
 message(STATUS "Multiarch flags for c2goto: ${multiarch_flags}. You may want to override C2GOTO_SYSROOT")
 mangle_clib(mangled_files ${inputs})
+
+# The model sources themselves, so c2goto can serve them to clang out of the VFS
+# rather than reading this machine's build tree. Data only, generated by mangle()
+# without c2goto's involvement, so this is not a dependency cycle.
+set(c2goto_model_data
+  ${CMAKE_CURRENT_BINARY_DIR}/libc.c
+  ${CMAKE_CURRENT_BINARY_DIR}/libm.c
+  ${CMAKE_CURRENT_BINARY_DIR}/libmusl.c
+  ${CMAKE_CURRENT_BINARY_DIR}/libmuslhdr.c
+  ${CMAKE_CURRENT_BINARY_DIR}/libcpp.c)
+if(ENABLE_PYTHON_FRONTEND)
+  list(APPEND c2goto_model_data ${CMAKE_CURRENT_BINARY_DIR}/libpython.c
+                                ${CMAKE_CURRENT_BINARY_DIR}/libpythonhdr.c)
+endif()
+if(ENABLE_SOLIDITY_FRONTEND)
+  list(APPEND c2goto_model_data ${CMAKE_CURRENT_BINARY_DIR}/libsolidity.c
+                                ${CMAKE_CURRENT_BINARY_DIR}/libsolidityhdr.c)
+endif()
+target_sources(c2goto PRIVATE ${c2goto_model_data})
 
 # Auto-generate the Python operational-model allowlist from the model sources so
 # new models register automatically (scripts/gen_python_c_models.py). The header
@@ -342,14 +438,19 @@ endif()
 set(private_headers
   "${CMAKE_CURRENT_BINARY_DIR}/libc.h"
   "${CMAKE_CURRENT_BINARY_DIR}/libm.h"
+  "${CMAKE_CURRENT_BINARY_DIR}/libmusl.h"
+  "${CMAKE_CURRENT_BINARY_DIR}/libmuslhdr.h"
+  "${CMAKE_CURRENT_BINARY_DIR}/libcpp.h"
 )
 
 if(ENABLE_PYTHON_FRONTEND)
-  list(APPEND private_headers "${CMAKE_CURRENT_BINARY_DIR}/libpython.h")
+  list(APPEND private_headers "${CMAKE_CURRENT_BINARY_DIR}/libpython.h"
+                              "${CMAKE_CURRENT_BINARY_DIR}/libpythonhdr.h")
 endif()
 
 if(ENABLE_SOLIDITY_FRONTEND)
-  list(APPEND private_headers "${CMAKE_CURRENT_BINARY_DIR}/libsolidity.h")
+  list(APPEND private_headers "${CMAKE_CURRENT_BINARY_DIR}/libsolidity.h"
+                              "${CMAKE_CURRENT_BINARY_DIR}/libsolidityhdr.h")
 endif()
 
 set_target_properties(clibs PROPERTIES PRIVATE_HEADER "${private_headers}")

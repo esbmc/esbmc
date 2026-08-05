@@ -1,7 +1,7 @@
-#include <fstream>
 #include <langapi/language_ui.h>
 #include <langapi/mode.h>
 #include <memory>
+#include <util/base/filesystem.h>
 #include <util/base/i2string.h>
 #include <util/message/message.h>
 #include <util/symtab/show_symbol_table.h>
@@ -52,9 +52,9 @@ bool language_uit::parse(const std::string &filename)
 
   config.language.lid = lang;
 
-  // Check that it opens
-  std::ifstream infile(filename.c_str());
-  if (!infile)
+  // Bundled sources answer here too: c2goto compiles the operational models
+  // straight out of the VFS, so they never exist on disk.
+  if (!file_operations::filesystemt::get().exists(filename))
   {
     log_error("failed to open input file {}", filename);
     return true;

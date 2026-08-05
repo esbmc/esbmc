@@ -9,7 +9,18 @@ extern "C"
 {
 #include <libc.h>
 #include <libm.h>
+#include <libmusl.h>
+#include <libmuslhdr.h>
+#include <libcpp.h>
 #include <headers/libc_hdr.h>
+#ifdef ENABLE_PYTHON_FRONTEND
+#  include <libpython.h>
+#  include <libpythonhdr.h>
+#endif
+#ifdef ENABLE_SOLIDITY_FRONTEND
+#  include <libsolidity.h>
+#  include <libsolidityhdr.h>
+#endif
 #undef ESBMC_FLAIL
 }
 
@@ -17,6 +28,10 @@ static const std::string vfs_prefix = clang_vfs_root() + "/libc";
 static const std::string vfs_headers = vfs_prefix + "/headers";
 static const std::string vfs_library = vfs_prefix + "/library";
 static const std::string vfs_libm = vfs_library + "/libm";
+static const std::string vfs_musl = vfs_libm + "/musl";
+static const std::string vfs_cpp = vfs_library + "/cpp";
+static const std::string vfs_python = vfs_library + "/python";
+static const std::string vfs_solidity = vfs_library + "/solidity";
 
 /* The build system generates one ESBMC_FLAIL(body, size, name) invocation per
  * bundled file; see scripts/flail.py --macro. */
@@ -42,6 +57,37 @@ void register_bundled_libc()
   fs.add_bundled(vfs_libm + "/" #__VA_ARGS__, body, size);
 #include <libm.h>
 #undef ESBMC_FLAIL
+
+#define ESBMC_FLAIL(body, size, ...)                                           \
+  fs.add_bundled(vfs_musl + "/" #__VA_ARGS__, body, size);
+#include <libmusl.h>
+#undef ESBMC_FLAIL
+
+#define ESBMC_FLAIL(body, size, ...)                                           \
+  fs.add_bundled(vfs_musl + "/" #__VA_ARGS__, body, size);
+#include <libmuslhdr.h>
+#undef ESBMC_FLAIL
+
+#define ESBMC_FLAIL(body, size, ...)                                           \
+  fs.add_bundled(vfs_cpp + "/" #__VA_ARGS__, body, size);
+#include <libcpp.h>
+#undef ESBMC_FLAIL
+
+#ifdef ENABLE_PYTHON_FRONTEND
+#  define ESBMC_FLAIL(body, size, ...)                                         \
+    fs.add_bundled(vfs_python + "/" #__VA_ARGS__, body, size);
+#  include <libpython.h>
+#  include <libpythonhdr.h>
+#  undef ESBMC_FLAIL
+#endif
+
+#ifdef ENABLE_SOLIDITY_FRONTEND
+#  define ESBMC_FLAIL(body, size, ...)                                         \
+    fs.add_bundled(vfs_solidity + "/" #__VA_ARGS__, body, size);
+#  include <libsolidity.h>
+#  include <libsolidityhdr.h>
+#  undef ESBMC_FLAIL
+#endif
 }
 
 const std::string *internal_libc_header_dir()
