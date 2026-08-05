@@ -111,7 +111,7 @@ rather than the host implementation. On the POSIX side that model covers:
 
 | Primitive | Notes |
 |---|---|
-| Mutexes | `PTHREAD_MUTEX_NORMAL`, `RECURSIVE` and `ERRORCHECK`, selected through `pthread_mutexattr_settype`. A recursive re-lock by the owner is not a deadlock; an error-checking one returns `EDEADLK` |
+| Mutexes | `PTHREAD_MUTEX_NORMAL`, `PTHREAD_MUTEX_RECURSIVE` and `PTHREAD_MUTEX_ERRORCHECK`, selected through `pthread_mutexattr_settype`. A recursive re-lock by the owner is not a deadlock; an error-checking one returns `EDEADLK` |
 | Read/write locks | `pthread_rwlock_rdlock` / `wrlock` participate in the wait graph, so a genuine rwlock deadlock is reported |
 | Barriers | `pthread_barrier_init` / `wait` / `destroy`, with waiter accounting |
 | Spinlocks | `pthread_spin_lock` / `trylock` / `unlock` |
