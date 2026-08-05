@@ -32,6 +32,8 @@ class ModuleLifecycleMixin:
                 helper_fn = self._build_dataclass_replace_error_helper(node)
                 node.body = [helper_fn] + node.body
 
+            self._inject_vararg_specializations(node)
+
             if self._needs_dataclass_getattr_helper:
                 helper_fn = self._build_dataclass_getattr_helper(node)
                 node.body = [helper_fn] + node.body

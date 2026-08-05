@@ -16,6 +16,10 @@ class PreprocessorStateMixin:
         self.nondet_expand_counter = 0
         self.helper_functions_added = False
         self.functionKwonlyParams = {}
+        self.functionVarargs = set()
+        self._vararg_func_defs = {}
+        self._vararg_specializations = {}
+        self._vararg_dropped_defs = set()
         self.listcomp_counter = 0
         self.variable_annotations = {}
         self.function_return_annotations = {}
