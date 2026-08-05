@@ -1025,9 +1025,10 @@ exceptions (`throw`/`catch` through `std::exception`), `std::variant`,
 It is also the cheapest to close.
 
 > **Re-measured 2026-08-05 — the table above is stale; see §15 M9 (G-remeasure).**
-> Six of the seven probes now pass. **G1, G2, G3, G4, G5 and G6 are closed**;
-> only **G7** (`std::unreachable`) still reproduces. The blocker for including an
-> ESBMC header is no longer a missing STL facility but **G9** below.
+> **All seven probes now pass: G1–G7 are closed**, so §13.6's WI-1, WI-2 and
+> WI-3 are all done. The blocker for including an ESBMC header is no longer a
+> missing STL facility but **G9** below. Probe G7 at `--std c++23`, not c++20 —
+> `std::unreachable` is a C++23 name and the OM gates it correctly.
 >
 > | ID | Facility | 2026-07-27 | 2026-08-05 |
 > |---|---|---|---|
@@ -1037,7 +1038,7 @@ It is also the cheapest to close.
 > | G4 | `iterator_traits::difference_type` | absent | **closed** |
 > | G5 | `std::this_thread::yield` | absent | **closed** |
 > | G6 | `<compare>` `strong_ordering` | absent | **closed** |
-> | G7 | `std::unreachable` | absent | **open** |
+> | G7 | `std::unreachable` | absent | **closed** — #6631; needs `--std c++23` |
 >
 > **G9 — `std::map` with an incomplete `mapped_type`.** `irept` declares
 > `typedef std::map<irep_idt, irept> named_subt` (`src/util/irep/irep.h:41`),
@@ -1113,15 +1114,15 @@ defect-masking failure mode of §9.1. Rules:
 | WI | Work | Effort | Milestone | Unblocks |
 |---|---|---|---|---|
 | ~~**WI-1**~~ | ~~`<shared_mutex>` operational model (G2)~~ | — | M0 | **Done** — closed in-tree; re-measured §15 M9 (G-remeasure) |
-| **WI-2** | ~~`<type_traits>` completion (G1)~~ + ~~`<compare>` `strong_ordering` (G6)~~ + `std::unreachable` (G7) | ~2 d | M0–M1 | **G1 and G6 done**; only G7 remains, a plain user-facing defect |
+| ~~**WI-2**~~ | ~~`<type_traits>` completion (G1) + `<compare>` `strong_ordering` (G6) + `std::unreachable` (G7)~~ | — | M0–M1 | **Done** — G1 and G7 by #6631, G6 in-tree |
 | ~~**WI-3**~~ | ~~`std::initializer_list` (G3), `iterator_traits::difference_type` (G4), `this_thread::yield` (G5), `aligned_storage[_t]`~~ | — | M1 | **Done** — `renaming.h` now stops only at G9 |
 | **WI-4** | **Tier B′ pilot**: a reduced harness that `#include`s `renaming.h` and drives the real `level1t`. **Gate:** must parse *and* verify in < 60 s. If it does not, record the negative result in §13.3 and keep Tier A — do not force it. **Now blocked on G9 alone**, not on a missing header. | ~1 wk | M4 | Removes transcription drift for C1 |
 | **WI-5** | E1 container reference/iterator invalidation modelling | ~2–3 wk | M6 | Stating R3/H-A9 on the real class; benefits all STL verification |
 | **WI-6** | E2 native 2-safety / equivalence mode | unscoped | post-M7 | Promotes H-C1/H-C2 from sweep to proof |
 
-**Critical path:** ~~WI-1 → WI-2 → WI-3~~ — retired. WI-1 and WI-3 are done and
-WI-2 is down to G7 (§15 M9 (G-remeasure)); what stands between here and WI-4 is
-**G9**, not this chain. WI-4 is a gated experiment with an explicit
+**Critical path:** ~~WI-1 → WI-2 → WI-3~~ — retired; all three are done
+(§15 M9 (G-remeasure)). What stands between here and WI-4 is **G9**, not this
+chain. WI-4 is a gated experiment with an explicit
 accept-the-negative-result branch. WI-5/WI-6 are stretch goals; neither is a
 precondition for any property claimed in §8.
 
@@ -3781,21 +3782,32 @@ the two are not comparable.
 With this, R9's three claims are all pinned and §7.3 has no row left open
 behind a reachability argument.
 
-### M9 (G-remeasure) — 2026-08-05, §13.2 re-run; WI-1 and WI-2 are done
+### M9 (G-remeasure) — 2026-08-05, §13.2 re-run; WI-1, WI-2 and WI-3 are done
 
 Appendix C says to re-run §13.2's figures before citing them. Doing so retires
-most of §13.6: **six of the seven probes now pass**, so **WI-1
-(`<shared_mutex>`, G2) and WI-2's G1 leg are closed** — carried as "not started"
-in every milestone entry since M0, and closed by other people's work in the
-interim rather than by this plan. G6 (`strong_ordering`) is closed too. Only
-**G7** (`std::unreachable`) still reproduces.
+§13.6's whole critical path: **all seven probes now pass**, so **WI-1, WI-2 and
+WI-3 are closed** — carried as "not started" in every milestone entry since M0,
+and closed by other people's work in the interim rather than by this plan.
+`<shared_mutex>` (G2) is simply present in `src/cpp/library/`; G1 and G7 were
+closed by **#6631**; G3, G4, G5 and G6 all parse. Nothing in §13.6's first three
+rows remains to do, and no one had re-measured to notice.
 
-A method note that changed a verdict: the first sweep grepped the tool output
-for `error:`, and reported G4 and G5 as failing. Both were false — the match was
-`runtime_error::~runtime_error` inside the `--parse-tree-only` AST dump. The
-reliable criterion is `PARSING ERROR` (or the exit code), and every figure above
-was re-taken with it. Appendix C's `probe()` helper has the same flaw and should
-be read with that in mind.
+**Two probe defects, both of which produced a wrong verdict before being
+caught.** They are recorded because each one reads exactly like a finding about
+ESBMC, and neither is.
+
+1. *Grepping for `error:`.* The first sweep matched
+   `runtime_error::~runtime_error` inside the `--parse-tree-only` AST dump and
+   reported G4 and G5 as failing. The reliable criterion is `PARSING ERROR` or
+   the exit code. Appendix C's `probe()` helper has this flaw.
+2. *Probing a C++23 name at `--std c++20`.* This entry first recorded G7 as the
+   one gap still open. It is not: `std::unreachable` is modelled at
+   `src/cpp/library/utility:285`, correctly gated on `__cplusplus >= 202302L`,
+   and closed together with G1 by **#6631** on 2026-08-02 — five days after M0
+   measured them, so both were real gaps when the table was written. At
+   `--std c++23` every probe passes. The lesson generalises: **the probe's
+   `--std` must be at least the standard that introduced the name**, or the OM
+   is blamed for the harness's setting.
 
 **The payoff measurement, and the new blocker.** G2 was called "the first-order
 blocker … it stops *any* file that reaches `irep_idt`". That is now testable
