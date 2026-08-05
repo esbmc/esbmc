@@ -3703,6 +3703,55 @@ rather than constraints, so "never adding behaviour" is not the direction to
 check — the question is whether the dropped `unknown` could have been the real
 target, which is why it was the one left unproven.
 
+### M9 (R9 cont.) — 2026-08-05, claim 1 pinned; the reachability claim was wrong
+
+The entry above says Tier B "cannot see the branch at all". That is false, and
+the correction is the cheap half of this one: `goto_k_induction` is a **free
+function** (`goto_k_induction.h:20`) and `gotoalgorithms` is already linked into
+every `unit/goto-symex` target. `symex_run::inductive_step_equation` runs
+`remove_no_op` then `goto_k_induction` over a `goto_factory` program before
+`setup_for_new_explore()`, with `inductive-step` and `add-symex-value-sets` set.
+Instrumenting the site confirms arrival rather than inferring it. No Tier-C leg
+was needed; the row was closed on inspection of the *option*, not of the call
+graph.
+
+**Getting a set worth filtering is the part that needs care.** The pre-havoc
+map must mix a concrete candidate with a sink, which needs an *external*
+function to supply the sink: `p = &a` on one arm, `p = ext()` on the other, with
+the loop writing `p` so the transform havocs it. A first attempt whose pointer
+had a single concrete target reached the branch with `pre map size=1` and
+filtered nothing — passing for reasons unrelated to the claim.
+
+**Two directions, two cases, three mutants.** The first case is the claim
+itself: the sink is dropped and the concrete candidate is not. It is separated
+by *both* one-sided mutants — keeping the sinks (`if (false && …)`) and keeping
+only the sinks (inverting the test) each fail it.
+
+The second case is the one the first entry did not anticipate, and it is where
+the real asymmetry lives. `filtered` is installed only `if (!filtered.empty())`,
+and on a program whose every entry is a sink that guard is the only thing
+between `p` and an *empty* target set. Deleting it costs, on a four-iteration
+loop, exactly one `dereference failure: invalid pointer` and one
+`dereference failure: Incorrect alignment` — four checks become three, while all
+40 assignments and every LHS name survive unchanged. A dereference simply stops
+being verified, and nothing in the equation says so. That is the same
+missed-bug direction as claim 3's function-pointer filter, and it makes the
+narrowing's real risk concrete: not that a dropped `unknown` was the true
+target, but that dropping *all* candidates removes the properties.
+
+**A harness bug worth recording, because it inverted a verdict.** The sink
+detector first scanned `step.rhs` only, and under that version the
+keep-only-the-sinks mutant *passed* — the sink reaches the equation through
+`lhs` and `guard` as well. A one-sided scan reads exactly like a discharged
+claim. Relatedly the assertions name the property text rather than totalling
+asserts: a bulk count cannot say *which* check went missing, and here that is
+the whole content. A differential pin against a concrete-target twin was tried
+first and abandoned — the twin carries 1 assertion to the sink program's 9, so
+the two are not comparable.
+
+With this, R9's three claims are all pinned and §7.3 has no row left open
+behind a reachability argument.
+
 ---
 
 ## Appendix A — Methodological basis
