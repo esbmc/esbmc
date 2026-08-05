@@ -147,7 +147,6 @@ weight: 4
 - **`Thread(args=(instance,))` value-copies object arguments** ([#4583](https://github.com/esbmc/esbmc/issues/4583)). When a `Thread` target receives a class instance with non-trivial attributes (e.g. a `threading.Lock`), the args-capture struct copies the descriptor by value and breaks attribute dereference inside the trampoline body. Workaround: share state via module-level globals instead of instance attributes passed through `args=`.
 - **Symex does not interleave at Python module-global accesses** ([#4584](https://github.com/esbmc/esbmc/issues/4584)). `--data-races-check` correctly flags W/W races on a module global, but symex's per-statement scheduler does not insert interleaving points at function-internal reads/writes of these globals. A classic split read-modify-write race (`tmp = counter; counter = tmp + 1` from two threads) reports `VERIFICATION SUCCESSFUL` instead of finding the schedule where both threads read `counter == 0` before either writes. The C equivalent of the same program is correctly reported as `VERIFICATION FAILED`.
 - **Thread shapes refused at parse time** with explicit errors:
-  - `Thread` subclassing with `run` override
   - Lambda or runtime-variable `target=`
   - Positional argument forms (`Thread(f, (a, b))`)
   - `args=` bound to a variable instead of a tuple literal (`Thread(target=f, args=payload)`)
@@ -157,6 +156,7 @@ weight: 4
   - `Thread` as a class attribute (`class C: t = Thread(...)`)
   - `target` defined after the caller in source order
   - `from threading import *`
+- **`Thread` subclassing is supported** (see [Supported Features](/docs/python/supported-features#thread-subclassing)), with these shapes refused at parse time: multiple inheritance, a class below module scope, a missing `run`, an overridden `start`, a non-bare `super().__init__()`, a class defined after its constructing function, instance reassignment, binding by anything other than a simple assignment, construction inside a loop, and assignment to a `global`/`nonlocal` name from a function.
 - **Other `threading` primitives are not supported**: `RLock`, `Semaphore`, `Condition`, `Event`, `Barrier`, `Timer` are refused at parse time. The `queue` module now has a single-threaded model (`queue.Queue`/`LifoQueue`; see [Supported Features — Queue](./supported-features#queue-module-queue)), but its blocking `put()`/`get()` semantics are not modelled, so it does not provide thread synchronisation.
 - **The CPython Global Interpreter Lock (GIL) is not modelled** ([#4579](https://github.com/esbmc/esbmc/issues/4579)). Translated programs execute under sequentially-consistent POSIX semantics rather than GIL-serialised bytecode execution, so the analysis over-approximates the set of feasible interleavings compared to actual CPython execution. This preserves safety but may produce spurious concurrency counterexamples.
 

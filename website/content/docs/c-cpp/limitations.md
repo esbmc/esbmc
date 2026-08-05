@@ -23,25 +23,14 @@ should not, or vice versa.
 
 ## Containers
 
-- **A `std::vector` of a non-trivial element type** — `std::vector<std::vector<int>>`,
-  or a vector of any type with a non-trivial constructor — fails, because
-  elements are assigned into raw `malloc`'d storage without the constructor
-  running ([#6368](https://github.com/esbmc/esbmc/issues/6368)). Prefer a
-  fixed-size array, or a vector of a trivial type, where you can.
+- **`insert` on a nested `std::vector` does not converge under an unbounded
+  strategy.** `std::vector<std::vector<int>>` now constructs its elements
+  correctly, and `push_back` converges under `--incremental-bmc`, but the
+  element copy-constructor loop that `insert`'s shift runs unwinds indefinitely.
+  Use a bounded `--unwind N` run for that case.
 - Some STL container regression tests remain marked `KNOWNBUG`
   ([#4400](https://github.com/esbmc/esbmc/issues/4400)); the `regression/esbmc-cpp`
   suites are the authoritative record of which specific cases fail.
-
-## Memory management
-
-- **A replacement `operator new` / `operator delete` is never called.** A
-  user-defined global or class-level replacement operator is ignored, so both
-  missed bugs and false alarms are possible
-  ([#6494](https://github.com/esbmc/esbmc/issues/6494)).
-- **Placement `new` can report a spurious heap out-of-bounds** under
-  `--incremental-bmc` and `--k-induction`
-  ([#6464](https://github.com/esbmc/esbmc/issues/6464)). A fixed-bound run
-  (`--unwind N`) avoids it.
 
 ## Exceptions
 
@@ -81,8 +70,10 @@ inheritance/polymorphism regressions remain marked `KNOWNBUG`
 ## Standard version
 
 The default is C++17. C++20 and C++23 features require an explicit `--std` — for
-example `--std c++20`. ESBMC does not currently take the standard into account
-when parsing the C++ libraries themselves
+example `--std c++20`. The operational models honour `--std` only where a
+version guard has been added by hand — see
+[Standard-version guards](/docs/c-cpp/supported-features#standard-version-guards) for the
+headers that have one; the models are not systematically versioned
 ([#1678](https://github.com/esbmc/esbmc/issues/1678)).
 
 ## Bounded verification

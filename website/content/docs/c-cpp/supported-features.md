@@ -147,6 +147,13 @@ case. See [Limitations](./limitations#constructor-and-destructor-ordering).
 - Address-of distributes over a conditional lvalue; class-typed conditionals
   elide their temporaries; a reference parameter binds to the selected arm
 
+### Lambdas
+
+- Capturing and non-capturing lambdas, including generic (`auto`-parameter) forms
+- A captureless lambda converted to a function pointer produces a *callable*
+  pointer: both the conversion operator and the static invoker behind it get a
+  body, so `int (*f)(int) = [](int x){ return x + 1; }; f(2);` runs
+
 ### Templates
 
 - Class and function templates, partial and explicit specialisation
@@ -169,6 +176,13 @@ case. See [Limitations](./limitations#constructor-and-destructor-ordering).
 ### Memory management
 
 - `new` / `delete` and `new[]` / `delete[]`
+- `new T[n]` runs `T`'s constructor on every element and `delete[]` runs its
+  destructor; `new T[n]()` value-initialises them
+- A user-replaced `operator new` / `operator delete` — global, class-level,
+  sized or array form — is called instead of the built-in allocator, so a pool
+  allocator that hands out overlapping storage is caught. The aligned
+  (`std::align_val_t`) and user-placement forms are not routed and keep the
+  built-in path
 - Detection of dangling pointers, double `delete` and mismatched operators
 - Placement `new`, including the form without an initialiser
 - `delete` dispatches through the virtual destructor slot; deleting through a
@@ -203,7 +217,8 @@ Other exception behaviour:
 | Feature | Standard |
 | --- | --- |
 | Structured bindings, including binding by reference and over `std::tuple` | C++17 |
-| Three-way comparison `<=>`, including pointer and side-effecting operands | C++20 |
+| Three-way comparison `<=>`, including pointer, floating-point and side-effecting operands | C++20 |
+| A defaulted friend `operator<=>` / `operator==`, with both operands bound | C++20 |
 | Parenthesized aggregate initialization | C++20 |
 | `using enum` declarations | C++20 |
 | `char8_t` | C++20 |
@@ -219,7 +234,7 @@ by regression tests under `regression/esbmc-cpp*`.
 
 | Header | Notes |
 | --- | --- |
-| `<vector>` | Including `data()`, `emplace_back`, `shrink_to_fit`, `cbegin`/`cend`; the destructor frees its buffer |
+| `<vector>` | Including `data()`, `emplace_back`, `shrink_to_fit`, `cbegin`/`cend`; the destructor frees its buffer. Elements are constructed into the raw buffer, so a vector of a non-trivial element type works |
 | `<list>` | Const `front`/`back`/`rbegin`/`rend`, `cbegin`/`cend` |
 | `<deque>` | Const iteration |
 | `<map>` | Const `at`, `emplace`, `try_emplace`, `insert_or_assign`, C++20 `contains` |
@@ -227,7 +242,7 @@ by regression tests under `regression/esbmc-cpp*`.
 | `<unordered_map>`, `<unordered_set>` | |
 | `<array>` | `iterator` / `const_iterator` typedefs; usable in C++11 |
 | `<queue>`, `<stack>`, `<bitset>` | Includes `std::priority_queue` |
-| `<iterator>` | `iterator_traits` and the iterator tags |
+| `<iterator>` | `iterator_traits` and the iterator tags; `advance`, `distance`, `next`, `prev` |
 | `<valarray>` | |
 
 `std::multimap` and `std::multiset` track `std::map` and `std::set`, including
@@ -237,7 +252,7 @@ by regression tests under `regression/esbmc-cpp*`.
 
 | Header | Notes |
 | --- | --- |
-| `<string>` | `(const char*, size_t)` range and fill constructors; length-aware `operator<`/`operator>` including free overloads against `const char*`; `const` `substr(pos, n)`; C++20 `starts_with`/`ends_with`; `at` throws `std::out_of_range` |
+| `<string>` | `(const char*, size_t)` range and fill constructors; length-aware `operator<`/`operator>`/`operator<=`/`operator>=` including free overloads against `const char*`; `const` `substr(pos, n)`; C++20 `starts_with`/`ends_with`; `at` throws `std::out_of_range`; the full `sto*` family (`stoi`, `stol`, `stoll`, `stoul`, `stoull`, `stof`, `stod`, `stold`) |
 | `<string_view>` | Search members, `string` → `string_view` conversion, `hash<string_view>` |
 | `<iostream>`, `<istream>`, `<ostream>`, `<ios>`, `<iosfwd>` | Standard stream objects, `ios::widen`/`narrow`, `ios::exceptions`, `ios::copyfmt` |
 | `<sstream>`, `<fstream>`, `<streambuf>`, `<iomanip>` | |
@@ -247,8 +262,9 @@ by regression tests under `regression/esbmc-cpp*`.
 
 | Header | Notes |
 | --- | --- |
-| `<type_traits>` | Classification traits and the `_t` aliases |
-| `<utility>`, `<functional>`, `<memory>`, `<initializer_list>` | |
+| `<type_traits>` | Classification traits and the `_t` / `_v` forms, including `is_trivial`, `is_standard_layout`, `is_aggregate`, `is_assignable` and the copy/move/destructible variants, `remove_cvref`, `aligned_storage`, and the logical traits `conjunction` / `disjunction` / `negation` |
+| `<utility>` | Including C++23 `std::unreachable` |
+| `<functional>`, `<memory>`, `<initializer_list>` | `<functional>` has the transparent operation functors (`plus<>`, `less<>`, …); `<memory>` has `std::allocate_shared` and a correct default-constructed `unique_ptr` |
 | `<tuple>` | `std::tie`, `std::ignore`, structured binding over a tuple |
 | `<optional>` | `emplace`, `swap`, `std::make_optional` |
 | `<variant>`, `<any>` | The converting constructor does not hijack copies |
@@ -270,10 +286,13 @@ by regression tests under `regression/esbmc-cpp*`.
 
 ### Concurrency
 
-`<thread>`, `<mutex>` and `<condition_variable>` are lowered onto ESBMC's pthread
-model, so interleaving exploration, deadlock detection and data-race detection
-apply to `std::thread` programs. `std::promise` and `std::future` are modelled on
-the same basis, and `<atomic>` is modelled with atomic sections.
+`<thread>`, `<mutex>`, `<shared_mutex>` and `<condition_variable>` are lowered
+onto ESBMC's pthread model, so interleaving exploration, deadlock detection and
+data-race detection apply to `std::thread` programs. `<shared_mutex>` sits on the
+pthread rwlock model, giving `shared_mutex`, `shared_timed_mutex`, `shared_lock`
+and the shared/exclusive locking split. `std::this_thread` and
+`std::hash<std::thread::id>` are available. `std::promise` and `std::future` are
+modelled on the same basis, and `<atomic>` is modelled with atomic sections.
 
 ### C library headers
 
@@ -281,12 +300,23 @@ the same basis, and `<atomic>` is modelled with atomic sections.
 `<clocale>`, `<cmath>`, `<csetjmp>`, `<csignal>`, `<cstdarg>`, `<cstddef>`,
 `<cstdint>`, `<cstdio>`, `<cstdlib>`, `<cstring>` and `<ctime>` are available.
 
+Their names are declared in namespace `std` as the standard requires, not only
+in the global namespace: `std::isalpha`, `std::tolower`, `std::time`,
+`std::setlocale`, the C99 `<cmath>` functions (`std::fabs`, `std::sqrt`,
+`std::fmod`, …), the `strto*` family, and `div` / `ldiv` / `lldiv` all resolve.
+
 ### Standard-version guards
 
 `<compare>` is includable before C++20; `<bit>`, `<span>` and `<expected>` are
-guarded by standard version; `<array>` is usable in C++11; `<limits>` works under
-`--std c++11` and `c++14`; and the C++98 container headers parse under
-`--std c++03`.
+guarded by standard version; `<array>` is usable in C++11; and `<limits>` works
+under every mode from `--std c++03` up.
+
+Under `--std c++03` the headers that postdate C++03 — `<any>`, `<chrono>`,
+`<filesystem>`, `<initializer_list>`, `<optional>`, `<random>`,
+`<source_location>`, `<string_view>`, `<unordered_map>`, `<unordered_set>` and
+`<variant>` — are *inert* rather than a parse error, so one can sit in a
+translation unit that only uses the C++03 headers. Using the type it declares
+is still an error in that mode.
 
 ### Not modelled
 
@@ -297,7 +327,7 @@ implementation, which is frequently intractable.
 
 `<forward_list>`, `<regex>`, `<ranges>`, `<format>`, `<concepts>`,
 `<coroutine>`, `<charconv>`, `<numbers>`, `<ratio>`, `<typeindex>`,
-`<shared_mutex>`, `<barrier>`, `<latch>`, `<semaphore>`, `<stop_token>`,
+`<barrier>`, `<latch>`, `<semaphore>`, `<stop_token>`,
 `<syncstream>`, `<execution>`, `<memory_resource>`, `<scoped_allocator>`,
 `<cwchar>`, `<cwctype>`, `<cfenv>`, `<cinttypes>`.
 

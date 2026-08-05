@@ -40,6 +40,7 @@ This page is a reference of all Python language constructs, data structures, and
 - **Classes**: Definitions, methods, and attributes
 - **Class attributes**: Class-level variables shared across all instances; supports both explicit type annotations and automatic type inference from assigned values; accessible via both `instance.attr` and `ClassName.attr`
 - **PEP 604 attribute annotations**: `self.x: T | None` (and other `T1 | T2` `BinOp` annotations) are recognised and mapped to the same pointer-to-`T` encoding used for `Optional[T]`
+- **`Callable[...]` attributes**: a member annotated `Callable[[A], R]` is typed as a function pointer, so the class both constructs and dispatches — `self.fn = fn` in `__init__` followed by `self.fn(v)` calls the stored function
 - **Instance variables**: Attributes defined in `__init__`
 - **Object reference semantics**: When an instance attribute is assigned an aliased class-instance reference (e.g. `self.head = head` from a constructor parameter), the field is stored as a reference, so mutating the object through one binding is visible through the attribute (and vice versa). This makes linked-list, queue, and tree patterns that reassign such attributes through chained references (`curr = q.head; curr = curr.nxt; q.head = curr`) verify correctly. A fresh-constructor RHS (`self.a: A = A()`) is still constructed in place by value.
 - **Return-by-reference for class instances**: A function whose return annotation resolves to a user-defined class returns a `Cls*` reference to the heap-allocated object rather than a value copy, so the returned object survives the callee frame and preserves identity/aliasing across the call boundary (`y = f(x); y.v = 1` is observed through `x` when `f` returns its argument). This matches CPython and the pointer representation already used for locals, parameters, and `self`; `return self` / `return param` and `return ClassName(...)` are all handled.
@@ -239,10 +240,37 @@ For each `Thread(target=f, args=(...))` construction site, the frontend synthesi
 
 Supported `Thread` shapes:
 
-- `target=f` — `f` must be a function statically resolvable at the construction site (a `Name` or attribute chain). Lambdas, runtime-callable values, and `Thread`-subclassing's `run` override are out of scope.
+- `target=f` — `f` must be a function statically resolvable at the construction site (a `Name` or attribute chain). Lambdas and runtime-callable values are out of scope.
 - `args=(...)` — must be a tuple literal whose elements are expressions evaluable at the construction site. Passing simple values (ints, floats, bools, strings) works end-to-end.
 - `t.start()` and `t.join()` — lower to `pthread_create` and `pthread_join` semantics; `join` establishes happens-before.
 - Multiple construction sites per program, with independent trampolines.
+
+### `Thread` subclassing
+
+A subclass of `threading.Thread` that overrides `run` is lowered the same way, with the `run` body taking the place of `target`:
+
+```python
+import threading
+
+shared: int = 0
+
+class Worker(threading.Thread):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def run(self) -> None:
+        global shared
+        shared = 42
+
+w: Worker = Worker()
+w.start()
+w.join()
+assert shared == 42
+```
+
+The class must be defined at module scope, but the instance may be constructed inside a function: a function-local instance is hoisted onto a synthesised module global so the spawned thread can reach it, including constructor arguments stored on `self`. Race detection applies to subclass threads exactly as it does to `target=` ones.
+
+The shapes the lowering cannot express are refused at parse time with a named error rather than being mis-modelled: multiple inheritance, a class defined below module scope, a missing `run`, an overridden `start`, a `super().__init__()` that is not a bare statement-level call, a class defined after the function that constructs it, an instance reassigned in the same scope, an instance bound by anything other than a simple assignment (for example inside a module-level `if`), construction inside a loop, and assignment to a `global`/`nonlocal` name from inside a function.
 
 ### Data-race detection
 
@@ -404,6 +432,8 @@ See also: [Random Operational Model](./random-operational-model)
 - **`deque`**: List-backed double-ended queue; supports construction, indexing, `__setitem__`, `append()`, and the FIFO-front methods `popleft()` (front pop) and `appendleft()` (front insert), enabling FIFO/BFS patterns. Aliased imports such as `from collections import deque as Queue` resolve correctly
 - **`OrderedDict`**: Supports construction and basic indexing / `append` / `__setitem__`
 
+`defaultdict`, `deque` and `OrderedDict` are classes in CPython but functions returning a dict or list in the operational model, so a variable *annotated* with one (`d: deque = deque()`, in either the dotted or the `from collections import …` spelling) resolves to the model function's return type rather than raising `NameError`.
+
 ## Queue Module (`queue`)
 
 A single-threaded verification model: `queue.Queue` is backed by a plain list (FIFO) and `queue.LifoQueue` by a list-backed stack (LIFO). Both the qualified form (`queue.Queue()`) and `from queue import LifoQueue` work.
@@ -414,6 +444,8 @@ A single-threaded verification model: `queue.Queue` is backed by a plain list (F
 - **`maxsize`**: tracked by `full()` (`Queue(2)`); `put()` does not block on it
 
 The blocking semantics of `put()`/`get()` (the `block`/`timeout` arguments) are not modelled — there is nothing to block on under sequential symbolic execution. An unguarded `get()` on an empty queue pops from an empty list, reported as an `IndexError`; guard with `empty()`/`qsize()` first.
+
+A queue held in an instance field (`self.q = queue.Queue()`, then `self.q.get()`) dispatches correctly, as does any other imported class held in a field.
 
 ## Datetime Module (`datetime`)
 
