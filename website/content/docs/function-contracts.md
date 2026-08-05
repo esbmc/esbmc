@@ -467,6 +467,22 @@ functions.
 | `--loop-invariant-check`           | Enable loop invariant checking (see [Loop Invariant Support](/docs/loop-invariants)) |
 | `--loop-frame-rule`                | Enable loop frame rule (requires `--loop-invariant-check`)                           |
 
+A name these flags cannot act on is an error, not a silent no-op:
+
+```
+ERROR: --enforce-contract: cannot use 'typoo': no function of that name,
+or the name is ambiguous
+```
+
+The same applies to a function with no body, a function with no contract
+clause, a comma-separated list where one name is expected, and
+`--enforce-all-contracts` / `--replace-all-contracts` when nothing matches. A
+typo used to report `VERIFICATION SUCCESSFUL` for a run that applied no contract
+at all.
+
+`__ESBMC_is_fresh(EXPR, n)` likewise rejects a non-pointer `EXPR` rather than
+lowering into an incoherent allocation.
+
 ## Known limitations
 
 The following cases are not yet fully supported. KNOWNBUG regression tests
