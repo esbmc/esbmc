@@ -962,7 +962,10 @@ std::set<std::string> code_contractst::enforce_contracts(
     // deserve enforcement: the assigns compliance check is the contract.
     std::vector<expr2tc> assigns_targets_early =
       extract_assigns_from_body(original_body_copy);
-    bool has_assigns = !assigns_targets_early.empty();
+    // An explicit __ESBMC_assigns() yields no targets but is still a frame
+    // condition -- the strongest one, naming nothing (#6555).
+    bool has_assigns = !assigns_targets_early.empty() ||
+                       has_empty_assigns_marker(original_body_copy);
 
     // For annotated functions without explicit contracts, use default true/true
     // This allows the function to be processed with default contract semantics.
@@ -1187,6 +1190,13 @@ goto_programt code_contractst::generate_checking_wrapper(
 {
   goto_programt wrapper;
   locationt location = original_func.location;
+
+  // A declared frame condition, whether or not it names any target. An
+  // explicit __ESBMC_assigns() names nothing, which enforce_frame_rule reads
+  // as "every snapshotted global must be unchanged" -- the check that makes
+  // the empty clause mean anything (#6555).
+  const bool declares_frame =
+    !assigns_targets.empty() || has_empty_assigns_marker(original_body);
 
   // Note: Here is the design, enforce_contracts mode does NOT havoc
   // parameters or globals. The wrapper is called by actual callers, so we
@@ -1468,7 +1478,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   std::vector<ptr_deref_snapshot_t> ptr_deref_snaps;
   std::vector<arr_elem_snapshot_t> arr_elem_snaps;
   frame_enforcert::classified_assignst classified_assigns;
-  if (check_assigns_compliance && !assigns_targets.empty())
+  if (check_assigns_compliance && declares_frame)
   {
     std::string func_name = id2string(original_func.name);
 
@@ -1679,7 +1689,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   }
 
   // 3c. Assert assigns compliance (after function call, before ensures)
-  if (check_assigns_compliance && !assigns_targets.empty())
+  if (check_assigns_compliance && declares_frame)
   {
     log_debug(
       "contracts",
@@ -3661,6 +3671,12 @@ expr2tc code_contractst::normalize_ensures_guard_for_return_value(
 
 bool code_contractst::has_contracts(const goto_programt &function_body) const
 {
+  // __ESBMC_assigns() lowers to an ASSERT marker, not an ASSUME, so the comment
+  // scan below cannot see it. An empty frame condition is a whole contract on
+  // its own: it states the function writes nothing outside its locals (#6555).
+  if (has_empty_assigns_marker(function_body))
+    return true;
+
   // Quick check: scan for contract markers without extracting full clauses
   forall_goto_program_instructions (it, function_body)
   {
