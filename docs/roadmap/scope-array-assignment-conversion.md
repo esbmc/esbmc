@@ -1,11 +1,14 @@
 # Scope — the array-typed assignment conversion
 
-> **Status: forward plan, opened 2026-08-03. Not started.**
+> **Status: Phase 1 shipped (#6700), Phase 2 gates discharged 2026-08-05 (§12).
+> The scope's own work is done; the flip it contributes to is not.**
 > `docs/roadmap/scope-coupled-arith-assign-conversion.md` §13.1 discharges every
 > gate that scope owns and closes with the flip blocked on **two mechanisms it
 > explicitly does not own**. This is the owner document for one of them. The
 > other — §9.4's "second mechanism" (`chained-comparison2_fail`, `lambda15`,
-> `precedence2`, `sum_tuple`) — still has none.
+> `precedence2`, `sum_tuple`) — is owned by
+> `scope-relational-float-reconciliation.md`, reopened at its §17 with one
+> witness clearing and nothing shipped.
 >
 > **Verification status of this document.** The tree reads in §3 were performed
 > against `master` on 2026-08-03. The GOTO diff and abort message in §2 are
@@ -160,3 +163,145 @@ unconverted, where a synthesised array-to-array typecast meets a
 `convert_typecast` with no array arm — the coupled scope's defect class with an
 array type, declined by every existing arm because they all guard on a pointer
 target.
+
+## 11. Phase 0 — the layer is the adjuster (2026-08-04)
+
+§6 Phase 0 asks one question before any code: **is the `char[1]` literal wrong,
+or is the missing conversion wrong?** §5 lists three candidate layers and
+forbids choosing before this is answered.
+
+### 11.1 Measurement
+
+`github_5571_tuple_str_annotation`, `--goto-functions-only`, both paths:
+
+```
+legacy:   DECL signed char [0] s;   ASSIGN s = (signed char [16])(&{ 0 }[0]);
+hop-off:  DECL signed char [0] s;   ASSIGN s = { 0 };
+```
+
+§2's inherited diff is reproduced exactly, and G0 is discharged.
+
+The `char[0]` declaration looks like the defect at first glance — three widths
+are in play (declared 0, cast target 16, literal 1). **It is not.** The control
+settles it:
+
+| test | declares `s` as | default path |
+|---|---|---|
+| `github_5571` | `signed char [0]` | **passes** |
+| `github_5571_fail` | `signed char [0]` | passes (as a `_fail`) |
+| `github_5571_tuple_str_annotation` | `signed char [0]` | passes; **aborts only under the hop-off** |
+
+Every variant declares `char[0]`, including the ones that verify correctly on
+the legacy path. So the zero-width declaration is the intended representation —
+the assignment's cast is what carries the real width — and it is not what
+distinguishes the failing configuration.
+
+### 11.2 Answer
+
+**The missing conversion is the defect; the literal and the declaration are
+both fine.** The only difference between a working run and an aborting one is
+that legacy emits the decay-then-cast at the assignment seam and the hop-off
+emits neither.
+
+That selects **§5 Option A — an array-aware assignment arm in `python_adjust`**,
+and rules out Option C (a correctly-sized literal at the converter), which would
+change a representation the working path depends on. Option B (an array arm in
+`convert_typecast`) remains available but is now clearly the wrong layer to
+start at: it would make the solver tolerate a cast the frontend should not be
+failing to emit.
+
+### 11.3 What Phase 1 must reproduce
+
+Unchanged from §4, now with the layer fixed:
+
+```
+(signed char [16])(&{ 0 }[0])
+```
+
+a cast of a **pointer** to an **array** type, assigned to a `char[0]`-declared
+variable. §4's warning stands — the existing decay arm emits an `address_of`
+and cannot produce this — as does R1: getting the shape wrong risks the
+array/pointer mismatch at symex rename that the decay arms were added to fix.
+
+## 12. Phase 2 — the gates, discharged (2026-08-05)
+
+Phase 1 shipped as **#6700** (`c5efabb9c1`): an `is_constant_array2t`-guarded
+arm in `python_adjust`'s general assignment conversion that decays the literal
+to `&lit[0]` and casts that pointer to the target array type. That PR claimed
+G1, G2 and G3 and explicitly did **not** claim G4 or G5. Both are discharged
+here, and G1/G3 are re-measured on a wider slice.
+
+### 12.1 G5 — dual-solver agreement
+
+Both witnesses, `--python-irep2-adjust-only --incremental-bmc`:
+
+| witness | Bitwuzla | Z3 |
+|---|---|---|
+| `github_5571_tuple_str_annotation` | SUCCESSFUL | SUCCESSFUL |
+| `github_5571_fail` | FAILED | FAILED |
+
+### 12.2 G4 — the array/pointer mismatch has not returned
+
+G4 asks for the tests that pinned the symex-rename mismatch the decay arms were
+added to fix. #6363's commit message names five; all five agree with legacy
+under the hop-off, and none of them is the witness this scope fixed:
+
+| test | legacy | hop-off |
+|---|---|---|
+| `string-concat6` | SUCCESSFUL | SUCCESSFUL |
+| `string-concat11` | SUCCESSFUL | SUCCESSFUL |
+| `github_3090_4_fail` | FAILED | FAILED |
+| `string18` | SUCCESSFUL | SUCCESSFUL |
+| `string22_fail` | FAILED | FAILED |
+
+The 56 `python_irep2_adjust*` ctest cases — the suite that exercises the
+hop-off directly, including `python_irep2_adjust_only_array_assign{,_fail}`
+added by #6700 — pass 56/56.
+
+### 12.3 G1 and G3, re-measured wider
+
+- **G1**: 30-test hop-off-vs-legacy verdict parity over the array-carrying
+  families (`bytes*`, `str_*`, `concat*`, the three `github_5571` variants),
+  each replayed with its own `test.desc` flags. **30/30 agree**, positives and
+  `_fail` negatives alike.
+- **G2**: `neural-net_fail` (`--fixedbv`) reports FAILED on both paths — the
+  anti-masking gate re-confirmed against the shipped arm, not just the
+  experimental one.
+- **G3**: 317-test default-path ctest slice over the same families, 317/317
+  pass. This is assertion, not proof: `python_adjust` runs only under
+  `python_language.cpp:299`'s flag, so the default path cannot reach the arm.
+
+### 12.4 The shipped guard is narrower than the conversion permits
+
+The arm requires `is_constant_array2t(a.source)`, while
+`check_c_implicit_typecast` permits any array source into an array target of
+the same element type (`c_typecast.cpp:258-268`). The gap is a **non-constant**
+array source meeting a differently-typed array target.
+
+It has no witness. The same function contains one — `s = v` in the loop body —
+and both paths emit it bare, identically, because the types already agree:
+
+```
+legacy:   ASSIGN s=(signed char [16])(&{ 0 }[0]);   ASSIGN s=v;
+hop-off:  ASSIGN s=(signed char [16])(&{ 0 }[0]);   ASSIGN s=v;
+```
+
+Widening the guard to the full permission rule is therefore a change with no
+demonstrated benefit, which is the shape
+`scope-relational-float-reconciliation.md` §16.2 declined to ship. Left as
+recorded scope, not as work.
+
+### 12.5 A trap this re-measurement walked into
+
+§2's abort reproduces perfectly on a binary built before `c5efabb9c1` — the
+defect is fixed in the tree while the artefact still exhibits it. Re-deriving
+Phase 0's answer from that binary produced a patch that duplicated the shipped
+arm. **Check the binary's provenance against the fix commit, not just its
+mtime**, before treating a reproduction as evidence the defect is open.
+
+### 12.6 What this scope hands back
+
+`scope-coupled-arith-assign-conversion.md` Phase 3 owns the flip. Of its two
+blockers this one is now **cleared**; the other is
+`scope-relational-float-reconciliation.md` §17, where one of four witnesses
+clears and the widening that achieved it is still too broad to ship.

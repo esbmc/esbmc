@@ -137,6 +137,10 @@ weight: 4
 - Type inference for class attributes requires values with clear, determinable types; complex expressions may require explicit type annotations.
 - Recovering a self-referential attribute's type from constructor arguments (the linked-list / tree pattern, e.g. `self.successor = successor` set via `Node(2, a)`) works both within a module and across the module boundary for an imported class (`from node import Node`). It relies on unifying against module-level `ClassName(...)` instantiations: if the class is never instantiated at module scope with the relevant positional argument, the attribute type cannot be recovered and an explicit annotation is required.
 
+## Callable Attributes
+
+- A callable member's signature is recovered from an explicit `Callable[...]` annotation or from the parameter an unannotated `self.fn = fn` names. A callable chosen at runtime (the assigned value varies by path) and a container of callables such as `List[Callable]` are not supported.
+
 ## Missing Return Detection
 
 - Does not analyze return statements inside lambda expressions within the main function body.
@@ -147,7 +151,6 @@ weight: 4
 - **`Thread(args=(instance,))` value-copies object arguments** ([#4583](https://github.com/esbmc/esbmc/issues/4583)). When a `Thread` target receives a class instance with non-trivial attributes (e.g. a `threading.Lock`), the args-capture struct copies the descriptor by value and breaks attribute dereference inside the trampoline body. Workaround: share state via module-level globals instead of instance attributes passed through `args=`.
 - **Symex does not interleave at Python module-global accesses** ([#4584](https://github.com/esbmc/esbmc/issues/4584)). `--data-races-check` correctly flags W/W races on a module global, but symex's per-statement scheduler does not insert interleaving points at function-internal reads/writes of these globals. A classic split read-modify-write race (`tmp = counter; counter = tmp + 1` from two threads) reports `VERIFICATION SUCCESSFUL` instead of finding the schedule where both threads read `counter == 0` before either writes. The C equivalent of the same program is correctly reported as `VERIFICATION FAILED`.
 - **Thread shapes refused at parse time** with explicit errors:
-  - `Thread` subclassing with `run` override
   - Lambda or runtime-variable `target=`
   - Positional argument forms (`Thread(f, (a, b))`)
   - `args=` bound to a variable instead of a tuple literal (`Thread(target=f, args=payload)`)
@@ -157,6 +160,7 @@ weight: 4
   - `Thread` as a class attribute (`class C: t = Thread(...)`)
   - `target` defined after the caller in source order
   - `from threading import *`
+- **`Thread` subclassing is supported** (see [Supported Features](/docs/python/supported-features#thread-subclassing)), with these shapes refused at parse time: multiple inheritance, a class below module scope, a missing `run`, an overridden `start`, a non-bare `super().__init__()`, a class defined after its constructing function, instance reassignment, binding by anything other than a simple assignment, construction inside a loop, and assignment to a `global`/`nonlocal` name from a function.
 - **Other `threading` primitives are not supported**: `RLock`, `Semaphore`, `Condition`, `Event`, `Barrier`, `Timer` are refused at parse time. The `queue` module now has a single-threaded model (`queue.Queue`/`LifoQueue`; see [Supported Features — Queue](./supported-features#queue-module-queue)), but its blocking `put()`/`get()` semantics are not modelled, so it does not provide thread synchronisation.
 - **The CPython Global Interpreter Lock (GIL) is not modelled** ([#4579](https://github.com/esbmc/esbmc/issues/4579)). Translated programs execute under sequentially-consistent POSIX semantics rather than GIL-serialised bytecode execution, so the analysis over-approximates the set of feasible interleavings compared to actual CPython execution. This preserves safety but may produce spurious concurrency counterexamples.
 

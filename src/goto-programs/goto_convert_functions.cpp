@@ -609,9 +609,6 @@ bool goto_convert_functionst::convert_native_rec(
     // destructor runs twice. Any temp it allocates is covered by
     // convert_function's snapshot/restore on a later fallback; restore the
     // value-operand locations first as the legacy body round-trip does.
-    // Delegate every shape convert_return transforms statement-locally instead
-    // of failing the walk: convert_return owns the lowering, and delegating one
-    // statement leaves the rest of the function native.
     auto delegate_to_legacy = [&]() {
       exprt op = migrate_expr_back(code2);
       restore_value_locations(op, effective_location(ret.location, inherited));
@@ -675,20 +672,36 @@ bool goto_convert_functionst::convert_native_rec(
       return true;
     }
 
+    // A branch that does not convert natively, or that leaks a scope-exit
+    // code_dead (a non-block branch such as `if (c) int x = 1;` has no
+    // enclosing block to unwind it), is delegated to convert_ifthenelse rather
+    // than failing the walk. The partial native attempt may already have
+    // allocated temps from the shared tmp_symbol counter, so roll that back
+    // first -- exactly as convert_function does on a whole-function fallback --
+    // or the delegated conversion numbers its temps from where the abandoned
+    // attempt left off and the output stops being byte-identical.
+    unsigned tmp_before = tmp_symbol.counter;
+    irep_idt ctx_before = context.mark();
+    targetst targets_before = targets;
+    auto delegate_to_legacy = [&]() {
+      tmp_symbol.counter = tmp_before;
+      context.erase_since(ctx_before);
+      targets = targets_before;
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(ite.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    };
+
     bool has_else = !is_nil_expr(ite.else_case);
 
     destructor_stackt stack_before_then = targets.destructor_stack;
     goto_programt tmp_op1;
     if (!convert_native_rec(
           ite.then_case, tmp_op1, effective_location(ite.location, inherited)))
-      return false;
-    // A non-block branch (e.g. a bare decl) could leak a scope-exit code_dead
-    // with no enclosing block to unwind it.
+      return delegate_to_legacy();
     if (targets.destructor_stack.size() != stack_before_then.size())
-    {
-      targets.destructor_stack = stack_before_then;
-      return false;
-    }
+      return delegate_to_legacy();
 
     goto_programt tmp_op2;
     if (has_else)
@@ -698,12 +711,9 @@ bool goto_convert_functionst::convert_native_rec(
             ite.else_case,
             tmp_op2,
             effective_location(ite.location, inherited)))
-        return false;
+        return delegate_to_legacy();
       if (targets.destructor_stack.size() != stack_before_else.size())
-      {
-        targets.destructor_stack = stack_before_else;
-        return false;
-      }
+        return delegate_to_legacy();
     }
 
     // generate_ifthenelse (goto_convert.cpp) folds a branch that reduces
