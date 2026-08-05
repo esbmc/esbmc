@@ -104,18 +104,13 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
   switch (decl.getKind())
   {
-  // Label declaration
+  // GNU local label: `__label__ l;` only scopes the name, and the label
+  // itself is placed by the LabelStmt, so the declaration emits nothing. It
+  // reaches here inside a DeclStmt, whose operands must be statements --
+  // yielding an expression made goto-convert abort on "label" (issue #4076).
   case clang::Decl::Label:
-  {
-    const clang::LabelDecl &ld = static_cast<const clang::LabelDecl &>(decl);
-
-    exprt label("label", empty_typet());
-    label.identifier(ld.getName().str());
-    label.cmt_base_name(ld.getName().str());
-
-    new_expr = label;
+    new_expr = code_skipt();
     break;
-  }
 
   // Declaration of variables
   case clang::Decl::Var:
