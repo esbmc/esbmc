@@ -66,6 +66,8 @@ ctest -R "regression/esbmc/00_big_endian_01" --output-on-failure
 
 **Note: /tmp disk space.** C and C++ runs write nothing to `/tmp`: bundled clang headers, the C++ operational models and the internal libc are registered with `file_operations::filesystemt` and served to clang out of `.rodata` via `esbmc_clang_vfs()` (`src/clang-c-frontend/AST/vfs_adapter.h`). The Python and Solidity frontends extract to `/tmp`, because they fork `python3`/`solc` and a separate process cannot read ESBMC's memory. Clean up after large runs of those suites: `rm -rf /tmp/esbmc*`
 
+`regression/esbmc/bundled_headers_from_vfs` and `regression/esbmc-cpp/cpp/om_source_from_vfs` pin this: the first asserts clang is handed `-isystem /esbmc-vfs/libc/headers` and `-resource-dir /esbmc-vfs/clang`, the second that an OM source location in a counterexample reads `/esbmc-vfs/cpp/vector`. Reintroducing extraction turns those paths back into a temp directory and both fail. Note that asserting the temp directory is *empty* after a run would not work: `tmp_path`'s destructor removes what it created, so a run that extracts and cleans up is indistinguishable from one that never extracted.
+
 Regression test format (`test.desc`): line 1 is `CORE`/`KNOWNBUG`/`FUTURE`/`THOROUGH` (THOROUGH is Linux-only), line 2 is the source file, line 3 is ESBMC flags, line 4+ are expected output regexes. Every PR should include at least two regression tests (one passing, one failing).
 
 **Before committing:**
