@@ -145,22 +145,25 @@ def _compute_output_json_path(
 def _reject_unencodable_string_constants(tree: ast.AST, source_filename: str) -> None:
     """Refuse string literals that cannot cross the parser->converter JSON boundary.
 
-    A lone surrogate is representable in a CPython ``str`` but has no UTF-8
-    encoding, and the C++ reader rejects both transportable spellings: an
+    A surrogate code point is representable in a CPython ``str`` but has no
+    UTF-8 encoding, and the C++ reader rejects both transportable spellings: an
     escaped ``\\ud800`` is invalid JSON (nlohmann requires a low surrogate to
-    follow), and the WTF-8 byte form is ill-formed UTF-8. Emitting one aborts
-    the parser mid-``json.dump``, so refuse at parse time with a located
-    diagnostic rather than crash or emit a silently truncated string.
+    follow), and the WTF-8 byte form is ill-formed UTF-8. Python never combines
+    a surrogate pair, so ``"\\ud83d\\ude00"`` is two unencodable code points
+    rather than an emoji and is refused the same way. Emitting one aborts the
+    parser mid-``json.dump``, so refuse at parse time with a located diagnostic
+    rather than crash or emit a silently truncated string.
     """
     for node in ast.walk(tree):
         if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
             continue
         try:
             node.value.encode("utf-8")
-        except UnicodeEncodeError:
-            print(f"ERROR: {source_filename}:{getattr(node, 'lineno', '?')}: "
-                  "string literal contains a lone surrogate, which is not supported by "
-                  "ESBMC's Python frontend")
+        except UnicodeEncodeError as err:
+            print(f"ERROR: {source_filename}:{getattr(node, 'lineno', '?')}:"
+                  f"{getattr(node, 'col_offset', '?')}: string literal contains "
+                  f"surrogate code point U+{ord(node.value[err.start]):04X}, which has "
+                  "no UTF-8 encoding and is not supported by ESBMC's Python frontend")
             sys.exit(4)
 
 
