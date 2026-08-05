@@ -308,6 +308,20 @@ std::vector<collected_nondet_value> collect_nondet_values(
   const symex_target_equationt &target,
   smt_convt &smt_conv);
 
+/// Collect the model value of every symbol assigned on the executed path.
+///
+/// Blocking on the input tuple alone merges two violating executions that
+/// share their inputs but differ in control-flow nondeterminism -- a nondet
+/// branch inside a loop, a schedule choice, a pointer-analysis choice -- so
+/// the violation set is under-reported with no warning (esbmc/esbmc#4313).
+/// Blocking on these distinguishes such executions by path instead.
+///
+/// Only guarded assignments are walked, so the failing assertion is never
+/// itself constrained.
+std::vector<collected_nondet_value> collect_trace_values(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv);
+
 /// Build a blocking clause that excludes the given input tuple from future
 /// solver queries: NOT (sym_1 == val_1 AND sym_2 == val_2 AND ...).
 ///

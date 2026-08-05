@@ -699,6 +699,18 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
       }
     }
 
+    const std::string wb = cmdline.getval("witness-blocking")
+                             ? cmdline.getval("witness-blocking")
+                             : "inputs";
+    if (wb != "inputs" && wb != "trace")
+    {
+      log_error(
+        "Invalid value for --witness-blocking: '{}'. Must be inputs or trace.",
+        wb);
+      abort();
+    }
+    options.set_option("witness-blocking", wb);
+
     const bool was_multi = options.get_bool_option("multi-property") ||
                            cmdline.isset("multi-property");
     if (!was_multi)

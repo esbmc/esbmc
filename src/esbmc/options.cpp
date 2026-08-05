@@ -352,7 +352,15 @@ const struct group_opt_templ all_cmd_options[] = {
     {"full-traces",
      NULL,
      "Print every trace state in the multi-witness report instead of the "
-     "states closest to the failure. Only meaningful with --all-witnesses."}}},
+     "states closest to the failure. Only meaningful with --all-witnesses."},
+    {"witness-blocking",
+     boost::program_options::value<std::string>()
+       ->default_value("inputs")
+       ->value_name("inputs|trace"),
+     "What --all-witnesses blocks between solver calls. 'inputs' (default) "
+     "enumerates distinct input tuples; 'trace' enumerates distinct executed "
+     "paths, so runs sharing an input tuple but differing in control-flow "
+     "nondeterminism are reported separately. 'trace' is slower."}}},
   {"Output",
    {{"output-goto",
      boost::program_options::value<std::string>(),

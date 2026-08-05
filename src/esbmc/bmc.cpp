@@ -2780,6 +2780,14 @@ smt_resultt bmct::multi_property_check(
         // The legacy single-witness renderer does not use them.
         if (enumerate)
           w.nondet_inputs = collect_nondet_values(local_eq, *solver_ptr);
+        // --witness-blocking trace blocks the executed path rather than the
+        // input tuple, so that two runs sharing inputs but differing in
+        // control-flow nondeterminism are enumerated separately
+        // (esbmc/esbmc#4313). Read here, while the model is still live: the
+        // push_ctx below invalidates it.
+        std::vector<collected_nondet_value> block_values;
+        if (enumerate && options.get_option("witness-blocking") == "trace")
+          block_values = collect_trace_values(local_eq, *solver_ptr);
         w.ce_index = ce_counter++;
 
         const std::string witness_id =
@@ -2835,7 +2843,9 @@ smt_resultt bmct::multi_property_check(
         // If this witness has no nondet inputs we can't enumerate further —
         // there's nothing meaningful to block. Mark the reason so the user
         // doesn't read "UNSAT" as "exhaustive".
-        if (witnesses.back().nondet_inputs.empty())
+        if (block_values.empty())
+          block_values = witnesses.back().nondet_inputs;
+        if (block_values.empty())
         {
           stop_reason = enumeration_stop_reasont::NoInputs;
           break;
@@ -2855,8 +2865,11 @@ smt_resultt bmct::multi_property_check(
           ctx_pushed = true;
         }
 
-        // Block this input tuple and re-solve on the same instance.
-        expr2tc block = make_blocking_expr(witnesses.back().nondet_inputs);
+        // Block this execution and re-solve on the same instance. Blocking on
+        // the input tuple merges two violating runs that share their inputs but
+        // differ in control-flow nondeterminism; --witness-blocking trace
+        // blocks the whole executed path instead (esbmc/esbmc#4313).
+        expr2tc block = make_blocking_expr(block_values);
         solver_ptr->assert_expr(block);
         enum_result = solver_ptr->dec_solve();
       }

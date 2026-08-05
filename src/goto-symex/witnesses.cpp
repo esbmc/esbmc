@@ -1317,6 +1317,58 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
   return results;
 }
 
+std::vector<collected_nondet_value>
+collect_trace_values(const symex_target_equationt &target, smt_convt &smt_conv)
+{
+  std::vector<collected_nondet_value> results;
+  std::unordered_set<std::string> seen;
+
+  for (auto const &SSA_step : target.SSA_steps)
+  {
+    // Same reachability filter as collect_nondet_values: a step off the
+    // executed path says nothing about which execution this witness was.
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
+      continue;
+
+    if (!SSA_step.is_assignment() || !is_symbol2t(SSA_step.lhs))
+      continue;
+
+    // Scalars only. An aggregate or pointer assignment's model value does not
+    // round-trip to the same SMT sort as its symbol -- make_blocking_expr
+    // would then build an equality whose sides differ in width, which the
+    // backends assert on. collect_nondet_values avoids this by model-completing
+    // aggregates; a blocking clause needs no such completeness, since the
+    // scalar writes on the path already separate two executions.
+    const type2tc &lt = SSA_step.lhs->type;
+    if (
+      !is_bv_type(lt) && !is_bool_type(lt) && !is_floatbv_type(lt) &&
+      !is_fixedbv_type(lt))
+      continue;
+
+    // The SSA name already carries the assignment's renaming level, so each
+    // dynamic write is a distinct key: a loop body assigned at several
+    // iterations contributes one entry per iteration, which is exactly what
+    // tells two paths through it apart.
+    const std::string name = to_symbol2t(SSA_step.lhs).thename.as_string();
+    if (!seen.insert(name).second)
+      continue;
+
+    expr2tc value = smt_conv.get(SSA_step.lhs);
+    // A value the backend leaves unresolved constrains nothing, and putting a
+    // non-constant into the blocking clause would over-block.
+    if (is_nil_expr(value) || !is_constant_expr(value) || value->type != lt)
+      continue;
+
+    collected_nondet_value val;
+    val.symbol_name = name;
+    val.symbol_expr = SSA_step.lhs;
+    val.value_expr = value;
+    val.type = value->type;
+    results.push_back(val);
+  }
+  return results;
+}
+
 expr2tc make_blocking_expr(const std::vector<collected_nondet_value> &nondets)
 {
   // No nondet inputs collected: return a literal `false` so the caller's
