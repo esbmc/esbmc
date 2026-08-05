@@ -3832,6 +3832,49 @@ verifying a translation unit, and the `immer`/`irep2` tractability wall stands
 untouched. What it does move is the **Tier-B′ pilot (WI-4)** from "blocked on a
 missing header" to "blocked on one identified, characterised incompatibility."
 
+### M9 (R6) — 2026-08-05, the collision is observed; the witness is not
+
+R6 has stood as "mechanism pinned, no witness" since M6: `current_hashes` is
+keyed by the **L0** name, so two states differing only in the L1 activation of a
+recursive local were *argued* to fingerprint identically. That argument is now
+**observed** rather than read off the source.
+
+Instrumenting `check_for_hash_collision` to record a per-thread call-stack-depth
+signature alongside each hash, and running a program whose recursive local holds
+the same value at every depth, prints exactly one line:
+
+```
+R6COLLIDE recorded_depths=3,5, current_depths=3,6,
+```
+
+Two states with equal fingerprints and **different call depths**, pruning one
+against the other. That is R6's precondition, reproduced on a concrete input.
+`generate_hash()` mixes the L2 value hashes with each thread's
+`pc->location_number` and nothing else, so depth cannot enter it; the collision
+is structural, not a hash accident.
+
+**The verdict does not flip, and that is the honest state of R6.** Two
+constructions were tried and both report `VERIFICATION FAILED` under
+`--state-hashing` and without it:
+
+- a recursive worker reached at two depths by a nondet branch, with an observer
+  asserting on the post-unwind counter;
+- the same with the observable narrowed to a one-step window that only the
+  deeper unwind opens.
+
+Pruning is real on both — symex drops from 178 assignments to 92 on the first —
+but the assertion stays reachable through interleavings the prune does not
+touch. That is the gap between *a collision occurs* and *the bug lives only
+behind the collided state*, and it is the whole difficulty: the pruned edge
+removes a schedule, not a sequential path, so a witness needs a property
+violable **only** in a schedule that the collision removes. Narrowing the window
+is not sufficient, because the surviving schedules re-open it.
+
+R6 therefore moves from "mechanism pinned by inspection" to "mechanism observed,
+soundness consequence still unwitnessed" — a smaller step than a witness, and
+the two failed constructions are recorded so the next attempt does not repeat
+them. Severity is unchanged and still bounded by `--state-hashing` being opt-in.
+
 ---
 
 ## Appendix A — Methodological basis
