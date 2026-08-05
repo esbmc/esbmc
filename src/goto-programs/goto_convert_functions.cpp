@@ -160,6 +160,17 @@ effective_location(const locationt &own, const locationt &inherited)
   return (own.is_not_nil() && !own.get_file().empty()) ? own : inherited;
 }
 
+// The location the legacy path stamps on an instruction it emits for `own`: it
+// reads the round-tripped codet through the *non-const* exprt::location(),
+// which materialises an empty -- and so not nil -- "#location" when the
+// statement carries none. Reproduce that rather than pass a nil location2t
+// through, which renders "no location" where the round-trip renders blank.
+static const locationt &emitted_location(const locationt &own)
+{
+  static const locationt materialised_empty;
+  return own.is_nil() ? materialised_empty : own;
+}
+
 // A statement's own location field, i.e. exactly what migrate_expr_back writes
 // into the legacy `#location` the legacy path then reads back. Only the kinds
 // convert_native_rec supports are listed; anything else cannot reach a caller.
@@ -639,12 +650,12 @@ bool goto_convert_functionst::convert_native_rec(
       goto_programt::targett r = dest.add_instruction();
       r->make_return();
       r->code = code2;
-      r->location = ret.location;
+      r->location = emitted_location(ret.location);
     }
 
     goto_programt::targett g = dest.add_instruction();
     g->make_goto(targets.return_target, gen_true_expr());
-    g->location = ret.location;
+    g->location = emitted_location(ret.location);
     return true;
   }
 
