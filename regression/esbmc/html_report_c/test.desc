@@ -5,16 +5,19 @@ main.c
 ^VERIFICATION FAILED$
 CHECK_FILE report-1.html contains <!doctype html><html><head><title>ESBMC report</title>
 CHECK_FILE report-1.html contains <h3>Bug Summary</h3><table class="simpletable">
-CHECK_FILE report-1.html contains <td class="rowname">File:</td><td>/[^<]*html_report_c/main\.c</td>
+CHECK_FILE report-1.html contains <td class="rowname">File:</td><td>[^<]*html_report_c[\\/]main\.c</td>
 CHECK_FILE report-1.html contains <a href="#EndPath">function main, line 8, column 3</a><br />Y must exceed one hundred
-CHECK_FILE report-1.html contains esbmc --[^<]*--generate-html-report=1
-CHECK_FILE report-1.html contains <div id=File1><h4 class=FileName>/[^<]*html_report_c/main\.c</h4>
+CHECK_FILE report-1.html contains esbmc [^<]*--generate-html-report=1
+CHECK_FILE report-1.html contains <div id=File1><h4 class=FileName>[^<]*html_report_c[\\/]main\.c</h4>
 CHECK_FILE report-1.html contains <table class="code" data-fileid="1">
-CHECK_FILE report-1.html contains <tr class="codeline" data-linenumber="1">
+CHECK_FILE report-1.html contains data-linenumber="1"><td class="num" id="LN1">1</td><td class="line"><span class='keyword'>int</span> nondet_int\(\);
 CHECK_FILE report-1.html contains <span class='keyword'>int</span>
-CHECK_FILE report-1.html absent <span class='keyword'>def</span>
+CHECK_FILE report-1.html absent <span class='keyword'>from</span>
 CHECK_FILE report-1.html contains <td>y = [0-9]+</td>
 CHECK_FILE report-1.html contains Assumption restriction
 CHECK_FILE report-1.html contains class="PathIndex PathIndexControl">[0-9]+</div>
-CHECK_FILE report-1.html contains class="PathIndex PathIndexEvent">[0-9]+</div>
+CHECK_FILE report-1.html contains <div id="Path[0-9]+" class="msg msgEvent"
 CHECK_FILE report-1.html contains <div id="EndPath" class="msg msgEvent"
+CHECK_FILE report-1.html contains var relevant_lines = \{"1": \{
+CHECK_FILE report-1.html contains "8": 1
+CHECK_FILE report-1.html contains </table><hr class=divider></body></html>
