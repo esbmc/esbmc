@@ -1,5 +1,8 @@
 #include <csignal>
 #include <memory>
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 #include <sys/types.h>
 #include <algorithm>
 #include <cctype>
@@ -573,15 +576,18 @@ namespace
 {
 /// True when the multi-witness report must avoid box-drawing glyphs. A console
 /// that is not reading UTF-8 renders them as mojibake on every line of the
-/// report (esbmc/esbmc#4311); Windows' default cp1252 console is the common
-/// case, and a POSIX shell in a non-UTF-8 locale the other. An unset locale is
-/// treated as UTF-8 so the common CI shape keeps the richer output.
+/// report (esbmc/esbmc#4311). On Windows the console's code page is queried;
+/// on POSIX the locale environment is read. An unset locale is treated as
+/// UTF-8 so the common CI shape keeps the richer output.
 bool ascii_report(const optionst &options)
 {
   if (options.get_bool_option("ascii-report"))
     return true;
 #ifdef _WIN32
-  return true;
+  // A Windows console is cp1252 by default but can be switched to UTF-8
+  // (`chcp 65001`), so ask it rather than assuming: assuming would also cost
+  // the richer output on a console that renders it correctly.
+  return GetConsoleOutputCP() != CP_UTF8;
 #else
   for (const char *var : {"LC_ALL", "LC_CTYPE", "LANG"})
   {
