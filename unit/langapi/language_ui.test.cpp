@@ -2,7 +2,8 @@
 Module: Unit tests for language_uit::parse()
 \*******************************************************************/
 
-#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
+#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this
+                          // in one cpp file
 #include <catch2/catch.hpp>
 
 #include "../testing-utils/goto_factory.h"
@@ -63,8 +64,9 @@ TEST_CASE(
 
   int fd = socket(AF_UNIX, SOCK_STREAM, 0);
   REQUIRE(fd >= 0);
-  REQUIRE(bind(fd, (const sockaddr *)&addr, sizeof(addr)) == 0);
+  int bound = bind(fd, reinterpret_cast<const sockaddr *>(&addr), sizeof(addr));
   close(fd);
+  REQUIRE(bound == 0);
 
   REQUIRE(file_operations::filesystemt::get().exists(path));
   language_uit l;
