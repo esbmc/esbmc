@@ -355,10 +355,24 @@ is a scalar**, so the result is a pointer-to-integer cast rather than an array
 cast. The hop-off assigns the bare `constant_array` into an integer lvalue, and
 the solver is handed an array term where a bitvector is expected.
 
-Shape 1 is worth a separate note: a `_Bool` compared against `1` reaches the
-solver unpromoted on the hop-off and does **not** abort. It is the shape the
-equality arm added in PR #6702 was written for, and it is not firing here. That
-is a live loose end, not a cleared one — it is simply not what breaks `class10`.
+Shape 1 is worth a separate note, stated with the ambiguity it still carries. A
+`_Bool` compared against `1` reaches the solver unpromoted on the hop-off and
+does **not** abort. Whether that is a declined promotion or a benign
+representational difference **cannot be read off the dump**: this format prints
+a Boolean constant as `1`, not `TRUE` — there is no `TRUE`/`FALSE` token
+anywhere in either dump — so `contains_tmp == 1` is equally consistent with
+
+- `bool == bool`, which is well-sorted, and which the PR #6702 equality arm
+  *correctly* declines: its guard requires one side Boolean and the other a
+  number; or
+- `bool == signedbv`, which that arm should convert and demonstrably does not,
+  since `c_implicit_typecast_arithmetic` raises both operands to `INT` through
+  `implicit_typecast_arithmetic`'s minimum promotion and would emit the cast.
+
+Legacy's `(signed int)` on both sides is what that same minimum promotion
+produces from *either* starting point, so it does not discriminate either.
+Settling this needs the operand type — instrumentation and a rebuild. Recorded
+as an open question, not as a defect, and not what breaks `class10` either way.
 
 ### 13.3 Why every arm declines it
 
