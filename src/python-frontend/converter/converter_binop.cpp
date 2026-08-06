@@ -24,6 +24,7 @@
 
 #include <functional>
 #include <map>
+#include <set>
 #include <util/irep/std_expr.h>
 #include <algorithm>
 #include <cctype>
@@ -995,7 +996,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // type-check it as a pointer/struct rather than as empty code.
     lhs = to_value_expr(lhs, ns);
     rhs = to_value_expr(rhs, ns);
-    return handle_none_comparison(op, lhs, rhs);
+
+    return handle_none_operand(op, lhs, rhs);
   }
 
   // Handle exceptions
