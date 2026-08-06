@@ -706,6 +706,17 @@ static bool has_empty_assigns_marker(const goto_programt &function_body)
   return false;
 }
 
+// A frame condition is declared whether or not it names any target: an
+// explicit __ESBMC_assigns() names nothing, which enforce_frame_rule reads as
+// "every snapshotted global must be unchanged" -- the check that makes the
+// empty clause mean anything (#6555).
+static bool declares_frame_condition(
+  const std::vector<expr2tc> &assigns_targets,
+  const goto_programt &function_body)
+{
+  return !assigns_targets.empty() || has_empty_assigns_marker(function_body);
+}
+
 // Helper function to unwrap array-to-pointer decay in assigns targets
 // In C, when an array is passed to a function, it decays to &arr[0].
 // This function detects this pattern and returns the original array.
@@ -962,10 +973,8 @@ std::set<std::string> code_contractst::enforce_contracts(
     // deserve enforcement: the assigns compliance check is the contract.
     std::vector<expr2tc> assigns_targets_early =
       extract_assigns_from_body(original_body_copy);
-    // An explicit __ESBMC_assigns() yields no targets but is still a frame
-    // condition -- the strongest one, naming nothing (#6555).
-    bool has_assigns = !assigns_targets_early.empty() ||
-                       has_empty_assigns_marker(original_body_copy);
+    bool has_assigns =
+      declares_frame_condition(assigns_targets_early, original_body_copy);
 
     // For annotated functions without explicit contracts, use default true/true
     // This allows the function to be processed with default contract semantics.
@@ -1191,12 +1200,8 @@ goto_programt code_contractst::generate_checking_wrapper(
   goto_programt wrapper;
   locationt location = original_func.location;
 
-  // A declared frame condition, whether or not it names any target. An
-  // explicit __ESBMC_assigns() names nothing, which enforce_frame_rule reads
-  // as "every snapshotted global must be unchanged" -- the check that makes
-  // the empty clause mean anything (#6555).
   const bool declares_frame =
-    !assigns_targets.empty() || has_empty_assigns_marker(original_body);
+    declares_frame_condition(assigns_targets, original_body);
 
   // Note: Here is the design, enforce_contracts mode does NOT havoc
   // parameters or globals. The wrapper is called by actual callers, so we
