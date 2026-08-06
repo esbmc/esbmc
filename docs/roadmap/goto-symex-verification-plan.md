@@ -4121,9 +4121,31 @@ and would have replaced two wrong hypotheses (a 120 s timeout, a Python version
 difference) that each looked plausible and cost more than the experiment would
 have.
 
-The correct placement is still open: the reset has to happen once where a fresh
-run begins, and `setup_for_new_explore` cannot distinguish that from a dependent
-k iteration.
+**What the fix has to satisfy is now exact.** The two requirements look like
+they conflict at one call site, and they do not, because they differ in what
+they share. `is_base_case_violated` and its siblings build a **fresh `bmct` per
+k iteration but pass the same `context`** by reference
+(`k_induction.cpp:704`), so the objects iteration k bound are still in the
+symbol table when iteration k+1 re-mints their names. R15's determinism harness
+is the opposite: `symex_run::equation` constructs its own `prog`, and therefore
+its own `prog.context`, per instance, so the two runs the test compares share
+nothing.
+
+The rule is therefore **reset when the context is fresh, not when an exploration
+begins** — the context is fresh exactly when the run is independent, which is
+the distinction `setup_for_new_explore` cannot make on its own but the context
+can make for it. Two ways to implement it:
+
+- *Seed rather than reset*: start each counter from the number of such objects
+  the context already holds. A fresh context gives 0, which is what the
+  determinism test needs; a shared one continues monotonically, which is what
+  `--incremental-bmc` needs. Self-keying, no extra state.
+- *Scope the counters to the context*: move them off `static thread_local` so
+  their lifetime is the context's. Cleaner, and larger.
+
+A static pointer to the last-seen context is **not** a third option: a freed
+context can be reallocated at the same address, and the reset would then be
+skipped exactly when it is needed.
 
 ---
 
