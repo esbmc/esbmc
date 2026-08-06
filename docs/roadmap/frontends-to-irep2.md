@@ -885,3 +885,68 @@ merged. The byte-identity sweep needs no instrumentation at all — it is the
 A/B, normalised. Normalise `/tmp/esbmc*` broadly: the C driver's temp dir is
 `esbmc.<hash>` and Solidity's is `esbmc_solidity_temp-<hash>`, and a pattern
 that catches one and not the other reports a false divergence.
+
+## 19. §18.4's defect fixed, and what the whole-suite sweep found underneath (2026-08-05)
+
+§18.4 sampled 13 Solidity tests. Sweeping all 520 changes both the fix and the
+picture of what is left.
+
+### 19.1 The RETURN divergence was two defects, not one
+
+The nil-location diagnosis holds, and the fix is the one §18.4 implies: route
+the RETURN and its end-of-function GOTO through a materialised-empty location
+rather than the nil `location2t`, because `convert_return` reads its location
+off the round-tripped `codet` through the **non-const** `exprt::location()`,
+which materialises an empty — and so not nil — `#location`. The native decl arm
+already open-coded that step; both now share one helper.
+
+Fixing it exposed a second: `convert_return`'s `else` arm logs *"function
+should not return value"*, and the native arm had no counterpart, so the
+diagnostic was silently dropped. §18.4 could not see this — C and C++ reject
+the shape, and on Solidity the RETURN divergence masked it. The native arm now
+delegates that shape, as it already does for the four `convert_return`
+rewrites.
+
+### 19.2 Whole-suite result: 502 / 510
+
+| | before | after |
+|---|---|---|
+| `esbmc-solidity` A/B | fails every test sampled (13/13) | **502 identical, 8 divergent** (10 tests skip: no source file) |
+| controls | C 10/10, Python 5/5, Jimple 15/15 | C 80/80, Python 25/25, Jimple 15/15, `esbmc-cpp/destructors` 14/14 |
+
+### 19.3 The eight residuals are a different defect — and it is not stable
+
+Every residual is **location-only**: zero instruction-text differences across
+all eight. The divergent locations are synthetic, always one line past the end
+of the contract (`swc_107_1`: 57-line file, native 59 vs legacy 58;
+`doftcoin_1`: 104 lines, native 105 vs legacy 106 — note the direction
+reverses), and they land on the generated scope-exit run — `DEAD`,
+`END_FUNCTION`, and whatever else inherits from it.
+
+The sharper finding is that **the legacy path is not run-to-run
+deterministic**. Ten repeats of `erc20_1` on the *same* binary, *same* flags,
+`--no-irep2-native-body` throughout, produce two distinct outputs — 8 runs at
+`line 96`, 2 at `line 97`. That is why the divergent set moves between sweeps:
+`erc20_1`, `swc_107_1` and `whole_contract_1` appeared in one sweep and not the
+next, and re-running them 5×5 shows native and legacy agreeing. Only the eight
+above diverge stably.
+
+Two consequences:
+
+1. **A single A/B run is not a verdict** on a Solidity test. Re-run a
+   divergence before believing it; §18.4's 13/13 was safe only because the
+   RETURN defect was universal and large.
+2. A nondeterministic synthetic location is a defect in its own right,
+   independent of the dispatcher — it is reachable with the native path off.
+
+Neither is fixed here; they are filed as #6759 (the stable divergence) and
+#6760 (the nondeterminism). Both predate the dispatcher: the fix in §19.1 can
+only turn a nil location into a blank one, so it cannot produce a line-number
+difference, and it cannot introduce nondeterminism.
+
+### 19.4 Reproduction
+
+Same A/B as §18.6, no instrumentation. For the residuals, run each side five
+times and compare the *sets* of output hashes, not one run against one run —
+`native_variants`, `legacy_variants`, and whether the two sets intersect is the
+measurement that separates a stable divergence from a nondeterministic one.

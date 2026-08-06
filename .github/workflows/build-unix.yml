@@ -76,11 +76,16 @@ jobs:
         # when tests set TIMEOUT via set_tests_properties (regression/CMakeLists.txt),
         # so we override the cache variable that feeds it and reconfigure.
         cmake -DESBMC_REGRESS_TIMEOUT=120 .
-        # macOS PR: only the python/ suite (anchored — excludes python-intensive
-        # and python-coverage, which already run on Linux). The Python frontend is
-        # the one part of ESBMC whose toolchain materially differs across OSes
-        # (Homebrew Python, stdlib paths); the rest of the regression suite is
-        # platform-portable and covered by the Linux PR job.
+        # macOS PR: the python/ suite (anchored — excludes python-intensive
+        # and python-coverage, which already run on Linux), plus the
+        # platform-sensitive set. The Python frontend is the one part of ESBMC
+        # whose toolchain materially differs across OSes (Homebrew Python,
+        # stdlib paths); the rest of the regression suite is platform-portable
+        # and covered by the Linux PR job. The exception is behaviour that is
+        # genuinely OS-specific — resource limits, threading, signals, memory
+        # mapping, filesystem semantics — which passes on Linux and fails on
+        # macOS with no signal from CI (#6619). Tests covering that opt in via
+        # ESBMC_PLATFORM_SENSITIVE_TESTS in regression/CMakeLists.txt.
         # On PR Linux, skip python-intensive to keep fast feedback.
         # On other systems/events (push, dispatch), run everything.
         #
@@ -89,10 +94,10 @@ jobs:
         # peaks ~8GB, map/multimap _string_class-2_bug ~3GB each). Under -j4 on a
         # 16GB runner these can align and exhaust RAM, ending the job with a
         # "runner received a shutdown signal" (OOM). Run the Linux legs with -j2
-        # to bound peak concurrent memory. The macOS leg runs only the light
-        # python/ suite and keeps -j4.
+        # to bound peak concurrent memory. The macOS leg runs the light python/
+        # suite plus a handful of platform-sensitive tests, and keeps -j4.
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
-          ctest -j4 --output-on-failure --progress -L '^python/$'
+          ctest -j4 --output-on-failure --progress -L '^python/$|^platform-sensitive$'
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
           ctest -j2 --output-on-failure --progress -LE python-intensive .
         else

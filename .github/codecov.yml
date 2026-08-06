@@ -10,5 +10,6 @@ ignore:
   - "src/ansi-c/cpp/**"
   - "src/clang-c-frontend/headers/**"
   - "src/c2goto/library/libm/musl/**"
+  - "src/lib/toml.hpp"
   - "build/**"
   - "**/unit/**"

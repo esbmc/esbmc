@@ -79,6 +79,19 @@ endif()
 string(REPLACE ";" "," ESBMC_TEST_CAPABILITIES_ARG "${ESBMC_TEST_CAPABILITIES}")
 message(STATUS "Regression capabilities: ${ESBMC_TEST_CAPABILITIES_ARG}")
 
+# Tests covering behaviour that is genuinely OS-specific -- resource limits,
+# threading, signals, memory mapping, filesystem semantics -- named as
+# "<folder>/<test>". The macOS CI leg runs only the python/ suite, so without
+# this a change of that kind passes on Linux and fails on macOS with no signal
+# from CI; #6617 was fixed twice for exactly that reason. These carry the
+# platform-sensitive label, which the macOS leg also selects (#6619).
+set(ESBMC_PLATFORM_SENSITIVE_TESTS
+    # Deep expression nesting: needs the large-stack thread main.cpp spawns,
+    # since raising RLIMIT_STACK does not grow the main thread's stack on
+    # macOS even though setrlimit reports success (#6618).
+    esbmc/deep_binary_chain_pass
+    esbmc/deep_binary_chain_fail)
+
 # An optional 5th argument names a backend to run the suite under. The tool
 # string is shlex-split by testing_tool.py, so the extra option rides along with
 # the binary; --default-solver only applies when the test itself names no
@@ -92,6 +105,9 @@ function(add_esbmc_regression_test folder modes test)
         set(test_name "${test_name}[${solver}]")
         set(tool "${ESBMC_BIN} --default-solver=${solver}")
         set(extra_labels ";cross-backend;cross-backend/${solver}")
+    endif()
+    if("${folder}/${test}" IN_LIST ESBMC_PLATFORM_SENSITIVE_TESTS)
+        string(APPEND extra_labels ";platform-sensitive")
     endif()
     add_test(NAME ${test_name}
              COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}

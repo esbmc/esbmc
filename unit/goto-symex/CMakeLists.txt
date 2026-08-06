@@ -10,3 +10,5 @@ new_unit_test(slice-test "slice.test.cpp" "test_goto_factory;symex;solvers;gotoa
 new_unit_test(mpor-test "mpor.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
 new_unit_test(value-set-merge-test "value_set_merge.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
 new_unit_test(assumption-discharge-test "assumption_discharge.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(context-stack-test "context_stack.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(overapproximation-test "overapproximation.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
