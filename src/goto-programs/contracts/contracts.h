@@ -601,6 +601,15 @@ private:
     std::vector<expr2tc> &allocated_ptrs,
     std::map<irep_idt, param_extentt> &param_extents);
 
+  /// \brief Whether \p func can observe the extent of pointer parameter
+  ///        \p param: dereferences it, or lets it escape into a call.
+  ///
+  /// Gates the unstated-extent warning so it is not raised for a parameter
+  /// nothing reads through (#6511). Conservative: true whenever the body
+  /// cannot be inspected, since a missed warning is worse than a spurious one.
+  bool
+  param_extent_is_observable(const symbolt &func, const irep_idt &param) const;
+
   /// \brief Back a struct/union pointer param with one stack-allocated element.
   ///
   /// This is the normative statement of the #6483 carve-out; other sites point

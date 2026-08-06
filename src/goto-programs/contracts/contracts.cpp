@@ -4340,6 +4340,72 @@ static void warn_assumed_struct_extents(
     fmt::join(params, ", "));
 }
 
+static bool contains_symbol(const expr2tc &e, const irep_idt &name)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_symbol2t(e) && to_symbol2t(e).thename == name)
+    return true;
+
+  bool found = false;
+  e->foreach_operand([&found, &name](const expr2tc &op) {
+    if (!found)
+      found = contains_symbol(op, name);
+  });
+  return found;
+}
+
+/// Whether \p e reads or writes through \p name rather than merely naming it.
+static bool dereferences_symbol(const expr2tc &e, const irep_idt &name)
+{
+  if (is_nil_expr(e))
+    return false;
+  if ((is_dereference2t(e) || is_index2t(e)) && contains_symbol(e, name))
+    return true;
+
+  bool found = false;
+  e->foreach_operand([&found, &name](const expr2tc &op) {
+    if (!found)
+      found = dereferences_symbol(op, name);
+  });
+  return found;
+}
+
+/// Whether the extent of \p param can matter here: it is read or written
+/// through, or it escapes into a call that could do either. Contract clauses
+/// are still calls in the body at this point, so one scan covers the body and
+/// the requires/ensures/assigns clauses alike.
+///
+/// Answers true whenever the body cannot be inspected or the parameter
+/// escapes. A wrong "no" silently drops the warning on an underspecified
+/// contract, which is worse than the noise it was reported for (#6511).
+bool code_contractst::param_extent_is_observable(
+  const symbolt &func,
+  const irep_idt &param) const
+{
+  auto entry = goto_functions.function_map.find(func.id);
+  if (entry == goto_functions.function_map.end())
+    return true;
+  if (!entry->second.body_available)
+    return true;
+
+  for (const auto &ins : entry->second.body.instructions)
+  {
+    if (dereferences_symbol(ins.code, param))
+      return true;
+    if (dereferences_symbol(ins.guard, param))
+      return true;
+
+    if (!ins.is_function_call() || !is_code_function_call2t(ins.code))
+      continue;
+
+    for (const expr2tc &arg : to_code_function_call2t(ins.code).operands)
+      if (contains_symbol(arg, param))
+        return true;
+  }
+  return false;
+}
+
 /// Tell the user why a dereference may fail: the contract states no extent for
 /// these parameters, so the harness leaves their extent unconstrained.
 static void warn_unstated_extents(
@@ -4413,7 +4479,10 @@ void code_contractst::add_pointer_validity_assumptions(
     param_extents[param.get_identifier()] = {
       emit_pointer_param_malloc(wrapper, p, name, func, location), false};
     allocated_ptrs.push_back(p);
-    nondet_extent.push_back(name);
+    // The storage is allocated either way; only the advice is withheld, and
+    // only when nothing here can observe the extent (#6511).
+    if (param_extent_is_observable(func, param.get_identifier()))
+      nondet_extent.push_back(name);
   }
 
   warn_unstated_extents(func, location, nondet_extent);
