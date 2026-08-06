@@ -1055,10 +1055,30 @@ smt_astt smt_solver_baset::mk_zero_ext(smt_astt a, unsigned int topwidth)
 smt_astt smt_solver_baset::tuple_create(const expr2tc &structdef)
 {
   const constant_struct2t &strct = to_constant_struct2t(structdef);
+
+  /* Build against the sort the *type* dictates, not the one the members happen
+   * to convert to. A constant_struct can carry a member already lowered to an
+   * integer where the struct type declares a pointer -- std::type_info's
+   * __impl field does exactly that. Synthesising the tuple sort from the
+   * converted members then yields <tuple, BV> where a symbol of the same type
+   * gets <tuple, tuple> from convert_sort(), and the two are not comparable:
+   * mkEqual rejects the assignment (esbmc/esbmc#6310). The declared type is the
+   * single source of truth, so a member whose sort disagrees is re-converted at
+   * the field's type. */
+  const std::vector<type2tc> &member_types = struct_union_members(
+    is_pointer_type(structdef->type) ? pointer_struct : structdef->type);
+  const auto &want = convert_sort(structdef->type)->getTupleElementSorts();
+
   std::vector<camada::SMTExprRef> fields;
   fields.reserve(strct.datatype_members.size());
-  for (const auto &member : strct.datatype_members)
-    fields.push_back(convert_ast(member));
+  for (std::size_t i = 0; i < strct.datatype_members.size(); ++i)
+  {
+    const expr2tc &member = strct.datatype_members[i];
+    smt_astt m = convert_ast(member);
+    if (i < want.size() && m->Sort != want[i] && i < member_types.size())
+      m = convert_ast(typecast2tc(member_types[i], member));
+    fields.push_back(m);
+  }
 
   return solver->mkTuple(fields);
 }
