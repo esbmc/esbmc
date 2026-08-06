@@ -3827,12 +3827,28 @@ not strand zero in the other.
 
 So the residue is a **cost asymmetry in the `--no-simplify` leg**, and giving
 the sweep more time does not reduce it — at 400× the default, a bound that
-covered these inputs would be hours per test. This is the same shape R16 ended
-on from the other side: `do_simplify` is load-bearing for the encoding rather
-than merely for formula size, and 400× on `--no-simplify` is what that costs
-when it is switched off. The open question is no longer "how much time does the
-oracle need" but "why is the unsimplified encoding 400× harder here", which is
-worth an entry of its own and is not answered by this one.
+covered these inputs would be hours per test.
+
+**And the asymmetry is not the solver.** `00_memcpy_02` reports
+`Symex completed in: 0.000s (31 assignments)` by default; under `--no-simplify`
+it never prints that line at all, stalling before a single VCC is generated. Run
+it with `--unwind 8` and the reason is named: `__memcpy_impl`'s byte-wise loop
+at `src/c2goto/library/string.c:284`, unwinding without end because the folded
+`sizeof(int)` that bounded it is gone. **This is R28's mechanism with the bound
+removed.** R28 pinned the same loss on `calloc`'s `__memset_impl` at
+`string.c:304`, where `--unwind 1 --no-unwinding-assertions` turns the
+truncation into a silent vacuous proof; with no `--unwind` at all the same lost
+constant simply never terminates, and that is what a "timeout" in this leg is.
+
+It is also more general than the libc models. `00_endianness_01` stalls in a
+loop the *test itself* writes (`myMemcpy`, its own `main.c:12`) and
+`00_memory_leak_02` in `__ESBMC_atexit_handler` (`stdlib.c:38`), so the rule is
+not about `string.c`: **any loop whose trip count `do_simplify` folds to a
+constant becomes unbounded once it is switched off.** That is the account of the
+206 — it subsumes them into R28 rather than leaving them as a coverage gap, and
+it is the reason no bound the oracle can afford will reduce the count. It also
+sharpens R16's conclusion from the other side: `do_simplify` is load-bearing not
+merely for formula size but for *termination*.
 
 ---
 
