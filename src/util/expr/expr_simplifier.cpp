@@ -651,6 +651,30 @@ expr2tc sub2t::do_simplify() const
   if (side_1 == side_2)
     return gen_zero(type);
 
+  /* &base[i] - &base[j] = i - j. C23 6.5.6p9 defines the result of pointer
+   * subtraction as the difference of the subscripts, so this is the standard's
+   * own answer rather than an optimisation; a differing base is undefined
+   * there, so it is left unfolded instead (#6779). Without this the difference
+   * stays a comparison operand symex cannot decide, and a loop bounded by it
+   * never exits. */
+  if (is_address_of2t(side_1) && is_address_of2t(side_2))
+  {
+    const expr2tc &obj_1 = to_address_of2t(side_1).ptr_obj;
+    const expr2tc &obj_2 = to_address_of2t(side_2).ptr_obj;
+    if (is_index2t(obj_1) && is_index2t(obj_2))
+    {
+      const index2t &idx_1 = to_index2t(obj_1);
+      const index2t &idx_2 = to_index2t(obj_2);
+      if (
+        idx_1.source_value == idx_2.source_value &&
+        is_constant_int2t(idx_1.index) && is_constant_int2t(idx_2.index))
+        return constant_int2tc(
+          type,
+          to_constant_int2t(idx_1.index).value -
+            to_constant_int2t(idx_2.index).value);
+    }
+  }
+
   if (is_bv_type(type))
   {
     // Recognize (base + X) - X = base pattern. bv-only: for pointer types,
