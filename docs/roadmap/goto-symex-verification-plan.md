@@ -4263,6 +4263,41 @@ cannot be satisfied by doing nothing.
 
 ---
 
+### M9 (POR re-measured) — 2026-08-06, and why it does not touch A6.4
+
+A6.4 is the last finding in §9.2 with no verdict: `calculate_mpor_constraints`
+resets the active thread's row to -1, and that reset is the one operation in the
+chain update that *removes* relations, so an unsound prune would live there. The
+POR leg is its empirical counterpart — if the reset dropped a dependency that
+mattered, POR would prune an interleaving `--no-por` explores, and a bug behind
+that interleaving would go missing.
+
+| | agreed | diverged | no-verdict | timeout |
+|---|---|---|---|---|
+| §15 M6 | 258 | 0 | — | — |
+| this run | **1409** | **0** | 39 | 2 |
+
+**This does not discharge A6.4, and M9's own R6 entry is why.** R6 named a real
+unsound prune in `--state-hashing`, and the H-C4 state-hashing leg was clean at
+the time — 255 agreed, 0 diverged — for a structural reason that applies here
+unchanged: a pruning defect only changes a *verdict* when the pruned state is on
+the path to the **only** buggy interleaving. A corpus of concurrent tests
+mostly admits many racy interleavings, an early one of which is found before any
+prune matters. R6's witness had to be built to make the bug reachable
+exclusively behind the collision, and no corpus test happened to have that
+shape.
+
+So 1409 agreeing inputs bounds how often A6.4 bites in practice and says
+nothing about whether the reset is sound. Discharging it still needs either the
+MPOR paper's chain definition — the citation is verified (Kahlon, Wang & Gupta,
+CAV 2009, pp. 398-413, doi:10.1007/978-3-642-02658-4_31) but the text is
+paywalled — or a witness constructed against the reset the way R6's was
+constructed against the fingerprint. The second is now a known-workable
+technique rather than a hope, which is the one thing this session changed about
+A6.4's prospects.
+
+---
+
 ## Appendix A — Methodological basis
 
 - **Design by contract.** Every harness is precondition (`__ESBMC_assume`) →
