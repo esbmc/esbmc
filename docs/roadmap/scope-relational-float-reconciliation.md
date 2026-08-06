@@ -656,15 +656,31 @@ false divergences, against the 9 that invalidated the first census on this
 track. A first, non-compliant run of this sweep was discarded for exactly that
 reason before any result was read from it.
 
-Partial result at 335/4 509 (the run is in flight; the full table lands with
+Partial result at 901/4 509 (the run is in flight; the full table lands with
 the next revision of this section):
 
 | bucket | count |
 |---|---:|
-| SAME | 330 |
-| DIVERGE | 2 (`class10`, `class12` — SUCCESSFUL vs `rc=134`) |
+| SAME | 892 |
+| DIVERGE | 5 |
 | NOVERDICT_BOTH (rule 2, not attributable) | 1 |
-| SKIP_SHORT (rule 4) | 2 |
+| SKIP_SHORT (rule 4) | 3 |
+
+The five divergences split into two kinds, and only one is established:
+
+| test | legacy | hop-off | status |
+|---|---|---|---|
+| `class10`, `class12` | SUCCESSFUL | `rc=134` | **real** — root-caused to an array-into-scalar assignment, `scope-array-assignment-conversion.md` §13 |
+| `del_list_slice`, `dictcomp_over_items` | SUCCESSFUL | TIMEOUT | **unconfirmed** |
+| `dict24_fail` | FAILED | TIMEOUT | **unconfirmed** |
+
+**The three timeouts must not be reported as divergences without a serial
+re-run.** They were measured with 20 concurrent workers on a machine that also
+carried other work, and a hop-off-only timeout is exactly the artifact that
+contention produces; the harness's 130 s cap is per-run, not per-arm. They are
+recorded here as *candidates*, and the rule-2 discipline that keeps
+both-paths-no-verdict out of the attributable count applies with equal force to
+a one-sided timeout under load.
 
 ### 18.5 Status
 
