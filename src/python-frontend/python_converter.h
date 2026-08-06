@@ -18,6 +18,7 @@
 #include <optional>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -230,6 +231,7 @@ public:
   symbolt *find_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
+  std::string current_module_name() const;
 
   const std::string
   get_imported_module_path(const std::string &module_name) const
@@ -309,6 +311,12 @@ private:
 
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
 
+  // Fills in the tagged-object fields.
+  void get_tagged_scalar_assign(
+    const nlohmann::json &ast_node,
+    const std::string &name,
+    codet &target_block);
+
   void preregister_global_variables(const nlohmann::json &ast_body);
 
   /// None/Optional redesign (step A/B): if `annotation` is a nullable reference
@@ -344,6 +352,14 @@ private:
   static bool contains_named_expr(const nlohmann::json &node);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
+
+  exprt handle_tagged_scalar_comparison(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
+  exprt
+  build_tagged_scalar_eq_literal(const exprt &tagged, const exprt &literal);
 
   /// Coarse Python-level type category used to decide whether two operands
   /// in an `Eq`/`NotEq` comparison are cross-type (Python's rule: different
@@ -458,6 +474,13 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
+  /// Binary operation with a None operand: raises for the operators CPython
+  /// rejects, otherwise defers to handle_none_comparison (#6260).
+  exprt handle_none_operand(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
   /// Rewrites `sl.start/stop/step is/is not None` to a check of the
   /// corresponding `has_start/has_stop/has_step` flag on __ESBMC_PySliceObj.
   /// Returns `nil_exprt()` when the operands are not a slice-member access
@@ -486,6 +509,10 @@ private:
   exprt get_logical_operator_expr(const nlohmann::json &element);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
+
+  // Decides which variables need the tagged-object representation
+  std::unordered_set<std::string>
+  scalar_tag_candidates(const nlohmann::json &if_node);
 
   bool is_coverage_mode() const;
 
@@ -647,6 +674,12 @@ private:
     const nlohmann::json &import_node,
     module_locator &locator,
     code_blockt &code);
+
+  /// Binds an `import <mod> as <alias>` alias to the module's file, so the
+  /// alias resolves like the module name does (#6296).
+  void register_import_alias(
+    const nlohmann::json &import_node,
+    const std::string &module_file);
 
   /// Converts every module-level and function-local Import/ImportFrom
   /// statement in the current AST, appending the resulting code to
@@ -822,13 +855,32 @@ private:
     const nlohmann::json &ast_node,
     const typet &current_type);
 
-  std::string resolve_name_symbol_id(const std::string &name);
+  std::string resolve_name_symbol_id(const std::string &name) const;
 
   std::string root_name_from_subscript(const nlohmann::json &node) const;
 
   bool is_basic_numpy_view_subscript(const nlohmann::json &node) const;
 
+  bool is_numpy_array_constructor_expr(const nlohmann::json &node) const;
+
+  bool is_numpy_view_copy_expr(const nlohmann::json &node) const;
+
+  std::string
+  root_name_from_numpy_view_copy_expr(const nlohmann::json &node) const;
+
   bool contains_copied_numpy_view_name(const nlohmann::json &node);
+
+  void reject_numpy_view_mutating_method_call(const nlohmann::json &node);
+
+  void reject_unknown_numpy_view_call(const nlohmann::json &node);
+
+  void reject_numpy_view_identity_query(const nlohmann::json &node);
+
+  void reject_copied_numpy_view_in_container(
+    const nlohmann::json &ast_node,
+    const std::set<std::string> &container_types);
+
+  bool is_numpy_ravel_receiver(const nlohmann::json &ravel_call) const;
 
   std::optional<nlohmann::json>
   select_return_value_for_call(const nlohmann::json &call_node) const;
@@ -846,6 +898,9 @@ private:
   void record_numpy_view_copy(const exprt &lhs, const nlohmann::json &rhs_node);
 
   void clear_numpy_view_copy(const exprt &lhs);
+
+  void
+  update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
 
   // =========================================================================
   // Unpacking helper methods
@@ -1245,6 +1300,7 @@ private:
   // instructions the probe emitted, e.g. for fancy/mask/column selection).
   exprt cached_any_subscript_rhs_;
   bool has_cached_any_subscript_rhs_ = false;
+  std::set<std::string> numpy_array_symbols_;
   std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
   bool is_loading_models = false;
   bool is_importing_module = false;
@@ -1283,6 +1339,9 @@ private:
   /// block_nesting_ == 1 (an unconditional top-level statement), where there is
   /// no control-flow join that could make the runtime type ambiguous.
   std::unordered_map<std::string, std::string> retype_aliases_;
+
+  // Names of variables flagged as needing the tagged-object representation.
+  std::unordered_set<std::string> tagged_scalar_names_;
 
   /// Flow-sensitive class tracking (#4771/#4772). Maps a straight-line lvalue
   /// access path -- "v" for a Name `v`, "v.attr" for an `obj.attr` lvalue -- to

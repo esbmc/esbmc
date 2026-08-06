@@ -238,7 +238,14 @@ class unique_ptr
   D deleter;
 
 public:
-  explicit unique_ptr(T *p = nullptr, D del = D()) : ptr(p), deleter(del)
+  // [unique.ptr.single.ctor] p1: the default constructor is a separate,
+  // non-explicit one, so a unique_ptr member value-initialises inside an
+  // aggregate -- `std::array<std::unique_ptr<T>, N> a{};`.
+  constexpr unique_ptr() noexcept : ptr(nullptr), deleter(D())
+  {
+  }
+
+  explicit unique_ptr(T *p, D del = D()) : ptr(p), deleter(del)
   {
   }
 
@@ -370,7 +377,14 @@ class unique_ptr<T[], D>
   D deleter;
 
 public:
-  explicit unique_ptr(T *p = nullptr, D del = D()) : ptr(p), deleter(del)
+  // [unique.ptr.single.ctor] p1: the default constructor is a separate,
+  // non-explicit one, so a unique_ptr member value-initialises inside an
+  // aggregate -- `std::array<std::unique_ptr<T>, N> a{};`.
+  constexpr unique_ptr() noexcept : ptr(nullptr), deleter(D())
+  {
+  }
+
+  explicit unique_ptr(T *p, D del = D()) : ptr(p), deleter(del)
   {
   }
 
@@ -866,6 +880,24 @@ template <class T, class... Args>
 shared_ptr<T> make_shared(Args &&...args)
 {
   return shared_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
+/* The allocator is deliberately not modelled, and the two halves cannot be
+ * coupled as they stand: allocator::allocate hands out malloc'd storage while
+ * shared_ptr releases with `delete __p`, so routing through the allocator
+ * makes every use report "Mismatched memory deallocation operators". Storage
+ * therefore comes from the same `new` make_shared uses, a custom allocator's
+ * allocate/deallocate/construct are never called, and this model cannot
+ * answer questions *about* an allocator -- only about code that happens to
+ * use one. allocate_shared_allocator_calls pins that divergence (github
+ * #6488). The array forms added in C++20 are not declared.
+ * `typename A::value_type` ([allocator.requirements]) stops A deducing to a
+ * constructor argument when the allocator is omitted altogether, which would
+ * otherwise silently swallow it. */
+template <class T, class A, class... Args, class = typename A::value_type>
+shared_ptr<T> allocate_shared(const A &, Args &&...args)
+{
+  return make_shared<T>(std::forward<Args>(args)...);
 }
 #endif
 

@@ -7,6 +7,7 @@
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/message/message.h>
 #include <util/message/format.h>
 #include <util/irep/migrate.h>
@@ -251,12 +252,17 @@ static inline expr2tc gen_value_by_byte(
     uint64_t bytes_left = num_of_bytes;
     uint64_t offset_left = offset;
 
+    /* This walk charges each member type_byte_size() bytes, which over-counts
+     * a bitfield: three members of 12, 8 and 4 bits occupy 3 bytes but are
+     * charged 4, so a trailing member of a 4-byte struct is written with zero
+     * bytes and silently keeps its old value. Leave those to __memset_impl. */
+    for (const type2tc &member : to_struct_type(type).members)
+      if (is_bv_type(member) && member->get_width() % 8 != 0)
+        return expr2tc();
+
     for (unsigned i = 0; i < data.datatype_members.size(); i++)
     {
       irep_idt name = to_struct_type(type).member_names[i];
-      // TODO: We need a better way to detect bitfields
-      if (has_prefix(name.as_string(), "bit_field_pad$"))
-        return expr2tc();
       expr2tc local_member =
         member2tc(to_struct_type(type).members[i], src, name);
 

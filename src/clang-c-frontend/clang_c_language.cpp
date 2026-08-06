@@ -87,6 +87,12 @@ void clang_c_languaget::build_compiler_args(
       "-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
     compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_check");
     compiler_args.emplace_back("-Dsem_wait=sem_wait_check");
+    // Only the blocking acquisitions need renaming: pthread_rwlock_unlock's
+    // waiter release is inert when nothing registered a waiter.
+    compiler_args.emplace_back(
+      "-Dpthread_rwlock_rdlock=pthread_rwlock_rdlock_check");
+    compiler_args.emplace_back(
+      "-Dpthread_rwlock_wrlock=pthread_rwlock_wrlock_check");
   }
   else if (config.options.get_bool_option("lock-order-check"))
   {
@@ -501,13 +507,29 @@ extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
+/* CBMC memory primitives (esbmc/esbmc#2457). Without these declarations the
+ * names are implicitly declared as int-returning functions and havoc'd, so a
+ * program written against CBMC verifies against nondet rather than against the
+ * memory model. Bodies live in src/c2goto/library/builtin_libs.c. */
+__SIZE_TYPE__ __CPROVER_POINTER_OBJECT(const void *);
+__PTRDIFF_TYPE__ __CPROVER_POINTER_OFFSET(const void *);
+_Bool __CPROVER_same_object(const void *, const void *);
+__SIZE_TYPE__ __CPROVER_OBJECT_SIZE(const void *);
+_Bool __CPROVER_DYNAMIC_OBJECT(const void *);
+_Bool __CPROVER_LIVE_OBJECT(const void *);
+_Bool __CPROVER_WRITEABLE_OBJECT(const void *);
+_Bool __CPROVER_r_ok(const void *, __SIZE_TYPE__);
+_Bool __CPROVER_w_ok(const void *, __SIZE_TYPE__);
+_Bool __CPROVER_rw_ok(const void *, __SIZE_TYPE__);
+
 // Contract predicate: indicates that a pointer points to freshly allocated memory
-// Signature: __ESBMC_is_fresh(void **ptr, size_t size)
-// - ptr: Address of the pointer variable (semantically void**, declared as void* to avoid Clang USR issues)
+// Signature: __ESBMC_is_fresh(p, size)
+// - p: The pointer itself, passed bare. const so that const-qualified pointer
+//      params are accepted, which C++ overload resolution otherwise rejects.
 // - size: Size in bytes of the memory region
 // Returns: true when memory is successfully allocated (in contract enforcement mode)
 // Note: Used in requires clauses to specify fresh memory allocation requirements
-_Bool __ESBMC_is_fresh(void*, __SIZE_TYPE__);
+_Bool __ESBMC_is_fresh(const void*, __SIZE_TYPE__);
 
 _Bool __ESBMC_is_little_endian();
 

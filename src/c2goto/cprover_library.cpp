@@ -180,6 +180,7 @@ const static std::vector<std::string> python_c_extern_deps = {
   "__pyt_init_tid",
   "__pyt_join",
   "__pyt_terminate",
+  "__pyt_lock_release_waiters",
   "__ESBMC_pthread_start_main_hook",
   "__ESBMC_pthread_end_main_hook",
   "__ESBMC_pylock_block_and_check"};

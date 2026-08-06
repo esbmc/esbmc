@@ -662,9 +662,10 @@ smt_astt ir_ieee_convt::encode_ieee_div(const expr2tc &expr)
   // IEEE 754: the sign of x / +-0 is sign(x) XOR sign of the zero divisor.
   // side2 is a bare real zero here (div_by_zero requires side2 == zero),
   // which cannot carry its own sign, so the divisor's sign is recovered
-  // from its tracked negative-zero predicate (set only when side2 is the
-  // result of flushing a negative subnormal-range value); absent that
-  // predicate, side2 is treated as ordinary +0.0, matching prior behaviour.
+  // from its tracked negative-zero predicate (set when side2 is the
+  // result of flushing a negative subnormal-range value, or is itself a
+  // literal -0.0 constant); absent that predicate, side2 is treated as
+  // ordinary +0.0, matching prior behaviour.
   smt_astt side1_neg = ctx->mk_lt(side1, zero);
   smt_astt side2_neg_zero = get_neg_zero_pred(side2);
   smt_astt result_neg =

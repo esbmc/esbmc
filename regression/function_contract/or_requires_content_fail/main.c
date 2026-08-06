@@ -11,6 +11,7 @@
 
 void f(int *p)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(int)));
   __ESBMC_requires(p == NULL || *p > 0);
   __ESBMC_ensures(*p > 1); /* stronger than requires guarantees */
   /* empty body */

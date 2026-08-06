@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -68,11 +69,45 @@ JsonType find_class(const JsonType &ast_json, const std::string &class_name)
   return (it != ast_json.end()) ? *it : JsonType();
 }
 
+/// Counts the ClassDef nodes named @p class_name that sit inside a function
+/// body under @p body. Module-scope definitions are not counted: find_class
+/// already reports those.
+template <typename JsonType>
+unsigned count_function_scope_classes(
+  const JsonType &body,
+  const std::string &class_name,
+  bool in_function = false)
+{
+  unsigned count = 0;
+  for (const auto &node : body)
+  {
+    if (!node.is_object() || !node.contains("_type"))
+      continue;
+
+    const auto &type = node["_type"];
+    if (in_function && type == "ClassDef" && node["name"] == class_name)
+      ++count;
+
+    if (
+      (type == "FunctionDef" || type == "AsyncFunctionDef") &&
+      node.contains("body"))
+      count += count_function_scope_classes(node["body"], class_name, true);
+  }
+  return count;
+}
+
 template <typename JsonType>
 bool is_class(const std::string &name, const JsonType &ast_json)
 {
   // Find class definition in the current json
   if (find_class(ast_json["body"], name) != JsonType())
+    return true;
+
+  // A class defined in a function body is an ordinary class (#6743). Accept
+  // it only when the name is unambiguous: a class symbol is keyed by name
+  // alone, so same-named classes in two functions share one symbol and
+  // resolving here would answer for whichever was converted last.
+  if (count_function_scope_classes(ast_json["body"], name) == 1)
     return true;
 
   // Cache loaded module JSONs
@@ -139,15 +174,32 @@ bool is_module(const std::string &module_name, const JsonType &ast)
   if (!ast.contains("ast_output_dir"))
     return false;
 
-  const std::string path = ast["ast_output_dir"].template get<std::string>() +
-                           "/" + dotted_to_path(module_name) + ".json";
+  const std::string rel = dotted_to_path(module_name) + ".json";
+  const std::string dir = ast["ast_output_dir"].template get<std::string>();
+  const std::string path = dir + "/" + rel;
 
   auto it = is_module_cache.find(path);
   if (it != is_module_cache.end())
     return it->second;
 
-  std::ifstream file(path);
-  bool result = file.is_open();
+  // Opening the path is not enough to decide the name *is* a module: on a
+  // case-insensitive filesystem (macOS, Windows) `Queue.json` opens
+  // `queue.json`, so the class `Queue` imported from `queue` is taken for a
+  // module and every method call on it fails to dispatch. Require a directory
+  // entry that matches byte-for-byte.
+  const std::filesystem::path full(path);
+  std::error_code ec;
+  bool result = false;
+  for (std::filesystem::directory_iterator dit(full.parent_path(), ec), end;
+       !ec && dit != end;
+       dit.increment(ec))
+  {
+    if (dit->path().filename() == full.filename())
+    {
+      result = true;
+      break;
+    }
+  }
   is_module_cache.emplace(path, result);
   return result;
 }
@@ -760,6 +812,61 @@ bool has_overload_decorator(const JsonType &func_node)
       return true;
   }
   return false;
+}
+
+/// The declared return-type name of a function `name` defined in a module this
+/// AST imports, or "" if there is none. Some operational models implement what
+/// Python calls a class as a function (collections.deque -> list[int]), and
+/// such a name is still legal in an annotation; resolving it to the return type
+/// is what makes `d: collections.deque` usable (#6639). Only imported modules
+/// are scanned, so a user function never shadows a type name this way.
+template <typename JsonType>
+std::string
+imported_function_return_type(const std::string &name, const JsonType &ast_json)
+{
+  if (!ast_json.contains("ast_output_dir") || !ast_json.contains("body"))
+    return "";
+
+  const std::string output_dir =
+    ast_json["ast_output_dir"].template get<std::string>();
+
+  auto lookup = [&](const std::string &module_name) -> std::string {
+    std::ifstream f(output_dir + "/" + dotted_to_path(module_name) + ".json");
+    if (!f.is_open())
+      return "";
+    JsonType module_json;
+    f >> module_json;
+    if (!module_json.contains("body"))
+      return "";
+    JsonType fn = try_find_function(module_json["body"], name);
+    if (fn.empty() || !fn.contains("returns") || fn["returns"].is_null())
+      return "";
+    return get_annotation_type_name(fn["returns"]);
+  };
+
+  for (const auto &obj : ast_json["body"])
+  {
+    if (obj["_type"] == "ImportFrom")
+    {
+      if (obj["module"].is_null())
+        continue;
+      const std::string r = lookup(obj["module"].template get<std::string>());
+      if (!r.empty())
+        return r;
+    }
+    else if (obj["_type"] == "Import")
+    {
+      for (const auto &imported : obj["names"])
+      {
+        const std::string r =
+          lookup(imported["name"].template get<std::string>());
+        if (!r.empty())
+          return r;
+      }
+    }
+  }
+
+  return "";
 }
 
 } // namespace json_utils

@@ -105,15 +105,21 @@ public:
       std::shared_ptr<symex_targett> t,
       unsigned int claims,
       unsigned int remain,
-      unsigned int simplified)
+      unsigned int simplified,
+      unsigned int truncations = 0)
       : target(std::move(t)),
         total_claims(claims),
         remaining_claims(remain),
-        simplified_claims(simplified){};
+        simplified_claims(simplified),
+        bounded_loop_truncations(truncations){};
     std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
     unsigned int simplified_claims;
+    /// Carried out of exploration rather than read back from live state:
+    /// under --schedule the current frame is already dangling by the time
+    /// bmct looks (issue #6423).
+    unsigned int bounded_loop_truncations;
   };
 
   /**
@@ -176,8 +182,14 @@ protected:
    *  if-then-else list of concrete references that it might point at.
    *  @param expr Expression to eliminate dereferences from.
    *  @param mode The dereference mode.
+   *  @param block_assertions Suppress the pointer-safety claims this
+   *         dereference would otherwise record. Only for probing what a
+   *         pointer may designate before deciding whether the access happens.
    */
-  void dereference(expr2tc &expr, dereferencet::modet mode);
+  void dereference(
+    expr2tc &expr,
+    dereferencet::modet mode,
+    bool block_assertions = false);
 
   // symex
 
@@ -193,15 +205,16 @@ protected:
   virtual void symex_goto(const expr2tc &old_guard);
 
   /**
-   *  Hook called when a GOTO forks off a sibling merge_statet snapshot.
-   *  Used by execution_statet to record an explicit reference to the sibling
-   *  path on the active transition result, so it can be preserved across
-   *  context switches without re-discovering it by scanning merge_state_map.
-   *  No-op for non-concurrent symex.
+   *  Hook called when a step parks a merge_statet snapshot for a deferred
+   *  merge — a GOTO forking off its sibling arm, or a RETURN parking the
+   *  continuation at end_of_function. Used by execution_statet to record an
+   *  explicit reference to that path on the active transition result, so it
+   *  can be preserved across context switches without re-discovering it by
+   *  scanning merge_state_map. No-op for non-concurrent symex.
    */
-  virtual void record_branch_sibling(
+  virtual void record_parked_path(
     goto_programt::const_targett /*target*/,
-    statet::merge_state_listt::iterator /*sibling*/)
+    statet::merge_state_listt::iterator /*parked*/)
   {
   }
 
@@ -275,6 +288,20 @@ protected:
    *  @param msg Textual message explaining assertion.
    */
   virtual void claim(const expr2tc &expr, const std::string &msg);
+
+  /**
+   *  Record a verdict for the claim being symbolically executed.
+   *  Used for claims symex discharges itself, so that they are reported once
+   *  per run alongside the ones the solver discharges, rather than once per
+   *  thread interleaving.
+   *  @param msg Textual message explaining the claim.
+   *  @param verdict Outcome to record.
+   *  @param note How the verdict was reached, when it needs qualifying.
+   */
+  void record_property_verdict(
+    const std::string &msg,
+    property_verdictt verdict,
+    const std::string &note = "");
 
   /**
    *  Perform an assertion.
@@ -357,6 +384,14 @@ protected:
    *  @param guard Current state guard.
    */
   void loop_bound_exceeded(const expr2tc &guard);
+
+  /// Records that a loop was cut off at the unwinding bound with nothing to
+  /// flag it. Virtual because --schedule runs each path in its own execution
+  /// state, so the count also has to accumulate outside them.
+  virtual void note_bounded_loop_truncation()
+  {
+    ++bounded_loop_truncations;
+  }
 
   // function calls
 
@@ -1269,6 +1304,12 @@ protected:
   unsigned remaining_claims;
   /** Number of assertions that were trivially verified. */
   unsigned simplified_claims;
+  /** Loops cut off at the unwinding bound with no unwinding assertion to flag
+   *  it, i.e. under --no-unwinding-assertions (which the coverage modes force
+   *  on whenever --unwind is given). Exploration stopped there silently, so a
+   *  coverage percentage measured on such a run is a lower bound: goals past
+   *  the bound were never reached (issue #6387). */
+  unsigned bounded_loop_truncations = 0;
   /** Reachability tree we're working with. */
   reachability_treet *art1;
   /** Unwind bounds, loop number -> max unwinds. */
@@ -1284,8 +1325,6 @@ protected:
    *  --no-interval-symex-guard); assertion pruning via --interval-symex-assert
    *  discharges claims proven TRUE. */
   std::optional<interval_domaint> interval_domain_state;
-  /** Whether constant propagation is to be enabled. */
-  bool constant_propagation;
   /** Namespace we're working in. */
   const namespacet &ns;
   /** Context we're working with */

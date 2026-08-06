@@ -395,9 +395,16 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
   }
   else if (is_bool_type(type))
     return BOOL;
-  else if (is_fixedbv_type(type))
+  else if (is_fixedbv_type(type) || is_floatbv_type(type))
   {
-    unsigned width = to_fixedbv_type(type).width;
+    // The legacy typet overload above classifies "floatbv" and "fixedbv"
+    // together; this one only ever handled fixedbv, so every floatbv fell
+    // through to OTHER. OTHER outranks every arithmetic kind, so
+    // implicit_typecast_arithmetic promoted both operands to a type its switch
+    // has no case for and silently converted neither -- making the whole
+    // helper a no-op on any expr2tc pair with a floating-point operand.
+    unsigned width = is_fixedbv_type(type) ? to_fixedbv_type(type).width
+                                           : to_floatbv_type(type).get_width();
     if (width <= config.ansi_c.single_width)
       return SINGLE;
     else if (width <= config.ansi_c.double_width)
@@ -594,6 +601,30 @@ void c_typecastt::implicit_typecast(expr2tc &expr, const type2tc &type)
   implicit_typecast_followed(expr, src_type, dest_type);
 }
 
+/// Build the pointer that models a reference bound to \p expr.
+///
+/// A conditional whose arms are lvalues is itself an lvalue ([expr.cond]), so
+/// the address has to be taken per arm: `&(c ? a : b)` is `c ? &a : &b`. Left
+/// as `address_of(if(...))` the pointer analysis resolves neither arm and the
+/// bound reference silently designates the wrong object (#6291, #3387).
+static void take_reference_address(exprt &expr)
+{
+  if (
+    expr.id() == "if" && expr.operands().size() == 3 &&
+    expr.op1().type() == expr.op2().type())
+  {
+    take_reference_address(expr.op1());
+    take_reference_address(expr.op2());
+    expr.type() = expr.op1().type();
+    return;
+  }
+
+  address_of_exprt addr(expr);
+  addr.location() = expr.location();
+  addr.type().set("#reference", true);
+  expr.swap(addr);
+}
+
 void c_typecastt::implicit_typecast_followed(
   exprt &expr,
   const typet &src_type,
@@ -620,10 +651,7 @@ void c_typecastt::implicit_typecast_followed(
       src_type != dest_type &&
       !expr.is_address_of()) // TODO: remove this condition
     {
-      address_of_exprt addr(expr);
-      addr.location() = expr.location();
-      addr.type().set("#reference", true);
-      expr.swap(addr);
+      take_reference_address(expr);
     }
     else
     {

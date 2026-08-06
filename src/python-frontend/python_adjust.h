@@ -99,6 +99,14 @@ protected:
   /// parameter type. Returns true when rewritten.
   bool wrap_function_pointer_callee(expr2tc &fn, std::vector<expr2tc> &args);
 
+  /// Decay an array-typed call argument to `&arg[0]` when the callee's declared
+  /// parameter is a pointer — the array half of
+  /// `clang_c_adjust::adjust_function_call_arguments`, which converts each
+  /// argument to its parameter type through `c_typecastt` (whose array case
+  /// decays). Without it symex aborts binding the argument. Returns true when
+  /// any argument was rewritten.
+  bool decay_array_arguments(const expr2tc &fn, std::vector<expr2tc> &args);
+
   /// Derive a cpp-throw's exception-id chain from its operand's type,
   /// mirroring `clang_cpp_adjust::convert_exception_id`: the bare class name
   /// followed by its direct bases for a class operand (both the by-name

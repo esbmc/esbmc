@@ -220,7 +220,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     cur_state->top().merge_state_map[new_state_pc];
 
   merge_state_list.emplace_back(*cur_state);
-  record_branch_sibling(new_state_pc, std::prev(merge_state_list.end()));
+  record_parked_path(new_state_pc, std::prev(merge_state_list.end()));
 
   // Capture the interval domain at the if-branch end so phi_function can JOIN
   // both branches.  Deep-copy so subsequent else-branch writes don't corrupt it.
@@ -511,6 +511,11 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
   }
   else
   {
+    // Nothing will flag this truncation to the user: the assumption below
+    // silently prunes the rest of the loop. Record it so a coverage run can
+    // say its percentages are lower bounds (issue #6387).
+    note_bounded_loop_truncation();
+
     // generate unwinding assumption, unless we permit partial loops
     expr2tc guarded_expr = negated_cond;
     cur_state->guard.guard_expr(guarded_expr);

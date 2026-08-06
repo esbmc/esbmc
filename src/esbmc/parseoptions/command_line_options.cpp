@@ -105,6 +105,12 @@ static std::string_view esbmc_version_string()
 void timeout_handler(int)
 {
   log_error("Timed out");
+  // Under --multi-property the run keeps exploring interleavings after a
+  // violation, to reach the properties only later schedules touch. A timeout
+  // landing in that tail must not discard a counterexample already found and
+  // printed: the verdict is settled once a property is violated.
+  if (goto_functionst::property_verdicts.has_violation())
+    log_fail("VERIFICATION FAILED");
   // Kill any external solver process groups first: they are in their own
   // groups, so they outlive this _exit() otherwise (e.g. an mpirun job).
   file_operations::kill_registered_pgroups();
@@ -392,6 +398,15 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("context-bound", cmdline.getval("context-bound"));
   else
     options.set_option("context-bound", -1);
+
+  if (cmdline.isset("incremental-context-bound"))
+    options.set_option("incremental-context-bound", true);
+
+  if (cmdline.isset("max-context-bound"))
+    options.set_option(
+      "max-context-bound", cmdline.getval("max-context-bound"));
+  else
+    options.set_option("max-context-bound", 20);
 
   if (cmdline.isset("deadlock-check"))
   {

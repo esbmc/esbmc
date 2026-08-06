@@ -1858,7 +1858,7 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   std::list<std::pair<expr2tc, expr2tc>> resolved_list;
 
   construct_struct_ref_from_dyn_offs_rec(
-    value, offs, type, gen_true_expr(), mode, resolved_list);
+    value, offs, type, guard, gen_true_expr(), mode, resolved_list);
 
   if (resolved_list.size() == 0)
   {
@@ -1901,6 +1901,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   const expr2tc &value,
   const expr2tc &offs,
   const type2tc &type,
+  const guard2tc &guard,
   const expr2tc &accuml_guard,
   modet mode,
   std::list<std::pair<expr2tc, expr2tc>> &output)
@@ -1945,7 +1946,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     simplify(range_guard);
 
     construct_struct_ref_from_dyn_offs_rec(
-      index, new_offset, type, range_guard, mode, output);
+      index, new_offset, type, guard, range_guard, mode, output);
     return;
   }
 
@@ -1993,7 +1994,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
 
       simplify(new_offset);
       construct_struct_ref_from_dyn_offs_rec(
-        memb, new_offset, type, range_guard, mode, output);
+        memb, new_offset, type, guard, range_guard, mode, output);
       i++;
     }
     return;
@@ -2027,7 +2028,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       expr2tc memb = member2tc(it, value, union_type.member_names[i]);
 
       construct_struct_ref_from_dyn_offs_rec(
-        memb, offs, type, accuml_guard, mode, output);
+        memb, offs, type, guard, accuml_guard, mode, output);
       i++;
     }
     return;
@@ -2039,7 +2040,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   {
     // This is a byte array. We can reconstruct a structure from this, if
     // we don't overflow bounds. Start by encoding an assertion.
-    guard2tc tmp;
+    guard2tc tmp(guard);
     tmp.add(accuml_guard);
 
     // Only encode a bounds check if we're directly accessing an array symbol:

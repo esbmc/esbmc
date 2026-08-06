@@ -83,7 +83,9 @@ public:
   ///        When non-empty AND matches the function being enforced, the wrapper
   ///        allocates fresh backing storage for all pointer parameters so that
   ///        the harness-generated nil args become valid dereferenceable objects.
-  void enforce_contracts(
+  /// \return The subset of \p to_enforce that was actually enforced. A name
+  ///         absent from the result named nothing this pass could act on.
+  std::set<std::string> enforce_contracts(
     const std::set<std::string> &to_enforce,
     const std::string &entry_function = "",
     bool check_assigns_compliance = false);
@@ -153,11 +155,42 @@ public:
     expr2tc snapshot_sym; ///< Snapshot symbol holding arr[j] pre-call value
   };
 
+  /// \brief Byte extent of a harness-allocated pointer parameter.
+  ///
+  /// \p justified says whether the harness backing is real enough to read
+  /// through: an __ESBMC_is_fresh size, or the one-element stack backing of
+  /// the #6483 carve-out. It is false for a nondet heap extent, which nothing
+  /// may dereference. An absent map entry is a third state: the harness never
+  /// allocated, so the pointer is the real caller's.
+  struct param_extentt
+  {
+    expr2tc bytes;  ///< Byte-extent expression of the allocation
+    bool justified; ///< True when the backing may be dereferenced
+  };
+
   /// \brief Check if a function is compiler-generated and should be skipped.
   /// Handles both short names ("fst") and full Clang USR IDs ("c:@F@fst#*1I#").
   /// \param function_name Function name or full ID
   /// \return True if the function should be skipped (destructor, __cxa_*, etc.)
   bool is_compiler_generated(const std::string &function_name) const;
+
+  /// \brief Say why \p function_name cannot be used by a contract flag.
+  ///
+  /// The eligibility rules differ between the two passes and always have:
+  /// enforce_contracts resolves a name through find_function_symbol, while
+  /// replace_calls selects through matches_replace_pattern, which is why a
+  /// C++ id with parameters satisfies one and not the other. This method is
+  /// the single place both rules live, so a caller can ask the same question
+  /// the pass will ask, and get the same answer.
+  ///
+  /// Call it before any pass runs: enforce_contracts rewrites the functions it
+  /// acts on into wrappers that carry no contract, so asking afterwards
+  /// reports a name that was used as unusable.
+  ///
+  /// \param for_replace Ask replace_calls' rule rather than enforce's
+  /// \return The reason, or an empty string when the name is usable
+  std::string
+  diagnose_contract_target(const std::string &function_name, bool for_replace);
 
 private:
   goto_functionst &goto_functions;
@@ -171,9 +204,14 @@ private:
   size_t arr_elem_snap_counter =
     0; ///< Counter for unique array-element snapshot names (Phase 2B)
 
-  /// Number of elements to allocate for pointer params that serve as arrays
-  /// (i.e., appear in array_elem_targets). Must match the ASSUME(j < N) bound.
-  static constexpr size_t ARRAY_ALLOC_ELEMS = 100;
+  /// Fallback element count for the Phase 2B array-element witness index when
+  /// no extent is recorded for the pointer: a global pointer, or a pointer
+  /// parameter with no __ESBMC_is_fresh in a run without --function, where the
+  /// entry harness never allocates. A global *array* does not reach here; it
+  /// takes the whole-object snapshot path instead. It can over-bound the index
+  /// and produce the spurious "array bounds violated" of #5314, so prefer a
+  /// recorded extent whenever one exists.
+  static constexpr size_t WITNESS_IDX_FALLBACK_ELEMS = 100;
 
   /// \brief Find function symbol
   /// \param function_name Function name (can be full ID or simple name)
@@ -359,6 +397,11 @@ private:
   /// \param wrapper GOTO program to append snapshot instructions to
   /// \param location Source location
   /// \param func_name Function name for unique snapshot naming
+  /// \param param_extents Byte extent of each harness allocation. Params whose
+  ///        backing is not justified are skipped: the snapshot dereferences
+  ///        the pointer, and against a nondet extent that harness-invented
+  ///        read fails its own bounds check, reporting a violation in a
+  ///        parameter the contract never mentions.
   /// \return Vector of snapshot records for use in emit_ptr_deref_assertions
   std::vector<ptr_deref_snapshot_t> materialize_ptr_deref_snapshots(
     const frame_enforcert::classified_assignst &classified,
@@ -366,7 +409,8 @@ private:
     const symbolt &original_func,
     goto_programt &wrapper,
     const locationt &location,
-    const std::string &func_name);
+    const std::string &func_name,
+    const std::map<irep_idt, param_extentt> &param_extents);
 
   /// \brief Emit ASSERT instructions for pointer-parameter dereference compliance.
   /// For each snapshot: asserts *p == snapshot (scalar) or p->field == snapshot (struct).
@@ -389,10 +433,11 @@ private:
   /// \param wrapper GOTO program to append snapshot instructions to
   /// \param location Source location
   /// \param func_name Function name for unique snapshot naming
-  /// \param is_fresh_sizes Maps each __ESBMC_is_fresh pointer symbol to its
-  ///        byte-size expression, so the array-element witness index is bounded
-  ///        by the real allocation (size/sizeof(elem)) rather than the default
-  ///        ARRAY_ALLOC_ELEMS used for validity-assumption allocations.
+  /// \param param_extents Byte extent of each harness allocation, used to
+  ///        clamp the witness index to extent/sizeof(elem). An absent entry
+  ///        falls back to WITNESS_IDX_FALLBACK_ELEMS. The bound is a clamp and
+  ///        never an ASSUME: assuming a range that a zero or symbolic extent
+  ///        can falsify would discharge the whole wrapper vacuously (#6212).
   /// \return Vector of snapshot records for use in emit_arr_elem_assertions
   std::vector<arr_elem_snapshot_t> materialize_arr_elem_snapshots(
     const frame_enforcert::classified_assignst &classified,
@@ -400,7 +445,7 @@ private:
     goto_programt &wrapper,
     const locationt &location,
     const std::string &func_name,
-    const std::map<irep_idt, expr2tc> &is_fresh_sizes);
+    const std::map<irep_idt, param_extentt> &param_extents);
 
   /// \brief Emit ASSERT instructions for array element assigns compliance.
   /// For each snapshot: asserts (j == declared_idx) || (arr[j] == snapshot).
@@ -530,39 +575,60 @@ private:
   /// \brief Allocate fresh malloc backing storage for all pointer parameters.
   /// Called in --function entry harness mode so that pointer params point to
   /// real heap objects instead of nil, enabling valid dereference in the body.
+  ///
+  /// The extent of each allocation is a fresh nondet value, so a parameter is
+  /// only dereferenceable as far as the contract itself justifies via
+  /// __ESBMC_is_fresh.  A fixed extent here would assume a buffer size the
+  /// contract does not state and mask out-of-bounds accesses in the body
+  /// (GitHub issue #6212). Struct and union params are the exception: they keep
+  /// a one-element stack backing, see emit_struct_stack_backing.
   /// \param wrapper Destination goto program (wrapper body)
   /// \param func Function symbol
   /// \param location Location information
-  /// \param array_params Set of param IDs that need array allocation (ARRAY_ALLOC_ELEMS elements)
   /// \param skip_params Set of param IDs already allocated by __ESBMC_is_fresh
   /// \param allocated_ptrs Output: pointer-typed lvalues that received a heap
   ///        allocation. Stack-backed struct params are not appended. Callers
   ///        use this to emit matching free() calls at wrapper exit so
   ///        --memory-leak-check does not blame the user's function for
   ///        wrapper-internal allocations (CWE-401).
+  /// \param param_extents Output: byte extent of each allocation, keyed by
+  ///        parameter symbol, each tagged with whether it may be dereferenced.
   void add_pointer_validity_assumptions(
     goto_programt &wrapper,
     const symbolt &func,
     const locationt &location,
-    const std::set<irep_idt> &array_params,
     const std::set<irep_idt> &skip_params,
-    std::vector<expr2tc> &allocated_ptrs);
+    std::vector<expr2tc> &allocated_ptrs,
+    std::map<irep_idt, param_extentt> &param_extents);
 
-  /// \brief Emit malloc + non-null ASSUME + tracking push for one pointer param.
-  /// Shared body of the array-param and primitive-pointer branches of
-  /// add_pointer_validity_assumptions. Allocates ARRAY_ALLOC_ELEMS elements of
-  /// \p pointed_to_type, assigns the result to \p p, assumes p != NULL, and
-  /// records \p p in \p allocated_ptrs so the caller can emit a matching free.
-  /// \param kind_label Short description used in the goto-instruction comment
-  ///        and the debug log (e.g. "array" or "primitive array").
-  void emit_pointer_param_malloc(
+  /// \brief Back a struct/union pointer param with one stack-allocated element.
+  ///
+  /// This is the normative statement of the #6483 carve-out; other sites point
+  /// here rather than restating it. One element is still an extent the contract
+  /// does not state (#6212), but the alternative is worse: a heap-backed struct
+  /// silently discharges __ESBMC_old-based ensures clauses (#6483), turning
+  /// every such contract into a false negative. Stack backing also gives symex
+  /// proper SSA phi-nodes for conditional field writes, which the heap path
+  /// loses. Route struct params through emit_pointer_param_malloc instead once
+  /// #6483 is fixed.
+  void emit_struct_stack_backing(
     goto_programt &wrapper,
     const expr2tc &p,
-    const type2tc &param_type,
-    const type2tc &pointed_to_type,
-    const locationt &location,
-    std::vector<expr2tc> &allocated_ptrs,
-    const char *kind_label);
+    const std::string &param_name,
+    const type2tc &pointee,
+    const symbolt &func,
+    const locationt &location);
+
+  /// \brief Emit malloc + non-null ASSUME for one pointer parameter.
+  /// Allocates a nondet number of bytes and assigns the result to \p p. The
+  /// caller registers \p p for the matching free.
+  /// \return The byte-extent expression of the allocation.
+  expr2tc emit_pointer_param_malloc(
+    goto_programt &wrapper,
+    const expr2tc &p,
+    const std::string &param_name,
+    const symbolt &func,
+    const locationt &location);
 };
 
 #endif // ESBMC_CONTRACTS_H

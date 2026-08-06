@@ -1,6 +1,9 @@
 #ifndef ESBMC_VARIANT
 #define ESBMC_VARIANT
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include "cstddef"
 #include "type_traits"
 #include "utility"
@@ -10,13 +13,45 @@
 // than a real tagged union but observably equivalent for verification and
 // avoids the constexpr/APValue::Union path that ESBMC's converter does
 // not yet handle.  Per [variant] in N4861/P0088.  Out-of-scope: visit()
-// returning non-void, monostate, in_place_type construction past the
-// fourth alternative, and emplace().
+// returning non-void, in_place_type construction past the fourth
+// alternative, and emplace().
 
 namespace std
 {
 
 inline constexpr size_t variant_npos = static_cast<size_t>(-1);
+
+// [variant.monostate]: a unit type, so that a variant whose first alternative
+// is not default-constructible can still be default-constructed. All values
+// compare equal, which is what [variant.monostate.relops] specifies.
+struct monostate
+{
+};
+
+constexpr bool operator==(monostate, monostate) noexcept
+{
+  return true;
+}
+constexpr bool operator!=(monostate, monostate) noexcept
+{
+  return false;
+}
+constexpr bool operator<(monostate, monostate) noexcept
+{
+  return false;
+}
+constexpr bool operator>(monostate, monostate) noexcept
+{
+  return false;
+}
+constexpr bool operator<=(monostate, monostate) noexcept
+{
+  return true;
+}
+constexpr bool operator>=(monostate, monostate) noexcept
+{
+  return true;
+}
 
 namespace __variant_detail
 {
@@ -269,4 +304,5 @@ get_if(const variant<Types...> *v) noexcept
 
 } // namespace std
 
+#endif // __cplusplus >= 201103L
 #endif

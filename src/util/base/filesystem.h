@@ -23,6 +23,9 @@ namespace file_operations
 class tmp_path
 {
   std::string _path;
+  /** Descriptor holding a BSD lock on the path; -1 when unlocked. Held for as
+   *  long as this object owns the path, so systemd-tmpfiles skips it. */
+  int _lock_fd = -1;
 
 protected:
   bool _keep = true;
@@ -42,6 +45,7 @@ public:
     using std::swap;
     swap(a._path, b._path);
     swap(a._keep, b._keep);
+    swap(a._lock_fd, b._lock_fd);
   }
 
   const std::string &path() const noexcept;
@@ -88,6 +92,10 @@ public:
  * In Linux, running this function with "esbmc-%%%%" will
  * return a string such as "/tmp/esbmc-0001" or "/tmp/esbmc-8787".
  *
+ * The directory is created before the path is returned, so the name is the
+ * caller's for as long as it keeps it. Unlike create_tmp_dir() the result is
+ * not registered for cleanup: the caller owns removal.
+ *
  * This function does not have guarantee that will finish
  * and can be run forever until it sees an available spot.
  *
@@ -95,6 +103,8 @@ public:
  */
 const std::string get_unique_tmp_path(const std::string &format);
 
+/** The file is created exclusively and with 0600 permissions, so it is never
+ *  a pre-existing path (or a symlink to one) that this would clobber. */
 tmp_file create_tmp_file(
   const std::string &format = "esbmc.%%%%-%%%%-%%%%",
   const char *mode = "w+");

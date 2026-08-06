@@ -212,6 +212,25 @@ int esbmc_parseoptionst::doit()
         return 1;
       }
 
+  // --incremental-context-bound owns the outer verification loop, re-running
+  // do_bmc per context bound; the unwinding strategies each drive an outer
+  // loop of their own, so only one driver can own the run (issue #6480).
+  if (cmdline.isset("incremental-context-bound"))
+    for (const char *incompatible :
+         {"termination",
+          "incremental-bmc",
+          "falsification",
+          "k-induction",
+          "k-induction-parallel",
+          "loop-invariant"})
+      if (cmdline.isset(incompatible))
+      {
+        log_error(
+          "--incremental-context-bound cannot be combined with --{}",
+          incompatible);
+        return 1;
+      }
+
   // Preprocess the input program.
   // (This will not have any effect if OLD_FRONTEND is not enabled.)
   if (cmdline.isset("preprocess"))
@@ -391,29 +410,49 @@ int esbmc_parseoptionst::doit()
     return 0;
 
   // Now run one of the chosen strategies
-  if (
+  int res;
+  if (cmdline.isset("incremental-context-bound"))
+    res = do_context_bound_deepening(options, goto_functions);
+  else if (
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
     cmdline.isset("falsification") || cmdline.isset("k-induction") ||
     cmdline.isset("loop-invariant"))
-    return do_bmc_strategy(options, goto_functions);
+    res = do_bmc_strategy(options, goto_functions);
+  else
+  {
+    // If no strategy is chosen, just rely on the simplifier
+    // and the flags set through CMD
+    bmct bmc(goto_functions, options, context);
+    res = do_bmc(bmc);
+  }
 
-  // If no strategy is chosen, just rely on the simplifier
-  // and the flags set through CMD
-  bmct bmc(goto_functions, options, context);
-  int bmc_result = do_bmc(bmc);
   // Dead-code analysis is advisory: its probes are SAT for every live branch,
   // which do_bmc maps to a non-zero (FAILED) exit code. The findings are
   // reported separately, so remap that to 0 — but only for a completed
   // analysis. A solver error (P_ERROR) or an SMTLIB-only emission (P_SMTLIB)
   // is not a finished advisory run, so propagate it rather than masking a
   // crashed/incomplete analysis as success (issue #4495).
+  //
+  // Checked before the coverage branch below: `is_coverage` also covers
+  // --dead-code-check, which borrows the instrumentation but reports
+  // advisories and a verdict rather than a [Coverage] block.
   if (options.get_bool_option("dead-code-check"))
   {
-    if (bmc_result == P_ERROR || bmc_result == P_SMTLIB)
-      return bmc_result;
+    if (res == P_ERROR || res == P_SMTLIB)
+      return res;
     return 0;
   }
-  return bmc_result;
+
+  // A coverage run has no verdict, so it has no failure exit code either: its
+  // result is the [Coverage] block closed by the completeness line. Printed
+  // here, once, so it lands after the last block (k-induction prints one per
+  // phase).
+  if (is_coverage)
+  {
+    report_coverage_completeness();
+    return 0;
+  }
+  return res;
 }
 
 bool esbmc_parseoptionst::resolve_color_option() const

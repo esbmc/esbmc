@@ -3,6 +3,7 @@
 
 #include <set>
 #include <goto-symex/level1_map.h>
+#include <goto-symex/symex_invariant.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>
 #include <util/base/i2string.h>
@@ -113,8 +114,10 @@ public:
   {
     // Given that this is level1, use base symbol.
     name_record rec(to_symbol2t(symbol));
-    [[maybe_unused]] const unsigned *cur = current_names.find(rec);
-    assert(!cur || *cur <= frame);
+    const unsigned *cur = current_names.find(rec);
+    // I1 at L1: an activation index only ever grows.
+    SYMEX_INVARIANT(
+      !cur || *cur <= frame, "L1 activation counter moved backwards");
     current_names.set(rec, frame);
   }
 
@@ -242,9 +245,19 @@ public:
     current_names.erase(name_record(to_symbol2t(symbol)));
   }
 
-  void remove(const name_record &rec)
+  /// Retire a name whose storage has gone out of scope. L1 names are never
+  /// reused (symex_decl draws from a monotone per-identifier counter), so a
+  /// popped frame's local can still be named -- through a dangling pointer --
+  /// after teardown. Erasing the record restarts the counter, letting such a
+  /// write re-issue an index the declaration already defined and so define one
+  /// SSA name twice (I10). Advancing past the last live index instead leaves
+  /// the current name undefined, which keeps a read of the expired storage
+  /// unconstrained exactly as erasure did.
+  void retire(const name_record &rec)
   {
-    current_names.erase(rec);
+    valuet &entry = current_names[rec];
+    ++entry.count;
+    entry.constant = expr2tc();
   }
 
   void get_original_name(expr2tc &expr) const override

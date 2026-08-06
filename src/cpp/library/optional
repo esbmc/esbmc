@@ -1,5 +1,8 @@
 #pragma once
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include "utility"
 #include "type_traits"
 
@@ -155,3 +158,5 @@ constexpr bool operator!=(const optional<T> &a, const optional<T> &b)
 }
 
 } // namespace std
+
+#endif // __cplusplus >= 201103L

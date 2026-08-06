@@ -1,5 +1,8 @@
 #pragma once
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include "cstdint"
 #include "limits"
 
@@ -142,3 +145,5 @@ using hours = duration<long long, ratio<3600>>;
 
 } // namespace chrono
 } // namespace std
+
+#endif // __cplusplus >= 201103L

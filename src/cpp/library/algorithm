@@ -1,6 +1,7 @@
 #ifndef STL_ALGORITHM
 #define STL_ALGORITHM
 
+#include "initializer_list" /* [algorithm.syn] opens with this include */
 #include "iterator" /* std::iterator_traits, used by the heap helpers below */
 #include "definitions.h"
 #include <utility>
@@ -463,26 +464,6 @@ FwdIt1 search(FwdIt1 first1, FwdIt1 last1, FwdIt2 first2, FwdIt2 last2, Pr pred)
     ++first1;
   }
   return last1;
-}
-
-template <class InputIterator, class Distance>
-void advance(InputIterator &i, Distance n)
-{
-  i = i + n;
-}
-
-template <class InputIterator>
-int distance(InputIterator first, InputIterator last)
-{
-  int i = 0;
-  int koef = first < last ? 1 : -1;
-  InputIterator pilgrim = first < last ? first : last;
-  while (pilgrim != last)
-  {
-    pilgrim = pilgrim + koef;
-    i++;
-  }
-  return i;
 }
 
 template <class FwdIt, class Diff, class Ty>
