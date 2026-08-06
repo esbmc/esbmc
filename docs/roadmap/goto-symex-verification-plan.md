@@ -4006,14 +4006,22 @@ So R16's residue was never a simplifier gap of its own — it was #6778 seen
 through k-induction. Its baseline entry is removed, the plan's own rule being
 that a fixed defect may not keep its exemption.
 
-**R28's two entries could not be judged here.** `github_1257-memcleanup` and
-`github_1257-memsafety` do not parse at all on this toolchain — their
-SV-COMP-preprocessed `.i` inputs fail on a `memset` builtin redeclaration — so
-both legs reach no verdict and the pair is `no-verdict`, not `agreed`. A first
-pass through this check read the two as agreeing, which is precisely the
-confusion the `no-verdict` / `timeout` split earlier in M9 exists to prevent,
-and it is recorded because the same trap is waiting for anyone re-running this
-on macOS. Whether the fixes retire those two needs a Linux run.
+**R28's two entries could not be judged by that check** — and the reason was my
+invocation, not the toolchain. Running `github_1257-memcleanup` and
+`github_1257-memsafety` by hand gave `ERROR: PARSING ERROR` on a `memset`
+builtin redeclaration, which this entry first recorded as "they do not parse on
+macOS". They parse fine. Their `test.desc` carries `-D'__builtin_unreachable()'`
+and `generate_run_argument_list` strips the quotes to one argv entry, whereas
+`$(sed -n 3p test.desc)` in a shell word-splits the quotes into the argument and
+produces a malformed `-D`. The full sweep below runs both and gets verdicts from
+each.
+
+That is exactly the hazard Appendix B states about reimplementing `test.desc`
+parsing — "how a sweep ends up reporting divergences that are really invocation
+differences" — reached by hand rather than in a script, which is the one place
+the warning does not look like it applies. A first pass had also read the pair's
+two empty results as *agreeing*, which the `no-verdict`/`timeout` split exists to
+prevent. Two wrong readings of one pair, neither of them about ESBMC.
 
 Taken as its own change rather than a tail-end edit, because the simplifier is
 reached from everywhere and a wrong fold is a soundness bug rather than a missed
@@ -4161,6 +4169,37 @@ because `malloc` mints `dynamic_N_`**`array`** and only the struct path uses
 Keeping just the dynamic-counter reset still aborted, which is what established
 that counter as sufficient on its own rather than the pair being jointly
 responsible.
+
+---
+
+### M9 (H-C2 re-measured) — 2026-08-06, the residue was hiding nothing
+
+With #6781 and #6783 both applied, H-C2 was re-run over the whole corpus. The
+question it answers is not "does the relation still hold" but "what was behind
+the timeouts", because a timed-out test is one the oracle **never compared** —
+so every input the fixes rescued is an input this relation had never covered.
+
+| | agreed | diverged | inconclusive | skipped | abstract |
+|---|---|---|---|---|---|
+| §15 M9 (R16), pre-fix | 1198 | 3 | 206 | 55 | 42 |
+| this run, post-fix | **1299** | **2** | **120** (37 no-verdict + 83 timeout) | 55 | 42 |
+
+101 tests moved from uncompared to agreeing, and the inconclusive count fell by
+86. **No new divergence appeared.** The two that remain are the `github_1257`
+pair that R28 already owns and the baseline already carries; `github_252`, R16's
+last entry, now agrees and its baseline line is gone with #6781.
+
+That is the useful result, and it is a negative one: the timeout residue was not
+concealing a defect. H-C2's coverage claim can now be stated as measured rather
+than bounded — the relation holds on 1299 of the 1421 inputs it is entitled to
+compare, and the 120 it still cannot reach split into 37 that reach no verdict
+(a property of those inputs) and 83 that remain over the bound.
+
+Worth noting what a *whole-corpus* run cost to learn this: a little over an
+hour. The 300-test prefix used earlier in M9 predicted the direction correctly
+but would not have settled the question, because the interesting population —
+tests that only became comparable once the fixes landed — is exactly the one a
+prefix under-samples.
 
 ---
 
