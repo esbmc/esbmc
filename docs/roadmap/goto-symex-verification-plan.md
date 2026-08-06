@@ -681,7 +681,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R5** | **Medium (soundness detector disabled)** — discharged, §15 M4 | `check_for_duplicate_assigns` — the *only* in-tree checker for the core SSA invariant I10 — merely `log_status`es duplicates and then reports "Checked N insns". It never fails, and nothing calls it in a normal run. | `symex_target_equationt::check_for_duplicate_assigns`, `symex_target_equation.cpp` | H-B1 | Turn it into a validator returning a bool; run it under a debug/CI flag over the whole regression corpus. |
 | **R6** | **Medium (unsound pruning, opt-in flag) — mechanism pinned, no witness, §15 M6 (cont.)** | `state_hashing_level2t::make_assignment` keys `current_hashes` by the **L0** original name, acknowledged in-code ("XXX — consider whether to use l1 names instead. Recursion, reentrancy."). Two states that differ only in the L1 activation of a recursive local therefore fingerprint identically ⇒ `hit_hashes` prunes a genuinely different state ⇒ missed interleaving. Severity is bounded by `--state-hashing` being opt-in. | `execution_state.cpp:~1342-1378`; `reachability_treet::hit_hashes`, `reachability_tree.h:352` | H-A8-style model + **H-C4** | Key by the L1 name record (or mix call-stack depth into `generate_hash`). The unproven step is the "equal fingerprints are bisimilar" claim at `reachability_tree.cpp:420`: the fingerprint omits call-stack depth, so two states at one pc with equal L0→value maps but different recursion depths collide while resuming into different continuations. H-C4's state-hashing leg is clean (255/0) and four targeted programs produced no verdict-changing prune, so a witness must make the bug reachable *exclusively* behind the colliding state — that construction is the open task. |
 | **R7** | **Low–Medium (UB) — refined, §15 M1** | `previous_frame()` computes `*(--(--call_stack.end()))` with no size check. `call_stackt` is a `std::vector<framet>`, so at size 1 this evaluates `--begin()`, forming a pointer before the start of the array — undefined by [expr.add]/4 **whether or not it is dereferenced**, not merely a bad read. The second clause of the original finding ("returns a reference a subsequent `pop_frame` invalidates") does **not** hold: `pop_back` invalidates only the reference to the erased last element, and `previous_frame` returns the second-to-last. The precondition holds today by construction — the sole call site does `new_frame(...)` on the preceding line — but nothing states it in the shipped binary (R1). | `goto_symex_statet::previous_frame`; sole caller `goto_symext::symex_function_call_code`; [expr.add]/4 | `unit/goto-symex/frame_lifecycle.test.cpp` (Tier B, discharged) | Add a release-checked precondition **as part of R1's `SYMEX_INVARIANT` work in M3**, so the macro lands once with its cost measured; index (`call_stack[size() - 2]`) rather than decrementing an iterator. |
-| **R8** | **Medium (documented model gap)** | `is_valid_object` returns `false` for **every** non-static, non-dynamic symbol: the stack-scope branch is `#if 0`'d out with "XXX re-enable to be able to check for stack-var-out-of-scope problems". Stack-object validity is therefore not modelled, and `dynamic_allocation.cpp` compensates by *assuming* `invalid_pointer` applies only to dynamic objects ("we never update `__ESBMC_alloc` for stack ptrs"). Net effect on stack-lifetime bugs (use-after-scope) is a **missed-bug** direction. | `goto_symext::is_valid_object`, `symex_valid_object.cpp:85-118`; `dynamic_allocation.cpp:110-116` | H-A10 + a targeted `regression/esbmc` use-after-scope corpus | Quantify with a dedicated corpus before attempting a fix; the fix is a model change, not a patch. |
+| **R8** | **Medium (documented model gap)** — **re-characterised, §15 M9 (R8): the missed-bug clause is false** | `is_valid_object` returns `false` for **every** non-static, non-dynamic symbol: the stack-scope branch is `#if 0`'d out with "XXX re-enable to be able to check for stack-var-out-of-scope problems". Stack-object validity is therefore not modelled, and `dynamic_allocation.cpp` compensates by *assuming* `invalid_pointer` applies only to dynamic objects ("we never update `__ESBMC_alloc` for stack ptrs"). Net effect on stack-lifetime bugs (use-after-scope) is a **missed-bug** direction. | `goto_symext::is_valid_object`, `symex_valid_object.cpp:85-118`; `dynamic_allocation.cpp:110-116` | H-A10 + a targeted `regression/esbmc` use-after-scope corpus | Quantify with a dedicated corpus before attempting a fix; the fix is a model change, not a patch. |
 | **R9** | **Low–Medium (approximation direction unproven)** — **all three pinned**, §15 M9 (R9) and M9 (R9 cont.) | Three documented "sound over-approximation" claims are unproven: value-set filtering after a pointer havoc (`symex_assign.cpp:554-576`), the non-scalar uninterpreted-function fallback (`symex_function.cpp:418-449`), and the function-pointer target enumeration over an over-approximated value set (`symex_function.cpp:806-839`). Each *argues* the direction in a comment; none was checked. | cited lines; `unit/goto-symex/overapproximation.test.cpp` | H-B6 + H-C1/H-C3 | All three are now Tier-B predicates over the produced equation, each mutation-confirmed: disabling the compatibility filter, and dropping its empty-list guard, fail one case apiece. **Claim 1 is pinned too** — the `pc->inductive_step_instruction` gate is reachable after all, since `goto_k_induction` is a free function a fixture can run over a `goto_factory` program (§15 M9 (R9 cont.)). Its two cases separate three mutants: keeping the sinks, keeping only the sinks, and deleting the `!filtered.empty()` guard, the last of which silently costs a dereference its safety checks. |
 | **R10** | **Low (latent UB)** — **FIXED**, §15 M9 (R10) | `renaming::level2t::name_record`'s `name_record() = default` leaves `lev`, `l1_num`, `t_num` **and the derived `hash`** indeterminate (contrast `level1t::name_record`, which initialises `base_name("")`). No current default-construction site was found, but a future one (`std::optional`, map default-insert, array of records) would read indeterminate memory in `compare`/`hash`. | `renaming.h:143-214` | `unit/goto-symex/renaming.test.cpp` (Tier B, discharged) | **Fixed.** Default member initialisers on all four fields, and the hash computation factored into a private `compute_hash()` both constructors call — the fix has to give `hash` a value *consistent with* the fields, not merely a defined one, because `compare()` short-circuits on it. Not latent in the weak sense the row implied: with the original `= default`, a test that merely default-constructs a record **traps** (SIGTRAP, exit 133). |
 | **R11** | **Confirmed — mechanism corrected, see R18, §15 M6** | MPOR's independence decision consumes `thread_last_reads`/`thread_last_writes`, populated via `get_expr_globals`, which resolves pointer operands through the *current* value set. If a write through a pointer whose value set is incomplete (or whose entry is `unknown`) is missed, the dependency is missed and an interleaving is dropped — **unsound**. `get_expr_globals` also early-returns entirely under `--data-races-check-only`. | `execution_statet::get_expr_globals`, `check_mpor_dependency`; `reachability_treet::ever_written_globals`/`address_taken_globals` | H-A6 (relation) + **H-C4** (end-to-end) | **Answered.** An `unknown` entry does not force a conservative dependency — the `dest` loop skips anything that is not an `object_descriptor2t` over a `symbol2t`, with no fallback. But that is *not* the reachable defect: the witness in R18 shows the missed dependency comes from resolving only **one** pointer level, so a nested dereference is recorded against the intermediate pointer. R11's suspicion was right and its stated mechanism was wrong. Superseded by R18. |
@@ -4059,6 +4059,12 @@ places outside this plan**: goto-symex *consumes* `value_sett`, and its
 correctness is a separate obligation. Recorded here, not chased, and worth its
 own issue against the pointer analysis rather than against MPOR.
 
+Regression scope: 568/572 `esbmc-unix` pass, the four failures being the
+pre-existing macOS set (`04_valgrind`, `error`, `error2`,
+`unsupported_extensions`) confirmed identical before this change; 658 unit tests
+pass. The new arm is reachable — the three flipped shapes exercise it — which
+discharges C-Live's obligation informally; a formal Mode C pass has not been run.
+
 ### M9 (R4) — 2026-08-06, swept for a miss; none found
 
 R4 says eight `*ns.lookup(...)` dereferences are unchecked and a miss is a
@@ -4089,11 +4095,41 @@ is exactly the dead-code candidate the coverage rule says to report rather than
 add. R4 therefore stays open as a *robustness* item, not a defect with a
 reproducer, and any fix should say plainly that its branches are unwitnessed.
 
-Regression scope: 568/572 `esbmc-unix` pass, the four failures being the
-pre-existing macOS set (`04_valgrind`, `error`, `error2`,
-`unsupported_extensions`) confirmed identical before this change; 658 unit tests
-pass. The new arm is reachable — the three flipped shapes exercise it — which
-discharges C-Live's obligation informally; a formal Mode C pass has not been run.
+### M9 (R8) — 2026-08-06, stack lifetime is checked, just not here
+
+R8 reads that `is_valid_object` returns false for every non-static, non-dynamic
+symbol, that stack-object validity is therefore "not modelled", and that the net
+effect on stack-lifetime bugs is a **missed-bug** direction. The first two
+clauses are accurate. **The third is false**, and three programs settle it:
+
+| program | shape | verdict |
+|---|---|---|
+| `u1.c` | `return &local`, then dereference | **FAILED** — `accessed expired variable pointer` |
+| `u2.c` | local's address stored in a global, read after return | **FAILED** — same |
+| `u3.c` | address of a block-scoped local read after the block | **FAILED** — same |
+
+Stack lifetime *is* checked; it is checked somewhere else.
+`dereference.cpp:2362` asks `dereference_callback.is_live_variable(symbol)`,
+implemented at `symex_dereference.cpp:153` as a per-thread call-stack search over
+**L1** names — precisely what the `#if 0` comment says it could not do with
+global names. The disabled block is a *superseded* implementation, not a hole,
+and the comment inviting someone to "re-enable to be able to check for
+stack-var-out-of-scope problems" is an invitation to re-implement a working
+check.
+
+**The surviving call site is not reached either.** `is_valid_object` has exactly
+one caller (`symex_valid_object.cpp:56`), lowering `valid_object2t` on a
+non-dynamic symbol. Instrumented, the three programs above hit it **zero** times,
+as do 101 CORE inputs from `regression/esbmc`.
+
+Two consequences. R8's severity should fall: there is no missed-bug direction to
+fix. But the `#if 0` block, its comment and `is_valid_object`'s stack arm are now
+**dead-code candidates** — an unreachable-on-this-corpus function guarding a
+disabled branch. Deleting them is a separate patch needing a **C-Dead** argument,
+which §14 item 8 records has no empirical substitute: 101 inputs not reaching a
+site is not a proof that nothing reaches it. That deletion should rest on the
+implicit-discharge route or on a far wider sweep, and this entry is not licence
+for it.
 
 ### M9 (Mode C) — 2026-08-06, the self-verification obligation cannot be met
 
