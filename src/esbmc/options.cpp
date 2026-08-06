@@ -321,6 +321,11 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Round floating-point results towards minus infinity"},
      {"round-to-zero", NULL, "Round floating-point results towards zero"},
+     {"fp-taylor-terms",
+      boost::program_options::value<int>()->value_name("n"),
+      "Terms the exp/log/pow operational models expand their Taylor series to, "
+      "between 2 and 12 (default 8). More terms are more accurate and more "
+      "expensive to solve"},
    }},
   {"Witness",
    {{"witness-output",
@@ -366,7 +371,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"full-traces",
      NULL,
      "Print every trace state in the multi-witness report instead of the "
-     "states closest to the failure. Only meaningful with --all-witnesses."}}},
+     "states closest to the failure. Only meaningful with --all-witnesses."},
+    {"ascii-report",
+     NULL,
+     "Draw the multi-witness report with ASCII instead of box-drawing "
+     "characters. Detected automatically from the locale; this forces it."}}},
   {"Output",
    {{"output-goto",
      boost::program_options::value<std::string>(),

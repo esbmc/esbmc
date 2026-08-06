@@ -500,19 +500,23 @@ class Executor:
                 # Gracefully shut down the whole process group so
                 # grandchildren don't linger and starve the CI runner.
                 if os.name == "posix":
-                    # Best-effort: on macOS killpg can raise EPERM when the
-                    # group holds a process we can no longer signal, which
-                    # otherwise turns a tolerated timeout into a hard ERROR.
+                    # ESBMC does not necessarily die on SIGTERM, so the SIGKILL
+                    # escalation has to run even when the SIGTERM itself failed.
+                    # Sharing one try with the wait meant a killpg that raised
+                    # (on macOS it raises EPERM when the group holds a process
+                    # we can no longer signal) skipped the kill entirely and
+                    # left the group running.
                     try:
                         os.killpg(proc.pid, signal.SIGTERM)
+                    except OSError:
+                        pass
+                    try:
                         proc.wait(timeout=_TERM_GRACE)
                     except subprocess.TimeoutExpired:
                         try:
                             os.killpg(proc.pid, signal.SIGKILL)
                         except OSError:
                             pass
-                    except OSError:
-                        pass
                 else:
                     proc.kill()
                 stdout, stderr = proc.communicate()

@@ -1093,7 +1093,8 @@ exprt python_converter::get_rhs_with_dict_resolution(
     dict_expr, ast_node["value"]["slice"], target_type);
 }
 
-std::string python_converter::resolve_name_symbol_id(const std::string &name)
+std::string
+python_converter::resolve_name_symbol_id(const std::string &name) const
 {
   symbol_id sid = create_symbol_id();
   sid.set_object(name);
@@ -1240,7 +1241,15 @@ bool python_converter::is_numpy_array_constructor_expr(
     return false;
 
   static const std::set<std::string> constructors = {
-    "array", "zeros", "ones", "full", "empty", "arange"};
+    "array",
+    "zeros",
+    "ones",
+    "full",
+    "empty",
+    "arange",
+    "eye",
+    "identity",
+    "linspace"};
   return constructors.count(node["func"].value("attr", "")) != 0;
 }
 
@@ -1316,15 +1325,72 @@ bool python_converter::contains_copied_numpy_view_name(
 
   if (node.is_object())
   {
-    if (node.value("_type", "") == "Name" && node.contains("id"))
+    const std::string node_type = node.value("_type", "");
+
+    // A comprehension/generator always builds a brand-new list/set/dict, so
+    // it cannot itself be a numpy view; and its element/key/value
+    // expressions reference the comprehension's own loop variable(s), which
+    // are not registered as real symbols outside of the comprehension's own
+    // conversion (handle_comprehension/_lower_listcomp) — probing a
+    // Subscript inside one here (e.g. `x[j]` for `for j in ...`) would look
+    // up `j` before it exists and abort the conversion.
+    if (
+      node_type == "GeneratorExp" || node_type == "ListComp" ||
+      node_type == "SetComp" || node_type == "DictComp")
+      return false;
+
+    if (node_type == "Name" && node.contains("id"))
     {
       const std::string id =
         resolve_name_symbol_id(node["id"].get<std::string>());
       return !id.empty() && numpy_view_copy_sources_.count(id) != 0;
     }
 
+    // An inline basic-indexing view used directly as a container literal
+    // element (x[0]) escapes just as much as one already bound to a name
+    // first — what makes it escape is the container literal, not whether
+    // an intermediate variable was involved. Scoped to the Subscript form
+    // only (not `.T`/`transpose`/`reshape`/`ravel` Call forms): probing
+    // those via get_expr here would convert them a second time, and
+    // unlike a plain index-into-a-symbol, their conversion is not free of
+    // side effects on converter state. The same Subscript AST shape also
+    // matches a plain scalar element read (x[0][0]), which is not a view,
+    // so confirm the expression is actually array-typed before treating
+    // it as an escape.
+    //
+    // The probe itself is not free of side effects either: a bounds-checked
+    // subscript (list index, when `--no-bounds-check` is not set) emits a
+    // size lookup and an IndexError-raise guard into current_block. This
+    // function can be reached while walking an AST subtree that has not
+    // been selected for evaluation yet (e.g. the untaken branch of a
+    // ternary, still being probed by contains_copied_numpy_view_name before
+    // get_conditional_stm's own short-circuit guard is built), so those
+    // instructions must not leak into the real block. Redirect them into a
+    // throwaway block for the duration of the probe.
     if (
-      node.value("_type", "") == "Subscript" && node.contains("value") &&
+      is_basic_numpy_view_subscript(node) &&
+      !root_name_from_subscript(node["value"]).empty())
+    {
+      code_blockt scratch_block;
+      code_blockt *saved_block = current_block;
+      current_block = &scratch_block;
+      exprt probe;
+      try
+      {
+        probe = get_expr(node);
+      }
+      catch (...)
+      {
+        current_block = saved_block;
+        throw;
+      }
+      current_block = saved_block;
+      if (!contains_cpp_throw(probe) && probe.type().is_array())
+        return true;
+    }
+
+    if (
+      node_type == "Subscript" && node.contains("value") &&
       node.contains("slice") && !json_contains_slice_node(node["slice"]) &&
       contains_copied_numpy_view_name(node["value"]))
       return contains_copied_numpy_view_name(node["slice"]);
@@ -1444,6 +1510,31 @@ void python_converter::reject_numpy_view_identity_query(
 
     throw std::runtime_error("TypeError: numpy view identity is not supported");
   }
+}
+
+// dict_handler_ intercepts a Dict-literal assignment before the generic
+// List/Tuple/Dict escape check further down the caller ever runs, so a
+// copied-view escape into a dict literal (named or inline, e.g.
+// {"row": x[0]}) has to be caught here too, or the view ends up embedded in
+// the dict's runtime representation in a way that crashes SMT encoding
+// instead of producing a diagnostic (mismatched sort widths in
+// z3_convt::mk_eq).
+void python_converter::reject_copied_numpy_view_in_container(
+  const nlohmann::json &ast_node,
+  const std::set<std::string> &container_types)
+{
+  if (!ast_node.contains("value") || !ast_node["value"].is_object())
+    return;
+
+  const nlohmann::json &value_node = ast_node["value"];
+  if (
+    container_types.count(value_node.value("_type", "")) == 0 ||
+    !contains_copied_numpy_view_name(value_node))
+    return;
+
+  throw std::runtime_error(
+    "TypeError: storing a copied numpy view in a container is not "
+    "supported");
 }
 
 std::optional<nlohmann::json> python_converter::select_return_value_for_call(
@@ -2547,6 +2638,41 @@ bool python_converter::is_global_variable(const symbol_id &sid) const
   return false;
 }
 
+bool python_converter::is_numpy_ravel_receiver(
+  const nlohmann::json &ravel_call) const
+{
+  if (!ravel_call["func"].contains("value"))
+    return false;
+
+  const nlohmann::json &func_value = ravel_call["func"]["value"];
+  const bool is_module_form =
+    func_value.is_object() && func_value.value("_type", "") == "Name" &&
+    is_imported_numpy_module_alias(*ast_json, func_value.value("id", ""));
+
+  // np.ravel(a): the array is the call's first argument (this is the shape
+  // the preprocessor's .flat rewrite always produces). a.ravel(): the array
+  // is the Attribute's own receiver.
+  nlohmann::json receiver;
+  if (is_module_form)
+  {
+    if (
+      ravel_call.contains("args") && ravel_call["args"].is_array() &&
+      !ravel_call["args"].empty())
+      receiver = ravel_call["args"][0];
+  }
+  else
+    receiver = func_value;
+
+  const std::string receiver_name = root_name_from_subscript(receiver);
+  if (receiver_name.empty())
+    return false;
+
+  const std::string receiver_id = resolve_name_symbol_id(receiver_name);
+  return !receiver_id.empty() &&
+         (numpy_array_symbols_.count(receiver_id) != 0 ||
+          numpy_view_copy_sources_.count(receiver_id) != 0);
+}
+
 std::string
 python_converter::extract_target_name(const nlohmann::json &target) const
 {
@@ -2560,6 +2686,22 @@ python_converter::extract_target_name(const nlohmann::json &target) const
     // Recurse through nested Subscripts (e.g. board[0][0] = x) to reach the
     // root container's Name/Attribute, which carries the symbol id.
     return extract_target_name(target["value"]);
+  else if (
+    target_type == "Call" && target.contains("func") &&
+    target["func"].is_object() &&
+    target["func"].value("_type", "") == "Attribute" &&
+    target["func"].value("attr", "") == "ravel" &&
+    is_numpy_ravel_receiver(target))
+    // a.flat[i] = x: the preprocessor rewrites every .flat read, including
+    // the one implicit in this assignment's target, to np.ravel(a) — so the
+    // target here is really Subscript(value=Call(ravel(a))), which has no
+    // symbol id to extract. np.ravel(a)[i] = x written directly hits the
+    // same shape and is equally unsupported for the same reason (ravel's
+    // result is a copy, not a writable view of a). Gated on the receiver
+    // actually being a tracked numpy array/view so an unrelated class with
+    // its own ravel() method does not get this numpy-specific diagnostic.
+    throw std::runtime_error(
+      "TypeError: mutation through .flat is not supported");
 
   throw std::runtime_error(
     "Unsupported assignment target type: " + target_type.get<std::string>());
@@ -3405,6 +3547,8 @@ void python_converter::get_var_assign(
     // Create LHS expression
     lhs = create_lhs_expression(target, lhs_symbol, location_begin);
 
+    reject_copied_numpy_view_in_container(ast_node, {"Dict"});
+
     // Handle dict literal assignment specially - after LHS is created
     if (dict_handler_->handle_literal_assignment_check(*this, ast_node, lhs))
     {
@@ -3434,6 +3578,8 @@ void python_converter::get_var_assign(
     lhs_symbol = symbol_table_.find_symbol(sid.to_string());
 
     bool is_global = is_global_variable(sid);
+
+    reject_copied_numpy_view_in_container(ast_node, {"Dict"});
 
     // Handle unannotated dict literal assignment
     if (
@@ -3518,17 +3664,7 @@ void python_converter::get_var_assign(
   current_lhs = &lhs;
   is_converting_lhs = false;
 
-  if (
-    ast_node.contains("value") && ast_node["value"].is_object() &&
-    (ast_node["value"].value("_type", "") == "List" ||
-     ast_node["value"].value("_type", "") == "Tuple" ||
-     ast_node["value"].value("_type", "") == "Dict") &&
-    contains_copied_numpy_view_name(ast_node["value"]))
-  {
-    throw std::runtime_error(
-      "TypeError: storing a copied numpy view in a container is not "
-      "supported");
-  }
+  reject_copied_numpy_view_in_container(ast_node, {"List", "Tuple", "Dict"});
 
   // Get RHS
   nlohmann::json effective_ast_node = ast_node;
@@ -3584,22 +3720,41 @@ void python_converter::get_var_assign(
     const bool base_is_imported_module =
       method_base_name == "np" || method_base_name == "numpy" ||
       (!method_base_name.empty() && is_imported_module(method_base_name));
-    const bool supported_view_method =
-      !base_is_imported_module &&
-      (method_name == "transpose" || method_name == "reshape" ||
-       method_name == "ravel");
     const std::string method_base_id =
       method_base_name.empty() ? std::string()
                                : resolve_name_symbol_id(method_base_name);
-    const bool supported_copy_method =
-      !base_is_imported_module && method_name == "copy" &&
+    // A method name like sum()/max()/min() is not exclusive to numpy (e.g.
+    // Decimal.max(), a plain module-level function called through an
+    // aliased import); only rewrite when the receiver is actually a
+    // tracked numpy array, matching the check already used for copy()
+    // below.
+    const bool method_base_is_numpy_array =
       !method_base_id.empty() &&
       numpy_array_symbols_.count(method_base_id) != 0;
+    const bool supported_view_method =
+      !base_is_imported_module && method_base_is_numpy_array &&
+      (method_name == "transpose" || method_name == "reshape" ||
+       method_name == "ravel");
+    // flatten()/sum()/mean()/min()/max()/std()/var() are not view-like (see
+    // is_numpy_view_copy_expr, which deliberately excludes them), but the
+    // method form still needs the same np.<name>(a, ...)-shaped rewrite
+    // below to dispatch to the existing np.<name>() handler — the only form
+    // that method-call dispatch resolves through here at all is the
+    // function-call shape.
+    static const std::set<std::string> other_dispatch_rewrite_methods = {
+      "flatten", "sum", "mean", "min", "max", "std", "var"};
+    const bool supported_dispatch_rewrite_method =
+      supported_view_method ||
+      (!base_is_imported_module && method_base_is_numpy_array &&
+       other_dispatch_rewrite_methods.count(method_name) != 0);
+    const bool supported_copy_method = !base_is_imported_module &&
+                                       method_name == "copy" &&
+                                       method_base_is_numpy_array;
     if (supported_copy_method)
     {
       effective_ast_node["value"] = ast_node["value"]["func"]["value"];
     }
-    else if (supported_view_method)
+    else if (supported_dispatch_rewrite_method)
     {
       std::string numpy_alias = "np";
       for (const auto &entry : imported_modules)
@@ -3633,6 +3788,13 @@ void python_converter::get_var_assign(
           call_node["args"].push_back(arg);
       call_node["keywords"] =
         ast_node["value"].value("keywords", nlohmann::json::array());
+      // numpy.reshape(a, newshape, order='C') has no split-dimension form
+      // (a third positional argument is `order`, not another dimension);
+      // only the method form a.reshape(d1, d2, ...) is equivalent to
+      // a.reshape((d1, d2, ...)). Mark this rewrite so the reshape handler
+      // can tell the two shapes apart and reject a genuine
+      // np.reshape(a, 2, 3) call instead of silently accepting it.
+      call_node["_numpy_method_form"] = true;
       copy_location_fields_from_decl(ast_node["value"], call_node);
       copy_location_fields_from_decl(ast_node["value"], call_node["func"]);
       effective_ast_node["value"] = call_node;

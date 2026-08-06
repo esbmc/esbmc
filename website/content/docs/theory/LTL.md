@@ -37,7 +37,7 @@ the implementation diverges from [1].
 | Monitor prefix bound | `-DLTL_PREFIX_BOUND=N`, **required in practice** (default is 2³¹) |
 | Other properties in the same run | **None** — safety and unwinding assertions are masked |
 | Regression coverage | 13 `CORE` tests in `regression/ltl/`, run on Linux, macOS and Windows |
-| Minimum translator version | libltl2ba `master` at [`b810033`](https://github.com/esbmc/libltl2ba/commit/b81003333) or later ([libltl2ba#4](https://github.com/esbmc/libltl2ba/pull/4)) — **later than the v2.1 tag** |
+| Minimum translator version | libltl2ba `master` at [`b810033`](https://github.com/esbmc/libltl2ba/commit/b81003333b5cf2505aeeee1df9355bd97b586ad7) or later ([libltl2ba#4](https://github.com/esbmc/libltl2ba/pull/4)) — **later than the v2.1 tag** |
 
 ## The four-valued verdict
 
@@ -247,7 +247,7 @@ re-checked with different maskings.
 ## Limitations
 
 > **Note**: Everything below was reproduced against ESBMC 8.4.0 paired with
-> libltl2ba at [`b810033`](https://github.com/esbmc/libltl2ba/commit/b81003333).
+> libltl2ba at [`b810033`](https://github.com/esbmc/libltl2ba/commit/b81003333b5cf2505aeeee1df9355bd97b586ad7).
 > The `--ltl` path has no dedicated issue label.
 
 ### Violations were missed *(fixed in 8.4.0)*

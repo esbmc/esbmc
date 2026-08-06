@@ -1083,6 +1083,26 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::ConditionalOperator &ternary =
       static_cast<const clang::ConditionalOperator &>(stmt);
 
+    // C++ [expr.cond]/2: a throw-expression operand contributes no value, so
+    // the branch has to become a statement rather than something the
+    // conditional's result is built from. Materialising a class-typed
+    // conditional takes the address of each branch, which for the throw is
+    // meaningless and used to abort inside the solver with an irep dump
+    // (issue #6717). Scalar conditionals never materialise, so they are
+    // unaffected and keep working.
+    if (
+      ternary.getType()->isRecordType() &&
+      (llvm::isa<clang::CXXThrowExpr>(
+         ternary.getTrueExpr()->IgnoreParenImpCasts()) ||
+       llvm::isa<clang::CXXThrowExpr>(
+         ternary.getFalseExpr()->IgnoreParenImpCasts())))
+    {
+      log_error(
+        "ESBMC currently does not support a throw-expression in a "
+        "class-typed conditional");
+      return true;
+    }
+
     bool elided = false;
     if (get_conditional_class_prvalue(ternary, new_expr, elided))
       return true;
@@ -1611,11 +1631,39 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*aile.getSubExpr(), init))
       return true;
 
-    index_exprt ind = to_index_expr(init);
-
     const llvm::APInt &Int = aile.getArraySize();
     std::size_t size = Int.getSExtValue();
     exprt inits("constant", common.type());
+
+    // A class-typed element copies through its copy constructor, so the
+    // sub-expression is a CXXConstructExpr rather than the indexed read a
+    // scalar element yields. Casting it to an index walked off the end of the
+    // expression and crashed the frontend (issue #6717). A trivial
+    // constructor copies the representation and nothing else, so the
+    // element-wise read below says the same thing.
+    if (!init.is_index())
+    {
+      const auto *ctor = llvm::dyn_cast<clang::CXXConstructExpr>(
+        aile.getSubExpr()->IgnoreImplicit());
+      if (!ctor || !ctor->getConstructor()->isTrivial())
+      {
+        log_error(
+          "ESBMC currently does not support an array copy whose element "
+          "constructor is non-trivial");
+        return true;
+      }
+
+      const typet &elem_t = common.type().subtype();
+      for (std::size_t i = 0; i < size; ++i)
+        inits.copy_to_operands(
+          index_exprt(common, from_integer(i, index_type()), elem_t));
+
+      new_expr = inits;
+      break;
+    }
+
+    index_exprt ind = to_index_expr(init);
+
     // { ref->arr[0], ref->arr[1], ... ,ref->arr[i]}
     for (std::size_t i = 0; i < size; ++i)
     {

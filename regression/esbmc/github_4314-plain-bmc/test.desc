@@ -1,0 +1,5 @@
+CORE
+main.c
+--all-witnesses --max-witnesses 2 --unwind 14 --no-unwinding-assertions
+^VERIFICATION FAILED$
+\[Counterexamples - [0-9]+ witnesses\]

@@ -467,6 +467,12 @@ lands.
 in §13: the C-family and Python causes are addressed or identified, and what
 blocks the claim now is **measurement access to two frontends**, not unknown
 defects.
+
+**Superseded by §18 (2026-08-05).** Both frontends *are* measurable on an
+ordinary Linux box — Solidity needs no `solc`, Jimple only a build flag. What
+measuring them found replaces the access blocker with a sharper one: Solidity
+reaches zero declines and still fails the byte-identity A/B on every test
+sampled.
 ## 16. Option F spike — Phase 0 answered from the tree (2026-08-04)
 
 §6 Phase 0 gates the whole B-4 half of this program on prototyping Option F and
@@ -763,3 +769,184 @@ site changes what is *reachable*, so a later site's count can rise even as the
 program improves — more statements convert natively, so more branches are
 attempted and more of them get the chance to decline. Compare like with like:
 same tests, same patch set, and prefer the per-site breakdown over the total.
+
+## 18. Solidity and Jimple censused — and a defect the decline metric cannot see (2026-08-05)
+
+§15.4 lists both frontends as **"not measurable here"** and §11.5 makes that the
+reason "0 fallbacks corpus-wide" stays unclaimable. Both are measurable, on an
+ordinary Linux dev box, and both have now been measured.
+
+### 18.1 Why they were thought unmeasurable, and why that was wrong
+
+| frontend | §15 reason | actual |
+|---|---|---|
+| `esbmc-solidity` | needs `solc`, so "rides Linux CI" | **`solc` is not needed.** Every test ships a committed `contract.solast` — `test.desc` line 2 names the AST, not the `.sol`. `--sol contract.sol` supplies source mapping only |
+| `jimple` | "frontend not built" | a build configured with `-DENABLE_JIMPLE_FRONTEND=On` runs the suite; no JDK invocation is involved at verify time, the `.jimple` is the input |
+
+The blocker was a property of the machine §15 was written on, not of the
+suites. Neither suite needs CI.
+
+### 18.2 Jimple — 15 tests, 24 declines, one genuine site
+
+Whole suite, each test replaying its own `test.desc` flags:
+
+| site | count | class |
+|---|---:|---|
+| `cpp_throw` | 12 | **genuine** |
+| `code_block` | 12 | cascade from the above |
+
+**1.6 declines per test** — the C profile (§12.1), not the pre-#6695 Python one.
+
+The genuine site is new: a **bare** `code_cpp_throw2t` *statement*.
+`convert_native_rec`'s `code_expression` arm already delegates a throw to the
+legacy `convert()` when it arrives wrapped in an expression statement
+(`goto_convert_functions.cpp:448-456`) — that is what #6295 added. The
+Jimple frontend emits the throw as a statement in its own right, which no arm
+claims, so it reaches the unsupported-kind fallback and takes the whole
+function with it. §11.5 predicted exactly this: "may reach sites this corpus
+never did".
+
+The fix is the same statement-local delegation the eight merged patches use.
+Not attempted here.
+
+### 18.3 Solidity — 0 declines, and that is the misleading part
+
+26-test stride sample: **0 declines**. Every function body converts natively.
+By the metric §12/§13/§17 use, Solidity is the most drained frontend in the
+tree.
+
+It is also the only one that is **not byte-identical**.
+
+### 18.4 The A/B gate fails 13/13 on Solidity
+
+§11.4 names the `--goto-functions-only` A/B against `--no-irep2-native-body` as
+the gate that "earned its place", and warns that byte-identity is strictly
+stronger than verdict parity. That gate has evidently never been run against
+this frontend. It fails on **every Solidity test sampled** — 13/13 in one
+stride sample, and 8/8 re-run on a clean (uninstrumented) binary — at 24 to
+148 divergent lines per test, after normalising the two known noise sources
+(the GOTO timing lines and the per-run `/tmp/esbmc*` path).
+
+The controls are clean, so this is Solidity-shaped, not a normalisation
+artefact: **C 10/10 identical, Python 5/5, Jimple 15/15**, same sweep, same
+binary.
+
+Every divergent instruction is a **RETURN**:
+
+```
+native:   // 2902 no location        legacy:   // 2902
+          RETURN: 1                            RETURN: 1
+```
+
+The native arm assigns the statement's own IREP2 location
+(`goto_convert_functions.cpp:646-654`, `r->location = ret.location`). Where
+that location is nil, the instruction is nil-located; the round-trip's
+`convert_return` reads the location off the migrated `codet`, which is
+empty-but-present. Both are "unlocated" to a reader, but `is_nil()`
+distinguishes them, and the dispatcher's contract is byte-identity, not
+approximate agreement.
+
+Two things make this worth fixing rather than waiving:
+
+1. It is **on master today**, on the default path — the native dispatcher is
+   on unless `--no-irep2-native-body` is passed.
+2. The return arm is the one arm that does *not* route its location through
+   `effective_location` (contrast lines 278, 336, 429, 453), which is why it
+   is the only shape that diverges.
+
+Jimple is byte-identical 15/15, but trivially so: a decline falls back to the
+round-trip, and the round-trip is the reference. Solidity is the only frontend
+that takes the native path everywhere and disagrees with it.
+
+### 18.5 What this does to the Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc-cpp` | drained; residue = assert-fold | gated per patch (§11.4) |
+| `esbmc` (C) | 4 / 60 tests | gated per patch |
+| `python` | dominant site fixed by #6695 (merged) | not swept |
+| `esbmc-solidity` | **0 / 26** | **fails 13/13** |
+| `jimple` | 24 / 15 tests, one genuine site | **15/15** |
+
+The measurement-access blocker §15.4 recorded is **gone**; all five suites are
+measurable here. What replaces it is sharper: *"0 fallbacks corpus-wide" is not
+the exit criterion it was taken to be.* A frontend can reach zero declines and
+still not reproduce the round-trip. The criterion needs both clauses, and the
+A/B sweep needs to run per frontend, not per patch — a patch developed against
+`esbmc-cpp` is gated against `esbmc-cpp`, and Solidity is what that misses.
+
+### 18.6 Reproduction
+
+Both numbers come from temporary instrumentation — one `fprintf` at each of
+`convert_native_rec`'s 21 `return false` sites, printing `get_expr_id(code2)`,
+which is exactly the site name §12/§13/§17's tables use. There is no census
+switch in the tree; §11.4's "census env var" describes a build that was never
+merged. The byte-identity sweep needs no instrumentation at all — it is the
+A/B, normalised. Normalise `/tmp/esbmc*` broadly: the C driver's temp dir is
+`esbmc.<hash>` and Solidity's is `esbmc_solidity_temp-<hash>`, and a pattern
+that catches one and not the other reports a false divergence.
+
+## 19. §18.4's defect fixed, and what the whole-suite sweep found underneath (2026-08-05)
+
+§18.4 sampled 13 Solidity tests. Sweeping all 520 changes both the fix and the
+picture of what is left.
+
+### 19.1 The RETURN divergence was two defects, not one
+
+The nil-location diagnosis holds, and the fix is the one §18.4 implies: route
+the RETURN and its end-of-function GOTO through a materialised-empty location
+rather than the nil `location2t`, because `convert_return` reads its location
+off the round-tripped `codet` through the **non-const** `exprt::location()`,
+which materialises an empty — and so not nil — `#location`. The native decl arm
+already open-coded that step; both now share one helper.
+
+Fixing it exposed a second: `convert_return`'s `else` arm logs *"function
+should not return value"*, and the native arm had no counterpart, so the
+diagnostic was silently dropped. §18.4 could not see this — C and C++ reject
+the shape, and on Solidity the RETURN divergence masked it. The native arm now
+delegates that shape, as it already does for the four `convert_return`
+rewrites.
+
+### 19.2 Whole-suite result: 502 / 510
+
+| | before | after |
+|---|---|---|
+| `esbmc-solidity` A/B | fails every test sampled (13/13) | **502 identical, 8 divergent** (10 tests skip: no source file) |
+| controls | C 10/10, Python 5/5, Jimple 15/15 | C 80/80, Python 25/25, Jimple 15/15, `esbmc-cpp/destructors` 14/14 |
+
+### 19.3 The eight residuals are a different defect — and it is not stable
+
+Every residual is **location-only**: zero instruction-text differences across
+all eight. The divergent locations are synthetic, always one line past the end
+of the contract (`swc_107_1`: 57-line file, native 59 vs legacy 58;
+`doftcoin_1`: 104 lines, native 105 vs legacy 106 — note the direction
+reverses), and they land on the generated scope-exit run — `DEAD`,
+`END_FUNCTION`, and whatever else inherits from it.
+
+The sharper finding is that **the legacy path is not run-to-run
+deterministic**. Ten repeats of `erc20_1` on the *same* binary, *same* flags,
+`--no-irep2-native-body` throughout, produce two distinct outputs — 8 runs at
+`line 96`, 2 at `line 97`. That is why the divergent set moves between sweeps:
+`erc20_1`, `swc_107_1` and `whole_contract_1` appeared in one sweep and not the
+next, and re-running them 5×5 shows native and legacy agreeing. Only the eight
+above diverge stably.
+
+Two consequences:
+
+1. **A single A/B run is not a verdict** on a Solidity test. Re-run a
+   divergence before believing it; §18.4's 13/13 was safe only because the
+   RETURN defect was universal and large.
+2. A nondeterministic synthetic location is a defect in its own right,
+   independent of the dispatcher — it is reachable with the native path off.
+
+Neither is fixed here; they are filed as #6759 (the stable divergence) and
+#6760 (the nondeterminism). Both predate the dispatcher: the fix in §19.1 can
+only turn a nil location into a blank one, so it cannot produce a line-number
+difference, and it cannot introduce nondeterminism.
+
+### 19.4 Reproduction
+
+Same A/B as §18.6, no instrumentation. For the residuals, run each side five
+times and compare the *sets* of output hashes, not one run against one run —
+`native_variants`, `legacy_variants`, and whether the two sets intersect is the
+measurement that separates a stable divergence from a nondeterministic one.

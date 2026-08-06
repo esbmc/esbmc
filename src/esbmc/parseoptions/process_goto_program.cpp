@@ -77,10 +77,62 @@
 #  include <goto-programs/goto_contractor.h>
 #endif
 
+/* Rewrite the initialiser __ESBMC_main performs for a model-tuning global.
+ * Rewriting the initialiser rather than the symbol leaves any later assignment
+ * (fesetround(), say) free to change the value again. Returns false when the
+ * program does not carry the global, which happens when nothing pulled the
+ * model in. */
+static bool set_model_global(
+  goto_functionst &goto_functions,
+  const irep_idt &name,
+  const BigInt &value)
+{
+  goto_functionst::function_mapt::iterator main =
+    goto_functions.function_map.find("__ESBMC_main");
+  if (main == goto_functions.function_map.end())
+    return false;
+
+  for (auto &i : main->second.body.instructions)
+  {
+    if (!i.is_assign())
+      continue;
+    const code_assign2t &assign = to_code_assign2t(i.code);
+    if (
+      !is_symbol2t(assign.target) || to_symbol2t(assign.target).thename != name)
+      continue;
+    i.code = code_assign2tc(
+      assign.target, constant_int2tc(assign.source->type, value));
+    return true;
+  }
+  return false;
+}
+
+/* --fp-taylor-terms tunes how far the exp/log/pow models expand their Taylor
+ * series (esbmc/esbmc#2865); see src/c2goto/library/libm/exp.c. */
+static bool
+apply_taylor_terms(goto_functionst &goto_functions, const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("fp-taylor-terms"))
+    return false;
+
+  const int terms = atoi(cmdline.getval("fp-taylor-terms"));
+  if (terms < 2 || terms > 12)
+  {
+    log_error("--fp-taylor-terms must be between 2 and 12; got {}", terms);
+    return true;
+  }
+
+  if (!set_model_global(
+        goto_functions, "c:@__ESBMC_fp_taylor_terms", BigInt(terms)))
+    log_warning(
+      "--fp-taylor-terms has no effect: this program calls no Taylor-series "
+      "model");
+  return false;
+}
+
 /* The --round-to-* flags select the IEEE 754 rounding mode (esbmc/esbmc#2763).
  * Floating-point operations read it from __ESBMC_rounding_mode, a global whose
- * zero-initialiser __ESBMC_main performs; rewriting that initialiser leaves
- * fesetround() free to change the mode again later. */
+ * zero-initialiser __ESBMC_main performs. */
 static bool
 apply_rounding_mode(goto_functionst &goto_functions, const cmdlinet &cmdline)
 {
@@ -113,26 +165,11 @@ apply_rounding_mode(goto_functionst &goto_functions, const cmdlinet &cmdline)
   if (!selected_flag)
     return false;
 
-  goto_functionst::function_mapt::iterator main =
-    goto_functions.function_map.find("__ESBMC_main");
-  if (main != goto_functions.function_map.end())
-    for (auto &i : main->second.body.instructions)
-    {
-      if (!i.is_assign())
-        continue;
-      const code_assign2t &assign = to_code_assign2t(i.code);
-      if (
-        !is_symbol2t(assign.target) ||
-        to_symbol2t(assign.target).thename != "c:@__ESBMC_rounding_mode")
-        continue;
-      i.code = code_assign2tc(
-        assign.target, constant_int2tc(assign.source->type, BigInt(selected)));
-      return false;
-    }
-
-  log_warning(
-    "--{} has no effect: this program performs no floating-point rounding",
-    selected_flag);
+  if (!set_model_global(
+        goto_functions, "c:@__ESBMC_rounding_mode", BigInt(selected)))
+    log_warning(
+      "--{} has no effect: this program performs no floating-point rounding",
+      selected_flag);
   return false;
 }
 
@@ -157,7 +194,9 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
 
-    if (apply_rounding_mode(goto_functions, cmdline))
+    if (
+      apply_rounding_mode(goto_functions, cmdline) ||
+      apply_taylor_terms(goto_functions, cmdline))
       return true;
 
     bool is_mul =
