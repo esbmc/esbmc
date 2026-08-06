@@ -192,6 +192,15 @@ bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type)
   return true;
 }
 
+/* Arithmetic destinations every scalar source below converts to implicitly.
+ * The arms differ only in whether they additionally admit bool or a pointer,
+ * so the shared membership test is written once. */
+static bool is_numeric_type(const type2tc &t)
+{
+  return is_unsignedbv_type(t) || is_signedbv_type(t) || is_floatbv_type(t) ||
+         is_fixedbv_type(t);
+}
+
 bool check_c_implicit_typecast(
   const type2tc &src_type,
   const type2tc &dest_type)
@@ -214,43 +223,19 @@ bool check_c_implicit_typecast(
   // §18.3). Same omission #6688 fixed in get_c_type.
   if (is_bool_type(src_type))
   {
-    if (is_unsignedbv_type(dest_type))
-      return false;
-    if (is_signedbv_type(dest_type))
-      return false;
-    if (is_pointer_type(dest_type))
-      return false;
-    if (is_floatbv_type(dest_type))
-      return false;
-    if (is_fixedbv_type(dest_type))
+    if (is_numeric_type(dest_type) || is_pointer_type(dest_type))
       return false;
   }
   else if (is_bv_type(src_type))
   {
-    if (is_bool_type(dest_type))
-      return false;
-    if (is_unsignedbv_type(dest_type))
-      return false;
-    if (is_signedbv_type(dest_type))
-      return false;
-    if (is_pointer_type(dest_type))
-      return false;
-    if (is_floatbv_type(dest_type))
-      return false;
-    if (is_fixedbv_type(dest_type))
+    if (
+      is_numeric_type(dest_type) || is_bool_type(dest_type) ||
+      is_pointer_type(dest_type))
       return false;
   }
   else if (is_fixedbv_type(src_type) || is_floatbv_type(src_type))
   {
-    if (is_bool_type(dest_type))
-      return false;
-    if (is_unsignedbv_type(dest_type))
-      return false;
-    if (is_signedbv_type(dest_type))
-      return false;
-    if (is_floatbv_type(dest_type))
-      return false;
-    if (is_fixedbv_type(dest_type))
+    if (is_numeric_type(dest_type) || is_bool_type(dest_type))
       return false;
   }
   else if (is_array_type(src_type) || is_pointer_type(src_type))
