@@ -160,6 +160,16 @@ effective_location(const locationt &own, const locationt &inherited)
   return (own.is_not_nil() && !own.get_file().empty()) ? own : inherited;
 }
 
+// The location the legacy path stamps on an instruction it emits for `own`: it
+// reads the round-tripped codet through the *non-const* exprt::location(),
+// which materialises an empty -- and so not nil -- "#location" when the
+// statement carries none. Reproduce that rather than pass a nil location2t
+// through, which renders "no location" where the round-trip renders blank.
+static locationt emitted_location(const locationt &own)
+{
+  return own.is_nil() ? locationt() : own;
+}
+
 // A statement's own location field, i.e. exactly what migrate_expr_back writes
 // into the legacy `#location` the legacy path then reads back. Only the kinds
 // convert_native_rec supports are listed; anything else cannot reach a caller.
@@ -565,15 +575,9 @@ bool goto_convert_functionst::convert_native_rec(
     if (initializer.is_not_nil())
     {
       code_assignt assign(var, initializer);
-      // convert_decl reads the ASSIGN location through codet's *mutable*
-      // location() accessor, which materialises an empty (id "", non-nil)
-      // #location when the declaration has none -- whereas code_decl2t::location
-      // stays properly nil, which the GOTO dump renders as "no location" rather
-      // than blank. Reproduce the materialised form so an unlocated declaration
-      // (e.g. a compound literal) stays byte-identical. The DECL above keeps the
-      // nil location: convert_decl emits it before the mutable access happens.
-      assign.location() =
-        decl.location.is_nil() ? locationt() : locationt(decl.location);
+      // The DECL above keeps its nil location: convert_decl emits it before the
+      // mutable access emitted_location reproduces.
+      assign.location() = emitted_location(decl.location);
       copy(assign, ASSIGN, dest);
     }
 
@@ -594,10 +598,9 @@ bool goto_convert_functionst::convert_native_rec(
     //  - a side-effect value (remove_sideeffects lowers it into extra instrs),
     //  - a cpp-throw return value (converted as a statement, no RETURN),
     //  - a top-level ternary (remove_sideeffects lowers `c ? a : b`),
-    //  - a missing value in a value-returning function (nondet replacement).
-    // A void function returning a value is a C/C++ constraint violation the
-    // frontend rejects, so it never reaches here; only a valueless void return
-    // does, which correctly emits just the end-of-function goto below.
+    //  - a missing value in a value-returning function (nondet replacement),
+    //  - a value returned from a void function (a diagnostic convert_return
+    //    emits; C/C++ reject that shape, Solidity does not).
     // When the destructor stack holds a destructor FUNCTION_CALL,
     // convert_return runs an unwind-before-RETURN (C++ [stmt.return]: capture
     // the value into a temp, run the destructors, then return the temp; a
@@ -642,12 +645,14 @@ bool goto_convert_functionst::convert_native_rec(
       goto_programt::targett r = dest.add_instruction();
       r->make_return();
       r->code = code2;
-      r->location = ret.location;
+      r->location = emitted_location(ret.location);
     }
+    else if (val.is_not_nil() && val.type().id() != "empty")
+      return delegate_to_legacy();
 
     goto_programt::targett g = dest.add_instruction();
     g->make_goto(targets.return_target, gen_true_expr());
-    g->location = ret.location;
+    g->location = emitted_location(ret.location);
     return true;
   }
 
