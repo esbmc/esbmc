@@ -4147,6 +4147,21 @@ A static pointer to the last-seen context is **not** a third option: a freed
 context can be reallocated at the same address, and the reset would then be
 skipped exactly when it is needed.
 
+**Fixed** with the first shape: `setup_for_new_explore` resets only when the
+context holds no `symex_dynamic::` symbol. All five inputs now match master's
+verdicts, R15's two determinism tests still pass — the harness gives each run
+its own `prog.context`, so the reset still fires for them — and
+`regression/esbmc/incremental_bmc_object_names` pins the k-iteration case
+directly rather than leaving the Python suite to notice.
+
+Two wrong attempts preceded it, both cheap and both caught by running rather
+than reasoning. Probing for `symex_dynamic::dynamic_1_value` never fired,
+because `malloc` mints `dynamic_N_`**`array`** and only the struct path uses
+`_value`; the probe therefore has to be the prefix, not any single name.
+Keeping just the dynamic-counter reset still aborted, which is what established
+that counter as sufficient on its own rather than the pair being jointly
+responsible.
+
 ---
 
 ## Appendix A — Methodological basis
