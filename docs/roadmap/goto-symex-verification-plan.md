@@ -3868,7 +3868,33 @@ unwinding, so this is divergence rather than slowness: `n` is a constant the
 default folds into the exit condition, and without the fold the guard is never
 decided. That the reproducer needs neither `calloc` nor `--no-unwinding-assertions`
 is the point — R28 was found through a libc model under a flag pair, but neither
-is load-bearing. That is the account of the
+is load-bearing.
+
+**The mechanism, in four lines of source.** `symex_goto` renames the branch
+guard and calls `do_simplify(new_guard)` (`symex_goto.cpp:20`); `do_simplify` is
+`if (!no_simplify) simplify(expr)` (`symex_assign.cpp:221`); and the next
+statement decides the branch with `is_false(new_guard)` (`symex_goto.cpp:23`),
+which is a **syntactic** test for a constant node. So whether symex can see that
+a loop has exited depends on `simplify()` having already folded the renamed
+guard to a literal. Turn the fold off and `i < n` stays a comparison node even
+though both operands are constant-propagated constants, `is_false` never holds,
+and the back-edge is taken forever.
+
+The two escape hatches confirm it rather than mitigate it. `--smt-symex-guard`
+asks the solver the same question (`symex_goto.cpp:30`), and
+`--no-simplify --smt-symex-guard` on the reproducer stops at
+`iteration 4` with `Symex completed in: 0.002s` and SUCCESSFUL — the guard was
+always decidable, only the syntactic check failed. It is off by default. The
+interval guard cannot help by construction: its comment states it prunes only
+when the guard is provably *true* and never sets `new_guard_false`, precisely so
+it cannot force entry into a loop.
+
+That makes the fix direction narrow, and worth stating even though this entry
+does not take it: `--no-simplify` is documented as "Do not simplify any
+expression" (`options.cpp:958`), but the fold at `symex_goto.cpp:20` is not an
+encoding choice — it is how a control-flow decision is made. Conflating the two
+is the defect, and either always folding the guard for the exit decision, or
+having `--no-simplify` imply `--smt-symex-guard`, would remove it. That is the account of the
 206 — it subsumes them into R28 rather than leaving them as a coverage gap, and
 it is the reason no bound the oracle can afford will reduce the count. It also
 sharpens R16's conclusion from the other side: `do_simplify` is load-bearing not
