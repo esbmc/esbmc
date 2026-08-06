@@ -6,12 +6,25 @@ SMT backend.
 **Verifier:** ESBMC itself (BMC + k-induction) on extracted kernels; Catch2
 property/differential tests on the real classes (`unit/goto-symex/`);
 whole-tool metamorphic oracles over `regression/`; sanitizers for the rest.
-**Status:** **M0–M8 closed** (§15 verdict log) — every milestone executed. §6.4
-records the tier-ordering rule M1 produced. Except where §15 records a
-discharged result, every harness below is a *proposal* and nothing here asserts
-a proof. Findings not marked discharged in §9.2 remain *hypotheses with cited
-evidence*, not confirmed end-to-end bugs; R15 is pinned by an explicit
-assertion but is not fixed.
+**Status:** **M0–M8 closed**, **M9 in progress** (§15 verdict log). §6.4 records
+the tier-ordering rule M1 produced. Except where §15 records a discharged
+result, every harness below is a *proposal* and nothing here asserts a proof.
+Findings not marked discharged in §9.2 remain *hypotheses with cited evidence*,
+not confirmed end-to-end bugs.
+
+M9 closed the §7.3 assumption register (H-A8 was its last live row), pinned all
+three of R9's approximation claims, and fixed R10 and R15. Three rows were
+**re-characterised rather than fixed**, which is the milestone's more useful
+output: R4's unchecked lookups have no witness in 352 corpus inputs, so guarding
+them would add branches nothing can show reachable; R8's "missed-bug direction"
+is false, because stack lifetime is checked by `is_live_variable` and the
+disabled block is superseded; and R28 — found by M9's own access-shape census —
+is a **new High-severity false SUCCESSFUL**, partly fixed, with its residual
+traced out of this subsystem into `src/pointer-analysis`.
+
+**Still open:** R6's soundness witness (mechanism observed, verdict never
+flipped), R28's two bare-struct-member shapes, and the pre-existing R16/R19–R27
+rows §9.2 records individually.
 **Audience:** An engineer who will implement the harnesses and run the
 verification tasks directly from this document.
 **Companion:** `docs/irep2-verification-plan.md` (branch
@@ -3897,6 +3910,34 @@ R6 therefore moves from "mechanism pinned by inspection" to "mechanism observed,
 soundness consequence still unwitnessed" — a smaller step than a witness, and
 the two failed constructions are recorded so the next attempt does not repeat
 them. Severity is unchanged and still bounded by `--state-hashing` being opt-in.
+
+**2026-08-06 — the collision's shape, and why the witness resists.**
+Re-instrumenting the prune to print the *whole* state signature — per-thread
+call depth **and** program counter — rather than depth alone gives the pair
+exactly:
+
+```
+R6PRUNE kept=[3@454 5@826]  pruned=[3@454 6@826]
+```
+
+Both states sit at the **same two program counters**. The only difference is one
+extra frame on the worker. That is the collision R6 predicts, and it is now
+pinned to the instruction rather than merely to a depth pair.
+
+It also explains the failed constructions structurally, which the earlier
+"narrowing the window is not sufficient" note did not. The kept and pruned
+states resume into the *same code at the same pc*; they differ only in how many
+times that continuation will repeat as the stack unwinds. So any property
+distinguishing them can only be evaluated **after** the unwind completes — by
+which point the surviving schedules have converged on the same values, and the
+assertion is reachable through one of them. A witness therefore needs a property
+that is observable *during* the unwind and whose truth depends on the remaining
+frame count, which is a much narrower target than "make the bug live behind the
+pruned state".
+
+Still not witnessed, and no further speculative programs were tried: the two
+recorded failures plus this structural reason are more useful to the next
+attempt than a third variant that also does not flip.
 
 ### M9 (R10) — 2026-08-05, the low-severity row that was not benign
 
