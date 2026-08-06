@@ -4,7 +4,7 @@
 int g = 0;
 int *pa[1] = {&g};
 
-// R28: a pointer in an array element. get_expr_globals gates its chain
+// R29: a pointer in an array element. get_expr_globals gates its chain
 // resolution on is_symbol2t, so this write reached the aggregate rather than g
 // and MPOR pruned the race. The dereference2t arm resolves the pointer through
 // the value set instead. The bare struct-member form is still open --

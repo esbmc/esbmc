@@ -1136,7 +1136,7 @@ void execution_statet::get_expr_globals(
    * resolution above, which is gated on `is_symbol2t`. The operand walk below
    * would then record the *aggregate*, so a thread reaching the same target
    * directly keys on something else and MPOR calls the two transitions
-   * independent (R28, the aggregate-held counterpart of #6539). Record the
+   * independent (R29, the aggregate-held counterpart of #6539). Record the
    * target as well; the walk still runs, and recording both keys only makes
    * MPOR more conservative. */
   if (is_dereference2t(expr))

@@ -11,7 +11,7 @@ struct S s = {&g};
 // The control for mpor_aggregate_ptr_race: copying the pointer into a local
 // gives get_expr_globals a bare symbol to resolve, so the write is keyed on g
 // and MPOR keeps the interleaving. The two differ only in that copy, which is
-// what pins R28 to the aggregate step rather than to the struct.
+// what pins R29 to the aggregate step rather than to the struct.
 void *writer(void *arg)
 {
   (void)arg;

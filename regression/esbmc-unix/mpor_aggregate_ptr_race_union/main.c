@@ -5,7 +5,7 @@ int g = 0;
 union U { int *p; long l; };
 union U u = {&g};
 
-// R28: a pointer in a union member. get_expr_globals gates its chain
+// R29: a pointer in a union member. get_expr_globals gates its chain
 // resolution on is_symbol2t, so this write reached the aggregate rather than g
 // and MPOR pruned the race. The dereference2t arm resolves the pointer through
 // the value set instead. The bare struct-member form is still open --
