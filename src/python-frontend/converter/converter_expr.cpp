@@ -850,7 +850,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
 
         throw std::runtime_error(
-          "Cannot resolve nested attribute: " + attr_name);
+          fmt::format("Cannot resolve nested attribute: {}", attr_name));
       }
       else if (element["value"]["_type"] == "Name")
       {
@@ -869,8 +869,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           break;
         }
 
-        throw std::runtime_error(
-          "Cannot resolve attribute '" + attr_name + "' on subscript result");
+        throw std::runtime_error(fmt::format(
+          "Cannot resolve attribute '{}' on subscript result", attr_name));
       }
       else if (element["value"]["_type"] == "Call")
       {
@@ -888,14 +888,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           break;
         }
 
-        throw std::runtime_error(
-          "Cannot resolve attribute '" + attr_name + "' on call result");
+        throw std::runtime_error(fmt::format(
+          "Cannot resolve attribute '{}' on call result", attr_name));
       }
       else
       {
-        throw std::runtime_error(
-          "Unsupported Attribute value type: " +
-          element["value"]["_type"].get<std::string>());
+        throw std::runtime_error(fmt::format(
+          "Unsupported Attribute value type: {}",
+          element["value"]["_type"].get<std::string>()));
       }
 
       // Handle module attribute access (e.g., math.inf) — unless the module
@@ -932,9 +932,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         symbolt *symbol = find_symbol(module_sid.to_string());
         if (!symbol)
         {
-          throw std::runtime_error(
-            "Module member '" + attr_name + "' not found in module '" +
-            var_name + "'");
+          throw std::runtime_error(fmt::format(
+            "Module member '{}' not found in module '{}'",
+            attr_name,
+            var_name));
         }
 
         expr = symbol_expr(*symbol);

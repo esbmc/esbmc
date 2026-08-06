@@ -584,6 +584,16 @@ bool esbmc_parseoptionst::parse_goto_program(
     return true;
   }
 
+  // Frontends report unconvertible input by throwing (e.g. the Python
+  // converter's unresolvable-attribute paths). Without this the exception
+  // escapes to std::terminate and the process dies on SIGABRT -- the failure
+  // mode that replacing abort() with a throw was meant to remove.
+  catch (const std::exception &e)
+  {
+    log_error("{}", e.what());
+    return true;
+  }
+
   return false;
 }
 
