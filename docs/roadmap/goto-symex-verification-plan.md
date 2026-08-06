@@ -4131,6 +4131,46 @@ site is not a proof that nothing reaches it. That deletion should rest on the
 implicit-discharge route or on a far wider sweep, and this entry is not licence
 for it.
 
+### M9 (side finding) — 2026-08-06, `__assert_rtn`'s argument order
+
+Not a goto-symex defect, and recorded because the plan's own verification found
+it and because it was silently costing every macOS run five CORE tests.
+
+Running the full `regression/esbmc` suite for the first time on this branch —
+1652 tests — left eight substantive failures. Five shared one symptom: the
+`test.desc` expects `^  assertion 0$` and ESBMC printed `assertion main`. The
+descs are byte-identical to master, and reverting this branch's six `src/` files
+to the base commit reproduced all five, so they were **not** this work.
+
+**The cause is an argument-order conflation.**
+`builtin_functions.cpp:1354` handled `__assert_rtn` and `__assert_fail` in one
+arm and read `arguments[0]` for both. Their signatures differ:
+
+| libc | call | expression at |
+|---|---|---|
+| glibc `__assert_fail` | `(#e, file, line, __func__)` | argument **0** |
+| Darwin `__assert_rtn` | `(__func__, file, line, #e)` | argument **3** |
+
+Confirmed from the macOS SDK header, which expands `assert(e)` to
+`__assert_rtn(__func__, __ASSERT_FILE_NAME, __LINE__, #e)`. The FreeBSD
+`__assert` arm *immediately below* already handles this exact order by reading
+`arguments[3]` — the Darwin spelling was grouped with the wrong sibling. Every
+assertion counterexample on macOS therefore named the enclosing function where
+the failing expression belonged, which is a diagnostic defect on every macOS
+user's assertion, not only in tests.
+
+One-line fix; the C suite goes from 10 failures to 5. The five that remain are
+`cwe_dead_code_concurrent`, `cwe_dead_code_dead_store_sarif` and `github_2572_2`
+— unrelated and unexamined — plus `github_4076_complex_deref{,_fail}`, which are
+**empty untracked directories** left by another session and registered as tests
+by a stale CMake configure, so they fail unconditionally and are not tests at
+all.
+
+No new regression test is added: the five tests this fixes already assert
+`^  assertion 0$`, which is the fix's contract and is platform-independent —
+they exercise the `__assert_fail` path on Linux and the corrected
+`__assert_rtn` path on macOS.
+
 ### M9 (Mode C) — 2026-08-06, the self-verification obligation cannot be met
 
 The entry above ends owing a Mode C pass: the R28 fix adds a branch to `src/**`,

@@ -1353,10 +1353,11 @@ void goto_convertt::do_function_call_symbol(
   }
   else if (base_name == "__assert_rtn" || base_name == "__assert_fail")
   {
-    // __assert_fail is Linux
-    // These take four arguments:
-    // "expression", "file.c", line, __func__
-
+    // Both take four arguments, but not in the same order. glibc's
+    // __assert_fail is (#e, file, line, __func__); Darwin's __assert_rtn is
+    // (__func__, file, line, #e) -- the FreeBSD __assert order handled below.
+    // Reading argument 0 for both put the enclosing function's name in every
+    // macOS counterexample where the failing expression belongs.
     if (arguments.size() != 4)
     {
       log_error("`{}' expected to have four arguments", id2string(base_name));
@@ -1364,7 +1365,8 @@ void goto_convertt::do_function_call_symbol(
     }
 
     std::string description = "assertion ";
-    get_string_constant(arguments[0], description);
+    get_string_constant(
+      arguments[base_name == "__assert_rtn" ? 3 : 0], description);
 
     if (!options.get_bool_option("no-assertions"))
     {
