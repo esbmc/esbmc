@@ -461,6 +461,11 @@ private:
   // None-keeps-Class* and dunder-dispatch-through-pointer paths to real classes.
   bool is_user_class_pointer(const typet &t);
 
+  // Widen a symbol rebound from a non-class placeholder (None, Any, a bare
+  // scalar) to a class-pointer binding. Only those types are widened: a
+  // struct-shaped one may already back an expression built elsewhere.
+  void retype_placeholder_to_class(symbolt &sym, const typet &new_type);
+
   exprt resolve_identity_function_call(
     const exprt &func_expr,
     const exprt &args_expr);
