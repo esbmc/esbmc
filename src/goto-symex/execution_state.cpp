@@ -1131,6 +1131,29 @@ void execution_statet::get_expr_globals(
     return;
   }
 
+  /* A dereference through a pointer that is not spelled as a bare symbol --
+   * held in a struct member, array element or union -- never reaches the
+   * resolution above, which is gated on `is_symbol2t`. The operand walk below
+   * would then record the *aggregate*, so a thread reaching the same target
+   * directly keys on something else and MPOR calls the two transitions
+   * independent (R28, the aggregate-held counterpart of #6539). Record the
+   * target as well; the walk still runs, and recording both keys only makes
+   * MPOR more conservative. */
+  if (is_dereference2t(expr))
+  {
+    const expr2tc &ptr = to_dereference2t(expr).value;
+    if (!is_symbol2t(ptr) && is_pointer_type(ptr->type))
+    {
+      bool to_global = false;
+      expr2tc target = resolve_pointer_target(ns, ptr, to_global);
+      if (!is_nil_expr(target) && to_global)
+      {
+        cur_state->top().level1.rename(target);
+        record_access_key(target, globals_list, kind);
+      }
+    }
+  }
+
   /* A direct `m[i]` on a lock array: record the element. Falling through to
    * the operand walk below would reach the bare array symbol and record the
    * whole array, which re-conflates the elements the pointer path above took
