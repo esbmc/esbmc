@@ -609,7 +609,7 @@ two configurations.
 | ID | Relation | Corpus | Detects |
 |---|---|---|---|
 | **H-C1** | verdict(default) == verdict(`--no-slice`) | `regression/esbmc` CORE (1430 of 1574 dirs) | Slicer unsoundness/incompleteness end-to-end. **Run, §15 M5: 1328 agreed, 0 diverged**, 67 inconclusive, 35 skipped |
-| **H-C2** | verdict(default) == verdict(`--no-simplify`) | same, minus tests selecting an approximate arithmetic encoding | Simplifier / constant-propagation semantic drift (P9). **Run, §15 M5: 1174 agreed, 11 diverged** — R16 (10, incompleteness) and R17 (1, false SUCCESSFUL, since **fixed**; the `--no-slice` composition turned out to be a symptom, and its residual is R25). **Re-measured §15 M9 (R16): 1198 agreed, 3 diverged**, 206 inconclusive, 55 skipped, 42 abstract — seven of the M5 entries agree again, and what is left is `github_252` (R16) plus the `github_1257` pair (**R28**). The relation's premise fails for `--ir`/`--ir-ieee`/`--fixedbv`, where the encoding rather than the simplifier decides the verdict, and the oracle now reports those as `abstract` rather than comparing them |
+| **H-C2** | verdict(default) == verdict(`--no-simplify`) | same, minus tests selecting an approximate arithmetic encoding | Simplifier / constant-propagation semantic drift (P9). **Run, §15 M5: 1174 agreed, 11 diverged** — R16 (10, incompleteness) and R17 (1, false SUCCESSFUL, since **fixed**; the `--no-slice` composition turned out to be a symptom, and its residual is R25). **Re-measured §15 M9 (R16): 1198 agreed, 3 diverged**, 206 inconclusive, 55 skipped, 42 abstract — seven of the M5 entries agree again, and what is left is `github_252` (R16) plus the `github_1257` pair (**R28**). The relation's premise fails for `--ir`/`--ir-ieee`/`--fixedbv`, where the encoding rather than the simplifier decides the verdict, and the oracle now reports those as `abstract` rather than comparing them. The inconclusive count is **not** the loaded machine it was first attributed to: it is `--no-simplify` costing two orders of magnitude more on the inputs it strands, so no practical bound recovers them — §15 M9 (H-C2 residue) |
 | **H-C3** | verdict(bitwuzla) == verdict(z3) | same | Encoding assumptions that only one solver tolerates. **Run, §15 M7: 1269 agreed, 0 diverged** |
 | **H-C4** | verdict(default) == verdict(`--no-por`) and == verdict(`--state-hashing`) | `regression/esbmc-unix`, `regression/esbmc` concurrency tests | POR / state-hashing over-pruning (I14, I15). **Run, §15 M6: 258/0 and 255/0 — clean, but the R18 witness is a program the corpus does not contain** |
 | **H-C5** | verdict(default) == verdict(`--no-interval-symex-guard`) | `regression/esbmc`, `regression/k-induction` | Interval-domain guard pruning (the documented hazard at `symex_goto.cpp:57-79`). **Run, §15 M7: 1360 agreed, 0 diverged** |
@@ -3784,7 +3784,55 @@ caught under both legs, because nothing memsets it.
 42 abstract. The inconclusive count is large and is mostly the
 20 s per-leg timeout under a loaded machine rather than anything about the flag;
 it bounds what this relation currently covers and is the obvious next thing to
-reduce.
+reduce. **That attribution is wrong** — see M9 (H-C2 residue) below, which
+tested it.
+
+### M9 (H-C2 residue) — 2026-08-06, the residue is the flag, not the machine
+
+The entry above closed by naming H-C2's 206 inconclusive results as the next
+thing to reduce, and attributed them to "the 20 s per-leg timeout under a loaded
+machine". Testing that attribution is the whole of this entry, and it does not
+survive.
+
+**The oracle was reporting two unlike things as one number.** `inconclusive`
+counted a leg that reached no verdict together with a leg that ran out of time.
+Reaching no verdict is a property of the *input* — a parse failure or an
+unsupported construct reproduces on any machine — whereas a timeout is a
+property of the *run*. Folded together, a stable exclusion cannot be told from a
+load artefact, which is exactly the question this entry needed to answer, so
+`classify` now splits them and `report` prints both.
+
+**A budgeted serial second pass tells them apart.** The first pass runs
+`--jobs` ESBMC pairs at once, so an input near the bound can lose to load; the
+retry re-runs only the timed-out residue, alone and at a larger bound. Serial
+because removing self-contention is the point, budgeted because the worst case
+is hours, and it prints `settled N of M` so a budget buying nothing is visible
+rather than assumed. On a 40-test prefix at `--jobs 8`, 12 timed out — every one
+of them in the `--no-simplify` leg — and the four the budget reached at 90 s
+serial settled **none**.
+
+**Direct timing says why.** Load average was 20.5 on 14 cores while the sweep
+ran, so the confound was real; it is simply not what produced the residue.
+Timed one leg at a time, `00_memcpy_01` takes 1 s by default and over 400 s
+under `--no-simplify`, `00_endianness_01` 0.6 s and over 240 s, `00_memcpy_02`
+0.2 s and over 240 s. Two orders of magnitude is not a test that a loaded
+machine nudged over a 20 s bound.
+
+**The control settles it.** `--no-slice` over the same 40-test prefix, at the
+same `--jobs 8`, on the same machine under the same load, times out on
+**nothing** — against 12 for `--no-simplify`. The two prefixes are not identical
+inputs, since each leg skips the tests whose own flags name it, but they overlap
+almost entirely, and a machine slow enough to strand 12 tests in one leg does
+not strand zero in the other.
+
+So the residue is a **cost asymmetry in the `--no-simplify` leg**, and giving
+the sweep more time does not reduce it — at 400× the default, a bound that
+covered these inputs would be hours per test. This is the same shape R16 ended
+on from the other side: `do_simplify` is load-bearing for the encoding rather
+than merely for formula size, and 400× on `--no-simplify` is what that costs
+when it is switched off. The open question is no longer "how much time does the
+oracle need" but "why is the unsimplified encoding 400× harder here", which is
+worth an entry of its own and is not answered by this one.
 
 ---
 
