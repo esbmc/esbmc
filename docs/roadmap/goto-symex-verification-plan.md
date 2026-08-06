@@ -3846,7 +3846,29 @@ It is also more general than the libc models. `00_endianness_01` stalls in a
 loop the *test itself* writes (`myMemcpy`, its own `main.c:12`) and
 `00_memory_leak_02` in `__ESBMC_atexit_handler` (`stdlib.c:38`), so the rule is
 not about `string.c`: **any loop whose trip count `do_simplify` folds to a
-constant becomes unbounded once it is switched off.** That is the account of the
+constant becomes unbounded once it is switched off.**
+
+**Seven lines reproduce it**, with no libc model and no flag pair:
+
+```c
+#include <assert.h>
+int main() {
+  unsigned n = sizeof(int);
+  unsigned s = 0;
+  for (unsigned i = 0; i < n; i++) s++;
+  assert(s == 4);
+  return 0;
+}
+```
+
+By default this is `Symex completed in: 0.002s (23 assignments)`, SUCCESSFUL,
+and the log shows exactly four `Unwinding loop 3` lines — the true trip count.
+Under `--no-simplify` it reaches **iteration 5064 in 25 s** and is still
+unwinding, so this is divergence rather than slowness: `n` is a constant the
+default folds into the exit condition, and without the fold the guard is never
+decided. That the reproducer needs neither `calloc` nor `--no-unwinding-assertions`
+is the point — R28 was found through a libc model under a flag pair, but neither
+is load-bearing. That is the account of the
 206 — it subsumes them into R28 rather than leaving them as a coverage gap, and
 it is the reason no bound the oracle can afford will reduce the count. It also
 sharpens R16's conclusion from the other side: `do_simplify` is load-bearing not
