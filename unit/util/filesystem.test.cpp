@@ -13,8 +13,10 @@ Author: Rafael Sá Menezes
 #  include <sys/file.h>
 #  include <unistd.h>
 #endif
+#include <chrono>
 #include <fstream>
 #include <cstdlib>
+#include <thread>
 
 TEST_CASE(
   "tmp path should be unique between two runs",
@@ -248,7 +250,7 @@ TEST_CASE(
 
   // The removal runs in a forked child, so wait for it rather than racing it.
   for (int i = 0; i < 200 && boost::filesystem::exists(root); ++i)
-    usleep(10000);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
   REQUIRE(!boost::filesystem::exists(root));
 
   file_operations::cleanup_registered_tmps();
