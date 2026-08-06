@@ -19,8 +19,19 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   cur_state->rename(new_guard);
   do_simplify(new_guard);
 
-  bool new_guard_false = (is_false(new_guard) || cur_state->guard.is_false());
-  bool new_guard_true = is_true(new_guard);
+  /* Whether a branch is taken is control flow, not encoding, but is_false /
+   * is_true below are syntactic: they hold only once the guard has been folded
+   * to a literal. do_simplify is a no-op under --no-simplify, so a loop whose
+   * exit condition is a folded constant never exits and symex diverges
+   * (#6778). Decide on an unconditionally simplified copy; new_guard itself
+   * still honours the flag, so what reaches the equation is unchanged. */
+  expr2tc decision_guard = new_guard;
+  if (no_simplify)
+    simplify(decision_guard);
+
+  bool new_guard_false =
+    (is_false(decision_guard) || cur_state->guard.is_false());
+  bool new_guard_true = is_true(decision_guard);
 
   // new_guard_false: the branch is provably not taken (guard simplifies to
   // false, or the current path is already dead). new_guard_true: the guard
