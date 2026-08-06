@@ -537,57 +537,6 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   }
   return build_boolean_chain(logical_expr);
 }
-/// Operators that CPython rejects outright when either operand is None:
-/// the arithmetic and ordering ones. Identity and equality are defined on
-/// None, and membership takes None as an element (`None in [1, 2]` is False),
-/// so both are absent here by design.
-static bool raises_on_none_operand(const std::string &op)
-{
-  static const std::set<std::string> raising{
-    "Add",
-    "Sub",
-    "Mult",
-    "Div",
-    "FloorDiv",
-    "Mod",
-    "Pow",
-    "LShift",
-    "RShift",
-    "BitOr",
-    "BitXor",
-    "BitAnd",
-    "MatMult",
-    "Lt",
-    "LtE",
-    "Gt",
-    "GtE"};
-
-  return raising.count(op) != 0;
-}
-
-/// Python source spelling of an AST operator name, for diagnostics that quote
-/// the operator the way CPython does. Falls back to the AST name.
-static std::string python_operator_symbol(const std::string &op)
-{
-  static const std::map<std::string, std::string> symbols{
-    {"Add", "+"},
-    {"Sub", "-"},
-    {"Mult", "*"},
-    {"Div", "/"},
-    {"FloorDiv", "//"},
-    {"Mod", "%"},
-    {"Pow", "**"},
-    {"LShift", "<<"},
-    {"RShift", ">>"},
-    {"BitOr", "|"},
-    {"BitXor", "^"},
-    {"BitAnd", "&"},
-    {"MatMult", "@"}};
-
-  auto it = symbols.find(op);
-  return it == symbols.end() ? op : it->second;
-}
-
 // Attach source location from symbol table if expr is a symbol
 static void attach_symbol_location(exprt &expr, contextt &symbol_table)
 {
@@ -1048,19 +997,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     lhs = to_value_expr(lhs, ns);
     rhs = to_value_expr(rhs, ns);
 
-    // Arithmetic and ordering on None raise TypeError in CPython;
-    // handle_none_comparison instead answers a bool, which the numeric path
-    // read as an integer constant and asserted on in binary2integer (#6260).
-    // Named explicitly rather than "everything but Is/Eq": membership also
-    // lands here, and `None in [1, 2]` is a valid False, not an error.
-    if (raises_on_none_operand(op))
-      return get_exception_handler().gen_exception_raise(
-        "TypeError",
-        "unsupported operand type(s) for " + python_operator_symbol(op) +
-          ": '" + type_handler_.get_python_type_name(lhs.type()) + "' and '" +
-          type_handler_.get_python_type_name(rhs.type()) + "'");
-
-    return handle_none_comparison(op, lhs, rhs);
+    return handle_none_operand(op, lhs, rhs);
   }
 
   // Handle exceptions
