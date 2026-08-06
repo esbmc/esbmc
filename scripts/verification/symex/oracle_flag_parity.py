@@ -19,6 +19,15 @@ cannot do is say which one -- that is triage, and §11.3 requires every
 divergence to reach a filed issue or a reviewed waiver before it may be
 baselined.
 
+That holds only while both legs decide the same question, which is why tests
+selecting an approximate arithmetic encoding are skipped. `--ir` reasons over
+unbounded integers/reals and `--fixedbv` models floats as fixed-point, so
+neither decides the C program: a verdict can turn on how much the *simplifier*
+folded in exact C semantics before encoding, and `verdict(default) !=
+verdict(--no-simplify)` is then the encoding's approximation showing through
+rather than a defect. Each such case was confirmed by re-running without the
+encoding flag, where the two legs agree again (§15 M9 R16).
+
 The argument list per test comes from regression/testing_tool.py's TestCase, so
 a sweep runs each input exactly as ctest does (same flag order, same
 --timeout/--memlimit stripping); reimplementing that parsing is how a sweep ends
@@ -45,6 +54,12 @@ from oracle_common import (
     scratch_dir,
     verdict_of,
 )
+
+# Flags selecting an encoding that does not decide the C program: `--ir` uses
+# unbounded integers/reals, `--fixedbv` fixed-point instead of IEEE floats. A
+# verdict under one of these is a property of the abstraction, so comparing it
+# across a flag that changes constant folding proves nothing either way.
+APPROXIMATE_ENCODINGS = {"--ir", "--ir-ieee", "--fixedbv"}
 
 
 def run_pair(case, esbmc, flags_a, flags_b, timeout):
@@ -85,17 +100,20 @@ def sweep(tests, esbmc, flags_a, flags_b, args):
     return agreed, diverged, inconclusive
 
 
-def report(agreed, diverged, inconclusive, skipped):
+def report(agreed, diverged, inconclusive, skipped, abstract):
     """Counts first, then every excluded and diverging test by name -- a sweep
     that hides what it dropped reads as broader coverage than it had."""
     print(f"\nagreed       {agreed}")
     print(f"diverged     {len(diverged)}")
     print(f"inconclusive {len(inconclusive)}  (no verdict or timeout in one leg)")
     print(f"skipped      {len(skipped)}  (test.desc already names a compared flag)")
+    print(f"abstract     {len(abstract)}  (test.desc selects an approximate encoding)")
     for name, a, b in diverged:
         print(f"DIVERGE {name}: A={a} B={b}")
     for name in sorted(t.name for t in skipped):
         print(f"SKIP {name}")
+    for name in sorted(t.name for t in abstract):
+        print(f"ABSTRACT {name}")
     for name, a, b in sorted(inconclusive):
         print(f"INCONCLUSIVE {name}: A={a} B={b}")
 
@@ -129,7 +147,12 @@ def main():
     # against itself, or against one the author deliberately pinned.
     named = set(flags_a + flags_b)
     skipped = [t for t in tests if named & set(t.test_args.split())]
-    tests = [t for t in tests if t not in skipped]
+    abstract = [
+        t
+        for t in tests
+        if t not in skipped and APPROXIMATE_ENCODINGS & set(t.test_args.split())
+    ]
+    tests = [t for t in tests if t not in skipped and t not in abstract]
     if args.limit:
         tests = tests[: args.limit]
 
@@ -139,7 +162,7 @@ def main():
 
     agreed, diverged, inconclusive = sweep(tests, esbmc, flags_a, flags_b, args)
 
-    report(agreed, diverged, inconclusive, skipped)
+    report(agreed, diverged, inconclusive, skipped, abstract)
     diverged_names = {name for name, _, _ in diverged}
     return 1 if report_baseline(baseline, diverged_names) else 0
 

@@ -69,11 +69,45 @@ JsonType find_class(const JsonType &ast_json, const std::string &class_name)
   return (it != ast_json.end()) ? *it : JsonType();
 }
 
+/// Counts the ClassDef nodes named @p class_name that sit inside a function
+/// body under @p body. Module-scope definitions are not counted: find_class
+/// already reports those.
+template <typename JsonType>
+unsigned count_function_scope_classes(
+  const JsonType &body,
+  const std::string &class_name,
+  bool in_function = false)
+{
+  unsigned count = 0;
+  for (const auto &node : body)
+  {
+    if (!node.is_object() || !node.contains("_type"))
+      continue;
+
+    const auto &type = node["_type"];
+    if (in_function && type == "ClassDef" && node["name"] == class_name)
+      ++count;
+
+    if (
+      (type == "FunctionDef" || type == "AsyncFunctionDef") &&
+      node.contains("body"))
+      count += count_function_scope_classes(node["body"], class_name, true);
+  }
+  return count;
+}
+
 template <typename JsonType>
 bool is_class(const std::string &name, const JsonType &ast_json)
 {
   // Find class definition in the current json
   if (find_class(ast_json["body"], name) != JsonType())
+    return true;
+
+  // A class defined in a function body is an ordinary class (#6743). Accept
+  // it only when the name is unambiguous: a class symbol is keyed by name
+  // alone, so same-named classes in two functions share one symbol and
+  // resolving here would answer for whichever was converted last.
+  if (count_function_scope_classes(ast_json["body"], name) == 1)
     return true;
 
   // Cache loaded module JSONs
