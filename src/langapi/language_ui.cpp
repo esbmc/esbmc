@@ -1,4 +1,3 @@
-#include <fstream>
 #include <langapi/language_ui.h>
 #include <langapi/mode.h>
 #include <memory>
@@ -54,11 +53,8 @@ bool language_uit::parse(const std::string &filename)
   config.language.lid = lang;
 
   // c2goto names the models it compiles by VFS path, and those exist only in
-  // .rodata. A path on disk still has to open: existing is not readable.
-  bool readable = file_operations::is_bundled_source(filename)
-                    ? file_operations::filesystemt::get().exists(filename)
-                    : static_cast<bool>(std::ifstream(filename));
-  if (!readable)
+  // .rodata.
+  if (!file_operations::filesystemt::get().readable(filename))
   {
     log_error("failed to open input file {}", filename);
     return true;

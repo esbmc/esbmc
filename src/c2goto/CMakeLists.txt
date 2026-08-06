@@ -3,7 +3,7 @@ add_subdirectory(headers)
 # c2goto reads the model sources it compiles out of the same VFS that ESBMC
 # serves them from, so the goto binary records /esbmc-vfs paths rather than this
 # machine's build tree. Hence the generated bundle lists on its include path: it
-# needs the real ones, though it still links no C library (blank_library).
+# needs the real ones.
 add_executable(c2goto c2goto.cpp cprover_blank_library.cpp cprover_libc_sources.cpp)
 target_include_directories(c2goto
     PRIVATE ${Boost_INCLUDE_DIRS}

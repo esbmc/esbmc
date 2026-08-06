@@ -278,6 +278,11 @@ bool filesystemt::exists(const std::string &path) const
   return _bundled.count(path) || boost::filesystem::exists(path);
 }
 
+bool filesystemt::readable(const std::string &path) const
+{
+  return _bundled.count(path) || std::ifstream(path);
+}
+
 size_t filesystemt::bundled_count() const noexcept
 {
   return _bundled.size();
