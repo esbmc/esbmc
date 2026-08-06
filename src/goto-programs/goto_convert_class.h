@@ -464,6 +464,16 @@ protected:
   void
   emit_assert_fail_noreturn(const locationt &location, goto_programt &dest);
 
+  // The same four hooks differ only in arity and in which argument carries the
+  // failing expression; `expr_arg` names the latter.
+  void do_assert_fail(
+    const exprt &function,
+    const exprt::operandst &arguments,
+    goto_programt &dest,
+    const irep_idt &base_name,
+    std::size_t arity,
+    std::size_t expr_arg);
+
   // some built-in functions
   void do_abort(
     const exprt &lhs,
