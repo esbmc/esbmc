@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import sys
 from dataclasses import dataclass
 from typing import Callable, Iterable, Protocol
 
@@ -141,6 +142,31 @@ def _compute_output_json_path(
     return os.path.join(output_dir, f"{os.path.basename(python_filename[:-3])}.json")
 
 
+def _reject_unencodable_string_constants(tree: ast.AST, source_filename: str) -> None:
+    """Refuse string literals that cannot cross the parser->converter JSON boundary.
+
+    A surrogate code point is representable in a CPython ``str`` but has no
+    UTF-8 encoding, and the C++ reader rejects both transportable spellings: an
+    escaped ``\\ud800`` is invalid JSON (nlohmann requires a low surrogate to
+    follow), and the WTF-8 byte form is ill-formed UTF-8. Python never combines
+    a surrogate pair, so ``"\\ud83d\\ude00"`` is two unencodable code points
+    rather than an emoji and is refused the same way. Emitting one aborts the
+    parser mid-``json.dump``, so refuse at parse time with a located diagnostic
+    rather than crash or emit a silently truncated string.
+    """
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            continue
+        try:
+            node.value.encode("utf-8")
+        except UnicodeEncodeError as err:
+            print(f"ERROR: {source_filename}:{getattr(node, 'lineno', '?')}:"
+                  f"{getattr(node, 'col_offset', '?')}: string literal contains "
+                  f"surrogate code point U+{ord(node.value[err.start]):04X}, which has "
+                  "no UTF-8 encoding and is not supported by ESBMC's Python frontend")
+            sys.exit(4)
+
+
 # pylint: disable-next=too-many-arguments
 def generate_ast_json(
     tree: ast.Module,
@@ -155,8 +181,9 @@ def generate_ast_json(
     tree = deps.import_resolver.filter_imports(tree)
     filtered_nodes = _filter_nodes_for_import(tree, elements_to_import)
 
-    ast_json = ast2json_func(
-        ast.Module(body=filtered_nodes, type_ignores=[]) if filtered_nodes else tree)
+    emitted_tree = ast.Module(body=filtered_nodes, type_ignores=[]) if filtered_nodes else tree
+    _reject_unencodable_string_constants(emitted_tree, python_filename)
+    ast_json = ast2json_func(emitted_tree)
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
     deps.tag_bignum_constants(ast_json)

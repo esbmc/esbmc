@@ -1,0 +1,7 @@
+CORE
+main.c
+--all-witnesses --ascii-report
+^VERIFICATION FAILED$
+^  \+- Witness 1 of [0-9]+ -+$
+^  \|  Inputs : \[0\] = -?[0-9]+$
+^  \+-+$
