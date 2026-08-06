@@ -3975,6 +3975,26 @@ no new divergence. It does not touch the constant-propagation gate above, and by
 construction cannot help R30, whose guard `simplify()` fails to fold even when it
 runs.
 
+**Where R30's fix would go.** The GOTO carries the bound as
+`ASSIGN n=(unsigned int)(q - p)` — a bare `sub2t` over two pointers.
+`sub2t::do_simplify` (`expr_simplifier.cpp:635`) already handles `x - 0`,
+`0 - x`, `x - x` and `(base + X) - X`, but has no case for two `address_of`
+expressions into one object. After constant propagation the operands are `&a[4]`
+and `&a[0]`, so the missing fold is `&base[i] - &base[j]` → `i - j` for constant
+`i`, `j` and a syntactically identical `base`.
+
+That is not an optimisation guess. **C23 6.5.6p9** (N3220): "When two pointers
+are subtracted, both shall point to elements of the same array object, or one
+past the last element of the array object; the result is the difference of the
+subscripts of the two array elements." The fold computes exactly what the
+standard defines the result to *be*, and declining to fold when the bases differ
+is conservative rather than incomplete, since the program is undefined there
+regardless.
+
+Not attempted here on purpose: the simplifier is reached from everywhere, so a
+wrong fold is a soundness bug rather than a missed optimisation, and it wants
+its own change with its own anti-vacuity pair rather than a tail-end edit.
+
 ---
 
 ## Appendix A — Methodological basis
