@@ -1346,9 +1346,20 @@ std::size_t execution_statet::generate_hash() const
   // same family irep2 uses for hash-consing) replaces the former Boost SHA-1;
   // a collision only over-prunes interleavings, the same risk class crc()
   // already carries tool-wide.
+  //
+  // The return continuation is part of the fingerprint because a pc does not
+  // identify it: one function reached from two call sites stands at one pc with
+  // one set of L0 values, and returns to different places. Depth alone does not
+  // separate those -- two calls from the same caller sit at equal depth -- so
+  // each frame's calling location is mixed in. Without it a bug reachable only
+  // past the later state is pruned away in silence.
   std::size_t h = l2->generate_l2_state_hash();
   for (const auto &it : threads_state)
+  {
     esbmct::hash_combine(h, it.source.pc->location_number);
+    for (const auto &frame : it.call_stack)
+      esbmct::hash_combine(h, frame.calling_location.pc->location_number);
+  }
 
   return h;
 }
