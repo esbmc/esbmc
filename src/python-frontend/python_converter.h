@@ -474,6 +474,13 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
+  /// Binary operation with a None operand: raises for the operators CPython
+  /// rejects, otherwise defers to handle_none_comparison (#6260).
+  exprt handle_none_operand(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
   /// Rewrites `sl.start/stop/step is/is not None` to a check of the
   /// corresponding `has_start/has_stop/has_step` flag on __ESBMC_PySliceObj.
   /// Returns `nil_exprt()` when the operands are not a slice-member access
