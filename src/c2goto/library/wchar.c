@@ -165,5 +165,16 @@ int mbsinit(const mbstate_t *ps)
 {
 __ESBMC_HIDE:;
   // A null pointer denotes the initial state, and the model never leaves it.
-  return ps == 0 || ps->__count == 0;
+  // Read the object representation rather than a member: mbstate_t's layout is
+  // implementation-defined, and the UCRT's struct _Mbstatet -- which this
+  // header defers to on Windows -- shares no member name with the fallback
+  // declared for the other libcs. A zero-valued mbstate_t always describes an
+  // initial conversion state (C11 7.29.1).
+  if (ps == 0)
+    return 1;
+  const unsigned char *state = (const unsigned char *)ps;
+  for (size_t i = 0; i < sizeof(mbstate_t); i++)
+    if (state[i] != 0)
+      return 0;
+  return 1;
 }
