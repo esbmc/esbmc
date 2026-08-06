@@ -14,7 +14,13 @@
 // C11 7.28 has <uchar.h> define mbstate_t too and ESBMC does not shadow that
 // header, so both can reach one translation unit. Honour every libc's guard
 // and set them all, so whichever header comes second stands down.
-#if !defined(__mbstate_t_defined) /* glibc */ &&                               \
+//
+// The UCRT has no such guard: corecrt.h typedefs mbstate_t unconditionally,
+// and every unshadowed UCRT header drags corecrt.h in. There is no race to
+// win there, so defer to it -- as headers/corecrt_math.h already does.
+#if __has_include(<corecrt.h>)
+#  include <corecrt.h>
+#elif !defined(__mbstate_t_defined) /* glibc */ &&                             \
   !defined(_MBSTATE_T) /* Darwin */ &&                                         \
   !defined(_MBSTATE_T_DECLARED) /* BSD */ &&                                   \
   !defined(__DEFINED_mbstate_t) /* musl */
