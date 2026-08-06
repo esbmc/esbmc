@@ -9,55 +9,39 @@ Module: Unit tests for language_uit::parse()
 #include <clang-c-frontend/AST/vfs_paths.h>
 #include <langapi/language_ui.h>
 #include <util/base/filesystem.h>
-#include <util/config/config.h>
 
 #include <fstream>
 #ifndef _WIN32
-#  include <sys/stat.h>
+#  include <cstring>
+#  include <sys/socket.h>
+#  include <sys/un.h>
+#  include <unistd.h>
 #endif
 
-/* Shaped like an operational model: c2goto names the sources it compiles by
- * their VFS path, and those exist only in .rodata. */
 static const char probe_c[] = "int esbmc_vfs_probe(int x) { return x + 1; }\n";
-
-static std::string bundle(const std::string &name)
-{
-  std::string path = clang_vfs_root() + "/unit/langapi/" + name;
-  file_operations::filesystemt::get().add_bundled(
-    path, probe_c, sizeof(probe_c) - 1);
-  return path;
-}
-
-static void configure()
-{
-  cmdlinet cmd = goto_factory::get_default_cmdline("");
-  config.set(cmd);
-  config.ansi_c.set_data_model(configt::LP64);
-  config.options = goto_factory::get_default_options(cmd);
-}
 
 TEST_CASE(
   "parse compiles a bundled source that is absent from disk",
   "[core][langapi]")
 {
-  configure();
-  std::string path = bundle("probe.c");
+  cmdlinet cmd = goto_factory::get_default_cmdline("");
+  optionst opts = goto_factory::get_default_options(cmd);
+  goto_factory::config_environment(
+    goto_factory::Architecture::BIT_64, cmd, opts);
+
+  std::string path = clang_vfs_root() + "/unit/langapi/probe.c";
+  file_operations::filesystemt::get().add_bundled(
+    path, probe_c, sizeof(probe_c) - 1);
   REQUIRE(!std::ifstream(path));
 
   language_uit l;
   REQUIRE(!l.parse(path));
   REQUIRE(!l.typecheck());
-
-  bool found = false;
-  l.context.foreach_operand([&found](const symbolt &s) {
-    found |= s.name.as_string().find("esbmc_vfs_probe") != std::string::npos;
-  });
-  REQUIRE(found);
+  REQUIRE(l.context.find_symbol("c:@F@esbmc_vfs_probe"));
 }
 
 TEST_CASE("parse rejects a VFS path nothing registered", "[core][langapi]")
 {
-  configure();
   language_uit l;
   REQUIRE(l.parse(clang_vfs_root() + "/unit/langapi/absent.c"));
 }
@@ -67,18 +51,23 @@ TEST_CASE(
   "parse rejects a file that exists but does not open",
   "[core][langapi]")
 {
-  configure();
-  auto tmp = file_operations::create_tmp_file("esbmc-test-%%%%%%.c");
-  REQUIRE(chmod(tmp.path().c_str(), 0) == 0);
+  // A socket is the one file open(2) refuses whatever the uid, so unlike mode
+  // 000 this still asserts something when the suite runs as root.
+  auto dir = file_operations::create_tmp_dir("esbmc-test-%%%%%%");
+  std::string path = dir.path() + "/probe.c";
 
-  if (std::ifstream(tmp.path()))
-  {
-    SUCCEED("mode 000 is no obstacle to this process, so nothing to reject");
-    return;
-  }
+  sockaddr_un addr = {};
+  addr.sun_family = AF_UNIX;
+  REQUIRE(path.size() < sizeof(addr.sun_path));
+  memcpy(addr.sun_path, path.c_str(), path.size());
 
-  REQUIRE(file_operations::filesystemt::get().exists(tmp.path()));
+  int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  REQUIRE(fd >= 0);
+  REQUIRE(bind(fd, (const sockaddr *)&addr, sizeof(addr)) == 0);
+  close(fd);
+
+  REQUIRE(file_operations::filesystemt::get().exists(path));
   language_uit l;
-  REQUIRE(l.parse(tmp.path()));
+  REQUIRE(l.parse(path));
 }
 #endif
