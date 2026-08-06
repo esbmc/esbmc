@@ -722,19 +722,6 @@ exprt function_call_builder::build() const
   symbol_id function_id = build_function_id();
   if (is_len_call(function_id) && !call_["args"].empty())
   {
-    // An int/float/bool/complex operand defines no __len__, so CPython raises
-    // TypeError. Decide that from the Python type: the integer fast path below
-    // answers 1, which is right for a single character (also a bitvector here)
-    // but silently wrong for a number (#6261). An unknown or empty type keeps
-    // the existing lowering rather than inventing an exception.
-    const std::string arg_py_type =
-      converter_.get_type_handler().get_operand_type(call_["args"][0]);
-    if (
-      arg_py_type == "int" || arg_py_type == "float" || arg_py_type == "bool" ||
-      arg_py_type == "complex")
-      return converter_.get_exception_handler().gen_exception_raise(
-        "TypeError", "object of type '" + arg_py_type + "' has no len()");
-
     exprt arg_expr = converter_.get_expr(call_["args"][0]);
 
     // If len() argument is a list-typed symbol, force list-size semantics.
@@ -768,7 +755,23 @@ exprt function_call_builder::build() const
     }
 
     if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
+    {
+      // A single character reaches here too and does have length 1, so tell the
+      // two apart by the Python type. A number defines no __len__, and CPython
+      // raises TypeError rather than answering 1 (#6261). Anything the
+      // annotator could not type keeps the historical answer: get_operand_type
+      // reports a BinOp as its left operand's type, so `3 * "x,"` looks like an
+      // int, and refusing on that alone would reject a real str/list.
+      const std::string arg_py_type =
+        converter_.get_type_handler().get_operand_type(call_["args"][0]);
+      if (
+        arg_py_type == "int" || arg_py_type == "float" ||
+        arg_py_type == "bool" || arg_py_type == "complex")
+        return converter_.get_exception_handler().gen_exception_raise(
+          "TypeError", "object of type '" + arg_py_type + "' has no len()");
+
       return from_integer(1, long_long_int_type());
+    }
 
     typet len_arg_type = converter_.ns.follow(arg_expr.type());
     if (len_arg_type.is_array() && len_arg_type.subtype() != char_type())
