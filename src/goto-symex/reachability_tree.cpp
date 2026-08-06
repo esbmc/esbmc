@@ -5,6 +5,7 @@
 #include <util/config/config.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
+#include <util/base/prefix.h>
 #include <util/message/message.h>
 #include <util/irep/std_expr.h>
 
@@ -304,10 +305,40 @@ void reachability_treet::setup_for_new_explore()
 {
   std::shared_ptr<symex_targett> targ;
 
-  // Object names must depend on (program, options) alone, not on how many
-  // objects earlier explorations in this process minted (R15).
-  execution_statet::reset_dynamic_counter();
-  dereferencet::reset_object_counter();
+  /* Object names must depend on (program, options) alone, not on how many
+   * objects earlier explorations in this process minted (R15) -- but only
+   * across *independent* runs. --incremental-bmc builds a fresh bmct per k
+   * iteration and hands each the same context, so renumbering there re-mints a
+   * name the previous iteration already bound at a different type, and the two
+   * meet in one formula as operands of different sort width.
+   *
+   * The context is fresh exactly when the run is independent, so let it
+   * decide: an untouched context has minted no object yet. Keying on the
+   * context *address* would be wrong -- a freed context can be reallocated at
+   * the same address, skipping the reset precisely when it is needed. */
+  /* Object names must depend on (program, options) alone, not on how many
+   * objects earlier explorations in this process minted (R15) -- but only
+   * across *independent* runs. --incremental-bmc builds a fresh bmct per k
+   * iteration and hands each the same context, so renumbering there re-mints a
+   * name the previous iteration already bound at a different type, and the two
+   * meet in one formula as operands of different sort width.
+   *
+   * The context is fresh exactly when the run is independent, so let it
+   * decide: a context that has minted no object yet holds no `symex_dynamic::`
+   * symbol. Keying on the context *address* would be wrong -- a freed context
+   * can be reallocated at the same address, skipping the reset precisely when
+   * it is needed. */
+  bool context_has_objects = false;
+  permanent_context.foreach_operand([&context_has_objects](const symbolt &s) {
+    if (has_prefix(s.id.as_string(), "symex_dynamic::"))
+      context_has_objects = true;
+  });
+
+  if (!context_has_objects)
+  {
+    execution_statet::reset_dynamic_counter();
+    dereferencet::reset_object_counter();
+  }
 
   exploration_frames.clear();
 
