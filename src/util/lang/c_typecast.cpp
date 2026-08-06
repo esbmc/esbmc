@@ -205,6 +205,13 @@ bool check_c_implicit_typecast(
   if (src_type == dest_type)
     return false;
 
+  // `floatbv` appears in every branch of the typet overload above and in none
+  // of this one, so any implicit conversion touching a float fell through to
+  // the `return true` below and was rejected. ESBMC represents a float as
+  // floatbv unless --fixedbv is given, so that rejected the default
+  // representation outright: python_adjust's assignment arm left an integer
+  // stored into a `double` lvalue (scope-relational-float-reconciliation.md
+  // §18.3). Same omission #6688 fixed in get_c_type.
   if (is_bool_type(src_type))
   {
     if (is_unsignedbv_type(dest_type))
@@ -212,6 +219,8 @@ bool check_c_implicit_typecast(
     if (is_signedbv_type(dest_type))
       return false;
     if (is_pointer_type(dest_type))
+      return false;
+    if (is_floatbv_type(dest_type))
       return false;
     if (is_fixedbv_type(dest_type))
       return false;
@@ -226,16 +235,20 @@ bool check_c_implicit_typecast(
       return false;
     if (is_pointer_type(dest_type))
       return false;
+    if (is_floatbv_type(dest_type))
+      return false;
     if (is_fixedbv_type(dest_type))
       return false;
   }
-  else if (is_fixedbv_type(src_type))
+  else if (is_fixedbv_type(src_type) || is_floatbv_type(src_type))
   {
     if (is_bool_type(dest_type))
       return false;
     if (is_unsignedbv_type(dest_type))
       return false;
     if (is_signedbv_type(dest_type))
+      return false;
+    if (is_floatbv_type(dest_type))
       return false;
     if (is_fixedbv_type(dest_type))
       return false;
