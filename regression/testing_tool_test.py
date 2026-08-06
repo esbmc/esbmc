@@ -169,5 +169,44 @@ class RelativeTestDirTest(unittest.TestCase):
                 os.chdir(cwd)
 
 
+class TimeoutReapsProcessGroupTest(unittest.TestCase):
+    """A timed-out run must leave nothing behind. ESBMC does not necessarily
+    die on SIGTERM -- orphans have been observed still running 34 hours after
+    their harness gave up -- so the cleanup has to escalate to SIGKILL."""
+
+    def test_sigterm_ignoring_child_is_reaped(self):
+        if os.name != "posix":
+            self.skipTest("process-group cleanup is posix-only")
+        with tempfile.TemporaryDirectory() as tmp:
+            # Stand-in for ESBMC: ignores SIGTERM, then sleeps past the timeout.
+            tool = os.path.join(tmp, "ignores_sigterm.py")
+            with open(tool, "w", encoding="utf-8") as f:
+                f.write(
+                    "import os, signal, sys, time\n"
+                    "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+                    "sys.stderr.write('CHILDPID=' + str(os.getpid()) + '\\n')\n"
+                    "sys.stderr.flush()\n"
+                    "time.sleep(600)\n"
+                )
+            test_dir = os.path.join(tmp, "hangs")
+            os.mkdir(test_dir)
+            open(os.path.join(test_dir, "main.c"), "w").close()
+            with open(os.path.join(test_dir, "test.desc"), "w",
+                      encoding="utf-8") as f:
+                f.write("CORE\nmain.c\n\n^VERIFICATION SUCCESSFUL$\n")
+
+            executor = Executor("{} {}".format(sys.executable, tool))
+            executor.timeout = 2
+            stdout, stderr, _ = executor.run(TestCase(test_dir, "hangs"))
+
+            self.assertIsNone(stdout, "run should report a timeout")
+            marker = re.search(r"CHILDPID=(\d+)", stderr.decode())
+            self.assertIsNotNone(marker, stderr.decode())
+            child_pid = int(marker.group(1))
+            # A reaped pid may be recycled, but not within this test's lifetime.
+            with self.assertRaises(OSError):
+                os.kill(child_pid, 0)
+
+
 if __name__ == '__main__':
     unittest.main()
