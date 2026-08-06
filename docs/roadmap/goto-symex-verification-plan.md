@@ -3811,19 +3811,21 @@ rather than assumed. On a 40-test prefix at `--jobs 8`, 12 timed out — every o
 of them in the `--no-simplify` leg — and the four the budget reached at 90 s
 serial settled **none**.
 
-**Direct timing says why.** Load average was 20.5 on 14 cores while the sweep
-ran, so the confound was real; it is simply not what produced the residue.
+**Direct timing says why.** Load average was 20.5 on 14 cores when the sweep was
+started, so the confound was real; it is simply not what produced the residue.
 Timed one leg at a time, `00_memcpy_01` takes 1 s by default and over 400 s
 under `--no-simplify`, `00_endianness_01` 0.6 s and over 240 s, `00_memcpy_02`
 0.2 s and over 240 s. Two orders of magnitude is not a test that a loaded
 machine nudged over a 20 s bound.
 
 **The control settles it.** `--no-slice` over the same 40-test prefix, at the
-same `--jobs 8`, on the same machine under the same load, times out on
-**nothing** — against 12 for `--no-simplify`. The two prefixes are not identical
+same `--jobs 8`, on the same machine in the same session, times out on
+**nothing** — against 12 for `--no-simplify`. Load was not re-measured at that
+point, so "same load" is an assumption rather than a reading; what is measured
+is that a machine supposedly slow enough to strand 12 tests in one leg stranded
+zero in the other, minutes apart. The two prefixes are also not identical
 inputs, since each leg skips the tests whose own flags name it, but they overlap
-almost entirely, and a machine slow enough to strand 12 tests in one leg does
-not strand zero in the other.
+almost entirely.
 
 So the residue is a **cost asymmetry in the `--no-simplify` leg**, and giving
 the sweep more time does not reduce it — at 400× the default, a bound that
