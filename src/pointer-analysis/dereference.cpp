@@ -560,6 +560,24 @@ expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)
   return value;
 }
 
+// Parameter names are not part of a function's type (C++ [dcl.fct]p5, C11
+// 6.7.6.3p15), but irep2 type equality compares argument_names too. An
+// out-of-line virtual definition gives its parameters fresh symbol ids, so the
+// vtable slot and the function symbol end up with code types that differ in
+// nothing else -- enough for the virtual call to lose its target (#6749).
+static bool same_code_type_ignoring_argument_names(
+  const type2tc &a,
+  const type2tc &b)
+{
+  if (!is_code_type(a) || !is_code_type(b))
+    return false;
+
+  const code_type2t &ca = to_code_type(a);
+  const code_type2t &cb = to_code_type(b);
+  return ca.arguments == cb.arguments && ca.ret_type == cb.ret_type &&
+         ca.ellipsis == cb.ellipsis;
+}
+
 bool dereferencet::dereference_type_compare(
   expr2tc &object,
   const type2tc &dereference_type) const
@@ -568,6 +586,13 @@ bool dereferencet::dereference_type_compare(
 
   // Test for simple equality
   if (object->type == dereference_type)
+    return true;
+
+  if (
+    is_pointer_type(object_type) && is_pointer_type(dereference_type) &&
+    same_code_type_ignoring_argument_names(
+      to_pointer_type(object_type).subtype,
+      to_pointer_type(dereference_type).subtype))
     return true;
 
   // Check for C++ subclasses; we can cast derived up to base safely.
