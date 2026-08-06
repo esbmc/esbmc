@@ -41,6 +41,7 @@ import argparse
 import os
 import sys
 import time
+from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 
 from oracle_common import (
@@ -62,27 +63,34 @@ from oracle_common import (
 # across a flag that changes constant folding proves nothing either way.
 APPROXIMATE_ENCODINGS = {"--ir", "--ir-ieee", "--fixedbv"}
 
+# The binary and the two flag-sets are one thing -- the comparison being run --
+# and every function here needs all three or none of them.
+Legs = namedtuple("Legs", "esbmc flags_a flags_b")
 
-def run_pair(case, esbmc, flags_a, flags_b, timeout):
+# What the sweep decided, per §15 M9 (H-C2 residue): `no_verdict` and
+# `timed_out` are separate because one is a property of the input and the other
+# of the run.
+Outcome = namedtuple("Outcome", "agreed diverged no_verdict timed_out")
+
+
+def run_pair(case, legs, timeout):
     """Both flag-sets on one input, in a scratch cwd so output files cannot
     collide between the two runs or between concurrent tests."""
-    base = case.generate_run_argument_list(esbmc)[1:]
+    base = case.generate_run_argument_list(legs.esbmc)[1:]
     work = scratch_dir("oracle-parity-")
     try:
-        a = verdict_of(capture(esbmc, flags_a + base, work, timeout))
-        b = verdict_of(capture(esbmc, flags_b + base, work, timeout))
+        a = verdict_of(capture(legs.esbmc, legs.flags_a + base, work, timeout))
+        b = verdict_of(capture(legs.esbmc, legs.flags_b + base, work, timeout))
     finally:
         drop_scratch(work)
     return case, a, b
 
 
-def run_pass(cases, esbmc, flags_a, flags_b, timeout, jobs):
+def run_pass(cases, legs, timeout, jobs):
     """Every case through both legs, `jobs` at a time."""
     results = []
     with ThreadPoolExecutor(max_workers=jobs) as pool:
-        futures = [
-            pool.submit(run_pair, c, esbmc, flags_a, flags_b, timeout) for c in cases
-        ]
+        futures = [pool.submit(run_pair, c, legs, timeout) for c in cases]
         for done, future in enumerate(futures, 1):
             results.append(future.result())
             if done % 100 == 0:
@@ -90,7 +98,7 @@ def run_pass(cases, esbmc, flags_a, flags_b, timeout, jobs):
     return results
 
 
-def retry_serially(cases, esbmc, flags_a, flags_b, timeout, budget):
+def retry_serially(cases, legs, timeout, budget):
     """Re-run each case on its own at a larger bound, until the budget is spent.
 
     Serial because the point is to remove self-contention, and budgeted because
@@ -102,11 +110,11 @@ def retry_serially(cases, esbmc, flags_a, flags_b, timeout, budget):
     for index, case in enumerate(cases):
         if time.monotonic() >= deadline:
             return results, cases[index:]
-        results.append(run_pair(case, esbmc, flags_a, flags_b, timeout))
+        results.append(run_pair(case, legs, timeout))
     return results, []
 
 
-def sweep(tests, esbmc, flags_a, flags_b, args):
+def sweep(tests, legs, args):
     """Both flag-sets over every test, then a second pass over what timed out.
 
     A timeout at `--jobs` concurrency need not be a property of the input: the
@@ -116,7 +124,7 @@ def sweep(tests, esbmc, flags_a, flags_b, args):
     larger bound, which separates the two -- and prints how many it settled, so
     a budget that is buying nothing is visible rather than assumed.
     """
-    results = run_pass(tests, esbmc, flags_a, flags_b, args.timeout, args.jobs)
+    results = run_pass(tests, legs, args.timeout, args.jobs)
     timed_out = [c for c, a, b in results if TIMEOUT in (a, b)]
     if not (timed_out and args.retry_timeout):
         return results
@@ -127,7 +135,7 @@ def sweep(tests, esbmc, flags_a, flags_b, args):
         flush=True,
     )
     retried, unreached = retry_serially(
-        timed_out, esbmc, flags_a, flags_b, args.retry_timeout, args.retry_budget
+        timed_out, legs, args.retry_timeout, args.retry_budget
     )
     settled = {c.name: (a, b) for c, a, b in retried}
     recovered = sum(1 for a, b in settled.values() if TIMEOUT not in (a, b))
@@ -157,12 +165,13 @@ def classify(results):
             diverged.append(row)
         else:
             agreed += 1
-    return agreed, diverged, no_verdict, timed_out
+    return Outcome(agreed, diverged, no_verdict, timed_out)
 
 
-def report(agreed, diverged, no_verdict, timed_out, skipped, abstract):
+def report(outcome, skipped, abstract):
     """Counts first, then every excluded and diverging test by name -- a sweep
     that hides what it dropped reads as broader coverage than it had."""
+    agreed, diverged, no_verdict, timed_out = outcome
     print(f"\nagreed       {agreed}")
     print(f"diverged     {len(diverged)}")
     print(f"no-verdict   {len(no_verdict)}  (a leg reached no verdict on this input)")
@@ -214,15 +223,12 @@ def main():
     )
     args = parser.parse_args()
 
-    esbmc = esbmc_path(parser, args.esbmc)
-
-    flags_a = args.a.split()
-    flags_b = args.b.split()
+    legs = Legs(esbmc_path(parser, args.esbmc), args.a.split(), args.b.split())
     tests = collect_tests(args.suite, args.modes.split(","))
 
     # A test already naming one of the flags would compare a configuration
     # against itself, or against one the author deliberately pinned.
-    named = set(flags_a + flags_b)
+    named = set(legs.flags_a + legs.flags_b)
     skipped = [t for t in tests if named & set(t.test_args.split())]
     abstract = [
         t
@@ -237,14 +243,12 @@ def main():
 
     print(
         f"{len(tests)} tests, modes={args.modes}, "
-        f"A={flags_a or ['(none)']} B={flags_b}"
+        f"A={legs.flags_a or ['(none)']} B={legs.flags_b}"
     )
 
-    agreed, diverged, no_verdict, timed_out = classify(
-        sweep(tests, esbmc, flags_a, flags_b, args)
-    )
-    report(agreed, diverged, no_verdict, timed_out, skipped, abstract)
-    diverged_names = {name for name, _, _ in diverged}
+    outcome = classify(sweep(tests, legs, args))
+    report(outcome, skipped, abstract)
+    diverged_names = {name for name, _, _ in outcome.diverged}
     return 1 if report_baseline(baseline, diverged_names) else 0
 
 
