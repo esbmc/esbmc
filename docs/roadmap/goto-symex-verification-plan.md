@@ -4235,6 +4235,34 @@ whether the default leg is right.
 
 ---
 
+### M9 (state-hashing re-measured) — 2026-08-06, #6785 costs nothing measurable
+
+#6785 mixes each frame's calling location into the state fingerprint, which
+makes two states *less* likely to collide. The risk it carries is therefore not
+unsoundness but over-precision: fewer prunes, more states explored, and in
+principle a timeout or a verdict shift somewhere pruning had been load-bearing.
+The state-hashing leg is the relation that would show it.
+
+| | agreed | diverged | no-verdict | timeout |
+|---|---|---|---|---|
+| §15 M6 | 255 | 0 | — | — |
+| this run, with #6785 | **1396** | **0** | 40 | **0** |
+
+No divergence over a sample five times larger than M6's, and **zero timeouts** —
+so the added precision did not strand a single input. The prune that R6's
+witness showed to be unsound is gone without the pruning that remains costing
+anything measurable here.
+
+The same caveat as H-C1 applies and is worth repeating rather than assuming
+read: both legs run one binary, so this establishes that the relation holds
+under the new fingerprint, not that the fingerprint preserves verdicts against
+master. What pins that is the regression suite plus
+`state_hashing_callsite_sound_fail`, which was shown to fail on master and pass
+with the fix — a test that only passes after the change is the one kind that
+cannot be satisfied by doing nothing.
+
+---
+
 ## Appendix A — Methodological basis
 
 - **Design by contract.** Every harness is precondition (`__ESBMC_assume`) →
