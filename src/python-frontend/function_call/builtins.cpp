@@ -485,13 +485,50 @@ exprt function_call_expr::handle_isinstance() const
   return build_isinstance(extract_type_name(type_arg));
 }
 
+std::optional<exprt> function_call_expr::module_hasattr(
+  const nlohmann::json &obj_arg,
+  const std::string &attr_name) const
+{
+  if (obj_arg["_type"] != "Name")
+    return std::nullopt;
+
+  const std::string module_name = obj_arg["id"].get<std::string>();
+
+  // Python scoping gives a local binding of the same name precedence over the
+  // module, so only treat the name as a module when nothing else claims it.
+  symbol_id local = converter_.create_symbol_id();
+  local.set_object(module_name);
+  if (converter_.find_symbol(local.to_string()))
+    return std::nullopt;
+  local.set_function("");
+  if (
+    converter_.find_symbol(local.to_string()) ||
+    converter_.find_symbol(local.global_to_string()))
+    return std::nullopt;
+
+  const std::string module_path =
+    converter_.get_imported_module_path(module_name);
+  if (module_path.empty())
+    return std::nullopt;
+
+  // The module contributes a symbol per member: @F@name for a function,
+  // @C@name for a class, @name for a module-level variable.
+  symbol_id member(module_path, "", "");
+  member.set_object(attr_name);
+  const bool present =
+    converter_.find_symbol(member.to_string()) ||
+    converter_.find_symbol(symbol_id(module_path, "", attr_name).to_string()) ||
+    converter_.find_symbol(symbol_id(module_path, attr_name, "").to_string());
+
+  return gen_boolean(present);
+}
+
 exprt function_call_expr::handle_hasattr() const
 {
   const auto &args = call_["args"];
   if (args.size() != 2)
     throw std::runtime_error("hasattr() takes exactly 2 arguments");
 
-  const exprt &obj_expr = converter_.get_expr(args[0]);
   const auto &attr_arg = args[1];
 
   if (
@@ -501,6 +538,14 @@ exprt function_call_expr::handle_hasattr() const
       "hasattr() expects attribute name as string literal");
 
   std::string attr_name = attr_arg["value"].get<std::string>();
+
+  // A module has no symbol of its own, so get_expr() below would abort on it
+  // (GitHub #6739). Answer from the module's own symbols instead, which
+  // reports what ESBMC actually models for that module.
+  if (std::optional<exprt> known = module_hasattr(args[0], attr_name))
+    return *known;
+
+  const exprt &obj_expr = converter_.get_expr(args[0]);
   typet attr_type = array_typet(
     unsigned_char_type(), from_integer(attr_name.size() + 1, size_type()));
   string_constantt attr_expr(attr_name, attr_type, string_constantt::k_default);
