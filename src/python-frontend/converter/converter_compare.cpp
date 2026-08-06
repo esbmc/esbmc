@@ -1,4 +1,5 @@
 #include <python-frontend/string/char_utils.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_handler.h>
@@ -8,6 +9,7 @@
 #include <util/lang/c_types.h>
 #include <util/irep/migrate.h>
 #include <util/lang/python_types.h>
+#include <set>
 
 namespace
 {
@@ -473,6 +475,76 @@ exprt python_converter::try_lower_slice_member_is_none(
   // `sl.start is not None` ⇔ flag is non-zero (bound was supplied).
   const expr2tc eq2 = equality2tc(flag2, gen_zero(flag2->type));
   return migrate_expr_back(op == "Is" ? eq2 : not2tc(eq2));
+}
+
+/// Operators that CPython rejects outright when either operand is None:
+/// the arithmetic and ordering ones. Identity and equality are defined on
+/// None, and membership takes None as an element (`None in [1, 2]` is False),
+/// so both are absent here by design.
+static bool raises_on_none_operand(const std::string &op)
+{
+  static const std::set<std::string> raising{
+    "Add",
+    "Sub",
+    "Mult",
+    "Div",
+    "FloorDiv",
+    "Mod",
+    "Pow",
+    "LShift",
+    "RShift",
+    "BitOr",
+    "BitXor",
+    "BitAnd",
+    "MatMult",
+    "Lt",
+    "LtE",
+    "Gt",
+    "GtE"};
+
+  return raising.count(op) != 0;
+}
+
+/// Python source spelling of an AST operator name, for diagnostics that quote
+/// the operator the way CPython does. Falls back to the AST name.
+static std::string python_operator_symbol(const std::string &op)
+{
+  static const std::map<std::string, std::string> symbols{
+    {"Add", "+"},
+    {"Sub", "-"},
+    {"Mult", "*"},
+    {"Div", "/"},
+    {"FloorDiv", "//"},
+    {"Mod", "%"},
+    {"Pow", "**"},
+    {"LShift", "<<"},
+    {"RShift", ">>"},
+    {"BitOr", "|"},
+    {"BitXor", "^"},
+    {"BitAnd", "&"},
+    {"MatMult", "@"}};
+
+  auto it = symbols.find(op);
+  return it == symbols.end() ? op : it->second;
+}
+
+/// Entry point for a binary operation with a None operand. Rejects the
+/// operators CPython rejects, and otherwise defers to the identity/equality
+/// handling. Kept separate from both callers so neither grows a decision
+/// point: get_binary_operator_expr is already far over the complexity gate.
+exprt python_converter::handle_none_operand(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (raises_on_none_operand(op))
+    return get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "unsupported operand type(s) for " + python_operator_symbol(op) + ": '" +
+        type_handler_.get_python_type_name(lhs.type()) + "' and '" +
+        type_handler_.get_python_type_name(rhs.type()) + "'");
+
+  return handle_none_comparison(op, lhs, rhs);
 }
 
 exprt python_converter::handle_none_comparison(
