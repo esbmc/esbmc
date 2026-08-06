@@ -1,6 +1,7 @@
 #include <goto2c/expr2c.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_misc.h>
+#include <util/irep/pad_names.h>
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <util/arith/fixedbv.h>
@@ -28,8 +29,7 @@ std::string expr2ct::get_name_shorthand(std::string fullname)
 
 bool expr2ct::is_padding(std::string tag)
 {
-  return has_prefix(tag, "anon_pad$") || has_prefix(tag, "$pad") ||
-         has_prefix(tag, "anon_bit_field_pad$");
+  return is_padding_name(tag);
 }
 
 bool expr2ct::is_anonymous_member(std::string tag)
@@ -171,7 +171,7 @@ std::string expr2ct::convert_rec(
     // program. If "#cpp_type" is not empty, we try to use
     // this information first, and only resort to inferring the type name
     // from its width otherwise.
-    std::string cpp_type = src.get("#cpp_type").as_string();
+    std::string cpp_type = src.cpp_type().as_string();
     if (!cpp_type.empty() && width % 8 == 0)
     {
       std::replace(cpp_type.begin(), cpp_type.end(), '_', ' ');

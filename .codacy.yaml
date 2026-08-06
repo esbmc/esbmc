@@ -78,6 +78,24 @@ engines:
       # siblings.
       - 'unit/python-frontend/**'
 
+      # Developer build and test tooling, run by hand or from CI against a
+      # checkout — never shipped, and never fed untrusted input. Driving
+      # another program IS the job of these scripts (esbmc for
+      # ld_resolver_oracle.py, csmith and a compiler for run_csmith.py,
+      # gcov for cov-report.py), so B404 "consider implications of the
+      # subprocess module" and B603 "subprocess call - check for execution
+      # of untrusted input" fire on every one of them. B603 in particular
+      # fires on the *recommended* form: a fixed argv list with no shell.
+      # B311 likewise flags the seeded PRNG that ld_resolver_oracle.py
+      # needs precisely because a failing case must be reproducible from
+      # its seed alone; a cryptographic generator would defeat that.
+      # Bandit's own `# nosec` markers are not honoured by Codacy and
+      # patterns cannot be disabled in this file, so the path is excluded
+      # instead. This mirrors the global 'regression/**' exclusion above,
+      # which already covers the identical findings in
+      # regression/testing_tool.py.
+      - 'scripts/**'
+
   cppcheck:
     enabled: true
     exclude_paths:

@@ -548,7 +548,9 @@ $0 [-OPTS] [deps] [build] [install]
 Options [defaults]:
   -h         display this help message
   -b BTYPE   set cmake build type to BTYPE [RelWithDebInfo]
-  -s STYPE   enable sanitizer STYPE and compile with clang [disabled]
+  -s STYPE   enable sanitizer STYPE (asan/tsan/lsan/msan/ubsan, or the
+             clang spellings address/thread/leak/memory/undefined; comma-
+             separated for several) and compile with clang [disabled]
   -e ON|OFF  enable/disable -Werror [OFF]
   -r ON|OFF  enable/disable 'benchbringup' [OFF]
   -d         enable debug output for this script and c2goto
@@ -585,7 +587,7 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
       BASE_ARGS+=("-DCMAKE_BUILD_TYPE=${OPTARG}")
       ;;
     s)
-      BASE_ARGS+=("-DSANITIZER_TYPE=${OPTARG}")
+      BASE_ARGS+=("-DENABLE_SANITIZERS=${OPTARG}")
       COMPILER_ENV=(CC=clang CXX=clang++)
       ;;
     e)

@@ -1478,6 +1478,24 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     expr2tc inner = if2tc(
       cw.type, eq, make_cmp_value(cw.type, 0), make_cmp_value(cw.type, 1));
     expr2tc outer = if2tc(cw.type, lt, make_cmp_value(cw.type, -1), inner);
+
+    // Floating-point operands yield std::partial_ordering, whose fourth
+    // result is `unordered` when either operand is NaN ([expr.spaceship]/4).
+    // Without this the NaN case falls through the chain above and is reported
+    // as `greater`. The sentinel must agree with std::partial_ordering's
+    // representation in src/cpp/library/compare, which follows libc++.
+    if (is_floatbv_type(cw.side_1) || is_floatbv_type(cw.side_2))
+    {
+      constexpr int partial_ordering_unordered = -127;
+      expr2tc gt = greaterthan2tc(cw.side_1, cw.side_2);
+      expr2tc ordered = or2tc(lt, or2tc(eq, gt));
+      outer = if2tc(
+        cw.type,
+        ordered,
+        outer,
+        make_cmp_value(cw.type, partial_ordering_unordered));
+    }
+
     a = convert_ast(outer);
     break;
   }
@@ -2016,7 +2034,29 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     if (int_encoding)
     {
       if (thereal.value.is_zero())
+      {
+        // A literal -0.0 constant is a second source of IEEE 754 negative
+        // zero, alongside the subnormal-flush case handled by
+        // mk_subnormal_flush. Reuse the same neg_zero_pred side-channel
+        // rather than adding new tracking machinery -- but tag a fresh
+        // symbol constrained equal to zero, not the shared mk_smt_real("0")
+        // AST directly: nothing guarantees mk_smt_real returns a distinct
+        // pointer per call (see its declaration), so tagging the literal
+        // itself could let an ordinary +0.0 silently inherit this
+        // predicate if any backend ever memoises real constants by value.
+        // Mirrors the NaN branch below, which mints mk_fresh(...) for the
+        // same reason.
+        if (ir_ieee && thereal.value.get_sign())
+        {
+          smt_astt neg_zero_ast =
+            mk_fresh(mk_real_sort(), "ir_ieee::neg_zero_const::", nullptr);
+          smt_astt is_zero = mk_eq(neg_zero_ast, mk_smt_real("0"));
+          assert_ast(is_zero);
+          ir_ieee_api->store_neg_zero_pred(neg_zero_ast, is_zero);
+          return neg_zero_ast;
+        }
         return mk_smt_real("0");
+      }
       if (thereal.value.is_NaN())
       {
         if (ir_ieee)
@@ -2522,9 +2562,11 @@ static unsigned long size_to_bit_width(unsigned long sz)
   uint64_t domwidth = 2;
   unsigned int dombits = 1;
 
-  // Shift domwidth up until it's either larger or equal to sz, or we risk
-  // overflowing.
-  while (domwidth != 0x8000000000000000ULL && domwidth < sz)
+  // Shift domwidth up until it is strictly larger than sz, or we risk
+  // overflowing. Strictly larger, not just equal: sz itself is the
+  // one-past-the-end index, a valid pointer value in C, and a domain that
+  // cannot represent it wraps it to 0 and aliases element 0 (#6399).
+  while (domwidth != 0x8000000000000000ULL && domwidth <= sz)
   {
     domwidth <<= 1;
     dombits++;

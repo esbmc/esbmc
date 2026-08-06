@@ -1,4 +1,5 @@
 #include <python-frontend/function_call/builder.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
@@ -61,6 +62,14 @@ static bool is_pylist_object_type(const typet &type, const namespacet &ns)
   return try_get_pylist_struct_type(type, ns).has_value();
 }
 
+/// Python types that define no __len__. Named rather than tested inline so the
+/// len() lowering stays one decision point wide.
+static bool is_unsized_python_type(const std::string &python_type)
+{
+  return python_type == "int" || python_type == "float" ||
+         python_type == "bool" || python_type == "complex";
+}
+
 const std::string kGetObjectSize = "__ESBMC_get_object_size";
 const std::string kStrlen = "strlen";
 const std::string kEsbmcAssume = "__ESBMC_assume";
@@ -77,6 +86,7 @@ const std::string kPytInitTid = "__pyt_init_tid";
 const std::string kPytJoin = "__pyt_join";
 const std::string kPytTerminate = "__pyt_terminate";
 const std::string kPyLockBlockAndCheck = "__ESBMC_pylock_block_and_check";
+const std::string kPyLockReleaseWaiters = "__pyt_lock_release_waiters";
 
 function_call_builder::function_call_builder(
   python_converter &converter,
@@ -707,6 +717,24 @@ symbol_id function_call_builder::build_function_id() const
   return function_id;
 }
 
+exprt function_call_builder::len_of_bitvector_operand(
+  const nlohmann::json &arg) const
+{
+  // A single character also lowers to a bitvector and does have length 1, so
+  // tell the two apart by the Python type. Anything the annotator could not
+  // type keeps the historical answer: get_operand_type reports a BinOp as its
+  // left operand's type, so `3 * "x,"` looks like an int, and refusing on that
+  // alone would reject a real str/list.
+  const std::string arg_py_type =
+    converter_.get_type_handler().get_operand_type(arg);
+
+  if (is_unsized_python_type(arg_py_type))
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "object of type '" + arg_py_type + "' has no len()");
+
+  return from_integer(1, long_long_int_type());
+}
+
 exprt function_call_builder::build() const
 {
   if (call_["func"]["_type"] == "Attribute")
@@ -753,7 +781,7 @@ exprt function_call_builder::build() const
     }
 
     if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
-      return from_integer(1, long_long_int_type());
+      return len_of_bitvector_operand(call_["args"][0]);
 
     typet len_arg_type = converter_.ns.follow(arg_expr.type());
     if (len_arg_type.is_array() && len_arg_type.subtype() != char_type())
@@ -1023,12 +1051,15 @@ exprt function_call_builder::build() const
     const bool is_join = func_name == kPytJoin;
     const bool is_terminate = func_name == kPytTerminate;
     const bool is_lock_block = func_name == kPyLockBlockAndCheck;
-    if (is_init_tid || is_join || is_terminate || is_lock_block)
+    const bool is_lock_release = func_name == kPyLockReleaseWaiters;
+    if (
+      is_init_tid || is_join || is_terminate || is_lock_block ||
+      is_lock_release)
     {
       auto &symbol_table = converter_.symbol_table();
       locationt location = converter_.get_location_from_decl(call_);
 
-      const bool takes_uint_arg = is_init_tid || is_join;
+      const bool takes_uint_arg = is_init_tid || is_join || is_lock_release;
 
       code_typet fn_type;
       fn_type.return_type() = empty_typet();

@@ -121,7 +121,7 @@ public:
 
   /// Id of the most-recently-added symbol, or a nil id if the table is empty.
   /// Pair with erase_since() to roll back a speculative batch of add() calls
-  /// (e.g. a discarded --irep2-native-body attempt, esbmc/esbmc#4715) in
+  /// (e.g. a discarded IREP2-native goto_convert attempt, esbmc/esbmc#4715) in
   /// O(k) for k symbols undone, instead of an O(n) scan of the whole table.
   irep_idt mark() const;
 

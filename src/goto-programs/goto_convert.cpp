@@ -1105,7 +1105,71 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
   {
     if (code.statement() == "cpp_delete[]")
     {
-      // build loop
+      // Destroy every element, pairing the construction loop do_cpp_new emits
+      // for `new T[n]` (github #6584). Leaving this empty while construction
+      // runs would be worse than leaving both empty: elements would be built
+      // and never torn down, so a T that acquires a resource in its
+      // constructor reports a spurious leak under --memory-leak-check.
+      //
+      // delete[] does not carry the element count, so recover it from the
+      // allocation -- dynamic_size is the object's size in bytes.
+      exprt byte_size("dynamic_size", size_type());
+      byte_size.copy_to_operands(tmp_op);
+
+      // An empty class models as zero bytes here, while C++ gives it a
+      // nonzero size ([class]/4). Clamp so the division below is well defined;
+      // the allocation for such a class is itself zero bytes, so its element
+      // count comes out as zero and no destructor runs -- see the limitation
+      // noted on #6584.
+      BigInt esz =
+        type_byte_size(migrate_type(ns.follow(tmp_op.type().subtype())));
+      if (esz == 0)
+        esz = 1;
+      exprt elem_size = from_integer(esz, size_type());
+
+      exprt count("/", size_type());
+      count.copy_to_operands(byte_size, elem_size);
+
+      symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+
+      // *(p + i). As in the scalar arm the destructor is retargeted at the
+      // pointee, since a virtually-bound destructor reads the vtable pointer
+      // out of that dereference.
+      exprt element_addr("+", tmp_op.type());
+      element_addr.copy_to_operands(tmp_op, index);
+      exprt element("dereference", ns.follow(tmp_op.type().subtype()));
+      element.copy_to_operands(element_addr);
+
+      codet tmp_code = to_code(destructor);
+      replace_new_object(element, tmp_code);
+
+      exprt next("+", size_type());
+      next.copy_to_operands(index, from_integer(1, size_type()));
+
+      code_fort loop;
+      loop.init() = code_assignt(index, from_integer(0, size_type()));
+      loop.cond() = binary_relation_exprt(index, "<", count);
+      loop.iter() = code_assignt(index, next);
+      loop.body() = tmp_code;
+      loop.location() = code.location();
+
+      // C++ [expr.delete]/7: deleting a null pointer invokes no destructor.
+      goto_programt dtor_prog;
+      convert(loop, dtor_prog);
+
+      goto_programt::targett t_skip = dtor_prog.add_instruction(SKIP);
+      t_skip->location = code.location();
+
+      goto_programt::targett t_null = dest.add_instruction();
+      t_null->make_goto(t_skip);
+      exprt is_null("not", typet("bool"));
+      exprt non_null("typecast", typet("bool"));
+      non_null.copy_to_operands(tmp_op);
+      is_null.move_to_operands(non_null);
+      migrate_expr(is_null, t_null->guard);
+      t_null->location = code.location();
+
+      dest.destructive_append(dtor_prog);
     }
     else if (code.statement() == "cpp_delete")
     {
@@ -1140,6 +1204,38 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
     }
     else
       assert(0);
+  }
+
+  // A replaced operator delete owns the storage the matching operator new
+  // handed out, so call it instead of the built-in deallocation -- which
+  // would otherwise free memory the program never obtained from us, and skip
+  // whatever bookkeeping the replacement does (github #6494).
+  const exprt &dealloc_function =
+    static_cast<const exprt &>(code.find("dealloc_function"));
+
+  if (dealloc_function.is_not_nil())
+  {
+    const code_typet::argumentst &params =
+      to_code_type(dealloc_function.type()).arguments();
+
+    code_function_callt call;
+    call.function() = dealloc_function;
+    call.arguments().push_back(tmp_op);
+    call.arguments().back().make_typecast(params[0].type());
+
+    // The C++14 sized form takes the object's byte count as its second
+    // argument ([basic.stc.dynamic.deallocation]).
+    if (params.size() == 2)
+      call.arguments().push_back(from_integer(
+        type_byte_size(migrate_type(ns.follow(tmp_op.type().subtype()))),
+        params[1].type()));
+
+    call.location() = code.location();
+
+    goto_programt::targett t_d = dest.add_instruction(FUNCTION_CALL);
+    migrate_expr(call, t_d->code);
+    t_d->location = code.location();
+    return;
   }
 
   expr2tc tmp_op2;

@@ -554,7 +554,8 @@ void show_simplified_location(std::ostream &out, const locationt &location)
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  bool reachability_trace)
 {
   unsigned prev_step_nr = 0;
   bool first_step = true;
@@ -573,8 +574,7 @@ void show_goto_trace(
       {
         show_state_header(
           out, step, step.pc->location, step.step_nr, simplify_trace);
-        out << "Violated property:"
-            << "\n";
+        out << (reachability_trace ? "Reached:" : "Violated property:") << "\n";
         if (!step.pc->location.is_nil())
         {
           if (simplify_trace)
@@ -605,14 +605,21 @@ void show_goto_trace(
         }
 
         out << "  " << step.comment << "\n";
-        std::string cwes = format_cwe_list(cwe_for(step.comment));
-        if (!cwes.empty())
-          out << "  CWE: " << cwes << "\n";
+        // A reached coverage probe carries no weakness: its guard is the
+        // constant `false` the instrumentation put there, not the program's
+        // own condition, so neither a CWE nor the guard text says anything
+        // about the program.
+        if (!reachability_trace)
+        {
+          std::string cwes = format_cwe_list(cwe_for(step.comment));
+          if (!cwes.empty())
+            out << "  CWE: " << cwes << "\n";
 
-        if (step.pc->is_assert())
-          out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
+          if (step.pc->is_assert())
+            out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
+        }
 
-        // Having printed a property violation, don't print more steps.
+        // The trace ends at the assert that terminated it.
         return;
       }
       break;

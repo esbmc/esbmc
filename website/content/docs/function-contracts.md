@@ -159,6 +159,28 @@ ESBMC builds a checking harness:
 3. Runs the function body symbolically.
 4. **Asserts** the `ensures` clause and assigns compliance.
 
+Step 1 is unconstrained in the extent of pointer parameters too, **in
+entry-harness mode only**. That is, when the enforced function is also the
+`--function` entry point, so ESBMC has to invent the arguments. Under a plain
+`--enforce-contract f` the pointer parameters come from the real caller and
+nothing below applies.
+
+In entry-harness mode a pointer parameter is backed by an object whose size is
+nondeterministic, so the body may only dereference it as far as the `requires`
+clause justifies. State the extent with
+[`__ESBMC_is_fresh`](#memory-freshness-__esbmc_is_fresh):
+
+```c
+void f(int *p) {
+    __ESBMC_requires(__ESBMC_is_fresh(p, 21 * sizeof(int)));
+    p[20] = 1;   // in bounds: the contract says p addresses 21 ints
+}
+```
+
+Without that clause, `p != NULL` alone says nothing about how many elements `p`
+addresses, so `p[20]` is reported as an out-of-bounds write. ESBMC emits a
+warning naming any pointer parameter whose extent the contract leaves unstated.
+
 If every path through the body satisfies the postcondition and the assigns
 frame, the result is `VERIFICATION SUCCESSFUL`. Otherwise, ESBMC reports a
 counterexample showing which input values and which execution path caused a
@@ -445,19 +467,52 @@ functions.
 | `--loop-invariant-check`           | Enable loop invariant checking (see [Loop Invariant Support](/docs/loop-invariants)) |
 | `--loop-frame-rule`                | Enable loop frame rule (requires `--loop-invariant-check`)                           |
 
+A name these flags cannot act on is an error, not a silent no-op:
+
+```
+ERROR: --enforce-contract: cannot use 'typoo': no function of that name,
+or the name is ambiguous
+```
+
+The same applies to a function with no body, a function with no contract
+clause, a comma-separated list where one name is expected, and
+`--enforce-all-contracts` / `--replace-all-contracts` when nothing matches. A
+typo used to report `VERIFICATION SUCCESSFUL` for a run that applied no contract
+at all.
+
+`__ESBMC_is_fresh(EXPR, n)` likewise rejects a non-pointer `EXPR` rather than
+lowering into an incoherent allocation.
+
 ## Known limitations
 
 The following cases are not yet fully supported. KNOWNBUG regression tests
 document each one explicitly.
 
-**Array assigns is bounded to 100 elements.** The nondet-witness approach used
-for `__ESBMC_assigns(arr[i])` ranges over indices 0 to 99
-(`ARRAY_ALLOC_ELEMS = 100`) for arrays allocated by the validity-assumption
-pass. If `i` can exceed 99, assigns compliance for out-of-range writes will not
-be detected. When the array pointer was allocated by `__ESBMC_is_fresh(a, n)`,
-the witness index is instead bounded by the real element count (`n /
-sizeof(elem)`), so an in-bounds element of a buffer smaller than 100 no longer
-reports a spurious bounds violation.
+**The array-assigns witness index falls back to 100 elements when the extent is
+unknown.** For `__ESBMC_assigns(arr[i])` the nondet witness index is clamped to
+the array's real extent, `n / sizeof(elem)` when the pointer came from
+`__ESBMC_is_fresh(a, n)`. Where no extent is recorded, such as a global pointer
+or a run without `--function`, the bound falls back to
+`WITNESS_IDX_FALLBACK_ELEMS = 100`, which can over-bound the index and report a
+spurious bounds violation on a smaller array. The bound is a clamp rather than
+an assumption: assuming the index range would force the extent to be at least
+one element, and for a zero extent it would be an assumption of false, which
+discharges the whole wrapper vacuously.
+
+**Pointer parameters with no stated extent are not checked against the assigns
+clause.** Proving that `*p` is unchanged means reading `*p` in the harness, and
+against an unstated extent that read is itself out of bounds. Such parameters
+are skipped rather than reported, so a contract that wants frame checking for a
+pointer must state its extent with `__ESBMC_is_fresh`. The warning names the
+parameters this applies to.
+
+**Struct pointer parameters assume one element.** A `struct S *` parameter is
+backed by a single stack-allocated `S`, so `s->field` is accepted even when the
+contract states no extent for `s`. This is the same unstated assumption that
+nondet extents remove for other pointer types, just narrowed to one element.
+Moving struct parameters onto the same nondet-extent allocation is blocked on
+[#6483](https://github.com/esbmc/esbmc/issues/6483): a heap-backed struct
+parameter silently discharges `__ESBMC_old`-based `ensures` clauses.
 
 **Global array element assigns is unsupported.** `__ESBMC_assigns(global[i])`
 does not work correctly for global arrays. Use `__ESBMC_assigns(global)` (the

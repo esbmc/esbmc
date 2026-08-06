@@ -282,8 +282,9 @@ public:
   const namespacet &ns;
   /** Options that are enabled */
   optionst &options;
-  /** __ESBMC_main thread has ended */
-  bool main_thread_ended;
+  /** --context-bound cut an available switch: the schedule space was truncated
+   *  rather than exhausted (issue #6480). */
+  bool cs_bound_pruned;
 
 protected:
   struct scheduler_framet
@@ -342,6 +343,8 @@ protected:
   unsigned int schedule_remaining_claims;
   /** Number of trivial claims in current --schedule exploration */
   unsigned int schedule_simplified_claims;
+  /** Loops cut off at the unwinding bound in current --schedule exploration */
+  unsigned int schedule_bounded_loop_truncations;
   /** Next thread ID to switch to, decided by analyse_* routines */
   unsigned int next_thread_id;
   /** Whether partial-order-reduction is enabled */

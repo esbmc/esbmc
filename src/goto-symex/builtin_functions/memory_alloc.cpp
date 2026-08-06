@@ -268,7 +268,9 @@ bool goto_symext::handle_realloc_zero_size(
 {
   expr2tc zero_size = gen_zero(realloc_size->type);
   expr2tc is_zero_size = equality2tc(realloc_size, zero_size);
-  do_simplify(is_zero_size);
+  // Classify unconditionally: --no-simplify selects a formula representation,
+  // it must not decide whether realloc(p, 0) frees p and returns NULL.
+  simplify(is_zero_size);
 
   if (is_true(is_zero_size))
   {
@@ -565,6 +567,8 @@ expr2tc goto_symext::symex_mem(
   type2tc type = code.alloctype;
   expr2tc size = code.size;
   bool size_is_one = false;
+  // Nil unless a symbolic size needs bounding to the address space.
+  expr2tc fits;
 
   if (is_nil_type(type))
     type = char_type2();
@@ -575,16 +579,18 @@ expr2tc goto_symext::symex_mem(
   {
     cur_state->rename(size);
 
-    // Detect malloc(-N) before do_simplify folds typecast(size_t, -N) into
-    // a large positive constant and erases the sign. The simplifier's
-    // behaviour varies between the normal and --no-slice paths, so we
-    // capture the inner operand's sign up front and also re-check the
-    // post-simplify value below.
+    // Classify the request on unconditionally simplified copies: --no-simplify
+    // must not blind the checks below, because an unsatisfiable request that
+    // reaches the address-space model is encoded as a contradiction rather
+    // than as a failed allocation, which silently proves the whole program.
     bool is_negative_size = false;
     if (is_malloc && is_typecast2t(size))
     {
+      // Detect malloc(-N) before the fold to typecast(size_t, -N) erases the
+      // sign; to_uint64() below discards it, so malloc(-1) would otherwise be
+      // mistaken for a 1-byte allocation.
       expr2tc inner = to_typecast2t(size).from;
-      do_simplify(inner);
+      simplify(inner);
       is_negative_size = is_constant_int2t(inner) &&
                          to_constant_int2t(inner).value.is_negative();
     }
@@ -599,22 +605,59 @@ expr2tc goto_symext::symex_mem(
       return null_sym;
     };
 
+    expr2tc folded = size;
+    simplify(folded);
+
+    if (is_malloc && is_constant_int2t(folded))
+    {
+      const BigInt &val = to_constant_int2t(folded).value;
+      // smt_memspace.cpp lays each object out as [start, start + size] over
+      // ptraddr_type2, with start past the NULL object and aligned to
+      // max_alignment(), and asserts that the sum does not wrap. A larger
+      // request cannot be laid out at all, so it must fail here; real
+      // allocators return NULL for it too.
+      const BigInt max_size = BigInt::power2m1(ptraddr_type2()->get_width()) -
+                              config.ansi_c.max_alignment();
+      // Return NULL even under --force-malloc-success, matching real OS
+      // behaviour.
+      if (is_negative_size || val.is_negative() || val > max_size)
+        return return_null_ptr();
+    }
+
     do_simplify(size);
     if (is_constant_int2t(size))
     {
-      const BigInt &val = to_constant_int2t(size).value;
-      // Check negativity before inspecting the magnitude: to_uint64()
-      // discards the sign, so malloc(-1) would otherwise be mistaken for
-      // a 1-byte allocation.
-      if (is_malloc && (is_negative_size || val.is_negative()))
-        // Negative size cast to size_t: return NULL even under
-        // --force-malloc-success, matching real OS behaviour.
-        return return_null_ptr();
-      uint64_t v = val.to_uint64();
+      uint64_t v = to_constant_int2t(size).value.to_uint64();
       if (v == 1)
         size_is_one = true;
       else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
         return return_null_ptr();
+    }
+    else if (
+      is_malloc && is_unsignedbv_type(size->type) &&
+      size->type->get_width() >= ptraddr_type2()->get_width())
+    {
+      // A symbolic request can exceed the address space too, and the layout
+      // constraints are asserted unconditionally, so leaving it unbounded makes
+      // the formula UNSAT — silently pruning the executions the program asked
+      // about instead of failing the allocation.
+      const BigInt lim = BigInt::power2m1(ptraddr_type2()->get_width()) -
+                         config.ansi_c.max_alignment();
+      fits = lessthanequal2tc(size, constant_int2tc(size->type, lim));
+
+      if (options.get_bool_option("force-malloc-success"))
+      {
+        // Branching to NULL here would reintroduce exactly the case split this
+        // flag exists to remove, at a cost measured in minutes on
+        // allocation-heavy inputs. State the bound as an assumption instead:
+        // the same executions are excluded as before, but visibly.
+        assume(fits);
+        fits = expr2tc();
+      }
+      else
+        // Give the object size zero on the failing branch so it is always
+        // representable, and hand back NULL for it below.
+        size = if2tc(size->type, fits, size, gen_zero(size->type));
     }
   }
 
@@ -679,6 +722,14 @@ expr2tc goto_symext::symex_mem(
   expr2tc rhs = rhs_addrof;
   expr2tc ptr_rhs = rhs;
   guard2tc alloc_guard = cur_state->guard;
+
+  if (!is_nil_expr(fits))
+  {
+    expr2tc null_sym = symbol2tc(rhs->type, "NULL");
+    alloc_guard.add(fits);
+    rhs = if2tc(rhs->type, fits, rhs, null_sym);
+    ptr_rhs = rhs;
+  }
 
   if (options.get_bool_option("malloc-zero-is-null"))
   {

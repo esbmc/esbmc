@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property --assertion-coverage --smtlib --smt-formula-only --output /dev/null
+^COVERAGE ANALYSIS INCOMPLETE: 3 goal\(s\) undecided
+reason: SMT formula only, no solving performed

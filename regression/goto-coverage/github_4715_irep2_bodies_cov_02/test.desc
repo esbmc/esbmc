@@ -3,4 +3,4 @@ main.c
 --assertion-coverage --unwind 1 --no-unwinding-assertions --irep2-bodies
 ^Total Asserts: 1$
 ^Reached Assertion Instances: 0$
-^VERIFICATION SUCCESSFUL$
+^COVERAGE ANALYSIS COMPLETE$

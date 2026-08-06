@@ -1,3 +1,5 @@
 CORE
 main.py
-^WARNING\: Undefined function: fail$
+
+^  Unsupported function 'fail' is reached$
+^VERIFICATION FAILED$

@@ -26,7 +26,6 @@ goto_symext::goto_symext(
     remaining_claims(0),
     simplified_claims(0),
     max_unwind(options.get_option("unwind").c_str()),
-    constant_propagation(!options.get_bool_option("no-propagation")),
     ns(_ns),
     new_context(_new_context),
     goto_functions(_goto_functions),
@@ -74,25 +73,31 @@ goto_symext::goto_symext(
       std::string val = func_set.substr(
         start, comma == std::string::npos ? std::string::npos : comma - start);
 
-      // Parse name:index:bound format
-      std::string::size_type first_colon = val.find(":");
-      std::string::size_type second_colon = first_colon != std::string::npos
-                                              ? val.find(":", first_colon + 1)
-                                              : std::string::npos;
+      // Parse name:index:bound from the right: only the last two fields are
+      // fixed, and a USR name is itself colon-prefixed (`c:@F@f#`).
+      std::string::size_type bound_colon = val.rfind(":");
+      std::string::size_type index_colon =
+        bound_colon == std::string::npos || bound_colon == 0
+          ? std::string::npos
+          : val.rfind(":", bound_colon - 1);
 
-      if (first_colon != std::string::npos && second_colon != std::string::npos)
+      if (index_colon != std::string::npos)
       {
-        std::string user_name = val.substr(0, first_colon);
+        std::string user_name = val.substr(0, index_colon);
         unsigned loop_index = atoi(
-          val.substr(first_colon + 1, second_colon - first_colon - 1).c_str());
-        BigInt bound(val.substr(second_colon + 1).c_str());
+          val.substr(index_colon + 1, bound_colon - index_colon - 1).c_str());
+        BigInt bound(val.substr(bound_colon + 1).c_str());
 
-        // Convert user syntax to internal USR format with trailing #
-        std::string usr_name = user_name_to_usr(user_name);
+        // Key on the name --show-loops prints. A user name cannot be turned
+        // back into a function id: ESBMC ids follow clang's USR spelling, so a
+        // C function is `c:@F@f` while a C++ one carries its parameter
+        // mangling (`c:@F@f#i#`). Normalising the id down to the user name is
+        // the only direction that matches both.
+        std::string key_name = usr_to_user_name(user_name);
 
         // Only add valid entries (must have function name)
-        if (!usr_name.empty())
-          unwind_func_set[std::make_pair(usr_name, loop_index)] = bound;
+        if (!key_name.empty())
+          unwind_func_set[std::make_pair(key_name, loop_index)] = bound;
       }
 
       if (comma == std::string::npos)
@@ -110,8 +115,8 @@ goto_symext::goto_symext(
     {
       if (instruction.is_backwards_goto())
       {
-        loop_id_to_func_index[instruction.loop_number] =
-          std::make_pair(func_pair.first.as_string(), loop_index);
+        loop_id_to_func_index[instruction.loop_number] = std::make_pair(
+          usr_to_user_name(func_pair.first.as_string()), loop_index);
         loop_index++;
 
         // Handle #pragma unroll annotations
@@ -174,7 +179,6 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   unwind_func_set = sym.unwind_func_set;
   loop_id_to_func_index = sym.loop_id_to_func_index;
   max_unwind = sym.max_unwind;
-  constant_propagation = sym.constant_propagation;
   total_claims = sym.total_claims;
   remaining_claims = sym.remaining_claims;
   simplified_claims = sym.simplified_claims;
