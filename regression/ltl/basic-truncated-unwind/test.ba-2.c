@@ -166,7 +166,7 @@ ltl2ba_fsm(bool state_stats, unsigned int num_iters)
 			_ltl2ba_visited_states[_ltl2ba_statevar]++;
 
 		__ESBMC_atomic_end();
-		// __ESBMC_switch_from_monitor();
+		__ESBMC_switch_from_monitor();
 	}
 
 	__ESBMC_assert(num_iters == iters, "Unwind bound on ltl2ba_fsm insufficient");
@@ -191,12 +191,12 @@ void ltl2ba_start_monitor(void)
 {
 	pthread_t t;
 
-//	__ESBMC_atomic_begin();
+	__ESBMC_atomic_begin();
 	pthread_create(&t, NULL, ltl2ba_thread, NULL);
 	__ESBMC_register_monitor(t);
-//	__ESBMC_atomic_end();
+	__ESBMC_atomic_end();
 
-	// __ESBMC_switch_to_monitor();
+	__ESBMC_switch_to_monitor();
 }
 
 _Bool _ltl2ba_stutter_accept_table[4][2] = {

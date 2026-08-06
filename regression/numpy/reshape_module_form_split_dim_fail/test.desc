@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy\.reshape\(\) does not accept dimensions as separate positional arguments

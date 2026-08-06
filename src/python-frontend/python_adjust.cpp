@@ -379,6 +379,29 @@ void python_adjust::adjust_expr(expr2tc &expr)
     // non-boolean sort and trips bitwuzla's mk_not assert. not2t is immutable.
     expr = not2tc(typecast2tc(get_bool_type(), to_not2t(expr).value));
   }
+  else if (is_equality2t(expr) || is_notequal2t(expr))
+  {
+    // Python's `x is True` builds `floatbv == bool`, which reaches bitwuzla's
+    // mk_eq with 64- and 1-bit sorts and aborts. Legacy routes == and !=
+    // through adjust_expr_rel, whose gen_typecast_arithmetic promotes the
+    // Boolean;
+    // python_adjust had no equality arm at all, so nothing did. Restricted to a
+    // Boolean paired with a number: the only shape measured to reach here
+    // unreconciled (docs/roadmap/scope-relational-float-reconciliation.md
+    // §15, §17). A wider rule would re-open gap-2.
+    std::vector<expr2tc *> ops;
+    expr->Foreach_operand([&ops](expr2tc &op) { ops.push_back(&op); });
+
+    auto number = [](const type2tc &t) {
+      return is_bv_type(t) || is_floatbv_type(t) || is_fixedbv_type(t);
+    };
+
+    if (
+      ops.size() == 2 &&
+      ((is_bool_type((*ops[0])->type) && number((*ops[1])->type)) ||
+       (number((*ops[0])->type) && is_bool_type((*ops[1])->type))))
+      c_implicit_typecast_arithmetic(*ops[0], *ops[1], ns);
+  }
   else if (
     is_lessthan2t(expr) || is_lessthanequal2t(expr) || is_greaterthan2t(expr) ||
     is_greaterthanequal2t(expr))
@@ -403,10 +426,24 @@ void python_adjust::adjust_expr(expr2tc &expr)
     std::vector<expr2tc *> ops;
     expr->Foreach_operand([&ops](expr2tc &op) { ops.push_back(&op); });
 
+    // The second admission: one side floating point, the other an integer.
+    // `0 <= x <= 10` with a float `x` trips convert_ast_node's signedbv
+    // assertion. Deliberately NOT a same-kind width promotion (char vs int):
+    // that is the traffic gap-2 showed diverges corpus-wide over the
+    // operational-model bodies. §12's census measured the mixed float/integer
+    // traffic there as empty -- 1296 comparison nodes, zero mixed pairs -- so
+    // this admits exactly what that census covered and nothing more.
+    const bool float_int_mix =
+      ops.size() == 2 &&
+      ((is_floatbv_type((*ops[0])->type) && is_bv_type((*ops[1])->type)) ||
+       (is_bv_type((*ops[0])->type) && is_floatbv_type((*ops[1])->type)));
+
     if (
-      ops.size() == 2 && is_bv_type((*ops[0])->type) &&
-      is_bv_type((*ops[1])->type) &&
-      is_signedbv_type((*ops[0])->type) != is_signedbv_type((*ops[1])->type))
+      (ops.size() == 2 && is_bv_type((*ops[0])->type) &&
+       is_bv_type((*ops[1])->type) &&
+       is_signedbv_type((*ops[0])->type) !=
+         is_signedbv_type((*ops[1])->type)) ||
+      float_int_mix)
     {
       // The expr2tc overload, not the legacy exprt one clang_c_adjust calls:
       // same usual-arithmetic-conversion rule with no migrate round-trip, so an
@@ -615,6 +652,30 @@ void python_adjust::adjust_expr(expr2tc &expr)
       c_implicit_typecast(source, a.target->type, ns);
       if (source != a.source)
         expr = code_assign2tc(a.target, source, a.location);
+    }
+    else if (
+      is_array_type(a.target->type) && is_array_type(a.source->type) &&
+      is_constant_array2t(a.source))
+    {
+      // An array-typed source into an array-typed target, which every arm above
+      // declines because they all guard on a pointer target. `s = ""` where `s`
+      // carries the #5571 fixed-width tuple-string representation assigns a
+      // char[1] literal to a char[16]; the hop-off leaves the bare
+      // constant_array, and symex then synthesises the array-to-array typecast
+      // that convert_typecast has no arm for.
+      //
+      // Reproduce legacy's two steps at this seam -- decay the literal to
+      // &lit[0], then cast that pointer to the target array type -- which is
+      // the shape clang_c_adjust emits and the only one the working default
+      // path produces. Phase 1 of
+      // docs/roadmap/scope-array-assignment-conversion.md; its Phase 0
+      // established that the conversion is the defect, not the literal or the
+      // char[0] declaration that every passing variant also carries.
+      const type2tc &elem = to_array_type(a.source->type).subtype;
+      expr2tc decayed =
+        address_of2tc(elem, index2tc(elem, a.source, gen_zero(index_type2())));
+      expr = code_assign2tc(
+        a.target, typecast2tc(a.target->type, decayed), a.location);
     }
   }
   else if (

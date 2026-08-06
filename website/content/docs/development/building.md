@@ -266,13 +266,33 @@ building LLVM from source.
 | CMake     | yes      | 3.18.0          |
 | CVC5      | no       | 1.1.2           |
 | MathSAT   | no       | 5.5.4           |
-| Yices     | no       | 2.6.4           |
+| Yices     | no       | 2.6.4 (2.7 also supported) |
 | Z3        | no       | 4.13.3          |
 | Bitwuzla  | no       | 0.9.0           |
 
 The version requirements are stable but can change between releases. For all
 available CMake options, see
 [Options.cmake](https://github.com/esbmc/esbmc/blob/master/scripts/cmake/Options.cmake).
+
+## Building with sanitizers
+
+`-DENABLE_SANITIZERS=<list>` instruments the build, independently of
+`CMAKE_BUILD_TYPE`. It accepts a comma- or semicolon-separated list drawn from
+`address`, `thread`, `leak`, `memory` and `undefined` (the `asan` / `tsan` /
+`lsan` / `msan` / `ubsan` spellings are accepted too), and an unknown name is a
+configure error:
+
+```sh
+cmake -GNinja -Bbuild -S . -DDOWNLOAD_DEPENDENCIES=On -DENABLE_Z3=On \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_SANITIZERS=address,undefined
+```
+
+Only the instrumentation comes from this option; the optimisation and debug
+level stay with the build type, so any build type can be sanitized. ASan is
+built with `-fsanitize-recover=address`, so — combined with
+`ASAN_OPTIONS=halt_on_error=0` — a run reports several findings instead of
+aborting on the first. The older `-DCMAKE_BUILD_TYPE=Sanitizer` with
+`-DSANITIZER_TYPE=ASAN`, and `scripts/build.sh -s ASAN`, still work.
 
 ## Optional frontends
 

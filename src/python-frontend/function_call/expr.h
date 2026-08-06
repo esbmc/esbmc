@@ -223,6 +223,16 @@ private:
   exprt handle_hasattr() const;
 
   /*
+   * hasattr()'s first argument when it names an imported module. A module is
+   * not a first-class value here, so it has no symbol of its own; resolve the
+   * attribute against the symbols the module contributed instead. Returns
+   * nullopt when the argument does not name an imported module.
+   */
+  std::optional<exprt> module_hasattr(
+    const nlohmann::json &obj_arg,
+    const std::string &attr_name) const;
+
+  /*
    * Handles issubclass(cls, classinfo): resolves the class hierarchy from the
    * AST at compile time. classinfo may be a single class or a tuple of classes.
    */
@@ -609,6 +619,9 @@ private:
    * not resolve to a non-code variable symbol.
    */
   std::optional<exprt> try_indirect_variable_call();
+
+  /// Indirect call through a function pointer held in an instance field.
+  std::optional<exprt> try_indirect_member_call();
 
   /*
    * Resolves the callee when the direct symbol lookup failed: dataclass

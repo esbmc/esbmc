@@ -18,6 +18,7 @@ class ASTContext;
 class SourceManager;
 class FunctionDecl;
 class Decl;
+class LabelDecl;
 class VarDecl;
 class ParmVarDecl;
 class RecordDecl;
@@ -121,6 +122,17 @@ protected:
   clang::SourceManager *sm;
 
   const clang::FunctionDecl *current_functionDecl;
+
+  /** Address-taken labels of the function being converted, in the order the
+   *  addresses appear. A label has no storage, so `&&L` lowers to its 1-based
+   *  position cast to a pointer and `goto *p` to an equality chain over those
+   *  positions. Collected up front because a label's address may be taken
+   *  after the indirect goto that jumps to it. A vector, not a map keyed on
+   *  the decl: pointer order varies per run, and the chain it emits has to be
+   *  reproducible (GCC computed goto, issue #4083). */
+  std::vector<const clang::LabelDecl *> address_taken_labels;
+
+  void collect_address_taken_labels(const clang::Stmt &body);
 
   bool convert_builtin_types();
   virtual bool convert_top_level_decl();

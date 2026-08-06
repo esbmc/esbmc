@@ -1,4 +1,4 @@
 CORE
 main.py
---bitwuzla --no-unwinding-assertions --unwind 2
+--no-unwinding-assertions --unwind 2
 ^VERIFICATION FAILED$
