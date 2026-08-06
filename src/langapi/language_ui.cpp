@@ -1,3 +1,4 @@
+#include <fstream>
 #include <langapi/language_ui.h>
 #include <langapi/mode.h>
 #include <memory>
@@ -52,9 +53,12 @@ bool language_uit::parse(const std::string &filename)
 
   config.language.lid = lang;
 
-  // Bundled sources answer here too: c2goto compiles the operational models
-  // straight out of the VFS, so they never exist on disk.
-  if (!file_operations::filesystemt::get().exists(filename))
+  // c2goto names the models it compiles by VFS path, and those exist only in
+  // .rodata. A path on disk still has to open: existing is not readable.
+  bool readable = file_operations::is_bundled_source(filename)
+                    ? file_operations::filesystemt::get().exists(filename)
+                    : static_cast<bool>(std::ifstream(filename));
+  if (!readable)
   {
     log_error("failed to open input file {}", filename);
     return true;
