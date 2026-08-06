@@ -2710,6 +2710,13 @@ code_contractst::materialize_ptr_deref_snapshots(
           if (
             !is_constant_int2t(atype.array_size) || !is_scalar_type(elem_type))
             continue;
+          // A zero-length array member -- the GCC trailing-flexible-member
+          // idiom -- has no element to snapshot, and no index is valid in it.
+          // The witness range used to be assumed, so an empty one assumed
+          // `false` ahead of the call and discharged every assertion in the
+          // wrapper, verifying the contract vacuously (#6513).
+          if (to_constant_int2t(atype.array_size).value == 0)
+            continue;
           type2tc k_type = atype.array_size->type;
 
           std::string base = func_name + "_" + id2string(param_id) + "_" +
@@ -2735,13 +2742,23 @@ code_contractst::materialize_ptr_deref_snapshots(
           k_asg->code = code_assign2tc(witness_k, gen_nondet(k_type));
           k_asg->location = location;
 
-          goto_programt::targett k_rng = wrapper.add_instruction(ASSUME);
-          k_rng->guard = and2tc(
-            greaterthanequal2tc(witness_k, gen_zero(k_type)),
-            lessthan2tc(witness_k, atype.array_size));
+          // Clamp rather than ASSUME, as Phase 2B does: an assumption over the
+          // witness index excludes paths whenever the range is empty. Element
+          // 0 exists here because the empty case was skipped above, so it is
+          // always a valid fallback (#6513).
+          goto_programt::targett k_rng = wrapper.add_instruction(ASSIGN);
+          k_rng->code = code_assign2tc(
+            witness_k,
+            if2tc(
+              k_type,
+              and2tc(
+                greaterthanequal2tc(witness_k, gen_zero(k_type)),
+                lessthan2tc(witness_k, atype.array_size)),
+              witness_k,
+              gen_zero(k_type)));
           k_rng->location = location;
           k_rng->location.comment(
-            "frame: constrain ptr-deref index (Phase 2C)");
+            "frame: clamp ptr-deref index to valid array range (Phase 2C)");
 
           // scalar snapshot of (*p).field[k]
           symbolt s_obj;
@@ -3015,8 +3032,8 @@ code_contractst::materialize_arr_elem_snapshots(
     // it, verifying the whole function vacuously. Assuming a non-empty range
     // instead forces the extent to be at least one element, which is #6212 in
     // another guise. Clamping to the declared index does neither.
-    // Phase 2C still assumes its range (#6513); it needs a skip rather than a
-    // clamp, having no declared index to fall back to.
+    // Phase 2C takes the same approach, skipping a zero-length member outright
+    // and clamping to element 0 otherwise (#6513).
     goto_programt::targett j_clamp = wrapper.add_instruction(ASSIGN);
     j_clamp->code = code_assign2tc(
       witness_j,
