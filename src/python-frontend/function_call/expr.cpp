@@ -4950,11 +4950,14 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
     if (!func_symbol)
     {
       // Check if this function is defined anywhere in the current Python source
-      // by searching the AST directly
-      bool is_forward_reference = false;
-
-      is_forward_reference = json_utils::search_function_in_ast(
-        converter_.ast(), function_id_.get_function());
+      // by searching the AST directly. A call routed to an imported module
+      // (`os.getcwd()`) carries that module's filename, so it must not bind a
+      // same-named function of the current file as a forward reference: the
+      // module attribute is unresolved, not user code (#6742).
+      const bool is_forward_reference =
+        function_id_.get_filename() == converter_.python_file() &&
+        json_utils::search_function_in_ast(
+          converter_.ast(), function_id_.get_function());
 
       if (is_forward_reference)
       {

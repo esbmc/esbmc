@@ -647,8 +647,14 @@ class CoreVisitorsMixin:
         kwonly_args = []
         if isinstance(node.func, ast.Attribute):
             method_name = node.func.attr
-            if isinstance(node.func.value, ast.Name):
-                var_name = node.func.value.id
+            # The receiver of a chained attribute call (`os.path.abspath(x)`) is
+            # as unresolved as a bare one, and must not bind a same-named
+            # module-level function as if it were a method (#6742).
+            receiver_root = node.func.value
+            while isinstance(receiver_root, ast.Attribute):
+                receiver_root = receiver_root.value
+            if isinstance(receiver_root, ast.Name):
+                var_name = receiver_root.id
                 if (var_name not in self.known_variable_types
                         and var_name not in self.functionParams
                         and not hasattr(__builtins__, var_name)):
