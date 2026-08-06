@@ -1139,10 +1139,14 @@ independently of this plan.
 Stated plainly, to avoid over-claiming:
 
 1. **Real goto-symex translation units.** Two independent obstacles, and only
-   the first is being removed. *(a) Parsing* — probe P-2: the C++ operational
-   model is missing the facilities enumerated as G1–G8 in §13.2, starting with
-   `<shared_mutex>` (which every ESBMC header reaches via `irep_idt`). This is a
-   bounded backlog and §13.6 schedules it. *(b) Tractability* — the measurements
+   the first is being removed. *(a) Parsing* — **re-measured 2026-08-05/06 and
+   now down to one cause.** G1–G7 are closed (§15 M9 (G-remeasure)), so the
+   operational model is no longer the obstacle; what remains is **G9**, `irept`'s
+   `std::map<irep_idt, irept> named_subt` naming an incomplete `mapped_type`.
+   Measured on the real target rather than projected: `--parse-tree-only` over
+   `src/goto-symex/execution_state.cpp` emits exactly one distinct error,
+   `field has incomplete type 'mapped_type' (aka 'irept')`. A backlog of eight
+   has become a single decision (§13.2). *(b) Tractability* — the measurements
    in §13.3 (a 4-key `unordered_map` loop takes 86 s at `--unwind 5` and times
    out at `--unwind 8`) put whole-TU verification out of reach **even after (a)
    is fixed**. Tier A is therefore *transcription*, and its fidelity rests on the
@@ -1169,6 +1173,23 @@ Stated plainly, to avoid over-claiming:
 7. **Absolute (unbounded) correctness of the engine.** Every Tier-A result is a
    proof at a bound, or a k-induction proof with convergence. Where convergence
    is not achieved, the result is reported as *bounded*, never as *proved*.
+8. **Mode C (dead-code) proofs on ESBMC's own C++ sources.** `AGENTS.md`/
+   `CLAUDE.md` require a C-Live proof for any patch to `src/**` that adds a
+   branch, discharged by instrumenting the branch with `__ESBMC_unreachable()`
+   and verifying the file. That is a corollary of item 1 and inherits its
+   blocker: the file cannot be parsed, so the instrumentation cannot be
+   verified. Confirmed on the R28 fix — the patched
+   `src/goto-symex/execution_state.cpp` stops at G9 alone. **What stands in for
+   it**, and what a report must say instead of claiming Mode C: an *empirical*
+   reachability witness — an input that demonstrably drives the new branch and
+   changes an observable. For R28's `dereference2t` arm that is three regression
+   tests whose verdict flips (§15 M9 (R28 fix)). This is weaker than C-Live:
+   it shows the branch is reachable on the inputs tried, not that it is
+   reachable in general, and it offers nothing for **C-Dead**, where the
+   obligation is to show a *removed* branch was unreachable — a negative no
+   finite set of inputs can establish. C-Dead on `src/**` therefore rests
+   entirely on the implicit discharge route (a cited issue or failing test
+   proving the branch was live).
 
 ---
 
@@ -4030,6 +4051,41 @@ pre-existing macOS set (`04_valgrind`, `error`, `error2`,
 `unsupported_extensions`) confirmed identical before this change; 658 unit tests
 pass. The new arm is reachable — the three flipped shapes exercise it — which
 discharges C-Live's obligation informally; a formal Mode C pass has not been run.
+
+### M9 (Mode C) — 2026-08-06, the self-verification obligation cannot be met
+
+The entry above ends owing a Mode C pass: the R28 fix adds a branch to `src/**`,
+and the repo rule requires C-Live for exactly that. Attempting it settles the
+question for every such patch, so it is recorded here rather than in that entry.
+
+**It cannot be run, and the reason is one line long.** C-Live means instrumenting
+the new branch with `__ESBMC_unreachable()` and verifying the file. Verifying the
+file means parsing it, and `--parse-tree-only` over the patched
+`src/goto-symex/execution_state.cpp` emits exactly one distinct error:
+`field has incomplete type 'mapped_type' (aka 'irept')` — **G9**. Measured on the
+real target, not inferred from the `renaming.h` probe. Recorded as §14 item 8.
+
+Two things follow that are worth separating.
+
+**The obligation has a substitute for C-Live, and none for C-Dead.** An
+*empirical* reachability witness — an input that drives the new branch and moves
+an observable — is available and, for R28, is three regression tests whose
+verdict flips. That is strictly weaker than C-Live: it shows reachability on the
+inputs tried, not in general. **C-Dead has no such substitute**: its obligation
+is that a *removed* branch was unreachable, a negative that no finite set of
+inputs can establish. C-Dead on `src/**` therefore rests entirely on the
+implicit-discharge route the rule already provides — a cited issue or failing
+test proving the branch was live — and any report claiming otherwise is
+overclaiming.
+
+**The gap is now one decision wide, not a backlog.** §14 item 1(a) has said since
+M0 that parsing is blocked by "G1–G8, starting with `<shared_mutex>`". Six of
+those closed without this plan noticing (§15 M9 (G-remeasure)) and G7 was never
+open at C++23. What is left is G9 alone, and G9 is not a missing facility — it is
+a choice between matching libstdc++'s incomplete-`mapped_type` extension in the
+OM's `map` and changing `named_subt` across ESBMC. Closing it would make Mode C
+on `src/**` reachable for the first time, which is a larger prize than the
+Tier-B′ pilot it was filed under.
 
 ---
 
