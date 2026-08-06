@@ -690,3 +690,75 @@ comparison dispatch this document spent §13-§16 searching. `sum_tuple` remains
 unexplained by §18.3 — its counterexample shows unresolved `tuple_elem`
 symbols, consistent with §11's finding that it has no heterogeneous comparison
 at all, and it should not be assumed to share `precedence2`'s cause.
+
+## 19. §18.3's fix, shipped and measured (2026-08-06)
+
+The `floatbv` gap §18.3 named is fixed: `check_c_implicit_typecast`'s `type2tc`
+overload now admits `floatbv` as a destination in the Boolean and integer source
+branches, and carries a `floatbv` source branch of its own, mirroring the
+`typet` overload it was ported from.
+
+### 19.1 What it clears
+
+Measured A/B against a frozen pre-fix binary, so each row is a controlled
+comparison rather than a recollection of an earlier run:
+
+| test | legacy | hop-off before | hop-off after |
+|---|---|---|---|
+| `precedence2` | SUCCESSFUL | FAILED | **SUCCESSFUL** |
+| `math33_frexp` | SUCCESSFUL | FAILED | **SUCCESSFUL** |
+| `math_edge_frexp_success` | SUCCESSFUL | FAILED | **SUCCESSFUL** |
+
+The two `frexp` tests were **not** predicted by §18.3 — they came out of the
+census and were found to share the cause. That is the whole argument for
+running a census rather than fixing named witnesses: one shared-helper defect
+was producing divergences in three unrelated tests, and only one of them was on
+the witness list this scope had been working from since §4.
+
+### 19.2 Gates
+
+| gate | result |
+|---|---|
+| G2 anti-masking (`neural-net_fail --fixedbv`) | **FAILED**, unchanged |
+| `lambda15` | SUCCESSFUL, unchanged |
+| unit suite | 635/635 (632 pre-existing + 3 new) |
+| `floats` + `floats-regression` | 164/164 |
+| `--interval-analysis` corpus — the **default-path** caller at `interval_domain.cpp:820` | 111/112 |
+
+The single interval failure, `esbmc-unix/github_2513_1`, is a **pre-existing
+timeout**, not a regression: it takes **138.3 s with the fix and 147.8 s
+without** it against the same 120 s harness cap, and produces the expected
+`VERIFICATION FAILED` verdict when run directly. Timing both arms is what
+settles this class of failure; the ctest verdict alone cannot.
+
+### 19.3 The regression test, and why it is a unit test
+
+Five attempts at a minimal Python reproducer all failed to discriminate: the
+shape that exercises the seam is an integer-typed expression assigned into a
+`double` lvalue, and outside `precedence2`'s whole-module type inference the
+frontend simply re-types the variable and the conversion is never needed. The
+one reduction that *did* discriminate — a compound `x &= 6` over a float — is
+**rejected by CPython**, so it would fail `scripts/check_python_tests.sh` and is
+not a legitimate test input.
+
+The defect's unit is the helper, so `unit/util/c_typecast.test.cpp` pins it
+directly: the float admissions, a struct-source control that must stay
+rejected, and the behavioural case that the cast is actually inserted.
+Mutation-checked — with the fix reverted, 6 of 7 assertions fail and the
+control still passes, so the control is not vacuous.
+
+### 19.4 Census status
+
+At 3 757/4 509: 3 677 SAME, 18 DIVERGE, 56 SKIP_PREFLAGGED (rule 1 earning its
+place), 4 SKIP_SHORT, 2 not attributable. The 18 divergences, all measured on
+the **pre-fix** baseline:
+
+| class | count | status |
+|---|---:|---|
+| cleared by §19's fix | 3 | done |
+| `rc=134` abort | 7 | `class10`/`class12` root-caused (`scope-array-assignment-conversion.md` §13); `github_3866`×3, `missing-return14_fail`, `min_max_multi_args` unexamined |
+| `rc=139` segfault | 2 | `github_3658_7`, `return13-fail` — unexamined |
+| hop-off-only TIMEOUT | 6 | **unconfirmed**, see §18.4 — needs a serial re-run |
+
+G4 is not discharged: it requires 0 attributable divergences, and there are at
+least 9 real ones outstanding.
