@@ -4203,6 +4203,38 @@ prefix under-samples.
 
 ---
 
+### M9 (H-C1 re-measured) — 2026-08-06, and what a clean leg does not prove
+
+H-C1 had not been re-run since M5. Re-running it serves two purposes: the
+slicer relation has never been checked against the inputs the fixes rescued
+from timing out, and #6783's pointer fold is **unconditional** — unlike the
+guard fold, it fires in every configuration — so a relation it might disturb is
+worth exercising deliberately.
+
+| | agreed | diverged | inconclusive | skipped | abstract |
+|---|---|---|---|---|---|
+| §15 M5 | 1328 | 0 | 67 | 35 | — |
+| this run | **1364** | **0** | **52** (39 no-verdict + 13 timeout) | 39 | 63 |
+
+Still zero divergences, over 36 more agreeing inputs than M5 saw.
+
+**What that establishes, precisely.** It is evidence the pointer fold does not
+disturb the slicer relation, and no more. It is *not* a check that the fold
+preserves verdicts against master, and it cannot be: both legs of every oracle
+here run the same binary, so a fold that changed a verdict identically in both
+legs would leave every relation intact and every count unmoved. The oracles
+compare configurations, not revisions. What actually pins the fold against
+master is the regression suite — roughly 2300 tests, with each of the seven
+failures reproduced on a rebuilt master binary before being set aside — plus
+the fold's own pair asserting `q - p == 4` and `p - q == -4` rather than only
+that the run terminates.
+
+Worth stating because a clean sweep is easy to over-read: 1364 agreeing inputs
+is a strong statement about `--no-slice` and says nothing whatever about
+whether the default leg is right.
+
+---
+
 ## Appendix A — Methodological basis
 
 - **Design by contract.** Every harness is precondition (`__ESBMC_assume`) →
