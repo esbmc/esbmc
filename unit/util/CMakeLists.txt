@@ -17,3 +17,4 @@ new_unit_test(migratetest "migrate.test.cpp" "util_esbmc")
 new_unit_test(arith_tools_test "arith_tools.test.cpp" "util_esbmc")
 # Running the fuzzer normally would overflow the /tmp with files.
 new_fast_fuzz_test(filesystemfuzz "filesystem.fuzz.cpp" "filesystem")
+new_unit_test(cmdlinetest "cmdline.test.cpp" "util_esbmc")
