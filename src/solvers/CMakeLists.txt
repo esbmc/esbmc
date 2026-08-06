@@ -20,7 +20,10 @@ if(NOT (ENABLE_Z3 OR ENABLE_CVC5 OR ENABLE_MATHSAT OR ENABLE_YICES OR ENABLE_BIT
   return()
 endif()
 
-set(CAMADA_DIR "$ENV{HOME}/camada" CACHE PATH "Camada installation prefix")
+# Empty by default: a camada tree left in a developer's home directory must not
+# silently take the place of the pinned download (its version is unchecked and
+# its build options unknown). Set -DCAMADA_DIR=... to use one deliberately.
+set(CAMADA_DIR "" CACHE PATH "Camada installation prefix")
 set(CAMADA_EXTRA_INCLUDE_DIRS)
 set(CAMADA_EXTRA_LIBRARY_DIRS)
 
@@ -67,7 +70,7 @@ if(NOT DEFINED CAMADA_DOWNLOAD_DIR)
       "camada's dependency install tree (…/build/deps/install)")
   if(CAMADA_DEPS_DIR)
     camada_register_deps_tree("${CAMADA_DEPS_DIR}")
-  else()
+  elseif(CAMADA_DIR)
     camada_register_deps_tree("${CAMADA_DIR}/build/deps/install")
     camada_register_deps_tree("${CAMADA_DIR}/../camada/build/deps/install")
   endif()
@@ -116,20 +119,41 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
 
   camada_register_deps_tree("${CAMADA_DEPS_INSTALL_DIR}")
 
-  # Download the archive if absent or empty (a previous interrupted run).
+  # Download the archive if absent, empty (a previous interrupted run), or not
+  # the pinned one.
   if(EXISTS "${CAMADA_ARCHIVE}")
     file(SIZE "${CAMADA_ARCHIVE}" _camada_archive_size)
     if(_camada_archive_size EQUAL 0)
       file(REMOVE "${CAMADA_ARCHIVE}")
+    elseif(ESBMC_CAMADA_HASH)
+      file(SHA256 "${CAMADA_ARCHIVE}" _camada_have_hash)
+      if(NOT _camada_have_hash STREQUAL ESBMC_CAMADA_HASH)
+        message(STATUS "Cached Camada archive does not match the pinned hash; "
+                       "re-downloading")
+        file(REMOVE "${CAMADA_ARCHIVE}")
+      endif()
     endif()
   endif()
   if(NOT EXISTS "${CAMADA_ARCHIVE}")
     message(STATUS "Downloading Camada from ${ESBMC_CAMADA_URL}")
-    file(DOWNLOAD "${ESBMC_CAMADA_URL}" "${CAMADA_ARCHIVE}"
-         SHOW_PROGRESS STATUS _camada_dl_status)
+    if(ESBMC_CAMADA_HASH)
+      # EXPECTED_HASH makes a moved or tampered artefact a hard error: camada
+      # supplies every bit-vector backend, so it must not be linked unverified.
+      file(DOWNLOAD "${ESBMC_CAMADA_URL}" "${CAMADA_ARCHIVE}"
+           SHOW_PROGRESS STATUS _camada_dl_status
+           EXPECTED_HASH SHA256=${ESBMC_CAMADA_HASH})
+    else()
+      message(WARNING
+        "ESBMC_CAMADA_HASH is empty: downloading Camada without verifying it")
+      file(DOWNLOAD "${ESBMC_CAMADA_URL}" "${CAMADA_ARCHIVE}"
+           SHOW_PROGRESS STATUS _camada_dl_status)
+    endif()
     list(GET _camada_dl_status 0 _camada_dl_result)
     list(GET _camada_dl_status 1 _camada_dl_message)
     if(NOT _camada_dl_result EQUAL 0)
+      # file(DOWNLOAD) leaves the partial/mismatched file behind; drop it so the
+      # next configure re-downloads instead of reusing it.
+      file(REMOVE "${CAMADA_ARCHIVE}")
       message(FATAL_ERROR "Failed to download Camada: ${_camada_dl_message}")
     endif()
     file(SIZE "${CAMADA_ARCHIVE}" _camada_archive_size)

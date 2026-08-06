@@ -75,6 +75,10 @@ endif()
 
 set(DEFAULT_CAMADA_URL "https://github.com/mikhailramalho/camada/archive/refs/tags/v0.13.tar.gz")
 set(DEFAULT_CAMADA_NAME "camada-v0.13.tar.gz")
+# SHA256 of the archive above. Camada carries every bit-vector backend, so a
+# moved or tampered artefact has to fail the build rather than be linked in.
+# Update alongside the URL; an empty value skips the check.
+set(DEFAULT_CAMADA_HASH "978cfd5d86dcd4eb4e8a54def72bfffa00ce5c8570d167b1aed1368d3e216f04")
 
 set(ESBMC_LLVM_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt LLVM")
 set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted directory of LLVM")
@@ -84,6 +88,7 @@ set(ESBMC_CHERI_LLVM_NAME ${DEFAULT_CHERI_LLVM_NAME} CACHE STRING "Name of the e
 
 set(ESBMC_CAMADA_URL ${DEFAULT_CAMADA_URL} CACHE STRING "URL to download Camada sources")
 set(ESBMC_CAMADA_NAME ${DEFAULT_CAMADA_NAME} CACHE STRING "Name of the downloaded Camada source archive")
+set(ESBMC_CAMADA_HASH ${DEFAULT_CAMADA_HASH} CACHE STRING "SHA256 of the Camada source archive; empty to skip verification")
 
 #############################
 # CMake extra Vars
