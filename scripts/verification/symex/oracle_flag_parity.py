@@ -40,6 +40,7 @@ Usage:
 import argparse
 import os
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from oracle_common import (
@@ -72,40 +73,100 @@ def run_pair(case, esbmc, flags_a, flags_b, timeout):
         b = verdict_of(capture(esbmc, flags_b + base, work, timeout))
     finally:
         drop_scratch(work)
-    return case.name, a, b
+    return case, a, b
+
+
+def run_pass(cases, esbmc, flags_a, flags_b, timeout, jobs):
+    """Every case through both legs, `jobs` at a time."""
+    results = []
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        futures = [
+            pool.submit(run_pair, c, esbmc, flags_a, flags_b, timeout) for c in cases
+        ]
+        for done, future in enumerate(futures, 1):
+            results.append(future.result())
+            if done % 100 == 0:
+                print(f"  ... {done}/{len(cases)}", flush=True)
+    return results
+
+
+def retry_serially(cases, esbmc, flags_a, flags_b, timeout, budget):
+    """Re-run each case on its own at a larger bound, until the budget is spent.
+
+    Serial because the point is to remove self-contention, and budgeted because
+    the worst case -- every case using the full bound in both legs -- runs for
+    hours. Returns (results, cases the budget did not reach).
+    """
+    deadline = time.monotonic() + budget
+    results = []
+    for index, case in enumerate(cases):
+        if time.monotonic() >= deadline:
+            return results, cases[index:]
+        results.append(run_pair(case, esbmc, flags_a, flags_b, timeout))
+    return results, []
 
 
 def sweep(tests, esbmc, flags_a, flags_b, args):
-    """Run both flag-sets over every test, reporting divergences as they land.
+    """Both flag-sets over every test, then a second pass over what timed out.
 
-    Returns (agreed_count, [(name, a, b)] diverged, [(name, a, b)] inconclusive).
+    A timeout at `--jobs` concurrency need not be a property of the input: the
+    first pass runs that many ESBMC pairs at once, so an input anywhere near the
+    bound can lose to load, and a count that moves with `uptime` is not a
+    measurement. The second pass re-runs only that residue, alone and at a
+    larger bound, which separates the two -- and prints how many it settled, so
+    a budget that is buying nothing is visible rather than assumed.
     """
-    diverged, inconclusive, agreed = [], [], 0
-    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = [
-            pool.submit(run_pair, t, esbmc, flags_a, flags_b, args.timeout)
-            for t in tests
-        ]
-        for done, future in enumerate(futures, 1):
-            name, a, b = future.result()
-            if a in (TIMEOUT, NO_VERDICT) or b in (TIMEOUT, NO_VERDICT):
-                inconclusive.append((name, a, b))
-            elif a != b:
-                diverged.append((name, a, b))
-                print(f"  DIVERGE {name}: A={a} B={b}", flush=True)
-            else:
-                agreed += 1
-            if done % 100 == 0:
-                print(f"  ... {done}/{len(tests)}", flush=True)
-    return agreed, diverged, inconclusive
+    results = run_pass(tests, esbmc, flags_a, flags_b, args.timeout, args.jobs)
+    timed_out = [c for c, a, b in results if TIMEOUT in (a, b)]
+    if not (timed_out and args.retry_timeout):
+        return results
+
+    print(
+        f"\nretrying {len(timed_out)} timed-out tests serially "
+        f"at {args.retry_timeout}s",
+        flush=True,
+    )
+    retried, unreached = retry_serially(
+        timed_out, esbmc, flags_a, flags_b, args.retry_timeout, args.retry_budget
+    )
+    settled = {c.name: (a, b) for c, a, b in retried}
+    recovered = sum(1 for a, b in settled.values() if TIMEOUT not in (a, b))
+    print(f"  settled {recovered} of {len(retried)} retried", flush=True)
+    if unreached:
+        print(f"  budget spent; {len(unreached)} not retried", flush=True)
+    return [(c, *settled.get(c.name, (a, b))) for c, a, b in results]
 
 
-def report(agreed, diverged, inconclusive, skipped, abstract):
+def classify(results):
+    """Split the sweep four ways.
+
+    `no-verdict` and `timeout` were one "inconclusive" count until §15 M9
+    (H-C2 residue), which is one number for two unlike things: reaching no
+    verdict is a property of the input and reproduces on any machine, whereas a
+    timeout is a property of the run. Reported together, a stable exclusion
+    cannot be told from a load artefact.
+    """
+    agreed, diverged, no_verdict, timed_out = 0, [], [], []
+    for case, a, b in results:
+        row = (case.name, a, b)
+        if TIMEOUT in (a, b):
+            timed_out.append(row)
+        elif NO_VERDICT in (a, b):
+            no_verdict.append(row)
+        elif a != b:
+            diverged.append(row)
+        else:
+            agreed += 1
+    return agreed, diverged, no_verdict, timed_out
+
+
+def report(agreed, diverged, no_verdict, timed_out, skipped, abstract):
     """Counts first, then every excluded and diverging test by name -- a sweep
     that hides what it dropped reads as broader coverage than it had."""
     print(f"\nagreed       {agreed}")
     print(f"diverged     {len(diverged)}")
-    print(f"inconclusive {len(inconclusive)}  (no verdict or timeout in one leg)")
+    print(f"no-verdict   {len(no_verdict)}  (a leg reached no verdict on this input)")
+    print(f"timeout      {len(timed_out)}  (still over the bound after the retry)")
     print(f"skipped      {len(skipped)}  (test.desc already names a compared flag)")
     print(f"abstract     {len(abstract)}  (test.desc selects an approximate encoding)")
     for name, a, b in diverged:
@@ -114,11 +175,14 @@ def report(agreed, diverged, inconclusive, skipped, abstract):
         print(f"SKIP {name}")
     for name in sorted(t.name for t in abstract):
         print(f"ABSTRACT {name}")
-    for name, a, b in sorted(inconclusive):
-        print(f"INCONCLUSIVE {name}: A={a} B={b}")
+    for name, a, b in sorted(no_verdict):
+        print(f"NO-VERDICT {name}: A={a} B={b}")
+    for name, a, b in sorted(timed_out):
+        print(f"TIMEOUT {name}: A={a} B={b}")
 
 
 def main():
+    """Exit non-zero on a divergence the baseline does not already carry."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--esbmc", default="build/src/esbmc/esbmc")
     parser.add_argument("--suite", default="regression/esbmc")
@@ -126,6 +190,20 @@ def main():
     parser.add_argument("--b", required=True, help="extra flags for the variant run")
     parser.add_argument("--modes", default="CORE")
     parser.add_argument("--timeout", type=int, default=20)
+    parser.add_argument(
+        "--retry-timeout",
+        type=int,
+        default=120,
+        help="bound for the serial second pass over tests that timed out under "
+        "--jobs concurrency; 0 disables the pass",
+    )
+    parser.add_argument(
+        "--retry-budget",
+        type=int,
+        default=900,
+        help="wall-clock seconds the second pass may spend; tests it does not "
+        "reach stay reported as timeouts",
+    )
     parser.add_argument("--jobs", type=int, default=os.cpu_count())
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument(
@@ -140,8 +218,7 @@ def main():
 
     flags_a = args.a.split()
     flags_b = args.b.split()
-    modes = args.modes.split(",")
-    tests = collect_tests(args.suite, modes)
+    tests = collect_tests(args.suite, args.modes.split(","))
 
     # A test already naming one of the flags would compare a configuration
     # against itself, or against one the author deliberately pinned.
@@ -158,11 +235,15 @@ def main():
 
     baseline = load_baseline(args.baseline)
 
-    print(f"{len(tests)} tests, modes={modes}, A={flags_a or ['(none)']} B={flags_b}")
+    print(
+        f"{len(tests)} tests, modes={args.modes}, "
+        f"A={flags_a or ['(none)']} B={flags_b}"
+    )
 
-    agreed, diverged, inconclusive = sweep(tests, esbmc, flags_a, flags_b, args)
-
-    report(agreed, diverged, inconclusive, skipped, abstract)
+    agreed, diverged, no_verdict, timed_out = classify(
+        sweep(tests, esbmc, flags_a, flags_b, args)
+    )
+    report(agreed, diverged, no_verdict, timed_out, skipped, abstract)
     diverged_names = {name for name, _, _ in diverged}
     return 1 if report_baseline(baseline, diverged_names) else 0
 
