@@ -230,9 +230,11 @@ established scope-doc pattern: census, phased decomposition, gates, risks.
 **Inherited harness rules — non-optional.** Every census on this track has been
 invalidated at least once by harness artifacts. Reuse them verbatim:
 
-1. Normalise the whole temp-path segment (`s@/esbmc[-._][^/ ]*@/TMPD@g`), not
-   individual prefixes — four spellings exist; partial normalisation reports
-   ~90 % false divergence.
+1. Normalise every temp *name*, not just temp paths
+   (`s@esbmc[-._][A-Za-z0-9._-]*@TMPD@g`) — several spellings exist and partial
+   normalisation reports ~90 % false divergence. Do not anchor on a leading
+   slash: `--gcc-nested-functions` synthesises `esbmc-nested.<hash>.c`, which
+   appears inside a symbol id with no path separator (§20.3).
 2. Strip timing lines (`completed in:|time:|Runtime|Elapsed`) — 46 false
    divergences out of 106 from `0.000s` vs `0.001s` alone.
 3. Exclude or serialize `--k-induction-parallel` tests — UNSTABLE against
@@ -882,9 +884,10 @@ Both numbers come from temporary instrumentation — one `fprintf` at each of
 which is exactly the site name §12/§13/§17's tables use. There is no census
 switch in the tree; §11.4's "census env var" describes a build that was never
 merged. The byte-identity sweep needs no instrumentation at all — it is the
-A/B, normalised. Normalise `/tmp/esbmc*` broadly: the C driver's temp dir is
+A/B, normalised. Normalise `esbmc*` broadly: the C driver's temp dir is
 `esbmc.<hash>` and Solidity's is `esbmc_solidity_temp-<hash>`, and a pattern
-that catches one and not the other reports a false divergence.
+that catches one and not the other reports a false divergence. Match the name
+wherever it appears, not only after a `/` — see §7 rule 1 and §20.3.
 
 ## 19. §18.4's defect fixed, and what the whole-suite sweep found underneath (2026-08-05)
 
@@ -950,3 +953,101 @@ Same A/B as §18.6, no instrumentation. For the residuals, run each side five
 times and compare the *sets* of output hashes, not one run against one run —
 `native_variants`, `legacy_variants`, and whether the two sets intersect is the
 measurement that separates a stable divergence from a nondeterministic one.
+
+## 20. §18.2's Jimple site closed — and what its mutants say about the gates (2026-08-05)
+
+§18.2 recorded Jimple's one genuine decline site: a **bare**
+`code_cpp_throw2t` *statement*, 12 declines across the 15-test suite, which no
+dispatcher arm claimed and which therefore took each containing function into
+a whole-function fallback. It is fixed by the same statement-local delegation
+the eight merged patches use.
+
+### 20.1 Result
+
+| | declines | jimple suite | A/B byte-identity |
+|---|---:|---|---|
+| before | **12** (12 of 15 tests, 1 each) | 15/15 pass | 15/15 identical, but *trivially* — §18.4 |
+| after | **0** | 17/17 pass | **15/15 identical, non-trivially** |
+
+The A/B number is unchanged and that is the point: before the fix those twelve
+functions were converted by the round-trip, so the native arm was compared
+against itself. They now take the native path end-to-end and still agree
+byte-for-byte. Jimple is the first frontend to reach **both** clauses of the
+criterion §18.5 says the exit needs — zero declines *and* byte-identity.
+
+The delegation needs no `tmp_symbol`/`context`/`targets` snapshot: like #6668,
+#6672, #6674, #6677 and #6678 it runs *before* any native attempt on the
+statement, so §11.3's two bounds do not apply.
+
+The two tests added here do **not** execute the new arm — they pass
+`--no-irep2-native-body`, which short-circuits `try_convert_body_native`
+before the dispatcher is entered. They are the *legacy half* of an A/B pair
+whose native half already exists (`github_4715_irep2_bodies_jimple_01{,_fail}`
+carry byte-identical inputs on the default path), so what they make durable is
+native/legacy verdict agreement on a throw-bearing body. Coverage of the arm
+itself comes from the twelve pre-existing tests, measured by the census, not
+from anything this patch adds.
+
+### 20.2 The mutants, and which gate caught which
+
+Three mutants were run rather than assumed, because §11.4 and §14.2 both turn
+on the difference between a gate passing and a gate discriminating:
+
+| mutant | what it breaks | caught by |
+|---|---|---|
+| M1 — arm absent (`return false`) | nothing observable; falls back | **only the decline census** |
+| M2 — arm present, conversion dropped | the throw disappears | **6 regression tests** + A/B 12/15 |
+| M3 — `restore_value_locations` given a nil stamp | nothing observable | **nothing** |
+
+M1 is the honest limit of this patch class: the delegation is
+behaviour-preserving by construction, so *no verdict test can distinguish an
+arm that exists from one that does not.* Only the census can. Do not ask a
+`test.desc` to pin arm presence; ask it to pin arm correctness, which M2 shows
+it does.
+
+Read M2's kill list off ctest's full output, not its tail: the first run of
+this table said five, because `tail -8` cut the head of the failure list. The
+sixth is `github_4715_irep2_bodies_jimple_01_fail`, whose input is
+byte-identical to `kt-hello-false` and whose `--irep2-bodies` flag is a
+documented no-op, so it takes the native path like the other five. Six of the
+twelve throw-bearing tests expect FAILED, and all six flip.
+
+M3 is a live coverage note rather than dead code. `restore_value_locations`
+iterates operands, and Jimple's throw has none — `jimple_statement.cpp:368`
+builds `codet("cpp-throw")` with the thrown value deliberately unattached
+(a frontend TODO). The call is required for byte-identity the moment a value
+*is* attached, and the C++ expression-statement arm relies on it today, so it
+stays; it is simply unexercised by any corpus that currently reaches this arm.
+
+### 20.3 A normalisation gap the C control exposed
+
+The C control sweep reported one divergence, `gcc_nested_func_06`, which was
+neither: `--gcc-nested-functions` synthesises a per-run temp **file name**,
+`esbmc-nested.<hash>.c`, which appears *without a leading slash* inside a
+symbol id (`c:esbmc-nested.4b6b-67a7.c@F@...`). §18.6's pattern anchors on
+`/esbmc*` and misses it.
+
+The control settled it, exactly as §7 rule 7 prescribes: the legacy arm run
+against **itself** three times produced three distinct hashes. Widen the
+pattern to `s@esbmc[-._][A-Za-z0-9._-]*@TMPD@g` — no leading slash — and the
+test is identical on both arms. C is then **138/138** on a stride-12 sample.
+
+This is the same class as §19.3's Solidity finding, arrived at from the other
+direction: there a synthetic *location* varied run to run, here a synthetic
+*file name* does. Treat any per-run artefact as noise until a self-control
+says otherwise.
+
+### 20.4 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc-cpp` | drained; residue = assert-fold | gated per patch (§11.4) |
+| `esbmc` (C) | 4 / 60 tests | **138/138** (stride-12, §20.3 normalisation) |
+| `python` | dominant site fixed by #6695 (merged) | not swept |
+| `esbmc-solidity` | 0 / 26 | 502/510; 8 residuals = #6759, #6760 |
+| `jimple` | **0 / 15** | **15/15** |
+
+What is left before the round-trip can be deleted is now short and named: the
+assert-fold in C/C++/Python, a Python A/B sweep that has never been run, and
+Solidity's eight residuals — which #6759 and #6760 already establish are *not*
+dispatcher defects.
