@@ -143,6 +143,15 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
     if (is_struct_type(new_from) || is_array_type(new_from))
       new_from = flatten_to_bitvector(new_from);
 
+    /* A pointer lowers to the pointer_struct tuple, so it needs the same
+     * flattening. Without this the value-based fallback at the end of the
+     * function runs instead and hands back a bit-vector while the expression's
+     * type says floatbv; the next mkIte or mkEqual pairing it with a properly
+     * FP-sorted term then aborts in camada ("Expected ITE branches with same
+     * sort"). */
+    if (is_pointer_type(new_from))
+      new_from = flatten_to_bitvector(new_from);
+
     // When int_encoding is true, integer types are represented as integers
     // in the SMT solver, but fp_api expects bitvectors. Fall back to
     // value-based conversion.
