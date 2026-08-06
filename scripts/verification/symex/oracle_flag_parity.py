@@ -86,13 +86,22 @@ def run_pair(case, legs, timeout):
     return case, a, b
 
 
-def run_pass(cases, legs, timeout, jobs):
-    """Every case through both legs, `jobs` at a time."""
+def run_pass(cases, legs, timeout, jobs, announce_diverged):
+    """Every case through both legs, `jobs` at a time.
+
+    A whole-corpus sweep runs for an hour or more, so a divergence is announced
+    as it lands rather than only in the closing report -- but only when no retry
+    pass follows, since a first-pass timeout can still become a verdict and turn
+    an announced divergence into a retraction.
+    """
     results = []
     with ThreadPoolExecutor(max_workers=jobs) as pool:
         futures = [pool.submit(run_pair, c, legs, timeout) for c in cases]
         for done, future in enumerate(futures, 1):
-            results.append(future.result())
+            case, a, b = future.result()
+            results.append((case, a, b))
+            if announce_diverged and a != b and TIMEOUT not in (a, b):
+                print(f"  DIVERGE {case.name}: A={a} B={b}", flush=True)
             if done % 100 == 0:
                 print(f"  ... {done}/{len(cases)}", flush=True)
     return results
@@ -124,7 +133,8 @@ def sweep(tests, legs, args):
     larger bound, which separates the two -- and prints how many it settled, so
     a budget that is buying nothing is visible rather than assumed.
     """
-    results = run_pass(tests, legs, args.timeout, args.jobs)
+    results = run_pass(
+        tests, legs, args.timeout, args.jobs, not args.retry_timeout)
     timed_out = [c for c, a, b in results if TIMEOUT in (a, b)]
     if not (timed_out and args.retry_timeout):
         return results
