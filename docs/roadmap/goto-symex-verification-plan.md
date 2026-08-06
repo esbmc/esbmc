@@ -4171,6 +4171,48 @@ No new regression test is added: the five tests this fixes already assert
 they exercise the `__assert_fail` path on Linux and the corrected
 `__assert_rtn` path on macOS.
 
+### M9 (side finding 2) — 2026-08-06, `--ir-ieee` cannot prove `0*f == 0`
+
+The second of the three substantive C failures left after the `__assert_rtn`
+fix. Also not goto-symex; recorded for the same reason.
+
+`regression/esbmc/github_2572_2` is CORE, runs `--z3 --ir-ieee`, and expects
+SUCCESSFUL. It reports FAILED on `assert(0*f==0)` with a counterexample naming
+`f = 1.797693e+308` — a finite value, so the program's `!isnan`/`!isinf`
+assumptions hold and the property is true in IEEE: `0 * finite` is exactly `±0`.
+
+**Isolated to one operation.** Seven single-assertion probes under
+`--z3 --ir-ieee`:
+
+| assertion | verdict |
+|---|---|
+| `0*f == 0` | **FAILED** |
+| `1*f == f`, `f*1 == f` | SUCCESSFUL |
+| `f+0 == f`, `f-0 == f`, `0.0+0.0+f == f` | SUCCESSFUL |
+| `100.0+10 == 110` | SUCCESSFUL |
+
+**Mechanism**, from `ir_ieee_convt::apply_ieee754_rne_enclosure`
+(`src/solvers/smt/fp/ir_ieee_conv.cpp:161-215`): the enclosure widens each bound
+by `eps_rel * |x| + eps_abs`, where `eps_abs` is the format's minimum subnormal
+and is added **unconditionally**. An exact result of zero therefore receives the
+enclosure `[-eps_abs, +eps_abs]` rather than `{0}`, and equality with `0` is no
+longer implied. The relative term alone would collapse correctly at zero; the
+absolute term is what prevents it.
+
+Why the multiplicative identity survives and the annihilator does not is
+consistent with this: `1*f` is constant-folded before the encoder sees it,
+while `0*f` cannot be folded soundly — `0 * NaN` and `0 * Inf` are NaN, so the
+simplifier is right to leave it alone, and the enclosure path then runs.
+
+Direction is **incompleteness** (a spurious counterexample, P1), not
+unsoundness: the enclosure is too wide, never too narrow. A fix would special-case
+an exactly-zero enclosure, which needs its own argument that no rounding mode
+produces a non-zero result from an exactly-zero real, and is not attempted here.
+
+**Caveat.** This is measured on macOS only. The enclosure code is
+platform-independent, but the test is CORE and presumably green in CI, so either
+CI does not run it or something upstream differs by platform. Not resolved.
+
 ### M9 (Mode C) — 2026-08-06, the self-verification obligation cannot be met
 
 The entry above ends owing a Mode C pass: the R28 fix adds a branch to `src/**`,
