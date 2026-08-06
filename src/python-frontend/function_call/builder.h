@@ -46,6 +46,12 @@ public:
   bool is_len_call(const symbol_id &function_id) const;
 
   /*
+   * len() of an operand that lowered to a bitvector: length 1 for a single
+   * character, TypeError for a number, which defines no __len__ (#6261).
+   */
+  exprt len_of_bitvector_operand(const nlohmann::json &arg) const;
+
+  /*
    * Checks if a NumPy function is being invoked.
    */
   bool is_numpy_call(const symbol_id &function_id) const;
