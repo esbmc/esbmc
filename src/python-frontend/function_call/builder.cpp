@@ -62,6 +62,14 @@ static bool is_pylist_object_type(const typet &type, const namespacet &ns)
   return try_get_pylist_struct_type(type, ns).has_value();
 }
 
+/// Python types that define no __len__. Named rather than tested inline so the
+/// len() lowering stays one decision point wide.
+static bool is_unsized_python_type(const std::string &python_type)
+{
+  return python_type == "int" || python_type == "float" ||
+         python_type == "bool" || python_type == "complex";
+}
+
 const std::string kGetObjectSize = "__ESBMC_get_object_size";
 const std::string kStrlen = "strlen";
 const std::string kEsbmcAssume = "__ESBMC_assume";
@@ -764,9 +772,7 @@ exprt function_call_builder::build() const
       // int, and refusing on that alone would reject a real str/list.
       const std::string arg_py_type =
         converter_.get_type_handler().get_operand_type(call_["args"][0]);
-      if (
-        arg_py_type == "int" || arg_py_type == "float" ||
-        arg_py_type == "bool" || arg_py_type == "complex")
+      if (is_unsized_python_type(arg_py_type))
         return converter_.get_exception_handler().gen_exception_raise(
           "TypeError", "object of type '" + arg_py_type + "' has no len()");
 
