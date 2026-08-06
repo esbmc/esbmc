@@ -7,8 +7,7 @@ class ModuleLifecycleMixin:
         """Run generic_visit and inject helper nodes requested during traversal."""
         # Per-module scope for the eq-only set and call-origin map.
         saved_eq_only = set(self._eq_only_items_view_targets)
-        self._eq_only_items_view_targets = (
-            self._scan_eq_only_items_view_targets(node.body))
+        self._eq_only_items_view_targets = (self._scan_eq_only_items_view_targets(node.body))
         saved_call_origins = dict(self._assignment_call_origins)
         self._assignment_call_origins.clear()
         try:
