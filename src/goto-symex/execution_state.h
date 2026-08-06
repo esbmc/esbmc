@@ -295,6 +295,12 @@ public:
   /** Like get_dynamic_counter, but with nondet symbols. */
   unsigned int &get_nondet_counter() override;
 
+  /** Zero the dynamic-object counter. Called once per exploration from
+   *  reachability_treet::setup_for_new_explore -- never from this class's
+   *  constructor, which the reachability tree runs per interleaving and where
+   *  a reset would mint colliding object names (R15). */
+  static void reset_dynamic_counter();
+
   /**
    *  Fetch name of current execution guard.
    *  The execution guard being the guard of the interleavings up to this point

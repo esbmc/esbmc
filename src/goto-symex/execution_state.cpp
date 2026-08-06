@@ -410,6 +410,11 @@ void execution_statet::assume(const expr2tc &assumption)
     analyze_read(assumption);
 }
 
+void execution_statet::reset_dynamic_counter()
+{
+  dynamic_counter = 0;
+}
+
 unsigned int &execution_statet::get_dynamic_counter()
 {
   return dynamic_counter;

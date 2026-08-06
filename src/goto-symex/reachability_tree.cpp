@@ -304,6 +304,11 @@ void reachability_treet::setup_for_new_explore()
 {
   std::shared_ptr<symex_targett> targ;
 
+  // Object names must depend on (program, options) alone, not on how many
+  // objects earlier explorations in this process minted (R15).
+  execution_statet::reset_dynamic_counter();
+  dereferencet::reset_object_counter();
+
   exploration_frames.clear();
 
   has_complete_formula = false;
