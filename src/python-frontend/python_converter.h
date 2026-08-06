@@ -675,6 +675,12 @@ private:
     module_locator &locator,
     code_blockt &code);
 
+  /// Binds an `import <mod> as <alias>` alias to the module's file, so the
+  /// alias resolves like the module name does (#6296).
+  void register_import_alias(
+    const nlohmann::json &import_node,
+    const std::string &module_file);
+
   /// Converts every module-level and function-local Import/ImportFrom
   /// statement in the current AST, appending the resulting code to
   /// `all_imports_block`. Shared by both the whole-module conversion path
