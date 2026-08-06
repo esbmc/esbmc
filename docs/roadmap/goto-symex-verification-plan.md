@@ -4213,6 +4213,45 @@ produces a non-zero result from an exactly-zero real, and is not attempted here.
 platform-independent, but the test is CORE and presumably green in CI, so either
 CI does not run it or something upstream differs by platform. Not resolved.
 
+### M9 (corpus sweep closed) — 2026-08-06, 1652 tests, three failures, all explained
+
+Closing the sweep the consolidated pass opened. The first full run of
+`regression/esbmc` on this branch left ten failures with no attribution. Every
+one is now accounted for, and the end state is **3 of 1652**:
+
+| Failure class | Count | Resolution |
+|---|---|---|
+| `__assert_rtn` argument order | 5 | **Fixed** — §15 M9 (side finding) |
+| Stale `out.sarif` in the source tree | 2 | **Not defects** — see below |
+| `--ir-ieee` on `0*f == 0` | 1 | **Recorded, unfixed** — §15 M9 (side finding 2) |
+| Phantom `github_4076_complex_deref{,_fail}` | 2 | **Not tests** — empty untracked directories |
+
+**The two `cwe_dead_code_*` failures were stale artifacts, not defects.** Both
+declare `CHECK_FILE`/`CHECK_JSON` on an `out.sarif` the run produces. Deleting
+the untracked `out.sarif` files sitting in their source directories makes both
+pass. Their origin is not this work — the harness runs ESBMC in a private
+`tmp_dir` and resolves the checks against it, and three consecutive runs after
+the deletion pass and leave **nothing** behind, so the tests do not poison
+themselves. The files predate the sweep, most likely from another session on
+this clone or an older binary.
+
+Worth recording only because the failure is silent and misattributable: a
+leftover output file in the source tree makes a passing test fail with a
+diagnostic (`CHECK_JSON file not found`) that points at the *harness*, not at
+the stale file. Anyone seeing it will suspect the CWD handling, as this entry's
+author did for two iterations.
+
+**The phantom pair is the same class of hazard.**
+`regression/esbmc/github_4076_complex_deref{,_fail}` are empty, untracked
+directories that a stale CMake configure registered as tests; they fail
+unconditionally and contain no `test.desc`. Neither is in git.
+
+What this leaves is one real, recorded, unfixed defect (`--ir-ieee`) and two
+non-tests. The suite is otherwise clean on macOS for the first time in this
+plan's history — which matters beyond tidiness, because every prior milestone's
+"regression scope" line was measured against a corpus with five silently
+mis-attributed failures in it.
+
 ### M9 (Mode C) — 2026-08-06, the self-verification obligation cannot be met
 
 The entry above ends owing a Mode C pass: the R28 fix adds a branch to `src/**`,
