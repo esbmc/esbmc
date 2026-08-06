@@ -2,32 +2,17 @@ add_subdirectory(headers)
 
 # c2goto reads the model sources it compiles out of the same VFS that ESBMC
 # serves them from, so the goto binary records /esbmc-vfs paths rather than this
-# machine's build tree. That needs the real bundled lists, not the blank ones a
-# tool that must not *link* a C library would otherwise get.
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/headers)
-set(c2goto_bundled_lists libc libm libmusl libmuslhdr libcpp headers/libc_hdr)
-if(ENABLE_PYTHON_FRONTEND)
-  list(APPEND c2goto_bundled_lists libpython libpythonhdr)
-endif()
-if(ENABLE_SOLIDITY_FRONTEND)
-  list(APPEND c2goto_bundled_lists libsolidity libsolidityhdr)
-endif()
-foreach(lst ${c2goto_bundled_lists})
-  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/${lst}.h
-             "#include \"${CMAKE_CURRENT_BINARY_DIR}/${lst}.h\"")
-endforeach()
-
+# machine's build tree. Hence the generated bundle lists on its include path: it
+# needs the real ones, though it still links no C library (blank_library).
 add_executable(c2goto c2goto.cpp cprover_blank_library.cpp cprover_libc_sources.cpp)
 target_include_directories(c2goto
     PRIVATE ${Boost_INCLUDE_DIRS}
     PRIVATE ${CMAKE_BINARY_DIR}/src
-    PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr
+    PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
     )
 target_link_libraries(c2goto
   clangcfrontend clangcppfrontend langapi c2gotoheaders
   filesystem ${Boost_LIBRARIES} ${OS_INCLUDE_LIBS})
-set_target_properties(c2goto PROPERTIES
-  PRIVATE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libc.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libm.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/headers/libc_hdr.h")
 
 
 if(C2GOTO_SYSROOT)
@@ -255,9 +240,12 @@ function(mangle_clib output)
          PREFIX esbmc_libmuslhdr_
          MACRO ESBMC_FLAIL
          ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libmuslhdr.h)
+  # RECURSIVE, like the file(GLOB_RECURSE) that hands c2goto the same set: a
+  # source it compiles by VFS path but that no mangle registered fails the build.
   mangle(${CMAKE_CURRENT_BINARY_DIR}/libcpp.c
          ${CMAKE_CURRENT_SOURCE_DIR}/library/cpp
          WILDCARD *.cpp
+         RECURSIVE 1
          SINGLE
          PREFIX esbmc_libcpp_
          MACRO ESBMC_FLAIL
@@ -267,6 +255,7 @@ function(mangle_clib output)
     mangle(${CMAKE_CURRENT_BINARY_DIR}/libpython.c
            ${CMAKE_CURRENT_SOURCE_DIR}/library/python
            WILDCARD *.c
+           RECURSIVE 1
            SINGLE
            PREFIX esbmc_python_
            MACRO ESBMC_FLAIL
@@ -276,6 +265,7 @@ function(mangle_clib output)
     mangle(${CMAKE_CURRENT_BINARY_DIR}/libpythonhdr.c
            ${CMAKE_CURRENT_SOURCE_DIR}/library/python
            WILDCARD *.h
+           RECURSIVE 1
            SINGLE
            PREFIX esbmc_pythonhdr_
            MACRO ESBMC_FLAIL
@@ -292,6 +282,7 @@ function(mangle_clib output)
     mangle(${CMAKE_CURRENT_BINARY_DIR}/libsolidity.c
            ${CMAKE_CURRENT_SOURCE_DIR}/library/solidity
            WILDCARD *.c
+           RECURSIVE 1
            SINGLE
            PREFIX esbmc_solidity_
            MACRO ESBMC_FLAIL
@@ -301,6 +292,7 @@ function(mangle_clib output)
     mangle(${CMAKE_CURRENT_BINARY_DIR}/libsolidityhdr.c
            ${CMAKE_CURRENT_SOURCE_DIR}/library/solidity
            WILDCARD *.h
+           RECURSIVE 1
            SINGLE
            PREFIX esbmc_solidityhdr_
            MACRO ESBMC_FLAIL
