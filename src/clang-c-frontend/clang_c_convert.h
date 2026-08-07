@@ -25,6 +25,7 @@ class RecordDecl;
 class QualType;
 class Type;
 class BuiltinType;
+class FunctionProtoType;
 class Stmt;
 class BinaryOperator;
 class CompoundAssignOperator;
@@ -248,6 +249,10 @@ protected:
   void get_ref_to_struct_type(typet &type);
 
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
+
+  bool get_function_proto_type(
+    const clang::FunctionProtoType &func,
+    typet &new_type);
 
   bool get_bitfield_type(
     const clang::FieldDecl &,
