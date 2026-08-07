@@ -209,6 +209,38 @@ void goto_convertt::emit_assert_fail_noreturn(
   a->location.user_provided(true);
 }
 
+void goto_convertt::do_assert_fail(
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest,
+  const irep_idt &base_name,
+  std::size_t arity,
+  std::size_t expr_arg)
+{
+  if (arguments.size() != arity)
+  {
+    log_error(
+      "`{}' expected to have {} arguments", id2string(base_name), arity);
+    abort();
+  }
+
+  std::string description = "assertion ";
+  get_string_constant(arguments[expr_arg], description);
+
+  if (options.get_bool_option("no-assertions"))
+  {
+    emit_assert_fail_noreturn(function.location(), dest);
+    return;
+  }
+
+  goto_programt::targett t = dest.add_instruction(ASSERT);
+  t->guard = gen_false_expr();
+  t->location = function.location();
+  t->location.user_provided(true);
+  t->location.property("assertion");
+  t->location.comment(description);
+}
+
 void goto_convertt::do_printf(
   const exprt &lhs,
   const exprt &function,
@@ -1353,87 +1385,28 @@ void goto_convertt::do_function_call_symbol(
   }
   else if (base_name == "__assert_rtn" || base_name == "__assert_fail")
   {
-    /* Both take four arguments, but not in the same order: glibc's
-     * __assert_fail(#e, file, line, __func__) leads with the stringified
-     * expression, while Darwin's __assert_rtn(__func__, file, line, #e) ends
-     * with it, as FreeBSD's __assert does below. Reading argument 0 for both
-     * reports every macOS assertion as its enclosing function name. */
-
-    if (arguments.size() != 4)
-    {
-      log_error("`{}' expected to have four arguments", id2string(base_name));
-      abort();
-    }
-
-    const unsigned expression_arg = base_name == "__assert_rtn" ? 3 : 0;
-
-    std::string description = "assertion ";
-    get_string_constant(arguments[expression_arg], description);
-
-    if (!options.get_bool_option("no-assertions"))
-    {
-      goto_programt::targett t = dest.add_instruction(ASSERT);
-      t->guard = gen_false_expr();
-      t->location = function.location();
-      t->location.user_provided(true);
-      t->location.property("assertion");
-      t->location.comment(description);
-    }
-    else
-      emit_assert_fail_noreturn(function.location(), dest);
-    // we ignore any LHS
+    // Both take four arguments, but not in the same order. glibc's
+    // __assert_fail is (#e, file, line, __func__); Darwin's __assert_rtn is
+    // (__func__, file, line, #e) -- the FreeBSD __assert order handled below.
+    // Reading argument 0 for both put the enclosing function's name in every
+    // macOS counterexample where the failing expression belongs.
+    do_assert_fail(
+      function,
+      arguments,
+      dest,
+      base_name,
+      4,
+      base_name == "__assert_rtn" ? 3 : 0);
   }
   else if (config.ansi_c.target.is_freebsd() && base_name == "__assert")
   {
     /* This is FreeBSD, taking 4 arguments: __func__, __FILE__, __LINE__, #e */
-
-    if (arguments.size() != 4)
-    {
-      log_error("`{}' expected to have four arguments", id2string(base_name));
-      abort();
-    }
-
-    std::string description = "assertion ";
-    get_string_constant(arguments[3], description);
-
-    if (!options.get_bool_option("no-assertions"))
-    {
-      goto_programt::targett t = dest.add_instruction(ASSERT);
-      t->guard = gen_false_expr();
-      t->location = function.location();
-      t->location.user_provided(true);
-      t->location.property("assertion");
-      t->location.comment(description);
-    }
-    else
-      emit_assert_fail_noreturn(function.location(), dest);
-    // we ignore any LHS
+    do_assert_fail(function, arguments, dest, base_name, 4, 3);
   }
   else if (base_name == "_wassert")
   {
-    // this is Windows
-
-    if (arguments.size() != 3)
-    {
-      log_error("`{}' expected to have three arguments", id2string(base_name));
-      abort();
-    }
-
-    std::string description = "assertion ";
-    get_string_constant(arguments[0], description);
-
-    if (!options.get_bool_option("no-assertions"))
-    {
-      goto_programt::targett t = dest.add_instruction(ASSERT);
-      t->guard = gen_false_expr();
-      t->location = function.location();
-      t->location.user_provided(true);
-      t->location.property("assertion");
-      t->location.comment(description);
-    }
-    else
-      emit_assert_fail_noreturn(function.location(), dest);
-    // we ignore any LHS
+    // this is Windows: #e, __FILE__, __LINE__
+    do_assert_fail(function, arguments, dest, base_name, 3, 0);
   }
   else if (base_name == "operator new")
   {

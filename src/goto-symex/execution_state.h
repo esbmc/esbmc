@@ -295,6 +295,12 @@ public:
   /** Like get_dynamic_counter, but with nondet symbols. */
   unsigned int &get_nondet_counter() override;
 
+  /** Zero the dynamic-object counter. Called once per exploration from
+   *  reachability_treet::setup_for_new_explore -- never from this class's
+   *  constructor, which the reachability tree runs per interleaving and where
+   *  a reset would mint colliding object names (R15). */
+  static void reset_dynamic_counter();
+
   /**
    *  Fetch name of current execution guard.
    *  The execution guard being the guard of the interleavings up to this point
@@ -461,6 +467,17 @@ public:
     const expr2tc &ptr,
     bool &to_global);
 
+  /**
+   *  Record what a dereference reaches when the pointer it goes through is not
+   *  a bare symbol (R29). No-op on any other expression, and on a target that
+   *  is not shared.
+   */
+  void record_aggregate_held_target(
+    const namespacet &ns,
+    const expr2tc &expr,
+    std::set<expr2tc> &global_list,
+    access_kindt kind);
+
   /** Record `key` as an object accessed by this transition, for MPOR. */
   void record_access_key(
     const expr2tc &key,
@@ -561,9 +578,9 @@ public:
    *  produced code when the monitor is to be ended. */
   void kill_monitor_thread();
 
-  /** Analyze the shared varables in a function call, this is because an argumemt
-   *  may be renamed to constant bool in symex_function_call_code(), while we need
-   *  to get the information for context switch.*/
+  /** Analyze the shared varables in a function call, this is because an
+   * argumemt may be renamed to constant bool in symex_function_call_code(),
+   * while we need to get the information for context switch.*/
   void analyze_args(const expr2tc &expr) override;
 
 public:

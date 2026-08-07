@@ -265,6 +265,11 @@ public:
    */
   bool has_dereference(const expr2tc &expr) const;
 
+  /** Zero the failed-symbol counter. Called once per exploration from
+   *  reachability_treet::setup_for_new_explore, so the equation is a function
+   *  of (program, options) alone (R15). */
+  static void reset_object_counter();
+
 private:
   /** Namespace to perform type lookups against. */
   const namespacet &ns;
