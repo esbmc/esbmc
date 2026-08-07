@@ -53,11 +53,11 @@ rewrite_re_match_attribute_calls = _DEPS.rewrite_re.rewrite_re_match_attribute_c
 threading_lowering = _DEPS.threading_lowering
 
 
-def parse_file(filename: str) -> tuple[ast.AST, Preprocessor]:
+def parse_file(filename: str, is_entry_module: bool = True) -> tuple[ast.AST, Preprocessor]:
     """Open, parse, and run Preprocessor on a Python source file."""
     with open(filename, "r", encoding="utf-8") as src:
         tree = ast.parse(src.read())
-    preprocessor = Preprocessor(filename)
+    preprocessor = Preprocessor(filename, is_entry_module=is_entry_module)
     tree = preprocessor.visit(tree)
     return tree, preprocessor
 

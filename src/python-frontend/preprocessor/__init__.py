@@ -47,6 +47,7 @@ class Preprocessor(
     _YieldToAppend = GeneratorMixin._YieldToAppend
     _YieldReplacer = GeneratorMixin._YieldReplacer
 
-    def __init__(self, module_name: str):
+    def __init__(self, module_name: str, is_entry_module: bool = True):
         super().__init__()
         self._init_preprocessor_state(module_name)
+        self.is_entry_module = is_entry_module

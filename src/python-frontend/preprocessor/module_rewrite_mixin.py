@@ -404,8 +404,27 @@ class ModuleRewriteMixin:
         self.attr_list_element_classes = self._scan_attr_list_element_classes(node)
         self.list_var_element_classes = self._scan_list_var_element_classes(node)
         self.module_dunder_all = self._capture_dunder_all(node)
+        self._value_referenced_names = self._scan_value_referenced_names(node)
         self._scan_sequence_iterators(node)
         self.apply_range_rewrites(node, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
+
+    @staticmethod
+    def _scan_value_referenced_names(module):
+        """Names read as values rather than called directly, e.g. `g = f`.
+
+        Rewrites that reshape a signature at its call sites are only sound for
+        functions whose every reference is a direct call (#6741).
+        """
+        called = {id(n.func) for n in ast.walk(module) if isinstance(n, ast.Call)}
+        referenced = set()
+        for n in ast.walk(module):
+            if id(n) in called:
+                continue
+            if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
+                referenced.add(n.id)
+            elif isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Load):
+                referenced.add(n.attr)
+        return referenced
 
     def _scan_dict_literal_bindings_and_calls(self, node):
         """Collect evidence for parameter-dict element recovery (#5444).

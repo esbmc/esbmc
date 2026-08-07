@@ -18,7 +18,7 @@ def parse_file_canonicalised(filename: str) -> tuple[ast.AST, Preprocessor]:
     """Parse a file and run only the alias-canonicalisation pre-pass."""
     with open(filename, "r", encoding="utf-8") as src:
         tree = ast.parse(src.read())
-    preprocessor = Preprocessor(filename)
+    preprocessor = Preprocessor(filename, is_entry_module=False)
     preprocessor.prepare_module(tree)
     return tree, preprocessor
 

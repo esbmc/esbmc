@@ -16,6 +16,9 @@ class PreprocessorStateMixin:
         self.nondet_expand_counter = 0
         self.helper_functions_added = False
         self.functionKwonlyParams = {}
+        self.functionVarargs = set()
+        self.functionPackedVarargs = {}
+        self._value_referenced_names = set()
         self.listcomp_counter = 0
         self.variable_annotations = {}
         self.function_return_annotations = {}
