@@ -3459,9 +3459,15 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
 {
   // XXX -- printing multidimensional arrays?
 
-  // Fetch the array bounds, if it's huge then assume this is a 1024 element
-  // array. Then fetch all elements and formulate a constant_array.
-  size_t w = array->Sort->getIndexSort()->getWidth();
+  /* Fetch the array bounds, if it's huge then assume this is a 1024 element
+   * array. Then fetch all elements and formulate a constant_array.
+   *
+   * The width comes from the ESBMC type rather than the index sort: under
+   * integer encoding the domain is an Int, and camada's getWidth() rejects
+   * arithmetic sorts outright. (Pre-camada this read the array sort's own
+   * data_width via get_domain_width(), which was set from the same type.) */
+  size_t w =
+    array_domain_width_or_word_size(to_array_type(flatten_array_type(type)));
   if (w > 10)
     w = 10;
 
