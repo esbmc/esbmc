@@ -119,14 +119,31 @@ void andersent::points_to_top(node_id n)
   pts[n].insert(TOP);
 }
 
+const andersent::node_id *andersent::find_node(const expr2tc &e) const
+{
+  if (is_symbol2t(e))
+  {
+    auto it = symbol_to_node.find(to_symbol2t(e).thename);
+    return it == symbol_to_node.end() ? nullptr : &it->second;
+  }
+
+  auto it = expr_to_node.find(e);
+  return it == expr_to_node.end() ? nullptr : &it->second;
+}
+
 andersent::node_id andersent::get_node(const expr2tc &e)
 {
-  auto it = expr_to_node.find(e);
-  if (it != expr_to_node.end())
-    return it->second;
+  if (const node_id *existing = find_node(e))
+    return *existing;
 
-  node_id n = node_to_expr.size();
-  expr_to_node.emplace(e, n);
+  const node_id n = node_to_expr.size();
+  // A formal parameter is interned from the callee's signature at the call
+  // site and from the body's own symbol inside it; keying on the identifier
+  // is what makes those the same node even when the two types differ.
+  if (is_symbol2t(e))
+    symbol_to_node.emplace(to_symbol2t(e).thename, n);
+  else
+    expr_to_node.emplace(e, n);
   node_to_expr.push_back(e);
   ensure_node(n);
   return n;
@@ -308,9 +325,16 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
     }
 
     case sideeffect2t::allockind::nondet:
-      // A nondet value is not an address of anything we can name; it also
-      // cannot alias an existing object, so an empty set stays sound.
-      return fresh_node();
+    {
+      // A nondet *pointer* is an unconstrained bit pattern that symbolic
+      // execution may later constrain to equal an existing object's address,
+      // so it may name anything.  Only a value that cannot carry a pointer at
+      // all names nothing.
+      const node_id t = fresh_node();
+      if (may_carry_pointer(side.type))
+        points_to_top(t);
+      return t;
+    }
 
     default:
       break;
@@ -359,6 +383,19 @@ andersent::node_id andersent::eval_rhs(const expr2tc &rhs, unsigned loc)
   return t;
 }
 
+void andersent::assign_top(const expr2tc &lhs)
+{
+  const expr2tc target = base_object(lhs);
+
+  if (is_dereference2t(target))
+    add_constraint(
+      constraint_kindt::STORE,
+      get_node(base_object(to_dereference2t(target).value)),
+      top_source());
+  else
+    points_to_top(get_node(target));
+}
+
 void andersent::handle_assign(
   const expr2tc &lhs,
   const expr2tc &rhs,
@@ -367,17 +404,26 @@ void andersent::handle_assign(
   if (is_nil_expr(lhs))
     return;
 
-  // A nil source is an unconstrained value, so route it through the node that
-  // already points anywhere rather than dropping the assignment.
+  // A nil source is an unconstrained value, so route the target to TOP rather
+  // than dropping the assignment.
   if (is_nil_expr(rhs))
   {
-    top_source();
-    handle_assign(lhs, top_source_expr(), loc);
+    assign_top(lhs);
     return;
   }
 
-  if (!may_carry_pointer(lhs->type) && !may_carry_pointer(rhs->type))
+  const expr2tc r = strip_casts(rhs);
+
+  // A pointer cast into an integer object (`x = (long)p`) leaves this model:
+  // the integer arithmetic that may follow is not tracked, so whatever is cast
+  // back out of x later may name any object.  Dropping the assignment would
+  // leave x empty, and `q = (void *)x` would then copy that empty set.
+  if (!may_carry_pointer(lhs->type))
+  {
+    if (may_carry_pointer(r->type))
+      assign_top(lhs);
     return;
+  }
 
   // Field- and index-insensitivity means the destination of `s.f = q` and
   // `p->f = q` is decided entirely by the base object.
@@ -393,7 +439,6 @@ void andersent::handle_assign(
   }
 
   const node_id l = get_node(target);
-  const expr2tc r = strip_casts(rhs);
 
   // The two dominant shapes get a constraint directly rather than through a
   // temporary, which keeps the node count close to the variable count.
@@ -424,7 +469,7 @@ void andersent::widen_call(
   unsigned loc)
 {
   if (!is_nil_expr(ret) && may_carry_pointer(ret->type))
-    handle_assign(ret, top_source_expr(), loc);
+    assign_top(ret);
 
   for (const expr2tc &arg : arguments)
     if (!is_nil_expr(arg) && may_carry_pointer(arg->type))
@@ -439,13 +484,28 @@ void andersent::bind_call(
   unsigned loc)
 {
   // One node per formal, shared by every call site (context insensitivity).
+  // get_node keys symbols by identifier, so the node built here from the
+  // signature is the very one the callee's body uses even when the two carry
+  // different spellings of the parameter's type.
   const code_type2t &ftype = to_code_type(callee.type);
   const std::size_t argc = std::min(
     {ftype.arguments.size(), ftype.argument_names.size(), arguments.size()});
+
+  // Arguments no formal can be bound to: a nameless parameter, or one passed
+  // beyond the signature (varargs, mismatched prototype) and read back out
+  // with va_arg.  They reach the callee by a route this frontend cannot see.
+  std::vector<expr2tc> unbound(arguments.begin() + argc, arguments.end());
+
   for (std::size_t i = 0; i < argc; ++i)
   {
     if (!may_carry_pointer(ftype.arguments[i]))
       continue;
+
+    if (ftype.argument_names[i].empty())
+    {
+      unbound.push_back(arguments[i]);
+      continue;
+    }
 
     const node_id formal =
       get_node(symbol2tc(ftype.arguments[i], ftype.argument_names[i]));
@@ -458,6 +518,9 @@ void andersent::bind_call(
       add_constraint(
         constraint_kindt::COPY, formal, eval_rhs(arguments[i], loc));
   }
+
+  if (!unbound.empty())
+    widen_call(expr2tc(), unbound, loc);
 
   if (!is_nil_expr(ret) && may_carry_pointer(ret->type))
     handle_assign(ret, return_symbol(callee_name), loc);
@@ -548,10 +611,34 @@ bool andersent::resolve_indirect_calls(const goto_functionst &goto_functions)
   return changed;
 }
 
+void andersent::handle_other(const expr2tc &code, unsigned loc)
+{
+  // These only read through their operands (compare goto_symext::symex_other),
+  // so they create no points-to facts.
+  if (is_code_expression2t(code) || is_code_free2t(code))
+    return;
+
+  // Inline asm keeps only its source string in IREP2 -- the operands it may
+  // write through are not in the IR at all, so there is nothing to widen per
+  // object and the whole result has to degrade to TOP.  ESBMC's C frontend
+  // lowers asm to a SKIP, so this is reachable only from a goto binary.
+  if (is_code_asm2t(code))
+  {
+    everything_escapes = true;
+    return;
+  }
+
+  // Anything else may write through the pointers it is handed: a delete
+  // running a destructor this walk never sees, or an asprintf() storing a
+  // freshly allocated buffer into its argument.  Same treatment as a call to
+  // a function without a body.
+  std::vector<expr2tc> args;
+  code->foreach_operand([&args](const expr2tc &op) { args.push_back(op); });
+  widen_call(expr2tc(), args, loc);
+}
+
 void andersent::collect_constraints(const goto_functionst &goto_functions)
 {
-  // Known gap: inline asm can write memory through operands this frontend
-  // never sees, so its effects are not modelled at all.
   forall_goto_functions (f_it, goto_functions)
   {
     if (!f_it->second.body_available)
@@ -583,6 +670,10 @@ void andersent::collect_constraints(const goto_functionst &goto_functions)
         handle_function_call(
           to_code_function_call2t(i_it->code), goto_functions, loc);
       }
+      else if (i_it->is_other())
+      {
+        handle_other(i_it->code, loc);
+      }
     }
   }
 }
@@ -606,7 +697,7 @@ void andersent::to_object_descriptors(node_id n, valuest &dest) const
 
   // TOP subsumes everything: report a single unnameable target so consumers
   // (is_object_descriptor2t checks) abstain / havoc conservatively.
-  if (set.count(TOP))
+  if (everything_escapes || set.count(TOP))
   {
     dest.push_back(unknown2tc(pointer_type2()));
     return;
@@ -622,14 +713,14 @@ void andersent::to_object_descriptors(node_id n, valuest &dest) const
 
 void andersent::get_values(locationt, const expr2tc &expr, valuest &dest)
 {
-  auto it = expr_to_node.find(base_object(expr));
-  if (it == expr_to_node.end())
+  const node_id *n = find_node(base_object(expr));
+  if (n == nullptr)
   {
     dest.push_back(unknown2tc(pointer_type2()));
     return;
   }
 
-  to_object_descriptors(it->second, dest);
+  to_object_descriptors(*n, dest);
 }
 
 void andersent::get_reference_set(locationt, const expr2tc &expr, valuest &dest)
@@ -640,8 +731,8 @@ void andersent::get_reference_set(locationt, const expr2tc &expr, valuest &dest)
   if (is_dereference2t(pointer))
     pointer = base_object(to_dereference2t(pointer).value);
 
-  auto it = expr_to_node.find(pointer);
-  if (it == expr_to_node.end())
+  const node_id *n = find_node(pointer);
+  if (n == nullptr)
   {
     // An expression with no node -- a nested dereference such as `(*q)->f`,
     // say -- was never constrained, so nothing is known about it. Returning
@@ -651,5 +742,5 @@ void andersent::get_reference_set(locationt, const expr2tc &expr, valuest &dest)
     return;
   }
 
-  to_object_descriptors(it->second, dest);
+  to_object_descriptors(*n, dest);
 }

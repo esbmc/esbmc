@@ -240,6 +240,84 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "andersen frontend routes a pointer laundered through an integer to TOP",
+  "[andersen][goto]")
+{
+  // Nothing tracks the arithmetic an integer holding an address may undergo,
+  // so the value cast back out of x names any object.  Dropping the store into
+  // x would leave it empty and q would inherit that empty set.
+  std::string src = R"(
+    int a;
+    int main(void)
+    {
+      int *p = &a;
+      unsigned long x = (unsigned long)p;
+      int *q = (int *)x;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"*"});
+  // The laundering must not cost precision on the pointer itself.
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p") == std::set<std::string>{"a"});
+}
+
+TEST_CASE(
+  "andersen frontend widens a nondet pointer to TOP",
+  "[andersen][goto]")
+{
+  // A call to a bodyless function is lowered to a nondet side effect: the
+  // resulting pointer is an unconstrained value symbolic execution may equate
+  // with the address of any object, so an empty set would under-approximate.
+  std::string src = R"(
+    int *ext(void);
+    int main(void)
+    {
+      int *n = ext();
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "n") == std::set<std::string>{"*"});
+}
+
+TEST_CASE(
+  "andersen frontend widens what an OTHER statement writes through",
+  "[andersen][goto]")
+{
+  // The printf family is lowered to an OTHER instruction rather than a call,
+  // so skipping those would claim s still holds the null it was initialised
+  // with -- while asprintf() stores a freshly allocated buffer into it.
+  std::string src = R"(
+    int asprintf(char **, const char *, ...);
+    int main(void)
+    {
+      char *s = 0;
+      asprintf(&s, "%d", 1);
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "s") == std::set<std::string>{"*"});
+}
+
+TEST_CASE(
   "andersen frontend is field- and index-insensitive",
   "[andersen][goto]")
 {

@@ -38,8 +38,22 @@ TEST_CASE("node interning is stable", "[andersen]")
   auto nq = a.get_node(q);
 
   REQUIRE(np != nq);
-  REQUIRE(a.get_node(p) == np); // same expr -> same node
+  REQUIRE(a.get_node(p) == np);             // same expr -> same node
   REQUIRE(a.get_node(make_var("p")) == np); // equal expr -> same node
+}
+
+TEST_CASE("symbols are interned by identifier", "[andersen]")
+{
+  // A formal is interned from the callee's signature at the call site and from
+  // the body's own symbol inside it.  Those two spellings of the type need not
+  // match (a symbol_type against the struct it names, say), and if they picked
+  // different nodes the argument binding would target neither.
+  andersent a;
+
+  auto by_pointer = a.get_node(symbol2tc(pointer_type2(), "p"));
+  auto by_int = a.get_node(symbol2tc(int_type2(), "p"));
+
+  REQUIRE(by_pointer == by_int);
 }
 
 TEST_CASE("address-of then copy", "[andersen][solve]")
@@ -168,9 +182,7 @@ TEST_CASE("query layer yields object descriptors", "[andersen][solve]")
   expr2tc p = make_var("p");
   expr2tc obj_a = make_var("a");
   a.add_constraint(
-    andersent::constraint_kindt::ADDRESS_OF,
-    a.get_node(p),
-    a.get_node(obj_a));
+    andersent::constraint_kindt::ADDRESS_OF, a.get_node(p), a.get_node(obj_a));
 
   a.solve();
 

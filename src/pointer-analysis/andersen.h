@@ -47,12 +47,12 @@
 /// four shapes.  Using `p`, `q` for pointer variables and `&a` for the
 /// address of object `a`:
 ///
-/// | # | Program statement | Constraint     | Meaning                          |
-/// |---|-------------------|----------------|----------------------------------|
-/// | 1 | `p = &a;`         | `pts[p] ⊇ {a}` | base / address-of                |
-/// | 2 | `p = q;`          | `pts[p] ⊇ pts[q]` | copy                          |
-/// | 3 | `p = *q;`         | `∀o∈pts[q]. pts[p] ⊇ pts[o]` | load               |
-/// | 4 | `*p = q;`         | `∀o∈pts[p]. pts[o] ⊇ pts[q]` | store              |
+/// | # | Statement | Constraint                   | Meaning    |
+/// |---|-----------|------------------------------|------------|
+/// | 1 | `p = &a;` | `pts[p] ⊇ {a}`               | address-of |
+/// | 2 | `p = q;`  | `pts[p] ⊇ pts[q]`            | copy       |
+/// | 3 | `p = *q;` | `∀o∈pts[q]. pts[p] ⊇ pts[o]` | load       |
+/// | 4 | `*p = q;` | `∀o∈pts[p]. pts[o] ⊇ pts[q]` | store      |
 ///
 /// Constraints 1 and 2 are *static*: they never change.  Constraints 3 and 4
 /// are *dynamic*: the pairs they relate depend on the points-to sets, which
@@ -82,6 +82,10 @@
 /// The query layer then reports an unnameable (`unknown`) target, which every
 /// consumer already treats as "abstain / be maximally conservative".
 /// Model-less code stays sound.
+///
+/// One statement cannot even be routed per object: inline asm, whose operands
+/// IREP2 does not keep.  It sets \ref andersent::everything_escapes, and every
+/// query then answers TOP.
 class andersent : public value_setst
 {
 public:
@@ -117,6 +121,9 @@ public:
   /// @{
 
   /// Interns \p e as a node, returning a stable id (creates one on first use).
+  /// Symbols are interned by identifier alone: the same variable can reach the
+  /// analysis with different-but-compatible types (a `symbol_type` at one use,
+  /// the followed struct at another), and those must share a node.
   node_id get_node(const expr2tc &e);
 
   /// Registers one constraint.  Cheap; the real work happens in \ref solve.
@@ -193,7 +200,9 @@ protected:
   /// node and duplicates would otherwise accumulate without bound.
   std::vector<std::unordered_set<node_id>> copy_edges;
 
-  /// Node tracking
+  /// Node tracking.  Symbols are keyed by identifier, everything else by the
+  /// expression itself; see \ref get_node.
+  std::unordered_map<irep_idt, node_id, irep_id_hash> symbol_to_node;
   std::unordered_map<expr2tc, node_id, irep2_hash> expr_to_node;
   std::vector<expr2tc> node_to_expr; // reverse lookup
 
@@ -202,6 +211,15 @@ protected:
 
   /// Set once \ref solve has produced a valid fixpoint.
   bool solved = false;
+
+  /// Set when the program contains a statement whose effect on memory is not
+  /// visible in the IR at all (inline asm: IREP2 keeps only its source string,
+  /// not the operands it writes through).  No per-object widening can be sound
+  /// then, so every query answers TOP.
+  bool everything_escapes = false;
+
+  /// The node interned for \p e, or nullptr if it was never seen.
+  const node_id *find_node(const expr2tc &e) const;
 
   /// Grows all node-indexed vectors so \p n is a valid index.
   void ensure_node(node_id n);
@@ -235,6 +253,15 @@ protected:
     const expr2tc &lhs,
     const expr2tc &rhs,
     unsigned location_number);
+
+  /// Records that the object \p lhs designates may hold any address, storing
+  /// through the pointer when \p lhs is a dereference.  The escape hatch for
+  /// an assignment whose source this frontend cannot model.
+  void assign_top(const expr2tc &lhs);
+
+  /// Lowers an OTHER instruction: the ones that only read are dropped, the
+  /// rest may write through any pointer operand.
+  void handle_other(const expr2tc &code, unsigned location_number);
 
   /// Binds arguments to formals and the return value to the LHS.
   void handle_function_call(
