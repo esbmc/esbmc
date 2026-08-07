@@ -632,6 +632,89 @@ static bool coerce_to_common_type(expr2tc &a, expr2tc &b)
   return true;
 }
 
+/// &base[i] - &base[j] = i - j, or nil when the operands are not two constant
+/// subscripts of one array. C23 6.5.6p9 defines pointer subtraction as the
+/// difference of the subscripts, so this is the standard's own answer rather
+/// than an optimisation; a differing base is undefined there and is left
+/// unfolded (#6779). Without this the difference stays a comparison operand
+/// symex cannot decide, and a loop bounded by it never exits.
+static expr2tc
+fold_index_difference(const expr2tc &a, const expr2tc &b, const type2tc &type)
+{
+  if (!is_address_of2t(a) || !is_address_of2t(b))
+    return expr2tc();
+
+  const expr2tc &obj_a = to_address_of2t(a).ptr_obj;
+  const expr2tc &obj_b = to_address_of2t(b).ptr_obj;
+  if (!is_index2t(obj_a) || !is_index2t(obj_b))
+    return expr2tc();
+
+  const index2t &idx_a = to_index2t(obj_a);
+  const index2t &idx_b = to_index2t(obj_b);
+  if (
+    idx_a.source_value != idx_b.source_value ||
+    !is_constant_int2t(idx_a.index) || !is_constant_int2t(idx_b.index))
+    return expr2tc();
+
+  return constant_int2tc(
+    type,
+    to_constant_int2t(idx_a.index).value -
+      to_constant_int2t(idx_b.index).value);
+}
+
+/// (w + x) - (y + z) with one shared addend cancels the common term; nil when
+/// no addend is shared or the surviving pair cannot be rebuilt.
+///
+/// Pointer-arith chains can have a common pointer base with mixed-width integer
+/// offsets, and the surviving sub's result type is the parent sub's type
+/// (ptrdiff for pointer-pointer subtraction, otherwise the arith type) — so the
+/// operands are coerced before the rebuilt sub2tc is handed back.
+static expr2tc
+fold_common_addend(const expr2tc &a, const expr2tc &b, const type2tc &type)
+{
+  if (!is_add2t(a) || !is_add2t(b))
+    return expr2tc();
+
+  auto cancel_sub = [&](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
+    expr2tc lhs = a_in, rhs = b_in;
+    if (!coerce_to_common_type(lhs, rhs))
+      return expr2tc();
+    // The arith_2ops invariant requires the operand widths match the result
+    // type's width when neither side is a pointer. For pointer-pointer
+    // cancellation the result type is ptrdiff but the surviving operands are
+    // integer offsets — only fold when widths match.
+    if (lhs->type->get_width() != type->get_width())
+      return expr2tc();
+    return sub2tc(type, lhs, rhs);
+  };
+
+  const add2t &add_a = to_add2t(a);
+  const add2t &add_b = to_add2t(b);
+  const std::pair<const expr2tc &, const expr2tc &> pairs[] = {
+    {add_a.side_1, add_b.side_1},
+    {add_a.side_1, add_b.side_2},
+    {add_a.side_2, add_b.side_1},
+    {add_a.side_2, add_b.side_2},
+  };
+  // Each shared-addend case keeps the two operands the match did not consume.
+  const std::pair<const expr2tc &, const expr2tc &> survivors[] = {
+    {add_a.side_2, add_b.side_2},
+    {add_a.side_2, add_b.side_1},
+    {add_a.side_1, add_b.side_2},
+    {add_a.side_1, add_b.side_1},
+  };
+
+  for (std::size_t i = 0; i < 4; ++i)
+    if (pairs[i].first == pairs[i].second)
+    {
+      expr2tc folded = cancel_sub(survivors[i].first, survivors[i].second);
+      if (!is_nil_expr(folded))
+        return folded;
+    }
+
+  return expr2tc();
+}
+
 expr2tc sub2t::do_simplify() const
 {
   // x - 0 = x. Mirrors Subtor::simplify but short-circuits before
@@ -650,6 +733,10 @@ expr2tc sub2t::do_simplify() const
   // a pointer-typed zero (i.e. NULL) and corrupt downstream encoding.
   if (side_1 == side_2)
     return gen_zero(type);
+
+  if (expr2tc folded = fold_index_difference(side_1, side_2, type);
+      !is_nil_expr(folded))
+    return folded;
 
   if (is_bv_type(type))
   {
@@ -697,43 +784,9 @@ expr2tc sub2t::do_simplify() const
         return neg2tc(type, add.side_1);
     }
 
-    // (w + x) - (y + z) with one shared addend cancels the common term.
-    // Pointer-arith chains can have a common pointer base with mixed-width
-    // integer offsets, and the surviving sub's result type is the parent
-    // sub's type (ptrdiff for pointer-pointer subtraction, otherwise the
-    // arith type) — coerce the operands so the rebuilt sub2tc is valid.
-    auto cancel_sub = [&](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
-      expr2tc a = a_in, b = b_in;
-      if (!coerce_to_common_type(a, b))
-        return expr2tc();
-      // The arith_2ops invariant requires the operand widths match the
-      // result type's width when neither side is a pointer. For
-      // pointer-pointer cancellation the result type is ptrdiff but the
-      // surviving operands are integer offsets — only fold when widths
-      // match.
-      if (a->type->get_width() != type->get_width())
-        return expr2tc();
-      return sub2tc(type, a, b);
-    };
-
-    if (is_add2t(side_1) && is_add2t(side_2))
-    {
-      const add2t &add1 = to_add2t(side_1);
-      const add2t &add2 = to_add2t(side_2);
-      expr2tc r;
-      if (add1.side_1 == add2.side_1)
-        if (!is_nil_expr(r = cancel_sub(add1.side_2, add2.side_2)))
-          return r;
-      if (add1.side_1 == add2.side_2)
-        if (!is_nil_expr(r = cancel_sub(add1.side_2, add2.side_1)))
-          return r;
-      if (add1.side_2 == add2.side_1)
-        if (!is_nil_expr(r = cancel_sub(add1.side_1, add2.side_2)))
-          return r;
-      if (add1.side_2 == add2.side_2)
-        if (!is_nil_expr(r = cancel_sub(add1.side_1, add2.side_1)))
-          return r;
-    }
+    if (expr2tc folded = fold_common_addend(side_1, side_2, type);
+        !is_nil_expr(folded))
+      return folded;
   }
 
   // x - (-y) -> x + y
