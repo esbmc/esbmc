@@ -1,4 +1,35 @@
-CORE
+KNOWNBUG
 main.i
---no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets --no-align-check --k-step 2 --floatbv --unlimited-k-steps --no-vla-size-check --64  --no-por --context-bound 3 --no-pointer-check --no-bounds-check --unsigned-overflow-check --no-assertions --incremental-bmc 
+--no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets --no-align-check --k-step 2 --floatbv --unlimited-k-steps --no-vla-size-check --64  --no-por --context-bound 3 --no-pointer-check --no-bounds-check --unsigned-overflow-check --no-assertions --incremental-bmc
 ^VERIFICATION FAILED$
+--
+This test's VERIFICATION FAILED was an artefact of a false positive in the
+unsigned shl overflow check: overflow_arith() derived signedness from either
+operand, so the SHA-512 table constants `(N_UL << 32) + M_UL` (main.i:3443+)
+took the signed path and were reported as overflowing for any N >= 2^31, even
+though every result is representable in u64.
+
+With that fixed, symex gets further into the file and hits a separate,
+pre-existing defect:
+
+  terminate called after throwing an instance of 'array_type2t::dyn_sized_array_excp'
+    what():  Sizeof nondeterministically sized array encountered
+
+That crash is independent of the overflow encoding -- it reproduces with
+--unsigned-overflow-check removed entirely. It is fixed separately, by
+routing __builtin_object_size() on a dynamically sized array into the
+"unknown size" answer this function already computes for unidentifiable
+objects (PR #6687).
+
+Fixing it is not sufficient to restore this test, however. With both
+changes in place the run no longer aborts, but it does not terminate
+either: --incremental-bmc --unlimited-k-steps over this file was still
+unwinding after 40 minutes and 10 GB. The false positive had been
+supplying an early exit, and without it there is no evidence this test
+ever reached a verdict on its own merits.
+
+Restoring it to CORE therefore needs a bound that makes it terminate --
+most likely a --k-step ceiling in place of --unlimited-k-steps, chosen so
+the expected VERIFICATION FAILED is actually reachable. That is a
+decision about what this test is meant to check, which is why it is left
+to whoever owns it rather than guessed at here.
