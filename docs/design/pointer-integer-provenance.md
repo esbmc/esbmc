@@ -21,7 +21,11 @@ reports a spurious violation, and so do `regression/esbmc/github_426_2`,
 multiplies an `offsetof`, but `offsetof` expands to `(size_t)&((S *)0)->y` and is
 address-derived like any other address.
 
-This is the noisy direction — a spurious counterexample, not a missed bug.
+Reads take the noisy direction — a spurious counterexample. Writes did not: with
+no target resolved the store landed on the fallback symbol, every object the
+pointer could alias kept its old value, and asserting the write had not happened
+was proved (esbmc/esbmc#6804). `dereference()` now raises `invalid pointer` for a
+write that resolves no target, so the store is reported rather than dropped.
 
 ## Why the obvious fix is unsound
 

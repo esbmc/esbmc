@@ -569,6 +569,12 @@ expr2tc dereferencet::dereference(
   if (!known_exhaustive)
     value = make_failed_symbol(type);
 
+  /* A write needs a real object to land on. When no target resolves, the
+   * fallback symbol absorbs it, the objects the pointer could alias keep their
+   * old values, and asserting the write did not happen is proved (#6804). The
+   * store is unrepresentable here, so say so rather than drop it. */
+  bool wrote_to_object = false;
+
   for (const expr2tc &target : points_to_set)
   {
     expr2tc new_value, pointer_guard;
@@ -591,11 +597,19 @@ expr2tc dereferencet::dereference(
     }
 
     // Chain a big if-then-else case.
+    wrote_to_object = true;
     if (is_nil_expr(value))
       value = new_value;
     else
       value = if2tc(type, pointer_guard, new_value, value);
   }
+
+  /* Same property as the unknown/invalid entries below raise, emitted where
+   * their solver-decided guard is false: the address is recoverable by the SMT
+   * layer but the static value set never named an object, so the store had
+   * nowhere to go. */
+  if (is_write(mode) && !wrote_to_object)
+    dereference_failure("pointer dereference", "invalid pointer", guard);
 
   if (is_internal(mode))
   {
