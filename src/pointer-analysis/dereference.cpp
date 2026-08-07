@@ -416,15 +416,15 @@ expr2tc dereferencet::resolve_nonscalar_if(
 {
   const if2t &ifref = to_if2t(expr);
 
-  auto resolve_arm = [this, &guard, &mode](
-                       const expr2tc &arm, const expr2tc &cond) {
-    guard2tc saved(guard);
-    guard.add(cond);
-    expr2tc copy = arm;
-    expr2tc res = dereference_expr_nonscalar(copy, guard, mode, copy);
-    guard = std::move(saved);
-    return is_nil_expr(res) ? arm : res;
-  };
+  auto resolve_arm =
+    [this, &guard, &mode](const expr2tc &arm, const expr2tc &cond) {
+      guard2tc saved(guard);
+      guard.add(cond);
+      expr2tc copy = arm;
+      expr2tc res = dereference_expr_nonscalar(copy, guard, mode, copy);
+      guard = std::move(saved);
+      return is_nil_expr(res) ? arm : res;
+    };
 
   expr2tc t = resolve_arm(ifref.true_value, ifref.cond);
   expr2tc f = resolve_arm(ifref.false_value, not2tc(ifref.cond));
