@@ -504,6 +504,26 @@ static void warn_undefined_external_symbols(const contextt &context)
       s->location);
 }
 
+// Expand --no-standard-checks into the individual checks it stands for. Must
+// run before goto_convert, because VLA size checks are generated during goto
+// conversion.
+static void
+expand_no_standard_checks(const cmdlinet &cmdline, optionst &options)
+{
+  if (
+    !cmdline.isset("no-standard-checks") &&
+    !options.get_bool_option("no-standard-checks"))
+    return;
+
+  options.set_option("no-pointer-check", true);
+  options.set_option("no-div-by-zero-check", true);
+  options.set_option("no-pointer-relation-check", true);
+  options.set_option("no-unlimited-scanf-check", true);
+  options.set_option("no-vla-size-check", true);
+  options.set_option("no-align-check", true);
+  options.set_option("no-bounds-check", true);
+}
+
 // This method creates a GOTO program by parsing the input program files.
 //
 // \param options - options to be passed to the program parser,
@@ -547,20 +567,7 @@ bool esbmc_parseoptionst::parse_goto_program(
         exit(0);
     }
 
-    // Expand --no-standard-checks into individual options before goto_convert,
-    // because VLA size checks are generated during goto conversion.
-    if (
-      cmdline.isset("no-standard-checks") ||
-      options.get_bool_option("no-standard-checks"))
-    {
-      options.set_option("no-pointer-check", true);
-      options.set_option("no-div-by-zero-check", true);
-      options.set_option("no-pointer-relation-check", true);
-      options.set_option("no-unlimited-scanf-check", true);
-      options.set_option("no-vla-size-check", true);
-      options.set_option("no-align-check", true);
-      options.set_option("no-bounds-check", true);
-    }
+    expand_no_standard_checks(cmdline, options);
 
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);
