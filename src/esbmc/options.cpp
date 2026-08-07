@@ -782,7 +782,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "Check if label is unreachable"},
     {"force-malloc-success", NULL, "Do not check for malloc/new failure"},
     {"force-realloc-success", NULL, "Do not check for realloc failure"},
-    {"malloc-zero-is-null", NULL, "Let malloc(0) return NULL"},
+    {"malloc-zero-is-null", NULL, "Also explore malloc(0) returning NULL"},
     {"max-symbolic-realloc-copy",
      boost::program_options::value<int>()->default_value(128)->value_name("nr"),
      "Set maximum number of elements to copy symbolically in realloc (default "
