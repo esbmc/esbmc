@@ -7,15 +7,60 @@ import copy
 class VarargMixin:
 
     def _scan_module_vararg_defs(self, node):
-        """Mark the variadic defs that live directly in the module body.
+        """Mark the variadic defs a specialization may be copied from.
 
-        Specializations are injected at module level, so only a def at that
-        level can be copied: a nested one would lose the scope it closes over.
+        Specializations are injected at module level, so a def qualifies only
+        when copying it there preserves its meaning. One directly in the module
+        body always does; a nested one does when it reads nothing its enclosing
+        functions bind, since then it closes over no scope it would lose.
         """
         self._vararg_module_defs = {
             id(stmt)
             for stmt in node.body if isinstance(stmt, ast.FunctionDef) and stmt.args.vararg
         }
+        self._vararg_module_defs |= self._scan_hoistable_nested_vararg_defs(node)
+
+    @staticmethod
+    def _scope_bound_names(func_def):
+        """Names `func_def` binds: its parameters, and anything it stores.
+
+        Over-approximate on purpose -- a name counted as bound that is not only
+        costs a hoist, while one missed would silently break a closure.
+        """
+        args = func_def.args
+        names = {arg.arg for arg in args.posonlyargs + args.args + args.kwonlyargs}
+        if args.vararg:
+            names.add(args.vararg.arg)
+        if args.kwarg:
+            names.add(args.kwarg.arg)
+        for inner in ast.walk(func_def):
+            if isinstance(inner, ast.Name) and isinstance(inner.ctx, ast.Store):
+                names.add(inner.id)
+            elif (isinstance(inner, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                  and inner is not func_def):
+                names.add(inner.name)
+        return names
+
+    def _scan_hoistable_nested_vararg_defs(self, module):
+        """Nested variadic defs that read nothing from their enclosing scope."""
+        hoistable = set()
+        for outer in ast.walk(module):
+            if not isinstance(outer, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            enclosing = self._scope_bound_names(outer)
+            for stmt in ast.walk(outer):
+                if stmt is outer or not isinstance(stmt, ast.FunctionDef):
+                    continue
+                if not stmt.args.vararg:
+                    continue
+                reads = {
+                    inner.id
+                    for inner in ast.walk(stmt)
+                    if isinstance(inner, ast.Name) and isinstance(inner.ctx, ast.Load)
+                }
+                if not reads & (enclosing - self._scope_bound_names(stmt)):
+                    hoistable.add(id(stmt))
+        return hoistable
 
     def _record_vararg_function(self, node, qualified_name):
         if node.args.vararg:
@@ -104,7 +149,24 @@ class VarargMixin:
             stmt for stmt in node.body if id(stmt) not in self._vararg_dropped_defs
             or self._name_is_used(survivors + specializations, stmt.name)
         ]
+        self._drop_specialized_nested_defs(node)
         for spec in specializations:
             self.ensure_all_locations(spec)
             ast.fix_missing_locations(spec)
         node.body = specializations + node.body
+
+    def _drop_specialized_nested_defs(self, node):
+        """Drop nested variadic defs whose every call was specialized.
+
+        The module-body pass above cannot reach these. Liveness is judged
+        within the enclosing function alone, which is the whole of a nested
+        def's scope -- judging it module-wide would let an unrelated call to a
+        same-named module-level function keep a dead nested def alive.
+        """
+        for parent in ast.walk(node):
+            if not isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            parent.body = [
+                stmt for stmt in parent.body if id(stmt) not in self._vararg_dropped_defs
+                or self._name_is_used(parent.body, stmt.name)
+            ]
