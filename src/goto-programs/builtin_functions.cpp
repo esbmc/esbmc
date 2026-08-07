@@ -1353,9 +1353,11 @@ void goto_convertt::do_function_call_symbol(
   }
   else if (base_name == "__assert_rtn" || base_name == "__assert_fail")
   {
-    // __assert_fail is Linux
-    // These take four arguments:
-    // "expression", "file.c", line, __func__
+    /* Both take four arguments, but not in the same order: glibc's
+     * __assert_fail(#e, file, line, __func__) leads with the stringified
+     * expression, while Darwin's __assert_rtn(__func__, file, line, #e) ends
+     * with it, as FreeBSD's __assert does below. Reading argument 0 for both
+     * reports every macOS assertion as its enclosing function name. */
 
     if (arguments.size() != 4)
     {
@@ -1363,8 +1365,10 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
+    const unsigned expression_arg = base_name == "__assert_rtn" ? 3 : 0;
+
     std::string description = "assertion ";
-    get_string_constant(arguments[0], description);
+    get_string_constant(arguments[expression_arg], description);
 
     if (!options.get_bool_option("no-assertions"))
     {
