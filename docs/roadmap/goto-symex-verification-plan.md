@@ -623,7 +623,7 @@ two configurations.
 | ID | Relation | Corpus | Detects |
 |---|---|---|---|
 | **H-C1** | verdict(default) == verdict(`--no-slice`) | `regression/esbmc` CORE (1430 of 1574 dirs) | Slicer unsoundness/incompleteness end-to-end. **Run, §15 M5: 1328 agreed, 0 diverged**, 67 inconclusive, 35 skipped |
-| **H-C2** | verdict(default) == verdict(`--no-simplify`) | same, minus tests selecting an approximate arithmetic encoding | Simplifier / constant-propagation semantic drift (P9). **Run, §15 M5: 1174 agreed, 11 diverged** — R16 (10, incompleteness) and R17 (1, false SUCCESSFUL, since **fixed**; the `--no-slice` composition turned out to be a symptom, and its residual is R25). **Re-measured §15 M9 (R16): 1198 agreed, 3 diverged**, 206 inconclusive, 55 skipped, 42 abstract — seven of the M5 entries agree again, and what is left is `github_252` (R16) plus the `github_1257` pair (**R28**). The relation's premise fails for `--ir`/`--ir-ieee`/`--fixedbv`, where the encoding rather than the simplifier decides the verdict, and the oracle now reports those as `abstract` rather than comparing them |
+| **H-C2** | verdict(default) == verdict(`--no-simplify`) | same, minus tests selecting an approximate arithmetic encoding | Simplifier / constant-propagation semantic drift (P9). **Run, §15 M5: 1174 agreed, 11 diverged** — R16 (10, incompleteness) and R17 (1, false SUCCESSFUL, since **fixed**; the `--no-slice` composition turned out to be a symptom, and its residual is R25). **Re-measured §15 M9 (R16): 1198 agreed, 3 diverged**, 206 inconclusive, 55 skipped, 42 abstract — seven of the M5 entries agree again, and what is left is `github_252` (R16) plus the `github_1257` pair (**R28**). The relation's premise fails for `--ir`/`--ir-ieee`/`--fixedbv`, where the encoding rather than the simplifier decides the verdict, and the oracle now reports those as `abstract` rather than comparing them. The inconclusive count is **not** the loaded machine it was first attributed to: it is `--no-simplify` costing two orders of magnitude more on the inputs it strands, so no practical bound recovers them — §15 M9 (H-C2 residue). **Re-measured whole-corpus after #6781 and #6783, §15 M9 (H-C2 re-measured): 1299 agreed, 2 diverged, 120 inconclusive** (37 no-verdict, 83 timeout), 55 skipped, 42 abstract. 101 inputs the relation had never been able to compare now agree and **no new divergence appeared**, so the residue concealed no defect; the 2 are R28's `github_1257` pair, and R16's `github_252` now agrees |
 | **H-C3** | verdict(bitwuzla) == verdict(z3) | same | Encoding assumptions that only one solver tolerates. **Run, §15 M7: 1269 agreed, 0 diverged** |
 | **H-C4** | verdict(default) == verdict(`--no-por`) and == verdict(`--state-hashing`) | `regression/esbmc-unix`, `regression/esbmc` concurrency tests | POR / state-hashing over-pruning (I14, I15). **Run, §15 M6: 258/0 and 255/0 — clean, but the R18 witness is a program the corpus does not contain** |
 | **H-C5** | verdict(default) == verdict(`--no-interval-symex-guard`) | `regression/esbmc`, `regression/k-induction` | Interval-domain guard pruning (the documented hazard at `symex_goto.cpp:57-79`). **Run, §15 M7: 1360 agreed, 0 diverged** |
@@ -692,7 +692,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R3** | **Medium (soundness) — re-characterised, §15 M1** | `make_assignment` holds `valuet &entry` — a reference **into** `current_names` (`std::unordered_map`) — across the virtual call `rename(lhs_symbol, entry.count + 1)`, which reaches `coveredinbees` and performs `current_names[key]`. This is safe *only because* the recomputed key is identical (the symbol is still L1 at that point, as `make_assignment` sets `symbol.rlevel` only *after* the call), so `operator[]` finds rather than inserts. **The invariant is unasserted.** The originally-hypothesised consequence — rehash ⇒ dangling `entry` ⇒ use-after-free — **does not hold**: [unord.req.general]/9 states rehashing "does not invalidate pointers or references to elements", and only erasing an element invalidates references to it, which `coveredinbees` never does. The real consequence of a re-keying callee is a **correctness** one: `coveredinbees` would bump a different entry, `make_assignment` would then publish the caller's *stale* `entry.count`, and two distinct program values would share an SSA name — an I1/I10 violation, silently unsound. | `renaming::level2t::make_assignment`; `::coveredinbees`; comment "This'll update entry beneath our feet"; [unord.req.general]/9 | `unit/goto-symex/renaming.test.cpp` (Tier B, discharged) | Severity downgraded from memory safety to soundness. The invariant still deserves an assertion — promote to `SYMEX_INVARIANT` with R1 (M3). No restructure needed: re-`find`ing after the call would buy nothing the standard does not already give. |
 | **R4** | **Medium (crash → no verdict)** — swept, no witness, §15 M9 (R4) | **Eight unchecked `*ns.lookup(...)` dereferences.** `namespacet::lookup` returns `nullptr` on miss (as `renaming.cpp:15-21` itself demonstrates by checking). A miss ⇒ null deref ⇒ SIGSEGV mid-verification. `phi_function`'s site is the most exposed: it filters only `goto_symex::guard!` and `symex::invalid_object` before looking up an arbitrary merged variable's base name. | `symex_goto.cpp:433`; `symex_function.cpp:159`; `symex_valid_object.cpp:47`; `dynamic_allocation.cpp:66,92,105,118,143` | H-A10 | Add checked lookups with a diagnostic (`log_error` + controlled abort) or prove the precondition per site and record it as a cited comment. |
 | **R5** | **Medium (soundness detector disabled)** — discharged, §15 M4 | `check_for_duplicate_assigns` — the *only* in-tree checker for the core SSA invariant I10 — merely `log_status`es duplicates and then reports "Checked N insns". It never fails, and nothing calls it in a normal run. | `symex_target_equationt::check_for_duplicate_assigns`, `symex_target_equation.cpp` | H-B1 | Turn it into a validator returning a bool; run it under a debug/CI flag over the whole regression corpus. |
-| **R6** | **Medium (unsound pruning, opt-in flag) — mechanism pinned, no witness, §15 M6 (cont.)** | `state_hashing_level2t::make_assignment` keys `current_hashes` by the **L0** original name, acknowledged in-code ("XXX — consider whether to use l1 names instead. Recursion, reentrancy."). Two states that differ only in the L1 activation of a recursive local therefore fingerprint identically ⇒ `hit_hashes` prunes a genuinely different state ⇒ missed interleaving. Severity is bounded by `--state-hashing` being opt-in. | `execution_state.cpp:~1342-1378`; `reachability_treet::hit_hashes`, `reachability_tree.h:352` | H-A8-style model + **H-C4** | Key by the L1 name record (or mix call-stack depth into `generate_hash`). The unproven step is the "equal fingerprints are bisimilar" claim at `reachability_tree.cpp:420`: the fingerprint omits call-stack depth, so two states at one pc with equal L0→value maps but different recursion depths collide while resuming into different continuations. H-C4's state-hashing leg is clean (255/0) and four targeted programs produced no verdict-changing prune, so a witness must make the bug reachable *exclusively* behind the colliding state — that construction is the open task. |
+| **R6** | **Medium (unsound pruning, opt-in flag) — mechanism pinned, no witness, §15 M6 (cont.)** | `state_hashing_level2t::make_assignment` keys `current_hashes` by the **L0** original name, acknowledged in-code ("XXX — consider whether to use l1 names instead. Recursion, reentrancy."). Two states that differ only in the L1 activation of a recursive local therefore fingerprint identically ⇒ `hit_hashes` prunes a genuinely different state ⇒ missed interleaving. Severity is bounded by `--state-hashing` being opt-in. | `execution_state.cpp:~1342-1378`; `reachability_treet::hit_hashes`, `reachability_tree.h:352` | H-A8-style model + **H-C4** | Key by the L1 name record (or mix call-stack depth into `generate_hash`). The unproven step is the "equal fingerprints are bisimilar" claim at `reachability_tree.cpp:420`: the fingerprint omits call-stack depth, so two states at one pc with equal L0→value maps but different recursion depths collide while resuming into different continuations. H-C4's state-hashing leg is clean (255/0) and four targeted programs produced no verdict-changing prune, so a witness must make the bug reachable *exclusively* behind the colliding state. **Witness found and fixed, §15 M9 (R6): recursion is not required.** One function called from two sites stands at one pc with one L0 map and returns to different places, which collides just as well and is far easier to build; `f(); f(); assert(0);` behind a cswitch point is missed under `--state-hashing` and reported without it, on both solvers. Depth would not have separated those two states either — they sit at equal depth — so the remedy this row proposed is insufficient, and **#6785** mixes each frame's `calling_location` instead. |
 | **R7** | **Low–Medium (UB) — refined, §15 M1** | `previous_frame()` computes `*(--(--call_stack.end()))` with no size check. `call_stackt` is a `std::vector<framet>`, so at size 1 this evaluates `--begin()`, forming a pointer before the start of the array — undefined by [expr.add]/4 **whether or not it is dereferenced**, not merely a bad read. The second clause of the original finding ("returns a reference a subsequent `pop_frame` invalidates") does **not** hold: `pop_back` invalidates only the reference to the erased last element, and `previous_frame` returns the second-to-last. The precondition holds today by construction — the sole call site does `new_frame(...)` on the preceding line — but nothing states it in the shipped binary (R1). | `goto_symex_statet::previous_frame`; sole caller `goto_symext::symex_function_call_code`; [expr.add]/4 | `unit/goto-symex/frame_lifecycle.test.cpp` (Tier B, discharged) | Add a release-checked precondition **as part of R1's `SYMEX_INVARIANT` work in M3**, so the macro lands once with its cost measured; index (`call_stack[size() - 2]`) rather than decrementing an iterator. |
 | **R8** | **Medium (documented model gap)** — **re-characterised, §15 M9 (R8): the missed-bug clause is false** | `is_valid_object` returns `false` for **every** non-static, non-dynamic symbol: the stack-scope branch is `#if 0`'d out with "XXX re-enable to be able to check for stack-var-out-of-scope problems". Stack-object validity is therefore not modelled, and `dynamic_allocation.cpp` compensates by *assuming* `invalid_pointer` applies only to dynamic objects ("we never update `__ESBMC_alloc` for stack ptrs"). Net effect on stack-lifetime bugs (use-after-scope) is a **missed-bug** direction. | `goto_symext::is_valid_object`, `symex_valid_object.cpp:85-118`; `dynamic_allocation.cpp:110-116` | H-A10 + a targeted `regression/esbmc` use-after-scope corpus | Quantify with a dedicated corpus before attempting a fix; the fix is a model change, not a patch. |
 | **R9** | **Low–Medium (approximation direction unproven)** — **all three pinned**, §15 M9 (R9) and M9 (R9 cont.) | Three documented "sound over-approximation" claims are unproven: value-set filtering after a pointer havoc (`symex_assign.cpp:554-576`), the non-scalar uninterpreted-function fallback (`symex_function.cpp:418-449`), and the function-pointer target enumeration over an over-approximated value set (`symex_function.cpp:806-839`). Each *argues* the direction in a comment; none was checked. | cited lines; `unit/goto-symex/overapproximation.test.cpp` | H-B6 + H-C1/H-C3 | All three are now Tier-B predicates over the produced equation, each mutation-confirmed: disabling the compatibility filter, and dropping its empty-list guard, fail one case apiece. **Claim 1 is pinned too** — the `pc->inductive_step_instruction` gate is reachable after all, since `goto_k_induction` is a free function a fixture can run over a `goto_factory` program (§15 M9 (R9 cont.)). Its two cases separate three mutants: keeping the sinks, keeping only the sinks, and deleting the `!filtered.empty()` guard, the last of which silently costs a dereference its safety checks. |
@@ -700,6 +700,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R11** | **Confirmed — mechanism corrected, see R18, §15 M6** | MPOR's independence decision consumes `thread_last_reads`/`thread_last_writes`, populated via `get_expr_globals`, which resolves pointer operands through the *current* value set. If a write through a pointer whose value set is incomplete (or whose entry is `unknown`) is missed, the dependency is missed and an interleaving is dropped — **unsound**. `get_expr_globals` also early-returns entirely under `--data-races-check-only`. | `execution_statet::get_expr_globals`, `check_mpor_dependency`; `reachability_treet::ever_written_globals`/`address_taken_globals` | H-A6 (relation) + **H-C4** (end-to-end) | **Answered.** An `unknown` entry does not force a conservative dependency — the `dest` loop skips anything that is not an `object_descriptor2t` over a `symbol2t`, with no fallback. But that is *not* the reachable defect: the witness in R18 shows the missed dependency comes from resolving only **one** pointer level, so a nested dereference is recorded against the intermediate pointer. R11's suspicion was right and its stated mechanism was wrong. Superseded by R18. |
 | **R13** | **Medium (silent under-verification) — confirmed and fixed, §15 M2 (cont.)** | **`--unwindsetname` never matched a loop.** `unwind_func_set` was keyed by `user_name_to_usr(name)`, which appends a `#` terminator (clang's C++ USR spelling), while `loop_id_to_func_index` was keyed by the goto function-map id, which for a C function is `c:@F@f` with no terminator. The `count(unwind_key)` in `get_unwind` therefore always missed and the global `--unwind` silently won, so a user raising the bound for one function got the lower global bound and a verdict covering less than they asked for. A second defect in the same option: the `name:index:bound` field split scanned left-to-right, so the documented USR form (`c:@F@f#:0:11`) split inside the `c:` prefix. Neither was caught because all five `unwindsetname` regression tests ran without a global `--unwind` and so passed vacuously. | `goto_symext::goto_symext`, `symex_assign.cpp:66-120`; `get_unwind`, `symex_goto.cpp:525`; `user_name_to_usr`, `usr_utils.cpp:29` | `unit/goto-symex/unwind.test.cpp` (Tier B, discharged) | Fixed: both sides now key on the name `--show-loops` prints (`usr_to_user_name`), and the field split scans from the right. Three non-vacuous regression tests added; `unwindsetname_03_priority` corrected to the loop number the program actually has. |
 | **R14** | **High (missed bug, default configuration)** — I10 violated on a real input, found by R5's repaired detector, §15 M4; **FIXED** by **#6650** | With `--double-assign-check` made to fail, `regression/esbmc/github_286_3` produces an equation that **defines one SSA name twice**: `…@F@getNumbers2@numbers2?1!0&0#1`, the L2 index 1 of a local array in a function that returns a dangling pointer to it. Two definitions of one name are two constraints `x#1 == e1` and `x#1 == e2` on the same variable; where the right-hand sides disagree the conjunction is unsatisfiable, which silently removes that path from the formula — the missed-bug direction. One input in ~900 swept. Not yet characterised: which two steps emit it, and whether the two right-hand sides can differ. | `symex_target_equationt::check_for_duplicate_assigns` under `--double-assign-check`; `regression/esbmc/double_assign_check_local_array` (CORE since #6650) | H-B1 | **Fixed by #6650.** The scope exit was the emitter, as this entry guessed: `pop_frame` *erased* the local's L2 record rather than retiring it, so the counter restarted and a later write through the returned dangling pointer re-issued the index the declaration had already used. The fix advances the counter on frame exit, leaving reads through the dangling pointer unconstrained. Re-measured 2026-08-03: the pin is CORE and `github_286_3 --double-assign-check` matches its `test.desc`. |
+| **R15** | **Low (reproducibility, latent collision)** — found by H-B2, §15 M4 (H-B2) | **Object numbering leaks across symex runs in one process.** `execution_statet::dynamic_counter` and `dereferencet::invalid_counter` are `static thread_local` and reset nowhere, so a second exploration in the same process names its objects from where the first stopped: the same program under the same options yields `symex_dynamic::dynamic_1_array` on the first run and `dynamic_2_array` on the second. The sibling `nondet_count` is a plain instance member the constructor zeroes, so the asymmetry is unintended rather than a design choice. The equation is therefore not a function of (program, options) alone. No wrong verdict follows — the names only need to be *fresh*, and monotonic counters are fresh — so this is a reproducibility defect, and objective 7's "byte-identical" wording is unachievable as stated. **Latent second-order risk:** `thread_local` means two threads each start at 0, so if symex is ever parallelised (§14.6) two threads would mint *colliding* object names into a shared context. | `execution_state.cpp:21`, `execution_state.h:583`; `dereference.cpp:23,538`, `dereference.h:281`; contrast `nondet_count` reset at `execution_state.cpp:104` | `unit/goto-symex/determinism.test.cpp` (Tier B, pinned) | Reset both counters per exploration — in `setup_for_new_explore`, **not** in the `execution_statet` constructor, which the reachability tree copies per interleaving and where a reset would mint colliding names. **That placement is wrong and the landed fix regresses `--incremental-bmc`, §15 M9 (R15 regression):** `setup_for_new_explore` runs from `bmct::run`, which each k iteration calls afresh while the symbol state persists, so a later iteration re-mints a name an earlier one bound at another type and Bitwuzla aborts on a sort-width mismatch in `mk_eq`. The reset belongs where an *independent* run begins, not where any exploration does. |
 | **R15** | **Low (reproducibility, latent collision)** — found by H-B2, §15 M4 (H-B2); **FIXED**, §15 M9 (R15) | **Object numbering leaks across symex runs in one process.** `execution_statet::dynamic_counter` and `dereferencet::invalid_counter` are `static thread_local` and reset nowhere, so a second exploration in the same process names its objects from where the first stopped: the same program under the same options yields `symex_dynamic::dynamic_1_array` on the first run and `dynamic_2_array` on the second. The sibling `nondet_count` is a plain instance member the constructor zeroes, so the asymmetry is unintended rather than a design choice. The equation is therefore not a function of (program, options) alone. No wrong verdict follows — the names only need to be *fresh*, and monotonic counters are fresh — so this is a reproducibility defect, and objective 7's "byte-identical" wording is unachievable as stated. **Latent second-order risk:** `thread_local` means two threads each start at 0, so if symex is ever parallelised (§14.6) two threads would mint *colliding* object names into a shared context. | `execution_state.cpp:21`, `execution_state.h:583`; `dereference.cpp:23,538`, `dereference.h:281`; contrast `nondet_count` reset at `execution_state.cpp:104` | `unit/goto-symex/determinism.test.cpp` (Tier B, pinned) | **Fixed** exactly as prescribed: `reset_dynamic_counter()` and `reset_object_counter()` are called from `setup_for_new_explore`, not from the `execution_statet` constructor. The predicted `test.desc` churn did not materialise — no `test.desc` in the corpus matches `dynamic_[0-9]+` or `invalid_object[0-9]+`, so nothing pinned the numbering. Objective 7's "byte-identical" wording is now achievable and the determinism harness asserts it strictly. |
 | **R27** | **High (missed bug, default configuration)** — found by M8 triage, §15 M8 (cont. 6); filed as **#6558**, fixed by **#6571**; **renumbered from R23**, which §15 uses for the compound-assignment defect | **A real race is lost when the guarded branch writes its own guard variable back to the falsifying value.** Nine lines: `t1` loops twice over `if (receive) { assert(i < 1); receive = 0; }` while `main` sets `receive = 1` after `pthread_create`. The racy schedule — `i=0` reads 0 and skips, `main` writes 1, `i=1` reads 1 and the assertion fires — is explored and reported when the branch body is empty, writes a *different* variable, or writes `receive = 1`. Only `receive = 0` loses it. **On that schedule the added write never executes before the violation**, since the body is skipped at `i=0` and the assertion fires before reaching the write at `i=1`, so provably-unexecuted code is removing a counterexample. **No flag recovers it:** `--no-por`, `--context-bound 8`, `--state-hashing`, `--no-slice` and `--no-interval-symex-guard` all still report SUCCESSFUL, which rules out POR, the context bound, state hashing, the slicer and the interval-domain guard pruning that was the natural suspect. **Narrowed further, §15 M8 (cont. 7):** the loss needs all three of — `t1` guards on X, `t1` writes X in the guarded body, and `main` writes X *exactly once*. Splitting the guard from the written variable in either direction restores detection, and so does giving `main` a second, redundant `receive = 1`. Since a duplicated identical write cannot change the formula's meaning but does add a scheduling point, the incompleteness is in the **interleaving set**, not the encoding. The GOTO programs of the detected and missed variants are instruction-for-instruction identical apart from the assignment target, so nothing upstream of symex differs. Mechanism still unknown. | discriminator table above; `regression/esbmc-unix/race_guard_self_clear` (CORE since #6571) and `race_guard_other_write` (CORE, different variable, caught today); `regression/esbmc-unix/03_circular_reduce` (pre-existing KNOWNBUG) | M8 triage | **Violability proven, gate hypothesis retracted, §15 M8 (cont. 8–9):** under `--data-races-check` the program reports FAILED **on the assertion itself**, so the schedule is reachable and the claim genuinely violable — the miss is a real incompleteness, not a modelling artefact. The `main_thread_ended` cutoff in `check_if_ileaves_blocked` was proposed as the cause and is **refuted**: keeping `main` alive past its write, with up to four further global writes, still reports SUCCESSFUL. `--data-races-check` both bypasses that gate *and* adds race instrumentation, so it does not isolate either. **Fixed by #6571**, which found three composing defects in the branch-merge path and flipped the pin to CORE. |
 | **R29** | **High (false SUCCESSFUL, default configuration)** — found by the H-A6 shape census, §15 M9 (H-A6); **renumbered from R28** on merging master, which uses that number for the `--no-simplify` truncation defect; this branch's commit titles predate the renumbering | **A pointer held in an aggregate defeats MPOR's access resolution.** `get_expr_globals` gates its pointer-chain resolution on `is_symbol2t(expr)`, so a pointer reached through any aggregate step never enters it: the write is keyed on the *aggregate* while another thread keys on the target, MPOR calls the two transitions independent and prunes the racy interleaving. `*(s.p) = 1` against a concurrent `g = 2` reports **SUCCESSFUL** by default and **FAILED** under `--no-por`, both under Bitwuzla and Z3. Five shapes reproduce it — struct member (`s.p`), arrow (`sp->p`), array element (`pa[0]`), nested struct (`o.in.p`), union member (`u.p`) — and the boundary is exact: copying the pointer to a local first (`int *lp = s.p;`) restores detection, so the gate is syntactic, not a value-set limitation. This is **R18/#6539 generalised**: that fix followed chains of *symbols*, and an aggregate step between the pointer and its name was left outside. | census of 21 access shapes, 16 + 5 boundary probes; `regression/esbmc-unix/mpor_aggregate_ptr_race` (KNOWNBUG) and `..._local` (CORE control) | H-A6 | **Partially fixed**, §15 M9 (R29 fix): a `dereference2t` arm resolves a non-symbol pointer operand through the value set, closing the array-element, arrow and union shapes. The two **bare struct-member** shapes (`*(s.p)`, `*(o.in.p)`) remain, and the cause is in `src/pointer-analysis`, not here: `get_reference_set` returns **0** objects for a `dereference` over a struct `member2t` while returning 1 for the union spelling of the same program, even though the entry `c:@s.p = { <g, 0, 1, signed int> }` is present in the value set. Out of this plan's scope by §14 item 2; `mpor_aggregate_ptr_race` stays KNOWNBUG as the marker. |
@@ -709,8 +710,9 @@ this document** — each is a prioritised target for the cited harness.
 | **R19** | **High (per-property false PASSED, non-default flag pair)** — **confirmed with a minimal reproducer** by H-B8, §15 M7; filed as **#6540** | **With `--multi-property --smt-during-symex`, a violable claim that is not the last property is individually reported as `✓ PASSED`.** Seven lines reproduce it: two non-trivial properties where the violable one comes first. ESBMC prints `✓ PASSED` for the violable claim, `Properties: 2 verified ✓ 2 passed`, and `VERIFICATION SUCCESSFUL`. Swapping the two assertions so the violable one is **last** restores `FAILED`, so the defect is positional. Neither flag alone loses the counterexample — `--multi-property` alone and `--smt-during-symex` alone both report FAILED — making this a flag *composition* defect like R17. This is I13 exactly as H-B8 hypothesised it: the per-claim solve reuses a `runtime_encoded_equationt` whose context stack still carries the preceding claim's state, so a non-final claim is discharged against the wrong formula. Worse than a verdict flip: the per-property report actively asserts the claim holds. | `oracle_flag_parity.py --b=--smt-during-symex` (3 corpus divergences: `github_1408`, `github_1890_1`, `github_2629`, all `--multi-property` tests); reproducer in #6540; **no portable regression pin** — see §15 M7 (CI) | **H-B8** | **Fixed by #6565**, which scoped the per-claim solves on the shared runtime solver — exactly the `push_ctx`/`pop_ctx` pairing this entry named. Re-measured 2026-08-03: both claim orderings now report the violable claim FAILED. |
 | **R22** | **High (false SUCCESSFUL, default configuration)** — **confirmed with a minimal reproducer** by M8 triage, **confirmed and fixed**, §15 M8 (cont. 6) | **A shared write performed by a function's return-value assignment creates no interleaving point.** Six lines reproduce it: one thread runs `x = notify(); x = 2;` (`notify` returns `1`), another asserts `x != 1`. Default reports **SUCCESSFUL** — no schedule can observe the intermediate value, because no context switch is offered between the two writes. Three controls make the boundary exact: writing `x = 1; x = 2;` inline reports FAILED; splitting the call off the shared write (`int v = notify(); x = v; x = 2;`) reports FAILED; and inserting *any* other shared write between them (`x = notify(); g = 5; x = 2;`) reports FAILED. The value therefore reaches the equation — `x = notify();` alone reports FAILED, and an in-thread `assert(x == 1)` after it holds — so what is lost is the *scheduling point*, not the write. Not POR (`--no-por` unchanged), not the context bound (`--context-bound 10` unchanged), and not constant propagation (the split control propagates identically and still catches it). `x = notify()` lowers to a `FUNCTION_CALL` instruction carrying the lhs, so the write is performed by the `RETURN` case's `make_return_assignment` path; `execution_statet::symex_step` calls `analyze_assign(assign)` there **after** `symex_return(thecode)`, whose last statement is `cur_state->guard.make_false()`, and `analyze_assign` early-returns on a false guard. That is the same mistake #6558 fixed at `symex_goto`, and instrumentation confirms the reorder does exactly what the argument predicts — the `RETURN` step goes from `writes=0 cswitch=false` to `writes=1 cswitch=true`. **It is still not sufficient**, and the second half is now identified: `execute_guard` emits `assume(false)` and kills the interleaving whenever a switch is taken away from a thread whose guard is false, which `symex_return` guarantees at a return boundary. That is **#6558's defect at a second boundary** — the `last_transition.branch` arm chains the pre-branch guard for gotos and nothing does so for returns. Both halves must be fixed together; see §15 M8 (cont. 4) and (cont. 5). **Fixed in §15 M8 (cont. 6)**, where the two halves collapse into one change: a return parks its continuation exactly as a branch parks its sibling arm, so `symex_return` now records that parked path through the same hook `symex_goto` uses, and the existing branch arms in `execute_guard` and `preserve_last_paths` cover returns unchanged. Fixing only the first two halves exposed a third — the returning thread was marked `thread_ended` at the boundary — which the same change removes. | reproducer and controls above; `execution_statet::execute_guard`, `execution_state.cpp:712-755`; `execution_statet::symex_step` `RETURN` case, `execution_state.cpp:339-356`; `goto_symext::symex_return`, `symex_function.cpp:1041-1066`; `execution_statet::analyze_assign`, `execution_state.cpp:819-838`; `regression/esbmc-unix/symex_return_value_cswitch` (CORE, flipped from KNOWNBUG by the fix), `..._split` (CORE) and `..._resume` (CORE, added by the fix to pin the thread-survival half) | M8 triage; **H-A6**'s A6.2 completeness obligation | Done. All three pins are CORE and the whole `esbmc-unix` suite is clean. |
 | **R18** | **High (false SUCCESSFUL, default configuration)** — **FIXED**, §15 M6 (fix); filed as **#6539**, fixed by **#6550** | **POR drops a racy interleaving when the write goes through a nested dereference.** `get_expr_globals` resolves *one* pointer level (`get_reference_set` on a single `dereference2tc`), so a write spelled `*(*gpp) = 1` is recorded against the intermediate pointer `gp` rather than its target `g`. A second thread writing `g` directly records `g`, the two keys do not alias, `check_mpor_dependency` returns *independent*, and the interleaving is pruned — **a real race missed in the default configuration, with no diagnostic**. Twelve lines reproduce it: writer does `*(*gpp) = 1`, `main` does `g = 2; seen = g;`, and `assert(seen == 2)` is reachable. Default reports **SUCCESSFUL**; `--no-por` reports FAILED. The mechanism is pinned by a decisive pair: with *both* threads using the nested form the race is found again (matching keys), while writer-nested/main-direct misses it. Splitting the nested access into `int *q = *gpp; *q = 1;` also restores detection, so the key depends on the syntactic nesting depth of the access rather than on the object touched. This is precisely the completeness direction H-A6's A6.2 names — a missed dependency — and it is **not** in the relation but upstream in the key construction feeding it. | `execution_statet::get_expr_globals`, `execution_state.cpp:868-918`; `check_mpor_dependency`, `:1050`; `mpor_set_conflicts`, `:231`; `regression/esbmc-unix/mpor_nested_deref_race` (KNOWNBUG) and `..._nopor` (CORE) | **H-A6**, **H-C4** | **Fixed in #6550** by following the chain and recording every shared object along it. The cost gate the entry called for was run: H-C4 agreement *rose* (258→259 on `--no-por`, 255→257 on `--state-hashing`) at 0 divergences, and the concurrency suite timing was unchanged (24.10 s vs 24.12 s). |
-| **R16** | **Medium (incompleteness under a non-default flag)** — found by H-C2, §15 M5 (H-C2); **re-measured, all but one entry retired**, §15 M9 (R16) | **`--no-simplify` is not verdict-preserving: 10 corpus inputs where the default proves SUCCESSFUL and `--no-simplify` does not.** Nine report a spurious counterexample (`github_1174_{hex,lmod,oct,pass}`, `github_2341_3`, `github_2357_5`, `github_2566_1`, `github_785-2`, `realloc13`) and one returns UNKNOWN (`github_252`, under `--k-induction`). In every case the *default* leg matches the verdict the test's own `test.desc` expects, so the fault is in the `--no-simplify` configuration, not the default. Spot-confirmed on `github_2341_3`: `--no-simplify` reports a violated `assert(temp != NULL)` the default discharges. The noisy direction — P1 — but it means `do_simplify` is load-bearing for *correctness of the encoding*, not merely for formula size, which is not how an "optimisation" flag reads. | `oracle_flag_parity.py --b=--no-simplify` over `regression/esbmc` CORE | **H-C2** | **Re-measured, §15 M9 (R16).** Seven of the nine spurious-counterexample entries agree on a current binary. #6660, #6675 and #6676 all landed in the interval and each removed a modelling decision gated on `do_simplify` — the shape this whole list turned out to share — but the per-test attribution was not re-derived, so treat that as the likely cause rather than a measured one. Two more are not the simplifier's doing at all: `github_2357_5` and `github_2566_1` select `--ir`, and `github_562` (which the original list missed) selects `--fixedbv`; dropping the encoding flag makes both legs agree again in all three, so the oracle now excludes approximate encodings rather than comparing them. What is left of R16 proper is `github_252` — UNKNOWN under `--k-induction`, the sound direction. The re-run also surfaced a divergence pair the original list did not contain, which is **R28**. |
-| **R28** | **Medium (false SUCCESSFUL, non-default flag combination)** — **confirmed with a ten-line reproducer** by H-C2, §15 M9 (R16) | **`--no-simplify` can put a bounded loop back where the default folded it away, and with `--no-unwinding-assertions` the resulting truncation discharges every claim on the path in silence.** `calloc`'s model ends in `memset(res, 0, total_size)`. With a constant `total_size` the default folds that to the byte-wise `gen_value_by_byte` form and no loop survives; under `--no-simplify` it takes `__memset_impl`'s loop, which needs `total_size` iterations. `github_1257-memcleanup` pins `--unwind 1` and passes `--no-unwinding-assertions`, so the truncation becomes an `assume(false)` that cuts every path through `calloc`, and a genuine CWE-401 leak reports **SUCCESSFUL** where the default reports FAILED. Ten lines reproduce it — `p = calloc(100, 8); if (!p) abort(); *p = 5; g = p;` — and the discriminator is exactly `calloc`: the same leak spelled `malloc(800)` is caught under both legs, because no memset is involved. Three controls pin the mechanism rather than the leak logic: raising the bound to `--unwind 801` reports the leak again and names `dynamic_2_array`, the object `calloc`'s non-zero path allocates; leaving unwinding assertions **on** turns the same run into `unwinding assertion loop 3` in `__memset_impl`; and the sibling `github_1257-memsafety`, which differs only by keeping them on, is the same mechanism surfacing honestly as a bound complaint (`SUCCESSFUL` → FAILED, the sound direction). Not a new unsoundness in symex — it is the documented truncated-loop hazard — but the route to it is a flag pair a user would not expect to change loop *structure*, an `--unwind` calibrated against the default program silently under-covers the `--no-simplify` one, and nothing warns. | `oracle_flag_parity.py --b=--no-simplify`; `regression/esbmc/github_1257-memcleanup` and `github_1257-memsafety`; `calloc` in `src/c2goto/library/stdlib.c`; `__memset_impl` at `src/c2goto/library/string.c:304` | **H-C2** | Open. Cheapest honest fix is a diagnostic: an `--unwind` that truncates a loop while `--no-unwinding-assertions` is set should say so, since the two flags together turn every over-bound path into a vacuous proof. Baselined meanwhile — see `baselines/simplify-parity.txt`. |
+| **R16** | **Medium (incompleteness under a non-default flag)** — found by H-C2, §15 M5 (H-C2); **re-measured, all but one entry retired**, §15 M9 (R16) | **`--no-simplify` is not verdict-preserving: 10 corpus inputs where the default proves SUCCESSFUL and `--no-simplify` does not.** Nine report a spurious counterexample (`github_1174_{hex,lmod,oct,pass}`, `github_2341_3`, `github_2357_5`, `github_2566_1`, `github_785-2`, `realloc13`) and one returns UNKNOWN (`github_252`, under `--k-induction`). In every case the *default* leg matches the verdict the test's own `test.desc` expects, so the fault is in the `--no-simplify` configuration, not the default. Spot-confirmed on `github_2341_3`: `--no-simplify` reports a violated `assert(temp != NULL)` the default discharges. The noisy direction — P1 — but it means `do_simplify` is load-bearing for *correctness of the encoding*, not merely for formula size, which is not how an "optimisation" flag reads. | `oracle_flag_parity.py --b=--no-simplify` over `regression/esbmc` CORE | **H-C2** | **Re-measured, §15 M9 (R16).** Seven of the nine spurious-counterexample entries agree on a current binary. #6660, #6675 and #6676 all landed in the interval and each removed a modelling decision gated on `do_simplify` — the shape this whole list turned out to share — but the per-test attribution was not re-derived, so treat that as the likely cause rather than a measured one. Two more are not the simplifier's doing at all: `github_2357_5` and `github_2566_1` select `--ir`, and `github_562` (which the original list missed) selects `--fixedbv`; dropping the encoding flag makes both legs agree again in all three, so the oracle now excludes approximate encodings rather than comparing them. What is left of R16 proper is `github_252` — UNKNOWN under `--k-induction`, the sound direction. **Closed by #6781** (§15 M9 R16 closed): the forward condition could not close because the loop it reasoned about never exited under the flag, so the last R16 entry was a symptom of #6778 rather than a simplifier gap of its own, and its baseline entry is removed. The re-run also surfaced a divergence pair the original list did not contain, which is **R28**. |
+| **R28** | **Medium (false SUCCESSFUL, non-default flag combination)** — **confirmed with a ten-line reproducer** by H-C2, §15 M9 (R16) | **`--no-simplify` can put a bounded loop back where the default folded it away, and with `--no-unwinding-assertions` the resulting truncation discharges every claim on the path in silence.** `calloc`'s model ends in `memset(res, 0, total_size)`. With a constant `total_size` the default folds that to the byte-wise `gen_value_by_byte` form and no loop survives; under `--no-simplify` it takes `__memset_impl`'s loop, which needs `total_size` iterations. `github_1257-memcleanup` pins `--unwind 1` and passes `--no-unwinding-assertions`, so the truncation becomes an `assume(false)` that cuts every path through `calloc`, and a genuine CWE-401 leak reports **SUCCESSFUL** where the default reports FAILED. Ten lines reproduce it — `p = calloc(100, 8); if (!p) abort(); *p = 5; g = p;` — and the discriminator is exactly `calloc`: the same leak spelled `malloc(800)` is caught under both legs, because no memset is involved. Three controls pin the mechanism rather than the leak logic: raising the bound to `--unwind 801` reports the leak again and names `dynamic_2_array`, the object `calloc`'s non-zero path allocates; leaving unwinding assertions **on** turns the same run into `unwinding assertion loop 3` in `__memset_impl`; and the sibling `github_1257-memsafety`, which differs only by keeping them on, is the same mechanism surfacing honestly as a bound complaint (`SUCCESSFUL` → FAILED, the sound direction). Not a new unsoundness in symex — it is the documented truncated-loop hazard — but the route to it is a flag pair a user would not expect to change loop *structure*, an `--unwind` calibrated against the default program silently under-covers the `--no-simplify` one, and nothing warns. **Wider than the flag pair, §15 M9 (H-C2 residue):** the lost constant is what bounds the loop at all, so with *no* `--unwind` the same mechanism does not truncate — it fails to terminate, and that is what H-C2's 206 "inconclusive" results are. Confirmed on `__memcpy_impl` (`string.c:284`) and on two loops outside `string.c` entirely — a test's own `myMemcpy` and `__ESBMC_atexit_handler` (`stdlib.c:38`) — so the rule is any loop whose trip count `do_simplify` folds, not the string models. | `oracle_flag_parity.py --b=--no-simplify`; `regression/esbmc/github_1257-memcleanup` and `github_1257-memsafety`; `calloc` in `src/c2goto/library/stdlib.c`; `__memset_impl` at `src/c2goto/library/string.c:304` | **H-C2** | Filed as **#6778**; the guard-fold gate is fixed by **#6781** (300 CORE tests, measured against an unpatched build: 49 non-terminating -> 18, 238 agreed -> 269, no new divergence). Cheapest honest fix is a diagnostic: an `--unwind` that truncates a loop while `--no-unwinding-assertions` is set should say so, since the two flags together turn every over-bound path into a vacuous proof. That does not address the unbounded form, which needs the trip count to survive `--no-simplify` rather than a warning. Baselined meanwhile — see `baselines/simplify-parity.txt`. |
+| **R30** | **Medium–High (no verdict, default configuration)** — **confirmed with a five-line reproducer**, §15 M9 (R30) | **A loop whose trip count is statically determined but not *syntactically* a constant node never terminates, with no flags set.** `symex_goto` decides a branch by `is_false(new_guard)` (`symex_goto.cpp:23`), a syntactic test that only holds once `do_simplify` has folded the renamed guard to a literal, and nothing else in the default configuration can decide a loop exit: `--smt-symex-guard` asks the solver but is off, and the interval guard prunes only when the guard is provably *true* and never sets `new_guard_false`, by design. So the default configuration terminates exactly on the loops `simplify()` happens to fold. Five lines find one it does not — a pointer difference between two constant offsets into the same object: `int a[5]; int *p=&a[0], *q=&a[4]; unsigned n=q-p; for (unsigned i=0;i<n;i++) s++;` reaches **iteration 867405 in 20 s** and is still unwinding. The value is not in doubt: `assert(n == 4)` on its own proves SUCCESSFUL, the same program with the bound written `4` proves SUCCESSFUL, and adding `--smt-symex-guard` stops the loop at `iteration 4` in 0.004 s. This is R28's mechanism reached without `--no-simplify`, so the flag was never the cause — it only widened the set of guards that fail to fold. Not unsoundness: the tool returns no verdict rather than a wrong one, but a five-line program with a statically known bound hanging under default flags is a completeness defect a user meets as a hang. | `symex_goto.cpp:20-23`; `do_simplify` at `symex_assign.cpp:221`; reproducer above | **H-C2** | Filed as **#6779**, fixed by **#6783** (fold `&base[i] - &base[j]` to `i - j`, per C23 6.5.6p9). Same fix direction as R28's unbounded form: the exit decision should not rest on whether an *optimisation* folded the guard — either fold unconditionally for that decision, or fall back to the solver question `--smt-symex-guard` already implements. |
 | **R17** | **High (false SUCCESSFUL, default configuration)** — found by H-C2, §15 M5 (H-C2); **FIXED**, §15 M5 (R17 root cause) | **An allocation the address space cannot lay out is encoded as a contradiction instead of a failed allocation, so the whole formula goes UNSAT and every assertion is discharged vacuously.** Found as `void *b = malloc(-4); assert(0);` returning **`VERIFICATION SUCCESSFUL`** under `--no-simplify --no-slice`, and first recorded as a flag-*composition* defect. It is not one, and the sign is not the trigger: `malloc(0xFFFFFFFFFFFFFFFCUL)` reproduces it under `--no-slice` alone. `--no-simplify` merely disabled the pre-existing negative-size guard (`do_simplify` is a no-op under it, so the guard never saw a constant) and `--no-slice` merely kept the otherwise-dead allocation in the equation. The real boundary is a layout limit and is exact: `1UL<<63` is fine, every size `>= 2^64 - 16` is vacuous, because `init_pointer_obj` asserts `end == start + size` **and** `end >= start` while `start` is past the NULL object at address 0 and aligned to `max_alignment()` (16). Reached in the corpus via `github_1631_compact`, whose `--compact-trace` sets `no-slice` implicitly (`command_line_options.cpp:410`). **No flag is needed at all**: an underflowing size such as `malloc(len - 4)` with `len < 4` widens to a huge `size_t`, and when the result is *used* the slicer keeps the allocation, so plain `esbmc file.c` goes vacuous. `default_underflow_malloc` pins that. | `smt_memspace.cpp` `init_pointer_obj`; fixed in `symex_mem`, `src/goto-symex/builtin_functions/memory_alloc.cpp`. `regression/esbmc/no_simplify_no_slice_huge_malloc` (KNOWNBUG → **CORE**), `default_underflow_malloc` (CORE, default flags), `no_slice_unrepresentable_malloc` (CORE, positive literal), `..._malloc` (CORE control) | **H-C2** | Fixed: classify the request on an unconditionally simplified copy so `--no-simplify` cannot blind it, and fail any allocation the address space cannot lay out by returning NULL, as real allocators do. Residual **R25** covers the symbolic-size form. |
 | **R23** | **High (false SUCCESSFUL *and* false FAILED, default configuration)** — **confirmed with a two-line reproducer** by M8 triage, §15 M8 (cont. 7); filed as **#6589** | **Compound assignment narrows the right operand to the left operand's type before the operation.** C11 **6.5.16.2p3**: "A compound assignment of the form E1 op= E2 is equivalent to the simple assignment expression E1 = E1 op (E2), except that the lvalue E1 is evaluated only once". ESBMC violates that equivalence for every left operand narrower than `int`. `char b; b += a;` emits `!overflow("+", (signed int)b, (signed int)((signed char)a))` — the right operand cast to `char` — where `b = b + a` correctly emits `!overflow("+", (signed int)b, a)`. Both directions are reachable and both are wrong: with `b = 3, a = INT_MAX`, `b += a` reports **SUCCESSFUL** (the overflow claim is unfalsifiable, a **missed bug**) while `b = b + a` reports FAILED; and with `char b = 100; int a = 256`, `b /= a` reports **FAILED "division by zero"** because the divisor narrows to `(char)256 == 0`, where C gives `100 / 256 == 0` and gcc/UBSan agree. Not bitfield-specific — `char`, `short`, struct members and bitfields all reproduce; the discriminator is *narrower than the promoted type*, not the member/bitfield spelling. `github_162_fail` is where it was found, and its claim is vacuous for exactly this reason — but that entry is a *wrong test* independently of R23, see §15 M8 (cont. 8). **Frontend, not goto-symex**, so it is outside §2.3's scope, but it is a soundness defect in extremely common C. **Fixed, §15 M8 (cont. 8).** | `clang_c_convertert::get_compound_assign_expr`, `clang_c_convert.cpp:4258-4343`, specifically the unconditional `gen_typecast(ns, rhs, lhs.type())`, together with `goto_convertt::remove_assignment`, `goto_sideeffects.cpp:1714-1870`, which took the operation's type from `expr.op0()`. `regression/esbmc/compound_assign_narrow_overflow`, `..._explicit` (control) and `compound_assign_narrow_divzero`, all CORE | M8 triage | Done. The frontend records clang's `getComputationResultType()` on the side effect; `remove_assignment` performs the operation there and converts the result back on assignment. |
 | **R24** | **Medium (spurious counterexample, default configuration)** — **confirmed with a reproducer** by M8 triage, §15 M8 (cont. 10); **FIXED**, §15 M8 (R24) | **`memset` does not constrain a struct's bitfield padding bits, so a type-punned read of the object is partly nondeterministic.** For `struct { int x : 12, y : 8; } s;`, `memset(&s, 0, sizeof s); s.x = -1; s.y = -1;` then reading `*(int *)&s` gives a value whose low 20 bits are correct — `(v & 0xFFFFF) == 0xFFFFF` verifies — but whose 12 padding bits are unconstrained: `(v >> 20) == 0` **fails**. gcc gives `0x000fffff` exactly, so the declared fields are laid out right and only the `memset`'s effect on the bits above them is lost. This is the direction an over-approximation produces (a false alarm, never a missed bug), and it is reachable with **no flags at all**, which is what separates it from the four flag-inadequacy entries triaged alongside it. Explains `github_732-1-1`, whose `sizeof(s) == 4` and `s.y == -1` assertions both hold and only whose type-punned assertion fails. | `regression/esbmc/bitfield_padding_memset`, `..._fields`, `..._fill` and `..._fail`, and `regression/esbmc/github_732-1-1` — all CORE, the first and last flipped from KNOWNBUG by the fix | M8 triage | Fixed: the optimised `memset` charged each member `type_byte_size()` bytes, which over-counts a bitfield, so a 4-byte struct's trailing member was written with zero bytes and kept its old value. `gen_value_by_byte` now declines any struct with a sub-byte member and leaves it to `__memset_impl`, whose byte-wise model gets the padding right. |
@@ -4408,7 +4410,516 @@ caught under both legs, because nothing memsets it.
 42 abstract. The inconclusive count is large and is mostly the
 20 s per-leg timeout under a loaded machine rather than anything about the flag;
 it bounds what this relation currently covers and is the obvious next thing to
-reduce.
+reduce. **That attribution is wrong** — see M9 (H-C2 residue) below, which
+tested it.
+
+### M9 (H-C2 residue) — 2026-08-06, the residue is the flag, not the machine
+
+The entry above closed by naming H-C2's 206 inconclusive results as the next
+thing to reduce, and attributed them to "the 20 s per-leg timeout under a loaded
+machine". Testing that attribution is the whole of this entry, and it does not
+survive.
+
+**The oracle was reporting two unlike things as one number.** `inconclusive`
+counted a leg that reached no verdict together with a leg that ran out of time.
+Reaching no verdict is a property of the *input* — a parse failure or an
+unsupported construct reproduces on any machine — whereas a timeout is a
+property of the *run*. Folded together, a stable exclusion cannot be told from a
+load artefact, which is exactly the question this entry needed to answer, so
+`classify` now splits them and `report` prints both.
+
+**A budgeted serial second pass tells them apart.** The first pass runs
+`--jobs` ESBMC pairs at once, so an input near the bound can lose to load; the
+retry re-runs only the timed-out residue, alone and at a larger bound. Serial
+because removing self-contention is the point, budgeted because the worst case
+is hours, and it prints `settled N of M` so a budget buying nothing is visible
+rather than assumed. On a 40-test prefix at `--jobs 8`, 12 timed out — every one
+of them in the `--no-simplify` leg — and the four the budget reached at 90 s
+serial settled **none**.
+
+**Direct timing says why.** Load average was 20.5 on 14 cores when the sweep was
+started, so the confound was real; it is simply not what produced the residue.
+Timed one leg at a time, `00_memcpy_01` takes 1 s by default and over 400 s
+under `--no-simplify`, `00_endianness_01` 0.6 s and over 240 s, `00_memcpy_02`
+0.2 s and over 240 s. Two orders of magnitude is not a test that a loaded
+machine nudged over a 20 s bound.
+
+**The control settles it.** `--no-slice` over the same 40-test prefix, at the
+same `--jobs 8`, on the same machine in the same session, times out on
+**nothing** — against 12 for `--no-simplify`. Load was not re-measured at that
+point, so "same load" is an assumption rather than a reading; what is measured
+is that a machine supposedly slow enough to strand 12 tests in one leg stranded
+zero in the other, minutes apart. The two prefixes are also not identical
+inputs, since each leg skips the tests whose own flags name it, but they overlap
+almost entirely.
+
+So the residue is a **cost asymmetry in the `--no-simplify` leg**, and giving
+the sweep more time does not reduce it — at 400× the default, a bound that
+covered these inputs would be hours per test.
+
+**And the asymmetry is not the solver.** `00_memcpy_02` reports
+`Symex completed in: 0.000s (31 assignments)` by default; under `--no-simplify`
+it never prints that line at all, stalling before a single VCC is generated. Run
+it with `--unwind 8` and the reason is named: `__memcpy_impl`'s byte-wise loop
+at `src/c2goto/library/string.c:284`, unwinding without end because the folded
+`sizeof(int)` that bounded it is gone. **This is R28's mechanism with the bound
+removed.** R28 pinned the same loss on `calloc`'s `__memset_impl` at
+`string.c:304`, where `--unwind 1 --no-unwinding-assertions` turns the
+truncation into a silent vacuous proof; with no `--unwind` at all the same lost
+constant simply never terminates, and that is what a "timeout" in this leg is.
+
+It is also more general than the libc models. `00_endianness_01` stalls in a
+loop the *test itself* writes (`myMemcpy`, its own `main.c:12`) and
+`00_memory_leak_02` in `__ESBMC_atexit_handler` (`stdlib.c:38`), so the rule is
+not about `string.c`: **any loop whose trip count `do_simplify` folds to a
+constant becomes unbounded once it is switched off.**
+
+**Seven lines reproduce it**, with no libc model and no flag pair:
+
+```c
+#include <assert.h>
+int main() {
+  unsigned n = sizeof(int);
+  unsigned s = 0;
+  for (unsigned i = 0; i < n; i++) s++;
+  assert(s == 4);
+  return 0;
+}
+```
+
+By default this is `Symex completed in: 0.002s (23 assignments)`, SUCCESSFUL,
+and the log shows exactly four `Unwinding loop 3` lines — the true trip count.
+Under `--no-simplify` it reaches **iteration 5064 in 25 s** and is still
+unwinding, so this is divergence rather than slowness: `n` is a constant the
+default folds into the exit condition, and without the fold the guard is never
+decided. That the reproducer needs neither `calloc` nor `--no-unwinding-assertions`
+is the point — R28 was found through a libc model under a flag pair, but neither
+is load-bearing.
+
+**The mechanism, in four lines of source.** `symex_goto` renames the branch
+guard and calls `do_simplify(new_guard)` (`symex_goto.cpp:20`); `do_simplify` is
+`if (!no_simplify) simplify(expr)` (`symex_assign.cpp:221`); and the next
+statement decides the branch with `is_false(new_guard)` (`symex_goto.cpp:23`),
+which is a **syntactic** test for a constant node. So whether symex can see that
+a loop has exited depends on `simplify()` having already folded the renamed
+guard to a literal. Turn the fold off and `i < n` stays a comparison node even
+though both operands are constant-propagated constants, `is_false` never holds,
+and the back-edge is taken forever.
+
+The two escape hatches confirm it rather than mitigate it. `--smt-symex-guard`
+asks the solver the same question (`symex_goto.cpp:30`), and
+`--no-simplify --smt-symex-guard` on the reproducer stops at
+`iteration 4` with `Symex completed in: 0.002s` and SUCCESSFUL — the guard was
+always decidable, only the syntactic check failed. It is off by default. The
+interval guard cannot help by construction: its comment states it prunes only
+when the guard is provably *true* and never sets `new_guard_false`, precisely so
+it cannot force entry into a loop.
+
+**Two corrections, both found by writing the fix.** They matter because each
+makes this entry's account narrower than the defect.
+
+The first is the blast radius. This entry reaches the mechanism through a
+`sizeof`-derived bound and reads as though loops whose bound needs *folding* are
+the population. They are not: baselined against an unpatched binary,
+`for (unsigned i = 0; i < 4; i++)` — a **literal** bound — also fails to
+terminate under `--no-simplify`. Essentially no loop exits under the flag, which
+is a much larger claim than the one made above and is the one the evidence
+supports.
+
+The second is that there are **two independent gates**, not one, and the entry
+above describes only the first. Constant propagation records a value only when
+the right-hand side already *is* a constant —
+`const_value = constant_propagation(rhs) ? rhs : expr2tc()`
+(`goto_symex_state.cpp:367`) — and under `--no-simplify` the rhs is never
+folded, so `unsigned n = sizeof(int);` records nothing at all and no later fold
+can recover it. That is why the `sizeof` reproducer still diverges once the
+guard-fold gate is fixed, while literal and simple-variable bounds terminate.
+Reading the guard fold as the whole mechanism is what made a partial fix look
+like a complete one, and only the unpatched baseline separated them.
+
+That makes the fix direction narrow, and worth stating even though this entry
+does not take it: `--no-simplify` is documented as "Do not simplify any
+expression" (`options.cpp:958`), but the fold at `symex_goto.cpp:20` is not an
+encoding choice — it is how a control-flow decision is made. Conflating the two
+is the defect, and either always folding the guard for the exit decision, or
+having `--no-simplify` imply `--smt-symex-guard`, would remove it. That is the
+account of the 206 — it subsumes them into R28 rather than leaving them as a
+coverage gap, and it is the reason no bound the oracle can afford will reduce
+the count. It also sharpens R16's conclusion from the other side: `do_simplify`
+is load-bearing not merely for formula size but for *termination*.
+
+### M9 (R30) — 2026-08-06, the same mechanism with no flags at all
+
+The entry above ends on a mechanism, and a mechanism invites the obvious
+question. If loop termination rests on `simplify()` having folded the guard, and
+nothing else in the default configuration can decide a loop exit, then the
+default configuration terminates *exactly* on the loops `simplify()` happens to
+fold. That is a property of a fixed rule set, not a guarantee. One loop it does
+not fold would move this from a `--no-simplify` story to a default-configuration
+one, so that is what this entry goes looking for.
+
+**Five candidates, one hit.** A concrete trip count held in an array element, a
+struct field, a `double` narrowed to `unsigned`, and a union member all fold and
+verify in under a second. A pointer difference does not:
+
+```c
+int a[5]; int *p = &a[0], *q = &a[4];
+unsigned n = (unsigned)(q - p);
+for (unsigned i = 0; i < n; i++) s++;
+```
+
+Plain `esbmc` on that reaches **iteration 867405 in 20 s** and is still
+unwinding. Recorded as **R30**.
+
+**Three controls say it is the guard fold and nothing else.** `assert(n == 4)`
+with the loop deleted proves SUCCESSFUL, so the value is fully determined; the
+same program with the bound written as the literal `4` proves SUCCESSFUL while
+still asserting `n == 4`, so the arithmetic is not the obstacle; and
+`--smt-symex-guard` on the unmodified reproducer stops at `iteration 4` in
+0.004 s, so the guard is decidable and only the syntactic test fails. Together
+they isolate the fold rather than the pointer arithmetic, the loop, or the
+solver.
+
+**What this does to R28.** R28 was written as a `--no-simplify` defect, and its
+unbounded form as a consequence of switching the fold off. R30 reaches the same
+non-termination with no flag set, so `--no-simplify` was never the cause — it
+only widens the set of guards that fail to fold, from "what `simplify()` misses"
+to "everything". The honest reading is one defect with two populations, and the
+default-configuration one is the more serious even though it is much rarer.
+
+Worth being exact about severity, because "hangs forever" reads worse than it
+is. R30 produces **no verdict**, not a wrong one; nothing is proved that should
+not be. What a user meets is a five-line program with a statically known bound
+that never returns and never says why — a completeness and usability defect
+rather than a soundness one.
+
+**Filed and part-fixed.** R28 is **#6778**, R30 is **#6779**. **#6781** fixes
+R28's guard-fold gate by deciding the branch on an unconditionally simplified
+copy. Re-measured over 300 CORE tests against an unpatched build under
+comparable load: 238 agreed / 49 non-terminating becomes 269 / 18, with no new
+divergence and the `no-verdict` count unmoved at 13 either way -- the last of
+those is the useful check, since that category is a property of the input and a
+patch that shifted it would be doing something other than advertised. It does not touch the constant-propagation gate above, and by
+construction cannot help R30, whose guard `simplify()` fails to fold even when it
+runs.
+
+**Where R30's fix would go.** The GOTO carries the bound as
+`ASSIGN n=(unsigned int)(q - p)` — a bare `sub2t` over two pointers.
+`sub2t::do_simplify` (`expr_simplifier.cpp:635`) already handles `x - 0`,
+`0 - x`, `x - x` and `(base + X) - X`, but has no case for two `address_of`
+expressions into one object. After constant propagation the operands are `&a[4]`
+and `&a[0]`, so the missing fold is `&base[i] - &base[j]` → `i - j` for constant
+`i`, `j` and a syntactically identical `base`.
+
+That is not an optimisation guess. **C23 6.5.6p9** (N3220): "When two pointers
+are subtracted, both shall point to elements of the same array object, or one
+past the last element of the array object; the result is the difference of the
+subscripts of the two array elements." The fold computes exactly what the
+standard defines the result to *be*, and declining to fold when the bases differ
+is conservative rather than incomplete, since the program is undefined there
+regardless.
+
+### M9 (R16 closed) — 2026-08-06, the last baseline entry was a symptom
+
+Fixing #6778 makes a prediction worth checking rather than assuming: if the
+guard fold is what a `--k-induction` forward condition needs in order to close
+over a bounded loop, then R16's last surviving entry should stop diverging on
+its own. It does. `github_252` reports SUCCESSFUL on both legs with #6781
+applied, and diverges (SUCCESSFUL vs UNKNOWN) on a master build rebuilt for the
+comparison; the guard fix alone is enough, with the pointer fold not involved.
+So R16's residue was never a simplifier gap of its own — it was #6778 seen
+through k-induction. Its baseline entry is removed, the plan's own rule being
+that a fixed defect may not keep its exemption.
+
+**R28's two entries could not be judged by that check** — and the reason was my
+invocation, not the toolchain. Running `github_1257-memcleanup` and
+`github_1257-memsafety` by hand gave `ERROR: PARSING ERROR` on a `memset`
+builtin redeclaration, which this entry first recorded as "they do not parse on
+macOS". They parse fine. Their `test.desc` carries `-D'__builtin_unreachable()'`
+and `generate_run_argument_list` strips the quotes to one argv entry, whereas
+`$(sed -n 3p test.desc)` in a shell word-splits the quotes into the argument and
+produces a malformed `-D`. The full sweep below runs both and gets verdicts from
+each.
+
+That is exactly the hazard Appendix B states about reimplementing `test.desc`
+parsing — "how a sweep ends up reporting divergences that are really invocation
+differences" — reached by hand rather than in a script, which is the one place
+the warning does not look like it applies. A first pass had also read the pair's
+two empty results as *agreeing*, which the `no-verdict`/`timeout` split exists to
+prevent. Two wrong readings of one pair, neither of them about ESBMC.
+
+Taken as its own change rather than a tail-end edit, because the simplifier is
+reached from everywhere and a wrong fold is a soundness bug rather than a missed
+optimisation: **#6783**. The operands turn out to be bare `address_of` after
+constant propagation, so no typecast peeling is involved — which matters here,
+because peeling a cast can change the element size the subscripts are measured
+in, and that is precisely how such a fold goes wrong. The reproducer completes
+in 0.000 s where it previously passed iteration 867405.
+
+Its regression pair asserts `q - p == 4` and `p - q == -4` alongside the loop
+count, not merely that the run terminates: a fold that terminates with the wrong
+difference is the failure mode worth pinning, and a termination-only test would
+pass straight through it. Around 2300 tests were run against the change — unit,
+pointer, cbmc, C++, floats, k-induction, and the core/unix/github slice — and
+each of the seven failures was reproduced on a rebuilt master binary before
+being set aside, since "it fails on master too" is worth nothing unless it is
+checked rather than assumed.
+
+---
+
+### M9 (R6) — 2026-08-06, the witness, and why four attempts missed it
+
+R6 sat at "mechanism pinned, no witness" after four targeted programs failed to
+produce a verdict-changing prune. The reason they failed is in the finding's own
+wording: it describes the collision as *recursive*, "two states that differ only
+in the L1 activation of a recursive local", and a witness built to that
+description has to arrange equal L0 values at two recursion depths — which is
+hard, because the recursion parameter is itself an L0 value that differs.
+
+Reading `generate_hash` rather than the finding gives a weaker condition. The
+fingerprint is the L2 value map (keyed by L0 name) combined with each thread's
+pc, and nothing else. Recursion is one way to reach one pc with one value map
+and two continuations; **one function called from two sites is another**, and it
+needs no recursion at all:
+
+```c
+void f(void) { int x = shared; (void)x; }
+void *worker(void *p) { f(); f(); assert(0); return 0; }
+```
+
+With a second (idle) thread and `--unwind 4`, this reports FAILED by default and
+**SUCCESSFUL under `--state-hashing`** — a reachable assertion silently pruned —
+agreed by Bitwuzla and Z3.
+
+The global read inside `f` is load-bearing and is what the four earlier attempts
+lacked: `check_for_hash_collision` runs at a context-switch point
+(`reachability_tree.cpp:732`), so the colliding state has to *be* one. Without a
+shared access inside the callee the two calls never present the state for
+comparison.
+
+**Two controls.** A single call finds the bug (so `--state-hashing` is not
+broken across the board), and writing `shared = 1` between the two calls also
+finds it (so it is the equality of the visible state that does the damage, not
+the repetition). Together they pin the miss to two occurrences of one state at
+one pc with different continuations.
+
+**The remedy this finding proposed would not have worked.** R6 suggested mixing
+call-stack *depth* into the fingerprint. Implemented first, and the witness still
+passed vacuously: both calls come from `worker`, so both states sit at equal
+depth. What separates them is the return address, so **#6785** mixes each
+frame's `calling_location` instead. Had the recorded remedy been trusted rather
+than tested against a witness, the fix would have shipped without fixing
+anything — which is the argument for finding the witness before the fix, not
+after.
+
+---
+
+### M9 (R15 regression) — 2026-08-06, the fix broke `--incremental-bmc`
+
+R15's fix reset `dynamic_counter` and `dereferencet::object_counter` in
+`setup_for_new_explore`, on the reasoning that object names should depend on
+(program, options) alone rather than on how many objects earlier explorations
+minted. The reasoning holds; the placement does not, and five
+`regression/python` tests turned red on the macOS CI leg because of it.
+
+`setup_for_new_explore` is called from `bmct::run`, and `--incremental-bmc`
+calls that once per k iteration while the symbol state persists across them. So
+iteration k+1 re-mints object names iteration k already bound at a different
+type, the two meet as operands in one formula, and Bitwuzla aborts:
+
+```
+Assertion failed: (a->sort->get_data_width() == b->sort->get_data_width()),
+function mk_eq, file bitwuzla_conv.cpp, line 470
+```
+
+**Three builds settle it**, all DebugOpt, which is what the CI leg uses: the
+branch aborts, master passes all five, and the branch with only R15 reverted
+passes all five. The reset is the cause, not a coincidence of the branch.
+
+**Why it never showed up locally.** A default RelWithDebInfo build carries
+`-DNDEBUG`, so the assertion is compiled out and the mismatched `mk_eq` proceeds
+in silence; the same tests pass. `--z3` does not complain either. This is R1's
+observation arriving from the other direction — an invariant that exists only in
+debug builds is not enforced in the shipped binary, and here that was the
+difference between a red CI leg and a green local run.
+
+**The methodological lesson is about the ownership check, not the bug.** The
+first pass at attributing this compared the branch's `src/python-frontend` and
+`regression/python` against master, found them byte-identical, and concluded the
+branch could not be responsible. The inputs were Python; the defect was in
+symex, which the branch does change. Matching the *language of the failing test*
+against the changed files is not an ownership argument — the only thing that
+settles it is building both revisions and running them, which took one rebuild
+and would have replaced two wrong hypotheses (a 120 s timeout, a Python version
+difference) that each looked plausible and cost more than the experiment would
+have.
+
+**What the fix has to satisfy is now exact.** The two requirements look like
+they conflict at one call site, and they do not, because they differ in what
+they share. `is_base_case_violated` and its siblings build a **fresh `bmct` per
+k iteration but pass the same `context`** by reference
+(`k_induction.cpp:704`), so the objects iteration k bound are still in the
+symbol table when iteration k+1 re-mints their names. R15's determinism harness
+is the opposite: `symex_run::equation` constructs its own `prog`, and therefore
+its own `prog.context`, per instance, so the two runs the test compares share
+nothing.
+
+The rule is therefore **reset when the context is fresh, not when an exploration
+begins** — the context is fresh exactly when the run is independent, which is
+the distinction `setup_for_new_explore` cannot make on its own but the context
+can make for it. Two ways to implement it:
+
+- *Seed rather than reset*: start each counter from the number of such objects
+  the context already holds. A fresh context gives 0, which is what the
+  determinism test needs; a shared one continues monotonically, which is what
+  `--incremental-bmc` needs. Self-keying, no extra state.
+- *Scope the counters to the context*: move them off `static thread_local` so
+  their lifetime is the context's. Cleaner, and larger.
+
+A static pointer to the last-seen context is **not** a third option: a freed
+context can be reallocated at the same address, and the reset would then be
+skipped exactly when it is needed.
+
+**Fixed** with the first shape: `setup_for_new_explore` resets only when the
+context holds no `symex_dynamic::` symbol. All five inputs now match master's
+verdicts, R15's two determinism tests still pass — the harness gives each run
+its own `prog.context`, so the reset still fires for them — and
+`regression/esbmc/incremental_bmc_object_names` pins the k-iteration case
+directly rather than leaving the Python suite to notice.
+
+Two wrong attempts preceded it, both cheap and both caught by running rather
+than reasoning. Probing for `symex_dynamic::dynamic_1_value` never fired,
+because `malloc` mints `dynamic_N_`**`array`** and only the struct path uses
+`_value`; the probe therefore has to be the prefix, not any single name.
+Keeping just the dynamic-counter reset still aborted, which is what established
+that counter as sufficient on its own rather than the pair being jointly
+responsible.
+
+---
+
+### M9 (H-C2 re-measured) — 2026-08-06, the residue was hiding nothing
+
+With #6781 and #6783 both applied, H-C2 was re-run over the whole corpus. The
+question it answers is not "does the relation still hold" but "what was behind
+the timeouts", because a timed-out test is one the oracle **never compared** —
+so every input the fixes rescued is an input this relation had never covered.
+
+| | agreed | diverged | inconclusive | skipped | abstract |
+|---|---|---|---|---|---|
+| §15 M9 (R16), pre-fix | 1198 | 3 | 206 | 55 | 42 |
+| this run, post-fix | **1299** | **2** | **120** (37 no-verdict + 83 timeout) | 55 | 42 |
+
+101 tests moved from uncompared to agreeing, and the inconclusive count fell by
+86. **No new divergence appeared.** The two that remain are the `github_1257`
+pair that R28 already owns and the baseline already carries; `github_252`, R16's
+last entry, now agrees and its baseline line is gone with #6781.
+
+That is the useful result, and it is a negative one: the timeout residue was not
+concealing a defect. H-C2's coverage claim can now be stated as measured rather
+than bounded — the relation holds on 1299 of the 1421 inputs it is entitled to
+compare, and the 120 it still cannot reach split into 37 that reach no verdict
+(a property of those inputs) and 83 that remain over the bound.
+
+Worth noting what a *whole-corpus* run cost to learn this: a little over an
+hour. The 300-test prefix used earlier in M9 predicted the direction correctly
+but would not have settled the question, because the interesting population —
+tests that only became comparable once the fixes landed — is exactly the one a
+prefix under-samples.
+
+---
+
+### M9 (H-C1 re-measured) — 2026-08-06, and what a clean leg does not prove
+
+H-C1 had not been re-run since M5. Re-running it serves two purposes: the
+slicer relation has never been checked against the inputs the fixes rescued
+from timing out, and #6783's pointer fold is **unconditional** — unlike the
+guard fold, it fires in every configuration — so a relation it might disturb is
+worth exercising deliberately.
+
+| | agreed | diverged | inconclusive | skipped | abstract |
+|---|---|---|---|---|---|
+| §15 M5 | 1328 | 0 | 67 | 35 | — |
+| this run | **1364** | **0** | **52** (39 no-verdict + 13 timeout) | 39 | 63 |
+
+Still zero divergences, over 36 more agreeing inputs than M5 saw.
+
+**What that establishes, precisely.** It is evidence the pointer fold does not
+disturb the slicer relation, and no more. It is *not* a check that the fold
+preserves verdicts against master, and it cannot be: both legs of every oracle
+here run the same binary, so a fold that changed a verdict identically in both
+legs would leave every relation intact and every count unmoved. The oracles
+compare configurations, not revisions. What actually pins the fold against
+master is the regression suite — roughly 2300 tests, with each of the seven
+failures reproduced on a rebuilt master binary before being set aside — plus
+the fold's own pair asserting `q - p == 4` and `p - q == -4` rather than only
+that the run terminates.
+
+Worth stating because a clean sweep is easy to over-read: 1364 agreeing inputs
+is a strong statement about `--no-slice` and says nothing whatever about
+whether the default leg is right.
+
+---
+
+### M9 (state-hashing re-measured) — 2026-08-06, #6785 costs nothing measurable
+
+#6785 mixes each frame's calling location into the state fingerprint, which
+makes two states *less* likely to collide. The risk it carries is therefore not
+unsoundness but over-precision: fewer prunes, more states explored, and in
+principle a timeout or a verdict shift somewhere pruning had been load-bearing.
+The state-hashing leg is the relation that would show it.
+
+| | agreed | diverged | no-verdict | timeout |
+|---|---|---|---|---|
+| §15 M6 | 255 | 0 | — | — |
+| this run, with #6785 | **1396** | **0** | 40 | **0** |
+
+No divergence over a sample five times larger than M6's, and **zero timeouts** —
+so the added precision did not strand a single input. The prune that R6's
+witness showed to be unsound is gone without the pruning that remains costing
+anything measurable here.
+
+The same caveat as H-C1 applies and is worth repeating rather than assuming
+read: both legs run one binary, so this establishes that the relation holds
+under the new fingerprint, not that the fingerprint preserves verdicts against
+master. What pins that is the regression suite plus
+`state_hashing_callsite_sound_fail`, which was shown to fail on master and pass
+with the fix — a test that only passes after the change is the one kind that
+cannot be satisfied by doing nothing.
+
+---
+
+### M9 (POR re-measured) — 2026-08-06, and why it does not touch A6.4
+
+A6.4 is the last finding in §9.2 with no verdict: `calculate_mpor_constraints`
+resets the active thread's row to -1, and that reset is the one operation in the
+chain update that *removes* relations, so an unsound prune would live there. The
+POR leg is its empirical counterpart — if the reset dropped a dependency that
+mattered, POR would prune an interleaving `--no-por` explores, and a bug behind
+that interleaving would go missing.
+
+| | agreed | diverged | no-verdict | timeout |
+|---|---|---|---|---|
+| §15 M6 | 258 | 0 | — | — |
+| this run | **1409** | **0** | 39 | 2 |
+
+**This does not discharge A6.4, and M9's own R6 entry is why.** R6 named a real
+unsound prune in `--state-hashing`, and the H-C4 state-hashing leg was clean at
+the time — 255 agreed, 0 diverged — for a structural reason that applies here
+unchanged: a pruning defect only changes a *verdict* when the pruned state is on
+the path to the **only** buggy interleaving. A corpus of concurrent tests
+mostly admits many racy interleavings, an early one of which is found before any
+prune matters. R6's witness had to be built to make the bug reachable
+exclusively behind the collision, and no corpus test happened to have that
+shape.
+
+So 1409 agreeing inputs bounds how often A6.4 bites in practice and says
+nothing about whether the reset is sound. Discharging it still needs either the
+MPOR paper's chain definition — the citation is verified (Kahlon, Wang & Gupta,
+CAV 2009, pp. 398-413, doi:10.1007/978-3-642-02658-4_31) but the text is
+paywalled — or a witness constructed against the reset the way R6's was
+constructed against the fingerprint. The second is now a known-workable
+technique rather than a hope, which is the one thing this session changed about
+A6.4's prospects.
 
 ---
 
