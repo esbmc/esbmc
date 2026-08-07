@@ -22,6 +22,11 @@
 
 thread_local unsigned int dereferencet::invalid_counter = 0;
 
+void dereferencet::reset_object_counter()
+{
+  invalid_counter = 0;
+}
+
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
 // dereference operation.
