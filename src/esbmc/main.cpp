@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <esbmc/esbmc_parseoptions.h>
+#include <esbmc/globals.h>
 #include <langapi/mode.h>
 
 #include <exception>
@@ -90,6 +91,8 @@ static void *run_main(void *arg)
 
 int main(int argc, const char **argv)
 {
+  register_bundled_files();
+
 #ifndef _WIN32
   pthread_attr_t attr;
   if (pthread_attr_init(&attr) == 0)

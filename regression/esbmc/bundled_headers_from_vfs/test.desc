@@ -1,0 +1,6 @@
+CORE
+main.c
+--verbosity clang:8
+^clang invocation:.*'-isystem' '([A-Za-z]:)?/esbmc-vfs/libc/headers'
+^clang invocation:.*'-resource-dir' '([A-Za-z]:)?/esbmc-vfs/clang'
+^VERIFICATION SUCCESSFUL$
