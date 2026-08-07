@@ -245,7 +245,8 @@ void execution_statet::symex_step(reachability_treet &art)
 
   merge_gotos();
 
-  // If current state guard is false, it shouldn't perform further context switch.
+  // If current state guard is false, it shouldn't perform further context
+  // switch.
   if (
     !state.guard.is_false() || !is_cur_state_guard_false(state.guard.as_expr()))
     interleaving_unviable = false;
@@ -301,7 +302,8 @@ void execution_statet::symex_step(reachability_treet &art)
       // whether we are not checking for memory leaks.
       // We should end the main thread to avoid exploring further interleavings
       // TODO: once we support at_exit, we should check this code
-      // TODO: we should support verifying memory leaks in multi-threaded C programs.
+      // TODO: we should support verifying memory leaks in multi-threaded C
+      // programs.
       //
       // Returning from main is a call to exit(): the process terminates and
       // every other thread is torn down (C11 5.1.2.2.3), so a thread still
@@ -408,6 +410,11 @@ void execution_statet::assume(const expr2tc &assumption)
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(assumption);
+}
+
+void execution_statet::reset_dynamic_counter()
+{
+  dynamic_counter = 0;
 }
 
 unsigned int &execution_statet::get_dynamic_counter()
@@ -1021,6 +1028,36 @@ void execution_statet::record_access_key(
   }
 }
 
+/* A dereference through a pointer that is not spelled as a bare symbol -- held
+ * in a struct member, array element or union -- never reaches the symbol
+ * resolution in get_expr_globals, which is gated on `is_symbol2t`. Its operand
+ * walk would then record the *aggregate*, so a thread reaching the same target
+ * directly keys on something else and MPOR calls the two transitions
+ * independent (R29, the aggregate-held counterpart of #6539). Record the target
+ * as well; the walk still runs, and recording both keys only makes MPOR more
+ * conservative. */
+void execution_statet::record_aggregate_held_target(
+  const namespacet &ns,
+  const expr2tc &expr,
+  std::set<expr2tc> &globals_list,
+  access_kindt kind)
+{
+  if (!is_dereference2t(expr))
+    return;
+
+  const expr2tc &ptr = to_dereference2t(expr).value;
+  if (is_symbol2t(ptr) || !is_pointer_type(ptr->type))
+    return;
+
+  bool to_global = false;
+  expr2tc target = resolve_pointer_target(ns, ptr, to_global);
+  if (is_nil_expr(target) || !to_global)
+    return;
+
+  cur_state->top().level1.rename(target);
+  record_access_key(target, globals_list, kind);
+}
+
 void execution_statet::get_expr_globals(
   const namespacet &ns,
   const expr2tc &expr,
@@ -1125,6 +1162,8 @@ void execution_statet::get_expr_globals(
     }
     return;
   }
+
+  record_aggregate_held_target(ns, expr, globals_list, kind);
 
   /* A direct `m[i]` on a lock array: record the element. Falling through to
    * the operand walk below would reach the bare array symbol and record the

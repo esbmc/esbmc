@@ -12,12 +12,13 @@
  The run fixture lives in symex_run.h: each equation refers to its own context
  by reference, so comparing two runs means keeping two bundles alive.
 
- The property holds *modulo object numbering*, and not strictly: two counters
- that name symex objects are `static thread_local` and never reset, so a second
- run in the same process numbers its objects from where the first stopped
- (finding R15). The cases below therefore split — strict equality where no such
- object is created, equality after canonicalising the numbering where one is,
- and one case pinning the leak itself so it cannot widen unnoticed.
+ The property holds strictly. It did not always: two counters naming symex
+ objects were `static thread_local` and reset nowhere, so a second run in the
+ same process numbered its objects from where the first stopped (R15, fixed by
+ resetting both in `setup_for_new_explore`). The canonicalising comparator is
+ kept because it localises a failure — a diff that survives normalisation is a
+ different defect from one that does not — but the heap case now asserts strict
+ equality, which is what R15's fix bought.
 
  \*******************************************************************/
 
@@ -215,16 +216,42 @@ int main(void)
 )");
 }
 
-TEST_CASE("object numbering leaks across runs (R15)", "[symex][determinism]")
+TEST_CASE(
+  "two runs minting an invalid_object agree byte for byte (R15)",
+  "[symex][determinism]")
 {
-  // Pins the leak the two cases above normalise around:
-  // execution_statet::dynamic_counter (execution_state.h) and
-  // dereferencet::invalid_counter (dereference.h) are `static thread_local` and
-  // reset nowhere — unlike the sibling nondet_count, a plain member the
-  // constructor zeroes. The equation is therefore not a function of (program,
-  // options) alone: it also depends on how many objects earlier runs in this
-  // process created. Delete this case when the counters are reset per
-  // exploration; the canonical-equality cases above are the durable property.
+  // The heap case below pins `dynamic_counter` only; `invalid_counter` is a
+  // separate counter with a separate reset, and nothing here mints a
+  // `symex::invalid_object` unless a dereference cannot be resolved. An
+  // external function's result is such a pointer.
+  const std::string src = R"(
+int *ext(void);
+int nondet_int(void);
+int main(void)
+{
+  int *p = ext();
+  *p = nondet_int();
+  return *p;
+}
+)";
+
+  const std::vector<step_crc> first = crcs(symex_run::equation(src).get());
+  const std::vector<step_crc> second = crcs(symex_run::equation(src).get());
+
+  REQUIRE(first.size() == second.size());
+  REQUIRE(first == second);
+}
+
+TEST_CASE(
+  "two runs of a heap program agree byte for byte (R15)",
+  "[symex][determinism]")
+{
+  // The strict form of the two cases above, and the one that would fail if
+  // R15 came back: `dynamic_counter` and `invalid_counter` are reset per
+  // exploration by `setup_for_new_explore`, so a second run in this process
+  // numbers its objects from zero again and no canonicalisation is needed.
+  // This case previously asserted the opposite -- it pinned the leak -- so a
+  // regression flips it rather than merely weakening it.
   const std::string src = R"(
 int nondet_int(void);
 void *malloc(unsigned long);
@@ -242,5 +269,5 @@ int main(void)
   const std::vector<step_crc> second = crcs(symex_run::equation(src).get());
 
   REQUIRE(first.size() == second.size());
-  REQUIRE(first != second);
+  REQUIRE(first == second);
 }
