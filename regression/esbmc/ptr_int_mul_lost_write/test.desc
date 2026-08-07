@@ -1,0 +1,5 @@
+KNOWNBUG
+main.c
+
+^VERIFICATION FAILED$
+^.*assertion s.x == 42$

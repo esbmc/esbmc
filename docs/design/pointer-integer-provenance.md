@@ -21,9 +21,55 @@ reports a spurious violation, and so do `regression/esbmc/github_426_2`,
 multiplies an `offsetof`, but `offsetof` expands to `(size_t)&((S *)0)->y` and is
 address-derived like any other address.
 
-This is the noisy direction — a spurious counterexample, not a missed bug.
+## The same gap also proves false assertions
 
-## Why the obvious fix is unsound
+An earlier revision of this document called the spurious counterexample "the
+noisy direction — a spurious counterexample, not a missed bug." **That was
+wrong** (esbmc/esbmc#6804). The write that goes missing from `s` is not reported
+anywhere, so asserting that it *did not* happen is proved:
+
+```c
+uintptr_t u = (uintptr_t)&s;
+u *= 2;
+u -= (uintptr_t)&s;   /* u == (uintptr_t)&s */
+int *p = (int *)u;
+*p = 3;               /* really writes s.x */
+assert(s.x == 42);    /* false in C; ESBMC reports SUCCESSFUL */
+```
+
+`VERIFICATION SUCCESSFUL` under both Bitwuzla and Z3, while the same program
+compiled with gcc aborts on the assertion at `-O0` and `-O2`. The additive
+round trip (`u += 8; u -= 8`) reports `FAILED` on the identical assertion, so
+the verdict turns on which operator was used, not on the program's semantics.
+
+The mechanism is that a top value set silently swallows the write:
+
+1. `get_value_set_rec` records `unknown` (`value_set.cpp:776-784`).
+2. `dereference()` sets `known_exhaustive = false` and builds a fallback
+   `make_failed_symbol(type)` (`dereference.cpp:564-570`).
+3. The `unknown` entry reaches `deref_invalid_ptr` and returns nil, so it
+   contributes no real target (`dereference.cpp:793-797`, `579-580`).
+4. In write mode the resulting lvalue is therefore the failed symbol. The write
+   lands on a fresh unconstrained symbol and no real object is havoc'd.
+
+The `invalid pointer` property is not a net here. It is guarded by a
+solver-decided `invalid_pointer(deref_expr)` (`dereference.cpp:951`, `968-977`),
+which is false exactly when the address *is* recoverable — the case where the
+lost write matters. It fires only when the pointer is genuinely wild.
+
+This is not specific to multiplication. A plain nondet integer cast to a pointer
+and constrained to alias an object loses the write the same way; there it
+happens to be masked by the alignment check, and `--no-pointer-check` exposes the
+same false proof. Multiplication is simply the case where the recovered address
+is too well-formed for any co-firing pointer check to mask it.
+
+Note that the solver layer is not at fault. `convert_typecast_to_ptr`
+(`smt_casts.cpp:435-509`) already resolves an integer to its object by
+address-range comparison against `__ESBMC_ptr_obj_start_N`/`_end_N`, and the
+counterexample for `github_426_3` shows it recovering `p == &s` exactly. The
+static value-set layer discards that before the solver is consulted.
+
+## Why the obvious value-set fix is unsound
 
 The tempting one-line change is to treat an operand whose value set contains
 nothing but `unknown` as the integer side of the arithmetic, so the subtraction
@@ -49,26 +95,35 @@ if ((uintptr_t)p == (uintptr_t)&b[0]) {
 The branch is reachable, ESBMC's own model puts `p` at `&b[0]`, the write
 executes — and the assertion is proved. The surviving bounds and alignment checks
 apply to the fabricated object `a`, not to wherever `p` actually points, so they
-catch nothing here. Trading a spurious counterexample for a false proof is the
-wrong direction for a verifier.
+catch nothing here.
 
 `regression/esbmc/ptr_int_mul_unknown_alias` and `ptr_int_mul_unknown_wild` pin
-both witnesses.
+both witnesses. Both use `nondet_ulong()`, so `p` can be wild and the
+`invalid pointer` property fires; that is why they stay green while the lost
+write described above sits underneath them untested.
+`regression/esbmc/ptr_int_mul_lost_write` pins the missed-bug direction.
 
 ## What a real fix needs
 
-Either of:
+Recovering provenance in the value set — whether as a linear form over object
+bases, or as a speculative recovery discharged by an address-range obligation at
+the dereference — addresses only the multiplicative case. Step 4 above mishandles
+a top value set whatever produced it, so neither closes the hole.
 
-- **Provenance as a linear form.** Represent an address-derived value as a
-  combination of object bases with coefficients, so `2*&s - &s` reduces to
-  `1*&s` and recovers offset 0 exactly. This is a model extension, not a local
-  change: every consumer of `object_mapt` would have to understand coefficients.
+The fix that does is to stop discarding the case split. When
+`known_exhaustive` is false, `dereference()` should build the same
+`same_object(p, &obj)`-guarded chain it already builds for value-set entries, but
+over the address-space objects, keeping the failed symbol only as the final
+`else`. That recovers `s` for the round trip above, sends the write in
+`ptr_int_mul_unknown_alias` to `b` where it belongs, and still falls through to
+`invalid pointer` for `ptr_int_mul_unknown_wild`, which names no object at all.
+It needs no `mul2t` case, no coefficients in `object_mapt`, and no new proof
+obligation: widening a points-to set can only add cases to the split, never
+delete a property.
 
-- **An address-range obligation at the dereference.** Recover the object as
-  above, but make the recovery a proof obligation rather than an assumption:
-  claim `(uintptr_t)p >= (uintptr_t)&obj && (uintptr_t)p < (uintptr_t)&obj +
-  sizeof(obj)` wherever the object came from a discarded `unknown`. That
-  discharges the round trip and rejects both witnesses above.
+The open question is cost — the split is over every object in the address space,
+so this may need to ship behind a flag before it can be default-on.
 
-Until one of them lands, recovering object identity through a multiplicative term
-is a known limitation and the three `github_426_*` tests stay `KNOWNBUG`.
+Until it lands, the three `github_426_*` tests stay `KNOWNBUG` as
+under-approximations of a soundness defect, not as a stated limitation. Tracked
+as esbmc/esbmc#6804.
