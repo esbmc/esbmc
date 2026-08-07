@@ -412,6 +412,25 @@ private:
     const std::string &func_name,
     const std::map<irep_idt, param_extentt> &param_extents);
 
+  /// \brief Snapshot one scalar element of an array field of *p.
+  /// A whole-array rvalue read through the pointer is illegal C, so the
+  /// element (*p).field[k] is captured at a nondet witness index k, clamped
+  /// into range -- sound by the same forall-via-witness argument as Phase 2B.
+  /// Appends to \p result unless the field is one this check skips (a VLA, a
+  /// non-scalar element type, or a zero-length array, which has no element).
+  /// \param deref_expr The *p expression the field is read from
+  void materialize_ptr_deref_array_field(
+    const irep_idt &param_id,
+    const irep_idt &field,
+    const type2tc &ftype,
+    const type2tc &pointee,
+    const expr2tc &ptr_sym,
+    const expr2tc &deref_expr,
+    goto_programt &wrapper,
+    const locationt &location,
+    const std::string &func_name,
+    std::vector<ptr_deref_snapshot_t> &result);
+
   /// \brief Emit ASSERT instructions for pointer-parameter dereference compliance.
   /// For each snapshot: asserts *p == snapshot (scalar) or p->field == snapshot (struct).
   /// \param snapshots Snapshots produced by materialize_ptr_deref_snapshots
