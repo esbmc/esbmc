@@ -137,15 +137,9 @@ bool file_operations::is_bundled_source(std::string_view file)
     file.remove_prefix(2);
 
   constexpr std::string_view root = std::string_view(ESBMC_VFS_ROOT).substr(1);
-  if (
-    file.size() > root.size() + 1 && is_sep(file[0]) &&
-    file.compare(1, root.size(), root) == 0 && is_sep(file[root.size() + 1]))
-    return true;
-
-  /* The c2goto library arrives the other way round: it is compiled into the
-   * goto binary at build time, so its symbols carry whatever absolute path the
-   * build tree had. The surrounding separators are what anchor the match. */
-  return file.find("/src/c2goto/library/") != std::string_view::npos;
+  return file.size() > root.size() + 1 && is_sep(file[0]) &&
+         file.compare(1, root.size(), root) == 0 &&
+         is_sep(file[root.size() + 1]);
 }
 
 filesystemt &filesystemt::get()
@@ -193,6 +187,11 @@ std::optional<file_data> filesystemt::read(const std::string &path) const
 bool filesystemt::exists(const std::string &path) const
 {
   return _bundled.count(path) || boost::filesystem::exists(path);
+}
+
+bool filesystemt::readable(const std::string &path) const
+{
+  return _bundled.count(path) || std::ifstream(path);
 }
 
 size_t filesystemt::bundled_count() const noexcept
