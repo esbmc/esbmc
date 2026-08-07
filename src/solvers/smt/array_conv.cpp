@@ -451,6 +451,13 @@ array_convt::encode_array_equality(const array_ast *a1, const array_ast *a2)
   // Record an equality between two arrays at this point in time. To be
   // implemented at constraint time.
 
+  /* Reflexivity: recording it instead indexes a valuation vector that is empty
+   * whenever no select was ever applied to that array (#6794). */
+  if (
+    a1->base_array_id == a2->base_array_id &&
+    a1->array_update_num == a2->array_update_num)
+    return ctx->mk_smt_bool(true);
+
   struct array_equality e;
   e.arr1_id = a1->base_array_id;
   e.arr2_id = a2->base_array_id;
