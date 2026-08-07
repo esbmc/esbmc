@@ -2,6 +2,9 @@ name: Master Push
 on:
   push:
     branches: [master]
+  # Lets the sharded pipeline be re-run against a known commit, so its total
+  # can be compared with a previous unsharded run rather than assumed correct.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
