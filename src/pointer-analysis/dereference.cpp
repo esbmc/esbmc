@@ -141,6 +141,8 @@ const expr2tc &dereferencet::get_symbol(const expr2tc &expr)
 
 /************************* Expression decomposing code ************************/
 
+static expr2tc distribute_steps_over_if(const expr2tc &e);
+
 void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
 {
   if (!has_dereference(expr))
@@ -179,6 +181,17 @@ void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
   {
     // Index/member ops applied on top of a dereference: resolve the chain
     // to a single dereference at the accumulated offset.
+
+    // A conditional inside the chain -- `(c ? *ra : *rb).x` -- must be lifted
+    // out first. The walk below accumulates the offset from the whole
+    // expression, which it cannot do across an `if`; pushing the steps into
+    // the arms gives each one a complete access path (#6717).
+    expr2tc lifted = distribute_steps_over_if(expr);
+    if (is_if2t(lifted))
+    {
+      expr = resolve_nonscalar_if(lifted, guard, mode);
+      break;
+    }
 
     expr2tc res = dereference_expr_nonscalar(expr, guard, mode, expr);
 
@@ -355,6 +368,72 @@ static bool is_aligned_member(const expr2tc &expr)
    * TODO: This holds true only for non-padding members as padding is not
    *       actually a member. We just treat it as one, which here is wrong. */
   return true;
+}
+
+/// Push member/index steps inside a conditional, so `(c ? a : b).f` becomes
+/// `c ? a.f : b.f`. Returns \p e unchanged when there is no conditional to
+/// lift. Both forms denote the same object; the rewrite only moves the
+/// selection outside the access path.
+static expr2tc distribute_steps_over_if(const expr2tc &e)
+{
+  if (is_member2t(e))
+  {
+    const member2t &m = to_member2t(e);
+    expr2tc src = distribute_steps_over_if(m.source_value);
+    if (is_if2t(src))
+    {
+      const if2t &i = to_if2t(src);
+      return if2tc(
+        e->type,
+        i.cond,
+        member2tc(e->type, i.true_value, m.member),
+        member2tc(e->type, i.false_value, m.member));
+    }
+    return src == m.source_value ? e : member2tc(e->type, src, m.member);
+  }
+
+  if (is_index2t(e))
+  {
+    const index2t &idx = to_index2t(e);
+    expr2tc src = distribute_steps_over_if(idx.source_value);
+    if (is_if2t(src))
+    {
+      const if2t &i = to_if2t(src);
+      return if2tc(
+        e->type,
+        i.cond,
+        index2tc(e->type, i.true_value, idx.index),
+        index2tc(e->type, i.false_value, idx.index));
+    }
+    return src == idx.source_value ? e : index2tc(e->type, src, idx.index);
+  }
+
+  return e;
+}
+
+/// Resolve each arm of a lifted conditional access path under the condition
+/// that selects it, so a dereference failure in one arm cannot fire when the
+/// other is taken. Arms that need no dereferencing are kept as they are.
+expr2tc dereferencet::resolve_nonscalar_if(
+  const expr2tc &expr,
+  guard2tc &guard,
+  modet mode)
+{
+  const if2t &ifref = to_if2t(expr);
+
+  auto resolve_arm =
+    [this, &guard, &mode](const expr2tc &arm, const expr2tc &cond) {
+      guard2tc saved(guard);
+      guard.add(cond);
+      expr2tc copy = arm;
+      expr2tc res = dereference_expr_nonscalar(copy, guard, mode, copy);
+      guard = std::move(saved);
+      return is_nil_expr(res) ? arm : res;
+    };
+
+  expr2tc t = resolve_arm(ifref.true_value, ifref.cond);
+  expr2tc f = resolve_arm(ifref.false_value, not2tc(ifref.cond));
+  return if2tc(expr->type, ifref.cond, t, f);
 }
 
 expr2tc dereferencet::dereference_expr_nonscalar(

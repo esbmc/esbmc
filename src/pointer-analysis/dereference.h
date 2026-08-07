@@ -345,6 +345,14 @@ private:
     modet mode,
     const expr2tc &base);
 
+  /** Resolve an access path whose steps were lifted out of a conditional,
+   *  e.g. `(c ? *ra : *rb).x` rewritten to `c ? (*ra).x : (*rb).x`. Each arm
+   *  is a complete path and is resolved under the condition selecting it, so
+   *  a dereference failure in the arm not taken cannot fire (#6717).
+   */
+  expr2tc
+  resolve_nonscalar_if(const expr2tc &expr, guard2tc &guard, modet mode);
+
   /** Check whether the given pointer expression satisfies the alignment
    *  requirements for accessing a value of the specified type. This uses the
    *  type's size to determine the required alignment (in bits) and verifies
