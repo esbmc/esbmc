@@ -305,3 +305,90 @@ mtime**, before treating a reproduction as evidence the defect is open.
 blockers this one is now **cleared**; the other is
 `scope-relational-float-reconciliation.md` §17, where one of four witnesses
 clears and the widening that achieved it is still too broad to ship.
+
+## 13. A second declined shape — an array source into a *scalar* target (2026-08-06)
+
+§12 discharged this scope's gates for the array→**array** assignment. The G4
+whole-corpus census (`scope-relational-float-reconciliation.md` §18.4) has since
+surfaced a second shape that every arm also declines, with a harder failure
+mode: the hop-off **aborts in the solver** where legacy verifies.
+
+### 13.1 The witnesses and a 7-line reduction
+
+`class10` and `class12` both carry a mutable class attribute appended through one
+instance and read through another. Reduced to:
+
+```python
+class C:
+    shared: list = []
+
+a = C()
+b = C()
+a.shared.append("x")
+assert "x" in b.shared
+```
+
+Under `--unwind 19 --no-standard-checks --smt-during-symex --smt-symex-guard
+--bitwuzla`: legacy **SUCCESSFUL**, hop-off aborts with
+
+```
+bitwuzla: error: ... terms with mismatching sort at indices 0 and 1
+```
+
+### 13.2 The node, isolated against a passing control
+
+The reduction's GOTO diff shows three differences, and a **passing** control
+(`xs = ["a", "b"]; assert "a" in xs`, SUCCESSFUL on both arms) carries two of
+them. That control is what makes the attribution safe rather than plausible:
+
+| # | shape | in the passing control? | verdict |
+|---|---|---|---|
+| 1 | `ASSERT (signed int)contains_tmp == 1` vs `ASSERT contains_tmp == 1` (a `_Bool` compared to `1`, unpromoted) | **yes** | benign here |
+| 2 | `ASSIGN v = (unsigned long int)(&{ 120, 0 }[0]);` vs `ASSIGN v = { 120, 0 };` | **no** | **the cause** |
+| 3 | `list_push(..., &elem, ...)` vs `list_push(..., &elem[0], ...)` | **yes** | benign here |
+
+Shape 2 is the only difference the aborting program has and the passing one does
+not. `v` is `unsigned long int`; the source is a `signed char [2]` string
+literal. Legacy does the same two steps §14 of the coupled-arith scope recorded
+for the array→array case — decay to `&lit[0]`, then cast — but the **target here
+is a scalar**, so the result is a pointer-to-integer cast rather than an array
+cast. The hop-off assigns the bare `constant_array` into an integer lvalue, and
+the solver is handed an array term where a bitvector is expected.
+
+Shape 1 is worth a separate note, stated with the ambiguity it still carries. A
+`_Bool` compared against `1` reaches the solver unpromoted on the hop-off and
+does **not** abort. Whether that is a declined promotion or a benign
+representational difference **cannot be read off the dump**: this format prints
+a Boolean constant as `1`, not `TRUE` — there is no `TRUE`/`FALSE` token
+anywhere in either dump — so `contains_tmp == 1` is equally consistent with
+
+- `bool == bool`, which is well-sorted, and which the PR #6702 equality arm
+  *correctly* declines: its guard requires one side Boolean and the other a
+  number; or
+- `bool == signedbv`, which that arm should convert and demonstrably does not,
+  since `c_implicit_typecast_arithmetic` raises both operands to `INT` through
+  `implicit_typecast_arithmetic`'s minimum promotion and would emit the cast.
+
+Legacy's `(signed int)` on both sides is what that same minimum promotion
+produces from *either* starting point, so it does not discriminate either.
+Settling this needs the operand type — instrumentation and a rebuild. Recorded
+as an open question, not as a defect, and not what breaks `class10` either way.
+
+### 13.3 Why every arm declines it
+
+The general assignment arm's guard (`python_adjust.cpp:642-649`) requires both
+sides numeric, and an array source is not; its `bool`-target/pointer-source
+disjunct does not apply either. §12's array→array arm requires an **array
+target**. So the shape falls through every arm to no conversion at all.
+
+The fix belongs to this scope — same seam, same two legacy steps — but the cast
+target is the scalar type rather than the array type, and it must not be bolted
+onto the array→array arm's guard: that arm's `is_constant_array2t` source test
+is right for both, while its `is_array_type(target)` test is exactly what
+excludes this one.
+
+### 13.4 Not yet done
+
+No patch. The reduction above is the regression test the fix should carry, and
+it needs a `_fail`-free positive form plus the dual-solver run this scope's
+Gates require.

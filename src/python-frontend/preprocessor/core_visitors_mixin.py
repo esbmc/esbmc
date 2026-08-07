@@ -717,10 +717,7 @@ class CoreVisitorsMixin:
         )
 
     def _validate_positional_call_arity(self, node, function_name, expected_args):
-        # A *args collector absorbs any surplus positional argument, so the
-        # declared names impose no upper bound on the call. Only reachable for
-        # a collector _pack_vararg_into_list_param declined to pack; a packed
-        # one has no surplus left by this point (#6741).
+        # A *args parameter absorbs any number of extra positionals (PEP 3102).
         if function_name in self.functionVarargs:
             return
         display_name = self._display_name(function_name)
@@ -931,32 +928,11 @@ class CoreVisitorsMixin:
         if function_name == "__unknown__" or function_name is None or expected_args is None:
             return False
 
-        # visit_FunctionDef turned a `*args` collector into a trailing list
-        # parameter (#6741). Detach it here so the surplus positional arguments
-        # are packed rather than counted against the declared names. The name
-        # check keeps a signature resolved through the unqualified-method
-        # fallback, which drops a leading `self`, from being mistaken for one.
-        collector = self.functionPackedVarargs.get(function_name)
-        has_vararg = bool(expected_args) and expected_args[-1] == collector
-        packed = []
-        if has_vararg:
-            expected_args = expected_args[:-1]
-            packed = node.args[len(expected_args):]
-            node.args = node.args[:len(expected_args)]
-
         keywords = self._build_keyword_map(node)
-        if has_vararg and collector in keywords:
-            raise TypeError(f"{self._display_name(function_name)}() got an unexpected "
-                            f"keyword argument '{collector}'")
         self._validate_kwonly_args(function_name, kwonly_args, keywords)
         self._validate_positional_call_arity(node, function_name, expected_args)
         self._validate_duplicate_positional_keyword(node, expected_args, keywords)
         self._fill_missing_args_with_defaults(node, function_name, expected_args, keywords)
-
-        if has_vararg:
-            packed_list = ast.List(elts=packed, ctx=ast.Load())
-            ast.copy_location(packed_list, node)
-            node.args.append(packed_list)
         return True
 
     def _resolve_and_store_function_annotations(self, node):
@@ -1269,38 +1245,6 @@ class CoreVisitorsMixin:
             )
         return None
 
-    def _pack_vararg_into_list_param(self, node, qualified_name):
-        # `def f(a, *rest)` becomes `def f(a, rest=[])`: the frontend has no
-        # tuple-collector parameter, but a list parameter supports len/index/
-        # iteration, and _apply_call_signature_defaults packs every call's
-        # surplus positional arguments into that slot (#6741).
-        vararg = node.args.vararg
-        if vararg is None:
-            # functionParams is a dict a redefinition overwrites; keep the
-            # vararg tables in step so a shadowing plain def is not treated as
-            # variadic.
-            self.functionVarargs.discard(qualified_name)
-            self.functionPackedVarargs.pop(qualified_name, None)
-            return
-        self.functionVarargs.add(qualified_name)
-        # Packing is driven from the call sites, so it is only sound when every
-        # call is one this preprocessor rewrites. A name used as a value
-        # (`g = f`), a positional-only parameter the signature table does not
-        # model, or a def in an imported module (preprocessed separately, with
-        # the importing module's call sites out of reach) all break that;
-        # leave those alone for the converter to reject rather than silently
-        # verify the wrong signature.
-        if (node.name in self._value_referenced_names or node.args.posonlyargs
-                or not self.is_entry_module):
-            return
-        self.functionPackedVarargs[qualified_name] = vararg.arg
-        node.args.args.append(ast.arg(arg=vararg.arg, annotation=None))
-        # Defaults align with the tail of args, so the new parameter needs one
-        # of its own or the preceding parameter's default shifts onto it.
-        node.args.defaults.append(ast.List(elts=[], ctx=ast.Load()))
-        node.args.vararg = None
-        ast.fix_missing_locations(node)
-
     def _build_qualified_function_name(self, node):
         if hasattr(self, "current_class_name") and self.current_class_name:
             return f"{self.current_class_name}.{node.name}"
@@ -1524,10 +1468,8 @@ class CoreVisitorsMixin:
         self._normalize_int_from_bytes_endianness(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
-        if not self._apply_call_signature_defaults(node):
-            self.generic_visit(node)
-            return node
-
+        self._apply_call_signature_defaults(node)
+        self._specialize_vararg_call(node)
         self.generic_visit(node)
         return node
 
@@ -1563,9 +1505,9 @@ class CoreVisitorsMixin:
             self._record_function_param_types(node)
             qualified_name = self._build_qualified_function_name(node)
 
-            self._pack_vararg_into_list_param(node, qualified_name)
             self.functionParams[qualified_name] = [i.arg for i in node.args.args]
             self.functionKwonlyParams[qualified_name] = [i.arg for i in node.args.kwonlyargs]
+            self._record_vararg_function(node, qualified_name)
 
             if len(node.args.defaults) < 1 and len(node.args.kw_defaults) < 1:
                 self.generic_visit(node)

@@ -19,6 +19,7 @@ from preprocessor.module_rewrite_mixin import ModuleRewriteMixin
 from preprocessor.preprocessor_state_mixin import PreprocessorStateMixin
 from preprocessor.sequence_iterator_mixin import SequenceIteratorMixin
 from preprocessor.type_inference_mixin import TypeInferenceMixin
+from preprocessor.vararg_mixin import VarargMixin
 
 __all__ = ["Preprocessor"]
 
@@ -38,6 +39,7 @@ class Preprocessor(
         ModuleRewriteMixin,
         ModuleLifecycleMixin,
         SequenceIteratorMixin,
+        VarargMixin,
         PreprocessorStateMixin,
         AstUtilsMixin,
         ImportTypingMixin,
@@ -47,7 +49,6 @@ class Preprocessor(
     _YieldToAppend = GeneratorMixin._YieldToAppend
     _YieldReplacer = GeneratorMixin._YieldReplacer
 
-    def __init__(self, module_name: str, is_entry_module: bool = True):
+    def __init__(self, module_name: str):
         super().__init__()
         self._init_preprocessor_state(module_name)
-        self.is_entry_module = is_entry_module

@@ -42,7 +42,7 @@ class JsonEmitterDeps:
 @dataclass(frozen=True)
 class EmitPipelineDeps:
     """Dependencies for file/module emission wrappers."""
-    parse_file: Callable[..., tuple[ast.AST, object]] | None = None
+    parse_file: Callable[[str], tuple[ast.AST, object]] | None = None
     generate_ast_json_fn: Callable[..., None] | None = None
     import_resolver: ImportResolverLike | None = None
     emit_file_as_json_fn: Callable[..., None] | None = None
@@ -206,7 +206,7 @@ def emit_file_as_json(
     """Generate AST JSON for a source file."""
     if deps.parse_file is None or deps.generate_ast_json_fn is None:
         raise ValueError("EmitPipelineDeps requires parse_file and generate_ast_json_fn")
-    tree, _ = deps.parse_file(filename, is_entry_module=module_qualname is None)
+    tree, _ = deps.parse_file(filename)
     deps.generate_ast_json_fn(
         tree,
         filename,

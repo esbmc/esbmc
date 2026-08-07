@@ -176,6 +176,16 @@ protected:
   virtual void do_simplify(expr2tc &expr);
 
   /**
+   *  The guard a branch decision is read from.
+   *  `is_false`/`is_true` are syntactic, so they hold only once the guard is
+   *  folded to a literal, and `do_simplify` is a no-op under --no-simplify.
+   *  Returns an unconditionally simplified copy under that flag, so a bounded
+   *  loop can still be seen to exit, and `guard` untouched otherwise.
+   *  @param guard The renamed branch guard.
+   */
+  expr2tc branch_decision_guard(const expr2tc &guard) const;
+
+  /**
    *  Dereference an expression.
    *  Finds dereference expressions within expr, takes the set of things that
    *  it might point at, according to value set tracking, and builds an

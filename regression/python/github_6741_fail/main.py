@@ -1,8 +1,5 @@
-def total(base, *rest):
-    s = base
-    for v in rest:
-        s = s + v
-    return s
+def byteslike(*pos):
+    return len(pos)
 
 
-assert total(1, 2, 3) == 7
+assert byteslike(1, 2) == 3

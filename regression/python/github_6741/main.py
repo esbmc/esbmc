@@ -1,32 +1,31 @@
-def count(*pos):
+def byteslike(*pos, **kw):
     return len(pos)
 
 
 def total(base, *rest):
     s = base
-    for v in rest:
-        s = s + v
+    for r in rest:
+        s += r
     return s
 
 
-def with_default(a, b=10, *rest):
-    return a + b + len(rest)
+def packs_a_tuple(*rest):
+    return isinstance(rest, tuple)
 
 
-class Acc:
-    def __init__(self, start, *more):
-        self.value = start
-        for m in more:
-            self.value = self.value + m
+def ignores_extras(a, *unused):
+    return a
 
 
-assert count() == 0
-assert count(1) == 1
-assert count(1, 2, 3) == 3
+def calls_from_function():
+    return total(10, 1, 2)
+
+
+assert byteslike(1) == 1
+assert byteslike() == 0
 assert total(1) == 1
 assert total(1, 2, 3) == 6
-assert with_default(1) == 11
-assert with_default(1, 2) == 3
-assert with_default(1, 2, 3, 4) == 5
-assert Acc(5).value == 5
-assert Acc(5, 1, 2).value == 8
+assert packs_a_tuple(1, 2)
+assert packs_a_tuple()
+assert ignores_extras(1, 2, 3) == 1
+assert calls_from_function() == 13
