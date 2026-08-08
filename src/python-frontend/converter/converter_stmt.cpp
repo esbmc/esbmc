@@ -2431,6 +2431,17 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   return symbol_table_.move_symbol_to_context(symbol);
 }
 
+/// The bare name an AST node denotes: `id` for a Name, `attr` for an Attribute
+/// -- a qualified `module.Class`, which is what a base inherited from an
+/// operational model looks like. \p fallback covers any other shape.
+static std::string
+ast_node_name(const nlohmann::json &node, const std::string &fallback = "")
+{
+  if (node.contains("id"))
+    return node["id"].get<std::string>();
+  return node.value("attr", fallback);
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -2442,20 +2453,12 @@ void python_converter::handle_function_call_rhs(
 {
   if (is_ctor_call)
   {
-    std::string func_name =
-      ast_node["value"]["func"].contains("id")
-        ? ast_node["value"]["func"]["id"].get<std::string>()
-        : ast_node["value"]["func"]["attr"].get<std::string>();
+    std::string func_name = ast_node_name(ast_node["value"]["func"]);
 
     if (base_ctor_called)
     {
       auto class_node = json_utils::find_class((*ast_json)["body"], func_name);
-      // A qualified base (`module.Class`) is an Attribute, which carries
-      // `attr`; only a bare Name has `id`. Reading `id` unconditionally threw
-      // on any class inheriting from an operational model.
-      const auto &base = class_node["bases"][0];
-      func_name = base.contains("id") ? base["id"].get<std::string>()
-                                      : base.value("attr", func_name);
+      func_name = ast_node_name(class_node["bases"][0], func_name);
       base_ctor_called = false;
     }
 
