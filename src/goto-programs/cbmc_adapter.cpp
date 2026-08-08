@@ -1649,6 +1649,20 @@ bool is_zero_fill(const irept &v)
   return !val.empty() && val.find_first_not_of('0') == std::string::npos;
 }
 
+// True if `i` is a literal zero subscript, tolerating the width-coercing cast
+// CBMC wraps an array index in.
+bool is_zero_index(const irept &i)
+{
+  const irept *e = &i;
+  while (e->id() == "typecast")
+  {
+    if (e->get_sub().empty())
+      return false;
+    e = &e->get_sub().front();
+  }
+  return is_zero_fill(*e);
+}
+
 // Rewrites JBMC's `ARRAY_SET payload <0|NULL>` into a __ESBMC_memset call over
 // the byte extent recorded when the payload was allocated two instructions
 // earlier. __CPROVER_array_set carries no length of its own -- that is why the
@@ -1719,6 +1733,78 @@ const irept *havoc_target(const irept &op)
   return e->id() == "symbol" ? e : nullptr;
 }
 
+// The array a CBMC ARRAY_SET fills, or null when the operand does not name one
+// statically. The pointer reaches the instruction as the decayed `&arr[0]`, so
+// peel the casts, the address-of and that subscript. The result must be an
+// array-typed *symbol*: CBMC fills the whole object the pointer lands in, which
+// coincides with the array only when the array is the entire object. A member
+// array (`&s.a[0]`) is therefore declined rather than filled -- CBMC clobbers
+// the rest of `s` too, so filling only `s.a` would claim SUCCESSFUL where CBMC
+// reports a violation. A non-zero index would fill from an offset, which a
+// whole-array constant cannot express, so only the decayed form is accepted.
+const irept *array_set_target(const irept &op)
+{
+  const irept *e = &op;
+  while (e->id() == "typecast")
+  {
+    if (e->get_sub().empty())
+      return nullptr;
+    e = &e->get_sub().front();
+  }
+
+  if (e->id() != "address_of" || e->get_sub().empty())
+    return nullptr;
+  e = &e->get_sub().front();
+
+  if (e->id() == "index")
+  {
+    if (e->get_sub().size() != 2 || !is_zero_index(e->get_sub()[1]))
+      return nullptr;
+    e = &e->get_sub().front();
+  }
+
+  return e->id() == "symbol" && e->find("type").id() == "array" ? e : nullptr;
+}
+
+// Rewrites `ARRAY_SET p v` (__CPROVER_array_set) into the fill assignment
+// `ASSIGN arr := array_of(v)`.
+// The instruction carries no length -- the extent is the pointee array's own,
+// which is exactly what an array_of over that type expresses, so the recovered
+// target supplies what the operand does not.
+bool rewrite_array_set_fill(irept &code)
+{
+  const irept::subt ops = code.get_sub();
+  if (ops.size() != 2)
+    return false;
+
+  const irept *target = array_set_target(ops[0]);
+  if (!target)
+    return false;
+
+  const irept &atype = target->find("type");
+  if (atype.get_sub().empty())
+    return false;
+
+  // CBMC converts the fill to the element type -- `__CPROVER_array_set(d, 5)`
+  // on a double[] leaves 5.0, and a char[] takes (char)300 -- so the value is
+  // cast rather than reinterpreted. Without it a wider or differently-kinded
+  // fill reaches the solver as an array_of whose operand sort disagrees with
+  // the array's, which Bitwuzla rejects outright.
+  irept value(irep_idt("typecast"));
+  value.add("type") = atype.get_sub().front();
+  value.get_sub().push_back(ops[1]);
+
+  irept fill(irep_idt("array_of"));
+  fill.add("type") = atype;
+  fill.get_sub().push_back(value);
+
+  code.add("statement") = mk("assign");
+  code.get_sub().clear();
+  code.get_sub().push_back(*target);
+  code.get_sub().push_back(fill);
+  return true;
+}
+
 // Rewrites `HAVOC_OBJECT p` (__CPROVER_havoc_object) into the ASSIGN of a
 // nondet side effect the native pipeline would produce, so the object loses
 // its value the way CBMC's own symex drops it. The instruction carries no
@@ -1767,6 +1853,8 @@ const char *rewrite_whole_object_codet(
   const irep_idt stmt = code.find("statement").id();
   if (stmt == "array_set" && rewrite_java_array_set(code, payload_extent))
     return "16";
+  if (stmt == "array_set" && rewrite_array_set_fill(code))
+    return "13";
   if (stmt == "havoc_object" && rewrite_havoc_object(code))
     return "13";
   if (stmt == "array_set" || stmt == "havoc_object")
