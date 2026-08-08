@@ -1732,6 +1732,28 @@ bool python_converter::return_value_uses_call_argument(
          return_value.contains("value") && is_param_name(return_value["value"]);
 }
 
+/// Item assignment on an immutable container is a TypeError. A string that is
+/// not intercepted here updates its char array with a whole string value, which
+/// trips with2t::assert_consistency and aborts instead of reporting anything.
+bool python_converter::reject_immutable_item_assignment(
+  const typet &container_type,
+  codet &target_block)
+{
+  const char *kind = tuple_handler_->is_tuple_type(container_type) ? "tuple"
+                     : type_utils::is_string_type(container_type)  ? "str"
+                                                                   : nullptr;
+  if (!kind)
+    return false;
+
+  exprt raise = get_exception_handler().gen_exception_raise(
+    "TypeError",
+    std::string("'") + kind + "' object does not support item assignment");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  target_block.copy_to_operands(throw_code);
+  return true;
+}
+
 void python_converter::reject_unsafe_numpy_view_target(
   const nlohmann::json &target)
 {
@@ -3271,16 +3293,8 @@ void python_converter::get_var_assign(
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
 
-    // Tuple subscript assignment: tuples are immutable, raise TypeError
-    if (tuple_handler_->is_tuple_type(container_type))
-    {
-      exprt raise = get_exception_handler().gen_exception_raise(
-        "TypeError", "'tuple' object does not support item assignment");
-      codet throw_code("expression");
-      throw_code.operands().push_back(raise);
-      target_block.copy_to_operands(throw_code);
+    if (reject_immutable_item_assignment(container_type, target_block))
       return;
-    }
 
     // Handle object subscript assignment via __setitem__:
     //   obj[key] = value  ->  obj.__setitem__(key, value)
