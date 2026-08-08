@@ -1280,11 +1280,15 @@ bool solved = false;
  * camada's FPEncoding::BV; let it bit-blast rather than swapping in ESBMC's
  * own software lowering. Keyed off fp2bv, not floatbv: the latter is set by
  * default for anything that is not --fixedbv, so reading it made every run
- * bit-blast and native FP unreachable. */
+ * bit-blast and native FP unreachable.
+ *
+ * prefers_fp2bv backends bit-blast without being asked, because their native
+ * FP theory costs more than it saves (see backendt::prefers_fp2bv). */
 camada::FPEncoding smt_solver_baset::fp_encoding() const
 {
-  return options.get_bool_option("fp2bv") ? camada::FPEncoding::BV
-                                          : camada::FPEncoding::Native;
+  return options.get_bool_option("fp2bv") || prefers_fp2bv
+           ? camada::FPEncoding::BV
+           : camada::FPEncoding::Native;
 }
 
 camada::SMTExprRef smt_solver_baset::make_index_expr(
@@ -1351,18 +1355,20 @@ std::unique_ptr<smt_solver_baset> make_solver(
   const optionst &options,
   const namespacet &ns,
   std::unique_ptr<camada::SMTSolver> solver,
-  bool streams_script = false)
+  bool streams_script = false,
+  bool prefers_fp2bv = false)
 {
   return std::make_unique<smt_solver_baset>(
-    ns, options, std::move(solver), streams_script);
+    ns, options, std::move(solver), streams_script, prefers_fp2bv);
 }
 
 std::unique_ptr<smt_solver_baset> create_linked_solver(
   const optionst &options,
   const namespacet &ns,
-  camada_buildert build)
+  camada_buildert build,
+  bool prefers_fp2bv)
 {
-  return make_solver(options, ns, build(options));
+  return make_solver(options, ns, build(options), false, prefers_fp2bv);
 }
 
 /* The one-shot command processes a single task and exits; strategies that

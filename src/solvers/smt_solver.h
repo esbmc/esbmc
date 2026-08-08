@@ -124,12 +124,16 @@ public:
    *         sink as it is built rather than buffering it, so dump_smt() has
    *         nothing to hand back. This is a property of which camada solver was
    *         built, not of the options, so it cannot be derived here.
+   *  @param _prefers_fp2bv Bit-blast floating-point even without --fp2bv,
+   *         because this backend's native FP theory is slower than the blasted
+   *         form. Like _streams_script, a property of the camada solver built.
    */
   smt_solver_baset(
     const namespacet &_ns,
     const optionst &_options,
     std::unique_ptr<camada::SMTSolver> _solver,
-    bool _streams_script = false);
+    bool _streams_script = false,
+    bool _prefers_fp2bv = false);
 
   ~smt_solver_baset();
 
@@ -1179,6 +1183,10 @@ private:
   /** Camada's SMT-LIB backend streams the script to its sink as it is built
    *  rather than buffering it, so dump_smt() has nothing to return. */
   const bool streams_script = false;
+
+  /** This backend bit-blasts floating-point even without --fp2bv; see
+   *  backendt::prefers_fp2bv and fp_encoding(). */
+  const bool prefers_fp2bv = false;
 
   /** Where the one-shot script is written; empty unless `oneshot`. */
   const std::string formula_path;

@@ -76,7 +76,8 @@ smt_solver_baset::smt_solver_baset(
   const namespacet &_ns,
   const optionst &_options,
   std::unique_ptr<camada::SMTSolver> _solver,
-  bool _streams_script)
+  bool _streams_script,
+  bool _prefers_fp2bv)
   : ctx_level(0),
     ns(_ns),
     options(_options),
@@ -86,6 +87,7 @@ smt_solver_baset::smt_solver_baset(
     oneshot_prog(options.get_option("smtlib-oneshot-prog")),
     oneshot(!oneshot_prog.empty()),
     streams_script(_streams_script),
+    prefers_fp2bv(_prefers_fp2bv),
     formula_path(
       oneshot ? oneshot_options::choose_formula_path(options, "smtlib")
               : std::string())
