@@ -1,8 +1,8 @@
 /* array_conv encodes an array equality index-by-index, so a frame check that
  * compares an array against its own snapshot -- the same array id at the same
  * update level -- indexed a valuation vector that is empty whenever no select
- * was ever applied to that array, and aborted (#6794). Bitwuzla only: Z3
- * carries arrays natively and never enters array_conv. */
+ * was ever applied to that array, and aborted (#6794). Reached via the tuple
+ * flattener, so every backend registering no tuple_api takes this path. */
 #include <stdint.h>
 #include <stddef.h>
 #define N 8

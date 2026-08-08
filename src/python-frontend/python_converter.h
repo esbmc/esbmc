@@ -900,6 +900,12 @@ private:
 
   void reject_unsafe_numpy_view_target(const nlohmann::json &target);
 
+  /// Raise Python's TypeError for item assignment on an immutable container,
+  /// reporting whether `container_type` is one.
+  bool reject_immutable_item_assignment(
+    const typet &container_type,
+    codet &target_block);
+
   void record_numpy_view_copy(const exprt &lhs, const nlohmann::json &rhs_node);
 
   void clear_numpy_view_copy(const exprt &lhs);
