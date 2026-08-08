@@ -283,6 +283,24 @@ static expr2tc normalise_native_code(
   return normalised;
 }
 
+// The condition-coverage family, all of which suppress convert_ifthenelse's
+// remove_sideeffects call, so the native if-arm has to delegate under any of
+// them.
+static bool condition_coverage_enabled(const optionst &options)
+{
+  return options.get_bool_option("condition-coverage") ||
+         options.get_bool_option("condition-coverage-claims") ||
+         options.get_bool_option("condition-coverage-rm") ||
+         options.get_bool_option("condition-coverage-claims-rm");
+}
+
+// remove_sideeffects' entry condition names a top-level ternary; a nil operand
+// is not one, and is_if2t would dereference the empty container.
+static bool is_ternary(const expr2tc &e)
+{
+  return !is_nil_expr(e) && is_if2t(e);
+}
+
 enum class assert_foldt
 {
   none,    // no fold applies; emit the general shape
@@ -563,8 +581,9 @@ bool goto_convert_functionst::convert_native_rec(
     // ESBMC_range_has_next_(...)` — the statement a desugared Python `for`
     // loop's preprocessor hoists the call into (see
     // docs/roadmap/spike-v1k-w1loc.md) — converts natively. Narrow slice:
-    // callee and arguments must be side-effect-free, so do_function_call's own
-    // remove_sideeffects() calls on them are no-ops we can skip issuing;
+    // callee and arguments must be side-effect-free *and* not top-level
+    // ternaries — remove_sideeffects' own entry condition — so
+    // do_function_call's calls on them are the no-ops we skip issuing;
     // convert_function's tmp_symbol/context rollback (above) still protects the
     // temp do_function_call allocates if a later statement in this body is
     // unsupported and forces a fallback.
@@ -574,10 +593,10 @@ bool goto_convert_functionst::convert_native_rec(
         sideeffect2t::allockind::function_call)
     {
       const sideeffect2t &se = to_sideeffect2t(assign.source);
-      if (has_sideeffect(se.operand))
+      if (has_sideeffect(se.operand) || is_ternary(se.operand))
         return delegate_to_legacy();
       for (const expr2tc &arg : se.arguments)
-        if (has_sideeffect(arg))
+        if (has_sideeffect(arg) || is_ternary(arg))
           return delegate_to_legacy();
 
       exprt function_legacy = migrate_expr_back(se.operand);
@@ -876,11 +895,8 @@ bool goto_convert_functionst::convert_native_rec(
     // and any labels/cases/temps they register ride the shared `targets` and
     // convert_function's snapshot exactly as the try/catch delegation does.
     if (
-      has_sideeffect(ite.cond) ||
-      options.get_bool_option("condition-coverage") ||
-      options.get_bool_option("condition-coverage-claims") ||
-      options.get_bool_option("condition-coverage-rm") ||
-      options.get_bool_option("condition-coverage-claims-rm"))
+      has_sideeffect(ite.cond) || is_ternary(ite.cond) ||
+      condition_coverage_enabled(options))
     {
       exprt op = migrate_expr_back(code2);
       restore_value_locations(op, effective_location(ite.location, inherited));
@@ -1138,7 +1154,7 @@ bool goto_convert_functionst::convert_native_rec(
     // shared tmp_symbol counter, whose numbering is observable.
     goto_programt sideeffects;
     expr2tc guard = normalise_native_code(dw.cond, here, ns);
-    if (has_sideeffect(dw.cond))
+    if (has_sideeffect(dw.cond) || is_ternary(dw.cond))
     {
       exprt cond = migrate_expr_back(dw.cond);
       if (!here.get_file().empty())
@@ -1250,7 +1266,7 @@ bool goto_convert_functionst::convert_native_rec(
     // observable, so the order is kept.
     goto_programt sideeffects;
     expr2tc guard = normalise_native_code(f.cond, here, ns);
-    if (has_sideeffect(f.cond))
+    if (has_sideeffect(f.cond) || is_ternary(f.cond))
     {
       exprt cond = migrate_expr_back(f.cond);
       if (!here.get_file().empty())
@@ -1360,7 +1376,7 @@ bool goto_convert_functionst::convert_native_rec(
     // tmp_symbol counter, whose numbering is observable.
     exprt argument = migrate_expr_back(sw.value);
     goto_programt sideeffects;
-    if (has_sideeffect(sw.value))
+    if (has_sideeffect(sw.value) || is_ternary(sw.value))
     {
       if (!here.get_file().empty())
         stamp_value_locations(argument, here);
@@ -1509,12 +1525,12 @@ bool goto_convert_functionst::convert_native_rec(
     // convert_assert (goto_convert.cpp) hands the guard to remove_sideeffects,
     // which owns the temp-symbol machinery this dispatcher does not reproduce.
     // Delegate the statement rather than failing the walk, so the rest of the
-    // body stays native. The `is_if2t` disjunct mirrors remove_sideeffects'
-    // own entry condition, as the assign/decl/return/expression arms do: a
-    // top-level ternary is entered even with no side effect, and under
-    // --validate-violation-witness it lowers to DECL/IF/GOTO so the `?` column
-    // reaches the branching waypoint.
-    if (has_sideeffect(a.guard) || is_if2t(a.guard))
+    // body stays native. The `is_ternary` disjunct mirrors remove_sideeffects'
+    // own entry condition, which every arm whose legacy counterpart calls it
+    // unconditionally has to carry: a top-level ternary is entered even with no
+    // side effect, and under --validate-violation-witness it lowers to
+    // DECL/IF/GOTO so the `?` column reaches the branching waypoint.
+    if (has_sideeffect(a.guard) || is_ternary(a.guard))
     {
       exprt op = migrate_expr_back(code2);
       restore_value_locations(op, effective_location(a.location, inherited));
@@ -1543,7 +1559,7 @@ bool goto_convert_functionst::convert_native_rec(
 
     // Same delegation and the same remove_sideeffects entry condition as the
     // assert arm above.
-    if (has_sideeffect(a.guard) || is_if2t(a.guard))
+    if (has_sideeffect(a.guard) || is_ternary(a.guard))
     {
       exprt op = migrate_expr_back(code2);
       restore_value_locations(op, effective_location(a.location, inherited));
@@ -1584,7 +1600,7 @@ bool goto_convert_functionst::convert_native_rec(
       return delegate_to_legacy();
 
     for (const expr2tc &arg : f.operands)
-      if (has_sideeffect(arg))
+      if (has_sideeffect(arg) || is_ternary(arg))
         return delegate_to_legacy();
 
     const symbol2t &fsym = to_symbol2t(f.function);

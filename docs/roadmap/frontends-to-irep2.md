@@ -1553,3 +1553,131 @@ gates, and per-suite samples — §25.3's second bound says what is missing. The
 the question Phase 1 exists to answer: whether `goto_convert_rec` and the
 round-trip can be deleted, which needs the fallback to be provably unreachable
 rather than merely unexercised.
+
+## 26. The option-varied A/B — §25.3's missing measurement, and what it found (2026-08-08)
+
+§25.3 named the gap: every byte-identity sweep so far ran on **default flags**,
+and the three options these arms branch on —
+`--validate-violation-witness`, `--no-assertions`, `--condition-coverage` —
+appear in **no** `regression/python` `test.desc` at all. This runs the A/B under
+each of them.
+
+### 26.1 Result
+
+Stride-17 over `regression/esbmc`, `regression/esbmc-cpp/cpp` and
+`regression/python` (411 dirs, 384 comparable), each replayed with its own
+`test.desc` flags plus the option under test:
+
+| option set | before | after |
+|---|---:|---:|
+| default | 384/384 | 384/384 |
+| `--no-assertions` | 384/384 | 384/384 |
+| `--condition-coverage` | 384/384 | 384/384 |
+| **`--validate-violation-witness`** | **140/384 — 244 divergent** | **384/384** |
+
+244 of 384. The default-flag sweeps that have gated every patch in this series
+could not see any of it.
+
+### 26.2 One cause, and it is the §25.5 defect again
+
+The native call arms — the `code_assign2t` call-rhs branch and the standalone
+`code_function_call2t` arm — gate their arguments on `has_sideeffect` alone,
+with a comment asserting that `do_function_call`'s own `remove_sideeffects`
+calls are therefore *"no-ops we can skip issuing."* Under
+`--validate-violation-witness` that is false for exactly the same reason it was
+false for the assert and assume arms: `remove_sideeffects` is entered for a
+top-level ternary regardless of side effects, and lowers it to DECL/IF/GOTO so
+the `?` column reaches the branching waypoint. The operands the arms hand it
+were never stamped, so every instruction of that lowering came out **unlocated**
+— 1833 unlocated instructions natively against 1641 under the round-trip on a
+single test.
+
+The fix is one disjunct, `|| is_ternary(...)` (a nil-safe `is_if2t`, §26.4), on
+the callee and each argument. Review then enumerated the rest, and the tally is
+the finding worth keeping: **an arm needs the disjunct exactly when its legacy
+counterpart calls `remove_sideeffects` unconditionally**, and by that test seven
+arms carried it and seven did not —
+
+| carried it | did not (fixed here) | correctly exempt |
+|---|---|---|
+| assign lhs, assign rhs, expression, decl init, return, assert, assume | call callee, assign call args, standalone call args, `if` cond, `do`/`while` cond, `for` cond, `switch` value | `while` cond — `generate_conditional_branch` gates on `has_sideeffect` itself |
+
+The four control-flow arms were invisible to the sweep for an incidental reason:
+the C frontend wraps a control-flow condition in a `(_Bool)` typecast, so
+`expr.id()` is `"typecast"`, not `"if"`. The shape only surfaces where the
+ternary is already bool-typed (C++, Python) or in a `switch` value (any
+language). That is a property of the frontend, not of the arms — and it is the
+sharpest illustration yet of why an enumeration beats a sample: the sweep was
+384/384 with four arms still wrong.
+
+### 26.3 A fourth per-run artefact
+
+The `--no-assertions` sweep reported one divergence,
+`python/github_4792_fail`, which the §7 rule 7 self-control disqualified: two
+runs of the legacy arm against itself gave two hashes. The varying token is
+`unpack_<address>_0`, an operational-model temp named from a pointer — distinct
+from §21.3's `ESBMC_unpack_temp_<n>`, which the normaliser already covered, and
+distinct again from §19.3's synthetic location, §20.3's synthetic file name and
+§21.3's character-coded temp dir. Four classes now, all found by the
+self-control and none by inspection. **Run the self-control first, always.**
+
+### 26.4 The fix segfaulted before it worked
+
+`is_if2t(e)` is `e->expr_id == expr2t::if_id` — `operator->` on an **empty**
+`expr2tc` dereferences null. The callee slot of a `sideeffect2t` function call
+is nil for some shapes, so the first cut of this fix crashed ESBMC on 19 C tests
+and 3 C++ ones (`github_170`, `align-deref_*`, `github_1220-*`, `github_2389_*`,
+…). Every `is_*2t` predicate in the tree has this property, which is why the
+codebase pairs them with `is_nil_expr` in most places; the guard is now a named
+`is_ternary` helper so its six call sites cannot each forget it. (`is_symbol2t`
+at the standalone-call arm's `f.function` is one place the pairing is *not*
+made — reachable only for a void call with a nil callee, unobserved, and left
+alone here rather than fixed blind.)
+
+Three of those tests pin it: removing the guard segfaults them. The lesson is
+narrower than "check for nil" — it is that **the suites caught this and the A/B
+did not**, because a crash makes both arms fail and `ab_opt.sh` scores
+`SKIP-ERR`. A sweep that skips on non-zero exit is blind to exactly the class of
+bug that makes both paths exit non-zero. Run the suites, not only the sweep.
+
+### 26.5 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc` (C) | 0 (§25) | 384/384 × 4 option sets, plus §21-§24's sweeps |
+| `esbmc-cpp` | 0 (§25) | as above |
+| `python` | 0 (§25) | as above |
+| `jimple` | 0 (§25) | 15/15 (§20) |
+| `esbmc-solidity` | not measurable here | 502/510; 8 residuals = #6759, #6760 |
+
+384/384 × 4 option sets is a *sampling* result over three suites, plus
+**161/161** over `regression/witnesses{,_validate}` — the suites that run
+`--validate-violation-witness` natively, and the obvious place to have looked
+first. It is not a proof, and §26.2 is the reason to say so plainly: the sweep
+was already 384/384 while four arms were still wrong.
+
+Outstanding, in order:
+
+1. **A pre-existing location bug in the `do`/`while` arm**, found by the same
+   review and reproduced on `master`. `convert_dowhile` reads the condition's
+   location off the operand (`code.op0().find_location()`); the native arm
+   substitutes the *statement* location, on the reasoning that the round-trip
+   leaves the operand location-less. That is false for `if2t` — the one value
+   kind this file itself documents as carrying a location through
+   `migrate_expr`. A ternary `do`/`while` condition therefore reports the
+   statement's column where legacy reports the `?` column, **on default flags**:
+
+   ```cpp
+   bool a, b, c;
+   int main() { do { a = true; } while (c ? a : b); return 0; }
+   // native     line 3 column 3   (the `do`)
+   // round-trip line 3 column 27  (the `?`)
+   ```
+
+   Unchanged by this patch — the diff against `HEAD` is byte-identical — so it
+   is filed here rather than fixed in passing.
+2. **Solidity**, which needs CI — §18.3's warning that zero declines does not
+   imply reproduction still stands there, unmeasured.
+3. **The option space is bigger than three.** Three were swept because three are
+   what these arms branch on *today*. Any future arm that reads an option
+   inherits the same obligation.
