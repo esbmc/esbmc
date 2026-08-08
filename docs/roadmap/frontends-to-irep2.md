@@ -2169,3 +2169,44 @@ The asymmetry says wait. The change becomes forced, and safe, at the moment the
 fallback is deleted, which is when the enumeration is load-bearing anyway.
 
 Recorded so the premise does not have to be re-derived then.
+
+## 35. The branch validated against every local suite (2026-08-09)
+
+Every section from §21 on gated on the suites the change plausibly touches — C,
+C++, Python subsets. That leaves a gap worth closing before review: this branch
+edits `goto_convert_functions.cpp`, which every frontend goes through, and CI
+has not run on it (the checks have been queued since the first push). So the
+remaining suites were run locally.
+
+### 35.1 What had not been run, and the result
+
+`esbmc-cpp11/14/17/20/23`, `jimple`, `cstd`, `esbmc-unix2`, `esbmc-old`,
+`goto-binary`, `goto-transcoder`, `ir-ra` — **1 022 tests, 8 failures**. Plus
+the unit suite: **663/663**.
+
+All eight fail identically on the merge-base (`9a3d7e8a6c`) with only the four
+changed files reverted, so **none is a regression**:
+
+| test | suite |
+|---|---|
+| `ra-fmod-inf-nan`, `ra-log-nan`, `ra-pow-nan` | `ir-ra` |
+| `ra-interval-lift-mul-rdn-both-tracked`, `…-rup-both-tracked-single` | `ir-ra` |
+| `builtin-template`, `builtin-template-fail` | `esbmc-cpp14/template` |
+| `cbmc_fpclassify` | `goto-transcoder` |
+
+Five of the eight are floating-point/NaN or interval-rounding cases, which is
+the profile of a known macOS-local divergence rather than anything this branch
+could reach.
+
+### 35.2 The measurement that would have caught a regression, and did not
+
+This is a negative result, and worth recording as one: running the suites a
+change *does not obviously touch* found nothing, on a branch where running the
+suites it does touch had already found nothing. That is the expected outcome
+and it is still worth the hour — the alternative was shipping fourteen commits
+to a shared converter with three of five frontends unexercised.
+
+The branch's local validation now stands at: C 1 681/1 684, C++ 752/755, the
+above 1 014/1 022, unit 663/663, Python subsets clean, and byte-identity sweeps
+over four option sets — all residual failures confirmed pre-existing against the
+merge base. What is still unrun anywhere is **Solidity**, and CI.
