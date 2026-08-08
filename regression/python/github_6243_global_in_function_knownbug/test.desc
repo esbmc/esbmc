@@ -1,4 +1,0 @@
-KNOWNBUG
-main.py
---incremental-bmc --unwind 2
-^VERIFICATION SUCCESSFUL$

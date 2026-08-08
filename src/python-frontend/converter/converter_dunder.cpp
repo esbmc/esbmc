@@ -202,6 +202,34 @@ bool python_converter::is_user_class_pointer(const typet &t)
   return t.is_pointer() && is_user_class_struct_type(t.subtype());
 }
 
+// move_symbol_to_context() only overwrites an existing symbol's type when
+// completing a forward declaration, so a variable rebound to a new value keeps
+// its stale type. Left alone, function_call_expr sizes the new instance from
+// that type and the constructor's field writes overrun it (#6243).
+//
+// The widening set is an ALLOWLIST, not a denylist of unsafe types: any
+// struct-shaped existing type (tuple, dict, a migrated class instance) is
+// excluded even when its class differs, because an earlier statement may
+// already have built an expression against that struct's layout (`x = t[0]`
+// after `t = (1, 2)`) and retyping in place corrupts it. Denylisting only
+// existing class pointers was tried first and missed that case.
+void python_converter::retype_placeholder_to_class(
+  symbolt &sym,
+  const typet &new_type)
+{
+  const typet &existing = sym.get_type();
+  const bool existing_is_safe_placeholder =
+    existing == none_type() ||
+    (existing.is_pointer() && existing.subtype().id() == "empty") ||
+    existing.is_signedbv() || existing.is_unsignedbv() ||
+    existing.is_floatbv() || existing.is_bool();
+
+  if (
+    is_user_class_pointer(new_type) && existing_is_safe_placeholder &&
+    existing != new_type)
+    sym.set_type(new_type);
+}
+
 exprt python_converter::dispatch_dunder_operator(
   const std::string &op,
   exprt &lhs,

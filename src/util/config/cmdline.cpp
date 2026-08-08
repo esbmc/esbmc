@@ -193,10 +193,12 @@ std::string cmdlinet::expand_user(std::string const path) const
 {
   std::string result = std::string(path);
 
-  // Case ~
-  const std::optional<std::string> home_path = std::getenv(HOME_ENV_NAME);
+  // Case ~. Test the pointer, not an optional wrapping it: an unset variable
+  // yields nullptr, and std::optional<std::string> would construct the string
+  // from it before the guard runs, which is UB (#6238).
+  const char *home_path = std::getenv(HOME_ENV_NAME);
   if (!result.empty() && result[0] == '~' && home_path)
-    result.replace(0, 1, home_path.value());
+    result.replace(0, 1, home_path);
 
   return std::filesystem::absolute(result).string();
 }

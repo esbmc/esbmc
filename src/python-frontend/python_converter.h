@@ -461,6 +461,11 @@ private:
   // None-keeps-Class* and dunder-dispatch-through-pointer paths to real classes.
   bool is_user_class_pointer(const typet &t);
 
+  // Widen a symbol rebound from a non-class placeholder (None, Any, a bare
+  // scalar) to a class-pointer binding. Only those types are widened: a
+  // struct-shaped one may already back an expression built elsewhere.
+  void retype_placeholder_to_class(symbolt &sym, const typet &new_type);
+
   exprt resolve_identity_function_call(
     const exprt &func_expr,
     const exprt &args_expr);
@@ -470,6 +475,13 @@ private:
     const std::string &func_identifier);
 
   exprt handle_none_comparison(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
+  /// Binary operation with a None operand: raises for the operators CPython
+  /// rejects, otherwise defers to handle_none_comparison (#6260).
+  exprt handle_none_operand(
     const std::string &op,
     const exprt &lhs,
     const exprt &rhs);
@@ -668,6 +680,12 @@ private:
     module_locator &locator,
     code_blockt &code);
 
+  /// Binds an `import <mod> as <alias>` alias to the module's file, so the
+  /// alias resolves like the module name does (#6296).
+  void register_import_alias(
+    const nlohmann::json &import_node,
+    const std::string &module_file);
+
   /// Converts every module-level and function-local Import/ImportFrom
   /// statement in the current AST, appending the resulting code to
   /// `all_imports_block`. Shared by both the whole-module conversion path
@@ -842,7 +860,7 @@ private:
     const nlohmann::json &ast_node,
     const typet &current_type);
 
-  std::string resolve_name_symbol_id(const std::string &name);
+  std::string resolve_name_symbol_id(const std::string &name) const;
 
   std::string root_name_from_subscript(const nlohmann::json &node) const;
 
@@ -862,6 +880,12 @@ private:
   void reject_unknown_numpy_view_call(const nlohmann::json &node);
 
   void reject_numpy_view_identity_query(const nlohmann::json &node);
+
+  void reject_copied_numpy_view_in_container(
+    const nlohmann::json &ast_node,
+    const std::set<std::string> &container_types);
+
+  bool is_numpy_ravel_receiver(const nlohmann::json &ravel_call) const;
 
   std::optional<nlohmann::json>
   select_return_value_for_call(const nlohmann::json &call_node) const;

@@ -225,6 +225,16 @@ void goto_symext::do_simplify(expr2tc &expr)
     simplify(expr);
 }
 
+expr2tc goto_symext::branch_decision_guard(const expr2tc &guard) const
+{
+  if (!no_simplify)
+    return guard;
+
+  expr2tc decided = guard;
+  simplify(decided);
+  return decided;
+}
+
 void goto_symext::handle_sideeffect(
   const expr2tc &lhs,
   const sideeffect2t &effect,

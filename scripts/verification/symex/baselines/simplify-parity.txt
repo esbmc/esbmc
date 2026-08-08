@@ -2,21 +2,41 @@
 # Each entry must cite a finding or issue; an untriaged divergence is a blocker,
 # not a baseline (plan §11.3). Remove an entry when its defect is fixed -- the
 # oracle reports STALE-BASELINE if a listed test starts agreeing again.
+#
+# Re-measured 2026-08-05 against a current binary (§15 M9 R16): 1203 agreed, 4
+# diverged. Seven of the nine entries first recorded under R16 now agree --
+# #6660, #6675 and #6676 each removed a modelling decision that was gated on
+# do_simplify, which is the defect shape the whole R16 list turned out to share.
+#
+# Two more are gone because the oracle no longer compares them: github_2357_5
+# and github_2566_1 select --ir, which does not decide the C program, so a
+# verdict flip there is the encoding's approximation showing through. github_562
+# is the same case under --fixedbv. All three were confirmed by re-running
+# without the encoding flag, where the two legs agree again.
 
-# R16 -- spurious counterexample under --no-simplify (default leg is correct).
-github_1174_hex
-github_1174_lmod
-github_1174_oct
-github_1174_pass
-github_2341_3
-github_2357_5
-github_2566_1
-github_785-2
-realloc13
+# R16's last entry, github_252, was removed when #6778 was fixed. It returned
+# UNKNOWN under --no-simplify because the k-induction forward condition could
+# not close: the loop it had to reason about never exited, since the exit
+# decision was a syntactic test on a guard the flag had left unfolded. Both legs
+# report SUCCESSFUL now, checked against a master build that still diverges.
 
-# R16 -- returns UNKNOWN under --no-simplify, under --k-induction.
-github_252
-
-# R17 -- false SUCCESSFUL: --compact-trace implies --no-slice, and
-# --no-simplify --no-slice makes a reachable assert(0) vacuously unreachable.
-github_1631_compact
+# R28 -- both legs of one input, one mechanism: --no-simplify leaves calloc's
+# constant total_size unfolded, so the memset takes __memset_impl's byte-wise
+# loop instead of the folded path, and the test's --unwind 1 truncates it.
+#
+# memcleanup adds --no-unwinding-assertions, so the truncation becomes an
+# assume(false) that cuts every path and the leak claim passes vacuously --
+# FAILED -> SUCCESSFUL, the unsound direction, with no diagnostic. Raising the
+# bound past the 800-byte memset (--unwind 801) reports the leak again, on
+# dynamic_2_array, which is the object calloc's non-zero path allocates.
+#
+# memsafety keeps unwinding assertions on, so the same truncation surfaces
+# honestly as "unwinding assertion loop 4" in __memset_impl -- SUCCESSFUL ->
+# FAILED, the sound direction.
+#
+# An --unwind calibrated against the simplified program is not a bound for the
+# unsimplified one, so this is partly a premise failure of the relation. It is
+# baselined rather than excluded because no static predicate detects it, and
+# because the vacuous half is worth keeping visible.
+github_1257-memcleanup
+github_1257-memsafety
