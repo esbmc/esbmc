@@ -735,3 +735,39 @@ Both were recorded as hypotheses gated on a Phase 0 measurement rather than as
 conclusions — this document's own §13→§14 reversal is the reason. That
 discipline paid: the second one's Phase 0 refuted it, at the cost of a census
 rather than a merged fix.
+
+## 16. Flip status — G4 in flight, and one blocker half root-caused (2026-08-06)
+
+§15 left Phase 3 blocked on two foreign mechanisms plus G4/G5. Both have moved.
+
+**The array-typecast blocker is closed.** Phase 1 of
+`scope-array-assignment-conversion.md` shipped as PR #6700 (`c5efabb9c1`) and
+its remaining gates were discharged in PR #6733.
+
+**The §9.4 second mechanism is down to two witnesses, and one of them is root-
+caused.** PR #6702 shipped the relational scope's narrowed arms; against a
+binary carrying it, `chained-comparison2_fail` now agrees with legacy
+(FAILED/FAILED), joining `lambda15`. `precedence2` and `sum_tuple` still
+diverge, both in the **false-alarm** direction (hop-off FAILED where legacy is
+SUCCESSFUL) rather than the masking direction G2 guards.
+
+`precedence2` is **this scope's node kind after all** — a `code_assign2t` whose
+source the arm declines. It is not declined by §12's guard, which admits it:
+`c_implicit_typecast` itself refuses, because `check_c_implicit_typecast`'s
+`type2tc` overload has no `floatbv` case as source or destination and falls
+through to reject. See `scope-relational-float-reconciliation.md` §18.2-§18.3
+for the GOTO diff and the overload comparison. The fix is in `c_typecast`, not
+in `python_adjust`, and its second caller (`interval_domain.cpp:820`) is on the
+default path — so it carries gates this scope's flag-gated arms did not.
+
+**G4 is in flight.** A whole-corpus census over all 4 509 `regression/python`
+tests, two runs each, is running under §5's five inherited rules — it also
+serves as PR #6702's outstanding verdict-parity gate. Rule 1 bit again and was
+caught before any result was read: **56 tests already pass
+`--python-irep2-adjust*` in their own `test.desc`**, and a first non-compliant
+run of the sweep was discarded rather than reported. Partial: 330 SAME,
+2 DIVERGE (`class10`, `class12`, both SUCCESSFUL vs `rc=134`), 1 not
+attributable, 2 skipped short, at 335/4 509.
+
+G5 (dual-solver agreement) has not been started; it should follow G4 rather
+than run concurrently, since both saturate the same machine.

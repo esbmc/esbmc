@@ -125,10 +125,7 @@ protected:
   remove_function_call(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_new(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_delete(exprt &expr, goto_programt &dest);
-  void remove_temporary_object(
-    exprt &expr,
-    goto_programt &dest,
-    bool result_is_used);
+  void remove_temporary_object(exprt &expr, goto_programt &dest);
   void remove_statement_expression(
     exprt &expr,
     goto_programt &dest,
@@ -463,6 +460,16 @@ protected:
   // regression that motivated the gate.
   void
   emit_assert_fail_noreturn(const locationt &location, goto_programt &dest);
+
+  // The same four hooks differ only in arity and in which argument carries the
+  // failing expression; `expr_arg` names the latter.
+  void do_assert_fail(
+    const exprt &function,
+    const exprt::operandst &arguments,
+    goto_programt &dest,
+    const irep_idt &base_name,
+    std::size_t arity,
+    std::size_t expr_arg);
 
   // some built-in functions
   void do_abort(

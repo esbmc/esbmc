@@ -3,6 +3,7 @@
 #else
 #  include <csignal>
 #  include <cstdlib>
+#  include <unistd.h>
 #endif
 
 #include <util/base/filesystem.h>
@@ -24,6 +25,9 @@ void install_signal_catcher()
 #endif
 }
 
+// Same async-signal-safety constraint as timeout_handler: this can interrupt
+// the allocator, so it uses only the signal-safe cleanup paths, and _exit()
+// rather than exit(), which would run atexit handlers and destructors (#6201).
 void signal_catcher(int sig)
 {
 #if defined(_WIN32)
@@ -32,9 +36,9 @@ void signal_catcher(int sig)
   killpg(0, sig);
   // External solvers spawned into their own process groups are not in our
   // group, so kill them explicitly.
-  file_operations::kill_registered_pgroups();
+  file_operations::kill_registered_pgroups_from_signal();
 
-  file_operations::cleanup_registered_tmps();
-  exit(sig);
+  file_operations::remove_registered_tmps_from_signal();
+  _exit(sig);
 #endif
 }

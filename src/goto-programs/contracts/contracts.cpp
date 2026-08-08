@@ -2566,6 +2566,110 @@ void code_contractst::emit_ptr_field_assertions(
 // Phase 2C: pointer-parameter dereference assigns compliance
 // ---------------------------------------------------------------------------
 
+void code_contractst::materialize_ptr_deref_array_field(
+  const irep_idt &param_id,
+  const irep_idt &field,
+  const type2tc &ftype,
+  const type2tc &pointee,
+  const expr2tc &ptr_sym,
+  const expr2tc &deref_expr,
+  goto_programt &wrapper,
+  const locationt &location,
+  const std::string &func_name,
+  std::vector<ptr_deref_snapshot_t> &result)
+{
+  const array_type2t &atype = to_array_type(ftype);
+  type2tc elem_type = atype.subtype;
+  if (is_symbol_type(elem_type))
+    elem_type = ns.follow(elem_type);
+  // Only constant-size arrays of scalar elements (skip VLAs and nested
+  // array/struct elements, which would recurse into the same array-rvalue
+  // problem).
+  if (!is_constant_int2t(atype.array_size) || !is_scalar_type(elem_type))
+    return;
+  // A zero-length array member -- the GCC trailing-flexible-member idiom --
+  // has no element to snapshot, and no index is valid in it. The witness range
+  // used to be assumed, so an empty one assumed `false` ahead of the call and
+  // discharged every assertion in the wrapper, verifying the contract
+  // vacuously (#6513).
+  if (to_constant_int2t(atype.array_size).value == 0)
+    return;
+  type2tc k_type = atype.array_size->type;
+
+  std::string base = func_name + "_" + id2string(param_id) + "_" +
+                     id2string(field) + "_" +
+                     std::to_string(ptr_deref_snap_counter++);
+
+  // nondet witness index k, constrained to [0, n)
+  symbolt k_obj;
+  k_obj.name = k_obj.id = "__ESBMC_frame_pderef_k_" + base;
+  set_symbol_type(k_obj, k_type);
+  k_obj.lvalue = true;
+  k_obj.static_lifetime = false;
+  k_obj.file_local = false;
+  symbolt *k_added = context.move_symbol_to_context(k_obj);
+  expr2tc witness_k = symbol2tc(k_type, k_added->id);
+
+  goto_programt::targett k_decl = wrapper.add_instruction(DECL);
+  k_decl->code = code_decl2tc(k_type, k_added->id);
+  k_decl->location = location;
+  k_decl->location.comment("frame: ptr-deref array witness (Phase 2C)");
+
+  goto_programt::targett k_asg = wrapper.add_instruction(ASSIGN);
+  k_asg->code = code_assign2tc(witness_k, gen_nondet(k_type));
+  k_asg->location = location;
+
+  // Clamp rather than ASSUME, as Phase 2B does: an assumption over the witness
+  // index excludes paths whenever the range is empty. Element 0 exists here
+  // because the empty case was skipped above, so it is always a valid fallback
+  // (#6513).
+  goto_programt::targett k_rng = wrapper.add_instruction(ASSIGN);
+  k_rng->code = code_assign2tc(
+    witness_k,
+    if2tc(
+      k_type,
+      and2tc(
+        greaterthanequal2tc(witness_k, gen_zero(k_type)),
+        lessthan2tc(witness_k, atype.array_size)),
+      witness_k,
+      gen_zero(k_type)));
+  k_rng->location = location;
+  k_rng->location.comment(
+    "frame: clamp ptr-deref index to valid array range (Phase 2C)");
+
+  // scalar snapshot of (*p).field[k]
+  symbolt s_obj;
+  s_obj.name = s_obj.id = "__ESBMC_frame_snap_pderef_" + base;
+  set_symbol_type(s_obj, elem_type);
+  s_obj.lvalue = true;
+  s_obj.static_lifetime = false;
+  s_obj.file_local = false;
+  symbolt *s_added = context.move_symbol_to_context(s_obj);
+  expr2tc snap_expr = symbol2tc(elem_type, s_added->id);
+
+  goto_programt::targett s_decl = wrapper.add_instruction(DECL);
+  s_decl->code = code_decl2tc(elem_type, s_added->id);
+  s_decl->location = location;
+  s_decl->location.comment("frame: ptr-deref array snapshot (Phase 2C)");
+
+  expr2tc field_arr = member2tc(ftype, deref_expr, field);
+  goto_programt::targett s_asg = wrapper.add_instruction(ASSIGN);
+  s_asg->code =
+    code_assign2tc(snap_expr, index2tc(elem_type, field_arr, witness_k));
+  s_asg->location = location;
+  s_asg->location.comment("frame: capture (ptr->field)[k] (Phase 2C)");
+
+  ptr_deref_snapshot_t entry;
+  entry.ptr_sym = ptr_sym;
+  entry.pointee_type = pointee;
+  entry.field_name = field;
+  entry.value_type = elem_type;
+  entry.snapshot_sym = snap_expr;
+  entry.array_index = witness_k;
+  entry.member_type = ftype; // array type, for member access at assert time
+  result.push_back(entry);
+}
+
 std::vector<code_contractst::ptr_deref_snapshot_t>
 code_contractst::materialize_ptr_deref_snapshots(
   const frame_enforcert::classified_assignst &classified,
@@ -2693,89 +2797,19 @@ code_contractst::materialize_ptr_deref_snapshots(
         if (is_pointer_type(ftype) || is_code_type(ftype))
           continue;
 
-        // Array field: a whole-array rvalue read through the pointer is
-        // illegal C (dereference cannot build an array rvalue). Snapshot the
-        // scalar element (*p).field[k] at a nondet witness index k in [0,n)
-        // and later assert it is unchanged -- sound by the same forall-via-
-        // witness argument as Phase 2B (avoids dereference.cpp abort).
         if (is_array_type(ftype))
         {
-          const array_type2t &atype = to_array_type(ftype);
-          type2tc elem_type = atype.subtype;
-          if (is_symbol_type(elem_type))
-            elem_type = ns.follow(elem_type);
-          // Only constant-size arrays of scalar elements (skip VLAs and
-          // nested array/struct elements, which would recurse into the same
-          // array-rvalue problem).
-          if (
-            !is_constant_int2t(atype.array_size) || !is_scalar_type(elem_type))
-            continue;
-          type2tc k_type = atype.array_size->type;
-
-          std::string base = func_name + "_" + id2string(param_id) + "_" +
-                             id2string(field) + "_" +
-                             std::to_string(ptr_deref_snap_counter++);
-
-          // nondet witness index k, constrained to [0, n)
-          symbolt k_obj;
-          k_obj.name = k_obj.id = "__ESBMC_frame_pderef_k_" + base;
-          set_symbol_type(k_obj, k_type);
-          k_obj.lvalue = true;
-          k_obj.static_lifetime = false;
-          k_obj.file_local = false;
-          symbolt *k_added = context.move_symbol_to_context(k_obj);
-          expr2tc witness_k = symbol2tc(k_type, k_added->id);
-
-          goto_programt::targett k_decl = wrapper.add_instruction(DECL);
-          k_decl->code = code_decl2tc(k_type, k_added->id);
-          k_decl->location = location;
-          k_decl->location.comment("frame: ptr-deref array witness (Phase 2C)");
-
-          goto_programt::targett k_asg = wrapper.add_instruction(ASSIGN);
-          k_asg->code = code_assign2tc(witness_k, gen_nondet(k_type));
-          k_asg->location = location;
-
-          goto_programt::targett k_rng = wrapper.add_instruction(ASSUME);
-          k_rng->guard = and2tc(
-            greaterthanequal2tc(witness_k, gen_zero(k_type)),
-            lessthan2tc(witness_k, atype.array_size));
-          k_rng->location = location;
-          k_rng->location.comment(
-            "frame: constrain ptr-deref index (Phase 2C)");
-
-          // scalar snapshot of (*p).field[k]
-          symbolt s_obj;
-          s_obj.name = s_obj.id = "__ESBMC_frame_snap_pderef_" + base;
-          set_symbol_type(s_obj, elem_type);
-          s_obj.lvalue = true;
-          s_obj.static_lifetime = false;
-          s_obj.file_local = false;
-          symbolt *s_added = context.move_symbol_to_context(s_obj);
-          expr2tc snap_expr = symbol2tc(elem_type, s_added->id);
-
-          goto_programt::targett s_decl = wrapper.add_instruction(DECL);
-          s_decl->code = code_decl2tc(elem_type, s_added->id);
-          s_decl->location = location;
-          s_decl->location.comment(
-            "frame: ptr-deref array snapshot (Phase 2C)");
-
-          expr2tc field_arr = member2tc(ftype, deref_expr, field);
-          goto_programt::targett s_asg = wrapper.add_instruction(ASSIGN);
-          s_asg->code = code_assign2tc(
-            snap_expr, index2tc(elem_type, field_arr, witness_k));
-          s_asg->location = location;
-          s_asg->location.comment("frame: capture (ptr->field)[k] (Phase 2C)");
-
-          ptr_deref_snapshot_t entry;
-          entry.ptr_sym = ptr_sym;
-          entry.pointee_type = pointee;
-          entry.field_name = field;
-          entry.value_type = elem_type;
-          entry.snapshot_sym = snap_expr;
-          entry.array_index = witness_k;
-          entry.member_type =
-            ftype; // array type, for member access at assert time
-          result.push_back(entry);
+          materialize_ptr_deref_array_field(
+            param_id,
+            field,
+            ftype,
+            pointee,
+            ptr_sym,
+            deref_expr,
+            wrapper,
+            location,
+            func_name,
+            result);
           continue;
         }
 
@@ -3015,8 +3049,8 @@ code_contractst::materialize_arr_elem_snapshots(
     // it, verifying the whole function vacuously. Assuming a non-empty range
     // instead forces the extent to be at least one element, which is #6212 in
     // another guise. Clamping to the declared index does neither.
-    // Phase 2C still assumes its range (#6513); it needs a skip rather than a
-    // clamp, having no declared index to fall back to.
+    // Phase 2C takes the same approach, skipping a zero-length member outright
+    // and clamping to element 0 otherwise (#6513).
     goto_programt::targett j_clamp = wrapper.add_instruction(ASSIGN);
     j_clamp->code = code_assign2tc(
       witness_j,
@@ -4340,6 +4374,72 @@ static void warn_assumed_struct_extents(
     fmt::join(params, ", "));
 }
 
+static bool contains_symbol(const expr2tc &e, const irep_idt &name)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_symbol2t(e) && to_symbol2t(e).thename == name)
+    return true;
+
+  bool found = false;
+  e->foreach_operand([&found, &name](const expr2tc &op) {
+    if (!found)
+      found = contains_symbol(op, name);
+  });
+  return found;
+}
+
+/// Whether \p e reads or writes through \p name rather than merely naming it.
+static bool dereferences_symbol(const expr2tc &e, const irep_idt &name)
+{
+  if (is_nil_expr(e))
+    return false;
+  if ((is_dereference2t(e) || is_index2t(e)) && contains_symbol(e, name))
+    return true;
+
+  bool found = false;
+  e->foreach_operand([&found, &name](const expr2tc &op) {
+    if (!found)
+      found = dereferences_symbol(op, name);
+  });
+  return found;
+}
+
+/// Whether the extent of \p param can matter here: it is read or written
+/// through, or it escapes into a call that could do either. Contract clauses
+/// are still calls in the body at this point, so one scan covers the body and
+/// the requires/ensures/assigns clauses alike.
+///
+/// Answers true whenever the body cannot be inspected or the parameter
+/// escapes. A wrong "no" silently drops the warning on an underspecified
+/// contract, which is worse than the noise it was reported for (#6511).
+bool code_contractst::param_extent_is_observable(
+  const symbolt &func,
+  const irep_idt &param) const
+{
+  auto entry = goto_functions.function_map.find(func.id);
+  if (entry == goto_functions.function_map.end())
+    return true;
+  if (!entry->second.body_available)
+    return true;
+
+  for (const auto &ins : entry->second.body.instructions)
+  {
+    if (dereferences_symbol(ins.code, param))
+      return true;
+    if (dereferences_symbol(ins.guard, param))
+      return true;
+
+    if (!ins.is_function_call() || !is_code_function_call2t(ins.code))
+      continue;
+
+    for (const expr2tc &arg : to_code_function_call2t(ins.code).operands)
+      if (contains_symbol(arg, param))
+        return true;
+  }
+  return false;
+}
+
 /// Tell the user why a dereference may fail: the contract states no extent for
 /// these parameters, so the harness leaves their extent unconstrained.
 static void warn_unstated_extents(
@@ -4413,7 +4513,10 @@ void code_contractst::add_pointer_validity_assumptions(
     param_extents[param.get_identifier()] = {
       emit_pointer_param_malloc(wrapper, p, name, func, location), false};
     allocated_ptrs.push_back(p);
-    nondet_extent.push_back(name);
+    // The storage is allocated either way; only the advice is withheld, and
+    // only when nothing here can observe the extent (#6511).
+    if (param_extent_is_observable(func, param.get_identifier()))
+      nondet_extent.push_back(name);
   }
 
   warn_unstated_extents(func, location, nondet_extent);

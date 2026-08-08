@@ -1,0 +1,4 @@
+CORE
+main.py
+ --unwind 2
+ERROR: Unsupported Attribute value type: BinOp
