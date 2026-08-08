@@ -160,6 +160,67 @@ effective_location(const locationt &own, const locationt &inherited)
   return (own.is_not_nil() && !own.get_file().empty()) ? own : inherited;
 }
 
+// The IREP2 half of restore_value_locations. `if2t` is the one value-level kind
+// with a location field (irep2_expr.h:786), so it is also the only one whose
+// stamping survives migrate_expr -- meaning a native arm that stores `code2`
+// verbatim loses a ternary's location where the round-trip keeps it. Python's
+// floor-division lowering builds exactly that shape.
+//
+// The guard mirrors stamp_value_locations above: a location the frontend
+// supplied wins, because that is the `?` position witness branching reads.
+// Every caller has already excluded code-typed operands, so unlike
+// restore_value_locations this walk never has to re-root on a nested statement.
+static void stamp_ternary_locations(expr2tc &expr, const locationt &loc)
+{
+  if (is_nil_expr(expr))
+    return;
+
+  if (is_if2t(expr))
+  {
+    if2t &ite = to_if2t(expr);
+    if (ite.location.is_nil() || ite.location.get_file().empty())
+      ite.location = loc;
+  }
+
+  expr->Foreach_operand(
+    [&loc](expr2tc &op) { stamp_ternary_locations(op, loc); });
+}
+
+static bool has_unlocated_ternary(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  if (is_if2t(expr))
+  {
+    const locationt &loc = to_if2t(expr).location;
+    if (loc.is_nil() || loc.get_file().empty())
+      return true;
+  }
+
+  bool found = false;
+  expr->foreach_operand([&found](const expr2tc &op) {
+    if (!found)
+      found = has_unlocated_ternary(op);
+  });
+  return found;
+}
+
+// `code2` with every location-less ternary stamped at the location the legacy
+// path would have given it. The pre-scan keeps the common case free: the
+// stamping walk detaches every node it descends through, so running it
+// unconditionally would deep-copy each assignment's expression tree.
+static expr2tc
+with_ternary_locations(const expr2tc &code2, const locationt &loc)
+{
+  if (loc.get_file().empty() || !has_unlocated_ternary(code2))
+    return code2;
+
+  expr2tc stamped = code2;
+  stamp_ternary_locations(stamped, loc);
+  return stamped;
+}
+
 // The location the legacy path stamps on an instruction it emits for `own`: it
 // reads the round-tripped codet through the *non-const* exprt::location(),
 // which materialises an empty -- and so not nil -- "#location" when the
@@ -408,12 +469,13 @@ bool goto_convert_functionst::convert_native_rec(
 
     // For side-effect-free operands the instruction convert_assign emits is
     // migrate_expr(code_assignt(lhs, rhs)) located at the statement — which
-    // round-trips back to `code2` itself (migrate_expr drops the operand
-    // locations, so none of restore_value_locations' stamping survives in the
-    // stored code). Emit it directly, no round-trip, carrying the statement's
-    // own location, exactly as copy(new_assign, ASSIGN) would.
+    // round-trips back to `code2` itself once the ternary stamping that
+    // survives migrate_expr is applied. Emit it directly, no round-trip,
+    // carrying the statement's own location, exactly as copy(new_assign,
+    // ASSIGN) would.
     goto_programt::targett t = dest.add_instruction(ASSIGN);
-    t->code = code2;
+    t->code = with_ternary_locations(
+      code2, effective_location(assign.location, inherited));
     t->location = assign.location;
     return true;
   }
@@ -497,7 +559,8 @@ bool goto_convert_functionst::convert_native_rec(
       return false;
 
     goto_programt::targett t = dest.add_instruction(OTHER);
-    t->code = code2;
+    t->code = with_ternary_locations(
+      code2, effective_location(expr_stmt.location, inherited));
     t->location = expr_stmt.location;
     return true;
   }
@@ -638,13 +701,14 @@ bool goto_convert_functionst::convert_native_rec(
       // convert_return replaces a missing value with nondet
       if (val.is_nil())
         return delegate_to_legacy();
-      // The RETURN instruction convert_return emits is migrate_expr(code_returnt)
-      // located at the statement; migrate_expr drops the value-operand location
-      // restore_value_locations stamped, so it round-trips to code2 itself. Emit
-      // it directly, exactly as the assign/expression handlers do.
+      // The RETURN instruction convert_return emits is
+      // migrate_expr(code_returnt) located at the statement, which round-trips
+      // to code2 itself once the ternary stamping is applied. Emit it directly,
+      // exactly as the assign/expression handlers do.
       goto_programt::targett r = dest.add_instruction();
       r->make_return();
-      r->code = code2;
+      r->code = with_ternary_locations(
+        code2, effective_location(ret.location, inherited));
       r->location = emitted_location(ret.location);
     }
     else if (val.is_not_nil() && val.type().id() != "empty")
@@ -1366,7 +1430,8 @@ bool goto_convert_functionst::convert_native_rec(
       return delegate_to_legacy();
 
     goto_programt::targett t = dest.add_instruction();
-    t->make_function_call(code2);
+    t->make_function_call(
+      with_ternary_locations(code2, effective_location(f.location, inherited)));
     t->location = f.location;
     return true;
   }

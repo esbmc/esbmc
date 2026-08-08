@@ -1051,3 +1051,120 @@ What is left before the round-trip can be deleted is now short and named: the
 assert-fold in C/C++/Python, a Python A/B sweep that has never been run, and
 Solidity's eight residuals — which #6759 and #6760 already establish are *not*
 dispatcher defects.
+
+## 21. The Python A/B sweep, run — and the one defect it found (2026-08-08)
+
+§20.4 listed the Python sweep as the one clause never measured. It is run here,
+at stride 15 over `regression/python` (303 of 4 539 tests), same A/B as §18.6.
+
+### 21.1 Result
+
+| | divergent | identical |
+|---|---:|---:|
+| before | **19** / 303 | 284 |
+| after | **0** | **303 / 303** |
+| controls (C stride-12, C++ stride-12) | 1 / 202, pre-existing (§21.4) | 201 |
+
+A further 16 tests diverged only under §18.6's normalisation and are not
+counted above; §21.3 records what they needed.
+
+### 21.2 One defect, and it is a hole in a stated premise
+
+All 19 are the same site, and they are location-only. The native `ASSIGN` arm
+stores `code2` verbatim on the reasoning — written into the code as a comment —
+that "migrate_expr drops the operand locations, so none of
+restore_value_locations' stamping survives in the stored code." That premise is
+false for exactly one kind: `if2t` carries a location field
+(`irep2_expr.h:786`) and `migrate.cpp:1006` round-trips it. So a ternary nested
+in a side-effect-free right-hand side keeps its stamped location on the legacy
+path and loses it natively.
+
+Python is where it shows because Python is where the shape occurs: floor
+division lowers to an arithmetic expression with an unlocated `if2t` correction
+term, so every `//` inside an assignment hits it. C and C++ do not — the clang
+frontends stamp sub-expression locations at parse time, so the ternary already
+has one and the legacy stamping is a no-op.
+
+The fix is the IREP2 half of `restore_value_locations`: stamp the statement's
+effective location onto location-less `if2t` operands before storing `code2`.
+
+**The premise is written into four arms, not one.** The A/B sample only reached
+the `ASSIGN` one; review found the same sentence — and the same divergence —
+at the three other sites that store `code2` verbatim, each reproduced against
+the patched binary before being fixed:
+
+| arm | Python shape that reaches it |
+|---|---|
+| `code_assign2t` → ASSIGN | `y = (x + n // x) // 2` |
+| `code_return2t` → RETURN | `return (x + n // x) // 2` |
+| `code_expression2t` → OTHER | `(x + n // x) // 2` as a bare statement |
+| `code_function_call2t` → FUNCTION_CALL | `g((x + n // x) // 2)` |
+
+`code_decl2t` was probed and does not diverge: a decl with an initializer
+delegates on `has_sideeffect` before reaching a verbatim store. Each of the four
+arms has already excluded code-typed operands by the time it emits, so unlike
+`restore_value_locations` the IREP2 walk never has to re-root on a nested
+statement — an invariant the helper's comment now states, because it is a
+coupling across a function boundary rather than a local property.
+
+### 21.3 The sweep needed three normalisations §18.6 does not name
+
+Each was settled by the §7 rule 7 self-control — the legacy arm against itself —
+not by inspection:
+
+| artefact | why it varies | normalisation |
+|---|---|---|
+| `GOTO program processing time: N.NNNs` | wall clock | `time: Ts` |
+| `ESBMC_unpack_temp_<n>` | temp name derived from an address | `_N` |
+| `ASSIGN __file__={ 47, 118, ... }` | the astgen temp dir, **as decimal character codes** | collapse the initialiser |
+
+The third is the one to remember: `__file__` holds the per-run temp directory
+encoded byte-by-byte, so no amount of widening §20.3's `esbmc[-._]…` text
+pattern can reach it. A per-run artefact need not be legible as text.
+
+### 21.4 Two findings the sweep produced that this patch does not fix
+
+1. **A C divergence that is not location-only.** `esbmc/cwe_uninit_array_vla`
+   (`--uninitialised-vars-check --incremental-bmc`) renders a VLA bound as `n`
+   natively and `tmp$1` under the round-trip — the first *instruction-text*
+   divergence recorded in any suite; every prior residue was a location. It
+   reproduces with the patch reverted, so it predates it. Not filed yet.
+2. **The A/B sees `if2t::location` only through the tree-dump fallback.** The
+   dump renders a `#location` block only where `from_expr` cannot print the
+   expression; on a printable one the field is invisible. Python surfaced this
+   defect only because its `xor` node forces the fallback, which is also why the
+   303-test sample reached one of the four affected arms and not the other
+   three. Treat the sweep's coverage of this field as partial.
+
+### 21.5 Mutants
+
+| mutant | what it breaks | caught by |
+|---|---|---|
+| M1 — stamping call removed | the ternary's location | `…ternary_loc_01` (ASSIGN) and `…_03` (RETURN/OTHER/CALL); and the A/B, 19/303 |
+| M2 — stamp unconditionally, overwriting a frontend `?:` position | a C/C++ ternary's own location | **nothing** — §21.4 item 2 is why |
+
+M1 was run, not assumed: reverting the call fails exactly the two tests that pin
+the arms and leaves `…_02` — the legacy-path control, which passes pre-patch by
+construction — green.
+
+M2 is the honest limit. The guard is kept on the semantics rather than on a
+gate: `irep2_expr.h:787` says the field carries the `?` position for witness
+branching, so a frontend that supplied one must win. Do not read the passing
+gates as evidence the guard is exercised.
+
+### 21.6 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc-cpp` | drained; residue = assert-fold | gated per patch (§11.4) |
+| `esbmc` (C) | 4 / 60 tests | 138/138 (stride-12, §20.3); 1 divergence at stride-12 here, §21.4 |
+| `python` | dominant site fixed by #6695 (merged) | **303/303** (stride-15) |
+| `esbmc-solidity` | 0 / 26 | 502/510; 8 residuals = #6759, #6760 |
+| `jimple` | 0 / 15 | 15/15 |
+
+Python's 303/303 is a sampling result, not a proof — §21.2 is the standing
+warning that a shape absent from the sample can still carry the defect, and
+§21.4 item 2 bounds what the dump can observe at all. What is left is the
+assert-fold in C/C++/Python, Solidity's eight residuals, and the C divergence in
+§21.4 — which, unlike the Solidity eight, has not been shown to predate the
+dispatcher series as a whole, only this patch.
