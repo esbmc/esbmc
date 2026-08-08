@@ -21,6 +21,9 @@ class PreprocessorStateMixin:
         self._vararg_module_defs = set()
         self._vararg_specializations = {}
         self._vararg_dropped_defs = set()
+        self._vararg_scope_stack = []
+        self._vararg_def_owners = {}
+        self._vararg_owner_specs = {}
         self.listcomp_counter = 0
         self.variable_annotations = {}
         self.function_return_annotations = {}

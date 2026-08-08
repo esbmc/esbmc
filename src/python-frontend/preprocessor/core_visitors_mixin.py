@@ -1491,6 +1491,7 @@ class CoreVisitorsMixin:
         self._assignment_call_origins.clear()
         saved_eq_only = set(self._eq_only_items_view_targets)
         self._eq_only_items_view_targets = self._scan_eq_only_items_view_targets(node.body)
+        saved_vararg_defs = self._enter_vararg_scope(node)
         try:
             node = self._rewrite_humaneval_20_none_sentinel(node)
 
@@ -1527,3 +1528,4 @@ class CoreVisitorsMixin:
             self.variable_annotations = saved_var_anns
             self._assignment_call_origins = saved_call_origins
             self._eq_only_items_view_targets = saved_eq_only
+            self._exit_vararg_scope(node, saved_vararg_defs)
