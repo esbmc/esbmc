@@ -1,4 +1,4 @@
 CORE
 main.c
 --bitwuzla --smt-formula-too --output -
-^\(set-logic QF\_ABV\)$
+^\(set-logic QF\_BV\)$

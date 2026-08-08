@@ -682,22 +682,49 @@ void smt_solver_baset::bump_addrspace_array(
   unsigned int idx,
   const expr2tc &val)
 {
-  expr2tc oldname = symbol2tc(
-    addr_space_arr_type,
-    "__ESBMC_addrspace_arr_" + std::to_string(addr_space_sym_num.back()++));
-  expr2tc store = with2tc(
-    addr_space_arr_type,
-    oldname,
-    constant_int2tc(machine_ptr, BigInt(idx)),
-    val);
-  expr2tc newname = symbol2tc(
-    addr_space_arr_type,
-    "__ESBMC_addrspace_arr_" + std::to_string(addr_space_sym_num.back()));
-  convert_assign(equality2tc(newname, store));
+  /* Defer: the version number still advances, so get_cur_addrspace_ident()
+   * keeps naming the array a reader would see, but nothing reaches the solver
+   * until one does. See pending_addrspace_stores. */
+  addr_space_sym_num.back()++;
+  pending_addrspace_stores.back().push_back({idx, val});
+}
+
+void smt_solver_baset::flush_addrspace_stores()
+{
+  if (pending_addrspace_stores.back().empty())
+    return;
+
+  /* Replay in construction order: each store builds on the version before it,
+   * so the chain cannot be collapsed or reordered. Move the buffer out first --
+   * convert_assign() re-enters conversion, which may reach this function
+   * again, and the emptied buffer is what stops it recursing. */
+  std::vector<addrspace_store> pending;
+  pending.swap(pending_addrspace_stores.back());
+
+  unsigned int version = addr_space_sym_num.back() - pending.size();
+  for (const addrspace_store &s : pending)
+  {
+    expr2tc oldname = symbol2tc(
+      addr_space_arr_type,
+      "__ESBMC_addrspace_arr_" + std::to_string(version++));
+    expr2tc store = with2tc(
+      addr_space_arr_type,
+      oldname,
+      constant_int2tc(machine_ptr, BigInt(s.idx)),
+      s.val);
+    expr2tc newname = symbol2tc(
+      addr_space_arr_type, "__ESBMC_addrspace_arr_" + std::to_string(version));
+    convert_assign(equality2tc(newname, store));
+  }
 }
 
 std::string smt_solver_baset::get_cur_addrspace_ident()
 {
+  /* The only two callers (both pointer-cast paths in smt_casts.cpp) index the
+   * array they name, so this is the point where the deferred stores have to
+   * exist. */
+  flush_addrspace_stores();
+
   std::stringstream ss;
   ss << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();
   return ss.str();

@@ -1141,6 +1141,40 @@ public:
    *  popping. */
   std::list<std::map<unsigned, unsigned>> addr_space_data;
 
+  /** One deferred `__ESBMC_addrspace_arr_N = with(arr_N-1, idx, val)` step. */
+  struct addrspace_store
+  {
+    unsigned int idx;
+    expr2tc val;
+  };
+
+  /** Address-space stores not yet handed to the solver.
+   *
+   *  The address-space array is written for every tracked object but read only
+   *  by the two pointer-cast paths in smt_casts.cpp, both of which go through
+   *  get_cur_addrspace_ident(). Programs that never cast between integers and
+   *  pointers therefore never select from it, and asserting the store chain
+   *  regardless costs one SMT array declaration per version per tuple field --
+   *  enough to pull the script from QF_BV up into QF_ABV, and to roughly double
+   *  the node count bitwuzla builds (nn-tanh_5_unsafe: 110k -> 55k initial
+   *  nodes once the stores are deferred). Solve time on that benchmark is
+   *  unchanged, so this buys formula size and the honest logic fragment, not
+   *  speed.
+   *
+   *  Pre-camada ESBMC avoided this in its own array flattener, which kept an
+   *  unbounded array as bookkeeping until a select forced it out
+   *  (array_conv.cpp's is_unbounded_array path). Camada has no equivalent, and
+   *  could not: ESBMC chooses the logic string before camada emits anything,
+   *  and bitwuzla rejects array declarations under QF_BV, so eliding the
+   *  arrays and staying in QF_BV has to happen here.
+   *
+   *  In a list to support push/pop, like addr_space_sym_num beside it. */
+  std::list<std::vector<addrspace_store>> pending_addrspace_stores;
+
+  /** Assert every deferred address-space store, oldest first, and stop
+   *  deferring. Called when something is about to read the array. */
+  void flush_addrspace_stores();
+
   /** Holds the `__ESBMC_alloc` symbol convert_terminal() was last invoked with.
    */
   expr2tc current_valid_objects_sym;

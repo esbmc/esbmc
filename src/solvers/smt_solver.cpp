@@ -113,6 +113,7 @@ smt_solver_baset::smt_solver_baset(
   pointer_logic.emplace_back();
 
   addr_space_sym_num.push_back(0);
+  pending_addrspace_stores.emplace_back();
 
   renumber_map.emplace_back();
 
@@ -175,6 +176,7 @@ void smt_solver_baset::push_ctx()
 
   addr_space_data.push_back(addr_space_data.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
+  pending_addrspace_stores.push_back(pending_addrspace_stores.back());
   pointer_logic.push_back(pointer_logic.back());
   renumber_map.push_back(renumber_map.back());
 
@@ -248,6 +250,7 @@ void smt_solver_baset::pop_ctx()
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
+  pending_addrspace_stores.pop_back();
   renumber_map.pop_back();
 
   ctx_level--;
