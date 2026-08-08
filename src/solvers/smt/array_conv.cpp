@@ -983,6 +983,13 @@ void array_convt::add_array_equalities()
 
   for (auto &it = pair.first; it != pair.second; it++)
   {
+    /* mk_array_equality() runs this over every equality at the level each time
+     * it records a new one, and it hands the caller the AST from the first
+     * encoding -- so re-encoding cannot reach the caller and only trips the
+     * assertion below (#6794). */
+    if (it->second.result != NULL)
+      continue;
+
 #ifndef NDEBUG
     assert(array_indexes_are_same(
       array_indexes[it->second.arr1_id], array_indexes[it->second.arr2_id]));
@@ -1049,7 +1056,10 @@ void array_convt::add_array_equality(
   const ast_vect &a2 = array_valuation[arr2_id][arr2_update];
 
   smt_solver_baset::ast_vec lits;
-  assert(start_pos < a1.size());
+  /* Equal is admissible: an equality between arrays that no index is ever read
+   * from constrains nothing, so the loop below is empty and make_n_ary_and
+   * returns true. A strict bound aborted on that case instead (#6794). */
+  assert(start_pos <= a1.size());
   for (unsigned int i = start_pos; i < a1.size(); i++)
   {
     lits.push_back(a1[i]->eq(ctx, a2[i]));
