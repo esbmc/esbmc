@@ -2450,7 +2450,12 @@ void python_converter::handle_function_call_rhs(
     if (base_ctor_called)
     {
       auto class_node = json_utils::find_class((*ast_json)["body"], func_name);
-      func_name = class_node["bases"][0]["id"].get<std::string>();
+      // A qualified base (`module.Class`) is an Attribute, which carries
+      // `attr`; only a bare Name has `id`. Reading `id` unconditionally threw
+      // on any class inheriting from an operational model.
+      const auto &base = class_node["bases"][0];
+      func_name = base.contains("id") ? base["id"].get<std::string>()
+                                      : base.value("attr", func_name);
       base_ctor_called = false;
     }
 
