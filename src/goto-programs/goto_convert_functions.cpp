@@ -487,6 +487,20 @@ static const locationt &statement_location(const expr2tc &code2)
 // so the statements around it convert natively. Each reads its own code_*2t
 // fields directly (no legacy round-trip) and carries the statement's own
 // location, matching goto_convertt::convert() byte-for-byte on this subset.
+// convert()'s postamble: a statement that emitted nothing into a still-empty
+// program leaves a SKIP at its own location (goto_convert.cpp). Only
+// code_assert2t under --no-assertions emits nothing here, and a block already
+// carries its own SKIP, so `stmt` is always a kind statement_location knows.
+static void ensure_nonempty(goto_programt &p, const expr2tc &stmt)
+{
+  if (!p.instructions.empty())
+    return;
+
+  p.add_instruction(SKIP);
+  p.instructions.back().code = expr2tc();
+  p.instructions.back().location = statement_location(stmt);
+}
+
 bool goto_convert_functionst::convert_native_rec(
   const expr2tc &code2,
   goto_programt &dest,
@@ -1295,7 +1309,13 @@ bool goto_convert_functionst::convert_native_rec(
     // from the shared tmp_symbol counter, and the numbering is observable.
     // A missing iteration statement still emits a SKIP (which is what the
     // continue target then points at), not nothing.
-    destructor_stackt stack_before_iter = targets.destructor_stack;
+    //
+    // Scope-exit state the iteration leaks is *not* a reason to bail: like the
+    // init above, convert_for leaves it for the enclosing block to unwind and
+    // never restores it itself. A call with a side-effecting argument leaks one
+    // -- remove_sideeffects' temp is declared, and convert_decl pushes its
+    // code_dead -- which is the only shape in the C/C++ corpus that reached
+    // this fallback (esbmc/esbmc#4715, docs §28).
     goto_programt tmp_x;
     bool iter_ok = true;
     if (is_nil_expr(f.iter))
@@ -1306,13 +1326,17 @@ bool goto_convert_functionst::convert_native_rec(
     else
       iter_ok = convert_native_rec(f.iter, tmp_x, here);
 
-    if (
-      !iter_ok || tmp_x.instructions.empty() ||
-      targets.destructor_stack.size() != stack_before_iter.size())
+    if (!iter_ok || tmp_x.instructions.empty())
     {
-      old_break_continue.restore(targets);
-      targets.destructor_stack = stack_before;
-      return false;
+      // Delegate the whole loop rather than failing the walk, as the body leg
+      // below does; the surrounding statements stay native either way.
+      tmp_symbol.counter = tmp_before;
+      context.erase_since(ctx_before);
+      targets = targets_before;
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(f.location, inherited));
+      convert(to_code(op), dest);
+      return true;
     }
 
     targets.set_break(z);
@@ -1456,11 +1480,7 @@ bool goto_convert_functionst::convert_native_rec(
           sc.code, tmp, effective_location(sc.location, inherited)))
       return false;
 
-    // convert() always leaves at least one instruction (it appends a SKIP when
-    // a statement emitted nothing), so legacy can take instructions.begin()
-    // unconditionally; convert_native_rec only guarantees that for a block.
-    if (tmp.instructions.empty())
-      return false;
+    ensure_nonempty(tmp, sc.code);
 
     goto_programt::targett target = tmp.insert(tmp.instructions.begin());
     target->make_skip();
@@ -1673,13 +1693,9 @@ bool goto_convert_functionst::convert_native_rec(
     }
     else
     {
-      // convert() always leaves at least one instruction (it appends a SKIP
-      // when a statement emitted nothing), so legacy can take
-      // instructions.begin() unconditionally; convert_native_rec only
-      // guarantees that for a block. On the branch above the assertion is the
-      // target, so an empty tmp is fine there.
-      if (tmp.instructions.empty())
-        return false;
+      // On the error-label branch above the assertion is the target, so an
+      // empty tmp is fine there; here the label needs an instruction to sit on.
+      ensure_nonempty(tmp, l.code);
 
       target = tmp.instructions.begin();
       dest.destructive_append(tmp);

@@ -1792,3 +1792,81 @@ What deleting the round-trip actually requires, in order:
 
 Until then the fallback is load-bearing, and "0 declines" should be read as what
 it is: a statement about a corpus, at a stride.
+
+## 29. The three live sites closed — the fallback is no longer reachable from the corpus (2026-08-08)
+
+§28 answered "can the round-trip be deleted?" with *no*, and named the three
+reachable origin sites. All three are closed here, and the count that matters
+moves from 1/3355 to **0/3355**.
+
+### 29.1 The `for` iteration — the check was stricter than legacy
+
+The arm declined when converting the iteration statement left
+`targets.destructor_stack` larger than it found it. `convert_for` (goto_convert.cpp)
+does no such thing: it converts the iteration, never touches the destructor
+stack, and leaves any `code_dead` a declaration pushes for the **enclosing
+block** to unwind — which is exactly what the arm's own comment already says
+about the *init* leg three lines above. The check was symmetry with the body
+leg, not a requirement.
+
+`for (i = 0; i < 3; acall(i++))` leaks one such entry: `remove_sideeffects`
+declares a temp for the side-effecting argument, and `convert_decl` pushes its
+dead. Dropping the check admits it; the A/B is byte-identical on both the
+reduced case and `cbmc/01_cbmc_for4` it came from.
+
+The remaining failure legs now **delegate** rather than `return false`, matching
+the body leg directly below them. That asymmetry — one leg of an arm taking a
+whole-function fallback while the next takes a statement-local one — was worth
+removing on its own.
+
+### 29.2 The two "emitted nothing" sites — fixed at the source
+
+§28.3 predicted these should be closed together, at the asymmetry rather than
+the symptoms, and that is what happened. `convert()` ends with: *if the
+accumulated program is still empty, add a SKIP at this statement's location*
+(goto_convert.cpp). `convert_native_rec` had no counterpart, so the
+`switch_case` and `label` arms — both of which need an instruction for their
+target to sit on — declined when their sub-statement emitted nothing.
+
+One helper, `ensure_nonempty`, reproduces that postamble, and both arms call it
+where they previously bailed. `code_assert2t` under `--no-assertions` remains
+the only native kind that can emit nothing, and a block already carries its own
+SKIP, so the statement whose location is used is always one
+`statement_location` knows.
+
+### 29.3 Result
+
+| census | tests | declining |
+|---|---:|---:|
+| §25, stride-9, four frontends | 778 | 0 |
+| §28, full C/C++ corpus | 3 355 | 1 |
+| here, full C/C++ corpus | 3 355 | **0** |
+
+The origin-site count drops from 8 to 5, and none of the 5 has been reached by
+any probe. `return false` sites in `convert_native_rec`: **15 → 12**.
+
+### 29.4 What this does and does not license
+
+It does **not** license deleting the round-trip. What changed is the *evidence*:
+before, one corpus input demonstrably needed the fallback; now none does. The
+five remaining origin sites are unreached-by-probe, which §28.2 already flagged
+as an honest negative rather than a proof — and this branch has produced three
+defects found by reading rather than probing.
+
+The gap between "no corpus input reaches it" and "no input can" is the whole of
+what is left, and closing it is a different kind of work: a reachability
+argument per site, of the kind `CLAUDE.md`'s Mode C prescribes, not another
+sweep. Two of the five (`break`/`continue` outside a loop) are ill-formed input
+and should simply be asserted rather than handled; the other three are defensive
+guards whose comments already say so.
+
+Also still open, unchanged: **Solidity**, which needs CI.
+
+### 29.5 A note on what these tests can pin
+
+Both new tests are verdict tests, and neither discriminates the change — a
+delegation and a decline produce byte-identical programs, so §23.2's M1 limit
+applies to all three sites. The census is the instrument; the tests pin the
+verdict under `--no-assertions` and on a side-effecting for-iteration, which
+nothing else in the C suite did, and guard the shapes against a future change
+that is *not* behaviour-preserving.
