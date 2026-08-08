@@ -270,6 +270,16 @@ public:
     entry.constant = expr2tc();
   }
 
+  /// Record `rec` at its initial version. phi_function merges only names that
+  /// already had a record when the branch was taken, so storage first written
+  /// inside a branch would otherwise keep that branch's version on both paths
+  /// (#6798). get_ident_name numbers a count-0 record exactly as it numbers an
+  /// absent one, so declaring costs no SSA renumbering.
+  void declare(const name_record &rec)
+  {
+    current_names.emplace(rec, valuet());
+  }
+
   void get_original_name(expr2tc &expr) const override
   {
     renaming_levelt::get_original_name(expr, symbol_renaming_level::level1);

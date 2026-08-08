@@ -1630,7 +1630,7 @@ void goto_convertt::remove_sideeffects(
     else if (statement == "temporary_object")
     {
       const locationt location = expr.find_location();
-      remove_temporary_object(expr, dest, result_is_used);
+      remove_temporary_object(expr, dest);
 
       // A discarded temporary dies at the end of its full expression
       // (C++ [class.temporary]/4, github #6076), not at block exit: emit
@@ -2287,10 +2287,7 @@ void goto_convertt::remove_cpp_delete(exprt &expr, goto_programt &dest)
   expr.make_nil();
 }
 
-void goto_convertt::remove_temporary_object(
-  exprt &expr,
-  goto_programt &dest,
-  bool result_is_used)
+void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
 {
   if (expr.operands().size() != 1 && expr.operands().size() != 0)
     throw "temporary_object takes 0 or 1 operands";
