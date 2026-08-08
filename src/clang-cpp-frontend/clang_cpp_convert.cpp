@@ -32,6 +32,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/lang/c_types.h>
 #include <util/lang/exception_specification.h>
 #include <util/expr/string_constant.h>
+#include <util/symtab/base_subobject.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
