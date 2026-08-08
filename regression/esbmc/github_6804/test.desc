@@ -1,5 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 
 ^VERIFICATION FAILED$
-^.*dereference failure: invalid pointer$

@@ -21,11 +21,15 @@ reports a spurious violation, and so do `regression/esbmc/github_426_2`,
 multiplies an `offsetof`, but `offsetof` expands to `(size_t)&((S *)0)->y` and is
 address-derived like any other address.
 
-Reads take the noisy direction — a spurious counterexample. Writes did not: with
-no target resolved the store landed on the fallback symbol, every object the
-pointer could alias kept its old value, and asserting the write had not happened
-was proved (esbmc/esbmc#6804). `dereference()` now raises `invalid pointer` for a
-write that resolves no target, so the store is reported rather than dropped.
+Reads take the noisy direction — a spurious counterexample. Writes do not: with
+no target resolved the store lands on the fallback symbol, every object the
+pointer could alias keeps its old value, and asserting the write did not happen
+is proved (esbmc/esbmc#6804). So the gap misses bugs as well as inventing them,
+and the fixes below are needed for the write direction too.
+
+Failing every write that resolves no target is not the answer: the k-induction
+inductive step havocs value sets on purpose, so such a check cannot tell a lost
+store from a deliberate over-approximation and fires on every inductive step.
 
 ## Why the obvious fix is unsound
 
