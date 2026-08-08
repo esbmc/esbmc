@@ -1,0 +1,6 @@
+CORE
+main.c
+--std c23
+^VERIFICATION FAILED$
+^EXIT=10$
+^SIGNAL=0$
