@@ -1937,3 +1937,68 @@ with a non-`cpp-throw` code operand, a `code_decl2t` whose symbol is absent from
 the context, a nil `for` condition, and `break`/`continue` with no target — are
 unreached by 8 660 corpus tests and by probe, which after §30.2 should be read
 as *evidence*, not proof.
+
+## 31. Reachability arguments for the five remaining sites (2026-08-08)
+
+§29.4 said the gap between "no corpus input reaches it" and "no input can" needs
+a per-site argument rather than another sweep, and §30.2 said a probe's negative
+is the weakest evidence available. Here are the arguments, from reading the
+producers and the legacy counterparts rather than from probing.
+
+### 31.1 Three sites where the legacy path aborts
+
+| site | native guard | legacy counterpart |
+|---|---|---|
+| `code_break2t` | `!targets.break_set` | `convert_break`: `log_error("break without target"); abort();` |
+| `code_continue2t` | `!targets.continue_set` | `convert_continue`: `log_error("continue without target"); abort();` |
+| `code_decl2t` | symbol absent from context | `convert_decl`: `assert(s != nullptr);` |
+
+This is the strongest class of argument available short of a formal proof, and
+it does not depend on any corpus: **the fallback at these three sites cannot
+change an outcome, because the path it falls back to terminates.** A run that
+reaches any of them produces no verdict either way. They are not dead code in
+the compiler's sense — they are unreachable *in any run that produces a result*.
+
+The right end-state for all three is the legacy diagnostic, not a fallback: the
+native arm should abort with the same message rather than route to a converter
+that will. That is a deletion, so per `CLAUDE.md` it needs its own C-Dead proof
+and its own PR; recorded here rather than done in passing.
+
+### 31.2 The nil `for` condition has no producer
+
+Every construction path for a `code_fort` sets `cond()`:
+
+- `clang_c_convert.cpp` initialises `exprt cond = true_exprt();` and overwrites
+  it only when the AST has one, so `for(;;)` gets `true` — which is why probing
+  it found nothing, and this time the probe agrees with the reading.
+- `clang_cpp_convert.cpp` takes the same shape.
+- The two internal builders in `builtin_functions.cpp` (array initialisation and
+  `cpp_new`'s element loop) both assign `loop.cond()` explicitly.
+- Python desugars `for` into `while`, so it produces no `code_for2t` at all.
+
+Unverified: Jimple and Solidity, whose loop lowering was not read. So the claim
+is "no producer in the C/C++/Python path", not "no producer".
+
+### 31.3 The expression-statement code operand is the one genuinely open site
+
+`code_expression2t`'s operand becomes code-typed only through the round-trip's
+own lowering of a nested `side_effect_exprt("cpp-throw")` to `codet("cpp-throw")`
+— which the arm handles. What it declines is *any other* code statement in that
+position, and nothing was found that produces one. But unlike §31.1 this rests
+on a survey of producers rather than on legacy terminating, and unlike §31.2 the
+guard is open-ended (`op.statement() != "cpp-throw"`) rather than a single
+field. It is the site to attack first if the round-trip is to go.
+
+### 31.4 Summary
+
+| # | site | argument | strength |
+|---|---|---|---|
+| 3 | `break`, `continue`, `decl`-symbol | legacy aborts or asserts | **strong** — corpus-independent |
+| 1 | nil `for` condition | no producer in C/C++/Python | medium — Jimple/Solidity unread |
+| 1 | expression code operand | no producer found | weak — open-ended guard |
+
+Together with §29 and §30 (0 declines over 8 660 corpus tests across four
+frontends), this is the state of the case for deleting `goto_convert_rec`. It is
+not yet a proof, and the honest summary is that **three of the five sites can be
+turned into aborts today, one is very likely dead, and one needs real work** —
+plus Solidity, still unmeasured here.
