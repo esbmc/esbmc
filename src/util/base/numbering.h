@@ -138,6 +138,18 @@ public:
     vec.erase(num);
   }
 
+  /* Iteration yields (number, object) pairs. Numbers are not contiguous:
+   * erase() leaves holes. */
+  auto begin() const
+  {
+    return vec.begin();
+  }
+
+  auto end() const
+  {
+    return vec.end();
+  }
+
 protected:
   typedef std::unordered_map<T, unsigned, hash_fkt> numberst;
   typedef std::unordered_map<unsigned, T, std::hash<unsigned>> vectort;

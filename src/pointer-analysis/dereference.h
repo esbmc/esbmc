@@ -407,6 +407,16 @@ private:
    */
   expr2tc make_failed_symbol(const type2tc &out_type);
 
+  /** Add every object the value-set layer has numbered to a non-exhaustive
+   *  points-to set, so the case split covers them instead of collapsing onto
+   *  the failed symbol. Only ever adds entries: the unknown/invalid entry stays
+   *  in the set, so no property built from it is lost. Liveness and validity of
+   *  each added object are left to valid_check(), which guards its failures by
+   *  same_object() just as it does for entries the value set supplied.
+   *  @param points_to_set The non-exhaustive set to widen, modified in place.
+   */
+  void widen_to_known_objects(value_setst::valuest &points_to_set);
+
   /** Try to build a reference to a data object. When we have a data object that
    *  a pointer (might) point at and need an expression to access it, this
    *  performs the require juggling. Some very strange approaches may come out

@@ -124,6 +124,50 @@ delete a property.
 The open question is cost — the split is over every object in the address space,
 so this may need to ship behind a flag before it can be default-on.
 
-Until it lands, the three `github_426_*` tests stay `KNOWNBUG` as
-under-approximations of a soundness defect, not as a stated limitation. Tracked
-as esbmc/esbmc#6804.
+## What landed: `--deref-unknown-objects`
+
+`dereferencet::widen_to_known_objects()` implements the fix above. On a write
+through a non-exhaustive value set it appends every object in
+`value_sett::object_numbering` to the points-to set, each with an unknown offset,
+and lets the existing loop build the `same_object`-guarded chain over them; the
+failed symbol stays as the final `else`. Objects are appended in object-number
+order so the chain — and hence the formula — does not depend on the numbering's
+hash order. The `unknown` entry is never removed, so `deref_invalid_ptr` still
+fires; liveness, dynamic invalidation and const-ness are left to `valid_check`,
+which guards each failure by `same_object` exactly as it does for entries the
+value set supplied.
+
+It closes both directions of the defect at once:
+
+| test | default | `--deref-unknown-objects` | correct |
+|---|---|---|---|
+| `ptr_int_mul_lost_write` | SUCCESSFUL | FAILED | FAILED |
+| `ptr_int_multiply_roundtrip` | FAILED | SUCCESSFUL | SUCCESSFUL |
+| `github_426_2`, `github_426_4` | FAILED | SUCCESSFUL | SUCCESSFUL |
+| `github_2512_11` | FAILED | SUCCESSFUL | SUCCESSFUL |
+| `ptr_int_mul_unknown_wild` | FAILED | FAILED | FAILED |
+
+`github_426_3` still reports FAILED, so the trio is not fully discharged.
+
+`github_2512_11` deserves note: it writes `e.d = 3` through an `offsetof`-derived
+pointer and then asserts `e.d`, and gcc holds the assertion at `-O0` and `-O2`.
+Its `CORE` expectation of `VERIFICATION FAILED` therefore pins the lost write
+rather than a real bug — a fourth test attributable to this defect, and the only
+one enforcing the wrong answer rather than merely being parked as `KNOWNBUG`. It
+has to be corrected when the flag goes default-on.
+
+### Why it is opt-in
+
+Instrumenting `dereference()` over the core C suite (1659 tests) shows the write
+path is rare but the split is wide: 32 tests reach a write through a
+non-exhaustive value set, over 491 sites, and `object_numbering` at those sites
+holds a median of 21 objects, 86 at the 90th percentile and 104 at most. That
+fan-out is enough to push several tests from seconds to over the timeout —
+`github_1807` 2s → >150s, `31_cdaudio` 6s → >150s — which is why the flag
+defaults off. Narrowing the split to type-compatible, still-live objects is the
+obvious next step; the reads that dominate the count (11640 sites) need no split
+at all, since a failed symbol over-approximates a read soundly.
+
+Until the flag can be default-on, the three `github_426_*` tests stay `KNOWNBUG`
+as under-approximations of a soundness defect, not as a stated limitation.
+Tracked as esbmc/esbmc#6804.
