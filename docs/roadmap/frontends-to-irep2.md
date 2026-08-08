@@ -2002,3 +2002,66 @@ frontends), this is the state of the case for deleting `goto_convert_rec`. It is
 not yet a proof, and the honest summary is that **three of the five sites can be
 turned into aborts today, one is very likely dead, and one needs real work** —
 plus Solidity, still unmeasured here.
+
+## 32. Option F re-scoped: the spelling domain is 83 values, not an enum (2026-08-08)
+
+§16.3 left Phase 0 with one open question and a revised sizing: *"add one
+excluded field to two kinds, repoint one reader, run the suite."* Phase 2 is
+gated on that spike, so before spending §10's estimated days on it, the premise
+is worth checking. It does not hold.
+
+### 32.1 The measurement
+
+`#cpp_type` is written from five places. The clang C frontend's builtin-type
+switch (`clang_c_convert.cpp`) alone assigns **83 distinct spellings**:
+
+| class | count | examples |
+|---|---:|---|
+| ARM SVE / vector builtin names | **56** | `__clang_svint32x4_t`, `__clang_svbfloat16x2_t`, `__SVCount_t` |
+| C/C++ scalar spellings | 27 | `signed_char`, `unsigned_long_long`, `char8_t`, `wchar_t`, `__int128`, `_Float16`, `bool`, `void`, `_ptrmem`, `__intcap` |
+
+Plus the other writers: the Solidity frontend sets `bool`, `void`,
+`signed_char`, `unsigned_char`; the Python frontend sets `char`, `float`,
+`double`, `long_double`.
+
+### 32.2 What that does to the design
+
+§5.2's Option F is `enum class c_spelling` on `signedbv_type2t` /
+`unsignedbv_type2t`. Two things in the measurement contradict its shape:
+
+1. **The domain is not small or closed.** Two thirds of it is ARM SVE builtin
+   names, which track a vendor extension and grow with LLVM. An enum over them
+   is a maintenance liability, and they are exactly the values that carry no
+   semantics for the one semantics-bearing reader.
+2. **The values do not live on two kinds.** `bool`, `void`, `float`, `double`,
+   `long_double`, `_ptrmem` and the 56 vector names are set on types that are
+   not `signedbv`/`unsignedbv`. A field on those two kinds carries the 27-value
+   scalar subset at best, and the rest still needs the `irept` key — so W3 is
+   not removed, which is the entire point of B-4.
+
+### 32.3 The re-scope this implies
+
+The split the measurement suggests, and which §5.2 did not consider:
+
+- **Semantics vs presentation is a real seam here, and it falls along the same
+  line.** `clang_cpp_adjust_expr`'s catch-matching — §5.2's argument for why
+  `#cpp_type` is semantics, not presentation — consumes scalar spellings. The
+  56 vector names reach only `cpp_expr2string` and `goto2c/expr2c`, which are
+  presentation. So the typed field only has to carry the scalar subset for the
+  semantic reader; the rest can stay a string, or move to a presentation-only
+  channel.
+- **That makes Phase 0's question 3 the wrong first question.** Verdict and
+  counterexample-text parity over `esbmc-cpp` matters, but only after the field
+  covers a domain it can actually represent. The first question is now: *does
+  catch-matching ever see a non-scalar spelling?* If no, Option F applies to a
+  27-value subset on more than two kinds, and B-4 is a partial removal rather
+  than a removal. If yes, Option F does not close B-4 at all.
+
+**This does not re-open the §16 conclusions.** The two design risks §16.1/§16.2
+retired — the field staying out of equality and hashing, and spellings surviving
+canonicalisation — are unaffected; they were about the *mechanism*, and the
+mechanism is sound. What changes is the *scope* the mechanism has to cover, and
+therefore whether it closes B-4 or only shrinks it.
+
+Recorded rather than acted on: this is a plan correction, and the plan's own
+gate (§Phase 0, "a recorded answer either way") is what it feeds.
