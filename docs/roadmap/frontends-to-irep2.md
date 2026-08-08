@@ -1446,3 +1446,110 @@ already established as *not* dispatcher defects) and, more honestly, the
 standing caveat of §21.4/§22.6: these censuses sample, and both defects fixed on
 this branch were found by reading the legacy code, not by re-running a sweep.
 "0 declines" is a statement about the corpus, not a proof about the dispatcher.
+
+## 25. The decline census, finally run properly — and it is zero (2026-08-08)
+
+§24.5 ended on a caveat: *"'0 declines' is a statement about the corpus, not a
+proof about the dispatcher"*, and every census before this one was per-suite,
+sampled, and — except §12's — run without replaying `test.desc` flags. This runs
+the measurement that Phase 1's exit criterion actually asks for.
+
+### 25.1 Method
+
+Every `return false` inside `convert_native_rec` instrumented with one
+`fprintf` printing its site index and `get_expr_id(code2)` — the same technique
+§18.6 describes, but over **all 18 sites at once** (17 genuine plus the
+`code_block` cascade) rather than the 21 of the original C++ census, and across
+four frontends in one sweep. Stride-9 over
+`regression/esbmc`, `regression/esbmc-cpp/cpp`, `regression/python` and
+`regression/jimple`: **778 tests**, each replayed with its own `test.desc`
+flags, `KNOWNBUG`/`FUTURE`/`THOROUGH` skipped. Solidity is excluded — it does
+not run on this machine (§15.1's `solc` blocker, still live).
+
+### 25.2 Result: one site, then none
+
+| | tests declining | sites firing |
+|---|---:|---|
+| before | **49 / 778** | `code_assert` — side-effecting guard (+ `code_block` cascade) |
+| after the assert delegation | **1 / 778** | `code_assume` — same shape |
+| after the assume delegation | **0 / 778** | — |
+
+Both are the same one-line story: `convert_assert`/`convert_assume` hand a
+side-effecting guard to `remove_sideeffects`, which owns temp-symbol machinery
+this dispatcher deliberately does not reproduce. The arm `return false`d, which
+is a *whole-function* fallback; it now delegates the statement, exactly as the
+throw/catch/return arms do. Byte-identical by construction, and measured:
+**88/88** on every test the pre-fix census flagged.
+
+In Python this is not a corner: a call in an assert guard is ordinary code, and
+`assert double(x) == 6` was taking whole functions to the round-trip.
+
+### 25.3 What the census does and does not establish
+
+It establishes clause 1 of §18.5's two-clause criterion — **zero declines** —
+on four frontends, with flags replayed, at a sample size no previous census
+reached. Combined with §21-§24's byte-identity numbers (Python 303/303, C/C++
+327/328, `--error-label` 162/162), both clauses now hold everywhere they can be
+measured on this machine.
+
+It does **not** establish that the dispatcher is complete. The honest bounds,
+in order of how much they cost:
+
+- **A decline census is blind to an arm that emits the *wrong thing*.** This is
+  the load-bearing one, and review demonstrated it on this very patch: the
+  assert and assume arms were the only two missing the `is_if2t` disjunct that
+  every sibling carries, so a *side-effect-free* top-level ternary guard sailed
+  past the new delegation and emitted `ASSERT c ? a : b` where legacy lowers to
+  DECL/IF/GOTO under `--validate-violation-witness`. The census counts declines;
+  that arm returns `true`. Reproduced and fixed here (§25.5).
+- **The A/B ran on the wrong set to catch it.** 88/88 byte-identical, but those
+  88 are exactly the tests that *previously declined* — the set where both paths
+  are identical by construction. The statements that were always native have
+  never been swept. A full-corpus A/B, and specifically one varying
+  `--validate-violation-witness`, `--no-assertions` and `--condition-coverage`
+  (the three options these arms branch on, and none of which appears in any
+  `regression/python/*/test.desc`), is the missing measurement.
+- **Solidity is unmeasured here**, and §18.3 is the standing warning that a
+  frontend can reach zero declines and still not reproduce the round-trip.
+- **Stride-9 is a sample.** The site this census found fired on 49 of 778 — hard
+  to miss. A site firing on one test in ten thousand would not show up.
+- **A green census cannot see an arm that should exist but does not.** §23.2's
+  M1 again: delegation is behaviour-preserving, so nothing distinguishes
+  "delegated" from "declined" except the census itself.
+
+### 25.5 Two defects the census could not have found
+
+Both came out of review of this patch, and neither is a decline:
+
+1. **The missing `is_if2t` disjunct** described above, on the assert and assume
+   arms. Fixed here; `…assert_ternary` pins it.
+2. **`--no-assertions` aborted ESBMC on the native path** — `assert` under that
+   flag is the one native kind that emits *nothing*, and the if-arm guarded its
+   then-branch against an empty program but not its else-branch, so
+   `y = tmp_y.instructions.begin()` handed `end()` to `make_goto` and
+   `compute_target_numbers` asserted. Reproduces on `master` with a one-line
+   Python file, so it predates this branch — but delegating side-effecting
+   asserts keeps more functions on the native path under that flag, which
+   widens the blast radius. Fixed here rather than left, with the guard made
+   symmetric.
+
+Neither shows up as a decline; neither shows up in any suite, because **no
+`regression/python` test passes `--no-assertions`** and none passes
+`--validate-violation-witness`. That gap is worth closing on its own.
+
+### 25.6 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc` (C) | **0** (stride-9, flags replayed) | 327/328 with C++; 162/162 on `--error-label` |
+| `esbmc-cpp` | **0** (same census) | as above |
+| `python` | **0** (same census) | 303/303 (stride-15) |
+| `jimple` | **0** (same census) | 15/15 (§20) |
+| `esbmc-solidity` | not measurable here | 502/510; 8 residuals = #6759, #6760 |
+
+Clause 1 is met on every frontend measurable here. Clause 2 is **not** fully
+measured: the byte-identity numbers cover previously-declining tests, per-patch
+gates, and per-suite samples — §25.3's second bound says what is missing. The next step is not another census — it is Solidity on CI, and then
+the question Phase 1 exists to answer: whether `goto_convert_rec` and the
+round-trip can be deleted, which needs the fallback to be provably unreachable
+rather than merely unexercised.

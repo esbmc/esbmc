@@ -957,8 +957,13 @@ bool goto_convert_functionst::convert_native_rec(
     // never sees an empty branch and asserts as much before reading the
     // then-branch's last location; convert_native_rec guarantees that only for
     // a block, so the useless-branch and branch-flip shapes generate_ifthenelse
-    // has for an empty branch stay legacy-side.
-    if (tmp_op1.instructions.empty())
+    // has for an empty branch stay legacy-side. The else-branch needs the same
+    // guard: an empty one makes instructions.begin() == end(), i.e. a GOTO
+    // whose target has no target_number, which trips compute_target_numbers.
+    // `assert` under --no-assertions is the one native kind that emits nothing.
+    if (
+      tmp_op1.instructions.empty() ||
+      (has_else && tmp_op2.instructions.empty()))
       return delegate_to_legacy();
 
     // v: if(!c) goto y/z; w: P; x: goto z; (else only) y: Q; (else only) z: ;
@@ -1501,13 +1506,21 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_assert2t &a = to_code_assert2t(code2);
 
-    // convert_assert (goto_convert.cpp) removes side effects from the
-    // guard before emitting; require a side-effect-free guard for the same
-    // reason as every other statement kind here. code_assert2t's guard is
-    // already expr2tc, so (unlike the legacy-exprt kinds) there is no
-    // migrate_expr round-trip to do.
-    if (has_sideeffect(a.guard))
-      return false;
+    // convert_assert (goto_convert.cpp) hands the guard to remove_sideeffects,
+    // which owns the temp-symbol machinery this dispatcher does not reproduce.
+    // Delegate the statement rather than failing the walk, so the rest of the
+    // body stays native. The `is_if2t` disjunct mirrors remove_sideeffects'
+    // own entry condition, as the assign/decl/return/expression arms do: a
+    // top-level ternary is entered even with no side effect, and under
+    // --validate-violation-witness it lowers to DECL/IF/GOTO so the `?` column
+    // reaches the branching waypoint.
+    if (has_sideeffect(a.guard) || is_if2t(a.guard))
+    {
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(a.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    }
 
     // --no-assertions: convert_assert removes side effects (a no-op here)
     // and returns without emitting an ASSERT — match that exactly, an empty
@@ -1527,8 +1540,16 @@ bool goto_convert_functionst::convert_native_rec(
   if (is_code_assume2t(code2))
   {
     const code_assume2t &a = to_code_assume2t(code2);
-    if (has_sideeffect(a.guard))
-      return false;
+
+    // Same delegation and the same remove_sideeffects entry condition as the
+    // assert arm above.
+    if (has_sideeffect(a.guard) || is_if2t(a.guard))
+    {
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(a.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    }
 
     goto_programt::targett t = dest.add_instruction(ASSUME);
     t->guard = normalise_native_code(
