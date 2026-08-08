@@ -512,7 +512,12 @@ static void extract_and_remove_side_effects_impl(
   for (auto rit = to_remove.rbegin(); rit != to_remove.rend(); ++rit)
   {
     side_effects_out.instructions.push_back(**rit);
-    goto_function.body.instructions.erase(*rit);
+    /* Erasing dangles any goto that targets this instruction -- a preceding
+     * loop's exit can land on one of the invariant's temporaries, and
+     * compute_target_numbers then aborts on the unnumbered target. Leaving a
+     * skip keeps every incoming target valid; only DECL/ASSIGN/FUNCTION_CALL
+     * reach here, so nothing that carries targets of its own is cleared. */
+    (*rit)->make_skip();
   }
 }
 
