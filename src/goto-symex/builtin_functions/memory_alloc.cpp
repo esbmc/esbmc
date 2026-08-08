@@ -691,6 +691,13 @@ expr2tc goto_symext::symex_mem(
 
   new_context.add(symbol);
 
+  // Without a record at the branch point phi_function skips this object, so a
+  // write inside a branch would apply on both paths (#6798).
+  expr2tc dyn_l1_sym = symbol2tc(get_empty_type(), symbol.id);
+  cur_state->top().level1.get_ident_name(dyn_l1_sym);
+  cur_state->level2.declare(
+    renaming::level2t::name_record(to_symbol2t(dyn_l1_sym)));
+
   type2tc new_type = migrate_symbol_type(symbol);
 
   type2tc rhs_type;
