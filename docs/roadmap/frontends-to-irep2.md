@@ -1051,3 +1051,505 @@ What is left before the round-trip can be deleted is now short and named: the
 assert-fold in C/C++/Python, a Python A/B sweep that has never been run, and
 Solidity's eight residuals — which #6759 and #6760 already establish are *not*
 dispatcher defects.
+
+## 21. The Python A/B sweep, run — and the one defect it found (2026-08-08)
+
+§20.4 listed the Python sweep as the one clause never measured. It is run here,
+at stride 15 over `regression/python` (303 of 4 539 tests), same A/B as §18.6.
+
+### 21.1 Result
+
+| | divergent | identical |
+|---|---:|---:|
+| before | **19** / 303 | 284 |
+| after | **0** | **303 / 303** |
+| controls (C stride-12, C++ stride-12) | 1 / 202, pre-existing (§21.4) | 201 |
+
+A further 16 tests diverged only under §18.6's normalisation and are not
+counted above; §21.3 records what they needed.
+
+### 21.2 One defect, and it is a hole in a stated premise
+
+All 19 are the same site, and they are location-only. The native `ASSIGN` arm
+stores `code2` verbatim on the reasoning — written into the code as a comment —
+that "migrate_expr drops the operand locations, so none of
+restore_value_locations' stamping survives in the stored code." That premise is
+false for exactly one kind: `if2t` carries a location field
+(`irep2_expr.h:786`) and `migrate.cpp:1006` round-trips it. So a ternary nested
+in a side-effect-free right-hand side keeps its stamped location on the legacy
+path and loses it natively.
+
+Python is where it shows because Python is where the shape occurs: floor
+division lowers to an arithmetic expression with an unlocated `if2t` correction
+term, so every `//` inside an assignment hits it. C and C++ do not — the clang
+frontends stamp sub-expression locations at parse time, so the ternary already
+has one and the legacy stamping is a no-op.
+
+The fix is the IREP2 half of `restore_value_locations`: stamp the statement's
+effective location onto location-less `if2t` operands before storing `code2`.
+
+**The premise is written into four arms, not one.** The A/B sample only reached
+the `ASSIGN` one; review found the same sentence — and the same divergence —
+at the three other sites that store `code2` verbatim, each reproduced against
+the patched binary before being fixed:
+
+| arm | Python shape that reaches it |
+|---|---|
+| `code_assign2t` → ASSIGN | `y = (x + n // x) // 2` |
+| `code_return2t` → RETURN | `return (x + n // x) // 2` |
+| `code_expression2t` → OTHER | `(x + n // x) // 2` as a bare statement |
+| `code_function_call2t` → FUNCTION_CALL | `g((x + n // x) // 2)` |
+
+`code_decl2t` was probed and does not diverge: a decl with an initializer
+delegates on `has_sideeffect` before reaching a verbatim store. Each of the four
+arms has already excluded code-typed operands by the time it emits, so unlike
+`restore_value_locations` the IREP2 walk never has to re-root on a nested
+statement — an invariant the helper's comment now states, because it is a
+coupling across a function boundary rather than a local property.
+
+### 21.3 The sweep needed three normalisations §18.6 does not name
+
+Each was settled by the §7 rule 7 self-control — the legacy arm against itself —
+not by inspection:
+
+| artefact | why it varies | normalisation |
+|---|---|---|
+| `GOTO program processing time: N.NNNs` | wall clock | `time: Ts` |
+| `ESBMC_unpack_temp_<n>` | temp name derived from an address | `_N` |
+| `ASSIGN __file__={ 47, 118, ... }` | the astgen temp dir, **as decimal character codes** | collapse the initialiser |
+
+The third is the one to remember: `__file__` holds the per-run temp directory
+encoded byte-by-byte, so no amount of widening §20.3's `esbmc[-._]…` text
+pattern can reach it. A per-run artefact need not be legible as text.
+
+### 21.4 Two findings the sweep produced that this patch does not fix
+
+1. **A C divergence that is not location-only.** `esbmc/cwe_uninit_array_vla`
+   (`--uninitialised-vars-check --incremental-bmc`) renders a VLA bound as `n`
+   natively and `tmp$1` under the round-trip — the first *instruction-text*
+   divergence recorded in any suite; every prior residue was a location. It
+   reproduces with the patch reverted, so it predates it. Not filed yet.
+2. **The A/B sees `if2t::location` only through the tree-dump fallback.** The
+   dump renders a `#location` block only where `from_expr` cannot print the
+   expression; on a printable one the field is invisible. Python surfaced this
+   defect only because its `xor` node forces the fallback, which is also why the
+   303-test sample reached one of the four affected arms and not the other
+   three. Treat the sweep's coverage of this field as partial.
+
+### 21.5 Mutants
+
+| mutant | what it breaks | caught by |
+|---|---|---|
+| M1 — stamping call removed | the ternary's location | `…ternary_loc_01` (ASSIGN) and `…_03` (RETURN/OTHER/CALL); and the A/B, 19/303 |
+| M2 — stamp unconditionally, overwriting a frontend `?:` position | a C/C++ ternary's own location | **nothing** — §21.4 item 2 is why |
+
+M1 was run, not assumed: reverting the call fails exactly the two tests that pin
+the arms and leaves `…_02` — the legacy-path control, which passes pre-patch by
+construction — green.
+
+M2 is the honest limit. The guard is kept on the semantics rather than on a
+gate: `irep2_expr.h:787` says the field carries the `?` position for witness
+branching, so a frontend that supplied one must win. Do not read the passing
+gates as evidence the guard is exercised.
+
+### 21.6 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc-cpp` | drained; residue = assert-fold | gated per patch (§11.4) |
+| `esbmc` (C) | 4 / 60 tests | 138/138 (stride-12, §20.3); 1 divergence at stride-12 here, §21.4 |
+| `python` | dominant site fixed by #6695 (merged) | **303/303** (stride-15) |
+| `esbmc-solidity` | 0 / 26 | 502/510; 8 residuals = #6759, #6760 |
+| `jimple` | 0 / 15 | 15/15 |
+
+Python's 303/303 is a sampling result, not a proof — §21.2 is the standing
+warning that a shape absent from the sample can still carry the defect, and
+§21.4 item 2 bounds what the dump can observe at all. What is left is the
+assert-fold in C/C++/Python, Solidity's eight residuals, and the C divergence in
+§21.4 — which, unlike the Solidity eight, has not been shown to predate the
+dispatcher series as a whole, only this patch.
+
+## 22. §21.4's C divergence is a soundness bug — and the second half of the same premise (2026-08-08)
+
+§21.4 filed `esbmc/cwe_uninit_array_vla` as "the first instruction-text
+divergence, not yet filed." Run down, it is not a cosmetic at all: on the
+default (native) path ESBMC **silently accepts a real out-of-bounds read**.
+
+### 22.1 The reproducer
+
+```c
+int main(void)
+{
+  int n = 1;
+  int a[n];
+  a[0] = 42;
+  n = 100;
+  return a[5];        /* ASan: dynamic-stack-buffer-overflow */
+}
+```
+
+| path | bound check emitted | verdict |
+|---|---|---|
+| `--no-irep2-native-body` | `5 < (signed long int)tmp$1` | **FAILED** (correct) |
+| default (native) | `5 < (signed long int)n` | **SUCCESSFUL** (misses it) |
+
+`n = 100` is what turns the stale bound into a *vacuous* one, so the missed bug
+needs a reassignment; without it the two bounds are equal and the divergence is
+invisible in the verdict — which is why the original test
+(`cwe_uninit_array_vla`, no reassignment) passed on both paths and the defect sat
+in the A/B as a text difference only.
+
+### 22.2 Root cause: the *other* thing migrate_expr normalises
+
+C11 6.7.6.2p5 evaluates a VLA's size expression once, at the declaration, so
+`convert_decl` snapshots it into a temporary and **retypes the array symbol
+mid-body** — `s->set_type(...)`, `goto_convert.cpp`. The legacy path picks that
+up for free, and not by mutating its tree: `sym_name_to_symbol`
+(`migrate.cpp:613`) deliberately re-reads **every level0 symbol's type from the
+global symbol table** rather than trusting the expression's own, with its own
+comment explaining why ("various things out there get parsed in with a partial
+type"). So a statement converted *after* the retype migrates with the new type.
+
+A native arm storing `code2` verbatim never re-migrates, so it keeps the
+frontend-time `int[n]`. `goto_check`'s bounds check then reads `array_size`
+straight off that stale type (`goto_check.cpp`, `ns.follow(ind.source_value->type)`).
+
+This is the same shape of defect as §21.2 and it was hiding behind it:
+**`migrate_expr` performs two normalisations that a verbatim store skips** — the
+ternary location, and the symbol-table type. §21 fixed the first at four arms;
+this fixes the second at the same four, behind one `normalise_native_code`
+helper whose contract is now stated positively: *`code2` as `migrate_expr` would
+have produced it from the legacy statement the fallback converts.*
+
+### 22.3 Result
+
+| sweep (divergences) | before §21 | after §21 | after §22 |
+|---|---:|---:|---:|
+| `esbmc` (C) + `esbmc-cpp` stride-12 | 1 / 202 | 1 / 202 | **0 / 202** |
+| `python` stride-15 | 19 / 303 | 0 / 303 | 0 / 303 |
+
+The C sample is clean for the first time. That is *not* the exit criterion met:
+§22.6 is a defect this sample cannot see, found by review rather than by
+measurement, and it is the second time on this patch that the sweep's silence
+was mistaken for coverage.
+
+### 22.4 Mutants
+
+| mutant | what it breaks | caught by |
+|---|---|---|
+| refresh disabled, stamping kept | the VLA retype | **both** new tests — `…vla_retype_01_fail` flips to SUCCESSFUL (false negative), `…_01` to FAILED (false positive) |
+| stamping disabled, refresh kept | the ternary location | the §21.5 tests only |
+
+The two normalisations are independently pinned, which matters because they
+share a helper and a call site: neither test set can pass on the other's fix.
+
+### 22.6 Review found the same bug at the condition guards
+
+The statement arms were fixed first, because those are what the sweep reported.
+Review then reproduced the identical missed out-of-bounds read with the access
+in an `if`, `while`, `do`/`while` and `for` condition — those arms fold the
+condition into a GOTO guard verbatim, so they share the premise and were not
+covered. The sample contains no VLA in a branch condition, so no amount of
+re-running it would have surfaced this.
+
+All six sites (the four statement arms plus the four condition guards, and
+`code_assert2t`/`code_assume2t`'s guards, which are Python-reachable) now go
+through the one `normalise_native_code` chokepoint.
+
+### 22.5 What this says about the A/B as a gate
+
+§21.4 item 2 warned the sweep's *location* coverage was partial. This is the
+sharper lesson and it runs the other way: the sweep **did** report this
+divergence, plainly, in instruction text — and §21 read it as "location-only
+residue, filed for later" because every prior residue had been. A text
+divergence is not the same class as a location one, and the C suite had never
+produced one before. **Re-classify before deferring**: an unexplained A/B
+divergence is a defect of unknown severity, not a cosmetic, until it has been
+run down. This one was a default-on missed bug that had shipped.
+
+## 23. The assert-fold reproduced — the last named decline residue (2026-08-08)
+
+§12.2 named the assert-fold as the residue both C and C++ carry, and §20.4/§22
+carried it forward as one of the three things left before the round-trip can go.
+`generate_ifthenelse` collapses a branch that reduces to a lone `assert(false)`
+into the guard; the native arm detected those shapes and **`return false`d**,
+which is a *whole-function* fallback — worse than the statement-local delegation
+the rest of the dispatcher uses. It now reproduces the fold.
+
+### 23.1 The shapes, and which are corpus-reachable
+
+| shape | native handling | reached by |
+|---|---|---|
+| then-branch is a lone `assert(false)`, no else (or a no-op else) | folded, guard `!c` | `…assert_fold_01` |
+| else-branch is a lone `assert(false)`, then-branch a no-op | folded, guard `c` | `…assert_fold_01` |
+| both branches lone `assert(false)` | both folded | `…assert_fold_01` |
+| then-branch is a lone `assert(false)`, else-branch a *no-op* | folded, guard `!c` | `…assert_fold_01` |
+| `(void)((cond) \|\| (assert(0),0))` — the C-library idiom | folded, guard `!c`, second instruction dropped | **`regression/esbmc/github_1565`** and 3 others; `…assert_fold_03` |
+
+and one shape that is not a fold but a delegation:
+
+| a fold that fires and still leaves the other branch to convert | delegated (the legacy re-entry with branches swapped is not reproduced) | `…assert_fold_02` |
+
+**Only the `||` idiom occurs in the corpus.** A stride-6 instrumented scan of
+`regression/esbmc` + `regression/esbmc-cpp/cpp` (405 tests) fires the fold on
+exactly four — `github_1565`, `no_pointer_check_4`,
+`interval_can_handle_global`, `github_5998-long-chain_fail` — and every one is
+`idiom=1`. The other shapes were reached only by written reproducers
+(`__ESBMC_assert(0, …)` in branch position), which is what the new tests pin.
+Every branch this patch adds is shown live by one or the other, per the C-Live
+obligation; none is dead instrumentation.
+
+**The idiom's gate was wrong on the first cut, and review caught it.** Legacy
+gates that fold on the else *program* being observationally no-op
+(`is_no_op_program`); the native arm tested the *AST* (`else_case` nil), so
+`if (c) { assert(0); g = 1; } else { }` folded on one path and not the other.
+Not corpus-reachable, but a byte-identity break, and the third time on this
+branch that a first cut was scoped by what the sweep happened to sample rather
+than by what the legacy code actually says. `…assert_fold_03` pins it. The
+shared predicate is now `is_no_op_program` in `remove_no_op.h` — previously a
+file-static in `goto_convert.cpp` that this arm had copied, which is how the two
+came to disagree.
+
+### 23.2 Mutants — and why one of them cannot be caught
+
+| mutant | what it breaks | caught by |
+|---|---|---|
+| M1 — fold arms replaced by `delegate_to_legacy()` | nothing observable | **nothing** (see below) |
+| M2 — folded guard `c` instead of `!c` | the assertion's condition | `…assert_fold_01` (text) and `…_01_fail` (verdict: the assume makes the sign observable), plus the A/B on `github_1565` |
+| M3 — idiom gated on an AST-empty else | the no-op-else idiom | `…assert_fold_03` |
+
+M1 is §20.2's limit again, and it is worth restating because it is the reason
+this residue survived so long: **a behaviour-preserving delegation is
+indistinguishable from the arm that replaces it by any verdict or output test.**
+The old code's `return false` and the new fold produce byte-identical programs.
+Only a decline census can tell them apart, which is why §23.1 reports the scan
+rather than resting on the green suite.
+
+### 23.3 A/B and a harness correction
+
+C stride-12 + C++ stride-4: **327/328**. A wider C++ stride-4 sample (189
+tests) reports one divergence, `cpp_stack_top_bug`, which the §7 rule 7
+self-control immediately disqualifies: it runs `--k-induction-parallel`, and the
+legacy arm against **itself** produces two different hashes on consecutive runs.
+The diff is interleaved whitespace from the forked workers. *Exclude
+`--k-induction-parallel` tests from the A/B* — this is the third distinct
+per-run artefact class the sweep has hit (§19.3 a synthetic location, §20.3 a
+synthetic file name, §21.3 a temp dir encoded as character codes), and the
+self-control caught all three.
+
+### 23.4 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc-cpp` | assert-fold now folded; residue = `--error-label` only | 327/328 with C (the 1 is §23.3 harness noise) |
+| `esbmc` (C) | assert-fold now folded; residue = `--error-label` only | as above |
+| `python` | dominant site fixed by #6695 (merged) | 303/303 (stride-15) |
+| `esbmc-solidity` | 0 / 26 | 502/510; 8 residuals = #6759, #6760 |
+| `jimple` | 0 / 15 | 15/15 |
+
+What is left is `--error-label` (§12.2: `convert_label` turns a matching label
+into an `ASSERT(false)` carrying property metadata; invisible to any census that
+does not replay `test.desc` flags) and Solidity's eight residuals. The
+assert-fold row of §12.3, carried since 2026-08-04, is closed.
+
+## 24. `--error-label` reproduced — the decline residue is now empty (2026-08-08)
+
+§12.2 named two genuine decline sites and called both "candidates for the same
+statement-local delegation." §23 closed the assert-fold; this closes the other,
+and it is the last one either census found.
+
+`convert_label` turns a label matching `--error-label` into an `ASSERT(false)`
+carrying `property`/`comment`/`user_provided` metadata, and makes **that
+assertion** the label's target so a `goto` lands on it. The native label arm
+detected the shape and `return false`d. It now reproduces it.
+
+### 24.1 Why it outlived the rest
+
+§12.2 already said it: the site fires only under a flag, so it is invisible to
+any census that does not replay each test's `test.desc` flags. Both the C++
+census (§11) and the whole-suite sweeps developed patches against default flags,
+and the arm never appeared. It is the one residue that a *better sample* would
+never have found — only reading the legacy function does.
+
+There is a second reason to be careful here, already recorded in `CLAUDE.md`:
+ESBMC reports `VERIFICATION SUCCESSFUL` **silently** when the label is absent
+from the GOTO program, which is indistinguishable from "label unreachable." That
+shows up in the mutant table below.
+
+### 24.2 Mutants
+
+| mutant | what it breaks | caught by |
+|---|---|---|
+| M1 — arm removed (`return false`) | nothing observable | **nothing** — §23.2's limit again |
+| M2 — assertion guard `true` | the error label stops failing | `regression/cbmc/01_cbmc_error-label1` (verdict) **and** the A/B on it |
+| M3 — `comment("error label")` dropped | the claim's rendered text | **only** the new `…error_label_01_fail` |
+| M4 — `user_provided(true)` dropped | `--no-assertions` stops skipping the claim | **only** the new `…error_label_02` |
+| — `property("error label")` dropped | *nothing* | nothing, and nothing can |
+
+The metadata splits three ways and only review caught that: `--goto-functions-only`
+renders `comment` but not `property` or `user_provided`, so one test cannot pin
+all three. `property` is genuinely unobservable — every reader compares it
+against other literals — so the call is kept for fidelity and **is not claimed
+to be tested**. `user_provided` needed a second test, because none of the 162
+`--error-label`-bearing tests pairs the flag with `--no-assertions`.
+
+M2's A/B also shows the arm is genuinely exercised, which is the reachability
+evidence M1 cannot supply. Worth recording from the same run: under M2 the A/B
+diverges on `01_cbmc_error-label1` but **not** on `esbmc-unix/github_2513_1`,
+because that test's label is not the one it names — `CLAUDE.md`'s
+silent-SUCCESSFUL trap, visible here as a test that cannot discriminate anything
+about this arm.
+
+Worth noting from the same run: under M2 the A/B diverges on
+`01_cbmc_error-label1` but **not** on `esbmc-unix/github_2513_1`, because that
+test's label is not the one it names — the silent-SUCCESSFUL trap above, visible
+here as a test that cannot discriminate anything about this arm.
+
+### 24.3 A/B
+
+All 162 `--error-label`-bearing tests outside `regression/disabled`: **162/162**
+byte-identical. (The first count reported here was 29 — a glob that missed the
+nested suite directories, and with them the whole `esbmc-cpp/try_catch/nec_ex*`
+cluster, which is the most interesting set because it combines the error label
+with the `cpp_catch` legacy delegation.)
+
+### 24.4 A test this patch invalidated
+
+`github_4715_irep2_native_body_goto_rollback_01` existed to pin
+`convert_function`'s `targets` rollback, and its stated premise was *"`--error-label`
+makes the label handler decline … which is exactly the ordering that leaves the
+dangling entry behind."* That premise is now false, so its comment is corrected
+rather than left to rot.
+
+Chasing it produced a finding worth keeping: **the rollback is not discriminated
+by any test, and was not before this patch either.** Removing
+`targets = targets_before` leaves the whole suite green, because the failure mode
+is a *dangling iterator read* in `finish_gotos` — latent UB, not a crash, and
+not observable without a sanitizer build. Re-pointing the test at another
+declining shape would not have fixed that; four candidate decliners were tried
+under the mutant and none faulted. Pinning it needs an ASan build, which this
+branch does not have.
+
+### 24.5 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc-cpp` | **drained** | 327/328 with C (the 1 is §23.3 harness noise) |
+| `esbmc` (C) | **drained** | as above; plus 162/162 on the `--error-label` set |
+| `python` | dominant site fixed by #6695 (merged) | 303/303 (stride-15) |
+| `esbmc-solidity` | 0 / 26 | 502/510; 8 residuals = #6759, #6760 |
+| `jimple` | 0 / 15 | 15/15 |
+
+Every decline site either census named is now closed. What remains before the
+round-trip can be deleted is **Solidity's eight residuals** (#6759, #6760 —
+already established as *not* dispatcher defects) and, more honestly, the
+standing caveat of §21.4/§22.6: these censuses sample, and both defects fixed on
+this branch were found by reading the legacy code, not by re-running a sweep.
+"0 declines" is a statement about the corpus, not a proof about the dispatcher.
+
+## 25. The decline census, finally run properly — and it is zero (2026-08-08)
+
+§24.5 ended on a caveat: *"'0 declines' is a statement about the corpus, not a
+proof about the dispatcher"*, and every census before this one was per-suite,
+sampled, and — except §12's — run without replaying `test.desc` flags. This runs
+the measurement that Phase 1's exit criterion actually asks for.
+
+### 25.1 Method
+
+Every `return false` inside `convert_native_rec` instrumented with one
+`fprintf` printing its site index and `get_expr_id(code2)` — the same technique
+§18.6 describes, but over **all 18 sites at once** (17 genuine plus the
+`code_block` cascade) rather than the 21 of the original C++ census, and across
+four frontends in one sweep. Stride-9 over
+`regression/esbmc`, `regression/esbmc-cpp/cpp`, `regression/python` and
+`regression/jimple`: **778 tests**, each replayed with its own `test.desc`
+flags, `KNOWNBUG`/`FUTURE`/`THOROUGH` skipped. Solidity is excluded — it does
+not run on this machine (§15.1's `solc` blocker, still live).
+
+### 25.2 Result: one site, then none
+
+| | tests declining | sites firing |
+|---|---:|---|
+| before | **49 / 778** | `code_assert` — side-effecting guard (+ `code_block` cascade) |
+| after the assert delegation | **1 / 778** | `code_assume` — same shape |
+| after the assume delegation | **0 / 778** | — |
+
+Both are the same one-line story: `convert_assert`/`convert_assume` hand a
+side-effecting guard to `remove_sideeffects`, which owns temp-symbol machinery
+this dispatcher deliberately does not reproduce. The arm `return false`d, which
+is a *whole-function* fallback; it now delegates the statement, exactly as the
+throw/catch/return arms do. Byte-identical by construction, and measured:
+**88/88** on every test the pre-fix census flagged.
+
+In Python this is not a corner: a call in an assert guard is ordinary code, and
+`assert double(x) == 6` was taking whole functions to the round-trip.
+
+### 25.3 What the census does and does not establish
+
+It establishes clause 1 of §18.5's two-clause criterion — **zero declines** —
+on four frontends, with flags replayed, at a sample size no previous census
+reached. Combined with §21-§24's byte-identity numbers (Python 303/303, C/C++
+327/328, `--error-label` 162/162), both clauses now hold everywhere they can be
+measured on this machine.
+
+It does **not** establish that the dispatcher is complete. The honest bounds,
+in order of how much they cost:
+
+- **A decline census is blind to an arm that emits the *wrong thing*.** This is
+  the load-bearing one, and review demonstrated it on this very patch: the
+  assert and assume arms were the only two missing the `is_if2t` disjunct that
+  every sibling carries, so a *side-effect-free* top-level ternary guard sailed
+  past the new delegation and emitted `ASSERT c ? a : b` where legacy lowers to
+  DECL/IF/GOTO under `--validate-violation-witness`. The census counts declines;
+  that arm returns `true`. Reproduced and fixed here (§25.5).
+- **The A/B ran on the wrong set to catch it.** 88/88 byte-identical, but those
+  88 are exactly the tests that *previously declined* — the set where both paths
+  are identical by construction. The statements that were always native have
+  never been swept. A full-corpus A/B, and specifically one varying
+  `--validate-violation-witness`, `--no-assertions` and `--condition-coverage`
+  (the three options these arms branch on, and none of which appears in any
+  `regression/python/*/test.desc`), is the missing measurement.
+- **Solidity is unmeasured here**, and §18.3 is the standing warning that a
+  frontend can reach zero declines and still not reproduce the round-trip.
+- **Stride-9 is a sample.** The site this census found fired on 49 of 778 — hard
+  to miss. A site firing on one test in ten thousand would not show up.
+- **A green census cannot see an arm that should exist but does not.** §23.2's
+  M1 again: delegation is behaviour-preserving, so nothing distinguishes
+  "delegated" from "declined" except the census itself.
+
+### 25.5 Two defects the census could not have found
+
+Both came out of review of this patch, and neither is a decline:
+
+1. **The missing `is_if2t` disjunct** described above, on the assert and assume
+   arms. Fixed here; `…assert_ternary` pins it.
+2. **`--no-assertions` aborted ESBMC on the native path** — `assert` under that
+   flag is the one native kind that emits *nothing*, and the if-arm guarded its
+   then-branch against an empty program but not its else-branch, so
+   `y = tmp_y.instructions.begin()` handed `end()` to `make_goto` and
+   `compute_target_numbers` asserted. Reproduces on `master` with a one-line
+   Python file, so it predates this branch — but delegating side-effecting
+   asserts keeps more functions on the native path under that flag, which
+   widens the blast radius. Fixed here rather than left, with the guard made
+   symmetric.
+
+Neither shows up as a decline; neither shows up in any suite, because **no
+`regression/python` test passes `--no-assertions`** and none passes
+`--validate-violation-witness`. That gap is worth closing on its own.
+
+### 25.6 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc` (C) | **0** (stride-9, flags replayed) | 327/328 with C++; 162/162 on `--error-label` |
+| `esbmc-cpp` | **0** (same census) | as above |
+| `python` | **0** (same census) | 303/303 (stride-15) |
+| `jimple` | **0** (same census) | 15/15 (§20) |
+| `esbmc-solidity` | not measurable here | 502/510; 8 residuals = #6759, #6760 |
+
+Clause 1 is met on every frontend measurable here. Clause 2 is **not** fully
+measured: the byte-identity numbers cover previously-declining tests, per-patch
+gates, and per-suite samples — §25.3's second bound says what is missing. The next step is not another census — it is Solidity on CI, and then
+the question Phase 1 exists to answer: whether `goto_convert_rec` and the
+round-trip can be deleted, which needs the fallback to be provably unreachable
+rather than merely unexercised.

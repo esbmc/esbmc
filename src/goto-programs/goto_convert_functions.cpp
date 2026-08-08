@@ -160,6 +160,211 @@ effective_location(const locationt &own, const locationt &inherited)
   return (own.is_not_nil() && !own.get_file().empty()) ? own : inherited;
 }
 
+// The IREP2 half of restore_value_locations. `if2t` is the one value-level kind
+// with a location field (irep2_expr.h:786), so it is also the only one whose
+// stamping survives migrate_expr -- meaning a native arm that stores `code2`
+// verbatim loses a ternary's location where the round-trip keeps it. Python's
+// floor-division lowering builds exactly that shape.
+//
+// The guard mirrors stamp_value_locations above: a location the frontend
+// supplied wins, because that is the `?` position witness branching reads.
+// Every caller has already excluded code-typed operands, so unlike
+// restore_value_locations this walk never has to re-root on a nested statement.
+static void stamp_ternary_locations(expr2tc &expr, const locationt &loc)
+{
+  if (is_nil_expr(expr))
+    return;
+
+  if (is_if2t(expr))
+  {
+    if2t &ite = to_if2t(expr);
+    if (ite.location.is_nil() || ite.location.get_file().empty())
+      ite.location = loc;
+  }
+
+  expr->Foreach_operand(
+    [&loc](expr2tc &op) { stamp_ternary_locations(op, loc); });
+}
+
+static bool has_unlocated_ternary(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  if (is_if2t(expr))
+  {
+    const locationt &loc = to_if2t(expr).location;
+    if (loc.is_nil() || loc.get_file().empty())
+      return true;
+  }
+
+  bool found = false;
+  expr->foreach_operand([&found](const expr2tc &op) {
+    if (!found)
+      found = has_unlocated_ternary(op);
+  });
+  return found;
+}
+
+// The symbol-table type for a level0 symbol expression, or nil when the node
+// already carries it (or is not such a symbol). migrate_expr normalises to this
+// type (sym_name_to_symbol, migrate.cpp), so a verbatim store must too -- see
+// esbmc/esbmc#4715 and docs/roadmap/frontends-to-irep2.md §22 for why
+// convert_decl's mid-body VLA retype makes this a soundness matter.
+static type2tc stale_symbol_type(const expr2tc &expr, const namespacet &ns)
+{
+  if (!is_symbol2t(expr))
+    return type2tc();
+
+  const symbol2t &sym = to_symbol2t(expr);
+  if (sym.rlevel != symbol2t::renaming_level::level0)
+    return type2tc();
+
+  const symbolt *s = ns.lookup(sym.thename);
+  if (s == nullptr)
+    return type2tc();
+
+  type2tc stored = migrate_symbol_type(*s);
+  return stored == expr->type ? type2tc() : stored;
+}
+
+static bool has_stale_symbol_type(const expr2tc &expr, const namespacet &ns)
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  if (!is_nil_type(stale_symbol_type(expr, ns)))
+    return true;
+
+  bool found = false;
+  expr->foreach_operand([&found, &ns](const expr2tc &op) {
+    if (!found)
+      found = has_stale_symbol_type(op, ns);
+  });
+  return found;
+}
+
+static void refresh_symbol_types(expr2tc &expr, const namespacet &ns)
+{
+  if (is_nil_expr(expr))
+    return;
+
+  type2tc stored = stale_symbol_type(expr, ns);
+  if (!is_nil_type(stored))
+  {
+    // Rebuilt exactly as sym_name_to_symbol builds a level0 symbol.
+    expr = symbol2tc(stored, to_symbol2t(expr).thename);
+    return;
+  }
+
+  expr->Foreach_operand([&ns](expr2tc &op) { refresh_symbol_types(op, ns); });
+}
+
+// `code2` as migrate_expr would have produced it from the legacy statement the
+// fallback path converts: ternaries located, level0 symbols carrying the
+// symbol-table type. Each pre-scan keeps the common case free -- the mutating
+// walks detach every node they descend through, so running them unconditionally
+// would deep-copy each statement's expression tree.
+static expr2tc normalise_native_code(
+  const expr2tc &code2,
+  const locationt &loc,
+  const namespacet &ns)
+{
+  const bool stamp = !loc.get_file().empty() && has_unlocated_ternary(code2);
+  const bool refresh = has_stale_symbol_type(code2, ns);
+  if (!stamp && !refresh)
+    return code2;
+
+  expr2tc normalised = code2;
+  if (stamp)
+    stamp_ternary_locations(normalised, loc);
+  if (refresh)
+    refresh_symbol_types(normalised, ns);
+  return normalised;
+}
+
+enum class assert_foldt
+{
+  none,    // no fold applies; emit the general shape
+  emitted, // the statement is fully converted
+  defer,   // a fold fires but legacy would then re-enter with the branches
+           // swapped, which is not reproduced here
+};
+
+// Reproduce generate_ifthenelse's assert-folds (goto_convert.cpp): a branch
+// that reduces to a lone `assert(false)` collapses into the guard instead of
+// emitting a conditional GOTO. A labelled assert is excluded throughout --
+// the label is a jump target, so the branch cannot collapse. Note the `||`
+// idiom fold DISCARDS the branch's second instruction; that is legacy
+// behaviour, reproduced deliberately.
+static bool is_lone_false_assert(const goto_programt &p)
+{
+  return p.instructions.size() == 1 && p.instructions.back().is_assert() &&
+         is_false(p.instructions.back().guard) &&
+         p.instructions.back().labels.empty();
+}
+
+// The `(void)((cond) || (assert(0),0))` idiom C libraries use. Legacy gates it
+// on the else-branch being observationally empty, not on there being no else.
+static bool
+is_or_idiom(const goto_programt &then_p, const goto_programt &else_p)
+{
+  return is_no_op_program(else_p) && then_p.instructions.size() == 2 &&
+         then_p.instructions.front().is_assert() &&
+         is_false(then_p.instructions.front().guard) &&
+         then_p.instructions.front().labels.empty() &&
+         then_p.instructions.back().labels.empty();
+}
+
+static assert_foldt fold_assert_branches(
+  goto_programt &then_p,
+  goto_programt &else_p,
+  const expr2tc &cond,
+  goto_programt &dest)
+{
+  const bool fold_then = is_lone_false_assert(then_p);
+  const bool fold_else = is_lone_false_assert(else_p);
+  const bool fold_or_idiom = is_or_idiom(then_p, else_p);
+
+  if (!fold_then && !fold_else && !fold_or_idiom)
+    return assert_foldt::none;
+
+  // boolean_negate's IREP2 twin: peels one `not`, folds a bool constant.
+  expr2tc negated_cond = cond;
+  make_not(negated_cond);
+
+  if (fold_then && fold_else)
+  {
+    // Both folds fire; generate_ifthenelse returns after the second because
+    // the first left the then-branch empty.
+    then_p.instructions.back().guard = negated_cond;
+    else_p.instructions.back().guard = cond;
+    dest.destructive_append(then_p);
+    dest.destructive_append(else_p);
+    return assert_foldt::emitted;
+  }
+  if (fold_then && is_no_op_program(else_p))
+  {
+    then_p.instructions.back().guard = negated_cond;
+    dest.destructive_append(then_p);
+    return assert_foldt::emitted;
+  }
+  if (fold_else && is_no_op_program(then_p))
+  {
+    else_p.instructions.back().guard = cond;
+    dest.destructive_append(else_p);
+    return assert_foldt::emitted;
+  }
+  if (fold_or_idiom)
+  {
+    then_p.instructions.front().guard = negated_cond;
+    then_p.instructions.erase(--then_p.instructions.end());
+    dest.destructive_append(then_p);
+    return assert_foldt::emitted;
+  }
+  return assert_foldt::defer;
+}
+
 // The location the legacy path stamps on an instruction it emits for `own`: it
 // reads the round-tripped codet through the *non-const* exprt::location(),
 // which materialises an empty -- and so not nil -- "#location" when the
@@ -408,12 +613,13 @@ bool goto_convert_functionst::convert_native_rec(
 
     // For side-effect-free operands the instruction convert_assign emits is
     // migrate_expr(code_assignt(lhs, rhs)) located at the statement — which
-    // round-trips back to `code2` itself (migrate_expr drops the operand
-    // locations, so none of restore_value_locations' stamping survives in the
-    // stored code). Emit it directly, no round-trip, carrying the statement's
-    // own location, exactly as copy(new_assign, ASSIGN) would.
+    // round-trips back to `code2` itself once the ternary stamping that
+    // survives migrate_expr is applied. Emit it directly, no round-trip,
+    // carrying the statement's own location, exactly as copy(new_assign,
+    // ASSIGN) would.
     goto_programt::targett t = dest.add_instruction(ASSIGN);
-    t->code = code2;
+    t->code = normalise_native_code(
+      code2, effective_location(assign.location, inherited), ns);
     t->location = assign.location;
     return true;
   }
@@ -497,7 +703,8 @@ bool goto_convert_functionst::convert_native_rec(
       return false;
 
     goto_programt::targett t = dest.add_instruction(OTHER);
-    t->code = code2;
+    t->code = normalise_native_code(
+      code2, effective_location(expr_stmt.location, inherited), ns);
     t->location = expr_stmt.location;
     return true;
   }
@@ -638,13 +845,14 @@ bool goto_convert_functionst::convert_native_rec(
       // convert_return replaces a missing value with nondet
       if (val.is_nil())
         return delegate_to_legacy();
-      // The RETURN instruction convert_return emits is migrate_expr(code_returnt)
-      // located at the statement; migrate_expr drops the value-operand location
-      // restore_value_locations stamped, so it round-trips to code2 itself. Emit
-      // it directly, exactly as the assign/expression handlers do.
+      // The RETURN instruction convert_return emits is
+      // migrate_expr(code_returnt) located at the statement, which round-trips
+      // to code2 itself once the ternary stamping is applied. Emit it directly,
+      // exactly as the assign/expression handlers do.
       goto_programt::targett r = dest.add_instruction();
       r->make_return();
-      r->code = code2;
+      r->code = normalise_native_code(
+        code2, effective_location(ret.location, inherited), ns);
       r->location = emitted_location(ret.location);
     }
     else if (val.is_not_nil() && val.type().id() != "empty")
@@ -724,32 +932,39 @@ bool goto_convert_functionst::convert_native_rec(
         return delegate_to_legacy();
     }
 
-    // generate_ifthenelse (goto_convert.cpp) folds a branch that reduces
-    // to a lone `assert(false)` directly into the guard instead of emitting
-    // the general shape below (--validate-violation-witness disables this);
-    // fall back rather than reproduce the fold.
+    const locationt &location = ite.location;
+    const expr2tc cond = normalise_native_code(ite.cond, location, ns);
+
+    // generate_ifthenelse (goto_convert.cpp) folds a branch that reduces to a
+    // lone `assert(false)` directly into the guard instead of emitting the
+    // general shape below. --validate-violation-witness disables the fold
+    // because witness branching waypoints need the conditional GOTO to steer
+    // the path, so the general shape is correct under that flag.
     if (!options.get_bool_option("validate-violation-witness"))
     {
-      auto is_lone_false_assert = [](const goto_programt &p) {
-        return p.instructions.size() == 1 &&
-               p.instructions.back().is_assert() &&
-               is_false(p.instructions.back().guard) &&
-               p.instructions.back().labels.empty();
-      };
-      if (
-        is_lone_false_assert(tmp_op1) ||
-        (has_else && is_lone_false_assert(tmp_op2)))
-        return false;
-      if (
-        !has_else && tmp_op1.instructions.size() == 2 &&
-        tmp_op1.instructions.front().is_assert() &&
-        is_false(tmp_op1.instructions.front().guard) &&
-        tmp_op1.instructions.front().labels.empty() &&
-        tmp_op1.instructions.back().labels.empty())
-        return false;
+      switch (fold_assert_branches(tmp_op1, tmp_op2, cond, dest))
+      {
+      case assert_foldt::emitted:
+        return true;
+      case assert_foldt::defer:
+        return delegate_to_legacy();
+      case assert_foldt::none:
+        break;
+      }
     }
 
-    const locationt &location = ite.location;
+    // convert() appends a SKIP for a statement that emits nothing, so legacy
+    // never sees an empty branch and asserts as much before reading the
+    // then-branch's last location; convert_native_rec guarantees that only for
+    // a block, so the useless-branch and branch-flip shapes generate_ifthenelse
+    // has for an empty branch stay legacy-side. The else-branch needs the same
+    // guard: an empty one makes instructions.begin() == end(), i.e. a GOTO
+    // whose target has no target_number, which trips compute_target_numbers.
+    // `assert` under --no-assertions is the one native kind that emits nothing.
+    if (
+      tmp_op1.instructions.empty() ||
+      (has_else && tmp_op2.instructions.empty()))
+      return delegate_to_legacy();
 
     // v: if(!c) goto y/z; w: P; x: goto z; (else only) y: Q; (else only) z: ;
     goto_programt tmp_z;
@@ -767,7 +982,7 @@ bool goto_convert_functionst::convert_native_rec(
 
     goto_programt tmp_v;
     goto_programt::targett v = tmp_v.add_instruction();
-    v->make_goto(has_else ? y : z, not2tc(ite.cond));
+    v->make_goto(has_else ? y : z, not2tc(cond));
     v->location = location;
 
     goto_programt tmp_w;
@@ -859,7 +1074,7 @@ bool goto_convert_functionst::convert_native_rec(
     else
     {
       goto_programt::targett t = tmp_branch.add_instruction();
-      t->make_goto(z, not2tc(w.cond));
+      t->make_goto(z, not2tc(normalise_native_code(w.cond, location, ns)));
       t->location = location;
     }
     goto_programt::targett v = tmp_branch.instructions.begin();
@@ -922,7 +1137,7 @@ bool goto_convert_functionst::convert_native_rec(
     // emits the continue target. Keep both: the lowering may allocate from the
     // shared tmp_symbol counter, whose numbering is observable.
     goto_programt sideeffects;
-    expr2tc guard = dw.cond;
+    expr2tc guard = normalise_native_code(dw.cond, here, ns);
     if (has_sideeffect(dw.cond))
     {
       exprt cond = migrate_expr_back(dw.cond);
@@ -1034,7 +1249,7 @@ bool goto_convert_functionst::convert_native_rec(
     // allocate from the shared tmp_symbol counter, whose numbering is
     // observable, so the order is kept.
     goto_programt sideeffects;
-    expr2tc guard = f.cond;
+    expr2tc guard = normalise_native_code(f.cond, here, ns);
     if (has_sideeffect(f.cond))
     {
       exprt cond = migrate_expr_back(f.cond);
@@ -1291,13 +1506,21 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_assert2t &a = to_code_assert2t(code2);
 
-    // convert_assert (goto_convert.cpp) removes side effects from the
-    // guard before emitting; require a side-effect-free guard for the same
-    // reason as every other statement kind here. code_assert2t's guard is
-    // already expr2tc, so (unlike the legacy-exprt kinds) there is no
-    // migrate_expr round-trip to do.
-    if (has_sideeffect(a.guard))
-      return false;
+    // convert_assert (goto_convert.cpp) hands the guard to remove_sideeffects,
+    // which owns the temp-symbol machinery this dispatcher does not reproduce.
+    // Delegate the statement rather than failing the walk, so the rest of the
+    // body stays native. The `is_if2t` disjunct mirrors remove_sideeffects'
+    // own entry condition, as the assign/decl/return/expression arms do: a
+    // top-level ternary is entered even with no side effect, and under
+    // --validate-violation-witness it lowers to DECL/IF/GOTO so the `?` column
+    // reaches the branching waypoint.
+    if (has_sideeffect(a.guard) || is_if2t(a.guard))
+    {
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(a.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    }
 
     // --no-assertions: convert_assert removes side effects (a no-op here)
     // and returns without emitting an ASSERT — match that exactly, an empty
@@ -1306,7 +1529,8 @@ bool goto_convert_functionst::convert_native_rec(
       return true;
 
     goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = a.guard;
+    t->guard = normalise_native_code(
+      a.guard, effective_location(a.location, inherited), ns);
     t->location = a.location;
     t->location.property("assertion");
     t->location.user_provided(true);
@@ -1316,11 +1540,20 @@ bool goto_convert_functionst::convert_native_rec(
   if (is_code_assume2t(code2))
   {
     const code_assume2t &a = to_code_assume2t(code2);
-    if (has_sideeffect(a.guard))
-      return false;
+
+    // Same delegation and the same remove_sideeffects entry condition as the
+    // assert arm above.
+    if (has_sideeffect(a.guard) || is_if2t(a.guard))
+    {
+      exprt op = migrate_expr_back(code2);
+      restore_value_locations(op, effective_location(a.location, inherited));
+      convert(to_code(op), dest);
+      return true;
+    }
 
     goto_programt::targett t = dest.add_instruction(ASSUME);
-    t->guard = a.guard;
+    t->guard = normalise_native_code(
+      a.guard, effective_location(a.location, inherited), ns);
     t->location = a.location;
     return true;
   }
@@ -1366,7 +1599,8 @@ bool goto_convert_functionst::convert_native_rec(
       return delegate_to_legacy();
 
     goto_programt::targett t = dest.add_instruction();
-    t->make_function_call(code2);
+    t->make_function_call(normalise_native_code(
+      code2, effective_location(f.location, inherited), ns));
     t->location = f.location;
     return true;
   }
@@ -1393,26 +1627,42 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_label2t &l = to_code_label2t(code2);
 
-    // convert_label turns a label matching --error-label into an ASSERT(false)
-    // carrying property/comment/user_provided metadata; that shape is not
-    // reproduced here.
-    const std::string &error_label = options.get_option("error-label");
-    if (!error_label.empty() && id2string(l.label) == error_label)
-      return false;
-
     goto_programt tmp;
     if (!convert_native_rec(
           l.code, tmp, effective_location(l.location, inherited)))
       return false;
 
-    // convert() always leaves at least one instruction (it appends a SKIP when
-    // a statement emitted nothing), so legacy can take instructions.begin()
-    // unconditionally; convert_native_rec only guarantees that for a block.
-    if (tmp.instructions.empty())
-      return false;
+    // convert_label turns a label matching --error-label into an ASSERT(false)
+    // carrying property/comment/user_provided metadata, and makes *that* the
+    // label's target so a goto to it lands on the assertion. The label
+    // statement's own location is read through codet's const accessor, so a nil
+    // one stays nil -- unlike the RETURN case, no empty is materialised.
+    const std::string &error_label = options.get_option("error-label");
+    goto_programt::targett target;
+    if (!error_label.empty() && id2string(l.label) == error_label)
+    {
+      target = dest.add_instruction(ASSERT);
+      target->guard = gen_false_expr();
+      target->location = l.location;
+      target->location.property("error label");
+      target->location.comment("error label");
+      target->location.user_provided(true);
+      dest.destructive_append(tmp);
+    }
+    else
+    {
+      // convert() always leaves at least one instruction (it appends a SKIP
+      // when a statement emitted nothing), so legacy can take
+      // instructions.begin() unconditionally; convert_native_rec only
+      // guarantees that for a block. On the branch above the assertion is the
+      // target, so an empty tmp is fine there.
+      if (tmp.instructions.empty())
+        return false;
 
-    goto_programt::targett target = tmp.instructions.begin();
-    dest.destructive_append(tmp);
+      target = tmp.instructions.begin();
+      dest.destructive_append(tmp);
+    }
+
     targets.labels.insert({l.label, {target, targets.destructor_stack}});
     target->labels.push_front(l.label);
     return true;
