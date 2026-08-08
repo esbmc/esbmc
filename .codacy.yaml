@@ -96,7 +96,9 @@ engines:
       # regression/testing_tool.py.
       - 'scripts/**'
 
-  pylint:
+  # Codacy's key for Pylint is `pylintpython3`, matching the pattern IDs it
+  # reports (PyLintPython3_W0611); a `pylint` block is silently ignored.
+  pylintpython3:
     enabled: true
     exclude_paths:
       # ESBMC operational models for the Python standard library. These files
@@ -118,6 +120,13 @@ engines:
       # and cannot be fixed without breaking what ESBMC resolves. Same
       # rationale as the bandit block above, which already excludes this
       # directory. Python code elsewhere in the tree remains in scope.
+      - 'src/python-frontend/models/**'
+
+  prospector:
+    enabled: true
+    exclude_paths:
+      # Prospector runs Pylint internally and reports the same finding under
+      # its own engine, so it needs the exclusion above to take effect too.
       - 'src/python-frontend/models/**'
 
   cppcheck:
