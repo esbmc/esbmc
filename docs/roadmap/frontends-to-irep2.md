@@ -1266,3 +1266,88 @@ divergence is not the same class as a location one, and the C suite had never
 produced one before. **Re-classify before deferring**: an unexplained A/B
 divergence is a defect of unknown severity, not a cosmetic, until it has been
 run down. This one was a default-on missed bug that had shipped.
+
+## 23. The assert-fold reproduced — the last named decline residue (2026-08-08)
+
+§12.2 named the assert-fold as the residue both C and C++ carry, and §20.4/§22
+carried it forward as one of the three things left before the round-trip can go.
+`generate_ifthenelse` collapses a branch that reduces to a lone `assert(false)`
+into the guard; the native arm detected those shapes and **`return false`d**,
+which is a *whole-function* fallback — worse than the statement-local delegation
+the rest of the dispatcher uses. It now reproduces the fold.
+
+### 23.1 The shapes, and which are corpus-reachable
+
+| shape | native handling | reached by |
+|---|---|---|
+| then-branch is a lone `assert(false)`, no else (or a no-op else) | folded, guard `!c` | `…assert_fold_01` |
+| else-branch is a lone `assert(false)`, then-branch a no-op | folded, guard `c` | `…assert_fold_01` |
+| both branches lone `assert(false)` | both folded | `…assert_fold_01` |
+| then-branch is a lone `assert(false)`, else-branch a *no-op* | folded, guard `!c` | `…assert_fold_01` |
+| `(void)((cond) \|\| (assert(0),0))` — the C-library idiom | folded, guard `!c`, second instruction dropped | **`regression/esbmc/github_1565`** and 3 others; `…assert_fold_03` |
+
+and one shape that is not a fold but a delegation:
+
+| a fold that fires and still leaves the other branch to convert | delegated (the legacy re-entry with branches swapped is not reproduced) | `…assert_fold_02` |
+
+**Only the `||` idiom occurs in the corpus.** A stride-6 instrumented scan of
+`regression/esbmc` + `regression/esbmc-cpp/cpp` (405 tests) fires the fold on
+exactly four — `github_1565`, `no_pointer_check_4`,
+`interval_can_handle_global`, `github_5998-long-chain_fail` — and every one is
+`idiom=1`. The other shapes were reached only by written reproducers
+(`__ESBMC_assert(0, …)` in branch position), which is what the new tests pin.
+Every branch this patch adds is shown live by one or the other, per the C-Live
+obligation; none is dead instrumentation.
+
+**The idiom's gate was wrong on the first cut, and review caught it.** Legacy
+gates that fold on the else *program* being observationally no-op
+(`is_no_op_program`); the native arm tested the *AST* (`else_case` nil), so
+`if (c) { assert(0); g = 1; } else { }` folded on one path and not the other.
+Not corpus-reachable, but a byte-identity break, and the third time on this
+branch that a first cut was scoped by what the sweep happened to sample rather
+than by what the legacy code actually says. `…assert_fold_03` pins it. The
+shared predicate is now `is_no_op_program` in `remove_no_op.h` — previously a
+file-static in `goto_convert.cpp` that this arm had copied, which is how the two
+came to disagree.
+
+### 23.2 Mutants — and why one of them cannot be caught
+
+| mutant | what it breaks | caught by |
+|---|---|---|
+| M1 — fold arms replaced by `delegate_to_legacy()` | nothing observable | **nothing** (see below) |
+| M2 — folded guard `c` instead of `!c` | the assertion's condition | `…assert_fold_01` (text) and `…_01_fail` (verdict: the assume makes the sign observable), plus the A/B on `github_1565` |
+| M3 — idiom gated on an AST-empty else | the no-op-else idiom | `…assert_fold_03` |
+
+M1 is §20.2's limit again, and it is worth restating because it is the reason
+this residue survived so long: **a behaviour-preserving delegation is
+indistinguishable from the arm that replaces it by any verdict or output test.**
+The old code's `return false` and the new fold produce byte-identical programs.
+Only a decline census can tell them apart, which is why §23.1 reports the scan
+rather than resting on the green suite.
+
+### 23.3 A/B and a harness correction
+
+C stride-12 + C++ stride-4: **327/328**. A wider C++ stride-4 sample (189
+tests) reports one divergence, `cpp_stack_top_bug`, which the §7 rule 7
+self-control immediately disqualifies: it runs `--k-induction-parallel`, and the
+legacy arm against **itself** produces two different hashes on consecutive runs.
+The diff is interleaved whitespace from the forked workers. *Exclude
+`--k-induction-parallel` tests from the A/B* — this is the third distinct
+per-run artefact class the sweep has hit (§19.3 a synthetic location, §20.3 a
+synthetic file name, §21.3 a temp dir encoded as character codes), and the
+self-control caught all three.
+
+### 23.4 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc-cpp` | assert-fold now folded; residue = `--error-label` only | 327/328 with C (the 1 is §23.3 harness noise) |
+| `esbmc` (C) | assert-fold now folded; residue = `--error-label` only | as above |
+| `python` | dominant site fixed by #6695 (merged) | 303/303 (stride-15) |
+| `esbmc-solidity` | 0 / 26 | 502/510; 8 residuals = #6759, #6760 |
+| `jimple` | 0 / 15 | 15/15 |
+
+What is left is `--error-label` (§12.2: `convert_label` turns a matching label
+into an `ASSERT(false)` carrying property metadata; invisible to any census that
+does not replay `test.desc` flags) and Solidity's eight residuals. The
+assert-fold row of §12.3, carried since 2026-08-04, is closed.

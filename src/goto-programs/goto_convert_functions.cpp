@@ -283,6 +283,88 @@ static expr2tc normalise_native_code(
   return normalised;
 }
 
+enum class assert_foldt
+{
+  none,    // no fold applies; emit the general shape
+  emitted, // the statement is fully converted
+  defer,   // a fold fires but legacy would then re-enter with the branches
+           // swapped, which is not reproduced here
+};
+
+// Reproduce generate_ifthenelse's assert-folds (goto_convert.cpp): a branch
+// that reduces to a lone `assert(false)` collapses into the guard instead of
+// emitting a conditional GOTO. A labelled assert is excluded throughout --
+// the label is a jump target, so the branch cannot collapse. Note the `||`
+// idiom fold DISCARDS the branch's second instruction; that is legacy
+// behaviour, reproduced deliberately.
+static bool is_lone_false_assert(const goto_programt &p)
+{
+  return p.instructions.size() == 1 && p.instructions.back().is_assert() &&
+         is_false(p.instructions.back().guard) &&
+         p.instructions.back().labels.empty();
+}
+
+// The `(void)((cond) || (assert(0),0))` idiom C libraries use. Legacy gates it
+// on the else-branch being observationally empty, not on there being no else.
+static bool
+is_or_idiom(const goto_programt &then_p, const goto_programt &else_p)
+{
+  return is_no_op_program(else_p) && then_p.instructions.size() == 2 &&
+         then_p.instructions.front().is_assert() &&
+         is_false(then_p.instructions.front().guard) &&
+         then_p.instructions.front().labels.empty() &&
+         then_p.instructions.back().labels.empty();
+}
+
+static assert_foldt fold_assert_branches(
+  goto_programt &then_p,
+  goto_programt &else_p,
+  const expr2tc &cond,
+  goto_programt &dest)
+{
+  const bool fold_then = is_lone_false_assert(then_p);
+  const bool fold_else = is_lone_false_assert(else_p);
+  const bool fold_or_idiom = is_or_idiom(then_p, else_p);
+
+  if (!fold_then && !fold_else && !fold_or_idiom)
+    return assert_foldt::none;
+
+  // boolean_negate's IREP2 twin: peels one `not`, folds a bool constant.
+  expr2tc negated_cond = cond;
+  make_not(negated_cond);
+
+  if (fold_then && fold_else)
+  {
+    // Both folds fire; generate_ifthenelse returns after the second because
+    // the first left the then-branch empty.
+    then_p.instructions.back().guard = negated_cond;
+    else_p.instructions.back().guard = cond;
+    dest.destructive_append(then_p);
+    dest.destructive_append(else_p);
+    return assert_foldt::emitted;
+  }
+  if (fold_then && is_no_op_program(else_p))
+  {
+    then_p.instructions.back().guard = negated_cond;
+    dest.destructive_append(then_p);
+    return assert_foldt::emitted;
+  }
+  if (fold_else && is_no_op_program(then_p))
+  {
+    else_p.instructions.back().guard = cond;
+    dest.destructive_append(else_p);
+    return assert_foldt::emitted;
+  }
+  if (fold_or_idiom)
+  {
+    then_p.instructions.front().guard = negated_cond;
+    then_p.instructions.erase(--then_p.instructions.end());
+    dest.destructive_append(then_p);
+    return assert_foldt::emitted;
+  }
+  return assert_foldt::defer;
+}
+
 // The location the legacy path stamps on an instruction it emits for `own`: it
 // reads the round-tripped codet through the *non-const* exprt::location(),
 // which materialises an empty -- and so not nil -- "#location" when the
@@ -850,32 +932,34 @@ bool goto_convert_functionst::convert_native_rec(
         return delegate_to_legacy();
     }
 
-    // generate_ifthenelse (goto_convert.cpp) folds a branch that reduces
-    // to a lone `assert(false)` directly into the guard instead of emitting
-    // the general shape below (--validate-violation-witness disables this);
-    // fall back rather than reproduce the fold.
+    const locationt &location = ite.location;
+    const expr2tc cond = normalise_native_code(ite.cond, location, ns);
+
+    // generate_ifthenelse (goto_convert.cpp) folds a branch that reduces to a
+    // lone `assert(false)` directly into the guard instead of emitting the
+    // general shape below. --validate-violation-witness disables the fold
+    // because witness branching waypoints need the conditional GOTO to steer
+    // the path, so the general shape is correct under that flag.
     if (!options.get_bool_option("validate-violation-witness"))
     {
-      auto is_lone_false_assert = [](const goto_programt &p) {
-        return p.instructions.size() == 1 &&
-               p.instructions.back().is_assert() &&
-               is_false(p.instructions.back().guard) &&
-               p.instructions.back().labels.empty();
-      };
-      if (
-        is_lone_false_assert(tmp_op1) ||
-        (has_else && is_lone_false_assert(tmp_op2)))
-        return false;
-      if (
-        !has_else && tmp_op1.instructions.size() == 2 &&
-        tmp_op1.instructions.front().is_assert() &&
-        is_false(tmp_op1.instructions.front().guard) &&
-        tmp_op1.instructions.front().labels.empty() &&
-        tmp_op1.instructions.back().labels.empty())
-        return false;
+      switch (fold_assert_branches(tmp_op1, tmp_op2, cond, dest))
+      {
+      case assert_foldt::emitted:
+        return true;
+      case assert_foldt::defer:
+        return delegate_to_legacy();
+      case assert_foldt::none:
+        break;
+      }
     }
 
-    const locationt &location = ite.location;
+    // convert() appends a SKIP for a statement that emits nothing, so legacy
+    // never sees an empty branch and asserts as much before reading the
+    // then-branch's last location; convert_native_rec guarantees that only for
+    // a block, so the useless-branch and branch-flip shapes generate_ifthenelse
+    // has for an empty branch stay legacy-side.
+    if (tmp_op1.instructions.empty())
+      return delegate_to_legacy();
 
     // v: if(!c) goto y/z; w: P; x: goto z; (else only) y: Q; (else only) z: ;
     goto_programt tmp_z;
@@ -893,8 +977,7 @@ bool goto_convert_functionst::convert_native_rec(
 
     goto_programt tmp_v;
     goto_programt::targett v = tmp_v.add_instruction();
-    v->make_goto(
-      has_else ? y : z, not2tc(normalise_native_code(ite.cond, location, ns)));
+    v->make_goto(has_else ? y : z, not2tc(cond));
     v->location = location;
 
     goto_programt tmp_w;
