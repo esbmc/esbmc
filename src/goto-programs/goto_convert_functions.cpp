@@ -206,19 +206,81 @@ static bool has_unlocated_ternary(const expr2tc &expr)
   return found;
 }
 
-// `code2` with every location-less ternary stamped at the location the legacy
-// path would have given it. The pre-scan keeps the common case free: the
-// stamping walk detaches every node it descends through, so running it
-// unconditionally would deep-copy each assignment's expression tree.
-static expr2tc
-with_ternary_locations(const expr2tc &code2, const locationt &loc)
+// The symbol-table type for a level0 symbol expression, or nil when the node
+// already carries it (or is not such a symbol). migrate_expr normalises to this
+// type (sym_name_to_symbol, migrate.cpp), so a verbatim store must too -- see
+// esbmc/esbmc#4715 and docs/roadmap/frontends-to-irep2.md §22 for why
+// convert_decl's mid-body VLA retype makes this a soundness matter.
+static type2tc stale_symbol_type(const expr2tc &expr, const namespacet &ns)
 {
-  if (loc.get_file().empty() || !has_unlocated_ternary(code2))
+  if (!is_symbol2t(expr))
+    return type2tc();
+
+  const symbol2t &sym = to_symbol2t(expr);
+  if (sym.rlevel != symbol2t::renaming_level::level0)
+    return type2tc();
+
+  const symbolt *s = ns.lookup(sym.thename);
+  if (s == nullptr)
+    return type2tc();
+
+  type2tc stored = migrate_symbol_type(*s);
+  return stored == expr->type ? type2tc() : stored;
+}
+
+static bool has_stale_symbol_type(const expr2tc &expr, const namespacet &ns)
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  if (!is_nil_type(stale_symbol_type(expr, ns)))
+    return true;
+
+  bool found = false;
+  expr->foreach_operand([&found, &ns](const expr2tc &op) {
+    if (!found)
+      found = has_stale_symbol_type(op, ns);
+  });
+  return found;
+}
+
+static void refresh_symbol_types(expr2tc &expr, const namespacet &ns)
+{
+  if (is_nil_expr(expr))
+    return;
+
+  type2tc stored = stale_symbol_type(expr, ns);
+  if (!is_nil_type(stored))
+  {
+    // Rebuilt exactly as sym_name_to_symbol builds a level0 symbol.
+    expr = symbol2tc(stored, to_symbol2t(expr).thename);
+    return;
+  }
+
+  expr->Foreach_operand([&ns](expr2tc &op) { refresh_symbol_types(op, ns); });
+}
+
+// `code2` as migrate_expr would have produced it from the legacy statement the
+// fallback path converts: ternaries located, level0 symbols carrying the
+// symbol-table type. Each pre-scan keeps the common case free -- the mutating
+// walks detach every node they descend through, so running them unconditionally
+// would deep-copy each statement's expression tree.
+static expr2tc normalise_native_code(
+  const expr2tc &code2,
+  const locationt &loc,
+  const namespacet &ns)
+{
+  const bool stamp = !loc.get_file().empty() && has_unlocated_ternary(code2);
+  const bool refresh = has_stale_symbol_type(code2, ns);
+  if (!stamp && !refresh)
     return code2;
 
-  expr2tc stamped = code2;
-  stamp_ternary_locations(stamped, loc);
-  return stamped;
+  expr2tc normalised = code2;
+  if (stamp)
+    stamp_ternary_locations(normalised, loc);
+  if (refresh)
+    refresh_symbol_types(normalised, ns);
+  return normalised;
 }
 
 // The location the legacy path stamps on an instruction it emits for `own`: it
@@ -474,8 +536,8 @@ bool goto_convert_functionst::convert_native_rec(
     // carrying the statement's own location, exactly as copy(new_assign,
     // ASSIGN) would.
     goto_programt::targett t = dest.add_instruction(ASSIGN);
-    t->code = with_ternary_locations(
-      code2, effective_location(assign.location, inherited));
+    t->code = normalise_native_code(
+      code2, effective_location(assign.location, inherited), ns);
     t->location = assign.location;
     return true;
   }
@@ -559,8 +621,8 @@ bool goto_convert_functionst::convert_native_rec(
       return false;
 
     goto_programt::targett t = dest.add_instruction(OTHER);
-    t->code = with_ternary_locations(
-      code2, effective_location(expr_stmt.location, inherited));
+    t->code = normalise_native_code(
+      code2, effective_location(expr_stmt.location, inherited), ns);
     t->location = expr_stmt.location;
     return true;
   }
@@ -707,8 +769,8 @@ bool goto_convert_functionst::convert_native_rec(
       // exactly as the assign/expression handlers do.
       goto_programt::targett r = dest.add_instruction();
       r->make_return();
-      r->code = with_ternary_locations(
-        code2, effective_location(ret.location, inherited));
+      r->code = normalise_native_code(
+        code2, effective_location(ret.location, inherited), ns);
       r->location = emitted_location(ret.location);
     }
     else if (val.is_not_nil() && val.type().id() != "empty")
@@ -831,7 +893,8 @@ bool goto_convert_functionst::convert_native_rec(
 
     goto_programt tmp_v;
     goto_programt::targett v = tmp_v.add_instruction();
-    v->make_goto(has_else ? y : z, not2tc(ite.cond));
+    v->make_goto(
+      has_else ? y : z, not2tc(normalise_native_code(ite.cond, location, ns)));
     v->location = location;
 
     goto_programt tmp_w;
@@ -923,7 +986,7 @@ bool goto_convert_functionst::convert_native_rec(
     else
     {
       goto_programt::targett t = tmp_branch.add_instruction();
-      t->make_goto(z, not2tc(w.cond));
+      t->make_goto(z, not2tc(normalise_native_code(w.cond, location, ns)));
       t->location = location;
     }
     goto_programt::targett v = tmp_branch.instructions.begin();
@@ -986,7 +1049,7 @@ bool goto_convert_functionst::convert_native_rec(
     // emits the continue target. Keep both: the lowering may allocate from the
     // shared tmp_symbol counter, whose numbering is observable.
     goto_programt sideeffects;
-    expr2tc guard = dw.cond;
+    expr2tc guard = normalise_native_code(dw.cond, here, ns);
     if (has_sideeffect(dw.cond))
     {
       exprt cond = migrate_expr_back(dw.cond);
@@ -1098,7 +1161,7 @@ bool goto_convert_functionst::convert_native_rec(
     // allocate from the shared tmp_symbol counter, whose numbering is
     // observable, so the order is kept.
     goto_programt sideeffects;
-    expr2tc guard = f.cond;
+    expr2tc guard = normalise_native_code(f.cond, here, ns);
     if (has_sideeffect(f.cond))
     {
       exprt cond = migrate_expr_back(f.cond);
@@ -1370,7 +1433,8 @@ bool goto_convert_functionst::convert_native_rec(
       return true;
 
     goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = a.guard;
+    t->guard = normalise_native_code(
+      a.guard, effective_location(a.location, inherited), ns);
     t->location = a.location;
     t->location.property("assertion");
     t->location.user_provided(true);
@@ -1384,7 +1448,8 @@ bool goto_convert_functionst::convert_native_rec(
       return false;
 
     goto_programt::targett t = dest.add_instruction(ASSUME);
-    t->guard = a.guard;
+    t->guard = normalise_native_code(
+      a.guard, effective_location(a.location, inherited), ns);
     t->location = a.location;
     return true;
   }
@@ -1430,8 +1495,8 @@ bool goto_convert_functionst::convert_native_rec(
       return delegate_to_legacy();
 
     goto_programt::targett t = dest.add_instruction();
-    t->make_function_call(
-      with_ternary_locations(code2, effective_location(f.location, inherited)));
+    t->make_function_call(normalise_native_code(
+      code2, effective_location(f.location, inherited), ns));
     t->location = f.location;
     return true;
   }

@@ -1168,3 +1168,101 @@ warning that a shape absent from the sample can still carry the defect, and
 assert-fold in C/C++/Python, Solidity's eight residuals, and the C divergence in
 §21.4 — which, unlike the Solidity eight, has not been shown to predate the
 dispatcher series as a whole, only this patch.
+
+## 22. §21.4's C divergence is a soundness bug — and the second half of the same premise (2026-08-08)
+
+§21.4 filed `esbmc/cwe_uninit_array_vla` as "the first instruction-text
+divergence, not yet filed." Run down, it is not a cosmetic at all: on the
+default (native) path ESBMC **silently accepts a real out-of-bounds read**.
+
+### 22.1 The reproducer
+
+```c
+int main(void)
+{
+  int n = 1;
+  int a[n];
+  a[0] = 42;
+  n = 100;
+  return a[5];        /* ASan: dynamic-stack-buffer-overflow */
+}
+```
+
+| path | bound check emitted | verdict |
+|---|---|---|
+| `--no-irep2-native-body` | `5 < (signed long int)tmp$1` | **FAILED** (correct) |
+| default (native) | `5 < (signed long int)n` | **SUCCESSFUL** (misses it) |
+
+`n = 100` is what turns the stale bound into a *vacuous* one, so the missed bug
+needs a reassignment; without it the two bounds are equal and the divergence is
+invisible in the verdict — which is why the original test
+(`cwe_uninit_array_vla`, no reassignment) passed on both paths and the defect sat
+in the A/B as a text difference only.
+
+### 22.2 Root cause: the *other* thing migrate_expr normalises
+
+C11 6.7.6.2p5 evaluates a VLA's size expression once, at the declaration, so
+`convert_decl` snapshots it into a temporary and **retypes the array symbol
+mid-body** — `s->set_type(...)`, `goto_convert.cpp`. The legacy path picks that
+up for free, and not by mutating its tree: `sym_name_to_symbol`
+(`migrate.cpp:613`) deliberately re-reads **every level0 symbol's type from the
+global symbol table** rather than trusting the expression's own, with its own
+comment explaining why ("various things out there get parsed in with a partial
+type"). So a statement converted *after* the retype migrates with the new type.
+
+A native arm storing `code2` verbatim never re-migrates, so it keeps the
+frontend-time `int[n]`. `goto_check`'s bounds check then reads `array_size`
+straight off that stale type (`goto_check.cpp`, `ns.follow(ind.source_value->type)`).
+
+This is the same shape of defect as §21.2 and it was hiding behind it:
+**`migrate_expr` performs two normalisations that a verbatim store skips** — the
+ternary location, and the symbol-table type. §21 fixed the first at four arms;
+this fixes the second at the same four, behind one `normalise_native_code`
+helper whose contract is now stated positively: *`code2` as `migrate_expr` would
+have produced it from the legacy statement the fallback converts.*
+
+### 22.3 Result
+
+| sweep (divergences) | before §21 | after §21 | after §22 |
+|---|---:|---:|---:|
+| `esbmc` (C) + `esbmc-cpp` stride-12 | 1 / 202 | 1 / 202 | **0 / 202** |
+| `python` stride-15 | 19 / 303 | 0 / 303 | 0 / 303 |
+
+The C sample is clean for the first time. That is *not* the exit criterion met:
+§22.6 is a defect this sample cannot see, found by review rather than by
+measurement, and it is the second time on this patch that the sweep's silence
+was mistaken for coverage.
+
+### 22.4 Mutants
+
+| mutant | what it breaks | caught by |
+|---|---|---|
+| refresh disabled, stamping kept | the VLA retype | **both** new tests — `…vla_retype_01_fail` flips to SUCCESSFUL (false negative), `…_01` to FAILED (false positive) |
+| stamping disabled, refresh kept | the ternary location | the §21.5 tests only |
+
+The two normalisations are independently pinned, which matters because they
+share a helper and a call site: neither test set can pass on the other's fix.
+
+### 22.6 Review found the same bug at the condition guards
+
+The statement arms were fixed first, because those are what the sweep reported.
+Review then reproduced the identical missed out-of-bounds read with the access
+in an `if`, `while`, `do`/`while` and `for` condition — those arms fold the
+condition into a GOTO guard verbatim, so they share the premise and were not
+covered. The sample contains no VLA in a branch condition, so no amount of
+re-running it would have surfaced this.
+
+All six sites (the four statement arms plus the four condition guards, and
+`code_assert2t`/`code_assume2t`'s guards, which are Python-reachable) now go
+through the one `normalise_native_code` chokepoint.
+
+### 22.5 What this says about the A/B as a gate
+
+§21.4 item 2 warned the sweep's *location* coverage was partial. This is the
+sharper lesson and it runs the other way: the sweep **did** report this
+divergence, plainly, in instruction text — and §21 read it as "location-only
+residue, filed for later" because every prior residue had been. A text
+divergence is not the same class as a location one, and the C suite had never
+produced one before. **Re-classify before deferring**: an unexplained A/B
+divergence is a defect of unknown severity, not a cosmetic, until it has been
+run down. This one was a default-on missed bug that had shipped.
