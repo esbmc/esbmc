@@ -25,14 +25,11 @@ camada::SMTSolverRef create_esbmc_mathsat_solver(const optionst &options);
 camada::SMTSolverRef create_esbmc_yices_solver(const optionst &options);
 camada::SMTSolverRef create_esbmc_bitwuzla_solver(const optionst &options);
 
-/** Wraps a linked camada solver in the ESBMC solver object.
- *  @param prefers_fp2bv Bit-blast floating-point without --fp2bv; see
- *         smt_solver_baset::fp_encoding. */
+/** Wraps a linked camada solver in the ESBMC solver object. */
 std::unique_ptr<smt_solver_baset> create_linked_solver(
   const optionst &options,
   const namespacet &ns,
-  camada_buildert build,
-  bool prefers_fp2bv = false);
+  camada_buildert build);
 
 /** The SMT-LIB backend is the exception: it chooses between a one-shot external
  *  program and an interactive/write-only script, and rejects strategies the

@@ -19,47 +19,31 @@ struct backendt
   /** Needs an external program the user must name, so it is never chosen
    *  implicitly. */
   bool needs_config;
-  /** Bit-blast floating-point rather than using the backend's FP theory.
-   *  Set where the native theory is a net loss: bitwuzla answers fp.div and
-   *  fp.sqrt far slower than the blasted form, to the point of exhausting a
-   *  16 GB CI runner, so it gets the same encoding it had before camada
-   *  (its pre-camada backend had no native-FP overrides at all). --fp2bv
-   *  still forces bit-blasting everywhere. */
-  bool prefers_fp2bv;
 };
 
 /* Order is default priority: the first built-in backend that can be chosen
  * implicitly wins when the user names no solver. */
 const backendt backends[] = {
-  {"smtlib", "SMTLIB", ESBMC_ENABLE_smtlib, nullptr, true, true, false},
+  {"smtlib", "SMTLIB", ESBMC_ENABLE_smtlib, nullptr, true, true},
   {"bitwuzla",
    "bitwuzla",
    ESBMC_ENABLE_bitwuzla,
    create_esbmc_bitwuzla_solver,
    false,
-   false,
-   true},
-  {"z3", "Z3", ESBMC_ENABLE_z3, create_esbmc_z3_solver, true, false, false},
-  {"cvc5",
-   "CVC5",
-   ESBMC_ENABLE_cvc5,
-   create_esbmc_cvc5_solver,
-   true,
-   false,
    false},
+  {"z3", "Z3", ESBMC_ENABLE_z3, create_esbmc_z3_solver, true, false},
+  {"cvc5", "CVC5", ESBMC_ENABLE_cvc5, create_esbmc_cvc5_solver, true, false},
   {"mathsat",
    "MathSAT",
    ESBMC_ENABLE_mathsat,
    create_esbmc_mathsat_solver,
    true,
-   false,
    false},
   {"yices",
    "Yices",
    ESBMC_ENABLE_yices,
    create_esbmc_yices_solver,
    true,
-   false,
    false}};
 
 const backendt *find_backend(const std::string &name)
@@ -197,15 +181,13 @@ create_solver(const namespacet &ns, const optionst &options)
      uses the solver's own theories where it has them and lowers otherwise, so
      there is no ESBMC-side flattener to install and nothing to select here.
      --fp2bv still forces FPEncoding::BV, because bit-blasting floats is a
-     semantic choice a caller may need, and backends flagged prefers_fp2bv
-     bit-blast unasked (see fp_encoding). */
+     semantic choice a caller may need (see fp_encoding). */
   const backendt &backend = pick_solver(options);
   /* smtlib is the only backend whose construction branches; the rest differ
    * only in which camada solver they build. */
   std::unique_ptr<smt_solver_baset> ctx =
-    backend.build
-      ? create_linked_solver(options, ns, backend.build, backend.prefers_fp2bv)
-      : create_new_smtlib_solver(options, ns);
+    backend.build ? create_linked_solver(options, ns, backend.build)
+                  : create_new_smtlib_solver(options, ns);
 
   ctx->smt_post_init();
   return std::make_unique<smt_convt>(std::move(ctx));
