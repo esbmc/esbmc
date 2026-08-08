@@ -2065,3 +2065,62 @@ therefore whether it closes B-4 or only shrinks it.
 
 Recorded rather than acted on: this is a plan correction, and the plan's own
 gate (§Phase 0, "a recorded answer either way") is what it feeds.
+
+## 33. What catch-matching actually sees: four spellings (2026-08-08)
+
+§32.3 reformulated Phase 0's first question as *"does catch-matching ever see a
+non-scalar spelling?"* — because the answer decides whether Option F closes B-4
+or only shrinks it. Measured here.
+
+### 33.1 Method and result
+
+One `fprintf` at the single `type.cpp_type()` read in
+`clang_cpp_adjust_expr`'s exception-id builder — the semantics-bearing reader,
+and the only one §5.2's argument rests on — run over every C++ suite:
+`esbmc-cpp/cpp`, `esbmc-cpp11/14/17/20/23` and `esbmc-cpp/try_catch`, **949
+test directories**, `test.desc` flags replayed.
+
+**Four distinct spellings reach it, on 94 tests:**
+
+```
+double   float   signed_char   signed_int
+```
+
+Four of the 83 in §32.1, all scalar, and **no vector name**. `bool`, `void`,
+`char8_t`, `__int128`, `_ptrmem` and the 56 SVE names never arrive.
+
+### 33.2 What this does and does not settle
+
+It settles the *shape* of the answer: the semantic reader consumes a tiny
+scalar subset, so a typed field carrying the scalar spellings serves it. The
+remaining 79 values reach only `cpp_expr2string` and `goto2c/expr2c`, both
+presentation.
+
+It does **not** settle reachability, and the argument I expected to close it is
+not available. I went looking for a spec-level prohibition — sizeless SVE types
+being ineligible as exception objects would make the 56 vector names
+unreachable *by construction* rather than merely unobserved. The ACLE documents
+sizeless-type restrictions on struct/union/class members, `sizeof`/`_Alignof`
+operands and array element types, but **no restriction on throw-expressions or
+catch parameters**. So the vector names are unobserved over 949 tests, which
+after §30.2 is evidence and not proof.
+
+### 33.3 Consequence for Phase 0
+
+The go/no-go the phase asks for, with what is now known:
+
+- **Go, for the scalar subset.** A typed field on the kinds that carry scalar
+  spellings serves the one semantic reader, and §16's mechanism conclusions
+  (excluded from `fields`, no interning) hold.
+- **Not a B-4 closure.** The 79 presentation-only spellings still need a
+  carrier, so `#cpp_type` survives unless they move to a presentation channel
+  of their own — which is a second, separable piece of work that §5.2 did not
+  scope.
+- **Sizing.** §16.3's "add one excluded field to two kinds, repoint one reader"
+  is right *for the semantic half* and wrong for B-4 as a whole. The honest
+  estimate splits: days for the semantic half, unscoped for the rest.
+
+The remaining risk is the one §33.2 names — that a spelling outside the four
+reaches catch-matching on input the corpus does not contain. Cheapest guard:
+assert on an unexpected spelling in the typed-field prototype and let the suite
+say so, rather than trying to enumerate the domain up front.
