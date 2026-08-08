@@ -2287,3 +2287,70 @@ readers, delete the `irept` accessors."* Against the measurements:
 Recorded as a plan correction. The next executable piece of B-4 is `sol_class`
 on the Solidity kinds — which, being Solidity, needs the CI leg that the rest of
 this branch has been waiting on.
+
+## 37. `sol_class` leaves the program — and B-4 has nothing executable left (2026-08-09)
+
+§36.3 named `sol_class` the next executable piece of B-4 and said it "was
+always sound". Before writing its scope document, I checked where `#sol_type`
+is actually consumed. The answer removes it from the program.
+
+### 37.1 The attribute never crosses a frontend boundary
+
+`#sol_type` is written and read through one pair of helpers
+(`solidity_convert.h:68-75`):
+
+```cpp
+static void set_sol_type(typet &t, SolidityGrammar::SolType st)
+{ t.set("#sol_type", SolidityGrammar::sol_type_to_str(st)); }
+static SolidityGrammar::SolType get_sol_type(const typet &t)
+{ return SolidityGrammar::str_to_sol_type(t.get("#sol_type").as_string()); }
+```
+
+Every file that mentions it — 17 of them — is under `src/solidity-frontend/`.
+`grep` across `src/goto-programs`, `src/goto-symex`, `src/solvers`, `src/util`
+and `src/irep2` returns **nothing**.
+
+### 37.2 Why that disqualifies it as a B-4 item
+
+B-4 is *"no `#`-attribute legacy escape hatch **into a shared pass**"*, and
+§5.2's whole argument for Option F being legitimate rather than a reinstated
+escape hatch is that `#cpp_type` reaches `clang_cpp_adjust_expr`'s
+catch-matching — a shared, semantics-bearing consumer.
+
+`#sol_type` has no such consumer. It is a frontend talking to itself: it holds
+`SolType` on both sides and stringifies only because `irept` cannot hold an
+enum. Nothing post-migration reads it, so **a typed field on `type2t` would
+carry data no consumer wants**. §5.2's phrasing was right that this "removes a
+serialization step rather than adding an escape hatch" — the refinement is that
+the step to remove sits *inside* the frontend, and removing it needs no IREP2
+change at all.
+
+So the work is real but it is Solidity-frontend cleanup: stop routing
+frontend-internal state through `irept`. It should be filed as such, and it does
+not need the CI leg this branch has been waiting on, because it does not need
+`type2t` to change.
+
+(One caveat, stated rather than hidden: a *generic* `#`-attribute walk would
+still see the key. Option D seamed `#member_name` and `#cpp_type` behind typed
+`irept` accessors for that reason and did not seam `#sol_type`, which is
+consistent with it never having mattered outside the frontend.)
+
+### 37.3 What is left of B-4
+
+| item | status |
+|---|---|
+| `c_spelling` | **no-go as scoped** (§36) — domain is open, 83 values |
+| `sol_class` | **not a migration item** (§37) — no consumer outside the frontend |
+
+B-4 as written has **no viable executable content left.** That is not a failure
+of the work; it is the measurements arriving. Two things survive it:
+
+1. The **semantics/presentation split** §33 left open — a typed field for the
+   four scalar spellings catch-matching consumes, the rest staying a string.
+   Real, smaller than B-4, and needing its own scope document and name.
+2. The **Solidity frontend cleanup** above, which is not this program's.
+
+Phase 2 should be struck from the phase list rather than left as a gate on
+Phases 5-9, which §6 already notes are independent of B-4. The program's
+executable frontier is therefore Phase 3 (the Python flip) and Phase 4 (extract
+the construction kit) — neither of which is blocked on anything measured here.
