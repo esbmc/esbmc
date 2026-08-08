@@ -141,9 +141,10 @@ symbolt *python_converter::find_function_in_base_classes(
     /* A base reached through an import lives in that module's file, so the
      * rewrite above -- which keeps the current file's prefix -- cannot name
      * it. Rebuild the id against the imported module instead. */
-    if (base_class_node.contains("value") &&
-        base_class_node["value"].is_object() &&
-        base_class_node["value"].contains("id"))
+    if (
+      base_class_node.contains("value") &&
+      base_class_node["value"].is_object() &&
+      base_class_node["value"].contains("id"))
     {
       const std::string module_name =
         base_class_node["value"]["id"].get<std::string>();
