@@ -2354,3 +2354,68 @@ Phase 2 should be struck from the phase list rather than left as a gate on
 Phases 5-9, which §6 already notes are independent of B-4. The program's
 executable frontier is therefore Phase 3 (the Python flip) and Phase 4 (extract
 the construction kit) — neither of which is blocked on anything measured here.
+
+## 38. Phase 4's kit already exists (2026-08-09)
+
+Phase 4 reads: *"Before touching a second frontend, factor what Python learned
+into shared helpers: the width-reconciliation idiom
+(`c_implicit_typecast_arithmetic` on `expr2tc`), the resolved-source `ns.follow`
+pattern, the operand-surgery recipe. Without this, four frontends re-derive the
+same lessons at four times the cost."* Checked before executing it, as §36 and
+§37 were. Two of the three are already shared; the third is not code.
+
+### 38.1 Width reconciliation — shared, with the IREP2 overload, already used
+
+`c_implicit_typecast_arithmetic` lives in **`src/util/lang/c_typecast.h`** — a
+shared location, not a frontend — and is declared **twice**: the legacy
+`exprt &` form and
+
+```cpp
+bool c_implicit_typecast_arithmetic(expr2tc &expr1, expr2tc &expr2,
+                                    const namespacet &ns);
+```
+
+Python already calls the `expr2tc` overload directly
+(`python_adjust.cpp:403, 454, 489`). There is nothing to extract: the helper
+Phase 4 names as its first deliverable is the helper the pathfinder frontend is
+using.
+
+### 38.2 The resolved-source follow — shared, and not Python-specific
+
+`namespacet::follow` has a native IREP2 overload in
+**`src/util/symtab/namespace.h:21`**, whose own comment states the point —
+*"mirroring follow(typet) without the back-migrate → follow(typet) →
+forward-migrate detour (hot path)"*. Its users span `goto-programs` (7 files),
+`clang-cpp-frontend` (5), `pointer-analysis` (3) and `util/lang` (5), not just
+Python. It is already the shared pattern.
+
+What *is* Python-specific is `python_adjust::resolve_source` — but that is the
+adjuster's member/index source resolution, a Phase 3 concern, not a
+construction idiom another frontend would inherit.
+
+### 38.3 Operand surgery is a rule, not a helper
+
+The third item cannot be extracted because it is not code: *mutate an operand
+in place through `Foreach_operand`; never round-trip a resolved subtree through
+`migrate_expr_back` → `migrate_expr`, which reverts resolved `member2t`/`index2t`
+sources to by-name `symbol_type2t`.* That belongs in prose, and this section is
+where the next frontend will look for it.
+
+### 38.4 What Phase 4 actually needs
+
+Not a refactor — a pointer. For whoever opens `scope-jimple-irep2.md`:
+
+| lesson | where it already lives |
+|---|---|
+| width reconciliation over `expr2tc` | `src/util/lang/c_typecast.h` — use the `expr2tc` overload, not `gen_typecast_arithmetic` on legacy `exprt` |
+| symbol-type resolution over `type2tc` | `src/util/symtab/namespace.h:21`, `ns.follow(const type2tc &)` |
+| operand surgery | §38.3 — in-place via `Foreach_operand`, never a round-trip |
+| the min-promotion trap | `c_implicit_typecast_arithmetic` promotes sub-`int` widths to `int`; sub-`int` numpy dtypes must be narrowed back afterwards |
+| `if2t` carries a location | the only value-level kind that does; §21.2, §26.2, §27 are three defects from forgetting it |
+
+**Phase 4 is closed as already-done.** Three phases in a row (2, 4, and B-4's
+content) have now turned out to be satisfied or misframed on inspection — the
+later phases were written before the work that made them moot, which is the
+ordinary fate of a plan that survives contact with its own execution. The
+remaining executable phase is **3** (finish the Python flip), and then **5-9**,
+whose gate on Phase 2 (Phase 8's text) is void now that B-4 has no content.
