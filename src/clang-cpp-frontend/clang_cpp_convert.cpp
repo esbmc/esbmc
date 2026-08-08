@@ -1926,7 +1926,7 @@ exprt clang_cpp_convertert::base_dtor_this(
   gen_typecast(ns, this_expr, char_ptr);
   plus_exprt adjusted(this_expr, from_integer(offset, index_type()));
   adjusted.type() = char_ptr;
-  return std::move(adjusted);
+  return adjusted;
 }
 
 bool clang_cpp_convertert::build_destructor_chain(
