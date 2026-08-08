@@ -1,5 +1,5 @@
 # Operational model for the unittest module.
-# pylint: disable=unused-argument,no-self-use
+# pylint: disable=unused-argument
 # Every CPython regression test is a unittest.TestCase subclass, so without
 # this module none of them convert at all (#6745). The model covers the
 # assertion vocabulary those tests actually use and maps each assertX onto a
@@ -70,4 +70,3 @@ class TestCase:
 
 def main(*args: Any, **kwargs: Any) -> None:
     """unittest.main() -- no runner, so nothing to do."""
-    pass
