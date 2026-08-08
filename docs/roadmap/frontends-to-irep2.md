@@ -1720,3 +1720,75 @@ value-level kind carrying a location — and each was found a different way: §2
 by a sweep, §26.2 by an enumeration against the legacy source, §27 by review of
 a patch fixing the other two. The fact is now cited at all three sites, which is
 the cheapest available defence against a fourth.
+
+## 28. Can the round-trip be deleted? Not yet — and the sample said otherwise (2026-08-08)
+
+Phase 1 exists to answer one question: whether `goto_convert_rec` and the
+whole-body round-trip can go. §25's census said **0 declines / 778 tests**, which
+reads like yes. It is not, and the gap is the sampling caveat §25.3 wrote down
+and this section collects on.
+
+### 28.1 The full C/C++ corpus, not a stride
+
+Same instrumentation, every `return false` in `convert_native_rec`, but over the
+**entire** `esbmc`, `esbmc-cpp/cpp`, `esbmc-cpp11/14/17`, `cbmc`, `esbmc-unix`,
+`floats`, `k-induction` and `jimple` corpus — **3 355 tests**, flags replayed.
+
+| census | tests | declining |
+|---|---:|---:|
+| §25, stride-9 over four frontends | 778 | **0** |
+| here, full C/C++ corpus | 3 355 | **1** |
+
+One test: `regression/cbmc/01_cbmc_for4`. Stride-9 missed it because it is one
+test in 3 355 — precisely the "one-in-ten-thousand would not show up" case
+§25.3 named, arriving one section later than the warning.
+
+### 28.2 The 15 sites, split
+
+Reading them rather than sampling them, the sites divide cleanly:
+
+**Cascade** (7) — fire only because a nested `convert_native_rec` returned
+false, so they can never *originate* a decline: `code_block`, the `do`/`while`
+body, the `for` init and iteration, the `switch` body, `switch_case`, `label`.
+
+**Origin** (8) — a condition on the statement itself. Reachability, probed:
+
+| site | condition | reachable? |
+|---|---|---|
+| `for` iteration (8) | sub-conversion left the destructor stack changed | **yes**, default flags — `for (i = 0; i < 3; acall(i++))` |
+| `switch_case` (11) | sub-statement emitted nothing | **yes**, `--no-assertions` — `case 1: __ESBMC_assert(0, …);` |
+| `label` (15) | sub-statement emitted nothing | **yes**, `--no-assertions` — `L: __ESBMC_assert(0, …);` |
+| `code_expression` (2) | code operand that is not `cpp-throw` | not reached; try/catch/throw does not produce one |
+| `code_expression` (3) | statement location nil or empty | not reached |
+| `code_decl` (4) | symbol absent from the context | not reached |
+| `for` condition (6) | `f.cond` nil | not reached — both C and C++ frontends synthesise a condition for `for(;;)` |
+| `break` (12) / `continue` (13) | outside a loop or switch | not reached; ill-formed in C, so no frontend emits it |
+
+"Not reached" is an honest negative from a constructed probe, not a proof: §21.2,
+§26.2 and §27 were all found by reading rather than probing, and the same could
+be true here. But five of the eight are defensive guards whose comments already
+say so, and two (`break`/`continue` outside a loop) are ill-formed input.
+
+### 28.3 The answer
+
+**No.** Three origin sites are demonstrably reachable, and the fallback runs on
+each. Two of the three need `--no-assertions` — the flag §25.5 recorded as
+absent from every `regression/python` `test.desc`, and which has now produced a
+crash (§26.4) and two live declines.
+
+What deleting the round-trip actually requires, in order:
+
+1. **The `for`-iteration site.** `remove_sideeffects` on an iteration statement
+   containing a call with a side-effecting argument allocates a temp, whose
+   `convert_decl` pushes a `code_dead`; the arm's destructor-stack invariance
+   check then trips. `convert_for` handles that push; the native arm declines
+   rather than assume it can. This is the only site reachable on default flags.
+2. **The two "emitted nothing" sites**, which exist because `convert()` appends
+   a SKIP where `convert_native_rec` may emit nothing — the same asymmetry that
+   produced §26.4's crash. Fixing it at the source (make the native arms match
+   `convert()`'s postamble) closes both at once and removes a whole hazard
+   class rather than two symptoms.
+3. **Solidity**, still unmeasured here.
+
+Until then the fallback is load-bearing, and "0 declines" should be read as what
+it is: a statement about a corpus, at a stride.
