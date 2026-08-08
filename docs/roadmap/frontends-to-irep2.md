@@ -1842,8 +1842,9 @@ SKIP, so the statement whose location is used is always one
 | §28, full C/C++ corpus | 3 355 | 1 |
 | here, full C/C++ corpus | 3 355 | **0** |
 
-The origin-site count drops from 8 to 5, and none of the 5 has been reached by
-any probe. `return false` sites in `convert_native_rec`: **15 → 12**.
+The origin-site count drops from 9 to 6 (§28.2's table put `break` and
+`continue` on one row), and none of the 6 had been reached by any probe.
+`return false` sites in `convert_native_rec`: **15 → 12**.
 
 ### 29.4 What this does and does not license
 
@@ -1870,3 +1871,69 @@ applies to all three sites. The census is the instrument; the tests pin the
 verdict under `--no-assertions` and on a side-effecting for-iteration, which
 nothing else in the C suite did, and guard the shapes against a future change
 that is *not* behaviour-preserving.
+
+## 30. The Python corpus censused in full — and the lesson repeats (2026-08-08)
+
+§28 censused the full C/C++ corpus because §25's stride-9 had missed a live
+site. Python was left at stride-9. This runs it in full, and the outcome is the
+same shape of result one rung down.
+
+### 30.1 Result
+
+| census | tests | declining |
+|---|---:|---:|
+| §25, stride-9 across four frontends | 778 | 0 |
+| here, full `python` + `numpy` corpus | **5 305** | **5** |
+| after the fix | 5 305 | **0** |
+
+All five fire at one origin site: `code_expression2t` whose statement carries no
+location. The arm needs one for the `OTHER` it emits, so it declined — a
+*whole-function* fallback.
+
+`regression/python/print1_expr_fail` reduces it to two lines:
+
+```python
+a = nondet_int()
+print((a + 1) * 2)
+```
+
+`print(a)` and `print(1)` do not reach it; a **compound** argument does.
+
+### 30.2 Why probing missed it
+
+§28.2 marked this site "not reached" on a constructed probe, and §29.4 warned
+that such a negative is not a proof. It took nine hours of that warning to cash
+out: the site is reachable from ordinary Python, in five corpus tests, and
+neither the stride-9 sample nor a hand-written probe found it. The probe failed
+because I guessed at C shapes — an unlocated expression statement is a *Python
+frontend* artefact, and nothing about the site's guard says so.
+
+That is now the third time on this branch that the instrument found nothing and
+the defect was real (§21.4's blind spot, §26.2's four arms, this). The pattern
+is consistent enough to state as a rule: **a negative from a probe is worth
+less than a negative from the full corpus, and both are worth less than a
+reachability argument.**
+
+### 30.3 The fix
+
+Delegate, not reimplement. The arm hands the statement to `convert_expression`
+exactly as the shapes above it do, which is byte-identical by construction and
+keeps the surrounding statements native. Working out what location legacy
+actually gives that `OTHER` — the arm's comment says "at an enclosing block" —
+is a question the delegation makes moot, and guessing at it would have risked
+the very byte-identity the delegation guarantees.
+
+### 30.4 Where the fallback now stands
+
+| corpus | tests | declining |
+|---|---:|---:|
+| C / C++ / Jimple (§29) | 3 355 | 0 |
+| Python / numpy (here) | 5 305 | 0 |
+| Solidity | — | not measurable here |
+
+`return false` sites: **12 → 11**; origin sites **6 → 5**. Every site reachable
+from either corpus is closed. The five that remain — an expression statement
+with a non-`cpp-throw` code operand, a `code_decl2t` whose symbol is absent from
+the context, a nil `for` condition, and `break`/`continue` with no target — are
+unreached by 8 660 corpus tests and by probe, which after §30.2 should be read
+as *evidence*, not proof.

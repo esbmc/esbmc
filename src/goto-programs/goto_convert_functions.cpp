@@ -731,9 +731,18 @@ bool goto_convert_functionst::convert_native_rec(
     }
 
     // The OTHER carries the statement location directly; without a usable one
-    // the legacy path would instead locate it at an enclosing block.
+    // the legacy path locates it differently, so hand the statement to
+    // convert_expression rather than guess -- and delegate rather than fail the
+    // walk, as the shapes above do. Python reaches this: a bare `print(expr)`
+    // whose argument is compound arrives unlocated (esbmc/esbmc#4715, §30).
     if (expr_stmt.location.is_nil() || expr_stmt.location.get_file().empty())
-      return false;
+    {
+      exprt stmt = migrate_expr_back(code2);
+      restore_value_locations(
+        stmt, effective_location(expr_stmt.location, inherited));
+      convert(to_code(stmt), dest);
+      return true;
+    }
 
     goto_programt::targett t = dest.add_instruction(OTHER);
     t->code = normalise_native_code(
