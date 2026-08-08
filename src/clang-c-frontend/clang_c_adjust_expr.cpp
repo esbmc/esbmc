@@ -5,6 +5,7 @@
 #include <util/arith/bitvector.h>
 #include <util/lang/c_types.h>
 #include <util/lang/c_sizeof.h>
+#include <util/symtab/base_subobject.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
 #include <util/arith/ieee_float.h>
@@ -218,11 +219,98 @@ void clang_c_adjust::adjust_expr(exprt &expr)
       expr.swap(func);
     }
   }
+  else if (expr.id() == "typecast" && expr.get_bool("#base_to_derived"))
+  {
+    adjust_operands(expr);
+    adjust_base_to_derived(expr);
+  }
   else
   {
     // Just check operands of everything else
     adjust_operands(expr);
   }
+}
+
+// Sum the offsets of the "@base@" components leading from `derived` down to
+// the struct symbol `base_id`. Offsets come from ESBMC's own layout, so they
+// agree with the member path the derived->base cast builds. adjust() fixes up
+// every type symbol before any value, so padding is already in place here.
+static bool base_subobject_offset(
+  const namespacet &ns,
+  const typet &derived,
+  const irep_idt &base_id,
+  BigInt &offset)
+{
+  const typet &d = ns.follow(derived);
+  if (!d.is_struct())
+    return false;
+
+  const struct_typet &st = to_struct_type(d);
+  const irep_idt want = base_subobject_name(base_id.as_string());
+
+  for (const auto &c : st.components())
+  {
+    if (!has_prefix(c.get_name(), BASE_SUBOBJECT_PREFIX))
+      continue;
+
+    BigInt nested = 0;
+    if (
+      c.get_name() != want &&
+      !base_subobject_offset(ns, c.type(), base_id, nested))
+      continue;
+
+    offset += member_offset(migrate_type(st), c.get_name(), &ns) + nested;
+    return true;
+  }
+
+  return false;
+}
+
+void clang_c_adjust::adjust_base_to_derived(exprt &expr)
+{
+  expr.remove("#base_to_derived");
+
+  if (expr.operands().size() != 1)
+    return;
+
+  const exprt &src = expr.op0();
+  if (!src.type().is_pointer() || !expr.type().is_pointer())
+    return;
+  if (src.type().subtype().id() != "symbol")
+    return;
+
+  const irep_idt base_id = src.type().subtype().identifier();
+  BigInt offset = 0;
+  if (!base_subobject_offset(ns, expr.type().subtype(), base_id, offset))
+  {
+    // The hierarchy kept the legacy flattened layout, so there is no @base@
+    // component to undo. Left as a plain typecast the result keeps pointing
+    // at the base subobject, which is only exact when the two coincide.
+    log_debug(
+      "c++",
+      "base-to-derived cast to {}: no @base@ path to {}, left unadjusted",
+      expr.type().subtype().identifier(),
+      base_id);
+    return;
+  }
+  if (offset == 0)
+    return; // base starts at the derived object; nothing to re-base
+
+  typet char_ptr = pointer_typet(char_type());
+  exprt adjusted = src;
+  gen_typecast(ns, adjusted, char_ptr);
+  // minus_exprt leaves the node's type nil, so set it before casting back.
+  adjusted = minus_exprt(adjusted, from_integer(offset, index_type()));
+  adjusted.type() = char_ptr;
+  gen_typecast(ns, adjusted, expr.type());
+
+  // [expr.static.cast]/11: a null pointer operand yields a null pointer, so
+  // the displacement must not be applied to it. Without the guard the
+  // check-then-downcast idiom dereferences a non-null (char *)0 - offset.
+  exprt guarded = if_exprt(
+    equality_exprt(src, gen_zero(src.type())), gen_zero(expr.type()), adjusted);
+  guarded.location() = expr.location();
+  expr = guarded;
 }
 
 void clang_c_adjust::adjust_symbol(exprt &expr)
