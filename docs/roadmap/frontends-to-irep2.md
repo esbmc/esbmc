@@ -1351,3 +1351,98 @@ What is left is `--error-label` (§12.2: `convert_label` turns a matching label
 into an `ASSERT(false)` carrying property metadata; invisible to any census that
 does not replay `test.desc` flags) and Solidity's eight residuals. The
 assert-fold row of §12.3, carried since 2026-08-04, is closed.
+
+## 24. `--error-label` reproduced — the decline residue is now empty (2026-08-08)
+
+§12.2 named two genuine decline sites and called both "candidates for the same
+statement-local delegation." §23 closed the assert-fold; this closes the other,
+and it is the last one either census found.
+
+`convert_label` turns a label matching `--error-label` into an `ASSERT(false)`
+carrying `property`/`comment`/`user_provided` metadata, and makes **that
+assertion** the label's target so a `goto` lands on it. The native label arm
+detected the shape and `return false`d. It now reproduces it.
+
+### 24.1 Why it outlived the rest
+
+§12.2 already said it: the site fires only under a flag, so it is invisible to
+any census that does not replay each test's `test.desc` flags. Both the C++
+census (§11) and the whole-suite sweeps developed patches against default flags,
+and the arm never appeared. It is the one residue that a *better sample* would
+never have found — only reading the legacy function does.
+
+There is a second reason to be careful here, already recorded in `CLAUDE.md`:
+ESBMC reports `VERIFICATION SUCCESSFUL` **silently** when the label is absent
+from the GOTO program, which is indistinguishable from "label unreachable." That
+shows up in the mutant table below.
+
+### 24.2 Mutants
+
+| mutant | what it breaks | caught by |
+|---|---|---|
+| M1 — arm removed (`return false`) | nothing observable | **nothing** — §23.2's limit again |
+| M2 — assertion guard `true` | the error label stops failing | `regression/cbmc/01_cbmc_error-label1` (verdict) **and** the A/B on it |
+| M3 — `comment("error label")` dropped | the claim's rendered text | **only** the new `…error_label_01_fail` |
+| M4 — `user_provided(true)` dropped | `--no-assertions` stops skipping the claim | **only** the new `…error_label_02` |
+| — `property("error label")` dropped | *nothing* | nothing, and nothing can |
+
+The metadata splits three ways and only review caught that: `--goto-functions-only`
+renders `comment` but not `property` or `user_provided`, so one test cannot pin
+all three. `property` is genuinely unobservable — every reader compares it
+against other literals — so the call is kept for fidelity and **is not claimed
+to be tested**. `user_provided` needed a second test, because none of the 162
+`--error-label`-bearing tests pairs the flag with `--no-assertions`.
+
+M2's A/B also shows the arm is genuinely exercised, which is the reachability
+evidence M1 cannot supply. Worth recording from the same run: under M2 the A/B
+diverges on `01_cbmc_error-label1` but **not** on `esbmc-unix/github_2513_1`,
+because that test's label is not the one it names — `CLAUDE.md`'s
+silent-SUCCESSFUL trap, visible here as a test that cannot discriminate anything
+about this arm.
+
+Worth noting from the same run: under M2 the A/B diverges on
+`01_cbmc_error-label1` but **not** on `esbmc-unix/github_2513_1`, because that
+test's label is not the one it names — the silent-SUCCESSFUL trap above, visible
+here as a test that cannot discriminate anything about this arm.
+
+### 24.3 A/B
+
+All 162 `--error-label`-bearing tests outside `regression/disabled`: **162/162**
+byte-identical. (The first count reported here was 29 — a glob that missed the
+nested suite directories, and with them the whole `esbmc-cpp/try_catch/nec_ex*`
+cluster, which is the most interesting set because it combines the error label
+with the `cpp_catch` legacy delegation.)
+
+### 24.4 A test this patch invalidated
+
+`github_4715_irep2_native_body_goto_rollback_01` existed to pin
+`convert_function`'s `targets` rollback, and its stated premise was *"`--error-label`
+makes the label handler decline … which is exactly the ordering that leaves the
+dangling entry behind."* That premise is now false, so its comment is corrected
+rather than left to rot.
+
+Chasing it produced a finding worth keeping: **the rollback is not discriminated
+by any test, and was not before this patch either.** Removing
+`targets = targets_before` leaves the whole suite green, because the failure mode
+is a *dangling iterator read* in `finish_gotos` — latent UB, not a crash, and
+not observable without a sanitizer build. Re-pointing the test at another
+declining shape would not have fixed that; four candidate decliners were tried
+under the mutant and none faulted. Pinning it needs an ASan build, which this
+branch does not have.
+
+### 24.5 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc-cpp` | **drained** | 327/328 with C (the 1 is §23.3 harness noise) |
+| `esbmc` (C) | **drained** | as above; plus 162/162 on the `--error-label` set |
+| `python` | dominant site fixed by #6695 (merged) | 303/303 (stride-15) |
+| `esbmc-solidity` | 0 / 26 | 502/510; 8 residuals = #6759, #6760 |
+| `jimple` | 0 / 15 | 15/15 |
+
+Every decline site either census named is now closed. What remains before the
+round-trip can be deleted is **Solidity's eight residuals** (#6759, #6760 —
+already established as *not* dispatcher defects) and, more honestly, the
+standing caveat of §21.4/§22.6: these censuses sample, and both defects fixed on
+this branch were found by reading the legacy code, not by re-running a sweep.
+"0 declines" is a statement about the corpus, not a proof about the dispatcher.

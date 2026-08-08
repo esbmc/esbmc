@@ -1606,26 +1606,42 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_label2t &l = to_code_label2t(code2);
 
-    // convert_label turns a label matching --error-label into an ASSERT(false)
-    // carrying property/comment/user_provided metadata; that shape is not
-    // reproduced here.
-    const std::string &error_label = options.get_option("error-label");
-    if (!error_label.empty() && id2string(l.label) == error_label)
-      return false;
-
     goto_programt tmp;
     if (!convert_native_rec(
           l.code, tmp, effective_location(l.location, inherited)))
       return false;
 
-    // convert() always leaves at least one instruction (it appends a SKIP when
-    // a statement emitted nothing), so legacy can take instructions.begin()
-    // unconditionally; convert_native_rec only guarantees that for a block.
-    if (tmp.instructions.empty())
-      return false;
+    // convert_label turns a label matching --error-label into an ASSERT(false)
+    // carrying property/comment/user_provided metadata, and makes *that* the
+    // label's target so a goto to it lands on the assertion. The label
+    // statement's own location is read through codet's const accessor, so a nil
+    // one stays nil -- unlike the RETURN case, no empty is materialised.
+    const std::string &error_label = options.get_option("error-label");
+    goto_programt::targett target;
+    if (!error_label.empty() && id2string(l.label) == error_label)
+    {
+      target = dest.add_instruction(ASSERT);
+      target->guard = gen_false_expr();
+      target->location = l.location;
+      target->location.property("error label");
+      target->location.comment("error label");
+      target->location.user_provided(true);
+      dest.destructive_append(tmp);
+    }
+    else
+    {
+      // convert() always leaves at least one instruction (it appends a SKIP
+      // when a statement emitted nothing), so legacy can take
+      // instructions.begin() unconditionally; convert_native_rec only
+      // guarantees that for a block. On the branch above the assertion is the
+      // target, so an empty tmp is fine there.
+      if (tmp.instructions.empty())
+        return false;
 
-    goto_programt::targett target = tmp.instructions.begin();
-    dest.destructive_append(tmp);
+      target = tmp.instructions.begin();
+      dest.destructive_append(tmp);
+    }
+
     targets.labels.insert({l.label, {target, targets.destructor_stack}});
     target->labels.push_front(l.label);
     return true;
