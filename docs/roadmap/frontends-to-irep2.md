@@ -1658,26 +1658,65 @@ was already 384/384 while four arms were still wrong.
 
 Outstanding, in order:
 
-1. **A pre-existing location bug in the `do`/`while` arm**, found by the same
-   review and reproduced on `master`. `convert_dowhile` reads the condition's
-   location off the operand (`code.op0().find_location()`); the native arm
-   substitutes the *statement* location, on the reasoning that the round-trip
-   leaves the operand location-less. That is false for `if2t` — the one value
-   kind this file itself documents as carrying a location through
-   `migrate_expr`. A ternary `do`/`while` condition therefore reports the
-   statement's column where legacy reports the `?` column, **on default flags**:
-
-   ```cpp
-   bool a, b, c;
-   int main() { do { a = true; } while (c ? a : b); return 0; }
-   // native     line 3 column 3   (the `do`)
-   // round-trip line 3 column 27  (the `?`)
-   ```
-
-   Unchanged by this patch — the diff against `HEAD` is byte-identical — so it
-   is filed here rather than fixed in passing.
-2. **Solidity**, which needs CI — §18.3's warning that zero declines does not
+1. **Solidity**, which needs CI — §18.3's warning that zero declines does not
    imply reproduction still stands there, unmeasured.
-3. **The option space is bigger than three.** Three were swept because three are
+2. **The option space is bigger than three.** Three were swept because three are
    what these arms branch on *today*. Any future arm that reads an option
    inherits the same obligation.
+
+(Item 1 of the original list — a pre-existing `do`/`while` location bug — is
+closed in §27.)
+
+## 27. The `do`/`while` condition location — §26.5's open item, closed (2026-08-08)
+
+§26.5 filed one defect rather than fixing it in passing: the native `do`/`while`
+arm reported the *statement's* column where `convert_dowhile` reports the
+condition's. It is closed here.
+
+### 27.1 The mechanism, which is §21.2's again
+
+`convert_dowhile` saves `code.op0().find_location()` **before** lowering, so the
+loop-back branch is located at the condition. The native arm has no operand to
+read — IREP2 values carry no location — so it substituted `here`, the statement
+location, reasoning that `restore_value_locations` would have stamped exactly
+that onto the operand.
+
+That reasoning holds for every value kind but one. `stamp_value_locations` only
+writes onto a node that *lacks* a location, and `if2t` is the single value kind
+carrying its own through `migrate_expr` (irep2_expr.h:786) — the same fact §21.2
+turned on. So a ternary condition arrives already located at the `?` column,
+`find_location()` returns that, and the substitute was wrong:
+
+```cpp
+bool a, b, c;
+int main() { do { a = true; } while (c ? a : b); return 0; }
+```
+
+| | loop-back branch |
+|---|---|
+| native, before | `line 16 column 12` → the `do` |
+| round-trip | `line 16 column 12` → the `?` |
+
+**On default flags** — no option needed. C hides it because the frontend wraps a
+control-flow condition in a `(_Bool)` typecast, so the top node is not the
+ternary; C++ and Python, whose ternaries are already bool-typed, do not.
+
+`convert_dowhile` is the only legacy converter that calls `find_location()`, so
+this arm is the only one with the substitute, and the fix is local: read the
+ternary's own location when it has one, keep the existing nil-vs-empty fallback
+otherwise.
+
+### 27.2 Verification
+
+`…dowhile_ternary_loc` pins the column and fails when the fix is reverted. The
+`--validate-violation-witness` and default sweeps stay 384/384; C 1679/1682 and
+C++ 752/755, pre-existing failures only.
+
+### 27.3 What this closes, and what it says
+
+It closes the last item this branch found and did not fix. Worth recording that
+**three separate defects on this branch trace to one fact** — `if2t` is the only
+value-level kind carrying a location — and each was found a different way: §21.2
+by a sweep, §26.2 by an enumeration against the legacy source, §27 by review of
+a patch fixing the other two. The fact is now cited at all three sites, which is
+the cheapest available defence against a fourth.

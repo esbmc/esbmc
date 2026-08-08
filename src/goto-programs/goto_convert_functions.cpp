@@ -1206,14 +1206,20 @@ bool goto_convert_functionst::convert_native_rec(
     y->guard = guard;
     // convert_dowhile reads the condition's location off the operand
     // (code.op0().find_location()), which restore_value_locations has stamped
-    // with the governing statement location on the legacy path. Where that
+    // with the governing statement location on the legacy path -- except where
+    // the operand already carries one, which stamp_value_locations leaves
+    // alone. `if2t` is the only value kind that does (irep2_expr.h:786), so a
+    // ternary condition reports the `?` column, not the statement's. Where the
     // top-down walk skips an unlocated subtree the operand stays location-less
     // and find_location() reports the *nil* irep — distinct from a
     // default-constructed, empty-id locationt (the nil-vs-empty distinction of
-    // #6176), so reproduce it explicitly.
-    y->location = here.get_file().empty()
-                    ? static_cast<const locationt &>(get_nil_irep())
-                    : here;
+    // #6176), so reproduce that explicitly too.
+    if (is_ternary(dw.cond) && to_if2t(dw.cond).location.is_not_nil())
+      y->location = to_if2t(dw.cond).location;
+    else
+      y->location = here.get_file().empty()
+                      ? static_cast<const locationt &>(get_nil_irep())
+                      : here;
     y->pragma_unroll_count = dw.pragma_unroll_count;
 
     dest.destructive_append(tmp_w);
