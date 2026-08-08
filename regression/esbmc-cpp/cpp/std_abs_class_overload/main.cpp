@@ -1,12 +1,8 @@
-// KNOWNBUG: overloading the name `abs` for a class type makes ESBMC abort with
-// an internal assertion:
-//
-//   Assertion failed: (type->type_id == trueval->type->type_id),
-//   function if2t, file irep2_expr.h, line 809
-//
-// The identical body under any other name converts and verifies fine, so the
-// trigger is the name `abs` rather than the arithmetic. This is why <complex>
-// does not provide std::abs(complex) -- shipping it would ship a crash.
+// Overloading the name `abs` for a class type used to abort with an internal
+// assertion: the call was rewritten to an `abs` node whatever the argument
+// type, and that lowers to `(x >= 0) ? x : -x`, which is ill-typed for a class
+// and tripped if2t's type assertion. The rewrite is now limited to arithmetic
+// arguments, so a user overload stays an ordinary call.
 //
 // Verified against clang++ -std=c++17 -fsanitize=address,undefined: exits 0.
 #include <cmath>
