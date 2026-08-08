@@ -1142,6 +1142,18 @@ compare_unscore_builtin(const irep_idt &identifier, const std::string &name)
          (identifier == underscore_name);
 }
 
+/// True for the abs builtins that may be lowered to an `abs` node. That node
+/// becomes `(x >= 0) ? x : -x`, ill-typed for anything but an arithmetic
+/// argument, so a program overloading the name for a class type --
+/// std::abs(complex) is why <complex> ships without it -- keeps its call.
+static inline bool is_abs_builtin_name(const irep_idt &identifier)
+{
+  return identifier == "abs" || identifier == "labs" ||
+         identifier == "imaxabs" || identifier == "llabs" ||
+         compare_float_suffix(identifier, "fabs") ||
+         compare_unscore_builtin(identifier, "fabs");
+}
+
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 {
   const exprt &f_op = expr.function();
@@ -1246,14 +1258,14 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(nan_expr);
     }
-    else if (
-      identifier == "abs" || identifier == "labs" || identifier == "imaxabs" ||
-      identifier == "llabs" || compare_float_suffix(identifier, "fabs") ||
-      compare_unscore_builtin(identifier, "fabs"))
+    else if (is_abs_builtin_name(identifier))
     {
-      exprt abs_expr("abs", expr.type());
-      abs_expr.operands() = expr.arguments();
-      expr.swap(abs_expr);
+      if (expr.arguments().size() == 1 && is_number(expr.arguments()[0].type()))
+      {
+        exprt abs_expr("abs", expr.type());
+        abs_expr.operands() = expr.arguments();
+        expr.swap(abs_expr);
+      }
     }
     else if (compare_unscore_builtin(identifier, "isinf"))
     {

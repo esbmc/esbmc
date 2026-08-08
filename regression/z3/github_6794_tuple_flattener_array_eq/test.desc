@@ -1,0 +1,4 @@
+CORE
+main.c
+--z3 --tuple-node-flattener --enforce-contract add --function add --unwind 9
+^VERIFICATION SUCCESSFUL$

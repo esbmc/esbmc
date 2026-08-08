@@ -427,6 +427,35 @@ static void ingest_symbol(
   deps.erase(name);
 }
 
+#ifdef ENABLE_SOLIDITY_FRONTEND
+/// Point `start`/`size` at the Solidity operational-model binary when
+/// `language` is Solidity, reporting whether it did. sol64 holds ONLY Solidity
+/// symbols, so callers need no whitelist for it.
+static bool select_solidity_blob(
+  const languaget *language,
+  const uint8_t *&start,
+  unsigned int &size)
+{
+  if (!language || language->id() != "solidity_ast")
+    return false;
+
+  // The build substitutes a zero-length stub wherever sol64 cannot be produced
+  // (macOS has no _BitInt wider than 128). Say so, rather than let the reader
+  // reject the empty buffer as "`' is not a goto-binary".
+  if (sol64_buf_size == 0)
+  {
+    log_error(
+      "This build has no Solidity operational-model library, so Solidity "
+      "verification is unavailable on this platform");
+    abort();
+  }
+
+  start = sol64_buf;
+  size = sol64_buf_size;
+  return true;
+}
+#endif
+
 void add_cprover_library(contextt &context, const languaget *language)
 {
   if (config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
@@ -477,24 +506,12 @@ void add_cprover_library(contextt &context, const languaget *language)
   if (language && language->id() == "python")
     goto_reader.set_functions_to_read(python_c_models);
 
-  // Solidity uses a separate, smaller goto binary (sol64) for fast loading.
-  // No whitelist needed: sol64 contains ONLY Solidity symbols.
-  const uint8_t *lib_start;
-  unsigned int lib_size;
+  const uint8_t *lib_start = clib->start;
+  unsigned int lib_size = clib->size;
   bool is_solidity = false;
 #ifdef ENABLE_SOLIDITY_FRONTEND
-  if (language && language->id() == "solidity_ast")
-  {
-    lib_start = sol64_buf;
-    lib_size = sol64_buf_size;
-    is_solidity = true;
-  }
-  else
+  is_solidity = select_solidity_blob(language, lib_start, lib_size);
 #endif
-  {
-    lib_start = clib->start;
-    lib_size = clib->size;
-  }
 
   /* Python: actively has a function filter
    *    - not everything makes it into new_ctx

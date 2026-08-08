@@ -451,6 +451,19 @@ array_convt::encode_array_equality(const array_ast *a1, const array_ast *a2)
   // Record an equality between two arrays at this point in time. To be
   // implemented at constraint time.
 
+  /* Both operands are resolved through array_valuation[id][update], so this
+   * pair is the identity of an array state, and only an unbounded array
+   * carries one -- a bounded one leaves both fields unset. */
+  assert(is_unbounded_array(a1->sort) && is_unbounded_array(a2->sort));
+
+  /* Same id and update level: the element-wise encoding would compare a
+   * valuation vector with itself, and that vector is empty when the array was
+   * never selected (#6794). */
+  if (
+    a1->base_array_id == a2->base_array_id &&
+    a1->array_update_num == a2->array_update_num)
+    return ctx->mk_smt_bool(true);
+
   struct array_equality e;
   e.arr1_id = a1->base_array_id;
   e.arr2_id = a2->base_array_id;
