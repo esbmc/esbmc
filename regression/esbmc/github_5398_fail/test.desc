@@ -1,0 +1,5 @@
+CORE
+main.c
+--force-malloc-success --malloc-zero-is-null
+^VERIFICATION FAILED$
+^\s*dereference failure: invalidated dynamic object freed$
