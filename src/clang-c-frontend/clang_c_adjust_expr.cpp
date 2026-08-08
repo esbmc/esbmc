@@ -171,53 +171,11 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   }
   else if (expr.is_struct())
   {
-    const typet &t = ns.follow(expr.type());
-    /* can't be an initializer of an incomplete type, it's not allowed by C */
-    assert(!t.incomplete());
-    const struct_union_typet::componentst &new_comp =
-      to_struct_union_type(t).components();
-    exprt::operandst &ops = expr.operands();
-    /* Only insert padding operands if the expression doesn't already have
-     * them.  The Solidity frontend creates struct expressions via
-     * gen_zero(get_complete_type()), which resolves padding before this
-     * pass, whereas the C frontend relies on this pass to add them. */
-    const bool already_padded = (ops.size() == new_comp.size());
-    for (size_t i = 0; i < new_comp.size(); i++)
-    {
-      const struct_union_typet::componentt &c = new_comp[i];
-      if (c.get_is_padding() && !already_padded)
-      {
-        // TODO: should we initialize pads with nondet values?
-        ops.insert(ops.begin() + i, gen_zero(c.type()));
-      }
-      adjust_expr(ops[i]);
-    }
-    assert(new_comp.size() == ops.size());
+    adjust_struct(expr);
   }
   else if (expr.id() == "ptr_mem")
   {
-    adjust_operands(expr);
-
-    exprt &base = expr.op0();
-    if (base.type().is_pointer())
-    {
-      exprt deref("dereference");
-      deref.type() = base.type().subtype();
-      deref.move_to_operands(base);
-      base.swap(deref);
-    }
-
-    if (expr.type().id() == "ptrmem")
-    {
-      exprt func = expr.op1();
-      code_typet &code_type = to_code_type(func.type().subtype());
-      exprt arg0 = address_of_exprt(expr.op0());
-      // `this` is the first parameter; appending its type at the back instead
-      // shifted every explicit argument by one (#6293).
-      code_type.arguments().insert(
-        code_type.arguments().begin(), code_typet::argumentt(arg0.type()));
-      expr.swap(func);
-    }
+    adjust_ptr_mem(expr);
   }
   else if (expr.id() == "typecast" && expr.get_bool("#base_to_derived"))
   {
@@ -228,6 +186,58 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   {
     // Just check operands of everything else
     adjust_operands(expr);
+  }
+}
+
+void clang_c_adjust::adjust_struct(exprt &expr)
+{
+  const typet &t = ns.follow(expr.type());
+  /* can't be an initializer of an incomplete type, it's not allowed by C */
+  assert(!t.incomplete());
+  const struct_union_typet::componentst &new_comp =
+    to_struct_union_type(t).components();
+  exprt::operandst &ops = expr.operands();
+  /* Only insert padding operands if the expression doesn't already have
+   * them.  The Solidity frontend creates struct expressions via
+   * gen_zero(get_complete_type()), which resolves padding before this
+   * pass, whereas the C frontend relies on this pass to add them. */
+  const bool already_padded = (ops.size() == new_comp.size());
+  for (size_t i = 0; i < new_comp.size(); i++)
+  {
+    const struct_union_typet::componentt &c = new_comp[i];
+    if (c.get_is_padding() && !already_padded)
+    {
+      // TODO: should we initialize pads with nondet values?
+      ops.insert(ops.begin() + i, gen_zero(c.type()));
+    }
+    adjust_expr(ops[i]);
+  }
+  assert(new_comp.size() == ops.size());
+}
+
+void clang_c_adjust::adjust_ptr_mem(exprt &expr)
+{
+  adjust_operands(expr);
+
+  exprt &base = expr.op0();
+  if (base.type().is_pointer())
+  {
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+
+  if (expr.type().id() == "ptrmem")
+  {
+    exprt func = expr.op1();
+    code_typet &code_type = to_code_type(func.type().subtype());
+    exprt arg0 = address_of_exprt(expr.op0());
+    // `this` is the first parameter; appending its type at the back instead
+    // shifted every explicit argument by one (#6293).
+    code_type.arguments().insert(
+      code_type.arguments().begin(), code_typet::argumentt(arg0.type()));
+    expr.swap(func);
   }
 }
 

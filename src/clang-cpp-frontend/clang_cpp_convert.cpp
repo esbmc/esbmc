@@ -1892,6 +1892,43 @@ void clang_cpp_convertert::build_member_from_component(
   component.swap(member);
 }
 
+// A non-primary base subobject sits away from the start of the derived object
+// (multiple inheritance); `this` must be adjusted to that subobject before the
+// base destructor runs, otherwise ~Base reads the derived's leading storage
+// (github #6021). Prefer the structural address `&this->@base@B`, which derives
+// the offset from ESBMC's own layout and so agrees with the base ctor `this`
+// and the derived->base cast (#1866, #3894); `offset` is the clang-ABI fallback
+// for hierarchies that kept the legacy flattened layout (virtual bases, P5).
+exprt clang_cpp_convertert::base_dtor_this(
+  const clang::CXXRecordDecl &base,
+  const exprt &deref,
+  const irep_idt &this_id,
+  const typet &this_ptr_type,
+  uint64_t offset)
+{
+  std::string base_name, base_id;
+  get_decl_name(base, base_name, base_id);
+  const irep_idt comp = base_subobject_name(base_id);
+  const typet derived_struct = ns.follow(this_ptr_type.subtype());
+  const symbolt *base_sym = context.find_symbol(base_id);
+
+  if (
+    base_sym && derived_struct.is_struct() &&
+    to_struct_type(derived_struct).has_component(comp))
+    return address_of_exprt(
+      member_exprt(deref, comp, symbol_typet(base_sym->id)));
+
+  exprt this_expr = symbol_exprt(this_id, this_ptr_type);
+  if (offset == 0)
+    return this_expr;
+
+  typet char_ptr = pointer_typet(char_type());
+  gen_typecast(ns, this_expr, char_ptr);
+  plus_exprt adjusted(this_expr, from_integer(offset, index_type()));
+  adjusted.type() = char_ptr;
+  return std::move(adjusted);
+}
+
 bool clang_cpp_convertert::build_destructor_chain(
   const clang::CXXDestructorDecl &dd,
   code_blockt &body)
@@ -1931,42 +1968,10 @@ bool clang_cpp_convertert::build_destructor_chain(
   };
 
   // Cast `this` to the base's expected pointer type and emit the call.
-  // A non-primary base subobject sits away from the start of the derived
-  // object (multiple inheritance); `this` must be adjusted to that subobject
-  // before the base destructor runs, otherwise ~Base reads the derived's
-  // leading storage (github #6021). Prefer the structural address
-  // `&this->@base@B`, which derives the offset from ESBMC's own layout and so
-  // agrees with the base ctor `this` and the derived->base cast (#1866, #3894);
-  // `offset` is the clang-ABI fallback for hierarchies that kept the legacy
-  // flattened layout (virtual bases, P5).
   auto emit_base_dtor =
     [&](const symbolt &sym, const clang::CXXRecordDecl *rec, uint64_t offset) {
-      exprt this_expr;
-
-      std::string base_name, base_id;
-      get_decl_name(*rec, base_name, base_id);
-      const irep_idt comp = base_subobject_name(base_id);
-      const typet derived_struct = ns.follow(this_ptr_type.subtype());
-      const symbolt *base_sym = context.find_symbol(base_id);
-
-      if (
-        base_sym && derived_struct.is_struct() &&
-        to_struct_type(derived_struct).has_component(comp))
-        this_expr = address_of_exprt(
-          member_exprt(deref, comp, symbol_typet(base_sym->id)));
-      else
-      {
-        this_expr = symbol_exprt(this_id, this_ptr_type);
-        if (offset > 0)
-        {
-          typet char_ptr = pointer_typet(char_type());
-          gen_typecast(ns, this_expr, char_ptr);
-          plus_exprt adjusted(this_expr, from_integer(offset, index_type()));
-          adjusted.type() = char_ptr;
-          this_expr = adjusted;
-        }
-      }
-
+      exprt this_expr =
+        base_dtor_this(*rec, deref, this_id, this_ptr_type, offset);
       gen_typecast(
         ns, this_expr, to_code_type(sym.get_type()).arguments().front().type());
       emit_dtor_call(sym, std::move(this_expr));

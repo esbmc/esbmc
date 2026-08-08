@@ -175,6 +175,17 @@ protected:
   build_destructor_chain(const clang::CXXDestructorDecl &dd, code_blockt &body);
 
   /*
+   * The `this` a base destructor is called with: the address of the derived
+   * object's base subobject, not the derived object itself.
+   */
+  exprt base_dtor_this(
+    const clang::CXXRecordDecl &base,
+    const exprt &deref,
+    const irep_idt &this_id,
+    const typet &this_ptr_type,
+    uint64_t offset);
+
+  /*
    * Add additional annotations for class/struct/union fields
    * Arguments:
    *  field: clang AST node representing the field we are dealing with
