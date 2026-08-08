@@ -2,23 +2,54 @@ import ast
 from typing import Dict, List, Any, Tuple
 from .lattice import *
 
-def parse_condition(cond):
-    if isinstance(cond, ast.Call) and isinstance(cond.func, ast.Name) and cond.func.id == 'isinstance':
-        if len(cond.args)>=2 and isinstance(cond.args[0], ast.Name):
-            var = cond.args[0].id
-            arg = cond.args[1]
-            if isinstance(arg, ast.Name):
-                return ('isinstance', var, arg.id)
-            if isinstance(arg, ast.Subscript) and isinstance(arg.value, ast.Name):
-                return ('isinstance', var, arg.value.id)
-    if isinstance(cond, ast.Compare) and isinstance(cond.left, ast.Name):
-        if len(cond.ops)==1 and isinstance(cond.ops[0], ast.Is):
-            if len(cond.comparators)==1 and isinstance(cond.comparators[0], ast.Constant) and cond.comparators[0].value is None:
-                return ('is_none', cond.left.id, False)
-        if len(cond.ops)==1 and isinstance(cond.ops[0], ast.IsNot):
-            if len(cond.comparators)==1 and isinstance(cond.comparators[0], ast.Constant) and cond.comparators[0].value is None:
-                return ('is_none', cond.left.id, True)
+def parse_isinstance_condtion(cond):
+    if not (isinstance(cond, ast.Call)
+    and isinstance(cond.func, ast.Name)
+    and cond.func.id == "isinstance"
+    and len(cond.args) >=2
+    and isinstance(cond.args[0], ast.Name)
+    ):
+        return None
+    var = cond.arg[0].id
+    type_expr = cond.args[1]
+
+    if isinstance(type_expr, ast.Name):
+        return ("isinstance", var, type_expr.id)
+
+    if(isinstance(type_expr, ast.Subscript)
+       and isinstance(type_expr.value, ast.Name)):
+
+       return ("isinstance", var, type_exr.value_id)
+
     return None
+
+def parse_none_condition(cond):
+    if not isinstance(cond, ast.Compare):
+        return None
+
+    if not isinstance(cond.left, ast.Name):
+        return None
+
+    comparator = cond.comparators[0]
+
+    if not (isinstance(comparator, ast.Constant)
+            and comparator.value is None):
+        return None
+
+    if isinstance(cond.ops[0], ast.Is):
+        return ("is_none", cond.left.id, False)
+
+    if isinstance(cond.ops[0], ast.IsNot):
+        return ("is_none", cond.left.id, True)
+
+    return None                               
+
+def parse_condition(cond):
+    result = parse_isinstance_condition(cond)
+    if result is not None:
+        return result
+
+    return parse_none_condition(cond)    
 
 def analyze_function(func_node: ast.FunctionDef, max_iters=50):
     from .cfg_builder import build_cfg_for_function
@@ -85,9 +116,17 @@ def analyze_function(func_node: ast.FunctionDef, max_iters=50):
                         cur = env.get(dict_name)
                         if isinstance(cur, DictType):
                             env[dict_name] = DictType(cur.key_t.join(key_type), cur.val_t.join(value_type))
+                        elif isinstance(cur, ListType):
+                            env[dict_name] = ListType(
+                                    cur.elem.join(value_type)
+                                )    
                         elif isinstance(cur, Unknown):
                             if isinstance(key_type, StrType):
                                 env[dict_name] = DictType(key_type, value_type)
+
+                            elif isinstance(key_type, IntType):
+                                env[dict_name] = ListType(value_type)
+
                             else:
                                 env[dict_name] = Unknown()
                         else:
@@ -476,6 +515,8 @@ def infer_type_from_expr(expr, env):
                  return DictType(Unknown(), Unknown())
             if f_name == "tuple":
                  return TupleType([])
+            #if f_name in known_classes:
+             #   return InstanceType(f_name)
 
             return Unknown()                             
        

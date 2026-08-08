@@ -262,6 +262,22 @@ class CallableType(Type):
     def narrow_with_isinstance(self, cls_name: str) -> 'Type':
         return self if self.is_subtype_of_name(cls_name) else Unknown()
 
+class InstanceType(Type):
+    def __init__(self, class_name:str):
+        self.class_name = class_name
+
+    def join(self, other):
+        if isinstance(other, InstanceType):
+            if self.class_name == other.class_name:
+                return self
+        return UnionType([self, other])
+
+    def __repr__(self):
+        return f"Instance[{self.class_name}]"
+
+    def to_ann_name(self) -> str:
+        return self.class_name        
+
 class UnionType(Type):
     def __init__(self, members: List[Type]):
         flat = []
@@ -336,6 +352,8 @@ def mk_type_from_name(name: str) -> Type:
         return StrType()
     if n == 'unknown':
         return Unknown()
+    #if name in known_classes:
+      #  return InstanceType(name)
     if n.startswith('list['):
         try:
             inner = name[name.find('[')+1:-1]

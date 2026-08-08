@@ -14,7 +14,6 @@ class ModuleLifecycleMixin:
         self._assignment_call_origins.clear()
         try:
             node = self.generic_visit(node)
-                   # try:
             ast.fix_missing_locations(node)
             print("Before pytype module annotations:")
             print(ast.unparse(node))
