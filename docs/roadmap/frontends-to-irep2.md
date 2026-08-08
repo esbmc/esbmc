@@ -2124,3 +2124,48 @@ The remaining risk is the one §33.2 names — that a spelling outside the four
 reaches catch-matching on input the corpus does not contain. Cheapest guard:
 assert on an unexpected spelling in the typed-field prototype and let the suite
 say so, rather than trying to enumerate the domain up front.
+
+## 34. The break/continue equivalence §31.1 assumed (2026-08-08)
+
+§31.1 argued three fallback sites can become aborts because their legacy
+counterparts abort. That argument has a premise it did not state: **the native
+arms must set `targets.break_set` / `continue_set` wherever legacy does.** If
+native ever left one unset that legacy would set, the decline is a *safety net*
+and replacing it with an abort would break working programs. Established here.
+
+### 34.1 The four set points correspond, and so does their ordering
+
+Both paths establish loop targets in exactly four places, and — the part that
+matters — both do it **before** converting the body a `break`/`continue` could
+appear in:
+
+| construct | native: set | native: body | legacy: set | legacy: body |
+|---|---:|---:|---:|---:|
+| `while` | 1125-1126 | 1136 | 1434-1435 | 1439 |
+| `do`/`while` | 1205-1206 | 1213 | 1503-1504 | 1508 |
+| `for` | 1351-1352 | 1360 | 1357-1358 | 1370 |
+| `switch` | 1435 (break only) | 1440 | 1599 (break only) | — |
+
+`switch` sets `break` and deliberately leaves `continue` alone on both sides —
+legacy says so in a comment (*"continue stays as is"*) — so a `continue` inside a
+switch inside a loop keeps the enclosing loop's target either way. The restores
+correspond too: `break_continue_targetst` / `break_switch_targetst` saved at
+entry and restored at the matching point in all four arms.
+
+No other native arm establishes or clears a loop target. `block`, `label` and
+`switch_case` recurse with whatever `targets` holds, as their legacy
+counterparts do.
+
+### 34.2 What follows
+
+The premise holds, so §31.1's argument stands: reaching those three sites means
+the legacy path aborts, and the fallback cannot rescue anything.
+
+**The change is still not made here, deliberately.** Converting the sites to a
+direct abort has no functional gain — both paths abort — and a real downside if
+this enumeration missed a path: today's behaviour degrades to legacy's
+diagnostic, an abort degrades to a crash on a program that might have worked.
+The asymmetry says wait. The change becomes forced, and safe, at the moment the
+fallback is deleted, which is when the enumeration is load-bearing anyway.
+
+Recorded so the premise does not have to be re-derived then.
