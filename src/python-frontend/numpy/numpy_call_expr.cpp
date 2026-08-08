@@ -1997,6 +1997,102 @@ materialize_numpy_constructor_array(const nlohmann::json &call_node)
     return node;
   }
 
+  if (ctor == "linspace")
+  {
+    if (args.size() < 2 || args.size() > 3)
+      return std::nullopt;
+    numeric_value start_v;
+    numeric_value stop_v;
+    if (
+      !try_extract_numeric_constant(args[0], start_v) ||
+      !try_extract_numeric_constant(args[1], stop_v))
+      return std::nullopt;
+    std::size_t num = 50;
+    if (args.size() == 3)
+    {
+      numeric_value num_v;
+      if (
+        !try_extract_numeric_constant(args[2], num_v) || !num_v.is_int ||
+        num_v.int_value < 0)
+        return std::nullopt;
+      num = static_cast<std::size_t>(num_v.int_value);
+    }
+    // Matches the real linspace() creation path: every element is a float,
+    // computed with the same start + step * i formula.
+    const double start = to_double(start_v);
+    const double stop = to_double(stop_v);
+    nlohmann::json node;
+    node["_type"] = "List";
+    node["elts"] = nlohmann::json::array();
+    if (num == 0)
+      return node;
+    if (num == 1)
+    {
+      node["elts"].push_back(build_constant_node(make_float_value(start)));
+      return node;
+    }
+    const double step = (stop - start) / static_cast<double>(num - 1);
+    for (std::size_t i = 0; i < num; ++i)
+      node["elts"].push_back(build_constant_node(
+        make_float_value(start + step * static_cast<double>(i))));
+    return node;
+  }
+
+  if (ctor == "arange")
+  {
+    if (args.empty() || args.size() > 3)
+      return std::nullopt;
+    std::vector<numeric_value> values;
+    values.reserve(args.size());
+    for (const auto &a : args)
+    {
+      numeric_value v;
+      if (!try_extract_numeric_constant(a, v))
+        return std::nullopt;
+      values.push_back(v);
+    }
+    double start = 0.0;
+    double stop;
+    double step = 1.0;
+    if (values.size() == 1)
+      stop = to_double(values[0]);
+    else
+    {
+      start = to_double(values[0]);
+      stop = to_double(values[1]);
+      if (values.size() == 3)
+        step = to_double(values[2]);
+    }
+    if (step == 0.0)
+      return std::nullopt;
+    // Matches the real arange() creation path: an int dtype unless any
+    // argument is float.
+    const bool any_float =
+      std::any_of(values.begin(), values.end(), [](const numeric_value &v) {
+        return !v.is_int;
+      });
+    nlohmann::json node;
+    node["_type"] = "List";
+    node["elts"] = nlohmann::json::array();
+    if (step > 0.0)
+    {
+      for (double current = start; current < stop; current += step)
+        node["elts"].push_back(build_constant_node(
+          any_float
+            ? make_float_value(current)
+            : make_int_value(static_cast<int64_t>(std::llround(current)))));
+    }
+    else
+    {
+      for (double current = start; current > stop; current += step)
+        node["elts"].push_back(build_constant_node(
+          any_float
+            ? make_float_value(current)
+            : make_int_value(static_cast<int64_t>(std::llround(current)))));
+    }
+    return node;
+  }
+
   return std::nullopt;
 }
 
@@ -5795,7 +5891,11 @@ exprt numpy_call_expr::get()
         return;
       if (var["value"]["_type"] == "Call")
       {
-        if (var["value"].contains("args") && !var["value"]["args"].empty())
+        if (
+          std::optional<nlohmann::json> materialized =
+            materialize_numpy_constructor_array(var["value"]))
+          var = std::move(*materialized);
+        else if (var["value"].contains("args") && !var["value"]["args"].empty())
           var = var["value"]["args"][0];
         else
           var = var["value"];
