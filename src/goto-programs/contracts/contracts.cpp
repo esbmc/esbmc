@@ -1305,6 +1305,10 @@ goto_programt code_contractst::generate_checking_wrapper(
       assume_nn->guard = notequal2tc(ptr_var, gen_zero(ptr_var->type));
       assume_nn->location = location;
       assume_nn->location.comment("__ESBMC_is_fresh: pointer is non-null");
+
+      // Must follow the non-null assume, or this writes through a pointer
+      // symex may still believe is NULL.
+      emit_is_fresh_initial_version(wrapper, ptr_var, size_expr, location);
     };
 
   // is_fresh pointers whose lvalue reads through another pointer — e.g. a
@@ -4521,6 +4525,36 @@ void code_contractst::add_pointer_validity_assumptions(
 
   warn_unstated_extents(func, location, nondet_extent);
   warn_assumed_struct_extents(func, location, assumed_one_element);
+}
+
+void code_contractst::emit_is_fresh_initial_version(
+  goto_programt &wrapper,
+  const expr2tc &ptr_var,
+  const expr2tc &size_expr,
+  const locationt &location)
+{
+  // A symbolic extent may be zero, which would make the write below the
+  // out-of-bounds access the harness exists to avoid. Those contracts keep
+  // the old behaviour, so #6798 survives for them.
+  expr2tc extent = size_expr;
+  simplify(extent);
+  if (!is_constant_int2t(extent) || to_constant_int2t(extent).value <= 0)
+    return;
+
+  // One byte, self-assigned. symex skips the phi at a join for an object with
+  // no level-2 version, so a write on one side of a branch stays current on
+  // both and a precondition on the object's contents is lost (#6798). Versions
+  // are per object rather than per location, so touching a single byte is
+  // enough and the cost does not grow with the extent; a self-assignment
+  // rather than a havoc means no value changes.
+  expr2tc byte = dereference2tc(
+    get_uint8_type(), typecast2tc(pointer_type2tc(get_uint8_type()), ptr_var));
+
+  auto init_inst = wrapper.add_instruction(ASSIGN);
+  init_inst->code = code_assign2tc(byte, byte);
+  init_inst->location = location;
+  init_inst->location.comment(
+    "__ESBMC_is_fresh: give the fresh object an initial version");
 }
 
 void code_contractst::emit_struct_stack_backing(

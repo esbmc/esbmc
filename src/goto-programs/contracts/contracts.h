@@ -629,6 +629,19 @@ private:
   bool
   param_extent_is_observable(const symbolt &func, const irep_idt &param) const;
 
+  /// \brief Give a freshly allocated object a level-2 version.
+  ///
+  /// symex skips the phi at a join for an object that has none, so a write on
+  /// one side of a branch stays current on both and a precondition on the
+  /// object's contents is silently lost (#6798). One self-assigned byte is
+  /// enough, since versions are per object rather than per location, and it
+  /// changes no value. Skipped for a symbolic extent, which may be zero.
+  void emit_is_fresh_initial_version(
+    goto_programt &wrapper,
+    const expr2tc &ptr_var,
+    const expr2tc &size_expr,
+    const locationt &location);
+
   /// \brief Back a struct/union pointer param with one stack-allocated element.
   ///
   /// This is the normative statement of the #6483 carve-out; other sites point
