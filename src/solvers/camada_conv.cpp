@@ -221,25 +221,19 @@ std::string wrap_smtlib_dump(std::string smt_formula)
   return dest.str();
 }
 
-/* --array-flattener asks for arrays lowered out of the backend's theory of
- * arrays. That is camada's Ackermann encoding: every select becomes a fresh
- * element variable tied to the array's other reads by congruence axioms, so
- * arrays never reach the solver. */
-/* --tuple-node-flattener asks for tuples lowered to per-field symbols instead
- * of the backend's datatypes. That is camada's TupleEncoding::Camada, the same
- * lowering it already applies to backends without native datatype support. */
-camada::TupleEncoding pick_tuple_encoding(const optionst &options)
+/* Tuples and arrays are camada's to encode. `Native` does not mean "require the
+ * theory": camada uses the backend's own theory where it has one and lowers
+ * otherwise -- per-field symbols for tuples, Ackermann congruence axioms for
+ * arrays -- so it already picks per backend. ESBMC used to choose here, back
+ * when ESBMC owned the flatteners; nothing is left to choose. */
+camada::TupleEncoding pick_tuple_encoding(const optionst &)
 {
-  return options.get_bool_option("tuple-node-flattener")
-           ? camada::TupleEncoding::Camada
-           : camada::TupleEncoding::Native;
+  return camada::TupleEncoding::Native;
 }
 
-camada::ArrayEncoding pick_array_encoding(const optionst &options)
+camada::ArrayEncoding pick_array_encoding(const optionst &)
 {
-  return options.get_bool_option("array-flattener")
-           ? camada::ArrayEncoding::Ackermann
-           : camada::ArrayEncoding::Native;
+  return camada::ArrayEncoding::Native;
 }
 
 std::string pick_logic(const optionst &options, bool native_fp)

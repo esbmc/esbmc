@@ -178,10 +178,10 @@ std::unique_ptr<smt_convt>
 create_solver(const namespacet &ns, const optionst &options)
 {
   /* The backend implements tuples, arrays and floating-point itself. Camada
-     uses the solver's own theories where it has them and lowers otherwise --
-     --tuple-node-flattener, --array-flattener and --fp2bv select those
-     lowerings (TupleEncoding::Camada, ArrayEncoding::Ackermann,
-     FPEncoding::BV) rather than installing an ESBMC-side flattener. */
+     uses the solver's own theories where it has them and lowers otherwise, so
+     there is no ESBMC-side flattener to install and nothing to select here.
+     --fp2bv still forces FPEncoding::BV, because bit-blasting floats is a
+     semantic choice a caller may need (see fp_encoding). */
   const backendt &backend = pick_solver(options);
   /* smtlib is the only backend whose construction branches; the rest differ
    * only in which camada solver they build. */

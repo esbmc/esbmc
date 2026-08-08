@@ -648,8 +648,6 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Encode floating-point as bit-vectors (default for solvers that don't "
      "support the SMT floating-point theory)"},
-    {"tuple-node-flattener", NULL, "Encode tuples using our tuple to node API"},
-    {"array-flattener", NULL, "Encode arrays using our array API"},
     {"no-return-value-opt",
      NULL,
      "Disable return value optimization to compute the stack size"}}},
