@@ -1155,3 +1155,50 @@ round-trip can be deleted is the assert-fold in C/C++/Python, Solidity's eight
 residuals (#6759, #6760), and this one `isqrt` operand location — left to a
 separate patch rather than fixed here, so that the measurement and the fix are
 not entangled in one change.
+
+### 21.7 The obvious fix for §21.2 is refuted
+
+Recorded in §14's spirit, because the candidate is the one anybody looking at
+§21.2 will reach for first, and it is wrong in a way the A/B metric actively
+hides.
+
+`handle_floor_division` (`python_math.cpp`) builds the correction ternary with
+`python_expr::build_if(cond, gen_one(div_type), gen_zero(div_type))` and sets no
+location, while the float path three lines up does
+`floor_call.location() = bin_expr.location()`. The obvious patch is to make the
+integer path match:
+
+```c++
+if_expr.location() = bin_expr.location();
+```
+
+It works, by the metric. All 24 divergent tests plus `github_4792` go to
+byte-identical — 25/25.
+
+**It is still wrong.** Measure the *legacy* arm before and after, which the A/B
+alone never does:
+
+| | line | column |
+|---|---:|---:|
+| legacy, before the patch | 276 | 8 |
+| legacy, after the patch | 265 | 10 |
+
+`bin_expr.location()` is not the statement's location — 265 is up in the
+function-header region, not the `y = (x + n // x) // 2` the instruction came
+from. Pre-setting a location in the converter makes `restore_value_locations` a
+no-op on that node, because it only fills nodes that are location-*less*
+(`goto_convert_functions.cpp`). So the patch does not pull native up to legacy;
+it pulls **both arms down** onto a worse location, and byte-identity improves
+because fidelity got uniformly worse on both sides.
+
+Two things follow, and the second is the more general one:
+
+1. The real fix is on the native side, not in the converter: an IREP2-level
+   equivalent of `stamp_value_locations` that fills a nil `if2t::location` from
+   the enclosing statement. That touches the shared dispatcher, so it wants its
+   own gates and its own patch — it is deliberately not attempted here.
+2. **Byte-identity is a comparison, not a correctness measure.** It cannot tell
+   "native was fixed" from "legacy was broken to match". Any patch justified by
+   a divergence count must also show the legacy arm unchanged; §18.4's A/B
+   protocol does not require that today, and this is the case that shows it
+   should.
