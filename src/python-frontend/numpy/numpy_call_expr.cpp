@@ -4175,6 +4175,17 @@ exprt numpy_call_expr::create_expr_from_call()
           }
         }
 
+        // The runtime backend call below writes its result through the
+        // address of current_lhs; a bare expression statement (result
+        // discarded, e.g. `np.dot(a, b)` with no assignment) has no
+        // current_lhs and previously crashed dereferencing a null pointer
+        // instead of producing this diagnostic (matches the existing
+        // arccos/transpose/ceil convention for the same requirement).
+        if (!converter_.current_lhs)
+          throw std::runtime_error(
+            "Internal error: numpy." + operation +
+            " runtime lowering requires an assignment target");
+
         // Determine dimensionality of both operands
         bool lhs_is_2d = type_handler_.is_2d_array(lhs);
         bool rhs_is_2d = type_handler_.is_2d_array(rhs);
