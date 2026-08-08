@@ -133,7 +133,7 @@ void reachability_treet::remove_hash_collision_entry()
 {
   execution_statet &ex_state = get_cur_state();
 
-  std::size_t hash = ex_state.generate_hash();
+  crypto_hash hash = ex_state.generate_hash();
   hit_hashes.erase(hash);
 }
 
