@@ -1051,3 +1051,107 @@ What is left before the round-trip can be deleted is now short and named: the
 assert-fold in C/C++/Python, a Python A/B sweep that has never been run, and
 Solidity's eight residuals — which #6759 and #6760 already establish are *not*
 dispatcher defects.
+
+## 21. The Python A/B sweep, run at last — one site, not a class (2026-08-08)
+
+§20.4 listed "a Python A/B sweep that has never been run" as one of three items
+left before the round-trip can be deleted. It has now been run. Python joins
+Jimple as a frontend measured on **both** clauses of §18.5's criterion, and the
+result is narrower than the decline census suggested: the divergent set is large
+but it has exactly one cause.
+
+### 21.1 Result
+
+Stride-12 sample of `regression/python`, 379 of 4541 tests, `--goto-functions-only`
+on both arms:
+
+| | tests | |
+|---|---:|---|
+| byte-identical | **354** | |
+| stable divergence | **24** | all one site — §21.2 |
+| nondeterministic | 1 | `threading_thread_subclass_race_fail`, §19.3's class |
+
+The 24 are not 24 problems. Every one of them reduces to the same operand-level
+`#location`, and the tests that carry it are simply the tests that reach the
+`math` operational model — directly (`math1`, `math_edge_*`), or transitively
+(`cmath_*`, `harness_torch_allclose_fail`, `list_float_param_int`). The count
+measures corpus reach, not defect count.
+
+### 21.2 The site
+
+`src/python-frontend/models/math.py:276` — `y = (x + n // x) // 2`, the body of
+`isqrt`'s `while` loop. Legacy carries a `#location` on a **constant nested
+inside the expression tree**; the native dispatcher does not. It is an
+operand-level attribute, not an instruction location: the containing
+instruction's own location is identical on both arms, and no instruction text
+differs anywhere in the 24.
+
+That is a smaller claim than the decline census would have predicted, and it
+should not be inflated into one. What it is *not* is a W1-loc regression —
+W1-loc concerned instruction locations, which this sweep finds intact.
+
+### 21.3 Two normalisation gaps §20.3's pattern does not cover
+
+§20.3 widened the temp-name pattern to catch a synthetic file name without a
+leading slash. Two further per-run artefacts defeat that pattern on Python, and
+both must be normalised or the sweep reports false divergences:
+
+1. **The temp path escaped as decimal ASCII codes.** `ASSIGN __file__={ 47, 116,
+   109, 112, 47, 101, 115, 98, 109, 99, ... }` is `/tmp/esbmc-python-astgen-<hash>/...`
+   character by character. No text pattern over `esbmc*` can see it. Every test
+   that imports a model carries this line.
+2. **Heap addresses in temp symbol names.** `ESBMC_unpack_temp_127415336141168`
+   and `unpack_134378588261744_0` embed a pointer value, so they vary with ASLR
+   between any two runs. Note the two distinct prefixes: normalising only
+   `ESBMC_unpack_temp_` leaves `github_4792` reporting a false divergence, which
+   is how it was initially miscounted here.
+
+Both were caught by the §7 rule 7 self-control, not by inspection. Widening a
+normalisation can in principle mask a real difference — if two distinct temps
+were confused by the same rewrite — so these two rules are deliberately narrow:
+they rewrite the numeric field only, and leave the surrounding structure to be
+compared.
+
+### 21.4 The nondeterministic residual
+
+`threading_thread_subclass_race_fail` diverges, but a 5×5 self-control gives
+`native_variants=2`, `legacy_variants=3`, and the two sets intersect: **neither
+arm is internally stable**. The race-check assertions and their comment lines
+are emitted in a varying order, with the native path off as well as on. This is
+the same class as §19.3's Solidity locations and §20.3's C temp file name, and
+the third frontend on which it has now appeared — the pattern is general enough
+that a self-control should be the default before any A/B divergence is believed,
+not a step reserved for suspicious results.
+
+### 21.5 Reproduction
+
+The A/B needs no instrumentation. Per test, run `--goto-functions-only` with and
+without `--no-irep2-native-body`, normalise, and compare. The normalisation is
+§18.6's, plus §21.3:
+
+```sh
+sed -e 's@esbmc[-._][A-Za-z0-9._-]*@TMPD@g' \
+    -e 's@^\(.*time\): [0-9.]*s$@\1: TIME@' \
+    -e 's@ESBMC_unpack_temp_[0-9][0-9]*@ESBMC_unpack_temp_N@g' \
+    -e 's@\bunpack_[0-9][0-9]*_@unpack_N_@g' \
+    -e 's@\(ASSIGN __file__=\).*@\1TMPD_BYTES@'
+```
+
+For any divergence, run each arm five times and compare the *sets* of hashes
+before believing it (§19.4).
+
+### 21.6 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc-cpp` | drained; residue = assert-fold | gated per patch (§11.4) |
+| `esbmc` (C) | 4 / 60 tests | 138/138 (stride-12, §20.3 normalisation) |
+| `python` | dominant site fixed by #6695 (merged) | **354/379 (stride-12); 24 = one site, 1 nondeterministic** |
+| `esbmc-solidity` | 0 / 26 | 502/510; 8 residuals = #6759, #6760 |
+| `jimple` | 0 / 15 | 15/15 |
+
+The Python row is now measured rather than blank. What is left before the
+round-trip can be deleted is the assert-fold in C/C++/Python, Solidity's eight
+residuals (#6759, #6760), and this one `isqrt` operand location — left to a
+separate patch rather than fixed here, so that the measurement and the fix are
+not entangled in one change.
