@@ -119,7 +119,15 @@ symbolt *python_converter::find_function_in_base_classes(
   // Python enforces acyclic inheritance, so this recursion terminates.
   for (const auto &base_class_node : class_node["bases"])
   {
-    const std::string &base_class = base_class_node["id"].get<std::string>();
+    /* A qualified base (`module.Class`) parses as an Attribute, which carries
+     * `attr` instead of `id` -- reading `id` unconditionally aborted on any
+     * model-provided base such as unittest.TestCase (#6745). The symbol id
+     * uses the bare class name either way. */
+    const std::string base_class = base_class_node.contains("id")
+                                     ? base_class_node["id"].get<std::string>()
+                                     : base_class_node.value("attr", "");
+    if (base_class.empty())
+      continue;
 
     // Under the base class, a constructor is named after that base.
     const std::string base_func_name = is_ctor ? base_class : method_name;
@@ -129,6 +137,24 @@ symbolt *python_converter::find_function_in_base_classes(
 
     if (symbolt *func = symbol_table_.find_symbol(sym_id.c_str()))
       return func;
+
+    /* A base reached through an import lives in that module's file, so the
+     * rewrite above -- which keeps the current file's prefix -- cannot name
+     * it. Rebuild the id against the imported module instead. */
+    if (base_class_node.contains("value") &&
+        base_class_node["value"].is_object() &&
+        base_class_node["value"].contains("id"))
+    {
+      const std::string module_name =
+        base_class_node["value"]["id"].get<std::string>();
+      const std::string &module_path = get_imported_module_path(module_name);
+      if (!module_path.empty())
+      {
+        class symbol_id base_id(module_path, base_class, base_func_name);
+        if (symbolt *func = symbol_table_.find_symbol(base_id.to_string()))
+          return func;
+      }
+    }
 
     // Not defined directly in this base: descend into its own bases so a
     // method inherited from a grandparent (or higher) still resolves.
