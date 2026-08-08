@@ -128,9 +128,12 @@ measurements say a closed enum suffices:
   `SolType` at `solidity-frontend/solidity_grammar.h:484`. It is stringified
   only to cross the `irept` boundary. Restoring it to a typed field removes a
   serialization step rather than adding an escape hatch.
-- **`#cpp_type`'s value domain is the C type-keyword set** — the writers emit
+- ~~**`#cpp_type`'s value domain is the C type-keyword set** — the writers emit
   `"bool"`, `"signed_char"`, `"unsigned_char"`, `"void"` and a `c_type` variable
-  drawn from the same finite vocabulary. It is an enum wearing a string.
+  drawn from the same finite vocabulary. It is an enum wearing a string.~~
+  **Refuted 2026-08-08, see §32.1.** The `c_type` variable is drawn from LLVM's
+  builtin-type list, not from a type-keyword vocabulary: 83 distinct values, 56
+  of them ARM SVE names. It is not an enum wearing a string.
 
 So the third option the record never separated out:
 
@@ -161,6 +164,12 @@ explicit invariant plus a test that pins it.
 **Option F is a spike before it is a plan** (Phase 0 below). If the equality
 asymmetry proves unmanageable, fall back to Option B for Solidity only and
 accept that B-4 closes for C/C++ but not Solidity.
+
+> **The spike came back the other way round — see §36.** The equality asymmetry
+> this paragraph hedges against is *not* the problem (§16 retired it). The
+> domain is. So the fallback splits the opposite way to what is written here:
+> Option F fits **Solidity**, whose classification is genuinely a closed enum,
+> and not C/C++, whose spelling domain is open.
 
 ## 6. Phased program
 
@@ -2210,3 +2219,71 @@ The branch's local validation now stands at: C 1 681/1 684, C++ 752/755, the
 above 1 014/1 022, unit 663/663, Python subsets clean, and byte-identity sweeps
 over four option sets — all residual failures confirmed pre-existing against the
 merge base. What is still unrun anywhere is **Solidity**, and CI.
+
+## 36. Option F's premise, and the inversion it produces (2026-08-09)
+
+§32 and §33 measured the `#cpp_type` domain and what catch-matching consumes.
+Read back against §5.2, where Option F is argued, they do something sharper than
+re-scope it: **they refute one of the two measurements the option rests on, and
+they invert which frontend it fits.**
+
+### 36.1 The refuted premise
+
+§5.2 offers two measurements. The first — Solidity's classification is already
+an `enum class SolType`, stringified only to cross the `irept` boundary — holds,
+and I re-read it to check.
+
+The second does not:
+
+> *"`#cpp_type`'s value domain is the C type-keyword set … a `c_type` variable
+> drawn from the same finite vocabulary. It is an enum wearing a string."*
+
+The `c_type` variable is assigned from LLVM's builtin-type switch, not from a
+type-keyword vocabulary. §32.1 counts **83 distinct values, 56 of them ARM SVE
+builtin names** that track a vendor extension and grow with the toolchain. That
+is not an enum wearing a string; it is a string doing string work. §5.2 now
+carries the correction inline, because a design section that states a false
+measurement is worse than one that states none.
+
+### 36.2 The inversion
+
+§5.2 hedges against one failure mode — *"if the equality asymmetry proves
+unmanageable, fall back to Option B for Solidity only"* — and prescribes a split
+where **C/C++ keeps Option F and Solidity falls back.**
+
+Both halves are wrong, in opposite directions:
+
+| | §5.2 expected | measured |
+|---|---|---|
+| the risk | equality/hashing asymmetry | **retired** by §16.1/§16.2: omit from `fields`, declare `excluded_field_bytes` |
+| the obstacle | — | **domain openness**, §32.1 |
+| C/C++ | Option F fits | **does not** — 83 values, 56 vendor-extension names, on kinds beyond the two |
+| Solidity | falls back to B | **Option F fits best** — `SolType` is already a closed enum (`solidity_grammar.h:484`) |
+
+So the split B-4 should take is the mirror image of the one written down: apply
+Option F where the domain is genuinely closed (Solidity), and do not try to
+force it onto the C/C++ spelling.
+
+### 36.3 What this changes about Phase 2
+
+Phase 2 reads *"land `c_spelling`/`sol_class` as typed fields, repoint the four
+readers, delete the `irept` accessors."* Against the measurements:
+
+- **`sol_class` — proceed.** Closed enum, one frontend, a serialization step to
+  remove rather than an escape hatch to add. This is the part that was always
+  sound, and it is now the part with evidence behind it.
+- **`c_spelling` — do not land as specified.** It cannot represent its domain,
+  so `#cpp_type` survives and the accessors cannot be deleted. §33 leaves a
+  narrower option open — a typed field for the four scalar spellings
+  catch-matching actually consumes, with the rest staying a string — but that is
+  a *semantics/presentation split*, not the B-4 removal Phase 2 describes, and
+  it deserves its own scope document rather than inheriting this one's name.
+- **Phase 0's go/no-go is answerable now, without the prototype**: no-go for
+  `c_spelling` as scoped, go for `sol_class`. The prototype §16.3 sizes at days
+  would confirm a conclusion the measurements already reach, and its remaining
+  question (verdict/counterexample parity) only matters for a field that is
+  going to land.
+
+Recorded as a plan correction. The next executable piece of B-4 is `sol_class`
+on the Solidity kinds — which, being Solidity, needs the CI leg that the rest of
+this branch has been waiting on.
