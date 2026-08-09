@@ -216,3 +216,60 @@ written to prevent.
 
 Census, decomposition, and two withdrawn first slices. No code has moved. The
 next decision is §8.1's technique, and it is a program-level one.
+
+## 10. The seam is already IREP2-ready, and it is one line
+
+§8.1's parallel-method technique has a precondition nobody had checked: it only
+helps if *something* can consume `expr2tc`. If the top of the tree is still
+legacy, migrating a leaf just moves the round-trip down rather than removing it
+— which is the same objection that killed J.1.
+
+**It is checked, and the answer is good.** `symbolt` already carries both sides
+(`symbol.h:48-67`):
+
+```cpp
+const exprt   &get_value()  const;
+const expr2tc &get_value2() const;
+void set_value(const exprt &v);
+void set_value(const expr2tc &v);   // <- the IREP2 setter exists
+```
+
+and the header states this is *"the end-state design, not transitional"*, with
+the legacy side derived lazily and `migrate_expr_back` covering *"every expr2t
+kind a symbol value may hold — including `code_block2t` for function bodies."*
+
+**And jimple touches that seam in exactly one place:**
+
+```
+jimple_method.cpp:92   added_symbol.set_value(body->to_exprt(ctx, class_name, this->name));
+```
+
+One call site, and the setter it needs already exists beside the one it uses.
+
+### 10.1 What that fixes about the decomposition
+
+Migration should run **top-down from that line**, not bottom-up from a leaf:
+
+| slice | change | round-trips after |
+|---|---|---|
+| K.1 | `jimple_method_body` gains `to_code2t`; `:92` calls `set_value(expr2tc)` | **one**, inside the new default |
+| K.2 | statements override `to_code2t` | shrinks per override |
+| K.3 | expressions override `to_expr2t` (§8.1) | shrinks per override |
+| K.4 | `to_typet` → `type2tc`, last, when its consumers are gone (§7) | zero |
+
+Each step *removes* a round-trip rather than adding one, because the boundary
+starts at the top and moves down. Bottom-up had the opposite property, which is
+why J.1 and J.1' both failed.
+
+The caveat the header records applies and is worth carrying: the lazy split
+tolerates *"latent holes"* in frontend-built legacy sub-expressions **as long as
+nothing reads the IREP2 side**. K.1 makes something read it, so any such hole in
+jimple's construction surfaces there — which is a feature for a migration, but
+it means K.1's gate is the full 17-test suite, not a smoke test.
+
+## 11. Status
+
+Census; three withdrawn slices (J.1, J.1', both for reasons now understood); the
+technique (§8.1); and the seam (§10). The decomposition is K.1-K.4 above. No
+code has moved, and K.1 is the first executable step — one line at the seam plus
+one new method with a migrating default.
