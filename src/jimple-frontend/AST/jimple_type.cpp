@@ -43,9 +43,9 @@ type2tc jimple_type::get_base_type2(const contextt &ctx) const
   case BASE_TYPES::INT:
     return int_type2();
 
-  // No BOOLEAN arm to mirror the one in get_base_type: no from_map entry
-  // yields BASE_TYPES::BOOLEAN -- "boolean" maps to INT -- so nothing can
-  // reach it, and reproducing it here would be dead instrumentation.
+    // No BOOLEAN arm to mirror the one in get_base_type: no from_map entry
+    // yields BASE_TYPES::BOOLEAN -- "boolean" maps to INT -- so nothing can
+    // reach it, and reproducing it here would be dead instrumentation.
 
   case BASE_TYPES::_VOID:
     return get_empty_type();
