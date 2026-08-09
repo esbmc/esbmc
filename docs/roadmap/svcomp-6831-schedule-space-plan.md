@@ -1,7 +1,8 @@
 # Plan — affording the schedule space #6607 exposed (issue #6831, cause 1)
 
-**Status:** W0 and W2 shipped; `--state-hashing` was **unsound** and is fixed
-(see W2). W1 diagnosed, no code yet. W3, W4 not started.
+**Status:** W0, W2 and W1.1 shipped; `--state-hashing` was **unsound** and is
+fixed (see W2); `--sleep-sets` is new, off by default, and sound on the paths
+it is allowed to run on (see W1.1). W3, W4 not started.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 1 —
 schedule-space explosion*, 291 of 489 lost SV-COMP tasks.
 **Bisected to:** `bac652b13c` — `[goto-symex] Track main-thread termination per
@@ -117,7 +118,9 @@ Two orthogonal levers, both open:
 
 - **A — explore fewer schedules.** MPOR is the only reduction that fires on this
   reproducer; W2 shows state hashing fires on plenty of others, unsoundly.
-  W0 added the counters this diagnosis needed.
+  W0 added the counters this diagnosis needed. W1.1 adds a third reduction,
+  sleep sets, which fires only where the search is exhaustive — so it is worth
+  nothing under a context bound and a good deal without one.
 - **B — make each schedule cheaper.** Each of the 940 schedules is symexed,
   sliced, encoded and solved as an independent formula. The DFS restores
   execution states on backtracking, but the per-formula pipeline downstream of
@@ -211,7 +214,7 @@ Remaining candidates:
 
 1. **Sleep sets** layered on the existing MPOR. Classical, sound, composes with
    a persistent-set-style reduction rather than replacing it; small state per
-   DFS node. Now the first thing to try, not the second.
+   DFS node. Now the first thing to try, not the second. **Done — W1.1 below.**
 2. **Decouple the pthread model's bookkeeping.** If `__ESBMC_num_threads_running`
    and friends were per-thread rather than shared scalars, W1.2's refinement
    would start paying. This is an operational-model change, and it must not
@@ -219,9 +222,131 @@ Remaining candidates:
 3. **Evaluate DPOR** (Flanagan–Godefroid dynamic POR) against MPOR. A design
    change, not a patch; investigation only.
 
-**Exit:** ≥2× reduction in schedules explored on `01_malloc_20` at
-`--context-bound 2`, with no verdict change anywhere in the concurrency
-regression suites, and #4584's regression test still detecting its race.
+#### W1.1 — Sleep sets (`--sleep-sets`), shipped off by default
+
+They do not layer on MPOR, and the exit criterion above was unreachable as
+written. Both corrections come from the same fact: **a sleep set may only
+record a thread whose subtree was exhaustively explored**, and under
+`--context-bound 2` — the configuration the exit criterion names — almost
+nothing is.
+
+Six independent unsoundnesses were found on the way, each of which produced a
+plausible-looking speedup while silently dropping violating schedules. They are
+recorded because each is easy to reintroduce. (d) and (e) were found by code
+review after (a)–(c) were already fixed and the suite was green, which is the
+strongest argument in this document for reviewing a reduction rather than
+trusting a passing corpus.
+
+**(a) The wake test must use the sleeping thread's *own* recorded transition.**
+`check_mpor_dependency(active, u)` compares against `thread_last_*[u]`, which
+describes the transition `u` took *before* it was put to sleep, not the one it
+would take next. Waking off it keeps `u` asleep across genuinely conflicting
+transitions. Measured on the first 73 CORE concurrent tests: **19 verdict
+changes, every one `FAILED` → `SUCCESSFUL`**. Fixed by storing, per sleeping
+thread, the footprint of the transition it took from the node where it was put
+to sleep (`execution_statet::transition_footprintt`) — which, for as long as it
+stays asleep, is exactly the transition it would take.
+
+**(b) Sleep-marking requires an exhausted subtree.** Adding `t` to `Sleep(s)`
+claims everything reachable through `t` was explored. MPOR blocking, a state-hash
+collision and the context bound each cut a subtree short, and the claim is then
+false. The context bound also breaks the cost symmetry the argument needs: if
+`t` is the thread already running at `s`, then `s→u→t` costs one switch and the
+supposedly equivalent `s→t→u` costs two, so the covering schedule can fall
+outside a budget the skipped one fits in. `reachability_treet::mark_search_truncated`
+clears an `exhaustive` flag at each of those three sites and propagates it to the
+parent on backtracking. An `interleaving_unviable` break is deliberately *not*
+a truncation: that state's guard is false, so everything below it is infeasible.
+
+**(b′) Both halves of the reduction have to be on the same code path.** The
+pruning half (`dfs_explore_thread`, `erase_current_frame`) is shared with
+`generate_schedule_formula` and `--direct-interleavings`, but the waking half
+lives only in `get_next_formula`. On those two paths a thread went to sleep and
+never woke. `--sleep-sets` is therefore forced off under `--schedule` and
+`--direct-interleavings` rather than half-applied.
+
+**(c) MPOR's read set under-approximated through `printf`.** A global passed as
+a `printf` argument was recorded nowhere: the frontend lowers the call to an
+OTHER instruction, and only the function-call path ran `analyze_args`. Sleep
+sets then called the reader independent of a writer of that same global and
+slept through the race (`esbmc-unix/00_race25`). Fixed by overriding
+`symex_printf` in `execution_statet`, the same way `symex_goto` / `assume` /
+`claim` are already overridden. This one is a pre-existing hole in the
+independence relation, not something sleep sets introduced — MPOR happens not to
+lose that race, but nothing guaranteed it would not.
+
+**(d) `--data-races-check-only` makes the independence relation vacuous.**
+`get_expr_globals` returns before recording anything under that flag, so every
+`thread_last_*` set is empty, `check_mpor_dependency` returns false for any pair
+of transitions, and a thread put to sleep can never wake — the entry then
+propagates to every descendant. Two CORE tests flipped `FAILED` →
+`SUCCESSFUL`: `github_2928_qw2004_2` and `github_4423_atomic_race`, the latter
+being the reproducer for the race #4423 fixed, lost again. `--sleep-sets` is
+forced off there, pinned by `github_6831_sleep_sets_forced_off`. Note the
+difference from (c): (c) was a relation missing one access, this is a relation
+missing all of them, so no wake test can rescue it.
+
+**(e) A loop the unwind bound truncated looks like an infeasible path.** Under
+`--no-unwinding-assertions`, `loop_bound_exceeded` cuts the remaining iterations
+with an assumption that drives the state guard false. `get_next_formula`'s
+`interleaving_unviable` break then abandons the pending switch — and that break
+is deliberately *not* a truncation, because for a genuinely false guard every
+schedule below really is infeasible. Here it is not: the iterations are
+unexplored, not impossible. `esbmc-unix2/11_podelski.fig3.lics04` went `FAILED`
+→ `SUCCESSFUL` (319 → 36 schedules), losing a W/R race on `x`. Fixed by
+overriding `note_bounded_loop_truncation` — the hook #6387 already added for
+coverage reporting — to clear `exhaustive`. It is a precise fix rather than a
+blunt one: the reproducer still gets 67 sleep prunes, and `01_malloc_19` keeps
+all of its 255-schedule win. Marking the `interleaving_unviable` break itself
+instead would be sound but useless, taking `01_malloc_19` from 3 s to over 300 s.
+
+One non-soundness bug rounds out the list: under `--interactive-ileaves`,
+`dfs_explore_thread` can now decline the thread the user chose while
+`check_thread_viable` — which explains refusals to that user — knows nothing
+about sleep sets, so `decide_ileave_direction` hits its
+"selected different thread from user choice" `abort()`. Forced off there too.
+
+**Where it pays.** Because of (b), sleep sets fire only along paths the search
+exhausted — so every MPOR block and every context-bound cut costs them ground,
+and they pay most with `--no-por` and no `--context-bound`. That is not a
+limitation for the target: `esbmc-wrapper.py` passes no `--context-bound`
+(§2.2), which is the regime §2.2 shows is not enumerable at all today.
+
+`01_malloc_19` and `01_malloc_21` are the same reproducer family and differ
+mainly in that only the latter carries `--context-bound 2`, which makes them a
+direct A/B:
+
+| test | bound | base | `--sleep-sets` | `--no-por --sleep-sets` |
+|---|---|---|---|---|
+| `01_malloc_19` | none | 819 (mpor 661) | 809 | **255**, 6.9 s → 2.6 s |
+| `01_malloc_21` | `2` | 919 (mpor 402) | 912 | timeout |
+
+Unbounded, sleep sets alone beat MPOR by **3.2×** with the verdict unchanged;
+bounded, they are (soundly) inert. The original exit criterion named
+`01_malloc_20` at `--context-bound 2` — the one configuration in which this
+reduction cannot fire.
+
+Behind MPOR rather than replacing it the win is smaller but real. Every CORE
+test in `esbmc-unix`/`esbmc-unix2` that calls `pthread_create` — 343 of them —
+was run twice, once with its own flags and once with `--sleep-sets` added. Of
+the 331 that report a schedule count both ways, `--sleep-sets` **cuts 63,
+leaves 268 unchanged, raises none, introduces no timeout, and changes no
+verdict**. Two more datapoints in the unbounded regime:
+`regression/python/threading_thread_increment_race_no_flag_fail` with the bound
+dropped **times out** on stock and returns `VERIFICATION FAILED` in 67
+schedules with `--sleep-sets`; `esbmc-unix/00_race24` goes 121 → 21.
+
+That sweep is the gate, and it earned its keep twice: an earlier revision of it
+over 76 tests caught (a), and the full 343 caught (e) — a single flip that the
+76-test corpus did not contain. Sizing the corpus to the whole population of
+concurrent tests, rather than to a sample, is what made the difference.
+
+**Exit — restated and discharged for W1.1:** no verdict change across the 343
+CORE concurrent tests of `esbmc-unix`/`esbmc-unix2` with `--sleep-sets` on, no
+verdict change on the default path either (585 of 586 with stock flags, the one
+exception a `FUTURE` test killed by hand), #4584's regression tests still
+detecting their race, and a measured reduction in the unbounded configuration.
+The remaining candidates (2) and (3) are untouched.
 
 ### W2 — Fix state hashing or stop paying for it — **re-scoped: it is unsound**
 
@@ -405,3 +530,16 @@ MPOR prunes 20 % of them, state hashing prunes none, and nothing reports either
 — so instrument the reduction (W0), then make it prune (W1/W2) and make each
 schedule cheaper (W3), never by exploring fewer schedules than #6607 proved are
 reachable.
+
+Two workstreams in, the recurring lesson is that every reduction here is
+*conditionally* sound and ships without saying on what: state hashing needed the
+active thread in its fingerprint (W2), and sleep sets need an exhaustively
+explored subtree and an independence relation that misses no access (W1.1).
+
+The second lesson is about how the conditions get found. Four of the six in
+W1.1 surfaced as verdict flips on existing CORE tests; the remaining two came
+from review of a green tree, and one of those — (e), a truncated loop passing
+for an infeasible path — flips a test that a 76-test sample missed and only the
+full 343 contained. So neither method dominates: run the sweep over the whole
+population rather than a sample, and still review the soundness argument at each
+site where a reduction decides a subtree was finished.
