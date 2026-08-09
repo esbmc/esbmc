@@ -529,3 +529,51 @@ The remaining statement overrides (`invoke`, `return`, `throw`, `identity`,
 `assertion`) reach operands through `jimple_symbol`, which is now native, so
 they no longer inherit a migrating operand. `jimple_assignment` stays blocked on
 §16.2. `to_typet` -> `type2tc` remains last (§7).
+
+## 18. `jimple_return` (#6866): the valueless-value trap, and two mutants
+
+`code_returnt` is not "zero or one operand". Its constructor resizes to one and
+nils it:
+
+```cpp
+code_returnt() : codet("return") { operands().resize(1); op0().make_nil(); }
+```
+
+so `migrate_expr` takes the `operands().size() == 1` arm unconditionally
+(migrate.cpp:2216) and recurses into a nil, which its first branch maps to a
+null `expr2tc` (migrate.cpp:729). A native override that emitted "no operand"
+for a valueless return would therefore be building a *different* node than the
+one migration produces, even though both read as "return with no value".
+
+This is the trap noted as low-priority during the goto_convert work; it is
+cheap here because the correct native form is just a default-constructed
+`expr2tc`.
+
+### 18.1 One mutant was not enough
+
+§17.1 used a single mutant, which sufficed because the override had one path.
+`jimple_return` has two, and a single mutant cannot separate them:
+
+| Mutant | Tests changed | What it establishes |
+|---|---|---|
+| M1 — drop the value, keep the return | 10 / 17 | 10 tests exercise the value-carrying path |
+| M2 — replace the statement with a skip | 17 / 17 | every test reaches the override at all |
+
+M1 alone would have left the other 7 ambiguous between "valueless return" and
+"override never runs here". M2 resolves it: all 17 reach the override, so the 7
+are genuine valueless returns and the nil-to-null mapping is covered by the
+corpus rather than by argument.
+
+**Rule for the remaining slices:** an override with N distinct output shapes
+needs mutants enough to distinguish them, not one mutant to prove liveness.
+
+### 18.2 Status
+
+Nine slices shipped: #6851, #6853, #6854, #6855, #6856, #6858, #6860, #6865,
+#6866. All byte-identical, all mutant-checked.
+
+Remaining: `jimple_throw` (currently a bare `codet("cpp-throw")` with the body
+commented out -- migrating it would pin an unfinished construct, so it is worth
+checking whether it is reachable at all before taking it), `jimple_identity`,
+`jimple_assertion`, and the two invoke forms. `jimple_assignment` stays blocked
+on §16.2; `to_typet` -> `type2tc` remains last (§7).
