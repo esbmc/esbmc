@@ -1005,3 +1005,42 @@ It has no open issue as far as a search of the tracker shows.
 **Not filed here**: opening an issue is a shared-state action outside what this
 work was asked to do, so the reproducer is recorded and the filing left as a
 decision.
+
+### 19.4 Root cause: `elem_size` is 0 for string elements, by construction
+
+The mechanism is already written down in the tree, in the two places that
+matter.
+
+`list_query.cpp:527-533` computes the `elem_size` argument:
+
+> *"Statically-known element byte size for the primitive comparison, so the
+> model's `__ESBMC_values_equal` takes its branch-free fast path instead of
+> memcmp's symbolic-size byte loop (the dominant cost when comparing large
+> lists, e.g. `assert l == [...]`). Emitted only when both operands' first
+> element is the same fixed-width scalar; **0 otherwise**."*
+
+and `list.c:401-406`, on the receiving side:
+
+> *"Falls back to `a->size` when `elem_size == 0`"* — the symbolic-index field
+> read that *"forces memcmp's per-byte loop to unwind per element."*
+
+`scalar_width` admits only `signedbv`/`unsignedbv`/`floatbv`/`fixedbv`. A string
+element is none of those, so `elem_size` is 0 and every string-list comparison
+takes the per-byte path. That is precisely why `[1] == [1]` is fast and
+`["y"] == ["y"]` is not.
+
+**What is new is the severity.** The comment frames this as a cost on *large*
+lists. It is not: a **one-element** list of a **one-character** string does not
+terminate in 120 s. That is what puts it in G4's way.
+
+**And why it is not a one-line fix.** `elem_size` is a single value for the
+whole comparison, so it can only exist when every element has the same fixed
+width. Strings are variable-length, so in general no such value exists — the 0
+is correct for the signature as it stands, not an oversight. A fix has to either
+(a) derive a per-list constant for the special case where all elements are
+same-length literals, which `["y"] == ["y"]` satisfies but the general case does
+not, or (b) make the fallback path itself cheap, which means bounding the
+per-byte loop in the model rather than passing more information into it.
+
+That is list-operational-model work with its own trade-offs, and it is the
+prerequisite standing in front of G4.
