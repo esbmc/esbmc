@@ -574,6 +574,20 @@ exprt jimple_deref::to_exprt(
   return index;
 };
 
+expr2tc jimple_deref::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  expr2tc arr = base->to_expr2t(ctx, class_name, function_name);
+  expr2tc offset = index->to_expr2t(ctx, class_name, function_name);
+
+  // to_exprt assembles an index_exprt and then rewrites it in place into a
+  // dereference of pointer arithmetic; this is that result, built directly.
+  const type2tc &element = to_pointer_type(arr->type).subtype;
+  return dereference2tc(element, add2tc(arr->type, arr, offset));
+}
+
 exprt jimple_nondet::to_exprt(
   contextt &,
   const std::string &,
