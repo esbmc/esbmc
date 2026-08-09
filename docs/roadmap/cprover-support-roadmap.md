@@ -116,6 +116,7 @@ and the symbol/function table layout.
 | Libc body bridge extended to `<ctype.h>` classifiers/case-mappers `isalnum`/`isalpha`/`isblank`/`iscntrl`/`isdigit`/`isgraph`/`islower`/`isprint`/`ispunct`/`isspace`/`isupper`/`isxdigit`/`tolower`/`toupper` (bodyless externals → ESBMC's ASCII operational-model bodies) (§4.8, Phase 2) | ✅ (PR #6157) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Libc body bridge extended to `<stdlib.h>` string-to-integer parsers `atoi`/`atol`/`strtol` (byte-loop bodies, need `--unwind`; `atoll`/`strtoll` left bodyless — CBMC does not model them) (§4.8, Phase 2) | ✅ (PR #6158) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Computed `goto` (GNU labels-as-values): `address_of(label)` → unique `(void *)K` constant so CBMC's lowered label-address equality chain resolves (§4.4, Phase 2) | ✅ (PR #6161) | `cbmc_adapter.cpp::fix_expression` |
+| `__CPROVER_havoc_object`: `HAVOC_OBJECT &obj` → `ASSIGN obj := side_effect("nondet")` over the whole containing object; a pointer *value* operand is still declined (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::rewrite_havoc_object` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -652,9 +653,27 @@ already verify to CBMC parity. Four gaps remain, each recorded for future work:
 - **`__CPROVER_OBJECT_SIZE` (`object_size`)** — migrates (`→ c:@F@__ESBMC_get_object_size`,
   already in the wrap-set) but the SMT **encoding hangs in the solver** (same class as the SIMD
   vector hang, §4.4) — a solver-performance item, not an adapter gap.
-- **`__CPROVER_array_set` / `__CPROVER_havoc_object`** — reach migrate as unhandled `code`
-  statements (`ERROR: code`); the array/havoc codet family, akin to the `ARRAY_COPY`/`ARRAY_SET`
-  memcpy handling of §4.8.
+- **`__CPROVER_array_set`** — reaches migrate as an unhandled `code` statement (`ERROR: code`);
+  the array codet family, akin to the `ARRAY_COPY`/`ARRAY_SET` memcpy handling of §4.8. The
+  JBMC zero-fill shape is rewritten to `__ESBMC_memset`; the general case is still declined.
+
+**`__CPROVER_havoc_object` — ✅ landed.** `HAVOC_OBJECT p` is size-implicit like `array_set`,
+and was declined with it — but a *whole-symbol* assignment needs no extent, so the shapes whose
+object is statically recoverable now translate. `rewrite_havoc_object` rewrites the instruction
+into the `ASSIGN <object> := side_effect("nondet")` the native pipeline would produce (migrate
+maps that to `sideeffect2t::allockind::nondet`, no new node). The operand is a `void *`, so
+`havoc_target` peels the typecasts, **requires an `address_of`**, then walks `index`/`member`
+down to the base symbol: CBMC havocs the *entire object containing the target*, so `&a[0]` from
+an array decay and `&s.x` must reach `a` and `s`, not one element or one field. The `address_of`
+requirement is load-bearing — without it `havoc_object(p)` on a `malloc` result reaches the walk
+as the symbol `p` and havocs the **pointer** rather than the heap object it designates, a
+different program rather than a weaker one; that case keeps the clean decline. Verdict parity
+with CBMC, dual-solver (Bitwuzla + Z3): `cbmc_havoc_object` (array, struct-member address and
+scalar, each re-initialised after the havoc) SUCCESSFUL, `cbmc_havoc_object_fail`
+(`havoc_object(a)` then `a[2] == 3`, the whole-object semantics the operand's `&a[0]` shape
+hides) FAILED — confirming the value is really dropped, not vacuously passed — and
+`cbmc_havoc_object_heap` pinning the declined pointer-value case. This also unblocks part of
+§4.6: contract `assigns`-clause instrumentation is what emits `havoc_object` in practice.
 
 **Computed `goto` (GNU labels-as-values) — ✅ landed.** A `goto *p` over
 `void *t[] = {&&a, &&b}` reached the adapter as `address_of(label{identifier})` expressions
