@@ -1733,16 +1733,17 @@ const irept *havoc_target(const irept &op)
   return e->id() == "symbol" ? e : nullptr;
 }
 
-// The array a CBMC ARRAY_SET fills, or null when the operand does not name one
+// The array a CBMC whole-object array codet (ARRAY_SET / ARRAY_COPY /
+// ARRAY_REPLACE) operates on, or null when the operand does not name one
 // statically. The pointer reaches the instruction as the decayed `&arr[0]`, so
 // peel the casts, the address-of and that subscript. The result must be an
-// array-typed *symbol*: CBMC fills the whole object the pointer lands in, which
-// coincides with the array only when the array is the entire object. A member
-// array (`&s.a[0]`) is therefore declined rather than filled -- CBMC clobbers
-// the rest of `s` too, so filling only `s.a` would claim SUCCESSFUL where CBMC
-// reports a violation. A non-zero index would fill from an offset, which a
-// whole-array constant cannot express, so only the decayed form is accepted.
-const irept *array_set_target(const irept &op)
+// array-typed *symbol*: CBMC works on the whole object the pointer lands in,
+// which coincides with the array only when the array is the entire object. A
+// member array (`&s.a[0]`) is therefore declined -- CBMC clobbers the rest of
+// `s` too, so touching only `s.a` would claim SUCCESSFUL where CBMC reports a
+// violation. A non-zero index would start from an offset, which a whole-array
+// assignment cannot express, so only the decayed form is accepted.
+const irept *whole_array_target(const irept &op)
 {
   const irept *e = &op;
   while (e->id() == "typecast")
@@ -1777,7 +1778,7 @@ bool rewrite_array_set_fill(irept &code)
   if (ops.size() != 2)
     return false;
 
-  const irept *target = array_set_target(ops[0]);
+  const irept *target = whole_array_target(ops[0]);
   if (!target)
     return false;
 
@@ -1802,6 +1803,31 @@ bool rewrite_array_set_fill(irept &code)
   code.get_sub().clear();
   code.get_sub().push_back(*target);
   code.get_sub().push_back(fill);
+  return true;
+}
+
+// Rewrites `ARRAY_COPY dst src` / `ARRAY_REPLACE dst src` into the whole-array
+// `ASSIGN dst := src`, which both reduce to when the two arrays have the same
+// type. They part company only when the extents differ, and neither remainder
+// is a whole-array assignment: a longer `array_copy` destination is left
+// *unconstrained* past the source extent (verified against CBMC), while
+// `array_replace` overwrites only the prefix and preserves the tail. Mismatched
+// extents are therefore declined rather than approximated in either direction.
+bool rewrite_array_copy(irept &code)
+{
+  const irept::subt ops = code.get_sub();
+  if (ops.size() != 2)
+    return false;
+
+  const irept *dst = whole_array_target(ops[0]);
+  const irept *src = whole_array_target(ops[1]);
+  if (!dst || !src || !(dst->find("type") == src->find("type")))
+    return false;
+
+  code.add("statement") = mk("assign");
+  code.get_sub().clear();
+  code.get_sub().push_back(*dst);
+  code.get_sub().push_back(*src);
   return true;
 }
 
@@ -1840,9 +1866,9 @@ bool rewrite_havoc_object(irept &code)
 // them. The rest are declined by throwing, which create_goto_program's handler
 // turns into a graceful error exit (roadmap §4.7): migrate would otherwise
 // abort() on them (SIGABRT). These reach the adapter only from an explicit
-// __CPROVER_array_set / __CPROVER_havoc_object -- CBMC's own memset lowering is
-// retargeted to __ESBMC_memset in fix_builtin_call before its ARRAY_SET body
-// runs (§4.8).
+// __CPROVER_array_set / _array_copy / _array_replace / _havoc_object -- CBMC's
+// own memset lowering is retargeted to __ESBMC_memset in fix_builtin_call
+// before its ARRAY_SET body runs (§4.8).
 const char *rewrite_whole_object_codet(
   irept &code,
   const std::unordered_map<std::string, irept> &payload_extent)
@@ -1851,18 +1877,29 @@ const char *rewrite_whole_object_codet(
     return nullptr;
 
   const irep_idt stmt = code.find("statement").id();
-  if (stmt == "array_set" && rewrite_java_array_set(code, payload_extent))
-    return "16";
-  if (stmt == "array_set" && rewrite_array_set_fill(code))
-    return "13";
-  if (stmt == "havoc_object" && rewrite_havoc_object(code))
-    return "13";
-  if (stmt == "array_set" || stmt == "havoc_object")
-    throw std::string(
-      "CBMC adapter: '" + stmt.as_string() +
-      "' whole-object operations are not yet supported on the --binary path");
+  if (stmt == "array_set")
+  {
+    if (rewrite_java_array_set(code, payload_extent))
+      return "16";
+    if (rewrite_array_set_fill(code))
+      return "13";
+  }
+  else if (stmt == "array_copy" || stmt == "array_replace")
+  {
+    if (rewrite_array_copy(code))
+      return "13";
+  }
+  else if (stmt == "havoc_object")
+  {
+    if (rewrite_havoc_object(code))
+      return "13";
+  }
+  else
+    return nullptr;
 
-  return nullptr;
+  throw std::string(
+    "CBMC adapter: '" + stmt.as_string() +
+    "' whole-object operations are not yet supported on the --binary path");
 }
 
 irept instruction_to_esbmc_irep(
