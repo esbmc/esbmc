@@ -1331,3 +1331,51 @@ deliberately on the default, and `to_type2t` has no unexercised arm left bar
 
 Remaining: `jimple_virtual_invoke` (zero-count, needs its own test) and
 `jimple_throw`, still unfinished.
+
+## 31. `jimple_virtual_invoke` (#6891): the expression migration is complete
+
+The last zero-count kind, taken test-first.
+`github_4715_virtual_invoke_nondet_01` assigns from a `java.util.Random`
+virtual invoke, which is what `is_nondet_call()` recognises.
+
+That arm is the only one reachable through `to_expr2t`, for the same reason as
+§27: `jimple_assignment` sends an invoke right-hand side to the migrating
+default unless it is nondet, and the three skip arms and the main block path all
+produce *statements* from an expression method. Deletion proves nothing here
+(§27.1), so liveness is the corruption probe: 1/26, the new test.
+
+### 31.1 Where the frontend now stands
+
+Every expression kind `jimple_expr::get_expression` can construct is migrated
+or deliberately left on the migrating default, and every statement kind the
+dispatcher can construct is migrated. `to_type2t` has no unexercised arm bar
+`BOOLEAN`, which nothing can produce (§23.1).
+
+Deliberately on the default, each with a stated reason:
+
+| Construct | Reason |
+|---|---|
+| `jimple_identity`, `jimple_assertion` | unconstructible -- no `from_map` entry / not in the dispatcher (§19) |
+| invoke main paths (`jimple_invoke` expr form, `jimple_virtual_invoke`) | return a `code_blockt`; the statement forms are already native (§27, §31) |
+| `jimple_static_member` member access | marked "Needs OOP members"; rewrites a base in place (§25.2) |
+| `jimple_assignment` invoke arms | rewrite their own lhs and lower to a call (§22) |
+| `jimple_throw` | body commented out upstream; migrating it would pin an unfinished construct |
+
+### 31.2 What the corpus cost
+
+The suite went from 17 tests to 26. Nine were written to make something
+measurable, and only one of those (§20.1) was prompted by a hazard I had
+predicted -- the rest came from a mutant refusing to move and the reason having
+to be chased down. That ratio is the honest summary of the campaign: the
+migrations were mechanical, and the verification was the work.
+
+### 31.3 Status
+
+Twenty-one PRs: #6851, #6853, #6854, #6855, #6856, #6858, #6860, #6865, #6866,
+#6868, #6870, #6875, #6877, #6880, #6882, #6884, #6885, #6886, #6887, #6889,
+#6891, plus #6873 in support. All byte-identical, all mutant-checked bar the
+arms listed in §31.1.
+
+Next is not another jimple slice: it is `to_typet` -> `type2tc` at the
+*declaration* sites (`create_jimple_symbolt` still takes a `typet`, §23), which
+is a different shape of change, or a return to the parent document's Phase list.
