@@ -222,11 +222,13 @@ Flag-off versus flag-on, same binary, over the 1 672 runnable tests of
 
 | Measure | Result |
 |---|---|
-| new failures | **none** -- 20 non-zero exits either way over a 300-test sample |
-| content divergence | **none**, after removing two harness artifacts |
-| raw divergence before removing them | 1 550 / 1 672 |
+| new failures | **12** -- 73 non-zero exits flag-off, 85 flag-on, over all 1 686 |
+| content divergence | 17 tests, **real** (see §8.3) |
+| raw divergence before the §9 lookup fix | 1 550 / 1 672 |
 
-The gap between 1 550 and 0 is the whole story of this section.
+*(Both of the first two rows previously read "none". §8.5 records how that
+happened and why the errors were the ones this project's own harness rules
+predict.)*
 
 ### 8.2 Every C symbol trips the migrate warning
 
@@ -247,27 +249,54 @@ lookup would have. But it is a diagnostic-noise defect waiting for the flip:
 the moment this pass stops being optional, every C compilation emits one warning
 per symbol. C.4 owns fixing the lookup, not silencing the warning.
 
-### 8.3 The baseline is nondeterministic on 17 tests
+### 8.3 The 17 are real, and the walk aborts on unions
 
-Stripping the warnings left 17 divergences, clustered suggestively:
-`to_union_*` (5), `github_994-cast-to-bitfield-*` (3), `github_709*` (4). Unions
-and bitfields are precisely the two round-trip losses `python_adjust` names, so
-the obvious reading is that the walk corrupts them.
+Stripping the warnings left 17 divergences, clustered on `to_union_*` (5),
+`github_994-cast-to-bitfield-*` (3) and `github_709*` (4). Unions and bitfields
+are precisely the round-trip losses `python_adjust` names.
 
-The reading is wrong. Parent §7 harness rule 7 -- *run the baseline against
-itself before attributing a divergence to the patch* -- says check, and the
-check is decisive: running the **flag-off** binary twice over ten of those
-tests, **nine differ against themselves**, instructions moving relative to their
-location comments between runs.
+The abort is direct:
 
-So it is pre-existing nondeterminism in ESBMC's GOTO output, and the
-union/bitfield clustering is a coincidence of which tests happen to be unstable.
-Without the control this would have been reported as a migration defect in the
-two constructs most likely to have one.
+```
+Assertion failed: (is_union_type(type)), function constant_union2t,
+irep2_expr.h:495
+```
 
-**The phase's most useful harness note.** An A/B over this corpus needs both
-filters -- strip the migrate warnings, pre-identify the unstable tests -- or its
-signal-to-noise runs 17 : 1 555 the wrong way.
+`migrate_expr`'s union arm builds
+`constant_union2tc(migrate_type(expr.type()), ...)` (migrate.cpp:923). The
+union's type at that point is still a **by-name tag**, so `migrate_type` yields
+`symbol_type2t` and the constructor's assertion fires.
+
+This is the transient-by-name-aggregate hazard `python_adjust` documents, and
+running the walk *after* `clang_c_adjust` was meant to avoid it -- Python's
+comment says a post-`clang_cpp_adjust` walk is safe because the types are
+resolved by then. **That inheritance does not hold for C.** `clang_c_adjust`
+does not leave every aggregate tag resolved, and 12 of 1 686 tests reach a union
+constant that proves it.
+
+**This is the substantive Phase 6 finding**, and C.4 cannot use the adjuster
+seam until it is answered: either the walk runs somewhere the types are
+resolved, or aggregate resolution has to precede it.
+
+### 8.5 How this section came to say the opposite
+
+The first version of §8.1/§8.3 reported no new failures and attributed the 17 to
+baseline nondeterminism. Both were measurement errors, and both are the errors
+parent §7 warns about by name:
+
+| Claim | Method | Defect |
+|---|---|---|
+| "no new failures, 20 = 20" | exit codes over the **first 300 tests alphabetically** | rule 6 -- *sample dense and unbiased*. A prefix contains no `to_union_*`, no `github_9*`; the entire defect class sorts after it. |
+| "nine of ten differ against themselves" | flag-off twice, stripping **only** the migrate warnings | the real A/B normalises temp paths and timing too. Re-run with the same normaliser: **1 of 13**. The control was measuring noise the comparison already removed. |
+
+The second is the more instructive. Rule 7 says run the baseline against itself
+-- I did, and still got a wrong answer, because the control was not normalised
+the same way as the thing it was controlling for. **A control has to be
+identical to the measurement in every respect but the variable under test**;
+mine differed in two.
+
+Both errors pointed the same way -- towards "the pass is fine" -- which is the
+direction that requires no further work.
 
 ### 8.4 What C.3 does and does not establish
 
