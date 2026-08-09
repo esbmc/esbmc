@@ -1923,6 +1923,166 @@ extract_constructor_shape_dims(const nlohmann::json &shape_node)
 // carrying keyword arguments such as dtype= (ADR-NP principle 3: reject
 // explicitly instead of applying a silently different semantics).
 static std::optional<nlohmann::json>
+materialize_zeros_ones(const std::string &ctor, const nlohmann::json &args)
+{
+  if (args.empty())
+    return std::nullopt;
+  std::vector<std::size_t> dims = extract_constructor_shape_dims(args[0]);
+  // No upper dimension cap here: callers (e.g. transpose) apply their own
+  // dimensional limits and should see the real shape, not a generic
+  // fallback error from this helper silently declining to materialize.
+  if (dims.empty() || dims.size() > 8)
+    return std::nullopt;
+  // Matches the real zeros()/ones() creation path: no dtype= means a
+  // floating-point fill (make_numpy_typed_constant with an empty dtype
+  // always returns a floating-point JSON value).
+  const numeric_value fill = make_float_value(ctor == "zeros" ? 0.0 : 1.0);
+  return build_filled_array_literal(dims, 0, fill);
+}
+
+static std::optional<nlohmann::json>
+materialize_full(const nlohmann::json &args)
+{
+  if (args.size() < 2)
+    return std::nullopt;
+  std::vector<std::size_t> dims = extract_constructor_shape_dims(args[0]);
+  numeric_value fill;
+  if (
+    dims.empty() || dims.size() > 8 ||
+    !try_extract_numeric_constant(args[1], fill))
+    return std::nullopt;
+  return build_filled_array_literal(dims, 0, fill);
+}
+
+static std::optional<nlohmann::json>
+materialize_eye_identity(const std::string &ctor, const nlohmann::json &args)
+{
+  if (args.empty() || (ctor == "eye" && args.size() > 1))
+    return std::nullopt;
+  numeric_value n_value;
+  if (
+    !try_extract_numeric_constant(args[0], n_value) || !n_value.is_int ||
+    n_value.int_value < 0)
+    return std::nullopt;
+  const std::size_t n = static_cast<std::size_t>(n_value.int_value);
+  // Matches the real eye()/identity() creation path: 1/0 built from a
+  // plain C++ int literal, i.e. an integer dtype (not float64, unlike
+  // real NumPy's default -- see make_constant() in the creation path).
+  nlohmann::json node;
+  node["_type"] = "List";
+  node["elts"] = nlohmann::json::array();
+  for (std::size_t i = 0; i < n; ++i)
+  {
+    nlohmann::json row;
+    row["_type"] = "List";
+    row["elts"] = nlohmann::json::array();
+    for (std::size_t j = 0; j < n; ++j)
+      row["elts"].push_back(
+        build_constant_node(make_int_value(i == j ? 1 : 0)));
+    node["elts"].push_back(row);
+  }
+  return node;
+}
+
+static std::optional<nlohmann::json>
+materialize_linspace(const nlohmann::json &args)
+{
+  if (args.size() < 2 || args.size() > 3)
+    return std::nullopt;
+  numeric_value start_v;
+  numeric_value stop_v;
+  if (
+    !try_extract_numeric_constant(args[0], start_v) ||
+    !try_extract_numeric_constant(args[1], stop_v))
+    return std::nullopt;
+  std::size_t num = 50;
+  if (args.size() == 3)
+  {
+    numeric_value num_v;
+    if (
+      !try_extract_numeric_constant(args[2], num_v) || !num_v.is_int ||
+      num_v.int_value < 0)
+      return std::nullopt;
+    num = static_cast<std::size_t>(num_v.int_value);
+  }
+  // Matches the real linspace() creation path: every element is a float,
+  // computed with the same start + step * i formula.
+  const double start = to_double(start_v);
+  const double stop = to_double(stop_v);
+  nlohmann::json node;
+  node["_type"] = "List";
+  node["elts"] = nlohmann::json::array();
+  if (num == 0)
+    return node;
+  if (num == 1)
+  {
+    node["elts"].push_back(build_constant_node(make_float_value(start)));
+    return node;
+  }
+  const double step = (stop - start) / static_cast<double>(num - 1);
+  for (std::size_t i = 0; i < num; ++i)
+    node["elts"].push_back(build_constant_node(
+      make_float_value(start + step * static_cast<double>(i))));
+  return node;
+}
+
+static std::optional<nlohmann::json>
+materialize_arange(const nlohmann::json &args)
+{
+  if (args.empty() || args.size() > 3)
+    return std::nullopt;
+  std::vector<numeric_value> values;
+  values.reserve(args.size());
+  for (const auto &a : args)
+  {
+    numeric_value v;
+    if (!try_extract_numeric_constant(a, v))
+      return std::nullopt;
+    values.push_back(v);
+  }
+  double start = 0.0;
+  double stop;
+  double step = 1.0;
+  if (values.size() == 1)
+    stop = to_double(values[0]);
+  else
+  {
+    start = to_double(values[0]);
+    stop = to_double(values[1]);
+    if (values.size() == 3)
+      step = to_double(values[2]);
+  }
+  if (step == 0.0)
+    return std::nullopt;
+  // Matches the real arange() creation path: an int dtype unless any
+  // argument is float.
+  const bool any_float =
+    std::any_of(values.begin(), values.end(), [](const numeric_value &v) {
+      return !v.is_int;
+    });
+  nlohmann::json node;
+  node["_type"] = "List";
+  node["elts"] = nlohmann::json::array();
+  if (step > 0.0)
+  {
+    for (double current = start; current < stop; current += step)
+      node["elts"].push_back(build_constant_node(
+        any_float
+          ? make_float_value(current)
+          : make_int_value(static_cast<int64_t>(std::llround(current)))));
+  }
+  else
+  {
+    for (double current = start; current > stop; current += step)
+      node["elts"].push_back(build_constant_node(
+        any_float
+          ? make_float_value(current)
+          : make_int_value(static_cast<int64_t>(std::llround(current)))));
+  }
+  return node;
+}
+
+static std::optional<nlohmann::json>
 materialize_numpy_constructor_array(const nlohmann::json &call_node)
 {
   if (
@@ -1939,159 +2099,15 @@ materialize_numpy_constructor_array(const nlohmann::json &call_node)
   const auto &args = call_node["args"];
 
   if (ctor == "zeros" || ctor == "ones")
-  {
-    if (args.empty())
-      return std::nullopt;
-    std::vector<std::size_t> dims = extract_constructor_shape_dims(args[0]);
-    // No upper dimension cap here: callers (e.g. transpose) apply their own
-    // dimensional limits and should see the real shape, not a generic
-    // fallback error from this helper silently declining to materialize.
-    if (dims.empty() || dims.size() > 8)
-      return std::nullopt;
-    // Matches the real zeros()/ones() creation path: no dtype= means a
-    // floating-point fill (make_numpy_typed_constant with an empty dtype
-    // always returns a floating-point JSON value).
-    const numeric_value fill = make_float_value(ctor == "zeros" ? 0.0 : 1.0);
-    return build_filled_array_literal(dims, 0, fill);
-  }
-
+    return materialize_zeros_ones(ctor, args);
   if (ctor == "full")
-  {
-    if (args.size() < 2)
-      return std::nullopt;
-    std::vector<std::size_t> dims = extract_constructor_shape_dims(args[0]);
-    numeric_value fill;
-    if (
-      dims.empty() || dims.size() > 8 ||
-      !try_extract_numeric_constant(args[1], fill))
-      return std::nullopt;
-    return build_filled_array_literal(dims, 0, fill);
-  }
-
+    return materialize_full(args);
   if (ctor == "eye" || ctor == "identity")
-  {
-    if (args.empty() || (ctor == "eye" && args.size() > 1))
-      return std::nullopt;
-    numeric_value n_value;
-    if (
-      !try_extract_numeric_constant(args[0], n_value) || !n_value.is_int ||
-      n_value.int_value < 0)
-      return std::nullopt;
-    const std::size_t n = static_cast<std::size_t>(n_value.int_value);
-    // Matches the real eye()/identity() creation path: 1/0 built from a
-    // plain C++ int literal, i.e. an integer dtype (not float64, unlike
-    // real NumPy's default -- see make_constant() in the creation path).
-    nlohmann::json node;
-    node["_type"] = "List";
-    node["elts"] = nlohmann::json::array();
-    for (std::size_t i = 0; i < n; ++i)
-    {
-      nlohmann::json row;
-      row["_type"] = "List";
-      row["elts"] = nlohmann::json::array();
-      for (std::size_t j = 0; j < n; ++j)
-        row["elts"].push_back(
-          build_constant_node(make_int_value(i == j ? 1 : 0)));
-      node["elts"].push_back(row);
-    }
-    return node;
-  }
-
+    return materialize_eye_identity(ctor, args);
   if (ctor == "linspace")
-  {
-    if (args.size() < 2 || args.size() > 3)
-      return std::nullopt;
-    numeric_value start_v;
-    numeric_value stop_v;
-    if (
-      !try_extract_numeric_constant(args[0], start_v) ||
-      !try_extract_numeric_constant(args[1], stop_v))
-      return std::nullopt;
-    std::size_t num = 50;
-    if (args.size() == 3)
-    {
-      numeric_value num_v;
-      if (
-        !try_extract_numeric_constant(args[2], num_v) || !num_v.is_int ||
-        num_v.int_value < 0)
-        return std::nullopt;
-      num = static_cast<std::size_t>(num_v.int_value);
-    }
-    // Matches the real linspace() creation path: every element is a float,
-    // computed with the same start + step * i formula.
-    const double start = to_double(start_v);
-    const double stop = to_double(stop_v);
-    nlohmann::json node;
-    node["_type"] = "List";
-    node["elts"] = nlohmann::json::array();
-    if (num == 0)
-      return node;
-    if (num == 1)
-    {
-      node["elts"].push_back(build_constant_node(make_float_value(start)));
-      return node;
-    }
-    const double step = (stop - start) / static_cast<double>(num - 1);
-    for (std::size_t i = 0; i < num; ++i)
-      node["elts"].push_back(build_constant_node(
-        make_float_value(start + step * static_cast<double>(i))));
-    return node;
-  }
-
+    return materialize_linspace(args);
   if (ctor == "arange")
-  {
-    if (args.empty() || args.size() > 3)
-      return std::nullopt;
-    std::vector<numeric_value> values;
-    values.reserve(args.size());
-    for (const auto &a : args)
-    {
-      numeric_value v;
-      if (!try_extract_numeric_constant(a, v))
-        return std::nullopt;
-      values.push_back(v);
-    }
-    double start = 0.0;
-    double stop;
-    double step = 1.0;
-    if (values.size() == 1)
-      stop = to_double(values[0]);
-    else
-    {
-      start = to_double(values[0]);
-      stop = to_double(values[1]);
-      if (values.size() == 3)
-        step = to_double(values[2]);
-    }
-    if (step == 0.0)
-      return std::nullopt;
-    // Matches the real arange() creation path: an int dtype unless any
-    // argument is float.
-    const bool any_float =
-      std::any_of(values.begin(), values.end(), [](const numeric_value &v) {
-        return !v.is_int;
-      });
-    nlohmann::json node;
-    node["_type"] = "List";
-    node["elts"] = nlohmann::json::array();
-    if (step > 0.0)
-    {
-      for (double current = start; current < stop; current += step)
-        node["elts"].push_back(build_constant_node(
-          any_float
-            ? make_float_value(current)
-            : make_int_value(static_cast<int64_t>(std::llround(current)))));
-    }
-    else
-    {
-      for (double current = start; current > stop; current += step)
-        node["elts"].push_back(build_constant_node(
-          any_float
-            ? make_float_value(current)
-            : make_int_value(static_cast<int64_t>(std::llround(current)))));
-    }
-    return node;
-  }
+    return materialize_arange(args);
 
   return std::nullopt;
 }
