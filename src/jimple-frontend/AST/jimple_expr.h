@@ -152,6 +152,11 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
+  virtual expr2tc to_expr2t(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
   std::string binop;
   std::shared_ptr<jimple_expr> lhs;
   std::shared_ptr<jimple_expr> rhs;

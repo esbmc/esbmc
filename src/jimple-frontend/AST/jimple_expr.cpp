@@ -199,6 +199,40 @@ exprt jimple_binop::to_exprt(
     rhs->to_exprt(ctx, class_name, function_name));
 };
 
+// The operator reaches to_exprt as a legacy irep id -- gen_binary builds
+// exprt(binop, ...) -- so the usable set is whatever migrate_expr maps, not
+// whatever the Jimple producer emits. The corpus uses six: ==, +, notequal, -,
+// >= and >, with from_json rewriting == to = beforehand. Anything else falls
+// through to the base default and takes exactly the path it takes today, so an
+// operator this switch does not know cannot silently build the wrong node.
+expr2tc jimple_binop::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  expr2tc l = lhs->to_expr2t(ctx, class_name, function_name);
+  expr2tc r = rhs->to_expr2t(ctx, class_name, function_name);
+
+  // gen_binary gives the node the lhs type; the relational kinds force bool
+  // themselves, which is what migrate_expr produces for them too.
+  const type2tc &t = l->type;
+
+  if (binop == "+")
+    return add2tc(t, l, r);
+  if (binop == "-")
+    return sub2tc(t, l, r);
+  if (binop == "=")
+    return equality2tc(l, r);
+  if (binop == "notequal")
+    return notequal2tc(l, r);
+  if (binop == ">")
+    return greaterthan2tc(l, r);
+  if (binop == ">=")
+    return greaterthanequal2tc(l, r);
+
+  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+}
+
 void jimple_cast::from_json(const json &j)
 {
   jimple_type type;
