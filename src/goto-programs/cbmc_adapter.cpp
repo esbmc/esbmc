@@ -2085,10 +2085,10 @@ irept instruction_to_esbmc_irep(
 
   result.add("code") = code;
   result.add("location") = ins.source_location;
-  // fix_builtin_call rewrote a FUNCTION_CALL into an ASSIGN (malloc/sqrt/...) or
-  // an OTHER "free" codet; the instruction kind must agree with the rewritten
-  // code, not CBMC's original raw type. 13 is ASSIGN, 4 is OTHER (shared
-  // numbering, see map_cbmc_instruction_type).
+  // fix_builtin_call rewrote a FUNCTION_CALL into an ASSIGN (malloc/sqrt/...)
+  // or an OTHER "free" codet; the instruction kind must agree with the
+  // rewritten code, not CBMC's original raw type. 13 is ASSIGN, 4 is OTHER
+  // (shared numbering, see map_cbmc_instruction_type).
   // rewrite_whole_object_codet reports the kind its own rewrite implies.
   result.add("typeid") = mk(
     whole_object_kind ? whole_object_kind
