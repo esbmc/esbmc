@@ -2,6 +2,9 @@ name: Master Push
 on:
   push:
     branches: [master]
+  # Lets the sharded pipeline be re-run against a known commit, so its total
+  # can be compared with a previous unsharded run rather than assumed correct.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -9,8 +12,15 @@ concurrency:
 
 jobs:
   coverage:
-    name: Build and upload coverage to Codecov
+    name: Coverage shard ${{ matrix.shard }}/4
     runs-on: ubuntu-24.04
+    # A 4-vCPU hosted runner needs ~5.5h for the whole suite, against a 6h hard
+    # job limit; runner speed varies by ~20%, so unsharded runs miss the wall.
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v6
       - name: Install dependencies and build with coverage
@@ -20,7 +30,11 @@ jobs:
       - name: Run tests
         env:
           LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m.profraw"
-        run: mkdir -p build/coverage && cd build/ && ctest -j4 --progress . || true
+        # -I <shard>,,4 walks the suite with a stride of 4, so the shards
+        # partition it exactly and interleave slow suites across all four.
+        run: |
+          mkdir -p build/coverage && cd build/ && \
+          ctest -j4 --progress --timeout 600 -I ${{ matrix.shard }},,4 . || true
       - name: Merge coverage data
         run: llvm-profdata merge -sparse /tmp/esbmc-coverage/*.profraw -o build/merged.profdata
       - name: Generate lcov coverage report
@@ -36,8 +50,39 @@ jobs:
                '/usr/*' \
                '*/build/*' \
                --output-file coverage.info
+      - name: Save shard coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: coverage.info
+          retention-days: 1
+
+  upload:
+    name: Build and upload coverage to Codecov
+    runs-on: ubuntu-24.04
+    # Every shard must succeed: a missing shard would publish a partial figure
+    # as the repo total, which reads as a coverage regression.
+    needs: coverage
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install lcov
+        run: sudo apt-get update && sudo apt-get install -y lcov
+      - name: Fetch shard coverage
+        uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-shard-*
+          path: shards
+      - name: Combine shard coverage
+        run: |
+          args=()
+          for f in shards/*/coverage.info; do args+=(-a "$f"); done
+          # 'empty': llvm-cov's lcov export carries no function records, which
+          # lcov treats as an error when aggregating tracefiles.
+          lcov --ignore-errors inconsistent --ignore-errors corrupt \
+               --ignore-errors empty "${args[@]}" \
+               --output-file coverage.info
       - name: Upload to Codecov
         uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.info  
+          files: coverage.info

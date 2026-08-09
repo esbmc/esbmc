@@ -32,6 +32,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/lang/c_types.h>
 #include <util/lang/exception_specification.h>
 #include <util/expr/string_constant.h>
+#include <util/symtab/base_subobject.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -1891,6 +1892,43 @@ void clang_cpp_convertert::build_member_from_component(
   component.swap(member);
 }
 
+// A non-primary base subobject sits away from the start of the derived object
+// (multiple inheritance); `this` must be adjusted to that subobject before the
+// base destructor runs, otherwise ~Base reads the derived's leading storage
+// (github #6021). Prefer the structural address `&this->@base@B`, which derives
+// the offset from ESBMC's own layout and so agrees with the base ctor `this`
+// and the derived->base cast (#1866, #3894); `offset` is the clang-ABI fallback
+// for hierarchies that kept the legacy flattened layout (virtual bases, P5).
+exprt clang_cpp_convertert::base_dtor_this(
+  const clang::CXXRecordDecl &base,
+  const exprt &deref,
+  const irep_idt &this_id,
+  const typet &this_ptr_type,
+  uint64_t offset)
+{
+  std::string base_name, base_id;
+  get_decl_name(base, base_name, base_id);
+  const irep_idt comp = base_subobject_name(base_id);
+  const typet derived_struct = ns.follow(this_ptr_type.subtype());
+  const symbolt *base_sym = context.find_symbol(base_id);
+
+  if (
+    base_sym && derived_struct.is_struct() &&
+    to_struct_type(derived_struct).has_component(comp))
+    return address_of_exprt(
+      member_exprt(deref, comp, symbol_typet(base_sym->id)));
+
+  exprt this_expr = symbol_exprt(this_id, this_ptr_type);
+  if (offset == 0)
+    return this_expr;
+
+  typet char_ptr = pointer_typet(char_type());
+  gen_typecast(ns, this_expr, char_ptr);
+  plus_exprt adjusted(this_expr, from_integer(offset, index_type()));
+  adjusted.type() = char_ptr;
+  return adjusted;
+}
+
 bool clang_cpp_convertert::build_destructor_chain(
   const clang::CXXDestructorDecl &dd,
   code_blockt &body)
@@ -1930,25 +1968,14 @@ bool clang_cpp_convertert::build_destructor_chain(
   };
 
   // Cast `this` to the base's expected pointer type and emit the call.
-  // A non-primary base subobject sits at a non-zero byte offset within the
-  // derived object (multiple inheritance); `this` must be adjusted to that
-  // subobject before the base destructor runs, otherwise ~Base reads the
-  // derived's leading storage (github #6021). This mirrors the method-receiver
-  // adjustment in clang_c_convert.cpp (char* + byte offset + reinterpret).
-  auto emit_base_dtor = [&](const symbolt &sym, uint64_t offset) {
-    exprt this_expr = symbol_exprt(this_id, this_ptr_type);
-    if (offset > 0)
-    {
-      typet char_ptr = pointer_typet(char_type());
-      gen_typecast(ns, this_expr, char_ptr);
-      plus_exprt adjusted(this_expr, from_integer(offset, index_type()));
-      adjusted.type() = char_ptr;
-      this_expr = adjusted;
-    }
-    gen_typecast(
-      ns, this_expr, to_code_type(sym.get_type()).arguments().front().type());
-    emit_dtor_call(sym, std::move(this_expr));
-  };
+  auto emit_base_dtor =
+    [&](const symbolt &sym, const clang::CXXRecordDecl *rec, uint64_t offset) {
+      exprt this_expr =
+        base_dtor_this(*rec, deref, this_id, this_ptr_type, offset);
+      gen_typecast(
+        ns, this_expr, to_code_type(sym.get_type()).arguments().front().type());
+      emit_dtor_call(sym, std::move(this_expr));
+    };
 
   // 1. Member subobjects, reverse declaration order (C++ [class.dtor]/9).
   llvm::SmallVector<const clang::FieldDecl *, 8> fields(parent->fields());
@@ -2027,7 +2054,7 @@ bool clang_cpp_convertert::build_destructor_chain(
     const symbolt *sym = lookup_dtor(rec->getDestructor());
     if (!sym)
       continue;
-    emit_base_dtor(*sym, layout.getBaseClassOffset(rec).getQuantity());
+    emit_base_dtor(*sym, rec, layout.getBaseClassOffset(rec).getQuantity());
   }
 
   // 3. Virtual base subobjects, reverse declaration order.
@@ -2046,7 +2073,7 @@ bool clang_cpp_convertert::build_destructor_chain(
     // Virtual-base offsets are dynamic; ESBMC keeps virtual bases at the
     // flattened offset 0, matching the method-receiver path which likewise
     // skips static adjustment for virtual bases.
-    emit_base_dtor(*sym, 0);
+    emit_base_dtor(*sym, rec, 0);
   }
 
   return false;

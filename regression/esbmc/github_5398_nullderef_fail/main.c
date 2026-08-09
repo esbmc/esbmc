@@ -1,5 +1,6 @@
-// The NULL alternative of malloc(0) must be a genuine NULL pointer, not some
-// distinct zero-sized object that merely compares equal to it.
+// The NULL alternative of malloc(0) must stay a genuine NULL pointer: the
+// allocation tracking arrays are indexed by the dynamic object, never by the
+// conditional result, or __ESBMC_alloc[NULL] is set and this deref is missed.
 #include <stdlib.h>
 
 int main(void)

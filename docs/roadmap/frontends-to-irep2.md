@@ -1051,3 +1051,186 @@ What is left before the round-trip can be deleted is now short and named: the
 assert-fold in C/C++/Python, a Python A/B sweep that has never been run, and
 Solidity's eight residuals — which #6759 and #6760 already establish are *not*
 dispatcher defects.
+
+## 21. The Python A/B sweep, run at last — one site, not a class (2026-08-08)
+
+§20.4 listed "a Python A/B sweep that has never been run" as one of three items
+left before the round-trip can be deleted. It has now been run. Python joins
+Jimple as a frontend measured on **both** clauses of §18.5's criterion, and the
+result is narrower than the decline census suggested: the divergent set is large
+but it has exactly one cause.
+
+### 21.1 Result
+
+Stride-12 sample of `regression/python`, 379 of 4541 tests, `--goto-functions-only`
+on both arms:
+
+| | tests | |
+|---|---:|---|
+| byte-identical | **354** | |
+| stable divergence | **24** | all one site — §21.2 |
+| nondeterministic | 1 | `threading_thread_subclass_race_fail`, §19.3's class |
+
+The 24 are not 24 problems. Every one of them reduces to the same operand-level
+`#location`, and the tests that carry it are simply the tests that reach the
+`math` operational model — directly (`math1`, `math_edge_*`), or transitively
+(`cmath_*`, `harness_torch_allclose_fail`, `list_float_param_int`). The count
+measures corpus reach, not defect count.
+
+### 21.2 The site
+
+`src/python-frontend/models/math.py:276` — `y = (x + n // x) // 2`, the body of
+`isqrt`'s `while` loop. Legacy carries a `#location` on a **constant nested
+inside the expression tree**; the native dispatcher does not. It is an
+operand-level attribute, not an instruction location: the containing
+instruction's own location is identical on both arms, and no instruction text
+differs anywhere in the 24.
+
+That is a smaller claim than the decline census would have predicted, and it
+should not be inflated into one. What it is *not* is a W1-loc regression —
+W1-loc concerned instruction locations, which this sweep finds intact.
+
+### 21.3 Two normalisation gaps §20.3's pattern does not cover
+
+§20.3 widened the temp-name pattern to catch a synthetic file name without a
+leading slash. Two further per-run artefacts defeat that pattern on Python, and
+both must be normalised or the sweep reports false divergences:
+
+1. **The temp path escaped as decimal ASCII codes.** `ASSIGN __file__={ 47, 116,
+   109, 112, 47, 101, 115, 98, 109, 99, ... }` is `/tmp/esbmc-python-astgen-<hash>/...`
+   character by character. No text pattern over `esbmc*` can see it. Every test
+   that imports a model carries this line.
+2. **Heap addresses in temp symbol names.** `ESBMC_unpack_temp_127415336141168`
+   and `unpack_134378588261744_0` embed a pointer value, so they vary with ASLR
+   between any two runs. Note the two distinct prefixes: normalising only
+   `ESBMC_unpack_temp_` leaves `github_4792` reporting a false divergence, which
+   is how it was initially miscounted here.
+
+Both were caught by the §7 rule 7 self-control, not by inspection. Widening a
+normalisation can in principle mask a real difference — if two distinct temps
+were confused by the same rewrite — so these two rules are deliberately narrow:
+they rewrite the numeric field only, and leave the surrounding structure to be
+compared.
+
+### 21.4 The nondeterministic residual
+
+`threading_thread_subclass_race_fail` diverges, but a 5×5 self-control gives
+`native_variants=2`, `legacy_variants=3`, and the two sets intersect: **neither
+arm is internally stable**. The race-check assertions and their comment lines
+are emitted in a varying order, with the native path off as well as on. This is
+the same class as §19.3's Solidity locations and §20.3's C temp file name, and
+the third frontend on which it has now appeared — the pattern is general enough
+that a self-control should be the default before any A/B divergence is believed,
+not a step reserved for suspicious results.
+
+### 21.5 Reproduction
+
+The A/B needs no instrumentation. Per test, run `--goto-functions-only` with and
+without `--no-irep2-native-body`, normalise, and compare. The normalisation is
+§18.6's, plus §21.3:
+
+```sh
+sed -e 's@esbmc[-._][A-Za-z0-9._-]*@TMPD@g' \
+    -e 's@^\(.*time\): [0-9.]*s$@\1: TIME@' \
+    -e 's@ESBMC_unpack_temp_[0-9][0-9]*@ESBMC_unpack_temp_N@g' \
+    -e 's@\bunpack_[0-9][0-9]*_@unpack_N_@g' \
+    -e 's@\(ASSIGN __file__=\).*@\1TMPD_BYTES@'
+```
+
+For any divergence, run each arm five times and compare the *sets* of hashes
+before believing it (§19.4).
+
+### 21.6 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc-cpp` | drained; residue = assert-fold | gated per patch (§11.4) |
+| `esbmc` (C) | 4 / 60 tests | 138/138 (stride-12, §20.3 normalisation) |
+| `python` | dominant site fixed by #6695 (merged) | **354/379 (stride-12); 24 = one site, 1 nondeterministic** |
+| `esbmc-solidity` | 0 / 26 | 502/510; 8 residuals = #6759, #6760 |
+| `jimple` | 0 / 15 | 15/15 |
+
+The Python row is now measured rather than blank. What is left before the
+round-trip can be deleted is the assert-fold in C/C++/Python, Solidity's eight
+residuals (#6759, #6760), and this one `isqrt` operand location — left to a
+separate patch rather than fixed here, so that the measurement and the fix are
+not entangled in one change.
+
+### 21.7 The obvious fix for §21.2 is refuted
+
+Recorded in §14's spirit, because the candidate is the one anybody looking at
+§21.2 will reach for first, and it is wrong in a way the A/B metric actively
+hides.
+
+`handle_floor_division` (`python_math.cpp`) builds the correction ternary with
+`python_expr::build_if(cond, gen_one(div_type), gen_zero(div_type))` and sets no
+location, while the float path three lines up does
+`floor_call.location() = bin_expr.location()`. The obvious patch is to make the
+integer path match:
+
+```c++
+if_expr.location() = bin_expr.location();
+```
+
+It works, by the metric. All 24 divergent tests plus `github_4792` go to
+byte-identical — 25/25.
+
+**It is still wrong.** Measure the *legacy* arm before and after, which the A/B
+alone never does:
+
+| | line | column |
+|---|---:|---:|
+| legacy, before the patch | 276 | 8 |
+| legacy, after the patch | 265 | 10 |
+
+`bin_expr.location()` is not the statement's location — 265 is up in the
+function-header region, not the `y = (x + n // x) // 2` the instruction came
+from. Pre-setting a location in the converter makes `restore_value_locations` a
+no-op on that node, because it only fills nodes that are location-*less*
+(`goto_convert_functions.cpp`). So the patch does not pull native up to legacy;
+it pulls **both arms down** onto a worse location, and byte-identity improves
+because fidelity got uniformly worse on both sides.
+
+Two things follow, and the second is the more general one:
+
+1. The real fix is on the native side, not in the converter: an IREP2-level
+   equivalent of `stamp_value_locations` that fills a nil `if2t::location` from
+   the enclosing statement. That touches the shared dispatcher, so it wants its
+   own gates and its own patch — it is deliberately not attempted here.
+2. **Byte-identity is a comparison, not a correctness measure.** It cannot tell
+   "native was fixed" from "legacy was broken to match". Any patch justified by
+   a divergence count must also show the legacy arm unchanged; §18.4's A/B
+   protocol does not require that today, and this is the case that shows it
+   should.
+
+### 21.8 The fix landed — and the sweep understated its reach by 3 sites
+
+§21.7's "real fix is on the native side" is #6835. Two things about it are worth
+recording here, because they are properties of *this sweep*, not of that patch.
+
+**The divergence set named one emission site; four were affected.** The nil
+`if2t::location` is not specific to the assignment handler. A nested ternary can
+also travel through the native `return`, the bare-call and the
+expression-statement emission points, and all three dropped the location the
+same way. None of them appears in §21.1's divergent set — no test in the
+stride-12 sample happened to put a floor division in a return or a call
+argument, so the sweep reported those paths clean.
+
+This is §20.2's M1 result reached from the other direction. There, no verdict
+test could distinguish a delegation arm that exists from one that does not, and
+only the census could. Here, no A/B sweep could distinguish an emission site
+that stamps from one that does not *unless the corpus happens to route a ternary
+through it* — and a 379-test sample routed one through exactly one of four. The
+sites were found by probing each emission point directly with a constructed
+input, after reading the handlers.
+
+**So a divergence count is a lower bound on defect reach, never a measure of
+it.** §21.1's "24 divergences, one site" was accurate about what diverged and
+misleading about what was broken: the correct statement is *one site observed,
+reach unmeasured*. Any future sweep row should be read that way, and a fix
+derived from one should enumerate the code paths that share the cause rather
+than the tests that happened to catch it.
+
+The corresponding correction to §21.6: the `isqrt` operand location is no longer
+"left to a separate patch" — it is #6835, covering all four sites, with A/B test
+pairs whose native arms fail without it.

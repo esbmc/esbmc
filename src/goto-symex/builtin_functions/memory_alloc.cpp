@@ -10,13 +10,10 @@
 #include <util/irep/migrate.h>
 #include <util/irep/std_types.h>
 #include <util/expr/type_byte_size.h>
+#include <util/symtab/base_subobject.h>
 #include <utility>
 #include <vector>
 #include <algorithm>
-
-// Component-name prefix the C++ frontend uses for nested base subobjects; see
-// base_subobject_name() in clang-c-frontend/clang_c_convert.h (#1866, #3894).
-static const std::string base_subobject_prefix = "@base@";
 
 // Collect the byte offset and class type of every (transitively) nested base
 // subobject of `t`, relative to the start of `t`.
@@ -38,7 +35,7 @@ static void collect_base_subobject_offsets(
   {
     const std::string name = st.member_names[i].as_string();
     if (
-      name.compare(0, base_subobject_prefix.size(), base_subobject_prefix) != 0)
+      name.compare(0, BASE_SUBOBJECT_PREFIX.size(), BASE_SUBOBJECT_PREFIX) != 0)
       continue;
 
     const BigInt off = base + member_offset(ft, st.member_names[i], &ns);
@@ -621,7 +618,10 @@ expr2tc goto_symext::symex_mem(
 
     do_simplify(size);
     if (is_constant_int2t(size))
-      size_is_one = to_constant_int2t(size).value == 1;
+    {
+      if (to_constant_int2t(size).value == 1)
+        size_is_one = true;
+    }
     else if (
       is_malloc && is_unsignedbv_type(size->type) &&
       size->type->get_width() >= ptraddr_type2()->get_width())
