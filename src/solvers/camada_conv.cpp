@@ -69,8 +69,17 @@ static void z3_error_handler(Z3_context c, Z3_error_code e)
 class esbmc_z3_solver : public camada::Z3Solver
 {
 public:
-  explicit esbmc_z3_solver(z3::context c, camada::ArrayEncoding arrays)
-    : camada::Z3Solver(std::move(c), arrays)
+  /* camada v0.15 pins Z3 back to 4.13.3, whose z3::context has no move
+   * constructor, so Z3Solver takes a z3::config (or nothing) instead of a
+   * context. Mirror both shapes. */
+  explicit esbmc_z3_solver(camada::ArrayEncoding arrays)
+    : camada::Z3Solver(arrays)
+  {
+    setSolver(make_solver(camada::Z3Solver::context()));
+  }
+
+  explicit esbmc_z3_solver(z3::config &cfg, camada::ArrayEncoding arrays)
+    : camada::Z3Solver(cfg, arrays)
   {
     setSolver(make_solver(camada::Z3Solver::context()));
   }
@@ -424,13 +433,13 @@ camada::SMTSolverRef create_esbmc_z3_solver(const optionst &options)
   const bool smtlib2_compliant = options.get_bool_option("smt-formula-only") ||
                                  options.get_bool_option("smt-formula-too");
 
-  // camada v0.11 reverted Z3Solver to take z3::context by value (with a move).
-  // Build the configured context once and pass it through; the cfg branch only
-  // fires for the z3-debug / smtlib-compliant modes.
-  auto make_context = [&] {
-    if (!z3_debug && !smtlib2_compliant)
-      return z3::context();
-
+  /* The config branch only fires for the z3-debug / smtlib-compliant
+   * modes; the plain path uses the default context. */
+  std::unique_ptr<esbmc_z3_solver> solver;
+  if (!z3_debug && !smtlib2_compliant)
+    solver = std::make_unique<esbmc_z3_solver>(pick_array_encoding(options));
+  else
+  {
     z3::config cfg;
     if (z3_debug)
     {
@@ -440,14 +449,11 @@ camada::SMTSolverRef create_esbmc_z3_solver(const optionst &options)
       cfg.set("well_sorted_check", "true");
     }
 
-    if (z3_debug || smtlib2_compliant)
-      cfg.set("smtlib2_compliant", "true");
+    cfg.set("smtlib2_compliant", "true");
 
-    return z3::context(cfg);
-  };
-
-  auto solver = std::make_unique<esbmc_z3_solver>(
-    make_context(), pick_array_encoding(options));
+    solver =
+      std::make_unique<esbmc_z3_solver>(cfg, pick_array_encoding(options));
+  }
   solver->configure();
   return solver;
 #else
