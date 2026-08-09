@@ -1,6 +1,6 @@
 # Plan — affording the schedule space #6607 exposed (issue #6831, cause 1)
 
-**Status:** plan only. No code shipped. Nothing here has been implemented.
+**Status:** W0 shipped; W1–W4 not started.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 1 —
 schedule-space explosion*, 291 of 489 lost SV-COMP tasks.
 **Bisected to:** `bac652b13c` — `[goto-symex] Track main-thread termination per
@@ -121,20 +121,41 @@ Two orthogonal levers, both open:
 
 ## 4. Workstreams
 
-### W0 — Instrument the reduction (prerequisite, no behaviour change)
+### W0 — Instrument the reduction (prerequisite, no behaviour change) — **done**
 
-Nothing today reports schedules pruned by MPOR, pruned by state hashing,
-pruned by the context bound, or explored. Every measurement in §2 had to be
-obtained by toggling flags and re-running whole verifications, which cannot be
-done across an SV-COMP set.
+Nothing reported schedules pruned by MPOR, pruned by state hashing, pruned by
+the context bound, or explored. Every measurement in §2 had to be obtained by
+toggling flags and re-running whole verifications, which cannot be done across
+an SV-COMP set.
 
-Add counters on `reachability_treet` and report them at `--verbosity` (and in
-the JSON/SARIF run summary if cheap): `schedules_explored`,
-`pruned_by_mpor`, `pruned_by_hash`, `pruned_by_cs_bound`. W1 and W2 are not
-assessable without this, so it lands first.
+`reachability_treet::reduction_stats` now carries `peak_threads`,
+`schedules_explored`, `pruned_by_mpor`, `pruned_by_hash` and
+`pruned_by_cs_bound`, emitted as one line at the end of a run:
 
-**Exit:** the §2.1 table reproducible from one run per configuration, and a
-per-category prune rate obtainable from an SV-COMP log.
+```
+Schedule reduction: peak_threads 3, schedules_explored 940, pruned_by_mpor 296, pruned_by_hash 0, pruned_by_cs_bound 335643
+```
+
+The three prune counters share a unit — context-switch points at which that
+reduction stopped the search branching further — while `schedules_explored`
+counts formulas. The line is suppressed when `peak_threads == 1`, so sequential
+runs are unaffected. `peak_threads` is what makes that gate possible; it is not
+otherwise part of the plan.
+
+**Exit — discharged.** §2.1 now reads off one run per configuration:
+
+| configuration | schedules | pruned_by_mpor | pruned_by_hash |
+|---|---|---|---|
+| baseline (MPOR on, hashing off) | 940 | 296 | 0 |
+| `--state-hashing` | 940 | 296 | **0** |
+| `--no-por` | 1171 | 0 | 0 |
+| `--no-por --state-hashing` | 1155 | 0 | 20 |
+
+(One more than §2.1's counts: that table quoted `interleaving_number`, which is
+read before the final interleaving increments it.) Hashing is now shown to
+prune nothing *behind MPOR* and only 20 of 1175 with MPOR off — the two
+reductions are not additive, and W2's hypothesis can be tested without a
+rebuild.
 
 ### W1 — Make partial-order reduction prune harder (highest leverage)
 
