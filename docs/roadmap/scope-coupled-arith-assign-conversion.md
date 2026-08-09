@@ -961,3 +961,47 @@ exactly the runs I was reading. The check that would have caught it costs one
 command: `grep -c promote_to_ieee src/python-frontend/python_adjust.cpp`.
 
 G4 therefore stands where §16 left it, minus the confidence §18.1 claimed.
+
+## 19. The reduction repaired, and G4's real blocker isolated (2026-08-09)
+
+§18.5 invalidated §18's flip measurements and said the reduction negatives had
+to be re-run. Done, with the build state checked first
+(`grep -c promote_to_ieee` = 2, then `ninja`).
+
+### 19.1 All nine negatives reconfirmed
+
+`r1`, `r3`, `r4`, `r6` and `c1`-`c5` — every reduced candidate — verify
+SUCCESSFUL under `--python-irep2-adjust-only` on a binary that **does** contain
+#6839. The reduction evidence §18.5 put in doubt is repaired unchanged: none of
+`append`, `in`, list assignment alone, or equality against `[]` triggers the
+width assert, on either a class attribute or a bare module-level list.
+
+### 19.2 The blocker is list equality over *string* elements
+
+The cost §18.4 found is narrower than "list equality against a non-empty
+literal". On the **default path**, no flags:
+
+| program | result |
+|---|---|
+| `m: list = [1]` &nbsp;`assert m == [1]` | SUCCESSFUL, fast |
+| `m: list = ["y"]` &nbsp;`assert len(m) == 1` | SUCCESSFUL, fast |
+| `m: list = ["y"]` &nbsp;`assert m == ["y"]` | **no verdict in 120 s** |
+
+So: integer elements are fine, and `len` over a string list is fine. It is the
+**equality comparison of a list whose elements are strings** that does not
+terminate. Two lines, default flags, no adjuster involved.
+
+### 19.3 Why this is G4's blocker and not a footnote
+
+`class10` and `class12` both compare string lists — `obj1.mutable_attr ==
+["instance_specific"]` — so with #6839 compiled in, **both arms of both tests
+time out** (§18.5). G4's census cannot classify a test it cannot run, and the
+two divergences it has surfaced cannot be re-confirmed while this stands.
+
+Fixing or bounding this is therefore a **prerequisite for G4**, not a parallel
+task, and it belongs to the list operational model rather than to this scope.
+It has no open issue as far as a search of the tracker shows.
+
+**Not filed here**: opening an issue is a shared-state action outside what this
+work was asked to do, so the reproducer is recorded and the filing left as a
+decision.
