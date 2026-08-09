@@ -2,6 +2,7 @@
 #define ESBMC_JIMPLE_METHOD_BODY_H
 
 #include <jimple-frontend/AST/jimple_ast.h>
+#include <util/irep/migrate.h>
 #include <util/irep/std_code.h>
 
 /**
@@ -17,6 +18,24 @@ public:
   {
     exprt dummy;
     return dummy;
+  }
+
+  /**
+   * @brief The IREP2 form of the body, for symbolt::set_value(const expr2tc &).
+   *
+   * K.1 of docs/roadmap/scope-jimple-irep2.md. The default migrates whatever
+   * to_exprt built, so a subclass that has not been converted yet keeps
+   * working; each override that lands removes one migration rather than adding
+   * one, which is why this migration runs from the seam downwards.
+   */
+  virtual expr2tc to_code2t(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const
+  {
+    expr2tc body;
+    migrate_expr(to_exprt(ctx, class_name, function_name), body);
+    return body;
   }
 };
 
