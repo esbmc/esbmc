@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--state-hashing
+^VERIFICATION FAILED$

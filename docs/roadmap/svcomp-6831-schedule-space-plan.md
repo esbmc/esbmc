@@ -1,6 +1,7 @@
 # Plan — affording the schedule space #6607 exposed (issue #6831, cause 1)
 
-**Status:** W0 shipped; W1–W4 not started.
+**Status:** W0 shipped. W2 diagnosed and re-scoped — `--state-hashing` is
+**unsound**, not merely useless (see W2). W1, W3, W4 not started.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 1 —
 schedule-space explosion*, 291 of 489 lost SV-COMP tasks.
 **Bisected to:** `bac652b13c` — `[goto-symex] Track main-thread termination per
@@ -66,6 +67,11 @@ Two results drive this plan:
 
 The 939 reproduces the issue's reported 940.
 
+**Superseded on the hashing row.** W2 re-measured this across all 314
+concurrent CORE tests rather than this one: hashing prunes on 62 of them and
+saves 16.5 % wall overall. `01_malloc_20` is an outlier, not a summary. It is
+also unsound on four of them — see W2.
+
 ### 2.2 The same reproducer under the SV-COMP flag shape
 
 `scripts/competitions/svcomp/esbmc-wrapper.py` passes **no `--context-bound`**,
@@ -109,9 +115,9 @@ solver would be aimed at 7.7 % of the run.
 
 Two orthogonal levers, both open:
 
-- **A — explore fewer schedules.** MPOR is the only reduction that fires; state
-  hashing contributes ~0. Nothing reports how much either pruned, so no
-  benchmark can currently be diagnosed without rebuilding with counters.
+- **A — explore fewer schedules.** MPOR is the only reduction that fires on this
+  reproducer; W2 shows state hashing fires on plenty of others, unsoundly.
+  W0 added the counters this diagnosis needed.
 - **B — make each schedule cheaper.** Each of the 940 schedules is symexed,
   sliced, encoded and solved as an independent formula. The DFS restores
   execution states on backtracking, but the per-formula pipeline downstream of
@@ -183,24 +189,58 @@ Candidates, cheapest first:
 `--context-bound 2`, with no verdict change anywhere in the concurrency
 regression suites, and #4584's regression test still detecting its race.
 
-### W2 — Fix state hashing or stop paying for it
+### W2 — Fix state hashing or stop paying for it — **re-scoped: it is unsound**
 
-Measured contribution: 0 % bounded, 1.8 % unbounded, for ~4 % wall.
+W2 was written around "prunes ~0 for ~4 % wall". Both halves of that premise
+were artefacts of measuring one reproducer. Running every CORE test in
+`esbmc-unix` and `esbmc-unix2` twice — once stock, once with `--state-hashing`
+— over the 314 that reach more than one thread, with W0's counters:
 
-The L2 fingerprint (`state_hashing_level2t::generate_l2_state_hash()`,
-`execution_state.cpp:1625`) mixes every assigned symbol's original name and
-value hash. Hypothesis to test first: it is too *fine* — thread-local and dead
-variables enter the fingerprint, so two states that are equivalent for
-scheduling purposes hash differently and never collide.
+- **Verdict changes: 4**, every one of them `FAILED` → `SUCCESSFUL`.
+- Schedules: fewer with hashing on **62** tests, equal on 247, more on none.
+- Wall over the tests whose verdict agreed: 372 s → 310 s, **−16.5 %**.
 
-Steps: restrict the fingerprint to shared state (globals plus reachable heap)
-plus the per-thread PC vector; optionally intersect with liveness the slicer
-already computes. Re-measure prune rate with W0's counters.
+So hashing does prune, sometimes enormously (`11_cook.fig2.pldi07`
+11,130 → 79 schedules, 25.0 s → 0.6 s; `github_3449` 2134 → 621). `01_malloc_20`,
+where §2.1 measured it, is simply a case where it prunes nothing — it is not
+representative.
 
-**Exit:** either a prune rate that pays for its own cost on the concurrency
-suites, or a PR removing `--state-hashing` from `esbmc_dargs` in
-`esbmc-wrapper.py` with the measurement quoted. Both are acceptable outcomes;
-the current state — paying 4 % for ~0 — is not.
+**The finding that matters is the soundness one.** These four CORE tests, whose
+`test.desc` expects `VERIFICATION FAILED`, return `VERIFICATION SUCCESSFUL`
+when `--state-hashing` is added, on stock `master` with no other flag change:
+
+| test | stock | `--state-hashing` |
+|---|---|---|
+| `esbmc-unix2/00_mpor1` | FAILED | **SUCCESSFUL** |
+| `esbmc-unix2/00_mpor2` | FAILED | **SUCCESSFUL** |
+| `esbmc-unix/race_guard_other_write` | FAILED | **SUCCESSFUL** |
+| `esbmc-unix/race_guard_self_clear` | FAILED | **SUCCESSFUL** |
+
+The fingerprint collides two states that are not bisimilar, and
+`post_hash_collision_cleanup()` then marks every switch from that point
+explored, so the schedule carrying the violation is never generated. This is
+the §7 "re-truncation" failure mode, already shipped, and
+`esbmc-wrapper.py:237` passes `--state-hashing` in `esbmc_dargs` — so SV-COMP
+runs are exposed to it. A wrong `true` is scored far more harshly than an
+`unknown`, which makes this a bigger liability than any timeout W1–W3 address.
+
+Pinned by `regression/esbmc-unix/github_6831_hashing_unsound{,_mpor}`
+(KNOWNBUG, expecting the correct FAILED) so a fix flips them to CORE.
+
+Revised order:
+
+1. **Diagnose the collision.** The hypothesis that the fingerprint is too
+   *fine* is now the wrong end: it is too *coarse* somewhere. Not yet located —
+   an allocation-naming hypothesis (the monotone `dynamic_counter` making
+   post-`malloc` states unique) was tested with a controlled probe and
+   **rejected**: the probe still pruned 76 states.
+2. **Fix or disable.** Until a fix exists, disabling `--state-hashing` in
+   `esbmc_dargs` is the sound choice, and costs the −16.5 % above.
+3. Only then revisit making it prune harder.
+
+**Exit:** the four tests above pass with `--state-hashing`, or the flag is out
+of `esbmc_dargs`. Performance tuning of the fingerprint is not in scope until
+one of those holds.
 
 ### W3 — Stop redoing per-schedule work
 
