@@ -1,4 +1,5 @@
 #include <jimple-frontend/AST/jimple_expr.h>
+#include <irep2/irep2_expr.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
@@ -20,6 +21,18 @@ exprt jimple_constant::to_exprt(
   return constant_exprt(
     integer2binary(as_number, 10), integer2string(as_number), int_type());
 };
+
+// The leaf of this frontend's expression tree: a literal with no context and no
+// operands, so it converts with nothing left to migrate. Matches what
+// migrate_expr makes of the constant_exprt above -- int_type() is signedbv, so
+// the IREP2 form is a constant_int2t of the same width.
+expr2tc jimple_constant::to_expr2t(
+  contextt &,
+  const std::string &,
+  const std::string &) const
+{
+  return constant_int2tc(migrate_type(int_type()), BigInt(std::stoi(value)));
+}
 
 void jimple_symbol::from_json(const json &j)
 {
