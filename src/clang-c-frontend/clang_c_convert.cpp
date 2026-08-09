@@ -2196,6 +2196,21 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  // C23 6.4.4.5: true and false are predefined constants, which clang models
+  // with the same node it uses for the C++ keywords.
+  case clang::Stmt::CXXBoolLiteralExprClass:
+  {
+    const clang::CXXBoolLiteralExpr &bool_literal =
+      static_cast<const clang::CXXBoolLiteralExpr &>(stmt);
+
+    if (bool_literal.getValue())
+      new_expr = true_exprt();
+    else
+      new_expr = false_exprt();
+
+    break;
+  }
+
   // A float value
   case clang::Stmt::FloatingLiteralClass:
   {
