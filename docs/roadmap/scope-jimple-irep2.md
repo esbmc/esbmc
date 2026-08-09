@@ -430,3 +430,63 @@ That turns the 17-test corpus from a validation problem into a sufficiency
 question — the tests need only show that the mapped operators are mapped
 correctly, because the unmapped ones are unchanged by construction. Byte
 identity over the six above does exactly that.
+
+## 16. `jimple_assignment` is gated on a typecast equivalence, not on jimple
+
+#6860 migrated the relational operators but left `+` and `-` inert, because they
+appear only in assignments. `jimple_assignment` is therefore the next slice by
+value. It is not takeable yet, and the reason is not local to this frontend.
+
+### 16.1 Three paths, two of which must fall back regardless
+
+`jimple_assignment::to_exprt` has:
+
+1. `is_skip` — returns a bare `code_skipt`.
+2. Two `dynamic_pointer_cast` special cases for `jimple_expr_invoke` and
+   `jimple_virtual_invoke`, which **mutate** the right-hand side
+   (`dyn_expr->set_lhs(lhs_handle)`) and then return `rhs->to_exprt(...)` — a
+   *statement*, not an assignment.
+3. The plain path: build both sides, implicit-cast the right to the left's type,
+   emit `code_assignt`.
+
+Paths 1 and 2 fall back to the default cleanly; the partial-override design
+already allows that. Path 3 is the one worth migrating.
+
+### 16.2 The gate: two implementations of implicit_typecast, not one
+
+Path 3 calls `c_typecastt::implicit_typecast(exprt &, const typet &)`. The IREP2
+counterpart exists — `c_implicit_typecast(expr2tc &, const type2tc &, const
+namespacet &)` — but it is **not a wrapper over the legacy one**:
+
+```cpp
+void c_typecastt::implicit_typecast(expr2tc &expr, const type2tc &type)
+{
+  ...
+  implicit_typecast_followed(expr, src_type, dest_type);   // parallel impl
+}
+```
+
+So migrating path 3 swaps one typecast implementation for another and *assumes*
+they agree. Byte-identity over 17 jimple tests would exercise that assumption
+only on the casts those tests happen to perform — the same insufficiency §15.2
+solved for operators by falling back, and which does **not** apply here, because
+there is no "unmapped" case to fall back on: every assignment takes the cast.
+
+### 16.3 Why this is worth naming separately
+
+Every frontend in Phases 5-9 performs implicit casts at assignment. If the two
+implementations diverge anywhere, each migration inherits the divergence, and
+the byte-identity gate will catch it only where the corpus happens to look.
+
+That makes `c_typecastt::implicit_typecast(exprt&)` ≡ `(expr2tc&)` a
+**program-level prerequisite**, in the same class as §8.1's parallel-method
+technique: settle it once, or discover it five times. Establishing it is a
+differential-testing question over the two implementations, not a jimple task,
+and it belongs in the parent document rather than here.
+
+### 16.4 Status
+
+Seven slices shipped (#6851, #6853, #6854, #6855, #6856, #6858, #6860), all
+byte-identical over the full suite. The next jimple slice by value is blocked on
+§16.2; the next one that is *not* is `jimple_symbol` (146 lines, the largest of
+the 27 overrides and the one the remaining statements all reach through).
