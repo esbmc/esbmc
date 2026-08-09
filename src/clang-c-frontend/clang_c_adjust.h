@@ -43,6 +43,9 @@ protected:
    * and other IRs derived from exprt
    */
   void adjust_expr(exprt &expr);
+  void adjust_base_to_derived(exprt &expr);
+  void adjust_struct(exprt &expr);
+  void adjust_ptr_mem(exprt &expr);
   void adjust_side_effect_assignment(exprt &expr);
   virtual void
   adjust_side_effect_function_call(side_effect_expr_function_callt &expr);

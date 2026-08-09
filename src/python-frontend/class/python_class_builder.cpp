@@ -42,6 +42,41 @@ symbolt *python_class_builder::ensure_sym(const std::string &name)
 
 /* Handles inheritance: collects user-defined base classes and
  * merges their components (fields) into the derived struct type. */
+/// Add the converted method \p sid to \p st's method table, reporting whether
+/// it could be. get_function_definition does not always leave a symbol behind
+/// -- a method whose body defines a class is not converted -- and
+/// dereferencing that miss segfaulted, since the recovery here only ever
+/// caught exceptions. Such a method stays callable directly; it is only absent
+/// from the table, so dispatch through it may not resolve.
+bool python_class_builder::register_method(
+  struct_typet &st,
+  const symbol_id &sid)
+{
+  const std::string id = sid.to_string();
+  symbolt *method_symbol = conv_.symbol_table_.find_symbol(id);
+  if (!method_symbol)
+  {
+    log_warning(
+      "{}: no symbol after conversion, so it is missing from the class's "
+      "method table; a class defined inside a method is not supported",
+      id);
+    return false;
+  }
+
+  try
+  {
+    exprt me = symbol_expr(*method_symbol);
+    st.methods().emplace_back(me.name(), me.type());
+  }
+  catch (const std::exception &e)
+  {
+    log_error("Exception creating symbol_expr for {}: {}", id, e.what());
+    return false;
+  }
+
+  return true;
+}
+
 bool python_class_builder::get_bases(struct_typet &st)
 {
   bool has_ud = false;
@@ -110,20 +145,8 @@ void python_class_builder::get_members(
       symbol_id method_sid = conv_.create_symbol_id();
       conv_.current_func_name_ = saved_func_for_lookup;
 
-      symbolt *method_symbol =
-        conv_.symbol_table_.find_symbol(method_sid.to_string());
-
-      try
+      if (!register_method(st, method_sid))
       {
-        exprt me = symbol_expr(*method_symbol);
-        st.methods().emplace_back(me.name(), me.type());
-      }
-      catch (const std::exception &e)
-      {
-        log_error(
-          "Exception creating symbol_expr for {}: {}",
-          method_sid.to_string(),
-          e.what());
         conv_.current_func_name_ = saved_func_name;
         continue;
       }

@@ -9,6 +9,9 @@
 #include "iostream"
 #include "algorithm"
 #include "functional"
+#if __cplusplus >= 201103L
+#  include <initializer_list>
+#endif
 
 namespace std
 {
@@ -432,6 +435,14 @@ public:
   {
     _size = 0;
   }
+
+#if __cplusplus >= 201103L
+  multiset(std::initializer_list<value_type> init) : _size(0)
+  {
+    for (const value_type *it = init.begin(); it != init.end(); ++it)
+      this->insert(*it);
+  }
+#endif
 
   ~multiset()
   {
@@ -1174,6 +1185,14 @@ public:
   set() : _size(0), rule(Compare())
   {
   }
+
+#if __cplusplus >= 201103L
+  set(std::initializer_list<value_type> init) : _size(0), rule(Compare())
+  {
+    for (const value_type *it = init.begin(); it != init.end(); ++it)
+      this->insert(*it);
+  }
+#endif
 
   ~set()
   {

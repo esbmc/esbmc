@@ -1732,6 +1732,28 @@ bool python_converter::return_value_uses_call_argument(
          return_value.contains("value") && is_param_name(return_value["value"]);
 }
 
+/// Item assignment on an immutable container is a TypeError. A string that is
+/// not intercepted here updates its char array with a whole string value, which
+/// trips with2t::assert_consistency and aborts instead of reporting anything.
+bool python_converter::reject_immutable_item_assignment(
+  const typet &container_type,
+  codet &target_block)
+{
+  const char *kind = tuple_handler_->is_tuple_type(container_type) ? "tuple"
+                     : type_utils::is_string_type(container_type)  ? "str"
+                                                                   : nullptr;
+  if (!kind)
+    return false;
+
+  exprt raise = get_exception_handler().gen_exception_raise(
+    "TypeError",
+    std::string("'") + kind + "' object does not support item assignment");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  target_block.copy_to_operands(throw_code);
+  return true;
+}
+
 void python_converter::reject_unsafe_numpy_view_target(
   const nlohmann::json &target)
 {
@@ -2409,6 +2431,17 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   return symbol_table_.move_symbol_to_context(symbol);
 }
 
+/// The bare name an AST node denotes: `id` for a Name, `attr` for an Attribute
+/// -- a qualified `module.Class`, which is what a base inherited from an
+/// operational model looks like. \p fallback covers any other shape.
+static std::string
+ast_node_name(const nlohmann::json &node, const std::string &fallback = "")
+{
+  if (node.contains("id"))
+    return node["id"].get<std::string>();
+  return node.value("attr", fallback);
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -2420,15 +2453,12 @@ void python_converter::handle_function_call_rhs(
 {
   if (is_ctor_call)
   {
-    std::string func_name =
-      ast_node["value"]["func"].contains("id")
-        ? ast_node["value"]["func"]["id"].get<std::string>()
-        : ast_node["value"]["func"]["attr"].get<std::string>();
+    std::string func_name = ast_node_name(ast_node["value"]["func"]);
 
     if (base_ctor_called)
     {
       auto class_node = json_utils::find_class((*ast_json)["body"], func_name);
-      func_name = class_node["bases"][0]["id"].get<std::string>();
+      func_name = ast_node_name(class_node["bases"][0], func_name);
       base_ctor_called = false;
     }
 
@@ -3271,16 +3301,8 @@ void python_converter::get_var_assign(
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
 
-    // Tuple subscript assignment: tuples are immutable, raise TypeError
-    if (tuple_handler_->is_tuple_type(container_type))
-    {
-      exprt raise = get_exception_handler().gen_exception_raise(
-        "TypeError", "'tuple' object does not support item assignment");
-      codet throw_code("expression");
-      throw_code.operands().push_back(raise);
-      target_block.copy_to_operands(throw_code);
+    if (reject_immutable_item_assignment(container_type, target_block))
       return;
-    }
 
     // Handle object subscript assignment via __setitem__:
     //   obj[key] = value  ->  obj.__setitem__(key, value)

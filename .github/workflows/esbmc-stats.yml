@@ -10,7 +10,9 @@ on:
 jobs:
   j1:
     name: repostats-for-robota-core
-    runs-on: ubuntu-slim
+    # github-repo-stats is a Docker container action, and ubuntu-slim is itself
+    # a container with no Docker daemon to build it against.
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         # The repositories to generate reports for.
