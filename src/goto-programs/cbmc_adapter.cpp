@@ -1461,6 +1461,113 @@ irept build_inf_rhs(const irept &lhs)
   return c;
 }
 
+enum class builtin_rhs_kind
+{
+  mem,
+  realloc,
+  unary_fp,
+  fma,
+  nan,
+  inf,
+  zero,
+};
+
+struct builtin_rhs_rule
+{
+  builtin_rhs_kind kind;
+  // The statement/expression id the builder takes, for the kinds that share a
+  // builder across several spellings; unused otherwise.
+  const char *id;
+};
+
+// The rhs a recognised value-returning builtin lowers to, or nil for a callee
+// that is not one (roadmap §4.8) and for one whose arity does not match --
+// fix_builtin_call declines both alike. The spellings are a table rather than
+// an `||` chain so that adding a family costs a row, not a decision point: the
+// twelve abs spellings alone put a chain over the complexity gate.
+irept build_builtin_rhs(
+  const std::string &callee,
+  const irept &lhs,
+  const irept::subt &args)
+{
+  // "abs" mirrors what clang_c_adjust_expr.cpp builds for a recognised
+  // fabs/fabsf/fabsl call; migrate_expr's abs handler reads op0(), so "abs"
+  // must be in fix_expression's operand-wrap set for the argument to reach it.
+  // The native abs expr is type-agnostic (build_unary_fp_rhs takes the lhs
+  // type), so the same rewrite covers the integer abs family -- CBMC emits
+  // abs/labs/llabs/imaxabs (and their __builtin_ spellings) as bodyless
+  // FUNCTION_CALL externals too, so without this ESBMC returns nondet and a
+  // valid abs(-7)==7 reports FAILED where CBMC says SUCCESSFUL.
+  //
+  // setjmp: neither tool models the longjmp control transfer, so the direct
+  // return is the only one the explored control flow can take and 0 is exact
+  // -- the value CBMC itself assigns. ESBMC's own setjmp OM instead puts the
+  // construct out of scope (__ESBMC_unreachable), leaving a bodyless external
+  // here whose nondet return admits values the modelled program cannot
+  // produce: a false FAILED on any setjmp-using binary. A longjmp still fails
+  // to transfer control, exactly as under CBMC -- cbmc_setjmp_longjmp pins
+  // that this rewrite does not claim otherwise.
+  static const std::unordered_map<std::string, builtin_rhs_rule> rules = {
+    {"malloc", {builtin_rhs_kind::mem, "malloc"}},
+    {"alloca", {builtin_rhs_kind::mem, "alloca"}},
+    {"__builtin_alloca", {builtin_rhs_kind::mem, "alloca"}},
+    {"realloc", {builtin_rhs_kind::realloc, nullptr}},
+    {"sqrtf", {builtin_rhs_kind::unary_fp, "ieee_sqrt"}},
+    {"sqrt", {builtin_rhs_kind::unary_fp, "ieee_sqrt"}},
+    {"sqrtl", {builtin_rhs_kind::unary_fp, "ieee_sqrt"}},
+    {"nearbyint", {builtin_rhs_kind::unary_fp, "nearbyint"}},
+    {"nearbyintf", {builtin_rhs_kind::unary_fp, "nearbyint"}},
+    {"nearbyintl", {builtin_rhs_kind::unary_fp, "nearbyint"}},
+    {"fma", {builtin_rhs_kind::fma, nullptr}},
+    {"fmaf", {builtin_rhs_kind::fma, nullptr}},
+    {"fmal", {builtin_rhs_kind::fma, nullptr}},
+    {"__builtin_nan", {builtin_rhs_kind::nan, nullptr}},
+    {"__builtin_nanf", {builtin_rhs_kind::nan, nullptr}},
+    {"__builtin_huge_val", {builtin_rhs_kind::inf, nullptr}},
+    {"__builtin_huge_valf", {builtin_rhs_kind::inf, nullptr}},
+    {"__builtin_huge_vall", {builtin_rhs_kind::inf, nullptr}},
+    {"__builtin_inf", {builtin_rhs_kind::inf, nullptr}},
+    {"__builtin_inff", {builtin_rhs_kind::inf, nullptr}},
+    {"__builtin_infl", {builtin_rhs_kind::inf, nullptr}},
+    {"fabsf", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"fabs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"fabsl", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"abs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"labs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"llabs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"imaxabs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"__builtin_abs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"__builtin_labs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"__builtin_llabs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"__builtin_imaxabs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"setjmp", {builtin_rhs_kind::zero, nullptr}},
+    {"_setjmp", {builtin_rhs_kind::zero, nullptr}}};
+
+  auto it = rules.find(callee);
+  if (it == rules.end())
+    return get_nil_irep();
+
+  const builtin_rhs_rule &rule = it->second;
+  switch (rule.kind)
+  {
+  case builtin_rhs_kind::mem:
+    return build_mem_rhs(lhs, args, rule.id);
+  case builtin_rhs_kind::realloc:
+    return build_realloc_rhs(lhs, args);
+  case builtin_rhs_kind::unary_fp:
+    return build_unary_fp_rhs(lhs, args, rule.id);
+  case builtin_rhs_kind::fma:
+    return build_fma_rhs(lhs, args);
+  case builtin_rhs_kind::nan:
+    return build_nan_rhs(lhs);
+  case builtin_rhs_kind::inf:
+    return build_inf_rhs(lhs);
+  case builtin_rhs_kind::zero:
+    return mk_bv_const(lhs.find("type"), 0);
+  }
+  return get_nil_irep();
+}
+
 // CBMC-sourced FUNCTION_CALL instructions never go through ESBMC's own
 // goto_convert, so ESBMC's builtin-call rewrites (e.g. malloc ->
 // side_effect_exprt via goto-programs/builtin_functions.cpp, or sqrtf ->
@@ -1535,57 +1642,9 @@ bool fix_builtin_call(irept &code)
 
   const irept lhs = sub[0];
 
-  irept rhs;
-  if (callee == "malloc")
-    rhs = build_mem_rhs(lhs, args, "malloc");
-  else if (callee == "alloca" || callee == "__builtin_alloca")
-    rhs = build_mem_rhs(lhs, args, "alloca");
-  else if (callee == "realloc")
-    rhs = build_realloc_rhs(lhs, args);
-  else if (callee == "sqrtf" || callee == "sqrt" || callee == "sqrtl")
-    rhs = build_unary_fp_rhs(lhs, args, "ieee_sqrt");
-  else if (
-    callee == "nearbyint" || callee == "nearbyintf" || callee == "nearbyintl")
-    rhs = build_unary_fp_rhs(lhs, args, "nearbyint");
-  else if (callee == "fma" || callee == "fmaf" || callee == "fmal")
-    rhs = build_fma_rhs(lhs, args);
-  else if (callee == "__builtin_nan" || callee == "__builtin_nanf")
-    rhs = build_nan_rhs(lhs);
-  else if (
-    callee == "__builtin_huge_val" || callee == "__builtin_huge_valf" ||
-    callee == "__builtin_huge_vall" || callee == "__builtin_inf" ||
-    callee == "__builtin_inff" || callee == "__builtin_infl")
-    rhs = build_inf_rhs(lhs);
-  // "abs" mirrors what clang_c_adjust_expr.cpp builds for a recognised
-  // fabs/fabsf/fabsl call; migrate_expr's abs handler reads op0(), so "abs"
-  // must be in fix_expression's operand-wrap set for the argument to reach it.
-  // The native abs expr is type-agnostic (build_unary_fp_rhs takes the lhs
-  // type), so the same rewrite covers the integer abs family -- CBMC emits
-  // abs/labs/llabs/imaxabs (and their __builtin_ spellings) as bodyless
-  // FUNCTION_CALL externals too, so without this ESBMC returns nondet and a
-  // valid abs(-7)==7 reports FAILED where CBMC says SUCCESSFUL.
-  else if (
-    callee == "fabsf" || callee == "fabs" || callee == "fabsl" ||
-    callee == "abs" || callee == "labs" || callee == "llabs" ||
-    callee == "imaxabs" || callee == "__builtin_abs" ||
-    callee == "__builtin_labs" || callee == "__builtin_llabs" ||
-    callee == "__builtin_imaxabs")
-    rhs = build_unary_fp_rhs(lhs, args, "abs");
-  // Neither tool models the longjmp control transfer, so the direct return is
-  // the only one the explored control flow can take and 0 is exact -- the value
-  // CBMC itself assigns. ESBMC's own setjmp OM instead puts the construct out
-  // of scope (__ESBMC_unreachable), leaving a bodyless external here whose
-  // nondet return admits values the modelled program cannot produce: a false
-  // FAILED on any setjmp-using binary. A longjmp still fails to transfer
-  // control, exactly as under CBMC -- cbmc_setjmp_longjmp pins that this
-  // rewrite does not claim otherwise.
-  else if (callee == "setjmp" || callee == "_setjmp")
-    rhs = mk_bv_const(lhs.find("type"), 0);
-  else
-    return false; // not (yet) a recognised builtin; see roadmap §4.8
-
+  const irept rhs = build_builtin_rhs(callee, lhs, args);
   if (rhs.is_nil())
-    return false; // wrong arity for the builtin matched above
+    return false;
 
   code.set("statement", "assign");
   code.get_sub().clear();
