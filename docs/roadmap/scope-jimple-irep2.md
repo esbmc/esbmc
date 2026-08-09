@@ -814,3 +814,76 @@ Remaining: `jimple_throw` (14 occurrences, but `to_exprt` is a bare
 `codet("cpp-throw")` with its body commented out); the three overrides §19 shows
 are unreachable; and `to_typet` -> `type2tc`, which §7 keeps for last and which
 §22.1 has now mapped in full.
+
+## 23. `to_type2t` and the cast (#6877): introduce a helper with its consumer
+
+§7 keeps `to_typet` -> `type2tc` for last. Taking it revealed that "migrate the
+type helper" is not a slice on its own: every `to_typet` call site sits inside a
+`to_exprt` that has not moved, so a `to_type2t` added by itself would have had
+no caller -- the same dead instrumentation §22.3 refused for `is_skip`.
+
+So it ships with its first consumer. An expression census picks that consumer:
+
+| Count | Expression | State |
+|---|---|---|
+| 500 | symbol | #6865 |
+| 183 | constant | #6858 |
+| 110 | binop | #6860 |
+| 47 | array_index | open |
+| **33** | **cast** | **#6877, uses to_typet** |
+| 21 | string_constant | maps to jimple_constant |
+| 19 | static_invoke | open |
+| 15 | static_member | open, uses to_typet |
+| 14 | new | open, uses to_typet |
+| 9 | newarray | open, uses to_typet |
+
+### 23.1 A second provably-dead arm
+
+`get_base_type` switches on `BASE_TYPES`, and `BASE_TYPES::BOOLEAN` has a case.
+Nothing produces it: `from_map` maps `"boolean"` to `BASE_TYPES::INT`, and a
+grep for `BASE_TYPES::BOOLEAN` finds only the two switch arms themselves, never
+a mapping. So the mirror omits it, on the §22.3 rule.
+
+Worth noting how the corpus census misleads here. All 33 casts take the INT arm,
+including the 17 to `java.lang.String[]` -- because `java.lang.String` is mapped
+to `BASE_TYPES::INT` too, with a `// TODO: handle this properly`. A mutant on
+the pointer arm therefore moves nothing, and it would have been easy to call
+that arm dead as well. It is not: it is reachable for any class name absent from
+`from_map`, and will be exercised as soon as `new` or `newarray` migrates. Only
+`BOOLEAN` is unreachable *by construction*.
+
+### 23.2 A cast that nothing can observe
+
+Dropping the cast's own conversion changed **0/19**. The first test written to
+fix that -- a cast on an assignment's right-hand side -- changed **0/20**, for a
+reason worth recording: `jimple_assignment` re-converts its source to the
+target's type, so an enclosing assignment subsumes the cast entirely. The GOTO
+is identical whether the cast converts or not.
+
+`github_4715_cast_conversion_01` puts the cast in an **invoke argument**
+instead, where `jimple_invoke` binds `@parameterN` with no typecast of its own:
+
+```
+ASSIGN @parameter0=(signed int *)$i0;
+FUNCTION_CALL:  sink_1((signed int *)$i0)
+```
+
+With the conversion dropped, that test and only that test changes.
+
+**Third addition to the §21 rule.** An unmoved mutant now has three causes, and
+they need different responses: the corpus is thin (§20, §21 -- write a test);
+the code is unreachable by construction (§22.3, §23.1 -- do not mirror it); or
+**a caller downstream re-does the work, so the output cannot distinguish**
+(here). The third is the subtlest, because the obvious test still shows nothing
+-- the fix is to find a position where the redundancy does not apply, not to
+write a bigger example of the same shape.
+
+### 23.3 Status
+
+Thirteen slices shipped: #6851, #6853, #6854, #6855, #6856, #6858, #6860,
+#6865, #6866, #6868, #6870, #6875, #6877, plus #6873 in support. Corpus now 20
+tests.
+
+Next by value is `array_index` (47, `jimple_deref`), then `static_member` (15),
+`new` (14) and `newarray` (9) -- the last three all consume `to_type2t`, which
+now exists, and between them will exercise its pointer arm.
