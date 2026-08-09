@@ -5154,7 +5154,12 @@ exprt numpy_call_expr::get()
           return;
         if (var["value"]["_type"] == "Call")
         {
-          if (var["value"].contains("args") && !var["value"]["args"].empty())
+          if (
+            std::optional<nlohmann::json> materialized =
+              materialize_numpy_constructor_array(var["value"]))
+            var = std::move(*materialized);
+          else if (
+            var["value"].contains("args") && !var["value"]["args"].empty())
             var = var["value"]["args"][0];
           else
             var = var["value"];
