@@ -1,0 +1,5 @@
+CORE
+main.c
+--malloc-zero-is-null
+^VERIFICATION FAILED$
+^\s*dereference failure: array bounds violated: heap object$

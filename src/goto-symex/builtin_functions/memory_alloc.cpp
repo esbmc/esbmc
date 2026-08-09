@@ -587,8 +587,7 @@ expr2tc goto_symext::symex_mem(
     if (is_malloc && is_typecast2t(size))
     {
       // Detect malloc(-N) before the fold to typecast(size_t, -N) erases the
-      // sign; to_uint64() below discards it, so malloc(-1) would otherwise be
-      // mistaken for a 1-byte allocation.
+      // sign and the request reads back as a huge positive size.
       expr2tc inner = to_typecast2t(size).from;
       simplify(inner);
       is_negative_size = is_constant_int2t(inner) &&
@@ -622,13 +621,7 @@ expr2tc goto_symext::symex_mem(
 
     do_simplify(size);
     if (is_constant_int2t(size))
-    {
-      uint64_t v = to_constant_int2t(size).value.to_uint64();
-      if (v == 1)
-        size_is_one = true;
-      else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
-        return symbol2tc(pointer_type2tc(type), "NULL");
-    }
+      size_is_one = to_constant_int2t(size).value == 1;
     else if (
       is_malloc && is_unsignedbv_type(size->type) &&
       size->type->get_width() >= ptraddr_type2()->get_width())
@@ -734,24 +727,32 @@ expr2tc goto_symext::symex_mem(
     ptr_rhs = rhs;
   }
 
-  if (options.get_bool_option("malloc-zero-is-null"))
+  if (is_malloc && options.get_bool_option("malloc-zero-is-null"))
   {
-    expr2tc null_sym = symbol2tc(rhs->type, "NULL");
-    expr2tc choice = greaterthan2tc(size, gen_long(size->type, 0));
-    alloc_guard.add(choice);
-    rhs = if2tc(rhs->type, choice, rhs, null_sym);
+    expr2tc nonzero = greaterthan2tc(size, gen_long(size->type, 0));
+    simplify(nonzero);
+
+    if (!is_true(nonzero))
+    {
+      // C17 7.22.3p1 leaves malloc(0) implementation-defined: NULL, or a
+      // pointer that may be freed but not used to access an object. Offer
+      // both -- forcing NULL makes the assume(p != NULL) that environment
+      // models emit after a zero-sized request unsatisfiable, pruning every
+      // execution under test (#5398).
+      expr2tc may_alloc = gen_nondet(get_bool_type());
+      replace_nondet(may_alloc);
+
+      expr2tc choice = or2tc(nonzero, may_alloc);
+      simplify(choice);
+      alloc_guard.add(choice);
+      rhs = if2tc(rhs->type, choice, rhs, symbol2tc(rhs->type, "NULL"));
+    }
   }
 
   if (!options.get_bool_option("force-malloc-success") && is_malloc)
   {
     expr2tc null_sym = symbol2tc(rhs->type, "NULL");
-    expr2tc choice = sideeffect2tc(
-      get_bool_type(),
-      expr2tc(),
-      expr2tc(),
-      std::vector<expr2tc>(),
-      type2tc(),
-      sideeffect2t::allockind::nondet);
+    expr2tc choice = gen_nondet(get_bool_type());
     replace_nondet(choice);
 
     rhs = if2tc(rhs->type, choice, rhs, null_sym);
