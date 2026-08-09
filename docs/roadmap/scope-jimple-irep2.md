@@ -6,11 +6,12 @@ operational-model complication, lowest blast radius. The pathfinder for the
 kit."* This document is the census and decomposition that phase asks each
 frontend to open with.
 
-**Build caveat, stated up front.** `ENABLE_JIMPLE_FRONTEND` is `OFF` in the
-working build, so nothing here is measured by running jimple — the census is
-static, and every gate below needs a build with the frontend enabled. The
-byte-identity numbers §20 records for jimple (15/15, zero declines) came from CI
-and the dispatcher work, not from this machine.
+**Build note (corrected 2026-08-09).** The first version of this document said
+`ENABLE_JIMPLE_FRONTEND` is `OFF` locally and therefore *"every gate is a CI
+round-trip"*. That was self-imposed and wrong: the frontend is gated only by a
+`-D` define, needs **no JDK** (the tests feed `.jimple` files directly), and
+`cmake -DENABLE_JIMPLE_FRONTEND=On .` plus a rebuild gives **17 tests passing in
+3.5 s**. Every gate below is local.
 
 ## 1. Census
 
@@ -58,9 +59,9 @@ virtual signature and its 27 implementations, not untangling a pass.
 
 ## 3. Phased decomposition
 
-**J.1 — the type side first.** `to_typet` is a single method and 20 `typet`
+**J.1 — the type side first.** ~~`to_typet` is a single method and 20 `typet`
 mentions. Migrating it to return `type2tc` is the smallest possible slice and
-proves the seam before any expression work.
+proves the seam before any expression work.~~ **Withdrawn — see §7.**
 
 **J.2 — leaf expressions.** The `to_exprt` overrides that construct constants,
 symbols and nil (`constant_exprt`, `nil_exprt`, and the symbol lookups). These
@@ -102,4 +103,43 @@ Inherited from `frontends-to-irep2.md` §7, plus one this frontend forces:
 
 ## 6. Status
 
-Census only. No code has moved, and J.1 has not started.
+Census and decomposition. No code has moved. J.1 as written is withdrawn (§7);
+the replacement first slice is J.1'.
+
+## 7. J.1 is the wrong first slice — checked before executing it
+
+`to_typet` has nine call sites outside `jimple_type`, and **every one feeds its
+result straight into a legacy API**:
+
+| site | consumer |
+|---|---|
+| `jimple_class_field.cpp:10`, `jimple_declaration.cpp:8` | `symbolt::type` |
+| `jimple_expr.cpp:204` | `c_typecast.implicit_typecast` |
+| `jimple_expr.cpp:432` | a legacy `exprt` base type |
+| `jimple_expr.cpp:535,581` | `gen_zero(typet)` |
+| `jimple_expr.cpp:587` | `member_exprt` |
+| `jimple_method.cpp:15,61` | `code_typet` |
+
+So returning `type2tc` from `to_typet` would force a `migrate_type_back` at
+**nine** sites and remove none. The slice makes the tree strictly worse until
+J.2-J.4 land, which is the opposite of what a first slice is for.
+
+The dependency runs the other way from what §3 assumed: in this frontend a type
+has no independent consumer — it exists only to be handed to an expression, a
+symbol or a code type. **Types can migrate only when their consumers do.**
+
+### J.1' — one AST node, vertically
+
+The replacement: migrate a single AST node kind **end to end** — its type, its
+expression construction, and its operands — leaving exactly one `migrate_*` at
+the boundary to its parent. One round-trip instead of nine, and the seam is
+proved on a real node rather than on a method with no independent existence.
+
+Pick the smallest leaf with its own type usage; `jimple_expr.cpp:535/581`'s
+`gen_zero(type->to_typet(ctx))` constant nodes are the obvious candidates,
+having no operands to thread.
+
+This is the pattern Part V settled on for Python — *relax at construction,
+re-enforce at the seam* — and it applies here for the same reason: a
+horizontal slice through a construction tree has no cut that does not multiply
+round-trips.
