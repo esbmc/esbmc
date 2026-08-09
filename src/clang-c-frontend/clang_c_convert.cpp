@@ -31,6 +31,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <util/expr/symbolic_types.h>
+#include <util/symtab/base_subobject.h>
 
 #include <boost/algorithm/string/replace.hpp>
 
@@ -2196,6 +2197,21 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  // C23 6.4.4.5: true and false are predefined constants, which clang models
+  // with the same node it uses for the C++ keywords.
+  case clang::Stmt::CXXBoolLiteralExprClass:
+  {
+    const clang::CXXBoolLiteralExpr &bool_literal =
+      static_cast<const clang::CXXBoolLiteralExpr &>(stmt);
+
+    if (bool_literal.getValue())
+      new_expr = true_exprt();
+    else
+      new_expr = false_exprt();
+
+    break;
+  }
+
   // A float value
   case clang::Stmt::FloatingLiteralClass:
   {
@@ -4014,6 +4030,31 @@ bool clang_c_convertert::get_cast_expr(
   }
 
   case clang::CK_BaseToDerived:
+  {
+    // The inverse of the CK_DerivedToBase routing above: the source points at
+    // a nested "@base@" subobject, so the result must be re-based to the start
+    // of the derived object. The offset comes from ESBMC's own layout, but the
+    // components are not padded until the adjust pass, so only mark the cast
+    // here; clang_c_adjust::adjust_base_to_derived resolves it once the layout
+    // is final. Marking is what separates a real downcast from a
+    // reinterpret_cast between the same two types. See #1866, #3894.
+    if (type.is_pointer())
+    {
+      typecast_exprt rebased(expr, type);
+      rebased.set("#base_to_derived", true);
+      expr = rebased;
+    }
+    else
+    {
+      // Reference form: clang strips the & from getType(), so `type` is the
+      // record itself and the result stays an lvalue. Re-base through the
+      // address and hand back *(Derived *)adjusted.
+      typecast_exprt rebased{address_of_exprt(expr), pointer_typet(type)};
+      rebased.set("#base_to_derived", true);
+      expr = dereference_exprt(rebased, rebased.type());
+    }
+    break;
+  }
 
   case clang::CK_UserDefinedConversion:
   case clang::CK_ConstructorConversion:

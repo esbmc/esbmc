@@ -1,0 +1,4 @@
+CORE
+main.py
+--goto-functions-only
+\* #location: \n\s*\* file: [^\n]*main\.py\n\s*\* line: 2\n\s*\* function: half_floor\n\s*\* column: 4
