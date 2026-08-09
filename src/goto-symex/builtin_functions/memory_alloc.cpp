@@ -728,7 +728,8 @@ expr2tc goto_symext::symex_mem(
     ptr_rhs = rhs;
   }
 
-  if (options.get_bool_option("malloc-zero-is-null"))
+  // alloca has no NULL outcome to explore: C17 7.22.3p1 is about malloc.
+  if (is_malloc && options.get_bool_option("malloc-zero-is-null"))
   {
     expr2tc nonzero = greaterthan2tc(size, gen_long(size->type, 0));
     simplify(nonzero);
