@@ -1106,3 +1106,61 @@ Remaining: the expression form of `static_invoke` (19), `jimple_lengthof`,
 `jimple_virtual_member`, `jimple_virtual_invoke`, and `jimple_throw`, still
 unfinished. Per §25.1 none reaches the `to_type2t` pointer arm without a new
 test.
+
+## 27. `jimple_expr_invoke` (#6885): remove-the-arm versus corrupt-the-arm
+
+Only one of this class's five arms is reachable through `to_expr2t`, and
+working out which took a chain of three facts rather than a census:
+
+1. `jimple_assignment::to_code2t` (#6875) sends an invoke right-hand side to the
+   migrating default *unless* it is nondet or intrinsic.
+2. `is_nondet_call()` tests for `org.sosy_lab.sv_benchmarks.Verifier`, which
+   never appears in the corpus.
+3. `is_intrinsic_method` is set in exactly one place -- `java.lang.Integer` with
+   `method == "valueOf_1"` -- and the corpus has 11 of those.
+
+So `valueOf` is the arm that reaches `to_expr2t`; the Intrinsics and Runtime
+skips and the main block path are reached only through the default, and the
+main path returns a `code_blockt` -- a statement from an expression method --
+which is why it belongs there anyway.
+
+### 27.1 The mutant that proves nothing
+
+Deleting the `valueOf` arm changes **0/22**, with the mutation correctly
+anchored to the native copy per §26.3. The reason is not any of the four causes
+in §24.1: the arm is reachable, the corpus covers it, the printer shows it, and
+nothing downstream re-does it. What happens is that the *fallback itself* is
+equivalent -- dropping to the migrating default reaches `to_exprt`'s own
+`valueOf` arm, which returns the same operand.
+
+That makes deletion the wrong probe. It measures whether the arm is
+**necessary**, and a correct migration slice is never necessary: it produces
+byte-identical output by construction, which is the whole premise of the A/B
+gate. Corrupting the arm instead -- returning a constant where the argument
+should go -- changes **2/22**, the two tests holding the 11 `valueOf` calls.
+
+**Generalisation.** Two different questions have been conflated up to now
+because for most slices one mutant answers both:
+
+| Probe | Question | When it is the right one |
+|---|---|---|
+| delete the arm | is this arm *necessary*? | the fallback does something different |
+| corrupt the arm | does this arm *execute*? | always |
+
+Where an override shadows a fallback that already handles the case -- which the
+partial-override technique produces by design (§15.2, §25.2, here) -- only the
+corruption probe carries information. Earlier slices happened to use probes
+that were corruptions in effect (§25's flipped constants, §26's altered width),
+so their liveness claims stand; but §23.2's cast, where deletion *did* move a
+test once the position was right, was a case where the fallback genuinely
+differed.
+
+### 27.2 Status
+
+Seventeen slices shipped: #6851, #6853, #6854, #6855, #6856, #6858, #6860,
+#6865, #6866, #6868, #6870, #6875, #6877, #6880, #6882, #6884, #6885, plus
+#6873 in support.
+
+Remaining: `jimple_lengthof`, `jimple_virtual_member`, `jimple_virtual_invoke`
+(0 in the corpus, so §19's limit applies), and `jimple_throw`, still an
+unfinished construct.
