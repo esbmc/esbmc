@@ -1222,3 +1222,42 @@ Remaining are the four other zero-count kinds -- `lengthof`, `local_member`,
 `virtual_invoke`, `class_reference` -- plus `jimple_throw`. Each needs a test
 written *before* its override, on the §28.3 lesson, and `jimple_throw` needs the
 construct finished first.
+
+## 29. `jimple_lengthof` (#6887): the §28.3 lesson applied
+
+First slice taken test-first. `expr_type: "lengthof"` is one of the five
+zero-count kinds §28 identified, so the order mattered: written the other way
+round, the A/B gate would have passed on an override nothing executes, which is
+precisely what #6886 had to go back and fix.
+
+`github_4715_lengthof_01` allocates an array and reads its length. It was
+written, run, and shown to reach the construct -- the GOTO carries the
+`__ESBMC_get_object_size` call -- **before** the override existed. Only then was
+`to_expr2t` added, and the corruption probe (§27.1) confirmed 1/24.
+
+The override itself is unremarkable, which is the point: it is the fifth
+instance of the build-then-discard shape (§22, §24, §25.3, §26.1), and
+`side_effect_function_call2tc` already existed from #6884, so the migration was
+a two-line mirror. **The test was the work.**
+
+### 29.1 Cost comparison
+
+| Order | Steps |
+|---|---|
+| override first (#6858 -> #6886) | write override, A/B passes vacuously, ship, census months later, discover the zero, write test, ship again -- two PRs, one false claim in between |
+| test first (#6887) | write test, confirm it reaches, write override, A/B and mutant both meaningful -- one PR |
+
+Nothing about the second order is harder. It only requires knowing the corpus
+count first, which a single census gives for every construct at once.
+
+### 29.2 Status
+
+Nineteen PRs, corpus 24 tests -- seven of them written to make a specific
+construct or arm live (§20.1, §21.1, §23.2, §25.2, §26.3, §28.1, §29).
+
+Remaining zero-count kinds: `local_member` (`jimple_virtual_member`),
+`virtual_invoke` (`jimple_virtual_invoke`), `class_reference`. The first two
+have real overrides worth migrating and both need a test written first;
+`class_reference` maps to `jimple_constant("-1")` in `get_expression` and has no
+override of its own, so there is nothing to migrate for it. `jimple_throw`
+remains an unfinished construct.
