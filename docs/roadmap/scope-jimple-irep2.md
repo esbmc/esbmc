@@ -488,5 +488,44 @@ and it belongs in the parent document rather than here.
 
 Seven slices shipped (#6851, #6853, #6854, #6855, #6856, #6858, #6860), all
 byte-identical over the full suite. The next jimple slice by value is blocked on
-§16.2; the next one that is *not* is `jimple_symbol` (146 lines, the largest of
-the 27 overrides and the one the remaining statements all reach through).
+§16.2; the next one that is *not* is `jimple_symbol` -- see §17.
+
+## 17. `jimple_symbol` (#6865): a substitution, not a reimplementation
+
+§16.4 called this the largest of the 27 overrides at 146 lines. That was wrong:
+`jimple_symbol::to_exprt` is fifteen lines, and its body is a context lookup
+followed by `symbol_expr(s)`.
+
+That matters more than the correction does, because `symbol_expr` already has a
+named IREP2 counterpart:
+
+```cpp
+expr2tc symbol_expr2tc(const symbolt &sym)
+{
+  return symbol2tc(migrate_symbol_type(sym), sym.id);
+}
+```
+
+and `migrate_expr` routes level-0 symbols through the same construction
+(`sym_name_to_symbol`, migrate.cpp:634). So unlike §16's assignment, this slice
+does not swap one implementation for a parallel one — it calls the function the
+migration path was already calling. The equivalence is by construction.
+
+### 17.1 Why the mutant check was still worth running
+
+Byte-identity over 17 tests proves nothing if the override never executes; a
+`to_expr2t` that no caller reaches is trivially identical. Replacing the body
+with `constant_int2tc(..., 4242)` changed the GOTO output of **all 17** tests,
+which establishes that every test in the suite reaches this override — the
+strongest exercise signal any slice in this stack has had, and unsurprising,
+since every jimple statement that touches a variable goes through it.
+
+### 17.2 Status
+
+Eight slices shipped: #6851, #6853, #6854, #6855, #6856, #6858, #6860, #6865.
+All byte-identical, all mutant-checked.
+
+The remaining statement overrides (`invoke`, `return`, `throw`, `identity`,
+`assertion`) reach operands through `jimple_symbol`, which is now native, so
+they no longer inherit a migrating operand. `jimple_assignment` stays blocked on
+§16.2. `to_typet` -> `type2tc` remains last (§7).
