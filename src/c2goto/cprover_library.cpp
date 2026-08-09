@@ -7,7 +7,6 @@
 #include <cstdlib>
 #include <fstream>
 #include <goto-programs/goto_binary_reader.h>
-#include <goto-programs/goto_functions.h>
 #include <util/symtab/context.h>
 #include <util/message/message.h>
 #include <util/lang/c_link.h>
@@ -462,7 +461,6 @@ void add_cprover_library(contextt &context, const languaget *language)
     return;
 
   contextt new_ctx, store_ctx;
-  goto_functionst goto_functions;
   std::multimap<irep_idt, irep_idt> symbol_deps;
   std::list<irep_idt> to_include;
   const buffer *clib;
@@ -522,7 +520,7 @@ void add_cprover_library(contextt &context, const languaget *language)
    */
   contextt ignored_ctx;
   if (goto_reader.read_goto_binary_array(
-        lib_start, lib_size, new_ctx, ignored_ctx, goto_functions))
+        lib_start, lib_size, new_ctx, ignored_ctx))
     abort();
 
   // Traverse symbols and get dependencies from both their nested types and values
