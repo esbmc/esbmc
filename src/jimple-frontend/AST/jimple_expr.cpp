@@ -524,6 +524,20 @@ exprt jimple_virtual_invoke::to_exprt(
   return block;
 }
 
+expr2tc jimple_virtual_invoke::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // The only arm reachable here: jimple_assignment sends an invoke right-hand
+  // side to the migrating default unless it is nondet. The three skip arms and
+  // the main path all produce statements, so they belong there in any case.
+  if (is_nondet_call())
+    return jimple_nondet(method).to_expr2t(ctx, class_name, function_name);
+
+  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+}
+
 exprt jimple_newarray::to_exprt(
   contextt &ctx,
   const std::string &class_name,
