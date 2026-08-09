@@ -1,7 +1,19 @@
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/namespace.h>
+#include <utility>
 
 bool clang_c_adjust_irep2::adjust()
 {
+  // migrate_expr resolves a symbol's type through this thread-local namespace.
+  // typecheck builds into its own context and c_link merges into the global one
+  // afterwards, so the namespace language_ui installed does not contain these
+  // symbols yet: every lookup would miss and fall through to
+  // sym_name_to_symbol's renaming parser, which warns once per symbol. Point it
+  // at the context being built, as dereferencet does for the same reason.
+  namespacet ns(context);
+  const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
+
   // Hash-table iterators are not stable across mutation, so snapshot the
   // symbol pointers first (mirrors clang_c_adjust::adjust()).
   std::vector<symbolt *> symbol_list;
@@ -17,6 +29,7 @@ bool clang_c_adjust_irep2::adjust()
     }
   }
 
+  migrate_namespace_lookup = old_ns;
   return false;
 }
 
