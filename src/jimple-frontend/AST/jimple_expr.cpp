@@ -305,6 +305,23 @@ exprt jimple_lengthof::to_exprt(
   return sideeffect;
 };
 
+expr2tc jimple_lengthof::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  expr2tc operand = from->to_expr2t(ctx, class_name, function_name);
+
+  symbolt lengthof = get_lengthof_function();
+  symbolt &added_symbol = *ctx.move_symbol_to_context(lengthof);
+
+  return side_effect_function_call2tc(
+    migrate_type(
+      static_cast<const typet &>(added_symbol.get_type().return_type())),
+    symbol_expr2tc(added_symbol),
+    {operand});
+}
+
 void jimple_newarray::from_json(const json &j)
 {
   size = get_expression(j.at("size"));
