@@ -422,3 +422,80 @@ C.1-C.3 done (#6894), §8.2 lookup fixed (#6897), union assert fixed (#6899).
 C.4 is blocked on §11.4 -- three tests whose GOTO changes when a symbol's IREP2
 value is merely read.
 
+## 13. §11.4 answered: the gate itself is the casualty
+
+Three tests (`github_1200`, `github_1377`, `github_2618`) are stable against
+themselves and change under the flag. §11.3 narrowed the cause to *reading*
+`get_value2()`. Two further bisects finish the job.
+
+### 13.1 It is global state, not the symbol
+
+Reading the value on a **copy** of the symbol -- so the real symbol's caches are
+never touched, but `migrate_expr` still runs -- leaves the divergence at exactly
+48 / 66 / 94 lines. So it is not the symbol's lazy cache. Emptying the walk
+entirely gives 0 (§11.3), so it is the migration.
+
+### 13.2 What actually changes
+
+The diff is a permutation of nondet initialisations:
+
+```
+<  ASSIGN r=NONDET(unsigned long int);        >  ASSIGN s=NONDET(signed char *);
+<  ASSIGN ATOI_MAP=NONDET(unsigned char [256]); >  ASSIGN r=NONDET(unsigned long int);
+<  ASSIGN s=NONDET(signed char *);           >  ASSIGN ATOI_MAP=NONDET(unsigned char [256]);
+```
+
+Same instructions, different order -- the signature of iterating a container
+whose order the migration perturbs.
+
+### 13.3 The mechanism: `irep_idt` orders by interning sequence
+
+```cpp
+inline bool operator<(const irep_idt &b) const { return no < b.no; }
+inline size_t hash() const { return no; }
+```
+
+`no` is the index the string received when it was interned in the append-only
+pool (`src/util/base/string_pool.h`). So **every `std::map`/`unordered_map`
+keyed by `irep_idt` iterates in interning order, not lexicographic order.**
+
+`migrate_expr` interns strings -- type tags, `nondet$`-prefixed names, component
+names. Running it before `goto_convert` shifts the `no` of every string interned
+afterwards, permuting iteration of whichever `irep_idt`-keyed container decides
+nondet-initialisation order.
+
+### 13.4 Why this matters far beyond clang-c
+
+This is a **pre-existing latent order-dependence**, not a defect the walk
+introduces; the walk only exposes it. But the consequence lands squarely on the
+migration programme:
+
+**Any pass that interns a string before `goto_convert` can permute the GOTO
+dump.** No migration pass can avoid interning strings -- that is what building
+IREP2 nodes does. So G3, `--goto-functions-only` byte-identity, is not a sound
+gate for a frontend-resident pass, and that applies to **Phases 6-9 alike**, not
+just this one.
+
+Phase 5 never hit it because jimple's corpus is 26 tests and its overrides run
+*inside* the conversion that was already interning those strings, in the same
+order.
+
+### 13.5 Options for C.4
+
+1. **Normalise instruction order within a block before diffing.** Cheapest;
+   weakens the gate exactly where §13.2 shows real bugs could hide.
+2. **Fix the container.** Order the offending map by string rather than by `no`.
+   A real fix, wide blast radius, and it would make ESBMC's GOTO output
+   deterministic under interning -- valuable independently of this programme.
+3. **Change gate.** Use G1 (verdict parity) and G2 (counterexample text) instead
+   of G3 for frontend-resident passes. Weaker per-test, but unaffected.
+
+Option 2 is the one worth costing first: it is the only one that leaves the gate
+intact, and the resulting determinism is worth having on its own.
+
+## 14. Status
+
+C.1-C.3 done (#6894), lookup fixed (#6897), union assert fixed (#6899). C.4 is
+blocked on §13.5 -- a gate decision, not a code task. The three divergent tests
+are explained and are not migration defects.
+
