@@ -548,6 +548,45 @@ exprt jimple_newarray::to_exprt(
   return sideeffect;
 };
 
+expr2tc jimple_newarray::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  typet base_type = type->to_typet(ctx);
+
+  // to_exprt's temp symbol only ever becomes the lhs of a call it then
+  // discards, but it is still entered into the context; keep that side effect.
+  symbolt tmp_symbol =
+    get_temp_symbol(pointer_typet(base_type), class_name, function_name);
+  ctx.move_symbol_to_context(tmp_symbol);
+
+  const type2tc uint2 = migrate_type(uint_type());
+
+  expr2tc alloc_size = size->to_expr2t(ctx, class_name, function_name);
+  if (is_nil_expr(alloc_size))
+    alloc_size = constant_int2tc(uint2, BigInt(1));
+
+  symbolt alloca = get_allocation_function();
+  symbolt &alloca_symbol = *ctx.move_symbol_to_context(alloca);
+
+  int type_width = 64;
+  if (!(base_type.is_pointer() && base_type.subtype().is_pointer()))
+    type_width = std::stoi(
+      (base_type.is_pointer() ? base_type.subtype().width()
+                              : base_type.width())
+        .as_string());
+
+  expr2tc bytes =
+    mul2tc(uint2, alloc_size, constant_int2tc(uint2, BigInt(type_width)));
+
+  return side_effect_function_call2tc(
+    migrate_type(
+      static_cast<const typet &>(alloca_symbol.get_type().return_type())),
+    symbol_expr2tc(alloca_symbol),
+    {bytes});
+}
+
 void jimple_deref::from_json(const json &j)
 {
   base = get_expression(j.at("base"));
