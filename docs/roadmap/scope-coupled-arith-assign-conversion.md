@@ -1044,3 +1044,38 @@ per-byte loop in the model rather than passing more information into it.
 
 That is list-operational-model work with its own trade-offs, and it is the
 prerequisite standing in front of G4.
+
+### 19.5 Fix direction (a) tried, and it does not work
+
+§19.4 offered two directions. **(a) — derive a per-list `elem_size` for the case
+where all elements are same-length literals — was prototyped and does not fix
+the hang.** Recorded so nobody implements it twice.
+
+The prototype extended `list_query.cpp`'s `scalar_width` to admit a fixed-size
+array element alongside the four scalar kinds, and instrumented what it saw. A
+string list element presents as:
+
+```
+EXP elem lt=array rt=array lw=2 rw=2
+```
+
+— an `array` of `signedbv` with a constant size, so for `["y"]` the derived
+element size is 2 (the character plus its terminator), and `eq_elem_size_bytes`
+is emitted as 2 instead of 0.
+
+With that in place, `m: list = ["y"]; assert m == ["y"]` **still does not
+terminate in 300 s.** The int-list control (`[1] == [1]`) stays fast on the same
+build, so the build is sound and the change is reaching the call.
+
+**This corrects §19.4.** `elem_size == 0` explains which path the model takes,
+but supplying a non-zero one does not make the comparison tractable — so the
+symbolic-size memcmp loop is **not** the dominant cost here, and the two code
+comments that frame it that way are describing a different (large-list) regime
+than the one that blocks G4. The real cost is elsewhere in the string-element
+comparison and is still unidentified.
+
+That leaves direction (b) — bounding the model's fallback — as the only
+untried option, and it now has to be justified on its own terms rather than as
+"avoid the slow path", since the fast path is not fast either. Whoever takes
+this should start by instrumenting `__ESBMC_values_equal` for an array-typed
+element rather than by changing `elem_size`.
