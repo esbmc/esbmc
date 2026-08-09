@@ -623,11 +623,8 @@ expr2tc goto_symext::symex_mem(
     do_simplify(size);
     if (is_constant_int2t(size))
     {
-      uint64_t v = to_constant_int2t(size).value.to_uint64();
-      if (v == 1)
+      if (to_constant_int2t(size).value == 1)
         size_is_one = true;
-      else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
-        return symbol2tc(pointer_type2tc(type), "NULL");
     }
     else if (
       is_malloc && is_unsignedbv_type(size->type) &&
@@ -736,10 +733,24 @@ expr2tc goto_symext::symex_mem(
 
   if (options.get_bool_option("malloc-zero-is-null"))
   {
-    expr2tc null_sym = symbol2tc(rhs->type, "NULL");
-    expr2tc choice = greaterthan2tc(size, gen_long(size->type, 0));
-    alloc_guard.add(choice);
-    rhs = if2tc(rhs->type, choice, rhs, null_sym);
+    expr2tc nonzero = greaterthan2tc(size, gen_long(size->type, 0));
+    simplify(nonzero);
+
+    if (!is_true(nonzero))
+    {
+      // C17 7.22.3p1 leaves malloc(0) implementation-defined: NULL, or a
+      // pointer that may be freed but not used to access an object. Offer
+      // both -- forcing NULL makes the assume(p != NULL) that environment
+      // models emit after a zero-sized request unsatisfiable, pruning every
+      // execution under test (#5398).
+      expr2tc may_alloc = gen_nondet(get_bool_type());
+      replace_nondet(may_alloc);
+
+      expr2tc choice = or2tc(nonzero, may_alloc);
+      simplify(choice);
+      alloc_guard.add(choice);
+      rhs = if2tc(rhs->type, choice, rhs, symbol2tc(rhs->type, "NULL"));
+    }
   }
 
   if (!options.get_bool_option("force-malloc-success") && is_malloc)
