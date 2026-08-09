@@ -327,21 +327,22 @@ bool cmdlinet::parse(
         .run(),
       vm);
   }
-  catch (std::exception &e)
-  {
-    log_error("{}", e.what());
-    return true;
-  }
   // Boost throws program_options errors as boost::wrapexcept<...>, whose
   // typeinfo does not match this translation unit's std::exception across the
-  // library boundary, so the catch above misses them: they escaped to main's
-  // catch(...), and repeating any option (`--unwind 2 --unwind 2`) reached the
-  // user as a mangled boost::wrapexcept type name and nothing else. Catch the
-  // boost type directly, which keeps what() -- it names the offending option --
-  // and keep a catch-all behind it in case that match fails too.
+  // library boundary, so a catch(std::exception&) misses them: they escaped to
+  // main's catch(...), and repeating any option (`--unwind 2 --unwind 2`)
+  // reached the user as a mangled boost::wrapexcept type name and nothing
+  // else. Catching the boost type keeps what(), which names the offending
+  // option. It derives from std::exception, so it has to precede the handler
+  // below -- behind it the compiler reports it as already caught.
   catch (const boost::program_options::error &e)
   {
     log_error("Invalid command line: {}", e.what());
+    return true;
+  }
+  catch (std::exception &e)
+  {
+    log_error("{}", e.what());
     return true;
   }
   catch (...)
