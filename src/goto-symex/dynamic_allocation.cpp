@@ -2,15 +2,12 @@
 #include <goto-symex/dynamic_allocation.h>
 #include <goto-symex/goto_symex.h>
 #include <util/lang/c_types.h>
+#include <util/symtab/base_subobject.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 #include <util/irep/std_expr.h>
 #include <string>
-
-// Component-name prefix the C++ frontend uses for nested base subobjects; see
-// base_subobject_name() in clang-c-frontend/clang_c_convert.h (#1866, #3894).
-static const std::string base_subobject_prefix = "@base@";
 
 // Build a member access to `member` within `source`, descending through nested
 // "@base@" base subobjects when the member is inherited rather than declared
@@ -41,7 +38,7 @@ static bool build_nested_member_access(
   {
     const std::string name = st.member_names[i].as_string();
     if (
-      name.compare(0, base_subobject_prefix.size(), base_subobject_prefix) != 0)
+      name.compare(0, BASE_SUBOBJECT_PREFIX.size(), BASE_SUBOBJECT_PREFIX) != 0)
       continue;
 
     expr2tc base_access = member2tc(st.members[i], source, st.member_names[i]);
