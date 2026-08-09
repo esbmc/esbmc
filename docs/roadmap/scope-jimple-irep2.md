@@ -273,3 +273,64 @@ Census; three withdrawn slices (J.1, J.1', both for reasons now understood); the
 technique (§8.1); and the seam (§10). The decomposition is K.1-K.4 above. No
 code has moved, and K.1 is the first executable step — one line at the seam plus
 one new method with a migrating default.
+
+## 12. K.1 shipped; K.2 attempted and blocked on decl-block flattening
+
+**K.1 is PR #6851.** `jimple_method_body::to_code2t` with a migrating default,
+and `jimple_method.cpp:92` handing the body over via `set_value(const expr2tc &)`.
+GOTO output byte-identical across all 17 tests, captured before and after with a
+stash-and-rebuild. The `symbol.h` "latent holes" caveat §10 flagged did not bite.
+
+**K.2 was attempted and reverted.** The intended shape was a
+`jimple_method_field::to_code2t(ctx, class, function, loc)` hook with a migrating
+default, and `jimple_full_method_body::to_code2t` assembling a `code_block2t`
+from it. Two things came out of trying it, one of which stops the design.
+
+### 12.1 The location has to be a parameter
+
+`jimple_full_method_body::to_exprt` stamps each statement's location *after*
+building it (`expression.location() = l`). A `code_*2t` carries its location in
+a non-reflected field, so it has to be set while the node is still a legacy
+`exprt` — i.e. before migration, inside the hook. Hence the `const locationt &`
+parameter. That part works and is worth keeping in any redesign.
+
+### 12.2 The blocker: decl-block flattening is a legacy-side distinction
+
+`migrate_expr`'s block arm (`util/irep/migrate.cpp`) does not migrate children
+uniformly. It **splices** a child whose legacy statement is `decl-block`
+directly into the parent's operand list, with a comment explaining why:
+otherwise *"an extra code_block layer … would cause convert_block to emit DEAD
+immediately after the initializer assignment instead of at scope end."*
+
+A statement-level `to_code2t` returns an already-migrated `expr2tc`, and at that
+point **the decl-block distinction is gone** — there is no `code_decl_block2t`
+kind to test for, and a migrated decl-block is not reliably distinguishable from
+an ordinary nested block. So the parent cannot decide whether to splice, and
+reproducing `migrate_expr`'s behaviour through the hook is not possible as
+designed.
+
+### 12.3 What that leaves
+
+Three options, none of them free:
+
+1. **Keep the legacy read in the parent.** `to_code2t` on the body calls each
+   statement's `to_exprt`, stamps the location, tests `statement() ==
+   "decl-block"` itself, and migrates or splices accordingly. Correct, and it
+   reproduces `migrate_expr` exactly — but it gives statements no hook, so K.3
+   has nothing to override and the slice buys nothing.
+2. **Give the hook a way to signal "splice me"** — return a small struct, or a
+   distinct wrapper kind. Workable, but it puts a migration artefact into the
+   AST interface.
+3. **Stop emitting decl-blocks in the jimple frontend**, so the flattening has
+   nothing to do. The cleanest end state, and the largest change: it means
+   auditing every `jimple_declaration` site.
+
+Option 3 is the one that leaves no residue, and it should be measured before
+either of the others is built — the frontend has 3 259 LOC and the decl-block
+may have few producers.
+
+## 13. Status
+
+K.1 shipped (#6851). K.2 blocked on §12.2 with three named options, the first
+of which is a dead end for the slice and the third of which needs a census of
+decl-block producers before it can be sized.
