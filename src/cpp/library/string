@@ -2039,17 +2039,36 @@ __ESBMC_HIDE:
   return *this;
 }
 
+/* [string.find]: the lowest xpos with pos <= xpos and xpos + nlen <= hlen at
+ * which the needle matches. An empty needle therefore matches at pos whenever
+ * pos <= hlen, and a pos past the end simply finds nothing -- neither is an
+ * error, which is why no assertion guards them. */
+static size_t __esbmc_string_find(
+  const char *hay,
+  size_t hlen,
+  const char *needle,
+  size_t nlen,
+  size_t pos)
+{
+__ESBMC_HIDE:
+  if (pos > hlen || nlen > hlen - pos)
+    return (size_t)-1;
+  for (size_t xpos = pos; xpos + nlen <= hlen; xpos++)
+  {
+    size_t i = 0;
+    while (i < nlen && hay[xpos + i] == needle[i])
+      i++;
+    if (i == nlen)
+      return xpos;
+  }
+  return (size_t)-1;
+}
+
 template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::find(char c, size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(pos < this->length(), "basic_string overflow");
-
-  for (size_t i = pos; i < this->length(); i++)
-    if (this->str[i] == c)
-      return i; // Return the index if character found
-
-  return npos; // Return npos if character not found
+  return __esbmc_string_find(this->str, this->length(), &c, 1, pos);
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -2058,41 +2077,9 @@ size_t basic_string<CharT, Traits, Alloc>::find(
   size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos >= 0) && (pos < this->length()), "basic_string overflow");
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
-  int len = this->length();
-  int lim = pos;
-  char s1[STRING_CAPACITY];
-  strcpy(s1, this->str);
-  int slen = s.length();
-  char s2[STRING_CAPACITY];
-  strcpy(s2, s.str);
-  pos = -1;
-  size_t i, j;
-
-  for (i = lim; i < len; i++)
-  {
-    for (j = 0; (j < slen) && ((i + j) < len); j++)
-    {
-      if (s1[i + j] != s2[j])
-      {
-        break;
-      }
-      else
-      {
-        if (pos == -1)
-        {
-          pos = i + j;
-        }
-      }
-    }
-    if (s2[j] == '\0')
-    {
-      return pos;
-    }
-  }
-
-  return -1;
+  return __esbmc_string_find(
+    this->str, this->length(), s.str, s.length(), pos);
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -2101,92 +2088,16 @@ basic_string<CharT, Traits, Alloc>::find(const char *s, size_t pos, size_t n)
   const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    (pos >= 0) && (pos < this->length()) && ((pos + n) < this->length()) &&
-      (n > 0),
-    "basic_string overflow");
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
-  size_t i, j;
-
-  int len = this->length();
-  int lim = pos;
-  char s1[STRING_CAPACITY];
-  strcpy(s1, this->str);
-
-  int slen = n;
-  char s2[STRING_CAPACITY];
-  for (i = 0; i < slen; i++)
-  {
-    s2[i] = s[i];
-  }
-  s2[i] = '\0';
-
-  pos = -1;
-
-  for (i = lim; i < len; i++)
-  {
-    for (j = 0; (j < slen) && ((i + j) < len); j++)
-    {
-      if (s1[i + j] != s2[j])
-      {
-        break;
-      }
-      else
-      {
-        if (pos == -1)
-        {
-          pos = i + j;
-        }
-      }
-    }
-    if (s2[j] == '\0')
-    {
-      return pos;
-    }
-  }
-
-  return -1;
+  return __esbmc_string_find(this->str, this->length(), s, n, pos);
 }
 
 template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::find(const char *s, size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos >= 0) && (pos < this->length()), "basic_string overflow");
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
-  int len = this->length();
-  int lim = pos;
-  char s1[STRING_CAPACITY];
-  strcpy(s1, this->str);
-  int slen = strlen(s);
-  char s2[STRING_CAPACITY];
-  strcpy(s2, s);
-  pos = -1;
-  size_t i, j;
-
-  for (i = lim; i < len; i++)
-  {
-    for (j = 0; (j < slen) && ((i + j) < len); j++)
-    {
-      if (s1[i + j] != s2[j])
-      {
-        break;
-      }
-      else
-      {
-        if (pos == -1)
-        {
-          pos = i + j;
-        }
-      }
-    }
-    if (s2[j] == '\0')
-    {
-      return pos;
-    }
-  }
-
-  return -1;
+  return __esbmc_string_find(this->str, this->length(), s, strlen(s), pos);
 }
 
 template <typename CharT, typename Traits, typename Alloc>
