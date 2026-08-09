@@ -353,3 +353,72 @@ settle it.
 C.1-C.3 done (#6894), §8.2 fixed (#6897). Next: characterise the 17 (§9.2), then
 C.4 -- the `-only` placement, one arm at a time, legacy arm disabled in the same
 run.
+
+## 11. The union assert (#6899), and why "read-only" was never true
+
+### 11.1 The abort was an asymmetry, not a rule
+
+`constant_struct2t` permits a `symbol_id` type as *"a transient pre-resolution
+state"* -- added deliberately so migrating a constant aggregate before its tag
+resolves does not abort. `constant_union2t`, whose comment calls it "almost the
+same as constant_struct2t", never got the disjunct. #6899 adds it.
+
+Result: non-zero exits with and without the flag go from 73 / 85 to **68 / 68**,
+and content divergence from 17 to 5.
+
+### 11.2 The remaining five, separated properly
+
+Running each candidate three ways -- flag-off twice, then flag-on -- with the
+*same* normaliser the A/B uses:
+
+| test | off vs off | off vs on |
+|---|---|---|
+| `github_746` | 12 | 12 |
+| `github_1200` | **0** | **48** |
+| `github_1377` | **0** | **66** |
+| `github_2618` | **0** | **94** |
+
+Only `github_746` is unstable. The other three are stable against themselves and
+change under the flag: **real divergences caused by the pass.**
+
+### 11.3 A read-only walk that is not read-only
+
+The divergence is a GOTO instruction reordering -- a `NONDET` initialisation
+swapping position with the next instruction's location comment. A frontend walk
+that writes nothing should not be able to do that.
+
+Two hypotheses, both tested:
+
+1. *The `get_value()` guard back-migrates.* `get_value()` on a symbol whose
+   IREP2 side is authoritative materialises `migrate_expr_back(value_)` into the
+   legacy cache. Removing the call: divergence unchanged at 48 / 66 / 94.
+   **Refuted.**
+2. *It is the iteration or the namespace swap.* Emptying the walk body entirely,
+   leaving only the symbol snapshot and the `migrate_namespace_lookup`
+   save/restore: divergence **0**. **Refuted.**
+
+What remains is the reading itself. `symbolt::get_value2()` is a *materialising*
+accessor: it populates `value_`, sets `value2_valid_`, and the pipeline is
+sensitive to the cache state it leaves behind.
+
+So the C.3 premise -- "read-only keeps the pass inert by construction" -- is
+wrong twice over. There is no read-only way to inspect a symbol's IREP2 value:
+the accessor is the mutation. §8.4 claimed read-only was "the point of C.3 and
+the limit of it"; the limit is tighter than that.
+
+### 11.4 What C.4 has to carry
+
+- The seam is still the right one (§6.2 stands: the shape exists, and the flag
+  gives a same-binary A/B).
+- But **any** placement that reads `get_value2()` perturbs three tests, before a
+  single arm is migrated. C.4's first job is to find out what downstream reads
+  the cache state and why it changes instruction order -- not to migrate an arm
+  on top of an unexplained perturbation.
+- `github_1200` is a 2-second reproducer with a 48-line diff.
+
+## 12. Status
+
+C.1-C.3 done (#6894), §8.2 lookup fixed (#6897), union assert fixed (#6899).
+C.4 is blocked on §11.4 -- three tests whose GOTO changes when a symbol's IREP2
+value is merely read.
+
