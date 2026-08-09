@@ -1571,6 +1571,16 @@ bool fix_builtin_call(irept &code)
     callee == "__builtin_labs" || callee == "__builtin_llabs" ||
     callee == "__builtin_imaxabs")
     rhs = build_unary_fp_rhs(lhs, args, "abs");
+  // Neither tool models the longjmp control transfer, so the direct return is
+  // the only one the explored control flow can take and 0 is exact -- the value
+  // CBMC itself assigns. ESBMC's own setjmp OM instead puts the construct out
+  // of scope (__ESBMC_unreachable), leaving a bodyless external here whose
+  // nondet return admits values the modelled program cannot produce: a false
+  // FAILED on any setjmp-using binary. A longjmp still fails to transfer
+  // control, exactly as under CBMC -- cbmc_setjmp_longjmp pins that this
+  // rewrite does not claim otherwise.
+  else if (callee == "setjmp" || callee == "_setjmp")
+    rhs = mk_bv_const(lhs.find("type"), 0);
   else
     return false; // not (yet) a recognised builtin; see roadmap §4.8
 
