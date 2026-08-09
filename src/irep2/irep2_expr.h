@@ -161,6 +161,7 @@ irep_typedefs(ieee_add);
 irep_typedefs(ieee_sub);
 irep_typedefs(ieee_mul);
 irep_typedefs(ieee_div);
+irep_typedefs(ieee_rem);
 irep_typedefs(ieee_fma);
 irep_typedefs(ieee_sqrt);
 irep_typedefs(modulus);
@@ -1253,6 +1254,10 @@ ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_add);
 ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_sub);
 ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_mul);
 ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_div);
+/* IEEE 754 remainder (SMT-LIB fp.rem, C's remainder()): x - n*y with
+ * n = rne(x/y). Exact for every input, so the rounding mode the macro
+ * carries is ignored; it exists only to share the 2-op plumbing. */
+ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_rem);
 #undef ESBMC_DEFINE_IEEE_ARITH_2OP
 
 /** IEEE fused multiply-add operation. Computes (x*y) + z as if to infinite

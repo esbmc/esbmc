@@ -767,6 +767,8 @@ std::string ieee_mul2t::field_names[esbmct::num_type_fields] =
   {"rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_div2t::field_names[esbmct::num_type_fields] =
   {"rounding_mode", "side_1", "side_2", "", "", ""};
+std::string ieee_rem2t::field_names[esbmct::num_type_fields] =
+  {"rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_fma2t::field_names[esbmct::num_type_fields] =
   {"value_1", "value_2", "value_3", "rounding_mode", "", ""};
 std::string ieee_sqrt2t::field_names[esbmct::num_type_fields] =
