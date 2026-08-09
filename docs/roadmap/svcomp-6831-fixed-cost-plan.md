@@ -1,6 +1,7 @@
 # Plan — the per-task cost every SV-COMP run pays (issue #6831, cause 2)
 
-**Status:** plan only. No code shipped. Nothing here has been implemented.
+**Status:** in progress. W3.1 (vector-backed read table) is shipped; everything
+else here is still plan only.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 2 —
 a general slowdown tipping tasks already at the limit*, ~198 of 489 lost tasks,
 led by 131 `Juliet_Test` no-overflow tasks at a median of 99.1 s of a 100 s
@@ -154,8 +155,9 @@ Interleaved A/B between two binaries differing only in that container, 15 pairs:
 | ratio | 0.83 | **0.80** |
 
 **20 % off GOTO program creation, 17 % off the wall clock of every run**, and
-`ctest -R "regression/esbmc/0[0-3]"` passes 61/61. This is a prototype measured
-for this plan and then reverted — it is W3, not shipped work. (Measured
+`ctest -R "regression/esbmc/0[0-3]"` passes 61/61. This was a prototype measured
+for this plan and then reverted; it has since shipped as W3.1, which reproduced
+the ratio (×0.805 on GOTO creation, 15 interleaved pairs). (Measured
 sequentially rather than interleaved, the same change first appeared to be worth
 15 % and then appeared to be a regression; hence the methodology note above.)
 
@@ -264,11 +266,14 @@ symbols present (3,847); `esbmc --binary` round-trip regressions pass.
 
 Independent of W1/W2, no format change:
 
-1. **Vector-backed `ireps_on_read`** (§2.5): measured 20 % off GOTO creation,
-   61/61 on the sanity subset. Needs a defensive check that ids really are
-   dense — the resize path in the prototype handles a sparse stream correctly,
-   but the invariant should be asserted, not assumed.
-2. **Do not populate a discarded `goto_functionst`** (§2.6): ~10 ms.
+1. **Vector-backed `ireps_on_read`** (§2.5): **shipped.** Landed as a plain
+   `std::vector<irept>` rather than the prototype's `pair<bool, irept>`: ids are
+   dense, so a first occurrence is always exactly the next index, and that is
+   checked (`id > size()` is a corrupt stream) instead of a presence flag. The
+   slot is claimed before `read_irep()` recurses, since children are numbered
+   after their parent. Re-measured interleaved on every frontend — GOTO creation
+   ×0.805 (C, 15 pairs), ×0.883 (C++, 12), ×0.927 (Python, 12).
+2. **Do not populate a discarded `goto_functionst`** (§2.6): ~10 ms. Not started.
 
 **Exit:** both landed with before/after timings, full regression suite green,
 `--binary` reading of externally-produced goto binaries unaffected.
