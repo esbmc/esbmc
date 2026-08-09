@@ -200,23 +200,53 @@ since a trivial program measures only the fixed term.
 
 Hypotheses to separate, cheapest first:
 
-1. **A per-task constant misread as a ratio.** If the 32-test median is
-   dominated by short tests, a fixed +0.15 s *is* a ~3.5 % ratio at ~4 s and the
-   two terms are one. Check the ratio against test runtime before assuming a
-   multiplicative mechanism exists at 99 s.
-2. **More model code reaching symex.** If commits in the window changed which OM
-   bodies get pulled in by dependency closure (the CBMC memory primitives of
-   #6708 are the obvious candidate, since they touch allocation modelling every
-   task uses), symex and VCC counts move for every task. Measurable directly:
-   compare VCC counts and `Symex completed in` between the two builds on the
-   same input.
-3. **Binary-size effects** (95.1 → 100.9 MB): i-cache/iTLB pressure. Last, and
-   only if 1 and 2 are excluded — it is the hardest to act on.
+1. ~~**A per-task constant misread as a ratio.**~~ **Refuted, from the issue's
+   own data.** The runtime-bucket table needs no new measurement: median delta
+   is 0.19 s and 0.18 s in the 0–1 s and 1–2 s buckets — that flat pair *is* the
+   fixed term — and then climbs to **1.89 s** at 40–100 s. A fixed cost is
+   constant in absolute terms and cannot grow 10×, so a runtime-proportional
+   term does exist at long runtimes. Subtracting the ~0.18 s fixed part puts it
+   nearer **2.4 %** than the headline 3.5 %.
+2. ~~**More model code reaching symex.**~~ **Prime suspect refuted.** Rather
+   than diff the two builds 183 commits apart, isolate the candidate: current
+   master against current master with only the ten `__CPROVER_*` bodies of
+   `5c9109d54c` (#6708) deleted from `builtin_libs.c`. On a 2,600-iteration C
+   loop under `--unwind 2601 --overflow-check` (19.7 s wall, 18.0 s symex — in
+   the band this workstream asks for), the two builds are indistinguishable
+   where it counts:
+
+   | | with #6708 | without |
+   |---|---|---|
+   | VCCs generated | 41,603 | 41,603 |
+   | symex assignments | 39,028 | 39,028 |
+   | remaining after simplification | 10,592 | 10,592 |
+   | `Symex completed in` | 23.05 s | 23.29 s |
+
+   Identical counts mean identical symex work, so #6708 contributes nothing to
+   the multiplicative term. Some *other* commit in the window may still move
+   what reaches symex; the obvious candidate no longer does.
+
+   **Side finding, for W1.** All ten primitives are nonetheless linked *with
+   bodies* into the GOTO program of `int main(void){return 0;}`, which calls
+   none of them, and nothing else in the OM references them. The dependency
+   closure is not excluding them, so they are dead weight in every C task —
+   fixed cost, not multiplicative, but exactly the kind of thing W1 exists to
+   stop paying for.
+3. **Binary-size effects** (95.1 → 100.9 MB): i-cache/iTLB pressure. Now the
+   leading unrefuted hypothesis, and the hardest to act on.
 
 **Exit:** a named commit or a named mechanism for the 3.5 %, with before/after
 timings on a task in the 10–100 s band, or a demonstration that the term is
 hypothesis 1 and no multiplicative mechanism exists. Everything else in this
 plan is worth doing regardless; **only W0 recovers the 131 Juliet tasks.**
+
+**Still open.** The term is real (hypothesis 1 is refuted, so the exit cannot be
+taken that way) and it is not #6708. What remains is the bisect this workstream
+originally called for, over the 183 commits in the window, with a long-running
+task as the oracle — but now with a sharper stopping rule than "the ratio moved":
+VCC count and symex assignments, which the hypothesis-2 probe shows are stable
+under a change that only adds unreferenced model code. A commit that moves those
+counts is the mechanism; one that moves only wall time is hypothesis 3.
 
 ### W1 — Split the blob so a task loads only its language's models
 
