@@ -128,7 +128,7 @@ The dependency runs the other way from what §3 assumed: in this frontend a type
 has no independent consumer — it exists only to be handed to an expression, a
 symbol or a code type. **Types can migrate only when their consumers do.**
 
-### J.1' — one AST node, vertically
+### J.1' — one AST node, vertically (also withdrawn, see §8)
 
 The replacement: migrate a single AST node kind **end to end** — its type, its
 expression construction, and its operands — leaving exactly one `migrate_*` at
@@ -143,3 +143,76 @@ This is the pattern Part V settled on for Python — *relax at construction,
 re-enforce at the seam* — and it applies here for the same reason: a
 horizontal slice through a construction tree has no cut that does not multiply
 round-trips.
+
+## 8. The slice is a virtual signature, not a node — so it needs a parallel method
+
+§7 replaced J.1 with "migrate one AST node vertically". Measuring the 27
+overrides to pick the right node killed that too, and found the real structure.
+
+**The node exists — it just cannot be sliced.** Ranking every `to_exprt`
+override by size and entanglement:
+
+| node | lines | `ctx` uses | operand surgery |
+|---|---:|---:|---:|
+| **`jimple_constant`** | **15** | **0** | **0** |
+| `jimple_nondet` | 21 | 0 | 0 |
+| `jimple_cast` | 17 | 4 | 0 |
+| `jimple_binop` | 21 | 3 | 0 |
+| `jimple_deref` | 20 | 3 | 2 |
+| `jimple_virtual_member` | 24 | 5 | 2 |
+| `jimple_static_member` | 46 | 3 | 2 |
+| `jimple_symbol` | 146 | 2 | 0 |
+| the rest (`invoke`, `newarray`, `lengthof`, …) | 62-77 | 3-7 | 0-3 |
+
+`jimple_constant` is a genuine leaf — four lines of body, no context, no
+operands. It is exactly what §7 asked for. (Note in passing: the two nodes §7
+*guessed* at, `jimple_static_member` and `jimple_virtual_member`, are among the
+most entangled — 2 operand-surgery sites each. Guessing picked the worst
+candidates available.)
+
+**But `to_exprt` is a virtual declared on `jimple_expr`** (`jimple_expr.h:13-18`)
+with a default body and 27 overrides. A return type is part of that signature.
+You cannot migrate one override of it — the choice is all 27 at once, or none.
+
+### 8.1 The technique this actually needs
+
+Add a **parallel virtual**, do not change the existing one:
+
+```cpp
+virtual expr2tc to_expr2t(contextt &, const std::string &,
+                          const std::string &) const
+{
+  // default: whatever has not migrated yet still builds legacy
+  expr2tc e;
+  migrate_expr(to_exprt(...), e);
+  return e;
+}
+```
+
+Overrides then move one at a time, each replacing the default for its own node,
+with exactly **one** `migrate_expr` per un-migrated node and none per migrated
+one. When the last override lands, the default and `to_exprt` both delete.
+
+That gives the incremental path §7 was looking for, and it does it without the
+round-trip multiplication that killed J.1 — because the round-trip lives in the
+*default*, which shrinks as the migration proceeds, rather than at every call
+site, which does not.
+
+### 8.2 This is a decision for Phases 5-9, not just jimple
+
+Every frontend in the plan converts through a similar interface — jimple's
+`to_exprt`/`to_typet`, and the equivalent entry points in clang-c, clang-cpp,
+solidity and python. If the parallel-method technique is right here, it is the
+shape all five need, and §Phase 4's "reusable construction kit" (closed as
+already-done in §38 of the parent document, on the grounds that its two named
+helpers already exist) is missing this: **the kit's most important item is not a
+helper, it is a migration technique for a virtual construction interface.**
+
+That is worth settling before Phase 5 writes code, because getting it wrong
+costs the same mistake five times — which is the exact failure Phase 4 was
+written to prevent.
+
+## 9. Status
+
+Census, decomposition, and two withdrawn first slices. No code has moved. The
+next decision is §8.1's technique, and it is a program-level one.
