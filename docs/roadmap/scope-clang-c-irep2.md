@@ -205,6 +205,82 @@ false zero §39.1 warns about.
 - **C.5** `get_type` -> `type2tc`, and only then consider `get_expr` (§3.1),
   which may not be worth migrating at all if the adjuster carries the semantics.
 
-## 8. Status
+## 8. C.3 executed (#6894): the walk is inert, and two harness facts it exposed
 
-Census complete, seam decided, nothing migrated. Next action is C.3.
+Added `clang_c_adjust_irep2` behind `--clang-c-irep2-adjust`, wired after
+`clang_c_adjust` in `clang_c_languaget::typecheck`. The walk is **read-only**:
+it reads each code symbol's `get_value2()` and recurses via `Foreach_operand`,
+never writing a symbol back. Read-only is not stylistic -- it keeps the pass
+inert *by construction* rather than by argument, and side-steps the round-trip
+losses `python_adjust` documents (a bitfield's `#bitfield` flag, an explicit
+alignment attribute), which is exactly where C headers live.
+
+### 8.1 Result
+
+Flag-off versus flag-on, same binary, over the 1 672 runnable tests of
+`regression/esbmc`:
+
+| Measure | Result |
+|---|---|
+| new failures | **none** -- 20 non-zero exits either way over a 300-test sample |
+| content divergence | **none**, after removing two harness artifacts |
+| raw divergence before removing them | 1 550 / 1 672 |
+
+The gap between 1 550 and 0 is the whole story of this section.
+
+### 8.2 Every C symbol trips the migrate warning
+
+```
+WARNING: migrate_expr: symbol 'c:@F@printf' missing renaming delimiters,
+treating as level0 with base name 'c:@F@printf'
+```
+
+`sym_name_to_symbol` looks the name up in `migrate_namespace_lookup` and, on
+failure, falls through to the renaming parser, which finds no `?`/`!` and warns
+(migrate.cpp:686). The lookup fails because `clang_c_languaget::typecheck`
+builds into **`new_context`** and only `c_link`s into the global context
+afterwards, so the namespace the migrator consults does not yet hold these
+symbols.
+
+The migration is not wrong -- the fallback returns the same level-0 symbol the
+lookup would have. But it is a diagnostic-noise defect waiting for the flip:
+the moment this pass stops being optional, every C compilation emits one warning
+per symbol. C.4 owns fixing the lookup, not silencing the warning.
+
+### 8.3 The baseline is nondeterministic on 17 tests
+
+Stripping the warnings left 17 divergences, clustered suggestively:
+`to_union_*` (5), `github_994-cast-to-bitfield-*` (3), `github_709*` (4). Unions
+and bitfields are precisely the two round-trip losses `python_adjust` names, so
+the obvious reading is that the walk corrupts them.
+
+The reading is wrong. Parent §7 harness rule 7 -- *run the baseline against
+itself before attributing a divergence to the patch* -- says check, and the
+check is decisive: running the **flag-off** binary twice over ten of those
+tests, **nine differ against themselves**, instructions moving relative to their
+location comments between runs.
+
+So it is pre-existing nondeterminism in ESBMC's GOTO output, and the
+union/bitfield clustering is a coincidence of which tests happen to be unstable.
+Without the control this would have been reported as a migration defect in the
+two constructs most likely to have one.
+
+**The phase's most useful harness note.** An A/B over this corpus needs both
+filters -- strip the migrate warnings, pre-identify the unstable tests -- or its
+signal-to-noise runs 17 : 1 555 the wrong way.
+
+### 8.4 What C.3 does and does not establish
+
+Establishes: the IREP2 walk reaches every code symbol in the C corpus, migrates
+each value, and neither crashes nor changes behaviour. `migrate_expr` handles
+every construct 1 672 C tests contain.
+
+Establishes nothing about a pass that *writes*. Read-only is the point of C.3
+and the limit of it; the first write-back is C.4's risk, and §6.3's warning
+stands.
+
+## 9. Status
+
+C.1-C.3 done (#6894). Next is C.4: the `-only` placement, one arm at a time,
+with the legacy arm disabled in the same run. Before the first arm, fix the
+§8.2 lookup -- cheap now, load-bearing later.
