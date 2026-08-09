@@ -90,6 +90,27 @@ exprt jimple_label::to_exprt(
   return c_label;
 }
 
+// K.3 of docs/roadmap/scope-jimple-irep2.md. migrate_expr's label arm also
+// flattens a single-declaration decl-block body to the bare decl; this frontend
+// never builds a decl-block, so there is nothing to reproduce. The members are
+// passed a nil location because to_exprt above does not stamp them -- only
+// jimple_full_method_body does that.
+expr2tc jimple_label::to_code2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name,
+  const locationt &loc) const
+{
+  const locationt &nil = static_cast<const locationt &>(get_nil_irep());
+
+  std::vector<expr2tc> ops;
+  ops.reserve(members->members.size());
+  for (auto const &member : members->members)
+    ops.push_back(member->to_code2t(ctx, class_name, function_name, nil));
+
+  return code_label2tc(label, code_block2tc(ops, nil, nil), loc);
+}
+
 void jimple_goto::from_json(const json &j)
 {
   j.at("goto").get_to(label);
