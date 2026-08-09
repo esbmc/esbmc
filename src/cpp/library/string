@@ -2657,26 +2657,34 @@ basic_string<CharT, Traits, Alloc> &basic_string<CharT, Traits, Alloc>::replace(
   return *this;
 }
 
+/* [string.compare] defers to [string.view.compare]: compare the common prefix
+ * first and only fall back to the lengths when it matches. [char.traits.
+ * specializations.char] defines lt as the built-in < on unsigned char. */
+static int
+__esbmc_string_compare(const char *s1, size_t n1, const char *s2, size_t n2)
+{
+__ESBMC_HIDE:
+  size_t rlen = n1 < n2 ? n1 : n2;
+  for (size_t i = 0; i < rlen; i++)
+  {
+    unsigned char c1 = (unsigned char)s1[i];
+    unsigned char c2 = (unsigned char)s2[i];
+    if (c1 != c2)
+      return c1 < c2 ? -1 : 1;
+  }
+  if (n1 < n2)
+    return -1;
+  if (n1 > n2)
+    return 1;
+  return 0;
+}
+
 template <typename CharT, typename Traits, typename Alloc>
 int basic_string<CharT, Traits, Alloc>::compare(const char *s) const
 {
 __ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
-  int i;
-  int sLen = strlen(s);
-  int len = this->length();
-  if (len < sLen)
-    return -1;
-  if (len > sLen)
-    return 1;
-  for (i = 0; i < sLen; i++)
-  {
-    if (this->str[i] != s[i])
-    {
-      return 2;
-    }
-  }
-  return 0;
+  return __esbmc_string_compare(this->str, this->length(), s, strlen(s));
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -2685,21 +2693,8 @@ int basic_string<CharT, Traits, Alloc>::compare(
 {
 __ESBMC_HIDE:
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
-  int i;
-  int sLen = s.length();
-  int len = this->length();
-  if (len < sLen)
-    return -1;
-  if (len > sLen)
-    return 1;
-  for (i = 0; i < sLen; i++)
-  {
-    if (this->str[i] != s.str[i])
-    {
-      return 2;
-    }
-  }
-  return 0;
+  return __esbmc_string_compare(
+    this->str, this->length(), s.str, s.length());
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -2712,27 +2707,7 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     (pos1 < this->length()) && ((pos1 + n1) <= this->length()), "overflow");
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
-  int i, k;
-  char tmp[STRING_CAPACITY];
-  for (k = 0, i = pos1; i < (pos1 + n1); i++, k++)
-  {
-    tmp[k] = this->str[i];
-  }
-  tmp[k] = '\0';
-  int sLen = strlen(s);
-  int len = strlen(tmp);
-  if (len < sLen)
-    return -1;
-  if (len > sLen)
-    return 1;
-  for (i = 0; i < sLen; i++)
-  {
-    if (tmp[i] != s[i])
-    {
-      return 2;
-    }
-  }
-  return 0;
+  return __esbmc_string_compare(this->str + pos1, n1, s, strlen(s));
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -2745,27 +2720,7 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     (pos1 < this->length()) && ((pos1 + n1) <= this->length()), "overflow");
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
-  int i, k;
-  char tmp[STRING_CAPACITY];
-  for (k = 0, i = pos1; i < (pos1 + n1); i++, k++)
-  {
-    tmp[k] = this->str[i];
-  }
-  tmp[k] = '\0';
-  int sLen = s.length();
-  int len = strlen(tmp);
-  if (len < sLen)
-    return -1;
-  if (len > sLen)
-    return 1;
-  for (i = 0; i < sLen; i++)
-  {
-    if (tmp[i] != s.str[i])
-    {
-      return 2;
-    }
-  }
-  return 0;
+  return __esbmc_string_compare(this->str + pos1, n1, s.str, s.length());
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -2782,39 +2737,7 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     (pos2 < s.length()) && ((pos2 + n2) <= s.length()) && (n2 > 0), "overflow");
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
-  int i, k;
-
-  char tmp[STRING_CAPACITY];
-  for (k = 0, i = pos1; i < (pos1 + n1); i++, k++)
-  {
-    tmp[k] = this->str[i];
-  }
-  tmp[k] = '\0';
-
-  char tmp2[STRING_CAPACITY];
-  for (k = 0, i = pos2; i < (pos2 + n2); i++, k++)
-  {
-    tmp2[k] = s.str[i];
-  }
-  tmp2[k] = '\0';
-
-  int sLen = strlen(tmp2);
-  int len = strlen(tmp);
-
-  if (len < sLen)
-    return -1;
-  if (len > sLen)
-    return 1;
-
-  for (i = 0; i < sLen; i++)
-  {
-    if (tmp[i] != tmp2[i])
-    {
-      return 2;
-    }
-  }
-
-  return 0;
+  return __esbmc_string_compare(this->str + pos1, n1, s.str + pos2, n2);
 }
 
 template <typename CharT, typename Traits, typename Alloc>
