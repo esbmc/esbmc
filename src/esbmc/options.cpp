@@ -640,10 +640,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"output",
      boost::program_options::value<std::string>()->value_name("<filename>"),
      "Output VCCs in SMT lib format to given file (or stdout if it is '-')"},
-    {"floatbv",
-     NULL,
-     "Encode floating-point using the SMT floating-point theory (default)"},
-    {"fixedbv", NULL, "Encode floating-point as fixed bit-vectors"},
     {"fp2bv",
      NULL,
      "Encode floating-point as bit-vectors (default for solvers that don't "

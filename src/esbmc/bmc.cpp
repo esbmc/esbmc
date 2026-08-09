@@ -271,9 +271,7 @@ void bmct::generate_smt_from_equation(
 
   if (!options.get_bool_option("int-encoding"))
   {
-    logic = "bit-vector";
-    logic += (!config.ansi_c.use_fixed_for_float) ? "/floating-point " : " ";
-    logic += "arithmetic";
+    logic = "bit-vector/floating-point arithmetic";
   }
   else
     logic = "integer/real arithmetic";

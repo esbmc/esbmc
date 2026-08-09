@@ -252,7 +252,7 @@ std::string pick_logic(const optionst &options, bool native_fp)
   if (options.get_bool_option("int-encoding"))
     return has_quantifiers ? "AUFLIRA" : "QF_AUFLIRA";
 
-  if (options.get_bool_option("floatbv") || !native_fp)
+  if (!native_fp)
     return has_quantifiers ? "AUFBV" : "QF_AUFBV";
 
   return has_quantifiers ? "AUFBVFP" : "QF_AUFBVFP";
@@ -1285,9 +1285,7 @@ bool solved = false;
 
 /* --fp2bv asks for floating-point encoded as bit-vectors, which is exactly
  * camada's FPEncoding::BV; let it bit-blast rather than swapping in ESBMC's
- * own software lowering. Keyed off fp2bv, not floatbv: the latter is set by
- * default for anything that is not --fixedbv, so reading it made every run
- * bit-blast and native FP unreachable. */
+ * own software lowering. */
 camada::FPEncoding smt_solver_baset::fp_encoding() const
 {
   return options.get_bool_option("fp2bv") ? camada::FPEncoding::BV

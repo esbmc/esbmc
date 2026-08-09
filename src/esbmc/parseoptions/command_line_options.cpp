@@ -401,11 +401,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
       cmdline.isset("ir-ieee") ? "ir-ieee" : "ir");
     exit(1);
   }
-  if (cmdline.isset("fixedbv"))
-    options.set_option("fixedbv", true);
-  else
-    options.set_option("floatbv", true);
-
   if (cmdline.isset("context-bound"))
     options.set_option("context-bound", cmdline.getval("context-bound"));
   else

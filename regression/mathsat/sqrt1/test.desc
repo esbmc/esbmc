@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---floatbv --mathsat
+--mathsat
 ^VERIFICATION SUCCESSFUL$

@@ -360,9 +360,6 @@ public:
     if (int_encoding)
       return solver->mkRealSort();
 
-    if (config.ansi_c.use_fixed_for_float)
-      return mk_fbv_sort(ew + sw);
-
     return mk_fpbv_sort(ew, sw);
   }
 
