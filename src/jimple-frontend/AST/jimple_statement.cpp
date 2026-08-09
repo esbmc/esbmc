@@ -52,6 +52,21 @@ exprt jimple_return::to_exprt(
   return ret_expr;
 }
 
+expr2tc jimple_return::to_code2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name,
+  const locationt &loc) const
+{
+  // code_returnt always carries one operand, nil when there is no value, and
+  // migrate_expr maps that nil to a null expr2tc.
+  expr2tc value;
+  if (expr)
+    value = expr->to_expr2t(ctx, class_name, function_name);
+
+  return code_return2tc(value, loc);
+}
+
 std::string jimple_return::to_string() const
 {
   return "Return: (Nothing)";
