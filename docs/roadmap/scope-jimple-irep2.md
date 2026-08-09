@@ -577,3 +577,90 @@ commented out -- migrating it would pin an unfinished construct, so it is worth
 checking whether it is reachable at all before taking it), `jimple_identity`,
 `jimple_assertion`, and the two invoke forms. `jimple_assignment` stays blocked
 on §16.2; `to_typet` -> `type2tc` remains last (§7).
+
+## 19. Corpus census: three overrides can never be verified this way
+
+Before taking `jimple_identity` I counted what the 17 tests actually contain,
+by `object` key:
+
+| Kind | Occurrences | State |
+|---|---|---|
+| `SetVariable` | 220 | blocked (§16) |
+| `Variable` | 167 | #6868 |
+| `Label` | 77 | #6855 |
+| `If` | 69 | #6856 |
+| `Return` | 53 | #6866 |
+| `StaticInvoke` | 30 | open |
+| `Goto` | 28 | #6854 |
+| `Throw` | 14 | open, but see below |
+| `SpecialInvoke` | 14 | open |
+| **`identity`** | **0** | **unverifiable** |
+| **`VirtualInvoke`** | **0** | **unverifiable** |
+
+`jimple_assertion` is not in `from_map` at all, so nothing can construct it.
+
+This is a hard limit, not a backlog. The method used by every slice in this
+stack — byte-identity plus a mutant that must change the output — cannot say
+anything about an override the corpus never reaches: identity holds vacuously
+and no mutant moves. §18.1's rule makes that explicit, so `jimple_identity`,
+`jimple_virtual_invoke` and `jimple_assertion` must not be migrated on the
+strength of "it looks right".
+
+`jimple_identity` would have been the worse trap of the three. Its right-hand
+side is a `symbolt` constructed locally and never entered into the context, so
+`migrate_expr`'s lookup fails and it falls through to the renaming parser,
+which — finding no `?` or `!` — logs a warning and returns level0
+(migrate.cpp:686). A native override calling `symbol_expr2tc` would produce a
+level0 symbol too, but by a different route, and nothing in the corpus would
+have caught a divergence.
+
+### 19.1 Options for the three
+
+Either extend the corpus so they become reachable, or leave them on the legacy
+path indefinitely. Extending is the better answer and is not hypothetical —
+§20 does exactly that for a *branch* rather than a statement.
+
+## 20. `jimple_declaration` (#6868): a live arm the corpus did not reach
+
+`jimple_declaration::to_exprt` ends with `decl.location() = get_location(...)`:
+it sets its own location instead of taking the caller's. The migrating default
+overwrites that only when `loc` is non-nil, so the override needs
+
+```cpp
+loc.is_nil() ? get_location(class_name, function_name) : loc
+```
+
+Mutating each arm to be unconditional changed **nothing**: both produce the
+baseline across all 17 tests. On the usual reading that ternary is dead weight
+and the "simplify aggressively" pass deletes it.
+
+It is not. `jimple_label::to_code2t` passes nil to every nested member
+(jimple_statement.cpp:124), so any declaration inside a label reaches the
+fallback. A JSON walk over the corpus explains the measurement: 167
+declarations, **0** of them nested in a label. The arm is demanded by a sibling
+override's contract and simply never exercised.
+
+### 20.1 The test, not the deletion
+
+`regression/jimple/github_4715_label_scoped_decl_01` nests a declaration inside
+a label. With the fallback the DECL carries
+`file OriginalKt.jimple function main_0`; without it, that instruction and its
+successor both print `no location`. The arm is now live, mutant-distinguished,
+and pinned.
+
+This is the shape §19.1 recommends for the unreachable overrides, and the
+general lesson for the rest of the migration: **"no mutant moves" has two
+causes — the code is dead, or the corpus is thin.** Deleting on the first
+reading without checking the second silently drops behaviour that the language
+permits and a sibling caller already relies on.
+
+### 20.2 Status
+
+Ten slices shipped: #6851, #6853, #6854, #6855, #6856, #6858, #6860, #6865,
+#6866, #6868. Corpus now 18 tests, all byte-identical, all mutant-checked.
+
+Remaining reachable: `StaticInvoke` (30), `SpecialInvoke` (14), `Throw` (14 --
+but `jimple_throw::to_exprt` is a bare `codet("cpp-throw")` with its body
+commented out, so migrating it would pin an unfinished construct rather than
+preserve one). `jimple_assignment` stays blocked on §16.2; `to_typet` ->
+`type2tc` remains last (§7).
