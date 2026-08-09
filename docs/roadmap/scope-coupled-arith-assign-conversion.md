@@ -848,8 +848,11 @@ restoring the predicate to `false` restores the assert.
 
 ### 18.1 `class10` and `class12` are the same defect, and it is not §17's
 
-Both G4 divergences §16 recorded still reproduce after #6839, and both fail
-identically:
+> **Withdrawn 2026-08-09 — see §18.5.** The measurement below was taken against
+> a build that did **not** contain #6839. The shared assert is real and was
+> observed; the claim that it survives #6839 was not established.
+
+Both G4 divergences §16 recorded reproduce, and both fail identically:
 
 ```
 Assertion failed: (a->sort->get_data_width() == b->sort->get_data_width())
@@ -915,3 +918,46 @@ Method note, since this is the third time the discipline has paid on this
 branch: **run the control before believing a measurement.** A timeout under load
 is not evidence; a timeout that reproduces on the other arm is evidence of
 something else entirely.
+
+### 18.5 A measurement error of mine, and what it invalidates
+
+§18.1 states the two divergences "still reproduce after #6839". **That was not
+measured.** The runs behind it were made on the roadmap branch, whose working
+tree does not contain `promote_to_ieee` — the fix lives on
+`fix/6745-python-adjust-ieee-promotion`. I switched branches without rebuilding,
+so every flip measurement in §18.1-§18.4 was taken against a binary whose
+adjuster lacked the fix, and attributed to one that had it.
+
+Re-measured with the fix actually compiled in, on a quiet machine (load 8):
+
+| run | result |
+|---|---|
+| `class10`, flip | timeout at 400 s |
+| `class12`, flip | timeout at 421 s |
+| `class12`, **legacy** | timeout at 421 s |
+
+So on the current build **neither arm completes**, and the divergence cannot be
+confirmed or refuted here: both are dominated by the same pre-existing
+list-equality cost §18.4 identified. `class10`/`class12` are, for now,
+**unmeasurable on this machine** rather than known-divergent.
+
+What survives from §18.1-§18.4:
+
+- The width assert `a->sort->get_data_width() == b->sort->get_data_width()` was
+  genuinely observed on both tests, on a build without #6839. That much is real.
+- §18.4's finding stands on its own merits — it was a legacy-vs-legacy control,
+  so the adjuster build state does not affect it.
+- The reduction negatives (c1-c5, r1, r3, r4, r6) were run on the same
+  unfixed binary. They are evidence about *that* adjuster, not the shipped one,
+  and should be re-run before being relied on.
+
+**Process lesson, and it is a different one from §18.4's.** That section's rule
+was *run the control before believing a measurement*. This one is narrower and
+was the actual failure here: **rebuild after switching branches, or the control
+you run is not the binary you think it is.** A `git checkout` silently reverted
+the file under test, and nothing in the output would have shown it — the fix is
+inert on the default path, so only flip runs were affected, and those are
+exactly the runs I was reading. The check that would have caught it costs one
+command: `grep -c promote_to_ieee src/python-frontend/python_adjust.cpp`.
+
+G4 therefore stands where §16 left it, minus the confidence §18.1 claimed.
