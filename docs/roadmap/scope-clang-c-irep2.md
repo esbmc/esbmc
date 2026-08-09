@@ -131,8 +131,80 @@ Three consequences:
   costs a rebuild. `--no-irep2-native-body` governs `goto_convert`, not the
   frontend.
 
-## 6. Status
+## 6. C.2 decided: start at adjust, not convert
 
-Census complete; nothing migrated. Next action is C.2 -- the seam decision --
-which needs `python_adjust`'s shape read properly first, since §3.2 says that is
-the existing precedent for an in-place IREP2 adjuster.
+§3.2 said `python_adjust` is the precedent to read rather than invent. Read, it
+decides the phase.
+
+### 6.1 What Python actually built
+
+`python_adjust::adjust_expr(expr2tc &)` (python_adjust.cpp:274) is the same
+shape as `clang_c_adjust::adjust_expr(exprt &)` -- in-place, recursive,
+dispatching on kind -- but over IREP2. It recurses with
+`expr->Foreach_operand([this](expr2tc &op) { adjust_expr(op); })`, which is the
+operand-surgery rule of parent §38.3 in its natural form rather than as advice.
+
+It is wired into `python_language.cpp` behind **two** flags
+(`src/esbmc/options.cpp:210,214`):
+
+| Flag | Placement | Effect |
+|---|---|---|
+| `--python-irep2-adjust` | *after* `clang_cpp_adjust` | shadow; default off; currently behaviour-inert |
+| `--python-irep2-adjust-only` | *instead of* `clang_cpp_adjust` | the real flip |
+
+### 6.2 Why this settles the seam
+
+Two reasons to take the adjuster rather than the converter:
+
+1. **The shape exists and has been debugged.** `get_expr`'s out-param recursion
+   (§3.1) has no precedent anywhere in the tree; a per-node migrating default
+   would be invented here for the first time. The adjuster's does not need
+   inventing.
+2. **It restores the runtime A/B, which R4 said was lost.** A flag-gated pass
+   means flag-off versus flag-on is *the same binary*. Phase 5 paid a rebuild
+   per A/B and per mutant, and §5 R1 predicted the rebuild would dominate at
+   this scale. A flag removes that cost entirely -- the same economics
+   `--no-irep2-native-body` gave the `goto_convert` work.
+
+So R4 is downgraded: it is true that no opt-out exists *today*, but the first
+commit of C.3 can add one, and should.
+
+### 6.3 The warning that comes with it
+
+Python's own comment records a negative result worth inheriting verbatim. The
+shadow placement is inert **because `clang_cpp_adjust` already did the work** --
+the IREP2 pass "currently resolves nothing" and "only writes a symbol back when
+it changes the value, so the flag is behaviour-inert."
+
+That is parent §39.1's third failure mode -- *a caller downstream re-does the
+work* -- sitting at the centre of the design. A mutant on a shadow-placed pass
+will not move a single test, and it will not move it for a reason that has
+nothing to do with whether the pass is correct.
+
+Moving the pass earlier does not fix it either: Python prototyped that (B.3,
+2026-06-25) and got *no verdict at all* across a 20-test fixture, because
+running both adjusters over the same nodes double-resolves them -- the
+"two-places-resolve hazard". Their conclusion, which applies unchanged here:
+the before-placement is viable only once it **replaces** the legacy adjuster.
+
+**Consequence for this phase.** The shadow flag is worth having as a
+crash/regression net, but it cannot be the verification gate. The gate has to
+be the `-only` placement over the §1.2 corpus, arm by arm, with the legacy
+adjuster's arm disabled in the same run -- otherwise every mutant reports the
+false zero §39.1 warns about.
+
+## 7. Revised decomposition
+
+- **C.1** ✅ census (§1).
+- **C.2** ✅ seam decided: `clang_c_adjust` -> a parallel IREP2 adjuster, behind
+  a flag pair mirroring Python's.
+- **C.3** Add the flag pair and an empty IREP2 adjuster that recurses and does
+  nothing. Gate: whole-corpus A/B, flag-on versus flag-off, same binary.
+- **C.4** Migrate arms one at a time under the `-only` flag, leaf arms first.
+  Each arm's mutant must be run with the legacy arm off (§6.3).
+- **C.5** `get_type` -> `type2tc`, and only then consider `get_expr` (§3.1),
+  which may not be worth migrating at all if the adjuster carries the semantics.
+
+## 8. Status
+
+Census complete, seam decided, nothing migrated. Next action is C.3.
