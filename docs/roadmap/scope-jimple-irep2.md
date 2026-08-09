@@ -730,3 +730,87 @@ constructs `jimple_invoke`); `Throw` (14) is a bare `codet("cpp-throw")` with
 its body commented out, so migrating it would pin an unfinished construct.
 `jimple_assignment` stays blocked on §16.2; `to_typet` -> `type2tc` remains
 last (§7).
+
+## 22. `jimple_assignment` (#6875): unblocked by one census, then by #6873
+
+§16 blocked this slice on whether the two `c_typecast` copies agree.
+`scope-coupled-arith-assign-conversion.md` §20 answered that: they did not, in
+seven structural ways plus a constant-fold difference that reached every
+frontend. #6873 fixed the fold. What remained was whether any of the seven can
+arise here.
+
+### 22.1 One census discharges all seven
+
+`jimple_type::to_typet` produces exactly four shapes:
+
+```cpp
+case INT:     return int_type();
+case BOOLEAN: return bool_type();
+case _VOID:   return empty_typet();
+default:      return pointer_typet(symbol->get_type());   // and arrays, as
+                                                          // nested pointers
+```
+
+and `incomplete_array`, `cmt_constant`, `cmt_volatile` and `#reference` appear
+**nowhere** in `src/jimple-frontend/`. So:
+
+| Gap | Why it cannot arise |
+|---|---|
+| references (both directions) | needs `#reference`, never set |
+| pointer-to-member | needs `to-member`, never set |
+| `incomplete_array` source | jimple builds no array type at all |
+| const/volatile warnings | no qualifier is ever set |
+| `#reference` propagation | same |
+| struct/union source to pointer | class types are already `pointer_typet(struct)`, never bare struct |
+| string-constant to array | no array *destination* exists; `get_expression` also discards the string value |
+
+This is a stronger argument than the one §20.1 made informally, and it is the
+kind that generalises: the question "can this conversion arise?" is answered by
+the frontend's *type constructor*, not by its statements.
+
+### 22.2 The fold dependency, measured
+
+Built against a base without #6873, **all 19** tests diverged, uniformly:
+
+```
+< ASSIGN $z0=1;
+> ASSIGN $z0=(signed int)1;
+```
+
+With #6873 merged in, all 19 are byte-identical. That is a clean confirmation of
+§20.2 from the other direction: the divergence was not hypothetical, and it hit
+every single test the moment an assignment moved to the native path.
+
+### 22.3 The first genuinely dead branch
+
+§20 and §21 both turned an unmoved mutant into a test. Removing the `is_skip`
+arm changed 0/19 — and this time the corpus is not the reason:
+
+```cpp
+bool is_skip = false;   // jimple_statement.h:164
+```
+
+It is assigned **nowhere** in the tree. `from_json` sets `lhs` and `rhs` only,
+there is no setter, and no other file mentions it. The arm is unreachable by
+construction, not by corpus, and no test could ever make it live.
+
+So the override does not mirror it. Reproducing a provably-unreachable branch in
+new code is dead instrumentation, which the C-Live obligation forbids; the
+legacy arm in `to_exprt` is a dead-code candidate for its own PR, already marked
+`//TODO: Remove this hack`.
+
+**The rule from §21 survives with its exception now stated:** an unmoved mutant
+is a question about the corpus first — but when the guard is a member that
+nothing in the tree ever assigns, the answer really is dead code, and that is
+provable statically rather than by adding a test.
+
+### 22.4 Status
+
+Twelve slices shipped: #6851, #6853, #6854, #6855, #6856, #6858, #6860, #6865,
+#6866, #6868, #6870, #6875, plus #6873 in support. Every reachable statement
+kind is now native.
+
+Remaining: `jimple_throw` (14 occurrences, but `to_exprt` is a bare
+`codet("cpp-throw")` with its body commented out); the three overrides §19 shows
+are unreachable; and `to_typet` -> `type2tc`, which §7 keeps for last and which
+§22.1 has now mapped in full.
