@@ -115,6 +115,7 @@ def _is_imported_model(module_name: str) -> bool:
         "threading",
         "queue",
         "torch",
+        "unittest",
     }
     return module_name in models
 
