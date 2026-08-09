@@ -21,5 +21,14 @@ int main(void)
   bool nz = raw;
   assert(nz == true);
 
+  /* C11 6.5.16.1 admits a pointer on the right of an assignment whose left
+   * operand is _Bool; it is a constraint violation against an int. */
+  int obj;
+  int *ptr = &obj;
+  bool nonnull = ptr;
+  assert(nonnull == true);
+  bool null = (int *)0;
+  assert(null == false);
+
   return 0;
 }
