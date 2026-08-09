@@ -2505,3 +2505,75 @@ later phases were written before the work that made them moot, which is the
 ordinary fate of a plan that survives contact with its own execution. The
 remaining executable phase is **3** (finish the Python flip), and then **5-9**,
 whose gate on Phase 2 (Phase 8's text) is void now that B-4 has no content.
+
+## 39. Phase 5 (jimple) is complete — and what Phase 6 inherits (2026-08-09)
+
+`scope-jimple-irep2.md` closed at §31. Every expression kind
+`jimple_expr::get_expression` can construct and every statement kind the body
+dispatcher can construct is now built natively or left on the migrating default
+with a stated reason; twenty-one PRs, all byte-identical, all mutant-checked.
+Phase 5 named jimple "the pathfinder for the kit", and the kit it produced is
+not the one Phase 4 predicted.
+
+### 39.1 The transferable artefact is a diagnostic table, not code
+
+§38.4 lists five construction lessons and their locations. Jimple added no
+sixth: the shared helpers were already adequate, and every slice was mechanical
+once the target was understood. What jimple actually produced is a way to tell
+whether a migration has been *verified* or merely *not contradicted*.
+
+The gate used throughout was A/B byte-identity of `--goto-functions-only`
+(G3) plus a mutant that must change it. The mutant is the load-bearing half,
+and it fails silently in five distinct ways:
+
+| An unmoved mutant means | Response | jimple §|
+|---|---|---|
+| the corpus is thin | write a test | §20, §21.1 |
+| the code is unreachable by construction | do not mirror the branch | §22.3, §23.1 |
+| a caller downstream re-does the work | test in a position where it does not | §23.2, §30.1 |
+| the printer normalises the field away | argue from source; do not claim it measured | §21.2, §24.1 |
+| the mutation makes the operation invalid, and the error path is also a no-op | mutate to a valid alternative | §30.2 |
+
+Only the second is a fact about the code. The other four are facts about the
+harness, and three of them read exactly like the second if not chased.
+
+Two procedural rules go with it:
+
+- **Census before writing.** Five of jimple's expression kinds occur zero times
+  in its corpus. One of them (`nondet`) was migrated before this was known, and
+  its byte-identity claim held for nine PRs because nothing executed the
+  override (§28). A single census, run once, prices every construct at the
+  start.
+- **Corrupt the arm, do not delete it** (§27.1). Deletion asks whether an arm is
+  *necessary*; a correct migration slice never is, because producing identical
+  output is the premise of the gate. Only corruption asks whether it *runs*.
+- **Anchor mutants to the native function.** The parallel-method technique
+  leaves a near-twin of every override a few hundred lines away, and a
+  text-targeted mutant that hits the legacy copy returns a false zero (§26.3).
+
+### 39.2 A program-level defect jimple surfaced
+
+`scope-jimple-irep2.md` §16 blocked its largest slice on whether
+`c_typecastt::implicit_typecast`'s two copies agree. They did not:
+`do_typecast`'s irept copy folds a cast of a constant and its `expr2tc` copy did
+not, so a literal assigned to a differently-typed lvalue folded on one path and
+not the other. Fixed in **#6873** with a differential harness in
+`unit/util/c_typecast.test.cpp`.
+
+That is not a jimple defect. Every frontend in Phases 6-9 implicit-casts at
+assignment, and each would have inherited it. It is the second divergence found
+between these independently-written copies, after the `floatbv` omission the
+same test file documents — which is itself a standing reason to run the
+differential harness whenever either copy is touched.
+
+`scope-coupled-arith-assign-conversion.md` §20 records the seven *structural*
+gaps that remain between the two `implicit_typecast_followed` copies. Four are
+C++-shaped (references, pointer-to-member, derived-to-base, string-to-array) and
+are dormant for jimple and Python but **live for Phase 7 (clang-cpp)**, which
+should treat §20.1 as its own pre-flight list.
+
+### 39.3 Next
+
+Phase 6 is **clang-c** (971 mentions, 49 already IREP2). Its first action is the
+census §39.1 asks for, not a slice. Phase 3 (the Python flip) remains open and
+independent.
