@@ -1,7 +1,7 @@
 # Plan — affording the schedule space #6607 exposed (issue #6831, cause 1)
 
 **Status:** W0 and W2 shipped; `--state-hashing` was **unsound** and is fixed
-(see W2). W1, W3, W4 not started.
+(see W2). W1 diagnosed, no code yet. W3, W4 not started.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 1 —
 schedule-space explosion*, 291 of 489 lost SV-COMP tasks.
 **Bisected to:** `bac652b13c` — `[goto-symex] Track main-thread termination per
@@ -171,19 +171,53 @@ MPOR quasi-monotonic dependency-chain test, with dependencies derived from
 reduction that fires, and it leaves 939 schedules where the property under test
 touches a handful of shared objects.
 
-Candidates, cheapest first:
+#### What actually drives the dependencies (measured)
+
+Instrumenting `mpor_set_conflicts` to name the object behind every conflict,
+and histogramming over five benchmarks:
+
+| benchmark | top dependency drivers |
+|---|---|
+| `01_malloc_20` | the mutex + 2 condvars (996), pthread bookkeeping (260), user `num` (**1**) |
+| `11_cook.fig2.pldi07` | `__ESBMC_pthread_thread_ended` (4591), user `x` (4367) |
+| `github_3449` | user mutex `m` (6181), user `counter` (608), bookkeeping (437) |
+| `11_bakery.simple.preempt` | users `t2`, `t1`, `x` (337) — all user |
+| `github_6475_safe` | `__ESBMC_pthread_thread_ended` (2172), user lock `l` (1960), `__ESBMC_pthread_join_waiters` (654) |
+
+Two things follow. Dependencies are dominated by **synchronisation objects and
+pthread-model bookkeeping**, not by ordinary shared data — on `01_malloc_20`
+exactly one conflict in 1257 involves a user global. And the mix varies enough
+between benchmarks that no single-reproducer measurement should be trusted
+(the mistake §2.1 made).
+
+#### W1.2 was tried and does not work — do not re-try it
+
+`mpor_keys_may_alias` already keys pthread *sync* arrays per element, but
+`__ESBMC_pthread_thread_ended` (`_Bool[]`), `__ESBMC_pthread_join_waiters`
+(`unsigned[]`) and `__ESBMC_pthread_end_values` (`void *[]`) are thread-indexed
+bookkeeping that fell back to a whole-array key, so every thread's write to its
+own slot conflicted with every other thread's read of a different slot.
+Extending element keying to those arrays is sound and precise — and bought
+**nothing**: the conflict count moved intact to the next bookkeeping object
+(`thread_ended` → `end_values` → `__ESBMC_num_threads_running`), which is a
+*scalar* and cannot be refined at all. Schedule counts were byte-identical on
+all 7 benchmarks tested.
+
+The dependency is over-determined: thread start/end threads every pair of
+transitions through shared scalar bookkeeping, so no amount of aliasing
+precision separates them. **The independence relation is not the lever.**
+
+Remaining candidates:
 
 1. **Sleep sets** layered on the existing MPOR. Classical, sound, composes with
    a persistent-set-style reduction rather than replacing it; small state per
-   DFS node.
-2. **Sharpen the independence relation.** Dependencies are currently computed
-   from the last transition's read/write sets. Objects proved thread-local by
-   the existing value-set / pointer analysis can never induce a dependency;
-   `--cswitch-skip-readonly-globals` (already passed by the SV-COMP wrapper)
-   shows the shape of this argument but applies it only to read-only globals.
-3. **Evaluate DPOR** (Flanagan–Godefroid dynamic POR) against MPOR. This is a
-   design change, not a patch, and is scoped as investigation only until 1 and 2
-   are measured.
+   DFS node. Now the first thing to try, not the second.
+2. **Decouple the pthread model's bookkeeping.** If `__ESBMC_num_threads_running`
+   and friends were per-thread rather than shared scalars, W1.2's refinement
+   would start paying. This is an operational-model change, and it must not
+   weaken `pthread_join` / deadlock detection, which read exactly that state.
+3. **Evaluate DPOR** (Flanagan–Godefroid dynamic POR) against MPOR. A design
+   change, not a patch; investigation only.
 
 **Exit:** ≥2× reduction in schedules explored on `01_malloc_20` at
 `--context-bound 2`, with no verdict change anywhere in the concurrency
