@@ -4197,9 +4197,63 @@ std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
     return false;
   };
 
+  // A Python str component is a char array, so its constant form is an array
+  // of character constants. Reading it lets a tuple carrying a string be
+  // folded here instead of falling through to the runtime sort model, which
+  // retypes elements as int (#6883).
+  std::function<bool(const exprt &, std::string &)> eval_const_str =
+    [&](const exprt &e, std::string &out) -> bool {
+    if (e.is_symbol())
+    {
+      const symbolt *sym = converter_.find_symbol(e.identifier().as_string());
+      return sym && eval_const_str(sym->get_value(), out);
+    }
+    if (e.id() == "typecast" && e.operands().size() == 1)
+      return eval_const_str(e.op0(), out);
+    if (!e.type().is_array())
+      return false;
+    const typet &elt = e.type().subtype();
+    const bool byte_elt =
+      (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
+      (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
+    if (!byte_elt || e.operands().empty())
+      return false;
+    out.clear();
+    for (const exprt &c : e.operands())
+    {
+      if (!c.is_constant())
+        return false;
+      BigInt v =
+        binary2integer(to_constant_expr(c).value().c_str(), c.type().is_signedbv());
+      if (v == 0)
+        break;
+      out.push_back(static_cast<char>(v.to_int64()));
+    }
+    return true;
+  };
+
+  // One tuple component: an integer or a string. Python orders tuples
+  // lexicographically and refuses to compare an int with a str, so a column
+  // that mixes the two makes the whole list unfoldable here.
+  struct comp_key
+  {
+    bool is_str = false;
+    BigInt i;
+    std::string s;
+
+    bool operator<(const comp_key &o) const
+    {
+      return is_str ? s < o.s : i < o.i;
+    }
+    bool operator==(const comp_key &o) const
+    {
+      return is_str == o.is_str && (is_str ? s == o.s : i == o.i);
+    }
+  };
+
   struct sortable_tuple
   {
-    std::vector<BigInt> key;
+    std::vector<comp_key> key;
     size_t pos;
   };
   std::vector<sortable_tuple> telems;
@@ -4234,16 +4288,33 @@ std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
       all_constant_tuples = false;
       break;
     }
-    std::vector<BigInt> key;
+    std::vector<comp_key> key;
     for (const auto &comp : val.operands())
     {
+      comp_key k;
       BigInt v;
-      if (!eval_const_int(comp, v))
+      std::string t;
+      if (eval_const_int(comp, v))
+        k.i = v;
+      else if (eval_const_str(comp, t))
+      {
+        k.is_str = true;
+        k.s = t;
+      }
+      else
       {
         all_constant_tuples = false;
         break;
       }
-      key.push_back(v);
+      // Python raises TypeError comparing int with str, so a column that is
+      // not uniformly one or the other must not be folded.
+      if (!telems.empty() && key.size() < telems[0].key.size() &&
+          telems[0].key[key.size()].is_str != k.is_str)
+      {
+        all_constant_tuples = false;
+        break;
+      }
+      key.push_back(k);
     }
     if (!all_constant_tuples)
       break;
@@ -4273,8 +4344,19 @@ std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
       tup["_type"] = "Tuple";
       tup["elts"] = nlohmann::json::array();
       converter_.copy_location_fields_from_decl(call_, tup);
-      for (const BigInt &v : te.key)
+      for (const comp_key &ck : te.key)
       {
+        if (ck.is_str)
+        {
+          nlohmann::json scst;
+          scst["_type"] = "Constant";
+          scst["value"] = ck.s;
+          scst["kind"] = nullptr;
+          converter_.copy_location_fields_from_decl(call_, scst);
+          tup["elts"].push_back(scst);
+          continue;
+        }
+        const BigInt &v = ck.i;
         // Mirror the parser's literal shape: a negative integer is
         // UnaryOp(USub, Constant(|v|)), not Constant(-v). A bare
         // negative Constant nested in a tuple takes a slow conversion
