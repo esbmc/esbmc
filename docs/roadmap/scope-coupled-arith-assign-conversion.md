@@ -1122,3 +1122,53 @@ control*, §18.5 was *rebuild after switching branches*, and this one is **check
 which phase is slow before optimising the cost model.** Two directions were
 derived from two code comments about memcmp, and the process never reached
 memcmp.
+
+### 19.7 The loop is not unbounded — symex fails to stop unwinding it
+
+§19.6 said "symex unwinds it without bound" and pointed the fix at extending the
+frontend elision. One more measurement narrows it again, and the conclusion is
+different in kind.
+
+With unwinding assertions **on** — so the result cannot be vacuous:
+
+| run | result |
+|---|---|
+| `m: list = ["y"]; assert m == ["y"]` `--unwind 4` | **SUCCESSFUL**, no unwinding-assertion violation |
+| the same at `--unwind 16` | SUCCESSFUL |
+
+A violated unwinding assertion is what a truncated loop reports. There is none
+at 4. So **every reachable execution of `__ESBMC_list_eq`'s worklist exits within
+four iterations** — the loop terminates, and quickly. Yet with no bound given,
+symex was still unwinding it at iteration 467 and climbing.
+
+The model is therefore *not* the problem, and neither is the comparison:
+
+- `depth_limit` (list.c:281-283) does bound the stack, but only guards the
+  nested-list `top++` — it is not a per-iteration bound, and it does not need to
+  be, because the loop is naturally short.
+- The frontend elisions (§19.6) are a *workaround* for this, not a fix for it —
+  they keep int lists away from a loop that symex mishandles.
+
+What is left is a **symex question**: why is the continuation still considered
+reachable after the worklist has drained? Concretely, `while (top > 0)` should
+become infeasible once `top` reaches 0, and for a one-element list that is after
+two iterations. Something in the state — most likely the list's `size` field, or
+`top` itself — is not concrete enough for that guard to simplify to false.
+
+**This is the fourth relocation of this root cause**, and every one was driven by
+a single cheap measurement that should have come earlier:
+
+| § | claim | displaced by |
+|---|---|---|
+| 19.4 | `elem_size == 0` selects a slow memcmp path | 19.5 — supplying a non-zero one changes nothing |
+| 19.5 | instrument the comparison | 19.6 — the run never reaches the solver |
+| 19.6 | the loop is unbounded; extend the elision | 19.7 — `--unwind 4` with assertions on is SUCCESSFUL |
+
+The rule that would have shortcut all three: **before explaining why something
+is slow, bound it and see whether it is actually infinite.** `--unwind N` with
+unwinding assertions on is a two-minute test that distinguishes "does not
+terminate" from "symex will not stop", and those have disjoint fixes.
+
+Recorded rather than fixed: the remaining question is in symex's loop handling,
+which is neither this scope's nor the list model's, and it wants someone who
+knows why that guard stays satisfiable.
