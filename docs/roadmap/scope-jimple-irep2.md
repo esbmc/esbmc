@@ -334,3 +334,51 @@ may have few producers.
 K.1 shipped (#6851). K.2 blocked on §12.2 with three named options, the first
 of which is a dead end for the slice and the third of which needs a census of
 decl-block producers before it can be sized.
+
+## 14. Phase 5 progress, and where the expression migration stops
+
+Five PRs, each byte-identical across all 17 jimple tests, stacked in order:
+
+| PR | slice |
+|---|---|
+| #6851 | K.1 — the seam: `set_value(const expr2tc &)`, `to_code2t` with a migrating default |
+| #6853 | K.2 — the body assembles a `code_block2t` natively |
+| #6854 | K.3 — `jimple_goto` |
+| #6855 | K.3 — `jimple_label` |
+| #6856 | K.4 — the parallel `to_expr2t` hook, with `jimple_constant` and `jimple_if` |
+| #6858 | K.4 — `jimple_nondet` |
+
+### 14.1 `jimple_binop` is where the ranking stops being a guide
+
+§8's entanglement ranking puts `jimple_binop` next (21 lines, 3 `ctx`, no
+operand surgery). It is not the next slice, for a reason the ranking cannot see:
+
+```cpp
+void jimple_binop::from_json(const json &j) { j.at("operator").get_to(binop); }
+```
+
+The operator is **a string taken straight from the input JSON**. Its domain is
+whatever the Jimple producer emits, not anything closed by this repository —
+grepping the frontend finds only the handful it special-cases (`==`, `+`, `*`,
+`|`, `=`). Migrating it means mapping that string to an IREP2 kind, and an
+unmapped operator would silently build the wrong node rather than fail.
+
+The 17-test corpus cannot validate such a mapping: byte-identity only covers the
+operators those tests happen to use. This is the same open-domain problem §32 of
+the parent document found in `#cpp_type`, and it deserves the same treatment —
+measure the domain before designing for it.
+
+Two ways forward, neither guessed at here:
+
+1. **Pin the operator set** from the Jimple specification or from the producer,
+   and map exhaustively with a hard failure on anything unrecognised.
+2. **Map the known operators and fall back** to the migrating default for the
+   rest. The parallel-method design already allows a partial override, so this
+   is expressible — but it needs the fallback to be deliberate and commented,
+   not an accident of an incomplete `if` chain.
+
+### 14.2 What is left
+
+`jimple_symbol` (146 lines) and the invoke/member nodes carry the remaining
+entanglement, and the operand-bearing statements — `invoke`, `return`,
+`assignment`, `throw` — follow their expressions. `to_typet` stays last (§7).
