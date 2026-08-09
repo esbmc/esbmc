@@ -913,6 +913,9 @@ private:
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
 
+  std::optional<nlohmann::json>
+  rewrite_numpy_method_call_node(const nlohmann::json &call_node) const;
+
   // =========================================================================
   // Unpacking helper methods
   // =========================================================================

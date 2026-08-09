@@ -1253,6 +1253,106 @@ bool python_converter::is_numpy_array_constructor_expr(
   return constructors.count(node["func"].value("attr", "")) != 0;
 }
 
+// a.<method>(...) on a tracked numpy array is only ever resolved as numpy
+// when it takes the `np.<method>(a, ...)`-shaped AST a module-form call
+// would have produced: name lookup has no other route to the numpy
+// operational model for a method call. Centralised here so every call site
+// that converts a Call node (assignment RHS, or any other expression
+// context) shares one recogniser instead of growing its own copy that can
+// drift out of sync with the constructor/method lists above.
+std::optional<nlohmann::json> python_converter::rewrite_numpy_method_call_node(
+  const nlohmann::json &call_node) const
+{
+  if (
+    !call_node.is_object() || call_node.value("_type", "") != "Call" ||
+    !call_node.contains("func") || !call_node["func"].is_object() ||
+    call_node["func"].value("_type", "") != "Attribute" ||
+    !call_node["func"].contains("value"))
+    return std::nullopt;
+
+  const std::string method_name = call_node["func"].value("attr", "");
+  const nlohmann::json &method_base = call_node["func"]["value"];
+  const std::string method_base_name =
+    method_base.value("_type", "") == "Name" && method_base.contains("id")
+      ? method_base["id"].get<std::string>()
+      : std::string();
+  const bool base_is_imported_module =
+    method_base_name == "np" || method_base_name == "numpy" ||
+    (!method_base_name.empty() && is_imported_module(method_base_name));
+  const std::string method_base_id =
+    method_base_name.empty() ? std::string()
+                             : resolve_name_symbol_id(method_base_name);
+  // A method name like sum()/max()/min() is not exclusive to numpy (e.g.
+  // Decimal.max(), a plain module-level function called through an
+  // aliased import); only rewrite when the receiver is actually a
+  // tracked numpy array, matching the check already used for copy()
+  // below.
+  const bool method_base_is_numpy_array =
+    !method_base_id.empty() && numpy_array_symbols_.count(method_base_id) != 0;
+  const bool supported_view_method =
+    !base_is_imported_module && method_base_is_numpy_array &&
+    (method_name == "transpose" || method_name == "reshape" ||
+     method_name == "ravel");
+  // flatten()/sum()/mean()/min()/max()/prod()/std()/var() are not view-like
+  // (see is_numpy_view_copy_expr, which deliberately excludes them), but the
+  // method form still needs the same np.<name>(a, ...)-shaped rewrite
+  // below to dispatch to the existing np.<name>() handler.
+  static const std::set<std::string> other_dispatch_rewrite_methods = {
+    "flatten", "sum", "mean", "min", "max", "prod", "std", "var"};
+  const bool supported_dispatch_rewrite_method =
+    supported_view_method ||
+    (!base_is_imported_module && method_base_is_numpy_array &&
+     other_dispatch_rewrite_methods.count(method_name) != 0);
+  const bool supported_copy_method = !base_is_imported_module &&
+                                     method_name == "copy" &&
+                                     method_base_is_numpy_array;
+
+  if (supported_copy_method)
+    return method_base;
+
+  if (!supported_dispatch_rewrite_method)
+    return std::nullopt;
+
+  std::string numpy_alias = "np";
+  for (const auto &entry : imported_modules)
+  {
+    if (entry.second == "numpy")
+    {
+      numpy_alias = entry.first;
+      break;
+    }
+  }
+
+  nlohmann::json module_name;
+  module_name["_type"] = "Name";
+  module_name["id"] = numpy_alias;
+  module_name["ctx"] = {{"_type", "Load"}};
+  copy_location_fields_from_decl(call_node, module_name);
+
+  nlohmann::json rewritten;
+  rewritten["_type"] = "Call";
+  rewritten["func"] = {
+    {"_type", "Attribute"},
+    {"value", module_name},
+    {"attr", method_name},
+    {"ctx", {{"_type", "Load"}}}};
+  rewritten["args"] = nlohmann::json::array({method_base});
+  if (call_node.contains("args") && call_node["args"].is_array())
+    for (const auto &arg : call_node["args"])
+      rewritten["args"].push_back(arg);
+  rewritten["keywords"] = call_node.value("keywords", nlohmann::json::array());
+  // numpy.reshape(a, newshape, order='C') has no split-dimension form
+  // (a third positional argument is `order`, not another dimension);
+  // only the method form a.reshape(d1, d2, ...) is equivalent to
+  // a.reshape((d1, d2, ...)). Mark this rewrite so the reshape handler
+  // can tell the two shapes apart and reject a genuine
+  // np.reshape(a, 2, 3) call instead of silently accepting it.
+  rewritten["_numpy_method_form"] = true;
+  copy_location_fields_from_decl(call_node, rewritten);
+  copy_location_fields_from_decl(call_node, rewritten["func"]);
+  return rewritten;
+}
+
 bool python_converter::is_numpy_view_copy_expr(const nlohmann::json &node) const
 {
   if (!node.is_object())
@@ -3699,102 +3799,12 @@ void python_converter::get_var_assign(
     copy_location_fields_from_decl(ast_node["value"], call_node["func"]);
     effective_ast_node["value"] = call_node;
   }
-  else if (
-    ast_node.contains("value") && ast_node["value"].is_object() &&
-    ast_node["value"].value("_type", "") == "Call" &&
-    ast_node["value"].contains("func") &&
-    ast_node["value"]["func"].is_object() &&
-    ast_node["value"]["func"].value("_type", "") == "Attribute" &&
-    ast_node["value"]["func"].contains("value"))
+  else if (ast_node.contains("value") && ast_node["value"].is_object())
   {
-    const std::string method_name = ast_node["value"]["func"].value("attr", "");
-    const nlohmann::json &method_base = ast_node["value"]["func"]["value"];
-    const std::string method_base_name =
-      method_base.value("_type", "") == "Name" && method_base.contains("id")
-        ? method_base["id"].get<std::string>()
-        : std::string();
-    const bool base_is_imported_module =
-      method_base_name == "np" || method_base_name == "numpy" ||
-      (!method_base_name.empty() && is_imported_module(method_base_name));
-    const std::string method_base_id =
-      method_base_name.empty() ? std::string()
-                               : resolve_name_symbol_id(method_base_name);
-    // A method name like sum()/max()/min() is not exclusive to numpy (e.g.
-    // Decimal.max(), a plain module-level function called through an
-    // aliased import); only rewrite when the receiver is actually a
-    // tracked numpy array, matching the check already used for copy()
-    // below.
-    const bool method_base_is_numpy_array =
-      !method_base_id.empty() &&
-      numpy_array_symbols_.count(method_base_id) != 0;
-    const bool supported_view_method =
-      !base_is_imported_module && method_base_is_numpy_array &&
-      (method_name == "transpose" || method_name == "reshape" ||
-       method_name == "ravel");
-    // flatten()/sum()/mean()/min()/max()/std()/var() are not view-like (see
-    // is_numpy_view_copy_expr, which deliberately excludes them), but the
-    // method form still needs the same np.<name>(a, ...)-shaped rewrite
-    // below to dispatch to the existing np.<name>() handler — the only form
-    // that method-call dispatch resolves through here at all is the
-    // function-call shape.
-    static const std::set<std::string> other_dispatch_rewrite_methods = {
-      "flatten", "sum", "mean", "min", "max", "std", "var"};
-    const bool supported_dispatch_rewrite_method =
-      supported_view_method ||
-      (!base_is_imported_module && method_base_is_numpy_array &&
-       other_dispatch_rewrite_methods.count(method_name) != 0);
-    const bool supported_copy_method = !base_is_imported_module &&
-                                       method_name == "copy" &&
-                                       method_base_is_numpy_array;
-    if (supported_copy_method)
-    {
-      effective_ast_node["value"] = ast_node["value"]["func"]["value"];
-    }
-    else if (supported_dispatch_rewrite_method)
-    {
-      std::string numpy_alias = "np";
-      for (const auto &entry : imported_modules)
-      {
-        if (entry.second == "numpy")
-        {
-          numpy_alias = entry.first;
-          break;
-        }
-      }
-
-      nlohmann::json module_name;
-      module_name["_type"] = "Name";
-      module_name["id"] = numpy_alias;
-      module_name["ctx"] = {{"_type", "Load"}};
-      copy_location_fields_from_decl(ast_node["value"], module_name);
-
-      nlohmann::json call_node;
-      call_node["_type"] = "Call";
-      call_node["func"] = {
-        {"_type", "Attribute"},
-        {"value", module_name},
-        {"attr", method_name},
-        {"ctx", {{"_type", "Load"}}}};
-      call_node["args"] =
-        nlohmann::json::array({ast_node["value"]["func"]["value"]});
-      if (
-        ast_node["value"].contains("args") &&
-        ast_node["value"]["args"].is_array())
-        for (const auto &arg : ast_node["value"]["args"])
-          call_node["args"].push_back(arg);
-      call_node["keywords"] =
-        ast_node["value"].value("keywords", nlohmann::json::array());
-      // numpy.reshape(a, newshape, order='C') has no split-dimension form
-      // (a third positional argument is `order`, not another dimension);
-      // only the method form a.reshape(d1, d2, ...) is equivalent to
-      // a.reshape((d1, d2, ...)). Mark this rewrite so the reshape handler
-      // can tell the two shapes apart and reject a genuine
-      // np.reshape(a, 2, 3) call instead of silently accepting it.
-      call_node["_numpy_method_form"] = true;
-      copy_location_fields_from_decl(ast_node["value"], call_node);
-      copy_location_fields_from_decl(ast_node["value"], call_node["func"]);
-      effective_ast_node["value"] = call_node;
-    }
+    if (
+      std::optional<nlohmann::json> rewritten =
+        rewrite_numpy_method_call_node(ast_node["value"]))
+      effective_ast_node["value"] = std::move(*rewritten);
   }
 
   exprt rhs;
