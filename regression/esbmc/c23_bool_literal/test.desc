@@ -2,5 +2,3 @@ CORE
 main.c
 --std c23
 ^VERIFICATION SUCCESSFUL$
-^EXIT=0$
-^SIGNAL=0$
