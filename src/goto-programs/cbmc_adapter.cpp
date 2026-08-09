@@ -1685,6 +1685,98 @@ bool rewrite_java_array_set(
   return true;
 }
 
+// The whole object a HAVOC_OBJECT operand designates, or null when it is not
+// statically known. CBMC hands the instruction a `void *`, but its semantics is
+// the entire object containing the target, so a subobject address (`&a[0]` from
+// an array decay, `&s.f`) walks down to the base symbol. A pointer whose value
+// is not an address-of -- a `malloc` result, a parameter -- names no symbol
+// here, and the caller declines rather than havocking the wrong storage.
+const irept *havoc_target(const irept &op)
+{
+  const irept *e = &op;
+  while (e->id() == "typecast")
+  {
+    if (e->get_sub().empty())
+      return nullptr;
+    e = &e->get_sub().front();
+  }
+
+  // Only an address-of names an object here. A pointer *value*
+  // (`havoc_object(p)` after `p = malloc(n)`) would otherwise reach the walk
+  // below as the symbol `p` itself, and havocking `p` scribbles on the pointer,
+  // not the heap object it designates -- a different program, not a weaker one.
+  if (e->id() != "address_of" || e->get_sub().empty())
+    return nullptr;
+  e = &e->get_sub().front();
+
+  while (e->id() == "index" || e->id() == "member")
+  {
+    if (e->get_sub().empty())
+      return nullptr;
+    e = &e->get_sub().front();
+  }
+
+  return e->id() == "symbol" ? e : nullptr;
+}
+
+// Rewrites `HAVOC_OBJECT p` (__CPROVER_havoc_object) into the ASSIGN of a
+// nondet side effect the native pipeline would produce, so the object loses
+// its value the way CBMC's own symex drops it. The instruction carries no
+// extent -- that is why an unrecoverable target is still declined -- but a
+// whole-symbol assignment needs none: the nondet takes the symbol's type.
+bool rewrite_havoc_object(irept &code)
+{
+  const irept::subt ops = code.get_sub();
+  if (ops.size() != 1)
+    return false;
+
+  const irept *target = havoc_target(ops[0]);
+  if (!target)
+    return false;
+
+  irept nondet(irep_idt("sideeffect"));
+  nondet.add("statement") = mk("nondet");
+  nondet.add("type") = target->find("type");
+
+  code.add("statement") = mk("assign");
+  code.get_sub().clear();
+  code.get_sub().push_back(*target);
+  code.get_sub().push_back(nondet);
+  return true;
+}
+
+// CBMC's whole-object codet statements are size-implicit: `array_set`
+// (__CPROVER_array_set: set every element of the pointed-to array) and
+// `havoc_object` take the extent from the pointee's type, which nothing here
+// reconstructs. Rewrite the shapes that need no extent and return the ESBMC
+// instruction kind that rewrite implies (13 ASSIGN, 16 FUNCTION_CALL -- shared
+// numbering, see map_cbmc_instruction_type), or null when `code` is not one of
+// them. The rest are declined by throwing, which create_goto_program's handler
+// turns into a graceful error exit (roadmap §4.7): migrate would otherwise
+// abort() on them (SIGABRT). These reach the adapter only from an explicit
+// __CPROVER_array_set / __CPROVER_havoc_object -- CBMC's own memset lowering is
+// retargeted to __ESBMC_memset in fix_builtin_call before its ARRAY_SET body
+// runs (§4.8).
+const char *rewrite_whole_object_codet(
+  irept &code,
+  const std::unordered_map<std::string, irept> &payload_extent)
+{
+  if (code.id() == "nil")
+    return nullptr;
+
+  const irep_idt stmt = code.find("statement").id();
+  if (stmt == "array_set" && rewrite_java_array_set(code, payload_extent))
+    return "16";
+  if (stmt == "havoc_object" && rewrite_havoc_object(code))
+    return "13";
+  if (stmt == "array_set" || stmt == "havoc_object")
+    throw std::string(
+      "CBMC adapter: '" + stmt.as_string() +
+      "' whole-object operations are not yet supported on the --binary path");
+
+  return nullptr;
+}
+
 irept instruction_to_esbmc_irep(
   const cbmc_instructiont &ins,
   const std::map<unsigned, unsigned> &target_revmap,
@@ -1696,28 +1788,8 @@ irept instruction_to_esbmc_irep(
   // ESBMC expects code arguments inside "operands".
   irept code = ins.code;
 
-  // CBMC's whole-object codet statements have no ESBMC symex counterpart, so
-  // migrate would abort() on them (SIGABRT). `array_set` (__CPROVER_array_set:
-  // set every element of the pointed-to array) carries no explicit length -- the
-  // extent comes from the pointee's type, which ESBMC's memset/array machinery
-  // does not reconstruct here -- and `havoc_object` (set the whole pointed-to
-  // object nondet) is likewise size-implicit. Decline cleanly (a throw the
-  // create_goto_program handler turns into a graceful error exit, roadmap §4.7)
-  // rather than crashing; these reach the adapter only from an explicit
-  // __CPROVER_array_set / __CPROVER_havoc_object (CBMC's own memset lowering is
-  // retargeted to __ESBMC_memset in fix_builtin_call before its ARRAY_SET body
-  // runs, §4.8).
-  bool rewrote_array_set = false;
-  if (code.id() != "nil")
-  {
-    const irep_idt stmt = code.find("statement").id();
-    if (stmt == "array_set")
-      rewrote_array_set = rewrite_java_array_set(code, payload_extent);
-    if (!rewrote_array_set && (stmt == "array_set" || stmt == "havoc_object"))
-      throw std::string(
-        "CBMC adapter: '" + stmt.as_string() +
-        "' whole-object operations are not yet supported on the --binary path");
-  }
+  const char *whole_object_kind =
+    rewrite_whole_object_codet(code, payload_extent);
 
   const bool rewrote_builtin_call = fix_builtin_call(code);
   irept operands;
@@ -1734,13 +1806,13 @@ irept instruction_to_esbmc_irep(
 
   result.add("code") = code;
   result.add("location") = ins.source_location;
-  // fix_builtin_call rewrote a FUNCTION_CALL into an ASSIGN (malloc/sqrt/...) or
-  // an OTHER "free" codet; the instruction kind must agree with the rewritten
-  // code, not CBMC's original raw type. 13 is ASSIGN, 4 is OTHER (shared
-  // numbering, see map_cbmc_instruction_type).
-  // 16 is FUNCTION_CALL: the memset call that replaced an ARRAY_SET.
+  // fix_builtin_call rewrote a FUNCTION_CALL into an ASSIGN (malloc/sqrt/...)
+  // or an OTHER "free" codet; the instruction kind must agree with the
+  // rewritten code, not CBMC's original raw type. 13 is ASSIGN, 4 is OTHER
+  // (shared numbering, see map_cbmc_instruction_type).
+  // rewrite_whole_object_codet reports the kind its own rewrite implies.
   result.add("typeid") = mk(
-    rewrote_array_set ? "16"
+    whole_object_kind ? whole_object_kind
     : rewrote_builtin_call
       ? (code.find("statement").id() == "free" ? "4" : "13")
       : std::to_string(map_cbmc_instruction_type(ins.instr_type)));
