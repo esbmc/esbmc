@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--unwind 8
+^VERIFICATION SUCCESSFUL$
+^EXIT=0$
+^SIGNAL=0$
