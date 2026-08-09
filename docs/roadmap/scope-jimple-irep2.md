@@ -664,3 +664,69 @@ but `jimple_throw::to_exprt` is a bare `codet("cpp-throw")` with its body
 commented out, so migrating it would pin an unfinished construct rather than
 preserve one). `jimple_assignment` stays blocked on §16.2; `to_typet` ->
 `type2tc` remains last (§7).
+
+## 21. `jimple_invoke` (#6870): the same gap, found by looking for it
+
+§20 turned an unmoved mutant into a test. `jimple_invoke` has four distinct
+shapes, so it got four mutants, and the pattern repeated:
+
+| Mutant | Changed | Reading |
+|---|---|---|
+| M1 — intrinsic skip arm removed | 14 / 18 | heavily exercised |
+| M3 — `@parameterN` assignments dropped | 3 / 18 | exercised |
+| M2 — `@this` assignment dropped | **0 / 18** | see below |
+| M4 — block `end_location` = loc, not nil | **0 / 18** | see §21.2 |
+
+### 21.1 M2: reachable in principle, absent in practice
+
+A census of every invoke in the corpus, keyed by `(object, base_class, has
+variable)`:
+
+| Count | Shape |
+|---|---|
+| 21 | `StaticInvoke` on `OriginalKt`, no variable |
+| 14 | `SpecialInvoke` on `java.lang.AssertionError`, **with** variable |
+| 7 | `StaticInvoke` on `kotlin.jvm.internal.Intrinsics`, no variable |
+| 2 | `StaticInvoke` on `MainKt`, no variable |
+
+Every invoke that carries a `variable` — the precondition for binding `@this` —
+targets `java.lang.AssertionError`, which is on the intrinsic skip list and
+returns before the binding is reached. The arm is not dead; the corpus simply
+has no invoke of a non-static user method.
+
+`regression/jimple/github_4715_invoke_this_binding_01` supplies one: a
+non-static `setup` invoked via `SpecialInvoke` with a variable, which emits
+`ASSIGN @this=$r0` ahead of the call (a non-static method gets its `@this`
+symbol at jimple_method.cpp:32). Re-running M2 with that test present moves
+1 / 19, and it is exactly the new test.
+
+That is twice in two slices. **Treat an unmoved mutant as a question about the
+corpus first and about the code second** — on this frontend the corpus has lost
+that argument every time it has been asked.
+
+### 21.2 M4: correct by construction, not by measurement
+
+The block's `end_location` is nil rather than the statement location, because
+`migrate_expr` reads `expr.end_location()` from a `code_blockt` that never had
+one assigned (migrate.cpp:2375). The GOTO dump does not print it for a nested
+block, so no mutant can move it and no test can pin it.
+
+This is a genuinely different case from §20 and §21.1, and worth naming so it
+is not mistaken for one: there, the arm was invisible because the corpus was
+thin, and a test fixed it. Here it is invisible because the field is not
+rendered at this position at all. The right response is to state the reasoning
+and *not* claim the field as verified — the same nil-versus-empty distinction
+that broke K.2 twice, where `end_location` was the visible one only because the
+block terminated a function.
+
+### 21.3 Status
+
+Eleven slices shipped: #6851, #6853, #6854, #6855, #6856, #6858, #6860, #6865,
+#6866, #6868, #6870. Corpus now 19 tests, all byte-identical, all
+mutant-checked.
+
+Remaining reachable: `SpecialInvoke` is already covered by this slice (it
+constructs `jimple_invoke`); `Throw` (14) is a bare `codet("cpp-throw")` with
+its body commented out, so migrating it would pin an unfinished construct.
+`jimple_assignment` stays blocked on §16.2; `to_typet` -> `type2tc` remains
+last (§7).
