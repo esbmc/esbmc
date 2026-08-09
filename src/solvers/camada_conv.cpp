@@ -479,7 +479,8 @@ camada::SMTSolverRef create_esbmc_mathsat_solver(const optionst &options)
   msat_set_option(config, "theory.fp.bv_combination_enabled", "true");
   msat_set_option(config, "theory.arr.enable_witness", "true");
 
-  auto solver = std::make_unique<esbmc_mathsat_solver>(config);
+  auto solver = std::make_unique<esbmc_mathsat_solver>(
+    config, pick_array_encoding(options));
   msat_destroy_config(config);
   return solver;
 #else
