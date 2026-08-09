@@ -1,7 +1,7 @@
 # Plan — affording the schedule space #6607 exposed (issue #6831, cause 1)
 
-**Status:** W0 shipped. W2 diagnosed and re-scoped — `--state-hashing` is
-**unsound**, not merely useless (see W2). W1, W3, W4 not started.
+**Status:** W0 and W2 shipped; `--state-hashing` was **unsound** and is fixed
+(see W2). W1, W3, W4 not started.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 1 —
 schedule-space explosion*, 291 of 489 lost SV-COMP tasks.
 **Bisected to:** `bac652b13c` — `[goto-symex] Track main-thread termination per
@@ -68,9 +68,9 @@ Two results drive this plan:
 The 939 reproduces the issue's reported 940.
 
 **Superseded on the hashing row.** W2 re-measured this across all 314
-concurrent CORE tests rather than this one: hashing prunes on 62 of them and
-saves 16.5 % wall overall. `01_malloc_20` is an outlier, not a summary. It is
-also unsound on four of them — see W2.
+concurrent CORE tests rather than this one: hashing cuts schedules on 41 of
+them and saves ~12 % wall overall once its soundness bug is fixed.
+`01_malloc_20` is an outlier, not a summary — see W2.
 
 ### 2.2 The same reproducer under the SV-COMP flag shape
 
@@ -224,23 +224,44 @@ the §7 "re-truncation" failure mode, already shipped, and
 runs are exposed to it. A wrong `true` is scored far more harshly than an
 `unknown`, which makes this a bigger liability than any timeout W1–W3 address.
 
-Pinned by `regression/esbmc-unix/github_6831_hashing_unsound{,_mpor}`
-(KNOWNBUG, expecting the correct FAILED) so a fix flips them to CORE.
+**Root cause: the fingerprint omitted `active_thread`.** Dumping every
+fingerprint with its components on `race_guard_self_clear` showed three states
+sharing one hash with byte-identical value maps *and* identical pcs, differing
+only in `active=0` vs `active=1`. Equal pcs and equal values still leave two
+states scheduling differently — MPOR's dependency chain and
+`decide_ileave_direction`'s scan both key off which thread just ran — and
+`post_hash_collision_cleanup()` marks every switch from the survivor explored.
 
-Revised order:
+Two earlier hypotheses were tested and **rejected** before this one, and are
+recorded so they are not re-tried: the monotone `dynamic_counter` making
+post-`malloc` states unique (a controlled probe still pruned 76 states), and
+constant propagation hiding values from the map (`assigned_value` is never nil
+on `goto_symex_statet::assignment`'s path).
 
-1. **Diagnose the collision.** The hypothesis that the fingerprint is too
-   *fine* is now the wrong end: it is too *coarse* somewhere. Not yet located —
-   an allocation-naming hypothesis (the monotone `dynamic_counter` making
-   post-`malloc` states unique) was tested with a controlled probe and
-   **rejected**: the probe still pruned 76 states.
-2. **Fix or disable.** Until a fix exists, disabling `--state-hashing` in
-   `esbmc_dargs` is the sound choice, and costs the −16.5 % above.
-3. Only then revisit making it prune harder.
+Fixed by mixing `active_thread` into `generate_hash()`
+(`execution_state.cpp:1398`) — one line, and finer by construction, so it can
+only reduce pruning, never increase it.
 
-**Exit:** the four tests above pass with `--state-hashing`, or the flag is out
-of `esbmc_dargs`. Performance tuning of the fingerprint is not in scope until
-one of those holds.
+**Cost, same corpus re-measured against the fixed binary:**
+
+| | tests where hashing cuts schedules | verdict changes | wall |
+|---|---|---|---|
+| before fix | 62 of 314 | **4** | −16.5 % |
+| after fix | 41 of 314 | **0** | −12.0 % |
+
+The fix gives up some pruning and keeps most of it; the largest win is
+untouched (`11_cook.fig2.pldi07` 11,130 → 79 schedules either way). Schedule
+counts are deterministic so the 62 → 41 comparison is exact; the wall figures
+come from separate runs and carry ~10 % run-to-run noise, so read the sign, not
+the 4.5-point gap.
+
+All 287 registered regression tests that pass `--state-hashing` pass with the
+fix. `github_6831_hashing_unsound{,_mpor}` are CORE.
+
+**Exit: discharged.** Hashing is sound on this corpus and still pays for
+itself, so `--state-hashing` stays in `esbmc_dargs`. Making it prune *harder*
+is a separate question, and W1's levers look better-founded than another pass
+at the fingerprint.
 
 ### W3 — Stop redoing per-schedule work
 

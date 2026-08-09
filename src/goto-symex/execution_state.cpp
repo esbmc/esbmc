@@ -1394,7 +1394,15 @@ std::size_t execution_statet::generate_hash() const
   // separate those -- two calls from the same caller sit at equal depth -- so
   // each frame's calling location is mixed in. Without it a bug reachable only
   // past the later state is pruned away in silence.
+  //
+  // The active thread is part of it for the same reason: equal pcs and equal
+  // values still leave two states scheduling differently, because MPOR's
+  // dependency chain and decide_ileave_direction's scan both key off which
+  // thread just ran. Omitting it collided such pairs, and
+  // post_hash_collision_cleanup marks every switch from the survivor explored,
+  // so the violating schedule was never generated (#6831).
   std::size_t h = l2->generate_l2_state_hash();
+  esbmct::hash_combine(h, active_thread);
   for (const auto &it : threads_state)
   {
     esbmct::hash_combine(h, it.source.pc->location_number);
