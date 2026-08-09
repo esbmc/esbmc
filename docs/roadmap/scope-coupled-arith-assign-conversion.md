@@ -871,17 +871,9 @@ Reduction, run under `--python-irep2-adjust-only`:
 |---|---|
 | `o.m.append("x")` then `assert "x" in o.m` on a class-attribute list | **SUCCESSFUL** — does not trigger |
 | bare module-level list, same two operations | **SUCCESSFUL** — does not trigger |
-| `o.m = ["y"]` then `assert o.m == ["y"]` | inconclusive — timed out at 150 s |
+| `o.m = ["y"]` then `assert o.m == ["y"]` | timed out — **and see §18.4** |
 
-So the trigger is **not** `append`/`in` on a class-attribute list. It involves
-the list *assignment and equality* shape, which is where the reduction stopped.
-
-**The measurement environment is degraded and that is why this stops here.**
-Load average was 42 with a second ESBMC session on the machine; the third
-candidate's timeout is not evidence of a hang, and bisecting further under that
-contention would produce results that cannot be trusted. Recording the two
-confirmed negatives and the shared assert is worth more than a bisect that has
-to be redone.
+So the trigger is **not** `append`/`in` on a class-attribute list.
 
 ### 18.3 Where G4 stands
 
@@ -889,3 +881,37 @@ G4 needs the whole-corpus census, and the census needs a machine. The two
 divergences it has already surfaced are now known to be **one defect, not two**,
 with a named assert and a narrowed shape. G5 (dual-solver) remains untouched and
 should still follow G4 rather than run beside it.
+
+### 18.4 The reduction candidate was contaminated — a correction
+
+§18.2 recorded `o.m = ["y"]; assert o.m == ["y"]` as "inconclusive — timed out",
+under a load average of 42, and read that as *possibly the trigger*. Re-run on a
+quiet machine (load 7) it still times out — and so does the same shape with **no
+class at all**:
+
+```python
+m: list = ["y"]
+assert m == ["y"]
+```
+
+The self-control settles it: that program times out at **300 s on the legacy
+path too**. It is a pre-existing cost of list equality against a non-empty list
+literal, present with the flip off, and it says nothing about the adjuster.
+Reading the first timeout as a lead would have sent the next person chasing a
+phantom.
+
+Two consequences:
+
+1. **The trigger is still un-isolated.** Everything reduced so far — `append`,
+   `in`, list assignment alone, equality against `[]`, on both a class attribute
+   and a bare module-level list — is **negative**. `class10`/`class12` remain the
+   only known reproducers of the width assert, and both complete quickly, so
+   whatever the trigger is, it is not the slow shape.
+2. **A separate, pre-existing finding falls out**: list equality against a
+   non-empty literal does not terminate in 300 s on either path. That is not this
+   scope's work, and it is not the flip's, but it is worth someone's time.
+
+Method note, since this is the third time the discipline has paid on this
+branch: **run the control before believing a measurement.** A timeout under load
+is not evidence; a timeout that reproduces on the other arm is evidence of
+something else entirely.
