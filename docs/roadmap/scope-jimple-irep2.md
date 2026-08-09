@@ -957,3 +957,70 @@ three consume `to_type2t` and between them will exercise the pointer arm §23.1
 showed the cast corpus cannot reach -- and the expression form of
 `static_invoke` (19). Statements are complete bar `jimple_throw`, which is an
 unfinished construct.
+
+## 25. `jimple_static_member` (#6882), and a correction to §24.2
+
+### 25.1 The prediction that was wrong
+
+§24.2 said `new` and `newarray` would exercise the pointer arm of `to_type2t`
+that §23.1 showed the cast corpus cannot reach. A census says otherwise:
+
+| Count | Shape |
+|---|---|
+| 14 | `new java.lang.AssertionError` |
+| 5 | `newarray int` dims 0 |
+| 2 | `newarray java.lang.Integer` dims 1 |
+| 2 | `newarray java.lang.Integer` dims 0 |
+
+`java.lang.AssertionError` and `java.lang.Integer` are both mapped to
+`BASE_TYPES::INT` in `from_map`, alongside `java.lang.String`, `Main`,
+`java.lang.Runtime` and `java.lang.Class` -- each with a `// TODO: handle this
+properly`. So every one of these takes the INT arm too.
+
+**The pointer arm of `get_base_type2` is reachable from no expression in the
+corpus at all.** It fires only for a class name absent from `from_map`, and the
+corpus has none. Any slice that wants it live has to bring its own test -- the
+§20 response -- and until then the arm should not be claimed as verified.
+
+### 25.2 Three arms, one reachable
+
+All 15 `static_member` uses are `kotlin._Assertions.ENABLED`. The
+`Main.$assertionsDisabled` arm and the member access proper are both unreached.
+They are not equivalent cases, and the slice treats them differently:
+
+- `Main.$assertionsDisabled` is trivially constructible, so
+  `github_4715_static_member_intrinsic_01` constructs it. Flipping that arm now
+  moves exactly one test.
+- The member access is marked `// TODO: Needs OOP members` and rewrites a
+  `member_exprt`'s base in place through a reference, much as §24 described.
+  Reimplementing it with no test would be a guess. It stays on the migrating
+  default.
+
+This is the partial-override technique from §15.2 and §22 doing what it was
+built for: the arm that can be verified moves, the arm that cannot stays on the
+path that already works. A slice does not have to be all-or-nothing.
+
+### 25.3 Discarded work in the legacy arms
+
+`to_exprt` opens with `gen_zero(type->to_typet(ctx))` and then, on both
+intrinsic arms, throws it away -- `make_true` is `*this = exprt(constant,
+typet("bool"))`, a whole-node replacement. So the type computation, including a
+symbol-table lookup when the type is a class, runs for nothing on 15 of the 15
+corpus uses. The native arms return the constant directly.
+
+Not a bug, and not worth a separate PR on its own, but it is the third instance
+in this frontend of a node being built and then overwritten (§24's
+`index_exprt`, §22's `code_returnt` operand, this). The pattern is worth
+watching for in the remaining overrides.
+
+### 25.4 Status
+
+Fifteen slices shipped: #6851, #6853, #6854, #6855, #6856, #6858, #6860, #6865,
+#6866, #6868, #6870, #6875, #6877, #6880, #6882, plus #6873 in support. Corpus
+now 21 tests.
+
+Remaining: `new` (14) and `newarray` (9) -- `newarray` is the most intricate
+override left, allocating through a temp symbol and a synthesised call, with a
+hardcoded 64-bit width fallback; the expression form of `static_invoke` (19);
+`jimple_virtual_member`; and `jimple_throw`, still unfinished. Per §25.1 none of
+these will reach the `to_type2t` pointer arm without a new test.
