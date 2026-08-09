@@ -834,3 +834,58 @@ agreement, which §16 says should follow G4 rather than run beside it.
 
 **Phase 3's blocker list is therefore one item long**, and it is a named rewrite
 against a named counterpart rather than an unowned mechanism.
+
+## 18. §17's fix shipped; G4's two divergences are one shape (2026-08-09)
+
+**§17.2's rewrite is PR #6839** (`fix/6745-python-adjust-ieee-promotion`, off
+master). `promote_to_ieee` in `python_adjust.cpp` rebuilds a float
+`add2t`/`sub2t`/`mul2t`/`div2t` as the matching `ieee_*2tc` with the
+`c:@__ESBMC_rounding_mode` symbol, called unconditionally after operand
+recursion with the shape test inside the helper — an `else if` arm pushes
+`adjust_expr` from 128 to 129 and fails the complexity gate. `sum_tuple` now
+agrees with legacy, so **all six §9.4 witnesses are clear**. Mutant-proven:
+restoring the predicate to `false` restores the assert.
+
+### 18.1 `class10` and `class12` are the same defect, and it is not §17's
+
+Both G4 divergences §16 recorded still reproduce after #6839, and both fail
+identically:
+
+```
+Assertion failed: (a->sort->get_data_width() == b->sort->get_data_width())
+```
+
+That is a **solver-level width mismatch** — two operands of different bit-widths
+reaching the SMT layer — not the node-kind gap §17 closed. It is the symptom
+this scope's own width reconciliation exists to prevent, so the arm is either
+not reached for this shape or not sufficient for it.
+
+### 18.2 Narrowed, as far as the machine allows
+
+Both sources share one shape: a `list` **class attribute**, mutated and compared.
+`class12` is the smaller and is the better corpus reproducer.
+
+Reduction, run under `--python-irep2-adjust-only`:
+
+| candidate | result |
+|---|---|
+| `o.m.append("x")` then `assert "x" in o.m` on a class-attribute list | **SUCCESSFUL** — does not trigger |
+| bare module-level list, same two operations | **SUCCESSFUL** — does not trigger |
+| `o.m = ["y"]` then `assert o.m == ["y"]` | inconclusive — timed out at 150 s |
+
+So the trigger is **not** `append`/`in` on a class-attribute list. It involves
+the list *assignment and equality* shape, which is where the reduction stopped.
+
+**The measurement environment is degraded and that is why this stops here.**
+Load average was 42 with a second ESBMC session on the machine; the third
+candidate's timeout is not evidence of a hang, and bisecting further under that
+contention would produce results that cannot be trusted. Recording the two
+confirmed negatives and the shared assert is worth more than a bisect that has
+to be redone.
+
+### 18.3 Where G4 stands
+
+G4 needs the whole-corpus census, and the census needs a machine. The two
+divergences it has already surfaced are now known to be **one defect, not two**,
+with a named assert and a narrowed shape. G5 (dual-solver) remains untouched and
+should still follow G4 rather than run beside it.
