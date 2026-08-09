@@ -1933,7 +1933,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     goto_functions.update();
 
-    if (cmdline.isset("data-races-check"))
+    if (
+      cmdline.isset("data-races-check")||
+      cmdline.isset("data-races-check-only"))
     {
       log_status("Adding Data Race Checks");
       options.set_option("no-por", true);
