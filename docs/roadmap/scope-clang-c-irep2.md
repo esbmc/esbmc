@@ -279,8 +279,48 @@ Establishes nothing about a pass that *writes*. Read-only is the point of C.3
 and the limit of it; the first write-back is C.4's risk, and §6.3's warning
 stands.
 
-## 9. Status
+## 9. §8.2 fixed (#6897): the gate is now readable without filters
 
-C.1-C.3 done (#6894). Next is C.4: the `-only` placement, one arm at a time,
-with the legacy arm disabled in the same run. Before the first arm, fix the
-§8.2 lookup -- cheap now, load-bearing later.
+The lookup defect §8.2 deferred is fixed. `migrate_namespace_lookup` now points
+at the context being built for the duration of the walk and is restored after,
+the same save/restore `dereferencet` performs for the same reason
+(`dereference.cpp:637`):
+
+```cpp
+namespacet ns(context);
+const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
+...
+migrate_namespace_lookup = old_ns;
+```
+
+### 9.1 The measurement that matters
+
+| | raw A/B divergence over 1 672 tests |
+|---|---|
+| C.3, as merged | 1 550 |
+| with §8.2 fixed | **17** |
+
+Seventeen is exactly the set §8.3 showed the baseline cannot reproduce against
+itself. So the divergence attributable to the pass is zero, and -- the point of
+fixing it now rather than later -- **the comparison no longer needs a filter to
+be readable**.
+
+That is worth more than the warning suppression. C.4 runs this A/B once per
+migrated arm; a gate whose raw output is 1 550 lines of noise is a gate people
+stop reading, and §8.3 already showed how convincing a false positive looks when
+it lands on unions and bitfields. A gate whose raw output is 17 known names is
+one where a real eighteenth stands out.
+
+### 9.2 The remaining 17 are still owed an explanation
+
+Not this phase's defect, but it is now the only thing between the corpus and a
+clean A/B, and it should be characterised before C.4 leans on the gate: are they
+one cause or several, and is the nondeterminism in `goto_convert`'s ordering, in
+a hash-table iteration order, or in the frontend? A single reproducer would
+settle it.
+
+## 10. Status
+
+C.1-C.3 done (#6894), §8.2 fixed (#6897). Next: characterise the 17 (§9.2), then
+C.4 -- the `-only` placement, one arm at a time, legacy arm disabled in the same
+run.
