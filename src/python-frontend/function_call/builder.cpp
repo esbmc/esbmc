@@ -426,6 +426,18 @@ symbol_id function_call_builder::build_function_id() const
     }
     else if (arg["_type"] == "List")
       func_name = kGetObjectSize;
+    else if (arg["_type"] == "Dict")
+    {
+      // len({"a": 1}) -- a dict literal is dict-typed just as dict(...) is,
+      // so it needs the same size handler. Without this it fell to strlen over
+      // the dict struct and reported a wrong size; a dict bound to a name was
+      // never affected, because it reaches the dict-aware path by type.
+      func_name = "__ESBMC_len_dict";
+      function_id.clear();
+      function_id.set_prefix("esbmc:");
+      function_id.set_function(func_name);
+      return function_id;
+    }
     else if (
       arg["_type"] == "Subscript" && arg.contains("slice") &&
       arg["slice"].is_object() && arg["slice"].value("_type", "") == "Slice" &&
