@@ -551,6 +551,33 @@ expr2tc goto_symext::symex_mem_inf(
   return to_address_of2t(rhs_addrof).ptr_obj;
 }
 
+void goto_symext::offer_malloc_zero_null(
+  const expr2tc &size,
+  expr2tc &rhs,
+  guard2tc &alloc_guard)
+{
+  if (!options.get_bool_option("malloc-zero-is-null"))
+    return;
+
+  expr2tc nonzero = greaterthan2tc(size, gen_long(size->type, 0));
+  simplify(nonzero);
+  if (is_true(nonzero))
+    return;
+
+  // C17 7.22.3p1 leaves malloc(0) implementation-defined: NULL, or a pointer
+  // that may be freed but not used to access an object. Offer both -- forcing
+  // NULL makes the assume(p != NULL) that environment models emit after a
+  // zero-sized request unsatisfiable, pruning every execution under test
+  // (#5398).
+  expr2tc may_alloc = gen_nondet(get_bool_type());
+  replace_nondet(may_alloc);
+
+  expr2tc choice = or2tc(nonzero, may_alloc);
+  simplify(choice);
+  alloc_guard.add(choice);
+  rhs = if2tc(rhs->type, choice, rhs, symbol2tc(rhs->type, "NULL"));
+}
+
 expr2tc goto_symext::symex_mem(
   const bool is_malloc,
   const expr2tc &lhs,
@@ -729,27 +756,8 @@ expr2tc goto_symext::symex_mem(
   }
 
   // alloca has no NULL outcome to explore: C17 7.22.3p1 is about malloc.
-  if (is_malloc && options.get_bool_option("malloc-zero-is-null"))
-  {
-    expr2tc nonzero = greaterthan2tc(size, gen_long(size->type, 0));
-    simplify(nonzero);
-
-    if (!is_true(nonzero))
-    {
-      // C17 7.22.3p1 leaves malloc(0) implementation-defined: NULL, or a
-      // pointer that may be freed but not used to access an object. Offer
-      // both -- forcing NULL makes the assume(p != NULL) that environment
-      // models emit after a zero-sized request unsatisfiable, pruning every
-      // execution under test (#5398).
-      expr2tc may_alloc = gen_nondet(get_bool_type());
-      replace_nondet(may_alloc);
-
-      expr2tc choice = or2tc(nonzero, may_alloc);
-      simplify(choice);
-      alloc_guard.add(choice);
-      rhs = if2tc(rhs->type, choice, rhs, symbol2tc(rhs->type, "NULL"));
-    }
-  }
+  if (is_malloc)
+    offer_malloc_zero_null(size, rhs, alloc_guard);
 
   if (!options.get_bool_option("force-malloc-success") && is_malloc)
   {
