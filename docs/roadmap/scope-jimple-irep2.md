@@ -1164,3 +1164,61 @@ Seventeen slices shipped: #6851, #6853, #6854, #6855, #6856, #6858, #6860,
 Remaining: `jimple_lengthof`, `jimple_virtual_member`, `jimple_virtual_invoke`
 (0 in the corpus, so §19's limit applies), and `jimple_throw`, still an
 unfinished construct.
+
+## 28. An audit of the slices that predate the mutant check (#6886)
+
+Every expression kind the corpus reaches is now native. The census that
+established this also turned up something about work already shipped:
+
+| expr_type | Occurrences |
+|---|---|
+| symbol, constant, binop, array_index, cast, string_constant, static_invoke, static_member, new, newarray | migrated, all non-zero |
+| **lengthof, local_member, virtual_invoke, nondet, class_reference** | **0** |
+
+`nondet` is in the zero list -- and #6858 migrated `jimple_nondet`, reporting
+"GOTO output is byte-identical across all 17 jimple tests."
+
+### 28.1 The claim was true and worthless
+
+The mutant check was introduced at §17.1, for #6865. Seven slices shipped before
+it: #6851, #6853, #6854, #6855, #6856, #6858, #6860. Each reported byte
+identity; none reported liveness.
+
+For `jimple_nondet` that gap was real. Corrupting the override with the corpus
+as it stood changes nothing, because `expr_type: "nondet"` never appears,
+`is_nondet_call()` tests for `org.sosy_lab.sv_benchmarks.Verifier` which never
+appears, and `java.util.Random` reaches only `jimple_virtual_invoke`, itself at
+zero. Three routes into the class, none of them taken.
+
+`github_4715_nondet_expr_01` supplies the direct one. Corrupting the override
+now changes exactly that test and nothing else -- one measurement establishing
+both that the new test covers the override and that the previous 22 did not.
+
+### 28.2 The rest of the pre-check slices are fine
+
+Not a general retraction. The other six operate on constructs with substantial
+counts -- goto 28, label 81, if 72, assignment 226, constant 183, binop 110 --
+and the method-body seam runs for every test in the suite. `jimple_nondet` was
+the only one of the seven at zero, so the audit closes with one fix rather than
+seven.
+
+### 28.3 What this says about ordering
+
+The mutant check was added when a slice happened to need it, and the six slices
+already shipped were never revisited. The cost of that was one unverified
+override surviving nine PRs. The general lesson for the remaining phases is
+cheap to state: **when a verification step is added mid-campaign, re-run it over
+what already shipped rather than only applying it forward.** A census of what
+the corpus contains, done once at the start, would have flagged `jimple_nondet`
+before it was written rather than nine slices later.
+
+### 28.4 Status
+
+Eighteen PRs: #6851, #6853, #6854, #6855, #6856, #6858, #6860, #6865, #6866,
+#6868, #6870, #6875, #6877, #6880, #6882, #6884, #6885, #6886, plus #6873 in
+support. Corpus 23 tests, six of them written to make a specific arm live.
+
+Remaining are the four other zero-count kinds -- `lengthof`, `local_member`,
+`virtual_invoke`, `class_reference` -- plus `jimple_throw`. Each needs a test
+written *before* its override, on the §28.3 lesson, and `jimple_throw` needs the
+construct finished first.
