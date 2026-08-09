@@ -382,3 +382,51 @@ Two ways forward, neither guessed at here:
 `jimple_symbol` (146 lines) and the invoke/member nodes carry the remaining
 entanglement, and the operand-bearing statements — `invoke`, `return`,
 `assignment`, `throw` — follow their expressions. `to_typet` stays last (§7).
+
+## 15. The binop operator domain, measured (2026-08-09)
+
+§14.1 said to measure the operator domain before designing for it. Measured
+over the whole corpus:
+
+| operator | occurrences |
+|---|---:|
+| `==` | 24 |
+| `+` | 21 |
+| `notequal` | 20 |
+| `-` | 17 |
+| `>=` | 14 |
+| `>` | 9 |
+
+Six distinct values, and the third is the one worth noticing: **`notequal` is a
+word, not a symbol.** A mapping written from the C operator set would miss it,
+and would do so silently.
+
+`from_json` also rewrites `==` to `=` before anything sees it, with a
+`// TODO, make hashmap for each operator` beside it — so the author already knew
+this was the incomplete part.
+
+### 15.1 The domain is bounded after all, and by something checkable
+
+§14.1 called the domain open because the string comes from input JSON. That is
+true of the *input* but not of the *effective* domain, which one more step
+settles: `to_exprt` passes the string to `gen_binary`, which builds
+`exprt(binop, …)` — a legacy irep id. The string is therefore only ever usable
+if it already **is** a valid legacy binary-operator id, because `migrate_expr`
+has to map it downstream. An operator outside that set is broken today, before
+any migration.
+
+So the bound is: *whatever `migrate_expr` maps for binary operators*. That is
+enumerable from `migrate.cpp`, not from the Jimple producer.
+
+### 15.2 What makes a partial mapping safe
+
+Given that, the second option in §14.1 is the right one and can be made safe by
+construction rather than by coverage: map the operators that are known, and
+**fall back to the migrating default** for anything else. The parallel-method
+design already permits a partial override, so an unrecognised operator takes the
+same path it takes today rather than silently building the wrong node.
+
+That turns the 17-test corpus from a validation problem into a sufficiency
+question — the tests need only show that the mapped operators are mapped
+correctly, because the unmapped ones are unchanged by construction. Byte
+identity over the six above does exactly that.
