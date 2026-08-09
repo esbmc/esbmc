@@ -1,5 +1,6 @@
 #include <jimple-frontend/AST/jimple_expr.h>
 #include <irep2/irep2_expr.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
@@ -530,6 +531,17 @@ exprt jimple_nondet::to_exprt(
 
   return rhs;
 };
+
+// gen_nondet builds exactly the sideeffect2t that migrate_expr makes of the
+// legacy sideeffect("nondet") above: nil operand, size and alloc type, kind
+// nondet.
+expr2tc jimple_nondet::to_expr2t(
+  contextt &,
+  const std::string &,
+  const std::string &) const
+{
+  return gen_nondet(migrate_type(int_type()));
+}
 
 void jimple_static_member::from_json(const json &j)
 {
