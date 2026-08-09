@@ -733,9 +733,8 @@ public:
     size_t pos = 0) const;
   size_t find_first_not_of(const char *s, size_t pos = 0) const;
   size_t find_first_not_of(char c, size_t pos = 0) const;
-  basic_string<CharT, Traits, Alloc> &erase(size_t pos, size_t n);
+  basic_string<CharT, Traits, Alloc> &erase(size_t pos = 0, size_t n = npos);
   basic_string<CharT, Traits, Alloc> &erase(size_t pos, size_t n, char *tmp);
-  basic_string<CharT, Traits, Alloc> &erase(size_t pos = 0);
   basic_string<CharT, Traits, Alloc> &erase(iterator it)
   {
     __ESBMC_assert(it.pos >= 0, "The parameter must be greater than zero");
@@ -1082,37 +1081,21 @@ public:
   size_t copy(char *s, size_t n, size_t pos = 0) const;
   const char *data() const;
 
-  basic_string<CharT, Traits, Alloc> substr(size_t pos, size_t n) const
+  /* [string.substr]: pos == size() is in range and yields the empty string;
+   * the count is min(n, size() - pos), so n is clamped rather than required
+   * to fit -- npos, the default, means "to the end". */
+  basic_string<CharT, Traits, Alloc>
+  substr(size_t pos = 0, size_t n = npos) const
   {
   __ESBMC_HIDE:
-    __ESBMC_assert(pos >= 0, "The first parameter must be greater than zero");
-    __ESBMC_assert(n >= 0, "The second parameter must be greater than zero");
-    int len = this->length();
-    __ESBMC_assert((pos < len) && ((pos + n) <= len), "basic_string overflow");
-    int i, k;
-    int lenOne = n + 1;
+    size_t len = this->length();
+    __ESBMC_assert(pos <= len, "basic_string::substr position out of range");
+    size_t rlen = n < (len - pos) ? n : (len - pos);
+    size_t k;
     char one[STRING_CAPACITY];
-    for (k = 0, i = pos; i < (pos + n); k++, i++)
+    for (k = 0; k < rlen; k++)
     {
-      one[k] = this->str[i];
-    }
-    one[k] = '\0';
-    basic_string<CharT, Traits, Alloc> tmp(one);
-    return tmp;
-  }
-
-  basic_string<CharT, Traits, Alloc> substr(size_t pos) const
-  {
-  __ESBMC_HIDE:
-    __ESBMC_assert(pos >= 0, "The first parameter must be greater than zero");
-    int i, k;
-    int len = this->length();
-    __ESBMC_assert(pos < len, "basic_string overflow");
-    int lenOne = len + 1;
-    char one[STRING_CAPACITY];
-    for (k = 0, i = pos; i < len; k++, i++)
-    {
-      one[k] = this->str[i];
+      one[k] = this->str[pos + k];
     }
     one[k] = '\0';
     basic_string<CharT, Traits, Alloc> tmp(one);
@@ -2410,67 +2393,18 @@ basic_string<CharT, Traits, Alloc> &
 basic_string<CharT, Traits, Alloc>::erase(size_t pos, size_t n)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    (pos < this->length()) && ((pos + n) <= this->length()), "overflow");
-  int i, k, len = this->length();
-  int lenOne = pos + 1;
-  char one[STRING_CAPACITY];
-  for (i = 0; i < pos; i++)
+  /* [string.erase]: out_of_range only if pos > size(); the count removed is
+   * min(n, size() - pos), so npos -- the default -- erases to the end. */
+  size_t len = this->length();
+  __ESBMC_assert(pos <= len, "basic_string::erase position out of range");
+  size_t xlen = n < (len - pos) ? n : (len - pos);
+  size_t i;
+  for (i = pos; i + xlen < len; i++)
   {
-    one[i] = this->str[i];
-  }
-  int lenTwo = (len - (pos + n)) + 1;
-  char two[STRING_CAPACITY];
-  for (k = 0, i = pos + n; i < len; i++, k++)
-  {
-    two[k] = this->str[i];
-  }
-  int totalLen = len - n;
-  this->_size = totalLen;
-  for (i = 0; i < lenOne - 1; i++)
-  {
-    this->str[i] = one[i];
-  }
-  for (k = 0; k < lenTwo - 1; k++, i++)
-  {
-    this->str[i] = two[k];
+    this->str[i] = this->str[i + xlen];
   }
   this->str[i] = '\0';
-  return *this;
-}
-
-template <typename CharT, typename Traits, typename Alloc>
-basic_string<CharT, Traits, Alloc> &
-basic_string<CharT, Traits, Alloc>::erase(size_t pos)
-{
-__ESBMC_HIDE:
-  int n = this->length() - 1;
-  __ESBMC_assert(
-    (pos < this->length()) && ((pos + n) <= this->length()), "overflow");
-  int i, k, len = this->length();
-  int lenOne = pos + 1;
-  char one[STRING_CAPACITY];
-  for (i = 0; i < pos; i++)
-  {
-    one[i] = this->str[i];
-  }
-  int lenTwo = (len - (pos + n)) + 1;
-  char two[STRING_CAPACITY];
-  for (k = 0, i = pos + n; i < len; i++, k++)
-  {
-    two[k] = this->str[i];
-  }
-  int totalLen = len - n;
-  this->_size = totalLen;
-  for (i = 0; i < lenOne - 1; i++)
-  {
-    this->str[i] = one[i];
-  }
-  for (k = 0; k < lenTwo - 1; k++, i++)
-  {
-    this->str[i] = two[k];
-  }
-  this->str[i] = '\0';
+  this->_size = len - xlen;
   return *this;
 }
 
