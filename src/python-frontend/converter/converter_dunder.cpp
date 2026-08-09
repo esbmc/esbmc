@@ -66,7 +66,21 @@ bool python_converter::has_dunder_method(
   const nlohmann::json &value_node,
   const std::string &dunder_name)
 {
-  const std::string class_name = type_handler_.get_var_classname(value_node);
+  std::string class_name = type_handler_.get_var_classname(value_node);
+
+  // get_var_classname resolves Name nodes only, so a constructor temporary --
+  // len(C()) rather than len(c) -- found no class and the dunder dispatch was
+  // skipped: len then fell through to the builtin path, which measures the
+  // struct rather than calling __len__. The call itself names the class.
+  if (
+    class_name.empty() && value_node.value("_type", "") == "Call" &&
+    type_handler_.is_constructor_call(value_node))
+  {
+    const auto &func = value_node["func"];
+    if (func.is_object() && func.value("_type", "") == "Name")
+      class_name = func.value("id", "");
+  }
+
   if (class_name.empty())
     return false;
 
