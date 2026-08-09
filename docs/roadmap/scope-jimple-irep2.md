@@ -1261,3 +1261,73 @@ have real overrides worth migrating and both need a test written first;
 `class_reference` maps to `jimple_constant("-1")` in `get_expression` and has no
 override of its own, so there is nothing to migrate for it. `jimple_throw`
 remains an unfinished construct.
+
+## 30. `jimple_virtual_member` (#6889), and a fifth cause
+
+Test-first again. `local_member` is a zero-count kind, and
+`github_4715_local_member_01` declares a class with a field, allocates an
+instance and reads the member. `to_exprt` builds a `gen_zero` and a
+`struct_type` local and reads neither -- the sixth build-then-discard -- so both
+are dropped; the dereference arm is kept, since a class-typed variable is always
+a pointer.
+
+### 30.1 The pointer arm, at last
+
+§23.1 and §25.1 both recorded that `to_type2t`'s pointer arm was reachable from
+nothing in the corpus, because `from_map` maps every class name that appears --
+`String`, `Integer`, `AssertionError`, `Main`, `Runtime`, `Class` -- to
+`BASE_TYPES::INT`. A user class not in that map does reach it, and this test
+declares one.
+
+Getting there took three corrections to my own expectations:
+
+1. `new OriginalKt` does not reach it -- #6884's override calls the **legacy**
+   `to_typet` to build the symbol, not `to_type2t`.
+2. A class-typed member does not reach it either -- the member's own type here
+   is `int`.
+3. A cast to the class type on an assignment right-hand side does not show it,
+   because the enclosing assignment re-converts to the target type (§23.2).
+
+What works is a cast to the class type in **argument** position, the same
+position §23.2 needed for the same reason.
+
+### 30.2 An unmoved mutant because the mutation is invalid
+
+Even with the arm reached, three mutants reported 0/25. All three replaced
+`pointer_type2tc(migrate_symbol_type(*symbol))` with the bare struct type, and
+that is the flaw:
+
+| | source type | destination | result |
+|---|---|---|---|
+| unmutated | `pointer(struct)` | `pointer(struct)` | legal, identical, **no cast emitted** |
+| mutated | `pointer(struct)` | `struct` | **illegal**, error recorded, **no cast emitted** |
+
+`c_implicit_typecast` on a rejected conversion pushes to `errors` and leaves the
+expression untouched, so refusal and success-with-nothing-to-do print the same.
+Substituting a *legal but different* type -- `pointer_type2tc(get_bool_type())`
+-- emits `(bool *)$r0` and moves 1/25.
+
+**Fifth cause for an unmoved mutant**, and the first that is a flaw in the probe
+rather than a fact about the code:
+
+| Cause | Response | Seen at |
+|---|---|---|
+| corpus is thin | write a test | §20, §21.1 |
+| unreachable by construction | do not mirror the branch | §22.3, §23.1 |
+| a caller downstream re-does the work | test where it does not | §23.2, §30.1 |
+| the printer normalises the field away | argue from source | §21.2, §24.1 |
+| **the mutation makes the operation invalid, and the error path is also a no-op** | **mutate to a valid alternative** | **§30.2** |
+
+The pattern to watch for: any mutation feeding a function that validates its
+input can be swallowed by that validation. Prefer mutants that stay inside the
+valid domain and change the answer, over mutants that leave it.
+
+### 30.3 Status
+
+Twenty PRs, corpus 25 tests, eight of them written to make a construct or arm
+live. Every expression kind that `get_expression` can build is now migrated or
+deliberately on the default, and `to_type2t` has no unexercised arm left bar
+`BOOLEAN`, which §23.1 proved unreachable by construction.
+
+Remaining: `jimple_virtual_invoke` (zero-count, needs its own test) and
+`jimple_throw`, still unfinished.
