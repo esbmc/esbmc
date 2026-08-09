@@ -1831,6 +1831,86 @@ bool rewrite_array_copy(irept &code)
   return true;
 }
 
+// Reads a raw CBMC integer constant. Values are hex strings at this point --
+// fix_expression's own constant branch is what later rewrites them to binary of
+// the type's width -- so parse base 16, and reject anything too wide for the
+// conversion rather than letting stoull throw.
+bool constant_uint(const irept &c, unsigned long long &out)
+{
+  if (c.id() != "constant")
+    return false;
+
+  const std::string v = c.find("value").id_string();
+  if (
+    v.empty() || v.size() > 16 ||
+    v.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
+    return false;
+
+  out = std::stoull(v, nullptr, 16);
+  return true;
+}
+
+// Guards against building a pathological conjunction for a huge array; such a
+// comparison is beyond BMC anyway, and declining beats exhausting memory.
+const unsigned long long array_equal_max_elements = 4096;
+
+// Rewrites `ARRAY_EQUAL lhs rhs result` (__CPROVER_array_equal) into
+// `ASSIGN result := lhs[0] == rhs[0] && ... && lhs[n-1] == rhs[n-1]`. Unlike
+// the rest of the family this codet carries its own destination -- the bool
+// temporary CBMC declares for the call's value -- as a third operand, so the
+// result lands there rather than on either array.
+//
+// The comparison is spelled out per element rather than as a whole-array `==`
+// because ESBMC's array equality does not decide this: two arrays whose every
+// in-bounds element is equal still compare may-differ (checked on both
+// solvers, with and without initialisers), where CBMC -- which flattens arrays
+// to fixed-size tuples -- answers equal. Indexing sidesteps that entirely.
+//
+// Arrays of differing type are declined: CBMC answers `false` for them (a
+// shorter array is never equal to a longer one), but two spellings of one type
+// would compare unequal as ireps while CBMC calls them equal, so a synthesised
+// `false` risks a wrong verdict where a decline only costs a case.
+bool rewrite_array_equal(irept &code)
+{
+  const irept::subt ops = code.get_sub();
+  if (ops.size() != 3)
+    return false;
+
+  const irept *lhs = whole_array_target(ops[0]);
+  const irept *rhs = whole_array_target(ops[1]);
+  if (!lhs || !rhs || !(lhs->find("type") == rhs->find("type")))
+    return false;
+
+  const irept &atype = lhs->find("type");
+  unsigned long long n = 0;
+  if (
+    atype.get_sub().empty() || !constant_uint(atype.find("size"), n) ||
+    n == 0 || n > array_equal_max_elements)
+    return false;
+
+  const irept &elem = atype.get_sub().front();
+  const irept &bool_ty = ops[2].find("type");
+  const irept idx_ty = static_cast<const irept &>(int_type());
+
+  irept result;
+  for (unsigned long long i = 0; i < n; i++)
+  {
+    const irept subscript = mk_bv_const(idx_ty, i);
+    irept eq = mk_binary(
+      "=",
+      bool_ty,
+      mk_binary("index", elem, *lhs, subscript),
+      mk_binary("index", elem, *rhs, subscript));
+    result = i == 0 ? eq : mk_binary("and", bool_ty, result, eq);
+  }
+
+  code.add("statement") = mk("assign");
+  code.get_sub().clear();
+  code.get_sub().push_back(ops[2]);
+  code.get_sub().push_back(result);
+  return true;
+}
+
 // Rewrites `HAVOC_OBJECT p` (__CPROVER_havoc_object) into the ASSIGN of a
 // nondet side effect the native pipeline would produce, so the object loses
 // its value the way CBMC's own symex drops it. The instruction carries no
@@ -1887,6 +1967,11 @@ const char *rewrite_whole_object_codet(
   else if (stmt == "array_copy" || stmt == "array_replace")
   {
     if (rewrite_array_copy(code))
+      return "13";
+  }
+  else if (stmt == "array_equal")
+  {
+    if (rewrite_array_equal(code))
       return "13";
   }
   else if (stmt == "havoc_object")
