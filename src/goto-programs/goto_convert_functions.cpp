@@ -676,11 +676,11 @@ bool goto_convert_functionst::convert_native_rec(
       // convert_return replaces a missing value with nondet
       if (val.is_nil())
         return delegate_to_legacy();
-      // The RETURN instruction convert_return emits is migrate_expr(code_returnt)
-      // located at the statement; migrate_expr drops every value-operand
-      // location restore_value_locations stamped except a ternary's, so
-      // with_if_locations is what makes this round-trip to code2 itself. Emit
-      // it directly, exactly as the assign/expression handlers do.
+      // The RETURN instruction convert_return emits is
+      // migrate_expr(code_returnt) located at the statement; migrate_expr drops
+      // every value-operand location restore_value_locations stamped except a
+      // ternary's, so with_if_locations is what makes this round-trip to code2
+      // itself. Emit it directly, exactly as the assign/expression handlers do.
       goto_programt::targett r = dest.add_instruction();
       r->make_return();
       r->code =
