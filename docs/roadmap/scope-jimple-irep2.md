@@ -887,3 +887,73 @@ tests.
 Next by value is `array_index` (47, `jimple_deref`), then `static_member` (15),
 `new` (14) and `newarray` (9) -- the last three all consume `to_type2t`, which
 now exists, and between them will exercise its pointer arm.
+
+## 24. `jimple_deref` (#6880): the oracle's own blind spot
+
+`array_index` was the largest remaining expression at 47 occurrences.
+`to_exprt` builds it by assembling an `index_exprt` and then rewriting the node
+in place:
+
+```cpp
+exprt &array_expr = index.op0();          // reference into the operand vector
+...
+addition.operands().swap(index.operands()); // vector now empty; the reference dangles
+index.move_to_operands(addition);
+index.type() = array_expr.type().subtype(); // reads the reference again
+```
+
+By the last line `array_expr` no longer designates the array -- the vector it
+pointed into was swapped away and refilled, so it now names the *addition*.
+The subtype happens to be the same either way, which is why this works. The
+native override builds the intended result, `dereference(base + index)`,
+without the rewrite.
+
+### 24.1 A fourth cause for an unmoved mutant
+
+| Mutant | Changed |
+|---|---|
+| index dropped | 7 / 20 |
+| dereference dropped | 7 / 20 |
+| result widened to the pointer type | 7 / 20 |
+| **addition's operands swapped** | **0 / 20** |
+
+Seven is every test that indexes an array, so the override is well covered. The
+swap is different from all three earlier zeroes: the code is reachable, the
+corpus is adequate, and nothing downstream re-does the work. The **oracle**
+cannot see it. The GOTO printer renders `dereference(p + i)` in index notation:
+
+```
+ASSIGN r0[i2]=$i1;
+```
+
+so operand order is normalised away before the dump is written.
+
+Nothing is at risk here -- pointer arithmetic identifies the pointer by type
+rather than position, so both orders are semantically identical, and the
+committed order matches `to_exprt` anyway. What matters is the general point:
+
+**A/B byte-identity is an oracle over the *printed* GOTO, not over the IR.**
+Any field the printer normalises or omits is outside its reach. Two such fields
+are now known -- `end_location` on a nested block (§21.2) and commutative
+operand order under index-notation printing (here) -- and for those the argument
+has to be made from the migration source, not from the measurement.
+
+So the four causes of an unmoved mutant, with their distinct responses:
+
+| Cause | Response | Seen at |
+|---|---|---|
+| corpus is thin | write a test | §20, §21.1 |
+| unreachable by construction | do not mirror the branch | §22.3, §23.1 |
+| a caller downstream re-does the work | test in a position where it does not | §23.2 |
+| the printer normalises the field away | argue from the source; do not claim it measured | §21.2, §24.1 |
+
+### 24.2 Status
+
+Fourteen slices shipped: #6851, #6853, #6854, #6855, #6856, #6858, #6860,
+#6865, #6866, #6868, #6870, #6875, #6877, #6880, plus #6873 in support.
+
+Remaining expressions: `static_member` (15), `new` (14), `newarray` (9) -- all
+three consume `to_type2t` and between them will exercise the pointer arm §23.1
+showed the cast corpus cannot reach -- and the expression form of
+`static_invoke` (19). Statements are complete bar `jimple_throw`, which is an
+unfinished construct.
