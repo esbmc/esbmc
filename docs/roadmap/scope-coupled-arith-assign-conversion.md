@@ -1172,3 +1172,73 @@ terminate" from "symex will not stop", and those have disjoint fixes.
 Recorded rather than fixed: the remaining question is in symex's loop handling,
 which is neither this scope's nor the list model's, and it wants someone who
 knows why that guard stays satisfiable.
+
+## 20. §16's question, answered: the two typecast copies are not equivalent
+
+`scope-jimple-irep2.md` §16 blocked `jimple_assignment` on whether
+`c_typecastt::implicit_typecast(exprt &)` and its `expr2tc &` overload agree,
+and flagged it as a program-level prerequisite rather than a jimple task. They
+do not agree, and the gap is wider than the framing assumed.
+
+### 20.1 Structural gaps in `implicit_typecast_followed`
+
+The irept copy is 162 lines, the expr2tc copy 67. The irept one additionally
+handles:
+
+1. lvalue/rvalue references in either direction (`take_reference_address`,
+   implicit dereference) -- C++ models `T&` as a pointer;
+2. pointer-to-member (`dest_type.find("to-member")` -> `member_ref_exprt`);
+3. `incomplete_array` as a source type;
+4. qualifier warnings -- "disregarding const" / "disregarding volatile";
+5. `#reference` propagation when source and destination types compare equal;
+6. struct/union source to pointer destination, the derived-object-to-base-
+   pointer address-of adjustment;
+7. string-constant to array, via `string2array`.
+
+It also uses `is_number` where the expr2tc copy uses `is_bv_type` for the
+"generous between scalars" arm, which changes only which conversions warn.
+
+Items 1, 2 and 6 are C++-frontend shaped and do not arise on jimple or Python.
+Item 7 does not arise on jimple either: `jimple_expr::get_expression` maps
+`string_constant` to a default `jimple_constant`, discarding the value.
+
+### 20.2 The gap that is not C++-shaped (#6873)
+
+`do_typecast` also exists twice, and the difference there reaches every
+frontend. The irept copy folds:
+
+```cpp
+dest.make_typecast(type);
+if (dest.op0().is_constant() && !no_simplify)
+{
+  expr2tc d2; migrate_expr(dest, d2); simplify(d2); dest = migrate_expr_back(d2);
+}
+```
+
+The expr2tc copy was `dest = typecast2tc(type, dest);` and nothing else. So
+assigning a literal to a differently-typed lvalue -- the commonest conversion a
+frontend performs -- produced `constant_int 1 : signedbv 64` on one path and
+`typecast(constant_int 1 : signedbv 32)` on the other.
+
+Fixed in #6873 by mirroring the fold, with a differential harness in
+`unit/util/c_typecast.test.cpp` that runs both overloads over the arithmetic and
+pointer conversions and requires the migrated results to be equal.
+
+### 20.3 What this cost, and what it buys
+
+The measurement that mattered took one afternoon; the reading that preceded it
+("`symbol_expr2tc` is the IREP2 form of `symbol_expr`, so the typecast pair is
+probably fine too") would have been wrong in a way no jimple test could catch,
+because jimple casts only between scalars where the *unfolded* form is still
+semantically correct -- just not byte-identical.
+
+That is the general shape of the remaining risk in Phases 5-9: **a second
+independently-written copy of a conversion is not a translation of the first,
+and byte-identity on one frontend's corpus does not establish that it is.**
+This file's §17-§19 recorded the same lesson for the arithmetic-conversion
+rules; #6873 extends it to the cast insertion itself.
+
+`jimple_assignment` remains blocked, but on a narrower question now: with the
+fold aligned, what is left is whether the seven structural gaps in §20.1 can
+arise on a jimple assignment. Items 1, 2, 6 and 7 are argued above not to;
+items 3, 4 and 5 need the same treatment before the slice is takeable.
