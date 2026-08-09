@@ -13,9 +13,10 @@
 /// At this stage the walk is deliberately **read-only**: it reads each code
 /// symbol's IREP2 value and recurses, and never writes one back. That keeps the
 /// pass inert by construction rather than by argument -- there is no write path
-/// to be wrong -- while still exercising `migrate_expr` over every construct the
-/// C corpus contains, since `symbolt::get_value2()` migrates the legacy value on
-/// demand. A construct that cannot migrate aborts here instead of much later.
+/// to be wrong -- while still exercising `migrate_expr` over every construct
+/// the C corpus contains, since `symbolt::get_value2()` migrates the legacy
+/// value on demand. A construct that cannot migrate aborts here instead of much
+/// later.
 ///
 /// Read-only also side-steps the round-trip losses `python_adjust` documents
 /// (a bitfield's `#bitfield` flag, an explicit alignment attribute): those only
