@@ -771,3 +771,66 @@ attributable, 2 skipped short, at 335/4 509.
 
 G5 (dual-solver agreement) has not been started; it should follow G4 rather
 than run concurrently, since both saturate the same machine.
+
+## 17. Re-measured: five of six blockers are clear, one is root-caused (2026-08-09)
+
+§16 left Phase 3 on two §9.4 witnesses (`precedence2`, `sum_tuple`), with
+`precedence2` root-caused to `c_typecast`'s IREP2 overload lacking a `floatbv`
+case. Re-measured against the current binary, replaying each test's own flags,
+legacy vs `--python-irep2-adjust-only`:
+
+| test | legacy | flip | was (§16) |
+|---|---|---|---|
+| `precedence2` | SUCCESSFUL | **SUCCESSFUL** | diverged |
+| `chained-comparison2_fail` | FAILED | FAILED | agreed |
+| `lambda15` | SUCCESSFUL | SUCCESSFUL | agreed |
+| `github_5571_fail` | FAILED | FAILED | agreed |
+| `github_5571_tuple_str_annotation` | SUCCESSFUL | SUCCESSFUL | agreed |
+| `sum_tuple` | SUCCESSFUL | **no verdict** | diverged |
+
+**`precedence2` is closed.** The `floatbv` omission §16 identified was fixed by
+**#6775** (`74da5e1e5a`, *"Admit floatbv in c_typecast's IREP2 conversion
+check"*), whose comment names this defect. Nothing further is owed here.
+
+### 17.1 `sum_tuple` — the last witness, and it is a node-kind gap
+
+Not a wrong verdict: an assertion.
+
+```
+Assertion failed: (!is_floatbv_type(type)), function simplify_arith_2ops,
+file expr_simplifier.cpp, line 253.
+```
+
+whose own comment reads `// This should be handled by ieee_*`. A float-typed
+**plain** `add2t` reached the simplifier, where floats must be `ieee_add2t`.
+
+The flag isolates the cause exactly: `--python-irep2-adjust` (both adjusters)
+verifies SUCCESSFUL; only `--python-irep2-adjust-only` asserts. So the converter
+builds the plain node and **`clang_c_adjust` is what repairs it** —
+`clang_c_adjust_expr.cpp:670-697` rewrites `+`/`-`/`*`/`/` to
+`ieee_add`/`ieee_sub`/`ieee_mul`/`ieee_div` under `need_float_adjust` and
+attaches the rounding-mode symbol, which `migrate_expr` then turns into
+`ieee_add2tc` (`migrate.cpp:1312-1333`).
+
+`python_adjust` has **no counterpart to that rewrite.** That is the whole of the
+remaining §9.4 gap, and it explains the shape of PR #5999's earlier finding that
+`promote_ieee_operands`/`is_ieee_op` were "provably dead" — they were dead
+*because clang_c_adjust was doing the promotion*, which stops being true the
+moment the flip removes it.
+
+### 17.2 What the fix is, and what it carries
+
+Add the promotion to `python_adjust`: for a float-typed `add2t`/`sub2t`/
+`mul2t`/`div2t`, rebuild as the `ieee_*` kind with the
+`c:@__ESBMC_rounding_mode` symbol as the rounding operand. Post-migration this
+is operand surgery — rebuild the node in place, never round-trip it (the
+`migrate_expr_back` → `migrate_expr` detour reverts resolved `member2t`/`index2t`
+sources to by-name `symbol_type2t`).
+
+It is a flag-gated arm, so it carries this scope's usual gates rather than the
+default path's: G4's whole-corpus census (§16 records it partial at 335/4 509,
+with two divergences `class10`/`class12` outstanding) and G5's dual-solver
+agreement, which §16 says should follow G4 rather than run beside it.
+
+**Phase 3's blocker list is therefore one item long**, and it is a named rewrite
+against a named counterpart rather than an unowned mechanism.
