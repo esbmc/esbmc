@@ -262,6 +262,17 @@ exprt jimple_cast::to_exprt(
   return from_expr;
 };
 
+expr2tc jimple_cast::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  expr2tc from_expr = from->to_expr2t(ctx, class_name, function_name);
+  namespacet ns(ctx);
+  c_implicit_typecast(from_expr, to->to_type2t(ctx), ns);
+  return from_expr;
+}
+
 void jimple_lengthof::from_json(const json &j)
 {
   from = get_expression(j.at("expression"));
