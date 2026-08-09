@@ -404,6 +404,21 @@ exprt jimple_expr_invoke::to_exprt(
   return block;
 }
 
+expr2tc jimple_expr_invoke::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // TODO: Move intrinsics to backend
+  // valueOf(n) is the identity on its argument. This is the only arm reachable
+  // here: jimple_assignment routes an invoke right-hand side to the migrating
+  // default unless it is nondet or intrinsic, and valueOf_1 is the intrinsic.
+  if (base_class == "java.lang.Integer" && method == "valueOf_1")
+    return parameters[0]->to_expr2t(ctx, class_name, function_name);
+
+  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+}
+
 void jimple_virtual_invoke::from_json(const json &j)
 {
   lhs = nil_exprt();
