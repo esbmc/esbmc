@@ -272,9 +272,9 @@ does to the score.
 - **Reverting #6607.** It fixes a real unsoundness (#4584).
 - **Cause 2 of #6831** (the ~3.5 % general slowdown plus ~0.15 s fixed cost,
   ~198 lost tasks, led by `Juliet_Test` at ~99 s of a 100 s limit). It is a
-  separate defect with a separate fix — on-demand operational-model loading —
-  and is paid by all 36,603 tasks rather than by the concurrency categories.
-  It deserves its own plan.
+  separate defect, paid by all 36,603 tasks rather than by the concurrency
+  categories, and has its own plan:
+  [`svcomp-6831-fixed-cost-plan.md`](svcomp-6831-fixed-cost-plan.md).
 - **The `incorrect 6 → 8` delta.** The issue establishes it came from the
   benchmark repository moving between runs, not from ESBMC.
 - **Pinning the sv-benchmarks revision** (the issue's suggested action 4). A
