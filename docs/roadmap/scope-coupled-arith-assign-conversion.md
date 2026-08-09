@@ -1079,3 +1079,46 @@ untried option, and it now has to be justified on its own terms rather than as
 "avoid the slow path", since the fast path is not fast either. Whoever takes
 this should start by instrumenting `__ESBMC_values_equal` for an array-typed
 element rather than by changing `elem_size`.
+
+### 19.6 The actual root cause: unbounded unwinding, not comparison cost
+
+§19.5 ruled out direction (a) and pointed at instrumenting
+`__ESBMC_values_equal`. That would also have been the wrong place. One cheaper
+diagnostic settles it — look at *which phase* the run is in:
+
+```
+Unwinding loop 6 iteration 467   file .../python/list.c line 298 column 3
+                                 function __ESBMC_list_eq
+```
+
+It never reaches the solver. `list.c:298` is `while (top > 0)`, the
+explicit-stack worklist in `__ESBMC_list_eq`, and symex unwinds it without
+bound. Two confirmations:
+
+| run | result |
+|---|---|
+| `m: list = ["y"]; assert m == ["y"]` with `--unwind 4` | **SUCCESSFUL, instantly** |
+| the same with `--unwind 8` | SUCCESSFUL |
+| `[1] == [1]`, occurrences of "Unwinding loop 6" | **0** — never enters the loop |
+
+So it is not comparison cost at all: it is an unbounded loop, and the int case
+avoids it entirely rather than traversing it cheaply.
+
+**Which relocates the fix.** `list_query.cpp` already has two elisions that keep
+lists out of this model — *"Fast path for list equality/inequality when we have
+concrete type-map entries for both operands. This avoids `__ESBMC_list_eq`
+loops"* (:116-117) and the nested-list one that keeps matrix comparisons *"from
+blowing up into large `__ESBMC_list_eq` trees"* (:193-195). The int case is fast
+because it takes one of them. **Strings do not.**
+
+So the work is to extend the existing frontend elision to string-element lists,
+not to bound the model's loop (direction (b)) and not to change `elem_size`
+(direction (a), already ruled out). That is a smaller and better-precedented
+change than either direction §19.4 proposed — both of which were reasoning about
+the wrong phase.
+
+Method note, and the third distinct one on this branch: §18.4 was *run the
+control*, §18.5 was *rebuild after switching branches*, and this one is **check
+which phase is slow before optimising the cost model.** Two directions were
+derived from two code comments about memcmp, and the process never reached
+memcmp.
