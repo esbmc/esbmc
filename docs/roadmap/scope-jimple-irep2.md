@@ -1024,3 +1024,85 @@ override left, allocating through a temp symbol and a synthesised call, with a
 hardcoded 64-bit width fallback; the expression form of `static_invoke` (19);
 `jimple_virtual_member`; and `jimple_throw`, still unfinished. Per §25.1 none of
 these will reach the `to_type2t` pointer arm without a new test.
+
+## 26. Allocation (#6884), and a mutant that tested the wrong copy
+
+`jimple_new` derives from `jimple_newarray` and overrides only `from_json`
+(setting `size` to the constant 1), so one override covers both -- 23 uses.
+
+### 26.1 The fourth build-then-discard
+
+`to_exprt` assembles a `code_function_callt`, sets its lhs to a fresh temp
+symbol, and then never uses the call: it copies `function`, `arguments` and
+`location` into a `side_effect_expr_function_callt` and returns that. The lhs,
+and with it the temp symbol's only use, is dropped. `alloc_type` is computed
+over two statements and never read at all.
+
+That is the fourth instance in this frontend, after §22's `code_returnt`
+operand, §24's `index_exprt` and §25.3's `gen_zero`. The native form uses the
+existing `side_effect_function_call2tc` helper -- which already documents the
+empty-not-nil alloctype trap -- and drops `alloc_type`.
+
+### 26.2 An unobservable side effect that still has to be kept
+
+Removing the temp symbol changes **0/22**. It is not dead, and it is not thin
+corpus either:
+
+```cpp
+static symbolt get_temp_symbol(...)
+{
+  static unsigned int counter = 0;
+  ... "return_value$tmp$" + std::to_string(counter++) ...
+```
+
+The counter is program-wide, so not calling it renames every later temp symbol.
+The dump does not show that here only because these particular temps are
+unused. This is §24.1's fourth cause again -- the oracle cannot see it -- but
+with the opposite conclusion: there the invisible difference was harmless and
+either choice was fine, here the invisible difference is real and the mirror
+must be exact. **Oracle blindness cuts both ways; the source has to settle it.**
+
+### 26.3 A mutant that silently tested the legacy copy
+
+The first run of the width-fallback mutant reported 0/22 even against a test
+whose dump plainly showed `MALLOC(signed char, 4 * 64)`. The cause was the
+mutation itself:
+
+```
+525:  int type_width = 64;   <- to_exprt   (legacy)
+573:  int type_width = 64;   <- to_expr2t  (native)
+```
+
+`str.replace(old, new, 1)` rewrote the **first** occurrence, so the mutant
+perturbed the legacy path, which `--irep2-bodies` does not execute, and the
+identical output was read as "the arm is unreachable."
+
+This is a hazard specific to the parallel-method technique of §8.1: every
+migrated override has a near-twin a few hundred lines away, and any
+text-targeted mutant can hit the wrong one and return a false zero. Mutants
+must be anchored to the native function -- slice the source at
+`expr2tc <class>::to_expr2t` first, then assert the pattern occurs exactly once
+in the tail:
+
+```python
+i = t.index("expr2tc jimple_newarray::to_expr2t")
+head, tail = t[:i], t[i:]
+assert tail.count(pattern) == 1
+```
+
+Re-run that way, the mutant moves 1/22 -- the new test. Earlier slices are not
+affected: their mutant strings differed from the legacy text (`symbolt` versus
+`auto`, `code_skip2tc` versus `code_skipt`), so they hit the native copy by
+luck rather than by construction. From here they are anchored deliberately.
+
+### 26.4 Status
+
+Sixteen slices shipped: #6851, #6853, #6854, #6855, #6856, #6858, #6860, #6865,
+#6866, #6868, #6870, #6875, #6877, #6880, #6882, #6884, plus #6873 in support.
+Corpus now 22 tests, having grown by five written to make specific arms live
+(§20.1, §21.1, §23.2, §25.2, §26.3).
+
+Remaining: the expression form of `static_invoke` (19), `jimple_lengthof`,
+`jimple_virtual_member`, `jimple_virtual_invoke`, and `jimple_throw`, still
+unfinished. Per §25.1 none reaches the `to_type2t` pointer arm without a new
+test.
