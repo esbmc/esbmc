@@ -1202,3 +1202,35 @@ Two things follow, and the second is the more general one:
    a divergence count must also show the legacy arm unchanged; §18.4's A/B
    protocol does not require that today, and this is the case that shows it
    should.
+
+### 21.8 The fix landed — and the sweep understated its reach by 3 sites
+
+§21.7's "real fix is on the native side" is #6835. Two things about it are worth
+recording here, because they are properties of *this sweep*, not of that patch.
+
+**The divergence set named one emission site; four were affected.** The nil
+`if2t::location` is not specific to the assignment handler. A nested ternary can
+also travel through the native `return`, the bare-call and the
+expression-statement emission points, and all three dropped the location the
+same way. None of them appears in §21.1's divergent set — no test in the
+stride-12 sample happened to put a floor division in a return or a call
+argument, so the sweep reported those paths clean.
+
+This is §20.2's M1 result reached from the other direction. There, no verdict
+test could distinguish a delegation arm that exists from one that does not, and
+only the census could. Here, no A/B sweep could distinguish an emission site
+that stamps from one that does not *unless the corpus happens to route a ternary
+through it* — and a 379-test sample routed one through exactly one of four. The
+sites were found by probing each emission point directly with a constructed
+input, after reading the handlers.
+
+**So a divergence count is a lower bound on defect reach, never a measure of
+it.** §21.1's "24 divergences, one site" was accurate about what diverged and
+misleading about what was broken: the correct statement is *one site observed,
+reach unmeasured*. Any future sweep row should be read that way, and a fix
+derived from one should enumerate the code paths that share the cause rather
+than the tests that happened to catch it.
+
+The corresponding correction to §21.6: the `isqrt` operand location is no longer
+"left to a separate patch" — it is #6835, covering all four sites, with A/B test
+pairs whose native arms fail without it.
