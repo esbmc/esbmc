@@ -466,6 +466,14 @@ void clang_c_adjust::adjust_expr_shifts(exprt &expr)
         expr.id("ashr");
         return;
       }
+
+      if (op0_type.id() == "fixedbv")
+      {
+        // Arithmetic for signed formats, logical for unsigned; the solver's
+        // fixed-point shift picks by format, so either id carries through.
+        expr.id(op0_type.get("#esbmc_unsigned") == "1" ? "lshr" : "ashr");
+        return;
+      }
     }
   }
 }
@@ -1338,7 +1346,23 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     }
     else if (is_abs_builtin_name(identifier))
     {
-      if (expr.arguments().size() == 1 && is_number(expr.arguments()[0].type()))
+      /* Only lower argument types the libc builtins actually take: abs and
+       * friends are integer, fabs* floating-point. A program declaring its
+       * own abs over some other arithmetic type -- e.g. TR 18037's
+       * saturating absfx over _Fract -- keeps its call, or we would verify
+       * the builtin instead of the program's code (esbmc/esbmc#6904).
+       * `abs` on a fixed-point value is also plain wrong: it lowers to
+       * (x >= 0) ? x : -x, which overflows at the format minimum where
+       * absfx saturates. */
+      const typet &arg_t = expr.arguments().size() == 1
+                             ? ns.follow(expr.arguments()[0].type())
+                             : typet();
+      const bool builtin_arg_type =
+        is_number(arg_t) && !arg_t.is_fixedbv() &&
+        (arg_t.is_floatbv() ==
+         (identifier.as_string().find("fabs") != std::string::npos));
+
+      if (expr.arguments().size() == 1 && builtin_arg_type)
       {
         exprt abs_expr("abs", expr.type());
         abs_expr.operands() = expr.arguments();
