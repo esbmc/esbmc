@@ -11,33 +11,69 @@ class CFG:
     def __init__(self):
         self.blocks = []
 
-
+#look for the set, append etc methods fro dataflow
 def build_cfg_for_function(func_node: ast.FunctionDef) -> CFG:
     cfg = CFG()
-    entry = Block(); cfg.blocks.append(entry)
-    cur = entry
-    for stmt in func_node.body:
-        if isinstance(stmt, ast.If):
-            # current block gets condition entry marker (store test)
-            cur.stmts.append(('cond', stmt.test))
-            # then block
-            then_block = Block()
-            then_block.stmts.extend(stmt.body)
-            # else block
-            else_block = Block()
-            else_block.stmts.extend(stmt.orelse)
-            # join block
-            join_block = Block()
-            idx_then = len(cfg.blocks); cfg.blocks.append(then_block)
-            idx_else = len(cfg.blocks); cfg.blocks.append(else_block)
-            idx_join = len(cfg.blocks); cfg.blocks.append(join_block)
-            cur.succ.extend([idx_then, idx_else])
-            cfg.blocks[idx_then].pred.append(cfg.blocks.index(cur))
-            cfg.blocks[idx_else].pred.append(cfg.blocks.index(cur))
-            cfg.blocks[idx_then].succ.append(idx_join)
-            cfg.blocks[idx_else].succ.append(idx_join)
-            cfg.blocks[idx_join].pred.extend([idx_then, idx_else])
-            cur = join_block
-        else:
-            cur.stmts.append(stmt)
+    entry = Block(); 
+
+    cfg.blocks.append(entry)
+
+    build_statements(func_node, CFG, 0)
+
     return cfg
+
+def build_statements(statements, cfg, current_idx):
+    current = current_idx
+
+    for stmt in statements:
+        if isinstance(stmt, ast.If):
+            current = build_if(stmt, cfg, current)
+        else:
+            cfg.blocks[current].stmts.append(stmt)
+
+            if is_terminal_statement(stmt):
+                return None
+    return current
+
+def is_terminal_statement(stmt):
+    return isinstance(
+        stmt,
+        (ast.Return, ast.Raise)
+    )
+
+def build_if(stmt: ast.If, cfg:CFG, current_idx: int) -> int:
+    current = cfg.blocks[current_idx]
+
+    current.stmts.append(("cond", stmt.test))
+
+    then_idx = len(cfg.blocks)
+    cfg.blocks.append(Block())
+
+    else_idx = len(cfg.blocks)
+    cfg.blocks.append(Block())
+
+    join_idx = len(cfg.blocks)
+    cfg.blocks.append(Block())
+
+    current.succ.extend([then_idx, else_idx])
+
+    cfg.blocks[then_idx].pred.append(current_idx)
+    cfg.blocks[else_idx].pred.append(current_idx)
+
+    then_tail = build_statements(
+        stmt.body,
+        cfg,
+        then_idx
+    )
+
+    else_tail = build_statements(stmt.orelse, cfg, else_idx)
+
+    if then_tail is not None:
+        cfg.blocks[then_tail].succ.append(join_idx)
+        cfg.blocks[join_idx].pred.append(then_tail)
+
+    if else_tail is not None:
+        cfg.blocks[else_tail].succ.append(join_idx)
+        cfg.blocks[join_idx].pred.append(else_tail)
+
+    return join_idx            

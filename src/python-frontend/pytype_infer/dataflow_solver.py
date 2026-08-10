@@ -1,259 +1,380 @@
 import ast
 from typing import Dict, List, Any, Tuple
 from .lattice import *
+from .cfg_builder import *
 
-def parse_condition(cond):
-    if isinstance(cond, ast.Call) and isinstance(cond.func, ast.Name) and cond.func.id == 'isinstance':
-        if len(cond.args)>=2 and isinstance(cond.args[0], ast.Name):
-            var = cond.args[0].id
-            arg = cond.args[1]
-            if isinstance(arg, ast.Name):
-                return ('isinstance', var, arg.id)
-            if isinstance(arg, ast.Subscript) and isinstance(arg.value, ast.Name):
-                return ('isinstance', var, arg.value.id)
-    if isinstance(cond, ast.Compare) and isinstance(cond.left, ast.Name):
-        if len(cond.ops)==1 and isinstance(cond.ops[0], ast.Is):
-            if len(cond.comparators)==1 and isinstance(cond.comparators[0], ast.Constant) and cond.comparators[0].value is None:
-                return ('is_none', cond.left.id, False)
-        if len(cond.ops)==1 and isinstance(cond.ops[0], ast.IsNot):
-            if len(cond.comparators)==1 and isinstance(cond.comparators[0], ast.Constant) and cond.comparators[0].value is None:
-                return ('is_none', cond.left.id, True)
+def parse_isinstance_condition(cond):
+    if not (isinstance(cond, ast.Call)
+    and isinstance(cond.func, ast.Name)
+    and cond.func.id == "isinstance"
+    and len(cond.args) >=2
+    and isinstance(cond.args[0], ast.Name)
+    ):
+        return None
+    var = cond.args[0].id
+    type_expr = cond.args[1]
+
+    if isinstance(type_expr, ast.Name):
+        return ("isinstance", var, type_expr.id)
+
+    if(isinstance(type_expr, ast.Subscript)
+       and isinstance(type_expr.value, ast.Name)):
+
+       return ("isinstance", var, type_expr.value.id)
+
     return None
 
+def parse_none_condition(cond):
+    if not isinstance(cond, ast.Compare):
+        return None
+
+    if not isinstance(cond.left, ast.Name):
+        return None
+
+    comparator = cond.comparators[0]
+
+    if not (isinstance(comparator, ast.Constant)
+            and comparator.value is None):
+        return None
+
+    if isinstance(cond.ops[0], ast.Is):
+        return ("is_none", cond.left.id, False)
+
+    if isinstance(cond.ops[0], ast.IsNot):
+        return ("is_none", cond.left.id, True)
+
+    return None                               
+
+def parse_condition(cond):
+    result = parse_isinstance_condition(cond)
+    if result is not None:
+        return result
+
+    return parse_none_condition(cond)    
+
 def analyze_function(func_node: ast.FunctionDef, max_iters=50):
-    from .cfg_builder import build_cfg_for_function
     cfg = build_cfg_for_function(func_node)
-    for i, block in enumerate(cfg.blocks):
-        print(f"BLOCK {i}")
-        for s in block.stmts:
-            print(type(s))
-            print(ast.dump(s, indent=2) if isinstance(s, ast.AST) else s)
-        print("pred =", block.pred)
-        print("succ = ", block.succ)
-            
-    n = len(cfg.blocks)
-    in_envs = [dict() for _ in range(n)]
-    out_envs = [dict() for _ in range(n)]
-    entry_env = {}
-    for arg in func_node.args.args:
-        entry_env[arg.arg] = Unknown()
-    if n>0:
-        in_envs[0] = entry_env.copy()
+    in_envs, out_envs = initialize_environments(func_node, cfg)
+
     changed = True
     iteration = 0
+
     while changed and iteration < max_iters:
         changed = False
-        iteration += 1
+        iteration +=1
+
         for i, block in enumerate(cfg.blocks):
-            if block.pred:
-                pred_env = {}
-                for p in block.pred:
-                    pred = out_envs[p]
-                    for k,v in pred.items():
-                        if k in pred_env:
-                            pred_env[k] = pred_env[k].join(v)
-                        else:
-                            pred_env[k] = v
-            else:
-                pred_env = in_envs[i] if in_envs[i] else {}
-            in_envs[i] = pred_env.copy()
-            env = pred_env.copy()
-            cond = None
-            if block.stmts and isinstance(block.stmts[0], tuple) and block.stmts[0][0]=='cond':
-                cond = block.stmts[0][1]
-                stmts = block.stmts[1:]
-            else:
-                stmts = block.stmts
+            env, cond, stmts = prepare_block(block, in_envs, i)
+
             for stmt in stmts:
-                if isinstance(stmt, ast.Assign):
-                    print(ast.dump(stmt, indent=2))
-                    targets = stmt.targets
-                    if len(targets)>=1 and isinstance(targets[0], ast.Name):
-                        name = targets[0].id
-                        val = stmt.value
-                        t = infer_type_from_expr(val, env)
-                        if t is None:
-                           t = Unknown()
-                        if name in env:
-                            env[name] = env[name].join(t)
-                        else:
-                            env[name] = t
-                    elif (len(targets) >=1 and isinstance(targets[0], ast.Subscript) and isinstance(targets[0].value, ast.Name)):
-                        dict_name = targets[0].value.id
-                        key_type = infer_type_from_expr(targets[0].slice, env)
-                        value_type = infer_type_from_expr(stmt.value, env)
-                        cur = env.get(dict_name)
-                        if isinstance(cur, DictType):
-                            env[dict_name] = DictType(cur.key_t.join(key_type), cur.val_t.join(value_type))
-                        elif isinstance(cur, Unknown):
-                            if isinstance(key_type, StrType):
-                                env[dict_name] = DictType(key_type, value_type)
-                            else:
-                                env[dict_name] = Unknown()
-                        else:
-                            env[dict_name] = Unknown()                
-                elif isinstance(stmt, ast.AnnAssign):
-                    target = stmt.target
-                    if isinstance(target, ast.Name):
-                        name = target.id
-                        ann = stmt.annotation
-                        if isinstance(ann, ast.Name):
-                            t = mk_type_from_name(ann.id)
-                        else:
-                            t = Unknown()
-                        env[name] = t
-                elif isinstance(stmt, ast.Expr):
-                    expr = stmt.value if hasattr(stmt,'value') else stmt
-                    if isinstance(expr, ast.Call) and isinstance(expr.func, ast.Attribute):
-                        if isinstance(expr.func.value, ast.Name) and expr.func.attr == 'append' and len(expr.args)>=1:
-                            listname = expr.func.value.id
-                            arg = expr.args[0]
-                            at = infer_type_from_expr(arg, env)
-                            cur = env.get(listname)
+                env = transfer_statement(stmt, env)
 
-                            if cur is None:
-                                env[listname] = ListType(at)
+            merged = merge_environment(out_envs[i], env)
 
-                            elif isinstance(cur, ListType):
-
-                                if isinstance(cur.elem, Unknown):
-
-                                    env[listname] = ListType(at)
-
-                                else:
-
-                                    env[listname] = ListType(cur.elem.join(at))
-
-                            elif isinstance(cur, Unknown):
-
-                                env[listname] = ListType(at)
-
-                            else:
-
-                                env[listname] = ListType(at)                
-
-            prev = out_envs[i]
-            merged = prev.copy()
-            for k,v in env.items():
-                if k in merged:
-                    merged[k] = merged[k].join(v)
-                else:
-                    merged[k] = v
-            if repr_dict(merged) != repr_dict(prev):
+            if merged != out_envs[i]:
                 out_envs[i] = merged
                 changed = True
-            # propagate to successors with condition narrowing
-            if cond and block.succ:
-                parsed = parse_condition(cond)
-                if parsed and len(block.succ)>=2:
-                    succ_true = block.succ[0]
-                    succ_false = block.succ[1]
-                    t_env = merged.copy()
-                    f_env = merged.copy()
-                    kind = parsed[0]
-                    if kind == 'isinstance':
-                        var, tname = parsed[1], parsed[2]
-                        if var in t_env:
-                            t_env[var] = t_env[var].narrow_with_isinstance(tname)
-                        if var in f_env:
-                            f_env[var] = f_env[var].remove_isinstance(tname)
-                    elif kind == 'is_none':
-                        var, is_not = parsed[1], parsed[2]
-                        if is_not:
-                            if var in t_env:
-                                t_env[var] = t_env[var].remove_isinstance('None')
-                            if var in f_env:
-                                f_env[var] = f_env[var].narrow_with_isinstance('None')
-                        else:
-                            if var in t_env:
-                                t_env[var] = t_env[var].narrow_with_isinstance('None')
-                            if var in f_env:
-                                f_env[var] = f_env[var].remove_isinstance('None')
-                    # merge into successor in_envs
-                    succ_prev = in_envs[succ_true]
-                    succ_new = succ_prev.copy()
-                    for k,v in t_env.items():
-                        if k in succ_new:
-                            succ_new[k] = succ_new[k].join(v)
-                        else:
-                            succ_new[k] = v
-                    in_envs[succ_true] = succ_new
-                    succ_prev = in_envs[succ_false]
-                    succ_new = succ_prev.copy()
-                    for k,v in f_env.items():
-                        if k in succ_new:
-                            succ_new[k] = succ_new[k].join(v)
-                        else:
-                            succ_new[k] = v
-                    in_envs[succ_false] = succ_new
-                else:
-                    for s in block.succ:
-                        succ_prev = in_envs[s]
-                        succ_new = succ_prev.copy()
-                        for k,v in merged.items():
-                            if k in succ_new:
-                                succ_new[k] = succ_new[k].join(v)
-                            else:
-                                succ_new[k] = v
-                        in_envs[s] = succ_new
-            else:
-                for s in block.succ:
-                    succ_prev = in_envs[s]
-                    succ_new = succ_prev.copy()
-                    for k,v in merged.items():
-                        if k in succ_new:
-                            succ_new[k] = succ_new[k].join(v)
-                        else:
-                            succ_new[k] = v
-                    in_envs[s] = succ_new
-    return cfg, in_envs, out_envs
+
+            propagate_block(block,merged, cond, in_envs)
+
+    return cfg, in_envs, out_envs  
+
+def propagate_block(block, env, cond, in_envs):
+    if cond is not None and block.succ:
+        propagate_condition(
+            block,
+            env,
+            cond,
+            in_envs,
+        )
+    else:
+        propagate_to_successors(
+            block.succ,
+            env,
+            in_envs,
+        )       
+def propagate_condition(block, env, cond, in_envs):
+    parsed = parse_condition(cond)
+
+    if parsed is None or len(block.succ) < 2:
+        propagate_to_successors(
+            block.succ,
+            env,
+            in_envs,
+        )
+        return
+
+    true_env, false_env = narrow_condition(
+        parsed,
+        env,
+    )
+
+    merge_successor_environment(
+        block.succ[0],
+        true_env,
+        in_envs,
+    )
+
+    merge_successor_environment(
+        block.succ[1],
+        false_env,
+        in_envs,
+    )
+def narrow_condition(parsed, env):
+    true_env = env.copy()
+    false_env = env.copy()
+
+    kind = parsed[0]
+
+    if kind == "isinstance":
+        narrow_isinstance(
+            parsed,
+            true_env,
+            false_env,
+        )
+    elif kind == "is_none":
+        narrow_none(
+            parsed,
+            true_env,
+            false_env,
+        )
+
+    return true_env, false_env
+
+def narrow_isinstance(parsed, true_env, false_env):
+    _, var, type_name = parsed
+
+    if var in true_env:
+        true_env[var] = (
+            true_env[var].narrow_with_isinstance(type_name)
+        )
+
+    if var in false_env:
+        false_env[var] = (
+            false_env[var].remove_isinstance(type_name)
+        )
+
+def narrow_none(parsed, true_env, false_env):
+    _, var, is_not = parsed
+
+    if is_not:
+        narrow_not_none(true_env, false_env, var)
+    else:
+        narrow_is_none(true_env, false_env, var)
+
+def narrow_is_none(true_env, false_env, var):
+    if var in true_env:
+        true_env[var] = true_env[var].narrow_with_isinstance("None")
+
+    if var in false_env:
+        false_env[var] = false_env[var].remove_isinstance("None")
+
+def narrow_not_none(true_env, false_env, var):
+    if var in true_env:
+        true_env[var] = true_env[var].remove_isinstance("None")
+
+    if var in false_env:
+        false_env[var] = false_env[var].narrow_with_isinstance("None")
+           
+
+def initialize_environments(func_node, cfg):
+    n = len(cfg.blocks)
+
+    in_envs = [dict() for _ in range(n)]
+    out_envs = [dict() for _ in range(n)]
+
+    entry_env = { arg.arg: Unknown()
+                  for arg in func_node.args.args
+                  }      
+
+    if n > 0:
+        in_envs[0] = entry_env.copy()
+
+    return in_envs, out_envs
+
+def compute_input_envirment(block, block_index, in_envs, out_envs):
+    if not block.pred:
+        return in_envs[block_index].copy()
+
+    pred_env = []
+
+    for predecessor in block.pred:
+        merge_into_environment(
+            pred_env,
+            out_envs[predecessor],
+        )
+
+    return pred_env
+
+def merge_into_environment(target, source):
+    for name, typ in source.items():
+        if name in target:
+            target[name] = target[name].join(typ)
+        else:
+            target[name] = typ
+
+def prepare_block(block, in_envs, block_index):
+    env = in_envs[block_index].copy()
+
+    if block.stmts and is_condition_marker(block.stmts[0]):
+        cond = block.stmts[0][1]
+        stmts = block.stmts[1:]
+    else:
+        cond = None
+        stmts = block.stmts
+
+    return env, cond, stmts
+
+def is_condition_marker(stmt):
+    return (isinstance(stmt, tuple)
+             and len(stmt) >=2
+             and stmt[0] == "cond")
+
+def transfer_statement(stmt, env):
+    if isinstance(stmt, ast.Assign):
+        return transfer_assign(stmt, env)
+
+    if isinstance(stmt, ast.AnnAssign):
+        return transfer_annassign(stmt, env)
+
+    if isinstance(stmt, ast.Expr):
+        return transfer_expr(stmt, env)
+
+    return env 
+
+def transfer_assign(stmt, env):
+    for target in stmt.targets:
+        if isinstance(target, ast.Name):
+            assign_name(target, stmt.value, env)
+
+        elif isinstance(target, ast.Subscript):
+            assign_subscript(target, stmt.value, env)
+
+    return env 
+
+def assign_name(target, value, env):
+    name = target.id
+    typ = infer_type_from_expr(value, env)
+
+    if typ is None:
+        typ = Unknown()
+
+    if name in env:
+        env[name] = env[name].join(typ)
+    else:
+        env[name] = typ 
+
+def assign_subscript(target, value, env):
+    if not isinstance(target.value, ast.Name):
+        return
+
+    container = target.value.id
+    key_type = infer_type_from_expr(target.slice,env) 
+    value_type = infer_type_from_expr(value, env)
+
+    update_subscript_assignment(
+        container,
+        key_type,
+        value_type,
+        env,
+    )
+def update_subscript_assignment(container, key_type, value_type, env):
+    current = env.get(container, Unknown())
+
+    if isinstance(current, DictType):
+        env[container] = DictType(
+            current.key_t.join(key_type),
+            current.val_t.join(value_type),
+        )    
+        return
+
+    if isinstance(current, ListType):
+        env[container] = ListType(current.elem.join(value_type))
+        return
+
+    if isinstance(current, Unknown):
+        env[container] = infer_subscript_container(key_type, value_type,)
+        return
+
+    env[container] = Unknown()
+
+def infer_subscript_container(key_type, value_type):
+    if isinstance(key_type, StrType):
+        return DictType(key_type, value_type)
+
+    if isinstance(key_type, IntType):
+        return ListType(value_type)
+
+    return Unknown()
+
+def transfer_annassign(stmt, env):
+    if not isinstance(stmt.target, ast.Name):
+        return env
+
+    name = stmt.target.id
+    annotation = stmt.annotation
+
+    if isinstance(annotation, ast.Name):
+        env[name] = mk_type_from_name(annotation.id)
+    else:
+        env[name] = Unknown()
+
+    return env
+
+def transfer_expr(stmt, env):
+    expr = stmt.value
+
+    if isinstance(expr, ast.Call):
+        handle_call_effect(expr, env)
+
+    return env    
+
+def handle_call_effect(call, env):
+    if not isinstance(call.func, ast.Attribute):
+        return
+
+    if call.func.attr == "append":
+        handle_append(call, env) 
+
+def handle_append(call, env):
+    if not isinstance(call.func.vlaue, ast.Name):
+        return
+
+    if not call.args:
+        return
+
+    listname = call.func.value.id
+    arg_type = infer_type_from_expr(call.args[0], env)
+    current = env.get(listname, Unknown())
+
+    if isinstance(current, ListType):
+        env[listname] = ListType(
+            current.elem.join(arg_type)
+        )                            
+        return
+
+    env[listname] = ListType(arg_type)
+
+def merge_environment(previous, current):
+    merged= previous.copy()
+    merge_into_environment(merged, current)
+    return merged
 
 def merge_types(old_t, new_type, use_widen=False):
     if old_t is None:
         return new_type
-    return old_t.widen(new_type) if use_widen else new_type    
+    return old_t.widen(new_type) if use_widen else new_type 
 
+def merge_successor_environment(successor, env, in_envs):
+    merge_into_environment(in_envs[successor], env)
 
-def resolve_method_call(onj_type, method, arg_types):
-    if isinstance(obj_type, ListType):
-        if method == "append":
-            return NoneType()
-        if method == "pop":
-            return obj_type.elem
-        if method == "copy":
-            return obj_type
-        if method == "extend":
-            if arg_types:
-                return ListType(obj_type.elem.join(arg_types[0]))
-            return obj_type
-
-    if isinstance(obj_type, StrType):
-        if method in ["lower", "upper", "strip", "replace"]:
-            return StrType()
-        if method in ["startswith", "endswith", "isdigit", "isalpha"]:
-            return BoolType()
-        if method in ["find", "rfind", "count"]:
-            return IntType()
-        if method == "split":
-            return ListType(StrType())
-
-    if isinstance(obj_type, StrType):
-        if method in ["lower", "upper", "strip", "replace"]:
-            return StrType()
-        if method in ["startswith", "endswith", "isdigit", "isalpha"]:
-            return BoolType()
-        if method in ["find", "rfind", "count"]:
-            return IntType()
-        if method == "split":
-            return ListType(StrType())
-
-    if isinstance(obj_type, DictType):
-        if method in ["get", "pop"]:
-            return obj_type.v 
-        if method == "keys":
-            return ListType(obj_type.k)
-
-    return Unknown()         
+def propagate_to_successors(successors, env, in_envs):
+    for successor in successors:
+        merge_successor_environment(
+            successor,
+            env,
+            in_envs,
+        )               
     
 def resolve_method_call(obj_type, method, arg_types):
     """
@@ -261,9 +382,6 @@ def resolve_method_call(obj_type, method, arg_types):
     Always returns a lattice Type.
     """
 
-    #
-    # ---------- STRINGS ----------
-    #
 
     if isinstance(obj_type, StrType):
 
@@ -321,14 +439,8 @@ def resolve_method_call(obj_type, method, arg_types):
         }:
             return BoolType()
 
-        if method == "encode":
-            return BytesType() if "BytesType" in globals() else Unknown()
-
         return Unknown()
 
-    #
-    # ---------- LISTS ----------
-    #
 
     if isinstance(obj_type, ListType):
 
@@ -357,10 +469,6 @@ def resolve_method_call(obj_type, method, arg_types):
 
         return Unknown()
 
-    #
-    # ---------- TUPLES ----------
-    #
-
     if isinstance(obj_type, TupleType):
 
         if method in {
@@ -371,41 +479,37 @@ def resolve_method_call(obj_type, method, arg_types):
 
         return Unknown()
 
-    #
-    # ---------- DICTIONARIES ----------
-    #
-
     if isinstance(obj_type, DictType):
 
         if method == "copy":
             return DictType(
-                obj_type.key,
-                obj_type.value
+                obj_type.key_t,
+                obj_type.val_t
             )
 
         if method == "get":
-            return obj_type.value
+            return obj_type.val_t
 
         if method == "pop":
-            return obj_type.value
+            return obj_type.val_t
 
         if method == "popitem":
             return TupleType([
-                obj_type.key,
-                obj_type.value
+                obj_type.key_t,
+                obj_type.val_t
             ])
 
         if method == "keys":
-            return ListType(obj_type.key)
+            return ListType(obj_type.key_t)
 
         if method == "values":
-            return ListType(obj_type.value)
+            return ListType(obj_type.val_t)
 
         if method == "items":
             return ListType(
                 TupleType([
-                    obj_type.key,
-                    obj_type.value
+                    obj_type.key_t,
+                    obj_type.val_t
                 ])
             )
 
@@ -418,58 +522,46 @@ def resolve_method_call(obj_type, method, arg_types):
 
         return Unknown()
 
-    #
-    # ---------- SETS ----------
-    #
+    # if isinstance(obj_type, SetType):
 
-    if isinstance(obj_type, SetType):
+    #     if method == "copy":
+    #         return SetType(obj_type.elem)
 
-        if method == "copy":
-            return SetType(obj_type.elem)
+    #     if method == "pop":
+    #         return obj_type.elem
 
-        if method == "pop":
-            return obj_type.elem
+    #     if method in {
+    #         "union",
+    #         "intersection",
+    #         "difference",
+    #         "symmetric_difference",
+    #     }:
+    #         return SetType(obj_type.elem)
 
-        if method in {
-            "union",
-            "intersection",
-            "difference",
-            "symmetric_difference",
-        }:
-            return SetType(obj_type.elem)
+    #     if method in {
+    #         "add",
+    #         "clear",
+    #         "discard",
+    #         "remove",
+    #         "update",
+    #         "intersection_update",
+    #         "difference_update",
+    #         "symmetric_difference_update",
+    #     }:
+    #         return NoneType()
 
-        if method in {
-            "add",
-            "clear",
-            "discard",
-            "remove",
-            "update",
-            "intersection_update",
-            "difference_update",
-            "symmetric_difference_update",
-        }:
-            return NoneType()
+    #     if method in {
+    #         "issubset",
+    #         "issuperset",
+    #         "isdisjoint",
+    #     }:
+    #         return BoolType()
 
-        if method in {
-            "issubset",
-            "issuperset",
-            "isdisjoint",
-        }:
-            return BoolType()
-
-        return Unknown()
-
-    #
-    # ---------- CALLABLES ----------
-    #
+    #     return Unknown()
 
     if isinstance(obj_type, CallableType):
 
         return obj_type.ret
-
-    #
-    # ---------- FALLBACK ----------
-    #
 
     return Unknown()    
                                                                           
@@ -547,40 +639,38 @@ def infer_type_from_expr(expr, env):
                  return DictType(Unknown(), Unknown())
             if f_name == "tuple":
                  return TupleType([])
-            if f_name == "set":
-                 return SetType(Unknown())
+            #if f_name in known_classes:
+             #   return InstanceType(f_name)
 
             return Unknown()                             
        
-    if isinstance(func, ast.Attribute):
+       if isinstance(func, ast.Attribute):
 
-        obj_type = infer_type_from_expr(func.value, env)
+            obj_type = infer_type_from_expr(func.value, env)
 
-        arg_types = [
-            infer_type_from_expr(arg, env)
-            for arg in expr.args
-        ]
+            arg_types = [
+                infer_type_from_expr(arg, env)
+                for arg in expr.args
+            ]
 
-        t = resolve_method_call(
-            obj_type,
-            func.attr,
-            arg_types
-        )
+            t = resolve_method_call(
+                obj_type,
+                func.attr,
+                arg_types
+            )
 
-        if t is None:
-            return Unknown()
+            if t is None:
+                return Unknown()
 
-        return t
-
-    return Unknown()
+            return t
     
-    if isinstance(expr, ast.Lambda):
+    elif isinstance(expr, ast.Lambda):
         # attempt to infer lambda return via body
         
         param_types: List[Type] = [Unknown() for _ in expr.args.args]
         ret_type = infer_type_from_expr(expr.body, env)
         return CallableType(param_types, ret_type)
-    return Unknown()
+    
     if isinstance(expr, ast.Tuple):
         elems = [infer_type_from_expr(e, env) for e in expr.elts]
         return TupleType(elems)
@@ -590,7 +680,8 @@ def infer_type_from_expr(expr, env):
         for key, val in zip(expr.keys, expr.values):
             k = k.join(infer_type_from_expr(key, env))
             v = v.join(infer_type_from_expr(val,env))
-        return DictType(k,v)        
+        return DictType(k,v)
+    return Unknown()        
 
 def repr_dict(d):
     return {k:repr(v) for k,v in d.items()}

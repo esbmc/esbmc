@@ -262,6 +262,84 @@ class CallableType(Type):
     def narrow_with_isinstance(self, cls_name: str) -> 'Type':
         return self if self.is_subtype_of_name(cls_name) else Unknown()
 
+class InstanceType(Type):
+    def __init__(self, class_name:str):
+        self.class_name = class_name
+
+    def join(self, other):
+        if isinstance(other, InstanceType):
+            if self.class_name == other.class_name:
+                return self
+        return UnionType([self, other])
+
+    def __repr__(self):
+        return f"Instance[{self.class_name}]"
+
+    def to_ann_name(self) -> str:
+        return self.class_name  
+
+class SetType(Type):
+    def __init__(self, elem: Type):
+        self.elem = elem
+
+    def join(self, other: 'Type') -> 'Type':
+        if isinstance(other, Unknown):
+            return self
+
+        if isinstance(other, SetType):
+            return SetType(self.elem.join(other.elem))
+
+        if isinstance(other, UnionType):
+            return other.join(self)
+
+        return UnionType([self, other])
+
+    def widen(self, other: 'Type') -> 'Type':
+        if isinstance(other, SetType):
+            return SetType(
+                self.elem.widen(other.elem)
+            )
+
+        if isinstance(other, UnionType):
+            return other.widen(self)
+
+        return other
+
+    def narrow_with_isinstance(self, cls_name: str) -> 'Type':
+        if cls_name.lower() in {
+            'set',
+            'builtins.set',
+            'typing.set',
+        }:
+            return self
+
+        return Unknown()
+
+    def remove_isinstance(self, cls_name: str) -> 'Type':
+        if cls_name.lower() in {
+            'set',
+            'builtins.set',
+            'typing.set',
+        }:
+            return Unknown()
+
+        return self
+
+    def is_subtype_of_name(self, cls_name: str) -> bool:
+        return cls_name.lower() in {
+            'set',
+            'builtins.set',
+            'typing.set',
+            'object',
+        }
+
+    def to_ann_name(self) -> str:
+        return f'set[{self.elem.to_ann_name()}]'
+
+    def __repr__(self) -> str:
+        return f'Set[{self.elem!r}]'
+                      
+
 class UnionType(Type):
     def __init__(self, members: List[Type]):
         flat = []
