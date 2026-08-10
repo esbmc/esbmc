@@ -325,6 +325,11 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
+  virtual expr2tc to_expr2t(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
   std::string base_class;
   std::string method;
   exprt lhs;
