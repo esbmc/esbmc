@@ -1263,15 +1263,41 @@ bool python_converter::is_numpy_array_constructor_expr(
 // that converts a Call node (assignment RHS, or any other expression
 // context) shares one recogniser instead of growing its own copy that can
 // drift out of sync with the constructor/method lists above.
-std::optional<nlohmann::json> python_converter::rewrite_numpy_method_call_node(
+static bool is_method_call_node_shape(const nlohmann::json &call_node)
+{
+  return call_node.is_object() && call_node.value("_type", "") == "Call" &&
+         call_node.contains("func") && call_node["func"].is_object() &&
+         call_node["func"].value("_type", "") == "Attribute" &&
+         call_node["func"].contains("value");
+}
+
+bool python_converter::method_base_is_imported_module(
+  const std::string &method_base_name) const
+{
+  return method_base_name == "np" || method_base_name == "numpy" ||
+         (!method_base_name.empty() && is_imported_module(method_base_name));
+}
+
+// A method name like sum()/max()/min() is not exclusive to numpy (e.g.
+// Decimal.max(), a plain module-level function called through an aliased
+// import); only rewrite when the receiver is actually a tracked numpy
+// array.
+bool python_converter::method_base_is_tracked_numpy_array(
+  const std::string &method_base_name) const
+{
+  if (method_base_name.empty())
+    return false;
+  const std::string method_base_id = resolve_name_symbol_id(method_base_name);
+  return !method_base_id.empty() &&
+         numpy_array_symbols_.count(method_base_id) != 0;
+}
+
+std::tuple<bool, std::string, nlohmann::json, bool, bool>
+python_converter::classify_numpy_method_call(
   const nlohmann::json &call_node) const
 {
-  if (
-    !call_node.is_object() || call_node.value("_type", "") != "Call" ||
-    !call_node.contains("func") || !call_node["func"].is_object() ||
-    call_node["func"].value("_type", "") != "Attribute" ||
-    !call_node["func"].contains("value"))
-    return std::nullopt;
+  if (!is_method_call_node_shape(call_node))
+    return {false, "", nlohmann::json(), false, false};
 
   const std::string method_name = call_node["func"].value("attr", "");
   const nlohmann::json &method_base = call_node["func"]["value"];
@@ -1279,43 +1305,45 @@ std::optional<nlohmann::json> python_converter::rewrite_numpy_method_call_node(
     method_base.value("_type", "") == "Name" && method_base.contains("id")
       ? method_base["id"].get<std::string>()
       : std::string();
-  const bool base_is_imported_module =
-    method_base_name == "np" || method_base_name == "numpy" ||
-    (!method_base_name.empty() && is_imported_module(method_base_name));
-  const std::string method_base_id =
-    method_base_name.empty() ? std::string()
-                             : resolve_name_symbol_id(method_base_name);
-  // A method name like sum()/max()/min() is not exclusive to numpy (e.g.
-  // Decimal.max(), a plain module-level function called through an
-  // aliased import); only rewrite when the receiver is actually a
-  // tracked numpy array, matching the check already used for copy()
-  // below.
-  const bool method_base_is_numpy_array =
-    !method_base_id.empty() && numpy_array_symbols_.count(method_base_id) != 0;
-  const bool supported_view_method =
-    !base_is_imported_module && method_base_is_numpy_array &&
-    (method_name == "transpose" || method_name == "reshape" ||
-     method_name == "ravel");
-  // flatten()/sum()/mean()/min()/max()/prod()/std()/var() are not view-like
-  // (see is_numpy_view_copy_expr, which deliberately excludes them), but the
-  // method form still needs the same np.<name>(a, ...)-shaped rewrite
-  // below to dispatch to the existing np.<name>() handler.
-  static const std::set<std::string> other_dispatch_rewrite_methods = {
-    "flatten", "sum", "mean", "min", "max", "prod", "std", "var"};
+  const bool receiver_is_rewritable =
+    !method_base_is_imported_module(method_base_name) &&
+    method_base_is_tracked_numpy_array(method_base_name);
+
+  // transpose()/reshape()/ravel() are view-like (see is_numpy_view_copy_expr,
+  // which handles them separately); flatten()/sum()/mean()/min()/max()/
+  // prod()/std()/var() are not, but the method form still needs the same
+  // np.<name>(a, ...)-shaped rewrite to dispatch to the existing
+  // np.<name>() handler.
+  static const std::set<std::string> dispatch_rewrite_methods = {
+    "transpose",
+    "reshape",
+    "ravel",
+    "flatten",
+    "sum",
+    "mean",
+    "min",
+    "max",
+    "prod",
+    "std",
+    "var"};
   const bool supported_dispatch_rewrite_method =
-    supported_view_method ||
-    (!base_is_imported_module && method_base_is_numpy_array &&
-     other_dispatch_rewrite_methods.count(method_name) != 0);
-  const bool supported_copy_method = !base_is_imported_module &&
-                                     method_name == "copy" &&
-                                     method_base_is_numpy_array;
+    receiver_is_rewritable && dispatch_rewrite_methods.count(method_name) != 0;
+  const bool supported_copy_method =
+    receiver_is_rewritable && method_name == "copy";
 
-  if (supported_copy_method)
-    return method_base;
+  return {
+    true,
+    method_name,
+    method_base,
+    supported_copy_method,
+    supported_dispatch_rewrite_method};
+}
 
-  if (!supported_dispatch_rewrite_method)
-    return std::nullopt;
-
+nlohmann::json python_converter::build_numpy_method_rewrite_node(
+  const nlohmann::json &call_node,
+  const std::string &method_name,
+  const nlohmann::json &method_base) const
+{
   std::string numpy_alias = "np";
   for (const auto &entry : imported_modules)
   {
@@ -1354,6 +1382,27 @@ std::optional<nlohmann::json> python_converter::rewrite_numpy_method_call_node(
   copy_location_fields_from_decl(call_node, rewritten);
   copy_location_fields_from_decl(call_node, rewritten["func"]);
   return rewritten;
+}
+
+std::optional<nlohmann::json> python_converter::rewrite_numpy_method_call_node(
+  const nlohmann::json &call_node) const
+{
+  const auto
+    [is_method_call,
+     method_name,
+     method_base,
+     supported_copy_method,
+     supported_dispatch_rewrite_method] = classify_numpy_method_call(call_node);
+  if (!is_method_call)
+    return std::nullopt;
+
+  if (supported_copy_method)
+    return method_base;
+
+  if (!supported_dispatch_rewrite_method)
+    return std::nullopt;
+
+  return build_numpy_method_rewrite_node(call_node, method_name, method_base);
 }
 
 bool python_converter::is_numpy_view_copy_expr(const nlohmann::json &node) const

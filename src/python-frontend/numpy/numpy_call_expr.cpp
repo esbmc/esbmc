@@ -2026,6 +2026,39 @@ materialize_linspace(const nlohmann::json &args)
   return node;
 }
 
+// Exact int64 arithmetic: routing an all-integer arange() call through
+// double (as materialize_arange_float() does) silently loses precision and
+// can drift the termination point past 2^53.
+static nlohmann::json
+materialize_arange_int(int64_t start, int64_t stop, int64_t step)
+{
+  nlohmann::json node;
+  node["_type"] = "List";
+  node["elts"] = nlohmann::json::array();
+  if (step > 0)
+    for (int64_t current = start; current < stop; current += step)
+      node["elts"].push_back(build_constant_node(make_int_value(current)));
+  else
+    for (int64_t current = start; current > stop; current += step)
+      node["elts"].push_back(build_constant_node(make_int_value(current)));
+  return node;
+}
+
+static nlohmann::json
+materialize_arange_float(double start, double stop, double step)
+{
+  nlohmann::json node;
+  node["_type"] = "List";
+  node["elts"] = nlohmann::json::array();
+  if (step > 0.0)
+    for (double current = start; current < stop; current += step)
+      node["elts"].push_back(build_constant_node(make_float_value(current)));
+  else
+    for (double current = start; current > stop; current += step)
+      node["elts"].push_back(build_constant_node(make_float_value(current)));
+  return node;
+}
+
 static std::optional<nlohmann::json>
 materialize_arange(const nlohmann::json &args)
 {
@@ -2040,73 +2073,39 @@ materialize_arange(const nlohmann::json &args)
       return std::nullopt;
     values.push_back(v);
   }
+
+  numeric_value start_v = make_int_value(0);
+  numeric_value stop_v = values[0];
+  numeric_value step_v = make_int_value(1);
+  if (values.size() >= 2)
+  {
+    start_v = values[0];
+    stop_v = values[1];
+  }
+  if (values.size() == 3)
+    step_v = values[2];
+
+  if (to_double(step_v) == 0.0)
+    return std::nullopt;
+
   // Matches the real arange() creation path: an int dtype unless any
   // argument is float.
   const bool any_float =
     std::any_of(values.begin(), values.end(), [](const numeric_value &v) {
       return !v.is_int;
     });
-
-  nlohmann::json node;
-  node["_type"] = "List";
-  node["elts"] = nlohmann::json::array();
-
   if (!any_float)
-  {
-    // Exact int64 arithmetic: routing an all-integer call through double
-    // (as the float path below does) silently loses precision and can
-    // drift the termination point past 2^53.
-    int64_t start = 0;
-    int64_t stop;
-    int64_t step = 1;
-    if (values.size() == 1)
-      stop = values[0].int_value;
-    else
-    {
-      start = values[0].int_value;
-      stop = values[1].int_value;
-      if (values.size() == 3)
-        step = values[2].int_value;
-    }
-    if (step == 0)
-      return std::nullopt;
-    if (step > 0)
-      for (int64_t current = start; current < stop; current += step)
-        node["elts"].push_back(build_constant_node(make_int_value(current)));
-    else
-      for (int64_t current = start; current > stop; current += step)
-        node["elts"].push_back(build_constant_node(make_int_value(current)));
-    return node;
-  }
+    return materialize_arange_int(
+      start_v.int_value, stop_v.int_value, step_v.int_value);
 
-  double start = 0.0;
-  double stop;
-  double step = 1.0;
-  if (values.size() == 1)
-    stop = to_double(values[0]);
-  else
-  {
-    start = to_double(values[0]);
-    stop = to_double(values[1]);
-    if (values.size() == 3)
-      step = to_double(values[2]);
-  }
-  if (step == 0.0)
-    return std::nullopt;
-  if (step > 0.0)
-  {
-    for (double current = start; current < stop; current += step)
-      node["elts"].push_back(build_constant_node(make_float_value(current)));
-  }
-  else
-  {
-    for (double current = start; current > stop; current += step)
-      node["elts"].push_back(build_constant_node(make_float_value(current)));
-  }
-  return node;
+  return materialize_arange_float(
+    to_double(start_v), to_double(stop_v), to_double(step_v));
 }
 
-static std::optional<nlohmann::json> materialize_numpy_constructor_array(
+// The structural/receiver checks materialize_numpy_constructor_array() needs
+// before it can even ask which constructor it's looking at, split out so
+// that function's own decision count stays small.
+static bool is_recognized_numpy_constructor_call_shape(
   const nlohmann::json &call_node,
   const nlohmann::json &ast_json)
 {
@@ -2120,9 +2119,20 @@ static std::optional<nlohmann::json> materialize_numpy_constructor_array(
     !call_node["func"]["value"].is_object() ||
     call_node["func"]["value"].value("_type", std::string()) != "Name" ||
     !is_imported_numpy_module_alias(
-      ast_json, call_node["func"]["value"].value("id", std::string())) ||
-    (call_node.contains("keywords") && !call_node["keywords"].empty()) ||
-    !call_node.contains("args") || !call_node["args"].is_array())
+      ast_json, call_node["func"]["value"].value("id", std::string())))
+    return false;
+
+  if (call_node.contains("keywords") && !call_node["keywords"].empty())
+    return false;
+
+  return call_node.contains("args") && call_node["args"].is_array();
+}
+
+static std::optional<nlohmann::json> materialize_numpy_constructor_array(
+  const nlohmann::json &call_node,
+  const nlohmann::json &ast_json)
+{
+  if (!is_recognized_numpy_constructor_call_shape(call_node, ast_json))
     return std::nullopt;
 
   const std::string ctor = call_node["func"]["attr"].get<std::string>();
@@ -2191,6 +2201,45 @@ is_dynamic_list_backed_numpy_constructor(const nlohmann::json &call_node)
            call_node["func"]["attr"].get<std::string>()) != 0;
 }
 
+static bool numeric_2d_list_is_rectangular(
+  const nlohmann::json &elts,
+  std::size_t col_count)
+{
+  for (const auto &row : elts)
+  {
+    if (
+      !row.is_object() || row.value("_type", std::string()) != "List" ||
+      !row.contains("elts") || row["elts"].size() != col_count)
+      return false;
+  }
+  return true;
+}
+
+static std::optional<nlohmann::json> build_transposed_literal(
+  const nlohmann::json &elts,
+  std::size_t row_count,
+  std::size_t col_count)
+{
+  nlohmann::json transposed;
+  transposed["_type"] = "List";
+  transposed["elts"] = nlohmann::json::array();
+  for (std::size_t c = 0; c < col_count; ++c)
+  {
+    nlohmann::json out_row;
+    out_row["_type"] = "List";
+    out_row["elts"] = nlohmann::json::array();
+    for (std::size_t r = 0; r < row_count; ++r)
+    {
+      numeric_value value;
+      if (!try_extract_numeric_constant(elts[r]["elts"][c], value))
+        return std::nullopt;
+      out_row["elts"].push_back(build_constant_node(value));
+    }
+    transposed["elts"].push_back(out_row);
+  }
+  return transposed;
+}
+
 // Computes np.transpose() directly over a fully-materialized numeric
 // literal (all Constant leaves), returning nullopt for anything this
 // conservative fold does not model (non-rectangular, 3D+, non-numeric
@@ -2219,39 +2268,15 @@ static std::optional<exprt> try_fold_transpose_literal_2d(
   const std::size_t row_count = elts.size();
   const std::size_t col_count =
     elts[0].contains("elts") ? elts[0]["elts"].size() : 0;
-  bool is_rectangular = col_count > 0;
-  for (const auto &row : elts)
-  {
-    if (
-      !row.is_object() || row.value("_type", std::string()) != "List" ||
-      !row.contains("elts") || row["elts"].size() != col_count)
-    {
-      is_rectangular = false;
-      break;
-    }
-  }
-  if (!is_rectangular)
+  if (col_count == 0 || !numeric_2d_list_is_rectangular(elts, col_count))
     return std::nullopt;
 
-  nlohmann::json transposed;
-  transposed["_type"] = "List";
-  transposed["elts"] = nlohmann::json::array();
-  for (std::size_t c = 0; c < col_count; ++c)
-  {
-    nlohmann::json out_row;
-    out_row["_type"] = "List";
-    out_row["elts"] = nlohmann::json::array();
-    for (std::size_t r = 0; r < row_count; ++r)
-    {
-      numeric_value value;
-      if (!try_extract_numeric_constant(elts[r]["elts"][c], value))
-        return std::nullopt;
-      out_row["elts"].push_back(build_constant_node(value));
-    }
-    transposed["elts"].push_back(out_row);
-  }
+  std::optional<nlohmann::json> transposed =
+    build_transposed_literal(elts, row_count, col_count);
+  if (!transposed)
+    return std::nullopt;
 
-  return converter.get_expr(transposed);
+  return converter.get_expr(*transposed);
 }
 
 static nlohmann::json unwrap_list_like_node(const nlohmann::json &node)
