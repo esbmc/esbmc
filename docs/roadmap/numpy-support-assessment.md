@@ -55,6 +55,55 @@ Architectural decisions that gate specific pendencies here (referenced as
     context. See `regression/numpy/constructor_method_dispatch_success`,
     `constructor_method_dispatch_non_numpy_fail`, and
     `constructor_module_method_parity_edge`.
+- **Hardened constructor materialization against a follow-up review of the
+  work above** — `materialize_numpy_constructor_array()` and its resolver
+  call sites had four confirmed correctness/diagnostic gaps of their own,
+  each verified by direct execution before and after the fix:
+  - A receiver was matched purely by attribute name (`zeros`/`full`/`eye`/
+    ...), so a user class with a same-named method (e.g. its own `.full()`)
+    was silently treated as a numpy constructor call. Now requires the
+    receiver to actually resolve to the imported numpy module, reusing
+    `is_imported_numpy_module_alias()` (promoted to external linkage) —
+    the same check `is_numpy_array_constructor_expr()` already used. See
+    `regression/numpy/constructor_materialize_module_alias_fail`.
+  - When materialization declined for a *recognized* constructor call (a
+    `dtype=` keyword, a non-constant fill), every resolver fell back to the
+    call's `args[0]` — exactly the shape/size argument this whole helper
+    exists to stop misreading as array data, silently reintroducing the
+    original bug for that one escape hatch (e.g.
+    `np.mean(np.eye(3, dtype=int))` verified against the shape scalar `3`
+    instead of the real flattened mean `1/3`). Now such calls are left as
+    unresolved `Call` nodes instead, so the existing numeric-extraction
+    path rejects them explicitly. See
+    `regression/numpy/reducer_constructor_dtype_kwarg_fail`.
+  - `a.transpose()` on a declined dynamic-list-backed constructor call
+    raised the generic "supports up to 2D arrays" message even when the
+    real cause was unrelated to dimensionality. Now distinguishes the two
+    failure modes with a specific diagnostic for the former. See
+    `regression/numpy/transpose_constructor_kwarg_fail`.
+  - `materialize_arange()` computed every value (including the all-integer,
+    dtype-default case) through a `double` loop, silently losing precision
+    or drifting the termination point past 2^53. Now uses exact `int64_t`
+    arithmetic when every argument is an integer; the float path is
+    unchanged. Not covered by a regression test: reproducing this needs
+    bounds large enough to exercise the gap, but any
+    `np.arange(...)` assigned to a variable already times out during array
+    creation regardless of this fix (see "Soundness concerns" below), so
+    verified by direct execution outside the regression harness instead.
+
+  A fifth resolve_var copy (guarding
+  `greater`/`less`/`equal`/`where`/`full`/`eye`/`identity`/`linspace`
+  comparison-scalar dispatch) was also brought onto
+  `materialize_numpy_constructor_array()` for consistency with every other
+  copy, though that dispatch only ever extracts a single numeric scalar
+  from its operands either way. A sixth, purely cosmetic finding (a stale
+  comment claiming no rank cap existed, contradicted by the very next
+  line) was also fixed. A sixth *substantive* finding raised in the same
+  review — no upper bound on total materialized elements — was
+  investigated and found to duplicate the pre-existing scalability wall
+  below rather than being an independently reachable issue: the same
+  large shape already hangs at ordinary array creation, before this
+  helper ever runs, with or without this PR's changes.
 - **Closed the remaining ADR-NP-003 etapa 1 gaps** — the guard layer
   introduced by the previous entry left several confirmed holes, all
   verified by direct execution before and after the fix:
@@ -288,7 +337,10 @@ Architectural decisions that gate specific pendencies here (referenced as
    arrays — three elements should not be expensive. Root cause not
    investigated; found while exercising constructor-backed reducers in this
    round (worked around there by using `eye`/`identity`/`full` instead) and
-   flagged here rather than fixed blind.
+   flagged here rather than fixed blind. This also blocks regression-testing
+   the `materialize_arange()` integer-precision fix above: any
+   `np.arange(...)` assigned to a variable hits this wall at the assignment
+   itself, before a reducer ever gets to exercise the fixed code path.
 
 ---
 
