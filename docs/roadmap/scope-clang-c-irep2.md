@@ -918,3 +918,67 @@ C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
 index arm (#6907). C.4b withdrawn (§25). Next substantive step is **shape 2**:
 move traversal ownership into the IREP2 pass, per §19.2 and §25.3.
 
+## 27. Sizing shape 2: the per-arm blocker census
+
+Shape 2 gives the IREP2 pass the traversal, so it reconstructs the dispatch
+context §25 showed shape 1 cannot inherit. It is close to all-or-nothing: an
+unmigrated arm cannot be called on an `expr2tc` without the
+`migrate_expr_back` -> `migrate_expr` round trip parent §38.3 bans. So the
+question is not "which arm next" but "how many arms, and which are hard".
+
+Censusing all 31 arms against the three clauses (§17 flags, §23 input-kind
+representability, §25 intrinsic applicability -- the last read off the call
+graph: an arm invoked from `adjust_expr`'s dispatch is intrinsic, one invoked
+from another arm is not):
+
+| | count |
+|---|---|
+| zero-flag **and** reached from the top dispatch | **18 / 31** |
+| carries legacy-only flags | 4 (`adjust_address_of` 2, `adjust_side_effect_function_call` 4, `adjust_dereference` 1, `adjust_symbol` 1) |
+| reached only from another arm (path-dependent) | 9 |
+
+The 18:
+
+`adjust_base_to_derived`, `adjust_builtin_va_arg`, `adjust_comma`,
+`adjust_expr_binary_arithmetic`, `adjust_expr_binary_boolean`,
+`adjust_expr_rel`, `adjust_expr_shifts`, `adjust_expr_unary_boolean`,
+`adjust_expr_unary_complex`, `adjust_if`, `adjust_index`, `adjust_member`,
+`adjust_ptr_mem`, `adjust_reference`, `adjust_side_effect`, `adjust_sizeof`,
+`adjust_struct`, `adjust_type`.
+
+### 27.1 What the census changes
+
+§25.3 read the two failures pessimistically -- "shape 1 suits a minority, the
+count is unknown". The count is now known and it is better than that reading:
+**18 of 31 arms are clean on both the flag and the applicability clause.**
+`adjust_expr_shifts` is in the 18 and still needs §23's treatment (its input
+kind is unrepresentable), but that is one arm with a known, local remedy --
+resolve `shr` at construction rather than in the adjuster.
+
+Under shape 2 the path-dependence clause largely dissolves: the nine
+called-from-another-arm cases become reachable once the IREP2 pass owns the
+dispatch, because the caller is then also IREP2 and supplies the context.
+`adjust_float_arith` fails under shape 1 for exactly the reason shape 2 fixes.
+
+So the real shape-2 obligation is: **18 arms to write, 9 that follow once their
+callers are IREP2, and 4 blocked on flags IREP2 cannot represent.**
+
+### 27.2 The four are the decision
+
+`#implicit` (`adjust_address_of`, `adjust_symbol`), the `cmt_*` uses in
+`adjust_side_effect_function_call`, and `adjust_dereference`'s single flag are
+not a scheduling problem -- they are the one design question the phase has to
+answer, and §17.3 already flagged that it should be answered once rather than
+per arm. Either those flags gain IREP2 representation, or the `-only` placement
+is permanently partial and the legacy adjuster survives for them.
+
+That decision gates shape 2 and should be taken before the 18 are written, not
+after.
+
+## 28. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), C.4b withdrawn (§25). Shape 2 sized (§27): 18 arms clean, 9
+unblocked by shape 2 itself, 4 gated on the flag-representation decision, which
+is the next thing to settle.
+
