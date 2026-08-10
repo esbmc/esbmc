@@ -419,7 +419,10 @@ public:
 
 /** Fixed bitvector type.
  *  Spec for a fixed bitwidth number — stores how the bits are distributed
- *  between integer bits and fraction bits.
+ *  between integer bits and fraction bits, whether the value is signed,
+ *  and whether arithmetic on it saturates (TR 18037 _Sat). integer_bits
+ *  counts the sign bit when signed, matching the historical layout;
+ *  _Fract is integer_bits == (is_signed ? 1 : 0), _Accum anything above.
  */
 class fixedbv_type2t : public type2t
 {
@@ -427,9 +430,19 @@ public:
   /** Primary constructor.
    *  @param width Total number of bits in this type of fixedbv
    *  @param integer Number of integer bits in this type of fixedbv
+   *  @param is_signed Signed value (default matches the legacy fixedbv use)
+   *  @param is_saturating TR 18037 _Sat semantics on arithmetic
    */
-  fixedbv_type2t(unsigned int w, unsigned int ib)
-    : type2t(fixedbv_id), width(w), integer_bits(ib)
+  fixedbv_type2t(
+    unsigned int w,
+    unsigned int ib,
+    bool is_signed = true,
+    bool is_saturating = false)
+    : type2t(fixedbv_id),
+      width(w),
+      integer_bits(ib),
+      is_signed(is_signed),
+      is_saturating(is_saturating)
   {
   }
   fixedbv_type2t(const fixedbv_type2t &ref) = default;
@@ -437,9 +450,14 @@ public:
 
   unsigned int width;
   unsigned int integer_bits;
+  bool is_signed;
+  bool is_saturating;
 
-  static constexpr auto fields =
-    std::make_tuple(&fixedbv_type2t::width, &fixedbv_type2t::integer_bits);
+  static constexpr auto fields = std::make_tuple(
+    &fixedbv_type2t::width,
+    &fixedbv_type2t::integer_bits,
+    &fixedbv_type2t::is_signed,
+    &fixedbv_type2t::is_saturating);
   static std::string field_names[esbmct::num_type_fields];
 };
 

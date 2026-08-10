@@ -254,7 +254,12 @@ static type2tc migrate_type0(const typet &type)
     unsigned int width_bits = to_fixedbv_type(type).get_width();
     unsigned int int_bits = to_fixedbv_type(type).get_integer_bits();
 
-    return fixedbv_type2tc(width_bits, int_bits);
+    /* Absent attributes mean the legacy signed, non-saturating layout. */
+    return fixedbv_type2tc(
+      width_bits,
+      int_bits,
+      type.get("#esbmc_unsigned") != "1",
+      type.get("#esbmc_saturating") == "1");
   }
 
   if (type.id() == typet::t_floatbv)
@@ -2931,6 +2936,12 @@ typet migrate_type_back(const type2tc &ref)
     fixedbv_typet thetype;
     thetype.set_integer_bits(ref2.integer_bits);
     thetype.set_width(ref2.width);
+    /* Only mark the non-legacy variants, so round-tripping the historical
+     * signed non-saturating layout stays byte-identical. */
+    if (!ref2.is_signed)
+      thetype.set("#esbmc_unsigned", "1");
+    if (ref2.is_saturating)
+      thetype.set("#esbmc_saturating", "1");
     return thetype;
   }
   case type2t::floatbv_id:

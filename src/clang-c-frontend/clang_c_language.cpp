@@ -270,6 +270,9 @@ void clang_c_languaget::build_compiler_args(
   // Increase maximum bracket depth
   compiler_args.push_back("-fbracket-depth=1024");
 
+  // TR 18037 fixed-point types (_Fract/_Accum/_Sat).
+  compiler_args.push_back("-ffixed-point");
+
   // Suppress -Wunknown-attributes: GCC-preprocessed files carry a bunch of
   // __leaf__ etc. attributes that we don't care about
   compiler_args.emplace_back("-Wno-unknown-attributes");

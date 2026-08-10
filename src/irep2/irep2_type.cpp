@@ -386,7 +386,7 @@ std::string vector_type2t::field_names[esbmct::num_type_fields] =
 std::string pointer_type2t::field_names[esbmct::num_type_fields] =
   {"subtype", "provenance", "", "", ""};
 std::string fixedbv_type2t::field_names[esbmct::num_type_fields] =
-  {"width", "integer_bits", "", "", ""};
+  {"width", "integer_bits", "is_signed", "is_saturating", ""};
 std::string floatbv_type2t::field_names[esbmct::num_type_fields] =
   {"fraction", "exponent", "", "", ""};
 std::string complex_type2t::field_names[esbmct::num_type_fields] =
