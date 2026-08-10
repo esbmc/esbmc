@@ -60,11 +60,10 @@ void clang_c_adjust_irep2::adjust_index(expr2tc &expr)
   expr2tc index_expr = idx.index;
 
   // The operands may be the other way round: `i[a]` is legal C.
-  if (
-    const type2tc a = ns.follow(array_expr->type),
-    i = ns.follow(index_expr->type);
-    !is_array_type(a) && !is_pointer_type(a) &&
-    (is_array_type(i) || is_pointer_type(i)))
+  if (const type2tc a = ns.follow(array_expr->type),
+      i = ns.follow(index_expr->type);
+      !is_array_type(a) && !is_pointer_type(a) &&
+      (is_array_type(i) || is_pointer_type(i)))
     std::swap(array_expr, index_expr);
 
   // migrate_type(index_type()), not index_type2(): despite the name they are

@@ -191,7 +191,9 @@ void make_nondet_assign(
   std::sort(
     ordered_vars.begin(),
     ordered_vars.end(),
-    [](const expr2tc &a, const expr2tc &b) { return a->pretty() < b->pretty(); });
+    [](const expr2tc &a, const expr2tc &b) {
+      return a->pretty() < b->pretty();
+    });
 
   goto_programt dest;
   size_t inserted = 0;
