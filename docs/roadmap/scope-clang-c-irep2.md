@@ -646,3 +646,73 @@ C.1-C.3 done (#6894), lookup (#6897), union assert (#6899), havoc order
 (#6901). C.4 re-planned per §17.3; next action is the first zero-flag arm, with
 `adjust_expr_binary_arithmetic` and `adjust_index` the leading candidates.
 
+## 19. `adjust_index` is implementable, and per-arm gating has an ordering hazard
+
+`adjust_index` (59 lines, zero flags) is the leading candidate from §17.3.
+Checked before executing, per the pattern the parent doc uses.
+
+### 19.1 The kit covers it, and #6873 is load-bearing
+
+Every primitive the arm needs has an IREP2 form:
+
+| legacy | IREP2 |
+|---|---|
+| `gen_typecast(ns, e, t)` | `c_implicit_typecast(expr2tc &, const type2tc &, ns)` |
+| `ns.follow(typet)` | `ns.follow(const type2tc &)` -- namespace.h:21 |
+| `index_exprt` -> `dereference` rewrite | build `dereference2tc(elem, add2tc(...))` directly |
+
+`gen_typecast` is a three-line wrapper over `c_typecastt::implicit_typecast`
+(typecast.cpp:9), so the IREP2 counterpart is the overload **#6873** fixed. That
+matters: before that fix the two copies disagreed on folding a cast of a
+constant, and `adjust_index`'s `gen_typecast(ns, index_expr, index_type())` is
+exactly a cast of a frequently-constant index. Migrating this arm on top of the
+unfixed overload would have diverged on every constant subscript -- the same
+failure jimple's assignment hit (`scope-jimple-irep2.md` §22.2).
+
+So Phase 4's claim that the kit already exists (parent §38) holds here, provided
+#6873 is in.
+
+### 19.2 The hazard: gating an arm changes traversal, not just the arm
+
+§6.3 requires the legacy arm disabled in the same run, or the mutant is
+shadowed. But `clang_c_adjust::adjust_expr` dispatches *and* recurses through
+the same arm:
+
+```cpp
+void clang_c_adjust::adjust_index(index_exprt &index)
+{
+  adjust_operands(index);      // <-- the recursion lives here
+  ...
+}
+```
+
+Skipping the arm therefore skips the recursion into the index's operands, not
+just the index rewrite. A naive `if (!flag) adjust_index(...)` would leave the
+subtree unadjusted and the comparison would measure that, not the migration.
+
+Two workable shapes:
+
+1. **Split the arm**: legacy keeps `adjust_operands`, the flag skips only the
+   rewrite below it. Smallest change, but it edits the legacy pass for every arm
+   migrated.
+2. **Move recursion up**: have the IREP2 pass own the traversal for the whole
+   expression once it owns any arm -- which is the `-only` placement in
+   miniature, and closer to where the phase must end up anyway.
+
+Shape 2 is the better target and the larger step. Shape 1 is what makes the
+*first* arm measurable without restructuring.
+
+### 19.3 Plan
+
+- C.4a: implement `adjust_index` in the IREP2 pass, gate the legacy rewrite
+  (shape 1), write back, A/B over `regression/esbmc`, mutant-check with the
+  legacy rewrite off.
+- C.4b: once two or three arms are in, switch to shape 2 rather than accumulating
+  per-arm edits in the legacy pass.
+
+## 20. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901).
+C.4a specified above; the primitives are confirmed present and the traversal
+hazard is identified before rather than after the first attempt.
+
