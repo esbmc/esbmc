@@ -1318,52 +1318,25 @@ RanIt partial_sort_copy(
   return pilgrim2;
 }
 
+/* [alg.nth.element]: the element at nth ends up where it would be if the
+ * range were sorted, and nothing before nth compares greater than it.
+ * Sorting the whole range establishes that. It also fixes one of the
+ * permutations the standard leaves unspecified, so a program reading the
+ * order of the *other* elements sees more than it is entitled to. */
 template <class RanIt>
 void nth_element(RanIt first, RanIt nth, RanIt last)
 {
-  RanIt pilgrim, pos;
-  swap(*first, *nth);
-  nth = first;
-  for (pilgrim = first + 1; pilgrim < last; pilgrim++)
-  {
-    if (*pilgrim < *nth)
-    {
-      swap(*pilgrim, *nth);
-      nth = pilgrim;
-      while (nth != first)
-      {
-        pos = nth - 1;
-        if (!(*nth < *pos))
-          break;
-        swap(*nth, *pos);
-        nth = pos;
-      }
-    }
-  }
+  if (nth == last)
+    return;
+  sort(first, last);
 }
 
 template <class RanIt, class Pr>
 void nth_element(RanIt first, RanIt nth, RanIt last, Pr pred)
 {
-  RanIt pilgrim, pos;
-  swap(*first, *nth);
-  nth = first;
-  for (pilgrim = first + 1; pilgrim < last; pilgrim++)
-  {
-    if (pred(*pilgrim, *nth))
-    {
-      swap(*pilgrim, *nth);
-      nth = pilgrim;
-      while (nth != first)
-      {
-        pos = nth - 1;
-        if (!pred(*nth, *pos))
-          break;
-        swap(*nth, *pos);
-        nth = pos;
-      }
-    }
-  }
+  if (nth == last)
+    return;
+  sort(first, last, pred);
 }
 
 template <class FwdIt, class Ty>
