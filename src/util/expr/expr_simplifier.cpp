@@ -5929,3 +5929,17 @@ ESBMC_NIL_SIMPLIFY(hasattr)
 ESBMC_NIL_SIMPLIFY(isnone)
 
 #undef ESBMC_NIL_SIMPLIFY
+
+/* No constant folding for the fixed-point elementary functions: reproducing
+ * correctly-rounded sqrt/exp here would mean duplicating the very thing the
+ * solver is being asked for, and a folder that rounded differently would
+ * silently disagree with mkFXPSqrt/mkFXPExp. Leave both to the solver. */
+expr2tc fixedbv_sqrt2t::do_simplify() const
+{
+  return expr2tc();
+}
+
+expr2tc fixedbv_exp2t::do_simplify() const
+{
+  return expr2tc();
+}

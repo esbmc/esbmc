@@ -548,6 +548,28 @@ int __ESBMC_memcmp(const void *, const void *, __SIZE_TYPE__);
  * types tgt and src point to. */
 void __ESBMC_bitcast(void * /* tgt */, void * /* src */);
 
+/* The exact, correctly-rounded fixed-point sqrt and exp -- TR 18037's sqrtfx
+ * and expfx as mathematical operations rather than any implementation of them.
+ * Lowered to camada's mkFXPSqrt / mkFXPExp, so a library's approximation can be
+ * checked against a reference the solver computes rather than one the harness
+ * recomputes. One declaration per format: argument and result types must match
+ * and C has no generic fixed-point parameter.
+ *
+ * exp is declared only for the _Accum formats, which are the ones camada
+ * supports (its correct rounding rests on a per-format exhaustive
+ * hardest-to-round measurement) and the only ones stdfix.h gives exp entry
+ * points for. */
+unsigned short _Fract __ESBMC_fxp_sqrt_uhr(unsigned short _Fract);
+unsigned _Fract __ESBMC_fxp_sqrt_ur(unsigned _Fract);
+unsigned long _Fract __ESBMC_fxp_sqrt_ulr(unsigned long _Fract);
+unsigned short _Accum __ESBMC_fxp_sqrt_uhk(unsigned short _Accum);
+unsigned _Accum __ESBMC_fxp_sqrt_uk(unsigned _Accum);
+
+short _Accum __ESBMC_fxp_exp_hk(short _Accum);
+_Accum __ESBMC_fxp_exp_k(_Accum);
+unsigned short _Accum __ESBMC_fxp_exp_uhk(unsigned short _Accum);
+unsigned _Accum __ESBMC_fxp_exp_uk(unsigned _Accum);
+
 // Calls goto_symext::add_memory_leak_checks() which adds memory leak checks
 // if it's enabled
 void __ESBMC_memory_leak_checks();

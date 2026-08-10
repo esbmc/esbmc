@@ -539,3 +539,83 @@ two lines cannot fix -- it needs a wider intermediate than `long accum`.
 | `harness_divi_shift.c` | FAILED | FAILED |
 
 Identical with the simplifier disabled, so none of it is a simplifier artefact.
+
+## Methodology correction: the sqrt results are now PROOFS, not differential tests
+
+The earlier sqrt numbers in this file (1.09x at u0.8, 2.48x at u0.16, "43% of
+inputs over 1 ulp") were produced by running libc natively under
+`clang -ffixed-point` and comparing against `long double`. That is a
+**differential test**, not a proof: the reference was computed by the harness,
+the rounding direction was my choice, and coverage was enumeration or sampling.
+
+The point of camada's `mkFXPSqrt` is that the reference lives **inside the
+solver**, so the comparison becomes a proof over all inputs of the format and
+the harness never computes an expected value. That is now wired up:
+
+* new irep2 nodes `fixedbv_sqrt2t` / `fixedbv_exp2t` -- TR 18037 operations, so
+  distinct from the `ieee_*` family and carrying no rounding mode;
+* frontend intrinsics `__ESBMC_fxp_sqrt_*` / `__ESBMC_fxp_exp_*`, one per
+  format since C has no generic fixed-point parameter;
+* lowered to `mkFXPSqrt` / `mkFXPExp` in `smt_solver.cpp`.
+
+The `sqrt`/`abs` user-definition guard stays as it is: libc's body must remain
+a call so that it is the thing being verified, not something replaced by the
+solver's own operation.
+
+### The oracle was validated before being trusted
+
+An unvalidated oracle would invalidate every result downstream, so
+`mkFXPSqrt` was pinned by its defining property first -- no reference
+implementation involved:
+
+```
+raw_r^2 <= raw_x * 2^F < (raw_r+1)^2
+```
+
+which has exactly one solution per input, so proving it proves the oracle
+computes the intended function. **VERIFICATION SUCCESSFUL at u0.8 and u0.16**,
+and the negated form FAILS, so the proof is not vacuous.
+
+Two corrections came out of doing this:
+
+1. **`mkFXPSqrt` truncates toward zero; it is NOT round-to-nearest.** Camada
+   documents it as "square root, rounded toward zero" (`camada.h:938`). Earlier
+   text in this file and in the sqrt report described it as "correctly
+   rounded" -- that description belongs to `mkFXPExp` (nearest, ties to even),
+   not to sqrt. A harness that compares a library against this oracle must
+   account for the direction or it reports a 1-ulp "error" that is the
+   oracle's own.
+2. My first two bracket attempts computed `r*r` **in the fixed-point type**,
+   where it rounds to F fractional bits and is useless as a bracket. The
+   bracket has to be evaluated on raw integers at full width. Both early
+   failures were my harness, not the oracle.
+
+### What the proof shows: an asymmetric, exactly-1-ulp defect
+
+Against the truncating oracle the exact root lies in `[rb, rb+1)`, so libc's
+documented "absolute errors < 2^(-fraction length)" permits exactly
+`{rb, rb+1}`. Proved separately per direction so neither masks the other:
+
+| property | u0.8 | u0.16 |
+|---|---|---|
+| libc <= exact + 1 ulp | **SUCCESSFUL** | -- |
+| libc >= exact (never below) | **FAILED** | **FAILED** |
+| libc >= exact - 1 ulp | **SUCCESSFUL** | -- |
+
+So the error is two-sided and bounded by 1 ulp in each direction, but the claim
+is *strictly* under one ulp, and the downward miss reaches a full ulp.
+
+The sharpest witnesses are **exact perfect squares**, where no rounding
+question exists at all:
+
+```
+sqrt(81/256)  = 9/16  = 0.5625     exactly representable; libc gives 143/256 = 0.5585938
+sqrt(100/256) = 10/16 = 0.6250     exactly representable; libc gives 159/256 = 0.6210938
+```
+
+Both are one ulp low. Verified independently by running libc natively, so this
+does not rest on the solver alone.
+
+This supersedes the "2.48x the bound" framing: that ratio depended on my choice
+of reference and rounding direction, whereas "one ulp low on an exactly
+representable perfect square" is a claim about libc alone.

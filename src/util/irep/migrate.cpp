@@ -2643,6 +2643,18 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  if (expr.id() == "fixedbv_sqrt" || expr.id() == "fixedbv_exp")
+  {
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+
+    type2tc thetype = migrate_type(expr.type());
+    new_expr_ref = expr.id() == "fixedbv_sqrt"
+                     ? expr2tc(fixedbv_sqrt2tc(thetype, theval))
+                     : expr2tc(fixedbv_exp2tc(thetype, theval));
+    return;
+  }
+
   if (expr.id() == "bswap")
   {
     expr2tc theval;
@@ -4407,6 +4419,20 @@ exprt migrate_expr_back(const expr2tc &ref)
     const popcount2t &ref2 = to_popcount2t(ref);
     exprt back("popcount", migrate_type_back(ref->type));
     back.copy_to_operands(migrate_expr_back(ref2.operand));
+    return back;
+  }
+  case expr2t::fixedbv_sqrt_id:
+  {
+    const fixedbv_sqrt2t &ref2 = to_fixedbv_sqrt2t(ref);
+    exprt back("fixedbv_sqrt", migrate_type_back(ref->type));
+    back.copy_to_operands(migrate_expr_back(ref2.value));
+    return back;
+  }
+  case expr2t::fixedbv_exp_id:
+  {
+    const fixedbv_exp2t &ref2 = to_fixedbv_exp2t(ref);
+    exprt back("fixedbv_exp", migrate_type_back(ref->type));
+    back.copy_to_operands(migrate_expr_back(ref2.value));
     return back;
   }
   case expr2t::bswap_id:

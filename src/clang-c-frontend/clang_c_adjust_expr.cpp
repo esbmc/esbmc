@@ -1591,6 +1591,18 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(new_expr);
     }
+    else if (
+      has_prefix(identifier, "__ESBMC_fxp_sqrt_") ||
+      has_prefix(identifier, "__ESBMC_fxp_exp_"))
+    {
+      /* The exact fixed-point sqrt/exp. Distinct nodes rather than the ieee_*
+       * family: these are TR 18037 operations, correctly rounded by
+       * construction, so there is no rounding mode to carry. */
+      const bool is_sqrt = has_prefix(identifier, "__ESBMC_fxp_sqrt_");
+      exprt new_expr(is_sqrt ? "fixedbv_sqrt" : "fixedbv_exp", expr.type());
+      new_expr.operands() = expr.arguments();
+      expr.swap(new_expr);
+    }
     else if (compare_float_suffix(identifier, "sqrt"))
     {
       /* ieee_sqrt is the floating-point operation, so a fixed-point argument

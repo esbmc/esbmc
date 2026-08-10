@@ -1226,6 +1226,18 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     a = convert_popcount(expr);
     break;
   }
+  case expr2t::fixedbv_sqrt_id:
+  {
+    assert(is_fixedbv_type(expr));
+    a = solver->mkFXPSqrt(args[0]);
+    break;
+  }
+  case expr2t::fixedbv_exp_id:
+  {
+    assert(is_fixedbv_type(expr));
+    a = solver->mkFXPExp(args[0]);
+    break;
+  }
   case expr2t::bswap_id:
   {
     a = convert_bswap(expr);

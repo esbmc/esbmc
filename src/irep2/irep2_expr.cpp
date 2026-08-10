@@ -907,6 +907,10 @@ std::string signbit2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string popcount2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
+std::string fixedbv_sqrt2t::field_names[esbmct::num_type_fields] =
+  {"value", "", "", "", ""};
+std::string fixedbv_exp2t::field_names[esbmct::num_type_fields] =
+  {"value", "", "", "", ""};
 std::string bswap2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string concat2t::field_names[esbmct::num_type_fields] =
