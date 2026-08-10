@@ -69,6 +69,13 @@ class jimple_return : public jimple_statement
     contextt &ctx,
     const std::string &class_name,
     const std::string &function_name) const override;
+
+  virtual expr2tc to_code2t(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name,
+    const locationt &loc) const override;
+
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
   std::shared_ptr<jimple_expr> expr;
