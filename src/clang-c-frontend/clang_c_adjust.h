@@ -22,7 +22,17 @@ public:
 
   bool adjust();
 
+  /// Hand the index rewrite to the IREP2 adjuster. Set only by the C driver:
+  /// clang_cpp_adjust derives from this class, and the IREP2 pass is wired into
+  /// clang_c_languaget::typecheck alone, so a global option check here would
+  /// disable the rewrite for C++ with nothing to replace it.
+  void set_irep2_owns_index()
+  {
+    irep2_owns_index = true;
+  }
+
 protected:
+  bool irep2_owns_index = false;
   contextt &context;
   namespacet ns;
   symbol_generator tmp_symbol{"clang_c_adjust::"};
