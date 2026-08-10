@@ -1252,6 +1252,24 @@ static inline bool is_abs_builtin_name(const irep_idt &identifier)
          compare_unscore_builtin(identifier, "fabs");
 }
 
+/// True when a call to one of the abs builtins may become an `abs` node. The
+/// argument must be arithmetic, since the node lowers to `(x >= 0) ? x : -x`,
+/// and the program must not supply the callee's body: matching on the name
+/// alone discarded a user's own definition and verified the builtin in its
+/// place -- `mylib::abs` is an identifier a program is free to reuse (#6904).
+/// Libc's `abs` is a bodiless declaration and <cmath>'s `std::abs` overloads
+/// forward to `::fabs`, so both still lower.
+bool clang_c_adjust::lowers_to_abs_node(
+  const side_effect_expr_function_callt &expr,
+  const exprt &f_op) const
+{
+  if (expr.arguments().size() != 1 || !is_number(expr.arguments()[0].type()))
+    return false;
+
+  const symbolt *s = context.find_symbol(to_symbol_expr(f_op).get_identifier());
+  return s == nullptr || s->get_value().is_nil();
+}
+
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 {
   const exprt &f_op = expr.function();
@@ -1358,7 +1376,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     }
     else if (is_abs_builtin_name(identifier))
     {
-      if (expr.arguments().size() == 1 && is_number(expr.arguments()[0].type()))
+      if (lowers_to_abs_node(expr, f_op))
       {
         exprt abs_expr("abs", expr.type());
         abs_expr.operands() = expr.arguments();

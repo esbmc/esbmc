@@ -30,6 +30,13 @@ protected:
   /**
    * methods for symbol adjustment
    */
+  /// True when a call to one of the abs builtins may become an `abs` node: the
+  /// argument is arithmetic and the program does not define the callee itself.
+  /// See #6904.
+  bool lowers_to_abs_node(
+    const side_effect_expr_function_callt &expr,
+    const exprt &f_op) const;
+
   virtual void adjust_symbol(symbolt &symbol);
   void adjust_argc_argv(const symbolt &main_symbol);
 
