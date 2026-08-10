@@ -30,12 +30,14 @@ protected:
   /**
    * methods for symbol adjustment
    */
-  /// True when a call to one of the abs builtins may become an `abs` node: the
-  /// argument is arithmetic and the program does not define the callee itself.
-  /// See #6904.
-  bool lowers_to_abs_node(
-    const side_effect_expr_function_callt &expr,
-    const exprt &f_op) const;
+  /// True when the single argument is arithmetic, as the `abs` node requires.
+  bool has_single_arithmetic_argument(
+    const side_effect_expr_function_callt &expr) const;
+
+  /// True when a name-matched builtin lowering would discard a definition the
+  /// program supplies, in which case the definition wins. See #6904.
+  bool
+  shadows_user_definition(const irep_idt &identifier, const exprt &f_op) const;
 
   virtual void adjust_symbol(symbolt &symbol);
   void adjust_argc_argv(const symbolt &main_symbol);
