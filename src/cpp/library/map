@@ -1136,7 +1136,9 @@ public:
         }
         if (key_compare()((Key &)x, this->_key[i]))
         {
-          return this->end();
+          /* First key greater than x: for both bounds that key is the
+           * answer, not the end of the map ([map.ops]). */
+          return it;
         }
         it++;
       }
@@ -1163,7 +1165,9 @@ public:
         }
         if (key_compare()((Key &)x, this->_key[i]))
         {
-          return this->end();
+          /* First key greater than x: for both bounds that key is the
+           * answer, not the end of the map ([map.ops]). */
+          return it;
         }
         it++;
       }
@@ -2136,7 +2140,9 @@ public:
         }
         if (key_compare()((Key &)x, this->_key[i]))
         {
-          return this->end();
+          /* First key greater than x: for both bounds that key is the
+           * answer, not the end of the map ([map.ops]). */
+          return it;
         }
         it++;
       }
@@ -2162,7 +2168,9 @@ public:
         }
         if (key_compare()((Key &)x, this->_key[i]))
         {
-          return this->end();
+          /* First key greater than x: for both bounds that key is the
+           * answer, not the end of the map ([map.ops]). */
+          return it;
         }
         it++;
       }
