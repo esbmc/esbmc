@@ -727,6 +727,22 @@ exprt jimple_static_member::to_exprt(
   return op;
 };
 
+expr2tc jimple_virtual_member::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // to_exprt also builds a gen_zero and looks the class tag up into a local,
+  // reading neither afterwards; both are dropped here.
+  expr2tc base = symbol_expr2tc(
+    *ctx.find_symbol(get_symbol_name(class_name, function_name, variable)));
+
+  if (is_pointer_type(base->type))
+    base = dereference2tc(to_pointer_type(base->type).subtype, base);
+
+  return member2tc(type->to_type2t(ctx), base, "tag-" + field);
+}
+
 expr2tc jimple_static_member::to_expr2t(
   contextt &ctx,
   const std::string &class_name,
