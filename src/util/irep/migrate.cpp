@@ -1522,7 +1522,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
-    new_expr_ref = address_of2tc(type, theval);
+    new_expr_ref = address_of2tc(type, theval, expr.implicit());
     return;
   }
 
@@ -3461,6 +3461,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt address_ofval("address_of", thetype);
     address_ofval.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
+    if (ref2.implicit)
+      address_ofval.implicit(true);
     return address_ofval;
   }
   case expr2t::byte_extract_id:
