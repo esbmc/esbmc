@@ -214,8 +214,8 @@ void value_sett::retire_objectless_operand(
 {
   auto carries_no_object = [](const object_mapt &m) {
     return !m.empty() && std::all_of(m.begin(), m.end(), [](const auto &e) {
-             return is_unknown2t(object_numbering[e.first]);
-           });
+      return is_unknown2t(object_numbering[e.first]);
+    });
   };
 
   if (carries_no_object(op0_set) && !op1_set.empty())
