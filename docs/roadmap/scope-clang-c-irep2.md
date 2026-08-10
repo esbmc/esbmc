@@ -1269,3 +1269,71 @@ Next is the first shape-2 step: give `clang_c_adjust_irep2` the dispatch, so the
 9 path-dependent arms become addressable, starting with the arms already proven
 under shape 1.
 
+## 39. `adjust_member` withdrawn: a fourth clause, about invariants not kinds
+
+`adjust_member` passed every check the phase had: 21 lines, zero flags,
+intrinsic applicability (reached from `adjust_expr`'s `is_member()` arm), and a
+representable input kind (`member2t` exists). It was implemented and
+**withdrawn** at 191 divergences.
+
+### 39.1 The failure is in migration, not in the arm
+
+```
+Assertion failed: (source->type->type_id == struct_id || union_id ||
+                   complex_id || symbol_id), function member2t,
+                   irep2_expr.h:1587
+```
+
+The arm's whole job is to make the base of a member access reachable -- wrapping
+a pointer base in a dereference, an array base in a zero index. Handing it over
+means the legacy pass leaves `member(pointer_base, ...)` in place, and
+`member2t`'s constructor **forbids a pointer source**. The abort happens inside
+`get_value2()`, before the IREP2 arm is ever called.
+
+### 39.2 The clause
+
+§23 said shape 1 is safe iff the node *as it arrives* survives `migrate_expr`,
+and read that as a statement about node **kinds** -- `shr` has no IREP2 kind.
+This is the same sentence with a different subject:
+
+> The node as it arrives must satisfy IREP2's **construction invariants**, not
+> merely have a representable kind. Legacy IR does not maintain those invariants
+> mid-adjustment; that is what the adjuster is for.
+
+`member2t` requires a struct-like source. `constant_union2t` required a union
+type (§11, fixed by relaxing it). `address_of2t` forbids a nested operand
+(§37.2). Each is an invariant IREP2 enforces at construction and legacy reaches
+only after the relevant arm has run.
+
+**So an arm that establishes an IREP2 construction invariant can never be handed
+over post hoc** -- by definition, the node before it runs is one IREP2 refuses to
+build. That is a sharper and more useful rule than the kind-based reading, and
+it predicts §23's `shr` case as a special instance.
+
+### 39.3 Consequence
+
+Three arms attempted under shape 1, one shipped:
+
+| arm | outcome |
+|---|---|
+| `adjust_index` | shipped (#6907) |
+| `adjust_float_arith` | withdrawn -- path-dependent applicability (§25) |
+| `adjust_member` | withdrawn -- establishes a construction invariant (§39) |
+
+`adjust_index` succeeded because the invariant it establishes -- turning `p[i]`
+into `*(p+i)` -- is not one `index2t` enforces: `index2t` accepts a pointer
+source, so the un-adjusted node migrates fine.
+
+The §27 census counted 18 "clean" arms against three clauses. This fourth clause
+is not visible in that census, and checking it needs the §23 test run per arm --
+disable the legacy rewrite, walk the corpus, see whether migration aborts. That
+test is cheap and should now precede any implementation.
+
+## 40. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912). Two arms withdrawn on measurement
+(§25, §39). Next action is the §39.3 pre-check across the 18, which will say how
+many survive all four clauses -- and if the answer is "few", that is the
+argument for going straight to shape 2.
+
