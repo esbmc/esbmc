@@ -5321,6 +5321,19 @@ exprt numpy_call_expr::get()
             var = std::move(*numpy_call);
             return;
           }
+          if (
+            std::optional<nlohmann::json> materialized =
+              materialize_numpy_constructor_array(
+                var["value"], converter_.ast()))
+          {
+            var = std::move(*materialized);
+            return;
+          }
+          if (is_numpy_constructor_call_by_name(var["value"]))
+          {
+            var = var["value"];
+            return;
+          }
           if (var["value"].contains("args") && !var["value"]["args"].empty())
             var = var["value"]["args"][0];
           else
