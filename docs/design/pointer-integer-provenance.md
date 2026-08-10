@@ -25,11 +25,12 @@ reported a spurious violation, as did `regression/esbmc/github_426_2`,
 multiplies an `offsetof`, but `offsetof` expands to `(size_t)&((S *)0)->y` and is
 address-derived like any other address.
 
-Reads take the noisy direction — a spurious counterexample. Writes do not: with
-no target resolved the store lands on the fallback symbol, every object the
-pointer could alias keeps its old value, and asserting the write did not happen
-is proved (esbmc/esbmc#6804). So the gap misses bugs as well as inventing them,
-and the fixes below are needed for the write direction too.
+Reads took the noisy direction — a spurious counterexample. Writes did not: with
+no target resolved the store landed on the fallback symbol, every object the
+pointer could alias kept its old value, and asserting the write did not happen
+was proved (esbmc/esbmc#6804). So the gap missed bugs as well as inventing them,
+and recovering the object fixes both directions: `regression/esbmc/github_6804`
+is the write witness and is now `CORE`.
 
 Failing every write that resolves no target is not the answer: the k-induction
 inductive step havocs value sets on purpose, so such a check cannot tell a lost
