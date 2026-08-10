@@ -2,6 +2,9 @@
 #define __STL_FORWARD_LIST
 
 #include "definitions.h"
+#if __cplusplus >= 201103L
+#  include <initializer_list>
+#endif
 
 #define FORWARD_LIST_MAX_SIZE 20
 
@@ -100,6 +103,15 @@ public:
   forward_list() : _head(SENTINEL), _free(0)
   {
   }
+
+#if __cplusplus >= 201103L
+  /* Built back-to-front: push_front is the only O(1) insertion here. */
+  forward_list(std::initializer_list<T> init) : _head(SENTINEL), _free(0)
+  {
+    for (const T *it = init.end(); it != init.begin();)
+      this->push_front(*--it);
+  }
+#endif
 
   forward_list(size_type n, const T &value) : _head(SENTINEL), _free(0)
   {

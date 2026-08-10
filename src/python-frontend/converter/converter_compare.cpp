@@ -632,6 +632,15 @@ expr2tc python_converter::build_is_equality(const exprt &lhs, const exprt &rhs)
     migrate_expr(rhs, rhs2);
   }
 
+  /* An object that lost its type through a container comes back as an
+   * integer, and comparing that with the object's pointer builds an equality
+   * every backend's mk_eq rejects on the width mismatch (#6640 territory).
+   * Say so here rather than abort in the solver. */
+  if (is_pointer_type(lhs2->type) != is_pointer_type(rhs2->type))
+    throw std::runtime_error(
+      "'is' between a pointer and a non-pointer: one operand lost its object "
+      "type, which ESBMC cannot compare by identity");
+
   return equality2tc(lhs2, rhs2);
 }
 
