@@ -1,15 +1,43 @@
 # LLVM libc's fixed-point `sqrt` exceeds its documented error bound
 
 **Verdict: the implementation is a valid approximation; the documented bound
-is wrong.** `sqrt.h` claims absolute errors below one ULP. Measured
-exhaustively, `unsigned short fract` reaches 1.09 ULP and `unsigned fract`
-reaches 2.48 ULP. No unsoundness in the arithmetic — the results are usable
-approximations — but code relying on the stated bound is relying on
-something untrue.
+is wrong.** `sqrt.h` claims absolute errors strictly below one ULP. The error
+reaches a full ULP downward, and the sharpest evidence needs no discussion of
+rounding at all: **153 of the 256 exact perfect squares in `uhksqrtus`'s domain
+come back one ULP low**, on inputs whose answer is exactly representable.
+
+```
+sqrt(25)  = 5  exactly -> libc gives  4.99609
+sqrt(100) = 10 exactly -> libc gives  9.99609
+```
+
+No unsoundness in the arithmetic — the results are usable approximations — but
+code relying on the stated bound is relying on something untrue.
+
+## How this was established
 
 Found while verifying LLVM libc's `stdfix` implementation with ESBMC
-(esbmc/esbmc PR #4179). Every number below is also reproduced by executing
-the library's own compiled code, independently of the verifier.
+(esbmc/esbmc PR #4179). The comparison is a **proof over every input of the
+format**, not a sampled differential test: the reference is an SMT term
+(camada's exact fixed-point square root), so the harness never computes an
+expected value.
+
+The reference was itself validated first, against the bracket that
+characterises it uniquely — `raw_r^2 <= raw_x * 2^F < (raw_r+1)^2` — so a
+mis-wired oracle could not silently produce these findings.
+
+Proved separately per direction, so neither masks the other:
+
+| property | verdict |
+|---|---|
+| libc is never *above* the true root | **SUCCESSFUL** |
+| libc is within 1 ULP *below* the true root | **FAILED** |
+
+The error is one-sided (always downward) and reaches a full ULP, which points
+at the truncating rescale rather than at approximation error as such.
+
+Every number below is also reproduced by executing the library's own compiled
+code, independently of the verifier.
 
 ## The claim
 

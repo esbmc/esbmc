@@ -619,3 +619,51 @@ does not rest on the solver alone.
 This supersedes the "2.48x the bound" framing: that ratio depended on my choice
 of reference and rounding direction, whereas "one ulp low on an exactly
 representable perfect square" is a claim about libc alone.
+
+### isqrt (uhksqrtus / uksqrtui): the same defect, proved
+
+The violated claim sits on `isqrt` -- *"Integer square root - Accurate version:
+Absolute errors < 2^(-fraction length)"* (sqrt.h:211-212). `uhksqrtus` and
+`uksqrtui` call it, so the bound is violated on its own entry points.
+
+isqrt takes an integer and returns an `_Accum`, so mkFXPSqrt of the same format
+is not the reference. The property is stated directly, with nothing computed by
+the harness: `r` is scaled by `2^F`, so `r^2` carries scale `2^(2F)` and
+
+```
+rb^2 <= n * 2^16 < (rb+1)^2          (F = 8 for u8.8)
+```
+
+evaluated on raw integers at full width. Proved separately per direction:
+
+| property | verdict |
+|---|---|
+| `rb^2 <= n * 2^16` (never above the true root) | **SUCCESSFUL** |
+| `n * 2^16 < (rb+1)^2` (within 1 ulp) | **FAILED** |
+
+Exhaustive native confirmation over all 65536 inputs:
+
+* **28228 inputs (43.07%)** exceed the documented 1-ulp bound
+* worst error ~2 ulp, at n = 64189
+* **153 of the 256 exact perfect squares are wrong**, every one 1 ulp low:
+
+```
+sqrt(25)  = 5  exactly -> libc  4.99609  (raw 1279, want 1280)
+sqrt(49)  = 7  exactly -> libc  6.99609  (raw 1791, want 1792)
+sqrt(100) = 10 exactly -> libc  9.99609  (raw 2559, want 2560)
+sqrt(196) = 14 exactly -> libc 13.99609  (raw 3583, want 3584)
+```
+
+Perfect squares are the sharpest possible witnesses: the answer is exactly
+representable, so no rounding-direction argument can excuse the miss. The
+error is consistently *downward*, which matches a truncating rescale
+(`r >>= (shift >> 1)`) rather than an approximation that is merely imprecise.
+
+#### A harness bug caught on the way
+
+The first run of this bracket "failed" for a reason that was mine: I read
+`rb = 177` off the counterexample when the value was 45312, and briefly
+concluded the scaling was wrong. It was not -- `rb/256 = 177.0` and the bracket
+was correct all along. Re-deriving the scaling from native ground truth
+(`isqrt(4) = 2`, `isqrt(65535) = 255.992`) settled it. Worth recording because
+the misreading pointed at the harness when the defect was real.
