@@ -618,7 +618,13 @@ public:
     return _size;
   }
 
-  size_type max_size() const;
+  /* Declared but never defined, so callers got a nondeterministic result.
+   * The model's own invariant is _size <= VECTOR_CAPACITY, so that bound is
+   * what a vector here can actually hold. */
+  size_type max_size() const
+  {
+    return VECTOR_CAPACITY;
+  }
 
   void resize(size_type sz)
   {
@@ -931,12 +937,14 @@ public:
 
   iterator erase(iterator first, iterator last)
   {
-    iterator it;
-    while (first != last)
-    {
-      it = erase(last--);
-    }
-    return it;
+    /* [vector.modifiers]: the range is half-open, so last is not itself
+     * erased, and the result is an iterator to the element that followed it.
+     * Each single erase shifts the tail down, so erasing at first that many
+     * times removes exactly the range. */
+    size_type n = last - first;
+    for (size_type i = 0; i < n; i++)
+      erase(first);
+    return first;
   }
 
   void swap(vector &v1)
@@ -973,14 +981,36 @@ public:
     return (!(*this == rhv));
   }
 
-  bool operator>=(const vector &rhv)
+  /* [container.requirements]: the ordering is the lexicographical comparison
+   * of the two ranges, so the first differing element decides it and the
+   * lengths matter only when one range is a prefix of the other. Comparing
+   * sizes instead made {2} < {1,3}. */
+  bool operator<(const vector &rhv) const
   {
-    return ((*this == rhv) || (this->size() > rhv.size()));
+    size_type n = this->size() < rhv.size() ? this->size() : rhv.size();
+    for (size_type i = 0; i < n; i++)
+    {
+      if ((*this)[i] < rhv[i])
+        return true;
+      if (rhv[i] < (*this)[i])
+        return false;
+    }
+    return this->size() < rhv.size();
   }
 
-  bool operator<=(const vector &rhv)
+  bool operator>(const vector &rhv) const
   {
-    return ((*this == rhv) || (this->size() < rhv.size()));
+    return rhv < *this;
+  }
+
+  bool operator>=(const vector &rhv) const
+  {
+    return !(*this < rhv);
+  }
+
+  bool operator<=(const vector &rhv) const
+  {
+    return !(rhv < *this);
   }
 
 private:

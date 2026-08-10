@@ -6,6 +6,7 @@
 #include <util/symtab/namespace.h>
 #include <util/symtab/context.h>
 #include <util/symtab/symbol.h>
+#include <util/symtab/base_subobject.h>
 #include <util/irep/migrate.h>
 #include <util/expr/expr_util.h>
 #include <util/irep/std_types.h>
@@ -1008,7 +1009,7 @@ private:
     if (!is_struct_type(st))
       return std::nullopt;
     const struct_type2t &s = to_struct_type(st);
-    const std::string want = "@base@" + id2string(target_tag);
+    const std::string want = base_subobject_name(id2string(target_tag));
     for (const irep_idt &m : s.member_names)
       if (m.as_string() == want)
         return member_offset(st, m, &ns);

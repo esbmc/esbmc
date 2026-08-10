@@ -233,6 +233,44 @@ pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops)
 }
 } // namespace
 
+// clang_c_adjust::adjust_float_arith rewrites +,-,*,/ over a float type to
+// ieee_add/sub/mul/div and attaches the rounding mode
+// (clang_c_adjust_expr.cpp:656-697); migrate_expr then builds the ieee_*2t
+// node. Nothing in this adjuster did that, so under --python-irep2-adjust-only
+// a float `+` stayed a plain add2t and tripped simplify_arith_2ops'
+// assert(!is_floatbv_type(type)) -- "this should be handled by ieee_*"
+// (scope-coupled-arith-assign-conversion.md §17).
+//
+// Returns @p expr unchanged for every other shape, which is what makes this
+// inert on the default pipeline: clang_c_adjust has already promoted every
+// float arithmetic node, so nothing here matches. Vectors are excluded
+// deliberately -- the legacy pass returns before attaching a rounding mode for
+// them ("BUG: setting rounding_mode breaks migration") and the Python frontend
+// emits no vector arithmetic.
+//
+// Operand surgery: the operands are reused as they stand, never round-tripped
+// through migrate_expr_back, which would revert a resolved member2t/index2t
+// source to a by-name symbol_type2t.
+static expr2tc promote_to_ieee(const expr2tc &expr)
+{
+  if (!is_floatbv_type(expr->type))
+    return expr;
+
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  const type2tc &t = expr->type;
+
+  if (is_add2t(expr))
+    return ieee_add2tc(t, to_add2t(expr).side_1, to_add2t(expr).side_2, rm);
+  if (is_sub2t(expr))
+    return ieee_sub2tc(t, to_sub2t(expr).side_1, to_sub2t(expr).side_2, rm);
+  if (is_mul2t(expr))
+    return ieee_mul2tc(t, to_mul2t(expr).side_1, to_mul2t(expr).side_2, rm);
+  if (is_div2t(expr))
+    return ieee_div2tc(t, to_div2t(expr).side_1, to_div2t(expr).side_2, rm);
+
+  return expr;
+}
+
 void python_adjust::adjust_expr(expr2tc &expr)
 {
   if (is_nil_expr(expr))
@@ -265,6 +303,8 @@ void python_adjust::adjust_expr(expr2tc &expr)
   // mutates each operand in place, so an inner member2t rebuilt below updates
   // the outer member2t's source before we read its type.
   expr->Foreach_operand([this](expr2tc &op) { adjust_expr(op); });
+
+  expr = promote_to_ieee(expr);
 
   // Resolve a transient symbol_type2t member/index source to its followed
   // aggregate, re-establishing the strong source invariant before symex sees

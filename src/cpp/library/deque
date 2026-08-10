@@ -3,6 +3,9 @@
 
 #include "iterator"
 #include "stdexcept"
+#if __cplusplus >= 201103L
+#  include <initializer_list>
+#endif
 
 #define DEQUE_CAPACITY 500
 
@@ -435,6 +438,14 @@ public:
     _size = 0;
     _capacity = 1;
   }
+
+#if __cplusplus >= 201103L
+  deque(std::initializer_list<T> init) : _size(0), _capacity(1)
+  {
+    for (const T *it = init.begin(); it != init.end(); ++it)
+      this->push_back(*it);
+  }
+#endif
 
   ~deque()
   {
