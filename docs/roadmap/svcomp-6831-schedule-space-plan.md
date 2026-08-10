@@ -2,12 +2,13 @@
 
 **Status:** W0, W2 and W1.1 shipped; `--state-hashing` was **unsound** and is
 fixed (see W2); `--sleep-sets` is new, off by default, and sound on the paths
-it is allowed to run on (see W1.1). W3, W4 not started.
+it is allowed to run on (see W1.1). W4 is investigated and re-scoped from a
+wrapper change to a code change (see W4). W3 not started.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 1 —
 schedule-space explosion*, 291 of 489 lost SV-COMP tasks.
 **Bisected to:** `bac652b13c` — `[goto-symex] Track main-thread termination per
 state, not per search` (#6607), which fixes #4584.
-**Last updated:** 2026-08-09.
+**Last updated:** 2026-08-10.
 
 **Measurement environment.** All numbers below were measured on an x86_64 Linux
 host against `build/src/esbmc/esbmc`, ESBMC 8.4.0, built from `19db2adc96`
@@ -438,24 +439,77 @@ the constant is where 74 % of the time is.
 **Exit:** measurable wall-time reduction on `01_malloc_20` at an unchanged
 schedule count and unchanged verdicts.
 
-### W4 — Bound the schedule space in the SV-COMP strategy
+### W4 — Bound the schedule space in the SV-COMP strategy — **investigated, not a flag flip**
 
 §2.2 shows the wrapper's own configuration cannot enumerate this reproducer at
 all. `--incremental-context-bound` exists (`options.cpp:553`, "stops at the
 first violation or once a round has covered every interleaving") and the
 wrapper does not use it.
 
-Proposal: for the concurrency categories, explore shallow schedules first and
-deepen while the budget lasts, so a task that currently times out with no answer
-instead answers at the largest bound it can afford. **Soundness constraint that
-must be honoured:** a `true` verdict may only be emitted when a round has
-provably covered every interleaving — a `true` from an exhausted-budget bound is
-an unsound claim and must be reported `unknown`. Verify this against the
-existing implementation before proposing any wrapper change; if the flag does
-not already guarantee it, W4 becomes a code change, not a configuration change.
+The proposal was: for the concurrency categories, explore shallow schedules
+first and deepen while the budget lasts, so a task that currently times out with
+no answer instead answers at the largest bound it can afford. Three findings
+change its shape. It is not a wrapper configuration change, and it is not free.
 
-**Exit:** a measured score delta on the affected categories, and an explicit
-argument for why no `true` is emitted without exhaustive coverage.
+**The soundness constraint is already honoured — this half needs no work.**
+`do_context_bound_deepening` (`bmc_strategy.cpp:525`) sets
+`suppress-bounded-success` and emits SUCCESSFUL only when `!cs_bound_pruned`,
+i.e. only after a round the bound did not truncate; otherwise it reports
+VERIFICATION UNKNOWN. A violation at any bound is genuine, each round being an
+under-approximation. The oracle is complete: `get_CS_bound()` has exactly one
+consumer, `check_if_ileaves_blocked` (`execution_state.cpp:493`), which sets the
+flag (`:502`) guarded on a switch actually being available, so a terminal state
+does not read as truncated; the flag is per-`reachability_treet` and each round
+builds a fresh `bmct`, so it does not leak across rounds. What "covered every
+interleaving" does *not* cover is `--unwind` — a SUCCESSFUL is still bounded by
+the unwind bound in the ordinary BMC sense, which the log line is careful about
+("not bounded by it", the context bound).
+
+**The wrapper cannot adopt the flag: it collides with unwind deepening.**
+`--incremental-context-bound` is rejected in combination with `--incremental-bmc`
+(`driver.cpp:218`, #6480 — only one driver may own the outer loop), and the
+wrapper sends *every* concurrency task through `--incremental-bmc`
+(`esbmc-wrapper.py:315`). So W4 is a code change after all, but not for the
+reason anticipated above: not a soundness gap, but that the two deepening
+loops do not compose. Designing that composition is the remaining W4 work.
+
+**It buys answers on unsafe tasks and loses them on safe ones.** All 40 CORE
+unsafe concurrent tests in `esbmc-unix`/`esbmc-unix2`, each run twice with its
+own flags minus any `--context-bound`, 120 s cap:
+
+| | direct (unbounded) | `--incremental-context-bound` |
+|---|---|---|
+| identical, ~1 s both | 37 | 37 |
+| `00_rwlock2` | 3 s | 1 s |
+| `00_atomicity07` | 13 s | 2 s |
+| `00_rwlock4` | **no verdict in 120 s** | **FAILED, 1 s** |
+
+No verdict changed. `00_rwlock4` is the #6480 shape and the SV-COMP shape — a
+violation needing few switches, stranded deep in unbounded DFS order;
+reconfirmed standalone under `--no-por`, where the direct run produced no
+verdict in over 130 s and deepening found it at bound 2 in 0.97 s.
+
+The safe side is the opposite, and the cost is not merely wall-clock. On
+`01_malloc_19` (`--no-unwinding-assertions --unwind 3 --force-malloc-success
+--memory-leak-check`) deepening converges at bound 10 on the same 1871 schedules
+the direct run explores, but re-explores every prefix nine times to get there:
+~11,470 schedules cumulative, 86.3 s against 12.3 s — **7×** for an identical
+verdict. Under a time cap that turns into lost verdicts rather than slow ones: a
+sweep over the 146 CORE safe concurrent tests is in progress, and the first 9
+already contain two (`00_race27` 23 s, `00_rwlock1` 19 s) that go **SUCCESSFUL →
+TIMEOUT** at a 60 s cap. Treat that ratio as a signal and not a rate until the
+sweep finishes — sizing a claim off 9 of 146 is the §2.1 mistake.
+
+So the trade is real in both directions: deepening converts a stranded
+falsification into an answer, and converts a mid-cost proof into a timeout.
+A wrapper that simply switched it on would trade correct `true`s for `unknown`s.
+That is an argument for an adaptive composition — deepen the context bound for
+falsification while leaving an unbounded exhaustive attempt able to finish — not
+for a flag.
+
+**Exit:** unchanged — a measured score delta on the affected categories, plus
+the argument for why no `true` is emitted without exhaustive coverage (the
+second half is now discharged above). The composition design is the open work.
 
 ---
 
