@@ -2118,6 +2118,29 @@ static std::optional<nlohmann::json> materialize_numpy_constructor_array(
   return std::nullopt;
 }
 
+// True when call_node's attribute name is one materialize_numpy_constructor_
+// array() knows about, regardless of whether materialization actually
+// succeeded. Callers use this to tell "not a constructor call at all" (safe
+// to fall back to args[0] for the pre-existing np.array(<literal>) shape)
+// apart from "a recognized constructor call materialization declined on"
+// (e.g. a dtype= keyword, a non-constant fill) -- the latter must not fall
+// back to args[0] either, since that is exactly the shape/size argument
+// this whole helper exists to stop misreading as array data.
+static bool is_numpy_constructor_call_by_name(const nlohmann::json &call_node)
+{
+  if (
+    !call_node.is_object() ||
+    call_node.value("_type", std::string()) != "Call" ||
+    !call_node.contains("func") || !call_node["func"].is_object() ||
+    call_node["func"].value("_type", std::string()) != "Attribute" ||
+    !call_node["func"].contains("attr"))
+    return false;
+
+  static const std::set<std::string> constructors = {
+    "zeros", "ones", "full", "eye", "identity", "linspace", "arange"};
+  return constructors.count(call_node["func"]["attr"].get<std::string>()) != 0;
+}
+
 // full()/eye()/identity()/linspace() are declared through to_list_expr in
 // the real creation path (see array_creation_funcs and its neighbours),
 // which forces a dynamic PyListObj representation instead of a plain
@@ -2805,6 +2828,8 @@ exprt numpy_call_expr::create_expr_from_call()
           std::optional<nlohmann::json> materialized =
             materialize_numpy_constructor_array(var["value"], converter_.ast()))
           var = std::move(*materialized);
+        else if (is_numpy_constructor_call_by_name(var["value"]))
+          var = var["value"];
         else if (var["value"].contains("args") && !var["value"]["args"].empty())
           var = var["value"]["args"][0];
         else
@@ -5032,6 +5057,11 @@ exprt numpy_call_expr::get()
             var = std::move(*materialized);
             return;
           }
+          if (is_numpy_constructor_call_by_name(var["value"]))
+          {
+            var = var["value"];
+            return;
+          }
           if (var["value"].contains("args") && !var["value"]["args"].empty())
             var = var["value"]["args"][0];
           else
@@ -5183,6 +5213,8 @@ exprt numpy_call_expr::get()
               materialize_numpy_constructor_array(
                 var["value"], converter_.ast()))
             var = std::move(*materialized);
+          else if (is_numpy_constructor_call_by_name(var["value"]))
+            var = var["value"];
           else if (
             var["value"].contains("args") && !var["value"]["args"].empty())
             var = var["value"]["args"][0];
@@ -5932,6 +5964,8 @@ exprt numpy_call_expr::get()
           std::optional<nlohmann::json> materialized =
             materialize_numpy_constructor_array(var["value"], converter_.ast()))
           var = std::move(*materialized);
+        else if (is_numpy_constructor_call_by_name(var["value"]))
+          var = var["value"];
         else if (var["value"].contains("args") && !var["value"]["args"].empty())
           var = var["value"]["args"][0];
         else
