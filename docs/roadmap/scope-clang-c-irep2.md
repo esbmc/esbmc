@@ -1042,3 +1042,67 @@ index arm (#6907), C.4b withdrawn (§25), shape 2 sized (§27). Flag decision ha
 settled (§29): `#implicit` is not a blocker. Next is the other half --
 `adjust_side_effect_function_call`'s `cmt_*` uses and `adjust_dereference`.
 
+## 31. Correction to §29: `#implicit` has two readers, and the second is needed
+
+§29 stated that `#implicit` "has exactly one reader" and concluded it is not a
+shape-2 blocker. The census behind that was incomplete. There are **two**:
+
+| site | what it does |
+|---|---|
+| `adjust_address_of:840` | collapses `&(&f)` for a function designator |
+| `adjust_side_effect_function_call:1159` | "do implicit dereference" -- strips the sugar `address_of` off a call's function operand |
+
+§29's probe dropped the first and measured no divergence. That result stands
+for what it tested: reader 1 is redundant. It says nothing about reader 2, which
+the probe left in place.
+
+### 31.1 Why the second reader is not redundant
+
+```cpp
+if (f_op.is_address_of() && f_op.implicit() && (f_op.operands().size() == 1))
+{ /* strip the address_of: call f directly */ }
+else if (f_op.type().is_pointer())
+{ /* wrap in an implicit dereference */ }
+```
+
+Here the flag separates two cases that are **both reachable from valid C**:
+
+- `f(x)` -- `adjust_symbol` rewrote `f` to an implicit `&f`, which this strips;
+- `(&f)(x)` -- the user wrote the address-of explicitly, which is legal, and
+  which must take the second branch.
+
+Unlike §29's case, the distinguished alternative is writable. The shape is
+identical; only the provenance differs, and provenance is exactly what the flag
+records.
+
+### 31.2 Corrected conclusion
+
+`#implicit` **is** load-bearing, and shape 2 needs it represented -- or
+`adjust_side_effect_function_call` and `adjust_symbol` stay legacy. §29.2's
+"corrected count" of 2 gated arms is withdrawn; it returns to **4**, as §27.2
+had it.
+
+The `cmt_*` uses at `:1089-1090` are a separate blocker of the same kind:
+`cmt_identifier`/`cmt_base_name` attach parameter identity to an *argument
+expression*, and IREP2 has no per-expression comment slot at all.
+
+### 31.3 The recurring error
+
+This is the second overclaim in this phase with the same cause -- §11's
+"read-only" and now §29's "one reader" -- and both times the fix was a census I
+had not run. The pattern is: I checked the site I was looking at and inferred a
+property of the whole. For a flag, the property that matters is over **all**
+readers, and `grep` gives it in seconds.
+
+Rule for the remaining flag work: **enumerate every reader before reasoning
+about a flag, and quote the list.** A claim of redundancy is a claim about a
+set, not about a site.
+
+## 32. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), C.4b withdrawn (§25), shape 2 sized (§27), §29 corrected
+here. Four arms remain gated on flag representation; the decision §27.2 asked
+for is still open, and is now known to be a real IR question rather than a
+census artefact.
+
