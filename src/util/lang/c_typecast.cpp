@@ -969,6 +969,13 @@ void c_typecastt::do_typecast(expr2tc &dest, const type2tc &type)
 
   if (dest_type != type)
   {
+    // Fold a typecast of a constant, as the irept overload above does. Without
+    // this the two copies disagree on the commonest conversion a frontend
+    // performs -- storing a literal into a differently-typed lvalue leaves an
+    // unfolded typecast here but a folded constant there.
+    const bool fold = is_constant(dest) && !no_simplify;
     dest = typecast2tc(type, dest);
+    if (fold)
+      simplify(dest);
   }
 }
