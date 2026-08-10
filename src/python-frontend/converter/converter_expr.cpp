@@ -458,6 +458,15 @@ exprt python_converter::get_named_expr(const nlohmann::json &element)
 
   return get_expr(target);
 }
+/// Node kinds whose value an attribute access may be applied to directly, as
+/// opposed to a plain name. Each converts to an object that
+/// resolve_member_on_base can look a member up on.
+static bool is_attribute_base_expression(const nlohmann::json &node_type)
+{
+  return node_type == "Subscript" || node_type == "Call" ||
+         node_type == "BinOp" || node_type == "UnaryOp";
+}
+
 
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
@@ -856,9 +865,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       {
         var_name = element["value"]["id"].get<std::string>();
       }
-      else if (element["value"]["_type"] == "Subscript")
+      else if (is_attribute_base_expression(element["value"]["_type"]))
       {
-        // Attribute access on a subscript result, e.g. `d[key].attr`.
+        // Attribute access on the value an expression produces rather than on
+        // a name: `d[key].attr`, `C().attr`, `(a + b).attr`, `(-a).attr`. A
+        // named instance (`c = a + b; c.attr`) already works; this covers the
+        // unnamed case for every receiver we can convert to an object.
         exprt base_expr = get_expr(element["value"]);
         const std::string &attr_name = element["attr"].get<std::string>();
 
@@ -870,26 +882,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
 
         throw std::runtime_error(fmt::format(
-          "Cannot resolve attribute '{}' on subscript result", attr_name));
-      }
-      else if (element["value"]["_type"] == "Call")
-      {
-        // Attribute access on an inline call result, e.g. `C().attr`. Convert
-        // the call to its (materialised) instance and resolve the member on
-        // it, the same way `d[k].attr` is handled above. A named instance
-        // (`c = C(); c.attr`) already works; this covers the unnamed case.
-        exprt base_expr = get_expr(element["value"]);
-        const std::string &attr_name = element["attr"].get<std::string>();
-
-        exprt resolved = resolve_member_on_base(base_expr, attr_name);
-        if (!resolved.is_nil())
-        {
-          expr = resolved;
-          break;
-        }
-
-        throw std::runtime_error(fmt::format(
-          "Cannot resolve attribute '{}' on call result", attr_name));
+          "Cannot resolve attribute '{}' on {} result",
+          attr_name,
+          element["value"]["_type"].get<std::string>()));
       }
       else
       {
