@@ -1411,3 +1411,48 @@ index arm (#6907), address_of bit (#6912). §39 corrected here. Next:
 relax `member2t` with the `pointer_id` disjunct and re-run #6907's withdrawn
 sibling, which is now a one-line change plus the arm already written.
 
+## 43. `adjust_member` shipped (#6921): §41's remedy, applied
+
+§41 predicted the withdrawal in §39 was a one-line relaxation rather than a
+wall. It was two lines, and the measurement shows why both were needed:
+
+| | A/B divergences |
+|---|---|
+| arm handed over, invariant untouched (§39) | 191 |
+| + `pointer_id` disjunct | 6 |
+| + `array_id` disjunct | **2** (`github_746`, unstable against itself) |
+
+`adjust_member` has two branches -- a pointer base becomes
+`member(dereference(base))`, an array base becomes `member(index(base, 0))` --
+so both are transient states its own input can be in. §41's work list named the
+pointer case from `index2t`'s precedent; the array case only surfaced when the
+second A/B still aborted, on the same assertion with a different type id.
+
+**Lesson for the remaining relaxations:** the disjuncts an invariant needs are
+one per *branch* of the arm that establishes it, not one per arm. Reading the
+arm tells you the list without measuring; §41.3's work list should be re-derived
+that way for `if2t` and `constant_array2t` before those arms are attempted.
+
+Dropping the dereference changes 187 tests, so the arm is live -- and 187 is
+also the size of the class §39 mistook for a wall.
+
+### 43.1 Where shape 1 now stands
+
+| arm | outcome |
+|---|---|
+| `adjust_index` | shipped (#6907) |
+| `adjust_member` | shipped (#6921) |
+| `adjust_float_arith` | withdrawn -- path-dependent (§25), only shape 2 fixes it |
+| `adjust_expr_shifts` | blocked -- `shr` has no IREP2 kind (§23) |
+
+Two of four attempted arms now ship, and the two failures have distinct,
+understood causes. That is a better rate than §25.3 feared and does not need
+shape 2 to continue.
+
+## 44. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921). Next: derive the
+disjunct list for `if2t` and `constant_array2t` from their arms (§43), then take
+`adjust_if` or `adjust_struct`.
+
