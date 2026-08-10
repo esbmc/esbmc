@@ -2,8 +2,10 @@
 
 **Status:** W0, W2 and W1.1 shipped; `--state-hashing` was **unsound** and is
 fixed (see W2); `--sleep-sets` is new, off by default, and sound on the paths
-it is allowed to run on (see W1.1). W4 is investigated and re-scoped from a
-wrapper change to a code change (see W4). W3 not started.
+it is allowed to run on (see W1.1). W3 and W4 are investigated, and both turn
+out to be about existing machinery rather than new: W3's exit is already
+discharged by `--smt-during-symex`, and W4 is re-scoped from a wrapper change to
+a code change.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 1 —
 schedule-space explosion*, 291 of 489 lost SV-COMP tasks.
 **Bisected to:** `bac652b13c` — `[goto-symex] Track main-thread termination per
@@ -18,12 +20,14 @@ treat the ratios as indicative and the orderings as reliable, not the absolute
 seconds. Reproducer: `regression/esbmc-unix/01_malloc_20`, the same one the
 issue's bisect used.
 
-`master` has since advanced to `8ffb84b24d`, which includes #6793
-(`malloc(0)` may now return NULL or a freeable object). That commit is *not* in
-the measurement binary and it touches allocation modelling in a reproducer
-named `01_malloc_20` — re-measure §2 against current `master` before acting on
-the absolute numbers. The relative standings (MPOR prunes, hashing does not;
-symex dominates the solver) are not expected to move.
+`master` has since advanced past `8ffb84b24d`, which includes #6793
+(`malloc(0)` may now return NULL or a freeable object) and touches allocation
+modelling in a reproducer named `01_malloc_20`, so §2 was flagged for
+re-measurement before its absolute numbers were acted on. **Done — §2.3 is
+re-measured below and the standings hold.** Every phase came in 8–10 % faster
+with the call counts (940/940/779/779) and the reduction counters
+(940 schedules, 296 MPOR, 0 hash) byte-identical, so the ratios §2.3 rests on
+are unchanged.
 
 ---
 
@@ -96,15 +100,16 @@ not merely large; without a context bound it is not enumerable at all here.
 
 ### 2.3 Where the time goes
 
-Summed over the 940 completed formulas of the bounded baseline run:
+Summed over the 940 completed formulas of the bounded baseline run, as first
+measured and as re-measured on current `master` (2026-08-10):
 
-| phase | calls | total |
-|---|---|---|
-| symex | 940 | **16.815 s** |
-| slicing | 940 | 0.813 s |
-| encoding to solver | 779 | 1.590 s |
-| decision procedure | 779 | **1.753 s** |
-| BMC program time | 940 | 22.710 s |
+| phase | calls | total | re-measured |
+|---|---|---|---|
+| symex | 940 | **16.815 s** | **15.408 s** |
+| slicing | 940 | 0.813 s | 0.699 s |
+| encoding to solver | 779 | 1.590 s | 1.387 s |
+| decision procedure | 779 | **1.753 s** | **1.603 s** |
+| BMC program time | 940 | 22.710 s | 20.457 s |
 
 **Symex outweighs the solver by ~10×.** 290,165 VCCs are generated across the
 940 schedules; a single schedule generates 376. This is a schedule-enumeration
@@ -436,8 +441,58 @@ machinery for); and not re-slicing the prefix. This is lever B and is
 independent of W1/W2 — it reduces the constant, not the exponent, but §2.3 says
 the constant is where 74 % of the time is.
 
-**Exit:** measurable wall-time reduction on `01_malloc_20` at an unchanged
-schedule count and unchanged verdicts.
+#### W3.1 — The first item is already built: `--smt-during-symex`
+
+`dfs_execution_statet::clone()` (`execution_state.cpp:1589`) deep-copies the
+whole target equation at every DFS node — which is why each of the 940 formulas
+carries the full trace rather than its suffix (mean 451 SSA assignments, 424,349
+across the run, for a program whose single schedule is ~451). Except under
+`--smt-during-symex`, where it keeps one shared equation and calls
+`push_ctx()` / `pop_ctx()` instead, and `bmc.cpp:2207` stops rebuilding the
+solver per interleaving. That *is* "push/pop over the shared prefix".
+
+On `01_malloc_20` with its own flags, three runs each, the schedule count,
+counters and verdict identical (940 / 296 MPOR / 0 hash / SUCCESSFUL):
+
+| | baseline | `--smt-during-symex` |
+|---|---|---|
+| wall | 21.25, 23.62, 21.44 s | 19.20, 19.12, 20.04 s |
+| encoding to solver | 1.387 s | **0.398 s** |
+| decision procedure | 1.603 s | **1.095 s** |
+| symex | 15.408 s | 15.603 s |
+
+~12 %, with the ranges disjoint. The saving lands exactly where the shared
+prefix predicts — encoding −71 %, solving −32 % — and symex is untouched, as it
+must be when the same 940 schedules are still enumerated.
+
+**So W3's stated exit is already discharged by an existing flag**, which the
+SV-COMP wrapper does not pass (275 regression tests do). It also generalises,
+which `01_malloc_20` alone could not have shown — the §2.1 mistake. Every CORE
+test in `esbmc-unix`/`esbmc-unix2` that calls `pthread_create`, 346 of them, run
+twice with its own flags, 120 s cap, 4-way parallel:
+
+- **No verdict changed** on the 329 whose rows survived (194 FAILED, 132
+  SUCCESSFUL, 2 no-answer both ways). The single apparent disagreement,
+  `pthread_cleanup8_fail`, already passes `--smt-during-symex` in its own
+  `test.desc`, so the sweep passed it twice and ESBMC rejected the duplicate.
+- **Schedule counts identical on all 323** that report one — as they must be:
+  the flag changes how a schedule is encoded, never which are explored. That is
+  the cheap check that this is not a reduction in disguise.
+- Wall over the 326 answered both ways: 526 s → 455 s, **−13.5 %**, matching
+  `01_malloc_20`'s −12 %.
+
+Two methodology caveats: the sweep ran 4-way parallel, so treat −13.5 % as the
+ratio rather than a per-test time; and 17 of the 346 rows were torn by
+concurrent writes and dropped rather than rerun.
+
+The more important consequence is what it leaves: with encoding and solving
+largely removed, symex is **87 %** of BMC time rather than 75 %. The remaining
+W3 lever is not the solver at all but the per-node equation deep-copy above and
+the re-slicing of a prefix that did not change.
+
+**Exit:** ~~measurable wall-time reduction on `01_malloc_20`~~ — discharged by
+W3.1. Restated: a wall-time reduction across the concurrent CORE corpus, not one
+reproducer, at unchanged schedule counts and verdicts.
 
 ### W4 — Bound the schedule space in the SV-COMP strategy — **investigated, not a flag flip**
 
