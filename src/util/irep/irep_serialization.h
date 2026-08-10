@@ -1,7 +1,7 @@
 #ifndef IREP_SERIALIZATION_H_
 #define IREP_SERIALIZATION_H_
 
-#include <map>
+#include <vector>
 #include <util/irep/irep.h>
 
 void write_long(std::ostream &, unsigned);
@@ -50,7 +50,10 @@ public:
   class ireps_containert
   {
   public:
-    typedef std::map<unsigned, irept> irepts_on_readt;
+    /* Ids are handed out densely and in increasing order on the write side
+     * (reference_convert() uses ireps_on_write.size()), so the read table is
+     * indexed by a dense array index, not a sparse key. */
+    typedef std::vector<irept> irepts_on_readt;
     irepts_on_readt ireps_on_read;
 
     typedef std::unordered_map<irept, unsigned, irep_full_hash, irep_full_eq>

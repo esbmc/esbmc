@@ -149,6 +149,43 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
   }
 }
 
+// The IREP2 counterpart of stamp_value_locations. Value-level IREP2 carries no
+// source location with one exception: if2t has a `location` field, and
+// migrate_expr/migrate_expr_back both preserve it (migrate.cpp). So a ternary
+// is the one value operand on which the round-trip's restore_value_locations
+// stamping *survives* into the stored code -- which is why a natively emitted
+// statement has to reproduce it, or the two paths differ on any body containing
+// one (e.g. the correction term Python floor division lowers to).
+static void stamp_if_locations(expr2tc &expr, const locationt &loc)
+{
+  if (is_nil_expr(expr))
+    return;
+
+  if (is_if2t(expr))
+  {
+    if2t &ref = to_if2t(expr);
+    if (ref.location.is_nil() || ref.location.get_file().empty())
+      ref.location = loc;
+  }
+
+  expr.get()->Foreach_operand(
+    [&loc](expr2tc &op) { stamp_if_locations(op, loc); });
+}
+
+// `code2` as the legacy path would have stored it: same node, except that any
+// ternary the round-trip would have had restore_value_locations stamp carries
+// `here`. Mirrors that helper's guard -- with no usable location it stamps
+// nothing rather than writing an empty one.
+static expr2tc with_if_locations(const expr2tc &code2, const locationt &here)
+{
+  if (here.get_file().empty())
+    return code2;
+
+  expr2tc stamped = code2;
+  stamp_if_locations(stamped, here);
+  return stamped;
+}
+
 // The location restore_value_locations would propagate into `code`'s value
 // operands: the statement's own when it has one, otherwise whatever the
 // enclosing statement passed down. An empty result means that helper's
@@ -407,13 +444,13 @@ bool goto_convert_functionst::convert_native_rec(
       return delegate_to_legacy();
 
     // For side-effect-free operands the instruction convert_assign emits is
-    // migrate_expr(code_assignt(lhs, rhs)) located at the statement — which
-    // round-trips back to `code2` itself (migrate_expr drops the operand
-    // locations, so none of restore_value_locations' stamping survives in the
-    // stored code). Emit it directly, no round-trip, carrying the statement's
-    // own location, exactly as copy(new_assign, ASSIGN) would.
+    // migrate_expr(code_assignt(lhs, rhs)) located at the statement, which
+    // round-trips back to `code2` itself for every value operand except a
+    // ternary — if2t's location field survives the round trip, so legacy keeps
+    // what restore_value_locations stamped there and we must stamp it too.
     goto_programt::targett t = dest.add_instruction(ASSIGN);
-    t->code = code2;
+    t->code =
+      with_if_locations(code2, effective_location(assign.location, inherited));
     t->location = assign.location;
     return true;
   }
@@ -497,7 +534,8 @@ bool goto_convert_functionst::convert_native_rec(
       return false;
 
     goto_programt::targett t = dest.add_instruction(OTHER);
-    t->code = code2;
+    t->code = with_if_locations(
+      code2, effective_location(expr_stmt.location, inherited));
     t->location = expr_stmt.location;
     return true;
   }
@@ -638,13 +676,15 @@ bool goto_convert_functionst::convert_native_rec(
       // convert_return replaces a missing value with nondet
       if (val.is_nil())
         return delegate_to_legacy();
-      // The RETURN instruction convert_return emits is migrate_expr(code_returnt)
-      // located at the statement; migrate_expr drops the value-operand location
-      // restore_value_locations stamped, so it round-trips to code2 itself. Emit
-      // it directly, exactly as the assign/expression handlers do.
+      // The RETURN instruction convert_return emits is
+      // migrate_expr(code_returnt) located at the statement; migrate_expr drops
+      // every value-operand location restore_value_locations stamped except a
+      // ternary's, so with_if_locations is what makes this round-trip to code2
+      // itself. Emit it directly, exactly as the assign/expression handlers do.
       goto_programt::targett r = dest.add_instruction();
       r->make_return();
-      r->code = code2;
+      r->code =
+        with_if_locations(code2, effective_location(ret.location, inherited));
       r->location = emitted_location(ret.location);
     }
     else if (val.is_not_nil() && val.type().id() != "empty")
@@ -1366,7 +1406,8 @@ bool goto_convert_functionst::convert_native_rec(
       return delegate_to_legacy();
 
     goto_programt::targett t = dest.add_instruction();
-    t->make_function_call(code2);
+    t->make_function_call(
+      with_if_locations(code2, effective_location(f.location, inherited)));
     t->location = f.location;
     return true;
   }
