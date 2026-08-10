@@ -1223,3 +1223,49 @@ unblocked by shape 2 itself, 4 discharged by one bit on `address_of2t`.**
 
 Next: add the bit, with the two migrate arms and a corpus A/B, then begin the 18.
 
+## 37. The bit is in (#6912)
+
+`address_of2t` now carries `implicit`, defaulted false, in its `fields` tuple
+and in both migrate directions. Nothing sets it from the IREP2 side yet -- this
+is the representation §35.3 decided on, not a user of it.
+
+### 37.1 The check that mattered
+
+Adding a field to the `fields` tuple changes every `address_of` node's hash and
+its comparison. Given §13 -- where a hash-ordered container permuted the GOTO
+dump -- that is the risk worth measuring, not the field itself.
+
+A/B over `regression/esbmc`: **2 divergences, both `github_746`**, which differs
+against itself. 668/668 unit tests.
+
+### 37.2 A constructor assertion worth noting
+
+```cpp
+assert(ptrobj->expr_id != expr2t::address_of_id);
+```
+
+IREP2 cannot represent a nested `address_of` at all. That independently
+corroborates §29: the reader at `:840`, which exists to collapse `&(&f)`, is
+looking for a shape that cannot survive into IREP2 -- so its redundancy is not
+merely a corpus observation. The live reader is `:1159`, whose shape
+(`address_of(symbol)`) is perfectly representable, which is why the bit is
+needed at all.
+
+### 37.3 Three pre-existing failures found on the way
+
+Running the C++ suite further than earlier runs had reached surfaced
+`github_2242_1`, `github_2242_2` and `github_3897_collision`. All three fail on
+**master**, so they are unrelated to this stack. Also `regression/esbmc/github_2572_2`
+fails on master (`--ir-ieee`, `assertion 0*f==0`). Recorded, not fixed: none is
+this phase's work, and quietly fixing them would mix concerns.
+
+## 38. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912). Shape 2's blockers are discharged:
+**18 arms clean, 9 unblocked by shape 2 itself, 4 unblocked by the bit.**
+
+Next is the first shape-2 step: give `clang_c_adjust_irep2` the dispatch, so the
+9 path-dependent arms become addressable, starting with the arms already proven
+under shape 1.
+
