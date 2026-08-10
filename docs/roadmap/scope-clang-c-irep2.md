@@ -1701,3 +1701,62 @@ index arm (#6907), address_of bit (#6912), member arm (#6921). Three arms
 withdrawn on measurement (§25, §39 -- later shipped, §51). Next action is the
 §51.3 decision, not another arm.
 
+## 53. §51.3 decided: do not carry the attributes
+
+The choice was "either `migrate_type` carries the dropped type attributes, or
+the gate moves for arms of this shape". Priced:
+
+### 53.1 Nothing on the IREP2 side consumes them
+
+`alignment` is a named sub-irep, and its only consumer is
+
+```cpp
+BigInt alignment(const typet &type, const namespacet &ns)   // type_byte_size.cpp:472
+{
+  const exprt &given_alignment = static_cast<const exprt &>(type.find("alignment"));
+```
+
+-- a **legacy** `typet`. `type_byte_size`'s IREP2 overloads take `type2tc` and
+never look for it. (`object_descriptor2t::alignment` is a computed field on a
+descriptor, not a type attribute.) The wider attribute census across the
+frontends -- `#reference` 5, `#bitfield` 5, `#extint` 3, `#rvalue_reference` 2,
+and four singletons -- is likewise all legacy-side.
+
+So carrying them into `type2t` would add representation, hashing cost and
+comparison semantics for information **no IREP2 consumer reads**. That is
+disproportionate, and it is the wrong direction for a migration whose point is
+that IREP2 is the destination.
+
+### 53.2 The divergence class is provably vacuous
+
+The `aligned_attr` difference is a cast between two types of identical width and
+signedness. It changes no verdict; §51.1 already noted the IREP2 output is
+arguably the better one.
+
+### 53.3 Decision
+
+**Do not carry the attributes.** For an arm whose behaviour is conditioned on
+type *equality*, normalise structurally-vacuous casts out of both sides before
+diffing, and keep byte-identity everywhere else.
+
+One condition, or this becomes a way to hide real divergences: *vacuous* must be
+**verified per case** -- same width, same signedness, same kind -- not assumed
+because the test name mentions an attribute. A cast that changes width is never
+in this class.
+
+### 53.4 The cheaper next step
+
+Four of §49.3's six candidates call no type-comparing helper at all:
+`adjust_comma`, `adjust_expr_unary_boolean`, `adjust_reference`,
+`adjust_sizeof`. They need neither the relaxation of §43 nor the gate change of
+§53.3, and taking one of them makes progress without weakening anything --
+which is the better move before spending effort on a normaliser whose first user
+would be a single arm.
+
+## 54. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921). §51.3 decided
+(§53). Next: `adjust_comma` or `adjust_sizeof`, both untouched by the type-
+identity gap.
+
