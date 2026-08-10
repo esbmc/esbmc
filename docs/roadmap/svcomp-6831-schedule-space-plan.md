@@ -130,7 +130,9 @@ Two orthogonal levers, both open:
 - **B — make each schedule cheaper.** Each of the 940 schedules is symexed,
   sliced, encoded and solved as an independent formula. The DFS restores
   execution states on backtracking, but the per-formula pipeline downstream of
-  symex does not exploit the shared prefix.
+  symex does not exploit the shared prefix. **Closed by W3:** `--smt-during-symex`
+  already makes it exploit the prefix, for −13.5 %, and what remains under this
+  lever is ~5 % of the run. Lever A is the only one with headroom left.
 
 ---
 
@@ -486,13 +488,37 @@ ratio rather than a per-test time; and 17 of the 346 rows were torn by
 concurrent writes and dropped rather than rerun.
 
 The more important consequence is what it leaves: with encoding and solving
-largely removed, symex is **87 %** of BMC time rather than 75 %. The remaining
-W3 lever is not the solver at all but the per-node equation deep-copy above and
-the re-slicing of a prefix that did not change.
+largely removed, symex is **87 %** of BMC time rather than 75 %.
+
+#### W3.2 — Copying is not the lever either (measured, negative result)
+
+The obvious next suspect was the deep copy above: 940 formulas each carrying a
+full 451-assignment trace looks like an enormous amount of duplicated state.
+Timing both halves of `dfs_execution_statet::clone()` directly (temporary
+instrumentation, `01_malloc_20`, 22.78 s run, 1513 clones) says otherwise:
+
+| | total | share of run |
+|---|---|---|
+| `execution_statet` copy | 0.891 s | 3.9 % |
+| target-equation deep copy | 0.190 s | **0.8 %** |
+
+So eliminating the equation copy entirely — which is what `--smt-during-symex`
+already does — can only ever be worth 0.8 %, and the 12 % it actually delivers
+comes from the solver side, not the copy. Symex's 15.4 s is genuine symbolic
+execution of 940 suffixes, not bookkeeping around it.
+
+That closes lever B at the level the plan framed it. Making each schedule
+cheaper has roughly 5 % of the run left in it once `--smt-during-symex` is on;
+everything else is the schedule count itself, which is lever A. **W1 is
+therefore the only remaining lever with headroom**, and W3 should not be
+resourced further on the strength of §2.3's 74 % — that share is symex doing
+work, not repeating it.
 
 **Exit:** ~~measurable wall-time reduction on `01_malloc_20`~~ — discharged by
-W3.1. Restated: a wall-time reduction across the concurrent CORE corpus, not one
-reproducer, at unchanged schedule counts and verdicts.
+W3.1 across the concurrent CORE corpus at unchanged schedule counts and
+verdicts. W3.2 closes the workstream: what remains under lever B is ~5 % of the
+run, so the open decision is a wrapper one (does `--smt-during-symex` belong in
+the concurrency configuration?), not an implementation one.
 
 ### W4 — Bound the schedule space in the SV-COMP strategy — **investigated, not a flag flip**
 
