@@ -1106,3 +1106,56 @@ here. Four arms remain gated on flag representation; the decision §27.2 asked
 for is still open, and is now known to be a real IR question rather than a
 census artefact.
 
+## 33. The `#implicit` census, run properly
+
+§31.3 set the rule: enumerate every reader before reasoning about a flag, and
+quote the list. Done, over all of `src/`.
+
+### 33.1 Reads -- two, both on `address_of`
+
+| site | condition |
+|---|---|
+| `clang_c_adjust_expr.cpp:840` | `op.is_address_of() && op.implicit() && ...` |
+| `clang_c_adjust_expr.cpp:1159` | `f_op.is_address_of() && f_op.implicit() && ...` |
+
+### 33.2 Writes -- nine, by node kind
+
+| node kind written | sites |
+|---|---|
+| **`address_of`** | `clang_c_adjust_expr.cpp:360` (the function-designator sugar), `:846` (clears it), `:894` |
+| `dereference` | `c_typecast.cpp:670`, `clang_c_adjust_expr.cpp:1168`, `clang_cpp_adjust_expr.cpp:420`, `:439`, `clang_cpp_convert.cpp:2907`, `:2946` |
+
+### 33.3 What the census yields
+
+Both readers test `is_address_of()` first. **Every `#implicit` written on a
+`dereference` node is therefore never read** -- six of the nine writes are dead
+metadata, spanning `util`, the C adjuster, the C++ adjuster and the C++
+converter.
+
+So the requirement on IREP2 is far narrower than §31.2 implied. Shape 2 needs
+`#implicit` carried **only on `address_of`**, produced by essentially one writer
+(`:360`, the `&f` sugar; `:894` builds the same sugar for a code-typed
+dereference, `:846` clears it). One bit on `address_of2t` discharges both
+readers.
+
+That is a materially cheaper answer than "give the flags IREP2 representation"
+sounded in §27.2, and it is only visible from the full list -- from either
+reader alone the flag looks like a general property of expressions.
+
+### 33.4 Two follow-ups, both out of scope here
+
+- **The six dead writes** are a simplification candidate in their own right, and
+  the `dereference` ones in `clang_cpp_convert` sit on the C++ reference model,
+  so removing them needs the C++ suite rather than this phase's corpus.
+- **Whether `address_of2t` should gain a bit, or the provenance should be
+  recovered another way**, is still the open decision. The census bounds its
+  cost; it does not take it.
+
+## 34. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), C.4b withdrawn (§25), shape 2 sized (§27), §29 corrected in
+§31, `#implicit` censused here. Remaining for the flag decision:
+`adjust_side_effect_function_call`'s `cmt_identifier`/`cmt_base_name`, which
+attach parameter identity to argument expressions and have no IREP2 slot at all.
+
