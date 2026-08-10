@@ -275,6 +275,7 @@ if(APPLE)
                     llvm
                     floats
                     floats-regression
+                    fixedbv
                     ${REGRESSIONS_JIMPLE}
                     k-induction
                     k-induction-parallel
@@ -342,6 +343,7 @@ else()
                     llvm
                     floats
                     floats-regression
+                    fixedbv
                     k-induction
                     termination
                     csmith
