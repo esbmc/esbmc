@@ -716,3 +716,77 @@ C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901).
 C.4a specified above; the primitives are confirmed present and the traversal
 hazard is identified before rather than after the first attempt.
 
+## 21. C.4a done (#6907): the first arm, and three ways to get it wrong
+
+`adjust_index` is migrated. A/B over `regression/esbmc`: **2 divergences, both
+`github_746`**, which differs against itself without the flag. The dereference
+rewrite mutant moves 23 tests, so the arm is live.
+
+Getting there took three corrections, and all three are transferable.
+
+### 21.1 #6873 was a hard prerequisite, exactly as predicted
+
+§19.1 said migrating this arm on top of the unfixed `c_typecast` overload would
+diverge on every constant subscript. First A/B: **296** divergences, all of the
+form
+
+```
+< p[0]                        > p[(signed long int)0]
+```
+
+The branch was stacked off master, which does not contain #6873. Merging it:
+296 -> 11.
+
+A prediction recorded before the attempt, confirmed by the attempt, at the exact
+magnitude implied -- which is worth more than the fix, because it means the
+reasoning in §19.1 can be trusted for the next arm.
+
+### 21.2 `index_type2()` is not the IREP2 form of `index_type()`
+
+```cpp
+typet   index_type()  { return signed_size_type(); }
+type2tc index_type2() { return get_int_type(config.ansi_c.address_width); }
+```
+
+The `2` suffix in `c_types.h` marks *an IREP2 type constructor*, not *the IREP2
+counterpart of the same-named legacy one*. The arm uses
+`migrate_type(index_type())`.
+
+This one did not change the count, so it was not the cause of the residue -- but
+it is a live trap for every later arm, and the naming makes it invisible.
+
+### 21.3 The gate reached C++ and the replacement did not
+
+The residue after #6873 was 11, of which 9 were `.cpp` and 2 were the known
+`github_746` pair. Cause: `clang_cpp_adjust` **derives from** `clang_c_adjust`,
+so gating the rewrite on `config.options.get_bool_option(...)` inside the shared
+arm disabled it for C++ as well -- where the IREP2 pass, wired only into
+`clang_c_languaget::typecheck`, never runs. The adjustment was simply lost, and
+it presented as a missing `int`->`long` widening cast, which looks exactly like a
+migration defect.
+
+The hand-over is now `clang_c_adjust::set_irep2_owns_index()`, called by the C
+driver alone.
+
+**The general rule for C.4:** the arms live in a base class three frontends
+inherit. A per-arm hand-over must be per-*instance*, never a global option read
+inside the arm. Any future arm that gets this wrong will present as a C++
+regression with a plausible-looking C-shaped explanation.
+
+### 21.4 Method note
+
+Each of the three was found by the same loop -- run the A/B, look at *one* diff,
+form a hypothesis, test it -- and two of the three hypotheses were wrong first
+(a vacuous-cast theory refuted by `int it_pos;` in the source, and an
+index-type theory that changed nothing). The cost of a wrong hypothesis here is
+one A/B, about ten minutes. That is the argument for keeping the corpus A/B
+cheap, which §9.1 made for a different reason.
+
+## 22. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+first arm (#6907). C.4b next: migrate a second zero-flag arm --
+`adjust_expr_binary_arithmetic` (114 lines) or `adjust_ptr_mem` (60) -- then
+switch to shape 2 (§19.2) rather than accumulating per-arm edits in the legacy
+pass.
+
