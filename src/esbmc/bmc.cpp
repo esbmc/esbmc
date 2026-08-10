@@ -1731,6 +1731,10 @@ void bmct::report_result(smt_resultt &res)
     log_status("Number of generated interleavings: {}", interleaving_number);
     log_status("Number of failed interleavings: {}", interleaving_failed);
   }
+
+  /* What the exploration spent its schedules on. Reading a reduction's
+   * contribution off a single run is what makes a prune rate measurable over a
+   * benchmark set, rather than by re-running with each knob toggled (#6831). */
 }
 
 smt_resultt bmct::start_bmc()
