@@ -4157,6 +4157,72 @@ std::optional<exprt> function_call_expr::fold_sorted_int_list(
   return std::nullopt;
 }
 
+/// Fold a constant integer component, following symbols, unary minus and
+/// widening typecasts.
+bool function_call_expr::eval_const_int(const exprt &e, BigInt &out) const
+{
+  if (
+    e.is_constant() &&
+    (e.type().is_signedbv() || e.type().is_unsignedbv() || e.is_boolean()))
+  {
+    out = binary2integer(
+      to_constant_expr(e).value().c_str(), e.type().is_signedbv());
+    return true;
+  }
+  if (e.is_symbol())
+  {
+    const symbolt *s = converter_.find_symbol(e.identifier().as_string());
+    return s && eval_const_int(s->get_value(), out);
+  }
+  // A negative literal reaches here as unary-minus over a constant
+  // (the parser emits UnaryOp(USub, Constant(n))); a widened literal
+  // as a typecast. Fold both.
+  if (e.id() == "unary-" && e.operands().size() == 1)
+  {
+    if (!eval_const_int(e.op0(), out))
+      return false;
+    out = -out;
+    return true;
+  }
+  if (e.id() == "typecast" && e.operands().size() == 1)
+    return eval_const_int(e.op0(), out);
+  return false;
+}
+
+/// Fold a constant str component. A Python str is a char array, so its
+/// constant form is an array of character constants (#6883).
+bool function_call_expr::eval_const_str(const exprt &e, std::string &out)
+  const
+{
+  if (e.is_symbol())
+  {
+    const symbolt *sym = converter_.find_symbol(e.identifier().as_string());
+    return sym && eval_const_str(sym->get_value(), out);
+  }
+  if (e.id() == "typecast" && e.operands().size() == 1)
+    return eval_const_str(e.op0(), out);
+  if (!e.type().is_array())
+    return false;
+  const typet &elt = e.type().subtype();
+  const bool byte_elt =
+    (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
+    (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
+  if (!byte_elt || e.operands().empty())
+    return false;
+  out.clear();
+  for (const exprt &c : e.operands())
+  {
+    if (!c.is_constant())
+      return false;
+    BigInt v = binary2integer(
+      to_constant_expr(c).value().c_str(), c.type().is_signedbv());
+    if (v == 0)
+      break;
+    out.push_back(static_cast<char>(v.to_int64()));
+  }
+  return true;
+}
+
 std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
   const std::string &list_id,
   size_t map_size,
@@ -4167,70 +4233,11 @@ std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
   // elements as int; sort here at convert time and rebuild a list of
   // tuple literals so the element type is preserved and verification is
   // cheap. Symbolic tuple lists fall through (still unsupported).
-  std::function<bool(const exprt &, BigInt &)> eval_const_int =
-    [&](const exprt &e, BigInt &out) -> bool {
-    if (
-      e.is_constant() &&
-      (e.type().is_signedbv() || e.type().is_unsignedbv() || e.is_boolean()))
-    {
-      out = binary2integer(
-        to_constant_expr(e).value().c_str(), e.type().is_signedbv());
-      return true;
-    }
-    if (e.is_symbol())
-    {
-      const symbolt *s = converter_.find_symbol(e.identifier().as_string());
-      return s && eval_const_int(s->get_value(), out);
-    }
-    // A negative literal reaches here as unary-minus over a constant
-    // (the parser emits UnaryOp(USub, Constant(n))); a widened literal
-    // as a typecast. Fold both.
-    if (e.id() == "unary-" && e.operands().size() == 1)
-    {
-      if (!eval_const_int(e.op0(), out))
-        return false;
-      out = -out;
-      return true;
-    }
-    if (e.id() == "typecast" && e.operands().size() == 1)
-      return eval_const_int(e.op0(), out);
-    return false;
-  };
 
   // A Python str component is a char array, so its constant form is an array
   // of character constants. Reading it lets a tuple carrying a string be
   // folded here instead of falling through to the runtime sort model, which
   // retypes elements as int (#6883).
-  std::function<bool(const exprt &, std::string &)> eval_const_str =
-    [&](const exprt &e, std::string &out) -> bool {
-    if (e.is_symbol())
-    {
-      const symbolt *sym = converter_.find_symbol(e.identifier().as_string());
-      return sym && eval_const_str(sym->get_value(), out);
-    }
-    if (e.id() == "typecast" && e.operands().size() == 1)
-      return eval_const_str(e.op0(), out);
-    if (!e.type().is_array())
-      return false;
-    const typet &elt = e.type().subtype();
-    const bool byte_elt =
-      (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
-      (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
-    if (!byte_elt || e.operands().empty())
-      return false;
-    out.clear();
-    for (const exprt &c : e.operands())
-    {
-      if (!c.is_constant())
-        return false;
-      BigInt v =
-        binary2integer(to_constant_expr(c).value().c_str(), c.type().is_signedbv());
-      if (v == 0)
-        break;
-      out.push_back(static_cast<char>(v.to_int64()));
-    }
-    return true;
-  };
 
   // One tuple component: an integer or a string. Python orders tuples
   // lexicographically and refuses to compare an int with a str, so a column
