@@ -568,3 +568,81 @@ test, and that test is unstable without the flag.
 C.4 is unblocked: migrate arms under the `-only` placement, one at a time, with
 the legacy arm disabled in the same run (§6.3).
 
+## 17. C.4's first arm: `adjust_symbol` is not migratable
+
+With the gate restored (§15.4), C.4 begins. The natural first arm is
+`clang_c_adjust::adjust_symbol(exprt &)` -- a true leaf, 20 lines, no operand
+recursion. It is not takeable, and the reason generalises.
+
+### 17.1 Two carriers IREP2 cannot hold
+
+```cpp
+locationt location = expr.location();          // saved
+...
+expr = symbol_expr(symbol);
+expr.location() = location;                    // restored
+if (expr.type().is_code())
+{
+  address_of_exprt tmp(expr);
+  tmp.implicit(true);                          // <-- flag
+  ...
+}
+```
+
+1. **Location.** `symbol2t` has no location slot -- `if2t` is the only
+   value-level kind that carries one (parent §38.4). The save/restore is a no-op
+   in IREP2, so the migrated arm silently drops it.
+2. **`#implicit`.** IREP2 has no representation for it: grepping `irep2_expr.h`
+   for `implicit` returns nothing.
+
+The second is the blocking one, because the flag is **read**:
+
+```cpp
+// clang_c_adjust_expr.cpp:840
+op.is_address_of() && op.implicit() && op.operands().size() == 1 && ...
+```
+
+A sibling arm branches on it. Migrating `adjust_symbol` alone would set the flag
+nowhere and that check would stop firing -- a behaviour change, not a
+representation detail.
+
+### 17.2 The census this prompted
+
+Counting legacy-only flag uses (`.set("#...")`, `implicit()`, `cmt_*`) per arm:
+
+| arm | flag uses |
+|---|---|
+| `adjust_side_effect_function_call` (142 lines) | 4 |
+| `adjust_address_of` (66) | 2 |
+| `adjust_base_to_derived`, `adjust_dereference`, `adjust_expr`, `adjust_symbol(exprt&)` | 1 each |
+| **all 28 others** | **0** |
+
+So the flag problem is concentrated: six arms carry it, twenty-eight do not.
+`adjust_expr_binary_arithmetic` (114 lines), `adjust_index` (59),
+`adjust_expr_shifts` (56), `adjust_ptr_mem` (60) and `adjust_side_effect_*` are
+all clean, and several are far more substantial than the leaf that blocked.
+
+### 17.3 Revised plan for C.4
+
+- **Do not** start with `adjust_symbol`. Start with a zero-flag arm; the
+  candidates are large enough to be worth the harness cost and clean enough to
+  be faithful.
+- The six flag-carrying arms need a decision that is **not** per-arm: either
+  `address_of2t` and friends gain the flags (an IR change with wide blast
+  radius), or those arms stay legacy permanently and the `-only` placement is
+  never fully reachable.
+- That decision should be taken once, with the six named, rather than
+  rediscovered per arm.
+
+**Generalisation for Phases 7-9.** Jimple had no analogue of this because it sets
+no `#`-flags at all (§22.1 there: the frontend emits no qualifier, no
+`#reference`). C, C++ and Solidity all do. The question "which legacy-only irep
+flags does this frontend's adjuster read?" belongs in each scope doc's census,
+next to the type-constructor census §22.1 established.
+
+## 18. Status
+
+C.1-C.3 done (#6894), lookup (#6897), union assert (#6899), havoc order
+(#6901). C.4 re-planned per §17.3; next action is the first zero-flag arm, with
+`adjust_expr_binary_arithmetic` and `adjust_index` the leading candidates.
+
