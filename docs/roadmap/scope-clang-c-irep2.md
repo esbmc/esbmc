@@ -1524,3 +1524,66 @@ index arm (#6907), address_of bit (#6912), member arm (#6921). §41.3's work lis
 is now fully derived: `adjust_struct` next, `adjust_if` deferred with its reason
 recorded.
 
+## 47. `adjust_struct`: §45.2's prediction was wrong, for a reason worth having
+
+§45.2 predicted `adjust_struct` would need no relaxation, because it changes
+operands rather than the type and `constant_struct2t` asserts nothing about
+operand count. That reasoning was sound and the conclusion is still wrong: the
+arm cannot be written at all in IREP2 as things stand.
+
+### 47.1 The blocker is type metadata, not an invariant
+
+```cpp
+if (c.get_is_padding() && !already_padded)
+  ops.insert(ops.begin() + i, gen_zero(c.type()));
+```
+
+The arm inserts a zero operand for each component that **is padding**.
+`struct_type2t` carries `members`, `member_names`, `member_pretty_names`, `name`
+and `packed` -- and **no per-member padding flag**. `migrate.cpp` mentions
+`is_padding` nowhere, so the legacy `componentt`'s flag is dropped on the way in.
+
+This is a fifth blocker category, and it is not §17's: that was a flag on an
+*expression*, this is metadata on a *type component*. §17's census looked for
+`.set("#...")` in the arms and would never have found it, because the write
+happens in `padding.cpp`, not in the adjuster.
+
+### 47.2 Reconstructible, but on a naming convention
+
+Padding components are named from two prefixes
+(`src/util/irep/pad_names.h`):
+
+```cpp
+inline constexpr std::string_view pad_prefix           = "anon_pad#";
+inline constexpr std::string_view pad_bit_field_prefix = "anon_bit_field_pad#";
+```
+
+`member_names` survives migration, so an IREP2 arm could test the prefix --
+and there is precedent: `goto_check.cpp:973` already identifies padding that way
+(`has_prefix(*it, pad_prefix)`), on the IREP2 side of the pipeline.
+
+So the arm is writable, but on a convention rather than a flag, and it would
+need both prefixes. Whether that is acceptable is a judgement about how load-
+bearing the convention should become, not a measurement -- and `goto_check`
+having already made that call is the strongest argument that it is.
+
+### 47.3 What this says about the census
+
+The §27 census screened arms on flags, input-kind representability and
+applicability. §39 added construction invariants; this adds **type metadata the
+arm reads**. Four of the five categories were found by attempting an arm and
+failing, not by the census -- which is the honest summary of how much a static
+screen can tell you here.
+
+A better pre-check, for the arms remaining: *list everything the arm reads that
+is not an operand or a type id, and confirm each survives `migrate_type`.*
+`is_padding` would have been caught by that; so would `#implicit`.
+
+## 48. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921). `adjust_struct`
+is writable via the §47.2 convention; `adjust_if` is deferred (§45.1). Next
+action is to apply §47.3's pre-check to the remaining 15 clean arms before
+attempting any of them.
+
