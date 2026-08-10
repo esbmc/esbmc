@@ -2,6 +2,7 @@
 #include <util/irep/std_expr.h>
 #include <util/irep/std_types.h>
 #include <jimple-frontend/AST/jimple_statement.h>
+#include <irep2/irep2_expr.h>
 #include <util/arith/arith_tools.h>
 #include "util/lang/c_typecast.h"
 
@@ -109,6 +110,19 @@ exprt jimple_goto::to_exprt(
   code_gotot code_goto;
   code_goto.set_destination(label);
   return code_goto;
+}
+
+// K.3 of docs/roadmap/scope-jimple-irep2.md: the first statement to build its
+// IREP2 form directly rather than through the base's migrating default. Matches
+// migrate_expr's goto arm, which reads the destination off the legacy node's
+// "destination" field -- what set_destination writes above.
+expr2tc jimple_goto::to_code2t(
+  contextt &,
+  const std::string &,
+  const std::string &,
+  const locationt &loc) const
+{
+  return code_goto2tc(label, loc);
 }
 
 void jimple_label::from_json(const json &j)

@@ -243,20 +243,108 @@ public:
   }
 };
 
+/* str() and the inserters were declared and never defined, so every use of an
+ * ostringstream produced a nondeterministic string. Back it with the same
+ * member stringstream uses, and give it the inserters that carry the common
+ * types. */
 class ostringstream : public ostream
 {
 public:
-  explicit ostringstream(openmode which = out)
+  string _string;
+
+  explicit ostringstream(openmode which = out) : ostream(), _string("")
   {
-    ostream();
   }
+
   explicit ostringstream(const string &str, openmode which = out)
+    : ostream(), _string(str)
   {
-    ostream();
   }
+
   stringbuf *rdbuf() const;
-  string str() const;
-  void str(const string &s);
+
+  string str() const
+  {
+    return _string;
+  }
+
+  void str(const string &s)
+  {
+    _string = s;
+  }
+
+  ostream &operator<<(const string &val)
+  {
+    _string.append(val.c_str());
+    return *this;
+  }
+
+  ostream &operator<<(const char *val)
+  {
+    _string.append(val);
+    return *this;
+  }
+
+  ostream &operator<<(char val)
+  {
+    char temp[2] = {val, '\0'};
+    _string.append(temp);
+    return *this;
+  }
+
+  ostream &operator<<(bool val)
+  {
+    _string.append(val ? "1" : "0");
+    return *this;
+  }
+
+  ostream &operator<<(short val)
+  {
+    char temp[NUM_SIZE];
+    itoa(val, temp, DEC);
+    _string.append(temp);
+    return *this;
+  }
+
+  ostream &operator<<(int val)
+  {
+    char temp[NUM_SIZE];
+    itoa(val, temp, DEC);
+    _string.append(temp);
+    return *this;
+  }
+
+  ostream &operator<<(long val)
+  {
+    char temp[NUM_SIZE];
+    itoa(val, temp, DEC);
+    _string.append(temp);
+    return *this;
+  }
+
+  ostream &operator<<(unsigned short val)
+  {
+    char temp[NUM_SIZE];
+    itoa(val, temp, DEC);
+    _string.append(temp);
+    return *this;
+  }
+
+  ostream &operator<<(unsigned int val)
+  {
+    char temp[NUM_SIZE];
+    itoa(val, temp, DEC);
+    _string.append(temp);
+    return *this;
+  }
+
+  ostream &operator<<(unsigned long val)
+  {
+    char temp[NUM_SIZE];
+    itoa(val, temp, DEC);
+    _string.append(temp);
+    return *this;
+  }
 };
 
 } // namespace std
