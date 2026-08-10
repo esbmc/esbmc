@@ -2,12 +2,15 @@
 
 **Status:** W0, W2 and W1.1 shipped; `--state-hashing` was **unsound** and is
 fixed (see W2); `--sleep-sets` is new, off by default, and sound on the paths
-it is allowed to run on (see W1.1). W3, W4 not started.
+it is allowed to run on (see W1.1). W3 and W4 are investigated, and both turn
+out to be about existing machinery rather than new: W3's exit is already
+discharged by `--smt-during-symex`, and W4 is re-scoped from a wrapper change to
+a code change.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 1 —
 schedule-space explosion*, 291 of 489 lost SV-COMP tasks.
 **Bisected to:** `bac652b13c` — `[goto-symex] Track main-thread termination per
 state, not per search` (#6607), which fixes #4584.
-**Last updated:** 2026-08-09.
+**Last updated:** 2026-08-10.
 
 **Measurement environment.** All numbers below were measured on an x86_64 Linux
 host against `build/src/esbmc/esbmc`, ESBMC 8.4.0, built from `19db2adc96`
@@ -17,12 +20,14 @@ treat the ratios as indicative and the orderings as reliable, not the absolute
 seconds. Reproducer: `regression/esbmc-unix/01_malloc_20`, the same one the
 issue's bisect used.
 
-`master` has since advanced to `8ffb84b24d`, which includes #6793
-(`malloc(0)` may now return NULL or a freeable object). That commit is *not* in
-the measurement binary and it touches allocation modelling in a reproducer
-named `01_malloc_20` — re-measure §2 against current `master` before acting on
-the absolute numbers. The relative standings (MPOR prunes, hashing does not;
-symex dominates the solver) are not expected to move.
+`master` has since advanced past `8ffb84b24d`, which includes #6793
+(`malloc(0)` may now return NULL or a freeable object) and touches allocation
+modelling in a reproducer named `01_malloc_20`, so §2 was flagged for
+re-measurement before its absolute numbers were acted on. **Done — §2.3 is
+re-measured below and the standings hold.** Every phase came in 8–10 % faster
+with the call counts (940/940/779/779) and the reduction counters
+(940 schedules, 296 MPOR, 0 hash) byte-identical, so the ratios §2.3 rests on
+are unchanged.
 
 ---
 
@@ -95,15 +100,16 @@ not merely large; without a context bound it is not enumerable at all here.
 
 ### 2.3 Where the time goes
 
-Summed over the 940 completed formulas of the bounded baseline run:
+Summed over the 940 completed formulas of the bounded baseline run, as first
+measured and as re-measured on current `master` (2026-08-10):
 
-| phase | calls | total |
-|---|---|---|
-| symex | 940 | **16.815 s** |
-| slicing | 940 | 0.813 s |
-| encoding to solver | 779 | 1.590 s |
-| decision procedure | 779 | **1.753 s** |
-| BMC program time | 940 | 22.710 s |
+| phase | calls | total | re-measured |
+|---|---|---|---|
+| symex | 940 | **16.815 s** | **15.408 s** |
+| slicing | 940 | 0.813 s | 0.699 s |
+| encoding to solver | 779 | 1.590 s | 1.387 s |
+| decision procedure | 779 | **1.753 s** | **1.603 s** |
+| BMC program time | 940 | 22.710 s | 20.457 s |
 
 **Symex outweighs the solver by ~10×.** 290,165 VCCs are generated across the
 940 schedules; a single schedule generates 376. This is a schedule-enumeration
@@ -124,7 +130,9 @@ Two orthogonal levers, both open:
 - **B — make each schedule cheaper.** Each of the 940 schedules is symexed,
   sliced, encoded and solved as an independent formula. The DFS restores
   execution states on backtracking, but the per-formula pipeline downstream of
-  symex does not exploit the shared prefix.
+  symex does not exploit the shared prefix. **Closed by W3:** `--smt-during-symex`
+  already makes it exploit the prefix, for −13.5 %, and what remains under this
+  lever is ~5 % of the run. Lever A is the only one with headroom left.
 
 ---
 
@@ -435,27 +443,169 @@ machinery for); and not re-slicing the prefix. This is lever B and is
 independent of W1/W2 — it reduces the constant, not the exponent, but §2.3 says
 the constant is where 74 % of the time is.
 
-**Exit:** measurable wall-time reduction on `01_malloc_20` at an unchanged
-schedule count and unchanged verdicts.
+#### W3.1 — The first item is already built: `--smt-during-symex`
 
-### W4 — Bound the schedule space in the SV-COMP strategy
+`dfs_execution_statet::clone()` (`execution_state.cpp:1589`) deep-copies the
+whole target equation at every DFS node — which is why each of the 940 formulas
+carries the full trace rather than its suffix (mean 451 SSA assignments, 424,349
+across the run, for a program whose single schedule is ~451). Except under
+`--smt-during-symex`, where it keeps one shared equation and calls
+`push_ctx()` / `pop_ctx()` instead, and `bmc.cpp:2207` stops rebuilding the
+solver per interleaving. That *is* "push/pop over the shared prefix".
+
+On `01_malloc_20` with its own flags, three runs each, the schedule count,
+counters and verdict identical (940 / 296 MPOR / 0 hash / SUCCESSFUL):
+
+| | baseline | `--smt-during-symex` |
+|---|---|---|
+| wall | 21.25, 23.62, 21.44 s | 19.20, 19.12, 20.04 s |
+| encoding to solver | 1.387 s | **0.398 s** |
+| decision procedure | 1.603 s | **1.095 s** |
+| symex | 15.408 s | 15.603 s |
+
+~12 %, with the ranges disjoint. The saving lands exactly where the shared
+prefix predicts — encoding −71 %, solving −32 % — and symex is untouched, as it
+must be when the same 940 schedules are still enumerated.
+
+**So W3's stated exit is already discharged by an existing flag**, which the
+SV-COMP wrapper does not pass (275 regression tests do). It also generalises,
+which `01_malloc_20` alone could not have shown — the §2.1 mistake. Every CORE
+test in `esbmc-unix`/`esbmc-unix2` that calls `pthread_create`, 346 of them, run
+twice with its own flags, 120 s cap, 4-way parallel:
+
+- **No verdict changed** on the 329 whose rows survived (194 FAILED, 132
+  SUCCESSFUL, 2 no-answer both ways). The single apparent disagreement,
+  `pthread_cleanup8_fail`, already passes `--smt-during-symex` in its own
+  `test.desc`, so the sweep passed it twice and ESBMC rejected the duplicate.
+- **Schedule counts identical on all 323** that report one — as they must be:
+  the flag changes how a schedule is encoded, never which are explored. That is
+  the cheap check that this is not a reduction in disguise.
+- Wall over the 326 answered both ways: 526 s → 455 s, **−13.5 %**, matching
+  `01_malloc_20`'s −12 %.
+
+Two methodology caveats: the sweep ran 4-way parallel, so treat −13.5 % as the
+ratio rather than a per-test time; and 17 of the 346 rows were torn by
+concurrent writes and dropped rather than rerun.
+
+The more important consequence is what it leaves: with encoding and solving
+largely removed, symex is **87 %** of BMC time rather than 75 %.
+
+#### W3.2 — Copying is not the lever either (measured, negative result)
+
+The obvious next suspect was the deep copy above: 940 formulas each carrying a
+full 451-assignment trace looks like an enormous amount of duplicated state.
+Timing both halves of `dfs_execution_statet::clone()` directly (temporary
+instrumentation, `01_malloc_20`, 22.78 s run, 1513 clones) says otherwise:
+
+| | total | share of run |
+|---|---|---|
+| `execution_statet` copy | 0.891 s | 3.9 % |
+| target-equation deep copy | 0.190 s | **0.8 %** |
+
+So eliminating the equation copy entirely — which is what `--smt-during-symex`
+already does — can only ever be worth 0.8 %, and the 12 % it actually delivers
+comes from the solver side, not the copy. Symex's 15.4 s is genuine symbolic
+execution of 940 suffixes, not bookkeeping around it.
+
+That closes lever B at the level the plan framed it. Making each schedule
+cheaper has roughly 5 % of the run left in it once `--smt-during-symex` is on;
+everything else is the schedule count itself, which is lever A. **W1 is
+therefore the only remaining lever with headroom**, and W3 should not be
+resourced further on the strength of §2.3's 74 % — that share is symex doing
+work, not repeating it.
+
+**Exit:** ~~measurable wall-time reduction on `01_malloc_20`~~ — discharged by
+W3.1 across the concurrent CORE corpus at unchanged schedule counts and
+verdicts. W3.2 closes the workstream: what remains under lever B is ~5 % of the
+run, so the open decision is a wrapper one (does `--smt-during-symex` belong in
+the concurrency configuration?), not an implementation one.
+
+### W4 — Bound the schedule space in the SV-COMP strategy — **investigated, not a flag flip**
 
 §2.2 shows the wrapper's own configuration cannot enumerate this reproducer at
 all. `--incremental-context-bound` exists (`options.cpp:553`, "stops at the
 first violation or once a round has covered every interleaving") and the
 wrapper does not use it.
 
-Proposal: for the concurrency categories, explore shallow schedules first and
-deepen while the budget lasts, so a task that currently times out with no answer
-instead answers at the largest bound it can afford. **Soundness constraint that
-must be honoured:** a `true` verdict may only be emitted when a round has
-provably covered every interleaving — a `true` from an exhausted-budget bound is
-an unsound claim and must be reported `unknown`. Verify this against the
-existing implementation before proposing any wrapper change; if the flag does
-not already guarantee it, W4 becomes a code change, not a configuration change.
+The proposal was: for the concurrency categories, explore shallow schedules
+first and deepen while the budget lasts, so a task that currently times out with
+no answer instead answers at the largest bound it can afford. Three findings
+change its shape. It is not a wrapper configuration change, and it is not free.
 
-**Exit:** a measured score delta on the affected categories, and an explicit
-argument for why no `true` is emitted without exhaustive coverage.
+**The soundness constraint is already honoured — this half needs no work.**
+`do_context_bound_deepening` (`bmc_strategy.cpp:525`) sets
+`suppress-bounded-success` and emits SUCCESSFUL only when `!cs_bound_pruned`,
+i.e. only after a round the bound did not truncate; otherwise it reports
+VERIFICATION UNKNOWN. A violation at any bound is genuine, each round being an
+under-approximation. The oracle is complete: `get_CS_bound()` has exactly one
+consumer, `check_if_ileaves_blocked` (`execution_state.cpp:493`), which sets the
+flag (`:502`) guarded on a switch actually being available, so a terminal state
+does not read as truncated; the flag is per-`reachability_treet` and each round
+builds a fresh `bmct`, so it does not leak across rounds. What "covered every
+interleaving" does *not* cover is `--unwind` — a SUCCESSFUL is still bounded by
+the unwind bound in the ordinary BMC sense, which the log line is careful about
+("not bounded by it", the context bound).
+
+**The wrapper cannot adopt the flag: it collides with unwind deepening.**
+`--incremental-context-bound` is rejected in combination with `--incremental-bmc`
+(`driver.cpp:218`, #6480 — only one driver may own the outer loop), and the
+wrapper sends *every* concurrency task through `--incremental-bmc`
+(`esbmc-wrapper.py:315`). So W4 is a code change after all, but not for the
+reason anticipated above: not a soundness gap, but that the two deepening
+loops do not compose. Designing that composition is the remaining W4 work.
+
+**It buys answers on unsafe tasks and loses them on safe ones.** All 40 CORE
+unsafe concurrent tests in `esbmc-unix`/`esbmc-unix2`, each run twice with its
+own flags minus any `--context-bound`, 120 s cap:
+
+| | direct (unbounded) | `--incremental-context-bound` |
+|---|---|---|
+| identical, ~1 s both | 37 | 37 |
+| `00_rwlock2` | 3 s | 1 s |
+| `00_atomicity07` | 13 s | 2 s |
+| `00_rwlock4` | **no verdict in 120 s** | **FAILED, 1 s** |
+
+No verdict changed. `00_rwlock4` is the #6480 shape and the SV-COMP shape — a
+violation needing few switches, stranded deep in unbounded DFS order;
+reconfirmed standalone under `--no-por`, where the direct run produced no
+verdict in over 130 s and deepening found it at bound 2 in 0.97 s.
+
+The safe side is the opposite, and the cost is not merely wall-clock. On
+`01_malloc_19` (`--no-unwinding-assertions --unwind 3 --force-malloc-success
+--memory-leak-check`) deepening converges at bound 10 on the same 1871 schedules
+the direct run explores, but re-explores every prefix nine times to get there:
+~11,470 schedules cumulative, 86.3 s against 12.3 s — **7×** for an identical
+verdict. Under a time cap that turns into lost verdicts rather than slow ones.
+Over all 146 CORE safe concurrent tests, 60 s cap, same flag treatment:
+
+| | count |
+|---|---|
+| SUCCESSFUL both ways | 114 |
+| **SUCCESSFUL → TIMEOUT** | **18** |
+| no answer either way | 14 |
+
+No verdict *changed* — nothing went SUCCESSFUL → FAILED — so the soundness
+argument holds on this corpus; what deepening costs is answers, not correctness.
+
+The threshold is sharper than the count: every one of the 114 kept proofs costs
+≤7 s directly, and every one of the 18 lost costs ≥4 s. Read the *ratio* rather
+than the 18. That sweep ran 8-way parallel, and re-running two of the losses
+sequentially splits them — `github_2174` 6 s → 52 s, which survives a 60 s cap
+unloaded, while `00_rwlock1` 15 s → over 90 s is lost at any comparable budget.
+So the count moves with the cap and the load; the 7–9× slowdown behind it does
+not. Any fixed budget converts the more expensive safe proofs into non-answers.
+
+So the trade is real in both directions and it is not symmetric in value:
+deepening bought one stranded falsification in 40 and cost 18 proofs in 132.
+A wrapper that simply switched it on would trade correct `true`s for `unknown`s
+at roughly ten times the rate it converts a timeout into a `false`. That is an
+argument for an adaptive composition — deepen the context bound only where
+falsification is the goal, leaving an unbounded exhaustive attempt able to
+finish — and against a flag.
+
+**Exit:** unchanged — a measured score delta on the affected categories, plus
+the argument for why no `true` is emitted without exhaustive coverage (the
+second half is now discharged above). The composition design is the open work.
 
 ---
 
