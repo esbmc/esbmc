@@ -210,6 +210,29 @@ static expr2tc try_simplification(const expr2tc &expr)
   return to_simplify;
 }
 
+/* fixedbvt models a signed, non-saturating fixed-point value; folding
+ * unsigned or _Sat constants through it would diverge from the encoder's
+ * (oracle-pinned) semantics, so those are left to the solver. */
+static bool fixedbv_type_foldable(const type2tc &t)
+{
+  if (!is_fixedbv_type(t))
+    return true;
+  const fixedbv_type2t &f = to_fixedbv_type(t);
+  return f.is_signed && !f.is_saturating;
+}
+
+/* fixedbvt's binary operators add/compare raw values, which is only
+ * meaningful when both operands share a format; mixed-format operations
+ * are left to the solver's common-format computation. */
+static bool fixedbv_same_format(const expr2tc &a, const expr2tc &b)
+{
+  if (!is_fixedbv_type(a) || !is_fixedbv_type(b))
+    return true;
+  const fixedbv_type2t &x = to_fixedbv_type(a->type);
+  const fixedbv_type2t &y = to_fixedbv_type(b->type);
+  return x.width == y.width && x.integer_bits == y.integer_bits;
+}
+
 static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
 {
   // If the expr is already nil, do nothing
@@ -283,7 +306,12 @@ static expr2tc simplify_arith_2ops(
         from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
   }
   else if (
-    is_fixedbv_type(simplified_side_1) || is_fixedbv_type(simplified_side_2))
+    (is_fixedbv_type(simplified_side_1) ||
+     is_fixedbv_type(simplified_side_2)) &&
+    fixedbv_type_foldable(type) &&
+    fixedbv_type_foldable(simplified_side_1->type) &&
+    fixedbv_type_foldable(simplified_side_2->type) &&
+    fixedbv_same_format(simplified_side_1, simplified_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
@@ -1030,7 +1058,7 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
       simpl_res =
         from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
   }
-  else if (is_fixedbv_type(value))
+  else if (is_fixedbv_type(value) && fixedbv_type_foldable(value->type))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
       (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
@@ -1898,7 +1926,12 @@ static expr2tc simplify_logic_2ops(
       simplified_side_1, simplified_side_2, is_constant, get_value);
   }
   else if (
-    is_fixedbv_type(simplified_side_1) || is_fixedbv_type(simplified_side_2))
+    (is_fixedbv_type(simplified_side_1) ||
+     is_fixedbv_type(simplified_side_2)) &&
+    fixedbv_type_foldable(type) &&
+    fixedbv_type_foldable(simplified_side_1->type) &&
+    fixedbv_type_foldable(simplified_side_2->type) &&
+    fixedbv_same_format(simplified_side_1, simplified_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
@@ -3168,6 +3201,8 @@ expr2tc typecast2t::do_simplify() const
 
       if (is_fixedbv_type(type))
       {
+        if (!fixedbv_type_foldable(type))
+          return expr2tc();
         fixedbvt fbv;
         fbv.spec = fixedbv_spect(to_fixedbv_type(type));
         fbv.from_integer(to_constant_bool2t(simp).value);
@@ -3208,6 +3243,8 @@ expr2tc typecast2t::do_simplify() const
 
       if (is_fixedbv_type(type))
       {
+        if (!fixedbv_type_foldable(type))
+          return expr2tc();
         fixedbvt fbv;
         fbv.spec = fixedbv_spect(to_fixedbv_type(type));
         fbv.from_integer(theint.value);
@@ -3238,11 +3275,15 @@ expr2tc typecast2t::do_simplify() const
     }
     else if (is_fixedbv_type(simp) && is_number_type(type))
     {
-      // float/double to int/float/double
+      if (!fixedbv_type_foldable(simp->type) || !fixedbv_type_foldable(type))
+        return expr2tc();
+
       fixedbvt fbv(to_constant_fixedbv2t(simp).value);
 
       if (is_bv_type(type))
-        return constant_int2tc(type, fbv.to_integer());
+        /* toward-zero integral part, then modular conversion to the
+         * destination width (from_integer performs the wrap) */
+        return from_integer(fbv.to_integer(), type);
 
       if (is_fixedbv_type(type))
       {
@@ -3505,7 +3546,12 @@ static expr2tc simplify_relations(
       simplified_side_1, simplified_side_2, is_constant, get_value);
   }
   else if (
-    is_fixedbv_type(simplified_side_1) || is_fixedbv_type(simplified_side_2))
+    (is_fixedbv_type(simplified_side_1) ||
+     is_fixedbv_type(simplified_side_2)) &&
+    fixedbv_type_foldable(type) &&
+    fixedbv_type_foldable(simplified_side_1->type) &&
+    fixedbv_type_foldable(simplified_side_2->type) &&
+    fixedbv_same_format(simplified_side_1, simplified_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
@@ -4976,7 +5022,7 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
 
   expr2tc simpl_res;
 
-  if (is_fixedbv_type(value))
+  if (is_fixedbv_type(value) && fixedbv_type_foldable(value->type))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
       (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
