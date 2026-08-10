@@ -231,6 +231,21 @@ exprt jimple_if::to_exprt(
   return if_expr;
 }
 
+// The first statement to reach an expression through to_expr2t. migrate_expr's
+// ifthenelse arm leaves else_case nil when the legacy node has only two
+// operands, which is the shape built above, so the else stays default.
+expr2tc jimple_if::to_code2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name,
+  const locationt &loc) const
+{
+  expr2tc condition = cond->to_expr2t(ctx, class_name, function_name);
+  expr2tc target = code_goto2tc(label);
+
+  return code_ifthenelse2tc(condition, target, expr2tc(), loc);
+}
+
 std::string jimple_assertion::to_string() const
 {
   std::ostringstream oss;
