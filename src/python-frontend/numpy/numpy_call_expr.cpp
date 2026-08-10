@@ -3888,22 +3888,25 @@ exprt numpy_call_expr::create_expr_from_call()
           decl.contains("value") && decl["value"].is_object() &&
           is_dynamic_list_backed_numpy_constructor(decl["value"]))
         {
+          std::optional<nlohmann::json> materialized =
+            materialize_numpy_constructor_array(
+              decl["value"], converter_.ast());
+          if (!materialized)
+            throw std::runtime_error(
+              "TypeError: numpy.transpose() does not support this "
+              "constructor call (unsupported keywords or non-constant "
+              "arguments)");
+
           if (
-            std::optional<nlohmann::json> materialized =
-              materialize_numpy_constructor_array(
-                decl["value"], converter_.ast()))
+            std::optional<exprt> folded =
+              try_fold_transpose_literal_2d(*materialized, converter_))
           {
-            if (
-              std::optional<exprt> folded =
-                try_fold_transpose_literal_2d(*materialized, converter_))
+            if (converter_.current_lhs)
             {
-              if (converter_.current_lhs)
-              {
-                converter_.current_lhs->type() = folded->type();
-                converter_.update_symbol(*converter_.current_lhs);
-              }
-              return *folded;
+              converter_.current_lhs->type() = folded->type();
+              converter_.update_symbol(*converter_.current_lhs);
             }
+            return *folded;
           }
           throw std::runtime_error(
             "TypeError: numpy.transpose currently supports up to 2D arrays");
