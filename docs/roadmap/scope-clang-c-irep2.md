@@ -1159,3 +1159,67 @@ index arm (#6907), C.4b withdrawn (§25), shape 2 sized (§27), §29 corrected i
 `adjust_side_effect_function_call`'s `cmt_identifier`/`cmt_base_name`, which
 attach parameter identity to argument expressions and have no IREP2 slot at all.
 
+## 35. The flag decision, settled: one bit on `address_of2t`
+
+§27.2 named flag representation as the single design question gating shape 2,
+and §31 restored the count to four arms. Censusing both flag families over all
+of `src/` -- the §31.3 rule applied properly -- collapses it to one bit.
+
+### 35.1 `cmt_identifier` / `cmt_base_name` on argument expressions are dead
+
+`adjust_side_effect_function_call:1089-1090` writes them onto `arguments[i]`,
+an *expression*. Every reader found is on `code_typet::argumentt`, a **type**
+component:
+
+| reader | subject |
+|---|---|
+| `std_types.h:334,339` (`get_identifier`, `get_base_name`) | `code_typet::argumentt` |
+| `clang_c_adjust_polymorphic_functions.cpp` (12 sites) | `code_type.arguments()[i]` |
+| `assign_params_as_non_det.cpp:77`, `clang_cpp_adjust_code_gen.cpp:82,172`, `clang_cpp_convert.cpp:2247,2256,2266,2291` (raw `get("#identifier")`) | `...arguments()` |
+
+Nothing reads either field off an argument expression. The type-level carrier is
+separately represented in IREP2 already (`code_type2t::argument_names`), so it
+is not at issue.
+
+### 35.2 What remains live
+
+| use | verdict |
+|---|---|
+| `#implicit` on `dereference` (6 writes) | dead -- both readers test `is_address_of()` first (§33) |
+| `#implicit` on `address_of` (`:360` sugar, `:894`, cleared at `:846`) | **live** -- feeds the reader at `:1159` |
+| `#implicit` read at `:840` | redundant, measured (§29) |
+| `#implicit` read at `:1159` | **live** -- distinguishes `f(x)` from `(&f)(x)` (§31.1) |
+| `cmt_*` on argument expressions | dead (§35.1) |
+
+**One live carrier: `#implicit` on `address_of`.** One bit on `address_of2t`
+discharges it, and with it all four arms §27.2 listed.
+
+### 35.3 The decision
+
+Add an `implicit` bit to `address_of2t`. Cost: one field, its `fields` tuple
+entry for hashing and comparison, and the two migrate arms. Everything else the
+flag families touch is dead metadata that need not migrate at all.
+
+The alternative -- leaving four arms permanently legacy -- was priced against a
+requirement that the census has now shown to be six times smaller than it
+looked. §27.2 asked for this decision to be taken once rather than rediscovered
+per arm; it is taken.
+
+### 35.4 Method note
+
+Three sections of this phase (§29, §31, §33, §35) are one question asked four
+times, each time with a wider search. The first answer was wrong, the second
+over-corrected, and only the exhaustive census produced a number worth
+building on. The rule §31.3 states is cheap -- `grep` over `src/` costs seconds
+-- and each time I skipped it the error pointed the same way: toward the
+conclusion that required less work.
+
+## 36. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), C.4b withdrawn (§25), shape 2 sized (§27), flag decision
+settled (§35). Shape 2 is now unblocked in principle: **18 arms clean, 9
+unblocked by shape 2 itself, 4 discharged by one bit on `address_of2t`.**
+
+Next: add the bit, with the two migrate arms and a corpus A/B, then begin the 18.
+
