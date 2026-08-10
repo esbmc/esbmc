@@ -982,3 +982,63 @@ index arm (#6907), C.4b withdrawn (§25). Shape 2 sized (§27): 18 arms clean, 9
 unblocked by shape 2 itself, 4 gated on the flag-representation decision, which
 is the next thing to settle.
 
+## 29. The flag decision, part 1: `#implicit`'s reader does not need it
+
+§27.2 named the four flag-carrying arms as the one design question gating shape
+2. Two of them (`adjust_symbol`, `adjust_address_of`) carry only `#implicit`,
+and the flag has exactly one reader:
+
+```cpp
+// clang_c_adjust::adjust_address_of -- "address of function designator",
+// ANSI-C 99 6.3.2.1 p4
+if (op.is_address_of() && op.implicit() && op.operands().size() == 1 &&
+    op.op0().id() == "symbol" && op.op0().type().is_code())
+```
+
+It collapses `&(&f)` for a function designator, where the inner `&f` is the
+sugar `adjust_symbol` inserts. The flag distinguishes that synthesised inner
+`address_of` from a user-written one -- but a user cannot write the shape it is
+distinguishing from: `&f` is an rvalue in both C and C++, so `&(&f)` is a
+constraint violation, not an alternative parse. **The shape alone determines the
+case.**
+
+### 29.1 Measured
+
+Dropping `op.implicit()` from the condition, leaving the shape test:
+
+| check | result |
+|---|---|
+| GOTO A/B over `regression/esbmc` (1 672) | **2 divergences**, both `github_746`, which differs against itself |
+| `esbmc-cpp/cpp` suite | **575 passed, none failed** |
+
+The C++ check matters because `adjust_address_of` is inherited by
+`clang_cpp_adjust`, and function designators are commoner there.
+
+### 29.2 What it unblocks
+
+If the read does not need the flag, the writes exist only to feed it, and
+`#implicit` need not be represented in IREP2 at all. That removes the blocker
+from two of §27.2's four arms and reduces the gating decision to
+`adjust_side_effect_function_call`'s four `cmt_*` uses and
+`adjust_dereference`'s single flag.
+
+**Corrected count for shape 2:** 18 arms clean, 9 unblocked by shape 2 itself,
+**2** gated on flags -- not 4.
+
+### 29.3 Scope of the claim
+
+Measured, not proven. The corpus contains whatever function-designator shapes
+these tests contain, and the standard argument covers why the distinguished case
+is unwritable, but neither rules out a frontend constructing an explicit
+`address_of(address_of(code symbol))` some other way -- the CBMC adapter and the
+Solidity frontend both build ireps directly. Removing the flag outright is a
+separate PR with its own sweep; this section establishes only that it is not a
+shape-2 blocker. The probe was reverted rather than shipped.
+
+## 30. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), C.4b withdrawn (§25), shape 2 sized (§27). Flag decision half
+settled (§29): `#implicit` is not a blocker. Next is the other half --
+`adjust_side_effect_function_call`'s `cmt_*` uses and `adjust_dereference`.
+
