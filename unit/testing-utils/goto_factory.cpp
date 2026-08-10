@@ -85,9 +85,11 @@ program goto_factory::get_goto_functions(
   goto_factory::Architecture arch,
   const std::string &test_name)
 {
-  std::string filename(
-    file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
-  filename += "/" + test_name;
+  /* The directory outlives the parse and is removed by ~tmp_path(): the
+   * program built from it holds no reference to the source. */
+  file_operations::tmp_path dir =
+    file_operations::create_tmp_dir("esbmc-test-%%%%%%");
+  std::string filename = dir.path() + "/" + test_name;
   log_status("Creating {}", filename);
   goto_factory::create_file_from(c_file, filename);
 
@@ -99,9 +101,9 @@ program goto_factory::get_goto_functions(
   goto_factory::Architecture arch,
   const std::string &test_name)
 {
-  std::string filename(
-    file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
-  filename += "/" + test_name;
+  file_operations::tmp_path dir =
+    file_operations::create_tmp_dir("esbmc-test-%%%%%%");
+  std::string filename = dir.path() + "/" + test_name;
   goto_factory::create_file_from(str, filename);
 
   return goto_factory::get_goto_functions_internal(filename, arch);
