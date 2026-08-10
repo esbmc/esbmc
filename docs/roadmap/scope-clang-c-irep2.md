@@ -850,3 +850,71 @@ C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
 index arm (#6907). C.4b re-aimed at `adjust_float_arith` per §23.3;
 `adjust_expr_shifts` is deferred to shape 2 with the reason recorded.
 
+## 25. C.4b attempted and withdrawn: applicability can be path-dependent
+
+`adjust_float_arith` cleared every check §23 knew to make -- 45 lines, zero
+flags, pre-adjust kinds (`+`/`-`/`*`/`/` on floats) all representable, and a
+working IREP2 precedent in `python_adjust::promote_to_ieee` (#6839). It was
+implemented, measured, and **withdrawn**: A/B over `regression/esbmc` gave
+**141 divergences**, clustered on `complex_*`.
+
+### 25.1 Why
+
+The legacy arm has exactly one call site:
+
+```cpp
+// clang_c_adjust::adjust_expr_binary_arithmetic, end of function
+if (expr.id() == "+" || expr.id() == "-" || expr.id() == "*" || expr.id() == "/")
+  adjust_float_arith(expr);
+```
+
+So it applies only to nodes that reached *that dispatch path*. The IREP2 pass
+walks every node and has no notion of how a node was reached, so it promoted
+float arithmetic the legacy pass never routes there -- most visibly the adds and
+multiplies the complex lowering builds.
+
+Tightening the node test does not fix it. Two nodes can be identical -- same
+kind, same operand types -- and differ only in whether the legacy dispatch would
+have handed them to this arm. That difference is not recoverable from the node.
+
+### 25.2 The third clause
+
+§17 gave one blocker (the arm sets a flag IREP2 cannot hold), §23 a second (the
+node as it arrives is not representable). This is a third, and the most
+restrictive:
+
+> **Shape 1 is safe only for an arm whose applicability is a property of the
+> node itself, not of the path that reached it.**
+
+`adjust_index` satisfies it -- "is this an `index2t`?" is intrinsic, which is
+why #6907 is faithful at 2 divergences. `adjust_float_arith` does not: "did this
+node come through binary-arithmetic adjustment?" is extrinsic.
+
+### 25.3 What this costs the plan
+
+The three clauses together are demanding, and they are not independently rare.
+The §17.2 census counted 28 zero-flag arms and implied a long runway; §23 and
+§25 both fired on the first two candidates drawn from it. The honest reading is
+that shape 1 suits a minority of arms, and the count is unknown until each is
+checked against all three clauses.
+
+That strengthens the §19.2 argument for **shape 2** -- give the IREP2 pass the
+traversal, so it reconstructs the dispatch context rather than inheriting nodes
+stripped of it -- and it moves that from "do it after two or three arms" to the
+next substantive step. #6907 stands on its own; it does not need more per-arm
+siblings to be worth having.
+
+### 25.4 Method
+
+The arm was written, measured, and reverted inside one iteration, because the
+corpus A/B costs about ten minutes (§9.1, §21.4). Withdrawal on measurement is
+the cheap outcome the harness was built to make possible; the expensive outcome
+would have been shipping 141 divergences behind a default-off flag where nothing
+would have looked at them again.
+
+## 26. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907). C.4b withdrawn (§25). Next substantive step is **shape 2**:
+move traversal ownership into the IREP2 pass, per §19.2 and §25.3.
+
