@@ -414,6 +414,9 @@ void clang_c_adjust::adjust_member(member_exprt &expr)
 {
   adjust_operands(expr);
 
+  if (irep2_owns_arms)
+    return;
+
   exprt &base = expr.struct_op();
   if (base.type().is_pointer())
   {
@@ -686,7 +689,7 @@ void clang_c_adjust::adjust_index(index_exprt &index)
   // The recursion above stays here whatever happens; only the rewrite below
   // moves (scope-clang-c-irep2.md §19.2), so gating the whole arm would skip
   // the subtree rather than hand over one transformation.
-  if (irep2_owns_index)
+  if (irep2_owns_arms)
     return;
 
   exprt &array_expr = index.op0();

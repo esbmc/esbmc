@@ -1580,15 +1580,27 @@ public:
        builds member2t pre-adjust (all go through migrate at goto-convert, which
        is post-adjust), so this disjunct is staged enabling infra, exercised
        once the V.1k converter/adjuster pilot lands. */
+    /* A `pointer_id` source is the same transient state index2t already
+       permits, and for the same reason: a legacy `member` over a pointer base
+       is what the C adjuster's adjust_member rewrites to
+       `member(dereference(base))`, so migrating a symbol value before that arm
+       has run hands one here. index2t's sibling comment names this pairing; the
+       relaxation had been applied there and not here. An `array_id` source is
+       the same thing for adjust_member other branch, which rewrites an array
+       base to `member(index(base, 0))`. */
     assert(
       source->type->type_id == type2t::struct_id ||
       source->type->type_id == type2t::union_id ||
       source->type->type_id == type2t::complex_id ||
-      source->type->type_id == type2t::symbol_id);
+      source->type->type_id == type2t::symbol_id ||
+      source->type->type_id == type2t::pointer_id ||
+      source->type->type_id == type2t::array_id);
     /* member must exist exactly once in the parent struct/union — only checkable
-       once the source type is resolved (skipped for the transient symbol case) */
+       once the source type is resolved (skipped for the transient cases) */
     assert(
       source->type->type_id == type2t::symbol_id ||
+      source->type->type_id == type2t::pointer_id ||
+      source->type->type_id == type2t::array_id ||
       struct_union_get_component_number(source->type, memb).has_value());
 #endif
   }
