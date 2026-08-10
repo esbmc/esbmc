@@ -499,3 +499,72 @@ C.1-C.3 done (#6894), lookup fixed (#6897), union assert fixed (#6899). C.4 is
 blocked on §13.5 -- a gate decision, not a code task. The three divergent tests
 are explained and are not migration defects.
 
+## 15. §13.5 option 2 taken (#6901): the container was one line
+
+§13.5 offered three responses to the interning-order problem and judged option 2
+-- fix the container -- worth costing first, on the grounds that it is the only
+one that leaves the gate intact. Costed: it is a single container with a single
+consumer.
+
+### 15.1 The container
+
+```cpp
+typedef std::unordered_set<expr2tc, irep2_hash> loop_varst;   // loopst.h:14
+```
+
+consumed by `make_nondet_assign` (goto_k_induction.cpp:159), which emits one
+havoc assignment per element in iteration order. `irep2_hash` folds in
+`irep_idt::hash()`, which returns `no` -- the interning sequence number -- so the
+bucket layout, and with it the iteration order, moves whenever anything earlier
+in the run interns a string.
+
+That is the whole mechanism. Not systemic: one set, one loop.
+
+### 15.2 Sorting by `operator<` would not have worked
+
+The obvious fix -- copy to a vector and `std::sort` with the default comparator
+-- is wrong here. `expr2tc::operator<` delegates to `expr2t::lt`, which recurses
+into fields; a `symbol2t`'s field is its `irep_idt`, whose `operator<` is
+`no < b.no`. **The default ordering is interning-ordered too.** #6901 sorts by
+`pretty()` instead, which is text.
+
+Worth recording because the same trap waits for anyone who tries to make another
+IREP2-keyed container deterministic: in this codebase, sorting `irep_idt` is not
+a text sort.
+
+### 15.3 Result
+
+| test | off vs off | off vs on, before | off vs on, after |
+|---|---|---|---|
+| `github_1200` | 0 | 48 | **0** |
+| `github_1377` | 0 | 66 | **0** |
+| `github_2618` | 0 | 94 | **0** |
+| `github_746` | 12 | 12 | 12 |
+
+`github_746` is unaffected -- it differs against itself, a separate
+nondeterminism this fix does not touch and does not claim to.
+
+202 k-induction tests, 668 unit tests and 1 037 C regression tests pass.
+
+### 15.4 What this restores
+
+G3 -- `--goto-functions-only` byte-identity -- is a sound gate again for a
+frontend-resident pass, which §13.4 had just declared it was not for Phases 6-9
+alike. The gate survived because the order-dependence turned out to be one
+container rather than a property of the IR.
+
+That is a better outcome than §13.5 expected from option 2, and it is worth
+noting *why* the estimate was pessimistic: §13.4 reasoned from the generality of
+the cause (every `irep_idt`-keyed container is interning-ordered) to the
+generality of the fix. Only one such container was actually on the path from
+frontend to GOTO dump.
+
+## 16. Status
+
+C.1-C.3 done (#6894), lookup fixed (#6897), union assert fixed (#6899), havoc
+order fixed (#6901). The flag's divergence over `regression/esbmc` is now one
+test, and that test is unstable without the flag.
+
+C.4 is unblocked: migrate arms under the `-only` placement, one at a time, with
+the legacy arm disabled in the same run (§6.3).
+
