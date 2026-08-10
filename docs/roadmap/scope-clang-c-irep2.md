@@ -790,3 +790,63 @@ first arm (#6907). C.4b next: migrate a second zero-flag arm --
 switch to shape 2 (§19.2) rather than accumulating per-arm edits in the legacy
 pass.
 
+## 23. C.4b: `adjust_expr_shifts` is not hand-over-able, and the criterion that says so
+
+The obvious second arm was `adjust_expr_shifts` -- 56 lines, zero flags,
+self-contained. Checked before implementing, and it fails, for a reason §17's
+flag census does not cover.
+
+### 23.1 The blocker
+
+The arm's own assertion states its input:
+
+```cpp
+assert(expr.id() == "shr" || expr.id() == "shl");
+```
+
+and its job is to resolve `"shr"` into `"lshr"` or `"ashr"` by the left
+operand's signedness. IREP2 has `lshr2t`, `ashr2t` and `shl2t` -- and **no plain
+`shr2t`**. `migrate_expr` has forward arms for all three resolved kinds and none
+for the unresolved one; `i_shr` does not exist.
+
+Under shape 1 the legacy arm returns early and the node reaches the IREP2 pass
+unresolved -- as a `"shr"` that `migrate_expr` cannot consume. The hand-over
+does not merely move a transformation; it strands a node kind IREP2 has no
+representation for.
+
+### 23.2 The criterion is not "rewrites a kind"
+
+Four arms rewrite `expr.id()`:
+
+| arm | rewrites to | pre-adjust kind | hand-over-able |
+|---|---|---|---|
+| `adjust_index` | `dereference` | `index` -- `index2t` exists | **yes** (#6907) |
+| `adjust_dereference` | `index` | `dereference` -- exists | yes (but 1 flag, §17.2) |
+| `adjust_float_arith` | `ieee_add`/`sub`/`mul`/`div` | `+`/`-`/`*`/`/` -- exist | yes |
+| `adjust_expr_shifts` | `lshr`/`ashr` | **`shr` -- does not exist** | **no** |
+
+So kind-rewriting is not the problem -- #6907 rewrites a kind and is faithful.
+The criterion is:
+
+> **Shape 1 is safe for an arm iff the node *as it arrives* survives
+> `migrate_expr`.** An arm that resolves a placeholder kind IREP2 does not model
+> cannot be handed over post hoc; it has to migrate where the node is built
+> (shape 2, or the converter).
+
+That is a third category alongside §17's two, and it is cheap to test for: run
+the C.3 walk with the arm's legacy rewrite disabled and see whether migration
+aborts.
+
+### 23.3 Next arm
+
+`adjust_float_arith` (45 lines, zero flags, pre-adjust kinds all representable).
+It is also the arm with a working precedent: `python_adjust::promote_to_ieee`
+(esbmc/esbmc#6839) performs the same `+`->`ieee_add` promotion over IREP2
+already, so the second arm has an implementation to mirror rather than derive.
+
+## 24. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907). C.4b re-aimed at `adjust_float_arith` per §23.3;
+`adjust_expr_shifts` is deferred to shape 2 with the reason recorded.
+
