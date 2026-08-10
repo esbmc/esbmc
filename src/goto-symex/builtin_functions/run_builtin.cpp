@@ -110,13 +110,22 @@ bool goto_symext::run_builtin(
   // (--clz-zero-check), with the other UB checks. Match the three names exactly:
   // a loose "__builtin_clz" prefix would also capture the two-argument
   // __builtin_clzg, tripping the one-argument assertion. See #4606.
+  /* __builtin_clzg is the width-generic form: clzg(x) counts leading zeros
+   * over the operand's own width, and clzg(x, fallback) returns `fallback`
+   * for a zero operand instead of being undefined. Unmodelled it was left as
+   * an undefined function returning nondet, so anything built on it -- e.g.
+   * LLVM libc's cpp::countl_zero, which prefers this spelling -- silently
+   * computed garbage (esbmc/esbmc#6925). */
   if (
     symname == "c:@F@__builtin_clz" || symname == "c:@F@__builtin_clzl" ||
-    symname == "c:@F@__builtin_clzll")
+    symname == "c:@F@__builtin_clzll" || symname == "c:@F@__builtin_clzg" ||
+    symname == "c:@F@__builtin_clzs")
   {
+    const bool is_generic = symname == "c:@F@__builtin_clzg";
     assert(
-      func_call.operands.size() == 1 &&
-      "__builtin_clz* must have one argument");
+      (is_generic ? func_call.operands.size() <= 2
+                  : func_call.operands.size() == 1) &&
+      "__builtin_clz* argument count");
 
     expr2tc arg = func_call.operands[0];
     expr2tc ret = func_call.ret;
@@ -137,6 +146,15 @@ bool goto_symext::run_builtin(
       get_int32_type(),
       constant_int2tc(get_int32_type(), width),
       popcount2tc(smeared));
+
+    /* The generic form's second argument is the value for a zero operand,
+     * which is what makes it defined there (unlike __builtin_clz). */
+    if (is_generic && func_call.operands.size() == 2)
+      count = if2tc(
+        get_int32_type(),
+        equality2tc(arg, gen_zero(arg->type)),
+        typecast2tc(get_int32_type(), func_call.operands[1]),
+        count);
 
     if (!is_nil_expr(ret))
       symex_assign(code_assign2tc(ret, typecast2tc(ret->type, count)));

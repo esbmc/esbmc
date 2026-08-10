@@ -1289,6 +1289,33 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
   const exprt &f_op = expr.function();
   const locationt location = expr.location();
 
+  /* Every rewrite below is selected by NAME, so a program that defines one of
+   * these functions itself would have its definition silently replaced by
+   * ESBMC's intrinsic -- a spurious failure when the two differ, and a hidden
+   * bug whenever the intrinsic happens to be correct (esbmc/esbmc#6904).
+   *
+   * Skip the rewrites when the callee has a body whose argument types the
+   * intrinsic cannot be about. ESBMC's own operational models are excluded by
+   * the type test rather than by provenance: libm's models are float-typed
+   * and *rely* on these mappings (fmod.c calls remainder() expecting
+   * fp.rem), so keying purely on "has a body" would break them. The
+   * collisions seen in practice are non-float overloads -- TR 18037's
+   * fixed-point absfx/sqrtfx family, and integer functions sharing a libm
+   * name (function_contract/basic21 defines an int remainder()). */
+  if (f_op.is_symbol())
+  {
+    const std::string usr = "c:@F@" + id2string(to_symbol_expr(f_op).name());
+    const symbolt *callee = context.find_symbol(usr);
+    const bool user_defined = callee && !callee->get_value().is_nil();
+    bool non_float_args = !expr.arguments().empty();
+    for (const exprt &a : expr.arguments())
+      if (ns.follow(a.type()).is_floatbv())
+        non_float_args = false;
+
+    if (user_defined && non_float_args)
+      return;
+  }
+
   // some built-in functions
   if (f_op.is_symbol())
   {
@@ -1370,23 +1397,14 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     }
     else if (is_abs_builtin_name(identifier))
     {
-      /* Only lower argument types the libc builtins actually take: abs and
-       * friends are integer, fabs* floating-point. A program declaring its
-       * own abs over some other arithmetic type -- e.g. TR 18037's
-       * saturating absfx over _Fract -- keeps its call, or we would verify
-       * the builtin instead of the program's code (esbmc/esbmc#6904).
-       * `abs` on a fixed-point value is also plain wrong: it lowers to
-       * (x >= 0) ? x : -x, which overflows at the format minimum where
-       * absfx saturates. */
-      const typet &arg_t = expr.arguments().size() == 1
-                             ? ns.follow(expr.arguments()[0].type())
-                             : typet();
-      const bool builtin_arg_type =
-        is_number(arg_t) && !arg_t.is_fixedbv() &&
-        (arg_t.is_floatbv() ==
-         (identifier.as_string().find("fabs") != std::string::npos));
-
-      if (expr.arguments().size() == 1 && builtin_arg_type)
+      /* The `abs` node lowers to (x >= 0) ? x : -x, which overflows at a
+       * fixed-point format's minimum -- exactly where TR 18037's absfx
+       * saturates -- so a fixed-point argument keeps its call. A
+       * program-supplied abs is already handled by the user-definition guard
+       * at the top of this function. */
+      if (
+        expr.arguments().size() == 1 && is_number(expr.arguments()[0].type()) &&
+        !ns.follow(expr.arguments()[0].type()).is_fixedbv())
       {
         exprt abs_expr("abs", expr.type());
         abs_expr.operands() = expr.arguments();
@@ -1575,8 +1593,15 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     }
     else if (compare_float_suffix(identifier, "sqrt"))
     {
+      /* ieee_sqrt is the floating-point operation, so a fixed-point argument
+       * -- TR 18037's sqrtfx family -- keeps its call rather than handing a
+       * fixed-point-sorted term to the solver's FP sqrt. A program-supplied
+       * sqrt is handled by the user-definition guard at the top. */
       // Skip Python user-defined functions
-      if (!has_prefix(id2string(to_symbol_expr(f_op).identifier()), "py:"))
+      if (
+        expr.arguments().size() == 1 &&
+        ns.follow(expr.arguments()[0].type()).is_floatbv() &&
+        !has_prefix(id2string(to_symbol_expr(f_op).identifier()), "py:"))
       {
         exprt new_expr("ieee_sqrt", expr.type());
         new_expr.operands() = expr.arguments();
