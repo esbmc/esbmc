@@ -192,6 +192,15 @@ bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type)
   return true;
 }
 
+/* Arithmetic destinations every scalar source below converts to implicitly.
+ * The arms differ only in whether they additionally admit bool or a pointer,
+ * so the shared membership test is written once. */
+static bool is_numeric_type(const type2tc &t)
+{
+  return is_unsignedbv_type(t) || is_signedbv_type(t) || is_floatbv_type(t) ||
+         is_fixedbv_type(t);
+}
+
 bool check_c_implicit_typecast(
   const type2tc &src_type,
   const type2tc &dest_type)
@@ -205,39 +214,28 @@ bool check_c_implicit_typecast(
   if (src_type == dest_type)
     return false;
 
+  // `floatbv` appears in every branch of the typet overload above and in none
+  // of this one, so any implicit conversion touching a float fell through to
+  // the `return true` below and was rejected. ESBMC represents a float as
+  // floatbv unless --fixedbv is given, so that rejected the default
+  // representation outright: python_adjust's assignment arm left an integer
+  // stored into a `double` lvalue (scope-relational-float-reconciliation.md
+  // §18.3). Same omission #6688 fixed in get_c_type.
   if (is_bool_type(src_type))
   {
-    if (is_unsignedbv_type(dest_type))
-      return false;
-    if (is_signedbv_type(dest_type))
-      return false;
-    if (is_pointer_type(dest_type))
-      return false;
-    if (is_fixedbv_type(dest_type))
+    if (is_numeric_type(dest_type) || is_pointer_type(dest_type))
       return false;
   }
   else if (is_bv_type(src_type))
   {
-    if (is_bool_type(dest_type))
-      return false;
-    if (is_unsignedbv_type(dest_type))
-      return false;
-    if (is_signedbv_type(dest_type))
-      return false;
-    if (is_pointer_type(dest_type))
-      return false;
-    if (is_fixedbv_type(dest_type))
+    if (
+      is_numeric_type(dest_type) || is_bool_type(dest_type) ||
+      is_pointer_type(dest_type))
       return false;
   }
-  else if (is_fixedbv_type(src_type))
+  else if (is_fixedbv_type(src_type) || is_floatbv_type(src_type))
   {
-    if (is_bool_type(dest_type))
-      return false;
-    if (is_unsignedbv_type(dest_type))
-      return false;
-    if (is_signedbv_type(dest_type))
-      return false;
-    if (is_fixedbv_type(dest_type))
+    if (is_numeric_type(dest_type) || is_bool_type(dest_type))
       return false;
   }
   else if (is_array_type(src_type) || is_pointer_type(src_type))
@@ -971,6 +969,13 @@ void c_typecastt::do_typecast(expr2tc &dest, const type2tc &type)
 
   if (dest_type != type)
   {
+    // Fold a typecast of a constant, as the irept overload above does. Without
+    // this the two copies disagree on the commonest conversion a frontend
+    // performs -- storing a literal into a differently-typed lvalue leaves an
+    // unfolded typecast here but a folded constant there.
+    const bool fold = is_constant(dest) && !no_simplify;
     dest = typecast2tc(type, dest);
+    if (fold)
+      simplify(dest);
   }
 }

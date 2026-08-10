@@ -89,7 +89,7 @@ exprt jimple_method::to_exprt(
     method_type.make_ellipsis();
 
   added_symbol.set_type(method_type);
-  added_symbol.set_value(body->to_exprt(ctx, class_name, this->name));
+  added_symbol.set_value(body->to_code2t(ctx, class_name, this->name));
 
   return dummy;
 }

@@ -13,8 +13,10 @@ Author: Rafael Sá Menezes
 #  include <sys/file.h>
 #  include <unistd.h>
 #endif
+#include <chrono>
 #include <fstream>
 #include <cstdlib>
+#include <thread>
 
 TEST_CASE(
   "tmp path should be unique between two runs",
@@ -425,5 +427,29 @@ TEST_CASE("moving a temporary path moves its lock", "[core][util][filesystem]")
     REQUIRE(!can_lock_exclusively(path));
   }
   REQUIRE(!boost::filesystem::exists(path));
+}
+
+TEST_CASE(
+  "signal-safe cleanup removes a registered tree",
+  "[core][util][filesystem]")
+{
+  // remove_registered_tmps_from_signal() is what the SIGALRM/SIGTERM handlers
+  // call instead of cleanup_registered_tmps(), which allocates (#6201). It
+  // must still remove a non-empty directory tree.
+  const std::string root =
+    file_operations::get_unique_tmp_path("esbmc-test-sigclean-%%%%-%%%%");
+  boost::filesystem::create_directories(root + "/nested");
+  std::ofstream(root + "/nested/file.txt") << "content";
+  REQUIRE(boost::filesystem::exists(root + "/nested/file.txt"));
+
+  file_operations::register_tmp_for_cleanup(root);
+  file_operations::remove_registered_tmps_from_signal();
+
+  // The removal runs in a forked child, so wait for it rather than racing it.
+  for (int i = 0; i < 200 && boost::filesystem::exists(root); ++i)
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  REQUIRE(!boost::filesystem::exists(root));
+
+  file_operations::cleanup_registered_tmps();
 }
 #endif

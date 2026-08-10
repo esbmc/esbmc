@@ -102,19 +102,39 @@ static std::string_view esbmc_version_string()
 }
 
 #ifndef _WIN32
+// Writes a preformatted constant, retrying short writes. write(2) is
+// async-signal-safe; the logging API is not — it formats and allocates.
+static void write_stderr(const char *msg, size_t len)
+{
+  while (len > 0)
+  {
+    ssize_t n = write(STDERR_FILENO, msg, len);
+    if (n <= 0)
+      break;
+    msg += n;
+    len -= static_cast<size_t>(n);
+  }
+}
+
+// Runs on SIGALRM, on whatever the main thread was doing — quite possibly
+// inside malloc holding the arena lock, which is why every call here is from
+// POSIX's async-signal-safe set (#6201). has_violation() is an atomic load.
 void timeout_handler(int)
 {
-  log_error("Timed out");
+  static const char timed_out[] = "ERROR: Timed out\n";
+  static const char failed[] = "VERIFICATION FAILED\n";
+
+  write_stderr(timed_out, sizeof(timed_out) - 1);
   // Under --multi-property the run keeps exploring interleavings after a
   // violation, to reach the properties only later schedules touch. A timeout
   // landing in that tail must not discard a counterexample already found and
   // printed: the verdict is settled once a property is violated.
   if (goto_functionst::property_verdicts.has_violation())
-    log_fail("VERIFICATION FAILED");
+    write_stderr(failed, sizeof(failed) - 1);
   // Kill any external solver process groups first: they are in their own
   // groups, so they outlive this _exit() otherwise (e.g. an mpirun job).
-  file_operations::kill_registered_pgroups();
-  file_operations::cleanup_registered_tmps();
+  file_operations::kill_registered_pgroups_from_signal();
+  file_operations::remove_registered_tmps_from_signal();
   // Use _exit to avoid atexit handlers that may deadlock the allocator
   _exit(1);
 }

@@ -72,6 +72,45 @@ static bool is_fresh_function(const std::string &funcname)
          funcname.find("__ESBMC_is_fresh") == 0;
 }
 
+/// Whether \p e asserts the symbol \p name unconditionally: reachable from the
+/// root through conjunctions, never under a disjunction, negation or
+/// conditional.
+///
+/// A conditional `__ESBMC_requires(n <= 0 || __ESBMC_is_fresh(p, n))` claims
+/// nothing about p on the other branch, so an obligation derived from it must
+/// not be imposed on every caller.
+static bool asserted_unconditionally(const expr2tc &e, const irep_idt &name)
+{
+  if (is_nil_expr(e))
+    return false;
+
+  if (is_and2t(e))
+    return asserted_unconditionally(to_and2t(e).side_1, name) ||
+           asserted_unconditionally(to_and2t(e).side_2, name);
+
+  // A conjunct asserts the temp only by being it. Merely mentioning it, say
+  // as an operand of a comparison, says nothing about whether the clause
+  // demands it, so recursing into other node kinds would over-approximate.
+  // The frontend may wrap the temp in a cast or compare it against zero.
+  expr2tc leaf = e;
+  while (is_typecast2t(leaf))
+    leaf = to_typecast2t(leaf).from;
+  // The frontend may compare the temp against zero with the constant on
+  // either side; both are the same assertion.
+  if (is_notequal2t(leaf))
+  {
+    const notequal2t &ne = to_notequal2t(leaf);
+    if (is_constant_number(ne.side_2))
+      leaf = ne.side_1;
+    else if (is_constant_number(ne.side_1))
+      leaf = ne.side_2;
+  }
+  while (is_typecast2t(leaf))
+    leaf = to_typecast2t(leaf).from;
+
+  return is_symbol2t(leaf) && to_symbol2t(leaf).thename == name;
+}
+
 /// Check if is_fresh call is in ensures clause by examining next instruction
 static bool
 is_fresh_in_ensures(goto_programt::const_targett it, const goto_programt &body)
@@ -80,6 +119,18 @@ is_fresh_in_ensures(goto_programt::const_targett it, const goto_programt &body)
   ++next_it;
   return next_it != body.instructions.end() && next_it->is_assume() &&
          id2string(next_it->location.comment()) == "contract::ensures";
+}
+
+/// Whether an __ESBMC_is_fresh call states separation, i.e. the requires
+/// clause asserts it unconditionally. Under a guard the contract claims
+/// nothing on the other branch, so the harness must not grant it there either.
+static bool states_separation(
+  const code_function_call2t &call,
+  const expr2tc &requires_clause)
+{
+  return is_symbol2t(call.ret) &&
+         asserted_unconditionally(
+           requires_clause, to_symbol2t(call.ret).thename);
 }
 
 code_contractst::code_contractst(
@@ -1221,6 +1272,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   {
     expr2tc ptr_arg;
     expr2tc size_expr;
+    bool states_separation;
   };
   std::vector<is_fresh_info> is_fresh_calls;
 
@@ -1254,6 +1306,7 @@ goto_programt code_contractst::generate_checking_wrapper(
           is_fresh_info info;
           info.ptr_arg = call.operands[0]->clone();
           info.size_expr = call.operands[1]->clone();
+          info.states_separation = states_separation(call, requires_clause);
           is_fresh_calls.push_back(info);
         }
       }
@@ -1272,6 +1325,11 @@ goto_programt code_contractst::generate_checking_wrapper(
   // __ESBMC_old at all (#6483).
   std::vector<std::string> is_fresh_struct_ptrs;
 
+  // Sequence number for the retained-allocation symbols below. An is_fresh
+  // lvalue may be indirect (a->p), so there is no parameter name to build a
+  // unique symbol from.
+  size_t is_fresh_alloc_seq = 0;
+
   // Emit the malloc + non-null assume for one resolved is_fresh pointer lvalue.
   auto emit_is_fresh_alloc =
     [&](const expr2tc &ptr_var, const expr2tc &size_expr) {
@@ -1281,7 +1339,16 @@ goto_programt code_contractst::generate_checking_wrapper(
       assign_inst->location.comment("__ESBMC_is_fresh memory allocation");
 
       // Remember the allocation so the wrapper can free it before returning.
-      wrapper_heap_ptrs.push_back(ptr_var);
+      // Freeing a snapshot rather than the lvalue itself matters when two
+      // parameters alias: `a->p` and `b->p` are then the same lvalue, the
+      // second malloc overwrites the first, and freeing the lvalue twice is a
+      // double free of one object while the other leaks.
+      wrapper_heap_ptrs.push_back(retain_allocation_for_free(
+        wrapper,
+        ptr_var,
+        "isfresh" + std::to_string(is_fresh_alloc_seq++),
+        original_func,
+        location));
 
       if (is_symbol2t(ptr_var) && is_pointer_type(ptr_var->type))
       {
@@ -1395,22 +1462,28 @@ goto_programt code_contractst::generate_checking_wrapper(
   // Both surface forms must be recognised: __ESBMC_is_fresh(&p, n) yields
   // an address_of2t over symbol p; __ESBMC_is_fresh(p, n) yields the
   // bare symbol expression p.
-  std::set<irep_idt> is_fresh_allocated_params;
+  //
+  // Allocation and separation are tracked apart. A guarded is_fresh still owns
+  // its allocation, so it must be skipped here too, but it states no
+  // separation, so it stays aliasable: otherwise the harness grants a callee
+  // separation on a branch the contract says nothing about, and the replace
+  // side -- which gates its obligation on the same test -- asks the caller for
+  // nothing. That is the composition hole this pass exists to close, reopened.
+  std::set<irep_idt> is_fresh_allocated_params, is_fresh_separated_params;
   for (const auto &info : is_fresh_calls)
   {
     expr2tc stripped = info.ptr_arg;
     while (is_typecast2t(stripped))
       stripped = to_typecast2t(stripped).from;
     if (is_address_of2t(stripped))
-    {
-      const expr2tc &obj = to_address_of2t(stripped).ptr_obj;
-      if (is_symbol2t(obj))
-        is_fresh_allocated_params.insert(to_symbol2t(obj).thename);
-    }
-    else if (is_symbol2t(stripped))
-    {
-      is_fresh_allocated_params.insert(to_symbol2t(stripped).thename);
-    }
+      stripped = to_address_of2t(stripped).ptr_obj;
+    if (!is_symbol2t(stripped))
+      continue;
+
+    const irep_idt name = to_symbol2t(stripped).thename;
+    is_fresh_allocated_params.insert(name);
+    if (info.states_separation)
+      is_fresh_separated_params.insert(name);
   }
 
   // 1. Allocate fresh backing storage for pointer parameters (entry-function
@@ -1423,6 +1496,7 @@ goto_programt code_contractst::generate_checking_wrapper(
       original_func,
       location,
       is_fresh_allocated_params,
+      is_fresh_separated_params,
       wrapper_heap_ptrs,
       param_extents);
   }
@@ -2566,6 +2640,157 @@ void code_contractst::emit_ptr_field_assertions(
 // Phase 2C: pointer-parameter dereference assigns compliance
 // ---------------------------------------------------------------------------
 
+void code_contractst::materialize_ptr_deref_array_field(
+  const irep_idt &param_id,
+  const irep_idt &field,
+  const type2tc &ftype,
+  const type2tc &pointee,
+  const expr2tc &ptr_sym,
+  const expr2tc &deref_expr,
+  goto_programt &wrapper,
+  const locationt &location,
+  const std::string &func_name,
+  std::vector<ptr_deref_snapshot_t> &result)
+{
+  const array_type2t &atype = to_array_type(ftype);
+  type2tc elem_type = atype.subtype;
+  if (is_symbol_type(elem_type))
+    elem_type = ns.follow(elem_type);
+  // Only constant-size arrays of scalar elements (skip VLAs and nested
+  // array/struct elements, which would recurse into the same array-rvalue
+  // problem).
+  if (!is_constant_int2t(atype.array_size) || !is_scalar_type(elem_type))
+    return;
+  // A zero-length array member -- the GCC trailing-flexible-member idiom --
+  // has no element to snapshot, and no index is valid in it. The witness range
+  // used to be assumed, so an empty one assumed `false` ahead of the call and
+  // discharged every assertion in the wrapper, verifying the contract
+  // vacuously (#6513).
+  if (to_constant_int2t(atype.array_size).value == 0)
+    return;
+  type2tc k_type = atype.array_size->type;
+
+  std::string base = func_name + "_" + id2string(param_id) + "_" +
+                     id2string(field) + "_" +
+                     std::to_string(ptr_deref_snap_counter++);
+
+  // nondet witness index k, constrained to [0, n)
+  symbolt k_obj;
+  k_obj.name = k_obj.id = "__ESBMC_frame_pderef_k_" + base;
+  set_symbol_type(k_obj, k_type);
+  k_obj.lvalue = true;
+  k_obj.static_lifetime = false;
+  k_obj.file_local = false;
+  symbolt *k_added = context.move_symbol_to_context(k_obj);
+  expr2tc witness_k = symbol2tc(k_type, k_added->id);
+
+  goto_programt::targett k_decl = wrapper.add_instruction(DECL);
+  k_decl->code = code_decl2tc(k_type, k_added->id);
+  k_decl->location = location;
+  k_decl->location.comment("frame: ptr-deref array witness (Phase 2C)");
+
+  goto_programt::targett k_asg = wrapper.add_instruction(ASSIGN);
+  k_asg->code = code_assign2tc(witness_k, gen_nondet(k_type));
+  k_asg->location = location;
+
+  // Clamp rather than ASSUME, as Phase 2B does: an assumption over the witness
+  // index excludes paths whenever the range is empty. Element 0 exists here
+  // because the empty case was skipped above, so it is always a valid fallback
+  // (#6513).
+  goto_programt::targett k_rng = wrapper.add_instruction(ASSIGN);
+  k_rng->code = code_assign2tc(
+    witness_k,
+    if2tc(
+      k_type,
+      and2tc(
+        greaterthanequal2tc(witness_k, gen_zero(k_type)),
+        lessthan2tc(witness_k, atype.array_size)),
+      witness_k,
+      gen_zero(k_type)));
+  k_rng->location = location;
+  k_rng->location.comment(
+    "frame: clamp ptr-deref index to valid array range (Phase 2C)");
+
+  // scalar snapshot of (*p).field[k]
+  symbolt s_obj;
+  s_obj.name = s_obj.id = "__ESBMC_frame_snap_pderef_" + base;
+  set_symbol_type(s_obj, elem_type);
+  s_obj.lvalue = true;
+  s_obj.static_lifetime = false;
+  s_obj.file_local = false;
+  symbolt *s_added = context.move_symbol_to_context(s_obj);
+  expr2tc snap_expr = symbol2tc(elem_type, s_added->id);
+
+  goto_programt::targett s_decl = wrapper.add_instruction(DECL);
+  s_decl->code = code_decl2tc(elem_type, s_added->id);
+  s_decl->location = location;
+  s_decl->location.comment("frame: ptr-deref array snapshot (Phase 2C)");
+
+  expr2tc field_arr = member2tc(ftype, deref_expr, field);
+  goto_programt::targett s_asg = wrapper.add_instruction(ASSIGN);
+  s_asg->code =
+    code_assign2tc(snap_expr, index2tc(elem_type, field_arr, witness_k));
+  s_asg->location = location;
+  s_asg->location.comment("frame: capture (ptr->field)[k] (Phase 2C)");
+
+  ptr_deref_snapshot_t entry;
+  entry.ptr_sym = ptr_sym;
+  entry.pointee_type = pointee;
+  entry.field_name = field;
+  entry.value_type = elem_type;
+  entry.snapshot_sym = snap_expr;
+  entry.array_index = witness_k;
+  entry.member_type = ftype; // array type, for member access at assert time
+  result.push_back(entry);
+}
+
+/// The base pointer of an assigns target that covers \p field, or nil if the
+/// target has some other shape. Used to decide whether a snapshotted parameter
+/// could be another name for memory the clause permits writing.
+///
+/// Two shapes qualify. `__ESBMC_assigns(*p)` covers the whole pointee and so
+/// every field. `p->field`, optionally indexed, covers just that field, which
+/// is what keeps the exemption from reaching a sibling. A bare `p` names the
+/// pointer rather than the pointee, so it grants nothing here.
+///
+/// Note that array decay already lowers `p->arr` to `index(member(...), 0)`
+/// upstream, so stripping indices here does not lose a distinction that
+/// existed: `assigns(p->arr)` and `assigns(p->arr[0])` reach this identically.
+/// Should per-index checking of the declared base ever be tightened, this
+/// stripping has to be revisited with it.
+static expr2tc assigns_target_base(const expr2tc &target, const irep_idt &field)
+{
+  expr2tc e = target;
+  while (is_typecast2t(e))
+    e = to_typecast2t(e).from;
+
+  // `__ESBMC_assigns(*p)`: the whole pointee, hence every field. A bare `p`
+  // names the pointer, not what it points at, so it is deliberately not
+  // matched: exempting every field of `*p` would waive frame checks the clause
+  // never granted.
+  if (is_dereference2t(e))
+  {
+    expr2tc whole = to_dereference2t(e).value;
+    while (is_typecast2t(whole))
+      whole = to_typecast2t(whole).from;
+    return is_symbol2t(whole) ? whole : expr2tc();
+  }
+
+  while (is_index2t(e))
+    e = to_index2t(e).source_value;
+  if (!is_member2t(e) || to_member2t(e).member != field)
+    return expr2tc();
+
+  expr2tc src = to_member2t(e).source_value;
+  if (!is_dereference2t(src))
+    return expr2tc();
+
+  expr2tc ptr = to_dereference2t(src).value;
+  while (is_typecast2t(ptr))
+    ptr = to_typecast2t(ptr).from;
+  return is_symbol2t(ptr) ? ptr : expr2tc();
+}
+
 std::vector<code_contractst::ptr_deref_snapshot_t>
 code_contractst::materialize_ptr_deref_snapshots(
   const frame_enforcert::classified_assignst &classified,
@@ -2693,89 +2918,19 @@ code_contractst::materialize_ptr_deref_snapshots(
         if (is_pointer_type(ftype) || is_code_type(ftype))
           continue;
 
-        // Array field: a whole-array rvalue read through the pointer is
-        // illegal C (dereference cannot build an array rvalue). Snapshot the
-        // scalar element (*p).field[k] at a nondet witness index k in [0,n)
-        // and later assert it is unchanged -- sound by the same forall-via-
-        // witness argument as Phase 2B (avoids dereference.cpp abort).
         if (is_array_type(ftype))
         {
-          const array_type2t &atype = to_array_type(ftype);
-          type2tc elem_type = atype.subtype;
-          if (is_symbol_type(elem_type))
-            elem_type = ns.follow(elem_type);
-          // Only constant-size arrays of scalar elements (skip VLAs and
-          // nested array/struct elements, which would recurse into the same
-          // array-rvalue problem).
-          if (
-            !is_constant_int2t(atype.array_size) || !is_scalar_type(elem_type))
-            continue;
-          type2tc k_type = atype.array_size->type;
-
-          std::string base = func_name + "_" + id2string(param_id) + "_" +
-                             id2string(field) + "_" +
-                             std::to_string(ptr_deref_snap_counter++);
-
-          // nondet witness index k, constrained to [0, n)
-          symbolt k_obj;
-          k_obj.name = k_obj.id = "__ESBMC_frame_pderef_k_" + base;
-          set_symbol_type(k_obj, k_type);
-          k_obj.lvalue = true;
-          k_obj.static_lifetime = false;
-          k_obj.file_local = false;
-          symbolt *k_added = context.move_symbol_to_context(k_obj);
-          expr2tc witness_k = symbol2tc(k_type, k_added->id);
-
-          goto_programt::targett k_decl = wrapper.add_instruction(DECL);
-          k_decl->code = code_decl2tc(k_type, k_added->id);
-          k_decl->location = location;
-          k_decl->location.comment("frame: ptr-deref array witness (Phase 2C)");
-
-          goto_programt::targett k_asg = wrapper.add_instruction(ASSIGN);
-          k_asg->code = code_assign2tc(witness_k, gen_nondet(k_type));
-          k_asg->location = location;
-
-          goto_programt::targett k_rng = wrapper.add_instruction(ASSUME);
-          k_rng->guard = and2tc(
-            greaterthanequal2tc(witness_k, gen_zero(k_type)),
-            lessthan2tc(witness_k, atype.array_size));
-          k_rng->location = location;
-          k_rng->location.comment(
-            "frame: constrain ptr-deref index (Phase 2C)");
-
-          // scalar snapshot of (*p).field[k]
-          symbolt s_obj;
-          s_obj.name = s_obj.id = "__ESBMC_frame_snap_pderef_" + base;
-          set_symbol_type(s_obj, elem_type);
-          s_obj.lvalue = true;
-          s_obj.static_lifetime = false;
-          s_obj.file_local = false;
-          symbolt *s_added = context.move_symbol_to_context(s_obj);
-          expr2tc snap_expr = symbol2tc(elem_type, s_added->id);
-
-          goto_programt::targett s_decl = wrapper.add_instruction(DECL);
-          s_decl->code = code_decl2tc(elem_type, s_added->id);
-          s_decl->location = location;
-          s_decl->location.comment(
-            "frame: ptr-deref array snapshot (Phase 2C)");
-
-          expr2tc field_arr = member2tc(ftype, deref_expr, field);
-          goto_programt::targett s_asg = wrapper.add_instruction(ASSIGN);
-          s_asg->code = code_assign2tc(
-            snap_expr, index2tc(elem_type, field_arr, witness_k));
-          s_asg->location = location;
-          s_asg->location.comment("frame: capture (ptr->field)[k] (Phase 2C)");
-
-          ptr_deref_snapshot_t entry;
-          entry.ptr_sym = ptr_sym;
-          entry.pointee_type = pointee;
-          entry.field_name = field;
-          entry.value_type = elem_type;
-          entry.snapshot_sym = snap_expr;
-          entry.array_index = witness_k;
-          entry.member_type =
-            ftype; // array type, for member access at assert time
-          result.push_back(entry);
+          materialize_ptr_deref_array_field(
+            param_id,
+            field,
+            ftype,
+            pointee,
+            ptr_sym,
+            deref_expr,
+            wrapper,
+            location,
+            func_name,
+            result);
           continue;
         }
 
@@ -2854,7 +3009,89 @@ code_contractst::materialize_ptr_deref_snapshots(
   next_param:;
   }
 
+  // A parameter that aliases an assigns target's base pointer is another name
+  // for the same memory, so a write the clause permits necessarily shows up
+  // under both names. Exempt exactly that, matched on the field so a sibling
+  // field stays protected. Without it the aliasing introduced for #6551 turns
+  // sound contracts into spurious frame violations: the mlk_poly_add(r, b)
+  // shape called as add(p, p) writes only r->coeffs, which it does declare.
+  attach_alias_exemptions(
+    result, assigns_targets, original_func, wrapper, location, func_name);
+
   return result;
+}
+
+/// \brief Mark snapshots whose location an assigns target may also name.
+///
+/// Pointer parameters may alias (see emit_pointer_param_aliasing), so a
+/// parameter can be another name for memory the clause permits writing. The
+/// frame assertion would then report a violation that is not one. Each
+/// exemption is matched on the field, so a sibling field stays protected.
+void code_contractst::attach_alias_exemptions(
+  std::vector<ptr_deref_snapshot_t> &result,
+  const std::vector<expr2tc> &assigns_targets,
+  const symbolt &original_func,
+  goto_programt &wrapper,
+  const locationt &location,
+  const std::string &func_name)
+{
+  // One snapshot per distinct base, not per (snapshot, target) pair: the same
+  // base recurs across targets and across snapshots, and each extra copy is a
+  // symbol plus a DECL and an ASSIGN in every wrapper.
+  //
+  // The base has to be read in the pre-state, because the exemption is
+  // asserted after the call while the value it guards was snapshotted before
+  // it. A callee free to assign a global base could otherwise point it at the
+  // checked object on the way out and launder a write that was outside the
+  // frame when it happened.
+  std::map<irep_idt, expr2tc> base_snapshots;
+  auto snapshot_of = [&](const expr2tc &base) {
+    const irep_idt key = to_symbol2t(base).thename;
+    auto it = base_snapshots.find(key);
+    if (it != base_snapshots.end())
+      return it->second;
+
+    std::string base_name = "__ESBMC_frame_aliasbase_" + func_name + "_" +
+                            get_pretty_name(id2string(key));
+    symbolt base_sym;
+    base_sym.name = base_name;
+    base_sym.id = base_name;
+    set_symbol_type(base_sym, base->type);
+    base_sym.lvalue = true;
+    base_sym.static_lifetime = false;
+    base_sym.location = location;
+    base_sym.mode = original_func.mode;
+    const irep_idt base_id = context.move_symbol_to_context(base_sym)->id;
+    expr2tc snapshot = symbol2tc(base->type, base_id);
+
+    auto base_decl = wrapper.add_instruction(DECL);
+    base_decl->code = code_decl2tc(base->type, base_id);
+    base_decl->location = location;
+    base_decl->location.comment("frame: assigns-target base, pre-state");
+
+    auto base_assign = wrapper.add_instruction(ASSIGN);
+    base_assign->code = code_assign2tc(snapshot, base);
+    base_assign->location = location;
+    base_assign->location.comment("frame: assigns-target base, pre-state");
+
+    base_snapshots.emplace(key, snapshot);
+    return snapshot;
+  };
+
+  for (auto &snap : result)
+  {
+    expr2tc exemption;
+    for (const expr2tc &target : assigns_targets)
+    {
+      expr2tc base = assigns_target_base(target, snap.field_name);
+      if (is_nil_expr(base) || base == snap.ptr_sym)
+        continue;
+
+      expr2tc same = same_object2tc(snap.ptr_sym, snapshot_of(base));
+      exemption = is_nil_expr(exemption) ? same : or2tc(exemption, same);
+    }
+    snap.alias_exemption = exemption;
+  }
 }
 
 void code_contractst::emit_ptr_deref_assertions(
@@ -2898,6 +3135,9 @@ void code_contractst::emit_ptr_deref_assertions(
     }
 
     expr2tc guard = equality2tc(current_val, snap.snapshot_sym);
+    if (!is_nil_expr(snap.alias_exemption))
+      guard = or2tc(guard, snap.alias_exemption);
+
     goto_programt::targett t = wrapper.add_instruction(ASSERT);
     t->guard = guard;
     t->location = location;
@@ -3015,8 +3255,8 @@ code_contractst::materialize_arr_elem_snapshots(
     // it, verifying the whole function vacuously. Assuming a non-empty range
     // instead forces the extent to be at least one element, which is #6212 in
     // another guise. Clamping to the declared index does neither.
-    // Phase 2C still assumes its range (#6513); it needs a skip rather than a
-    // clamp, having no declared index to fall back to.
+    // Phase 2C takes the same approach, skipping a zero-length member outright
+    // and clamping to element 0 otherwise (#6513).
     goto_programt::targett j_clamp = wrapper.add_instruction(ASSIGN);
     j_clamp->code = code_assign2tc(
       witness_j,
@@ -3935,6 +4175,227 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
   goto_functions.update();
 }
 
+/// The __ESBMC_is_fresh call at \p it, or nullptr if it is not one.
+static const code_function_call2t *
+as_is_fresh_call(goto_programt::const_targett it)
+{
+  if (!it->is_function_call() || !is_code_function_call2t(it->code))
+    return nullptr;
+
+  const code_function_call2t &c = to_code_function_call2t(it->code);
+  if (
+    !is_symbol2t(c.function) ||
+    !is_fresh_function(to_symbol2t(c.function).thename.as_string()) ||
+    c.operands.size() < 2 || is_nil_expr(c.ret) || !is_symbol2t(c.ret))
+    return nullptr;
+
+  return &c;
+}
+
+/// The position of the parameter \p ptr names, or params.size() if it names
+/// none. Recorded before rebinding to actual arguments, which makes two
+/// formals bound to one actual indistinguishable from one formal named twice.
+static size_t
+fresh_param_index(const expr2tc &ptr, const code_typet::argumentst &params)
+{
+  if (!is_symbol2t(ptr))
+    return params.size();
+
+  for (size_t i = 0; i < params.size(); ++i)
+    if (params[i].get_identifier() == to_symbol2t(ptr).thename)
+      return i;
+
+  return params.size();
+}
+
+/// \brief The separations a caller must discharge for the fresh parameters.
+///
+/// __ESBMC_is_fresh(p, n) says p addresses a *fresh* object, so it is separate
+/// from everything else the caller can reach, not merely from the other
+/// is_fresh parameters. The enforce harness grants exactly that, by backing p
+/// on its own and excluding it from the aliasing introduced for #6551, so
+/// every one of those separations has to be discharged at the call. Otherwise
+/// a caller passes one object twice, the assumed ensures becomes
+/// self-contradictory, and everything after the call is discharged vacuously
+/// (the first case in #6542).
+/// Static-lifetime objects the contract's clauses name, as addresses. A fresh
+/// pointer is separate from everything the caller can reach, so it is separate
+/// from these too, and only the ones the contract mentions are worth asserting.
+static void collect_clause_globals(
+  const expr2tc &e,
+  const namespacet &ns,
+  std::vector<expr2tc> &out)
+{
+  if (is_nil_expr(e))
+    return;
+
+  if (is_symbol2t(e))
+  {
+    const symbolt *sym = ns.lookup(to_symbol2t(e).thename);
+    if (sym && sym->static_lifetime && !is_code_type(e->type))
+    {
+      expr2tc addr = address_of2tc(pointer_type2tc(e->type), e);
+      if (
+        std::find(out.begin(), out.end(), addr) == out.end() &&
+        !is_pointer_type(e->type))
+        out.push_back(addr);
+    }
+    return;
+  }
+
+  e->foreach_operand(
+    [&ns, &out](const expr2tc &op) { collect_clause_globals(op, ns, out); });
+}
+
+static std::vector<expr2tc> is_fresh_separations(
+  const code_typet::argumentst &params,
+  const std::vector<expr2tc> &actual_args,
+  const std::set<size_t> &fresh_params,
+  const std::vector<expr2tc> &fresh_others,
+  const std::vector<expr2tc> &clause_globals)
+{
+  std::vector<expr2tc> obligations;
+
+  // Every fresh pointer is separate from each global the contract names.
+  auto separate_from_globals = [&](const expr2tc &fresh) {
+    for (const expr2tc &g : clause_globals)
+      obligations.push_back(not2tc(same_object2tc(fresh, g)));
+  };
+
+  // Fresh lvalues that are not parameters: a global, `s->p`, `*out`. They owe
+  // the same separation, against every pointer argument and against each
+  // other, but have no position to key on.
+  for (size_t a = 0; a < fresh_others.size(); ++a)
+  {
+    for (size_t j = 0; j < params.size() && j < actual_args.size(); ++j)
+      if (is_pointer_type(migrate_type(params[j].type())))
+        obligations.push_back(
+          not2tc(same_object2tc(fresh_others[a], actual_args[j])));
+
+    for (size_t b = a + 1; b < fresh_others.size(); ++b)
+      obligations.push_back(
+        not2tc(same_object2tc(fresh_others[a], fresh_others[b])));
+
+    separate_from_globals(fresh_others[a]);
+  }
+
+  for (size_t i : fresh_params)
+  {
+    if (i >= actual_args.size())
+      continue;
+
+    for (size_t j = 0; j < params.size() && j < actual_args.size(); ++j)
+    {
+      if (j == i || !is_pointer_type(migrate_type(params[j].type())))
+        continue;
+      // Emit each unordered pair once when both ends are fresh.
+      if (fresh_params.count(j) && j < i)
+        continue;
+
+      obligations.push_back(
+        not2tc(same_object2tc(actual_args[i], actual_args[j])));
+    }
+
+    separate_from_globals(actual_args[i]);
+  }
+
+  return obligations;
+}
+
+/// \brief Lower __ESBMC_is_fresh in a requires clause for a replace site.
+///
+/// On the assume/enforce side is_fresh is realised by allocation; here the
+/// precondition is checked against the caller's argument, so the raw intrinsic
+/// -- whose return-value temp is never defined in the caller -- would be
+/// asserted against an undefined value and pass vacuously (#6380).
+///
+/// \param separation Output: obligations the caller must discharge.
+/// \return The requires clause with is_fresh temps rewritten.
+expr2tc code_contractst::lower_is_fresh_in_requires(
+  const symbolt &function_symbol,
+  const goto_programt &function_body,
+  const std::vector<expr2tc> &actual_args,
+  expr2tc requires_clause,
+  std::vector<expr2tc> &separation)
+{
+  if (is_nil_expr(requires_clause) || !function_symbol.get_type().is_code())
+    return requires_clause;
+
+  const code_typet::argumentst &params =
+    to_code_type(function_symbol.get_type()).arguments();
+
+  std::set<size_t> fresh_params;
+  std::vector<expr2tc> fresh_others;
+  std::vector<is_fresh_mapping_t> req_is_fresh;
+
+  forall_goto_program_instructions (it, function_body)
+  {
+    const code_function_call2t *call = as_is_fresh_call(it);
+    if (!call)
+      continue;
+
+    // Recover the guarded pointer, stripping the void* cast the frontend
+    // inserts, then rebind the callee's formal parameter to the actual
+    // argument passed at this call site.
+    expr2tc ptr = call->operands[0];
+    while (is_typecast2t(ptr))
+      ptr = to_typecast2t(ptr).from;
+
+    const size_t fresh_param = fresh_param_index(ptr, params);
+
+    for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
+    {
+      expr2tc param_expr =
+        symbol2tc(migrate_type(params[i].type()), params[i].get_identifier());
+      ptr = replace_symbol_in_expr(ptr, param_expr, actual_args[i]);
+    }
+    if (!is_pointer_type(ptr->type))
+      continue;
+
+    // The separation obligation is only owed when the requires clause asserts
+    // this is_fresh unconditionally. That test also excludes an ensures-side
+    // is_fresh, which describes what the callee produces and asks nothing of
+    // the caller. It is made here, while the clause still mentions the temp:
+    // the positional test the enforce side uses reads the untransformed body,
+    // and by this point the clause assumes have been rewritten.
+    if (asserted_unconditionally(
+          requires_clause, to_symbol2t(call->ret).thename))
+    {
+      if (fresh_param != params.size())
+        fresh_params.insert(fresh_param);
+      else
+        // A global, `s->p`, `*out`: the enforce harness allocates that lvalue
+        // on its own just as it does a bare parameter, so the separation has
+        // to be discharged here too. Keyed on the rebound expression rather
+        // than a parameter position, which these have none of.
+        fresh_others.push_back(ptr);
+    }
+
+    // valid_object() takes a pointer operand (cf. the canonical
+    // valid_object2tc(address_of(obj)) in dereference.cpp), so pass the
+    // argument pointer directly -- do not dereference it, which would both
+    // add a spurious bounds check and (through the frontend's void* cast)
+    // build an ill-typed array-select.
+    is_fresh_mapping_t m;
+    m.temp_var_name = to_symbol2t(call->ret).thename;
+    m.ptr_expr = ptr;
+    req_is_fresh.push_back(m);
+  }
+
+  if (!req_is_fresh.empty())
+    requires_clause = replace_is_fresh_temps(
+      requires_clause, req_is_fresh, /*require_dynamic=*/false);
+
+  std::vector<expr2tc> clause_globals;
+  collect_clause_globals(requires_clause, ns, clause_globals);
+  collect_clause_globals(
+    extract_ensures_from_body(function_body), ns, clause_globals);
+
+  separation = is_fresh_separations(
+    params, actual_args, fresh_params, fresh_others, clause_globals);
+  return requires_clause;
+}
+
 void code_contractst::generate_replacement_at_call(
   const symbolt &function_symbol,
   const goto_programt &function_body,
@@ -4049,54 +4510,19 @@ void code_contractst::generate_replacement_at_call(
   // this call site (with its real pointee type, so we never dereference through
   // the frontend's void* cast), then replace_is_fresh_temps rewrites the temp
   // to valid_object() on the pointed-to object.
-  if (!is_nil_expr(requires_clause) && function_symbol.get_type().is_code())
   {
-    const code_typet &code_type = to_code_type(function_symbol.get_type());
-    const code_typet::argumentst &params = code_type.arguments();
+    std::vector<expr2tc> separation;
+    requires_clause = lower_is_fresh_in_requires(
+      function_symbol, function_body, actual_args, requires_clause, separation);
 
-    std::vector<is_fresh_mapping_t> req_is_fresh;
-    forall_goto_program_instructions (it, function_body)
-    {
-      if (!it->is_function_call() || !is_code_function_call2t(it->code))
-        continue;
-      const code_function_call2t &c = to_code_function_call2t(it->code);
-      if (
-        !is_symbol2t(c.function) ||
-        !is_fresh_function(to_symbol2t(c.function).thename.as_string()) ||
-        c.operands.size() < 2 || is_nil_expr(c.ret) || !is_symbol2t(c.ret))
-        continue;
-
-      // Recover the guarded pointer, stripping the void* cast the frontend
-      // inserts, then rebind the callee's formal parameter to the actual
-      // argument passed at this call site.
-      expr2tc ptr = c.operands[0];
-      while (is_typecast2t(ptr))
-        ptr = to_typecast2t(ptr).from;
-      for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
-      {
-        expr2tc param_expr =
-          symbol2tc(migrate_type(params[i].type()), params[i].get_identifier());
-        ptr = replace_symbol_in_expr(ptr, param_expr, actual_args[i]);
-      }
-      if (!is_pointer_type(ptr->type))
-        continue;
-
-      // valid_object() takes a pointer operand (cf. the canonical
-      // valid_object2tc(address_of(obj)) in dereference.cpp), so pass the
-      // argument pointer directly -- do not dereference it, which would both
-      // add a spurious bounds check and (through the frontend's void* cast)
-      // build an ill-typed array-select.
-      is_fresh_mapping_t m;
-      m.temp_var_name = to_symbol2t(c.ret).thename;
-      m.ptr_expr = ptr;
-      req_is_fresh.push_back(m);
-    }
-
-    if (!req_is_fresh.empty())
-      requires_clause = replace_is_fresh_temps(
-        requires_clause, req_is_fresh, /*require_dynamic=*/false);
+    for (const expr2tc &obligation : separation)
+      add_contract_clause(
+        obligation,
+        ASSERT,
+        "contract requires: __ESBMC_is_fresh argument must not alias another "
+        "pointer argument",
+        "contract requires");
   }
-
   add_contract_clause(
     requires_clause, ASSERT, "contract requires", "contract requires");
 
@@ -4340,6 +4766,72 @@ static void warn_assumed_struct_extents(
     fmt::join(params, ", "));
 }
 
+static bool contains_symbol(const expr2tc &e, const irep_idt &name)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_symbol2t(e) && to_symbol2t(e).thename == name)
+    return true;
+
+  bool found = false;
+  e->foreach_operand([&found, &name](const expr2tc &op) {
+    if (!found)
+      found = contains_symbol(op, name);
+  });
+  return found;
+}
+
+/// Whether \p e reads or writes through \p name rather than merely naming it.
+static bool dereferences_symbol(const expr2tc &e, const irep_idt &name)
+{
+  if (is_nil_expr(e))
+    return false;
+  if ((is_dereference2t(e) || is_index2t(e)) && contains_symbol(e, name))
+    return true;
+
+  bool found = false;
+  e->foreach_operand([&found, &name](const expr2tc &op) {
+    if (!found)
+      found = dereferences_symbol(op, name);
+  });
+  return found;
+}
+
+/// Whether the extent of \p param can matter here: it is read or written
+/// through, or it escapes into a call that could do either. Contract clauses
+/// are still calls in the body at this point, so one scan covers the body and
+/// the requires/ensures/assigns clauses alike.
+///
+/// Answers true whenever the body cannot be inspected or the parameter
+/// escapes. A wrong "no" silently drops the warning on an underspecified
+/// contract, which is worse than the noise it was reported for (#6511).
+bool code_contractst::param_extent_is_observable(
+  const symbolt &func,
+  const irep_idt &param) const
+{
+  auto entry = goto_functions.function_map.find(func.id);
+  if (entry == goto_functions.function_map.end())
+    return true;
+  if (!entry->second.body_available)
+    return true;
+
+  for (const auto &ins : entry->second.body.instructions)
+  {
+    if (dereferences_symbol(ins.code, param))
+      return true;
+    if (dereferences_symbol(ins.guard, param))
+      return true;
+
+    if (!ins.is_function_call() || !is_code_function_call2t(ins.code))
+      continue;
+
+    for (const expr2tc &arg : to_code_function_call2t(ins.code).operands)
+      if (contains_symbol(arg, param))
+        return true;
+  }
+  return false;
+}
+
 /// Tell the user why a dereference may fail: the contract states no extent for
 /// these parameters, so the harness leaves their extent unconstrained.
 static void warn_unstated_extents(
@@ -4365,6 +4857,7 @@ void code_contractst::add_pointer_validity_assumptions(
   const symbolt &func,
   const locationt &location,
   const std::set<irep_idt> &skip_params,
+  const std::set<irep_idt> &separated_params,
   std::vector<expr2tc> &allocated_ptrs,
   std::map<irep_idt, param_extentt> &param_extents)
 {
@@ -4375,6 +4868,13 @@ void code_contractst::add_pointer_validity_assumptions(
   // function gets one warning rather than one per parameter.
   std::vector<std::string> nondet_extent, assumed_one_element;
 
+  // Pointer parameters this function backs itself, paired with their pretty
+  // names. Each is given its own storage below, which would hand the callee a
+  // separation hypothesis no contract clause states, so they are afterwards
+  // allowed to alias (issue #6551). Parameters covered by __ESBMC_is_fresh are
+  // absent: is_fresh does state separation, so it is theirs to keep.
+  std::vector<std::pair<expr2tc, std::string>> aliasable_params;
+
   for (const auto &param : to_code_type(func.get_type()).arguments())
   {
     if (!param.type().is_pointer())
@@ -4383,18 +4883,25 @@ void code_contractst::add_pointer_validity_assumptions(
     type2tc param_type = migrate_type(param.type());
     expr2tc p = symbol2tc(param_type, param.get_identifier());
 
+    std::string name = get_pretty_name(id2string(param.get_identifier()));
+
     // Skip params already allocated by __ESBMC_is_fresh to avoid overwriting
     // the is_fresh allocation, which has the extent the contract asked for.
+    // Only those whose is_fresh is asserted unconditionally are also withheld
+    // from aliasing; a guarded one states no separation and must not be
+    // granted any.
     if (skip_params.count(param.get_identifier()))
     {
       log_debug(
         "contracts",
         "add_pointer_validity_assumptions: skipping {} (allocated by is_fresh)",
         id2string(param.get_identifier()));
+      if (!separated_params.count(param.get_identifier()))
+        aliasable_params.emplace_back(
+          symbol2tc(migrate_type(param.type()), param.get_identifier()), name);
       continue;
     }
 
-    std::string name = get_pretty_name(id2string(param.get_identifier()));
     type2tc pointee = ns.follow(to_pointer_type(param_type).subtype);
 
     // See emit_struct_stack_backing for why structs are carved out.
@@ -4407,17 +4914,153 @@ void code_contractst::add_pointer_validity_assumptions(
       param_extents[param.get_identifier()] = {
         type_byte_size_expr(pointee, &ns), true};
       assumed_one_element.push_back(name);
+      aliasable_params.emplace_back(p, name);
       continue;
     }
 
     param_extents[param.get_identifier()] = {
       emit_pointer_param_malloc(wrapper, p, name, func, location), false};
-    allocated_ptrs.push_back(p);
-    nondet_extent.push_back(name);
+
+    allocated_ptrs.push_back(
+      retain_allocation_for_free(wrapper, p, name, func, location));
+    // The storage is allocated either way; only the advice is withheld, and
+    // only when nothing here can observe the extent (#6511).
+    if (param_extent_is_observable(func, param.get_identifier()))
+      nondet_extent.push_back(name);
+    aliasable_params.emplace_back(p, name);
   }
+
+  emit_pointer_param_aliasing(wrapper, func, location, aliasable_params);
 
   warn_unstated_extents(func, location, nondet_extent);
   warn_assumed_struct_extents(func, location, assumed_one_element);
+}
+
+expr2tc code_contractst::retain_allocation_for_free(
+  goto_programt &wrapper,
+  const expr2tc &allocated,
+  const std::string &name,
+  const symbolt &func,
+  const locationt &location)
+{
+  std::string backing_name =
+    "__ESBMC_harness_backing_" + id2string(func.name) + "_" + name;
+
+  symbolt backing_sym;
+  backing_sym.name = backing_name;
+  backing_sym.id = backing_name;
+  set_symbol_type(backing_sym, allocated->type);
+  backing_sym.lvalue = true;
+  backing_sym.static_lifetime = false;
+  backing_sym.location = location;
+  backing_sym.mode = func.mode;
+  const irep_idt backing_id = context.move_symbol_to_context(backing_sym)->id;
+  expr2tc backing = symbol2tc(allocated->type, backing_id);
+
+  auto backing_decl = wrapper.add_instruction(DECL);
+  backing_decl->code = code_decl2tc(allocated->type, backing_id);
+  backing_decl->location = location;
+  backing_decl->location.comment("harness: retain allocation for free");
+
+  auto backing_assign = wrapper.add_instruction(ASSIGN);
+  backing_assign->code = code_assign2tc(backing, allocated);
+  backing_assign->location = location;
+  backing_assign->location.comment("harness: retain allocation for free");
+
+  return backing;
+}
+
+void code_contractst::emit_pointer_param_aliasing(
+  goto_programt &wrapper,
+  const symbolt &func,
+  const locationt &location,
+  const std::vector<std::pair<expr2tc, std::string>> &params)
+{
+  // Parameters that gained an aliasing choice, so the change of behaviour can
+  // be explained once rather than left to be inferred from a flag buried in a
+  // counterexample.
+  std::vector<std::string> may_alias;
+
+  for (size_t j = 1; j < params.size(); ++j)
+  {
+    const expr2tc &target = params[j].first;
+
+    // Each parameter either takes the value of an earlier one or keeps its own
+    // backing. Chaining the choices reaches every partition of the parameters
+    // into aliasing groups, because the assignments run in order and so a
+    // later parameter reads an earlier one's chosen value.
+    //
+    // Pointee type is not a barrier. Two parameters of different pointer type
+    // can address the same storage, and a contract that needs them apart has
+    // to say so like any other. Restricting this to identical types would also
+    // put the two sides out of step, since a replace site discharges is_fresh
+    // separation against every pointer argument regardless of type.
+    expr2tc value = target;
+    bool aliased = false;
+    for (size_t i = j; i-- > 0;)
+    {
+      aliased = true;
+
+      // A named flag rather than an inline nondet, so a counterexample says
+      // which two parameters the failing trace aliased.
+      std::string flag_name = "__ESBMC_harness_alias_" + id2string(func.name) +
+                              "_" + params[j].second + "_" + params[i].second;
+      symbolt flag_sym;
+      flag_sym.name = flag_name;
+      flag_sym.id = flag_name;
+      set_symbol_type(flag_sym, get_bool_type());
+      flag_sym.lvalue = true;
+      flag_sym.static_lifetime = false;
+      flag_sym.location = location;
+      flag_sym.mode = func.mode;
+      const irep_idt flag_id = context.move_symbol_to_context(flag_sym)->id;
+      expr2tc flag = symbol2tc(get_bool_type(), flag_id);
+
+      auto flag_decl = wrapper.add_instruction(DECL);
+      flag_decl->code = code_decl2tc(get_bool_type(), flag_id);
+      flag_decl->location = location;
+      flag_decl->location.comment("harness: whether two parameters alias");
+
+      auto flag_assign = wrapper.add_instruction(ASSIGN);
+      flag_assign->code = code_assign2tc(flag, gen_nondet(get_bool_type()));
+      flag_assign->location = location;
+      flag_assign->location.comment("harness: aliasing is unconstrained");
+
+      expr2tc source = params[i].first;
+      if (source->type != target->type)
+        source = typecast2tc(target->type, source);
+      value = if2tc(target->type, flag, source, value);
+    }
+
+    if (!aliased)
+      continue;
+
+    may_alias.push_back(params[j].second);
+
+    auto assign_inst = wrapper.add_instruction(ASSIGN);
+    assign_inst->code = code_assign2tc(target, value);
+    assign_inst->location = location;
+    assign_inst->location.comment(
+      "harness: '" + params[j].second +
+      "' may alias an earlier parameter, which the contract does not separate");
+
+    log_debug(
+      "contracts",
+      "emit_pointer_param_aliasing: {} may alias an earlier parameter",
+      params[j].second);
+  }
+
+  if (may_alias.empty())
+    return;
+
+  log_warning(
+    "{}: {}: pointer parameter(s) {} may alias another parameter, because the "
+    "contract does not state that they are separate. A contract that needs "
+    "them separate has to say so, with __ESBMC_requires(<p> != <q>) or "
+    "__ESBMC_requires(__ESBMC_is_fresh(<param>, <bytes>)).",
+    location,
+    func.name,
+    fmt::join(may_alias, ", "));
 }
 
 void code_contractst::emit_struct_stack_backing(

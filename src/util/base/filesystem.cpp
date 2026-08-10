@@ -2,6 +2,7 @@
 #include <boost/filesystem.hpp>
 #include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <fstream>
 #include <vector>
 
@@ -57,9 +58,34 @@ static void unlock_tmp_path(int &fd)
 static std::vector<std::string> registered_tmp_paths;
 static std::vector<long> registered_pgroups;
 
+/* Signal-safe mirrors of the two registries above. A handler may run with the
+ * allocator lock held by the code it interrupted, so it must not touch the
+ * std:: containers: iterating them races with a concurrent push_back, and
+ * clearing the path vector frees the strings and re-enters malloc, which glibc
+ * catches as a heap-consistency assertion (#6201). These are fixed-capacity,
+ * written only at registration, and read by the handler with plain loads. */
+#ifndef _WIN32
+static constexpr size_t sig_max_tmps = 32;
+static constexpr size_t sig_path_max = 4096;
+static char sig_tmp_paths[sig_max_tmps][sig_path_max];
+static volatile sig_atomic_t sig_tmp_count = 0;
+
+static constexpr size_t sig_max_pgroups = 64;
+static volatile sig_atomic_t sig_pgroups[sig_max_pgroups];
+static volatile sig_atomic_t sig_pgroup_count = 0;
+#endif
+
 void file_operations::register_tmp_for_cleanup(const std::string &path)
 {
   registered_tmp_paths.push_back(path);
+#ifndef _WIN32
+  size_t n = static_cast<size_t>(sig_tmp_count);
+  if (n < sig_max_tmps && path.size() < sig_path_max)
+  {
+    memcpy(sig_tmp_paths[n], path.c_str(), path.size() + 1);
+    sig_tmp_count = static_cast<sig_atomic_t>(n + 1);
+  }
+#endif
 }
 
 void file_operations::cleanup_registered_tmps()
@@ -70,17 +96,35 @@ void file_operations::cleanup_registered_tmps()
     boost::filesystem::remove_all(p, ec);
   }
   registered_tmp_paths.clear();
+#ifndef _WIN32
+  sig_tmp_count = 0;
+#endif
 }
 
 void file_operations::register_pgroup_for_cleanup(long pgid)
 {
   registered_pgroups.push_back(pgid);
+#ifndef _WIN32
+  size_t n = static_cast<size_t>(sig_pgroup_count);
+  if (n < sig_max_pgroups)
+  {
+    sig_pgroups[n] = static_cast<sig_atomic_t>(pgid);
+    sig_pgroup_count = static_cast<sig_atomic_t>(n + 1);
+  }
+#endif
 }
 
 void file_operations::unregister_pgroup(long pgid)
 {
   auto &v = registered_pgroups;
   v.erase(std::remove(v.begin(), v.end(), pgid), v.end());
+#ifndef _WIN32
+  /* Clearing the slot rather than compacting keeps the mirror append-only, so
+   * a handler firing mid-update never observes a shifted or short array. */
+  for (sig_atomic_t i = 0; i < sig_pgroup_count; ++i)
+    if (sig_pgroups[i] == static_cast<sig_atomic_t>(pgid))
+      sig_pgroups[i] = 0;
+#endif
 }
 
 void file_operations::kill_registered_pgroups()
@@ -91,7 +135,52 @@ void file_operations::kill_registered_pgroups()
       killpg(static_cast<pid_t>(pgid), SIGKILL);
 #endif
   registered_pgroups.clear();
+#ifndef _WIN32
+  sig_pgroup_count = 0;
+#endif
 }
+
+#ifndef _WIN32
+void file_operations::kill_registered_pgroups_from_signal()
+{
+  for (sig_atomic_t i = 0; i < sig_pgroup_count; ++i)
+  {
+    sig_atomic_t pgid = sig_pgroups[i];
+    if (pgid > 0)
+      killpg(static_cast<pid_t>(pgid), SIGKILL);
+  }
+}
+
+void file_operations::remove_registered_tmps_from_signal()
+{
+  /* The temporaries are directory trees, and no async-signal-safe call removes
+   * one. fork() is safe, and a child that does nothing but execve() is too, so
+   * hand each tree to rm(1): the child never touches the inherited heap.
+   * argv is built here from static storage only. Best effort — if rm is
+   * missing the tree is simply left for /tmp ageing, as it would have been
+   * with no cleanup at all. */
+  static char arg_rm[] = "rm";
+  static char arg_rf[] = "-rf";
+  static char *const envp[] = {nullptr};
+
+  for (sig_atomic_t i = 0; i < sig_tmp_count; ++i)
+  {
+    if (sig_tmp_paths[i][0] == '\0')
+      continue;
+
+    pid_t pid = fork();
+    if (pid != 0)
+      continue;
+
+    /* Leave the caller's process group so a killpg() of it (signal_catcher)
+     * cannot take the child down before it has removed anything. */
+    setpgid(0, 0);
+    char *argv[] = {arg_rm, arg_rf, sig_tmp_paths[i], nullptr};
+    execve("/bin/rm", argv, envp);
+    _exit(127);
+  }
+}
+#endif
 
 file_data file_data::bundled(const char *data, size_t size)
 {

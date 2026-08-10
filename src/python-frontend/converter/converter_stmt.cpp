@@ -1732,6 +1732,28 @@ bool python_converter::return_value_uses_call_argument(
          return_value.contains("value") && is_param_name(return_value["value"]);
 }
 
+/// Item assignment on an immutable container is a TypeError. A string that is
+/// not intercepted here updates its char array with a whole string value, which
+/// trips with2t::assert_consistency and aborts instead of reporting anything.
+bool python_converter::reject_immutable_item_assignment(
+  const typet &container_type,
+  codet &target_block)
+{
+  const char *kind = tuple_handler_->is_tuple_type(container_type) ? "tuple"
+                     : type_utils::is_string_type(container_type)  ? "str"
+                                                                   : nullptr;
+  if (!kind)
+    return false;
+
+  exprt raise = get_exception_handler().gen_exception_raise(
+    "TypeError",
+    std::string("'") + kind + "' object does not support item assignment");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  target_block.copy_to_operands(throw_code);
+  return true;
+}
+
 void python_converter::reject_unsafe_numpy_view_target(
   const nlohmann::json &target)
 {
@@ -2409,6 +2431,17 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   return symbol_table_.move_symbol_to_context(symbol);
 }
 
+/// The bare name an AST node denotes: `id` for a Name, `attr` for an Attribute
+/// -- a qualified `module.Class`, which is what a base inherited from an
+/// operational model looks like. \p fallback covers any other shape.
+static std::string
+ast_node_name(const nlohmann::json &node, const std::string &fallback = "")
+{
+  if (node.contains("id"))
+    return node["id"].get<std::string>();
+  return node.value("attr", fallback);
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -2420,15 +2453,12 @@ void python_converter::handle_function_call_rhs(
 {
   if (is_ctor_call)
   {
-    std::string func_name =
-      ast_node["value"]["func"].contains("id")
-        ? ast_node["value"]["func"]["id"].get<std::string>()
-        : ast_node["value"]["func"]["attr"].get<std::string>();
+    std::string func_name = ast_node_name(ast_node["value"]["func"]);
 
     if (base_ctor_called)
     {
       auto class_node = json_utils::find_class((*ast_json)["body"], func_name);
-      func_name = class_node["bases"][0]["id"].get<std::string>();
+      func_name = ast_node_name(class_node["bases"][0], func_name);
       base_ctor_called = false;
     }
 
@@ -3271,16 +3301,8 @@ void python_converter::get_var_assign(
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
 
-    // Tuple subscript assignment: tuples are immutable, raise TypeError
-    if (tuple_handler_->is_tuple_type(container_type))
-    {
-      exprt raise = get_exception_handler().gen_exception_raise(
-        "TypeError", "'tuple' object does not support item assignment");
-      codet throw_code("expression");
-      throw_code.operands().push_back(raise);
-      target_block.copy_to_operands(throw_code);
+    if (reject_immutable_item_assignment(container_type, target_block))
       return;
-    }
 
     // Handle object subscript assignment via __setitem__:
     //   obj[key] = value  ->  obj.__setitem__(key, value)
@@ -3462,41 +3484,8 @@ void python_converter::get_var_assign(
       bool symbol_created = (lhs_symbol == nullptr);
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
 
-      // move_symbol_to_context() only overwrites an existing symbol's type
-      // when completing a forward declaration (a code/type/extern symbol
-      // gaining its real definition) — a plain variable rebound to a new
-      // value keeps its old, stale type otherwise. When that stale type is
-      // a non-class placeholder (None, a scalar literal, Any) being rebound
-      // to a fresh class-pointer binding — e.g. `g = None` or `g = 0`
-      // followed by `g = Service(...)` — retype it explicitly: otherwise
-      // the self-allocation in function_call_expr sizes the new instance
-      // from the stale type and overruns it as soon as the constructor
-      // writes a field (#6243).
-      //
-      // This must be an ALLOWLIST of safe placeholder types, not a denylist
-      // of unsafe ones: any struct-shaped existing type (tuple, dict, a
-      // migrated class instance, ...) is excluded even when its class
-      // differs from the new one, because an earlier statement may already
-      // have built an expression against that struct's layout (e.g.
-      // `x = t[0]` after `t = (1, 2)`), and retyping the symbol in place
-      // here without fixing up that expression corrupts it — confirmed to
-      // abort GOTO conversion (member2t) for a tuple/dict placeholder
-      // followed by a constructor rebind. A first version of this fix
-      // instead denylisted only existing class pointers (to protect the
-      // flow-sensitive class scanner, #4772, which deliberately drops its
-      // own tracking on `n1 = A(1); n1 = B()` — github_4117_attr_shadow)
-      // and missed this broader case.
-      const typet &existing_type = lhs_symbol->get_type();
-      const bool existing_is_safe_placeholder =
-        existing_type == none_type() ||
-        (existing_type.is_pointer() &&
-         existing_type.subtype().id() == "empty") ||
-        existing_type.is_signedbv() || existing_type.is_unsignedbv() ||
-        existing_type.is_floatbv() || existing_type.is_bool();
-      if (
-        !symbol_created && is_user_class_pointer(current_element_type) &&
-        existing_is_safe_placeholder && existing_type != current_element_type)
-        lhs_symbol->set_type(current_element_type);
+      if (!symbol_created)
+        retype_placeholder_to_class(*lhs_symbol, current_element_type);
 
       // Add declaration statement ONLY for newly created local variables
       if (symbol_created && !current_func_name_.empty() && !is_global)
@@ -3506,6 +3495,13 @@ void python_converter::get_var_assign(
         target_block.copy_to_operands(decl);
         lhs_already_declared = true;
       }
+    }
+    else
+    {
+      // A pre-registered module global reached from a `global` declaration
+      // skips the branch above, so it never got the placeholder widening and
+      // the constructor overran its scalar storage (#6243).
+      retype_placeholder_to_class(*lhs_symbol, current_element_type);
     }
 
     if (lhs_symbol && ast_node.contains("annotation"))

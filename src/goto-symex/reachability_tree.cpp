@@ -5,6 +5,7 @@
 #include <util/config/config.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
+#include <util/base/prefix.h>
 #include <util/message/message.h>
 #include <util/irep/std_expr.h>
 
@@ -303,6 +304,41 @@ void reachability_treet::scan_program_writes()
 void reachability_treet::setup_for_new_explore()
 {
   std::shared_ptr<symex_targett> targ;
+
+  /* Object names must depend on (program, options) alone, not on how many
+   * objects earlier explorations in this process minted (R15) -- but only
+   * across *independent* runs. --incremental-bmc builds a fresh bmct per k
+   * iteration and hands each the same context, so renumbering there re-mints a
+   * name the previous iteration already bound at a different type, and the two
+   * meet in one formula as operands of different sort width.
+   *
+   * The context is fresh exactly when the run is independent, so let it
+   * decide: an untouched context has minted no object yet. Keying on the
+   * context *address* would be wrong -- a freed context can be reallocated at
+   * the same address, skipping the reset precisely when it is needed. */
+  /* Object names must depend on (program, options) alone, not on how many
+   * objects earlier explorations in this process minted (R15) -- but only
+   * across *independent* runs. --incremental-bmc builds a fresh bmct per k
+   * iteration and hands each the same context, so renumbering there re-mints a
+   * name the previous iteration already bound at a different type, and the two
+   * meet in one formula as operands of different sort width.
+   *
+   * The context is fresh exactly when the run is independent, so let it
+   * decide: a context that has minted no object yet holds no `symex_dynamic::`
+   * symbol. Keying on the context *address* would be wrong -- a freed context
+   * can be reallocated at the same address, skipping the reset precisely when
+   * it is needed. */
+  bool context_has_objects = false;
+  permanent_context.foreach_operand([&context_has_objects](const symbolt &s) {
+    if (has_prefix(s.id.as_string(), "symex_dynamic::"))
+      context_has_objects = true;
+  });
+
+  if (!context_has_objects)
+  {
+    execution_statet::reset_dynamic_counter();
+    dereferencet::reset_object_counter();
+  }
 
   exploration_frames.clear();
 
@@ -733,6 +769,7 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
     {
       if (check_for_hash_collision())
       {
+        ++schedule_stats.pruned_by_hash;
         post_hash_collision_cleanup();
         break;
       }
@@ -748,6 +785,7 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
         // This transition is pruned by MPOR. If we already recorded its state
         // hash above, drop it again so the seen set reflects the state explored
         // before this transition rather than the pruned state.
+        ++schedule_stats.pruned_by_mpor;
         if (state_hashing)
           remove_hash_collision_entry();
         break;
@@ -775,6 +813,7 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
     cur_frame_it->state->add_memory_leak_checks();
 
   has_complete_formula = false;
+  ++schedule_stats.explored;
 
   return get_cur_state().get_symex_result();
 }

@@ -198,6 +198,22 @@ void register_pgroup_for_cleanup(long pgid);
 void unregister_pgroup(long pgid);
 void kill_registered_pgroups();
 
+#ifndef _WIN32
+/**
+ * @brief Async-signal-safe counterparts of the two cleanup calls above, for
+ * use from a signal handler.
+ *
+ * The ordinary versions walk std:: containers and, for the temporaries, run
+ * boost::filesystem::remove_all; both allocate, so a handler interrupting the
+ * allocator deadlocks or trips glibc's heap assertion (#6201). These read
+ * fixed-capacity mirrors populated at registration time and call nothing
+ * outside POSIX's async-signal-safe set. Neither clears the mirror: a handler
+ * runs once, on the way to _exit().
+ */
+void kill_registered_pgroups_from_signal();
+void remove_registered_tmps_from_signal();
+#endif
+
 /**
  * @brief Files bundled into the binary, overlaid on the real filesystem.
  *
