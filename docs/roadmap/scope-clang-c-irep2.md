@@ -1337,3 +1337,77 @@ index arm (#6907), address_of bit (#6912). Two arms withdrawn on measurement
 many survive all four clauses -- and if the answer is "few", that is the
 argument for going straight to shape 2.
 
+## 41. Correction to §39: the invariant is relaxable, and the pattern is established
+
+§39 concluded that "an arm that establishes an IREP2 construction invariant can
+never be handed over post hoc". Too strong. The static census of construction
+assertions shows why.
+
+### 41.1 `index2t` was already relaxed for exactly this
+
+```cpp
+/* A `symbol_id` or `pointer_id` source is permitted only as a transient
+   pre-resolution state (V.1k two-phase source invariant, see member2t
+   above); the IREP2-native adjuster resolves a symbol source to an
+   array/vector and rewrites a pointer source `p[i]` to `*(p+i)` before
+   symex. */
+assert(is_array_type(source) || is_vector_type(source) ||
+       source->type->type_id == type2t::symbol_id ||
+       source->type->type_id == type2t::pointer_id);
+```
+
+`adjust_index` did not succeed because its invariant happened not to bite. It
+succeeded because someone had **already** relaxed `index2t` to admit the
+transient pointer source, and documented the rewrite -- `p[i]` to `*(p+i)` --
+that #6907 went on to implement.
+
+`member2t` carries the sibling comment ("see member2t above") and permits
+`symbol_id` but **not** `pointer_id`. The relaxation was applied to one of the
+pair and not the other.
+
+### 41.2 So §39's wall is a checklist
+
+The remedy is the one #6899 already used for `constant_union2t`: add the
+transient disjunct, with the same justification -- the adjuster re-establishes
+the strong form before symex. `member2t` needs `pointer_id`, one line, and the
+V.1k two-phase invariant is the standing rationale for it.
+
+Restated:
+
+> An arm that establishes an IREP2 construction invariant needs that invariant
+> relaxed to admit its *input* state before it can be handed over. The pattern
+> is established (`index2t`, `constant_struct2t`, `constant_union2t` after
+> #6899); what it costs per arm is one disjunct plus the A/B.
+
+### 41.3 The invariant census, as a work list
+
+Node kinds whose constructor asserts a shape an adjuster arm establishes:
+
+| kind | invariant | status |
+|---|---|---|
+| `index2t` | source array/vector/symbol/**pointer** | already relaxed |
+| `constant_struct2t` | type struct/complex/**symbol** | already relaxed |
+| `constant_union2t` | type union/**symbol** | relaxed in #6899 |
+| `member2t` | source struct/union/complex/symbol | **needs `pointer_id`** |
+| `if2t` | type matches both arms | check `adjust_if` |
+| `constant_array2t` | type is array | check `adjust_struct` |
+
+The first three are the precedent; the fourth is `adjust_member`'s one-line
+unblock; the last two are unchecked and should be, before those arms are
+attempted.
+
+### 41.4 What this changes
+
+§40 offered "if few arms survive all four clauses, go straight to shape 2".
+The fourth clause is now a per-arm one-liner with an established pattern, not a
+wall, so it does not by itself argue for abandoning shape 1. The argument for
+shape 2 rests where §25 put it -- path-dependent applicability -- which no
+relaxation fixes.
+
+## 42. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912). §39 corrected here. Next:
+relax `member2t` with the `pointer_id` disjunct and re-run #6907's withdrawn
+sibling, which is now a one-line change plus the arm already written.
+
