@@ -1587,3 +1587,53 @@ is writable via the §47.2 convention; `adjust_if` is deferred (§45.1). Next
 action is to apply §47.3's pre-check to the remaining 15 clean arms before
 attempting any of them.
 
+## 49. §47.3's pre-check, run across the clean arms
+
+*List everything the arm reads that is not an operand or a type id, and confirm
+each survives migration.* Applied to the 18:
+
+| arm | non-migrating reads |
+|---|---|
+| `adjust_comma`, `adjust_expr_binary_boolean`, `adjust_expr_rel`, `adjust_expr_unary_boolean`, `adjust_reference`, `adjust_sizeof` | **none** |
+| `adjust_member` | none -- shipped (#6921) |
+| `adjust_if` | none on this axis; blocked by §45.1's relational invariant |
+| `adjust_base_to_derived`, `adjust_builtin_va_arg`, `adjust_side_effect` | `location()` |
+| `adjust_struct` | `is_padding`, `incomplete()` |
+| `adjust_type` | `incomplete()` |
+| `adjust_index`, `adjust_expr_binary_arithmetic`, `adjust_expr_shifts`, `adjust_expr_unary_complex`, `adjust_ptr_mem` | (`id()` string compare -- see below) |
+
+### 49.1 One category the check over-flagged
+
+The first run flagged `expr.id() == "..."` as a non-migrating read. It is not:
+an `id()` comparison is a kind test, and becomes `is_<kind>2t(expr)`.
+`adjust_index` does it and shipped fine (#6907). Reclassified as benign, which
+moves five arms out of the suspect list.
+
+Worth recording because it is the same failure mode as §29 in miniature -- a
+pattern match standing in for the property actually being asked about.
+
+### 49.2 The real finding: `location()` is a third blocker family
+
+Three arms read `expr.location()`. Only `if2t` carries a location among
+value-level IREP2 kinds (parent §38.4), so an arm that reads or propagates a
+location cannot do so natively. That is neither a flag (§17), an invariant
+(§39), nor type metadata (§47) -- it is the location model, and it is the same
+gap `scope-jimple-irep2.md` §17.1 hit on `adjust_symbol`.
+
+### 49.3 The list this leaves
+
+Six arms are clear on every known axis: `adjust_comma`,
+`adjust_expr_binary_boolean`, `adjust_expr_rel`, `adjust_expr_unary_boolean`,
+`adjust_reference`, `adjust_sizeof`.
+
+That is a real list, produced statically, and it is the first time this phase has
+had one -- §47.3 was written precisely because four of five blocker categories
+had been found by attempting arms rather than screening them. Whether the screen
+is now complete will be told by whether the next arm ships without a surprise.
+
+## 50. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921). Six screened
+candidates (§49.3); next is `adjust_expr_rel`, the smallest of them at 11 lines.
+
