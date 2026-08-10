@@ -197,6 +197,39 @@ void value_sett::get_value_set(const expr2tc &expr, object_mapt &dest) const
   get_value_set_rec(new_expr, dest, "", new_expr->type);
 }
 
+/// An operand whose set holds nothing but `unknown` carries no object
+/// information, so it must not veto the other operand's. Letting it count as
+/// non-empty dropped the whole expression to `unknown`, which is how an address
+/// round-tripped through uintptr_t arithmetic lost the object it still pointed
+/// at once a multiply had made one side unknown (#6545).
+///
+/// The `unknown` is carried into @p dest rather than discarded: the arithmetic
+/// may equally land outside every known object, and dropping that alternative
+/// would delete the `invalid pointer` property and hide a wild dereference.
+/// See docs/design/pointer-integer-provenance.md.
+void value_sett::retire_objectless_operand(
+  object_mapt &op0_set,
+  object_mapt &op1_set,
+  object_mapt &dest) const
+{
+  auto carries_no_object = [](const object_mapt &m) {
+    return !m.empty() && std::all_of(m.begin(), m.end(), [](const auto &e) {
+             return is_unknown2t(object_numbering[e.first]);
+           });
+  };
+
+  if (carries_no_object(op0_set) && !op1_set.empty())
+  {
+    make_union(dest, op0_set);
+    op0_set.clear();
+  }
+  else if (carries_no_object(op1_set) && !op0_set.empty())
+  {
+    make_union(dest, op1_set);
+    op1_set.clear();
+  }
+}
+
 void value_sett::get_value_set_rec(
   const expr2tc &expr,
   object_mapt &dest,
@@ -634,6 +667,8 @@ void value_sett::get_value_set_rec(
 
     /* TODO: The case that both, op0_set and op1_set, are non-empty is not
      *       handled, yet. */
+
+    retire_objectless_operand(op0_set, op1_set, dest);
 
     if (op0_set.empty() != op1_set.empty())
     {
