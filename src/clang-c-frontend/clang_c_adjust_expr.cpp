@@ -1015,13 +1015,26 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     return;
   }
 
-  if (statement == "assign_shl" || statement == "assign_shr")
+  /* assign_lshr / assign_ashr are the already-specialised forms: this
+   * function can see the same expression twice (adjust walks types before
+   * values), and on the second visit the statement has been rewritten. They
+   * must be recognised here too, or they fall through to the two-operand
+   * gen_typecast_arithmetic below, which converts the shift COUNT to the
+   * shifted type -- for a fixed-point LHS that reinterprets `1` as one ulp
+   * and the shift becomes `x >> -1`. */
+  if (
+    statement == "assign_shl" || statement == "assign_shr" ||
+    statement == "assign_lshr" || statement == "assign_ashr")
   {
     gen_typecast_arithmetic(ns, op1);
 
     if (is_number(op1.type()))
     {
-      if (statement == "assign_shl")
+      /* assign_shl needs no specialisation, and the *shr forms are already
+       * specialised (a re-visit); either way the count stays integral. */
+      if (
+        statement == "assign_shl" || statement == "assign_lshr" ||
+        statement == "assign_ashr")
         return;
 
       if (type0.id() == "unsignedbv")
@@ -1033,6 +1046,17 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
       if (type0.id() == "signedbv")
       {
         expr.statement("assign_ashr");
+        return;
+      }
+
+      /* Fixed-point shifts arithmetically when signed and logically when
+       * unsigned, same as the plain `>>` case in adjust_expr_shifts. Left
+       * unspecialised, assign_shr reaches goto-convert unlowered ("cannot
+       * remove side effect"). */
+      if (type0.id() == "fixedbv")
+      {
+        expr.statement(
+          type0.get("#esbmc_unsigned") == "1" ? "assign_lshr" : "assign_ashr");
         return;
       }
     }

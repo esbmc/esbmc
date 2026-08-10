@@ -73,12 +73,12 @@ else()
   set(DEFAULT_CHERI_LLVM_NAME "clang-cheri-17")
 endif()
 
-set(DEFAULT_CAMADA_URL "https://github.com/mikhailramalho/camada/archive/refs/tags/v0.15.tar.gz")
-set(DEFAULT_CAMADA_NAME "camada-v0.15.tar.gz")
+set(DEFAULT_CAMADA_URL "https://github.com/mikhailramalho/camada/archive/refs/tags/v0.16.tar.gz")
+set(DEFAULT_CAMADA_NAME "camada-v0.16.tar.gz")
 # SHA256 of the archive above. Camada carries every bit-vector backend, so a
 # moved or tampered artefact has to fail the build rather than be linked in.
 # Update alongside the URL; an empty value skips the check.
-set(DEFAULT_CAMADA_HASH "939437993f11933cd214d757de28a158d94c06553e9cc77bf3d0b82428f7344f")
+set(DEFAULT_CAMADA_HASH "20440361550666a41fab274897a117d67654abef94069b198777f2dcc302e954")
 
 set(ESBMC_LLVM_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt LLVM")
 set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted directory of LLVM")
