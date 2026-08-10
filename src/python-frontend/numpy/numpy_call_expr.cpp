@@ -2040,6 +2040,45 @@ materialize_arange(const nlohmann::json &args)
       return std::nullopt;
     values.push_back(v);
   }
+  // Matches the real arange() creation path: an int dtype unless any
+  // argument is float.
+  const bool any_float =
+    std::any_of(values.begin(), values.end(), [](const numeric_value &v) {
+      return !v.is_int;
+    });
+
+  nlohmann::json node;
+  node["_type"] = "List";
+  node["elts"] = nlohmann::json::array();
+
+  if (!any_float)
+  {
+    // Exact int64 arithmetic: routing an all-integer call through double
+    // (as the float path below does) silently loses precision and can
+    // drift the termination point past 2^53.
+    int64_t start = 0;
+    int64_t stop;
+    int64_t step = 1;
+    if (values.size() == 1)
+      stop = values[0].int_value;
+    else
+    {
+      start = values[0].int_value;
+      stop = values[1].int_value;
+      if (values.size() == 3)
+        step = values[2].int_value;
+    }
+    if (step == 0)
+      return std::nullopt;
+    if (step > 0)
+      for (int64_t current = start; current < stop; current += step)
+        node["elts"].push_back(build_constant_node(make_int_value(current)));
+    else
+      for (int64_t current = start; current > stop; current += step)
+        node["elts"].push_back(build_constant_node(make_int_value(current)));
+    return node;
+  }
+
   double start = 0.0;
   double stop;
   double step = 1.0;
@@ -2054,30 +2093,15 @@ materialize_arange(const nlohmann::json &args)
   }
   if (step == 0.0)
     return std::nullopt;
-  // Matches the real arange() creation path: an int dtype unless any
-  // argument is float.
-  const bool any_float =
-    std::any_of(values.begin(), values.end(), [](const numeric_value &v) {
-      return !v.is_int;
-    });
-  nlohmann::json node;
-  node["_type"] = "List";
-  node["elts"] = nlohmann::json::array();
   if (step > 0.0)
   {
     for (double current = start; current < stop; current += step)
-      node["elts"].push_back(build_constant_node(
-        any_float
-          ? make_float_value(current)
-          : make_int_value(static_cast<int64_t>(std::llround(current)))));
+      node["elts"].push_back(build_constant_node(make_float_value(current)));
   }
   else
   {
     for (double current = start; current > stop; current += step)
-      node["elts"].push_back(build_constant_node(
-        any_float
-          ? make_float_value(current)
-          : make_int_value(static_cast<int64_t>(std::llround(current)))));
+      node["elts"].push_back(build_constant_node(make_float_value(current)));
   }
   return node;
 }
