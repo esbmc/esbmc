@@ -1637,3 +1637,67 @@ C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
 index arm (#6907), address_of bit (#6912), member arm (#6921). Six screened
 candidates (§49.3); next is `adjust_expr_rel`, the smallest of them at 11 lines.
 
+## 51. `adjust_expr_rel` withdrawn: legacy type identity is finer than IREP2's
+
+The first arm drawn from §49.3's screened list. Implemented, measured at **4
+divergences** -- the `github_746` pair plus `aligned_attr` and
+`aligned_attr_fail` -- and withdrawn.
+
+### 51.1 What differs
+
+```
+< ASSERT ... (!((signed int)default_global_var == 42))
+> ASSERT ... (!(default_global_var == 42))
+```
+
+The arm is `gen_typecast_arithmetic(ns, op0, op1)`, which inserts a cast when
+the operand types differ. `default_global_var` carries an alignment attribute,
+so its legacy type is not equal to plain `int` and the legacy pass casts.
+`migrate_type` drops the attribute, both operands migrate to `signedbv 32`, the
+IREP2 helper sees equal types and inserts nothing.
+
+The cast is structurally vacuous -- same width, same signedness -- so the IREP2
+output is arguably the better one. It is still a divergence, and byte-identity
+is this phase's gate, so the arm does not ship on that argument.
+
+### 51.2 Not a new category -- a second face of §47
+
+§47 found `adjust_struct` blocked because `is_padding` does not survive
+`migrate_type`. This is the same gap seen from the other side: the attribute
+survives nowhere, so **legacy type equality is strictly finer than IREP2's**,
+and any arm whose behaviour is conditioned on type *inequality* can diverge
+wherever a dropped attribute was the only difference.
+
+That is a much wider blast radius than §47's, because it does not require the
+arm to read the metadata. `adjust_expr_rel` reads nothing unusual -- it passes
+the screen in §49 -- and still diverges, because the helper it calls compares
+types.
+
+### 51.3 What this does to the screen
+
+§49.3 produced six candidates and asked whether the screen was complete. The
+answer is no, and the missing test is not about what an arm *reads* but about
+what it *compares*:
+
+> An arm that calls a helper which branches on type equality can diverge
+> wherever `migrate_type` drops an attribute, regardless of what the arm itself
+> reads.
+
+Of the six, `adjust_expr_rel` and `adjust_expr_binary_boolean` call
+`gen_typecast*`; `adjust_comma`, `adjust_expr_unary_boolean`,
+`adjust_reference` and `adjust_sizeof` need re-reading against this test before
+being attempted.
+
+The alternative to screening each is to decide the question once: either
+`migrate_type` carries the attributes, or the phase accepts that vacuous casts
+may be dropped and moves the gate from byte-identity to verdict parity for arms
+of this shape. That is the same choice §13.5 posed for interning order, and it
+was worth taking once there.
+
+## 52. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921). Three arms
+withdrawn on measurement (§25, §39 -- later shipped, §51). Next action is the
+§51.3 decision, not another arm.
+
