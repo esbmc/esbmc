@@ -494,18 +494,33 @@ The safe side is the opposite, and the cost is not merely wall-clock. On
 --memory-leak-check`) deepening converges at bound 10 on the same 1871 schedules
 the direct run explores, but re-explores every prefix nine times to get there:
 ~11,470 schedules cumulative, 86.3 s against 12.3 s — **7×** for an identical
-verdict. Under a time cap that turns into lost verdicts rather than slow ones: a
-sweep over the 146 CORE safe concurrent tests is in progress, and the first 9
-already contain two (`00_race27` 23 s, `00_rwlock1` 19 s) that go **SUCCESSFUL →
-TIMEOUT** at a 60 s cap. Treat that ratio as a signal and not a rate until the
-sweep finishes — sizing a claim off 9 of 146 is the §2.1 mistake.
+verdict. Under a time cap that turns into lost verdicts rather than slow ones.
+Over all 146 CORE safe concurrent tests, 60 s cap, same flag treatment:
 
-So the trade is real in both directions: deepening converts a stranded
-falsification into an answer, and converts a mid-cost proof into a timeout.
-A wrapper that simply switched it on would trade correct `true`s for `unknown`s.
-That is an argument for an adaptive composition — deepen the context bound for
-falsification while leaving an unbounded exhaustive attempt able to finish — not
-for a flag.
+| | count |
+|---|---|
+| SUCCESSFUL both ways | 114 |
+| **SUCCESSFUL → TIMEOUT** | **18** |
+| no answer either way | 14 |
+
+No verdict *changed* — nothing went SUCCESSFUL → FAILED — so the soundness
+argument holds on this corpus; what deepening costs is answers, not correctness.
+
+The threshold is sharper than the count: every one of the 114 kept proofs costs
+≤7 s directly, and every one of the 18 lost costs ≥4 s. Read the *ratio* rather
+than the 18. That sweep ran 8-way parallel, and re-running two of the losses
+sequentially splits them — `github_2174` 6 s → 52 s, which survives a 60 s cap
+unloaded, while `00_rwlock1` 15 s → over 90 s is lost at any comparable budget.
+So the count moves with the cap and the load; the 7–9× slowdown behind it does
+not. Any fixed budget converts the more expensive safe proofs into non-answers.
+
+So the trade is real in both directions and it is not symmetric in value:
+deepening bought one stranded falsification in 40 and cost 18 proofs in 132.
+A wrapper that simply switched it on would trade correct `true`s for `unknown`s
+at roughly ten times the rate it converts a timeout into a `false`. That is an
+argument for an adaptive composition — deepen the context bound only where
+falsification is the goal, leaving an unbounded exhaustive attempt able to
+finish — and against a flag.
 
 **Exit:** unchanged — a measured score delta on the affected categories, plus
 the argument for why no `true` is emitted without exhaustive coverage (the
