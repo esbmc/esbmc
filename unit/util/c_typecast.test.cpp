@@ -20,6 +20,9 @@
 #include <util/config/config.h>
 #include <util/symtab/context.h>
 #include <util/symtab/namespace.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
+#include <util/arith/arith_tools.h>
 #include <irep2/irep2_utils.h>
 
 // get_c_type ranks an operand against config.ansi_c, which is zero-initialised
@@ -90,4 +93,113 @@ TEST_CASE("c_implicit_typecast converts an integer to double", "[c_typecast]")
   expr2tc e = gen_one(get_int32_type());
   REQUIRE_FALSE(c_implicit_typecast(e, double_type2(), ns));
   REQUIRE(is_floatbv_type(e->type));
+}
+
+// Differential harness. implicit_typecast_followed also exists twice, and the
+// two copies are not translations of each other: the irept one additionally
+// handles references, pointer-to-member, incomplete_array sources, qualifier
+// warnings and string-constant-to-array, none of which the expr2tc one has
+// (docs/roadmap/scope-coupled-arith-assign-conversion.md §20). Those gaps are
+// C++-frontend shaped; what follows pins the arithmetic and pointer conversions
+// that every frontend performs at an assignment, so a future edit to one copy
+// cannot silently drift from the other the way the floatbv omission above did.
+static void require_overloads_agree(
+  const namespacet &ns,
+  const exprt &input,
+  const typet &dest)
+{
+  // migrate_expr resolves symbol types through this thread-local, which only
+  // language_ui sets in a real run.
+  migrate_namespace_lookup = &ns;
+
+  exprt legacy = input;
+  const bool legacy_failed = c_implicit_typecast(legacy, dest, ns);
+
+  expr2tc native;
+  migrate_expr(input, native);
+  const bool native_failed =
+    c_implicit_typecast(native, migrate_type(dest), ns);
+
+  REQUIRE(legacy_failed == native_failed);
+
+  expr2tc legacy_migrated;
+  migrate_expr(legacy, legacy_migrated);
+  REQUIRE(legacy_migrated == native);
+}
+
+TEST_CASE(
+  "both c_implicit_typecast overloads agree on arithmetic conversions",
+  "[c_typecast]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+
+  SECTION("integer widens to double")
+  {
+    require_overloads_agree(ns, from_integer(1, int_type()), double_type());
+  }
+
+  SECTION("integer widens to a wider integer")
+  {
+    require_overloads_agree(ns, from_integer(1, int_type()), long_int_type());
+  }
+
+  SECTION("integer narrows to bool")
+  {
+    require_overloads_agree(ns, from_integer(1, int_type()), bool_type());
+  }
+
+  // A non-constant source takes the unfolded route, so it covers the other
+  // side of the branch the constant sections above exercise.
+  SECTION("double narrows to integer")
+  {
+    require_overloads_agree(ns, symbol_exprt("d", double_type()), int_type());
+  }
+
+  SECTION("signed converts to unsigned of the same width")
+  {
+    require_overloads_agree(ns, from_integer(1, int_type()), uint_type());
+  }
+}
+
+TEST_CASE(
+  "both c_implicit_typecast overloads agree on pointer conversions",
+  "[c_typecast]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+
+  // The two copies spell the null pointer differently -- the irept one builds a
+  // constant whose value is "NULL", the expr2tc one a symbol named "NULL" --
+  // and migrate_expr reconciles them (migrate.cpp:810). Left unpinned, a change
+  // to either spelling would go unnoticed until a frontend compared pointers.
+  SECTION("literal zero becomes the null pointer")
+  {
+    require_overloads_agree(
+      ns, from_integer(0, int_type()), pointer_typet(int_type()));
+  }
+
+  SECTION("pointer converts to void pointer")
+  {
+    require_overloads_agree(
+      ns,
+      symbol_exprt("p", pointer_typet(int_type())),
+      pointer_typet(empty_typet()));
+  }
+
+  SECTION("pointer converts to an unrelated pointer type")
+  {
+    require_overloads_agree(
+      ns,
+      symbol_exprt("p", pointer_typet(int_type())),
+      pointer_typet(char_type()));
+  }
+
+  SECTION("pointer conversion to its own type is a no-op")
+  {
+    require_overloads_agree(
+      ns,
+      symbol_exprt("p", pointer_typet(int_type())),
+      pointer_typet(int_type()));
+  }
 }
