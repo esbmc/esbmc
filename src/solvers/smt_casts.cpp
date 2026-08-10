@@ -23,136 +23,54 @@ smt_astt
 smt_solver_baset::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
+  const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
+  smt_sortt to_sort = convert_sort(cast.type);
 
-  if (is_pointer_type(cast.from))
+  // _Sat destinations clamp; plain destinations follow TR 18037 (overflow
+  // on the way into a non-_Sat fixed type is undefined behavior).
+  if (is_fixedbv_type(cast.from))
   {
-    log_error("Converting pointer to a float is unsupported");
-    abort();
+    smt_astt from = convert_ast(cast.from);
+    return fbvt.is_saturating ? solver->mkFXPToFXPSat(from, to_sort)
+                              : solver->mkFXPToFXP(from, to_sort);
   }
 
+  // int -> fixed: the source type's signedness governs the value. _Sat
+  // destinations clamp via the zero-fraction reinterpretation (there is no
+  // mkFXPFromBVSat); plain destinations use mkFXPFromBV directly.
   if (is_bv_type(cast.from))
-    return convert_typecast_to_fixedbv_nonint_from_bv(expr);
+  {
+    if (fbvt.is_saturating)
+      return solver->mkFXPToFXPSat(
+        solver->mkFXPFromRawBV(
+          convert_ast(cast.from),
+          solver->mkFXPSort(
+            cast.from->type->get_width(), 0, is_signedbv_type(cast.from))),
+        to_sort);
+    return solver->mkFXPFromBV(
+      convert_ast(cast.from), is_signedbv_type(cast.from), to_sort);
+  }
+
   if (is_bool_type(cast.from))
-    return convert_typecast_to_fixedbv_nonint_from_bool(expr);
-  else if (is_fixedbv_type(cast.from))
-    return convert_typecast_to_fixedbv_nonint_from_fixedbv(expr);
+  {
+    smt_astt bit = solver->mkIte(
+      convert_ast(cast.from), mk_smt_bv(BigInt(1), 1), mk_smt_bv(BigInt(0), 1));
+    if (fbvt.is_saturating)
+      return solver->mkFXPToFXPSat(
+        solver->mkFXPFromRawBV(bit, solver->mkFXPSort(1, 0, false)), to_sort);
+    return solver->mkFXPFromBV(bit, false, to_sort);
+  }
+
+  // float -> fixed rounds toward zero (not the floor that fixed -> fixed
+  // narrowing uses); out-of-range, inf and NaN are UB unless the target
+  // saturates, where they clamp (NaN -> 0).
+  if (is_floatbv_type(cast.from))
+    return fbvt.is_saturating
+             ? solver->mkFPToFXPSat(convert_ast(cast.from), to_sort)
+             : solver->mkFPToFXP(convert_ast(cast.from), to_sort);
 
   log_error("unexpected typecast to fixedbv");
   abort();
-}
-
-smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_bv(
-  const expr2tc &expr)
-{
-  const typecast2t &cast = to_typecast2t(expr);
-  const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
-  unsigned to_fraction_bits = fbvt.width - fbvt.integer_bits;
-  unsigned to_integer_bits = fbvt.integer_bits;
-  assert(is_bv_type(cast.from));
-
-  smt_astt a = convert_ast(cast.from);
-
-  unsigned from_width = cast.from->type->get_width();
-
-  smt_astt frontpart;
-  if (from_width == to_integer_bits)
-  {
-    // Just concat fraction ozeros at the bottom
-    frontpart = a;
-  }
-  else if (from_width > to_integer_bits)
-  {
-    frontpart = mk_extract(a, to_integer_bits - 1, 0);
-  }
-  else
-  {
-    assert(from_width < to_integer_bits);
-    if (is_signedbv_type(cast.from))
-      frontpart = mk_sign_ext(a, to_integer_bits - from_width);
-    else
-      frontpart = mk_zero_ext(a, to_integer_bits - from_width);
-  }
-
-  // Make all zeros fraction bits
-  smt_astt zero_fracbits = mk_smt_bv(BigInt(0), to_fraction_bits);
-  return solver->mkBVConcat(frontpart, zero_fracbits);
-}
-
-smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_bool(
-  const expr2tc &expr)
-{
-  const typecast2t &cast = to_typecast2t(expr);
-  const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
-  unsigned to_integer_bits = fbvt.integer_bits;
-  assert(is_bool_type(cast.from));
-
-  smt_astt a = convert_ast(cast.from);
-
-  smt_astt zero = mk_smt_bv(BigInt(0), to_integer_bits);
-  smt_astt one = mk_smt_bv(BigInt(1), to_integer_bits);
-  smt_astt switched = solver->mkIte(a, one, zero);
-
-  smt_astt zero_fracbits = mk_smt_bv(BigInt(0), fbvt.width - to_integer_bits);
-  return solver->mkBVConcat(switched, zero_fracbits);
-}
-
-smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_fixedbv(
-  const expr2tc &expr)
-{
-  const typecast2t &cast = to_typecast2t(expr);
-  assert(is_fixedbv_type(cast.from));
-  const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
-  const fixedbv_type2t &from_fbvt = to_fixedbv_type(cast.from->type);
-  unsigned to_fraction_bits = fbvt.width - fbvt.integer_bits;
-  unsigned to_integer_bits = fbvt.integer_bits;
-  unsigned from_fraction_bits = from_fbvt.width - from_fbvt.integer_bits;
-  unsigned from_integer_bits = from_fbvt.integer_bits;
-  smt_astt magnitude, fraction;
-  smt_astt a = convert_ast(cast.from);
-
-  // FIXME: conversion here for to_int_bits > from_int_bits is factually
-  // broken, run 01_cbmc_Fixedbv8 with --no-simplify
-
-  // The plan here is to extract the magnitude and fraction from the source
-  // fbv, extend or truncate them appropriately, then concatenate them.
-
-  // Start with the magnitude
-  if (to_integer_bits <= from_integer_bits)
-  {
-    magnitude = mk_extract(
-      a, (from_fraction_bits + to_integer_bits - 1), from_fraction_bits);
-  }
-  else
-  {
-    assert(to_integer_bits > from_integer_bits);
-    unsigned from_width = from_fbvt.width;
-    smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits);
-
-    unsigned int additional_bits = to_integer_bits - from_integer_bits;
-    magnitude = mk_sign_ext(ext, additional_bits);
-  }
-
-  // Followed by the fraction part
-  if (to_fraction_bits <= from_fraction_bits)
-  {
-    fraction = mk_extract(
-      a, from_fraction_bits - 1, from_fraction_bits - to_fraction_bits);
-  }
-  else
-  {
-    assert(to_fraction_bits > from_fraction_bits);
-
-    // Increase the size of the fraction by adding zeros on the end. This is
-    // not a zero extension because they're at the end, not the start
-    smt_astt src_fraction = mk_extract(a, from_fraction_bits - 1, 0);
-    smt_astt zeros =
-      mk_smt_bv(BigInt(0), to_fraction_bits - from_fraction_bits);
-
-    fraction = solver->mkBVConcat(src_fraction, zeros);
-  }
-
-  // Finally, concatenate the adjusted magnitude / fraction
-  return solver->mkBVConcat(magnitude, fraction);
 }
 
 smt_astt smt_solver_baset::convert_typecast_to_fpbv(const typecast2t &cast)
@@ -185,6 +103,14 @@ smt_astt smt_solver_baset::convert_typecast_to_fpbv(const typecast2t &cast)
       convert_ast(cast.from),
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
+
+  // fixed -> float rounds to nearest even (C's direction, oracle-pinned);
+  // always defined, since every fixed range fits any float range.
+  if (is_fixedbv_type(cast.from))
+    return solver->mkFXPToFP(
+      convert_ast(cast.from),
+      convert_sort(cast.type),
+      camada::RM::ROUND_TO_EVEN);
 
   log_error("Unexpected type in typecast to fpbv");
   abort();
@@ -290,20 +216,11 @@ smt_solver_baset::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
   unsigned from_width = cast.from->type->get_width();
 
   if (is_fixedbv_type(cast.from) && is_bv_type(cast.type))
-  {
-    /* Round in the source width first. A fixedbv's low bits hold its fraction,
-     * so resizing the raw bit pattern would yield the fraction rather than the
-     * integer value (esbmc/esbmc#562). */
-    smt_astt rounded = round_fixedbv_to_int(a, from_width, from_width);
-
-    if (from_width == to_width)
-      return rounded;
-
-    if (from_width < to_width)
-      return mk_sign_ext(rounded, to_width - from_width);
-
-    return mk_extract(rounded, to_width - 1, 0);
-  }
+    /* Fixed to integer rounds toward zero (TR 18037), then the integral part
+     * converts with C's modular integer-conversion semantics — no saturation
+     * even from a _Sat source (saturation is a property of fixed-point
+     * DESTINATIONS; pinned by the execution oracle). */
+    return solver->mkFXPToBV(a, to_width);
 
   if (from_width == to_width)
   {

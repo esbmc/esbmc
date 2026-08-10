@@ -354,7 +354,7 @@ public:
     return solver->mkBVSort(width);
   }
 
-  /** Create an real or floating-point/fixed-point sort */
+  /** Create an real or floating-point sort */
   smt_sortt mk_real_fp_sort(std::size_t ew, std::size_t sw)
   {
     if (int_encoding)
@@ -362,9 +362,6 @@ public:
 
     return mk_fpbv_sort(ew, sw);
   }
-
-  /** Create a fixed-point sort */
-  smt_sortt mk_fbv_sort(std::size_t width);
 
   /** Create a floating-point sort, using bitvectors */
   smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw);
@@ -493,6 +490,9 @@ public:
    *  @param is_signed whether the bitvector is signed
    *  @return Expression representation of a's value */
   BigInt get_bv(smt_astt a, bool is_signed);
+
+  /** Extract a fixed-point assignment as its raw scaled value. */
+  BigInt get_fxp(smt_astt a);
 
   /** Reduction or: equals bit0 iff all bits are 0
    * @param op the expr to be reduced
@@ -930,9 +930,6 @@ public:
   smt_astt convert_typecast_to_bool(const typecast2t &cast);
   /** Typecast to a fixedbv in bitvector mode */
   smt_astt convert_typecast_to_fixedbv_nonint(const expr2tc &cast);
-  smt_astt convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &cast);
-  smt_astt convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &cast);
-  smt_astt convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &cast);
   /** Typecast anything to an integer (but not pointers) */
   smt_astt convert_typecast_to_ints(const typecast2t &cast);
   smt_astt convert_typecast_to_ints_intmode(const typecast2t &cast);
@@ -953,9 +950,14 @@ public:
   smt_astt convert_typecast_from_fpbv(const typecast2t &cast);
   /** Round a real to an integer; not straightforward at all. */
   smt_astt round_real_to_int(smt_astt a);
-  /** Round a fixedbv to an integer. */
-  smt_astt
-  round_fixedbv_to_int(smt_astt a, unsigned int width, unsigned int towidth);
+  /** Resize a shift amount's raw bits to a fixed-point operand's width. */
+  smt_astt fxp_shift_amount(smt_astt amount, unsigned int width);
+  /** Convert a mixed-format fixed-point result into the C result type. */
+  smt_astt fxp_align_result(
+    smt_astt a,
+    const expr2tc &expr,
+    const expr2tc &side_1,
+    const expr2tc &side_2);
   /** Round an SMT integer to the nearest representable float/double using
    *  IEEE 754 round-to-nearest-even. Used for int->fp casts under --ir-ieee.
    *  source_width is the bit-width of the source integer type. */

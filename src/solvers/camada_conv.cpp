@@ -716,6 +716,13 @@ BigInt smt_solver_baset::get_bv(smt_astt a, bool is_signed)
   return result ? binary2integer(*result, is_signed) : BigInt(0);
 }
 
+BigInt smt_solver_baset::get_fxp(smt_astt a)
+{
+  auto result = unwrap_model_result(
+    solver->getFXP(a), "fixed-point model value", oneshot_label());
+  return result ? binary2integer(result->RawBits, result->IsSigned) : BigInt(0);
+}
+
 ieee_floatt smt_solver_baset::get_fpbv(smt_astt a)
 {
   auto model_result = unwrap_model_result(
@@ -891,13 +898,6 @@ smt_astt smt_solver_baset::mk_select(smt_astt a, smt_astt b)
 smt_astt smt_solver_baset::mk_int2real(smt_astt a)
 {
   return solver->mkInt2Real(a);
-}
-
-smt_sortt smt_solver_baset::mk_fbv_sort(std::size_t width)
-{
-  /* ESBMC's fixedbv lowers to a plain bit-vector for now; camada has an FXP
-   * sort but nothing here reads the distinction back. */
-  return solver->mkBVSort(width);
 }
 
 smt_sortt smt_solver_baset::mk_bvfp_sort(std::size_t ew, std::size_t sw)

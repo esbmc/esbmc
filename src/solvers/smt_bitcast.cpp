@@ -179,7 +179,7 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
       // bv- and floatbv-target branches.
       if (int_encoding)
         return convert_ast(typecast2tc(to_type, from));
-      return convert_ast(from);
+      return solver->mkFXPFromRawBV(convert_ast(from), convert_sort(to_type));
     }
   }
   else if (is_bv_type(to_type))
@@ -193,7 +193,7 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
       return mk_from_fp_to_bv(convert_ast(from));
 
     if (is_fixedbv_type(from))
-      return convert_ast(from);
+      return solver->mkFXPToRawBV(convert_ast(from));
 
     if (is_struct_type(from) || is_array_type(from))
       return convert_ast(flatten_to_bitvector(from));

@@ -135,17 +135,17 @@ smt_astt smt_solver_baset::convert_byte_extract_bv_mode(
   expr2tc offs,
   unsigned int src_width)
 {
-  if (!is_bv_type(source->type) && !is_fixedbv_type(source->type))
+  if (!is_bv_type(source->type))
     source = bitcast2tc(get_uint_type(src_width), source);
 
   // ESBMC's own byte_extract2t is byte-granular (an 8-bit result), but a
   // migrated CBMC byte_extract_little_endian may reinterpret a wider value
   // The result is data.type wide; when the target isn't a plain bitvector
-  // (pointer/float/aggregate) the extracted bits are reinterpreted into its
-  // sort via a bitcast. For the ubiquitous 8-bit bitvector case out_width is 8
-  // and this collapses to the original single-byte extraction.
+  // (pointer/float/fixed/aggregate) the extracted bits are reinterpreted into
+  // its sort via a bitcast. For the ubiquitous 8-bit bitvector case out_width
+  // is 8 and this collapses to the original single-byte extraction.
   const unsigned out_width = data.type->get_width();
-  const bool bv_result = is_bv_type(data.type) || is_fixedbv_type(data.type);
+  const bool bv_result = is_bv_type(data.type);
 
   if (!is_constant_int2t(offs))
   {
@@ -415,7 +415,7 @@ expr2tc smt_solver_baset::convert_byte_update_int_mode_expr(
 smt_astt
 smt_solver_baset::convert_byte_update_bv_mode(const byte_update2t &data)
 {
-  if (!is_bv_type(data.type) && !is_fixedbv_type(data.type))
+  if (!is_bv_type(data.type))
   {
     // This is a pointer or a bool, or something. We don't want to handle
     // casting of it in the body of this function, so wrap it up as a bitvector

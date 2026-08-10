@@ -42,6 +42,21 @@ static std::string itos(int64_t i)
   return ss.str();
 }
 
+// _Sat types share their representation with the plain type; saturation is
+// picked per operation, mirroring LLVM's fixed-point intrinsics.
+static bool is_sat_fixedbv(const type2tc &t)
+{
+  return to_fixedbv_type(t).is_saturating;
+}
+
+static bool fxp_same_format(const type2tc &a, const type2tc &b)
+{
+  const fixedbv_type2t &x = to_fixedbv_type(a);
+  const fixedbv_type2t &y = to_fixedbv_type(b);
+  return x.width == y.width && x.integer_bits == y.integer_bits &&
+         x.is_signed == y.is_signed;
+}
+
 unsigned int smt_solver_baset::get_member_name_field(
   const type2tc &t,
   const irep_idt &name) const
@@ -655,6 +670,12 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     {
       a = mk_add(args[0], args[1]);
     }
+    else if (is_fixedbv_type(expr))
+    {
+      a = is_sat_fixedbv(expr->type) ? solver->mkFXPAddSat(args[0], args[1])
+                                     : solver->mkFXPAdd(args[0], args[1]);
+      a = fxp_align_result(a, expr, add.side_1, add.side_2);
+    }
     else
     {
       a = solver->mkBVAdd(args[0], args[1]);
@@ -674,6 +695,12 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     {
       a = mk_sub(args[0], args[1]);
     }
+    else if (is_fixedbv_type(expr))
+    {
+      a = is_sat_fixedbv(expr->type) ? solver->mkFXPSubSat(args[0], args[1])
+                                     : solver->mkFXPSub(args[0], args[1]);
+      a = fxp_align_result(a, expr, sub.side_1, sub.side_2);
+    }
     else
     {
       a = solver->mkBVSub(args[0], args[1]);
@@ -682,19 +709,12 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   }
   case expr2t::mul_id:
   {
-    // Fixedbvs are handled separately
     if (is_fixedbv_type(expr) && !int_encoding)
     {
-      auto mul = to_mul2t(expr);
-      auto fbvt = to_fixedbv_type(mul.type);
-
-      unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
-
-      args[0] = mk_sign_ext(convert_ast(mul.side_1), fraction_bits);
-      args[1] = mk_sign_ext(convert_ast(mul.side_2), fraction_bits);
-
-      a = solver->mkBVMul(args[0], args[1]);
-      a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits);
+      const mul2t &mul = to_mul2t(expr);
+      a = is_sat_fixedbv(expr->type) ? solver->mkFXPMulSat(args[0], args[1])
+                                     : solver->mkFXPMul(args[0], args[1]);
+      a = fxp_align_result(a, expr, mul.side_1, mul.side_2);
     }
     else if (int_encoding)
     {
@@ -710,23 +730,11 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     auto d = to_div2t(expr);
 
-    // Fixedbvs are handled separately
     if (is_fixedbv_type(expr) && !int_encoding)
     {
-      auto fbvt = to_fixedbv_type(d.type);
-
-      unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
-
-      args[1] = mk_sign_ext(convert_ast(d.side_2), fraction_bits);
-
-      smt_astt zero = mk_smt_bv(BigInt(0), fraction_bits);
-      smt_astt op0 = convert_ast(d.side_1);
-
-      args[0] = solver->mkBVConcat(op0, zero);
-
-      // Sorts.
-      a = mk_bvsdiv(args[0], args[1]);
-      a = mk_extract(a, fbvt.width - 1, 0);
+      a = is_sat_fixedbv(expr->type) ? solver->mkFXPDivSat(args[0], args[1])
+                                     : solver->mkFXPDiv(args[0], args[1]);
+      a = fxp_align_result(a, expr, d.side_1, d.side_2);
     }
     else if (int_encoding)
     {
@@ -954,10 +962,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
     {
       a = mk_mod(args[0], args[1]);
-    }
-    else if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
-    {
-      a = solver->mkBVSRem(args[0], args[1]);
     }
     else if (is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2))
     {
@@ -1303,6 +1307,11 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (
       is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2) && !int_encoding)
       a = solver->mkFPEqual(args[0], args[1]);
+    else if (
+      is_fixedbv_type(eq.side_1) && is_fixedbv_type(eq.side_2) && !int_encoding)
+      // Scale-aligning: mixed-format operands reach here uncast (TR 18037
+      // 4.1.4 inserts no conversions), so their sorts may differ.
+      a = solver->mkFXPEqual(args[0], args[1]);
     else
       a = ast_eq(args[0], args[1]);
     if (
@@ -1322,6 +1331,10 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       is_floatbv_type(neq.side_1) && is_floatbv_type(neq.side_2) &&
       !int_encoding)
       a = solver->mkFPEqual(args[0], args[1]);
+    else if (
+      is_fixedbv_type(neq.side_1) && is_fixedbv_type(neq.side_2) &&
+      !int_encoding)
+      a = solver->mkFXPEqual(args[0], args[1]);
     else
       a = ast_eq(args[0], args[1]);
     a = mk_not(a);
@@ -1334,6 +1347,19 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::shl_id:
   {
     const shl2t &shl = to_shl2t(expr);
+    if (is_fixedbv_type(shl.side_1) && !int_encoding)
+    {
+      // The shift amount stays a plain integer count; casting it to the
+      // fixed type would scale it. Resize its raw bits to the operand width.
+      a =
+        is_sat_fixedbv(shl.side_1->type)
+          ? solver->mkFXPShlSatExpr(
+              args[0], fxp_shift_amount(args[1], shl.side_1->type->get_width()))
+          : solver->mkFXPShlExpr(
+              args[0],
+              fxp_shift_amount(args[1], shl.side_1->type->get_width()));
+      break;
+    }
     if (shl.side_1->type->get_width() != shl.side_2->type->get_width())
     {
       // frontend doesn't cast the second operand up to the width of
@@ -1359,6 +1385,12 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::ashr_id:
   {
     const ashr2t &ashr = to_ashr2t(expr);
+    if (is_fixedbv_type(ashr.side_1) && !int_encoding)
+    {
+      a = solver->mkFXPShrExpr(
+        args[0], fxp_shift_amount(args[1], ashr.side_1->type->get_width()));
+      break;
+    }
     if (ashr.side_1->type->get_width() != ashr.side_2->type->get_width())
     {
       // frontend doesn't cast the second operand up to the width of
@@ -1384,6 +1416,12 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::lshr_id:
   {
     const lshr2t &lshr = to_lshr2t(expr);
+    if (is_fixedbv_type(lshr.side_1) && !int_encoding)
+    {
+      a = solver->mkFXPShrExpr(
+        args[0], fxp_shift_amount(args[1], lshr.side_1->type->get_width()));
+      break;
+    }
     if (lshr.side_1->type->get_width() != lshr.side_2->type->get_width())
     {
       // frontend doesn't cast the second operand up to the width of
@@ -1451,9 +1489,14 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
           ir_ieee_api->propagate_nan_pred(negated, args[0]);
         }
       }
+      else if (is_fixedbv_type(abs.value))
+      {
+        is_nonneg = solver->mkFXPGe(args[0], zero);
+        negated = is_sat_fixedbv(abs.value->type) ? solver->mkFXPNegSat(args[0])
+                                                  : solver->mkFXPNeg(args[0]);
+      }
       else
       {
-        // fixedbv and signedbv both compare and negate as signed bit-vectors.
         is_nonneg = mk_bvsge(args[0], zero);
         negated = solver->mkBVNeg(args[0]);
       }
@@ -1521,7 +1564,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_fixedbv_type(lt.side_1) && is_fixedbv_type(lt.side_2))
     {
-      a = solver->mkBVSlt(args[0], args[1]);
+      a = solver->mkFXPLt(args[0], args[1]);
     }
     else if (is_unsignedbv_type(lt.side_1) && is_unsignedbv_type(lt.side_2))
     {
@@ -1554,7 +1597,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_fixedbv_type(lte.side_1) && is_fixedbv_type(lte.side_2))
     {
-      a = solver->mkBVSle(args[0], args[1]);
+      a = solver->mkFXPLe(args[0], args[1]);
     }
     else if (is_unsignedbv_type(lte.side_1) && is_unsignedbv_type(lte.side_2))
     {
@@ -1587,7 +1630,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_fixedbv_type(gt.side_1) && is_fixedbv_type(gt.side_2))
     {
-      a = mk_bvsgt(args[0], args[1]);
+      a = solver->mkFXPGt(args[0], args[1]);
     }
     else if (is_unsignedbv_type(gt.side_1) && is_unsignedbv_type(gt.side_2))
     {
@@ -1620,7 +1663,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (is_fixedbv_type(gte.side_1) && is_fixedbv_type(gte.side_2))
     {
-      a = mk_bvsge(args[0], args[1]);
+      a = solver->mkFXPGe(args[0], args[1]);
     }
     else if (is_unsignedbv_type(gte.side_1) && is_unsignedbv_type(gte.side_2))
     {
@@ -1690,6 +1733,11 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else if (is_floatbv_type(neg.value))
     {
       a = solver->mkFPNeg(args[0]);
+    }
+    else if (is_fixedbv_type(neg.value))
+    {
+      a = is_sat_fixedbv(neg.value->type) ? solver->mkFXPNegSat(args[0])
+                                          : solver->mkFXPNeg(args[0]);
     }
     else
     {
@@ -1869,9 +1917,14 @@ smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
 
   case type2t::fixedbv_id:
   {
-    unsigned int int_bits = to_fixedbv_type(type).integer_bits;
-    unsigned int width = type->get_width();
-    result = mk_real_fp_sort(int_bits, width - int_bits);
+    if (int_encoding)
+    {
+      log_error("fixed-point types are not supported under integer encoding");
+      abort();
+    }
+    const fixedbv_type2t &fbvt = to_fixedbv_type(type);
+    result = solver->mkFXPSort(
+      fbvt.width, fbvt.width - fbvt.integer_bits, fbvt.is_signed);
     break;
   }
 
@@ -2004,25 +2057,9 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
       return solver->mkReal(result);
     }
 
-    assert(
-      thereal.type->get_width() <= 64 &&
-      "Converting fixedbv constant to"
-      " SMT, too large to fit into a uint64_t");
-
-    uint64_t magnitude, fraction, fin;
-    unsigned int bitwidth = thereal.type->get_width();
-    std::string m, f, c;
-    std::string theval = thereal.value.to_expr().value().as_string();
-
-    m = extract_magnitude(theval, bitwidth);
-    f = extract_fraction(theval, bitwidth);
-    magnitude = strtoll(m.c_str(), nullptr, 10);
-    fraction = strtoll(f.c_str(), nullptr, 10);
-
-    magnitude <<= (bitwidth / 2);
-    fin = magnitude | fraction;
-
-    return mk_smt_bv(BigInt(fin), bitwidth);
+    return solver->mkFXPFromBin(
+      integer2binary(thereal.value.get_value(), thereal.type->get_width()),
+      convert_sort(thereal.type));
   }
   case expr2t::constant_floatbv_id:
   {
@@ -2440,44 +2477,34 @@ smt_astt smt_solver_baset::round_int_to_fp(
   return mk_int2real(signed_result);
 }
 
-smt_astt smt_solver_baset::round_fixedbv_to_int(
+smt_astt smt_solver_baset::fxp_align_result(
   smt_astt a,
-  unsigned int fromwidth,
-  unsigned int towidth)
+  const expr2tc &expr,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
 {
-  // Perform C rounding: just truncate towards zero. Annoyingly, this isn't
-  // that simple for negative numbers, because they're represented as a negative
-  // integer _plus_ a positive fraction. So we need to round up if there's a
-  // nonzero fraction, and not if there's not.
-  unsigned int frac_width = fromwidth / 2;
+  // camada's mixed-format ops return the operands' common format; convert
+  // once into the C result type (clamping for _Sat destinations).
+  if (
+    fxp_same_format(side_1->type, expr->type) &&
+    fxp_same_format(side_2->type, expr->type))
+    return a;
 
-  // Determine whether the source is signed from its topmost bit.
-  smt_astt is_neg_bit = mk_extract(a, fromwidth - 1, fromwidth - 1);
-  smt_astt true_bit = mk_smt_bv(BigInt(1), 1);
+  smt_sortt s = convert_sort(expr->type);
+  return is_sat_fixedbv(expr->type) ? solver->mkFXPToFXPSat(a, s)
+                                    : solver->mkFXPToFXP(a, s);
+}
 
-  // Also collect data for dealing with the magnitude.
-  smt_astt magnitude = mk_extract(a, fromwidth - 1, frac_width);
-  smt_astt intvalue = mk_sign_ext(magnitude, frac_width);
-
-  // Data for inspecting fraction part
-  smt_astt frac_part = mk_extract(a, frac_width - 1, 0);
-  smt_astt zero = mk_smt_bv(BigInt(0), frac_width);
-  smt_astt is_zero_frac = solver->mkEqual(frac_part, zero);
-
-  // So, we have a base number (the magnitude), and need to decide whether to
-  // round up or down. If it's positive, round down towards zero. If it's neg
-  // and the fraction is zero, leave it, otherwise round towards zero.
-
-  // We may need a value + 1.
-  smt_astt one = mk_smt_bv(BigInt(1), towidth);
-  smt_astt intvalue_plus_one = solver->mkBVAdd(intvalue, one);
-
-  smt_astt neg_val = solver->mkIte(is_zero_frac, intvalue, intvalue_plus_one);
-
-  smt_astt is_neg = solver->mkEqual(true_bit, is_neg_bit);
-
-  // final switch
-  return solver->mkIte(is_neg, neg_val, intvalue);
+smt_astt smt_solver_baset::fxp_shift_amount(smt_astt amount, unsigned int width)
+{
+  // camada's runtime-amount fixed-point shifts want the amount as a
+  // bit-vector of the operand's width; C shift amounts are plain ints.
+  unsigned int amount_width = amount->getWidth();
+  if (amount_width < width)
+    return mk_zero_ext(amount, width - amount_width);
+  if (amount_width > width)
+    return mk_extract(amount, width - 1, 0);
+  return amount;
 }
 
 smt_astt smt_solver_baset::make_bool_bit(smt_astt a)
@@ -3216,8 +3243,10 @@ expr2tc smt_solver_baset::get_by_ast(const type2tc &type, smt_astt a)
 
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
-  case type2t::fixedbv_id:
     return get_by_value(type, get_bv(a, is_signedbv_type(type)));
+
+  case type2t::fixedbv_id:
+    return get_by_value(type, get_fxp(a));
 
   case type2t::floatbv_id:
     if (int_encoding)
@@ -3817,8 +3846,8 @@ expr2tc smt_solver_baset::get_by_value(const type2tc &type, BigInt value)
     // round-trip) without staging a legacy constant_exprt / type
     // back-migration.
     fixedbvt fbv(fixedbv_spect(to_fixedbv_type(type)));
-    fbv.set_value(
-      binary2integer(integer2binary(value, type->get_width()), true));
+    fbv.set_value(binary2integer(
+      integer2binary(value, type->get_width()), fbv.spec.is_signed));
     return constant_fixedbv2tc(fbv);
   }
 
