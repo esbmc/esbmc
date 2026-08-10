@@ -1456,3 +1456,71 @@ index arm (#6907), address_of bit (#6912), member arm (#6921). Next: derive the
 disjunct list for `if2t` and `constant_array2t` from their arms (§43), then take
 `adjust_if` or `adjust_struct`.
 
+## 45. The disjunct lists for `if2t` and `constant_array2t`, derived not measured
+
+§43 said the disjuncts an invariant needs are one per *branch* of the arm that
+establishes it, and that reading the arm gives the list. Applied to the two
+unchecked entries in §41.3.
+
+### 45.1 `adjust_if` needs a different kind of relaxation
+
+```cpp
+gen_typecast(ns, expr.op0(), bool_type());
+if (expr.type() != expr.op1().type() || expr.type() != expr.op2().type())
+{
+  gen_typecast(ns, expr.op1(), expr.type());
+  gen_typecast(ns, expr.op2(), expr.type());
+}
+```
+
+and `if2t`:
+
+```cpp
+assert(type->type_id == trueval->type->type_id);
+assert(type->type_id == falseval->type->type_id);
+```
+
+The arm establishes exactly that invariant, so handing it over hands `if2t` a
+node it refuses. But this invariant is **relational** -- an equality between two
+fields -- not a whitelist of type ids. There is no disjunct to add. Admitting
+the transient state means dropping the equality for everyone, which is a
+materially weaker change than `index2t`'s and `member2t`'s: those still
+constrain the source to a listed set, whereas this would constrain nothing.
+
+So `adjust_if` is not the next arm. If it is taken later it needs either a
+marker distinguishing pre-adjust nodes, or the arm migrating at construction
+rather than post hoc.
+
+**The §43 rule needs the qualifier:** it holds for invariants that whitelist a
+field's shape. A relational invariant has no transient form that is weaker but
+still meaningful, so relaxing it is a different decision.
+
+### 45.2 `adjust_struct` looks clear
+
+```cpp
+const typet &t = ns.follow(expr.type());
+... insert gen_zero padding operands where components are padding ...
+adjust_expr(ops[i]);
+```
+
+The arm changes the **operands**, never the type. `constant_struct2t`'s only
+assertion is on the type (`struct_id || complex_id || symbol_id`), already
+relaxed for the transient symbol case, and it asserts **nothing** about operand
+count -- the operand/component agreement `python_adjust` documents is enforced
+by that pass, not by the constructor.
+
+So an un-padded literal constructs fine, and the arm should be hand-over-able
+with no relaxation at all. It is the next candidate.
+
+Two cautions, both from this phase's own history: the recursion at `ops[i]`
+lives inside the arm, so the split must keep it (§19.2); and the arm is reached
+from `adjust_expr`'s dispatch, so applicability is intrinsic (§25) -- both
+already checked against the §27 census.
+
+## 46. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921). §41.3's work list
+is now fully derived: `adjust_struct` next, `adjust_if` deferred with its reason
+recorded.
+
