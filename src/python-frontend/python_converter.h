@@ -37,6 +37,13 @@ class python_lambda;
 class python_exception_handler;
 class get_expr_depth_guard;
 
+// Defined in converter_stmt.cpp; shared with numpy_call_expr.cpp so both can
+// verify a Name/Attribute receiver actually resolves to the imported numpy
+// module before treating a call as a numpy constructor/method.
+bool is_imported_numpy_module_alias(
+  const nlohmann::json &ast,
+  const std::string &name);
+
 /**
  * @class python_converter
  * @brief Main converter for transforming Python AST into ESBMC's intermediate representation.

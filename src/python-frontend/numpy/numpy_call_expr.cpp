@@ -2082,8 +2082,9 @@ materialize_arange(const nlohmann::json &args)
   return node;
 }
 
-static std::optional<nlohmann::json>
-materialize_numpy_constructor_array(const nlohmann::json &call_node)
+static std::optional<nlohmann::json> materialize_numpy_constructor_array(
+  const nlohmann::json &call_node,
+  const nlohmann::json &ast_json)
 {
   if (
     !call_node.is_object() ||
@@ -2091,6 +2092,11 @@ materialize_numpy_constructor_array(const nlohmann::json &call_node)
     !call_node.contains("func") || !call_node["func"].is_object() ||
     call_node["func"].value("_type", std::string()) != "Attribute" ||
     !call_node["func"].contains("attr") ||
+    !call_node["func"].contains("value") ||
+    !call_node["func"]["value"].is_object() ||
+    call_node["func"]["value"].value("_type", std::string()) != "Name" ||
+    !is_imported_numpy_module_alias(
+      ast_json, call_node["func"]["value"].value("id", std::string())) ||
     (call_node.contains("keywords") && !call_node["keywords"].empty()) ||
     !call_node.contains("args") || !call_node["args"].is_array())
     return std::nullopt;
@@ -2797,7 +2803,7 @@ exprt numpy_call_expr::create_expr_from_call()
       {
         if (
           std::optional<nlohmann::json> materialized =
-            materialize_numpy_constructor_array(var["value"]))
+            materialize_numpy_constructor_array(var["value"], converter_.ast()))
           var = std::move(*materialized);
         else if (var["value"].contains("args") && !var["value"]["args"].empty())
           var = var["value"]["args"][0];
@@ -3859,7 +3865,8 @@ exprt numpy_call_expr::create_expr_from_call()
         {
           if (
             std::optional<nlohmann::json> materialized =
-              materialize_numpy_constructor_array(decl["value"]))
+              materialize_numpy_constructor_array(
+                decl["value"], converter_.ast()))
           {
             if (
               std::optional<exprt> folded =
@@ -5019,7 +5026,8 @@ exprt numpy_call_expr::get()
           }
           if (
             std::optional<nlohmann::json> materialized =
-              materialize_numpy_constructor_array(var["value"]))
+              materialize_numpy_constructor_array(
+                var["value"], converter_.ast()))
           {
             var = std::move(*materialized);
             return;
@@ -5172,7 +5180,8 @@ exprt numpy_call_expr::get()
         {
           if (
             std::optional<nlohmann::json> materialized =
-              materialize_numpy_constructor_array(var["value"]))
+              materialize_numpy_constructor_array(
+                var["value"], converter_.ast()))
             var = std::move(*materialized);
           else if (
             var["value"].contains("args") && !var["value"]["args"].empty())
@@ -5921,7 +5930,7 @@ exprt numpy_call_expr::get()
       {
         if (
           std::optional<nlohmann::json> materialized =
-            materialize_numpy_constructor_array(var["value"]))
+            materialize_numpy_constructor_array(var["value"], converter_.ast()))
           var = std::move(*materialized);
         else if (var["value"].contains("args") && !var["value"]["args"].empty())
           var = var["value"]["args"][0];

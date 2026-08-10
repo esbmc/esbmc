@@ -167,40 +167,6 @@ bool ast_contains_call(const nlohmann::json &n)
   return false;
 }
 
-bool is_imported_numpy_module_alias(
-  const nlohmann::json &ast,
-  const std::string &name)
-{
-  if (
-    name.empty() || !ast.is_object() || !ast.contains("body") ||
-    !ast["body"].is_array())
-    return false;
-
-  for (const auto &stmt : ast["body"])
-  {
-    if (
-      !stmt.is_object() || stmt.value("_type", std::string()) != "Import" ||
-      !stmt.contains("names") || !stmt["names"].is_array())
-      continue;
-
-    for (const auto &alias : stmt["names"])
-    {
-      if (
-        !alias.is_object() || alias.value("_type", std::string()) != "alias" ||
-        alias.value("name", std::string()) != "numpy")
-        continue;
-
-      const nlohmann::json &asname = alias.value("asname", nlohmann::json());
-      const std::string bound_name =
-        asname.is_null() ? std::string("numpy") : asname.get<std::string>();
-      if (bound_name == name)
-        return true;
-    }
-  }
-
-  return false;
-}
-
 bool ast_imports_numpy_module(const nlohmann::json &ast)
 {
   if (!ast.is_object() || !ast.contains("body") || !ast["body"].is_array())
@@ -308,6 +274,43 @@ struct tagged_scalar_scope_guard
   }
 };
 } // namespace
+
+// External linkage: shared with numpy_call_expr.cpp (declared in
+// python_converter.h) so both can verify a Name/Attribute receiver actually
+// resolves to the imported numpy module.
+bool is_imported_numpy_module_alias(
+  const nlohmann::json &ast,
+  const std::string &name)
+{
+  if (
+    name.empty() || !ast.is_object() || !ast.contains("body") ||
+    !ast["body"].is_array())
+    return false;
+
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      !stmt.is_object() || stmt.value("_type", std::string()) != "Import" ||
+      !stmt.contains("names") || !stmt["names"].is_array())
+      continue;
+
+    for (const auto &alias : stmt["names"])
+    {
+      if (
+        !alias.is_object() || alias.value("_type", std::string()) != "alias" ||
+        alias.value("name", std::string()) != "numpy")
+        continue;
+
+      const nlohmann::json &asname = alias.value("asname", nlohmann::json());
+      const std::string bound_name =
+        asname.is_null() ? std::string("numpy") : asname.get<std::string>();
+      if (bound_name == name)
+        return true;
+    }
+  }
+
+  return false;
+}
 
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
