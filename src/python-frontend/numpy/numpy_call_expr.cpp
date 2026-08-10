@@ -1928,9 +1928,9 @@ materialize_zeros_ones(const std::string &ctor, const nlohmann::json &args)
   if (args.empty())
     return std::nullopt;
   std::vector<std::size_t> dims = extract_constructor_shape_dims(args[0]);
-  // No upper dimension cap here: callers (e.g. transpose) apply their own
-  // dimensional limits and should see the real shape, not a generic
-  // fallback error from this helper silently declining to materialize.
+  // Rank capped at 8 as a sanity bound (real numpy arrays are rarely, if
+  // ever, higher-rank than this); callers needing a tighter, shape-specific
+  // limit (e.g. transpose's 2D-only support) apply their own on top.
   if (dims.empty() || dims.size() > 8)
     return std::nullopt;
   // Matches the real zeros()/ones() creation path: no dtype= means a
