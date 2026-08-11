@@ -4191,8 +4191,7 @@ bool function_call_expr::eval_const_int(const exprt &e, BigInt &out) const
 
 /// Fold a constant str component. A Python str is a char array, so its
 /// constant form is an array of character constants (#6883).
-bool function_call_expr::eval_const_str(const exprt &e, std::string &out)
-  const
+bool function_call_expr::eval_const_str(const exprt &e, std::string &out) const
 {
   if (e.is_symbol())
   {
@@ -4234,14 +4233,8 @@ std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
   // tuple literals so the element type is preserved and verification is
   // cheap. Symbolic tuple lists fall through (still unsupported).
 
-  // A Python str component is a char array, so its constant form is an array
-  // of character constants. Reading it lets a tuple carrying a string be
-  // folded here instead of falling through to the runtime sort model, which
-  // retypes elements as int (#6883).
-
-  // One tuple component: an integer or a string. Python orders tuples
-  // lexicographically and refuses to compare an int with a str, so a column
-  // that mixes the two makes the whole list unfoldable here.
+  // One tuple component: an integer or a string, ordered as Python orders
+  // tuples, lexicographically component by component.
   struct comp_key
   {
     bool is_str = false;
@@ -4315,8 +4308,9 @@ std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
       }
       // Python raises TypeError comparing int with str, so a column that is
       // not uniformly one or the other must not be folded.
-      if (!telems.empty() && key.size() < telems[0].key.size() &&
-          telems[0].key[key.size()].is_str != k.is_str)
+      if (
+        !telems.empty() && key.size() < telems[0].key.size() &&
+        telems[0].key[key.size()].is_str != k.is_str)
       {
         all_constant_tuples = false;
         break;
