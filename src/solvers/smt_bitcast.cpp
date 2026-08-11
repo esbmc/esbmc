@@ -181,6 +181,21 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
         return convert_ast(typecast2tc(to_type, from));
       return solver->mkFXPFromRawBV(convert_ast(from), convert_sort(to_type));
     }
+
+    /* fixedbv -> fixedbv of the same storage width reinterprets the bits; it
+     * must NOT rescale. Falling through to the generic path gave a
+     * value-preserving typecast, so a u0.32 raw pattern read back as u16.16
+     * came out shifted by the 16-bit difference in fraction length. LLVM
+     * libc's isqrt ends in exactly this cast (bit_cast<OutType> of a FracType
+     * result), so the rescale silently corrupted every isqrt result. */
+    if (is_fixedbv_type(from) && !int_encoding)
+    {
+      const fixedbv_type2t &f = to_fixedbv_type(from->type);
+      const fixedbv_type2t &t = to_fixedbv_type(to_type);
+      if (f.width == t.width)
+        return solver->mkFXPFromRawBV(
+          solver->mkFXPToRawBV(convert_ast(from)), convert_sort(to_type));
+    }
   }
   else if (is_bv_type(to_type))
   {

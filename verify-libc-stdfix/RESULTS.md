@@ -800,3 +800,106 @@ and the limitation is stated rather than left implicit.
 ### Scope
 
 Both exp entry points are covered. Nothing here has been reported upstream.
+
+## An ESBMC bug that invalidated the earlier isqrt results
+
+Confirming counterexamples concretely -- rather than trusting the verdicts --
+turned up a defect in **ESBMC**, not libc: `__ESBMC_bitcast` between two
+fixed-point formats of the same storage width **rescaled instead of
+reinterpreting the bits**. A u0.32 raw pattern read back as u16.16 came out
+shifted by the 16-bit difference in fraction length (0xB505A837 -> 0x0000B505).
+
+`smt_bitcast.cpp`'s `is_fixedbv_type(to_type)` branch only handled a bitvector
+source, so fixedbv->fixedbv fell through to a value-preserving typecast. Fixed
+by routing it through `mkFXPToRawBV` + `mkFXPFromRawBV` when the widths match.
+
+This mattered because LLVM libc's `isqrt` **ends** in exactly that cast
+(`bit_cast<OutType>` of a `FracType` result), so every isqrt verdict before the
+fix was computed on a corrupted value. After the fix, verdicts changed in both
+directions -- harnesses that had passed began failing. Nothing that rests on
+`isqrt` should be read from the pre-fix commits.
+
+How it was caught: ESBMC reported a counterexample at `n = 2147549183`, and
+re-running that input through native libc showed **both brackets holding** and
+an error of 0.87 ulp, inside the bound. The cex did not reproduce, which is the
+signal that pointed at the tool rather than the library.
+
+## Two harness bugs of my own, found the same way
+
+1. **The lower bracket forbade rounding up.** It asserted `rb <= floor(root)`,
+   but libc claims an error *bound*, not truncation. At `n = 65534`,
+   `sqrt(65534)*256 = 65534.99999` and libc correctly returns 65535 -- off the
+   true root by 0.0000038 ulp. My bracket called that a defect. Restated
+   direction-agnostically as `(rb-1)^2 < n*2^(2F) < (rb+1)^2`.
+2. **Saturation was tested on the wrong value.** The first guard checked
+   `rb == MAX`, but at `n = 65535` libc returns 65534, not MAX, so the guard
+   missed it. The test has to be on the *true root* against the format maximum.
+
+Both produced false positives that native confirmation caught.
+
+## sqrt/isqrt: final verdicts, all counterexamples confirmed
+
+Every counterexample below was re-run through native libc and reproduces
+exactly. Saturation is excluded (where the true root exceeds the format
+maximum, clamping is correct and no error bound applies).
+
+| harness | format | verdict | ESBMC | witness, confirmed natively |
+|---|---|---|---|---|
+| `oracle_sqrt_exact.c` | u0.8 | SUCCESSFUL | 0.50s | oracle validated |
+| `oracle_sqrt_ur.c` | u0.16 | SUCCESSFUL | 14.72s | oracle validated |
+| `harness_sqrt_vs_oracle_high` | u0.8 | **SUCCESSFUL** | 0.60s | never >1 ulp above |
+| `harness_sqrt_vs_oracle_low` | u0.8 | FAILED | 0.60s | `sqrt(81/256)=9/16` exact, libc 1 ulp low |
+| `harness_sqrt_vs_oracle_ur` | u0.16 | FAILED | 0.60s | same defect at 16 bits |
+| `harness_isqrt_bound` | u8.8 | FAILED | 0.70s | `n=32045`: **-1.86 ulp**, not saturating |
+| `harness_isqrt_uk_bound` | u16.16 | FAILED | 0.70s | `n=2147483649`: **-1.68 ulp**, not saturating |
+
+The two isqrt witnesses are the strongest form of the finding: both are far
+from the saturation rail, so no clamping argument applies, and both exceed the
+documented "< 1 ulp" by well over half an ulp again.
+
+## ESBMC vs native libc: time to reach the same conclusion
+
+Native sweeps check the identical property over the identical domain, compiled
+`-O2`. The comparison is not about raw throughput -- it is about what each
+approach can conclude.
+
+| domain | inputs | native sweep | ESBMC | note |
+|---|---|---|---|---|
+| u0.8 sqrt | 2^8 | 0.00s | 0.60s | native wins; the domain is trivial |
+| u0.16 sqrt | 2^16 | 0.00s | 0.60s | native wins |
+| u8.8 isqrt | 2^16 | 0.00s | 0.70s | native wins |
+| **u0.32 sqrt** | **2^32** | **90.20s** | **0.60s** | **ESBMC 150x faster** |
+| **u16.16 isqrt** | **2^32** | **91.10s** | **0.70s** | **ESBMC 130x faster** |
+| exphk saturated entry | s8.7 window | 0.00s | 59.17s | native wins |
+| exphk flush-to-zero | s8.7 window | 0.00s | 1.50s | native wins |
+| expk flush-to-zero | 4 inputs | 0.00s | 1.60s | native wins |
+
+Two honest observations:
+
+* **Below 2^16, enumeration beats BMC outright.** Sweeping 65536 inputs is
+  free; encoding the same question for a solver is not. The 0.6-0.7s floor is
+  parse and encode cost, not solving.
+* **At 2^32 the crossover is decisive**, and it is not merely a constant
+  factor: BMC does not enumerate, so `u0.32` costs ESBMC the same 0.6s as
+  `u0.8`, while the native sweep grows linearly with the domain. Extending to
+  a 64-bit format is another 4-billion-fold for enumeration and roughly free
+  for BMC -- which is why the 64-bit `_Accum` formats are reachable at all.
+
+The other difference is not a time at all: a native sweep answers "no
+violation was found among the inputs I tried", while a SUCCESSFUL verdict
+answers "no violation exists". `harness_sqrt_vs_oracle_high` is the only
+positive result here, and only BMC could have produced it.
+
+### exp timings
+
+| harness | verdict | ESBMC |
+|---|---|---|
+| `oracle_exp_conc.c` (8 anchors) | SUCCESSFUL | 0.40s |
+| `harness_exphk_saturated_entry` | FAILED | 59.17s |
+| `harness_exphk_flush_zero` | FAILED | 1.50s |
+| `harness_expk_flush_zero` | FAILED | 1.60s |
+
+exp is where BMC is *most* expensive relative to native, because correct
+rounding needs a wide intermediate: 19 bits at s8.7 and 37 at s16.15 (camada's
+measured hardest-to-round bounds). The 59s case is the symbolic window sweep;
+the flush cases pin fewer inputs.
