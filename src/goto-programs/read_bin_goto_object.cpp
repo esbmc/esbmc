@@ -9,6 +9,22 @@
 
 #define BINARY_VERSION 1
 
+// Makes sure there is an empty function for every function symbol and fixes
+// the function types. A null goto_functions means the caller wants symbols
+// only.
+static void declare_empty_function(goto_functionst *goto_functions, const symbolt &symbol)
+{
+  if (!goto_functions || symbol.is_type || !symbol.get_type().is_code())
+    return;
+
+  auto it = goto_functions->function_map.find(symbol.id);
+  if (it == goto_functions->function_map.end())
+    goto_functions->function_map.emplace(symbol.id, goto_functiont());
+  goto_functiont &f = goto_functions->function_map.at(symbol.id);
+  f.type = migrate_symbol_type(symbol);
+  f.exception_spec = exception_specificationt::from_type(symbol.get_type());
+}
+
 bool read_bin_goto_object(
   std::istream &in,
   const std::string &filename,
@@ -71,18 +87,7 @@ bool read_bin_goto_object(
     symbolt symbol;
     symbol.from_irep(t);
 
-    if (goto_functions && !symbol.is_type && symbol.get_type().is_code())
-    {
-      // makes sure there is an empty function
-      // for every function symbol and fixes
-      // the function types.
-      auto it = goto_functions->function_map.find(symbol.id);
-      if (it == goto_functions->function_map.end())
-        goto_functions->function_map.emplace(symbol.id, goto_functiont());
-      goto_functiont &f = goto_functions->function_map.at(symbol.id);
-      f.type = migrate_symbol_type(symbol);
-      f.exception_spec = exception_specificationt::from_type(symbol.get_type());
-    }
+    declare_empty_function(goto_functions, symbol);
 
     // Add functions only from the list if there is a whitelist
     if (!function_set.empty())
