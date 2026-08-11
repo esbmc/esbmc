@@ -314,10 +314,17 @@ code_contractst::extract_requires_from_body(const goto_programt &function_body)
 /// than a plain re-issued call.
 static bool is_contract_intrinsic(const std::string &funcname)
 {
-  return is_fresh_function(funcname) ||
-         funcname.find("__ESBMC_old") != std::string::npos ||
-         funcname.find("__ESBMC_forall") != std::string::npos ||
-         funcname.find("__ESBMC_exists") != std::string::npos;
+  if (is_fresh_function(funcname))
+    return true;
+
+  // Compare the base name rather than substring-matching the mangled id, so a
+  // user function whose name merely contains one of these tokens is lifted
+  // like any other.
+  const size_t at = funcname.rfind('@');
+  const std::string base =
+    at == std::string::npos ? funcname : funcname.substr(at + 1);
+  return base == "__ESBMC_old" || base == "__ESBMC_old_raw" ||
+         base == "__ESBMC_forall" || base == "__ESBMC_exists";
 }
 
 static void collect_symbol_names(const expr2tc &e, std::set<irep_idt> &out)
@@ -333,6 +340,142 @@ static void collect_symbol_names(const expr2tc &e, std::set<irep_idt> &out)
 
   e->foreach_operand(
     [&out](const expr2tc &op) { collect_symbol_names(op, out); });
+}
+
+/// Calls in \p body whose results \p referenced depends on, transitively. A
+/// clause call may take another call's result (`outer(inner(x))`), so the
+/// operands of everything selected are themselves candidates; iterate until the
+/// referenced set stops growing. \p referenced is grown in place.
+static std::set<goto_programt::const_targett> select_clause_calls(
+  std::set<irep_idt> &referenced,
+  const std::set<irep_idt> &body_decls,
+  const goto_programt &body)
+{
+  std::set<goto_programt::const_targett> selected;
+
+  for (bool grew = true; grew;)
+  {
+    grew = false;
+    forall_goto_program_instructions (it, body)
+    {
+      if (!it->is_function_call() || !is_code_function_call2t(it->code))
+        continue;
+      if (selected.count(it))
+        continue;
+
+      const code_function_call2t &call = to_code_function_call2t(it->code);
+      if (is_nil_expr(call.ret) || !is_symbol2t(call.ret))
+        continue;
+
+      const irep_idt &ret_name = to_symbol2t(call.ret).thename;
+      if (!referenced.count(ret_name) || !body_decls.count(ret_name))
+        continue;
+
+      // Contract intrinsics keep their own materialisation, which knows how to
+      // turn them into allocations and snapshots rather than a plain call.
+      if (
+        is_symbol2t(call.function) &&
+        is_contract_intrinsic(to_symbol2t(call.function).thename.as_string()))
+        continue;
+
+      selected.insert(it);
+      for (const expr2tc &arg : call.operands)
+        collect_symbol_names(arg, referenced);
+      grew = true;
+    }
+  }
+
+  return selected;
+}
+
+/// Symbols declared in \p body. A call can bind a global directly
+/// (`g = compute();`); re-declaring that in the wrapper would shadow the very
+/// object the clause is about, so only body-local temporaries are lifted.
+static std::set<irep_idt> declared_in(const goto_programt &body)
+{
+  std::set<irep_idt> decls;
+  forall_goto_program_instructions (it, body)
+    if (it->is_decl() && is_code_decl2t(it->code))
+      decls.insert(to_code_decl2t(it->code).value);
+  return decls;
+}
+
+bool code_contractst::callee_is_pure(
+  const irep_idt &callee,
+  std::set<irep_idt> &visited) const
+{
+  if (!visited.insert(callee).second)
+    return true; // already on the stack: recursion adds no new writes
+
+  auto it = goto_functions.function_map.find(callee);
+  if (it == goto_functions.function_map.end() || !it->second.body_available)
+    return false; // no body here, so nothing rules out a side effect
+
+  forall_goto_program_instructions (i, it->second.body)
+  {
+    if (i->is_assign() && is_code_assign2t(i->code))
+    {
+      const code_assign2t &assign = to_code_assign2t(i->code);
+      // A write anywhere but a local of this callee escapes it.
+      if (!is_symbol2t(assign.target))
+        return false;
+      const symbolt *target = ns.lookup(to_symbol2t(assign.target).thename);
+      if (!target || target->static_lifetime)
+        return false;
+    }
+
+    if (i->is_function_call() && is_code_function_call2t(i->code))
+    {
+      const code_function_call2t &call = to_code_function_call2t(i->code);
+      if (!is_symbol2t(call.function))
+        return false;
+      if (!callee_is_pure(to_symbol2t(call.function).thename, visited))
+        return false;
+    }
+  }
+
+  return true;
+}
+
+std::string
+code_contractst::impure_clause_reason(const goto_programt &body) const
+{
+  const std::string callee = impure_clause_callee(body);
+  if (callee.empty())
+    return std::string();
+
+  return "a contract clause calls '" + callee +
+         "', which is not provably free of side effects";
+}
+
+std::string
+code_contractst::impure_clause_callee(const goto_programt &body) const
+{
+  std::set<irep_idt> referenced;
+  forall_goto_program_instructions (it, body)
+    if (
+      it->is_assume() && (id2string(it->location.comment()) ==
+                            "contract::requires" ||
+                          id2string(it->location.comment()) ==
+                            "contract::ensures"))
+      collect_symbol_names(it->guard, referenced);
+
+  if (referenced.empty())
+    return std::string();
+
+  std::set<irep_idt> visited;
+  for (const goto_programt::const_targett &call_it :
+       select_clause_calls(referenced, declared_in(body), body))
+  {
+    const code_function_call2t &call =
+      to_code_function_call2t(call_it->code);
+    const irep_idt &callee = to_symbol2t(call.function).thename;
+    visited.clear();
+    if (!callee_is_pure(callee, visited))
+      return id2string(callee);
+  }
+
+  return std::string();
 }
 
 /// A clause is lowered into a single ASSUME/ASSERT, so a call inside it
@@ -353,27 +496,17 @@ void code_contractst::lift_clause_call_temps(
   if (referenced.empty())
     return;
 
+  const std::set<irep_idt> body_decls = declared_in(original_body);
+
+  std::set<goto_programt::const_targett> selected =
+    select_clause_calls(referenced, body_decls, original_body);
+
   forall_goto_program_instructions (it, original_body)
   {
-    if (!it->is_function_call() || !is_code_function_call2t(it->code))
+    if (!selected.count(it))
       continue;
 
     const code_function_call2t &call = to_code_function_call2t(it->code);
-    if (is_nil_expr(call.ret) || !is_symbol2t(call.ret))
-      continue;
-    if (!referenced.count(to_symbol2t(call.ret).thename))
-      continue;
-
-    // Contract intrinsics keep their own materialisation, which knows how to
-    // turn them into allocations and snapshots rather than a plain call.
-    if (
-      is_symbol2t(call.function) &&
-      is_contract_intrinsic(to_symbol2t(call.function).thename.as_string()))
-      continue;
-
-    goto_programt::targett decl = dest.add_instruction(DECL);
-    decl->code = code_decl2tc(call.ret->type, to_symbol2t(call.ret).thename);
-    decl->location = it->location;
 
     // At a call site the lifted call still names the callee's parameters, so
     // rewrite them to this caller's actual arguments.
@@ -381,6 +514,10 @@ void code_contractst::lift_clause_call_temps(
     for (const auto &sub : substitutions)
       for (expr2tc &arg : lifted_call.operands)
         arg = replace_symbol_in_expr(arg, sub.first, sub.second);
+
+    goto_programt::targett decl = dest.add_instruction(DECL);
+    decl->code = code_decl2tc(call.ret->type, to_symbol2t(call.ret).thename);
+    decl->location = it->location;
 
     goto_programt::targett lifted = dest.add_instruction(FUNCTION_CALL);
     lifted->code = code_function_call2tc(
@@ -4122,7 +4259,9 @@ std::string code_contractst::diagnose_contract_target(
       if (
         has_contracts(it->second.body) ||
         (sym && is_annotated_contract_function(*sym)))
-        return std::string();
+      {
+        return impure_clause_reason(it->second.body);
+      }
     }
     return any_match ? "that function declares no contract clauses"
                      : "no function of that name has a body here";
@@ -4143,7 +4282,10 @@ std::string code_contractst::diagnose_contract_target(
   if (!has_contracts(it->second.body) && !is_annotated_contract_function(*sym))
     return "that function declares no contract clauses";
 
-  return std::string();
+  // A clause call is re-issued in the wrapper, so an impure one would run its
+  // side effects before the body and check it from a state no caller can
+  // reach (#6945).
+  return impure_clause_reason(it->second.body);
 }
 
 void code_contractst::replace_calls(const std::set<std::string> &to_replace)

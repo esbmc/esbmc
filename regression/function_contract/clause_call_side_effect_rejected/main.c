@@ -11,6 +11,6 @@ int f(int x)
 int main(void)
 {
   int r = f(5);
-  __ESBMC_assert(g == 1, "the clause call should happen once");
+  __ESBMC_assert(g == 1, "unreachable: the contract is rejected");
   return 0;
 }

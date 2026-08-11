@@ -118,6 +118,20 @@ public:
   /// \brief Re-materialise, into \p dest, the calls whose SSA temporaries
   ///   \p clause still references. Without this the clause stands over a
   ///   symbol declared in the function body but not in the wrapper (#6941).
+  /// \brief Conservatively true when \p callee writes nothing outside its own
+  ///   locals, transitively. A callee with no body here is not provably pure.
+  bool
+  callee_is_pure(const irep_idt &callee, std::set<irep_idt> &visited) const;
+
+  /// \brief Name of the first function a clause in \p body calls that is not
+  ///   provably pure, empty when every clause call is pure. Re-issuing an
+  ///   impure call in the wrapper would check the body from a state no caller
+  ///   can reach (#6945).
+  std::string impure_clause_callee(const goto_programt &body) const;
+
+  /// \brief Diagnostic for an impure clause call in \p body, empty when none.
+  std::string impure_clause_reason(const goto_programt &body) const;
+
   void lift_clause_call_temps(
     const expr2tc &clause,
     const goto_programt &original_body,
