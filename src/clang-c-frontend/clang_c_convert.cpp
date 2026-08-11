@@ -406,6 +406,20 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
       if (attr->getKind() == clang::attr::Packed)
         t.set("packed", true);
 
+      /* clang models `#pragma pack(n)` as MaxFieldAlignmentAttr, not as
+       * attr::Packed: it caps every member's alignment at n bytes, and n == 1
+       * is exactly what attr::Packed means. */
+      if (attr->getKind() == clang::attr::MaxFieldAlignment)
+      {
+        const auto &mattr =
+          static_cast<const clang::MaxFieldAlignmentAttr &>(*attr);
+        const unsigned bytes = mattr.getAlignment() / config.ansi_c.char_width;
+        if (bytes <= 1)
+          t.set("packed", true);
+        else
+          t.set("max_field_alignment", bytes);
+      }
+
       if (attr->getKind() == clang::attr::Aligned)
       {
         const clang::AlignedAttr &aattr =

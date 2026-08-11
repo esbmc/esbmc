@@ -72,6 +72,19 @@ static bool follows_ext_int_padding(
          next->type().get_bool("#extint");
 }
 
+/* `#pragma pack(n)` caps each member's alignment at n bytes; the record's own
+ * alignment is the max of the capped member alignments. Recorded by the
+ * frontend as "max_field_alignment"; absent (0) means uncapped. */
+static BigInt
+capped_alignment(const typet &member, const typet &record, const namespacet &ns)
+{
+  const BigInt a = alignment(member, ns);
+  const std::string &cap = record.get_string("max_field_alignment");
+  if (cap.empty())
+    return a;
+  return std::min(a, string2integer(cap));
+}
+
 static void add_padding(struct_typet &type, const namespacet &ns)
 {
   /* components only exist for complete types */
@@ -161,7 +174,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
 
     if (it_type.get_bool("#bitfield"))
     {
-      a = alignment(it_type, ns);
+      a = capped_alignment(it_type, type, ns);
 
       // A zero-width bit-field causes alignment to the base-type.
       if (string2integer(it_type.width().as_string()) == 0)
@@ -203,7 +216,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
       a = 1;
     }
     else
-      a = alignment(it_type, ns);
+      a = capped_alignment(it_type, type, ns);
 
     assert(bit_field_bits == 0);
     assert(a > 0);
@@ -313,7 +326,8 @@ static void add_padding(union_typet &type, const namespacet &ns)
   /* components only exist for complete types */
   assert(!type.incomplete());
 
-  BigInt max_alignment_bits = alignment(type, ns) * config.ansi_c.char_width;
+  const BigInt union_alignment = capped_alignment(type, type, ns);
+  BigInt max_alignment_bits = union_alignment * config.ansi_c.char_width;
   BigInt size_bits = 0;
 
   // check per component, and ignore those without fixed size
@@ -350,9 +364,8 @@ static void add_padding(union_typet &type, const namespacet &ns)
   // for structs above (see the comment there).
   if (!type.get_bool("packed") && type.find("alignment").is_nil())
   {
-    const BigInt a = alignment(type, ns);
-    if (a > 1)
-      type.set("alignment", constant_exprt(a, size_type()));
+    if (union_alignment > 1)
+      type.set("alignment", constant_exprt(union_alignment, size_type()));
   }
 }
 
