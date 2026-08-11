@@ -14,7 +14,7 @@ re-implementing the code under test. 8/16-bit formats are exhaustive.
 | `divi` | 8 | **3 BUGS** -- double sign negation in the power-of-two branch; `1 << F` UB at F>=31; no intermediate headroom at s32.31/u32.32. See below. |
 | `bitsfx`/`fxbits` | 24 | **PASS** -- mutual inverses in both directions, exhaustive over 8-bit formats; raw pattern is the scaled value |
 | `idiv` | 8 | **PASS** on the whole domain except one input; see the overflow question below |
-| `exp` | 2 | **2 BUGS** -- a reachable saturated table entry (36% error) and a spurious flush to zero; relative bound exceeded on 74% of in-band inputs |
+| `exp` | 2 | **2 BUGS** -- reachable saturated table entry in `exphk` only (36% error); spurious flush to zero in BOTH; relative bound exceeded on 74% (exphk) / 83% (expk) of in-band inputs |
 
 ## roundfx tie direction: settled
 
@@ -760,7 +760,43 @@ does not, by a margin of 0.000024.
 
 Proof: `harness_exphk_flush_zero.cpp` -- **FAILED**.
 
+### expk (s16.15): one defect recurs, the other does not
+
+Both entry points are now covered, and they differ in a way worth stating
+because it would have been easy to assume the pattern generalised:
+
+| defect | `exphk` (s8.7) | `expk` (s16.15) |
+|---|---|---|
+| A: reachable saturated table entry | **YES** -- index 88 hits `EXP_HI[11]` | **NO** -- max index reached is 22, `EXP_HI[23]` is unreachable |
+| B: spurious flush to zero | **YES** | **YES** |
+| in-band inputs over the relative bound | 73.64% | 83.13% (sampled) |
+
+`expk`'s `EXP_HI[23]` is also an `ACCUM_MAX` placeholder -- `exp(12) = 162754.79`
+does not fit s16.15 -- but it is never selected: the largest index reached is 22,
+consistent with libc's own "indices <= 355" comment (355 >> 4 = 22). So the
+reachable placeholder is specific to `exphk`'s narrower table, not a shared
+design flaw. `expk` also uses a quadratic term (`1 + lo + lo^2/2`) where `exphk`
+uses only `1 + lo`, and claims the correspondingly tighter `2^-16`.
+
+Defect B does recur, from the same cause: `EXP_HI[0] = 0x1p-15` is exactly one
+ulp and `lo` can be negative, so the product underflows. The guard flushes only
+`x <= -11.0903320`, while
+
+```
+exp(-11.0898132) = 0.0000152671     half an ulp = 0.0000152588
+```
+
+is above half an ulp, so the correctly-rounded answer is raw 1. Verified at four
+natively-measured inputs in that window.
+
+Proof: `harness_expk_flush_zero.cpp` -- **FAILED**.
+
+A note on cost: this harness pins concrete inputs rather than sweeping the
+window symbolically. Correct rounding at s16.15 needs a 37-bit intermediate
+(camada's measured hardest-to-round bound), and the symbolic sweep did not
+finish in 10 minutes. The concrete inputs are enough to establish the defect,
+and the limitation is stated rather than left implicit.
+
 ### Scope
 
-Only `exphk` (s8.7) is covered. `expk` (s16.15) is the other entry point and is
-not yet tested. Nothing here has been reported upstream.
+Both exp entry points are covered. Nothing here has been reported upstream.
