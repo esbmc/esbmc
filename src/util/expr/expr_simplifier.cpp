@@ -3676,6 +3676,68 @@ widened_bool_compared_to_zero(const expr2tc &side_1, const expr2tc &side_2)
   return is_nil_expr(r) ? match(side_2, side_1) : r;
 }
 
+/// (x + c1) REL c2 -> x REL (c2 - c1), and (x - c1) REL c2 -> x REL (c2 + c1),
+/// for REL in {==, !=}: the two hold together, since `!= x y` is exactly the
+/// negation of `== x y`.
+///
+/// Requires homogeneous types across the entire shape: the add or sub, BOTH
+/// its operands, and c2 must share a single arithmetic domain. Mixed widths
+/// (e.g. (x_u8 + c_u16) == c2_u16) would silently rewrite into something that
+/// confuses modular semantics. The folded constant must also fit the compared
+/// type, or the rewrite would wrap where the original did not.
+template <class Rel2t>
+static expr2tc
+fold_const_across_addsub(const expr2tc &side_1, const expr2tc &side_2)
+{
+  if (!is_constant_int2t(side_2) || side_1->type != side_2->type)
+    return expr2tc();
+
+  const BigInt &c2 = to_constant_int2t(side_2).value;
+  const type2tc &t = side_2->type;
+
+  auto rebuild = [&t](const expr2tc &rest, const BigInt &folded) -> expr2tc {
+    if (!fits_in_width(folded, t->get_width(), is_signedbv_type(t)))
+      return expr2tc();
+    return make_irep<Rel2t>(rest, constant_int2tc(t, folded));
+  };
+
+  auto homogeneous = [&t](const expr2tc &a, const expr2tc &b) {
+    return a->type == t && b->type == t;
+  };
+
+  if (is_add2t(side_1))
+  {
+    const add2t &add_expr = to_add2t(side_1);
+    if (!homogeneous(add_expr.side_1, add_expr.side_2))
+      return expr2tc();
+
+    if (is_constant_int2t(add_expr.side_2))
+      if (expr2tc r = rebuild(
+            add_expr.side_1, c2 - to_constant_int2t(add_expr.side_2).value);
+          !is_nil_expr(r))
+        return r;
+
+    if (is_constant_int2t(add_expr.side_1))
+      return rebuild(
+        add_expr.side_2, c2 - to_constant_int2t(add_expr.side_1).value);
+
+    return expr2tc();
+  }
+
+  if (is_sub2t(side_1))
+  {
+    const sub2t &sub_expr = to_sub2t(side_1);
+    if (!homogeneous(sub_expr.side_1, sub_expr.side_2))
+      return expr2tc();
+
+    if (is_constant_int2t(sub_expr.side_2))
+      return rebuild(
+        sub_expr.side_1, c2 + to_constant_int2t(sub_expr.side_2).value);
+  }
+
+  return expr2tc();
+}
+
 expr2tc equality2t::do_simplify() const
 {
   // Self-comparison: x == x is always true (except for floats with NaN)
@@ -3692,70 +3754,9 @@ expr2tc equality2t::do_simplify() const
       !is_nil_expr(b))
     return not2tc(b);
 
-  // (x + c1) == c2 -> x == (c2 - c1). Requires homogeneous types across
-  // the entire shape: the add, BOTH its operands, and c2 must share a
-  // single arithmetic domain. Mixed widths (e.g. (x_u8 + c_u16) == c2_u16)
-  // would silently rewrite into something that confuses modular semantics.
-  if (
-    is_add2t(side_1) && is_constant_int2t(side_2) &&
-    side_1->type == side_2->type &&
-    to_add2t(side_1).side_1->type == side_2->type &&
-    to_add2t(side_1).side_2->type == side_2->type)
-  {
-    const add2t &add_expr = to_add2t(side_1);
-
-    if (is_constant_int2t(add_expr.side_2))
-    {
-      const BigInt &c1 = to_constant_int2t(add_expr.side_2).value;
-      const BigInt &c2 = to_constant_int2t(side_2).value;
-      BigInt diff = c2 - c1;
-
-      if (fits_in_width(
-            diff, side_2->type->get_width(), is_signedbv_type(side_2->type)))
-      {
-        expr2tc new_const = constant_int2tc(side_2->type, diff);
-        return equality2tc(add_expr.side_1, new_const);
-      }
-    }
-
-    if (is_constant_int2t(add_expr.side_1))
-    {
-      const BigInt &c1 = to_constant_int2t(add_expr.side_1).value;
-      const BigInt &c2 = to_constant_int2t(side_2).value;
-      BigInt diff = c2 - c1;
-
-      if (fits_in_width(
-            diff, side_2->type->get_width(), is_signedbv_type(side_2->type)))
-      {
-        expr2tc new_const = constant_int2tc(side_2->type, diff);
-        return equality2tc(add_expr.side_2, new_const);
-      }
-    }
-  }
-
-  // (x - c1) == c2 -> x == (c2 + c1). Same homogeneity requirement.
-  if (
-    is_sub2t(side_1) && is_constant_int2t(side_2) &&
-    side_1->type == side_2->type &&
-    to_sub2t(side_1).side_1->type == side_2->type &&
-    to_sub2t(side_1).side_2->type == side_2->type)
-  {
-    const sub2t &sub_expr = to_sub2t(side_1);
-
-    if (is_constant_int2t(sub_expr.side_2))
-    {
-      const BigInt &c1 = to_constant_int2t(sub_expr.side_2).value;
-      const BigInt &c2 = to_constant_int2t(side_2).value;
-      BigInt sum = c2 + c1;
-
-      if (fits_in_width(
-            sum, side_2->type->get_width(), is_signedbv_type(side_2->type)))
-      {
-        expr2tc new_const = constant_int2tc(side_2->type, sum);
-        return equality2tc(sub_expr.side_1, new_const);
-      }
-    }
-  }
+  if (expr2tc r = fold_const_across_addsub<equality2t>(side_1, side_2);
+      !is_nil_expr(r))
+    return r;
 
   // (x * c) == 0 -> x == 0 when c is odd. Restricted to odd constants
   // because modular bv multiplication is injective only for invertibles
@@ -3924,68 +3925,9 @@ expr2tc notequal2t::do_simplify() const
   // the same rewrites: != x y holds iff == x y doesn't, so any rewrite that
   // preserves equality also preserves inequality.
 
-  // (x + c1) != c2 -> x != (c2 - c1), and the (c1 + x) != c2 mirror.
-  // Same homogeneity requirement as the equality case: the add, BOTH its
-  // operands, and c2 must all share a single arithmetic domain.
-  if (
-    is_add2t(side_1) && is_constant_int2t(side_2) &&
-    side_1->type == side_2->type &&
-    to_add2t(side_1).side_1->type == side_2->type &&
-    to_add2t(side_1).side_2->type == side_2->type)
-  {
-    const add2t &add_expr = to_add2t(side_1);
-    const BigInt &c2 = to_constant_int2t(side_2).value;
-
-    if (is_constant_int2t(add_expr.side_2))
-    {
-      const BigInt &c1 = to_constant_int2t(add_expr.side_2).value;
-      BigInt diff = c2 - c1;
-
-      if (fits_in_width(
-            diff, side_2->type->get_width(), is_signedbv_type(side_2->type)))
-      {
-        expr2tc new_const = constant_int2tc(side_2->type, diff);
-        return notequal2tc(add_expr.side_1, new_const);
-      }
-    }
-
-    if (is_constant_int2t(add_expr.side_1))
-    {
-      const BigInt &c1 = to_constant_int2t(add_expr.side_1).value;
-      BigInt diff = c2 - c1;
-
-      if (fits_in_width(
-            diff, side_2->type->get_width(), is_signedbv_type(side_2->type)))
-      {
-        expr2tc new_const = constant_int2tc(side_2->type, diff);
-        return notequal2tc(add_expr.side_2, new_const);
-      }
-    }
-  }
-
-  // (x - c1) != c2 -> x != (c2 + c1). Same homogeneity requirement.
-  if (
-    is_sub2t(side_1) && is_constant_int2t(side_2) &&
-    side_1->type == side_2->type &&
-    to_sub2t(side_1).side_1->type == side_2->type &&
-    to_sub2t(side_1).side_2->type == side_2->type)
-  {
-    const sub2t &sub_expr = to_sub2t(side_1);
-
-    if (is_constant_int2t(sub_expr.side_2))
-    {
-      const BigInt &c1 = to_constant_int2t(sub_expr.side_2).value;
-      const BigInt &c2 = to_constant_int2t(side_2).value;
-      BigInt sum = c2 + c1;
-
-      if (fits_in_width(
-            sum, side_2->type->get_width(), is_signedbv_type(side_2->type)))
-      {
-        expr2tc new_const = constant_int2tc(side_2->type, sum);
-        return notequal2tc(sub_expr.side_1, new_const);
-      }
-    }
-  }
+  if (expr2tc r = fold_const_across_addsub<notequal2t>(side_1, side_2);
+      !is_nil_expr(r))
+    return r;
 
   // d + c != d + e -> c != e (cancel common addend). Coerce surviving
   // operands to a common type when their concrete types differ.
