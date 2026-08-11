@@ -228,7 +228,58 @@ Remaining candidates:
    would start paying. This is an operational-model change, and it must not
    weaken `pthread_join` / deadlock detection, which read exactly that state.
 3. **Evaluate DPOR** (Flanagan–Godefroid dynamic POR) against MPOR. A design
-   change, not a patch; investigation only.
+   change, not a patch; investigation only. **Done — W1.4 below: do not start
+   it.**
+
+#### W1.4 — What is left for DPOR, measured (candidate 3: do not start it)
+
+DPOR computes the dependency relation during exploration rather than from a
+static analysis (Flanagan and Godefroid, *"Dynamic Partial-Order Reduction for
+Model Checking Software"*, POPL 2005,
+[doi:10.1145/1040305.1040315](https://doi.org/10.1145/1040305.1040315)), and its
+optimal form explores exactly one interleaving per Mazurkiewicz trace — the
+lower bound any sound partial-order reduction can reach (Abdulla, Aronis,
+Jonsson and Sagonas, *"Optimal Dynamic Partial Order Reduction"*, POPL 2014,
+[doi:10.1145/2535838.2535845](https://doi.org/10.1145/2535838.2535845)). So the
+question DPOR answers is: **how much of what ESBMC explores is redundant that
+its existing reductions do not already remove?** Measured, `schedules_explored`
+per configuration:
+
+| benchmark | `--no-por` | MPOR | + sleep | + hash | + both |
+|---|---|---|---|---|---|
+| `01_malloc_20` (`--context-bound 2`) | 1171 | 940 | 940 | 940 | 940 |
+| `github_3449` | TIMEOUT | 2134 | 2131 | 876 | 846 |
+| `11_bakery.simple.preempt` | TIMEOUT | 2279 | 2279 | 746 | 746 |
+
+**The exit benchmark has no redundancy left to find.** On `01_malloc_20` at
+`--context-bound 2`, every reduction ESBMC has — MPOR, sleep sets, state
+hashing, all combinations — lands on exactly 940. W1's exit asks for ≥2× *on
+this benchmark*, and no technique available today moves it at all. **Re-scope
+the exit** onto a benchmark where redundancy is demonstrable (`github_3449`,
+`11_bakery.simple.preempt`); keeping it on `01_malloc_20` makes W1 unfalsifiable
+rather than demanding.
+
+**The reductions are substitutes, not complements.** Sleep sets add ~nothing on
+top of MPOR (2134 → 2131, 2279 → 2279) but are strong *instead* of it: with
+`--no-por`, `github_3449` goes from TIMEOUT to **1653**, beating MPOR's 2134,
+and `github_6831_sleep_sets` goes 4892 → 368. Two reductions that each remove
+most of the same redundancy leave little for a third to find, which is the case
+against DPOR here: it is a rewrite (§7), and this corpus cannot demonstrate the
+upside that would pay for one.
+
+**Counter caveat, and it matters for reading every row above.** A hash collision
+truncates the schedule and `get_next_formula` still returns a formula for the
+truncated prefix, so `schedules_explored` counts that prefix as a schedule.
+Under `--no-por --state-hashing`, `github_3449` reports 15,923 schedules against
+1653 for `--no-por --sleep-sets` — most of that gap is the counter changing
+meaning, not the search getting worse. **`schedules_explored` is not a clean
+cross-configuration comparator once hashing is on**; compare wall-clock and
+verdicts there, and read W0's counter as within-configuration.
+
+**Recommendation:** close candidate 3 without building anything. Revisit only if
+a benchmark appears where the schedule count stays high under MPOR, sleep sets
+*and* hashing — that is the shape whose redundancy only a trace-based method
+could remove, and this corpus does not contain one.
 
 #### W1.1 — Sleep sets (`--sleep-sets`), shipped off by default
 
