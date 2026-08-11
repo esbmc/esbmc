@@ -410,7 +410,7 @@ int esbmc_parseoptionst::doit()
     return 0;
 
   // A violation found under a bounded schedule space is genuine whichever
-  // strategy owns the run, so this precedes the dispatch rather than joining it.
+  // strategy owns the run, so this precedes the dispatch rather than joins it.
   const int prepass = falsify_with_bounded_schedules(options, goto_functions);
   if (prepass >= 0)
     return prepass;

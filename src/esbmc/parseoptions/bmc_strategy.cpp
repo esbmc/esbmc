@@ -598,8 +598,9 @@ int esbmc_parseoptionst::falsify_with_bounded_schedules(
   }
 
   // A round of the pre-pass is a base-case BMC run, so it composes only with a
-  // verdict read off the base case. Under --forward-condition / --inductive-step
-  // a SAT round means "unable to prove" rather than "violation"; --termination
+  // verdict read off the base case. Under --forward-condition or
+  // --inductive-step a SAT round means "unable to prove", not a violation;
+  // --termination
   // inverts it further, since its markers make reaching an assert evidence that
   // the loop *does* terminate. A --multi-property round owns the property table
   // and would report the truncated pre-pass as the whole result, and the two

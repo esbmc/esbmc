@@ -348,9 +348,18 @@ and the pre-pass forces `--no-unwinding-assertions` (defaulting `--unwind` to 1
 when the run sets none) so a truncated loop yields fewer paths rather than a
 spurious unwinding-assertion failure. A violation found is therefore genuine
 whatever the strategy would have concluded, and finding none is not evidence,
-so the strategy afterwards runs untouched. Coverage runs skip the pre-pass:
-its rounds would fold into the reported figure and print one `[Coverage]` block
-per bound.
+so the strategy afterwards runs untouched.
+
+That argument only holds where a SAT round *means* a violation, which is
+narrower than it first appears and cost four wrong verdicts in review before it
+was pinned down. `--forward-condition` and `--inductive-step` read SAT as
+"unable to prove"; `--termination` inverts it further, since its markers make
+reaching an assert evidence that the loop terminates; a `--multi-property`
+round owns the property table and would report the truncated pre-pass as the
+whole result; and `--partial-loops` removes the very assumption the
+under-approximation rests on. The first four are rejected, `--partial-loops` is
+forced off for the pre-pass, and coverage runs skip it (its rounds would fold
+into the reported figure and print one `[Coverage]` block per bound).
 
 On `00_rwlock4` — the #6480 shape, a violation needing few switches stranded
 deep in unbounded DFS order — `--incremental-bmc` alone produced no verdict in
