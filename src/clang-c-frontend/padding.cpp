@@ -74,7 +74,7 @@ static bool follows_ext_int_padding(
 
 /* `#pragma pack(n)` caps each member's alignment at n bytes; the record's own
  * alignment is the max of the capped member alignments. Recorded by the
- * frontend as "max_field_alignment"; absent (0) means uncapped. */
+ * frontend as "max_field_alignment"; absent means uncapped. */
 static BigInt
 capped_alignment(const typet &member, const typet &record, const namespacet &ns)
 {
@@ -174,16 +174,17 @@ static void add_padding(struct_typet &type, const namespacet &ns)
 
     if (it_type.get_bool("#bitfield"))
     {
-      a = capped_alignment(it_type, type, ns);
-
-      // A zero-width bit-field causes alignment to the base-type.
+      // A zero-width bit-field causes alignment to the base-type. Neither
+      // `packed` nor `#pragma pack(n)` relaxes that demand.
       if (string2integer(it_type.width().as_string()) == 0)
       {
+        a = alignment(it_type, ns);
       }
       else
       {
         // Otherwise, ANSI-C says that bit-fields do not get padded!
         // We consider the type for max_alignment, however.
+        a = capped_alignment(it_type, type, ns);
         if (max_alignment < a)
           max_alignment = a;
 
@@ -213,6 +214,13 @@ static void add_padding(struct_typet &type, const namespacet &ns)
        *       non-packed but padded structs we still have the alignment
        *       guarantees for all the non-padding members.
        */
+      a = 1;
+    }
+    else if (type.get_bool("packed"))
+    {
+      /* Reached only when the record also carries an explicit alignment, which
+       * raises the record's own alignment but leaves its members densely
+       * packed. */
       a = 1;
     }
     else

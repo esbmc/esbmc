@@ -28,8 +28,36 @@ struct plain_s
   uint32_t b;
 };
 
+#pragma pack(push, 2)
+struct bitfield_s
+{
+  char a;
+  unsigned x : 20;
+  char b;
+};
+struct zero_bitfield_s
+{
+  char a;
+  unsigned : 0;
+  char b;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct __attribute__((aligned(8))) pack1_aligned_s
+{
+  char a;
+  uint32_t b;
+};
+#pragma pack(pop)
+
 int main(void)
 {
+  struct pack2_s obj;
+  struct pack2_s *p = &obj;
+  uint32_t direct = p->b;
+  (void)direct;
+
   __ESBMC_assert(sizeof(struct pack1_s) == 5, "pack(1) sizeof is 5");
   __ESBMC_assert(offsetof(struct pack1_s, b) == 1, "pack(1) offsetof(b) is 1");
   __ESBMC_assert(sizeof(struct pack2_s) == 6, "pack(2) sizeof is 6");
@@ -37,5 +65,10 @@ int main(void)
   __ESBMC_assert(sizeof(union pack2_u) == 4, "pack(2) union sizeof is 4");
   __ESBMC_assert(sizeof(struct plain_s) == 8, "unpacked sizeof is 8");
   __ESBMC_assert(offsetof(struct plain_s, b) == 4, "unpacked offsetof(b) is 4");
+  __ESBMC_assert(offsetof(struct bitfield_s, b) == 4, "pack(2) bitfield offsetof(b) is 4");
+  __ESBMC_assert(sizeof(struct bitfield_s) == 6, "pack(2) bitfield sizeof is 6");
+  __ESBMC_assert(offsetof(struct zero_bitfield_s, b) == 4, "pack(2) zero-width bitfield offsetof(b) is 4");
+  __ESBMC_assert(offsetof(struct pack1_aligned_s, b) == 1, "pack(1) + aligned(8) offsetof(b) is 1");
+  __ESBMC_assert(sizeof(struct pack1_aligned_s) == 8, "pack(1) + aligned(8) sizeof is 8");
   return 0;
 }

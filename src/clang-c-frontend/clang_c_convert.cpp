@@ -414,9 +414,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
         const auto &mattr =
           static_cast<const clang::MaxFieldAlignmentAttr &>(*attr);
         const unsigned bytes = mattr.getAlignment() / config.ansi_c.char_width;
-        if (bytes <= 1)
+        if (bytes == 1)
           t.set("packed", true);
-        else
+        else if (bytes > 1)
           t.set("max_field_alignment", bytes);
       }
 
