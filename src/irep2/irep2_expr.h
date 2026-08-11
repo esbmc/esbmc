@@ -1595,8 +1595,9 @@ public:
       source->type->type_id == type2t::symbol_id ||
       source->type->type_id == type2t::pointer_id ||
       source->type->type_id == type2t::array_id);
-    /* member must exist exactly once in the parent struct/union — only checkable
-       once the source type is resolved (skipped for the transient cases) */
+    /* member must exist exactly once in the parent struct/union — only
+       checkable once the source type is resolved (skipped for the transient
+       cases) */
     assert(
       source->type->type_id == type2t::symbol_id ||
       source->type->type_id == type2t::pointer_id ||
