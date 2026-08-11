@@ -12,13 +12,45 @@ except ImportError:  # pragma: no cover - environment-dependent
 
 __all__ = ["run_mypy_strict"]
 
-# Verification intrinsics (__ESBMC_assume, nondet_int, __ESBMC_requires, ...)
-# are supplied by the frontend rather than declared in the source, so mypy
-# reports every use as undefined. Suppress only those; a name-defined error
-# for a name the user actually mistyped still reaches the report.
-_INTRINSIC_UNDEFINED = re.compile(
-    r'error: Name "(__ESBMC_\w+|__VERIFIER_\w+|nondet_\w+|__loop_invariant)"'
-    r' is not defined')
+# Verification intrinsics are supplied by the frontend rather than declared in
+# the source, so mypy reports every use as undefined. Matched by exact name: a
+# prefix wildcard would also swallow a misspelling such as `__ESBMC_assme`,
+# which is the very thing the report should still show.
+_INTRINSICS = (
+    "__ESBMC_assume",
+    "__ESBMC_assert",
+    "__ESBMC_requires",
+    "__ESBMC_ensures",
+    "__ESBMC_return_value",
+    "__ESBMC_old",
+    "__ESBMC_assigns",
+    "__ESBMC_is_fresh",
+    "__ESBMC_forall",
+    "__ESBMC_exists",
+    "__ESBMC_unreachable",
+    "__ESBMC_cover",
+    "__ESBMC_loop_invariant",
+    "__loop_invariant",
+    "__ESBMC_atomic_begin",
+    "__ESBMC_atomic_end",
+    "__VERIFIER_assume",
+    "__VERIFIER_error",
+    "nondet_int",
+    "nondet_uint",
+    "nondet_long",
+    "nondet_ulong",
+    "nondet_short",
+    "nondet_ushort",
+    "nondet_char",
+    "nondet_uchar",
+    "nondet_float",
+    "nondet_double",
+    "nondet_bool",
+    "nondet_str",
+    "nondet_size",
+)
+_INTRINSIC_UNDEFINED = re.compile(r'error: Name "(?:%s)" is not defined' %
+                                  "|".join(re.escape(name) for name in _INTRINSICS))
 
 
 def _run_mypy_module(filename: str, cache_dir: str) -> tuple[int, str]:

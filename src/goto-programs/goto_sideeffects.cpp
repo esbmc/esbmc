@@ -1492,11 +1492,7 @@ void goto_convertt::remove_sideeffects(
       // they have zero effect on the GOTO program (no FUNCTION_CALL step, no
       // side-effect processing of the argument).  The declarations remain in
       // the unconditional intrinsics section so annotated files still compile.
-      if (
-        fsym && options.get_option("enforce-contract").empty() &&
-        options.get_option("replace-call-with-contract").empty() &&
-        !options.get_bool_option("enforce-all-contracts") &&
-        !options.get_bool_option("replace-all-contracts"))
+      if (fsym && !options.contracts_enabled())
       {
         const std::string &fname = id2string(fsym->name);
         if (

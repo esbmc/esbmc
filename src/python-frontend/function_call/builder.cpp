@@ -16,6 +16,7 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
+#include <set>
 
 using namespace python_expr;
 
@@ -92,13 +93,6 @@ const std::string kPytTerminate = "__pyt_terminate";
 const std::string kPyLockBlockAndCheck = "__ESBMC_pylock_block_and_check";
 const std::string kPyLockReleaseWaiters = "__pyt_lock_release_waiters";
 
-// True when the enclosing function yields nothing an ensures clause could
-// name: `-> None`, no annotation, or no enclosing function at all.
-static bool returns_no_value(const typet &t)
-{
-  return t.is_nil() || t == none_type() || t.id() == "empty";
-}
-
 typet function_call_builder::enclosing_return_type() const
 {
   symbol_id sid(
@@ -111,6 +105,15 @@ typet function_call_builder::enclosing_return_type() const
     return typet();
 
   return to_code_type(sym->get_type()).return_type();
+}
+
+// Loop invariants and function-contract clauses share one shape: a bodiless
+// `void f(bool)` whose call goto_convert lowers into a LOOP_INVARIANT or a
+// marked ASSUME.
+static bool needs_bool_intrinsic_symbol(const std::string &name)
+{
+  return name == kEsbmcLoopInvariant || name == kEsbmcRequires ||
+         name == kEsbmcEnsures;
 }
 
 void function_call_builder::check_contract_call(
@@ -131,6 +134,87 @@ void function_call_builder::check_contract_call(
       call_["args"].size()));
 
   check_contract_clause(call_["args"], clause);
+}
+
+// Node kinds a clause may contain. An allow-list rather than a deny-list: the
+// clause becomes one ASSUME/ASSERT, so anything needing a temporary, a branch
+// or an iteration does not survive it, and a construct nobody enumerated
+// should fail loudly instead of lowering into something else. Denying only
+// Call and Subscript let comprehensions and the walrus operator through.
+// Operator and context nodes carry their own `_type`, so they are listed too.
+static bool is_pure_clause_node(const std::string &node_type)
+{
+  static const std::set<std::string> pure = {
+    "Name",  "Constant", "BoolOp", "UnaryOp", "BinOp",    "Compare",
+    "IfExp", "Attribute", "Load",
+    "And",   "Or",       "Not",    "UAdd",    "USub",     "Invert",
+    "Add",   "Sub",      "Mult",   "Div",     "FloorDiv", "Mod",
+    "Pow",   "LShift",   "RShift", "BitOr",   "BitXor",   "BitAnd",
+    // `in` / `not in` are container operations and stay out
+    "Eq",    "NotEq",    "Lt",     "LtE",     "Gt",       "GtE",
+    "Is",    "IsNot"};
+  return pure.count(node_type) != 0;
+}
+
+/// Names the Python construct rather than the AST spelling where they differ.
+static std::string describe_clause_node(const std::string &node_type)
+{
+  if (node_type == "Call")
+    return "a function call";
+  if (node_type == "Subscript")
+    return "a subscript";
+  if (node_type == "NamedExpr")
+    return "an assignment expression";
+  if (
+    node_type == "ListComp" || node_type == "SetComp" ||
+    node_type == "DictComp" || node_type == "GeneratorExp")
+    return "a comprehension";
+  return "a " + node_type + " expression";
+}
+
+void function_call_builder::check_clause_name(
+  const nlohmann::json &node,
+  const std::string &clause) const
+{
+  const std::string name = node.value("id", "");
+
+  if (name == kEsbmcReturnValue)
+  {
+    if (clause == kEsbmcRequires)
+      throw std::runtime_error(fmt::format(
+        "{} clause at line {} references {}; a precondition cannot mention "
+        "the return value",
+        clause,
+        node.value("lineno", 0),
+        kEsbmcReturnValue));
+
+    if (returns_no_value(enclosing_return_type()))
+      throw std::runtime_error(fmt::format(
+        "{} clause at line {} references {}, but '{}' returns None",
+        clause,
+        node.value("lineno", 0),
+        kEsbmcReturnValue,
+        converter_.current_function_name()));
+  }
+
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  sid.set_object(name);
+
+  // A clause may also name a module-level global, which is not in the
+  // function's scope.
+  const symbolt *sym = converter_.symbol_table().find_symbol(sid.to_string());
+  if (!sym)
+    sym = converter_.symbol_table().find_symbol(sid.global_to_string());
+  if (sym && sym->get_type() == any_type())
+    throw std::runtime_error(fmt::format(
+      "{} clause at line {} references '{}', whose type could not be "
+      "determined; annotate the parameter so the clause constrains its value",
+      clause,
+      node.value("lineno", 0),
+      name));
 }
 
 // A contract clause is lowered into one ASSUME/ASSERT, so its argument has to
@@ -156,60 +240,23 @@ void function_call_builder::check_contract_clause(
 
   const std::string node_type = node.value("_type", "");
 
-  if (node_type == "Call" || node_type == "Subscript")
+  if (!node_type.empty() && !is_pure_clause_node(node_type))
   {
-    const bool is_call = node_type == "Call";
     const std::string callee =
-      is_call ? node["func"].value("id", "") : std::string();
+      node_type == "Call" ? node["func"].value("id", "") : std::string();
     throw std::runtime_error(fmt::format(
       "{} clause at line {} contains {}; a contract clause must be a pure "
       "expression{}",
       clause,
       node.value("lineno", 0),
-      is_call ? "a function call" : "a subscript",
+      describe_clause_node(node_type),
       callee.rfind("__ESBMC_", 0) == 0
         ? fmt::format(" ({} is not supported in Python clauses yet)", callee)
         : ""));
   }
 
   if (node_type == "Name")
-  {
-    const std::string name = node.value("id", "");
-
-    if (name == kEsbmcReturnValue)
-    {
-      if (clause == kEsbmcRequires)
-        throw std::runtime_error(fmt::format(
-          "{} clause at line {} references {}; a precondition cannot mention "
-          "the return value",
-          clause,
-          node.value("lineno", 0),
-          kEsbmcReturnValue));
-
-      if (returns_no_value(enclosing_return_type()))
-        throw std::runtime_error(fmt::format(
-          "{} clause at line {} references {}, but '{}' returns None",
-          clause,
-          node.value("lineno", 0),
-          kEsbmcReturnValue,
-          converter_.current_function_name()));
-    }
-
-    symbol_id sid(
-      converter_.python_file(),
-      converter_.current_classname(),
-      converter_.current_function_name());
-    sid.set_object(name);
-
-    const symbolt *sym = converter_.symbol_table().find_symbol(sid.to_string());
-    if (sym && sym->get_type() == any_type())
-      throw std::runtime_error(fmt::format(
-        "{} clause at line {} references '{}', whose type could not be "
-        "determined; annotate the parameter so the clause constrains its value",
-        clause,
-        node.value("lineno", 0),
-        name));
-  }
+    check_clause_name(node, clause);
 
   for (const auto &child : node)
     check_contract_clause(child, clause);
@@ -1270,10 +1317,7 @@ exprt function_call_builder::build() const
   // `void f(bool)` whose call goto_convert lowers into a LOOP_INVARIANT or a
   // marked ASSUME. The symbol must stay valueless: builtin_functions.cpp
   // routes any callee carrying a body to a plain FUNCTION_CALL instead.
-  if (
-    function_id.get_function() == kEsbmcLoopInvariant ||
-    function_id.get_function() == kEsbmcRequires ||
-    function_id.get_function() == kEsbmcEnsures)
+  if (needs_bool_intrinsic_symbol(function_id.get_function()))
   {
     const auto &symbol_table = converter_.symbol_table();
     const std::string &func_symbol_id = function_id.to_string();

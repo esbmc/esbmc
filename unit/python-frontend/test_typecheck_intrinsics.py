@@ -23,17 +23,21 @@ def test_intrinsic_only_report_is_dropped():
     assert _without_intrinsic_diagnostics(1, report) == (0, "")
 
 
-def test_user_typo_survives_alongside_intrinsics():
+def test_misspelled_intrinsic_still_reaches_the_report():
+    """The real gap: a name that looks like an intrinsic but is not one."""
     report = ('main.py:2: error: Name "__ESBMC_ensures" is not defined'
               '  [name-defined]\n'
-              'main.py:3: error: Name "typo_name" is not defined'
+              'main.py:3: error: Name "__ESBMC_assme" is not defined'
               '  [name-defined]\n'
-              'Found 2 errors in 1 file (checked 1 source file)\n')
+              'main.py:4: error: Name "nondet_intt" is not defined'
+              '  [name-defined]\n'
+              'Found 3 errors in 1 file (checked 1 source file)\n')
 
     status, kept = _without_intrinsic_diagnostics(1, report)
 
     assert status == 1
-    assert "typo_name" in kept
+    assert "__ESBMC_assme" in kept
+    assert "nondet_intt" in kept
     assert "__ESBMC_ensures" not in kept
 
 

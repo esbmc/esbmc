@@ -100,6 +100,12 @@ public:
   {
     return *ast_json;
   }
+  /// \brief Symbol for __ESBMC_return_value in an ensures clause, null when
+  ///   the name is something else or the function returns nothing.
+  symbolt *contract_return_value_symbol(
+    const std::string &var_name,
+    const nlohmann::json &element);
+
   exprt get_expr(const nlohmann::json &element);
 
   /**

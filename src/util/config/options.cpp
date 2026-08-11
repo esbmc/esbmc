@@ -73,3 +73,11 @@ bool optionst::is_kind() const
   return get_bool_option("k-induction") ||
          get_bool_option("k-induction-parallel");
 }
+
+bool optionst::contracts_enabled() const
+{
+  return !get_option("enforce-contract").empty() ||
+         !get_option("replace-call-with-contract").empty() ||
+         get_bool_option("enforce-all-contracts") ||
+         get_bool_option("replace-all-contracts");
+}

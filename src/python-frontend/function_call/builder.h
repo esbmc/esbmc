@@ -67,6 +67,14 @@ private:
    * Rejects a contract clause that does not lower to a pure expression.
    * Throws with a diagnostic naming the offending construct.
    */
+  /*
+   * Rejects a name a clause may not mention: the return value in a
+   * precondition or in a None-returning function, or a value whose type
+   * could not be determined.
+   */
+  void check_clause_name(const nlohmann::json &node, const std::string &clause)
+    const;
+
   void check_contract_clause(
     const nlohmann::json &node,
     const std::string &clause) const;

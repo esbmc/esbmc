@@ -864,12 +864,9 @@ static void emit_va_marker_call(
   t->location = function.location();
 }
 
-static bool contracts_enabled(const optionst &options)
+bool goto_convertt::drop_inactive_contract_clause(bool is_clause) const
 {
-  return !options.get_option("enforce-contract").empty() ||
-         !options.get_option("replace-call-with-contract").empty() ||
-         options.get_bool_option("enforce-all-contracts") ||
-         options.get_bool_option("replace-all-contracts");
+  return is_clause && !options.contracts_enabled();
 }
 
 void goto_convertt::do_function_call_symbol(
@@ -933,6 +930,7 @@ void goto_convertt::do_function_call_symbol(
   bool is_loop_invariant = (base_name == "__ESBMC_loop_invariant");
   bool is_requires = (base_name == "__ESBMC_requires");
   bool is_ensures = (base_name == "__ESBMC_ensures");
+  bool is_clause = is_requires || is_ensures;
   bool is_assigns = (base_name == "__ESBMC_assigns");
 
   // Debug: log if we see assigns
@@ -949,10 +947,10 @@ void goto_convertt::do_function_call_symbol(
   // expression; the Python frontend emits a direct FUNCTION_CALL, which never
   // reaches that strip, so a live `requires` would be assumed and mask real
   // bugs in the function it annotates.
-  if ((is_requires || is_ensures) && !contracts_enabled(options))
+  if (drop_inactive_contract_clause(is_clause))
     return;
 
-  if (is_assume || is_assert || is_loop_invariant || is_requires || is_ensures)
+  if (is_assume || is_assert || is_loop_invariant || is_clause)
   {
     if (arguments.size() != 1)
     {
@@ -962,7 +960,7 @@ void goto_convertt::do_function_call_symbol(
 
     if (
       options.get_bool_option("no-assertions") && !is_assume &&
-      !is_loop_invariant && !is_requires && !is_ensures)
+      !is_loop_invariant && !is_clause)
       return;
 
     // Rafael's invariant merging: combine consecutive
@@ -995,7 +993,7 @@ void goto_convertt::do_function_call_symbol(
     else
     {
       // For contract functions, generate ASSUME instructions with special markers
-      if (is_requires || is_ensures)
+      if (is_clause)
       {
         t = dest.add_instruction(ASSUME);
         t->guard = guard;
