@@ -619,8 +619,7 @@ expr2tc jimple_newarray::to_expr2t(
   int type_width = 64;
   if (!(base_type.is_pointer() && base_type.subtype().is_pointer()))
     type_width = std::stoi(
-      (base_type.is_pointer() ? base_type.subtype().width()
-                              : base_type.width())
+      (base_type.is_pointer() ? base_type.subtype().width() : base_type.width())
         .as_string());
 
   expr2tc bytes =

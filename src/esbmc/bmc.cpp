@@ -1623,6 +1623,28 @@ void bmct::report_coverage_verbose(
   }
 }
 
+/* What the exploration spent its schedules on. Reading a reduction's
+ * contribution off a single run is what makes a prune rate measurable over a
+ * benchmark set, rather than by re-running with each knob toggled (#6831). */
+void bmct::report_schedule_stats()
+{
+  if (!symex)
+    return;
+
+  const auto &stats = symex->get_schedule_stats();
+
+  /* Silent on a program that never had a schedule to choose: one explored
+   * schedule and nothing pruned is just a sequential run. */
+  if (stats.explored <= 1 && !stats.pruned_by_mpor && !stats.pruned_by_hash)
+    return;
+
+  log_status(
+    "Schedules explored: {} (pruned by MPOR: {}, by state hashing: {})",
+    stats.explored,
+    stats.pruned_by_mpor,
+    stats.pruned_by_hash);
+}
+
 void bmct::report_result(smt_resultt &res)
 {
   // k-induction prints its own messages
@@ -1731,6 +1753,11 @@ void bmct::report_result(smt_resultt &res)
     log_status("Number of generated interleavings: {}", interleaving_number);
     log_status("Number of failed interleavings: {}", interleaving_failed);
   }
+
+  /* What the exploration spent its schedules on. Reading a reduction's
+   * contribution off a single run is what makes a prune rate measurable over a
+   * benchmark set, rather than by re-running with each knob toggled (#6831). */
+  report_schedule_stats();
 }
 
 smt_resultt bmct::start_bmc()
