@@ -363,6 +363,154 @@ static bool fits_in_width(const BigInt &value, unsigned width, bool is_signed);
 static bool is_all_ones_constant(const expr2tc &e);
 static bool coerce_to_common_type(expr2tc &a, expr2tc &b);
 
+/// (p + C1) + C2 -> p + (C1 + C2), for a pointer-typed add.
+///
+/// Symex sometimes calls do_simplify() directly after renaming a pointer
+/// increment, bypassing the full expr2t::simplify() reassociation pass. Keep
+/// this pointer-only fold local so repeated increments still canonicalize.
+static expr2tc simplify_pointer_add_const(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  auto split_pointer_add_const =
+    [](const expr2tc &expr, expr2tc &base, expr2tc &constant) -> bool {
+    if (!is_add2t(expr))
+      return false;
+
+    const add2t &add = to_add2t(expr);
+    if (is_pointer_type(add.side_1) && is_constant_int2t(add.side_2))
+    {
+      base = add.side_1;
+      constant = add.side_2;
+      return true;
+    }
+
+    if (is_pointer_type(add.side_2) && is_constant_int2t(add.side_1))
+    {
+      base = add.side_2;
+      constant = add.side_1;
+      return true;
+    }
+
+    return false;
+  };
+
+  // Each unfolded `add(pointer, ptr, c)` step sign-extends c to the pointer
+  // offset width (index_type2, signed long) before the SMT bv add (see
+  // smt_memspace.cpp:155). Cast both constants to the offset type, sum the
+  // sign-extended values there, and re-emit the folded constant at that same
+  // type. This avoids a per-operand type-match guard that would refuse the
+  // fold whenever C produces mixed-width offsets (e.g. `&arr[0] + (int)1 +
+  // (long)2`).
+  auto fold_offsets = [](const expr2tc &c1, const expr2tc &c2) -> expr2tc {
+    const type2tc &offset_t = index_type2();
+    auto extend = [&](const expr2tc &c) -> BigInt {
+      const BigInt &v = to_constant_int2t(c).value;
+      const unsigned w = c->type->get_width();
+      const bool is_signed = is_signedbv_type(c->type);
+      return binary2integer(integer2binary(v, w), is_signed);
+    };
+    BigInt folded = extend(c1) + extend(c2);
+    return from_integer(folded, offset_t);
+  };
+
+  auto rebuild = [&type](const expr2tc &base, const expr2tc &folded) {
+    return to_constant_int2t(folded).value.is_zero()
+             ? base
+             : add2tc(type, base, folded);
+  };
+
+  expr2tc base, constant;
+  if (
+    is_constant_int2t(side_2) &&
+    split_pointer_add_const(side_1, base, constant))
+    return rebuild(base, fold_offsets(constant, side_2));
+
+  if (
+    is_constant_int2t(side_1) &&
+    split_pointer_add_const(side_2, base, constant))
+    return rebuild(base, fold_offsets(constant, side_1));
+
+  return expr2tc();
+}
+
+/// ~B + C -> (C - 1) - B for one ordering of the operands, since ~B == -B - 1.
+///
+/// The bitnot folds into the constant beside it, and vanishes outright at
+/// C == 1. Applied across one level of an add chain too, this is the
+/// `(A + 1) + ~B -> A - B` family in whichever permutation reassociation
+/// leaves behind. A constant is required, so the rewrite never trades a
+/// bitnot for a longer expression.
+static expr2tc fold_bitnot_plus_const(
+  const type2tc &type,
+  const expr2tc &first,
+  const expr2tc &second)
+{
+  auto bitnot_value = [&type](const expr2tc &e) -> expr2tc {
+    return is_bitnot2t(e) && e->type == type ? to_bitnot2t(e).value : expr2tc();
+  };
+  auto is_const = [&type](const expr2tc &e) {
+    return is_constant_int2t(e) && e->type == type;
+  };
+  auto decrement = [&type](const expr2tc &c) {
+    return from_integer(to_constant_int2t(c).value - 1, type);
+  };
+  auto fold = [&](const expr2tc &a, const expr2tc &b, const expr2tc &c) {
+    return add2tc(type, sub2tc(type, a, b), decrement(c));
+  };
+
+  // ~B + C
+  if (expr2tc b = bitnot_value(first); !is_nil_expr(b) && is_const(second))
+    return sub2tc(type, decrement(second), b);
+
+  if (!is_add2t(first) || first->type != type)
+    return expr2tc();
+  const add2t &inner = to_add2t(first);
+
+  // (A + C) + ~B
+  if (expr2tc b = bitnot_value(second); !is_nil_expr(b))
+  {
+    if (is_const(inner.side_2))
+      return fold(inner.side_1, b, inner.side_2);
+    if (is_const(inner.side_1))
+      return fold(inner.side_2, b, inner.side_1);
+  }
+
+  // (A + ~B) + C
+  if (is_const(second))
+  {
+    if (expr2tc b = bitnot_value(inner.side_2); !is_nil_expr(b))
+      return fold(inner.side_1, b, second);
+    if (expr2tc b = bitnot_value(inner.side_1); !is_nil_expr(b))
+      return fold(inner.side_2, b, second);
+  }
+
+  return expr2tc();
+}
+
+/// Bitvector-only add identities that reassociation leaves behind (#626).
+static expr2tc simplify_add_bv_identities(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  // x + x -> x << 1: a constant shift is wiring where the add is a full
+  // adder, and it feeds the existing constant-shift folds. The identity does
+  // not hold for floats, and there is no shift on a pointer.
+  // The shift amount takes int_type2(), the type the C frontend gives a shift
+  // literal, so the result is structurally equal to a hand-written `x << 1`
+  // and the surrounding folds can match the two.
+  if (side_1 == side_2)
+    return shl2tc(type, side_1, constant_int2tc(int_type2(), BigInt(1)));
+
+  if (expr2tc folded = fold_bitnot_plus_const(type, side_1, side_2);
+      !is_nil_expr(folded))
+    return folded;
+
+  return fold_bitnot_plus_const(type, side_2, side_1);
+}
+
 expr2tc add2t::do_simplify() const
 {
   // x + 0 = x, 0 + x = x. Mirrors Addtor::simplify but short-circuits before
@@ -372,75 +520,10 @@ expr2tc add2t::do_simplify() const
   if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero())
     return side_2;
 
-  // Symex sometimes calls do_simplify() directly after renaming a pointer
-  // increment, bypassing the full expr2t::simplify() reassociation pass. Keep
-  // this pointer-only fold local so repeated increments still canonicalize:
-  //   (p + C1) + C2 -> p + (C1 + C2)
   if (is_pointer_type(type))
-  {
-    auto split_pointer_add_const =
-      [](const expr2tc &expr, expr2tc &base, expr2tc &constant) -> bool {
-      if (!is_add2t(expr))
-        return false;
-
-      const add2t &add = to_add2t(expr);
-      if (is_pointer_type(add.side_1) && is_constant_int2t(add.side_2))
-      {
-        base = add.side_1;
-        constant = add.side_2;
-        return true;
-      }
-
-      if (is_pointer_type(add.side_2) && is_constant_int2t(add.side_1))
-      {
-        base = add.side_2;
-        constant = add.side_1;
-        return true;
-      }
-
-      return false;
-    };
-
-    // Pointer-add fold: each unfolded `add(pointer, ptr, c)` step
-    // sign-extends c to the pointer offset width (index_type2, signed long)
-    // before the SMT bv add (see smt_memspace.cpp:155). Cast both constants
-    // to the offset type, sum the sign-extended values there, and re-emit
-    // the folded constant at that same type. This avoids a per-operand
-    // type-match guard that would refuse the fold whenever C produces
-    // mixed-width offsets (e.g. `&arr[0] + (int)1 + (long)2`).
-    auto fold_offsets = [](const expr2tc &c1, const expr2tc &c2) -> expr2tc {
-      const type2tc &offset_t = index_type2();
-      auto extend = [&](const expr2tc &c) -> BigInt {
-        const BigInt &v = to_constant_int2t(c).value;
-        const unsigned w = c->type->get_width();
-        const bool is_signed = is_signedbv_type(c->type);
-        return binary2integer(integer2binary(v, w), is_signed);
-      };
-      BigInt folded = extend(c1) + extend(c2);
-      return from_integer(folded, offset_t);
-    };
-
-    expr2tc base, constant;
-    if (
-      is_constant_int2t(side_2) &&
-      split_pointer_add_const(side_1, base, constant))
-    {
-      expr2tc folded = fold_offsets(constant, side_2);
-      if (to_constant_int2t(folded).value.is_zero())
-        return base;
-      return add2tc(type, base, folded);
-    }
-
-    if (
-      is_constant_int2t(side_1) &&
-      split_pointer_add_const(side_2, base, constant))
-    {
-      expr2tc folded = fold_offsets(constant, side_1);
-      if (to_constant_int2t(folded).value.is_zero())
-        return base;
-      return add2tc(type, base, folded);
-    }
-  }
+    if (expr2tc folded = simplify_pointer_add_const(type, side_1, side_2);
+        !is_nil_expr(folded))
+      return folded;
 
   // x + (-x) = 0
   if (is_neg2t(side_2) && to_neg2t(side_2).value == side_1)
@@ -477,67 +560,10 @@ expr2tc add2t::do_simplify() const
   if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
     return constant_int2tc(type, BigInt(-1));
 
-  // x + x -> x << 1: a constant shift is wiring where the add is a full
-  // adder, and it feeds the existing constant-shift folds (#626). Bitvectors
-  // only -- the identity does not hold for floats, and there is no shift on a
-  // pointer.
-  // The shift amount takes int_type2(), the type the C frontend gives a shift
-  // literal, so the result is structurally equal to a hand-written `x << 1`
-  // and the surrounding folds can match the two.
-  if (is_bv_type(type) && side_1 == side_2)
-    return shl2tc(type, side_1, constant_int2tc(int_type2(), BigInt(1)));
-
-  // ~B + C -> (C - 1) - B, since ~B == -B - 1: the bitnot folds into the
-  // constant beside it, and vanishes outright at C == 1. Applied across one
-  // level of an add chain too, this is #626's `(A + 1) + ~B -> A - B` family in
-  // whichever permutation reassociation leaves behind. A constant is required,
-  // so the rewrite never trades a bitnot for a longer expression.
   if (is_bv_type(type))
-  {
-    auto bitnot_value = [this](const expr2tc &e) -> expr2tc {
-      return is_bitnot2t(e) && e->type == type ? to_bitnot2t(e).value
-                                               : expr2tc();
-    };
-    auto is_const = [this](const expr2tc &e) {
-      return is_constant_int2t(e) && e->type == type;
-    };
-    auto decrement = [this](const expr2tc &c) {
-      return from_integer(to_constant_int2t(c).value - 1, type);
-    };
-    auto fold = [&](const expr2tc &a, const expr2tc &b, const expr2tc &c) {
-      return add2tc(type, sub2tc(type, a, b), decrement(c));
-    };
-
-    for (const auto &[first, second] :
-         {std::pair{side_1, side_2}, std::pair{side_2, side_1}})
-    {
-      // ~B + C
-      if (expr2tc b = bitnot_value(first); !is_nil_expr(b) && is_const(second))
-        return sub2tc(type, decrement(second), b);
-
-      if (!is_add2t(first) || first->type != type)
-        continue;
-      const add2t &inner = to_add2t(first);
-
-      // (A + C) + ~B
-      if (expr2tc b = bitnot_value(second); !is_nil_expr(b))
-      {
-        if (is_const(inner.side_2))
-          return fold(inner.side_1, b, inner.side_2);
-        if (is_const(inner.side_1))
-          return fold(inner.side_2, b, inner.side_1);
-      }
-
-      // (A + ~B) + C
-      if (is_const(second))
-      {
-        if (expr2tc b = bitnot_value(inner.side_2); !is_nil_expr(b))
-          return fold(inner.side_1, b, second);
-        if (expr2tc b = bitnot_value(inner.side_1); !is_nil_expr(b))
-          return fold(inner.side_2, b, second);
-      }
-    }
-  }
+    if (expr2tc folded = simplify_add_bv_identities(type, side_1, side_2);
+        !is_nil_expr(folded))
+      return folded;
 
   // (-x) + (-y) -> -(x + y). Signed-bv only: for unsigned bv, neg2t lowers
   // to (modulus - x) % modulus, so the rewrite would fold two cheap structural
