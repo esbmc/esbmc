@@ -12,7 +12,8 @@
 // Makes sure there is an empty function for every function symbol and fixes
 // the function types. A null goto_functions means the caller wants symbols
 // only.
-static void declare_empty_function(goto_functionst *goto_functions, const symbolt &symbol)
+static void
+declare_empty_function(goto_functionst *goto_functions, const symbolt &symbol)
 {
   if (!goto_functions || symbol.is_type || !symbol.get_type().is_code())
     return;
