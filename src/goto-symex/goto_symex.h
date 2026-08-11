@@ -1212,6 +1212,12 @@ protected:
     const expr2tc &lhs,
     const sideeffect2t &code,
     const guard2tc &guard);
+  /** Offer both outcomes C17 7.22.3p1 permits for a zero-sized malloc,
+   *  under --malloc-zero-is-null. Widens @p alloc_guard and @p rhs. */
+  void offer_malloc_zero_null(
+    const expr2tc &size,
+    expr2tc &rhs,
+    guard2tc &alloc_guard);
   /** Wrapper around for infinite array allocation. */
   expr2tc symex_mem_inf(
     const expr2tc &lhs,

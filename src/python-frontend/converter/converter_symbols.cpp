@@ -168,6 +168,29 @@ symbolt *python_converter::find_function_in_base_classes(
   return nullptr;
 }
 
+/// The name @p id asks for, as an import would spell it. from_string parses
+/// the @C@/@F@ markers but not the trailing segment; when an id carries one,
+/// that segment is the name and the class/function are only its scope. Reading
+/// the function instead made every name used inside `def acos()` resolve to
+/// `math.acos` from an unrelated `import math` (#6895).
+static std::string
+import_lookup_name(const std::string &id, const ::symbol_id &parsed)
+{
+  ::symbol_id scope = parsed;
+  scope.set_object("");
+  const std::string prefix = scope.to_string();
+  if (
+    id.size() > prefix.size() && id.compare(0, prefix.size(), prefix) == 0 &&
+    id[prefix.size()] == '@')
+    return id.substr(prefix.size() + 1);
+
+  if (!parsed.get_class().empty())
+    return parsed.get_class();
+  if (!parsed.get_function().empty())
+    return parsed.get_function();
+  return parsed.get_object();
+}
+
 symbolt *
 python_converter::find_imported_symbol(const std::string &symbol_id) const
 {
@@ -175,11 +198,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   // When the symbol has a class component (py:main@C@Foo@F@bar),
   // use the class name for matching against import names.
   auto parsed = ::symbol_id::from_string(symbol_id);
-  std::string lookup_name =
-    !parsed.get_class().empty()
-      ? parsed.get_class()
-      : (parsed.get_function().empty() ? parsed.get_object()
-                                       : parsed.get_function());
+  std::string lookup_name = import_lookup_name(symbol_id, parsed);
 
   // symbol_id::from_string currently parses class/function components but not
   // trailing object names (e.g. py:file@replace). Recover that case from raw
