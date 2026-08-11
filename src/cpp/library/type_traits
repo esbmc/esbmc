@@ -766,6 +766,36 @@ struct is_invocable_r : decltype(detail::test_invocable_r<R, F, Args...>(0))
 {
 };
 
+namespace detail
+{
+// SFINAE-friendly per [meta.trans.other]: no member `type` when the call is
+// ill-formed, so invoke_result can appear in a deduction context without
+// hard-erroring.
+template <class Void, class F, class... Args>
+struct invoke_result_impl
+{
+};
+
+template <class F, class... Args>
+struct invoke_result_impl<
+  void_t<decltype(declval<F>()(declval<Args>()...))>,
+  F,
+  Args...>
+{
+  using type = decltype(declval<F>()(declval<Args>()...));
+};
+} // namespace detail
+
+// invoke_result. Only the plain call form of INVOKE is modelled, matching
+// is_invocable above; pointer-to-member callables are out of scope.
+template <class F, class... Args>
+struct invoke_result : detail::invoke_result_impl<void, F, Args...>
+{
+};
+
+template <class F, class... Args>
+using invoke_result_t = typename invoke_result<F, Args...>::type;
+
 // is_convertible (simplified)
 namespace detail
 {
