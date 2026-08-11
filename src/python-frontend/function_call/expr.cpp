@@ -154,6 +154,64 @@ static std::string get_classname_from_symbol_id(const std::string &symbol_id)
   return class_name;
 }
 
+// Does @p class_name, or any class it transitively derives from, define
+// __init__? Answers whether constructing it has observable effects; a class
+// with no __init__ anywhere has nothing to run, and has no constructor symbol
+// to call either. Python forbids cyclic inheritance, so this terminates.
+static bool
+class_defines_init(const nlohmann::json &ast, const std::string &class_name)
+{
+  const auto class_node = json_utils::find_class(ast["body"], class_name);
+  if (class_node == nlohmann::json())
+    return false;
+
+  for (const auto &member : class_node["body"])
+    if (
+      member.value("_type", "") == "FunctionDef" &&
+      member.value("name", "") == "__init__")
+      return true;
+
+  for (const auto &base : class_node["bases"])
+  {
+    const std::string base_name =
+      base.contains("id") ? base.value("id", "") : base.value("attr", "");
+    if (!base_name.empty() && class_defines_init(ast, base_name))
+      return true;
+  }
+  return false;
+}
+
+exprt function_call_expr::build_temporary_receiver(
+  const nlohmann::json &ctor_call) const
+{
+  const std::string &class_name = ctor_call["func"]["id"].get<std::string>();
+
+  if (!class_defines_init(converter_.ast(), class_name))
+  {
+    // No __init__ anywhere in the MRO: there is no constructor symbol to call,
+    // so an uninitialised instance is all the receiver can be.
+    symbolt &tmp = converter_.create_tmp_symbol(
+      ctor_call, "$inst$", type_handler_.get_typet(class_name), exprt());
+    converter_.symbol_table().add(tmp);
+    code_declt tmp_decl(build_symbol(tmp));
+    tmp_decl.location() = converter_.get_location_from_decl(call_);
+    converter_.current_block->copy_to_operands(tmp_decl);
+    return build_symbol(tmp);
+  }
+
+  // Convert the constructor with no LHS so it takes the $ctor_self$ path,
+  // which emits the call as a FUNCTION_CALL instruction and hands back the
+  // initialised object. Pointing current_lhs at a temp instead left that temp
+  // declared and nondet: the constructor was converted but its call never
+  // reached the block, so a method reading state __init__ wrote saw an
+  // unconstrained value.
+  exprt *saved_lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  exprt ctor_result = converter_.get_expr(ctor_call);
+  converter_.current_lhs = saved_lhs;
+  return ctor_result;
+}
+
 void function_call_expr::get_function_type()
 {
   const auto &func_node = call_["func"];
@@ -5319,26 +5377,9 @@ size_t function_call_expr::bind_call_receiver(
           func_value["_type"] == "Call" && func_value.contains("func") &&
           func_value["func"]["_type"] == "Name")
         {
-          // A().f(...): create a temporary A instance and use it as self.
-          const std::string &class_name =
-            func_value["func"]["id"].get<std::string>();
-          typet class_type = type_handler_.get_typet(class_name);
-
-          symbolt &tmp = converter_.create_tmp_symbol(
-            func_value, "$inst$", class_type, exprt());
-          converter_.symbol_table().add(tmp);
-          code_declt tmp_decl(build_symbol(tmp));
-          tmp_decl.location() = location;
-          converter_.current_block->copy_to_operands(tmp_decl);
-
-          // Call the constructor if it is defined, using tmp as self.
-          exprt *saved_lhs = converter_.current_lhs;
-          exprt tmp_expr = build_symbol(tmp);
-          converter_.current_lhs = &tmp_expr;
-          exprt ctor_result = converter_.get_expr(func_value);
-          converter_.current_lhs = saved_lhs;
-
-          call.arguments().push_back(bind_instance_receiver(build_symbol(tmp)));
+          // A().f(...): the receiver is a freshly constructed A.
+          call.arguments().push_back(
+            bind_instance_receiver(build_temporary_receiver(func_value)));
         }
         else if (func_value["_type"] == "Call")
         {

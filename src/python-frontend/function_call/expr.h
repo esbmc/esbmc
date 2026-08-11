@@ -58,6 +58,12 @@ private:
   bool eval_const_str(const exprt &e, std::string &out) const;
 
   /*
+   * Build the receiver for a method called on a constructor temporary
+   * (`A().f()`), running A's __init__ when it has one.
+   */
+  exprt build_temporary_receiver(const nlohmann::json &ctor_call) const;
+
+  /*
   * Check if the current function call is to math.comb() function
   * Returns true if this is a call to math.comb
   */
