@@ -4521,7 +4521,14 @@ bool clang_c_convertert::get_compound_assign_expr(
     if (get_type(compop.getComputationResultType(), computation_type))
       return true;
 
-    gen_typecast(ns, rhs, computation_type);
+    // C11 6.5.7p3 is the exception: a shift promotes its operands
+    // independently and takes its result from the left one, so E2 is a bit
+    // count, not a value in the computation type. clang has already promoted
+    // it, and casting it here reinterprets the count in any computation type
+    // that is not integer-compatible (#6924).
+    const clang::BinaryOperatorKind opcode = compop.getOpcode();
+    if (opcode != clang::BO_ShlAssign && opcode != clang::BO_ShrAssign)
+      gen_typecast(ns, rhs, computation_type);
     new_expr.add("computation_type") = computation_type;
   }
 
