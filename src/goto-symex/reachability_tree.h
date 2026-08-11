@@ -286,23 +286,37 @@ public:
    *  rather than exhausted (issue #6480). */
   bool cs_bound_pruned;
 
-  /** How the exploration spent its schedules. Reported at the end of a run so
-   *  a reduction's contribution can be read off one verification instead of
-   *  re-running with each knob toggled (issue #6831). */
-  struct schedule_statisticst
+  /** Why the schedule space shrank. Without these, the contribution of each
+   *  reduction can only be obtained by toggling its flag and re-running the
+   *  whole verification, which does not scale to a benchmark set (issue #6831,
+   *  cause 1). */
+  struct reduction_statst
   {
-    unsigned long explored = 0;
+    /** Largest thread count any explored state reached, main included. Also
+     *  what decides whether the run is worth reporting on at all. */
+    unsigned long peak_threads = 1;
+    /** Complete formulas handed to the caller. One per schedule under the
+     *  default DFS; --schedule folds every interleaving into one, so it
+     *  reports 1. */
+    unsigned long schedules_explored = 0;
+    /** The three prune counters share a unit: context-switch points at which
+     *  that reduction stopped the search from branching further. */
     unsigned long pruned_by_mpor = 0;
     unsigned long pruned_by_hash = 0;
-  };
-  schedule_statisticst schedule_stats;
+    /** Only counts points where a switch was still available, i.e. where the
+     *  bound truncated rather than the program simply terminating. */
+    unsigned long pruned_by_cs_bound = 0;
 
-public:
-  /** Read-only accessor for the schedule statistics, for run reporting. */
-  const schedule_statisticst &get_schedule_stats() const
-  {
-    return schedule_stats;
-  }
+    bool is_concurrent() const
+    {
+      return peak_threads > 1;
+    }
+  };
+  reduction_statst reduction_stats;
+
+  /** Log the reduction counters. Silent on a single-threaded run, which has
+   *  no schedule space to report on. */
+  void report_reduction_stats() const;
 
 protected:
   struct scheduler_framet

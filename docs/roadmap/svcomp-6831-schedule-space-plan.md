@@ -1,6 +1,7 @@
 # Plan — affording the schedule space #6607 exposed (issue #6831, cause 1)
 
-**Status:** plan only. No code shipped. Nothing here has been implemented.
+**Status:** W0 and W2 shipped; `--state-hashing` was **unsound** and is fixed
+(see W2). W1 diagnosed, no code yet. W3, W4 not started.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 1 —
 schedule-space explosion*, 291 of 489 lost SV-COMP tasks.
 **Bisected to:** `bac652b13c` — `[goto-symex] Track main-thread termination per
@@ -66,6 +67,11 @@ Two results drive this plan:
 
 The 939 reproduces the issue's reported 940.
 
+**Superseded on the hashing row.** W2 re-measured this across all 314
+concurrent CORE tests rather than this one: hashing cuts schedules on 41 of
+them and saves ~12 % wall overall once its soundness bug is fixed.
+`01_malloc_20` is an outlier, not a summary — see W2.
+
 ### 2.2 The same reproducer under the SV-COMP flag shape
 
 `scripts/competitions/svcomp/esbmc-wrapper.py` passes **no `--context-bound`**,
@@ -109,9 +115,9 @@ solver would be aimed at 7.7 % of the run.
 
 Two orthogonal levers, both open:
 
-- **A — explore fewer schedules.** MPOR is the only reduction that fires; state
-  hashing contributes ~0. Nothing reports how much either pruned, so no
-  benchmark can currently be diagnosed without rebuilding with counters.
+- **A — explore fewer schedules.** MPOR is the only reduction that fires on this
+  reproducer; W2 shows state hashing fires on plenty of others, unsoundly.
+  W0 added the counters this diagnosis needed.
 - **B — make each schedule cheaper.** Each of the 940 schedules is symexed,
   sliced, encoded and solved as an independent formula. The DFS restores
   execution states on backtracking, but the per-formula pipeline downstream of
@@ -121,20 +127,41 @@ Two orthogonal levers, both open:
 
 ## 4. Workstreams
 
-### W0 — Instrument the reduction (prerequisite, no behaviour change)
+### W0 — Instrument the reduction (prerequisite, no behaviour change) — **done**
 
-Nothing today reports schedules pruned by MPOR, pruned by state hashing,
-pruned by the context bound, or explored. Every measurement in §2 had to be
-obtained by toggling flags and re-running whole verifications, which cannot be
-done across an SV-COMP set.
+Nothing reported schedules pruned by MPOR, pruned by state hashing, pruned by
+the context bound, or explored. Every measurement in §2 had to be obtained by
+toggling flags and re-running whole verifications, which cannot be done across
+an SV-COMP set.
 
-Add counters on `reachability_treet` and report them at `--verbosity` (and in
-the JSON/SARIF run summary if cheap): `schedules_explored`,
-`pruned_by_mpor`, `pruned_by_hash`, `pruned_by_cs_bound`. W1 and W2 are not
-assessable without this, so it lands first.
+`reachability_treet::reduction_stats` now carries `peak_threads`,
+`schedules_explored`, `pruned_by_mpor`, `pruned_by_hash` and
+`pruned_by_cs_bound`, emitted as one line at the end of a run:
 
-**Exit:** the §2.1 table reproducible from one run per configuration, and a
-per-category prune rate obtainable from an SV-COMP log.
+```
+Schedule reduction: peak_threads 3, schedules_explored 940, pruned_by_mpor 296, pruned_by_hash 0, pruned_by_cs_bound 335643
+```
+
+The three prune counters share a unit — context-switch points at which that
+reduction stopped the search branching further — while `schedules_explored`
+counts formulas. The line is suppressed when `peak_threads == 1`, so sequential
+runs are unaffected. `peak_threads` is what makes that gate possible; it is not
+otherwise part of the plan.
+
+**Exit — discharged.** §2.1 now reads off one run per configuration:
+
+| configuration | schedules | pruned_by_mpor | pruned_by_hash |
+|---|---|---|---|
+| baseline (MPOR on, hashing off) | 940 | 296 | 0 |
+| `--state-hashing` | 940 | 296 | **0** |
+| `--no-por` | 1171 | 0 | 0 |
+| `--no-por --state-hashing` | 1155 | 0 | 20 |
+
+(One more than §2.1's counts: that table quoted `interleaving_number`, which is
+read before the final interleaving increments it.) Hashing is now shown to
+prune nothing *behind MPOR* and only 20 of 1175 with MPOR off — the two
+reductions are not additive, and W2's hypothesis can be tested without a
+rebuild.
 
 ### W1 — Make partial-order reduction prune harder (highest leverage)
 
@@ -144,42 +171,131 @@ MPOR quasi-monotonic dependency-chain test, with dependencies derived from
 reduction that fires, and it leaves 939 schedules where the property under test
 touches a handful of shared objects.
 
-Candidates, cheapest first:
+#### What actually drives the dependencies (measured)
+
+Instrumenting `mpor_set_conflicts` to name the object behind every conflict,
+and histogramming over five benchmarks:
+
+| benchmark | top dependency drivers |
+|---|---|
+| `01_malloc_20` | the mutex + 2 condvars (996), pthread bookkeeping (260), user `num` (**1**) |
+| `11_cook.fig2.pldi07` | `__ESBMC_pthread_thread_ended` (4591), user `x` (4367) |
+| `github_3449` | user mutex `m` (6181), user `counter` (608), bookkeeping (437) |
+| `11_bakery.simple.preempt` | users `t2`, `t1`, `x` (337) — all user |
+| `github_6475_safe` | `__ESBMC_pthread_thread_ended` (2172), user lock `l` (1960), `__ESBMC_pthread_join_waiters` (654) |
+
+Two things follow. Dependencies are dominated by **synchronisation objects and
+pthread-model bookkeeping**, not by ordinary shared data — on `01_malloc_20`
+exactly one conflict in 1257 involves a user global. And the mix varies enough
+between benchmarks that no single-reproducer measurement should be trusted
+(the mistake §2.1 made).
+
+#### W1.2 was tried and does not work — do not re-try it
+
+`mpor_keys_may_alias` already keys pthread *sync* arrays per element, but
+`__ESBMC_pthread_thread_ended` (`_Bool[]`), `__ESBMC_pthread_join_waiters`
+(`unsigned[]`) and `__ESBMC_pthread_end_values` (`void *[]`) are thread-indexed
+bookkeeping that fell back to a whole-array key, so every thread's write to its
+own slot conflicted with every other thread's read of a different slot.
+Extending element keying to those arrays is sound and precise — and bought
+**nothing**: the conflict count moved intact to the next bookkeeping object
+(`thread_ended` → `end_values` → `__ESBMC_num_threads_running`), which is a
+*scalar* and cannot be refined at all. Schedule counts were byte-identical on
+all 7 benchmarks tested.
+
+The dependency is over-determined: thread start/end threads every pair of
+transitions through shared scalar bookkeeping, so no amount of aliasing
+precision separates them. **The independence relation is not the lever.**
+
+Remaining candidates:
 
 1. **Sleep sets** layered on the existing MPOR. Classical, sound, composes with
    a persistent-set-style reduction rather than replacing it; small state per
-   DFS node.
-2. **Sharpen the independence relation.** Dependencies are currently computed
-   from the last transition's read/write sets. Objects proved thread-local by
-   the existing value-set / pointer analysis can never induce a dependency;
-   `--cswitch-skip-readonly-globals` (already passed by the SV-COMP wrapper)
-   shows the shape of this argument but applies it only to read-only globals.
-3. **Evaluate DPOR** (Flanagan–Godefroid dynamic POR) against MPOR. This is a
-   design change, not a patch, and is scoped as investigation only until 1 and 2
-   are measured.
+   DFS node. Now the first thing to try, not the second.
+2. **Decouple the pthread model's bookkeeping.** If `__ESBMC_num_threads_running`
+   and friends were per-thread rather than shared scalars, W1.2's refinement
+   would start paying. This is an operational-model change, and it must not
+   weaken `pthread_join` / deadlock detection, which read exactly that state.
+3. **Evaluate DPOR** (Flanagan–Godefroid dynamic POR) against MPOR. A design
+   change, not a patch; investigation only.
 
 **Exit:** ≥2× reduction in schedules explored on `01_malloc_20` at
 `--context-bound 2`, with no verdict change anywhere in the concurrency
 regression suites, and #4584's regression test still detecting its race.
 
-### W2 — Fix state hashing or stop paying for it
+### W2 — Fix state hashing or stop paying for it — **re-scoped: it is unsound**
 
-Measured contribution: 0 % bounded, 1.8 % unbounded, for ~4 % wall.
+W2 was written around "prunes ~0 for ~4 % wall". Both halves of that premise
+were artefacts of measuring one reproducer. Running every CORE test in
+`esbmc-unix` and `esbmc-unix2` twice — once stock, once with `--state-hashing`
+— over the 314 that reach more than one thread, with W0's counters:
 
-The L2 fingerprint (`state_hashing_level2t::generate_l2_state_hash()`,
-`execution_state.cpp:1625`) mixes every assigned symbol's original name and
-value hash. Hypothesis to test first: it is too *fine* — thread-local and dead
-variables enter the fingerprint, so two states that are equivalent for
-scheduling purposes hash differently and never collide.
+- **Verdict changes: 4**, every one of them `FAILED` → `SUCCESSFUL`.
+- Schedules: fewer with hashing on **62** tests, equal on 247, more on none.
+- Wall over the tests whose verdict agreed: 372 s → 310 s, **−16.5 %**.
 
-Steps: restrict the fingerprint to shared state (globals plus reachable heap)
-plus the per-thread PC vector; optionally intersect with liveness the slicer
-already computes. Re-measure prune rate with W0's counters.
+So hashing does prune, sometimes enormously (`11_cook.fig2.pldi07`
+11,130 → 79 schedules, 25.0 s → 0.6 s; `github_3449` 2134 → 621). `01_malloc_20`,
+where §2.1 measured it, is simply a case where it prunes nothing — it is not
+representative.
 
-**Exit:** either a prune rate that pays for its own cost on the concurrency
-suites, or a PR removing `--state-hashing` from `esbmc_dargs` in
-`esbmc-wrapper.py` with the measurement quoted. Both are acceptable outcomes;
-the current state — paying 4 % for ~0 — is not.
+**The finding that matters is the soundness one.** These four CORE tests, whose
+`test.desc` expects `VERIFICATION FAILED`, return `VERIFICATION SUCCESSFUL`
+when `--state-hashing` is added, on stock `master` with no other flag change:
+
+| test | stock | `--state-hashing` |
+|---|---|---|
+| `esbmc-unix2/00_mpor1` | FAILED | **SUCCESSFUL** |
+| `esbmc-unix2/00_mpor2` | FAILED | **SUCCESSFUL** |
+| `esbmc-unix/race_guard_other_write` | FAILED | **SUCCESSFUL** |
+| `esbmc-unix/race_guard_self_clear` | FAILED | **SUCCESSFUL** |
+
+The fingerprint collides two states that are not bisimilar, and
+`post_hash_collision_cleanup()` then marks every switch from that point
+explored, so the schedule carrying the violation is never generated. This is
+the §7 "re-truncation" failure mode, already shipped, and
+`esbmc-wrapper.py:237` passes `--state-hashing` in `esbmc_dargs` — so SV-COMP
+runs are exposed to it. A wrong `true` is scored far more harshly than an
+`unknown`, which makes this a bigger liability than any timeout W1–W3 address.
+
+**Root cause: the fingerprint omitted `active_thread`.** Dumping every
+fingerprint with its components on `race_guard_self_clear` showed three states
+sharing one hash with byte-identical value maps *and* identical pcs, differing
+only in `active=0` vs `active=1`. Equal pcs and equal values still leave two
+states scheduling differently — MPOR's dependency chain and
+`decide_ileave_direction`'s scan both key off which thread just ran — and
+`post_hash_collision_cleanup()` marks every switch from the survivor explored.
+
+Two earlier hypotheses were tested and **rejected** before this one, and are
+recorded so they are not re-tried: the monotone `dynamic_counter` making
+post-`malloc` states unique (a controlled probe still pruned 76 states), and
+constant propagation hiding values from the map (`assigned_value` is never nil
+on `goto_symex_statet::assignment`'s path).
+
+Fixed by mixing `active_thread` into `generate_hash()`
+(`execution_state.cpp:1398`) — one line, and finer by construction, so it can
+only reduce pruning, never increase it.
+
+**Cost, same corpus re-measured against the fixed binary:**
+
+| | tests where hashing cuts schedules | verdict changes | wall |
+|---|---|---|---|
+| before fix | 62 of 314 | **4** | −16.5 % |
+| after fix | 41 of 314 | **0** | −12.0 % |
+
+The fix gives up some pruning and keeps most of it; the largest win is
+untouched (`11_cook.fig2.pldi07` 11,130 → 79 schedules either way). Schedule
+counts are deterministic so the 62 → 41 comparison is exact; the wall figures
+come from separate runs and carry ~10 % run-to-run noise, so read the sign, not
+the 4.5-point gap.
+
+All 287 registered regression tests that pass `--state-hashing` pass with the
+fix. `github_6831_hashing_unsound{,_mpor}` are CORE.
+
+**Exit: discharged.** Hashing is sound on this corpus and still pays for
+itself, so `--state-hashing` stays in `esbmc_dargs`. Making it prune *harder*
+is a separate question, and W1's levers look better-founded than another pass
+at the fingerprint.
 
 ### W3 — Stop redoing per-schedule work
 
