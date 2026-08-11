@@ -1289,6 +1289,13 @@ bool clang_c_adjust::shadows_user_definition(
   if (!is_name_matched_builtin(identifier))
     return false;
 
+  /* c2goto compiles the operational models themselves, where libm/fabs.c and
+   * friends do define these names. Those definitions are the models, not a
+   * program's, so honouring them here would stop every call inside the models
+   * folding to its native node and blow the encoding up (#6904). */
+  if (config.options.get_bool_option("building-c-library"))
+    return false;
+
   const symbolt *s = context.find_symbol(to_symbol_expr(f_op).get_identifier());
   return s != nullptr && !s->get_value().is_nil();
 }
