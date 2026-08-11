@@ -2967,6 +2967,14 @@ typet migrate_type_back(const type2tc &ref)
   }
 }
 
+// Only set the flag when it is on: `set` stores an explicit "0" rather than
+// omitting the attribute, which would change the irep the round-trip produces.
+static void set_implicit_flag(exprt &e, bool implicit)
+{
+  if (implicit)
+    e.implicit(true);
+}
+
 exprt migrate_expr_back(const expr2tc &ref)
 {
   if (ref.get() == nullptr)
@@ -3461,8 +3469,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt address_ofval("address_of", thetype);
     address_ofval.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
-    if (ref2.implicit)
-      address_ofval.implicit(true);
+    set_implicit_flag(address_ofval, ref2.implicit);
     return address_ofval;
   }
   case expr2t::byte_extract_id:
