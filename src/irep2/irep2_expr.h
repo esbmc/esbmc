@@ -492,7 +492,15 @@ public:
       datatype_members(members),
       init_field(std::move(if_))
   {
-    assert(is_union_type(type));
+    // A symbol_id type is permitted on the same terms constant_struct2t
+    // permits it above: a transient pre-resolution state. migrate_expr builds
+    // a union literal from `constant_union2tc(migrate_type(expr.type()), ...)`
+    // (migrate.cpp:923), and a frontend whose union tag is still by-name at
+    // that point yields symbol_type2t rather than union_type2t -- which aborted
+    // here for 12 of regression/esbmc's tests under --clang-c-irep2-adjust,
+    // while the identical shape passed for structs. The asymmetry was an
+    // oversight, not a rule: NDEBUG builds already construct these nodes.
+    assert(is_union_type(type) || type->type_id == type2t::symbol_id);
     // smt_conv.cpp's counterexample reconstruction intentionally builds unions
     //  with multiple members (see TODO in get_by_ast), so we can't check if the
     // union has at most 1 member initializer, with
