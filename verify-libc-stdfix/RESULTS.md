@@ -954,3 +954,78 @@ Every counterexample in this table was re-run through native libc and
 reproduces. The one positive result -- `harness_sqrt_vs_oracle_high`, "libc is
 never more than 1 ulp above the exact root at u0.8", SUCCESSFUL in 0.60s -- is
 the only claim here that enumeration could not have established.
+
+## Correction: the earlier coverage was libc's formats, not camada's
+
+The tables above cover the formats **stdfix.h instantiates**, which is a strictly
+smaller set than what camada's operations support. Stating "all 7 entry points"
+was accurate about libc and misleading about the operations:
+
+* **`mkFXPSqrt` is format-generic** -- an exact integer digit recurrence with no
+  allowlist, valid at any width and signedness. All **12** TR 18037 formats are
+  in scope; I had exercised **5**, all unsigned. Every signed format and both
+  64-bit formats were untested.
+* **`mkFXPExp` supports 6 formats** -- (16,7)s (16,8)u (32,15)s (32,16)u
+  (64,31)s (64,32)u, i.e. every C `_Accum` type. I had exercised **2**, the
+  signed narrow ones libc has entry points for.
+
+The intrinsic surface is now declared for the full set: 12 `__ESBMC_fxp_sqrt_*`
+and 6 `__ESBMC_fxp_exp_*`.
+
+### mkFXPSqrt: all 12 formats
+
+| format | type | method | verdict | time |
+|---|---|---|---|---|
+| s0.7 | `short _Fract` | symbolic bracket, all inputs | **SUCCESSFUL** | 0.50s |
+| u0.8 | `unsigned short _Fract` | symbolic bracket, all inputs | **SUCCESSFUL** | 0.50s |
+| s0.15 | `_Fract` | symbolic bracket, all inputs | **SUCCESSFUL** | 6.71s |
+| u0.16 | `unsigned _Fract` | symbolic bracket, all inputs | **SUCCESSFUL** | 14.61s |
+| s8.7 | `short _Accum` | symbolic bracket, all inputs | **SUCCESSFUL** | 1.40s |
+| u8.8 | `unsigned short _Accum` | symbolic bracket, all inputs | **SUCCESSFUL** | 2.30s |
+| s0.31 | `long _Fract` | anchors | SUCCESSFUL | 0.60s |
+| u0.32 | `unsigned long _Fract` | anchors | SUCCESSFUL | 0.60s |
+| s16.15 | `_Accum` | anchors | SUCCESSFUL | 0.60s |
+| u16.16 | `unsigned _Accum` | anchors | SUCCESSFUL | 0.50s |
+| s32.31 | `long _Accum` | anchors | SUCCESSFUL | 0.60s |
+| u32.32 | `unsigned long _Accum` | anchors | SUCCESSFUL | 0.50s |
+
+The signed formats also confirm the documented negative-operand behaviour
+(no real square root, result zero), which none of the earlier unsigned-only
+work touched.
+
+**Where the symbolic bracket stops scaling, and why.** The bracket squares a
+symbolic root, so at 32 bits it asks the solver about a 64-bit product of an
+unknown, and at 64 bits a 128-bit one. None of the six wide formats discharged
+in 40 minutes under bitwuzla, and u0.32 also failed under z3 (>10 min). The
+anchor rows are therefore **validation on specific inputs, not proofs over all
+inputs**, and are labelled as such rather than folded in with the six that are.
+
+Anchors are perfect squares whose roots are exactly representable (0.25 -> 0.5,
+2^-4 -> 2^-2), so no rounding question arises and a wrong wiring -- identity,
+wrong sort, wrong scale -- still fails them.
+
+### mkFXPExp: all 6 supported formats
+
+Expected values computed natively in `long double`, rounded to nearest with ties
+to even per camada's contract. None guessed.
+
+| format | type | verdict | time | note |
+|---|---|---|---|---|
+| s8.7 | `short _Accum` | **SUCCESSFUL** | 0.40s | 8 anchors incl. saturation + flush |
+| u8.8 | `unsigned short _Accum` | **SUCCESSFUL** | 0.50s | newly covered |
+| s16.15 | `_Accum` | **SUCCESSFUL** | 0.50s | newly covered |
+| u16.16 | `unsigned _Accum` | **SUCCESSFUL** | 0.50s | newly covered |
+| s32.31 | `long _Accum` | **SUCCESSFUL** | 0.50s | newly covered, incl. negative arm |
+| u32.32 | `unsigned long _Accum` | **SUCCESSFUL** | 0.60s | newly covered |
+
+So `mkFXPExp` is validated on **every format it supports**, both 64-bit formats
+included. The four newly covered ones have no stdfix.h entry point, so they
+exercise the operation alone -- there is no library implementation to compare
+against at those formats.
+
+### What this does not change
+
+The libc defects stand exactly as reported: they are findings about the formats
+libc actually ships, and every counterexample was confirmed natively. What
+changes is the coverage claim about the *operations* -- previously 5 of 12 sqrt
+formats and 2 of 6 exp formats, now 12 and 6.

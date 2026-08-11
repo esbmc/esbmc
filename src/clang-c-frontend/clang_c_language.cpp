@@ -555,19 +555,33 @@ void __ESBMC_bitcast(void * /* tgt */, void * /* src */);
  * recomputes. One declaration per format: argument and result types must match
  * and C has no generic fixed-point parameter.
  *
- * exp is declared only for the _Accum formats, which are the ones camada
- * supports (its correct rounding rests on a per-format exhaustive
- * hardest-to-round measurement) and the only ones stdfix.h gives exp entry
- * points for. */
+ * mkFXPSqrt is format-generic -- exact integer digit recurrence at any width
+ * and signedness -- so sqrt is declared for all twelve TR 18037 formats, not
+ * only the five that stdfix.h happens to give entry points for.
+ *
+ * mkFXPExp is restricted to the six formats whose hardest-to-round input camada
+ * has measured exhaustively: (16,7)s (16,8)u (32,15)s (32,16)u (64,31)s
+ * (64,32)u -- i.e. every C _Accum type. Declared for all six, though stdfix.h
+ * only gives entry points for the two signed narrow ones. */
+short _Fract __ESBMC_fxp_sqrt_hr(short _Fract);
 unsigned short _Fract __ESBMC_fxp_sqrt_uhr(unsigned short _Fract);
+_Fract __ESBMC_fxp_sqrt_r(_Fract);
 unsigned _Fract __ESBMC_fxp_sqrt_ur(unsigned _Fract);
+long _Fract __ESBMC_fxp_sqrt_lr(long _Fract);
 unsigned long _Fract __ESBMC_fxp_sqrt_ulr(unsigned long _Fract);
+short _Accum __ESBMC_fxp_sqrt_hk(short _Accum);
 unsigned short _Accum __ESBMC_fxp_sqrt_uhk(unsigned short _Accum);
+_Accum __ESBMC_fxp_sqrt_k(_Accum);
 unsigned _Accum __ESBMC_fxp_sqrt_uk(unsigned _Accum);
+long _Accum __ESBMC_fxp_sqrt_lk(long _Accum);
+unsigned long _Accum __ESBMC_fxp_sqrt_ulk(unsigned long _Accum);
 
 short _Accum __ESBMC_fxp_exp_hk(short _Accum);
-_Accum __ESBMC_fxp_exp_k(_Accum);
 unsigned short _Accum __ESBMC_fxp_exp_uhk(unsigned short _Accum);
+_Accum __ESBMC_fxp_exp_k(_Accum);
+unsigned _Accum __ESBMC_fxp_exp_uk(unsigned _Accum);
+long _Accum __ESBMC_fxp_exp_lk(long _Accum);
+unsigned long _Accum __ESBMC_fxp_exp_ulk(unsigned long _Accum);
 unsigned _Accum __ESBMC_fxp_exp_uk(unsigned _Accum);
 
 // Calls goto_symext::add_memory_leak_checks() which adds memory leak checks
