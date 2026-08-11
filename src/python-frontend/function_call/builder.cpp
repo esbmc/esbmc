@@ -9,6 +9,7 @@
 #include <python-frontend/type/type_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
+#include <util/lang/python_types.h>
 #include <util/message/message.h>
 #include <util/irep/std_expr.h>
 #include <python-frontend/python_expr_builder.h>
@@ -89,6 +90,59 @@ const std::string kPytJoin = "__pyt_join";
 const std::string kPytTerminate = "__pyt_terminate";
 const std::string kPyLockBlockAndCheck = "__ESBMC_pylock_block_and_check";
 const std::string kPyLockReleaseWaiters = "__pyt_lock_release_waiters";
+
+// A contract clause is lowered into one ASSUME/ASSERT, so its argument has to
+// survive as a pure expression. Three Python constructs do not: a call binds
+// to an SSA temporary that the contract wrapper never declares, so the clause
+// silently becomes nondeterministic; a subscript expands into a bounds-check
+// branch, which collapses the clause to a constant; and a parameter whose type
+// could not be inferred is a `void *`, so `o > 0` compares a pointer rather
+// than the value the source reads as. Reject all three instead of verifying a
+// different property than the one written. A parameter whose type *is* known,
+// including a list or str, stays allowed.
+void function_call_builder::check_contract_clause(
+  const nlohmann::json &node,
+  const std::string &clause) const
+{
+  if (!node.is_object())
+  {
+    if (node.is_array())
+      for (const auto &child : node)
+        check_contract_clause(child, clause);
+    return;
+  }
+
+  const std::string node_type = node.value("_type", "");
+
+  if (node_type == "Call" || node_type == "Subscript")
+    throw std::runtime_error(fmt::format(
+      "{} clause at line {} contains {}; a contract clause must be a pure "
+      "expression",
+      clause,
+      node.value("lineno", 0),
+      node_type == "Call" ? "a function call" : "a subscript"));
+
+  if (node_type == "Name")
+  {
+    symbol_id sid(
+      converter_.python_file(),
+      converter_.current_classname(),
+      converter_.current_function_name());
+    sid.set_object(node.value("id", ""));
+
+    const symbolt *sym = converter_.symbol_table().find_symbol(sid.to_string());
+    if (sym && sym->get_type() == any_type())
+      throw std::runtime_error(fmt::format(
+        "{} clause at line {} references '{}', whose type could not be "
+        "determined; annotate the parameter so the clause constrains its value",
+        clause,
+        node.value("lineno", 0),
+        node.value("id", "")));
+  }
+
+  for (const auto &child : node)
+    check_contract_clause(child, clause);
+}
 
 function_call_builder::function_call_builder(
   python_converter &converter,
@@ -1138,6 +1192,11 @@ exprt function_call_builder::build() const
       converter_.add_symbol(symbol);
     }
   }
+
+  if (
+    function_id.get_function() == kEsbmcRequires ||
+    function_id.get_function() == kEsbmcEnsures)
+    check_contract_clause(call_["args"], function_id.get_function());
 
   // Loop invariants and function-contract clauses share one shape: a bodiless
   // `void f(bool)` whose call goto_convert lowers into a LOOP_INVARIANT or a

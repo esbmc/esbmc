@@ -57,6 +57,14 @@ public:
   bool is_numpy_call(const symbol_id &function_id) const;
 
 private:
+  /*
+   * Rejects a contract clause that does not lower to a pure expression.
+   * Throws with a diagnostic naming the offending construct.
+   */
+  void check_contract_clause(
+    const nlohmann::json &node,
+    const std::string &clause) const;
+
   python_converter &converter_;
   const nlohmann::json &call_;
 };
