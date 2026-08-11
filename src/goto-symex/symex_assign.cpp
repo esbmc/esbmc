@@ -13,6 +13,15 @@
 #include <util/irep/migrate.h>
 #include <util/irep/std_expr.h>
 
+/// Whether \p e denotes a place whose address can be taken. Dereference
+/// lowering can turn a member read through an untyped allocation into a value
+/// rebuilt from bytes, and that has no address.
+static bool is_lvalue(const expr2tc &e)
+{
+  return is_symbol2t(e) || is_member2t(e) || is_index2t(e) ||
+         is_dereference2t(e);
+}
+
 goto_symext::goto_symext(
   const namespacet &_ns,
   contextt &_new_context,
@@ -271,6 +280,18 @@ void goto_symext::handle_sideeffect(
     // modifies anything, so address_of(inner) gives the correct pre-state value.
     {
       expr2tc inner = effect.operand;
+
+      // Only an lvalue has an address. When the snapshotted expression reads
+      // through a pointer into an untyped allocation -- which is what
+      // __ESBMC_is_fresh produces, a byte array -- dereference lowering hands
+      // back a value reassembled from bytes rather than a place, and taking
+      // its address reaches the SMT layer as address_of(bitcast(concat(...)))
+      // and aborts there. Materialise the value into storage of its own and
+      // point at that instead: `*(T*)lhs` still reads the pre-state value,
+      // which is all the caller wants.
+      if (!is_lvalue(inner))
+        inner = materialise_old_snapshot(inner, guard);
+
       // address_of2tc(subtype, expr): subtype is T, result type is T*
       expr2tc addr = address_of2tc(inner->type, inner);
       // Cast to lhs type (void*)
@@ -320,6 +341,27 @@ bool goto_symext::handle_conditional(
   }
 
   return has_sideeffect;
+}
+
+/// Give \p value storage of its own and return a reference to it, so that the
+/// caller has something addressable holding the pre-state value.
+expr2tc goto_symext::materialise_old_snapshot(
+  const expr2tc &value,
+  const guard2tc &guard)
+{
+  static unsigned counter = 0;
+
+  symbolt symbol;
+  symbol.name = "old_snapshot_value_" + i2string(counter++);
+  symbol.id = "symex::" + id2string(symbol.name);
+  symbol.lvalue = true;
+  symbol.mode = "C";
+  symbol.set_type(ns.follow(migrate_type_back(value->type)));
+  new_context.add(symbol);
+
+  expr2tc place = symbol2tc(migrate_symbol_type(symbol), symbol.id);
+  symex_assign(code_assign2tc(place, value), true, guard);
+  return place;
 }
 
 void goto_symext::symex_assign(
