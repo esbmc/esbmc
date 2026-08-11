@@ -123,6 +123,11 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
+  virtual expr2tc to_expr2t(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
   const std::string &getVarName() const
   {
     return var_name;
@@ -152,6 +157,11 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
+  virtual expr2tc to_expr2t(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
   std::string binop;
   std::shared_ptr<jimple_expr> lhs;
   std::shared_ptr<jimple_expr> rhs;
@@ -172,6 +182,11 @@ public:
   }
 
   virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
+  virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
     const std::string &function_name) const override;
@@ -222,6 +237,11 @@ public:
   }
 
   virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
+  virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
     const std::string &function_name) const override;
@@ -377,6 +397,11 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
+  virtual expr2tc to_expr2t(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
   std::shared_ptr<jimple_expr> index;
   std::shared_ptr<jimple_expr> base;
 };
@@ -407,6 +432,11 @@ public:
     contextt &ctx,
     const std::string &class_name,
     const std::string &function_name) const override;
+
+  virtual expr2tc to_expr2t(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
 };
 
 /**
@@ -427,6 +457,11 @@ public:
   }
   virtual void from_json(const json &j) override;
   virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
+  virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
     const std::string &function_name) const override;
