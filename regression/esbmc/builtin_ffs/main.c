@@ -30,7 +30,11 @@ int main(void)
   assert(__builtin_ffs((int)0x80000000u) == 32);
 
   // The index is one-based and taken at the operand's own width.
+  assert(__builtin_ffsl(1L << 20) == 21);
+#if __SIZEOF_LONG__ >= 8
+  // Only where long is 64-bit: LLP64 (Windows) would shift past its width.
   assert(__builtin_ffsl(1L << 40) == 41);
+#endif
   assert(__builtin_ffsll(1LL << 60) == 61);
 
   // ffs is ctz + 1 wherever ctz is defined.
