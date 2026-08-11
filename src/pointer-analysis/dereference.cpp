@@ -1,8 +1,11 @@
+#include <algorithm>
 #include <cassert>
 #include <langapi/language_util.h>
 #include <pointer-analysis/dereference.h>
 #include <pointer-analysis/value_set.h>
 #include <sstream>
+#include <unordered_set>
+#include <vector>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
 #include <util/lang/c_misc.h>
@@ -526,6 +529,45 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 
 /********************** Intermediate reference munging code *******************/
 
+void dereferencet::widen_to_known_objects(value_setst::valuest &points_to_set)
+{
+  std::unordered_set<expr2tc, irep2_hash> present;
+  for (const expr2tc &target : points_to_set)
+    if (is_object_descriptor2t(target))
+      present.insert(to_object_descriptor2t(target).object);
+
+  std::vector<std::pair<unsigned int, expr2tc>> objects;
+  for (const auto &[num, object] : value_sett::object_numbering)
+  {
+    /* Only symbols name storage a write can land on. This drops the lattice
+     * markers, and the abstract dynamic_object2t placeholders, which are not
+     * assignable -- a concretised heap allocation is a symex_dynamic::dynamic_N
+     * symbol and is still covered. */
+    if (!is_symbol2t(object))
+      continue;
+
+    if (!present.count(object))
+      objects.emplace_back(num, object);
+  }
+
+  /* Object numbers order the chain, so the formula does not depend on the
+   * numbering's hash order. */
+  std::sort(objects.begin(), objects.end(), [](const auto &a, const auto &b) {
+    return a.first < b.first;
+  });
+
+  /* Nothing is known about where in the object the pointer lands, so the offset
+   * is unknown and guarantees only byte alignment -- build_reference_to()
+   * requires a non-zero alignment for a non-constant offset. */
+  expr2tc unknown_offset = unknown2tc(index_type2());
+  for (const auto &entry : objects)
+  {
+    const expr2tc &object = entry.second;
+    points_to_set.push_back(
+      object_descriptor2tc(object->type, object, unknown_offset, 1));
+  }
+}
+
 expr2tc dereferencet::dereference(
   const expr2tc &orig_src,
   const type2tc &to_type,
@@ -567,7 +609,16 @@ expr2tc dereferencet::dereference(
 
   expr2tc value;
   if (!known_exhaustive)
+  {
     value = make_failed_symbol(type);
+
+    /* In write mode the failed symbol on its own absorbs the write, so a real
+     * object silently keeps its old value and the store is never reported
+     * (esbmc/esbmc#6804). Widening the split covers the objects the pointer may
+     * actually name; the failed symbol stays as the final else. */
+    if (is_write(mode) && options.get_bool_option("deref-unknown-objects"))
+      widen_to_known_objects(points_to_set);
+  }
 
   for (const expr2tc &target : points_to_set)
   {

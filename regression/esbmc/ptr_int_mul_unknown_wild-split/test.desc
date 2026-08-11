@@ -1,0 +1,5 @@
+CORE
+main.c
+--deref-unknown-objects
+^VERIFICATION FAILED$
+^.*dereference failure: invalid pointer$

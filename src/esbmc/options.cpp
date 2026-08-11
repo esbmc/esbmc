@@ -698,6 +698,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-div-by-zero-check", NULL, "Do not do division by zero check"},
     {"no-pointer-check", NULL, "Do not do pointer check"},
     {"no-align-check", NULL, "Do not check pointer alignment"},
+    {"deref-unknown-objects",
+     NULL,
+     "On a write through a pointer whose value set is not exhaustive, split "
+     "over every tracked object instead of absorbing the write into a free "
+     "symbol (esbmc/esbmc#6804)"},
     {"no-unlimited-scanf-check",
      NULL,
      "Do not do overflow check for scanf/fscanf with unlimited character "
