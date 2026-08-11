@@ -477,6 +477,68 @@ expr2tc add2t::do_simplify() const
   if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
     return constant_int2tc(type, BigInt(-1));
 
+  // x + x -> x << 1: a constant shift is wiring where the add is a full
+  // adder, and it feeds the existing constant-shift folds (#626). Bitvectors
+  // only -- the identity does not hold for floats, and there is no shift on a
+  // pointer.
+  // The shift amount takes int_type2(), the type the C frontend gives a shift
+  // literal, so the result is structurally equal to a hand-written `x << 1`
+  // and the surrounding folds can match the two.
+  if (is_bv_type(type) && side_1 == side_2)
+    return shl2tc(type, side_1, constant_int2tc(int_type2(), BigInt(1)));
+
+  // ~B + C -> (C - 1) - B, since ~B == -B - 1: the bitnot folds into the
+  // constant beside it, and vanishes outright at C == 1. Applied across one
+  // level of an add chain too, this is #626's `(A + 1) + ~B -> A - B` family in
+  // whichever permutation reassociation leaves behind. A constant is required,
+  // so the rewrite never trades a bitnot for a longer expression.
+  if (is_bv_type(type))
+  {
+    auto bitnot_value = [this](const expr2tc &e) -> expr2tc {
+      return is_bitnot2t(e) && e->type == type ? to_bitnot2t(e).value
+                                               : expr2tc();
+    };
+    auto is_const = [this](const expr2tc &e) {
+      return is_constant_int2t(e) && e->type == type;
+    };
+    auto decrement = [this](const expr2tc &c) {
+      return from_integer(to_constant_int2t(c).value - 1, type);
+    };
+    auto fold = [&](const expr2tc &a, const expr2tc &b, const expr2tc &c) {
+      return add2tc(type, sub2tc(type, a, b), decrement(c));
+    };
+
+    for (const auto &[first, second] :
+         {std::pair{side_1, side_2}, std::pair{side_2, side_1}})
+    {
+      // ~B + C
+      if (expr2tc b = bitnot_value(first); !is_nil_expr(b) && is_const(second))
+        return sub2tc(type, decrement(second), b);
+
+      if (!is_add2t(first) || first->type != type)
+        continue;
+      const add2t &inner = to_add2t(first);
+
+      // (A + C) + ~B
+      if (expr2tc b = bitnot_value(second); !is_nil_expr(b))
+      {
+        if (is_const(inner.side_2))
+          return fold(inner.side_1, b, inner.side_2);
+        if (is_const(inner.side_1))
+          return fold(inner.side_2, b, inner.side_1);
+      }
+
+      // (A + ~B) + C
+      if (is_const(second))
+      {
+        if (expr2tc b = bitnot_value(inner.side_2); !is_nil_expr(b))
+          return fold(inner.side_1, b, second);
+        if (expr2tc b = bitnot_value(inner.side_1); !is_nil_expr(b))
+          return fold(inner.side_2, b, second);
+      }
+    }
+  }
+
   // (-x) + (-y) -> -(x + y). Signed-bv only: for unsigned bv, neg2t lowers
   // to (modulus - x) % modulus, so the rewrite would fold two cheap structural
   // negs into one wrap, but the wrap re-enters modulus simplification on a
