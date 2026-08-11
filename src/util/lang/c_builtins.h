@@ -28,7 +28,7 @@ inline bit_scan_endt bit_scan_builtin(std::string_view symname)
     return bit_scan_endt::none;
   symname.remove_prefix(prefix.size());
 
-  bit_scan_endt end;
+  bit_scan_endt end = bit_scan_endt::none;
   if (has_prefix(symname, "clz"))
     end = bit_scan_endt::leading;
   else if (has_prefix(symname, "ctz"))
@@ -37,9 +37,8 @@ inline bit_scan_endt bit_scan_builtin(std::string_view symname)
     return bit_scan_endt::none;
   symname.remove_prefix(3);
 
-  if (
-    symname.empty() || symname == "l" || symname == "ll" || symname == "s" ||
-    symname == "g")
-    return end;
+  for (const std::string_view width : {"", "l", "ll", "s", "g"})
+    if (symname == width)
+      return end;
   return bit_scan_endt::none;
 }
