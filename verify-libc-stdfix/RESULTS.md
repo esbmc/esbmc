@@ -926,3 +926,31 @@ exp is where BMC is *most* expensive relative to native, because correct
 rounding needs a wide intermediate: 19 bits at s8.7 and 37 at s16.15 (camada's
 measured hardest-to-round bounds). The 59s case is the symbolic window sweep;
 the flush cases pin fewer inputs.
+
+## Complete sqrt/exp coverage: all 7 entry points proved in-solver
+
+The last gap was `sqrtulr` (u0.32). Validating `mkFXPSqrt` at that width did not
+discharge under either backend (bitwuzla >50 min, z3 >10 min) -- bracketing a
+32-bit symbolic root with 128-bit products is the expensive part. But the
+oracle is not needed to check libc's own claim: the bound is stated directly on
+the result, the same shape that proved `uksqrtui` in 0.7s. That closes u0.32 in
+**4.81s**.
+
+Lesson worth keeping: the oracle is the right tool for questions libc does not
+answer itself (what IS the correct value), but where the library states a bound,
+asserting the bound directly is both sufficient and far cheaper.
+
+| entry point | format | verdict | solver | time | witness (confirmed natively) |
+|---|---|---|---|---|---|
+| `sqrtuhr` | u0.8 | FAILED | bitwuzla | 0.60s | `sqrt(81/256)=9/16` exact, 1 ulp low |
+| `sqrtur` | u0.16 | FAILED | bitwuzla | 0.60s | same defect |
+| `sqrtulr` | u0.32 | FAILED | bitwuzla | 4.81s | `xb=2973817639`: **-1.039 ulp** |
+| `uhksqrtus` | u8.8 | FAILED | bitwuzla | 0.70s | `n=32045`: **-1.86 ulp** |
+| `uksqrtui` | u16.16 | FAILED | bitwuzla | 0.70s | `n=2147483649`: **-1.68 ulp** |
+| `exphk` | s8.7 | FAILED | bitwuzla | 59.17s | saturated table entry + flush |
+| `expk` | s16.15 | FAILED | **z3** | 40.64s | `x=-11.0779419`: flush, want raw 1 |
+
+Every counterexample in this table was re-run through native libc and
+reproduces. The one positive result -- `harness_sqrt_vs_oracle_high`, "libc is
+never more than 1 ulp above the exact root at u0.8", SUCCESSFUL in 0.60s -- is
+the only claim here that enumeration could not have established.
