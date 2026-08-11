@@ -581,13 +581,44 @@ int esbmc_parseoptionst::do_context_bound_deepening(
 // context bound truncates the schedule space and the unwind bound truncates the
 // loops -- so a violation is genuine, while finding none is not evidence of
 // anything and is not reported. The chosen strategy then runs untouched.
-bool esbmc_parseoptionst::falsify_with_bounded_schedules(
+// Returns an exit code when the pre-pass concluded the run, or -1 to hand over
+// to the chosen strategy.
+int esbmc_parseoptionst::falsify_with_bounded_schedules(
   optionst &options,
   goto_functionst &goto_functions)
 {
   const int max_cb = atoi(options.get_option("falsify-context-bound").c_str());
-  if (max_cb < 1)
-    return false;
+  if (max_cb == 0)
+    return -1;
+
+  if (max_cb < 0)
+  {
+    log_error("--falsify-context-bound ({}) cannot be negative.", max_cb);
+    return 6;
+  }
+
+  // A round of the pre-pass is a base-case BMC run, so it composes only with a
+  // verdict read off the base case. Under --forward-condition / --inductive-step
+  // a SAT round means "unable to prove" rather than "violation"; --termination
+  // inverts it further, since its markers make reaching an assert evidence that
+  // the loop *does* terminate. A --multi-property round owns the property table
+  // and would report the truncated pre-pass as the whole result, and the two
+  // emission modes would dump their formulas once per bound.
+  for (const char *incompatible :
+       {"termination",
+        "forward-condition",
+        "inductive-step",
+        "multi-property",
+        "incremental-context-bound",
+        "show-vcc",
+        "smt-formula-only",
+        "smt-formula-too"})
+    if (options.get_bool_option(incompatible))
+    {
+      log_error(
+        "--falsify-context-bound cannot be combined with --{}", incompatible);
+      return 1;
+    }
 
   // Each round reaches its own set of claims and a coverage run reports the
   // union, so the pre-pass would print a [Coverage] block per bound and fold
@@ -595,27 +626,42 @@ bool esbmc_parseoptionst::falsify_with_bounded_schedules(
   if (is_coverage)
   {
     log_warning("--falsify-context-bound is ignored on a coverage run");
-    return false;
+    return -1;
   }
 
   const optionst::option_mapt saved = options.option_map;
 
   options.set_option("suppress-bounded-success", true);
   options.set_option("no-unwinding-assertions", true);
+  // Without this the forced unwind bound cuts loops with no constraint at all
+  // (symex_goto.cpp, loop_bound_exceeded), and paths that never satisfy the
+  // exit condition would flow on into the code after the loop -- which is an
+  // over-approximation, and would make a "violation" here not a violation.
+  options.set_option("partial-loops", false);
   if (options.get_option("unwind").empty())
     options.set_option("unwind", "1");
 
-  bool violated = false;
-  for (int cb = 1; cb <= max_cb && !violated; ++cb)
+  int result = -1;
+  for (int cb = 1; cb <= max_cb; ++cb)
   {
     options.set_option("context-bound", std::to_string(cb));
     bmct bmc(goto_functions, options, context);
     log_progress("Falsifying with context bound {}", cb);
-    violated = do_bmc(bmc) == P_SATISFIABLE;
+
+    const int res = do_bmc(bmc);
+    if (res == P_SATISFIABLE)
+    {
+      result = 1;
+      break;
+    }
+    // A solver failure says nothing about deeper bounds, and the strategy is
+    // entitled to its own attempt, so stop the pre-pass rather than deepen.
+    if (res != P_UNSATISFIABLE)
+      break;
   }
 
   options.option_map = saved;
-  return violated;
+  return result;
 }
 
 int esbmc_parseoptionst::do_bmc(bmct &bmc)

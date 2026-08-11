@@ -79,7 +79,7 @@ protected:
     optionst &options,
     goto_functionst &goto_functions);
 
-  bool falsify_with_bounded_schedules(
+  int falsify_with_bounded_schedules(
     optionst &options,
     goto_functionst &goto_functions);
 
