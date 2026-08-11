@@ -1,5 +1,5 @@
 def first(l: list) -> int:
-    __ESBMC_requires(len(l) > 0)
+    __ESBMC_requires(True)
     __ESBMC_ensures(__ESBMC_return_value == l[0])
     return l[0]
 
