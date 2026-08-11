@@ -769,7 +769,7 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
     {
       if (check_for_hash_collision())
       {
-        ++schedule_stats.pruned_by_hash;
+        ++reduction_stats.pruned_by_hash;
         post_hash_collision_cleanup();
         break;
       }
@@ -782,10 +782,10 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
       get_cur_state().calculate_mpor_constraints();
       if (get_cur_state().is_transition_blocked_by_mpor())
       {
+        ++reduction_stats.pruned_by_mpor;
         // This transition is pruned by MPOR. If we already recorded its state
         // hash above, drop it again so the seen set reflects the state explored
         // before this transition rather than the pruned state.
-        ++schedule_stats.pruned_by_mpor;
         if (state_hashing)
           remove_hash_collision_entry();
         break;
@@ -813,9 +813,24 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
     cur_frame_it->state->add_memory_leak_checks();
 
   has_complete_formula = false;
-  ++schedule_stats.explored;
+  ++reduction_stats.schedules_explored;
 
   return get_cur_state().get_symex_result();
+}
+
+void reachability_treet::report_reduction_stats() const
+{
+  if (!reduction_stats.is_concurrent())
+    return;
+
+  log_status(
+    "Schedule reduction: peak_threads {}, schedules_explored {}, "
+    "pruned_by_mpor {}, pruned_by_hash {}, pruned_by_cs_bound {}",
+    reduction_stats.peak_threads,
+    reduction_stats.schedules_explored,
+    reduction_stats.pruned_by_mpor,
+    reduction_stats.pruned_by_hash,
+    reduction_stats.pruned_by_cs_bound);
 }
 
 bool reachability_treet::setup_next_formula()
@@ -838,6 +853,7 @@ goto_symext::symex_resultt reachability_treet::generate_schedule_formula()
     {
       if (check_for_hash_collision())
       {
+        ++reduction_stats.pruned_by_hash;
         post_hash_collision_cleanup();
         go_next_state();
         continue;
@@ -852,6 +868,8 @@ goto_symext::symex_resultt reachability_treet::generate_schedule_formula()
 
     go_next_state();
   }
+
+  ++reduction_stats.schedules_explored;
 
   return goto_symext::symex_resultt(
     schedule_target,

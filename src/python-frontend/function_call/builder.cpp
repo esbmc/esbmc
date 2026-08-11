@@ -140,6 +140,17 @@ bool function_call_builder::is_len_call(const symbol_id &function_id) const
   return func_name == kGetObjectSize || func_name == kStrlen;
 }
 
+/// True when @p arg is `name[...]` whose slice node is of kind @p slice_kind
+/// and whose base is a plain Name; the caller then tests that name's type.
+static bool is_name_subscript(const nlohmann::json &arg, const char *slice_kind)
+{
+  return arg["_type"] == "Subscript" && arg.contains("slice") &&
+         arg["slice"].is_object() &&
+         arg["slice"].value("_type", "") == slice_kind &&
+         arg.contains("value") && arg["value"].is_object() &&
+         arg["value"].value("_type", "") == "Name";
+}
+
 symbol_id function_call_builder::build_function_id() const
 {
   const std::string &python_file = converter_.python_file();
@@ -426,11 +437,20 @@ symbol_id function_call_builder::build_function_id() const
     }
     else if (arg["_type"] == "List")
       func_name = kGetObjectSize;
+    else if (arg["_type"] == "Dict")
+    {
+      // len({"a": 1}) -- a dict literal is dict-typed just as dict(...) is,
+      // so it needs the same size handler. Without this it fell to strlen over
+      // the dict struct and reported a wrong size; a dict bound to a name was
+      // never affected, because it reaches the dict-aware path by type.
+      func_name = "__ESBMC_len_dict";
+      function_id.clear();
+      function_id.set_prefix("esbmc:");
+      function_id.set_function(func_name);
+      return function_id;
+    }
     else if (
-      arg["_type"] == "Subscript" && arg.contains("slice") &&
-      arg["slice"].is_object() && arg["slice"].value("_type", "") == "Slice" &&
-      arg.contains("value") && arg["value"].is_object() &&
-      arg["value"].value("_type", "") == "Name" &&
+      is_name_subscript(arg, "Slice") &&
       th.get_var_type(arg["value"]["id"].get<std::string>()) == "bytes")
     {
       // Inline len(b[a:b]) where b is bytes: the slice is a wide-int array, so
@@ -440,10 +460,7 @@ symbol_id function_call_builder::build_function_id() const
       func_name = kGetObjectSize;
     }
     else if (
-      arg["_type"] == "Subscript" && arg.contains("slice") &&
-      arg["slice"].is_object() && arg["slice"].value("_type", "") == "List" &&
-      arg.contains("value") && arg["value"].is_object() &&
-      arg["value"].value("_type", "") == "Name" &&
+      is_name_subscript(arg, "List") &&
       th.get_var_type(arg["value"]["id"].get<std::string>()) != "str")
     {
       // len(a[[0, 2]]): fancy indexing always selects multiple elements into

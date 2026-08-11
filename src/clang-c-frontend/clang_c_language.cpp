@@ -222,6 +222,11 @@ void clang_c_languaget::build_compiler_args(
 
   compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
 
+  // Lets a source tree tell an ESBMC run from an ordinary compile, and gates
+  // include/esbmc.h so including it anywhere else is an error rather than a
+  // pile of undefined intrinsics (#4610).
+  compiler_args.emplace_back("-D__ESBMC_execution");
+
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
 

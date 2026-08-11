@@ -200,6 +200,12 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   // frontend) so it is well-formed IR: migrate_expr asserts that `not`/`and`/
   // `or` nodes are bool-typed, and consumers that migrate eagerly (e.g.
   // build_typecast) would otherwise abort before the C adjuster normalises it.
+  // `not obj` is a truth test like `if obj:`, so it goes through the class's
+  // __bool__ where there is one; without it the operand was cast straight to
+  // bool and the dunder never ran.
+  unary_sub =
+    apply_bool_dunder_for_not(op, unary_sub, get_location_from_decl(element));
+
   const typet result_type = (op == "Not") ? bool_type() : type;
   const std::string op_id = python_frontend::map_operator(op, result_type);
 

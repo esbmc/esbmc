@@ -12,9 +12,9 @@
 // types via a flat discriminator + per-alternative member, which is wider
 // than a real tagged union but observably equivalent for verification and
 // avoids the constexpr/APValue::Union path that ESBMC's converter does
-// not yet handle.  Per [variant] in N4861/P0088.  Out-of-scope: visit()
-// returning non-void, in_place_type construction past the fourth
-// alternative, and emplace().
+// not yet handle.  Per [variant] in N4861/P0088.  Out-of-scope: visiting
+// more than one variant at once, in_place_type construction past the
+// fourth alternative, and emplace().
 
 namespace std
 {
@@ -300,6 +300,55 @@ get_if(const variant<Types...> *v) noexcept
     return &v->__s2_;
   else
     return &v->__s3_;
+}
+
+// [variant.visit]: call the visitor on the currently held alternative.
+//
+// The dispatch is hand-unrolled to match the storage, and each arm is gated on
+// `sizeof...(Types)`: the four slots are padded with `char` for a variant of
+// fewer alternatives, and instantiating the visitor on a padding slot would not
+// compile. Testing the highest index first leaves alternative 0 as the fall
+// through, so the visitor is called exactly once on every path -- a chain that
+// ended with a second `f(get<0>(v))` would run a visitor's side effects twice
+// on a valueless variant.
+//
+// The result type is the visitor's result on alternative 0; [variant.visit]
+// requires the same type for every alternative, so any other arm converts to
+// it. Out of scope, as elsewhere in this header: visiting more than one variant
+// at a time, and throwing bad_variant_access for a valueless variant (which
+// reads as alternative 0 here).
+template <class F, class... Types>
+constexpr auto visit(F &&f, variant<Types...> &v)
+  -> decltype(f(get<0>(v)))
+{
+  const size_t __i = v.index();
+  if constexpr (sizeof...(Types) > 3)
+    if (__i == 3)
+      return f(get<3>(v));
+  if constexpr (sizeof...(Types) > 2)
+    if (__i == 2)
+      return f(get<2>(v));
+  if constexpr (sizeof...(Types) > 1)
+    if (__i == 1)
+      return f(get<1>(v));
+  return f(get<0>(v));
+}
+
+template <class F, class... Types>
+constexpr auto visit(F &&f, const variant<Types...> &v)
+  -> decltype(f(get<0>(v)))
+{
+  const size_t __i = v.index();
+  if constexpr (sizeof...(Types) > 3)
+    if (__i == 3)
+      return f(get<3>(v));
+  if constexpr (sizeof...(Types) > 2)
+    if (__i == 2)
+      return f(get<2>(v));
+  if constexpr (sizeof...(Types) > 1)
+    if (__i == 1)
+      return f(get<1>(v));
+  return f(get<0>(v));
 }
 
 } // namespace std
