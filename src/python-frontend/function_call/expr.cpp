@@ -154,6 +154,64 @@ static std::string get_classname_from_symbol_id(const std::string &symbol_id)
   return class_name;
 }
 
+// Does @p class_name, or any class it transitively derives from, define
+// __init__? Answers whether constructing it has observable effects; a class
+// with no __init__ anywhere has nothing to run, and has no constructor symbol
+// to call either. Python forbids cyclic inheritance, so this terminates.
+static bool
+class_defines_init(const nlohmann::json &ast, const std::string &class_name)
+{
+  const auto class_node = json_utils::find_class(ast["body"], class_name);
+  if (class_node == nlohmann::json())
+    return false;
+
+  for (const auto &member : class_node["body"])
+    if (
+      member.value("_type", "") == "FunctionDef" &&
+      member.value("name", "") == "__init__")
+      return true;
+
+  for (const auto &base : class_node["bases"])
+  {
+    const std::string base_name =
+      base.contains("id") ? base.value("id", "") : base.value("attr", "");
+    if (!base_name.empty() && class_defines_init(ast, base_name))
+      return true;
+  }
+  return false;
+}
+
+exprt function_call_expr::build_temporary_receiver(
+  const nlohmann::json &ctor_call) const
+{
+  const std::string &class_name = ctor_call["func"]["id"].get<std::string>();
+
+  if (!class_defines_init(converter_.ast(), class_name))
+  {
+    // No __init__ anywhere in the MRO: there is no constructor symbol to call,
+    // so an uninitialised instance is all the receiver can be.
+    symbolt &tmp = converter_.create_tmp_symbol(
+      ctor_call, "$inst$", type_handler_.get_typet(class_name), exprt());
+    converter_.symbol_table().add(tmp);
+    code_declt tmp_decl(build_symbol(tmp));
+    tmp_decl.location() = converter_.get_location_from_decl(call_);
+    converter_.current_block->copy_to_operands(tmp_decl);
+    return build_symbol(tmp);
+  }
+
+  // Convert the constructor with no LHS so it takes the $ctor_self$ path,
+  // which emits the call as a FUNCTION_CALL instruction and hands back the
+  // initialised object. Pointing current_lhs at a temp instead left that temp
+  // declared and nondet: the constructor was converted but its call never
+  // reached the block, so a method reading state __init__ wrote saw an
+  // unconstrained value.
+  exprt *saved_lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  exprt ctor_result = converter_.get_expr(ctor_call);
+  converter_.current_lhs = saved_lhs;
+  return ctor_result;
+}
+
 void function_call_expr::get_function_type()
 {
   const auto &func_node = call_["func"];
@@ -1886,6 +1944,13 @@ bool function_call_expr::receiver_is_non_dict_object() const
       cls = cls.substr(4);
     return !cls.empty() && cls != "__python_dict__";
   }
+
+  // A constructor call as the receiver (`C().get()`) is a class instance, so
+  // the class's own method must win over the same-named dict method. Without
+  // this the dict handler claims the call and then fails looking `C` up as a
+  // dict variable. Only the name collides -- `C().value()` never came here.
+  if (node_type_of(recv) == "Call")
+    return type_handler_.is_constructor_call(recv);
 
   if (recv["_type"] != "Name" || !recv.contains("id"))
     return false;
@@ -4157,6 +4222,71 @@ std::optional<exprt> function_call_expr::fold_sorted_int_list(
   return std::nullopt;
 }
 
+/// Fold a constant integer component, following symbols, unary minus and
+/// widening typecasts.
+bool function_call_expr::eval_const_int(const exprt &e, BigInt &out) const
+{
+  if (
+    e.is_constant() &&
+    (e.type().is_signedbv() || e.type().is_unsignedbv() || e.is_boolean()))
+  {
+    out = binary2integer(
+      to_constant_expr(e).value().c_str(), e.type().is_signedbv());
+    return true;
+  }
+  if (e.is_symbol())
+  {
+    const symbolt *s = converter_.find_symbol(e.identifier().as_string());
+    return s && eval_const_int(s->get_value(), out);
+  }
+  // A negative literal reaches here as unary-minus over a constant
+  // (the parser emits UnaryOp(USub, Constant(n))); a widened literal
+  // as a typecast. Fold both.
+  if (e.id() == "unary-" && e.operands().size() == 1)
+  {
+    if (!eval_const_int(e.op0(), out))
+      return false;
+    out = -out;
+    return true;
+  }
+  if (e.id() == "typecast" && e.operands().size() == 1)
+    return eval_const_int(e.op0(), out);
+  return false;
+}
+
+/// Fold a constant str component. A Python str is a char array, so its
+/// constant form is an array of character constants (#6883).
+bool function_call_expr::eval_const_str(const exprt &e, std::string &out) const
+{
+  if (e.is_symbol())
+  {
+    const symbolt *sym = converter_.find_symbol(e.identifier().as_string());
+    return sym && eval_const_str(sym->get_value(), out);
+  }
+  if (e.id() == "typecast" && e.operands().size() == 1)
+    return eval_const_str(e.op0(), out);
+  if (!e.type().is_array())
+    return false;
+  const typet &elt = e.type().subtype();
+  const bool byte_elt =
+    (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
+    (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
+  if (!byte_elt || e.operands().empty())
+    return false;
+  out.clear();
+  for (const exprt &c : e.operands())
+  {
+    if (!c.is_constant())
+      return false;
+    BigInt v = binary2integer(
+      to_constant_expr(c).value().c_str(), c.type().is_signedbv());
+    if (v == 0)
+      break;
+    out.push_back(static_cast<char>(v.to_int64()));
+  }
+  return true;
+}
+
 std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
   const std::string &list_id,
   size_t map_size,
@@ -4167,39 +4297,28 @@ std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
   // elements as int; sort here at convert time and rebuild a list of
   // tuple literals so the element type is preserved and verification is
   // cheap. Symbolic tuple lists fall through (still unsupported).
-  std::function<bool(const exprt &, BigInt &)> eval_const_int =
-    [&](const exprt &e, BigInt &out) -> bool {
-    if (
-      e.is_constant() &&
-      (e.type().is_signedbv() || e.type().is_unsignedbv() || e.is_boolean()))
+
+  // One tuple component: an integer or a string, ordered as Python orders
+  // tuples, lexicographically component by component.
+  struct comp_key
+  {
+    bool is_str = false;
+    BigInt i;
+    std::string s;
+
+    bool operator<(const comp_key &o) const
     {
-      out = binary2integer(
-        to_constant_expr(e).value().c_str(), e.type().is_signedbv());
-      return true;
+      return is_str ? s < o.s : i < o.i;
     }
-    if (e.is_symbol())
+    bool operator==(const comp_key &o) const
     {
-      const symbolt *s = converter_.find_symbol(e.identifier().as_string());
-      return s && eval_const_int(s->get_value(), out);
+      return is_str == o.is_str && (is_str ? s == o.s : i == o.i);
     }
-    // A negative literal reaches here as unary-minus over a constant
-    // (the parser emits UnaryOp(USub, Constant(n))); a widened literal
-    // as a typecast. Fold both.
-    if (e.id() == "unary-" && e.operands().size() == 1)
-    {
-      if (!eval_const_int(e.op0(), out))
-        return false;
-      out = -out;
-      return true;
-    }
-    if (e.id() == "typecast" && e.operands().size() == 1)
-      return eval_const_int(e.op0(), out);
-    return false;
   };
 
   struct sortable_tuple
   {
-    std::vector<BigInt> key;
+    std::vector<comp_key> key;
     size_t pos;
   };
   std::vector<sortable_tuple> telems;
@@ -4234,16 +4353,34 @@ std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
       all_constant_tuples = false;
       break;
     }
-    std::vector<BigInt> key;
+    std::vector<comp_key> key;
     for (const auto &comp : val.operands())
     {
+      comp_key k;
       BigInt v;
-      if (!eval_const_int(comp, v))
+      std::string t;
+      if (eval_const_int(comp, v))
+        k.i = v;
+      else if (eval_const_str(comp, t))
+      {
+        k.is_str = true;
+        k.s = t;
+      }
+      else
       {
         all_constant_tuples = false;
         break;
       }
-      key.push_back(v);
+      // Python raises TypeError comparing int with str, so a column that is
+      // not uniformly one or the other must not be folded.
+      if (
+        !telems.empty() && key.size() < telems[0].key.size() &&
+        telems[0].key[key.size()].is_str != k.is_str)
+      {
+        all_constant_tuples = false;
+        break;
+      }
+      key.push_back(k);
     }
     if (!all_constant_tuples)
       break;
@@ -4273,8 +4410,19 @@ std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
       tup["_type"] = "Tuple";
       tup["elts"] = nlohmann::json::array();
       converter_.copy_location_fields_from_decl(call_, tup);
-      for (const BigInt &v : te.key)
+      for (const comp_key &ck : te.key)
       {
+        if (ck.is_str)
+        {
+          nlohmann::json scst;
+          scst["_type"] = "Constant";
+          scst["value"] = ck.s;
+          scst["kind"] = nullptr;
+          converter_.copy_location_fields_from_decl(call_, scst);
+          tup["elts"].push_back(scst);
+          continue;
+        }
+        const BigInt &v = ck.i;
         // Mirror the parser's literal shape: a negative integer is
         // UnaryOp(USub, Constant(|v|)), not Constant(-v). A bare
         // negative Constant nested in a tuple takes a slow conversion
@@ -5229,26 +5377,9 @@ size_t function_call_expr::bind_call_receiver(
           func_value["_type"] == "Call" && func_value.contains("func") &&
           func_value["func"]["_type"] == "Name")
         {
-          // A().f(...): create a temporary A instance and use it as self.
-          const std::string &class_name =
-            func_value["func"]["id"].get<std::string>();
-          typet class_type = type_handler_.get_typet(class_name);
-
-          symbolt &tmp = converter_.create_tmp_symbol(
-            func_value, "$inst$", class_type, exprt());
-          converter_.symbol_table().add(tmp);
-          code_declt tmp_decl(build_symbol(tmp));
-          tmp_decl.location() = location;
-          converter_.current_block->copy_to_operands(tmp_decl);
-
-          // Call the constructor if it is defined, using tmp as self.
-          exprt *saved_lhs = converter_.current_lhs;
-          exprt tmp_expr = build_symbol(tmp);
-          converter_.current_lhs = &tmp_expr;
-          exprt ctor_result = converter_.get_expr(func_value);
-          converter_.current_lhs = saved_lhs;
-
-          call.arguments().push_back(bind_instance_receiver(build_symbol(tmp)));
+          // A().f(...): the receiver is a freshly constructed A.
+          call.arguments().push_back(
+            bind_instance_receiver(build_temporary_receiver(func_value)));
         }
         else if (func_value["_type"] == "Call")
         {

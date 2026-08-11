@@ -1,0 +1,7 @@
+CORE
+main.py
+--unwind 2 --goto-functions-only
+FUNCTION_CALL:  return_value\$_double\$1=double\(x\)
+ASSUME return_value\$_double\$1 == 6
+FUNCTION_CALL:  return_value\$_double\$2=double\(x\)
+ASSERT return_value\$_double\$2 == 6
