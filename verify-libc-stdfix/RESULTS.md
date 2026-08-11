@@ -14,7 +14,7 @@ re-implementing the code under test. 8/16-bit formats are exhaustive.
 | `divi` | 8 | **3 BUGS** -- double sign negation in the power-of-two branch; `1 << F` UB at F>=31; no intermediate headroom at s32.31/u32.32. See below. |
 | `bitsfx`/`fxbits` | 24 | **PASS** -- mutual inverses in both directions, exhaustive over 8-bit formats; raw pattern is the scaled value |
 | `idiv` | 8 | **PASS** on the whole domain except one input; see the overflow question below |
-| `exp` | 2 | not yet tested |
+| `exp` | 2 | **2 BUGS** -- a reachable saturated table entry (36% error) and a spurious flush to zero; relative bound exceeded on 74% of in-band inputs |
 
 ## roundfx tie direction: settled
 
@@ -667,3 +667,100 @@ concluded the scaling was wrong. It was not -- `rb/256 = 177.0` and the bracket
 was correct all along. Re-deriving the scaling from native ground truth
 (`isqrt(4) = 2`, `isqrt(65535) = 255.992`) settled it. Worth recording because
 the misreading pointed at the harness when the defect was real.
+
+## exp: two defects, proved against the correctly-rounded oracle
+
+camada v0.17 added `mkFXPExp` -- exp correctly rounded to nearest, ties to even,
+saturating at MAX and flushing below half an ulp. The pin in
+`scripts/cmake/Options.cmake` is bumped to v0.17 accordingly.
+
+### The oracle was validated first
+
+Eight natively-measured anchors spanning the whole range, including both
+boundary behaviours, all **SUCCESSFUL**:
+
+```
+raw    0 ->   128    exp(0) = 1
+raw  128 ->   348    exp(1) = 2.7182818 -> 2.7187500
+raw -128 ->    47    exp(-1) = 0.3678794 -> 0.3671875
+raw  256 ->   946    exp(2) = 7.3890561 -> 7.3906250
+raw  640 -> 18997    exp(5) = 148.4131591 -> 148.4140625
+raw  704 -> 31321    exp(5.5) = 244.6919323 -> 244.6953125
+raw  710 -> 32767    saturates (true value 256.43 exceeds MAX)
+raw -800 ->     0    flushes (true value 0.00193 is below half an ulp)
+```
+
+Negating an anchor FAILS, so the proof is not vacuous. Full monotonicity over
+all inputs was not proved -- two exp terms with a symbolic index does not
+finish in reasonable time -- so the oracle rests on these anchors plus
+non-vacuity, which is stated rather than glossed.
+
+### What exphk claims
+
+The bound is **relative**, and libc states it for one step of the range
+reduction rather than end to end (`exphk.cpp`):
+
+```
+exp(x) = exp(hi)*exp(mid)*exp(lo) ~ exp(hi)*exp(mid)*(1 + lo)
+   "with relative errors < |lo|^2 <= 2^-8"
+```
+
+Measured exhaustively over the 1419 inputs whose true value is strictly inside
+the representable band:
+
+* **1045 (73.64%)** exceed 2^-8 relative
+* worst relative error **1.0** (100%) at x = -5.5390625
+* worst absolute error **11840 ulp** at x = 5.5234375
+
+A typical mid-range case, verified independently of the solver:
+`x = 1.5859375`, `exp(x) = 4.883867859`, libc returns 4.84375 -- 5 ulp off, a
+relative error of 0.008214 against the claimed 0.003906, i.e. **2.10x**.
+
+### Defect A: the saturated table entry is reachable
+
+`EXP_HI[11]` is `SACCUM_MAX`, a placeholder rather than `exp(6) = 403.4287935`,
+which is not representable in s8.7. libc's own comment says so:
+
+```
+// Notice that when i = 88 and 89, e_hi will overflow short accum range.
+```
+
+But nothing excludes those indices. The guard rejects `x >= 0x1.64p2 = 5.5625`,
+while index 88 needs only `x_rounded = 5.5` -- which every `x` in
+`[5.4375, 5.5625)` rounds to. So the placeholder is multiplied by
+`exp_mid * (1 + lo)`, with `exp_mid = 0.609` at that index, and the result
+collapses:
+
+```
+x = 5.4375   exp = 229.8668   libc = 145.9922
+x = 5.5000   exp = 244.6919   libc = 155.9922     (36% error)
+x = 5.5469   exp = 256.4349   libc = 161.9922
+```
+
+Proof: `harness_exphk_saturated_entry.cpp` -- **FAILED**.
+
+### Defect B: a representable value is flushed to zero
+
+At index 0 the entry is `EXP_HI[0] = 0.0078125`, exactly one ulp, and `lo` can
+be negative -- so `exp_hi * (exp_mid * (1 + lo))` underflows to zero. libc's
+guard only flushes `x <= -0x1.63p2 = -5.5625`, so these inputs are inside the
+supported domain, and their true value does *not* round to zero:
+
+```
+exp(-5.5390625) = 0.003930210     half an ulp = 0.003906250
+```
+
+which is above half an ulp, so the correctly-rounded result is raw 1. libc
+returns 0. The window runs from about x = -5.5547 up to -5.3906.
+
+This one is narrow, and it was worth double-checking rather than asserting:
+the first reading was that flushing must be wrong because the value is
+"representable", but what actually matters is whether it rounds to zero. It
+does not, by a margin of 0.000024.
+
+Proof: `harness_exphk_flush_zero.cpp` -- **FAILED**.
+
+### Scope
+
+Only `exphk` (s8.7) is covered. `expk` (s16.15) is the other entry point and is
+not yet tested. Nothing here has been reported upstream.
