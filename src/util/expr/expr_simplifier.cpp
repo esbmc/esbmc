@@ -3654,6 +3654,28 @@ struct Equalitytor
   }
 };
 
+/// Recognise `(T)b` compared against zero, for `b` already boolean. Widening a
+/// bool to an integer yields exactly 0 or 1, so comparing it with zero recovers
+/// `b` itself -- the bool->int->bool round trip every condition over a stored
+/// _Bool produces. Returns `b`, or nil when the operands are not that shape
+/// (#4626). The reverse trip does not fold: (int)(_Bool)i keeps only whether i
+/// was non-zero, so it is not the identity on i.
+static expr2tc
+widened_bool_compared_to_zero(const expr2tc &side_1, const expr2tc &side_2)
+{
+  auto match = [](const expr2tc &cast, const expr2tc &zero) -> expr2tc {
+    if (!is_typecast2t(cast) || !is_bv_type(cast->type))
+      return expr2tc();
+    if (!is_constant_int2t(zero) || !to_constant_int2t(zero).value.is_zero())
+      return expr2tc();
+    const expr2tc &inner = to_typecast2t(cast).from;
+    return is_bool_type(inner->type) ? inner : expr2tc();
+  };
+
+  expr2tc r = match(side_1, side_2);
+  return is_nil_expr(r) ? match(side_2, side_1) : r;
+}
+
 expr2tc equality2t::do_simplify() const
 {
   // Self-comparison: x == x is always true (except for floats with NaN)
@@ -3664,6 +3686,11 @@ expr2tc equality2t::do_simplify() const
   if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
     return simplify_floatbv_relations<IEEE_equalitytor, equality2t>(
       type, side_1, side_2);
+
+  // (T)b == 0 -> !b
+  if (expr2tc b = widened_bool_compared_to_zero(side_1, side_2);
+      !is_nil_expr(b))
+    return not2tc(b);
 
   // (x + c1) == c2 -> x == (c2 - c1). Requires homogeneous types across
   // the entire shape: the add, BOTH its operands, and c2 must share a
@@ -3887,6 +3914,11 @@ expr2tc notequal2t::do_simplify() const
   if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
     return simplify_floatbv_relations<IEEE_notequalitytor, equality2t>(
       type, side_1, side_2);
+
+  // (T)b != 0 -> b
+  if (expr2tc b = widened_bool_compared_to_zero(side_1, side_2);
+      !is_nil_expr(b))
+    return b;
 
   // The shape-canonicalizations below mirror equality2t::do_simplify. They are
   // the same rewrites: != x y holds iff == x y doesn't, so any rewrite that

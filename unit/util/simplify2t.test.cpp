@@ -1781,6 +1781,79 @@ TEST_CASE(
     REQUIRE_FALSE(result == v);
 }
 
+TEST_CASE("bool->int->bool: (int)b != 0 = b", "[typecast][bool]")
+{
+  const expr2tc b = symbol2tc(get_bool_type(), "b");
+  const expr2tc widened = typecast2tc(get_int_type(32), b);
+  const expr2tc zero = constant_int2tc(get_int_type(32), BigInt(0));
+
+  const expr2tc result = notequal2tc(widened, zero)->simplify();
+
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(result == b);
+}
+
+TEST_CASE("bool->int->bool: 0 != (int)b = b", "[typecast][bool]")
+{
+  const expr2tc b = symbol2tc(get_bool_type(), "b");
+  const expr2tc widened = typecast2tc(get_int_type(32), b);
+  const expr2tc zero = constant_int2tc(get_int_type(32), BigInt(0));
+
+  const expr2tc result = notequal2tc(zero, widened)->simplify();
+
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(result == b);
+}
+
+TEST_CASE("bool->int->bool: (int)b == 0 = !b", "[typecast][bool]")
+{
+  const expr2tc b = symbol2tc(get_bool_type(), "b");
+  const expr2tc widened = typecast2tc(get_int_type(32), b);
+  const expr2tc zero = constant_int2tc(get_int_type(32), BigInt(0));
+
+  const expr2tc result = equality2tc(widened, zero)->simplify();
+
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_not2t(result));
+  REQUIRE(to_not2t(result).value == b);
+}
+
+TEST_CASE("bool->int->bool: (_Bool)(int)b = b", "[typecast][bool]")
+{
+  const expr2tc b = symbol2tc(get_bool_type(), "b");
+  const expr2tc widened = typecast2tc(get_int_type(32), b);
+
+  const expr2tc result = typecast2tc(get_bool_type(), widened)->simplify();
+
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(result == b);
+}
+
+TEST_CASE("bool->int->bool: an int operand is not a bool", "[typecast][bool]")
+{
+  // (int)(short)i != 0 must keep the comparison: i is not known to be 0 or 1.
+  const expr2tc i = symbol2tc(get_int_type(16), "i");
+  const expr2tc widened = typecast2tc(get_int_type(32), i);
+  const expr2tc zero = constant_int2tc(get_int_type(32), BigInt(0));
+
+  const expr2tc result = notequal2tc(widened, zero)->simplify();
+
+  if (!is_nil_expr(result))
+    REQUIRE_FALSE(result == i);
+}
+
+TEST_CASE("int->bool->int does not fold", "[typecast][bool]")
+{
+  // (int)(_Bool)i keeps only whether i was non-zero, so it is not i.
+  const expr2tc i = symbol2tc(get_int_type(32), "i");
+  const expr2tc narrowed = typecast2tc(get_bool_type(), i);
+
+  const expr2tc result = typecast2tc(get_int_type(32), narrowed)->simplify();
+
+  if (!is_nil_expr(result))
+    REQUIRE_FALSE(result == i);
+}
+
 // TODO: Tests that should be valid but... not yet!
 
 #if 0
