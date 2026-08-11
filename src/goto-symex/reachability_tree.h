@@ -286,6 +286,24 @@ public:
    *  rather than exhausted (issue #6480). */
   bool cs_bound_pruned;
 
+  /** How the exploration spent its schedules. Reported at the end of a run so
+   *  a reduction's contribution can be read off one verification instead of
+   *  re-running with each knob toggled (issue #6831). */
+  struct schedule_statisticst
+  {
+    unsigned long explored = 0;
+    unsigned long pruned_by_mpor = 0;
+    unsigned long pruned_by_hash = 0;
+  };
+  schedule_statisticst schedule_stats;
+
+public:
+  /** Read-only accessor for the schedule statistics, for run reporting. */
+  const schedule_statisticst &get_schedule_stats() const
+  {
+    return schedule_stats;
+  }
+
 protected:
   struct scheduler_framet
   {

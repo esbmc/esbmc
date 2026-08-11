@@ -1887,6 +1887,13 @@ bool function_call_expr::receiver_is_non_dict_object() const
     return !cls.empty() && cls != "__python_dict__";
   }
 
+  // A constructor call as the receiver (`C().get()`) is a class instance, so
+  // the class's own method must win over the same-named dict method. Without
+  // this the dict handler claims the call and then fails looking `C` up as a
+  // dict variable. Only the name collides -- `C().value()` never came here.
+  if (node_type_of(recv) == "Call")
+    return type_handler_.is_constructor_call(recv);
+
   if (recv["_type"] != "Name" || !recv.contains("id"))
     return false;
 

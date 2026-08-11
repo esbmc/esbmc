@@ -116,7 +116,9 @@ and the symbol/function table layout.
 | Libc body bridge extended to `<ctype.h>` classifiers/case-mappers `isalnum`/`isalpha`/`isblank`/`iscntrl`/`isdigit`/`isgraph`/`islower`/`isprint`/`ispunct`/`isspace`/`isupper`/`isxdigit`/`tolower`/`toupper` (bodyless externals → ESBMC's ASCII operational-model bodies) (§4.8, Phase 2) | ✅ (PR #6157) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Libc body bridge extended to `<stdlib.h>` string-to-integer parsers `atoi`/`atol`/`strtol` (byte-loop bodies, need `--unwind`; `atoll`/`strtoll` left bodyless — CBMC does not model them) (§4.8, Phase 2) | ✅ (PR #6158) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Computed `goto` (GNU labels-as-values): `address_of(label)` → unique `(void *)K` constant so CBMC's lowered label-address equality chain resolves (§4.4, Phase 2) | ✅ (PR #6161) | `cbmc_adapter.cpp::fix_expression` |
-| `__CPROVER_havoc_object`: `HAVOC_OBJECT &obj` → `ASSIGN obj := side_effect("nondet")` over the whole containing object; a pointer *value* operand is still declined (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::rewrite_havoc_object` |
+| `__CPROVER_havoc_object`: `HAVOC_OBJECT &obj` → `ASSIGN obj := side_effect("nondet")` over the whole containing object; a pointer *value* operand is still declined (§4.4, Phase 2) | ✅ (PR #6830) | `cbmc_adapter.cpp::rewrite_havoc_object` |
+| `__CPROVER_array_set`: `ARRAY_SET &arr[0] v` → `ASSIGN arr := array_of((elem)v)` when the array is a whole object; member arrays / non-zero offsets / heap pointers still declined (§4.4, Phase 2) | ✅ (PR #6833) | `cbmc_adapter.cpp::rewrite_array_set_fill` |
+| `__CPROVER_array_copy` / `__CPROVER_array_replace`: `ARRAY_COPY dst src` → `ASSIGN dst := src` for same-extent whole-object arrays; mismatched extents declined (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::rewrite_array_copy` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -653,9 +655,43 @@ already verify to CBMC parity. Four gaps remain, each recorded for future work:
 - **`__CPROVER_OBJECT_SIZE` (`object_size`)** — migrates (`→ c:@F@__ESBMC_get_object_size`,
   already in the wrap-set) but the SMT **encoding hangs in the solver** (same class as the SIMD
   vector hang, §4.4) — a solver-performance item, not an adapter gap.
-- **`__CPROVER_array_set`** — reaches migrate as an unhandled `code` statement (`ERROR: code`);
-  the array codet family, akin to the `ARRAY_COPY`/`ARRAY_SET` memcpy handling of §4.8. The
-  JBMC zero-fill shape is rewritten to `__ESBMC_memset`; the general case is still declined.
+**`__CPROVER_array_set` — ✅ landed (whole-object arrays).** `ARRAY_SET` carries no length: the
+extent is the pointee array's own, which is exactly what an `array_of` over that array's type
+expresses, so the recovered target supplies what the operand does not. `rewrite_array_set_fill`
+rewrites the instruction into `ASSIGN arr := array_of((elem)v)`. Two constraints, both found by
+probing CBMC rather than assumed:
+- **The target must be an array-typed *symbol*.** CBMC fills the whole object the pointer lands
+  in, which coincides with the array only when the array *is* the entire object. A member array
+  (`&s.a[0]`) is declined: CBMC clobbers the rest of `s` too, so filling only `s.a` would report
+  SUCCESSFUL where CBMC reports a violation — a soundness divergence, not a weaker result.
+  Pinned by `cbmc_array_set_member`. The same reasoning rules out a non-zero subscript, a 2-D
+  array (CBMC's own answer there is its outer-element semantics, not an element fill) and a
+  heap pointer, all still declined.
+- **The fill is *converted* to the element type, not reinterpreted** — `__CPROVER_array_set(d, 5)`
+  on a `double[]` leaves `5.0`, and a `char[]` takes `(char)300` — so the value is wrapped in a
+  typecast. Without it a differently-kinded fill reaches the solver as an `array_of` whose
+  operand sort disagrees with the array's, which Bitwuzla rejects outright (`terms with
+  mismatching sort`).
+Verdict parity with CBMC, dual-solver (Bitwuzla + Z3): `cbmc_array_set_fill` (int, `double`
+taking an int fill, and a symbolic fill whose elements must agree) SUCCESSFUL,
+`cbmc_array_set_fill_fail` (wrong expected element) FAILED. The pre-existing `cbmc_array_set`,
+which pinned the decline, now expects SUCCESSFUL. The JBMC zero-fill shape keeps its earlier
+`__ESBMC_memset` rewrite (it fills a heap payload, which has no array symbol to name).
+
+**`__CPROVER_array_copy` / `__CPROVER_array_replace` — ✅ landed (same extent).** Both previously
+reached migrate as unhandled `code` statements (`ERROR: code`, an abort rather than a decline).
+They coincide exactly when the two arrays have the same type — a whole-array `ASSIGN dst := src`
+— and part company only on mismatched extents, where neither remainder is a whole-array
+assignment: a longer `array_copy` destination is left **unconstrained** past the source extent
+(probed against CBMC: `d2[3] == 8` FAILS after copying a 2-element source into a 4-element
+destination), while `array_replace` overwrites only the prefix and **preserves** the tail
+(`r[3] == 0` holds). Mismatched extents are therefore declined rather than approximated in
+either direction. The `whole_array_target` helper is shared with `array_set`, so the same
+whole-object constraint applies to both operands. Verdict parity with CBMC, dual-solver:
+`cbmc_array_copy` (equal-extent copy, equal-extent replace, a value-not-alias check that
+mutating the source afterwards leaves the destination alone, and a symbolic `char` copy)
+SUCCESSFUL, `cbmc_array_copy_fail` (destination asserted to keep its pre-copy value) FAILED,
+and `cbmc_array_copy_extent` pinning the declined mismatched-extent case.
 
 **`__CPROVER_havoc_object` — ✅ landed.** `HAVOC_OBJECT p` is size-implicit like `array_set`,
 and was declined with it — but a *whole-symbol* assignment needs no extent, so the shapes whose
