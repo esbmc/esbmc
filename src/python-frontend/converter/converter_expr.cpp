@@ -467,7 +467,6 @@ static bool is_attribute_base_expression(const nlohmann::json &node_type)
          node_type == "BinOp" || node_type == "UnaryOp";
 }
 
-
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
