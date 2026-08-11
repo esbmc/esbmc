@@ -2,6 +2,7 @@
 #include <goto-symex/goto_symex.h>
 #include <string>
 #include <util/arith/arith_tools.h>
+#include <util/lang/c_builtins.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
@@ -104,39 +105,53 @@ bool goto_symext::run_builtin(
     return true;
   }
 
-  // __builtin_clz / __builtin_clzl / __builtin_clzll: count leading zero bits.
-  // One handler covers all widths — the operand type fixes the bit width. clz of
-  // zero is undefined; the optional UB assertion is added in goto-check
-  // (--clz-zero-check), with the other UB checks. Match the three names exactly:
-  // a loose "__builtin_clz" prefix would also capture the two-argument
-  // __builtin_clzg, tripping the one-argument assertion. See #4606.
-  if (
-    symname == "c:@F@__builtin_clz" || symname == "c:@F@__builtin_clzl" ||
-    symname == "c:@F@__builtin_clzll")
+  // __builtin_clz*/__builtin_ctz*: count leading/trailing zero bits. One
+  // handler covers every spelling — the operand type fixes the bit width, and
+  // the two directions differ only in which way the smear below shifts. Zero is
+  // undefined for every form but the two-argument clzg/ctzg; the optional UB
+  // assertion is added in goto-check (--clz-zero-check), with the other UB
+  // checks. See #4606, #6925.
+  if (const bit_scan_endt end = bit_scan_builtin(symname);
+      end != bit_scan_endt::none)
   {
     assert(
-      func_call.operands.size() == 1 &&
-      "__builtin_clz* must have one argument");
+      !func_call.operands.empty() && func_call.operands.size() <= 2 &&
+      "__builtin_clz*/__builtin_ctz* take one or two arguments");
 
     expr2tc arg = func_call.operands[0];
     expr2tc ret = func_call.ret;
 
     const type2tc &t = arg->type;
     const unsigned width = t->get_width();
+    const bool leading = end == bit_scan_endt::leading;
 
     // clz(x) = width - popcount(x with every bit below the most-significant set
-    // bit smeared down). Reusing the popcount irep means a constant argument
-    // folds to a constant (popcount has a simplifier), while a symbolic argument
-    // is handled exactly by the backend's popcount encoding.
+    // bit smeared down); ctz mirrors it, smearing up from the least-significant
+    // set bit. Reusing the popcount irep means a constant argument folds to a
+    // constant (popcount has a simplifier), while a symbolic argument is
+    // handled exactly by the backend's popcount encoding.
     expr2tc smeared = arg;
     for (unsigned shift = 1; shift < width; shift <<= 1)
-      smeared =
-        bitor2tc(t, smeared, lshr2tc(t, smeared, constant_int2tc(t, shift)));
+    {
+      expr2tc offset = constant_int2tc(t, shift);
+      smeared = bitor2tc(
+        t,
+        smeared,
+        leading ? lshr2tc(t, smeared, offset) : shl2tc(t, smeared, offset));
+    }
 
     expr2tc count = sub2tc(
       get_int32_type(),
       constant_int2tc(get_int32_type(), width),
       popcount2tc(smeared));
+
+    // The second argument of clzg/ctzg is the result at zero.
+    if (func_call.operands.size() == 2)
+      count = if2tc(
+        get_int32_type(),
+        equality2tc(arg, gen_zero(t)),
+        typecast2tc(get_int32_type(), func_call.operands[1]),
+        count);
 
     if (!is_nil_expr(ret))
       symex_assign(code_assign2tc(ret, typecast2tc(ret->type, count)));
