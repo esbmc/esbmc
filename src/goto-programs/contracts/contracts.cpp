@@ -309,6 +309,86 @@ code_contractst::extract_requires_from_body(const goto_programt &function_body)
 }
 
 // Helper structure to track assignments to a variable
+/// Contract intrinsics keep their own materialisation in the wrapper, which
+/// knows how to turn them into allocations, snapshots or quantifiers rather
+/// than a plain re-issued call.
+static bool is_contract_intrinsic(const std::string &funcname)
+{
+  return is_fresh_function(funcname) ||
+         funcname.find("__ESBMC_old") != std::string::npos ||
+         funcname.find("__ESBMC_forall") != std::string::npos ||
+         funcname.find("__ESBMC_exists") != std::string::npos;
+}
+
+static void collect_symbol_names(const expr2tc &e, std::set<irep_idt> &out)
+{
+  if (is_nil_expr(e))
+    return;
+
+  if (is_symbol2t(e))
+  {
+    out.insert(to_symbol2t(e).thename);
+    return;
+  }
+
+  e->foreach_operand(
+    [&out](const expr2tc &op) { collect_symbol_names(op, out); });
+}
+
+/// A clause is lowered into a single ASSUME/ASSERT, so a call inside it
+/// survives only as the SSA temporary the frontend bound its result to. That
+/// temporary is declared in the function body, not in the wrapper, which left
+/// the clause standing over a free symbol: assumed, it constrained nothing;
+/// asserted, it was unprovable (#6941). Re-materialise the defining call here,
+/// which is what the __ESBMC_is_fresh path has always done for its one
+/// hard-coded intrinsic.
+void code_contractst::lift_clause_call_temps(
+  const expr2tc &clause,
+  const goto_programt &original_body,
+  goto_programt &dest,
+  const std::vector<std::pair<expr2tc, expr2tc>> &substitutions) const
+{
+  std::set<irep_idt> referenced;
+  collect_symbol_names(clause, referenced);
+  if (referenced.empty())
+    return;
+
+  forall_goto_program_instructions (it, original_body)
+  {
+    if (!it->is_function_call() || !is_code_function_call2t(it->code))
+      continue;
+
+    const code_function_call2t &call = to_code_function_call2t(it->code);
+    if (is_nil_expr(call.ret) || !is_symbol2t(call.ret))
+      continue;
+    if (!referenced.count(to_symbol2t(call.ret).thename))
+      continue;
+
+    // Contract intrinsics keep their own materialisation, which knows how to
+    // turn them into allocations and snapshots rather than a plain call.
+    if (
+      is_symbol2t(call.function) &&
+      is_contract_intrinsic(to_symbol2t(call.function).thename.as_string()))
+      continue;
+
+    goto_programt::targett decl = dest.add_instruction(DECL);
+    decl->code = code_decl2tc(call.ret->type, to_symbol2t(call.ret).thename);
+    decl->location = it->location;
+
+    // At a call site the lifted call still names the callee's parameters, so
+    // rewrite them to this caller's actual arguments.
+    code_function_call2t lifted_call = call;
+    for (const auto &sub : substitutions)
+      for (expr2tc &arg : lifted_call.operands)
+        arg = replace_symbol_in_expr(arg, sub.first, sub.second);
+
+    goto_programt::targett lifted = dest.add_instruction(FUNCTION_CALL);
+    lifted->code = code_function_call2tc(
+      lifted_call.ret, lifted_call.function, lifted_call.operands);
+    lifted->location = it->location;
+  }
+}
+
 struct var_assignment_info
 {
   expr2tc value;                         // The assigned value
@@ -1542,6 +1622,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   // 3. Assume requires clause (after memory allocation for is_fresh)
   // Also replace __ESBMC_old() references in the requires clause — old snapshots
   // have already been materialized above (step 2), so replacement is safe here.
+  lift_clause_call_temps(requires_clause, original_body, wrapper);
   {
     expr2tc req = requires_clause;
     if (!old_snapshots.empty() && !is_nil_expr(req))
@@ -1790,6 +1871,8 @@ goto_programt code_contractst::generate_checking_wrapper(
 
   // 4. Assert ensures clause (replace __ESBMC_return_value and __ESBMC_old)
   // Process ensures clause: replace return_value, old(), and is_fresh
+  // Lifted after the original call, so a clause call observes the post-state.
+  lift_clause_call_temps(ensures_clause, original_body, wrapper);
   expr2tc ensures_guard = ensures_clause;
   if (!is_nil_expr(ensures_clause))
   {
@@ -4467,6 +4550,7 @@ void code_contractst::generate_replacement_at_call(
   }
 
   // Replace function parameters with actual arguments in contract clauses
+  std::vector<std::pair<expr2tc, expr2tc>> param_substitutions;
   if (function_symbol.get_type().is_code())
   {
     const code_typet &code_type = to_code_type(function_symbol.get_type());
@@ -4477,6 +4561,7 @@ void code_contractst::generate_replacement_at_call(
     {
       irep_idt param_id = params[i].get_identifier();
       expr2tc param_expr = symbol2tc(migrate_type(params[i].type()), param_id);
+      param_substitutions.emplace_back(param_expr, actual_args[i]);
 
       // Replace parameter symbol with actual argument in requires/ensures
       requires_clause =
@@ -4527,6 +4612,9 @@ void code_contractst::generate_replacement_at_call(
     if (!property.empty())
       t->location.property(property);
   };
+
+  lift_clause_call_temps(
+    requires_clause, function_body, replacement, param_substitutions);
 
   // 1. Assert requires clause (check precondition at call site)
   //
@@ -4733,6 +4821,9 @@ void code_contractst::generate_replacement_at_call(
       "ensures (after type={})",
       ensures_guard ? get_type_id(*ensures_guard->type) : "nil");
   }
+
+  lift_clause_call_temps(
+    ensures_clause, function_body, replacement, param_substitutions);
 
   // 4. Assume ensures clause (assume postcondition at call site)
   add_contract_clause(

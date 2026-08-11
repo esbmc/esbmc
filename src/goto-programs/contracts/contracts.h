@@ -115,6 +115,15 @@ public:
   /// \return True if function has the contract annotation
   bool is_annotated_contract_function(const symbolt &func_sym) const;
 
+  /// \brief Re-materialise, into \p dest, the calls whose SSA temporaries
+  ///   \p clause still references. Without this the clause stands over a
+  ///   symbol declared in the function body but not in the wrapper (#6941).
+  void lift_clause_call_temps(
+    const expr2tc &clause,
+    const goto_programt &original_body,
+    goto_programt &dest,
+    const std::vector<std::pair<expr2tc, expr2tc>> &substitutions = {}) const;
+
   /// \brief Per-field snapshot for pointer-struct-field assigns compliance.
   /// Captures the pre-call value of a field NOT in the assigns clause so that
   /// the post-call assertion can verify it is unchanged.
