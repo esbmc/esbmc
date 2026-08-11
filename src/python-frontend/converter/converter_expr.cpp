@@ -1007,6 +1007,30 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             break;
           }
         }
+        // __ESBMC_return_value names the returned value inside an
+        // __ESBMC_ensures clause. The contracts pass rewrites it to the real
+        // return value, so the frontend only has to give it the enclosing
+        // function's return type for the clause to type-check.
+        if (var_name == "__ESBMC_return_value" && !current_func_name_.empty())
+        {
+          symbol_id ret_sid = create_symbol_id();
+          symbolt *func_symbol = find_symbol(ret_sid.to_string());
+          if (func_symbol && func_symbol->get_type().is_code())
+          {
+            ret_sid.set_object(var_name);
+            symbolt ret_symbol = create_symbol(
+              current_python_file,
+              var_name,
+              ret_sid.to_string(),
+              get_location_from_decl(element),
+              to_code_type(func_symbol->get_type()).return_type());
+            ret_symbol.lvalue = true;
+            ret_symbol.file_local = true;
+            expr = symbol_expr(*add_symbol_and_get_ptr(ret_symbol));
+            break;
+          }
+        }
+
         locationt location = get_location_from_decl(element);
         std::ostringstream error_msg;
         if (!current_func_name_.empty())

@@ -78,6 +78,8 @@ const std::string kEsbmcAssert = "__ESBMC_assert";
 const std::string kEsbmcUnreachable = "__ESBMC_unreachable";
 const std::string kLoopInvariant = "__loop_invariant";
 const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
+const std::string kEsbmcRequires = "__ESBMC_requires";
+const std::string kEsbmcEnsures = "__ESBMC_ensures";
 const std::string kEsbmcCover = "__ESBMC_cover";
 const std::string kEsbmcAtomicBegin = "__ESBMC_atomic_begin";
 const std::string kEsbmcAtomicEnd = "__ESBMC_atomic_end";
@@ -1137,8 +1139,14 @@ exprt function_call_builder::build() const
     }
   }
 
-  // Add loop invariant symbol to symbol table
-  if (function_id.get_function() == kEsbmcLoopInvariant)
+  // Loop invariants and function-contract clauses share one shape: a bodiless
+  // `void f(bool)` whose call goto_convert lowers into a LOOP_INVARIANT or a
+  // marked ASSUME. The symbol must stay valueless: builtin_functions.cpp
+  // routes any callee carrying a body to a plain FUNCTION_CALL instead.
+  if (
+    function_id.get_function() == kEsbmcLoopInvariant ||
+    function_id.get_function() == kEsbmcRequires ||
+    function_id.get_function() == kEsbmcEnsures)
   {
     const auto &symbol_table = converter_.symbol_table();
     const std::string &func_symbol_id = function_id.to_string();
