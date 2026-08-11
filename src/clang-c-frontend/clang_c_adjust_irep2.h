@@ -50,6 +50,10 @@ private:
   /// (scope-clang-c-irep2.md §19.2).
   void adjust_index(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_member's rewrite: reach through a
+  /// pointer base with a dereference, or an array base with a zero index.
+  void adjust_member(expr2tc &expr);
+
   contextt &context;
   namespacet ns{context};
 };
