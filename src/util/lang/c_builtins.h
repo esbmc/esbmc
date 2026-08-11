@@ -47,7 +47,11 @@ inline bit_scan_endt bit_scan_builtin(std::string_view symname)
       return end;
 
   // Only clz/ctz have the 16-bit and type-generic spellings.
-  if (end != bit_scan_endt::first_set && (symname == "s" || symname == "g"))
-    return end;
+  if (end == bit_scan_endt::first_set)
+    return bit_scan_endt::none;
+
+  for (const std::string_view width : {"s", "g"})
+    if (symname == width)
+      return end;
   return bit_scan_endt::none;
 }
