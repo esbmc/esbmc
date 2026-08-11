@@ -105,18 +105,18 @@ bool goto_symext::run_builtin(
     return true;
   }
 
-  // __builtin_clz*/__builtin_ctz*: count leading/trailing zero bits. One
-  // handler covers every spelling — the operand type fixes the bit width, and
-  // the two directions differ only in which way the smear below shifts. Zero is
-  // undefined for every form but the two-argument clzg/ctzg; the optional UB
+  // __builtin_clz*/ctz*/ffs*: report the outermost set bit. One handler covers
+  // every spelling — the operand type fixes the bit width, and the directions
+  // differ only in which way the smear below shifts. Zero is undefined for
+  // every form but the two-argument clzg/ctzg and ffs; the optional UB
   // assertion is added in goto-check (--clz-zero-check), with the other UB
-  // checks. See #4606, #6925.
+  // checks. See #4606, #6925, #183.
   if (const bit_scan_endt end = bit_scan_builtin(symname);
       end != bit_scan_endt::none)
   {
     assert(
       !func_call.operands.empty() && func_call.operands.size() <= 2 &&
-      "__builtin_clz*/__builtin_ctz* take one or two arguments");
+      "__builtin_clz*/ctz*/ffs* take one or two arguments");
 
     expr2tc arg = func_call.operands[0];
     expr2tc ret = func_call.ret;
@@ -144,6 +144,18 @@ bool goto_symext::run_builtin(
       get_int32_type(),
       constant_int2tc(get_int32_type(), width),
       popcount2tc(smeared));
+
+    // ffs counts the same trailing zeros but reports a one-based index, and is
+    // defined at zero as 0 rather than left undefined there (POSIX).
+    if (end == bit_scan_endt::first_set)
+      count = if2tc(
+        get_int32_type(),
+        equality2tc(arg, gen_zero(t)),
+        gen_zero(get_int32_type()),
+        add2tc(
+          get_int32_type(),
+          count,
+          constant_int2tc(get_int32_type(), BigInt(1))));
 
     // The second argument of clzg/ctzg is the result at zero.
     if (func_call.operands.size() == 2)
