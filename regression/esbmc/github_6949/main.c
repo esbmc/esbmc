@@ -28,6 +28,25 @@ struct plain_s
   uint32_t b;
 };
 
+struct __attribute__((packed)) attr_packed_s
+{
+  char a;
+  uint32_t b;
+};
+
+/* an attribute that says nothing about layout */
+struct __attribute__((deprecated)) unrelated_attr_s
+{
+  char a;
+  uint32_t b;
+};
+
+union plain_u
+{
+  char c;
+  uint32_t u;
+};
+
 #pragma pack(push, 2)
 struct bitfield_s
 {
@@ -56,7 +75,11 @@ int main(void)
   struct pack2_s obj;
   struct pack2_s *p = &obj;
   uint32_t direct = p->b;
+  union plain_u pu;
+  pu.u = 1;
+  uint32_t via_union = pu.u;
   (void)direct;
+  (void)via_union;
 
   __ESBMC_assert(sizeof(struct pack1_s) == 5, "pack(1) sizeof is 5");
   __ESBMC_assert(offsetof(struct pack1_s, b) == 1, "pack(1) offsetof(b) is 1");
@@ -70,5 +93,9 @@ int main(void)
   __ESBMC_assert(offsetof(struct zero_bitfield_s, b) == 4, "pack(2) zero-width bitfield offsetof(b) is 4");
   __ESBMC_assert(offsetof(struct pack1_aligned_s, b) == 1, "pack(1) + aligned(8) offsetof(b) is 1");
   __ESBMC_assert(sizeof(struct pack1_aligned_s) == 8, "pack(1) + aligned(8) sizeof is 8");
+  __ESBMC_assert(offsetof(struct attr_packed_s, b) == 1, "packed offsetof(b) is 1");
+  __ESBMC_assert(
+    offsetof(struct unrelated_attr_s, b) == 4,
+    "unrelated attribute leaves layout alone");
   return 0;
 }
