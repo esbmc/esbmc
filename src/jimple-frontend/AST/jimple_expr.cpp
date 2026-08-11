@@ -574,6 +574,20 @@ exprt jimple_deref::to_exprt(
   return index;
 };
 
+expr2tc jimple_deref::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  expr2tc arr = base->to_expr2t(ctx, class_name, function_name);
+  expr2tc offset = index->to_expr2t(ctx, class_name, function_name);
+
+  // to_exprt assembles an index_exprt and then rewrites it in place into a
+  // dereference of pointer arithmetic; this is that result, built directly.
+  const type2tc &element = to_pointer_type(arr->type).subtype;
+  return dereference2tc(element, add2tc(arr->type, arr, offset));
+}
+
 exprt jimple_nondet::to_exprt(
   contextt &,
   const std::string &,
@@ -641,6 +655,24 @@ exprt jimple_static_member::to_exprt(
   }
   return op;
 };
+
+expr2tc jimple_static_member::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // make_true/make_false replace the expression outright, so to_exprt's
+  // gen_zero(to_typet(...)) is discarded on both of these arms.
+  if (from == "kotlin._Assertions" && field == "ENABLED")
+    return gen_true_expr();
+
+  if (from == "Main" && field == "$assertionsDisabled")
+    return gen_false_expr();
+
+  // The member access itself is still marked "Needs OOP members"; leave it on
+  // the migrating default.
+  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+}
 
 void jimple_virtual_member::from_json(const json &j)
 {
