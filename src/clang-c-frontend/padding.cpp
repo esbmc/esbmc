@@ -72,12 +72,17 @@ static bool follows_ext_int_padding(
          next->type().get_bool("#extint");
 }
 
-/* `#pragma pack(n)` caps each member's alignment at n bytes; the record's own
- * alignment is the max of the capped member alignments. Recorded by the
- * frontend as "max_field_alignment"; absent means uncapped. */
+/* A member's alignment demand as the record's attributes leave it: `packed`
+ * drops it to 1, `#pragma pack(n)` caps it at n bytes (recorded by the frontend
+ * as "max_field_alignment"; absent means uncapped). The record's own alignment
+ * is then the max over its members, which is why capping an aggregate is the
+ * same as capping each of its members. */
 static BigInt
 capped_alignment(const typet &member, const typet &record, const namespacet &ns)
 {
+  if (record.get_bool("packed"))
+    return 1;
+
   const BigInt a = alignment(member, ns);
   const std::string &cap = record.get_string("max_field_alignment");
   if (cap.empty())
@@ -214,13 +219,6 @@ static void add_padding(struct_typet &type, const namespacet &ns)
        *       non-packed but padded structs we still have the alignment
        *       guarantees for all the non-padding members.
        */
-      a = 1;
-    }
-    else if (type.get_bool("packed"))
-    {
-      /* Reached only when the record also carries an explicit alignment, which
-       * raises the record's own alignment but leaves its members densely
-       * packed. */
       a = 1;
     }
     else

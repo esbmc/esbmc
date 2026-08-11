@@ -397,39 +397,8 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if (get_struct_union_class_fields(*rd_def, t))
     return true;
 
-  // Check for packed and aligned attributes
-  if (rd_def->hasAttrs())
-  {
-    const auto &attrs = rd_def->getAttrs();
-    for (const auto &attr : attrs)
-    {
-      if (attr->getKind() == clang::attr::Packed)
-        t.set("packed", true);
-
-      /* clang models `#pragma pack(n)` as MaxFieldAlignmentAttr, not as
-       * attr::Packed: it caps every member's alignment at n bytes, and n == 1
-       * is exactly what attr::Packed means. */
-      if (attr->getKind() == clang::attr::MaxFieldAlignment)
-      {
-        const auto &mattr =
-          static_cast<const clang::MaxFieldAlignmentAttr &>(*attr);
-        const unsigned bytes = mattr.getAlignment() / config.ansi_c.char_width;
-        if (bytes == 1)
-          t.set("packed", true);
-        else if (bytes > 1)
-          t.set("max_field_alignment", bytes);
-      }
-
-      if (attr->getKind() == clang::attr::Aligned)
-      {
-        const clang::AlignedAttr &aattr =
-          static_cast<const clang::AlignedAttr &>(*attr);
-
-        if (process_aligned_attribute(aattr, t))
-          return true;
-      }
-    }
-  }
+  if (process_record_layout_attributes(*rd_def, t))
+    return true;
 
   /* We successfully constructed the type of this symbol; complete the
    * incomplete-type symbol with the now-complete type definition, in place.
@@ -5175,6 +5144,50 @@ clang_c_convertert::get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt)
   }
 
   return nullptr;
+}
+
+bool clang_c_convertert::process_record_layout_attributes(
+  const clang::RecordDecl &rd,
+  typet &t) const
+{
+  if (!rd.hasAttrs())
+    return false;
+
+  for (const auto &attr : rd.getAttrs())
+  {
+    switch (attr->getKind())
+    {
+    case clang::attr::Packed:
+      t.set("packed", true);
+      break;
+
+    /* clang models `#pragma pack(n)` as MaxFieldAlignmentAttr, not as
+     * attr::Packed: it caps every member's alignment at n bytes, and n == 1 is
+     * exactly what attr::Packed means. */
+    case clang::attr::MaxFieldAlignment:
+    {
+      const auto &mattr =
+        static_cast<const clang::MaxFieldAlignmentAttr &>(*attr);
+      const unsigned bytes = mattr.getAlignment() / config.ansi_c.char_width;
+      if (bytes == 1)
+        t.set("packed", true);
+      else if (bytes > 1)
+        t.set("max_field_alignment", bytes);
+      break;
+    }
+
+    case clang::attr::Aligned:
+      if (process_aligned_attribute(
+            static_cast<const clang::AlignedAttr &>(*attr), t))
+        return true;
+      break;
+
+    default:
+      break;
+    }
+  }
+
+  return false;
 }
 
 bool clang_c_convertert::process_aligned_attribute(
