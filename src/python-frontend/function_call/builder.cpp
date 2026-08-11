@@ -81,6 +81,7 @@ const std::string kLoopInvariant = "__loop_invariant";
 const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
 const std::string kEsbmcRequires = "__ESBMC_requires";
 const std::string kEsbmcEnsures = "__ESBMC_ensures";
+const std::string kEsbmcReturnValue = "__ESBMC_return_value";
 const std::string kEsbmcCover = "__ESBMC_cover";
 const std::string kEsbmcAtomicBegin = "__ESBMC_atomic_begin";
 const std::string kEsbmcAtomicEnd = "__ESBMC_atomic_end";
@@ -90,6 +91,47 @@ const std::string kPytJoin = "__pyt_join";
 const std::string kPytTerminate = "__pyt_terminate";
 const std::string kPyLockBlockAndCheck = "__ESBMC_pylock_block_and_check";
 const std::string kPyLockReleaseWaiters = "__pyt_lock_release_waiters";
+
+// True when the enclosing function yields nothing an ensures clause could
+// name: `-> None`, no annotation, or no enclosing function at all.
+static bool returns_no_value(const typet &t)
+{
+  return t.is_nil() || t == none_type() || t.id() == "empty";
+}
+
+typet function_call_builder::enclosing_return_type() const
+{
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+
+  const symbolt *sym = converter_.symbol_table().find_symbol(sid.to_string());
+  if (!sym || !sym->get_type().is_code())
+    return typet();
+
+  return to_code_type(sym->get_type()).return_type();
+}
+
+void function_call_builder::check_contract_call(
+  const symbol_id &function_id) const
+{
+  const std::string &clause = function_id.get_function();
+  if (clause != kEsbmcRequires && clause != kEsbmcEnsures)
+    return;
+
+  // goto_convert aborts on any other arity, so reject it here where the user
+  // still gets a line number and a suggestion.
+  if (call_["args"].size() != 1)
+    throw std::runtime_error(fmt::format(
+      "{} at line {} takes exactly one argument, got {}; combine conditions "
+      "with 'and'",
+      clause,
+      call_.value("lineno", 0),
+      call_["args"].size()));
+
+  check_contract_clause(call_["args"], clause);
+}
 
 // A contract clause is lowered into one ASSUME/ASSERT, so its argument has to
 // survive as a pure expression. Three Python constructs do not: a call binds
@@ -115,20 +157,49 @@ void function_call_builder::check_contract_clause(
   const std::string node_type = node.value("_type", "");
 
   if (node_type == "Call" || node_type == "Subscript")
+  {
+    const bool is_call = node_type == "Call";
+    const std::string callee =
+      is_call ? node["func"].value("id", "") : std::string();
     throw std::runtime_error(fmt::format(
       "{} clause at line {} contains {}; a contract clause must be a pure "
-      "expression",
+      "expression{}",
       clause,
       node.value("lineno", 0),
-      node_type == "Call" ? "a function call" : "a subscript"));
+      is_call ? "a function call" : "a subscript",
+      callee.rfind("__ESBMC_", 0) == 0
+        ? fmt::format(" ({} is not supported in Python clauses yet)", callee)
+        : ""));
+  }
 
   if (node_type == "Name")
   {
+    const std::string name = node.value("id", "");
+
+    if (name == kEsbmcReturnValue)
+    {
+      if (clause == kEsbmcRequires)
+        throw std::runtime_error(fmt::format(
+          "{} clause at line {} references {}; a precondition cannot mention "
+          "the return value",
+          clause,
+          node.value("lineno", 0),
+          kEsbmcReturnValue));
+
+      if (returns_no_value(enclosing_return_type()))
+        throw std::runtime_error(fmt::format(
+          "{} clause at line {} references {}, but '{}' returns None",
+          clause,
+          node.value("lineno", 0),
+          kEsbmcReturnValue,
+          converter_.current_function_name()));
+    }
+
     symbol_id sid(
       converter_.python_file(),
       converter_.current_classname(),
       converter_.current_function_name());
-    sid.set_object(node.value("id", ""));
+    sid.set_object(name);
 
     const symbolt *sym = converter_.symbol_table().find_symbol(sid.to_string());
     if (sym && sym->get_type() == any_type())
@@ -137,7 +208,7 @@ void function_call_builder::check_contract_clause(
         "determined; annotate the parameter so the clause constrains its value",
         clause,
         node.value("lineno", 0),
-        node.value("id", "")));
+        name));
   }
 
   for (const auto &child : node)
@@ -1193,10 +1264,7 @@ exprt function_call_builder::build() const
     }
   }
 
-  if (
-    function_id.get_function() == kEsbmcRequires ||
-    function_id.get_function() == kEsbmcEnsures)
-    check_contract_clause(call_["args"], function_id.get_function());
+  check_contract_call(function_id);
 
   // Loop invariants and function-contract clauses share one shape: a bodiless
   // `void f(bool)` whose call goto_convert lowers into a LOOP_INVARIANT or a

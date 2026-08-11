@@ -37,6 +37,12 @@ def test_user_typo_survives_alongside_intrinsics():
     assert "__ESBMC_ensures" not in kept
 
 
+def test_mypy_failure_without_error_lines_is_preserved():
+    report = "mypy: can't read file 'missing.py': No such file or directory\n"
+
+    assert _without_intrinsic_diagnostics(2, report) == (2, report)
+
+
 def test_non_name_errors_are_untouched():
     report = ('main.py:2: error: Incompatible return value type'
               '  [return-value]\n'

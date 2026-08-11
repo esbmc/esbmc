@@ -1015,7 +1015,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         {
           symbol_id ret_sid = create_symbol_id();
           symbolt *func_symbol = find_symbol(ret_sid.to_string());
-          if (func_symbol && func_symbol->get_type().is_code())
+          // A None-returning function has no value to name, and an
+          // empty-typed symbol crashes the encoder rather than failing here.
+          const typet ret_type =
+            func_symbol && func_symbol->get_type().is_code()
+              ? to_code_type(func_symbol->get_type()).return_type()
+              : typet();
+          if (
+            ret_type.is_not_nil() && ret_type != none_type() &&
+            ret_type.id() != "empty")
           {
             ret_sid.set_object(var_name);
             symbolt ret_symbol = create_symbol(
@@ -1023,7 +1031,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
               var_name,
               ret_sid.to_string(),
               get_location_from_decl(element),
-              to_code_type(func_symbol->get_type()).return_type());
+              ret_type);
             ret_symbol.lvalue = true;
             ret_symbol.file_local = true;
             expr = symbol_expr(*add_symbol_and_get_ptr(ret_symbol));

@@ -58,12 +58,24 @@ public:
 
 private:
   /*
+   * Validates a call to __ESBMC_requires / __ESBMC_ensures; a no-op for any
+   * other callee.
+   */
+  void check_contract_call(const symbol_id &function_id) const;
+
+  /*
    * Rejects a contract clause that does not lower to a pure expression.
    * Throws with a diagnostic naming the offending construct.
    */
   void check_contract_clause(
     const nlohmann::json &node,
     const std::string &clause) const;
+
+  /*
+   * Return type of the function currently being converted; nil when there is
+   * no enclosing function.
+   */
+  typet enclosing_return_type() const;
 
   python_converter &converter_;
   const nlohmann::json &call_;

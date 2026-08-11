@@ -864,6 +864,14 @@ static void emit_va_marker_call(
   t->location = function.location();
 }
 
+static bool contracts_enabled(const optionst &options)
+{
+  return !options.get_option("enforce-contract").empty() ||
+         !options.get_option("replace-call-with-contract").empty() ||
+         options.get_bool_option("enforce-all-contracts") ||
+         options.get_bool_option("replace-all-contracts");
+}
+
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,
   const exprt &function,
@@ -935,6 +943,14 @@ void goto_convertt::do_function_call_symbol(
       "Found __ESBMC_assigns call with {} arguments",
       arguments.size());
   }
+
+  // A contract clause states nothing outside contract mode. goto_sideeffects
+  // already drops it, but only for clauses that arrive as a side-effect
+  // expression; the Python frontend emits a direct FUNCTION_CALL, which never
+  // reaches that strip, so a live `requires` would be assumed and mask real
+  // bugs in the function it annotates.
+  if ((is_requires || is_ensures) && !contracts_enabled(options))
+    return;
 
   if (is_assume || is_assert || is_loop_invariant || is_requires || is_ensures)
   {
