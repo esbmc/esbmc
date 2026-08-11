@@ -4637,9 +4637,7 @@ exprt python_converter::apply_bool_dunder_for_not(
   return op == "Not" ? apply_bool_dunder(operand, location) : operand;
 }
 
-exprt python_converter::apply_bool_dunder(
-  exprt cond,
-  const locationt &location)
+exprt python_converter::apply_bool_dunder(exprt cond, const locationt &location)
 {
   typet value_type = ns.follow(cond.type());
   if (value_type.is_pointer())
@@ -4667,8 +4665,7 @@ exprt python_converter::apply_bool_dunder(
   bool_call.function() = symbol_expr(*bool_method);
   bool_call.type() = to_code_type(bool_method->get_type()).return_type();
   bool_call.location() = location;
-  bool_call.arguments().push_back(
-    object_is_ptr ? cond : gen_address_of(cond));
+  bool_call.arguments().push_back(object_is_ptr ? cond : gen_address_of(cond));
 
   exprt result = store_call_result(bool_call, location, "cond_bool");
   result.location() = location;
