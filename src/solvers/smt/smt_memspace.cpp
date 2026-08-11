@@ -427,7 +427,19 @@ smt_astt smt_solver_baset::init_pointer_obj(
    * yields a spurious counterexample. Types of alignment 1 constrain nothing. */
   if (type)
   {
-    const BigInt a = alignment(*type, ns);
+    BigInt a = alignment(*type, ns);
+
+    /* dereferencet::check_alignment() decides a scalar access from the offset
+     * within the object alone, i.e. it assumes the base carries at least the
+     * ABI's fundamental alignment -- the same assumption memory_alloc.cpp
+     * already makes for dynamic objects (C11 7.22.3). Give automatic and static
+     * objects that guarantee too, so the two do not answer "can this pointer be
+     * misaligned?" differently within one run. `packed` opts a type out of
+     * alignment altogether, and the dereference check skips it as well. */
+    const typet &followed = ns.follow(*type);
+    if (!followed.get_bool("packed"))
+      a = std::max(a, BigInt(config.ansi_c.max_alignment()));
+
     if (a > 1)
     {
       expr2tc mod =
