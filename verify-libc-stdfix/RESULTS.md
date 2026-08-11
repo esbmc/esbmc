@@ -791,11 +791,34 @@ natively-measured inputs in that window.
 
 Proof: `harness_expk_flush_zero.cpp` -- **FAILED**.
 
-A note on cost: this harness pins concrete inputs rather than sweeping the
-window symbolically. Correct rounding at s16.15 needs a 37-bit intermediate
-(camada's measured hardest-to-round bound), and the symbolic sweep did not
-finish in 10 minutes. The concrete inputs are enough to establish the defect,
-and the limitation is stated rather than left implicit.
+#### Symbolic coverage achieved, by changing solver
+
+The pinned-input version is superseded. The full symbolic window (3392 inputs)
+does discharge -- but only under **z3**:
+
+| harness | window | solver | time | verdict |
+|---|---|---|---|---|
+| `harness_expk_flush_symbolic` | 3392 inputs | bitwuzla | **>90 min, no verdict** | -- |
+| `harness_expk_flush_symbolic` | 3392 inputs | **z3** | **40.64s** | **FAILED** |
+| `harness_expk_flush_narrow` | 32 inputs | bitwuzla | 2.70s | FAILED |
+
+Worth recording as a solver-portfolio result rather than a limit of the
+approach: correct rounding at s16.15 needs a 37-bit intermediate, and the two
+backends differ by more than three orders of magnitude on that query. The
+earlier "does not finish in reasonable time" conclusion was true of bitwuzla
+only, and I should have tried the other backend before writing it down.
+
+Both counterexamples were confirmed against native libc:
+
+```
+bitwuzla (narrow): x = -11.0888672   exp = 0.000015281506   libc 0, want raw 1
+z3 (full window):  x = -11.0779419   exp = 0.000015449377   libc 0, want raw 1
+                                     half ulp = 0.000015258789
+```
+
+The native trace also confirms the mechanism directly: at `idx = 0`,
+`EXP_HI[0] = 0.0000305176` (one ulp) and `l2 = 0.974 < 1`, so the product
+underflows to zero.
 
 ### Scope
 
