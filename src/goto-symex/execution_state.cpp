@@ -477,15 +477,15 @@ bool execution_statet::check_if_ileaves_blocked()
   {
     // Only count this as truncation if a switch was actually available;
     // otherwise every terminal state would look truncated.
-    if (!art1->cs_bound_pruned)
-      for (unsigned int i = 0; i < threads_state.size(); ++i)
-        if (
-          i != active_thread && !threads_state[i].thread_ended &&
-          !threads_state[i].call_stack.empty())
-        {
-          art1->cs_bound_pruned = true;
-          break;
-        }
+    for (unsigned int i = 0; i < threads_state.size(); ++i)
+      if (
+        i != active_thread && !threads_state[i].thread_ended &&
+        !threads_state[i].call_stack.empty())
+      {
+        art1->cs_bound_pruned = true;
+        ++art1->reduction_stats.pruned_by_cs_bound;
+        break;
+      }
     return true;
   }
 
@@ -820,6 +820,8 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
+  if (threads_state.size() > art1->reduction_stats.peak_threads)
+    art1->reduction_stats.peak_threads = threads_state.size();
   preserved_paths.emplace_back();
   atomic_numbers.push_back(0);
 
@@ -1392,7 +1394,15 @@ std::size_t execution_statet::generate_hash() const
   // separate those -- two calls from the same caller sit at equal depth -- so
   // each frame's calling location is mixed in. Without it a bug reachable only
   // past the later state is pruned away in silence.
+  //
+  // The active thread is part of it for the same reason: equal pcs and equal
+  // values still leave two states scheduling differently, because MPOR's
+  // dependency chain and decide_ileave_direction's scan both key off which
+  // thread just ran. Omitting it collided such pairs, and
+  // post_hash_collision_cleanup marks every switch from the survivor explored,
+  // so the violating schedule was never generated (#6831).
   std::size_t h = l2->generate_l2_state_hash();
+  esbmct::hash_combine(h, active_thread);
   for (const auto &it : threads_state)
   {
     esbmct::hash_combine(h, it.source.pc->location_number);
