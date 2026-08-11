@@ -4684,6 +4684,56 @@ python_converter::scalar_tag_candidates(const nlohmann::json &if_node)
   return candidates;
 }
 
+/// Truth-testing an object calls its __bool__ when the class defines one. The
+/// caller has already resolved @p value_type to the struct behind @p cond
+/// (following a pointer if need be); a non-struct or a class without the dunder
+/// comes back unchanged.
+/// `not obj` is a truth test, so it dispatches __bool__ exactly as `if obj:`
+/// does. Kept as its own entry point so the unary-operator conversion stays a
+/// single statement.
+exprt python_converter::apply_bool_dunder_for_not(
+  const std::string &op,
+  exprt operand,
+  const locationt &location)
+{
+  return op == "Not" ? apply_bool_dunder(operand, location) : operand;
+}
+
+exprt python_converter::apply_bool_dunder(exprt cond, const locationt &location)
+{
+  typet value_type = ns.follow(cond.type());
+  if (value_type.is_pointer())
+    value_type = ns.follow(value_type.subtype());
+  if (!value_type.is_struct())
+    return cond;
+
+  const std::string class_name =
+    extract_class_name_from_tag(to_struct_type(value_type).tag().as_string());
+  if (class_name.empty())
+    return cond;
+
+  symbolt *bool_method = find_dunder_method(class_name, "__bool__");
+  if (!bool_method)
+    return cond;
+
+  // __bool__ expects self by reference. A migrated instance is already a
+  // `Class*` pointer (pass it through); a by-value struct must be a named
+  // object whose address we take.
+  const bool object_is_ptr = cond.type().is_pointer();
+  if (!object_is_ptr && !cond.is_symbol())
+    cond = store_call_result(cond, location, "cond_obj");
+
+  side_effect_expr_function_callt bool_call;
+  bool_call.function() = symbol_expr(*bool_method);
+  bool_call.type() = to_code_type(bool_method->get_type()).return_type();
+  bool_call.location() = location;
+  bool_call.arguments().push_back(object_is_ptr ? cond : gen_address_of(cond));
+
+  exprt result = store_call_result(bool_call, location, "cond_bool");
+  result.location() = location;
+  return result;
+}
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // A walrus in a `while` test re-evaluates every iteration, but get_named_expr
@@ -5042,35 +5092,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         value_type = ns.follow(value_type.subtype());
 
       // Objects in conditions are converted with __bool__() when available.
-      if (value_type.is_struct())
-      {
-        if (const std::string class_name = extract_class_name_from_tag(
-              to_struct_type(value_type).tag().as_string());
-            !class_name.empty())
-        {
-          if (symbolt *bool_method = find_dunder_method(class_name, "__bool__"))
-          {
-            exprt bool_object = cond;
-            // __bool__ expects self by reference. A migrated instance is
-            // already a `Class*` pointer (pass it through); a by-value struct
-            // must be a named object whose address we take.
-            const bool object_is_ptr = bool_object.type().is_pointer();
-            if (!object_is_ptr && !bool_object.is_symbol())
-              bool_object =
-                store_call_result(bool_object, location, "cond_obj");
-            const code_typet &method_type =
-              to_code_type(bool_method->get_type());
-            side_effect_expr_function_callt bool_call;
-            bool_call.function() = symbol_expr(*bool_method);
-            bool_call.type() = method_type.return_type();
-            bool_call.location() = location;
-            bool_call.arguments().push_back(
-              object_is_ptr ? bool_object : gen_address_of(bool_object));
-            cond = store_call_result(bool_call, location, "cond_bool");
-            cond.location() = location;
-          }
-        }
-      }
+      cond = apply_bool_dunder(cond, location);
 
       typet list_type = type_handler_.get_list_type();
       // Python treats lists in conditions by their size, for example:
@@ -5829,6 +5851,10 @@ exprt python_converter::get_block(
 
       current_element_type = bool_type();
       exprt test = get_expr(element["test"]);
+      // An object asserted directly is truth-tested like any condition, so a
+      // class with __bool__ decides the answer. Without this `assert obj` cast
+      // the object to bool and passed whatever the dunder said.
+      test = apply_bool_dunder(test, get_location_from_decl(element));
       if (test.statement() == "cpp-throw")
       {
         test.location() = get_location_from_decl(element);

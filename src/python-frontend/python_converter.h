@@ -1264,6 +1264,15 @@ private:
 
   static std::string op_to_dunder(const std::string &op);
   static std::string op_to_rdunder(const std::string &op);
+  /// Rewrite @p cond into a call to its class's __bool__ when there is one.
+  exprt apply_bool_dunder(exprt cond, const locationt &location);
+
+  /// apply_bool_dunder for the `not` operator; a no-op for any other @p op.
+  exprt apply_bool_dunder_for_not(
+    const std::string &op,
+    exprt operand,
+    const locationt &location);
+
   symbolt *find_dunder_method(
     const std::string &class_name,
     const std::string &dunder_name);
