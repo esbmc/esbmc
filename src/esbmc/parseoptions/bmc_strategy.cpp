@@ -573,6 +573,51 @@ int esbmc_parseoptionst::do_context_bound_deepening(
   return 0;
 }
 
+// Falsification-only pre-pass over a deepening context bound (issue #6831, W4).
+//
+// --incremental-context-bound cannot compose with the unwinding strategies
+// because both would own the verdict (driver.cpp, #6480). This composes by
+// giving up the half that collides: every round here under-approximates -- the
+// context bound truncates the schedule space and the unwind bound truncates the
+// loops -- so a violation is genuine, while finding none is not evidence of
+// anything and is not reported. The chosen strategy then runs untouched.
+bool esbmc_parseoptionst::falsify_with_bounded_schedules(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  const int max_cb = atoi(options.get_option("falsify-context-bound").c_str());
+  if (max_cb < 1)
+    return false;
+
+  // Each round reaches its own set of claims and a coverage run reports the
+  // union, so the pre-pass would print a [Coverage] block per bound and fold
+  // its truncated rounds into the figure the strategy reports.
+  if (is_coverage)
+  {
+    log_warning("--falsify-context-bound is ignored on a coverage run");
+    return false;
+  }
+
+  const optionst::option_mapt saved = options.option_map;
+
+  options.set_option("suppress-bounded-success", true);
+  options.set_option("no-unwinding-assertions", true);
+  if (options.get_option("unwind").empty())
+    options.set_option("unwind", "1");
+
+  bool violated = false;
+  for (int cb = 1; cb <= max_cb && !violated; ++cb)
+  {
+    options.set_option("context-bound", std::to_string(cb));
+    bmct bmc(goto_functions, options, context);
+    log_progress("Falsifying with context bound {}", cb);
+    violated = do_bmc(bmc) == P_SATISFIABLE;
+  }
+
+  options.option_map = saved;
+  return violated;
+}
+
 int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");

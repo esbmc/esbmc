@@ -409,6 +409,11 @@ int esbmc_parseoptionst::doit()
   if (options.get_bool_option("skip-bmc"))
     return 0;
 
+  // A violation found under a bounded schedule space is genuine whichever
+  // strategy owns the run, so this precedes the dispatch rather than joining it.
+  if (falsify_with_bounded_schedules(options, goto_functions))
+    return 1;
+
   // Now run one of the chosen strategies
   int res;
   if (cmdline.isset("incremental-context-bound"))
