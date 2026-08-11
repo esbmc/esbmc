@@ -383,6 +383,11 @@ protected:
 
   scheduler_framet &get_cur_scheduler_frame();
   const scheduler_framet &get_cur_scheduler_frame() const;
+
+  /** Wake any sleeping thread the transition just taken is dependent on.
+   *  A no-op unless --sleep-sets is set. */
+  void wake_dependent_sleepers();
+
   bool dfs_explore_thread(unsigned int tid);
   void erase_current_frame();
 

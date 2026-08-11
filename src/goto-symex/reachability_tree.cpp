@@ -799,6 +799,23 @@ void reachability_treet::erase_current_frame()
   cur_frame_it = prev;
 }
 
+// A sleeping thread stays asleep only while the transitions taken since it was
+// put to sleep remain independent of the one it would take. The transition just
+// taken is only known once taken, so this runs after the step rather than at
+// create_next_state.
+void reachability_treet::wake_dependent_sleepers()
+{
+  if (!sleep_sets)
+    return;
+
+  scheduler_framet &f = get_cur_scheduler_frame();
+  const execution_statet &es = get_cur_state();
+  for (auto it = f.sleeping.begin(); it != f.sleeping.end();)
+    it = es.check_mpor_dependency(es.active_thread, it->second)
+           ? f.sleeping.erase(it)
+           : std::next(it);
+}
+
 goto_symext::symex_resultt reachability_treet::get_next_formula()
 {
   assert(!exploration_frames.empty() && "Must setup RT before exploring");
@@ -823,19 +840,7 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
       update_hash_collision_set();
     }
 
-    // A sleeping thread stays asleep only while the transitions taken since it
-    // was put to sleep remain independent of the one it would take. The
-    // transition just taken is only known once taken, so the filter runs here
-    // rather than at create_next_state.
-    if (sleep_sets)
-    {
-      scheduler_framet &f = get_cur_scheduler_frame();
-      const execution_statet &es = get_cur_state();
-      for (auto it = f.sleeping.begin(); it != f.sleeping.end();)
-        it = es.check_mpor_dependency(es.active_thread, it->second)
-               ? f.sleeping.erase(it)
-               : std::next(it);
-    }
+    wake_dependent_sleepers();
 
     if (por)
     {
