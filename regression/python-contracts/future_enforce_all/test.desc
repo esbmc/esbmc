@@ -1,0 +1,4 @@
+FUTURE
+main.py
+--enforce-all-contracts
+^VERIFICATION SUCCESSFUL$

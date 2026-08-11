@@ -649,6 +649,10 @@ Every unsupported construct reports what it is rather than failing obscurely:
 ERROR: __ESBMC_assigns at line 5 is not supported in Python contracts yet
 ```
 
+Each one also has a `FUTURE` regression test stating the verdict it should
+produce once implemented, so the test flips from passing to "consider
+reclassifying" the moment support lands.
+
 Without a contract flag the clauses state nothing and are dropped, so an
 annotated file verifies exactly as it did before it was annotated.
 
