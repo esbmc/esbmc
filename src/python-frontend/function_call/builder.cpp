@@ -142,8 +142,7 @@ bool function_call_builder::is_len_call(const symbol_id &function_id) const
 
 /// True when @p arg is `name[...]` whose slice node is of kind @p slice_kind
 /// and whose base is a plain Name; the caller then tests that name's type.
-static bool
-is_name_subscript(const nlohmann::json &arg, const char *slice_kind)
+static bool is_name_subscript(const nlohmann::json &arg, const char *slice_kind)
 {
   return arg["_type"] == "Subscript" && arg.contains("slice") &&
          arg["slice"].is_object() &&
