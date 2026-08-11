@@ -52,6 +52,21 @@ exprt jimple_return::to_exprt(
   return ret_expr;
 }
 
+expr2tc jimple_return::to_code2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name,
+  const locationt &loc) const
+{
+  // code_returnt always carries one operand, nil when there is no value, and
+  // migrate_expr maps that nil to a null expr2tc.
+  expr2tc value;
+  if (expr)
+    value = expr->to_expr2t(ctx, class_name, function_name);
+
+  return code_return2tc(value, loc);
+}
+
 std::string jimple_return::to_string() const
 {
   return "Return: (Nothing)";
@@ -396,6 +411,66 @@ exprt jimple_invoke::to_exprt(
   }
   block.operands().push_back(call);
   return block;
+}
+
+expr2tc jimple_invoke::to_code2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name,
+  const locationt &loc) const
+{
+  // TODO: Move intrinsics to backend
+  static const std::set<std::string> modelled_elsewhere = {
+    "kotlin.jvm.internal.Intrinsics",
+    "java.lang.Runtime",
+    "java.lang.Object",
+    "java.util.Random",
+    "java.lang.String",
+    "java.lang.AssertionError"};
+
+  if (modelled_elsewhere.count(base_class))
+    return code_skip2tc(get_empty_type(), loc);
+
+  const locationt &nil = static_cast<const locationt &>(get_nil_irep());
+
+  std::ostringstream oss;
+  oss << base_class << ":" << method;
+  expr2tc function = symbol_expr2tc(*ctx.find_symbol(oss.str()));
+
+  std::vector<expr2tc> args, ops;
+
+  // The @this / @parameterN assignments mirror to_exprt: the arguments alone
+  // do not bind the callee's parameter symbols.
+  if (variable != "")
+  {
+    expr2tc this_expression =
+      jimple_symbol(variable).to_expr2t(ctx, class_name, function_name);
+    args.push_back(this_expression);
+    ops.push_back(code_assign2tc(
+      symbol_expr2tc(
+        *ctx.find_symbol(get_symbol_name(base_class, method, "@this"))),
+      this_expression,
+      nil));
+  }
+
+  for (std::size_t i = 0; i < parameters.size(); i++)
+  {
+    expr2tc parameter_expr =
+      parameters[i]->to_expr2t(ctx, class_name, function_name);
+    args.push_back(parameter_expr);
+
+    std::ostringstream parameter_name;
+    parameter_name << "@parameter" << i;
+    ops.push_back(code_assign2tc(
+      symbol_expr2tc(*ctx.find_symbol(
+        get_symbol_name(base_class, method, parameter_name.str()))),
+      parameter_expr,
+      nil));
+  }
+
+  ops.push_back(code_function_call2tc(expr2tc(), function, args, nil));
+
+  return code_block2tc(ops, loc, nil);
 }
 
 std::string jimple_throw::to_string() const

@@ -56,6 +56,15 @@ exprt jimple_symbol::to_exprt(
   return symbol_expr(s);
 };
 
+expr2tc jimple_symbol::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  return symbol_expr2tc(
+    *ctx.find_symbol(get_symbol_name(class_name, function_name, var_name)));
+}
+
 std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
 {
   std::string expr_type;
