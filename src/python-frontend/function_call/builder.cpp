@@ -133,7 +133,7 @@ void function_call_builder::check_contract_call(
 
   if (is_unsupported_contract_intrinsic(clause))
     throw std::runtime_error(fmt::format(
-      "{} at line {} is not supported in Python contracts yet",
+      "{} at line {} is not supported by the Python frontend yet",
       clause,
       call_.value("lineno", 0)));
 
@@ -267,7 +267,8 @@ void function_call_builder::check_contract_clause(
       node.value("lineno", 0),
       describe_clause_node(node_type),
       is_unsupported_contract_intrinsic(callee)
-        ? fmt::format(" ({} is not supported in Python contracts yet)", callee)
+        ? fmt::format(
+            " ({} is not supported by the Python frontend yet)", callee)
         : ""));
   }
 
