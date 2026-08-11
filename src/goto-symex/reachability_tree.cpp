@@ -769,6 +769,7 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
     {
       if (check_for_hash_collision())
       {
+        ++schedule_stats.pruned_by_hash;
         post_hash_collision_cleanup();
         break;
       }
@@ -784,6 +785,7 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
         // This transition is pruned by MPOR. If we already recorded its state
         // hash above, drop it again so the seen set reflects the state explored
         // before this transition rather than the pruned state.
+        ++schedule_stats.pruned_by_mpor;
         if (state_hashing)
           remove_hash_collision_entry();
         break;
@@ -811,6 +813,7 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
     cur_frame_it->state->add_memory_leak_checks();
 
   has_complete_formula = false;
+  ++schedule_stats.explored;
 
   return get_cur_state().get_symex_result();
 }

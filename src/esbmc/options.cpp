@@ -207,6 +207,10 @@ const struct group_opt_templ all_cmd_options[] = {
      {"python-list-compare-depth",
       boost::program_options::value<int>()->default_value(4)->value_name("nr"),
       "Set maximum nesting depth for Python list comparison (default is 4)"},
+     {"clang-c-irep2-adjust",
+      NULL,
+      "Run the IREP2-native C adjuster alongside the legacy adjust pass "
+      "(Phase 6 migration; experimental, default off)"},
      {"python-irep2-adjust",
       NULL,
       "Run the IREP2-native Python adjuster alongside the legacy adjust pass "

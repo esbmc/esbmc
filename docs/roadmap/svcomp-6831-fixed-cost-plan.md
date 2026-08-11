@@ -1,6 +1,7 @@
 # Plan — the per-task cost every SV-COMP run pays (issue #6831, cause 2)
 
-**Status:** plan only. No code shipped. Nothing here has been implemented.
+**Status:** in progress. W3.1 (vector-backed read table) is shipped; everything
+else here is still plan only.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 2 —
 a general slowdown tipping tasks already at the limit*, ~198 of 489 lost tasks,
 led by 131 `Juliet_Test` no-overflow tasks at a median of 99.1 s of a 100 s
@@ -154,8 +155,9 @@ Interleaved A/B between two binaries differing only in that container, 15 pairs:
 | ratio | 0.83 | **0.80** |
 
 **20 % off GOTO program creation, 17 % off the wall clock of every run**, and
-`ctest -R "regression/esbmc/0[0-3]"` passes 61/61. This is a prototype measured
-for this plan and then reverted — it is W3, not shipped work. (Measured
+`ctest -R "regression/esbmc/0[0-3]"` passes 61/61. This was a prototype measured
+for this plan and then reverted; it has since shipped as W3.1, which reproduced
+the ratio (×0.805 on GOTO creation, 15 interleaved pairs). (Measured
 sequentially rather than interleaved, the same change first appeared to be worth
 15 % and then appeared to be a regression; hence the methodology note above.)
 
@@ -200,23 +202,53 @@ since a trivial program measures only the fixed term.
 
 Hypotheses to separate, cheapest first:
 
-1. **A per-task constant misread as a ratio.** If the 32-test median is
-   dominated by short tests, a fixed +0.15 s *is* a ~3.5 % ratio at ~4 s and the
-   two terms are one. Check the ratio against test runtime before assuming a
-   multiplicative mechanism exists at 99 s.
-2. **More model code reaching symex.** If commits in the window changed which OM
-   bodies get pulled in by dependency closure (the CBMC memory primitives of
-   #6708 are the obvious candidate, since they touch allocation modelling every
-   task uses), symex and VCC counts move for every task. Measurable directly:
-   compare VCC counts and `Symex completed in` between the two builds on the
-   same input.
-3. **Binary-size effects** (95.1 → 100.9 MB): i-cache/iTLB pressure. Last, and
-   only if 1 and 2 are excluded — it is the hardest to act on.
+1. ~~**A per-task constant misread as a ratio.**~~ **Refuted, from the issue's
+   own data.** The runtime-bucket table needs no new measurement: median delta
+   is 0.19 s and 0.18 s in the 0–1 s and 1–2 s buckets — that flat pair *is* the
+   fixed term — and then climbs to **1.89 s** at 40–100 s. A fixed cost is
+   constant in absolute terms and cannot grow 10×, so a runtime-proportional
+   term does exist at long runtimes. Subtracting the ~0.18 s fixed part puts it
+   nearer **2.4 %** than the headline 3.5 %.
+2. ~~**More model code reaching symex.**~~ **Prime suspect refuted.** Rather
+   than diff the two builds 183 commits apart, isolate the candidate: current
+   master against current master with only the ten `__CPROVER_*` bodies of
+   `5c9109d54c` (#6708) deleted from `builtin_libs.c`. On a 2,600-iteration C
+   loop under `--unwind 2601 --overflow-check` (19.7 s wall, 18.0 s symex — in
+   the band this workstream asks for), the two builds are indistinguishable
+   where it counts:
+
+   | | with #6708 | without |
+   |---|---|---|
+   | VCCs generated | 41,603 | 41,603 |
+   | symex assignments | 39,028 | 39,028 |
+   | remaining after simplification | 10,592 | 10,592 |
+   | `Symex completed in` | 23.05 s | 23.29 s |
+
+   Identical counts mean identical symex work, so #6708 contributes nothing to
+   the multiplicative term. Some *other* commit in the window may still move
+   what reaches symex; the obvious candidate no longer does.
+
+   **Side finding, for W1.** All ten primitives are nonetheless linked *with
+   bodies* into the GOTO program of `int main(void){return 0;}`, which calls
+   none of them, and nothing else in the OM references them. The dependency
+   closure is not excluding them, so they are dead weight in every C task —
+   fixed cost, not multiplicative, but exactly the kind of thing W1 exists to
+   stop paying for.
+3. **Binary-size effects** (95.1 → 100.9 MB): i-cache/iTLB pressure. Now the
+   leading unrefuted hypothesis, and the hardest to act on.
 
 **Exit:** a named commit or a named mechanism for the 3.5 %, with before/after
 timings on a task in the 10–100 s band, or a demonstration that the term is
 hypothesis 1 and no multiplicative mechanism exists. Everything else in this
 plan is worth doing regardless; **only W0 recovers the 131 Juliet tasks.**
+
+**Still open.** The term is real (hypothesis 1 is refuted, so the exit cannot be
+taken that way) and it is not #6708. What remains is the bisect this workstream
+originally called for, over the 183 commits in the window, with a long-running
+task as the oracle — but now with a sharper stopping rule than "the ratio moved":
+VCC count and symex assignments, which the hypothesis-2 probe shows are stable
+under a change that only adds unreferenced model code. A commit that moves those
+counts is the mechanism; one that moves only wall time is hypothesis 3.
 
 ### W1 — Split the blob so a task loads only its language's models
 
@@ -264,11 +296,14 @@ symbols present (3,847); `esbmc --binary` round-trip regressions pass.
 
 Independent of W1/W2, no format change:
 
-1. **Vector-backed `ireps_on_read`** (§2.5): measured 20 % off GOTO creation,
-   61/61 on the sanity subset. Needs a defensive check that ids really are
-   dense — the resize path in the prototype handles a sparse stream correctly,
-   but the invariant should be asserted, not assumed.
-2. **Do not populate a discarded `goto_functionst`** (§2.6): ~10 ms.
+1. **Vector-backed `ireps_on_read`** (§2.5): **shipped.** Landed as a plain
+   `std::vector<irept>` rather than the prototype's `pair<bool, irept>`: ids are
+   dense, so a first occurrence is always exactly the next index, and that is
+   checked (`id > size()` is a corrupt stream) instead of a presence flag. The
+   slot is claimed before `read_irep()` recurses, since children are numbered
+   after their parent. Re-measured interleaved on every frontend — GOTO creation
+   ×0.805 (C, 15 pairs), ×0.883 (C++, 12), ×0.927 (Python, 12).
+2. **Do not populate a discarded `goto_functionst`** (§2.6): ~10 ms. Not started.
 
 **Exit:** both landed with before/after timings, full regression suite green,
 `--binary` reading of externally-produced goto binaries unaffected.
