@@ -2117,18 +2117,16 @@ void goto_convert_functionst::rename_types(
       }
     }
 
-    /* An alignment specifier written at the declaration (C11 6.7.5p2) lives on
-     * this symbol type, while type2 carries only the tag's own alignment.
-     * Substituting wholesale would drop it, so keep the stricter of the two:
-     * the specifier can only strengthen an object's alignment. */
+    /* An alignment specifier written at the declaration lives on this symbol
+     * type, while type2 carries only the tag's own alignment. Substituting
+     * wholesale would drop it, so keep the stricter of the two: a specifier
+     * "shall not specify an alignment that is less strict than the alignment
+     * that would otherwise be required" (C11 6.7.5). */
     const irept &decl_alignment = type.find("alignment");
-    if (decl_alignment.is_not_nil())
-    {
-      const BigInt decl_a = string2integer(
-        static_cast<const exprt &>(decl_alignment).cformat().as_string());
-      if (decl_a > alignment(type2, ns))
-        type2.set("alignment", decl_alignment);
-    }
+    if (
+      decl_alignment.is_not_nil() &&
+      alignment(static_cast<const typet &>(type), ns) > alignment(type2, ns))
+      type2.set("alignment", decl_alignment);
 
     type = type2;
     return;
