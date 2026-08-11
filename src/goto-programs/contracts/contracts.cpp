@@ -175,21 +175,63 @@ bool code_contractst::is_compiler_generated(
   return false;
 }
 
+bool code_contractst::declares_contracts(const symbolt &func_sym) const
+{
+  auto it = goto_functions.function_map.find(func_sym.id);
+  if (it == goto_functions.function_map.end() || !it->second.body_available)
+    return false;
+
+  return has_contracts(it->second.body) ||
+         is_annotated_contract_function(func_sym);
+}
+
 symbolt *code_contractst::find_function_symbol(const std::string &function_name)
 {
   // Exact match (handles full IDs like "c:@F@fst#*1I#" passed by wildcard expansion)
   symbolt *sym = context.find_symbol(function_name);
   if (sym != nullptr)
     return sym;
-  // C convention: c:@F@funcname
-  std::string func_id = "c:@F@" + function_name;
-  sym = context.find_symbol(func_id);
-  if (sym != nullptr)
-    return sym;
-  // C++ no-parameter free function: c:@F@funcname#
-  sym = context.find_symbol(func_id + "#");
-  if (sym != nullptr)
-    return sym;
+
+  // A short name is resolved against every mode's symbols, and the operational
+  // models define plenty of ordinary names. Whichever candidate actually
+  // carries a contract is the one the user annotated, so prefer it over
+  // whatever the naming conventions below happen to match first: a Python
+  // `add` never has the id `c:@F@add`, but umath.c does.
+  symbolt *annotated = nullptr;
+  bool annotated_ambiguous = false;
+  forall_goto_functions (it, goto_functions)
+  {
+    symbolt *candidate = context.find_symbol(it->first);
+    if (
+      candidate && candidate->get_type().is_code() &&
+      id2string(candidate->name) == function_name &&
+      declares_contracts(*candidate))
+    {
+      if (annotated != nullptr)
+      {
+        annotated_ambiguous = true;
+        break;
+      }
+      annotated = candidate;
+    }
+  }
+  if (annotated != nullptr && !annotated_ambiguous)
+    return annotated;
+
+  // Two annotated candidates share the name: skip the convention lookups so
+  // the loop below reports the ambiguity instead of silently picking one.
+  if (!annotated_ambiguous)
+  {
+    // C convention: c:@F@funcname
+    std::string func_id = "c:@F@" + function_name;
+    sym = context.find_symbol(func_id);
+    if (sym != nullptr)
+      return sym;
+    // C++ no-parameter free function: c:@F@funcname#
+    sym = context.find_symbol(func_id + "#");
+    if (sym != nullptr)
+      return sym;
+  }
   // C++ general fallback: search by short name (sym->name) to handle
   // parameterized free functions like c:@F@fst#*1I# where the user passes
   // just "fst" via --enforce-contract. Detect ambiguity when multiple

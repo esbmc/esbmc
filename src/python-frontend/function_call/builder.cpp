@@ -116,10 +116,27 @@ static bool needs_bool_intrinsic_symbol(const std::string &name)
          name == kEsbmcEnsures;
 }
 
+// Contract intrinsics the Python frontend does not lower yet. Named so a use
+// reports why rather than reaching the undefined-function stub, which fails as
+// an unreachable assertion and explains nothing.
+static bool is_unsupported_contract_intrinsic(const std::string &name)
+{
+  return name == "__ESBMC_assigns" || name == "__ESBMC_old" ||
+         name == "__ESBMC_is_fresh" || name == "__ESBMC_forall" ||
+         name == "__ESBMC_exists";
+}
+
 void function_call_builder::check_contract_call(
   const symbol_id &function_id) const
 {
   const std::string &clause = function_id.get_function();
+
+  if (is_unsupported_contract_intrinsic(clause))
+    throw std::runtime_error(fmt::format(
+      "{} at line {} is not supported in Python contracts yet",
+      clause,
+      call_.value("lineno", 0)));
+
   if (clause != kEsbmcRequires && clause != kEsbmcEnsures)
     return;
 
@@ -249,8 +266,8 @@ void function_call_builder::check_contract_clause(
       clause,
       node.value("lineno", 0),
       describe_clause_node(node_type),
-      callee.rfind("__ESBMC_", 0) == 0
-        ? fmt::format(" ({} is not supported in Python clauses yet)", callee)
+      is_unsupported_contract_intrinsic(callee)
+        ? fmt::format(" ({} is not supported in Python contracts yet)", callee)
         : ""));
   }
 

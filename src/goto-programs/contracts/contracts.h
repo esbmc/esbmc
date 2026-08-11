@@ -122,6 +122,11 @@ public:
   /// \brief Diagnostic for such a call, empty when there is none.
   std::string clause_call_reason(const goto_programt &body) const;
 
+  /// \brief Whether \p func_sym has a body carrying contract clauses, or the
+  ///   __ESBMC_contract annotation. Used to pick the function the user
+  ///   annotated when a short name matches symbols from several modes.
+  bool declares_contracts(const symbolt &func_sym) const;
+
   /// \brief Per-field snapshot for pointer-struct-field assigns compliance.
   /// Captures the pre-call value of a field NOT in the assigns clause so that
   /// the post-call assertion can verify it is unchanged.
