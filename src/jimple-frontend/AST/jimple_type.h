@@ -2,6 +2,9 @@
 #define ESBMC_JIMPLE_TYPE_H
 
 #include <jimple-frontend/AST/jimple_ast.h>
+#include <irep2/irep2_type.h>
+#include <irep2/irep2_utils.h>
+#include <util/irep/migrate.h>
 #include <util/irep/std_code.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -14,6 +17,14 @@ public:
   virtual std::string to_string() const override;
   virtual typet to_typet(const contextt &ctx) const;
 
+  /**
+   * @brief IREP2 form of to_typet, for the natively-built expressions.
+   *
+   * Kept parallel rather than replacing to_typet: the legacy one still feeds
+   * create_jimple_symbolt, which takes a typet.
+   */
+  virtual type2tc to_type2t(const contextt &ctx) const;
+
   bool is_array() const
   {
     return dimensions > 0;
@@ -24,6 +35,7 @@ public:
 
 protected:
   typet get_base_type(const contextt &ctx) const;
+  type2tc get_base_type2(const contextt &ctx) const;
   typet get_builtin_type() const;
 
   typet get_arr_type(const contextt &ctx) const
@@ -32,6 +44,15 @@ protected:
     typet ptr_type = pointer_typet(base);
     for (int i = 1; i < dimensions; i++)
       ptr_type = pointer_typet(ptr_type);
+
+    return ptr_type;
+  }
+
+  type2tc get_arr_type2(const contextt &ctx) const
+  {
+    type2tc ptr_type = pointer_type2tc(get_base_type2(ctx));
+    for (int i = 1; i < dimensions; i++)
+      ptr_type = pointer_type2tc(ptr_type);
 
     return ptr_type;
   }

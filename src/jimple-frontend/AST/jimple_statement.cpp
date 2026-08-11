@@ -218,6 +218,40 @@ exprt jimple_assignment::to_exprt(
   return assign;
 }
 
+expr2tc jimple_assignment::to_code2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name,
+  const locationt &loc) const
+{
+  // No is_skip arm to mirror the one in to_exprt: is_skip is initialised false
+  // and assigned nowhere in the tree, so that arm is unreachable in both
+  // copies. Reproducing it here would be dead instrumentation.
+
+  // Both invoke forms rewrite their own left-hand side and lower to a call
+  // rather than to an assignment, so they stay on the migrating default.
+  auto dyn_expr = std::dynamic_pointer_cast<jimple_expr_invoke>(rhs);
+  auto dyn2_expr = std::dynamic_pointer_cast<jimple_virtual_invoke>(rhs);
+
+  if (
+    (dyn_expr && !dyn_expr->is_nondet_call() &&
+     !dyn_expr->is_intrinsic_method) ||
+    (dyn2_expr && !dyn2_expr->is_nondet_call()))
+    return jimple_method_field::to_code2t(ctx, class_name, function_name, loc);
+
+  expr2tc target = lhs->to_expr2t(ctx, class_name, function_name);
+  expr2tc source = rhs->to_expr2t(ctx, class_name, function_name);
+
+  // The two c_typecast copies agreed on the conversions jimple can produce
+  // only after esbmc/esbmc#6873 aligned the constant fold; jimple_type builds
+  // nothing but int, bool, void and pointers, so no other divergence applies
+  // (docs/roadmap/scope-coupled-arith-assign-conversion.md §20).
+  namespacet ns(ctx);
+  c_implicit_typecast(source, target->type, ns);
+
+  return code_assign2tc(target, source, loc);
+}
+
 std::string jimple_if::to_string() const
 {
   std::ostringstream oss;

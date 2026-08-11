@@ -262,6 +262,17 @@ exprt jimple_cast::to_exprt(
   return from_expr;
 };
 
+expr2tc jimple_cast::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  expr2tc from_expr = from->to_expr2t(ctx, class_name, function_name);
+  namespacet ns(ctx);
+  c_implicit_typecast(from_expr, to->to_type2t(ctx), ns);
+  return from_expr;
+}
+
 void jimple_lengthof::from_json(const json &j)
 {
   from = get_expression(j.at("expression"));
@@ -537,6 +548,44 @@ exprt jimple_newarray::to_exprt(
   return sideeffect;
 };
 
+expr2tc jimple_newarray::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  typet base_type = type->to_typet(ctx);
+
+  // to_exprt's temp symbol only ever becomes the lhs of a call it then
+  // discards, but it is still entered into the context; keep that side effect.
+  symbolt tmp_symbol =
+    get_temp_symbol(pointer_typet(base_type), class_name, function_name);
+  ctx.move_symbol_to_context(tmp_symbol);
+
+  const type2tc uint2 = migrate_type(uint_type());
+
+  expr2tc alloc_size = size->to_expr2t(ctx, class_name, function_name);
+  if (is_nil_expr(alloc_size))
+    alloc_size = constant_int2tc(uint2, BigInt(1));
+
+  symbolt alloca = get_allocation_function();
+  symbolt &alloca_symbol = *ctx.move_symbol_to_context(alloca);
+
+  int type_width = 64;
+  if (!(base_type.is_pointer() && base_type.subtype().is_pointer()))
+    type_width = std::stoi(
+      (base_type.is_pointer() ? base_type.subtype().width() : base_type.width())
+        .as_string());
+
+  expr2tc bytes =
+    mul2tc(uint2, alloc_size, constant_int2tc(uint2, BigInt(type_width)));
+
+  return side_effect_function_call2tc(
+    migrate_type(
+      static_cast<const typet &>(alloca_symbol.get_type().return_type())),
+    symbol_expr2tc(alloca_symbol),
+    {bytes});
+}
+
 void jimple_deref::from_json(const json &j)
 {
   base = get_expression(j.at("base"));
@@ -562,6 +611,20 @@ exprt jimple_deref::to_exprt(
 
   return index;
 };
+
+expr2tc jimple_deref::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  expr2tc arr = base->to_expr2t(ctx, class_name, function_name);
+  expr2tc offset = index->to_expr2t(ctx, class_name, function_name);
+
+  // to_exprt assembles an index_exprt and then rewrites it in place into a
+  // dereference of pointer arithmetic; this is that result, built directly.
+  const type2tc &element = to_pointer_type(arr->type).subtype;
+  return dereference2tc(element, add2tc(arr->type, arr, offset));
+}
 
 exprt jimple_nondet::to_exprt(
   contextt &,
@@ -630,6 +693,24 @@ exprt jimple_static_member::to_exprt(
   }
   return op;
 };
+
+expr2tc jimple_static_member::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // make_true/make_false replace the expression outright, so to_exprt's
+  // gen_zero(to_typet(...)) is discarded on both of these arms.
+  if (from == "kotlin._Assertions" && field == "ENABLED")
+    return gen_true_expr();
+
+  if (from == "Main" && field == "$assertionsDisabled")
+    return gen_false_expr();
+
+  // The member access itself is still marked "Needs OOP members"; leave it on
+  // the migrating default.
+  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+}
 
 void jimple_virtual_member::from_json(const json &j)
 {
