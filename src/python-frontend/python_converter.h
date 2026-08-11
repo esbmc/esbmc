@@ -17,6 +17,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -36,6 +37,13 @@ class python_class_builder;
 class python_lambda;
 class python_exception_handler;
 class get_expr_depth_guard;
+
+// Defined in converter_stmt.cpp; shared with numpy_call_expr.cpp so both can
+// verify a Name/Attribute receiver actually resolves to the imported numpy
+// module before treating a call as a numpy constructor/method.
+bool is_imported_numpy_module_alias(
+  const nlohmann::json &ast,
+  const std::string &name);
 
 /**
  * @class python_converter
@@ -912,6 +920,30 @@ private:
 
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
+
+  std::optional<nlohmann::json>
+  rewrite_numpy_method_call_node(const nlohmann::json &call_node) const;
+
+  // Classifies a Call node as a numpy method call: (is_a_method_call,
+  // method_name, method_base, is_a_supported_copy_method,
+  // is_a_supported_dispatch_rewrite_method). Split out of
+  // rewrite_numpy_method_call_node() to keep that function's own decision
+  // count low.
+  std::tuple<bool, std::string, nlohmann::json, bool, bool>
+  classify_numpy_method_call(const nlohmann::json &call_node) const;
+
+  bool
+  method_base_is_imported_module(const std::string &method_base_name) const;
+
+  bool
+  method_base_is_tracked_numpy_array(const std::string &method_base_name) const;
+
+  // Builds the np.<method_name>(method_base, ...original args...) rewrite of
+  // a recognized numpy method call.
+  nlohmann::json build_numpy_method_rewrite_node(
+    const nlohmann::json &call_node,
+    const std::string &method_name,
+    const nlohmann::json &method_base) const;
 
   // =========================================================================
   // Unpacking helper methods
