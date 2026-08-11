@@ -1029,3 +1029,69 @@ The libc defects stand exactly as reported: they are findings about the formats
 libc actually ships, and every counterexample was confirmed natively. What
 changes is the coverage claim about the *operations* -- previously 5 of 12 sqrt
 formats and 2 of 6 exp formats, now 12 and 6.
+
+## Native exhaustive coverage: what was actually run
+
+Asked directly whether the formats were tested exhaustively by running the
+binary, the honest answer is **5 of 12**, and it is worth being precise about
+why -- because the reason is not laziness in three of the seven gaps.
+
+| format | width | domain | exhaustive native run? |
+|---|---|---|---|
+| u0.8 | 8 | 256 | **YES** |
+| u0.16 | 16 | 65,536 | **YES** |
+| u8.8 | 16 | 65,536 | **YES** |
+| u0.32 | 32 | 4,294,967,296 | **YES** (90.20s) |
+| u16.16 | 32 | 4,294,967,296 | **YES** (91.10s) |
+| s0.7, s0.15, s8.7, s0.31, s16.15 | 8-32 | feasible | **no -- libc has no signed sqrt** |
+| s32.31, u32.32 | 64 | 1.8e19 | **no -- 2^64, about 12,000 years** |
+
+### libc's sqrt is unsigned-only, so five of the gaps are not gaps
+
+Attempting the signed sweeps does not produce wrong numbers -- it **does not
+compile**:
+
+```
+sqrt.h:198: implicit instantiation of undefined template
+            'SqrtConfig<short _Fract>'
+```
+
+`sqrt.h` specialises `SqrtConfig` for exactly five fixed-point formats
+(u0.8, u0.16, u0.32, u8.8, u16.16) plus two integer entries (`unsigned short`,
+`unsigned int`). There is no signed specialisation and no 64-bit one. So the
+five exhaustive sweeps that were run cover **every fixed-point format libc's
+sqrt implements**, and the signed rows above are unimplementable rather than
+untested.
+
+This also corrects the framing of the 12-format sqrt table earlier in this
+file: camada supports all 12 and ESBMC now exercises all 12, but only 5 have a
+libc counterpart to compare against. The other 7 validate the *operation*, not
+any library.
+
+### A declared-but-missing entry point
+
+`stdfix.yaml` declares **`sqrtulk`** (u32.32):
+
+```yaml
+  - name: sqrtulk
+    return_type: unsigned long accum
+    arguments:
+      - type: unsigned long accum
+```
+
+but there is no `sqrtulk.cpp`, no CMake entry, and `SqrtConfig<unsigned long
+_Accum>` is undefined -- so `fx::sqrt` on a u32.32 value fails to compile.
+A caller reading the public spec would reasonably expect the function to exist.
+
+Recorded as an observation rather than a defect claim: the yaml may be an
+intentional forward declaration of planned work. It is worth asking, since the
+declaration is visible to consumers while the symbol is not.
+
+### The 64-bit domains are out of reach for enumeration, and that is the point
+
+At the measured native rate (4.29e9 inputs in 91s, ~47M/sec) a single 2^64
+sweep is about **12,000 years**. This is exactly the case BMC exists for -- and
+it is also where the symbolic bracket is hardest, which is why s32.31 and
+u32.32 are anchor-validated rather than proved and the racing runs are still
+open after 14h. Neither method covers those two formats exhaustively today;
+saying so is more useful than picking whichever framing sounds better.
