@@ -1,9 +1,7 @@
 #include <stdint.h>
 
-/* dereferencet::check_alignment() decides a scalar access from the offset
- * within the object alone, so the address-space model must give every
- * non-packed object at least the ABI's fundamental alignment; otherwise the
- * two disagree on whether the same pointer can be misaligned. */
+/* The base-address constraint must cover the access widths check_alignment()
+ * assumes; see #6951. */
 
 char g_buf[16];
 
