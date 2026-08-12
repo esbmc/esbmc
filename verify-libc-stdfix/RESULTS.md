@@ -1351,15 +1351,23 @@ intermediate headroom) are reachable only through **`rdivi`** -- the one entry
 point that calls `divi`. `REPORT-llvm-libc-divi-defects.md` still describes them
 as affecting the `divi*` family and needs rewriting.
 
-## divifx against camada's mkFXPDiv: agreement, on the _Accum formats
+## divifx against camada's mkFXPDiv: all 8 entry points agree
 
 Same design as the sqrt oracle work: symbolic inputs, libc on one side, camada's
 exact operation on the other, diffed.
 
-| entry point | format | verdict | time |
-|---|---|---|---|
-| `diviuk` | u16.16 | **SUCCESSFUL** | 6.91s |
-| `divik` | s16.15 | **SUCCESSFUL** | 5.61s |
+| entry point | operand format | division done in | verdict | time |
+|---|---|---|---|---|
+| `divir` | s0.15 | s16.15 | **SUCCESSFUL** | 5.31s |
+| `diviur` | u0.16 | u16.16 | **SUCCESSFUL** | 8.91s |
+| `divilr` | s0.31 | s32.31 | **SUCCESSFUL** | 25.63s |
+| `diviulr` | u0.32 | u32.32 | **SUCCESSFUL** | 26.13s |
+| `divik` | s16.15 | s16.15 | **SUCCESSFUL** | 5.61s |
+| `diviuk` | u16.16 | u16.16 | **SUCCESSFUL** | 6.91s |
+| `divilk` | s32.31 | s32.31 | **SUCCESSFUL** | 35.34s |
+| `diviulk` | u32.32 | u32.32 | **SUCCESSFUL** | 58.67s |
+
+All eight non-vacuous: negating the agreement assertion FAILS in every case.
 
 Both non-vacuous: negating the agreement assertion FAILS for each. `diviuk` also
 passes the independent truncation-bracket harness (0.58s), so two different
@@ -1369,25 +1377,34 @@ properties agree on it.
 eight `divi*` entry points actually call, and on these formats it matches an
 exact reference.
 
-### Why only the _Accum formats, and what the bounds are
+### Correction: the _Fract formats were excluded in error
 
-Three restrictions, each forced rather than chosen:
+An earlier version of this section claimed the `_Fract` entry points "cannot be
+compared this way at all". **That was wrong.** `mkFXPDiv` is format-generic --
+no allowlist, unlike `mkFXPExp` -- so the limitation was never camada's.
 
-* **`_Fract` formats cannot be compared this way at all.** camada's `mkFXPDiv`
-  divides fixed-point by fixed-point, so `n` has to be representable in the
-  format -- and u0.16/s0.15 hold nothing >= 1. An earlier version cast `n` into
-  u0.16 and produced garbage: `(unsigned _Fract)64` came out as ~2.97e222.
-  Only the `_Accum` formats have integer bits.
-* **The quotient must also fit.** With a tiny divisor the quotient exceeds the
-  format maximum and camada's division overflows -- at `n=64, d=2^-16` the true
-  quotient is 2097152 against u16.16's max of 65536, and the camada side
-  returned 0. Bounded by `d >= 2^-4`, `n <= 16`, giving a quotient <= 256.
+The real problem was that I tried to represent `n` in s0.15/u0.16 themselves,
+which hold only [-1, 1); `(unsigned _Fract)64` came out as ~2.97e222. The fix is
+to do the camada-side division in a format with the **same fraction length but
+integer headroom**: s0.15 -> s16.15, u0.32 -> u32.32, and so on. Widening the
+divisor that way is exact, since the fraction length is unchanged.
+
+With that, all four `_Fract` entry points verify. The remaining bounds are:
+* **The quotient must fit the format the division happens in.** With a tiny
+  divisor the quotient exceeds the maximum and the camada side overflows -- at
+  `n=64, d=2^-16` the true quotient is 2097152 against u16.16's max of 65536.
+  Bounded by `n <= 16` and a divisor floor, giving a quotient <= 256. This is a
+  C range constraint, not a solver or camada one.
 * **Non-negative quotients only** for the signed format. camada's division
   floors (camada.h:756-758) while `divifx` truncates toward zero, so the two
   legitimately differ by one where the signs differ. Restricting to matching
   signs makes the comparison exact instead of approximate.
 
-So this is agreement over a restricted domain, not a proof over all inputs.
+So this is agreement over a restricted domain, not a proof over all inputs --
+but the domain restriction is now only on `n` and the quotient magnitude, not on
+which formats can be tested. **`divifx` is clean on every entry point libc
+ships**, which makes it the only stdfix family to come out fully verified
+against an exact reference.
 
 ### Four false failures caught before they became claims
 
