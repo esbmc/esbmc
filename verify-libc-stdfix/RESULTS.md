@@ -984,7 +984,7 @@ and 6 `__ESBMC_fxp_exp_*`.
 | u8.8 | `unsigned short _Accum` | symbolic bracket, all inputs | **SUCCESSFUL** | 2.30s |
 | s0.31 | `long _Fract` | anchors | SUCCESSFUL | 0.60s |
 | u0.32 | `unsigned long _Fract` | anchors | SUCCESSFUL | 0.60s |
-| s16.15 | `_Accum` | anchors | SUCCESSFUL | 0.60s |
+| s16.15 | `_Accum` | **symbolic bracket, all 2^32 inputs** | **SUCCESSFUL** | **65086s (18h05m, bitwuzla)** |
 | u16.16 | `unsigned _Accum` | anchors | SUCCESSFUL | 0.50s |
 | s32.31 | `long _Accum` | anchors | SUCCESSFUL | 0.60s |
 | u32.32 | `unsigned long _Accum` | anchors | SUCCESSFUL | 0.50s |
@@ -1095,3 +1095,52 @@ it is also where the symbolic bracket is hardest, which is why s32.31 and
 u32.32 are anchor-validated rather than proved and the racing runs are still
 open after 14h. Neither method covers those two formats exhaustively today;
 saying so is more useful than picking whichever framing sounds better.
+
+## s16.15 upgraded from anchor-validated to proved (18h05m)
+
+The racing runs produced their first result: **`k` (s16.15) verified
+SUCCESSFUL under bitwuzla after 65,086s** -- 18 hours 5 minutes in the decision
+procedure. z3 was still working on the same query at 22h21m.
+
+The verdict was checked rather than taken at face value:
+
+* the log shows 3 VCCs generated and 3 remaining after simplification, so
+  nothing was sliced away, and the run ended normally rather than crashing;
+* the harness contains **no `__ESBMC_assume` at all** -- the input is a free
+  32-bit pattern -- so vacuity is structurally impossible;
+* both arms were probed anyway. Negating the negative-operand assertion FAILS
+  in 0.6s, and a reachability probe on the positive arm (where the 18 hours
+  went) also FAILS in 0.6s. Both arms are reachable.
+
+So `mkFXPSqrt` at s16.15 is proved over every input of the format: the bracket
+`raw_r^2 <= raw_x * 2^15 < (raw_r+1)^2` holds for all 2^31 non-negative inputs,
+and negative inputs return zero as documented.
+
+Note this is a format libc's sqrt cannot even instantiate (`SqrtConfig` is
+unsigned-only), so it validates the operation rather than any library.
+
+### Revised expectations for the remaining five
+
+| format | frac bits | bitwuzla | z3 | note |
+|---|---|---|---|---|
+| s16.15 | 15 | **SUCCESSFUL 18h05m** | still running | settled |
+| u16.16 | 16 | running 22h+ | running 22h+ | next most likely |
+| s0.31 | 31 | running 22h+ | running 22h+ | ~126-bit product |
+| u0.32 | 32 | running 22h+ | running 22h+ | ~128-bit product |
+| s32.31 | 31 | running 22h+ | running 22h+ | 64-bit storage |
+| u32.32 | 32 | running 22h+ | running 22h+ | 64-bit storage |
+
+That s16.15 took 18h and u16.16 has not landed at 22h is consistent with the
+one-extra-fraction-bit cost. The four formats with 31-32 fraction bits square a
+root into ~126-128 bits rather than ~62, and nothing suggests they are close.
+
+Two earlier predictions of mine to correct:
+
+1. I wrote that a plateau in z3's memory suggested "neither backend looks close
+   to closing these queries". bitwuzla closed one 2.5 hours later, on flat
+   0.2 GB memory the whole time -- so flat memory says nothing about progress
+   for a bit-blasting solver.
+2. I projected z3 would exhaust the box's memory in ~24h by fitting an
+   exponential through two samples. Growth flattened to ~0.5 GB/h; at 22h the
+   box is at 106 GB of 247 GB with 141 GB free. Time, not memory, is the
+   constraint.
