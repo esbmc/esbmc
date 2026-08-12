@@ -183,8 +183,8 @@ bool code_contractst::declares_contracts(const symbolt &func_sym) const
     return true;
 
   auto it = goto_functions.function_map.find(func_sym.id);
-  return it != goto_functions.function_map.end() &&
-         it->second.body_available && has_contracts(it->second.body);
+  return it != goto_functions.function_map.end() && it->second.body_available &&
+         has_contracts(it->second.body);
 }
 
 /// Code symbols in \p goto_functions whose short name is \p short_name and
