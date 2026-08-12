@@ -1350,3 +1350,49 @@ The three defects in `fixed_point::divi` (double sign negation, `1 << F` UB, no
 intermediate headroom) are reachable only through **`rdivi`** -- the one entry
 point that calls `divi`. `REPORT-llvm-libc-divi-defects.md` still describes them
 as affecting the `divi*` family and needs rewriting.
+
+## divifx against camada's mkFXPDiv: agreement, on the _Accum formats
+
+Same design as the sqrt oracle work: symbolic inputs, libc on one side, camada's
+exact operation on the other, diffed.
+
+| entry point | format | verdict | time |
+|---|---|---|---|
+| `diviuk` | u16.16 | **SUCCESSFUL** | 6.91s |
+| `divik` | s16.15 | **SUCCESSFUL** | 5.61s |
+
+Both non-vacuous: negating the agreement assertion FAILS for each. `diviuk` also
+passes the independent truncation-bracket harness (0.58s), so two different
+properties agree on it.
+
+**This is the first family where libc comes out clean.** `divifx` is what all
+eight `divi*` entry points actually call, and on these formats it matches an
+exact reference.
+
+### Why only the _Accum formats, and what the bounds are
+
+Three restrictions, each forced rather than chosen:
+
+* **`_Fract` formats cannot be compared this way at all.** camada's `mkFXPDiv`
+  divides fixed-point by fixed-point, so `n` has to be representable in the
+  format -- and u0.16/s0.15 hold nothing >= 1. An earlier version cast `n` into
+  u0.16 and produced garbage: `(unsigned _Fract)64` came out as ~2.97e222.
+  Only the `_Accum` formats have integer bits.
+* **The quotient must also fit.** With a tiny divisor the quotient exceeds the
+  format maximum and camada's division overflows -- at `n=64, d=2^-16` the true
+  quotient is 2097152 against u16.16's max of 65536, and the camada side
+  returned 0. Bounded by `d >= 2^-4`, `n <= 16`, giving a quotient <= 256.
+* **Non-negative quotients only** for the signed format. camada's division
+  floors (camada.h:756-758) while `divifx` truncates toward zero, so the two
+  legitimately differ by one where the signs differ. Restricting to matching
+  signs makes the comparison exact instead of approximate.
+
+So this is agreement over a restricted domain, not a proof over all inputs.
+
+### Four false failures caught before they became claims
+
+The first run of this comparison failed on all four formats, at `n=64` with
+tiny divisors. Hand-checking showed **libc was right every time**:
+`divifx(64, 0.5) = 128` and `divifx(64, 2^-16) = 2097152` are both exact. The
+failures were the two representability problems above. Four-for-four failures on
+a first attempt is the signal to check the harness, not the library.
