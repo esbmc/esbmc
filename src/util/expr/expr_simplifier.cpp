@@ -495,15 +495,10 @@ static expr2tc simplify_add_bv_identities(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
-  // x + x -> x << 1: a constant shift is wiring where the add is a full
-  // adder, and it feeds the existing constant-shift folds. The identity does
-  // not hold for floats, and there is no shift on a pointer.
-  // The shift amount takes int_type2(), the type the C frontend gives a shift
-  // literal, so the result is structurally equal to a hand-written `x << 1`
-  // and the surrounding folds can match the two.
-  if (side_1 == side_2)
-    return shl2tc(type, side_1, constant_int2tc(int_type2(), BigInt(1)));
-
+  // No x + x -> x << 1 here: measured, the rewrite costs more than it pays.
+  // It takes the add out of reach of the add-based folds and constant
+  // propagation downstream, which on regression/esbmc-unix/00_bbuf_02 left
+  // 253 rather than 71 VCCs after simplification and ran 25x longer (#626).
   if (expr2tc folded = fold_bitnot_plus_const(type, side_1, side_2);
       !is_nil_expr(folded))
     return folded;
