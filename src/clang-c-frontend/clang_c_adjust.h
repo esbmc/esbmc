@@ -22,7 +22,17 @@ public:
 
   bool adjust();
 
+  /// Hand the index rewrite to the IREP2 adjuster. Set only by the C driver:
+  /// clang_cpp_adjust derives from this class, and the IREP2 pass is wired into
+  /// clang_c_languaget::typecheck alone, so a global option check here would
+  /// disable the rewrite for C++ with nothing to replace it.
+  void set_irep2_owns_index()
+  {
+    irep2_owns_index = true;
+  }
+
 protected:
+  bool irep2_owns_index = false;
   contextt &context;
   namespacet ns;
   symbol_generator tmp_symbol{"clang_c_adjust::"};
@@ -30,6 +40,15 @@ protected:
   /**
    * methods for symbol adjustment
    */
+  /// True when the single argument is arithmetic, as the `abs` node requires.
+  bool has_single_arithmetic_argument(
+    const side_effect_expr_function_callt &expr) const;
+
+  /// True when a name-matched builtin lowering would discard a definition the
+  /// program supplies, in which case the definition wins. See #6904.
+  bool
+  shadows_user_definition(const irep_idt &identifier, const exprt &f_op) const;
+
   virtual void adjust_symbol(symbolt &symbol);
   void adjust_argc_argv(const symbolt &main_symbol);
 

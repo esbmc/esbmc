@@ -79,6 +79,12 @@ protected:
     optionst &options,
     goto_functionst &goto_functions);
 
+  int falsify_with_bounded_schedules(
+    optionst &options,
+    goto_functionst &goto_functions);
+
+  int run_chosen_strategy(optionst &options, goto_functionst &goto_functions);
+
   int doit_k_induction_parallel();
 
   tvt is_base_case_violated(

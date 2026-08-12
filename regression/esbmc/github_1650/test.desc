@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property
+FAILED: 'assertion a\[\*ptr\] > 2147483646
+^VERIFICATION FAILED$

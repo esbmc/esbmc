@@ -612,6 +612,14 @@ public:
    *         constant expressions do not generate any references in the
    *         value-set.
    */
+  /// Stop an operand whose set is only `unknown` from vetoing the other's;
+  /// the `unknown` moves into @p dest. See
+  /// docs/design/pointer-integer-provenance.md.
+  void retire_objectless_operand(
+    object_mapt &op0_set,
+    object_mapt &op1_set,
+    object_mapt &dest) const;
+
   void get_value_set_rec(
     const expr2tc &expr,
     object_mapt &dest,
