@@ -571,6 +571,12 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Do not merge gotos when restoring paths after a context-switch"},
     {"no-por", NULL, "Do not do partial order reduction"},
+    {"sleep-sets",
+     NULL,
+     "Prune schedules with sleep sets; only fires where the search is "
+     "exhaustive, so pair it with --no-por and no context bound. Ignored under "
+     "--schedule, --direct-interleavings, --interactive-ileaves and "
+     "--data-races-check-only (experimental, off by default)"},
     {"cswitch-skip-readonly-globals",
      NULL,
      "Skip context switches on globals that are never written anywhere "
