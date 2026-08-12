@@ -1200,3 +1200,37 @@ So there are two distinct findings, not one:
 
 The `fixed_point::sqrt` results (sqrtuhr/sqrtur/sqrtulr, 1 ulp low on exact
 perfect squares) are unaffected -- those entry points do call `sqrt`.
+
+## Parallel sharding: the wide-format proofs are tractable after all
+
+The six 32/64-bit formats had been running 41h unsharded with one result
+(s16.15 at 18h05m). Partitioning the input domain with `__ESBMC_assume` and
+running the shards concurrently changes the picture completely.
+
+The partition is a **complete case split**, not sampling: 32 shards of
+134,217,728 consecutive raw values each, verified programmatically to cover
+`[INT32_MIN, INT32_MAX]` with no gap and no overlap, summing to exactly 2^32.
+If every shard verifies SUCCESSFUL the property holds over the whole domain.
+
+Measured on s16.15, the format whose unsharded time is known:
+
+| shard set | inputs each | time | note |
+|---|---|---|---|
+| 00-15 (negative half) | 134M | **0.5-1.1s** | `xb < 0` early return, trivial |
+| 31 (positive, top of range) | 134M | **735.78s (12m)** | real bracket work |
+| unsharded whole domain | 4.29e9 | **65086s (18h05m)** | for comparison |
+
+So one positive shard is ~12 minutes where the whole domain was 18 hours. With
+16 positive shards running concurrently the wall-clock for a full format proof
+drops from 18h to roughly the slowest single shard -- a **~90x** improvement,
+and it parallelises across the 32 cores that were previously idle behind one
+sequential query.
+
+Why it works: the assume prunes the search space before the solver starts, so
+each shard is a genuinely smaller problem rather than the same problem with a
+filter. The negative-half shards collapse to nothing because the early return
+makes the bracket unreachable.
+
+This is the technique that makes the two 64-bit formats (s32.31, u32.32)
+plausibly reachable at all -- they were the ones with no path to exhaustive
+native testing either (2^64 is ~12,000 years of enumeration).
