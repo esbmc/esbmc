@@ -4600,7 +4600,6 @@ void code_contractst::generate_replacement_at_call(
   }
 
   // Replace function parameters with actual arguments in contract clauses
-  std::vector<std::pair<expr2tc, expr2tc>> param_substitutions;
   if (function_symbol.get_type().is_code())
   {
     const code_typet &code_type = to_code_type(function_symbol.get_type());
@@ -4611,8 +4610,6 @@ void code_contractst::generate_replacement_at_call(
     {
       irep_idt param_id = params[i].get_identifier();
       expr2tc param_expr = symbol2tc(migrate_type(params[i].type()), param_id);
-      param_substitutions.emplace_back(param_expr, actual_args[i]);
-
       // Replace parameter symbol with actual argument in requires/ensures
       requires_clause =
         replace_symbol_in_expr(requires_clause, param_expr, actual_args[i]);

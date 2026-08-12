@@ -115,16 +115,12 @@ public:
   /// \return True if function has the contract annotation
   bool is_annotated_contract_function(const symbolt &func_sym) const;
 
-  /// \brief Re-materialise, into \p dest, the calls whose SSA temporaries
-  ///   \p clause still references. Without this the clause stands over a
-  ///   symbol declared in the function body but not in the wrapper (#6941).
   /// \brief Name of the first non-intrinsic call a clause in \p body depends
   ///   on, empty when there is none.
   std::string clause_call_callee(const goto_programt &body) const;
 
   /// \brief Diagnostic for such a call, empty when there is none.
   std::string clause_call_reason(const goto_programt &body) const;
-
 
   /// \brief Per-field snapshot for pointer-struct-field assigns compliance.
   /// Captures the pre-call value of a field NOT in the assigns clause so that
