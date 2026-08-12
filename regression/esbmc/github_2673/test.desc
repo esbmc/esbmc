@@ -1,0 +1,5 @@
+CORE
+main.c
+
+dereference failure: invalid pointer
+^VERIFICATION FAILED$
