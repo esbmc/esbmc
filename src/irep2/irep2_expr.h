@@ -1397,8 +1397,21 @@ public:
    *         expr is a pointer to this subtype. This is slightly unintuitive,
    *         might be changed in the future.
    *  @param ptrobj Item to take pointer to. */
-  address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
-    : expr2t(pointer_type2tc(subtype), address_of_id), ptr_obj(ptrobj)
+  /// Set when the frontend synthesised this address-of rather than the program
+  /// spelling it: the `&f` sugar clang_c_adjust inserts for a function
+  /// designator. clang_c_adjust reads it back to tell `f(x)` (strip the sugar)
+  /// from `(&f)(x)` (a call through a user-written function pointer) -- the two
+  /// carry the same shape and differ only in provenance
+  /// (docs/roadmap/scope-clang-c-irep2.md §35).
+  bool implicit;
+
+  address_of2t(
+    const type2tc &subtype,
+    const expr2tc &ptrobj,
+    bool is_implicit = false)
+    : expr2t(pointer_type2tc(subtype), address_of_id),
+      ptr_obj(ptrobj),
+      implicit(is_implicit)
   {
     assert(ptrobj->expr_id != expr2t::constant_int_id);
     assert(ptrobj->expr_id != expr2t::address_of_id);
@@ -1407,8 +1420,10 @@ public:
 
   expr2tc do_simplify() const override;
 
-  static constexpr auto fields =
-    std::make_tuple(&expr2t::type, &address_of2t::ptr_obj);
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &address_of2t::ptr_obj,
+    &address_of2t::implicit);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1565,15 +1580,28 @@ public:
        builds member2t pre-adjust (all go through migrate at goto-convert, which
        is post-adjust), so this disjunct is staged enabling infra, exercised
        once the V.1k converter/adjuster pilot lands. */
+    /* A `pointer_id` source is the same transient state index2t already
+       permits, and for the same reason: a legacy `member` over a pointer base
+       is what the C adjuster's adjust_member rewrites to
+       `member(dereference(base))`, so migrating a symbol value before that arm
+       has run hands one here. index2t's sibling comment names this pairing; the
+       relaxation had been applied there and not here. An `array_id` source is
+       the same thing for adjust_member other branch, which rewrites an array
+       base to `member(index(base, 0))`. */
     assert(
       source->type->type_id == type2t::struct_id ||
       source->type->type_id == type2t::union_id ||
       source->type->type_id == type2t::complex_id ||
-      source->type->type_id == type2t::symbol_id);
-    /* member must exist exactly once in the parent struct/union — only checkable
-       once the source type is resolved (skipped for the transient symbol case) */
+      source->type->type_id == type2t::symbol_id ||
+      source->type->type_id == type2t::pointer_id ||
+      source->type->type_id == type2t::array_id);
+    /* member must exist exactly once in the parent struct/union — only
+       checkable once the source type is resolved (skipped for the transient
+       cases) */
     assert(
       source->type->type_id == type2t::symbol_id ||
+      source->type->type_id == type2t::pointer_id ||
+      source->type->type_id == type2t::array_id ||
       struct_union_get_component_number(source->type, memb).has_value());
 #endif
   }

@@ -51,6 +51,26 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
 
   if (is_index2t(expr))
     adjust_index(expr);
+  else if (is_member2t(expr))
+    adjust_member(expr);
+}
+
+void clang_c_adjust_irep2::adjust_member(expr2tc &expr)
+{
+  const member2t &m = to_member2t(expr);
+  expr2tc base = m.source_value;
+
+  if (is_pointer_type(base->type))
+    base = dereference2tc(to_pointer_type(base->type).subtype, base);
+  else if (is_array_type(base->type))
+    base = index2tc(
+      to_array_type(base->type).subtype,
+      base,
+      gen_zero(migrate_type(index_type())));
+  else
+    return;
+
+  expr = member2tc(expr->type, base, m.member);
 }
 
 void clang_c_adjust_irep2::adjust_index(expr2tc &expr)

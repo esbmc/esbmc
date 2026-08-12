@@ -26,13 +26,13 @@ public:
   /// clang_cpp_adjust derives from this class, and the IREP2 pass is wired into
   /// clang_c_languaget::typecheck alone, so a global option check here would
   /// disable the rewrite for C++ with nothing to replace it.
-  void set_irep2_owns_index()
+  void set_irep2_owns_arms()
   {
-    irep2_owns_index = true;
+    irep2_owns_arms = true;
   }
 
 protected:
-  bool irep2_owns_index = false;
+  bool irep2_owns_arms = false;
   contextt &context;
   namespacet ns;
   symbol_generator tmp_symbol{"clang_c_adjust::"};

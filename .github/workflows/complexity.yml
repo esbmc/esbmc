@@ -63,7 +63,17 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          base=$(git merge-base "origin/$BASE_REF" HEAD)
+          # The checkout above brings down the head ref alone, so a PR stacked
+          # on another branch has no remote-tracking ref for its base and
+          # merge-base aborts -- failing the gate for a reason that has nothing
+          # to do with complexity. Fetch the base, and fall back to master when
+          # it is gone (a stacked base is often deleted once it merges).
+          for ref in "$BASE_REF" master; do
+            git fetch --no-tags --quiet origin \
+              "+refs/heads/$ref:refs/remotes/origin/$ref" 2>/dev/null || true
+          done
+          base=$(git merge-base "origin/$BASE_REF" HEAD 2>/dev/null) \
+            || base=$(git merge-base origin/master HEAD)
           echo "merge base: $base"
           python3 scripts/complexity/ccn_report.py \
             --base "$base" --gate \
