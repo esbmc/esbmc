@@ -1297,3 +1297,56 @@ sqrt entry points" were wrong: there are **7**.
 Roughly two days of solver time went into wide-format oracle validation for
 `mkFXPSqrt` while two shipped sqrt entry points sat untested and the divi work
 targeted the wrong function. The dispatch audit takes one command.
+
+## Results after the dispatch audit
+
+### sqrtuhk / sqrtuk: the two entry points that had never been tested
+
+Both call `fixed_point::sqrt`, so the claim is sqrt.h:211's absolute < 1 ulp.
+Compared against camada's `mkFXPSqrt` on the same symbolic input -- operand and
+result share the format here, so the oracle applies with no rescaling.
+
+| entry point | x_raw | libc | true root (raw) | error | saturating? |
+|---|---|---|---|---|---|
+| `sqrtuhk` | 24591 | 2508 | 2509.0428 | **-1.043 ulp** | no |
+| `sqrtuk` | 2282042691 | 12229306 | 12229307.0040 | **-1.004 ulp** | no |
+
+Both **FAILED**, both confirmed natively, neither near the saturation rail. So
+all seven sqrt entry points violate the bound they claim.
+
+### divifx: first verification, and one positive result
+
+The eight `divi*` entry points call `divifx`, which had never been tested. Its
+contract quotes no error term (fx_bits.h:337-338):
+
+> "Divide an integer operand by a fixed-point operand and return the
+>  mathematically exact result as an IntType rounded towards 0."
+
+Exactness plus truncation is fully checkable, so the property is a
+division-free bracket on `q * d_raw` against `n * 2^F`.
+
+**`diviur` (u0.16): VERIFICATION SUCCESSFUL (0.60s)** -- the first `divifx`
+result, and the first *positive* result on any divi-family function.
+
+Two constraints on that claim, stated rather than buried:
+
+* **`n` is bounded to [-1024, 1024]**; the divisor is fully symbolic over its
+  whole format. Unbounded `n` did not finish in 500s -- the property multiplies
+  128-bit values, and both operands symbolic at full width is too much. So this
+  is a proof over a restricted domain, not the whole input space.
+* **Return-type overflow is excluded.** With `d_raw = 1` the exact quotient is
+  `n * 2^F`, which exceeds `int` for most `n`; TR 18037 (quoted at
+  fx_bits.h:223 for the sibling `idiv`) makes an overflowing integer result
+  undefined. The first version of this harness asserted the truncation identity
+  everywhere and "failed" on all four formats -- that was the harness, not
+  libc. `divir` at `n = -196608, d_raw = 1` returns `INT_MIN` for a true
+  quotient of `-6442450944`.
+
+`divir`, `divik`, `diviuk` are still running.
+
+### Corrected scope of the divi defects
+
+The three defects in `fixed_point::divi` (double sign negation, `1 << F` UB, no
+intermediate headroom) are reachable only through **`rdivi`** -- the one entry
+point that calls `divi`. `REPORT-llvm-libc-divi-defects.md` still describes them
+as affecting the `divi*` family and needs rewriting.
