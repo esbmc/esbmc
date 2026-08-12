@@ -10,13 +10,87 @@ from the checkout rather than transcribed. Every claim below is proved over all
 inputs of the stated format, and every number was reproduced by running the
 real function natively under `clang -ffixed-point`.
 
+## Scope: one shipped entry point, not eight
+
+**`fixed_point::divi` is reached only through `rdivi`.**
+
+`fx_bits.h` declares two unrelated functions whose names invite confusion:
+
+```
+line 241  divi(int n, int d) -> XType              integer / integer -> fixed-point
+line 342  divifx(IntType n, FXType d) -> IntType   integer / fixed-point -> integer
+```
+
+All eight `divi*` entry points -- `divir`, `diviur`, `divilr`, `diviulr`,
+`divik`, `diviuk`, `divilk`, `diviulk` -- call **`divifx`**:
+
+```cpp
+LLVM_LIBC_FUNCTION(int, divir, (int n, fract d)) {
+  return fixed_point::divifx<int, fract>(n, d);   // NOT divi
+}
+```
+
+`stdfix.yaml` confirms the signature: `divir(int, fract) -> int`.
+
+Only `rdivi` calls `divi`:
+
+```cpp
+LLVM_LIBC_FUNCTION(fract, rdivi, (int a, int b)) {
+  return fixed_point::divi<fract>(a, b);
+}
+```
+
+So the three defects below are real, but the exposed surface is **`rdivi`
+alone**. An earlier draft of this report named the `divi*` family as affected;
+that was wrong, and the format labels used throughout the tables below
+(`divihr`, `divir`, `divilr`, ...) are **shorthand for `divi<T>` template
+instantiations at those formats**, not references to those entry points.
+
+`divifx` was verified separately and **agrees with an exact reference** on the
+`_Accum` formats over a restricted domain -- see RESULTS.md. Nothing in this
+report applies to it.
+
 ## Summary
 
-| # | defect | affected | strength of claim |
+| # | defect | affected `divi<T>` instantiations | strength of claim |
 |---|---|---|---|
-| 1 | sign applied twice on the power-of-two-divisor path | `divihr` `divir` `divilr` (and `_Accum` off-rail) | **firm** -- violates the sign law of division |
-| 2 | `1 << F` is UB for `F >= 31` | the four `long` types | **firm** -- C11 6.5.7p3/p4, and clang warns |
-| 3 | intermediate format equals result format at s32.31 / u32.32 | `divilk` `diviulk` | **weaker** -- libc depends on a conversion TR 18037 leaves undefined |
+| 1 | sign applied twice on the power-of-two-divisor path | s0.7, s0.15, s0.31 (and `_Accum` off-rail) | **firm** -- violates the sign law of division |
+| 2 | `1 << F` is UB for `F >= 31` | the four 31/32-fraction-bit formats | **firm** -- C11 6.5.7p3/p4, and clang warns |
+| 3 | intermediate format equals result format | s32.31, u32.32 | **weaker** -- libc depends on a conversion TR 18037 leaves undefined |
+
+`rdivi` instantiates `divi<fract>` (s0.15), so **defect 1 is the one that
+reaches shipped code**. Defects 2 and 3 need `long`/`_Accum` instantiations that
+no current entry point creates -- they are latent until someone instantiates
+`divi` at those formats, which the template permits.
+
+Verified across the whole tree, source and tests:
+
+```
+$ grep -rn "divi<" libc/src libc/test | grep -v divifx
+libc/src/stdfix/rdivi.cpp:18:  return fixed_point::divi<fract>(a, b);
+```
+
+`divi<fract>` is the only instantiation that exists. The per-format tables later
+in this report therefore describe **potential** behaviour at formats nothing
+currently instantiates; only the s0.15 rows correspond to shipped code.
+
+### Defect 1 through rdivi: measured
+
+```
+rdivi( -2, -1) = -32768   exact +2.000   should be MAX 32767   WRONG RAIL
+rdivi( -3, -1) = -32768   exact +3.000   should be MAX 32767   WRONG RAIL
+rdivi(-64,-32) = -32768   exact +2.000   should be MAX 32767   WRONG RAIL
+rdivi( -3, -2) = -32768   exact +1.500   should be MAX 32767   WRONG RAIL
+rdivi( -5, -4) = -32768   exact +1.250   should be MAX 32767   WRONG RAIL
+rdivi(  1, -1) =  32767   exact -1.000   should be MIN -32768  WRONG RAIL
+```
+
+Six of nine boundary cases return the opposite saturation rail. Exact fractions
+are unaffected: `rdivi(-1,-2) = 16384` (+0.5) is correct.
+
+`rdivi(1, -1)` is also the input **avr-libc's own test suite** expects to yield
+`FRACT_MIN` (`tests/simulate/stdfix/rdivi-1.c`), so an independent
+implementation's tests disagree with LLVM libc here.
 
 Only the *sign* of the result is claimed as wrong. `divi` documents **no
 end-to-end accuracy bound** -- it is Newton-Raphson division with per-iteration
