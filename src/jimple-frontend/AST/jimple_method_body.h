@@ -71,7 +71,10 @@ public:
     const locationt &loc) const
   {
     exprt e = to_exprt(ctx, class_name, function_name);
-    e.location() = loc;
+    // A nil location means "leave whatever to_exprt produced": jimple_label
+    // does not stamp its members, where jimple_full_method_body does.
+    if (!loc.is_nil())
+      e.location() = loc;
     expr2tc stmt;
     migrate_expr(e, stmt);
     return stmt;
