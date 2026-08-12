@@ -79,6 +79,40 @@ is not saturation — the answer exists and is not returned.
 Traced through the real body, `x = 5.5` gives `idx = 88`, `idx >> 3 = 11`,
 `EXP_HI[11] = 255.9922`, `exp_mid = 0.609`, `lo = 0`.
 
+### Confirmed end to end against a binary built from libc's own source
+
+Not a transcription: `libc/src/stdfix/exphk.cpp` was compiled directly
+(`clang++ -ffixed-point -O2 -DLIBC_NAMESPACE=libc_test -c`), linked into a test
+program, and called. The prebuilt `libc.a` in this tree contains no stdfix
+symbols -- the whole family is gated behind `LIBC_COMPILER_HAS_FIXED_POINT` --
+so compiling the source file is the way to exercise the shipped entry point.
+
+```
+exphk(5.5000) = 155.992188   true exp = 244.691932   36.250% low
+exphk(5.4375) = 145.992188   true exp = 229.866798   36.488% low
+```
+
+Sweeping every raw value around the window locates it exactly:
+
+```
+raw      x         exphk        true exp     rel err   note
+ 695   5.42969   227.257812   228.077960    0.360%
+ 696   5.43750   145.992188   229.866798   36.488%   <-- window starts
+ 704   5.50000   155.992188   244.691932   36.250%
+ 709   5.53906   161.992188   254.439351   36.334%   <-- window ends
+ 710   5.54688   161.992188   256.434943      --     true value > format max
+ 712   5.56250   255.992188   260.473206      --     guard fires, saturates
+```
+
+**14 inputs** are affected: raw 696-709, i.e. `x` in `[5.4375, 5.5391]`. Every
+one has a representable correct answer, and every one is 36-37% low. At raw 695
+the error is 0.36% -- ordinary approximation -- so the failure is a cliff, not a
+gradual drift.
+
+Raw 710-711 also return low values, but there the true result exceeds the format
+maximum so clamping low is defensible; from raw 712 the guard fires and saturates
+correctly. The defect is bounded by those two edges.
+
 **`expk` is not affected.** Its `EXP_HI[23]` is likewise an `ACCUM_MAX`
 placeholder (`exp(12) = 162754.79` does not fit s16.15), but it is unreachable:
 the maximum index reached is 22, consistent with the source's own
