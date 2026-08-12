@@ -222,6 +222,11 @@ void clang_c_languaget::build_compiler_args(
 
   compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
 
+  // Lets a source tree tell an ESBMC run from an ordinary compile, and gates
+  // include/esbmc.h so including it anywhere else is an error rather than a
+  // pile of undefined intrinsics (#4610).
+  compiler_args.emplace_back("-D__ESBMC_execution");
+
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
 
@@ -452,6 +457,8 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
     return true;
 
   clang_c_adjust adjuster(new_context);
+  if (config.options.get_bool_option("clang-c-irep2-adjust"))
+    adjuster.set_irep2_owns_index();
   if (adjuster.adjust())
     return true;
 

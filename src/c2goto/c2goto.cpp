@@ -74,6 +74,7 @@ public:
     if (config.set(cmdline))
       return 1;
     config.options.cmdline(cmdline);
+    config.options.set_option("building-c-library", true);
     set_verbosity_msg(VerbosityLevel::Result);
 
     if (!cmdline.isset("output"))

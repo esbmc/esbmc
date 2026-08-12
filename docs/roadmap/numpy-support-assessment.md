@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-08-02.
+**Updated:** 2026-08-09.
 
 This file tracks what is **not yet implemented or broken** in the NumPy
 module. Completed items are in the git history and `regression/numpy/`.
@@ -11,6 +11,99 @@ Architectural decisions that gate specific pendencies here (referenced as
 
 ## Recently completed
 
+- **Constructor-backed array operations** — closed the three confirmed gaps
+  listed below in "Soundness concerns" for arrays built by a shape
+  constructor (`zeros`/`ones`/`full`/`eye`/`identity`/`linspace`/`arange`)
+  rather than an inline literal:
+  - `np.dot(a, b)`/`a.dot(b)` no longer crashes the process for two
+    1-D vectors read from a variable; the runtime lowering now requires an
+    assignment target and raises an explicit diagnostic instead of
+    dereferencing a null one when the call is a bare statement. See
+    `regression/numpy/dot_variable_*`.
+  - `np.transpose(a)`/`a.transpose()`, `np.flatten(a)`/`a.flatten()`,
+    `np.sum(a)`/`a.sum()`, `np.mean(a)`/`a.mean()`, and the remaining
+    reducers `min`/`max`/`prod`/`std`/`var` (module and method form) now
+    work for every constructor above, not just `np.array(<literal>)`. Root
+    cause: several independent call sites resolved a variable's declaration
+    and, if the right-hand side was a constructor call, blindly took its
+    first argument as if it were `np.array(<literal>)`-shaped data — which
+    misreads a shape/fill argument (`np.zeros((2, 2))`, `np.full((2, 2),
+    5)`, ...) as the array's data. Fixed via a new
+    `materialize_numpy_constructor_array` helper that reconstructs the
+    literal list a constructor call would have produced, used by every
+    affected call site. `transpose` additionally needed a compile-time
+    literal fold instead of the general runtime array backend for the
+    subset of constructors (`full`/`eye`/`identity`/`linspace`) that build
+    a dynamic `__ESBMC_PyListObj` list rather than a static array — taking
+    the address of the real declared symbol for that representation is
+    unsound. See `regression/numpy/transpose_constructor_*`,
+    `flatten_constructor_*`, `sum_constructor_*`, `mean_constructor_*`, and
+    `reducer_constructor_*`.
+  - The `a.<method>()` → `np.<method>(a, ...)` method-dispatch rewrite only
+    fired when the call was the direct right-hand side of an assignment
+    statement (`x = a.min()`); the identical call anywhere else — `assert
+    a.min() == 0`, a nested expression, a call argument — fell through to
+    an unrelated builtin/class-method lookup and raised a spurious
+    `TypeError`/`AttributeError` (e.g. Python's builtin `min()` complaining
+    about a missing `iterable` argument). Centralized the rewrite into one
+    `rewrite_numpy_method_call_node()` helper shared by the
+    assignment-statement path and the general Call-expression path, so
+    every expression context resolves the same receiver check. Also added
+    `"prod"` to the rewritten method set, which was missing next to its
+    sibling reducers (`sum`/`mean`/`min`/`max`/`std`/`var`) and left
+    `.prod()` permanently unresolvable in method form regardless of
+    context. See `regression/numpy/constructor_method_dispatch_success`,
+    `constructor_method_dispatch_non_numpy_fail`, and
+    `constructor_module_method_parity_edge`.
+- **Hardened constructor materialization against a follow-up review of the
+  work above** — `materialize_numpy_constructor_array()` and its resolver
+  call sites had four confirmed correctness/diagnostic gaps of their own,
+  each verified by direct execution before and after the fix:
+  - A receiver was matched purely by attribute name (`zeros`/`full`/`eye`/
+    ...), so a user class with a same-named method (e.g. its own `.full()`)
+    was silently treated as a numpy constructor call. Now requires the
+    receiver to actually resolve to the imported numpy module, reusing
+    `is_imported_numpy_module_alias()` (promoted to external linkage) —
+    the same check `is_numpy_array_constructor_expr()` already used. See
+    `regression/numpy/constructor_materialize_module_alias_fail`.
+  - When materialization declined for a *recognized* constructor call (a
+    `dtype=` keyword, a non-constant fill), every resolver fell back to the
+    call's `args[0]` — exactly the shape/size argument this whole helper
+    exists to stop misreading as array data, silently reintroducing the
+    original bug for that one escape hatch (e.g.
+    `np.mean(np.eye(3, dtype=int))` verified against the shape scalar `3`
+    instead of the real flattened mean `1/3`). Now such calls are left as
+    unresolved `Call` nodes instead, so the existing numeric-extraction
+    path rejects them explicitly. See
+    `regression/numpy/reducer_constructor_dtype_kwarg_fail`.
+  - `a.transpose()` on a declined dynamic-list-backed constructor call
+    raised the generic "supports up to 2D arrays" message even when the
+    real cause was unrelated to dimensionality. Now distinguishes the two
+    failure modes with a specific diagnostic for the former. See
+    `regression/numpy/transpose_constructor_kwarg_fail`.
+  - `materialize_arange()` computed every value (including the all-integer,
+    dtype-default case) through a `double` loop, silently losing precision
+    or drifting the termination point past 2^53. Now uses exact `int64_t`
+    arithmetic when every argument is an integer; the float path is
+    unchanged. Not covered by a regression test: reproducing this needs
+    bounds large enough to exercise the gap, but any
+    `np.arange(...)` assigned to a variable already times out during array
+    creation regardless of this fix (see "Soundness concerns" below), so
+    verified by direct execution outside the regression harness instead.
+
+  A fifth resolve_var copy (guarding
+  `greater`/`less`/`equal`/`where`/`full`/`eye`/`identity`/`linspace`
+  comparison-scalar dispatch) was also brought onto
+  `materialize_numpy_constructor_array()` for consistency with every other
+  copy, though that dispatch only ever extracts a single numeric scalar
+  from its operands either way. A sixth, purely cosmetic finding (a stale
+  comment claiming no rank cap existed, contradicted by the very next
+  line) was also fixed. A sixth *substantive* finding raised in the same
+  review — no upper bound on total materialized elements — was
+  investigated and found to duplicate the pre-existing scalability wall
+  below rather than being an independently reachable issue: the same
+  large shape already hangs at ordinary array creation, before this
+  helper ever runs, with or without this PR's changes.
 - **Closed the remaining ADR-NP-003 etapa 1 gaps** — the guard layer
   introduced by the previous entry left several confirmed holes, all
   verified by direct execution before and after the fix:
@@ -237,46 +330,17 @@ Architectural decisions that gate specific pendencies here (referenced as
    all now rejected/supported correctly (see "Recently completed") — the
    remaining piece is the definitive shared-buffer descriptor model
    (etapa 2), which replaces conservative rejection with real aliasing.
-5. **`np.dot(a, b)` crashes the process for two 1-D vectors read from a
-   variable** (not a literal) — confirmed by direct execution:
-   ```python
-   import numpy as np
-   a = np.array([1, 2, 3])
-   b = np.array([4, 5, 6])
-   np.dot(a, b)
-   ```
-   aborts (core dump) during GOTO conversion instead of producing a
-   verdict. `a.dot(b)` (method form) does not crash — it raises an
-   explicit `TypeError`, so it is merely unsupported, not unsound. Found
-   while checking which other methods could safely gain dispatch rewrite
-   support alongside this PR; not fixed here since it is unrelated to
-   view/dispatch work and needs its own root-cause investigation.
-6. **`.transpose()`/`np.transpose(a)` fails for a variable built by a
-   non-literal constructor** (`np.zeros`, `np.eye`, `np.identity` — `ones`/
-   `full`/`arange` untested) — confirmed by direct execution:
-   ```python
-   import numpy as np
-   a = np.zeros((2, 2))
-   b = a.transpose()
-   ```
-   raises `Unsupported Numpy call: transpose` instead of transposing, even
-   though the identical code with `a = np.array([[1, 2], [3, 4]])` (a
-   literal) works (see `regression/numpy/view_function_transpose_method_success`).
-   Pre-existing — `zeros` was already tracked in `numpy_array_symbols_`
-   before this PR, so this is not a dispatch-rewrite gap; the `Name`-typed
-   argument branch in `numpy_call_expr.cpp`'s transpose handler does not
-   handle whatever type shape a non-literal constructor produces. Found
-   while adding `eye`/`identity`/`linspace` to the dispatch-rewrite
-   constructor set; not fixed here — out of scope for that fix.
-7. **`.mean()` and `.sum()`/`.flatten()` compute a wrong numeric result for
-   some non-literal-constructed arrays** — confirmed by direct execution:
-   `c = np.identity(2); c.mean()` asserts `!= 0.5` (wrong; `.sum()` on the
-   same array correctly returns `2.0`), and separately
-   `e = np.linspace(0.0, 4.0, 5); e.sum()` and `e.flatten()[i]` both compute
-   wrong values even though raw indexing (`e[0]`, `e[4]`) and `.copy()` on
-   the same `e` are correct. Two distinct confirmed-wrong cases, root cause
-   not yet investigated for either. Found alongside the `.transpose()` gap
-   above; not fixed here.
+5. **`np.arange(n)` is disproportionately slow even for tiny `n`** —
+   confirmed by direct execution: `np.arange(3)` alone (no reducer applied)
+   times out (30-60s) even with a small `--unwind`. This is not explained
+   by the general scalability wall above (#3), which is about *large*
+   arrays — three elements should not be expensive. Root cause not
+   investigated; found while exercising constructor-backed reducers in this
+   round (worked around there by using `eye`/`identity`/`full` instead) and
+   flagged here rather than fixed blind. This also blocks regression-testing
+   the `materialize_arange()` integer-precision fix above: any
+   `np.arange(...)` assigned to a variable hits this wall at the assignment
+   itself, before a reducer ever gets to exercise the fixed code path.
 
 ---
 
@@ -290,9 +354,9 @@ No remaining KNOWNBUG in the targeted `dot6`/`dot7`/`transpose2`/
 
 ## Prioritised next steps
 
-1. **`np.dot(a, b)` crash with two variable-sourced 1-D vectors** — see
-   "Soundness concerns" #5. Highest priority: it is a process crash, not
-   merely a missing feature or a conservative rejection.
+1. **`np.arange(n)` performance** — see "Soundness concerns" #5. A tiny,
+   fixed-size input should not time out; worth understanding before it
+   blocks other `arange`-based work.
 2. **Definitive view descriptor model (ADR-NP-003 etapa 2)** — replace the
    current conservative guard-over-copy approach with shared
    `ndarray_descriptor` buffer_id/offset/stride metadata in indexing,
@@ -343,8 +407,8 @@ No remaining KNOWNBUG in the targeted `dot6`/`dot7`/`transpose2`/
 
 ## Suggested next PRs
 
-1. **Fix the `np.dot` variable-vector crash** — small, isolated, high
-   priority (process crash, not a soundness/feature gap).
+1. **Root-cause `np.arange(n)` performance** — small input, disproportionate
+   cost; see "Soundness concerns" #5.
 2. **Shared-buffer view descriptors (ADR-NP-003 etapa 2)** — connect
    `ndarray_descriptor` buffer/offset/stride metadata to basic indexing,
    transpose, assignment, and escape checks so supported writable views
