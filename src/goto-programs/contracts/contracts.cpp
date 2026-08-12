@@ -994,6 +994,19 @@ static expr2tc unwrap_array_decay(const expr2tc &expr)
   return expr;
 }
 
+// The place a havoc writes to. Substituting a formal with an array argument
+// re-introduces the decay the collection step stripped once — `p` becomes
+// `&b[0]` — and an address is not a place to assign to. Widening back to the
+// whole array also covers everything the callee reaches through the decayed
+// pointer (#6961). Any other address_of names its own operand.
+static expr2tc havoc_place(const expr2tc &target)
+{
+  expr2tc place = unwrap_array_decay(target);
+  if (is_address_of2t(place))
+    return to_address_of2t(place).ptr_obj;
+  return place;
+}
+
 std::vector<expr2tc>
 code_contractst::extract_assigns_from_body(const goto_programt &function_body)
 {
@@ -4880,6 +4893,8 @@ void code_contractst::generate_replacement_at_call(
         config.options.get_bool_option("add-symex-value-sets") &&
         is_pointer_type(instantiated_target))
         continue;
+
+      instantiated_target = havoc_place(instantiated_target);
 
       if (havoc_pointed_to_array(
             instantiated_target, call_location, replacement))
