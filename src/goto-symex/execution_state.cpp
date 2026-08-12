@@ -1,5 +1,6 @@
 #include <goto-symex/execution_state.h>
 #include <goto-symex/reachability_tree.h>
+#include <goto-symex/symex_invariant.h>
 #include <langapi/language_ui.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -95,6 +96,8 @@ execution_statet::execution_statet(
   // One thread with one dependency relation.
   dependency_chain.emplace_back();
   dependency_chain.back().push_back(0);
+  thread_last_transition.push_back(0);
+  transition_ordinal = 0;
   mpor_says_no = false;
 
   cswitch_forced = false;
@@ -163,6 +166,8 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   thread_last_reads = ex.thread_last_reads;
   thread_last_writes = ex.thread_last_writes;
   dependency_chain = ex.dependency_chain;
+  thread_last_transition = ex.thread_last_transition;
+  transition_ordinal = ex.transition_ordinal;
   mpor_says_no = ex.mpor_says_no;
   cswitch_forced = ex.cswitch_forced;
 
@@ -862,6 +867,7 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   dependency_chain.emplace_back();
   for (unsigned int i = 0; i < dependency_chain.size(); i++)
     dependency_chain.back().push_back(0);
+  thread_last_transition.push_back(0);
 
   // While we've recorded the new thread as starting in the designated program,
   // it might not run immediately, thus must have it's path preserved:
@@ -1286,6 +1292,9 @@ void execution_statet::calculate_mpor_constraints()
   //  about progress later.
   std::vector<std::vector<int>> new_dep_chain = dependency_chain;
 
+  // The transition just taken is the newest in the run.
+  thread_last_transition[active_thread] = ++transition_ordinal;
+
   // Start new dependency chain for this thread. Default to there being no
   // relation.
   for (unsigned int i = 0; i < new_dep_chain.size(); i++)
@@ -1300,6 +1309,12 @@ void execution_statet::calculate_mpor_constraints()
   {
     if (j == active_thread)
       continue;
+
+    // The diagonal is what the un-run test below reads, and it is only a
+    // "has this thread run" flag because nothing else ever writes it.
+    SYMEX_INVARIANT(
+      (dependency_chain[j][j] == 1) == (thread_last_transition[j] != 0),
+      "MPOR chain diagonal disagrees with whether the thread has run");
 
     // MPOR's rule is DCjj(k) == 0 -- "Tj has not run" -- not DCji(k) == 0. The
     // two differ for a thread created after Tj last ran: its column is padded
@@ -1336,6 +1351,22 @@ void execution_statet::calculate_mpor_constraints()
       if (res != 0)
         new_dep_chain[j][active_thread] = res;
     }
+
+    // The inductive step of A6.4: every 1 in the chain points forward in run
+    // order. Only the active thread's row and column change meaning when it
+    // takes a transition -- every other entry keeps both its endpoints -- so
+    // checking those two is checking the step. The column covers the res == 0
+    // path, which keeps a 1 recorded against an older transition of the active
+    // thread; the row covers the reset above, without which the chain would
+    // claim a dependency leaving the newest transition in the run.
+    SYMEX_INVARIANT(
+      new_dep_chain[j][active_thread] != 1 ||
+        thread_last_transition[j] < thread_last_transition[active_thread],
+      "MPOR dependency chain runs backwards in time");
+    SYMEX_INVARIANT(
+      new_dep_chain[active_thread][j] != 1 ||
+        thread_last_transition[active_thread] < thread_last_transition[j],
+      "MPOR dependency chain leaves the newest transition");
   }
 
   // For /all other relations/, just propagate the dependency it already has.

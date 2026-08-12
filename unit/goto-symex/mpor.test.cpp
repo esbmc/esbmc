@@ -11,9 +11,12 @@
 
  The reset is faithful: DCil records a chain from the last transition of Tl to
  Ti's, and the transition just taken is the latest in the run, so no chain can
- leave it. What is *not* a transcription of the recurrence is the guard on the
- un-run case, which tests the column entry DCja where MPOR tests the diagonal
- DCjj; that equivalence is a property of the run and is asserted in the engine.
+ leave it. That argument is now the engine's own invariant -- every 1 in the
+ chain points forward in the run order the engine records alongside it -- and
+ this file re-checks it from outside, on the chain a real exploration produces.
+ What is *not* a transcription of the recurrence is the guard on the un-run
+ case, which tests the column entry DCja where MPOR tests the diagonal DCjj;
+ that equivalence is a property of the run and is asserted in the engine.
  This file pins the chain's shape after every interleaving of a real concurrent
  program. It does *not* discriminate the un-run guard itself: reverting that
  guard leaves every assertion here green, and the interleaving count unchanged
@@ -24,6 +27,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -57,10 +61,18 @@ public:
     rt.setup_for_new_explore();
   }
 
-  const std::vector<std::vector<int>> &run_one_interleaving()
+  struct chaint
+  {
+    const std::vector<std::vector<int>> &dc;
+    const std::vector<unsigned int> &order;
+  };
+
+  chaint run_one_interleaving()
   {
     rt.get_next_formula();
-    return rt.get_cur_state().get_dependency_chain();
+    return {
+      rt.get_cur_state().get_dependency_chain(),
+      rt.get_cur_state().get_thread_last_transition()};
   }
 
   bool more_interleavings()
@@ -84,16 +96,31 @@ struct census
   unsigned run_threads = 0;
   unsigned chains = 0;
   unsigned no_relation = 0;
+  unsigned rows_reset_after_running = 0;
 };
 
-void check_chain(const std::vector<std::vector<int>> &dc, census &seen)
+void check_chain(const engine::chaint &c, census &seen)
 {
+  const std::vector<std::vector<int>> &dc = c.dc;
   const size_t n = dc.size();
   REQUIRE(n >= 2);
+  REQUIRE(c.order.size() == n);
+
+  // A6.4 from outside the engine: a chain into Tj's last transition can only
+  // start at one that preceded it. The reset of the active row is what keeps
+  // this true, so a run where some thread took a second transition after a
+  // chain out of it was recorded is a run where the reset had work to do --
+  // counted below, since without it the property is unobservable.
+  unsigned latest = 0;
+  for (size_t j = 0; j < n; j++)
+    latest = std::max(latest, c.order[j]);
+  if (latest > n)
+    seen.rows_reset_after_running++;
 
   for (size_t j = 0; j < n; j++)
   {
     REQUIRE(dc[j].size() == n);
+    REQUIRE((dc[j][j] == 1) == (c.order[j] != 0));
 
     bool row_all_zero = true;
     for (size_t l = 0; l < n; l++)
@@ -105,7 +132,10 @@ void check_chain(const std::vector<std::vector<int>> &dc, census &seen)
       if (j == l)
         continue;
       if (dc[j][l] == 1)
+      {
+        REQUIRE(c.order[j] < c.order[l]);
         seen.chains++;
+      }
       else if (dc[j][l] == -1)
         seen.no_relation++;
     }
@@ -172,4 +202,5 @@ TEST_CASE(
   REQUIRE(seen.run_threads > 0);
   REQUIRE(seen.chains > 0);
   REQUIRE(seen.no_relation > 0);
+  REQUIRE(seen.rows_reset_after_running > 0);
 }

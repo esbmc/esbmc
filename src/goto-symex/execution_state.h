@@ -549,6 +549,12 @@ public:
     return dependency_chain;
   }
 
+  /** Read-only accessor for the chain's run order, for the A6.4 harness. */
+  const std::vector<unsigned int> &get_thread_last_transition() const
+  {
+    return thread_last_transition;
+  }
+
   /** Accessor method for cswitch_forced. Sets it to true. */
   void force_cswitch()
   {
@@ -699,6 +705,14 @@ protected:
   /** Dependancy chain for POR calculations. In mpor paper, DCij elements map
    *  to dependency_chain[i][j] here. */
   std::vector<std::vector<int>> dependency_chain;
+  /** Run-order ordinal of each thread's last completed transition; 0 for a
+   *  thread that has not run. Only advanced where the chain is maintained,
+   *  which is why it is the chain's own notion of time rather than CS_number.
+   *  DCij asserts a chain from Ti's last transition to Tj's, so every 1 must
+   *  point forward in this order (A6.4). */
+  std::vector<unsigned int> thread_last_transition;
+  /** Ordinal issued to the next completed transition. */
+  unsigned int transition_ordinal;
   /** MPOR scheduling outcome. If we've just taken a transition that MPOR
    *  rejects, this becomes true. For various reasons, we can't tell whether or
    *  not MPOR rejects a transition in advance. */
