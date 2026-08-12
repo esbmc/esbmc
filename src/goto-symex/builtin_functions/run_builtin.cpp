@@ -162,6 +162,52 @@ bool goto_symext::run_builtin(
     return true;
   }
 
+  /* __builtin_ctz family: count TRAILING zero bits -- the mirror of clz above,
+   * smearing set bits upward rather than down. Unmodelled these returned
+   * nondet, so LLVM libc's cpp::countr_zero (which compiles to __builtin_ctzg)
+   * produced an unconstrained result and ESBMC reported a spurious shift-count
+   * violation on any code using it -- e.g. fixed_point::divi's `scaled_n >> k`,
+   * where the real k is bounded by the operand width. Same defect class as
+   * #6925 for clzg.
+   */
+  if (
+    symname == "c:@F@__builtin_ctz" || symname == "c:@F@__builtin_ctzl" ||
+    symname == "c:@F@__builtin_ctzll" || symname == "c:@F@__builtin_ctzg" ||
+    symname == "c:@F@__builtin_ctzs")
+  {
+    const bool is_generic = symname == "c:@F@__builtin_ctzg";
+    assert(
+      (is_generic ? func_call.operands.size() <= 2
+                  : func_call.operands.size() == 1) &&
+      "__builtin_ctz* argument count");
+
+    expr2tc arg = func_call.operands[0];
+    expr2tc ret = func_call.ret;
+
+    const type2tc &t = arg->type;
+
+    // ctz(x) = popcount(~x & (x - 1)) -- the mask isolates exactly the trailing
+    // zeros of x. Reusing popcount keeps constant arguments foldable and hands
+    // symbolic ones to the backend's exact popcount encoding, as clz does.
+    expr2tc below = sub2tc(t, arg, gen_one(t));
+    expr2tc trailing = bitand2tc(t, bitnot2tc(t, arg), below);
+    expr2tc count = popcount2tc(trailing);
+
+    /* The generic form's second argument is the value for a zero operand,
+     * which is what makes it defined there (unlike __builtin_ctz). */
+    if (is_generic && func_call.operands.size() == 2)
+      count = if2tc(
+        get_int32_type(),
+        equality2tc(arg, gen_zero(arg->type)),
+        typecast2tc(get_int32_type(), func_call.operands[1]),
+        count);
+
+    if (!is_nil_expr(ret))
+      symex_assign(code_assign2tc(ret, typecast2tc(ret->type, count)));
+
+    return true;
+  }
+
   // va_start/va_copy are kept in the GOTO program purely so that symex can
   // track which va_lists have been initialised; a va_arg on an unstarted
   // va_list is then flagged in symex_va_arg. The vararg values themselves

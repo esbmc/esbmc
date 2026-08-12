@@ -1604,12 +1604,12 @@ low, which no rounding convention explains.
 instead of stopping at the first, and with no user-written assertions the
 checkers themselves are the oracle. Applied to libc's real templates.
 
-### divi: 3 violations, all reported together
+### divi: 3 violations reported, 2 real
 
 ```
 fx_bits.h:256  undefined behavior on shift operation shl   CWE-1335
                F >= 0 && F < 64 && (signed long int)n >= 0
-fx_bits.h:257  undefined behavior on shift operation ashr  CWE-1335
+fx_bits.h:257  undefined behavior on shift operation ashr  CWE-1335   <- ESBMC bug, see below
                k >= 0 && k < 64
 fx_bits.h:266  arithmetic overflow on shl                  CWE-190, CWE-191
                !overflow("shl", 1, F)
@@ -1625,11 +1625,23 @@ Of the three:
   `rdivi` passes signed operands straight through, so it is on the shipped path.
 * **266 is the originally reported `1 << F`.** ESBMC's condition
   `!overflow("shl", 1, F)` states it exactly.
-* **257 is a false positive.** ESBMC requires `k < 64` for `scaled_n >> k`, but
-  `k = countr_zero<uint32_t>(...)` is bounded by 32 -- measured: 31 for
-  `|INT_MIN|`, 32 for an all-zero input. No reachable `k` violates it. The
-  checker simply does not know `countr_zero`'s range. Recorded as a checker
-  limitation, not a libc bug.
+* **257 was a false positive -- caused by an ESBMC gap, now fixed.** My first
+  explanation ("the checker does not know `countr_zero`'s range") was wrong. The
+  real cause: `cpp::countr_zero` compiles to **`__builtin_ctzg`**
+  (`CPP/bit.h:104`), and ESBMC did not model any of the `__builtin_ctz*` family
+  -- it printed `WARNING: no body for function __builtin_ctzg` and treated the
+  call as returning nondet. An unconstrained `k` then genuinely can exceed 63,
+  so the violation was real *given the model*, and the model was the defect.
+
+  This is the same defect class as `__builtin_clzg` (esbmc/esbmc#6925), fixed
+  the same way: `ctz(x) = popcount(~x & (x-1))`, with the generic form's second
+  argument supplying the zero-operand fallback. Verified correct rather than
+  merely permissive -- checked against a shift-loop reference over a symbolic
+  input, plus concrete spot checks -- and pinned by
+  `regression/esbmc/builtin_ctz{,_fail}`.
+
+  **After the fix, divi reports 2 violations instead of 3.** Line 257 is gone;
+  256 and 266 remain, which are the real defects.
 
 ### Every other family: clean
 
