@@ -142,17 +142,16 @@ void function_call_builder::check_contract_call(
 // should fail loudly instead of lowering into something else. Denying only
 // Call and Subscript let comprehensions and the walrus operator through.
 // Operator and context nodes carry their own `_type`, so they are listed too.
+// `In` / `NotIn` are absent because they are container operations.
 static bool is_pure_clause_node(const std::string &node_type)
 {
   static const std::set<std::string> pure = {
-    "Name",  "Constant", "BoolOp", "UnaryOp", "BinOp",    "Compare",
-    "IfExp", "Attribute", "Load",
-    "And",   "Or",       "Not",    "UAdd",    "USub",     "Invert",
-    "Add",   "Sub",      "Mult",   "Div",     "FloorDiv", "Mod",
-    "Pow",   "LShift",   "RShift", "BitOr",   "BitXor",   "BitAnd",
-    // `in` / `not in` are container operations and stay out
-    "Eq",    "NotEq",    "Lt",     "LtE",     "Gt",       "GtE",
-    "Is",    "IsNot"};
+    "Name",  "Constant",  "BoolOp", "UnaryOp", "BinOp",  "Compare",
+    "IfExp", "Attribute", "Load",   "And",     "Or",     "Not",
+    "UAdd",  "USub",      "Invert", "Add",     "Sub",    "Mult",
+    "Div",   "FloorDiv",  "Mod",    "Pow",     "LShift", "RShift",
+    "BitOr", "BitXor",    "BitAnd", "Eq",      "NotEq",  "Lt",
+    "LtE",   "Gt",        "GtE",    "Is",      "IsNot"};
   return pure.count(node_type) != 0;
 }
 
