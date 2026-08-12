@@ -1,32 +1,94 @@
-# LLVM libc `stdfix` sqrt: which bound applies where
+# LLVM libc `stdfix` sqrt is not correctly rounded
 
 **Status: DRAFT, not reported upstream.** Held for review.
 
-**Verdict, corrected.** An earlier draft of this report was titled
-"`sqrt` exceeds its documented error bound" and applied one bound to all seven
-entry points. That was wrong: `sqrt.h` states **three different bounds on three
-different functions**, and the function five of the seven entry points call
-states none at all.
+File: `libc/src/__support/fixed_point/sqrt.h`.
+Tree: llvm-project a074f5ba20c7.
+
+**`fixed_point::sqrt` returns a value other than the nearest representable root
+for the majority of inputs, at every format measured, and documents no accuracy
+bound that would tell a caller so.**
+
+Measured exhaustively -- every input of each format, no sampling:
+
+| entry point | format | inputs | not correctly rounded | worst error | exact roots wrong |
+|---|---|---|---|---|---|
+| `sqrtuhr` | u0.8 | 256 | **146 (57.0%)** | 1.09 ulp | 8 / 16 |
+| `sqrtur` | u0.16 | 65 536 | **53 060 (81.0%)** | 2.48 ulp | 153 / 256 |
+| `sqrtuhk` | u8.8 | 65 536 | **34 767 (53.1%)** | 1.09 ulp | 153 / 256 |
+
+28 228 of the u0.16 failures are more than one ULP out, so this is not a
+tie-breaking disagreement.
+
+The sharpest cases need no rounding convention to adjudicate. `sqrt(81/256) =
+9/16` and `sqrt(100/65536) = 10/256` are **exactly representable** -- there is a
+correct answer with zero error available -- and both come back one ULP low.
+
+```
+x = 254/256 = 0.992187500
+  true root x 256 = 254.998039     nearest representable: raw 255
+  libc returns      raw 254        -0.998 ulp
+```
+
+The root sits 99.8% of the way to the next representable value; libc returns the
+one below.
+
+## Why this is the finding, rather than a bound violation
+
+`fixed_point::sqrt` is declared at sqrt.h:184 and the comment above it is a TODO
+about division-free Newton iterations -- **no accuracy claim at all**. So nothing
+in the source is contradicted. That is precisely the problem: a caller sees a
+function named `sqrt`, taking and returning the same fixed-point format, and has
+no way to learn from the source that it is a ~2.5-ULP approximation.
+
+The implementation is *usable* -- bounded, both-directions, no wrong answers of
+the kind found in exp. The gap is between what it does and what a reader would
+assume.
+
+### An earlier draft of this report got the attribution wrong
+
+It was titled "`sqrt` exceeds its documented error bound" and applied one bound
+to all seven entry points. `sqrt.h` in fact states **three different bounds on
+three different functions**:
 
 | `sqrt.h` line | bound | function | reached by |
 |---|---|---|---|
 | 165 | `\|r - sqrt(x_frac)\| < max(1.5*2^-11, eps)` | `sqrt_core` | all, indirectly |
-| **(none)** | — | **`fixed_point::sqrt`** | `sqrtuhr` `sqrtur` `sqrtulr` `sqrtuhk` `sqrtuk` |
+| **(none)** | -- | **`fixed_point::sqrt`** | `sqrtuhr` `sqrtur` `sqrtulr` `sqrtuhk` `sqrtuk` |
 | 212 | **absolute** errors < 2^-F | `isqrt` | **nothing** |
 | 237 | **relative** errors < 2^-F | `isqrt_fast` | `uhksqrtus` `uksqrtui` |
 
-So the findings split three ways:
+Two secondary findings follow from the table:
 
-1. **`uhksqrtus` / `uksqrtui` violate `isqrt_fast`'s relative bound** — the claim
-   their own function makes. Measured 1.51× and 3.47×. **Firm.**
-2. **`isqrt`'s absolute bound is violated** (−1.86 ulp at u8.8, −1.68 ulp at
-   u16.16) — but `grep` over `libc/src` and `libc/test` shows **no caller**. A
+1. **`isqrt_fast`'s relative bound is violated** on the two entry points that
+   call it -- 1.51x at `uhksqrtus`, 3.47x at `uksqrtui`. This is the only sqrt
+   finding where a function fails a claim it makes about itself. Note a relative
+   bound is an awkward shape here for the same reason documented for exp: near
+   the bottom of the range, one ULP of unavoidable error is large in relative
+   terms.
+2. **`isqrt`'s absolute bound is violated** (-1.86 ulp at u8.8, -1.68 ulp at
+   u16.16), but `grep` over `libc/src` and `libc/test` finds **no caller**. A
    defect in a documented internal function nothing currently uses.
-3. **The five `sqrt` entry points** are 1–2 ulp from the exact root, and
-   153 of 256 exact perfect squares come back one ulp low. But
-   `fixed_point::sqrt` documents **no end-to-end bound**, and the one bound in
-   its call chain is honoured (see below). This is a **documentation gap**, not a
-   proven bound violation.
+
+## How correct rounding was checked
+
+Two independent methods, agreeing.
+
+**In-solver**, over all inputs at once, with no reference root computed by the
+harness. camada's `mkFXPSqrt` is the exact root truncated toward zero, so the
+true root lies in `[oracle, oracle+1ulp)` and the nearest representable value is
+decided by squaring the midpoint:
+
+```
+root >= oracle + 1/2   <=>   (2*oracle + 1)^2 <= 4 * raw_x * 2^F
+```
+
+`harness_sqrt_correctly_rounded.cpp` -- **VERIFICATION FAILED in 0.70 s**,
+counterexample `xb = 254`.
+
+**Natively**, by executing libc's own compiled code over every input of the three
+formats above and comparing against `sqrt()` in `long double`. This is what
+produced the percentages; it needs no verifier and is independently reproducible.
 
 ### The one bound covering `sqrt`'s machinery is honoured
 
@@ -50,63 +112,6 @@ x_raw = 63211 (0.964523315)
 Both return the same value — the rescale is a no-op at this input — so the error
 originates in `sqrt_core`, within its own bound. The gap is that `sqrt_core`'s
 48-ulp slack propagates to `sqrt` unchanged and nothing narrows or documents it.
-
-## Evidence for finding 3: exact perfect squares
-
-The measurements below stand as *behaviour*; what changed is the claim they are
-evidence for. A caller of a function named `sqrt` returning the same fixed-point
-format would reasonably expect near-1-ulp accuracy, and does not get it:
-
-```
-sqrt(25)  = 5  exactly -> libc gives  4.99609
-sqrt(100) = 10 exactly -> libc gives  9.99609
-```
-
-No unsoundness in the arithmetic — the results are usable approximations — but
-code relying on the stated bound is relying on something untrue.
-
-## How this was established
-
-Found while verifying LLVM libc's `stdfix` implementation with ESBMC
-(esbmc/esbmc PR #4179). The comparison is a **proof over every input of the
-format**, not a sampled differential test: the reference is an SMT term
-(camada's exact fixed-point square root), so the harness never computes an
-expected value.
-
-The reference was itself validated first, against the bracket that
-characterises it uniquely — `raw_r^2 <= raw_x * 2^F < (raw_r+1)^2` — so a
-mis-wired oracle could not silently produce these findings.
-
-Proved separately per direction, so neither masks the other:
-
-| property | verdict |
-|---|---|
-| libc is never *above* the true root | **SUCCESSFUL** |
-| libc is within 1 ULP *below* the true root | **FAILED** |
-
-The error is one-sided (always downward) and reaches a full ULP, which points
-at the truncating rescale rather than at approximation error as such.
-
-Every number below is also reproduced by executing the library's own compiled
-code, independently of the verifier.
-
-## The claim — and whose claim it is
-
-```cpp
-// libc/src/__support/fixed_point/sqrt.h:211-212
-// Integer square root - Accurate version:
-// Absolute errors < 2^(-fraction length).
-```
-
-`2^(-fraction length)` is one ULP of the result format: `2^-8` for
-`unsigned short fract`, `2^-16` for `unsigned fract`.
-
-**This comment sits on `isqrt`, and nothing calls `isqrt`.** The measurements in
-the next section were taken against it, which is why they are now reported under
-finding 2 (a defect in an uncalled internal function) rather than as a violation
-by the shipped entry points. `uhksqrtus` and `uksqrtui` call `isqrt_fast`, whose
-bound is *relative* (line 237); the other five call `fixed_point::sqrt`, which
-states nothing.
 
 ## Measurements
 
@@ -270,10 +275,11 @@ missed 13 scattered inputs out of 256.
 
 Any one of these makes the documentation and the code agree:
 
-1. **Give `fixed_point::sqrt` an accuracy comment.** It has none, and five of the
-   seven shipped entry points call it. Whatever bound it actually meets —
-   measurement says roughly 2 ulp — stating it would close the gap that makes up
-   finding 3 entirely. This is the cheapest and most useful change.
+1. **Give `fixed_point::sqrt` an accuracy comment** — the primary
+   recommendation. It has none, and five of the seven shipped entry points call
+   it. Measurement says it is within ~2.5 ULP but correctly rounded on only
+   19-47% of inputs depending on format. Stating either figure closes the gap
+   between the implementation and what a reader assumes, and costs one comment.
 2. **Correct or re-scope `isqrt`'s line-212 bound**, which is violated
    (−1.86 ulp at u8.8). Low priority while nothing calls `isqrt`, but the
    comment is currently untrue as written.
@@ -282,9 +288,14 @@ Any one of these makes the documentation and the code agree:
    bound is also the awkward shape here — near the bottom of the range one ulp
    of unavoidable error is large in relative terms, the same issue documented
    for exp in REPORT-llvm-libc-exp-defects.md.
-4. **Round instead of truncating** on the final rescale, if tighter accuracy is
-   wanted. Note this is offered as an improvement, not a fix for a diagnosed
-   cause — the rescale attribution above is withdrawn.
+4. **Make it correctly rounded**, if that is the intended contract. The exact
+   perfect squares are the argument: `sqrt(81/256) = 9/16` has a zero-error
+   answer available and does not return it, which no rounding convention
+   justifies. This is a larger change than (1) and only worth it if callers are
+   expected to rely on nearest-representable results.
+5. **Round instead of truncating** on the final rescale, if tighter accuracy is
+   wanted without full correct rounding. Offered as an improvement, not a fix
+   for a diagnosed cause — the rescale attribution above is withdrawn.
 
 An earlier draft of this report suggested raising `EXTRA_STEPS`. **That
 suggestion is withdrawn** -- u0.32 already uses `EXTRA_STEPS = 2` and is no
@@ -299,7 +310,10 @@ exhaustive enumeration is impractical at those widths. The sampled figures are
 included because they carry the argument that refinement count is not the
 driver; they are not offered as worst-case bounds.
 
-The violated claim sits on **`isqrt`** (sqrt.h:211-212), which is what the
-`uksqrtui` and `uhksqrtus` entry points call -- so the bound is violated on its
-own entry points, not merely inherited from the neighbouring
-`fixed_point::sqrt`.
+**Correction to an earlier version of this paragraph.** It stated that
+`uksqrtui` and `uhksqrtus` call `isqrt`. They do not -- both call `isqrt_fast`
+(`uksqrtui.cpp:18`, `uhksqrtus.cpp:18`), whose bound is *relative* rather than
+absolute. `isqrt`'s absolute bound is violated but has no caller anywhere in
+`libc/src` or `libc/test`. The correct-rounding measurements that lead this
+report are about `fixed_point::sqrt`, which is what the other five entry points
+call.
