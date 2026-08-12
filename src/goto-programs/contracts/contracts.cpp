@@ -400,130 +400,44 @@ static std::set<irep_idt> declared_in(const goto_programt &body)
   return decls;
 }
 
-bool code_contractst::callee_is_pure(
-  const irep_idt &callee,
-  std::set<irep_idt> &visited) const
-{
-  if (!visited.insert(callee).second)
-    return true; // already on the stack: recursion adds no new writes
-
-  auto it = goto_functions.function_map.find(callee);
-  if (it == goto_functions.function_map.end() || !it->second.body_available)
-    return false; // no body here, so nothing rules out a side effect
-
-  forall_goto_program_instructions (i, it->second.body)
-  {
-    if (i->is_assign() && is_code_assign2t(i->code))
-    {
-      const code_assign2t &assign = to_code_assign2t(i->code);
-      // A write anywhere but a local of this callee escapes it.
-      if (!is_symbol2t(assign.target))
-        return false;
-      const symbolt *target = ns.lookup(to_symbol2t(assign.target).thename);
-      if (!target || target->static_lifetime)
-        return false;
-    }
-
-    if (i->is_function_call() && is_code_function_call2t(i->code))
-    {
-      const code_function_call2t &call = to_code_function_call2t(i->code);
-      if (!is_symbol2t(call.function))
-        return false;
-      if (!callee_is_pure(to_symbol2t(call.function).thename, visited))
-        return false;
-    }
-  }
-
-  return true;
-}
-
-std::string
-code_contractst::impure_clause_reason(const goto_programt &body) const
-{
-  const std::string callee = impure_clause_callee(body);
-  if (callee.empty())
-    return std::string();
-
-  return "a contract clause calls '" + callee +
-         "', which is not provably free of side effects";
-}
-
-std::string
-code_contractst::impure_clause_callee(const goto_programt &body) const
+/// Name of the first non-intrinsic call whose result a clause in \p body
+/// still depends on, empty when there is none.
+///
+/// A clause is lowered into a single ASSUME/ASSERT, so a call inside it
+/// survives only as the SSA temporary the frontend bound its result to. That
+/// temporary is declared in the function body, never in the wrapper or at a
+/// replaced call site, so the clause is left over a free symbol: assumed it
+/// constrains nothing, asserted it is unprovable (#6941). Contract intrinsics
+/// are excluded because they carry their own materialisation.
+std::string code_contractst::clause_call_callee(const goto_programt &body) const
 {
   std::set<irep_idt> referenced;
   forall_goto_program_instructions (it, body)
     if (
-      it->is_assume() && (id2string(it->location.comment()) ==
-                            "contract::requires" ||
-                          id2string(it->location.comment()) ==
-                            "contract::ensures"))
+      it->is_assume() &&
+      (id2string(it->location.comment()) == "contract::requires" ||
+       id2string(it->location.comment()) == "contract::ensures"))
       collect_symbol_names(it->guard, referenced);
 
   if (referenced.empty())
     return std::string();
 
-  std::set<irep_idt> visited;
   for (const goto_programt::const_targett &call_it :
        select_clause_calls(referenced, declared_in(body), body))
-  {
-    const code_function_call2t &call =
-      to_code_function_call2t(call_it->code);
-    const irep_idt &callee = to_symbol2t(call.function).thename;
-    visited.clear();
-    if (!callee_is_pure(callee, visited))
-      return id2string(callee);
-  }
+    return id2string(
+      to_symbol2t(to_code_function_call2t(call_it->code).function).thename);
 
   return std::string();
 }
 
-/// A clause is lowered into a single ASSUME/ASSERT, so a call inside it
-/// survives only as the SSA temporary the frontend bound its result to. That
-/// temporary is declared in the function body, not in the wrapper, which left
-/// the clause standing over a free symbol: assumed, it constrained nothing;
-/// asserted, it was unprovable (#6941). Re-materialise the defining call here,
-/// which is what the __ESBMC_is_fresh path has always done for its one
-/// hard-coded intrinsic.
-void code_contractst::lift_clause_call_temps(
-  const expr2tc &clause,
-  const goto_programt &original_body,
-  goto_programt &dest,
-  const std::vector<std::pair<expr2tc, expr2tc>> &substitutions) const
+std::string code_contractst::clause_call_reason(const goto_programt &body) const
 {
-  std::set<irep_idt> referenced;
-  collect_symbol_names(clause, referenced);
-  if (referenced.empty())
-    return;
+  const std::string callee = clause_call_callee(body);
+  if (callee.empty())
+    return std::string();
 
-  const std::set<irep_idt> body_decls = declared_in(original_body);
-
-  std::set<goto_programt::const_targett> selected =
-    select_clause_calls(referenced, body_decls, original_body);
-
-  forall_goto_program_instructions (it, original_body)
-  {
-    if (!selected.count(it))
-      continue;
-
-    const code_function_call2t &call = to_code_function_call2t(it->code);
-
-    // At a call site the lifted call still names the callee's parameters, so
-    // rewrite them to this caller's actual arguments.
-    code_function_call2t lifted_call = call;
-    for (const auto &sub : substitutions)
-      for (expr2tc &arg : lifted_call.operands)
-        arg = replace_symbol_in_expr(arg, sub.first, sub.second);
-
-    goto_programt::targett decl = dest.add_instruction(DECL);
-    decl->code = code_decl2tc(call.ret->type, to_symbol2t(call.ret).thename);
-    decl->location = it->location;
-
-    goto_programt::targett lifted = dest.add_instruction(FUNCTION_CALL);
-    lifted->code = code_function_call2tc(
-      lifted_call.ret, lifted_call.function, lifted_call.operands);
-    lifted->location = it->location;
-  }
+  return "a contract clause calls '" + callee +
+         "', whose result the clause cannot name outside the function body";
 }
 
 struct var_assignment_info
@@ -1759,7 +1673,6 @@ goto_programt code_contractst::generate_checking_wrapper(
   // 3. Assume requires clause (after memory allocation for is_fresh)
   // Also replace __ESBMC_old() references in the requires clause — old snapshots
   // have already been materialized above (step 2), so replacement is safe here.
-  lift_clause_call_temps(requires_clause, original_body, wrapper);
   {
     expr2tc req = requires_clause;
     if (!old_snapshots.empty() && !is_nil_expr(req))
@@ -2008,8 +1921,6 @@ goto_programt code_contractst::generate_checking_wrapper(
 
   // 4. Assert ensures clause (replace __ESBMC_return_value and __ESBMC_old)
   // Process ensures clause: replace return_value, old(), and is_fresh
-  // Lifted after the original call, so a clause call observes the post-state.
-  lift_clause_call_temps(ensures_clause, original_body, wrapper);
   expr2tc ensures_guard = ensures_clause;
   if (!is_nil_expr(ensures_clause))
   {
@@ -4260,7 +4171,7 @@ std::string code_contractst::diagnose_contract_target(
         has_contracts(it->second.body) ||
         (sym && is_annotated_contract_function(*sym)))
       {
-        return impure_clause_reason(it->second.body);
+        return clause_call_reason(it->second.body);
       }
     }
     return any_match ? "that function declares no contract clauses"
@@ -4282,10 +4193,7 @@ std::string code_contractst::diagnose_contract_target(
   if (!has_contracts(it->second.body) && !is_annotated_contract_function(*sym))
     return "that function declares no contract clauses";
 
-  // A clause call is re-issued in the wrapper, so an impure one would run its
-  // side effects before the body and check it from a state no caller can
-  // reach (#6945).
-  return impure_clause_reason(it->second.body);
+  return clause_call_reason(it->second.body);
 }
 
 void code_contractst::replace_calls(const std::set<std::string> &to_replace)
@@ -4755,9 +4663,6 @@ void code_contractst::generate_replacement_at_call(
       t->location.property(property);
   };
 
-  lift_clause_call_temps(
-    requires_clause, function_body, replacement, param_substitutions);
-
   // 1. Assert requires clause (check precondition at call site)
   //
   // Lower any __ESBMC_is_fresh(p, n) in the requires clause to a concrete,
@@ -4963,9 +4868,6 @@ void code_contractst::generate_replacement_at_call(
       "ensures (after type={})",
       ensures_guard ? get_type_id(*ensures_guard->type) : "nil");
   }
-
-  lift_clause_call_temps(
-    ensures_clause, function_body, replacement, param_substitutions);
 
   // 4. Assume ensures clause (assume postcondition at call site)
   add_contract_clause(

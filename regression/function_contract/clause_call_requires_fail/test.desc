@@ -1,5 +1,0 @@
-CORE
-main.c
---enforce-contract f
-^  contract ensures$
-^VERIFICATION FAILED$

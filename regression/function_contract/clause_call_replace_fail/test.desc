@@ -1,5 +1,0 @@
-CORE
-main.c
---replace-call-with-contract f
-^  contract requires$
-^VERIFICATION FAILED$
