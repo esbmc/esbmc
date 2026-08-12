@@ -1597,3 +1597,54 @@ where the naming and signature suggest a correctly-rounded result. The exact
 perfect squares make it concrete -- `sqrt(81/256) = 9/16` and
 `sqrt(100/65536) = 10/256` are exactly representable and still come back one ulp
 low, which no rounding convention explains.
+
+## Multi-property UB sweep
+
+`--multi-property --overflow-check` reports every violated claim in one run
+instead of stopping at the first, and with no user-written assertions the
+checkers themselves are the oracle. Applied to libc's real templates.
+
+### divi: 3 violations, all reported together
+
+```
+fx_bits.h:256  undefined behavior on shift operation shl   CWE-1335
+               F >= 0 && F < 64 && (signed long int)n >= 0
+fx_bits.h:257  undefined behavior on shift operation ashr  CWE-1335
+               k >= 0 && k < 64
+fx_bits.h:266  arithmetic overflow on shl                  CWE-190, CWE-191
+               !overflow("shl", 1, F)
+```
+
+Reporting all three in a single run confirms they are **independent**, not one
+masking another -- which is what the earlier one-at-a-time runs could not show.
+
+Of the three:
+
+* **256 is a real defect and broader than first reported.** Left-shifting a
+  negative `int64_t` is UB (C11 6.5.7p4) at *every* format, not only `F >= 31`.
+  `rdivi` passes signed operands straight through, so it is on the shipped path.
+* **266 is the originally reported `1 << F`.** ESBMC's condition
+  `!overflow("shl", 1, F)` states it exactly.
+* **257 is a false positive.** ESBMC requires `k < 64` for `scaled_n >> k`, but
+  `k = countr_zero<uint32_t>(...)` is bounded by 32 -- measured: 31 for
+  `|INT_MIN|`, 32 for an all-zero input. No reachable `k` violates it. The
+  checker simply does not know `countr_zero`'s range. Recorded as a checker
+  limitation, not a libc bug.
+
+### Every other family: clean
+
+Same flags, no assertions, symbolic input:
+
+| harness | function | verdict | violations |
+|---|---|---|---|
+| `ub_sqrt_uhr` | `fixed_point::sqrt` u0.8 | SUCCESSFUL | 0 |
+| `ub_sqrt_ur` | `fixed_point::sqrt` u0.16 | SUCCESSFUL | 0 |
+| `ub_isqrt_fast_uhk` | `isqrt_fast` | SUCCESSFUL | 0 |
+| `ub_round_hk` | `round` | SUCCESSFUL | 0 |
+| `ub_countls_hk` | `countls` | SUCCESSFUL | 0 |
+| `ub_abs_hk` | `abs` | SUCCESSFUL | 0 |
+
+So the UB is confined to `divi`. That is worth stating positively: the accuracy
+findings elsewhere (sqrt not correctly rounded, exp's placeholder entry) are
+*accuracy* problems in code that is otherwise free of undefined behaviour, and
+`--overflow-check` clears the five families that pass on accuracy too.
