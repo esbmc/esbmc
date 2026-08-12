@@ -1,0 +1,6 @@
+CORE
+main.c
+--assertion-coverage-claims
+Assertion Instances Coverage: 100%
+: REACHED$
+^COVERAGE ANALYSIS COMPLETE$

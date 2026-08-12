@@ -35,6 +35,17 @@ reachability_treet::reachability_treet(
   schedule = options.get_bool_option("schedule");
   smt_during_symex = options.get_bool_option("smt-during-symex");
   por = !options.get_bool_option("no-por");
+  // --schedule and --direct-interleavings keep the pruning half of sleep sets
+  // (dfs_explore_thread and erase_current_frame are shared) without the waking
+  // half: generate_schedule_formula has no wake filter, and
+  // --direct-interleavings drives the search by hand, so every frame looks
+  // exhaustive. --data-races-check-only makes get_expr_globals record nothing,
+  // so every footprint is empty and a sleeping thread could never wake.
+  // --interactive-ileaves aborts when the search declines the user's thread,
+  // which a sleep set is now a reason to do.
+  sleep_sets = options.get_bool_option("sleep-sets") && !schedule &&
+               !directed_interleavings && !interactive_ileaves &&
+               !options.get_bool_option("data-races-check-only");
   cs_bound_pruned = false;
   target_template = std::move(target);
 
@@ -406,6 +417,7 @@ void reachability_treet::scheduler_framet::ensure_thread_count(
 void reachability_treet::scheduler_framet::reset(unsigned int count)
 {
   explored_threads.assign(count, false);
+  sleeping.clear();
 }
 
 void reachability_treet::scheduler_framet::mark_all_explored(unsigned int count)
@@ -423,6 +435,18 @@ void reachability_treet::scheduler_framet::mark_explored(unsigned int tid)
 {
   ensure_thread_count(tid + 1);
   explored_threads[tid] = true;
+}
+
+bool reachability_treet::scheduler_framet::is_sleeping(unsigned int tid) const
+{
+  return sleeping.count(tid) != 0;
+}
+
+void reachability_treet::mark_search_truncated()
+{
+  assert(
+    !exploration_frames.empty() && cur_frame_it != exploration_frames.end());
+  cur_frame_it->exhaustive = false;
 }
 
 reachability_treet::scheduler_framet &
@@ -502,7 +526,8 @@ void reachability_treet::create_next_state()
     get_cur_scheduler_frame().mark_explored(next_thread_id);
 
     auto new_state = ex_state.clone();
-    exploration_frames.push_back({new_state, scheduler_framet{}});
+    exploration_frames.push_back(
+      {new_state, scheduler_framet{}, next_thread_id});
 
     /* Make it active, make it follow on from previous state... */
     if (new_state->get_active_state_number() != next_thread_id)
@@ -511,6 +536,11 @@ void reachability_treet::create_next_state()
     new_state->switch_to_thread(next_thread_id);
     new_state->update_after_switch_point();
     exploration_frames.back().scheduler.reset(new_state->threads_state.size());
+    // cur_frame_it is still the parent, and a list push_back does not
+    // invalidate it: the child starts from the parent's sleep set.
+    if (sleep_sets)
+      exploration_frames.back().scheduler.sleeping =
+        get_cur_scheduler_frame().sleeping;
   }
 }
 
@@ -720,7 +750,7 @@ void reachability_treet::mark_active_thread_explored()
   get_cur_scheduler_frame().mark_explored(get_cur_state().active_thread);
 }
 
-// Pure: whether tid is still an unexplored, runnable switch target on this
+// Whether tid is still an unexplored, awake, runnable switch target on this
 // frame. Marking it explored is create_next_state's job, once the switch is
 // actually taken -- deciding is not the same as going, and get_next_formula
 // can bail between the two (#4482).
@@ -728,6 +758,12 @@ bool reachability_treet::dfs_explore_thread(unsigned int tid)
 {
   if (get_cur_scheduler_frame().is_explored(tid))
     return false;
+
+  if (get_cur_scheduler_frame().is_sleeping(tid))
+  {
+    ++reduction_stats.pruned_by_sleep;
+    return false;
+  }
 
   if (get_cur_state().threads_state.at(tid).call_stack.empty())
     return false;
@@ -750,8 +786,34 @@ void reachability_treet::erase_current_frame()
   }
 
   auto prev = std::prev(cur_frame_it);
+  // An incomplete subtree makes the parent's incomplete too. Otherwise
+  // everything reachable by taking this thread from the parent has now been
+  // explored, so the parent's remaining successors need not take it again --
+  // for as long as nothing dependent on the transition it took happens first.
+  if (!cur_frame_it->exhaustive)
+    prev->exhaustive = false;
+  else if (sleep_sets && cur_frame_it->entered_via != UINT_MAX)
+    prev->scheduler.sleeping[cur_frame_it->entered_via] =
+      cur_frame_it->state->last_transition_footprint(cur_frame_it->entered_via);
   exploration_frames.erase(cur_frame_it);
   cur_frame_it = prev;
+}
+
+// A sleeping thread stays asleep only while the transitions taken since it was
+// put to sleep remain independent of the one it would take. The transition just
+// taken is only known once taken, so this runs after the step rather than at
+// create_next_state.
+void reachability_treet::wake_dependent_sleepers()
+{
+  if (!sleep_sets)
+    return;
+
+  scheduler_framet &f = get_cur_scheduler_frame();
+  const execution_statet &es = get_cur_state();
+  for (auto it = f.sleeping.begin(); it != f.sleeping.end();)
+    it = es.check_mpor_dependency(es.active_thread, it->second)
+           ? f.sleeping.erase(it)
+           : std::next(it);
 }
 
 goto_symext::symex_resultt reachability_treet::get_next_formula()
@@ -771,11 +833,14 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
       {
         ++reduction_stats.pruned_by_hash;
         post_hash_collision_cleanup();
+        mark_search_truncated();
         break;
       }
 
       update_hash_collision_set();
     }
+
+    wake_dependent_sleepers();
 
     if (por)
     {
@@ -788,11 +853,21 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
         // before this transition rather than the pruned state.
         if (state_hashing)
           remove_hash_collision_entry();
+        mark_search_truncated();
         break;
       }
     }
     next_thread_id = decide_ileave_direction(get_cur_state());
 
+    // Deliberately not a truncation, and the whole reduction rests on it:
+    // marking it makes sleep sets inert (01_malloc_19 goes 3 s -> >300 s).
+    // interleaving_unviable is the *active* thread's guard, proven false by
+    // is_cur_state_guard_false -- not a property of the whole state, so a
+    // thread we decline to switch to here may still have a satisfiable guard.
+    // What makes dropping the switch coverage-preserving is that every
+    // assignment the active thread makes from here is guarded by false, so the
+    // schedule this abandons is observationally equal to one that switches away
+    // before the dead branch -- which is a sibling of this node, and explored.
     if (
       get_cur_state().interleaving_unviable &&
       next_thread_id != get_cur_state().active_thread)
@@ -825,11 +900,13 @@ void reachability_treet::report_reduction_stats() const
 
   log_status(
     "Schedule reduction: peak_threads {}, schedules_explored {}, "
-    "pruned_by_mpor {}, pruned_by_hash {}, pruned_by_cs_bound {}",
+    "pruned_by_mpor {}, pruned_by_hash {}, pruned_by_sleep {}, "
+    "pruned_by_cs_bound {}",
     reduction_stats.peak_threads,
     reduction_stats.schedules_explored,
     reduction_stats.pruned_by_mpor,
     reduction_stats.pruned_by_hash,
+    reduction_stats.pruned_by_sleep,
     reduction_stats.pruned_by_cs_bound);
 }
 
@@ -855,6 +932,7 @@ goto_symext::symex_resultt reachability_treet::generate_schedule_formula()
       {
         ++reduction_stats.pruned_by_hash;
         post_hash_collision_cleanup();
+        mark_search_truncated();
         go_next_state();
         continue;
       }

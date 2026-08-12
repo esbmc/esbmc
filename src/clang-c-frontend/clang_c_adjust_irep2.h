@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
 #include <irep2/irep2.h>
 
 /// Phase 6 (C.3) IREP2-native adjuster for the C frontend.
@@ -21,6 +22,14 @@
 /// Read-only also side-steps the round-trip losses `python_adjust` documents
 /// (a bitfield's `#bitfield` flag, an explicit alignment attribute): those only
 /// matter to a write-back, and C headers are exactly the place they occur.
+///
+/// Known limitation: the walk aborts on a union constant whose type is still a
+/// by-name tag -- `migrate_expr` hands `migrate_type`'s `symbol_type2t` to
+/// `constant_union2tc`, whose `is_union_type` assertion then fires. Running
+/// after `clang_c_adjust` was meant to guarantee resolved aggregate types, as
+/// it does for Python after `clang_cpp_adjust`; for C it does not. 12 of the
+/// 1686 tests in regression/esbmc reach it. Left unguarded on purpose: this is
+/// the defect the walk exists to surface, and the flag is opt-in.
 class clang_c_adjust_irep2
 {
 public:
@@ -36,5 +45,11 @@ public:
   void adjust_expr(expr2tc &expr);
 
 private:
+  /// IREP2 form of clang_c_adjust::adjust_index's rewrite. The legacy arm keeps
+  /// the operand recursion and returns before this point when the flag is on
+  /// (scope-clang-c-irep2.md §19.2).
+  void adjust_index(expr2tc &expr);
+
   contextt &context;
+  namespacet ns{context};
 };
