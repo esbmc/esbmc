@@ -38,11 +38,12 @@ ends_with(std::string const &value, std::string const &ending)
   return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
 }
 
-/// Value of a __builtin_clz*/__builtin_ctz* call. One encoding covers every
-/// spelling: the operand type fixes the bit width, and the two directions
-/// differ only in which way the smear shifts. Zero is undefined for every form
-/// but the two-argument clzg/ctzg; the optional UB assertion is added in
-/// goto-check (--clz-zero-check), with the other UB checks. See #4606, #6925.
+/// Value of a __builtin_clz*/ctz*/ffs* call. One encoding covers every
+/// spelling: the operand type fixes the bit width, and the directions differ
+/// only in which way the smear shifts. Zero is undefined for every form but the
+/// two-argument clzg/ctzg and ffs; the optional UB assertion is added in
+/// goto-check (--clz-zero-check), with the other UB checks. See #4606, #6925,
+/// #183.
 static expr2tc
 build_bit_scan(const code_function_call2t &func_call, bit_scan_endt end)
 {
@@ -70,6 +71,16 @@ build_bit_scan(const code_function_call2t &func_call, bit_scan_endt end)
     get_int32_type(),
     constant_int2tc(get_int32_type(), width),
     popcount2tc(smeared));
+
+  // ffs counts the same trailing zeros but reports a one-based index, and is
+  // defined at zero as 0 rather than left undefined there (POSIX).
+  if (end == bit_scan_endt::first_set)
+    count = if2tc(
+      get_int32_type(),
+      equality2tc(arg, gen_zero(t)),
+      gen_zero(get_int32_type()),
+      add2tc(
+        get_int32_type(), count, constant_int2tc(get_int32_type(), BigInt(1))));
 
   // The second argument of clzg/ctzg is the result at zero.
   if (func_call.operands.size() == 2)
