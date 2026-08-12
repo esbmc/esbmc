@@ -1489,7 +1489,7 @@ asserting exact agreement. bitwuzla only.
 | entry point | shards | SUCCESSFUL | FAILED | slowest shard |
 |---|---|---|---|---|
 | `exphk` (s8.7) | 32 | 30 | **2** (15, 16) | 528.79s |
-| `expk` (s16.15) | 32 | 30 | **1** (16) | -- |
+| `expk` (s16.15) | 32 | 30 | **2** (15, 16) | 1399.47s |
 
 The failing shards are the ones straddling raw 0 -- the mid-range, not the
 boundary windows the earlier defect harnesses targeted. Sharding therefore found
@@ -1504,6 +1504,7 @@ All three confirmed against native libc and against exp computed in long double.
 | `exphk` | -1.3984375 | 0.246982573 | 0.2421875 (raw 31, want 32) | 0.61 ulp | **4.97x** over 2^-8 |
 | `exphk` | +0.5 | 1.648721271 | 1.6562500 (raw 212, want 211) | 0.96 ulp | **1.17x** over 2^-8 |
 | `expk` | +0.3828125 | 1.466403054 | 1.46636963 (raw 48050, want 48051) | 1.10 ulp | **1.49x** over 2^-16 |
+| `expk` | **-3.8750305** | 0.020753705 | 0.02072144 (raw 679, want 680) | 1.06 ulp | **101.90x** over 2^-16 |
 
 `x = 0.5` and `x = 0.383` are about as ordinary as inputs get -- no saturation,
 no flush, no table edge. Unlike the sqrt situation, these **do** violate a bound
@@ -1511,10 +1512,25 @@ libc states for the function in question: `exphk.cpp` and `expk.cpp` both give a
 relative error bound for the `(1 + lo)` / `(1 + lo + lo^2/2)` step, and the
 end-to-end relative error exceeds it.
 
-Note the errors are only ~1 ulp in absolute terms and go in both directions
-(raw 31 where 32 is correct, raw 212 where 211 is correct), so this is ordinary
-approximation error -- the finding is that it is larger than documented, not that
-the arithmetic is broken.
+The absolute errors are all ~1 ulp and go in both directions (raw 31 where 32 is
+correct, raw 212 where 211 is correct), so the arithmetic is not broken -- the
+finding is that the error is larger than documented.
+
+But the **relative** picture degrades badly for small results, and that is what
+the source actually bounds. At `x = -3.875` the true value is 0.0207, so a 1 ulp
+absolute error is **101.9x** the claimed 2^-16 relative bound. A relative bound
+is the wrong shape for a function whose output spans five orders of magnitude
+across its domain: near the bottom of the range one ulp of absolute error is
+enormous in relative terms, and no fixed-point implementation returning a
+representable value could satisfy it there. That is arguably a defect in the
+documented claim rather than in the code.
+
+Fourth counterexample, from expk shard 15 which finished last (1399s):
+
+```
+x = -3.875030518   exp = 0.020753704511   libc = 0.020721435547 (raw 679, want 680)
+                   1.06 ulp absolute, 1.554853e-03 relative, 101.90x the bound
+```
 
 ### What sharding bought
 
