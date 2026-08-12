@@ -5,10 +5,13 @@
 // discarded and the iterator dangles. finish_gotos then dereferences it after
 // the fallback rebuilds the body -- a segfault, not merely stale state.
 //
-// --error-label makes the label handler decline (convert_label turns a matching
-// label into an ASSERT(false) with property metadata the native path does not
-// reproduce), so f() emits its goto natively and *then* falls back at the label,
-// which is exactly the ordering that leaves the dangling entry behind.
+// The label handler no longer declines under --error-label (it reproduces the
+// ASSERT(false) since #4715's error-label arm), so this input is now converted
+// natively end to end and pins the label/goto pair on the native path rather
+// than the fallback ordering. The rollback itself is NOT discriminated by any
+// test here: removing `targets = targets_before` in convert_function leaves
+// every case green, because the failure mode is a dangling iterator read --
+// latent UB that needs a sanitizer build to observe, not a crash.
 #include <assert.h>
 
 int g;
