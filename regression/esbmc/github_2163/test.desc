@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --assertion-coverage-claims
 Assertion Instances Coverage: 100%
