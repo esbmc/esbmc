@@ -1478,3 +1478,50 @@ Both return the same value -- the rescale is a no-op at this input -- so the
 * **`isqrt`**: its absolute bound is violated (-1.86 ulp at u8.8), but **no
   shipped entry point calls `isqrt`**, so this is a defect in a documented
   internal function with no current caller.
+
+## Sharded whole-domain verification of exp against camada (bitwuzla)
+
+Both exp entry points, 32 shards each, partitions verified exact
+(`exphk`: 32 x 2048 = 2^16; `expk`: 32 x 134217728 = 2^32; no gap, no overlap).
+Property: libc's body versus camada's `mkFXPExp` on the same symbolic input,
+asserting exact agreement. bitwuzla only.
+
+| entry point | shards | SUCCESSFUL | FAILED | slowest shard |
+|---|---|---|---|---|
+| `exphk` (s8.7) | 32 | 30 | **2** (15, 16) | 528.79s |
+| `expk` (s16.15) | 32 | 30 | **1** (16) | -- |
+
+The failing shards are the ones straddling raw 0 -- the mid-range, not the
+boundary windows the earlier defect harnesses targeted. Sharding therefore found
+**new** counterexamples, not the ones already known.
+
+### The counterexamples, and they violate the stated relative bounds
+
+All three confirmed against native libc and against exp computed in long double.
+
+| entry point | x | exp(x) | libc | error | vs claimed bound |
+|---|---|---|---|---|---|
+| `exphk` | -1.3984375 | 0.246982573 | 0.2421875 (raw 31, want 32) | 0.61 ulp | **4.97x** over 2^-8 |
+| `exphk` | +0.5 | 1.648721271 | 1.6562500 (raw 212, want 211) | 0.96 ulp | **1.17x** over 2^-8 |
+| `expk` | +0.3828125 | 1.466403054 | 1.46636963 (raw 48050, want 48051) | 1.10 ulp | **1.49x** over 2^-16 |
+
+`x = 0.5` and `x = 0.383` are about as ordinary as inputs get -- no saturation,
+no flush, no table edge. Unlike the sqrt situation, these **do** violate a bound
+libc states for the function in question: `exphk.cpp` and `expk.cpp` both give a
+relative error bound for the `(1 + lo)` / `(1 + lo + lo^2/2)` step, and the
+end-to-end relative error exceeds it.
+
+Note the errors are only ~1 ulp in absolute terms and go in both directions
+(raw 31 where 32 is correct, raw 212 where 211 is correct), so this is ordinary
+approximation error -- the finding is that it is larger than documented, not that
+the arithmetic is broken.
+
+### What sharding bought
+
+The unsharded whole-domain query at s16.15 never finished (>90 min under
+bitwuzla, and z3 only managed a narrow window). Sharded, 31 of 32 shards
+returned in under 30 seconds and the whole 2^32 domain was covered. For
+`exphk` the slowest shard was 528s and the rest were seconds.
+
+This is the same ~90x pattern measured on the sqrt shards, and it is what made
+whole-domain exp verification possible at all.
