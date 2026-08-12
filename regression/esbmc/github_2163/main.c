@@ -3,8 +3,12 @@
 
  int main () {
  
-   int x ;
-   int y ;
+   /* The issue's reproducer reads uninitialised locals, which is undefined
+      behaviour and is not modelled as nondeterministic on every target -- on
+      LLP64/Windows the assumes below become infeasible and the assertion is
+      reported UNREACHED. nondet_int() states the intent portably. */
+   int x = nondet_int();
+   int y = nondet_int();
    
    __ESBMC_assume (x < 100);
    __ESBMC_assume (x > 0);
