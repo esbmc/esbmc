@@ -1275,6 +1275,30 @@ bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
     thread_last_writes[l]);
 }
 
+/// The inductive step of A6.4: every 1 in the chain points forward in run
+/// order. Only the active thread's row and column change meaning when it takes
+/// a transition -- every other entry keeps both its endpoints -- so checking
+/// those two is checking the step.
+static void check_chain_points_forward(
+  const std::vector<std::vector<int>> &chain,
+  const std::vector<unsigned int> &last_transition,
+  unsigned int active_thread,
+  unsigned int j)
+{
+  // The column covers the res == 0 path, which keeps a 1 recorded against an
+  // older transition of the active thread; the row covers the active-row reset,
+  // without which the chain would claim a dependency leaving the newest
+  // transition in the run.
+  SYMEX_INVARIANT(
+    chain[j][active_thread] != 1 ||
+      last_transition[j] < last_transition[active_thread],
+    "MPOR dependency chain runs backwards in time");
+  SYMEX_INVARIANT(
+    chain[active_thread][j] != 1 ||
+      last_transition[active_thread] < last_transition[j],
+    "MPOR dependency chain leaves the newest transition");
+}
+
 void execution_statet::calculate_mpor_constraints()
 {
   // Primary bit of MPOR logic - to be executed at the end of a transition to
@@ -1352,21 +1376,8 @@ void execution_statet::calculate_mpor_constraints()
         new_dep_chain[j][active_thread] = res;
     }
 
-    // The inductive step of A6.4: every 1 in the chain points forward in run
-    // order. Only the active thread's row and column change meaning when it
-    // takes a transition -- every other entry keeps both its endpoints -- so
-    // checking those two is checking the step. The column covers the res == 0
-    // path, which keeps a 1 recorded against an older transition of the active
-    // thread; the row covers the reset above, without which the chain would
-    // claim a dependency leaving the newest transition in the run.
-    SYMEX_INVARIANT(
-      new_dep_chain[j][active_thread] != 1 ||
-        thread_last_transition[j] < thread_last_transition[active_thread],
-      "MPOR dependency chain runs backwards in time");
-    SYMEX_INVARIANT(
-      new_dep_chain[active_thread][j] != 1 ||
-        thread_last_transition[active_thread] < thread_last_transition[j],
-      "MPOR dependency chain leaves the newest transition");
+    check_chain_points_forward(
+      new_dep_chain, thread_last_transition, active_thread, j);
   }
 
   // For /all other relations/, just propagate the dependency it already has.
