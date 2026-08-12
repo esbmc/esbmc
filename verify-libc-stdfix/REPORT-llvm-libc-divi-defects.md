@@ -198,8 +198,46 @@ Note also that `-Werror` builds instantiating `divi<unsigned long _Fract>` or
 
 Fix: `1LL << F`, or `static_cast<int64_t>(1) << F`.
 
-Proof: `harness_divi_shift.c` -- FAILED under `--overflow-check`. It uses no
-fixed-point types; the defect is plain integer UB.
+### Caught by ESBMC's own UB checker on the real template
+
+The original proof here used `harness_divi_shift.c`, which asserts `scale > 0` --
+a hand-written *consequence* of the UB rather than the UB itself, on a reduced
+shift rather than on libc's code. That was weaker than necessary.
+`--overflow-check` flags the shifts directly in `fx_bits.h`, with no assertion
+written by the harness at all (`harness_divi_shift_real.cpp`).
+
+Doing that exposes **three** distinct shift-UB sites on this path, not one. Each
+appears once the preceding one is excluded by assumption:
+
+| line | expression | ESBMC diagnostic | condition | standard |
+|---|---|---|---|---|
+| **256** | `static_cast<int64_t>(n) << F` | undefined behavior on shift operation `shl` | `F >= 0 && F < 64 && (int64_t)n >= 0` | C11 6.5.7p4 -- left operand must be non-negative |
+| **257** | `scaled_n >> k` | undefined behavior on shift operation `ashr` | `k >= 0 && k < 64` | C11 6.5.7p3 |
+| **266** | `static_cast<long accum>(1 << F)` | arithmetic overflow on `shl` | `!overflow("shl", 1, F)` | 6.5.7p3/p4 -- the site reported above |
+
+Only line 266 was in the original finding. Two are new:
+
+* **Line 256 is UB for any negative `n`**, at every format -- not just `F >= 31`.
+  The cast to `int64_t` fixes the *width* but a left-shift of a negative value is
+  undefined regardless. `divi(-3, -1)` reaches it, and `rdivi` passes signed
+  operands straight through, so this is on the shipped path.
+* **Line 257** right-shifts by `k = countr_zero(|d|)`; ESBMC requires
+  `k < 64`, which holds for the `uint32_t` argument in practice, so this one is
+  a checker completeness condition rather than a reachable defect. Recorded for
+  accuracy, not claimed as a bug.
+
+Reproduction, each with the preceding site assumed away:
+
+```sh
+# line 256: negative n
+esbmc harness_divi_shift_real.cpp --overflow-check ...        # n in [-8, 8]
+# line 266: 1 << F at F == 32
+esbmc harness_divi_shift_real.cpp --overflow-check ...        # unsigned long _Fract, n >= 0
+```
+
+That ESBMC reports these without any user-written property is the stronger form
+of the claim: the tool's UB checker, not a hand-derived consequence, is the
+oracle.
 
 ## Defect 3: no intermediate headroom at s32.31 / u32.32
 
