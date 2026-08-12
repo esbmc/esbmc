@@ -1159,3 +1159,44 @@ Two earlier predictions of mine to correct:
    z3 processes carry `oom_score_adj=800` against bitwuzla's 200 -- so the
    kernel sacrifices a z3 run and leaves all six bitwuzla runs, which is the
    right trade given bitwuzla produced the only result so far.
+
+## Correction: uksqrtui/uhksqrtus call isqrt_fast, not isqrt
+
+`sqrt.h` declares **two** integer square roots with **different** documented
+claims, and I tested the shipped entry points against the wrong one:
+
+```
+// Integer square root - Accurate version:
+// Absolute errors < 2^(-fraction length).        <- isqrt      (sqrt.h:211)
+
+// Integer square root - Fast but less accurate version:
+// Relative errors < 2^(-fraction length).        <- isqrt_fast (sqrt.h:236)
+```
+
+`uksqrtui.cpp:18` and `uhksqrtus.cpp:18` both `return fixed_point::isqrt_fast(x)`.
+My harnesses called `fx::isqrt` and asserted the **absolute** bound. So the
+earlier rows describing those two entry points were checking a function the
+entry points do not call, against a claim they do not make.
+
+Re-measured against the correct function and its own relative claim, both
+still violate -- by more than the earlier numbers suggested:
+
+| entry point | calls | claim | measured | ratio |
+|---|---|---|---|---|
+| `uhksqrtus` | `isqrt_fast` | relative < 2^-8 = 3.906e-3 | **5.649e-3** | **1.45x** |
+| `uksqrtui` | `isqrt_fast` | relative < 2^-16 = 1.526e-5 | **2.050e-5** | **1.34x** |
+
+At `n = 32045`, `isqrt_fast` is **258.9 ulp** below the true root where `isqrt`
+is 1.86 ulp below -- consistent with "fast but less accurate", and still outside
+the relative bound it claims for itself.
+
+So there are two distinct findings, not one:
+
+1. **`isqrt`** violates its absolute < 1 ulp claim (-1.86 ulp at u8.8,
+   -1.68 ulp at u16.16). No shipped stdfix entry point calls it, so this is a
+   defect in an internal function that `sqrt.h` documents and exposes.
+2. **`isqrt_fast`** violates its relative < 2^-F claim (1.45x at u8.8, 1.34x at
+   u16.16). This one **is** on the shipped path for `uhksqrtus`/`uksqrtui`.
+
+The `fixed_point::sqrt` results (sqrtuhr/sqrtur/sqrtulr, 1 ulp low on exact
+perfect squares) are unaffected -- those entry points do call `sqrt`.
