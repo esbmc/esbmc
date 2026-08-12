@@ -1541,3 +1541,59 @@ returned in under 30 seconds and the whole 2^32 domain was covered. For
 
 This is the same ~90x pattern measured on the sqrt shards, and it is what made
 whole-domain exp verification possible at all.
+
+## Is fixed_point::sqrt correctly rounded? No -- 53-81% of inputs
+
+Correct rounding is a stronger property than any error bound: does the function
+return the *nearest representable value* to the true root for every input? It is
+worth asking separately because `fixed_point::sqrt` documents no bound at all, so
+correct rounding is the natural default expectation for a function returning the
+same format as its argument.
+
+Exhaustive native measurement, all inputs of each format:
+
+| entry point | format | inputs | not correctly rounded | worst error | exact roots wrong |
+|---|---|---|---|---|---|
+| `sqrtuhr` | u0.8 | 256 | **146 (57.0%)** | 1.09 ulp | 8 / 16 |
+| `sqrtur` | u0.16 | 65536 | **53060 (81.0%)** | 2.48 ulp | 153 / 256 |
+| `sqrtuhk` | u8.8 | 65536 | **34767 (53.1%)** | 1.09 ulp | 153 / 256 |
+
+Of the u0.16 failures, 28228 are more than one ulp out -- so it is not merely a
+tie-breaking disagreement.
+
+Proved in-solver too, not just enumerated. `harness_sqrt_correctly_rounded.cpp`
+states correct rounding without computing the root: camada's oracle truncates, so
+the true root is in `[oracle, oracle+1ulp)` and the nearest representable value
+is decided by squaring the midpoint,
+
+```
+root >= oracle + 1/2   <=>   (2*oracle + 1)^2 <= 4 * raw_x * 2^F
+```
+
+**VERIFICATION FAILED** in 0.70s, counterexample `xb = 254`, confirmed natively:
+
+```
+x = 254/256 = 0.992187500
+  true root * 256 = 254.998039   -> nearest representable is raw 255
+  libc returns      raw 254       -0.998 ulp
+```
+
+The true root is 0.998 of the way to the next representable value and libc
+returns the one below it -- a clear rounding-down where rounding up is nearer.
+
+### How this fits the other sqrt findings
+
+This is the sharpest statement of the sqrt situation, and it needs no argument
+about which comment applies to which function:
+
+* `fixed_point::sqrt` is **not correctly rounded**, on a majority of inputs, at
+  every format measured.
+* It is **within ~2.5 ulp** everywhere, so it is a usable approximation.
+* It documents **no bound**, so nothing is contradicted -- but a caller has no
+  way to know either fact from the source.
+
+That combination is the actual finding: an undocumented ~2.5-ulp approximation
+where the naming and signature suggest a correctly-rounded result. The exact
+perfect squares make it concrete -- `sqrt(81/256) = 9/16` and
+`sqrt(100/65536) = 10/256` are exactly representable and still come back one ulp
+low, which no rounding convention explains.
