@@ -60,9 +60,9 @@ void python_languaget::register_bundled()
     return;
   done = true;
 
-  auto &fs = file_operations::filesystemt::get();
 #define ESBMC_FLAIL(body, size, ...)                                           \
-  fs.add_bundled(vfs_prefix + "/" #__VA_ARGS__, body, size);
+  file_operations::filesystemt::get().add_bundled(                             \
+    vfs_prefix + "/" #__VA_ARGS__, body, size);
 #include <pythonastgen.h>
 #undef ESBMC_FLAIL
 }
