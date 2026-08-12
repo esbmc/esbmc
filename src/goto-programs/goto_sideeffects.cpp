@@ -87,6 +87,103 @@ static bool mentions_symbol(const exprt &e, const std::set<irep_idt> &ids)
   return false;
 }
 
+/// `__ESBMC_old(base[j])` with `j` bound by the enclosing quantifier takes the
+/// address of one element, which has no value outside the quantifier and so
+/// cannot be hoisted. Snapshot the array instead — `__ESBMC_old(base)[j]` —
+/// leaving an operand the bound variable does not reach, so the ordinary
+/// hoisting applies and the contract layer materialises one array snapshot in
+/// place of one per index (#4219). Only a base of array type is rewritten: a
+/// pointer with a symbolic extent has no whole object to snapshot.
+/// The `__ESBMC_old_raw` call under \p deref, which the `__ESBMC_old` macro
+/// wraps as `*(T*)__ESBMC_old_raw(&x)`, or nullptr if this is not one.
+static exprt *old_raw_call_under(exprt &deref)
+{
+  if (deref.id() != exprt::deref || deref.operands().size() != 1)
+    return nullptr;
+
+  exprt *call = &deref.op0();
+  while (call->id() == exprt::typecast && call->operands().size() == 1)
+    call = &call->op0();
+
+  if (
+    call->id() != "sideeffect" || call->statement() != "function_call" ||
+    call->operands().size() < 2 || !call->op0().is_symbol())
+    return nullptr;
+
+  const std::string callee = call->op0().identifier().as_string();
+  static const std::string old_raw = "__ESBMC_old_raw";
+  if (
+    callee.size() < old_raw.size() ||
+    callee.compare(callee.size() - old_raw.size(), old_raw.size(), old_raw) !=
+      0)
+    return nullptr;
+
+  return call->op1().operands().size() == 1 ? call : nullptr;
+}
+
+/// The array element \p addr addresses, when its index reaches \p bound_vars
+/// and its base is an array. A pointer with a symbolic extent has no whole
+/// object to snapshot, so it is left alone.
+static const exprt *
+bound_array_element(const exprt &addr, const std::set<irep_idt> &bound_vars)
+{
+  const exprt *e = &addr;
+  while (e->id() == exprt::typecast && e->operands().size() == 1)
+    e = &e->op0();
+  if (e->id() != exprt::addrof || e->operands().size() != 1)
+    return nullptr;
+
+  const exprt &target = e->op0();
+  if (target.id() != exprt::index || target.operands().size() != 2)
+    return nullptr;
+
+  if (
+    !mentions_symbol(target.op1(), bound_vars) ||
+    !target.op0().type().is_array())
+    return nullptr;
+
+  return &target;
+}
+
+static void
+lift_old_over_bound_index(exprt &expr, const std::set<irep_idt> &bound_vars)
+{
+  Forall_operands (it, expr)
+    lift_old_over_bound_index(*it, bound_vars);
+
+  exprt *call = old_raw_call_under(expr);
+  if (!call)
+    return;
+
+  const exprt *target =
+    bound_array_element(call->op1().operands()[0], bound_vars);
+  if (!target)
+    return;
+
+  // Snapshotting an array through a dereference is an rvalue array read, which
+  // the dereference layer refuses. Where the array is a struct member, take the
+  // struct — a legal rvalue — and re-apply the member to the snapshot.
+  const exprt base = target->op0();
+  const exprt index = target->op1();
+  const bool via_member = base.id() == exprt::member;
+  const exprt object = via_member ? base.op0() : base;
+
+  exprt whole_snapshot = *call;
+  whole_snapshot.op1().operands()[0] = address_of_exprt(object);
+
+  typet object_ptr("pointer");
+  object_ptr.subtype() = object.type();
+  exprt snapshot =
+    dereference_exprt(typecast_exprt(whole_snapshot, object_ptr), object_ptr);
+
+  if (via_member)
+    snapshot = member_exprt(
+      snapshot, to_member_expr(base).get_component_name(), base.type());
+
+  index_exprt element(snapshot, index);
+  expr.swap(element);
+}
+
 /// A side effect other than a nested function call (e.g. ++ on a parameter)
 /// cannot be replicated by argument substitution.
 static bool has_non_call_sideeffect(const exprt &e)
@@ -1008,6 +1105,9 @@ void goto_convertt::convert_quantifier_calls(exprt &expr)
       // Bottom-up: convert any nested quantifier calls first, then summarize
       // the remaining calls so the bound variable stays free in the body.
       convert_quantifier_calls(args[1]);
+      const irep_idt bound = quantifier_bound_var_id(args[0]);
+      if (!bound.empty())
+        lift_old_over_bound_index(args[1], {bound});
       inline_calls_in_quantifier_body(args[1], max_quantifier_inline_depth);
       if (!has_sideeffect(args[1]))
       {
