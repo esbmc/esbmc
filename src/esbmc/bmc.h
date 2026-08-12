@@ -109,10 +109,6 @@ protected:
 
   virtual void report_result(smt_resultt &res);
 
-  /** Report how the exploration spent its schedules, for programs that had
-   *  more than one to choose from. */
-  void report_schedule_stats();
-
   virtual void
   bidirectional_search(smt_convt &smt_conv, const symex_target_equationt &eq);
 

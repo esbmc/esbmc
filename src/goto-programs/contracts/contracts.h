@@ -68,6 +68,7 @@ public:
     irep_idt
       temp_var_name; ///< Temporary variable name (e.g., return_value$___ESBMC_is_fresh$1)
     expr2tc ptr_expr; ///< Pointer expression (dereferenced from &ptr)
+    expr2tc size_expr; ///< Extent the contract asked for, in bytes; may be nil
   };
 
   code_contractst(

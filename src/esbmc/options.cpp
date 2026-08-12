@@ -561,11 +561,22 @@ const struct group_opt_templ all_cmd_options[] = {
     {"max-context-bound",
      boost::program_options::value<int>()->default_value(20)->value_name("nr"),
      "Highest context bound tried by --incremental-context-bound"},
+    {"falsify-context-bound",
+     boost::program_options::value<int>()->default_value(0)->value_name("nr"),
+     "Before the chosen strategy runs, look for a violation with the context "
+     "bound raised from 1 to nr; such a violation is genuine, no proof is "
+     "claimed, and the strategy still runs when none is found (0 = off)"},
     {"state-hashing", NULL, "Enable state-hashing, prunes duplicate states"},
     {"no-goto-merge",
      NULL,
      "Do not merge gotos when restoring paths after a context-switch"},
     {"no-por", NULL, "Do not do partial order reduction"},
+    {"sleep-sets",
+     NULL,
+     "Prune schedules with sleep sets; only fires where the search is "
+     "exhaustive, so pair it with --no-por and no context bound. Ignored under "
+     "--schedule, --direct-interleavings, --interactive-ileaves and "
+     "--data-races-check-only (experimental, off by default)"},
     {"cswitch-skip-readonly-globals",
      NULL,
      "Skip context switches on globals that are never written anywhere "

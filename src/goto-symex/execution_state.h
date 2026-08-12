@@ -284,6 +284,22 @@ public:
   void assume(const expr2tc &assumption) override;
 
   /**
+   *  Implemented by goto_symext::symex_printf. Overridden only to record the
+   *  globals the arguments read: the frontend lowers a printf call to an OTHER
+   *  instruction, so the function-call path never analyses them.
+   */
+  void symex_printf(const expr2tc &lhs, expr2tc &code) override;
+
+  /**
+   *  Under --no-unwinding-assertions a truncated loop is cut with an
+   *  assumption, which drives the state guard false and so is indistinguishable
+   *  at the scheduler from a genuinely infeasible path. The remaining
+   *  iterations are not infeasible, only unexplored, so the subtree is not
+   *  exhausted and no thread may be put to sleep against it (issue #6831).
+   */
+  void note_bounded_loop_truncation() override;
+
+  /**
    *  Fetch reference to count of dynamic objects in this state.
    *  The goto_symext class knows that such a count exists, just it doesn't
    *  store it itself. So we instead provide a hook for it to fetch a reference
@@ -493,6 +509,27 @@ public:
    *  @return True if scheduling dependency exists between threads j and l
    */
   bool check_mpor_dependency(unsigned int j, unsigned int l) const;
+
+  /** The objects one transition read and wrote, as MPOR records them. */
+  struct transition_footprintt
+  {
+    std::set<expr2tc> reads, writes;
+  };
+
+  /** Footprint of the transition thread `tid` most recently completed. */
+  transition_footprintt last_transition_footprint(unsigned int tid) const
+  {
+    return {thread_last_reads.at(tid), thread_last_writes.at(tid)};
+  }
+
+  /**
+   *  As check_mpor_dependency, but against a footprint captured earlier rather
+   *  than against a thread's current one. Sleep sets need this: the transition
+   *  a sleeping thread would take is the one it took when it was put to sleep,
+   *  which its `thread_last_*` entries no longer describe.
+   */
+  bool
+  check_mpor_dependency(unsigned int j, const transition_footprintt &fp) const;
 
   /**
    *  Calculate MPOR schedulable threads. I.E. what threads we can schedule

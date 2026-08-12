@@ -412,6 +412,23 @@ void execution_statet::assume(const expr2tc &assumption)
     analyze_read(assumption);
 }
 
+void execution_statet::symex_printf(const expr2tc &lhs, expr2tc &code)
+{
+  // A shared global passed to printf is read here and nowhere else, so without
+  // this the read is missing from thread_last_reads and every reduction that
+  // consults it treats the transition as independent of a writer (issue #6831).
+  if (threads_state.size() >= thread_cswitch_threshold)
+    analyze_read(code);
+
+  goto_symext::symex_printf(lhs, code);
+}
+
+void execution_statet::note_bounded_loop_truncation()
+{
+  goto_symext::note_bounded_loop_truncation();
+  art1->mark_search_truncated();
+}
+
 void execution_statet::reset_dynamic_counter()
 {
   dynamic_counter = 0;
@@ -477,15 +494,16 @@ bool execution_statet::check_if_ileaves_blocked()
   {
     // Only count this as truncation if a switch was actually available;
     // otherwise every terminal state would look truncated.
-    if (!art1->cs_bound_pruned)
-      for (unsigned int i = 0; i < threads_state.size(); ++i)
-        if (
-          i != active_thread && !threads_state[i].thread_ended &&
-          !threads_state[i].call_stack.empty())
-        {
-          art1->cs_bound_pruned = true;
-          break;
-        }
+    for (unsigned int i = 0; i < threads_state.size(); ++i)
+      if (
+        i != active_thread && !threads_state[i].thread_ended &&
+        !threads_state[i].call_stack.empty())
+      {
+        art1->cs_bound_pruned = true;
+        ++art1->reduction_stats.pruned_by_cs_bound;
+        art1->mark_search_truncated();
+        break;
+      }
     return true;
   }
 
@@ -820,6 +838,8 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
+  if (threads_state.size() > art1->reduction_stats.peak_threads)
+    art1->reduction_stats.peak_threads = threads_state.size();
   preserved_paths.emplace_back();
   atomic_numbers.push_back(0);
 
@@ -1198,35 +1218,55 @@ void execution_statet::get_expr_globals(
   });
 }
 
+// Rules given on page 13 of MPOR paper, although they don't appear to
+// distinguish which thread is which correctly. Essentially, check that the
+// write(s) of the previous transition (l) don't intersect with this
+// transitions (j) reads or writes; and that the previous transitions reads
+// don't intersect with this transitions write(s).
+static bool mpor_transitions_conflict(
+  const std::set<expr2tc> &reads_j,
+  const std::set<expr2tc> &writes_j,
+  const std::set<expr2tc> &reads_l,
+  const std::set<expr2tc> &writes_l)
+{
+  // Double write intersection
+  for (const expr2tc &it : writes_j)
+    if (mpor_set_conflicts(writes_l, it))
+      return true;
+
+  // This read what that wrote intersection
+  for (const expr2tc &it : reads_j)
+    if (mpor_set_conflicts(writes_l, it))
+      return true;
+
+  // We wrote what that reads intersection
+  for (const expr2tc &it : writes_j)
+    if (mpor_set_conflicts(reads_l, it))
+      return true;
+
+  // No check for read-read intersection, it doesn't affect anything
+  return false;
+}
+
+bool execution_statet::check_mpor_dependency(
+  unsigned int j,
+  const transition_footprintt &fp) const
+{
+  assert(j < threads_state.size());
+  return mpor_transitions_conflict(
+    thread_last_reads[j], thread_last_writes[j], fp.reads, fp.writes);
+}
+
 bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
   const
 {
   assert(j < threads_state.size());
   assert(l < threads_state.size());
-
-  // Rules given on page 13 of MPOR paper, although they don't appear to
-  // distinguish which thread is which correctly. Essentially, check that
-  // the write(s) of the previous transition (l) don't intersect with this
-  // transitions (j) reads or writes; and that the previous transitions reads
-  // don't intersect with this transitions write(s).
-
-  // Double write intersection
-  for (const expr2tc &it : thread_last_writes[j])
-    if (mpor_set_conflicts(thread_last_writes[l], it))
-      return true;
-
-  // This read what that wrote intersection
-  for (const expr2tc &it : thread_last_reads[j])
-    if (mpor_set_conflicts(thread_last_writes[l], it))
-      return true;
-
-  // We wrote what that reads intersection
-  for (const expr2tc &it : thread_last_writes[j])
-    if (mpor_set_conflicts(thread_last_reads[l], it))
-      return true;
-
-  // No check for read-read intersection, it doesn't affect anything
-  return false;
+  return mpor_transitions_conflict(
+    thread_last_reads[j],
+    thread_last_writes[j],
+    thread_last_reads[l],
+    thread_last_writes[l]);
 }
 
 void execution_statet::calculate_mpor_constraints()
@@ -1392,7 +1432,15 @@ std::size_t execution_statet::generate_hash() const
   // separate those -- two calls from the same caller sit at equal depth -- so
   // each frame's calling location is mixed in. Without it a bug reachable only
   // past the later state is pruned away in silence.
+  //
+  // The active thread is part of it for the same reason: equal pcs and equal
+  // values still leave two states scheduling differently, because MPOR's
+  // dependency chain and decide_ileave_direction's scan both key off which
+  // thread just ran. Omitting it collided such pairs, and
+  // post_hash_collision_cleanup marks every switch from the survivor explored,
+  // so the violating schedule was never generated (#6831).
   std::size_t h = l2->generate_l2_state_hash();
+  esbmct::hash_combine(h, active_thread);
   for (const auto &it : threads_state)
   {
     esbmct::hash_combine(h, it.source.pc->location_number);

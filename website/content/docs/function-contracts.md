@@ -392,7 +392,10 @@ also how a contract states that a pointer parameter is separate from the
 others. Enforcement grants it — the parameter gets its own allocation, and is
 excluded from the aliasing described under "Pointer parameters may alias"
 below. Replacement therefore checks it, asserting at the call that the argument
-shares no object with any other pointer argument.
+shares no object with any other pointer argument, and that the object it points
+into really does extend `size` bytes past it. Both halves are obligations on
+the caller, so a program that passed a smaller object than the contract asked
+for now reports a violated `requires` where it previously verified.
 
 Two consequences worth knowing:
 
