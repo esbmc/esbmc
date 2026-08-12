@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
 #include <irep2/irep2.h>
 
 /// Phase 6 (C.3) IREP2-native adjuster for the C frontend.
@@ -44,5 +45,11 @@ public:
   void adjust_expr(expr2tc &expr);
 
 private:
+  /// IREP2 form of clang_c_adjust::adjust_index's rewrite. The legacy arm keeps
+  /// the operand recursion and returns before this point when the flag is on
+  /// (scope-clang-c-irep2.md §19.2).
+  void adjust_index(expr2tc &expr);
+
   contextt &context;
+  namespacet ns{context};
 };
