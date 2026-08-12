@@ -501,6 +501,23 @@ symbolt *python_converter::contract_return_value_symbol(
   return add_symbol_and_get_ptr(ret_symbol);
 }
 
+/// The "variable is not defined" diagnostic for a Name that resolved to no
+/// symbol, naming the enclosing function when the reference is inside one.
+static std::string undefined_variable_message(
+  const std::string &var_name,
+  const std::string &func_name,
+  const locationt &location)
+{
+  std::ostringstream error_msg;
+  error_msg << "Variable '" << var_name << "' is not defined";
+  if (!func_name.empty())
+    error_msg << " in function '" << func_name << "'";
+  if (!location.get_line().empty())
+    error_msg << " at line " << location.get_line();
+  error_msg << ".";
+  return error_msg.str();
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
@@ -1047,27 +1064,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           break;
         }
 
-        locationt location = get_location_from_decl(element);
-        std::ostringstream error_msg;
-        if (!current_func_name_.empty())
-        {
-          // Variable referenced inside a function
-          error_msg << "Variable '" << var_name
-                    << "' is not defined in function '" << current_func_name_
-                    << "'";
-          if (!location.get_line().empty())
-            error_msg << " at line " << location.get_line();
-          error_msg << ".";
-        }
-        else
-        {
-          // Variable referenced at global scope
-          error_msg << "Variable '" << var_name << "' is not defined";
-          if (!location.get_line().empty())
-            error_msg << " at line " << location.get_line();
-          error_msg << ".";
-        }
-        throw std::runtime_error(error_msg.str());
+        throw std::runtime_error(undefined_variable_message(
+          var_name, current_func_name_, get_location_from_decl(element)));
       }
     }
 
