@@ -1234,3 +1234,66 @@ makes the bracket unreachable.
 This is the technique that makes the two 64-bit formats (s32.31, u32.32)
 plausibly reachable at all -- they were the ones with no path to exhaustive
 native testing either (2^64 is ~12,000 years of enumeration).
+
+## DISPATCH AUDIT: what each entry point actually calls
+
+Read from every `libc/src/stdfix/*.cpp`. This should have been done first; two
+substantial findings in this file were aimed at the wrong function.
+
+| family | entry points | calls | tested? |
+|---|---|---|---|
+| `abs*` | 6 | `fixed_point::abs` | yes |
+| `bits*` | 12 | `fixed_point::bitsfx` | yes |
+| `*bits` | 12 | (inline bit_cast) | yes |
+| `countls*` | 12 | `fixed_point::countls` | yes |
+| `round*` | 12 | `fixed_point::round` | yes |
+| `idiv*` | 8 | `fixed_point::idiv` | yes |
+| **`divi*`** | **8** | **`fixed_point::divifx`** | **NO -- tested `divi`** |
+| `rdivi` | 1 | `fixed_point::divi` | yes |
+| `sqrtuhr`, `sqrtur`, `sqrtulr` | 3 | `fixed_point::sqrt` | yes |
+| **`sqrtuhk`, `sqrtuk`** | **2** | **`fixed_point::sqrt`** | **NO -- never tested** |
+| `uhksqrtus`, `uksqrtui` | 2 | `fixed_point::isqrt_fast` | corrected |
+| `exphk`, `expk` | 2 | (inline bodies) | yes |
+
+### Error 1: the divi findings target a function only rdivi calls
+
+`fx_bits.h` declares two unrelated functions:
+
+```
+line 241  divi(int n, int d) -> XType            integer / integer -> fixed-point
+line 342  divifx(IntType n, FXType d) -> IntType integer / fixed-point -> integer
+```
+
+All eight `divi*` entry points call **`divifx`**:
+
+```cpp
+LLVM_LIBC_FUNCTION(int, divir, (int n, fract d)) {
+  return fixed_point::divifx<int, fract>(n, d);
+}
+```
+
+`stdfix.yaml` confirms the signature: `divir(int, fract) -> int`.
+
+The three defects recorded earlier under "divi, by root cause" -- the double
+sign negation, the `1 << F` UB, and the missing intermediate headroom -- are all
+in **`divi`**, which only `rdivi` reaches. So:
+
+* they remain real defects in `divi`, and `rdivi` is a genuinely affected
+  shipped entry point (one entry point, not eight);
+* `REPORT-llvm-libc-divi-defects.md` overstates the blast radius and must be
+  rewritten to say `rdivi` rather than the `divi*` family;
+* **`divifx` is untested.** Eight shipped entry points have had no verification
+  at all.
+
+### Error 2: sqrtuhk and sqrtuk were never tested
+
+Both call `fixed_point::sqrt` on `_Accum` formats (u8.8, u16.16). The five
+sqrt entry points tested were `sqrtuhr`/`sqrtur`/`sqrtulr` plus the two
+`isqrt_fast` ones -- these two were missed entirely. Earlier claims of "all 5
+sqrt entry points" were wrong: there are **7**.
+
+### Cost of not doing this first
+
+Roughly two days of solver time went into wide-format oracle validation for
+`mkFXPSqrt` while two shipped sqrt entry points sat untested and the divi work
+targeted the wrong function. The dispatch audit takes one command.
