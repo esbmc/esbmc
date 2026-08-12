@@ -348,10 +348,20 @@ void goto_convertt::do_mem(
 {
   std::string func = is_malloc ? "malloc" : "alloca";
 
-  if (lhs.is_nil())
-    return; // does nothing
-
   locationt location = function.location();
+
+  // `malloc(n);` with the result discarded still allocates, and the storage is
+  // unreachable the moment the statement ends -- exactly what
+  // --memory-leak-check exists to report. Dropping the call made that leak
+  // invisible, so allocate into a temporary instead (#822). The result type is
+  // the allocator's own; the object's type and size ride on the side effect
+  // below, so nothing downstream depends on it.
+  exprt target = lhs;
+  if (target.is_nil())
+  {
+    const typet ptr_type = pointer_typet(empty_typet());
+    target = symbol_exprt(new_tmp_symbol(ptr_type).id, ptr_type);
+  }
 
   // get alloc type and size
   typet alloc_type;
@@ -362,7 +372,7 @@ void goto_convertt::do_mem(
 
   // produce new object
 
-  exprt new_expr("sideeffect", lhs.type());
+  exprt new_expr("sideeffect", target.type());
   new_expr.statement(func);
   new_expr.copy_to_operands(arguments[0]);
   new_expr.cmt_size(alloc_size);
@@ -371,7 +381,7 @@ void goto_convertt::do_mem(
 
   goto_programt::targett t_n = dest.add_instruction(ASSIGN);
 
-  exprt new_assign = code_assignt(lhs, new_expr);
+  exprt new_assign = code_assignt(target, new_expr);
   expr2tc new_assign_expr;
   migrate_expr(new_assign, new_assign_expr);
   t_n->code = new_assign_expr;
