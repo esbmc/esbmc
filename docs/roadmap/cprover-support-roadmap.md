@@ -118,7 +118,8 @@ and the symbol/function table layout.
 | Computed `goto` (GNU labels-as-values): `address_of(label)` → unique `(void *)K` constant so CBMC's lowered label-address equality chain resolves (§4.4, Phase 2) | ✅ (PR #6161) | `cbmc_adapter.cpp::fix_expression` |
 | `__CPROVER_havoc_object`: `HAVOC_OBJECT &obj` → `ASSIGN obj := side_effect("nondet")` over the whole containing object; a pointer *value* operand is still declined (§4.4, Phase 2) | ✅ (PR #6830) | `cbmc_adapter.cpp::rewrite_havoc_object` |
 | `__CPROVER_array_set`: `ARRAY_SET &arr[0] v` → `ASSIGN arr := array_of((elem)v)` when the array is a whole object; member arrays / non-zero offsets / heap pointers still declined (§4.4, Phase 2) | ✅ (PR #6833) | `cbmc_adapter.cpp::rewrite_array_set_fill` |
-| `__CPROVER_array_copy` / `__CPROVER_array_replace`: `ARRAY_COPY dst src` → `ASSIGN dst := src` for same-extent whole-object arrays; mismatched extents declined (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::rewrite_array_copy` |
+| `__CPROVER_array_copy` / `__CPROVER_array_replace`: `ARRAY_COPY dst src` → `ASSIGN dst := src` for same-extent whole-object arrays; mismatched extents declined (§4.4, Phase 2) | ✅ (PR #6834) | `cbmc_adapter.cpp::rewrite_array_copy` |
+| `__CPROVER_array_equal`: `ARRAY_EQUAL lhs rhs result` → `ASSIGN result := lhs[i] == rhs[i] && …` elementwise, because ESBMC's whole-array `==` reports may-differ on equal arrays (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::rewrite_array_equal` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -692,6 +693,24 @@ whole-object constraint applies to both operands. Verdict parity with CBMC, dual
 mutating the source afterwards leaves the destination alone, and a symbolic `char` copy)
 SUCCESSFUL, `cbmc_array_copy_fail` (destination asserted to keep its pre-copy value) FAILED,
 and `cbmc_array_copy_extent` pinning the declined mismatched-extent case.
+
+**`__CPROVER_array_equal` — ✅ landed (same extent), and it exposed an ESBMC array-equality
+gap.** The codet is the odd one of the family: it carries its own destination — the `bool`
+temporary CBMC declares for the call's value — as a *third* operand, so the result lands there
+rather than on either array. The obvious lowering, a whole-array `ASSIGN result := (lhs ==
+rhs)`, is **wrong on ESBMC**: two arrays whose every in-bounds element is equal still compare
+**may-differ** (`cbmc_array_equal`'s symbolic case reported FAILED on both Bitwuzla and Z3,
+with and without initialisers, where CBMC — which flattens arrays to fixed-size tuples —
+answers equal). `rewrite_array_equal` therefore spells the comparison out per element,
+`result := lhs[0] == rhs[0] && … && lhs[n-1] == rhs[n-1]`, taking `n` from the array type's own
+size constant and declining past a 4096-element guard. That sidesteps the encoding question
+entirely; **ESBMC's whole-array `==` remains a separate open item** worth its own issue, since
+nothing in the native C path can reach it (C has no array `==`). Differing types are declined:
+CBMC answers `false` for them, but two spellings of one type would compare unequal as ireps
+while CBMC calls them equal, so synthesising that `false` risks a wrong verdict where a decline
+only costs a case. Verdict parity, dual-solver: `cbmc_array_equal` (equal, differing-in-one-
+element, symbolic-equal, symbolic-differ, and `char`) SUCCESSFUL, `cbmc_array_equal_fail`
+FAILED, `cbmc_array_equal_extent` pinning the decline.
 
 **`__CPROVER_havoc_object` — ✅ landed.** `HAVOC_OBJECT p` is size-implicit like `array_set`,
 and was declined with it — but a *whole-symbol* assignment needs no extent, so the shapes whose

@@ -1,4 +1,5 @@
 #include <util/base/compiler_defs.h>
+#include <clang-c-frontend/clang_c_adjust_irep2.h>
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Frontend/ASTUnit.h>
@@ -220,6 +221,11 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("-W" + inc);
 
   compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
+
+  // Lets a source tree tell an ESBMC run from an ordinary compile, and gates
+  // include/esbmc.h so including it anywhere else is an error rather than a
+  // pile of undefined intrinsics (#4610).
+  compiler_args.emplace_back("-D__ESBMC_execution");
 
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
@@ -451,8 +457,21 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
     return true;
 
   clang_c_adjust adjuster(new_context);
+  if (config.options.get_bool_option("clang-c-irep2-adjust"))
+    adjuster.set_irep2_owns_index();
   if (adjuster.adjust())
     return true;
+
+  // Phase 6 C.3: shadow the legacy pass with the IREP2-native walk. Read-only,
+  // so flag-on and flag-off are byte-identical by construction; what the flag
+  // buys is migrating every value in the corpus through get_value2(), which
+  // aborts on a construct migrate_expr cannot represent.
+  if (config.options.get_bool_option("clang-c-irep2-adjust"))
+  {
+    clang_c_adjust_irep2 irep2_adjuster(new_context);
+    if (irep2_adjuster.adjust())
+      return true;
+  }
 
   return c_link(context, new_context, module);
 }
