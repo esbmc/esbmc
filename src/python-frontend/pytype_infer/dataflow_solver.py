@@ -192,19 +192,19 @@ def initialize_environments(func_node, cfg):
 
     return in_envs, out_envs
 
-def compute_input_envirment(block, block_index, in_envs, out_envs):
-    if not block.pred:
-        return in_envs[block_index].copy()
+# def compute_input_envirment(block, block_index, in_envs, out_envs):
+#     if not block.pred:
+#         return in_envs[block_index].copy()
 
-    pred_env = []
+#     pred_env = []
 
-    for predecessor in block.pred:
-        merge_into_environment(
-            pred_env,
-            out_envs[predecessor],
-        )
+#     for predecessor in block.pred:
+#         merge_into_environment(
+#             pred_env,
+#             out_envs[predecessor],
+#         )
 
-    return pred_env
+#     return pred_env
 
 def merge_into_environment(target, source):
     for name, typ in source.items():
@@ -337,7 +337,7 @@ def handle_call_effect(call, env):
         handle_append(call, env) 
 
 def handle_append(call, env):
-    if not isinstance(call.func.vlaue, ast.Name):
+    if not isinstance(call.func.value, ast.Name):
         return
 
     if not call.args:
