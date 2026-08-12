@@ -49,8 +49,9 @@ _INTRINSICS = (
     "nondet_str",
     "nondet_size",
 )
-_INTRINSIC_UNDEFINED = re.compile(r'error: Name "(?:%s)" is not defined' %
-                                  "|".join(re.escape(name) for name in _INTRINSICS))
+_INTRINSIC_UNDEFINED = re.compile('error: Name "(?:' +
+                                  "|".join(re.escape(name)
+                                           for name in _INTRINSICS) + ')" is not defined')
 
 
 def _run_mypy_module(filename: str, cache_dir: str) -> tuple[int, str]:
