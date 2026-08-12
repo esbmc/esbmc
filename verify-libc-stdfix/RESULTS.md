@@ -1413,3 +1413,68 @@ tiny divisors. Hand-checking showed **libc was right every time**:
 `divifx(64, 0.5) = 128` and `divifx(64, 2^-16) = 2097152` are both exact. The
 failures were the two representability problems above. Four-for-four failures on
 a first attempt is the signal to check the harness, not the library.
+
+## Which bound applies to which sqrt function -- and the one that has none
+
+`sqrt.h` states three bounds, and they attach to three different functions:
+
+| line | bound | function | entry points reaching it |
+|---|---|---|---|
+| 35/57/83 | `max(1.5 * 2^-11, eps)` | Sollya initial-approximation tables | (internal) |
+| **165** | `\|r - sqrt(x_frac)\| < max(1.5 * 2^-11, eps)` | **`sqrt_core`** | all, indirectly |
+| **212** | **Absolute** errors < 2^-F | **`isqrt`** | **none** |
+| **237** | **Relative** errors < 2^-F | **`isqrt_fast`** | `uhksqrtus`, `uksqrtui` |
+
+**`fixed_point::sqrt` has no accuracy comment at all.** It is declared at
+sqrt.h:184 and the lines above it are a TODO about division-free Newton
+iterations. Yet `sqrtuhr`, `sqrtur`, `sqrtulr`, `sqrtuhk` and `sqrtuk` -- five of
+the seven entry points -- call it.
+
+### Correction: those five were tested against isqrt's bound
+
+Earlier sections of this file assert "Absolute errors < 2^(-fraction length)"
+against the five `sqrt` entry points. **That is line 212, which documents
+`isqrt`.** Having already corrected the opposite error -- testing the
+`isqrt_fast` entry points against `isqrt`'s bound -- I made the same
+misattribution a second time, in the other direction.
+
+### What the two testable bounds show
+
+`harness_sqrt_core_bound.cpp` -- **VERIFICATION SUCCESSFUL (11.01s)**.
+`sqrt_core` honours line 165 over every normalised u0.16 input
+(`x_frac >= 16384`, its documented domain). At 16 fraction bits the bound
+`1.5 * 2^-11` is 48 ulp, so this is a generous window and the core sits inside
+it.
+
+`harness_sqrt_rescale_gap.cpp` -- **FAILED** against a one-ulp contract that is
+**inferred, not quoted**, and labelled as such in the harness.
+
+### The rescale theory was wrong
+
+I had attributed the error to the truncating rescale at sqrt.h:205
+(`r >>= EXP_ADJUSTMENT - (x_exp >> 1)`). The counterexample refutes it:
+
+```
+x_raw = 63211 (0.964523315)
+  exact root * 2^16   = 64363.0025
+  sqrt_core           = 64361      -2.0025 ulp   (bound 48 ulp: WITHIN)
+  fixed_point::sqrt   = 64361      -2.0025 ulp   (no documented bound)
+```
+
+Both return the same value -- the rescale is a no-op at this input -- so the
+2 ulp error originates in `sqrt_core` itself, well within its own bound.
+
+### Restating the sqrt findings honestly
+
+* **`uhksqrtus` / `uksqrtui`**: violate `isqrt_fast`'s relative bound, the claim
+  their own function makes. 1.51x and 3.47x, confirmed natively. **Firm.**
+* **The five `sqrt` entry points**: measurably 1-2 ulp from the exact root, and
+  153 of 256 exact perfect squares come back 1 ulp low. But `fixed_point::sqrt`
+  documents no end-to-end bound, and the one bound in its call chain
+  (`sqrt_core`, 48 ulp at u0.16) is honoured. So this is a **documentation gap**
+  -- a caller gets up to tens of ulp with nothing saying so -- **not** a proven
+  bound violation. `REPORT-llvm-libc-sqrtfx-error-bound.md` claims the latter
+  and must be rewritten.
+* **`isqrt`**: its absolute bound is violated (-1.86 ulp at u8.8), but **no
+  shipped entry point calls `isqrt`**, so this is a defect in a documented
+  internal function with no current caller.
