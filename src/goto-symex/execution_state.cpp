@@ -412,6 +412,23 @@ void execution_statet::assume(const expr2tc &assumption)
     analyze_read(assumption);
 }
 
+void execution_statet::symex_printf(const expr2tc &lhs, expr2tc &code)
+{
+  // A shared global passed to printf is read here and nowhere else, so without
+  // this the read is missing from thread_last_reads and every reduction that
+  // consults it treats the transition as independent of a writer (issue #6831).
+  if (threads_state.size() >= thread_cswitch_threshold)
+    analyze_read(code);
+
+  goto_symext::symex_printf(lhs, code);
+}
+
+void execution_statet::note_bounded_loop_truncation()
+{
+  goto_symext::note_bounded_loop_truncation();
+  art1->mark_search_truncated();
+}
+
 void execution_statet::reset_dynamic_counter()
 {
   dynamic_counter = 0;
@@ -484,6 +501,7 @@ bool execution_statet::check_if_ileaves_blocked()
       {
         art1->cs_bound_pruned = true;
         ++art1->reduction_stats.pruned_by_cs_bound;
+        art1->mark_search_truncated();
         break;
       }
     return true;
@@ -1200,35 +1218,55 @@ void execution_statet::get_expr_globals(
   });
 }
 
+// Rules given on page 13 of MPOR paper, although they don't appear to
+// distinguish which thread is which correctly. Essentially, check that the
+// write(s) of the previous transition (l) don't intersect with this
+// transitions (j) reads or writes; and that the previous transitions reads
+// don't intersect with this transitions write(s).
+static bool mpor_transitions_conflict(
+  const std::set<expr2tc> &reads_j,
+  const std::set<expr2tc> &writes_j,
+  const std::set<expr2tc> &reads_l,
+  const std::set<expr2tc> &writes_l)
+{
+  // Double write intersection
+  for (const expr2tc &it : writes_j)
+    if (mpor_set_conflicts(writes_l, it))
+      return true;
+
+  // This read what that wrote intersection
+  for (const expr2tc &it : reads_j)
+    if (mpor_set_conflicts(writes_l, it))
+      return true;
+
+  // We wrote what that reads intersection
+  for (const expr2tc &it : writes_j)
+    if (mpor_set_conflicts(reads_l, it))
+      return true;
+
+  // No check for read-read intersection, it doesn't affect anything
+  return false;
+}
+
+bool execution_statet::check_mpor_dependency(
+  unsigned int j,
+  const transition_footprintt &fp) const
+{
+  assert(j < threads_state.size());
+  return mpor_transitions_conflict(
+    thread_last_reads[j], thread_last_writes[j], fp.reads, fp.writes);
+}
+
 bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
   const
 {
   assert(j < threads_state.size());
   assert(l < threads_state.size());
-
-  // Rules given on page 13 of MPOR paper, although they don't appear to
-  // distinguish which thread is which correctly. Essentially, check that
-  // the write(s) of the previous transition (l) don't intersect with this
-  // transitions (j) reads or writes; and that the previous transitions reads
-  // don't intersect with this transitions write(s).
-
-  // Double write intersection
-  for (const expr2tc &it : thread_last_writes[j])
-    if (mpor_set_conflicts(thread_last_writes[l], it))
-      return true;
-
-  // This read what that wrote intersection
-  for (const expr2tc &it : thread_last_reads[j])
-    if (mpor_set_conflicts(thread_last_writes[l], it))
-      return true;
-
-  // We wrote what that reads intersection
-  for (const expr2tc &it : thread_last_writes[j])
-    if (mpor_set_conflicts(thread_last_reads[l], it))
-      return true;
-
-  // No check for read-read intersection, it doesn't affect anything
-  return false;
+  return mpor_transitions_conflict(
+    thread_last_reads[j],
+    thread_last_writes[j],
+    thread_last_reads[l],
+    thread_last_writes[l]);
 }
 
 void execution_statet::calculate_mpor_constraints()

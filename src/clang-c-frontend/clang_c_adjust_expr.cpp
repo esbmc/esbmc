@@ -683,6 +683,12 @@ void clang_c_adjust::adjust_index(index_exprt &index)
 {
   adjust_operands(index);
 
+  // The recursion above stays here whatever happens; only the rewrite below
+  // moves (scope-clang-c-irep2.md §19.2), so gating the whole arm would skip
+  // the subtree rather than hand over one transformation.
+  if (irep2_owns_index)
+    return;
+
   exprt &array_expr = index.op0();
   exprt &index_expr = index.op1();
 
