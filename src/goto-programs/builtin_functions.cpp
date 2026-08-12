@@ -46,7 +46,16 @@ static void get_string_constant(const exprt &expr, std::string &the_string)
     !expr.is_address_of() || expr.operands().size() != 1 ||
     !expr.op0().is_index() || expr.op0().operands().size() != 2)
   {
-    log_warning("expected string constant, but got:\n{}", expr);
+    // Only the assertion's description is read from here, so a message built
+    // at runtime is not an error: the caller falls back to printing the guard.
+    // Name the location rather than dumping the expression tree — the dump was
+    // pages of irep for a benign case, and it is the source line the user needs
+    // (#1557).
+    const locationt &loc = expr.find_location();
+    log_warning(
+      "assertion description at {} is not a string literal; reporting the "
+      "guard instead",
+      loc.is_nil() ? std::string("unknown location") : loc.as_string());
     return;
   }
 

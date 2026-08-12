@@ -1249,7 +1249,7 @@ protected:
     const sideeffect2t &code,
     const guard2tc &guard);
   /** Symbolic implementation of printf */
-  void symex_printf(const expr2tc &lhs, expr2tc &code);
+  virtual void symex_printf(const expr2tc &lhs, expr2tc &code);
   /** Recover the variadic arguments hidden behind a va_list operand of a
    *  v*printf-family call (vprintf/vfprintf/vsprintf/vsnprintf/vasprintf).
    *  Succeeds only under conservative conditions guaranteeing the mapping is
