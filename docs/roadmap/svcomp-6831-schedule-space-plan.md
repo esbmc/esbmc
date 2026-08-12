@@ -223,13 +223,43 @@ Remaining candidates:
 1. **Sleep sets** layered on the existing MPOR. Classical, sound, composes with
    a persistent-set-style reduction rather than replacing it; small state per
    DFS node. Now the first thing to try, not the second. **Done — W1.1 below.**
-2. **Decouple the pthread model's bookkeeping.** If `__ESBMC_num_threads_running`
-   and friends were per-thread rather than shared scalars, W1.2's refinement
-   would start paying. This is an operational-model change, and it must not
-   weaken `pthread_join` / deadlock detection, which read exactly that state.
+2. ~~**Decouple the pthread model's bookkeeping.**~~ **Closed — measured below
+   (W1.3), its ceiling is 3.5 % on the exit benchmark.**
 3. **Evaluate DPOR** (Flanagan–Godefroid dynamic POR) against MPOR. A design
    change, not a patch; investigation only. **Done — W1.4 below: do not start
    it.**
+
+#### W1.3 — Decoupling the bookkeeping cannot reach the exit (measured)
+
+Candidate 2 was to make `__ESBMC_num_threads_running` and friends per-thread so
+W1.2's element keying would start paying. Rather than build the operational
+model first, its **ceiling** was measured: `mpor_set_conflicts` was patched to
+drop every conflict whose key names a `__ESBMC_pthread*` /
+`__ESBMC_num_threads_running` / `__ESBMC_blocked_threads_count` object. That is
+unsound — it is an upper bound on what *any* decoupling of that state could
+buy, not a candidate patch, and it was reverted rather than committed.
+
+| benchmark | schedules, base | bookkeeping conflicts dropped | change |
+|---|---|---|---|
+| `01_malloc_20` (`--context-bound 2`) | 940 | 907 | **−3.5 %** |
+| `11_cook.fig2.pldi07` | 11,130 | 11,124 | −0.05 % |
+| `github_3449` | 2134 | 1606 | −24.7 % |
+| `11_bakery.simple.preempt` | 2279 | 2279 | 0 % |
+| `github_6475_safe` | 2544 | 2348 | −7.7 % |
+
+The exit asks for ≥2× on `01_malloc_20`; the unsound ceiling delivers 3.5 %.
+**Candidate 2 is closed** — the operational-model work it needs cannot pay for
+itself.
+
+**The methodological finding is the more useful one: conflict-count share does
+not predict schedule-count reduction.** The histogram above ranks
+`__ESBMC_pthread_thread_ended` as the top dependency driver on
+`11_cook.fig2.pldi07` with 4591 conflicts — and removing every bookkeeping
+conflict there changes the schedule count by six. The dependencies are
+over-determined in the same way W1.2 found: drop one driver and the remaining
+ones still order the same pairs of transitions. Rank a lever by re-measuring
+schedules with it disabled, never by how often it appears in a conflict
+histogram.
 
 #### W1.4 — What is left for DPOR, measured (candidate 3: do not start it)
 
