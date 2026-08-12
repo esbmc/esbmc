@@ -305,6 +305,23 @@ exprt jimple_lengthof::to_exprt(
   return sideeffect;
 };
 
+expr2tc jimple_lengthof::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  expr2tc operand = from->to_expr2t(ctx, class_name, function_name);
+
+  symbolt lengthof = get_lengthof_function();
+  symbolt &added_symbol = *ctx.move_symbol_to_context(lengthof);
+
+  return side_effect_function_call2tc(
+    migrate_type(
+      static_cast<const typet &>(added_symbol.get_type().return_type())),
+    symbol_expr2tc(added_symbol),
+    {operand});
+}
+
 void jimple_newarray::from_json(const json &j)
 {
   size = get_expression(j.at("size"));
@@ -404,6 +421,21 @@ exprt jimple_expr_invoke::to_exprt(
   return block;
 }
 
+expr2tc jimple_expr_invoke::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // TODO: Move intrinsics to backend
+  // valueOf(n) is the identity on its argument. This is the only arm reachable
+  // here: jimple_assignment routes an invoke right-hand side to the migrating
+  // default unless it is nondet or intrinsic, and valueOf_1 is the intrinsic.
+  if (base_class == "java.lang.Integer" && method == "valueOf_1")
+    return parameters[0]->to_expr2t(ctx, class_name, function_name);
+
+  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+}
+
 void jimple_virtual_invoke::from_json(const json &j)
 {
   lhs = nil_exprt();
@@ -490,6 +522,20 @@ exprt jimple_virtual_invoke::to_exprt(
   }
   block.operands().push_back(call);
   return block;
+}
+
+expr2tc jimple_virtual_invoke::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // The only arm reachable here: jimple_assignment sends an invoke right-hand
+  // side to the migrating default unless it is nondet. The three skip arms and
+  // the main path all produce statements, so they belong there in any case.
+  if (is_nondet_call())
+    return jimple_nondet(method).to_expr2t(ctx, class_name, function_name);
+
+  return jimple_expr::to_expr2t(ctx, class_name, function_name);
 }
 
 exprt jimple_newarray::to_exprt(
@@ -693,6 +739,22 @@ exprt jimple_static_member::to_exprt(
   }
   return op;
 };
+
+expr2tc jimple_virtual_member::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // to_exprt also builds a gen_zero and looks the class tag up into a local,
+  // reading neither afterwards; both are dropped here.
+  expr2tc base = symbol_expr2tc(
+    *ctx.find_symbol(get_symbol_name(class_name, function_name, variable)));
+
+  if (is_pointer_type(base->type))
+    base = dereference2tc(to_pointer_type(base->type).subtype, base);
+
+  return member2tc(type->to_type2t(ctx), base, "tag-" + field);
+}
 
 expr2tc jimple_static_member::to_expr2t(
   contextt &ctx,
