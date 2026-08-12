@@ -2258,17 +2258,23 @@ expr2tc code_contractst::replace_is_fresh_temps(
         //
         // requires side at a --replace-call-with-contract call site
         // (require_dynamic == false):
-        //   valid_object(p) only. The precondition is *asserted* against the
-        //   caller's argument here, and a real caller legitimately passes a
-        //   live stack object or an interior sub-object (e.g. &v->vec[k] of a
-        //   fresh vector) -- valid, but not heap-dynamic. Requiring is_dynamic
-        //   would reject every such caller and make is_fresh unusable under
-        //   contract replacement; the frame guarantee is carried by the
-        //   callee's assigns clause, not by heap-freshness. (#6380)
+        //   valid_object(p) and the stated extent, but not is_dynamic. The
+        //   precondition is *asserted* against the caller's argument here, and
+        //   a real caller legitimately passes a live stack object or an
+        //   interior sub-object (e.g. &v->vec[k] of a fresh vector) -- valid,
+        //   but not heap-dynamic. Requiring is_dynamic would reject every such
+        //   caller and make is_fresh unusable under contract replacement; the
+        //   frame guarantee is carried by the callee's assigns clause, not by
+        //   heap-freshness. (#6380)
+        //
+        //   plus the extent the contract asked for, which the caller has to
+        //   supply. dynamic_size is a byte count, the currency is_fresh states
+        //   its extent in, and the offset term is what keeps
+        //   is_fresh(&a[i], n) working. It says nothing about an object with
+        //   automatic storage -- __ESBMC_alloc_size is only maintained for
+        //   heap objects -- so the extent is owed only where it is meaningful,
+        //   which keeps the stack caller above working. (#6542)
         expr2tc valid_obj = valid_object2tc(mapping.ptr_expr);
-        if (!require_dynamic)
-          return valid_obj;
-
         expr2tc ptr_obj = pointer_object2tc(pointer_type2(), mapping.ptr_expr);
 
         const symbolt *dyn_sym = ns.lookup("c:@__ESBMC_is_dynamic");
@@ -2281,7 +2287,26 @@ expr2tc code_contractst::replace_is_fresh_temps(
         expr2tc dyn_arr = symbol2tc(dyn_arr_type, dyn_sym->id);
         expr2tc is_dynamic = index2tc(get_bool_type(), dyn_arr, ptr_obj);
 
-        return and2tc(valid_obj, is_dynamic);
+        if (require_dynamic)
+          return and2tc(valid_obj, is_dynamic);
+
+        if (is_nil_expr(mapping.size_expr))
+          return valid_obj;
+
+        // off + n <= have would wrap for a large n and pass vacuously, so ask
+        // the same question without an addition.
+        expr2tc off = typecast2tc(
+          size_type2(),
+          pointer_offset2tc(
+            get_int_type(config.ansi_c.address_width), mapping.ptr_expr));
+        expr2tc n = typecast2tc(size_type2(), mapping.size_expr);
+        expr2tc have =
+          typecast2tc(size_type2(), dynamic_size2tc(mapping.ptr_expr));
+        expr2tc fits = and2tc(
+          lessthanequal2tc(off, have),
+          lessthanequal2tc(n, sub2tc(size_type2(), have, off)));
+
+        return and2tc(valid_obj, or2tc(not2tc(is_dynamic), fits));
       }
     }
   }
@@ -4343,11 +4368,15 @@ expr2tc code_contractst::lower_is_fresh_in_requires(
 
     const size_t fresh_param = fresh_param_index(ptr, params);
 
+    // The extent is rebound alongside the pointer: __ESBMC_is_fresh(b, n) with
+    // n a parameter has to mean the caller's n, not the callee's symbol.
+    expr2tc size = call->operands[1];
     for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
     {
       expr2tc param_expr =
         symbol2tc(migrate_type(params[i].type()), params[i].get_identifier());
       ptr = replace_symbol_in_expr(ptr, param_expr, actual_args[i]);
+      size = replace_symbol_in_expr(size, param_expr, actual_args[i]);
     }
     if (!is_pointer_type(ptr->type))
       continue;
@@ -4379,6 +4408,7 @@ expr2tc code_contractst::lower_is_fresh_in_requires(
     is_fresh_mapping_t m;
     m.temp_var_name = to_symbol2t(call->ret).thename;
     m.ptr_expr = ptr;
+    m.size_expr = size;
     req_is_fresh.push_back(m);
   }
 

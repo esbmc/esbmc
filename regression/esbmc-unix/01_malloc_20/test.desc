@@ -2,3 +2,4 @@ THOROUGH
 main.c
 --no-unwinding-assertions --unwind 3 --context-bound 2 --force-malloc-success --memory-leak-check
 ^VERIFICATION SUCCESSFUL$
+^Schedule reduction: peak_threads 3, schedules_explored 940, pruned_by_mpor 296, pruned_by_hash 0

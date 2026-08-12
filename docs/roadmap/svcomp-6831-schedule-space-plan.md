@@ -10,7 +10,7 @@ a code change.
 schedule-space explosion*, 291 of 489 lost SV-COMP tasks.
 **Bisected to:** `bac652b13c` — `[goto-symex] Track main-thread termination per
 state, not per search` (#6607), which fixes #4584.
-**Last updated:** 2026-08-10.
+**Last updated:** 2026-08-11.
 
 **Measurement environment.** All numbers below were measured on an x86_64 Linux
 host against `build/src/esbmc/esbmc`, ESBMC 8.4.0, built from `19db2adc96`
@@ -658,6 +658,48 @@ finish — and against a flag.
 the argument for why no `true` is emitted without exhaustive coverage (the
 second half is now discharged above). The composition design is the open work.
 
+#### W4.1 — `--falsify-context-bound`, the composition (shipped, off by default)
+
+The wrapper cannot adopt `--incremental-context-bound`: it is rejected
+alongside `--incremental-bmc` (`driver.cpp:218`, #6480 — only one driver may own
+the outer loop) and the wrapper sends every concurrency task through
+`--incremental-bmc` (`esbmc-wrapper.py:315`). The two deepening loops do not
+compose because both own the *verdict*, not because they cannot run in sequence.
+
+`--falsify-context-bound N` gives up the half that collides. It deepens the
+context bound from 1 to N before the chosen strategy runs, under
+`suppress-bounded-success`, so it can only report a violation: each round
+under-approximates twice over — the context bound truncates the schedule space,
+and the pre-pass forces `--no-unwinding-assertions` (defaulting `--unwind` to 1
+when the run sets none) so a truncated loop yields fewer paths rather than a
+spurious unwinding-assertion failure. A violation found is therefore genuine
+whatever the strategy would have concluded, and finding none is not evidence,
+so the strategy afterwards runs untouched.
+
+That argument only holds where a SAT round *means* a violation, which is
+narrower than it first appears and cost four wrong verdicts in review before it
+was pinned down. `--forward-condition` and `--inductive-step` read SAT as
+"unable to prove"; `--termination` inverts it further, since its markers make
+reaching an assert evidence that the loop terminates; a `--multi-property`
+round owns the property table and would report the truncated pre-pass as the
+whole result; and `--partial-loops` removes the very assumption the
+under-approximation rests on. The first four are rejected, `--partial-loops` is
+forced off for the pre-pass, and coverage runs skip it (its rounds would fold
+into the reported figure and print one `[Coverage]` block per bound).
+
+On `00_rwlock4` — the #6480 shape, a violation needing few switches stranded
+deep in unbounded DFS order — `--incremental-bmc` alone produced no verdict in
+90 s, and `--incremental-bmc --falsify-context-bound 2` reported FAILED in
+1.1 s. `--k-induction --falsify-context-bound 2` behaves the same (1.2 s); both
+combinations were previously rejected outright.
+
+**Still open:** the adaptive policy. §W4's sweep says full deepening buys one
+stranded falsification in 40 unsafe tests and costs 18 proofs in 132 safe ones,
+so the wrapper change wants a *shallow* N (the stranded shapes are found at
+N ≤ 2 in ~1 s) rather than deepening to convergence — and that N, plus the
+resulting score delta on the concurrency categories, is what the exit above
+still asks for.
+
 ---
 
 ## 5. Sequencing
@@ -682,10 +724,14 @@ re-introduce exactly the unsoundness #6607 removed. Each must discharge:
 - **G2 — #4584 still caught.** The regression test #6607 added still detects its
   race. A reduction that silently re-truncates the search will pass G1 and fail
   only here.
-- **G3 — schedule count pinned.** A regression test asserting the interleaving
-  count on `01_malloc_20` at `--context-bound 2`, so a future truncation is a
-  test failure rather than a score movement noticed a release later. This is the
-  oracle the issue's bisect used; it should be in the tree.
+- **G3 — schedule count pinned. Discharged.** Both `01_malloc_20` at
+  `--context-bound 2` (the oracle the bisect used, 940 schedules / 296 MPOR,
+  THOROUGH) and a CORE variant `github_6831_schedule_count` at `--unwind 1`
+  (262 / 95, 4 s so it runs in PR CI) now assert their counters, so a future
+  truncation is a test failure rather than a score movement noticed a release
+  later. Re-introducing #6607's search-global `main_thread_ended` collapses them
+  to 66 / 15 and 14 / 3 respectively — measured, not assumed, so the pin is
+  known to discriminate the exact regression §7 is about.
 - **G4 — dual-solver agreement.** Bitwuzla and Z3 agree on the changed set.
 - **G5 — measured, not asserted.** Every claimed reduction quoted with W0's
   counters, before and after, naming the configuration.
