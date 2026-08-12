@@ -360,6 +360,21 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     return get_function_call(call_node);
   }
 
+  // a.<method>(...) on a tracked numpy array (sum/mean/min/max/std/var/
+  // flatten/transpose/reshape/ravel/copy) only resolves through the numpy
+  // operational model when it has the np.<method>(a, ...) shape a
+  // module-form call would have produced. The assignment-statement RHS
+  // already rewrites this shape before it reaches here; this call covers
+  // every other expression context (assert, nested expressions, call
+  // arguments, ...), which otherwise fall through to an unrelated builtin
+  // or class-method lookup for the same method name.
+  if (
+    std::optional<nlohmann::json> rewritten =
+      rewrite_numpy_method_call_node(element))
+    return rewritten->value("_type", "") == "Call"
+             ? get_function_call(*rewritten)
+             : get_expr(*rewritten);
+
   if (
     is_numpy_random_attr(element["func"], "random") &&
     element.contains("args") && element["args"].size() == 1)

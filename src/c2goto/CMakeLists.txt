@@ -276,9 +276,13 @@ function(mangle_clib output)
       endforeach()
       file(WRITE ${sol64_unified_c} "${sol64_unified_body}")
 
+      # No --fixedbv here: the contract under verification, the default clib and
+      # the solver encoding all run floats as IEEE, so building the models with
+      # the legacy fixed-point fallback gives the same C type two incompatible
+      # representations either side of the model boundary (#6898).
       add_custom_command(OUTPUT ${sol64_goto}
         COMMAND c2goto ${multiarch_flags} ${OS_C2GOTO_FLAGS}
-                ${sol64_unified_c} --64 --fixedbv -D__ESBMC_FIXEDBV
+                ${sol64_unified_c} --64
                 --output ${sol64_goto}
         DEPENDS c2goto ${c2goto_solidity_files} ${c2goto_header_files}
                 ${sol64_unified_c}

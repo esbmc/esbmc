@@ -128,9 +128,12 @@ measurements say a closed enum suffices:
   `SolType` at `solidity-frontend/solidity_grammar.h:484`. It is stringified
   only to cross the `irept` boundary. Restoring it to a typed field removes a
   serialization step rather than adding an escape hatch.
-- **`#cpp_type`'s value domain is the C type-keyword set** — the writers emit
+- ~~**`#cpp_type`'s value domain is the C type-keyword set** — the writers emit
   `"bool"`, `"signed_char"`, `"unsigned_char"`, `"void"` and a `c_type` variable
-  drawn from the same finite vocabulary. It is an enum wearing a string.
+  drawn from the same finite vocabulary. It is an enum wearing a string.~~
+  **Refuted 2026-08-08, see §32.1.** The `c_type` variable is drawn from LLVM's
+  builtin-type list, not from a type-keyword vocabulary: 83 distinct values, 56
+  of them ARM SVE names. It is not an enum wearing a string.
 
 So the third option the record never separated out:
 
@@ -161,6 +164,12 @@ explicit invariant plus a test that pins it.
 **Option F is a spike before it is a plan** (Phase 0 below). If the equality
 asymmetry proves unmanageable, fall back to Option B for Solidity only and
 accept that B-4 closes for C/C++ but not Solidity.
+
+> **The spike came back the other way round — see §36.** The equality asymmetry
+> this paragraph hedges against is *not* the problem (§16 retired it). The
+> domain is. So the fallback splits the opposite way to what is written here:
+> Option F fits **Solidity**, whose classification is genuinely a closed enum,
+> and not C/C++, whose spelling domain is open.
 
 ## 6. Phased program
 
@@ -1052,109 +1061,129 @@ assert-fold in C/C++/Python, a Python A/B sweep that has never been run, and
 Solidity's eight residuals — which #6759 and #6760 already establish are *not*
 dispatcher defects.
 
-## 21. The Python A/B sweep, run at last — one site, not a class (2026-08-08)
+## 21. The Python A/B sweep, run — and the one defect it found (2026-08-08)
 
-§20.4 listed "a Python A/B sweep that has never been run" as one of three items
-left before the round-trip can be deleted. It has now been run. Python joins
-Jimple as a frontend measured on **both** clauses of §18.5's criterion, and the
-result is narrower than the decline census suggested: the divergent set is large
-but it has exactly one cause.
+§20.4 listed the Python sweep as the one clause never measured. It is run here,
+at stride 15 over `regression/python` (303 of 4 539 tests), same A/B as §18.6.
 
 ### 21.1 Result
 
-Stride-12 sample of `regression/python`, 379 of 4541 tests, `--goto-functions-only`
-on both arms:
+| | divergent | identical |
+|---|---:|---:|
+| before | **19** / 303 | 284 |
+| after | **0** | **303 / 303** |
+| controls (C stride-12, C++ stride-12) | 1 / 202, pre-existing (§21.4) | 201 |
 
-| | tests | |
-|---|---:|---|
-| byte-identical | **354** | |
-| stable divergence | **24** | all one site — §21.2 |
-| nondeterministic | 1 | `threading_thread_subclass_race_fail`, §19.3's class |
+A further 16 tests diverged only under §18.6's normalisation and are not
+counted above; §21.3 records what they needed.
 
-The 24 are not 24 problems. Every one of them reduces to the same operand-level
-`#location`, and the tests that carry it are simply the tests that reach the
-`math` operational model — directly (`math1`, `math_edge_*`), or transitively
-(`cmath_*`, `harness_torch_allclose_fail`, `list_float_param_int`). The count
-measures corpus reach, not defect count.
+### 21.2 One defect, and it is a hole in a stated premise
 
-### 21.2 The site
+All 19 are the same site, and they are location-only. The native `ASSIGN` arm
+stores `code2` verbatim on the reasoning — written into the code as a comment —
+that "migrate_expr drops the operand locations, so none of
+restore_value_locations' stamping survives in the stored code." That premise is
+false for exactly one kind: `if2t` carries a location field
+(`irep2_expr.h:786`) and `migrate.cpp:1006` round-trips it. So a ternary nested
+in a side-effect-free right-hand side keeps its stamped location on the legacy
+path and loses it natively.
 
-`src/python-frontend/models/math.py:276` — `y = (x + n // x) // 2`, the body of
-`isqrt`'s `while` loop. Legacy carries a `#location` on a **constant nested
-inside the expression tree**; the native dispatcher does not. It is an
-operand-level attribute, not an instruction location: the containing
-instruction's own location is identical on both arms, and no instruction text
-differs anywhere in the 24.
+Python is where it shows because Python is where the shape occurs: floor
+division lowers to an arithmetic expression with an unlocated `if2t` correction
+term, so every `//` inside an assignment hits it. C and C++ do not — the clang
+frontends stamp sub-expression locations at parse time, so the ternary already
+has one and the legacy stamping is a no-op.
 
-That is a smaller claim than the decline census would have predicted, and it
-should not be inflated into one. What it is *not* is a W1-loc regression —
-W1-loc concerned instruction locations, which this sweep finds intact.
+The fix is the IREP2 half of `restore_value_locations`: stamp the statement's
+effective location onto location-less `if2t` operands before storing `code2`.
 
-### 21.3 Two normalisation gaps §20.3's pattern does not cover
+**The premise is written into four arms, not one.** The A/B sample only reached
+the `ASSIGN` one; review found the same sentence — and the same divergence —
+at the three other sites that store `code2` verbatim, each reproduced against
+the patched binary before being fixed:
 
-§20.3 widened the temp-name pattern to catch a synthetic file name without a
-leading slash. Two further per-run artefacts defeat that pattern on Python, and
-both must be normalised or the sweep reports false divergences:
+| arm | Python shape that reaches it |
+|---|---|
+| `code_assign2t` → ASSIGN | `y = (x + n // x) // 2` |
+| `code_return2t` → RETURN | `return (x + n // x) // 2` |
+| `code_expression2t` → OTHER | `(x + n // x) // 2` as a bare statement |
+| `code_function_call2t` → FUNCTION_CALL | `g((x + n // x) // 2)` |
 
-1. **The temp path escaped as decimal ASCII codes.** `ASSIGN __file__={ 47, 116,
-   109, 112, 47, 101, 115, 98, 109, 99, ... }` is `/tmp/esbmc-python-astgen-<hash>/...`
-   character by character. No text pattern over `esbmc*` can see it. Every test
-   that imports a model carries this line.
-2. **Heap addresses in temp symbol names.** `ESBMC_unpack_temp_127415336141168`
-   and `unpack_134378588261744_0` embed a pointer value, so they vary with ASLR
-   between any two runs. Note the two distinct prefixes: normalising only
-   `ESBMC_unpack_temp_` leaves `github_4792` reporting a false divergence, which
-   is how it was initially miscounted here.
+`code_decl2t` was probed and does not diverge: a decl with an initializer
+delegates on `has_sideeffect` before reaching a verbatim store. Each of the four
+arms has already excluded code-typed operands by the time it emits, so unlike
+`restore_value_locations` the IREP2 walk never has to re-root on a nested
+statement — an invariant the helper's comment now states, because it is a
+coupling across a function boundary rather than a local property.
 
-Both were caught by the §7 rule 7 self-control, not by inspection. Widening a
-normalisation can in principle mask a real difference — if two distinct temps
-were confused by the same rewrite — so these two rules are deliberately narrow:
-they rewrite the numeric field only, and leave the surrounding structure to be
-compared.
+### 21.3 The sweep needed three normalisations §18.6 does not name
 
-### 21.4 The nondeterministic residual
+Each was settled by the §7 rule 7 self-control — the legacy arm against itself —
+not by inspection:
 
-`threading_thread_subclass_race_fail` diverges, but a 5×5 self-control gives
-`native_variants=2`, `legacy_variants=3`, and the two sets intersect: **neither
-arm is internally stable**. The race-check assertions and their comment lines
-are emitted in a varying order, with the native path off as well as on. This is
-the same class as §19.3's Solidity locations and §20.3's C temp file name, and
-the third frontend on which it has now appeared — the pattern is general enough
-that a self-control should be the default before any A/B divergence is believed,
-not a step reserved for suspicious results.
+| artefact | why it varies | normalisation |
+|---|---|---|
+| `GOTO program processing time: N.NNNs` | wall clock | `time: Ts` |
+| `ESBMC_unpack_temp_<n>` | temp name derived from an address | `_N` |
+| `ASSIGN __file__={ 47, 118, ... }` | the astgen temp dir, **as decimal character codes** | collapse the initialiser |
 
-### 21.5 Reproduction
+The third is the one to remember: `__file__` holds the per-run temp directory
+encoded byte-by-byte, so no amount of widening §20.3's `esbmc[-._]…` text
+pattern can reach it. A per-run artefact need not be legible as text.
 
-The A/B needs no instrumentation. Per test, run `--goto-functions-only` with and
-without `--no-irep2-native-body`, normalise, and compare. The normalisation is
-§18.6's, plus §21.3:
+### 21.4 Two findings the sweep produced that this patch does not fix
 
-```sh
-sed -e 's@esbmc[-._][A-Za-z0-9._-]*@TMPD@g' \
-    -e 's@^\(.*time\): [0-9.]*s$@\1: TIME@' \
-    -e 's@ESBMC_unpack_temp_[0-9][0-9]*@ESBMC_unpack_temp_N@g' \
-    -e 's@\bunpack_[0-9][0-9]*_@unpack_N_@g' \
-    -e 's@\(ASSIGN __file__=\).*@\1TMPD_BYTES@'
-```
+1. **A C divergence that is not location-only.** `esbmc/cwe_uninit_array_vla`
+   (`--uninitialised-vars-check --incremental-bmc`) renders a VLA bound as `n`
+   natively and `tmp$1` under the round-trip — the first *instruction-text*
+   divergence recorded in any suite; every prior residue was a location. It
+   reproduces with the patch reverted, so it predates it. Not filed yet.
+2. **The A/B sees `if2t::location` only through the tree-dump fallback.** The
+   dump renders a `#location` block only where `from_expr` cannot print the
+   expression; on a printable one the field is invisible. Python surfaced this
+   defect only because its `xor` node forces the fallback, which is also why the
+   303-test sample reached one of the four affected arms and not the other
+   three. Treat the sweep's coverage of this field as partial.
 
-For any divergence, run each arm five times and compare the *sets* of hashes
-before believing it (§19.4).
+### 21.5 Mutants
+
+| mutant | what it breaks | caught by |
+|---|---|---|
+| M1 — stamping call removed | the ternary's location | `…ternary_loc_01` (ASSIGN) and `…_03` (RETURN/OTHER/CALL); and the A/B, 19/303 |
+| M2 — stamp unconditionally, overwriting a frontend `?:` position | a C/C++ ternary's own location | **nothing** — §21.4 item 2 is why |
+
+M1 was run, not assumed: reverting the call fails exactly the two tests that pin
+the arms and leaves `…_02` — the legacy-path control, which passes pre-patch by
+construction — green.
+
+M2 is the honest limit. The guard is kept on the semantics rather than on a
+gate: `irep2_expr.h:787` says the field carries the `?` position for witness
+branching, so a frontend that supplied one must win. Do not read the passing
+gates as evidence the guard is exercised.
 
 ### 21.6 Phase 1 exit criterion
 
 | suite | declines | byte-identical |
 |---|---|---|
 | `esbmc-cpp` | drained; residue = assert-fold | gated per patch (§11.4) |
-| `esbmc` (C) | 4 / 60 tests | 138/138 (stride-12, §20.3 normalisation) |
-| `python` | dominant site fixed by #6695 (merged) | **354/379 (stride-12); 24 = one site, 1 nondeterministic** |
+| `esbmc` (C) | 4 / 60 tests | 138/138 (stride-12, §20.3); 1 divergence at stride-12 here, §21.4 |
+| `python` | dominant site fixed by #6695 (merged) | **303/303** (stride-15) |
 | `esbmc-solidity` | 0 / 26 | 502/510; 8 residuals = #6759, #6760 |
 | `jimple` | 0 / 15 | 15/15 |
 
-The Python row is now measured rather than blank. What is left before the
-round-trip can be deleted is the assert-fold in C/C++/Python, Solidity's eight
-residuals (#6759, #6760), and this one `isqrt` operand location — left to a
-separate patch rather than fixed here, so that the measurement and the fix are
-not entangled in one change.
+Python's 303/303 is a sampling result, not a proof — §21.2 is the standing
+warning that a shape absent from the sample can still carry the defect, and
+§21.4 item 2 bounds what the dump can observe at all. What is left is the
+assert-fold in C/C++/Python, Solidity's eight residuals, and the C divergence in
+§21.4 — which, unlike the Solidity eight, has not been shown to predate the
+dispatcher series as a whole, only this patch.
+
+> **Provenance.** §21.7 and §21.8 arrived from the parallel Python sweep merged
+> as #6829, which sampled at stride 12 (379 tests, 24 divergences) where §21.1
+> above sampled at stride 15 (303 tests, 19 divergences). Both measured the same
+> defect — the location-less `if2t` of §21.2 — so their analysis carries over
+> unchanged, but where they cite §21.1's or §21.6's figures they mean that
+> sweep's, not this one's.
 
 ### 21.7 The obvious fix for §21.2 is refuted
 
@@ -1234,3 +1263,1317 @@ than the tests that happened to catch it.
 The corresponding correction to §21.6: the `isqrt` operand location is no longer
 "left to a separate patch" — it is #6835, covering all four sites, with A/B test
 pairs whose native arms fail without it.
+
+## 22. §21.4's C divergence is a soundness bug — and the second half of the same premise (2026-08-08)
+
+§21.4 filed `esbmc/cwe_uninit_array_vla` as "the first instruction-text
+divergence, not yet filed." Run down, it is not a cosmetic at all: on the
+default (native) path ESBMC **silently accepts a real out-of-bounds read**.
+
+### 22.1 The reproducer
+
+```c
+int main(void)
+{
+  int n = 1;
+  int a[n];
+  a[0] = 42;
+  n = 100;
+  return a[5];        /* ASan: dynamic-stack-buffer-overflow */
+}
+```
+
+| path | bound check emitted | verdict |
+|---|---|---|
+| `--no-irep2-native-body` | `5 < (signed long int)tmp$1` | **FAILED** (correct) |
+| default (native) | `5 < (signed long int)n` | **SUCCESSFUL** (misses it) |
+
+`n = 100` is what turns the stale bound into a *vacuous* one, so the missed bug
+needs a reassignment; without it the two bounds are equal and the divergence is
+invisible in the verdict — which is why the original test
+(`cwe_uninit_array_vla`, no reassignment) passed on both paths and the defect sat
+in the A/B as a text difference only.
+
+### 22.2 Root cause: the *other* thing migrate_expr normalises
+
+C11 6.7.6.2p5 evaluates a VLA's size expression once, at the declaration, so
+`convert_decl` snapshots it into a temporary and **retypes the array symbol
+mid-body** — `s->set_type(...)`, `goto_convert.cpp`. The legacy path picks that
+up for free, and not by mutating its tree: `sym_name_to_symbol`
+(`migrate.cpp:613`) deliberately re-reads **every level0 symbol's type from the
+global symbol table** rather than trusting the expression's own, with its own
+comment explaining why ("various things out there get parsed in with a partial
+type"). So a statement converted *after* the retype migrates with the new type.
+
+A native arm storing `code2` verbatim never re-migrates, so it keeps the
+frontend-time `int[n]`. `goto_check`'s bounds check then reads `array_size`
+straight off that stale type (`goto_check.cpp`, `ns.follow(ind.source_value->type)`).
+
+This is the same shape of defect as §21.2 and it was hiding behind it:
+**`migrate_expr` performs two normalisations that a verbatim store skips** — the
+ternary location, and the symbol-table type. §21 fixed the first at four arms;
+this fixes the second at the same four, behind one `normalise_native_code`
+helper whose contract is now stated positively: *`code2` as `migrate_expr` would
+have produced it from the legacy statement the fallback converts.*
+
+### 22.3 Result
+
+| sweep (divergences) | before §21 | after §21 | after §22 |
+|---|---:|---:|---:|
+| `esbmc` (C) + `esbmc-cpp` stride-12 | 1 / 202 | 1 / 202 | **0 / 202** |
+| `python` stride-15 | 19 / 303 | 0 / 303 | 0 / 303 |
+
+The C sample is clean for the first time. That is *not* the exit criterion met:
+§22.6 is a defect this sample cannot see, found by review rather than by
+measurement, and it is the second time on this patch that the sweep's silence
+was mistaken for coverage.
+
+### 22.4 Mutants
+
+| mutant | what it breaks | caught by |
+|---|---|---|
+| refresh disabled, stamping kept | the VLA retype | **both** new tests — `…vla_retype_01_fail` flips to SUCCESSFUL (false negative), `…_01` to FAILED (false positive) |
+| stamping disabled, refresh kept | the ternary location | the §21.5 tests only |
+
+The two normalisations are independently pinned, which matters because they
+share a helper and a call site: neither test set can pass on the other's fix.
+
+### 22.6 Review found the same bug at the condition guards
+
+The statement arms were fixed first, because those are what the sweep reported.
+Review then reproduced the identical missed out-of-bounds read with the access
+in an `if`, `while`, `do`/`while` and `for` condition — those arms fold the
+condition into a GOTO guard verbatim, so they share the premise and were not
+covered. The sample contains no VLA in a branch condition, so no amount of
+re-running it would have surfaced this.
+
+All six sites (the four statement arms plus the four condition guards, and
+`code_assert2t`/`code_assume2t`'s guards, which are Python-reachable) now go
+through the one `normalise_native_code` chokepoint.
+
+### 22.5 What this says about the A/B as a gate
+
+§21.4 item 2 warned the sweep's *location* coverage was partial. This is the
+sharper lesson and it runs the other way: the sweep **did** report this
+divergence, plainly, in instruction text — and §21 read it as "location-only
+residue, filed for later" because every prior residue had been. A text
+divergence is not the same class as a location one, and the C suite had never
+produced one before. **Re-classify before deferring**: an unexplained A/B
+divergence is a defect of unknown severity, not a cosmetic, until it has been
+run down. This one was a default-on missed bug that had shipped.
+
+## 23. The assert-fold reproduced — the last named decline residue (2026-08-08)
+
+§12.2 named the assert-fold as the residue both C and C++ carry, and §20.4/§22
+carried it forward as one of the three things left before the round-trip can go.
+`generate_ifthenelse` collapses a branch that reduces to a lone `assert(false)`
+into the guard; the native arm detected those shapes and **`return false`d**,
+which is a *whole-function* fallback — worse than the statement-local delegation
+the rest of the dispatcher uses. It now reproduces the fold.
+
+### 23.1 The shapes, and which are corpus-reachable
+
+| shape | native handling | reached by |
+|---|---|---|
+| then-branch is a lone `assert(false)`, no else (or a no-op else) | folded, guard `!c` | `…assert_fold_01` |
+| else-branch is a lone `assert(false)`, then-branch a no-op | folded, guard `c` | `…assert_fold_01` |
+| both branches lone `assert(false)` | both folded | `…assert_fold_01` |
+| then-branch is a lone `assert(false)`, else-branch a *no-op* | folded, guard `!c` | `…assert_fold_01` |
+| `(void)((cond) \|\| (assert(0),0))` — the C-library idiom | folded, guard `!c`, second instruction dropped | **`regression/esbmc/github_1565`** and 3 others; `…assert_fold_03` |
+
+and one shape that is not a fold but a delegation:
+
+| a fold that fires and still leaves the other branch to convert | delegated (the legacy re-entry with branches swapped is not reproduced) | `…assert_fold_02` |
+
+**Only the `||` idiom occurs in the corpus.** A stride-6 instrumented scan of
+`regression/esbmc` + `regression/esbmc-cpp/cpp` (405 tests) fires the fold on
+exactly four — `github_1565`, `no_pointer_check_4`,
+`interval_can_handle_global`, `github_5998-long-chain_fail` — and every one is
+`idiom=1`. The other shapes were reached only by written reproducers
+(`__ESBMC_assert(0, …)` in branch position), which is what the new tests pin.
+Every branch this patch adds is shown live by one or the other, per the C-Live
+obligation; none is dead instrumentation.
+
+**The idiom's gate was wrong on the first cut, and review caught it.** Legacy
+gates that fold on the else *program* being observationally no-op
+(`is_no_op_program`); the native arm tested the *AST* (`else_case` nil), so
+`if (c) { assert(0); g = 1; } else { }` folded on one path and not the other.
+Not corpus-reachable, but a byte-identity break, and the third time on this
+branch that a first cut was scoped by what the sweep happened to sample rather
+than by what the legacy code actually says. `…assert_fold_03` pins it. The
+shared predicate is now `is_no_op_program` in `remove_no_op.h` — previously a
+file-static in `goto_convert.cpp` that this arm had copied, which is how the two
+came to disagree.
+
+### 23.2 Mutants — and why one of them cannot be caught
+
+| mutant | what it breaks | caught by |
+|---|---|---|
+| M1 — fold arms replaced by `delegate_to_legacy()` | nothing observable | **nothing** (see below) |
+| M2 — folded guard `c` instead of `!c` | the assertion's condition | `…assert_fold_01` (text) and `…_01_fail` (verdict: the assume makes the sign observable), plus the A/B on `github_1565` |
+| M3 — idiom gated on an AST-empty else | the no-op-else idiom | `…assert_fold_03` |
+
+M1 is §20.2's limit again, and it is worth restating because it is the reason
+this residue survived so long: **a behaviour-preserving delegation is
+indistinguishable from the arm that replaces it by any verdict or output test.**
+The old code's `return false` and the new fold produce byte-identical programs.
+Only a decline census can tell them apart, which is why §23.1 reports the scan
+rather than resting on the green suite.
+
+### 23.3 A/B and a harness correction
+
+C stride-12 + C++ stride-4: **327/328**. A wider C++ stride-4 sample (189
+tests) reports one divergence, `cpp_stack_top_bug`, which the §7 rule 7
+self-control immediately disqualifies: it runs `--k-induction-parallel`, and the
+legacy arm against **itself** produces two different hashes on consecutive runs.
+The diff is interleaved whitespace from the forked workers. *Exclude
+`--k-induction-parallel` tests from the A/B* — this is the third distinct
+per-run artefact class the sweep has hit (§19.3 a synthetic location, §20.3 a
+synthetic file name, §21.3 a temp dir encoded as character codes), and the
+self-control caught all three.
+
+### 23.4 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc-cpp` | assert-fold now folded; residue = `--error-label` only | 327/328 with C (the 1 is §23.3 harness noise) |
+| `esbmc` (C) | assert-fold now folded; residue = `--error-label` only | as above |
+| `python` | dominant site fixed by #6695 (merged) | 303/303 (stride-15) |
+| `esbmc-solidity` | 0 / 26 | 502/510; 8 residuals = #6759, #6760 |
+| `jimple` | 0 / 15 | 15/15 |
+
+What is left is `--error-label` (§12.2: `convert_label` turns a matching label
+into an `ASSERT(false)` carrying property metadata; invisible to any census that
+does not replay `test.desc` flags) and Solidity's eight residuals. The
+assert-fold row of §12.3, carried since 2026-08-04, is closed.
+
+## 24. `--error-label` reproduced — the decline residue is now empty (2026-08-08)
+
+§12.2 named two genuine decline sites and called both "candidates for the same
+statement-local delegation." §23 closed the assert-fold; this closes the other,
+and it is the last one either census found.
+
+`convert_label` turns a label matching `--error-label` into an `ASSERT(false)`
+carrying `property`/`comment`/`user_provided` metadata, and makes **that
+assertion** the label's target so a `goto` lands on it. The native label arm
+detected the shape and `return false`d. It now reproduces it.
+
+### 24.1 Why it outlived the rest
+
+§12.2 already said it: the site fires only under a flag, so it is invisible to
+any census that does not replay each test's `test.desc` flags. Both the C++
+census (§11) and the whole-suite sweeps developed patches against default flags,
+and the arm never appeared. It is the one residue that a *better sample* would
+never have found — only reading the legacy function does.
+
+There is a second reason to be careful here, already recorded in `CLAUDE.md`:
+ESBMC reports `VERIFICATION SUCCESSFUL` **silently** when the label is absent
+from the GOTO program, which is indistinguishable from "label unreachable." That
+shows up in the mutant table below.
+
+### 24.2 Mutants
+
+| mutant | what it breaks | caught by |
+|---|---|---|
+| M1 — arm removed (`return false`) | nothing observable | **nothing** — §23.2's limit again |
+| M2 — assertion guard `true` | the error label stops failing | `regression/cbmc/01_cbmc_error-label1` (verdict) **and** the A/B on it |
+| M3 — `comment("error label")` dropped | the claim's rendered text | **only** the new `…error_label_01_fail` |
+| M4 — `user_provided(true)` dropped | `--no-assertions` stops skipping the claim | **only** the new `…error_label_02` |
+| — `property("error label")` dropped | *nothing* | nothing, and nothing can |
+
+The metadata splits three ways and only review caught that: `--goto-functions-only`
+renders `comment` but not `property` or `user_provided`, so one test cannot pin
+all three. `property` is genuinely unobservable — every reader compares it
+against other literals — so the call is kept for fidelity and **is not claimed
+to be tested**. `user_provided` needed a second test, because none of the 162
+`--error-label`-bearing tests pairs the flag with `--no-assertions`.
+
+M2's A/B also shows the arm is genuinely exercised, which is the reachability
+evidence M1 cannot supply. Worth recording from the same run: under M2 the A/B
+diverges on `01_cbmc_error-label1` but **not** on `esbmc-unix/github_2513_1`,
+because that test's label is not the one it names — `CLAUDE.md`'s
+silent-SUCCESSFUL trap, visible here as a test that cannot discriminate anything
+about this arm.
+
+Worth noting from the same run: under M2 the A/B diverges on
+`01_cbmc_error-label1` but **not** on `esbmc-unix/github_2513_1`, because that
+test's label is not the one it names — the silent-SUCCESSFUL trap above, visible
+here as a test that cannot discriminate anything about this arm.
+
+### 24.3 A/B
+
+All 162 `--error-label`-bearing tests outside `regression/disabled`: **162/162**
+byte-identical. (The first count reported here was 29 — a glob that missed the
+nested suite directories, and with them the whole `esbmc-cpp/try_catch/nec_ex*`
+cluster, which is the most interesting set because it combines the error label
+with the `cpp_catch` legacy delegation.)
+
+### 24.4 A test this patch invalidated
+
+`github_4715_irep2_native_body_goto_rollback_01` existed to pin
+`convert_function`'s `targets` rollback, and its stated premise was *"`--error-label`
+makes the label handler decline … which is exactly the ordering that leaves the
+dangling entry behind."* That premise is now false, so its comment is corrected
+rather than left to rot.
+
+Chasing it produced a finding worth keeping: **the rollback is not discriminated
+by any test, and was not before this patch either.** Removing
+`targets = targets_before` leaves the whole suite green, because the failure mode
+is a *dangling iterator read* in `finish_gotos` — latent UB, not a crash, and
+not observable without a sanitizer build. Re-pointing the test at another
+declining shape would not have fixed that; four candidate decliners were tried
+under the mutant and none faulted. Pinning it needs an ASan build, which this
+branch does not have.
+
+### 24.5 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc-cpp` | **drained** | 327/328 with C (the 1 is §23.3 harness noise) |
+| `esbmc` (C) | **drained** | as above; plus 162/162 on the `--error-label` set |
+| `python` | dominant site fixed by #6695 (merged) | 303/303 (stride-15) |
+| `esbmc-solidity` | 0 / 26 | 502/510; 8 residuals = #6759, #6760 |
+| `jimple` | 0 / 15 | 15/15 |
+
+Every decline site either census named is now closed. What remains before the
+round-trip can be deleted is **Solidity's eight residuals** (#6759, #6760 —
+already established as *not* dispatcher defects) and, more honestly, the
+standing caveat of §21.4/§22.6: these censuses sample, and both defects fixed on
+this branch were found by reading the legacy code, not by re-running a sweep.
+"0 declines" is a statement about the corpus, not a proof about the dispatcher.
+
+## 25. The decline census, finally run properly — and it is zero (2026-08-08)
+
+§24.5 ended on a caveat: *"'0 declines' is a statement about the corpus, not a
+proof about the dispatcher"*, and every census before this one was per-suite,
+sampled, and — except §12's — run without replaying `test.desc` flags. This runs
+the measurement that Phase 1's exit criterion actually asks for.
+
+### 25.1 Method
+
+Every `return false` inside `convert_native_rec` instrumented with one
+`fprintf` printing its site index and `get_expr_id(code2)` — the same technique
+§18.6 describes, but over **all 18 sites at once** (17 genuine plus the
+`code_block` cascade) rather than the 21 of the original C++ census, and across
+four frontends in one sweep. Stride-9 over
+`regression/esbmc`, `regression/esbmc-cpp/cpp`, `regression/python` and
+`regression/jimple`: **778 tests**, each replayed with its own `test.desc`
+flags, `KNOWNBUG`/`FUTURE`/`THOROUGH` skipped. Solidity is excluded — it does
+not run on this machine (§15.1's `solc` blocker, still live).
+
+### 25.2 Result: one site, then none
+
+| | tests declining | sites firing |
+|---|---:|---|
+| before | **49 / 778** | `code_assert` — side-effecting guard (+ `code_block` cascade) |
+| after the assert delegation | **1 / 778** | `code_assume` — same shape |
+| after the assume delegation | **0 / 778** | — |
+
+Both are the same one-line story: `convert_assert`/`convert_assume` hand a
+side-effecting guard to `remove_sideeffects`, which owns temp-symbol machinery
+this dispatcher deliberately does not reproduce. The arm `return false`d, which
+is a *whole-function* fallback; it now delegates the statement, exactly as the
+throw/catch/return arms do. Byte-identical by construction, and measured:
+**88/88** on every test the pre-fix census flagged.
+
+In Python this is not a corner: a call in an assert guard is ordinary code, and
+`assert double(x) == 6` was taking whole functions to the round-trip.
+
+### 25.3 What the census does and does not establish
+
+It establishes clause 1 of §18.5's two-clause criterion — **zero declines** —
+on four frontends, with flags replayed, at a sample size no previous census
+reached. Combined with §21-§24's byte-identity numbers (Python 303/303, C/C++
+327/328, `--error-label` 162/162), both clauses now hold everywhere they can be
+measured on this machine.
+
+It does **not** establish that the dispatcher is complete. The honest bounds,
+in order of how much they cost:
+
+- **A decline census is blind to an arm that emits the *wrong thing*.** This is
+  the load-bearing one, and review demonstrated it on this very patch: the
+  assert and assume arms were the only two missing the `is_if2t` disjunct that
+  every sibling carries, so a *side-effect-free* top-level ternary guard sailed
+  past the new delegation and emitted `ASSERT c ? a : b` where legacy lowers to
+  DECL/IF/GOTO under `--validate-violation-witness`. The census counts declines;
+  that arm returns `true`. Reproduced and fixed here (§25.5).
+- **The A/B ran on the wrong set to catch it.** 88/88 byte-identical, but those
+  88 are exactly the tests that *previously declined* — the set where both paths
+  are identical by construction. The statements that were always native have
+  never been swept. A full-corpus A/B, and specifically one varying
+  `--validate-violation-witness`, `--no-assertions` and `--condition-coverage`
+  (the three options these arms branch on, and none of which appears in any
+  `regression/python/*/test.desc`), is the missing measurement.
+- **Solidity is unmeasured here**, and §18.3 is the standing warning that a
+  frontend can reach zero declines and still not reproduce the round-trip.
+- **Stride-9 is a sample.** The site this census found fired on 49 of 778 — hard
+  to miss. A site firing on one test in ten thousand would not show up.
+- **A green census cannot see an arm that should exist but does not.** §23.2's
+  M1 again: delegation is behaviour-preserving, so nothing distinguishes
+  "delegated" from "declined" except the census itself.
+
+### 25.5 Two defects the census could not have found
+
+Both came out of review of this patch, and neither is a decline:
+
+1. **The missing `is_if2t` disjunct** described above, on the assert and assume
+   arms. Fixed here; `…assert_ternary` pins it.
+2. **`--no-assertions` aborted ESBMC on the native path** — `assert` under that
+   flag is the one native kind that emits *nothing*, and the if-arm guarded its
+   then-branch against an empty program but not its else-branch, so
+   `y = tmp_y.instructions.begin()` handed `end()` to `make_goto` and
+   `compute_target_numbers` asserted. Reproduces on `master` with a one-line
+   Python file, so it predates this branch — but delegating side-effecting
+   asserts keeps more functions on the native path under that flag, which
+   widens the blast radius. Fixed here rather than left, with the guard made
+   symmetric.
+
+Neither shows up as a decline; neither shows up in any suite, because **no
+`regression/python` test passes `--no-assertions`** and none passes
+`--validate-violation-witness`. That gap is worth closing on its own.
+
+### 25.6 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc` (C) | **0** (stride-9, flags replayed) | 327/328 with C++; 162/162 on `--error-label` |
+| `esbmc-cpp` | **0** (same census) | as above |
+| `python` | **0** (same census) | 303/303 (stride-15) |
+| `jimple` | **0** (same census) | 15/15 (§20) |
+| `esbmc-solidity` | not measurable here | 502/510; 8 residuals = #6759, #6760 |
+
+Clause 1 is met on every frontend measurable here. Clause 2 is **not** fully
+measured: the byte-identity numbers cover previously-declining tests, per-patch
+gates, and per-suite samples — §25.3's second bound says what is missing. The next step is not another census — it is Solidity on CI, and then
+the question Phase 1 exists to answer: whether `goto_convert_rec` and the
+round-trip can be deleted, which needs the fallback to be provably unreachable
+rather than merely unexercised.
+
+## 26. The option-varied A/B — §25.3's missing measurement, and what it found (2026-08-08)
+
+§25.3 named the gap: every byte-identity sweep so far ran on **default flags**,
+and the three options these arms branch on —
+`--validate-violation-witness`, `--no-assertions`, `--condition-coverage` —
+appear in **no** `regression/python` `test.desc` at all. This runs the A/B under
+each of them.
+
+### 26.1 Result
+
+Stride-17 over `regression/esbmc`, `regression/esbmc-cpp/cpp` and
+`regression/python` (411 dirs, 384 comparable), each replayed with its own
+`test.desc` flags plus the option under test:
+
+| option set | before | after |
+|---|---:|---:|
+| default | 384/384 | 384/384 |
+| `--no-assertions` | 384/384 | 384/384 |
+| `--condition-coverage` | 384/384 | 384/384 |
+| **`--validate-violation-witness`** | **140/384 — 244 divergent** | **384/384** |
+
+244 of 384. The default-flag sweeps that have gated every patch in this series
+could not see any of it.
+
+### 26.2 One cause, and it is the §25.5 defect again
+
+The native call arms — the `code_assign2t` call-rhs branch and the standalone
+`code_function_call2t` arm — gate their arguments on `has_sideeffect` alone,
+with a comment asserting that `do_function_call`'s own `remove_sideeffects`
+calls are therefore *"no-ops we can skip issuing."* Under
+`--validate-violation-witness` that is false for exactly the same reason it was
+false for the assert and assume arms: `remove_sideeffects` is entered for a
+top-level ternary regardless of side effects, and lowers it to DECL/IF/GOTO so
+the `?` column reaches the branching waypoint. The operands the arms hand it
+were never stamped, so every instruction of that lowering came out **unlocated**
+— 1833 unlocated instructions natively against 1641 under the round-trip on a
+single test.
+
+The fix is one disjunct, `|| is_ternary(...)` (a nil-safe `is_if2t`, §26.4), on
+the callee and each argument. Review then enumerated the rest, and the tally is
+the finding worth keeping: **an arm needs the disjunct exactly when its legacy
+counterpart calls `remove_sideeffects` unconditionally**, and by that test seven
+arms carried it and seven did not —
+
+| carried it | did not (fixed here) | correctly exempt |
+|---|---|---|
+| assign lhs, assign rhs, expression, decl init, return, assert, assume | call callee, assign call args, standalone call args, `if` cond, `do`/`while` cond, `for` cond, `switch` value | `while` cond — `generate_conditional_branch` gates on `has_sideeffect` itself |
+
+The four control-flow arms were invisible to the sweep for an incidental reason:
+the C frontend wraps a control-flow condition in a `(_Bool)` typecast, so
+`expr.id()` is `"typecast"`, not `"if"`. The shape only surfaces where the
+ternary is already bool-typed (C++, Python) or in a `switch` value (any
+language). That is a property of the frontend, not of the arms — and it is the
+sharpest illustration yet of why an enumeration beats a sample: the sweep was
+384/384 with four arms still wrong.
+
+### 26.3 A fourth per-run artefact
+
+The `--no-assertions` sweep reported one divergence,
+`python/github_4792_fail`, which the §7 rule 7 self-control disqualified: two
+runs of the legacy arm against itself gave two hashes. The varying token is
+`unpack_<address>_0`, an operational-model temp named from a pointer — distinct
+from §21.3's `ESBMC_unpack_temp_<n>`, which the normaliser already covered, and
+distinct again from §19.3's synthetic location, §20.3's synthetic file name and
+§21.3's character-coded temp dir. Four classes now, all found by the
+self-control and none by inspection. **Run the self-control first, always.**
+
+### 26.4 The fix segfaulted before it worked
+
+`is_if2t(e)` is `e->expr_id == expr2t::if_id` — `operator->` on an **empty**
+`expr2tc` dereferences null. The callee slot of a `sideeffect2t` function call
+is nil for some shapes, so the first cut of this fix crashed ESBMC on 19 C tests
+and 3 C++ ones (`github_170`, `align-deref_*`, `github_1220-*`, `github_2389_*`,
+…). Every `is_*2t` predicate in the tree has this property, which is why the
+codebase pairs them with `is_nil_expr` in most places; the guard is now a named
+`is_ternary` helper so its six call sites cannot each forget it. (`is_symbol2t`
+at the standalone-call arm's `f.function` is one place the pairing is *not*
+made — reachable only for a void call with a nil callee, unobserved, and left
+alone here rather than fixed blind.)
+
+Three of those tests pin it: removing the guard segfaults them. The lesson is
+narrower than "check for nil" — it is that **the suites caught this and the A/B
+did not**, because a crash makes both arms fail and `ab_opt.sh` scores
+`SKIP-ERR`. A sweep that skips on non-zero exit is blind to exactly the class of
+bug that makes both paths exit non-zero. Run the suites, not only the sweep.
+
+### 26.5 Phase 1 exit criterion
+
+| suite | declines | byte-identical |
+|---|---|---|
+| `esbmc` (C) | 0 (§25) | 384/384 × 4 option sets, plus §21-§24's sweeps |
+| `esbmc-cpp` | 0 (§25) | as above |
+| `python` | 0 (§25) | as above |
+| `jimple` | 0 (§25) | 15/15 (§20) |
+| `esbmc-solidity` | not measurable here | 502/510; 8 residuals = #6759, #6760 |
+
+384/384 × 4 option sets is a *sampling* result over three suites, plus
+**161/161** over `regression/witnesses{,_validate}` — the suites that run
+`--validate-violation-witness` natively, and the obvious place to have looked
+first. It is not a proof, and §26.2 is the reason to say so plainly: the sweep
+was already 384/384 while four arms were still wrong.
+
+Outstanding, in order:
+
+1. **Solidity**, which needs CI — §18.3's warning that zero declines does not
+   imply reproduction still stands there, unmeasured.
+2. **The option space is bigger than three.** Three were swept because three are
+   what these arms branch on *today*. Any future arm that reads an option
+   inherits the same obligation.
+
+(Item 1 of the original list — a pre-existing `do`/`while` location bug — is
+closed in §27.)
+
+## 27. The `do`/`while` condition location — §26.5's open item, closed (2026-08-08)
+
+§26.5 filed one defect rather than fixing it in passing: the native `do`/`while`
+arm reported the *statement's* column where `convert_dowhile` reports the
+condition's. It is closed here.
+
+### 27.1 The mechanism, which is §21.2's again
+
+`convert_dowhile` saves `code.op0().find_location()` **before** lowering, so the
+loop-back branch is located at the condition. The native arm has no operand to
+read — IREP2 values carry no location — so it substituted `here`, the statement
+location, reasoning that `restore_value_locations` would have stamped exactly
+that onto the operand.
+
+That reasoning holds for every value kind but one. `stamp_value_locations` only
+writes onto a node that *lacks* a location, and `if2t` is the single value kind
+carrying its own through `migrate_expr` (irep2_expr.h:786) — the same fact §21.2
+turned on. So a ternary condition arrives already located at the `?` column,
+`find_location()` returns that, and the substitute was wrong:
+
+```cpp
+bool a, b, c;
+int main() { do { a = true; } while (c ? a : b); return 0; }
+```
+
+| | loop-back branch |
+|---|---|
+| native, before | `line 16 column 12` → the `do` |
+| round-trip | `line 16 column 12` → the `?` |
+
+**On default flags** — no option needed. C hides it because the frontend wraps a
+control-flow condition in a `(_Bool)` typecast, so the top node is not the
+ternary; C++ and Python, whose ternaries are already bool-typed, do not.
+
+`convert_dowhile` is the only legacy converter that calls `find_location()`, so
+this arm is the only one with the substitute, and the fix is local: read the
+ternary's own location when it has one, keep the existing nil-vs-empty fallback
+otherwise.
+
+### 27.2 Verification
+
+`…dowhile_ternary_loc` pins the column and fails when the fix is reverted. The
+`--validate-violation-witness` and default sweeps stay 384/384; C 1679/1682 and
+C++ 752/755, pre-existing failures only.
+
+### 27.3 What this closes, and what it says
+
+It closes the last item this branch found and did not fix. Worth recording that
+**three separate defects on this branch trace to one fact** — `if2t` is the only
+value-level kind carrying a location — and each was found a different way: §21.2
+by a sweep, §26.2 by an enumeration against the legacy source, §27 by review of
+a patch fixing the other two. The fact is now cited at all three sites, which is
+the cheapest available defence against a fourth.
+
+## 28. Can the round-trip be deleted? Not yet — and the sample said otherwise (2026-08-08)
+
+Phase 1 exists to answer one question: whether `goto_convert_rec` and the
+whole-body round-trip can go. §25's census said **0 declines / 778 tests**, which
+reads like yes. It is not, and the gap is the sampling caveat §25.3 wrote down
+and this section collects on.
+
+### 28.1 The full C/C++ corpus, not a stride
+
+Same instrumentation, every `return false` in `convert_native_rec`, but over the
+**entire** `esbmc`, `esbmc-cpp/cpp`, `esbmc-cpp11/14/17`, `cbmc`, `esbmc-unix`,
+`floats`, `k-induction` and `jimple` corpus — **3 355 tests**, flags replayed.
+
+| census | tests | declining |
+|---|---:|---:|
+| §25, stride-9 over four frontends | 778 | **0** |
+| here, full C/C++ corpus | 3 355 | **1** |
+
+One test: `regression/cbmc/01_cbmc_for4`. Stride-9 missed it because it is one
+test in 3 355 — precisely the "one-in-ten-thousand would not show up" case
+§25.3 named, arriving one section later than the warning.
+
+### 28.2 The 15 sites, split
+
+Reading them rather than sampling them, the sites divide cleanly:
+
+**Cascade** (7) — fire only because a nested `convert_native_rec` returned
+false, so they can never *originate* a decline: `code_block`, the `do`/`while`
+body, the `for` init and iteration, the `switch` body, `switch_case`, `label`.
+
+**Origin** (8) — a condition on the statement itself. Reachability, probed:
+
+| site | condition | reachable? |
+|---|---|---|
+| `for` iteration (8) | sub-conversion left the destructor stack changed | **yes**, default flags — `for (i = 0; i < 3; acall(i++))` |
+| `switch_case` (11) | sub-statement emitted nothing | **yes**, `--no-assertions` — `case 1: __ESBMC_assert(0, …);` |
+| `label` (15) | sub-statement emitted nothing | **yes**, `--no-assertions` — `L: __ESBMC_assert(0, …);` |
+| `code_expression` (2) | code operand that is not `cpp-throw` | not reached; try/catch/throw does not produce one |
+| `code_expression` (3) | statement location nil or empty | not reached |
+| `code_decl` (4) | symbol absent from the context | not reached |
+| `for` condition (6) | `f.cond` nil | not reached — both C and C++ frontends synthesise a condition for `for(;;)` |
+| `break` (12) / `continue` (13) | outside a loop or switch | not reached; ill-formed in C, so no frontend emits it |
+
+"Not reached" is an honest negative from a constructed probe, not a proof: §21.2,
+§26.2 and §27 were all found by reading rather than probing, and the same could
+be true here. But five of the eight are defensive guards whose comments already
+say so, and two (`break`/`continue` outside a loop) are ill-formed input.
+
+### 28.3 The answer
+
+**No.** Three origin sites are demonstrably reachable, and the fallback runs on
+each. Two of the three need `--no-assertions` — the flag §25.5 recorded as
+absent from every `regression/python` `test.desc`, and which has now produced a
+crash (§26.4) and two live declines.
+
+What deleting the round-trip actually requires, in order:
+
+1. **The `for`-iteration site.** `remove_sideeffects` on an iteration statement
+   containing a call with a side-effecting argument allocates a temp, whose
+   `convert_decl` pushes a `code_dead`; the arm's destructor-stack invariance
+   check then trips. `convert_for` handles that push; the native arm declines
+   rather than assume it can. This is the only site reachable on default flags.
+2. **The two "emitted nothing" sites**, which exist because `convert()` appends
+   a SKIP where `convert_native_rec` may emit nothing — the same asymmetry that
+   produced §26.4's crash. Fixing it at the source (make the native arms match
+   `convert()`'s postamble) closes both at once and removes a whole hazard
+   class rather than two symptoms.
+3. **Solidity**, still unmeasured here.
+
+Until then the fallback is load-bearing, and "0 declines" should be read as what
+it is: a statement about a corpus, at a stride.
+
+## 29. The three live sites closed — the fallback is no longer reachable from the corpus (2026-08-08)
+
+§28 answered "can the round-trip be deleted?" with *no*, and named the three
+reachable origin sites. All three are closed here, and the count that matters
+moves from 1/3355 to **0/3355**.
+
+### 29.1 The `for` iteration — the check was stricter than legacy
+
+The arm declined when converting the iteration statement left
+`targets.destructor_stack` larger than it found it. `convert_for` (goto_convert.cpp)
+does no such thing: it converts the iteration, never touches the destructor
+stack, and leaves any `code_dead` a declaration pushes for the **enclosing
+block** to unwind — which is exactly what the arm's own comment already says
+about the *init* leg three lines above. The check was symmetry with the body
+leg, not a requirement.
+
+`for (i = 0; i < 3; acall(i++))` leaks one such entry: `remove_sideeffects`
+declares a temp for the side-effecting argument, and `convert_decl` pushes its
+dead. Dropping the check admits it; the A/B is byte-identical on both the
+reduced case and `cbmc/01_cbmc_for4` it came from.
+
+The remaining failure legs now **delegate** rather than `return false`, matching
+the body leg directly below them. That asymmetry — one leg of an arm taking a
+whole-function fallback while the next takes a statement-local one — was worth
+removing on its own.
+
+### 29.2 The two "emitted nothing" sites — fixed at the source
+
+§28.3 predicted these should be closed together, at the asymmetry rather than
+the symptoms, and that is what happened. `convert()` ends with: *if the
+accumulated program is still empty, add a SKIP at this statement's location*
+(goto_convert.cpp). `convert_native_rec` had no counterpart, so the
+`switch_case` and `label` arms — both of which need an instruction for their
+target to sit on — declined when their sub-statement emitted nothing.
+
+One helper, `ensure_nonempty`, reproduces that postamble, and both arms call it
+where they previously bailed. `code_assert2t` under `--no-assertions` remains
+the only native kind that can emit nothing, and a block already carries its own
+SKIP, so the statement whose location is used is always one
+`statement_location` knows.
+
+### 29.3 Result
+
+| census | tests | declining |
+|---|---:|---:|
+| §25, stride-9, four frontends | 778 | 0 |
+| §28, full C/C++ corpus | 3 355 | 1 |
+| here, full C/C++ corpus | 3 355 | **0** |
+
+The origin-site count drops from 9 to 6 (§28.2's table put `break` and
+`continue` on one row), and none of the 6 had been reached by any probe.
+`return false` sites in `convert_native_rec`: **15 → 12**.
+
+### 29.4 What this does and does not license
+
+It does **not** license deleting the round-trip. What changed is the *evidence*:
+before, one corpus input demonstrably needed the fallback; now none does. The
+five remaining origin sites are unreached-by-probe, which §28.2 already flagged
+as an honest negative rather than a proof — and this branch has produced three
+defects found by reading rather than probing.
+
+The gap between "no corpus input reaches it" and "no input can" is the whole of
+what is left, and closing it is a different kind of work: a reachability
+argument per site, of the kind `CLAUDE.md`'s Mode C prescribes, not another
+sweep. Two of the five (`break`/`continue` outside a loop) are ill-formed input
+and should simply be asserted rather than handled; the other three are defensive
+guards whose comments already say so.
+
+Also still open, unchanged: **Solidity**, which needs CI.
+
+### 29.5 A note on what these tests can pin
+
+Both new tests are verdict tests, and neither discriminates the change — a
+delegation and a decline produce byte-identical programs, so §23.2's M1 limit
+applies to all three sites. The census is the instrument; the tests pin the
+verdict under `--no-assertions` and on a side-effecting for-iteration, which
+nothing else in the C suite did, and guard the shapes against a future change
+that is *not* behaviour-preserving.
+
+## 30. The Python corpus censused in full — and the lesson repeats (2026-08-08)
+
+§28 censused the full C/C++ corpus because §25's stride-9 had missed a live
+site. Python was left at stride-9. This runs it in full, and the outcome is the
+same shape of result one rung down.
+
+### 30.1 Result
+
+| census | tests | declining |
+|---|---:|---:|
+| §25, stride-9 across four frontends | 778 | 0 |
+| here, full `python` + `numpy` corpus | **5 305** | **5** |
+| after the fix | 5 305 | **0** |
+
+All five fire at one origin site: `code_expression2t` whose statement carries no
+location. The arm needs one for the `OTHER` it emits, so it declined — a
+*whole-function* fallback.
+
+`regression/python/print1_expr_fail` reduces it to two lines:
+
+```python
+a = nondet_int()
+print((a + 1) * 2)
+```
+
+`print(a)` and `print(1)` do not reach it; a **compound** argument does.
+
+### 30.2 Why probing missed it
+
+§28.2 marked this site "not reached" on a constructed probe, and §29.4 warned
+that such a negative is not a proof. It took nine hours of that warning to cash
+out: the site is reachable from ordinary Python, in five corpus tests, and
+neither the stride-9 sample nor a hand-written probe found it. The probe failed
+because I guessed at C shapes — an unlocated expression statement is a *Python
+frontend* artefact, and nothing about the site's guard says so.
+
+That is now the third time on this branch that the instrument found nothing and
+the defect was real (§21.4's blind spot, §26.2's four arms, this). The pattern
+is consistent enough to state as a rule: **a negative from a probe is worth
+less than a negative from the full corpus, and both are worth less than a
+reachability argument.**
+
+### 30.3 The fix
+
+Delegate, not reimplement. The arm hands the statement to `convert_expression`
+exactly as the shapes above it do, which is byte-identical by construction and
+keeps the surrounding statements native. Working out what location legacy
+actually gives that `OTHER` — the arm's comment says "at an enclosing block" —
+is a question the delegation makes moot, and guessing at it would have risked
+the very byte-identity the delegation guarantees.
+
+### 30.4 Where the fallback now stands
+
+| corpus | tests | declining |
+|---|---:|---:|
+| C / C++ / Jimple (§29) | 3 355 | 0 |
+| Python / numpy (here) | 5 305 | 0 |
+| Solidity | — | not measurable here |
+
+`return false` sites: **12 → 11**; origin sites **6 → 5**. Every site reachable
+from either corpus is closed. The five that remain — an expression statement
+with a non-`cpp-throw` code operand, a `code_decl2t` whose symbol is absent from
+the context, a nil `for` condition, and `break`/`continue` with no target — are
+unreached by 8 660 corpus tests and by probe, which after §30.2 should be read
+as *evidence*, not proof.
+
+## 31. Reachability arguments for the five remaining sites (2026-08-08)
+
+§29.4 said the gap between "no corpus input reaches it" and "no input can" needs
+a per-site argument rather than another sweep, and §30.2 said a probe's negative
+is the weakest evidence available. Here are the arguments, from reading the
+producers and the legacy counterparts rather than from probing.
+
+### 31.1 Three sites where the legacy path aborts
+
+| site | native guard | legacy counterpart |
+|---|---|---|
+| `code_break2t` | `!targets.break_set` | `convert_break`: `log_error("break without target"); abort();` |
+| `code_continue2t` | `!targets.continue_set` | `convert_continue`: `log_error("continue without target"); abort();` |
+| `code_decl2t` | symbol absent from context | `convert_decl`: `assert(s != nullptr);` |
+
+This is the strongest class of argument available short of a formal proof, and
+it does not depend on any corpus: **the fallback at these three sites cannot
+change an outcome, because the path it falls back to terminates.** A run that
+reaches any of them produces no verdict either way. They are not dead code in
+the compiler's sense — they are unreachable *in any run that produces a result*.
+
+The right end-state for all three is the legacy diagnostic, not a fallback: the
+native arm should abort with the same message rather than route to a converter
+that will. That is a deletion, so per `CLAUDE.md` it needs its own C-Dead proof
+and its own PR; recorded here rather than done in passing.
+
+### 31.2 The nil `for` condition has no producer
+
+Every construction path for a `code_fort` sets `cond()`:
+
+- `clang_c_convert.cpp` initialises `exprt cond = true_exprt();` and overwrites
+  it only when the AST has one, so `for(;;)` gets `true` — which is why probing
+  it found nothing, and this time the probe agrees with the reading.
+- `clang_cpp_convert.cpp` takes the same shape.
+- The two internal builders in `builtin_functions.cpp` (array initialisation and
+  `cpp_new`'s element loop) both assign `loop.cond()` explicitly.
+- Python desugars `for` into `while`, so it produces no `code_for2t` at all.
+
+Unverified: Jimple and Solidity, whose loop lowering was not read. So the claim
+is "no producer in the C/C++/Python path", not "no producer".
+
+### 31.3 The expression-statement code operand is the one genuinely open site
+
+`code_expression2t`'s operand becomes code-typed only through the round-trip's
+own lowering of a nested `side_effect_exprt("cpp-throw")` to `codet("cpp-throw")`
+— which the arm handles. What it declines is *any other* code statement in that
+position, and nothing was found that produces one. But unlike §31.1 this rests
+on a survey of producers rather than on legacy terminating, and unlike §31.2 the
+guard is open-ended (`op.statement() != "cpp-throw"`) rather than a single
+field. It is the site to attack first if the round-trip is to go.
+
+### 31.4 Summary
+
+| # | site | argument | strength |
+|---|---|---|---|
+| 3 | `break`, `continue`, `decl`-symbol | legacy aborts or asserts | **strong** — corpus-independent |
+| 1 | nil `for` condition | no producer in C/C++/Python | medium — Jimple/Solidity unread |
+| 1 | expression code operand | no producer found | weak — open-ended guard |
+
+Together with §29 and §30 (0 declines over 8 660 corpus tests across four
+frontends), this is the state of the case for deleting `goto_convert_rec`. It is
+not yet a proof, and the honest summary is that **three of the five sites can be
+turned into aborts today, one is very likely dead, and one needs real work** —
+plus Solidity, still unmeasured here.
+
+## 32. Option F re-scoped: the spelling domain is 83 values, not an enum (2026-08-08)
+
+§16.3 left Phase 0 with one open question and a revised sizing: *"add one
+excluded field to two kinds, repoint one reader, run the suite."* Phase 2 is
+gated on that spike, so before spending §10's estimated days on it, the premise
+is worth checking. It does not hold.
+
+### 32.1 The measurement
+
+`#cpp_type` is written from five places. The clang C frontend's builtin-type
+switch (`clang_c_convert.cpp`) alone assigns **83 distinct spellings**:
+
+| class | count | examples |
+|---|---:|---|
+| ARM SVE / vector builtin names | **56** | `__clang_svint32x4_t`, `__clang_svbfloat16x2_t`, `__SVCount_t` |
+| C/C++ scalar spellings | 27 | `signed_char`, `unsigned_long_long`, `char8_t`, `wchar_t`, `__int128`, `_Float16`, `bool`, `void`, `_ptrmem`, `__intcap` |
+
+Plus the other writers: the Solidity frontend sets `bool`, `void`,
+`signed_char`, `unsigned_char`; the Python frontend sets `char`, `float`,
+`double`, `long_double`.
+
+### 32.2 What that does to the design
+
+§5.2's Option F is `enum class c_spelling` on `signedbv_type2t` /
+`unsignedbv_type2t`. Two things in the measurement contradict its shape:
+
+1. **The domain is not small or closed.** Two thirds of it is ARM SVE builtin
+   names, which track a vendor extension and grow with LLVM. An enum over them
+   is a maintenance liability, and they are exactly the values that carry no
+   semantics for the one semantics-bearing reader.
+2. **The values do not live on two kinds.** `bool`, `void`, `float`, `double`,
+   `long_double`, `_ptrmem` and the 56 vector names are set on types that are
+   not `signedbv`/`unsignedbv`. A field on those two kinds carries the 27-value
+   scalar subset at best, and the rest still needs the `irept` key — so W3 is
+   not removed, which is the entire point of B-4.
+
+### 32.3 The re-scope this implies
+
+The split the measurement suggests, and which §5.2 did not consider:
+
+- **Semantics vs presentation is a real seam here, and it falls along the same
+  line.** `clang_cpp_adjust_expr`'s catch-matching — §5.2's argument for why
+  `#cpp_type` is semantics, not presentation — consumes scalar spellings. The
+  56 vector names reach only `cpp_expr2string` and `goto2c/expr2c`, which are
+  presentation. So the typed field only has to carry the scalar subset for the
+  semantic reader; the rest can stay a string, or move to a presentation-only
+  channel.
+- **That makes Phase 0's question 3 the wrong first question.** Verdict and
+  counterexample-text parity over `esbmc-cpp` matters, but only after the field
+  covers a domain it can actually represent. The first question is now: *does
+  catch-matching ever see a non-scalar spelling?* If no, Option F applies to a
+  27-value subset on more than two kinds, and B-4 is a partial removal rather
+  than a removal. If yes, Option F does not close B-4 at all.
+
+**This does not re-open the §16 conclusions.** The two design risks §16.1/§16.2
+retired — the field staying out of equality and hashing, and spellings surviving
+canonicalisation — are unaffected; they were about the *mechanism*, and the
+mechanism is sound. What changes is the *scope* the mechanism has to cover, and
+therefore whether it closes B-4 or only shrinks it.
+
+Recorded rather than acted on: this is a plan correction, and the plan's own
+gate (§Phase 0, "a recorded answer either way") is what it feeds.
+
+## 33. What catch-matching actually sees: four spellings (2026-08-08)
+
+§32.3 reformulated Phase 0's first question as *"does catch-matching ever see a
+non-scalar spelling?"* — because the answer decides whether Option F closes B-4
+or only shrinks it. Measured here.
+
+### 33.1 Method and result
+
+One `fprintf` at the single `type.cpp_type()` read in
+`clang_cpp_adjust_expr`'s exception-id builder — the semantics-bearing reader,
+and the only one §5.2's argument rests on — run over every C++ suite:
+`esbmc-cpp/cpp`, `esbmc-cpp11/14/17/20/23` and `esbmc-cpp/try_catch`, **949
+test directories**, `test.desc` flags replayed.
+
+**Four distinct spellings reach it, on 94 tests:**
+
+```
+double   float   signed_char   signed_int
+```
+
+Four of the 83 in §32.1, all scalar, and **no vector name**. `bool`, `void`,
+`char8_t`, `__int128`, `_ptrmem` and the 56 SVE names never arrive.
+
+### 33.2 What this does and does not settle
+
+It settles the *shape* of the answer: the semantic reader consumes a tiny
+scalar subset, so a typed field carrying the scalar spellings serves it. The
+remaining 79 values reach only `cpp_expr2string` and `goto2c/expr2c`, both
+presentation.
+
+It does **not** settle reachability, and the argument I expected to close it is
+not available. I went looking for a spec-level prohibition — sizeless SVE types
+being ineligible as exception objects would make the 56 vector names
+unreachable *by construction* rather than merely unobserved. The ACLE documents
+sizeless-type restrictions on struct/union/class members, `sizeof`/`_Alignof`
+operands and array element types, but **no restriction on throw-expressions or
+catch parameters**. So the vector names are unobserved over 949 tests, which
+after §30.2 is evidence and not proof.
+
+### 33.3 Consequence for Phase 0
+
+The go/no-go the phase asks for, with what is now known:
+
+- **Go, for the scalar subset.** A typed field on the kinds that carry scalar
+  spellings serves the one semantic reader, and §16's mechanism conclusions
+  (excluded from `fields`, no interning) hold.
+- **Not a B-4 closure.** The 79 presentation-only spellings still need a
+  carrier, so `#cpp_type` survives unless they move to a presentation channel
+  of their own — which is a second, separable piece of work that §5.2 did not
+  scope.
+- **Sizing.** §16.3's "add one excluded field to two kinds, repoint one reader"
+  is right *for the semantic half* and wrong for B-4 as a whole. The honest
+  estimate splits: days for the semantic half, unscoped for the rest.
+
+The remaining risk is the one §33.2 names — that a spelling outside the four
+reaches catch-matching on input the corpus does not contain. Cheapest guard:
+assert on an unexpected spelling in the typed-field prototype and let the suite
+say so, rather than trying to enumerate the domain up front.
+
+## 34. The break/continue equivalence §31.1 assumed (2026-08-08)
+
+§31.1 argued three fallback sites can become aborts because their legacy
+counterparts abort. That argument has a premise it did not state: **the native
+arms must set `targets.break_set` / `continue_set` wherever legacy does.** If
+native ever left one unset that legacy would set, the decline is a *safety net*
+and replacing it with an abort would break working programs. Established here.
+
+### 34.1 The four set points correspond, and so does their ordering
+
+Both paths establish loop targets in exactly four places, and — the part that
+matters — both do it **before** converting the body a `break`/`continue` could
+appear in:
+
+| construct | native: set | native: body | legacy: set | legacy: body |
+|---|---:|---:|---:|---:|
+| `while` | 1125-1126 | 1136 | 1434-1435 | 1439 |
+| `do`/`while` | 1205-1206 | 1213 | 1503-1504 | 1508 |
+| `for` | 1351-1352 | 1360 | 1357-1358 | 1370 |
+| `switch` | 1435 (break only) | 1440 | 1599 (break only) | — |
+
+`switch` sets `break` and deliberately leaves `continue` alone on both sides —
+legacy says so in a comment (*"continue stays as is"*) — so a `continue` inside a
+switch inside a loop keeps the enclosing loop's target either way. The restores
+correspond too: `break_continue_targetst` / `break_switch_targetst` saved at
+entry and restored at the matching point in all four arms.
+
+No other native arm establishes or clears a loop target. `block`, `label` and
+`switch_case` recurse with whatever `targets` holds, as their legacy
+counterparts do.
+
+### 34.2 What follows
+
+The premise holds, so §31.1's argument stands: reaching those three sites means
+the legacy path aborts, and the fallback cannot rescue anything.
+
+**The change is still not made here, deliberately.** Converting the sites to a
+direct abort has no functional gain — both paths abort — and a real downside if
+this enumeration missed a path: today's behaviour degrades to legacy's
+diagnostic, an abort degrades to a crash on a program that might have worked.
+The asymmetry says wait. The change becomes forced, and safe, at the moment the
+fallback is deleted, which is when the enumeration is load-bearing anyway.
+
+Recorded so the premise does not have to be re-derived then.
+
+## 35. The branch validated against every local suite (2026-08-09)
+
+Every section from §21 on gated on the suites the change plausibly touches — C,
+C++, Python subsets. That leaves a gap worth closing before review: this branch
+edits `goto_convert_functions.cpp`, which every frontend goes through, and CI
+has not run on it (the checks have been queued since the first push). So the
+remaining suites were run locally.
+
+### 35.1 What had not been run, and the result
+
+`esbmc-cpp11/14/17/20/23`, `jimple`, `cstd`, `esbmc-unix2`, `esbmc-old`,
+`goto-binary`, `goto-transcoder`, `ir-ra` — **1 022 tests, 8 failures**. Plus
+the unit suite: **663/663**.
+
+All eight fail identically on the merge-base (`9a3d7e8a6c`) with only the four
+changed files reverted, so **none is a regression**:
+
+| test | suite |
+|---|---|
+| `ra-fmod-inf-nan`, `ra-log-nan`, `ra-pow-nan` | `ir-ra` |
+| `ra-interval-lift-mul-rdn-both-tracked`, `…-rup-both-tracked-single` | `ir-ra` |
+| `builtin-template`, `builtin-template-fail` | `esbmc-cpp14/template` |
+| `cbmc_fpclassify` | `goto-transcoder` |
+
+Five of the eight are floating-point/NaN or interval-rounding cases, which is
+the profile of a known macOS-local divergence rather than anything this branch
+could reach.
+
+### 35.2 The measurement that would have caught a regression, and did not
+
+This is a negative result, and worth recording as one: running the suites a
+change *does not obviously touch* found nothing, on a branch where running the
+suites it does touch had already found nothing. That is the expected outcome
+and it is still worth the hour — the alternative was shipping fourteen commits
+to a shared converter with three of five frontends unexercised.
+
+The branch's local validation now stands at: C 1 681/1 684, C++ 752/755, the
+above 1 014/1 022, unit 663/663, Python subsets clean, and byte-identity sweeps
+over four option sets — all residual failures confirmed pre-existing against the
+merge base. What is still unrun anywhere is **Solidity**, and CI.
+
+## 36. Option F's premise, and the inversion it produces (2026-08-09)
+
+§32 and §33 measured the `#cpp_type` domain and what catch-matching consumes.
+Read back against §5.2, where Option F is argued, they do something sharper than
+re-scope it: **they refute one of the two measurements the option rests on, and
+they invert which frontend it fits.**
+
+### 36.1 The refuted premise
+
+§5.2 offers two measurements. The first — Solidity's classification is already
+an `enum class SolType`, stringified only to cross the `irept` boundary — holds,
+and I re-read it to check.
+
+The second does not:
+
+> *"`#cpp_type`'s value domain is the C type-keyword set … a `c_type` variable
+> drawn from the same finite vocabulary. It is an enum wearing a string."*
+
+The `c_type` variable is assigned from LLVM's builtin-type switch, not from a
+type-keyword vocabulary. §32.1 counts **83 distinct values, 56 of them ARM SVE
+builtin names** that track a vendor extension and grow with the toolchain. That
+is not an enum wearing a string; it is a string doing string work. §5.2 now
+carries the correction inline, because a design section that states a false
+measurement is worse than one that states none.
+
+### 36.2 The inversion
+
+§5.2 hedges against one failure mode — *"if the equality asymmetry proves
+unmanageable, fall back to Option B for Solidity only"* — and prescribes a split
+where **C/C++ keeps Option F and Solidity falls back.**
+
+Both halves are wrong, in opposite directions:
+
+| | §5.2 expected | measured |
+|---|---|---|
+| the risk | equality/hashing asymmetry | **retired** by §16.1/§16.2: omit from `fields`, declare `excluded_field_bytes` |
+| the obstacle | — | **domain openness**, §32.1 |
+| C/C++ | Option F fits | **does not** — 83 values, 56 vendor-extension names, on kinds beyond the two |
+| Solidity | falls back to B | **Option F fits best** — `SolType` is already a closed enum (`solidity_grammar.h:484`) |
+
+So the split B-4 should take is the mirror image of the one written down: apply
+Option F where the domain is genuinely closed (Solidity), and do not try to
+force it onto the C/C++ spelling.
+
+### 36.3 What this changes about Phase 2
+
+Phase 2 reads *"land `c_spelling`/`sol_class` as typed fields, repoint the four
+readers, delete the `irept` accessors."* Against the measurements:
+
+- **`sol_class` — proceed.** Closed enum, one frontend, a serialization step to
+  remove rather than an escape hatch to add. This is the part that was always
+  sound, and it is now the part with evidence behind it.
+- **`c_spelling` — do not land as specified.** It cannot represent its domain,
+  so `#cpp_type` survives and the accessors cannot be deleted. §33 leaves a
+  narrower option open — a typed field for the four scalar spellings
+  catch-matching actually consumes, with the rest staying a string — but that is
+  a *semantics/presentation split*, not the B-4 removal Phase 2 describes, and
+  it deserves its own scope document rather than inheriting this one's name.
+- **Phase 0's go/no-go is answerable now, without the prototype**: no-go for
+  `c_spelling` as scoped, go for `sol_class`. The prototype §16.3 sizes at days
+  would confirm a conclusion the measurements already reach, and its remaining
+  question (verdict/counterexample parity) only matters for a field that is
+  going to land.
+
+Recorded as a plan correction. The next executable piece of B-4 is `sol_class`
+on the Solidity kinds — which, being Solidity, needs the CI leg that the rest of
+this branch has been waiting on.
+
+## 37. `sol_class` leaves the program — and B-4 has nothing executable left (2026-08-09)
+
+§36.3 named `sol_class` the next executable piece of B-4 and said it "was
+always sound". Before writing its scope document, I checked where `#sol_type`
+is actually consumed. The answer removes it from the program.
+
+### 37.1 The attribute never crosses a frontend boundary
+
+`#sol_type` is written and read through one pair of helpers
+(`solidity_convert.h:68-75`):
+
+```cpp
+static void set_sol_type(typet &t, SolidityGrammar::SolType st)
+{ t.set("#sol_type", SolidityGrammar::sol_type_to_str(st)); }
+static SolidityGrammar::SolType get_sol_type(const typet &t)
+{ return SolidityGrammar::str_to_sol_type(t.get("#sol_type").as_string()); }
+```
+
+Every file that mentions it — 17 of them — is under `src/solidity-frontend/`.
+`grep` across `src/goto-programs`, `src/goto-symex`, `src/solvers`, `src/util`
+and `src/irep2` returns **nothing**.
+
+### 37.2 Why that disqualifies it as a B-4 item
+
+B-4 is *"no `#`-attribute legacy escape hatch **into a shared pass**"*, and
+§5.2's whole argument for Option F being legitimate rather than a reinstated
+escape hatch is that `#cpp_type` reaches `clang_cpp_adjust_expr`'s
+catch-matching — a shared, semantics-bearing consumer.
+
+`#sol_type` has no such consumer. It is a frontend talking to itself: it holds
+`SolType` on both sides and stringifies only because `irept` cannot hold an
+enum. Nothing post-migration reads it, so **a typed field on `type2t` would
+carry data no consumer wants**. §5.2's phrasing was right that this "removes a
+serialization step rather than adding an escape hatch" — the refinement is that
+the step to remove sits *inside* the frontend, and removing it needs no IREP2
+change at all.
+
+So the work is real but it is Solidity-frontend cleanup: stop routing
+frontend-internal state through `irept`. It should be filed as such, and it does
+not need the CI leg this branch has been waiting on, because it does not need
+`type2t` to change.
+
+(One caveat, stated rather than hidden: a *generic* `#`-attribute walk would
+still see the key. Option D seamed `#member_name` and `#cpp_type` behind typed
+`irept` accessors for that reason and did not seam `#sol_type`, which is
+consistent with it never having mattered outside the frontend.)
+
+### 37.3 What is left of B-4
+
+| item | status |
+|---|---|
+| `c_spelling` | **no-go as scoped** (§36) — domain is open, 83 values |
+| `sol_class` | **not a migration item** (§37) — no consumer outside the frontend |
+
+B-4 as written has **no viable executable content left.** That is not a failure
+of the work; it is the measurements arriving. Two things survive it:
+
+1. The **semantics/presentation split** §33 left open — a typed field for the
+   four scalar spellings catch-matching consumes, the rest staying a string.
+   Real, smaller than B-4, and needing its own scope document and name.
+2. The **Solidity frontend cleanup** above, which is not this program's.
+
+Phase 2 should be struck from the phase list rather than left as a gate on
+Phases 5-9, which §6 already notes are independent of B-4. The program's
+executable frontier is therefore Phase 3 (the Python flip) and Phase 4 (extract
+the construction kit) — neither of which is blocked on anything measured here.
+
+## 38. Phase 4's kit already exists (2026-08-09)
+
+Phase 4 reads: *"Before touching a second frontend, factor what Python learned
+into shared helpers: the width-reconciliation idiom
+(`c_implicit_typecast_arithmetic` on `expr2tc`), the resolved-source `ns.follow`
+pattern, the operand-surgery recipe. Without this, four frontends re-derive the
+same lessons at four times the cost."* Checked before executing it, as §36 and
+§37 were. Two of the three are already shared; the third is not code.
+
+### 38.1 Width reconciliation — shared, with the IREP2 overload, already used
+
+`c_implicit_typecast_arithmetic` lives in **`src/util/lang/c_typecast.h`** — a
+shared location, not a frontend — and is declared **twice**: the legacy
+`exprt &` form and
+
+```cpp
+bool c_implicit_typecast_arithmetic(expr2tc &expr1, expr2tc &expr2,
+                                    const namespacet &ns);
+```
+
+Python already calls the `expr2tc` overload directly
+(`python_adjust.cpp:403, 454, 489`). There is nothing to extract: the helper
+Phase 4 names as its first deliverable is the helper the pathfinder frontend is
+using.
+
+### 38.2 The resolved-source follow — shared, and not Python-specific
+
+`namespacet::follow` has a native IREP2 overload in
+**`src/util/symtab/namespace.h:21`**, whose own comment states the point —
+*"mirroring follow(typet) without the back-migrate → follow(typet) →
+forward-migrate detour (hot path)"*. Its users span `goto-programs` (7 files),
+`clang-cpp-frontend` (5), `pointer-analysis` (3) and `util/lang` (5), not just
+Python. It is already the shared pattern.
+
+What *is* Python-specific is `python_adjust::resolve_source` — but that is the
+adjuster's member/index source resolution, a Phase 3 concern, not a
+construction idiom another frontend would inherit.
+
+### 38.3 Operand surgery is a rule, not a helper
+
+The third item cannot be extracted because it is not code: *mutate an operand
+in place through `Foreach_operand`; never round-trip a resolved subtree through
+`migrate_expr_back` → `migrate_expr`, which reverts resolved `member2t`/`index2t`
+sources to by-name `symbol_type2t`.* That belongs in prose, and this section is
+where the next frontend will look for it.
+
+### 38.4 What Phase 4 actually needs
+
+Not a refactor — a pointer. For whoever opens `scope-jimple-irep2.md`:
+
+| lesson | where it already lives |
+|---|---|
+| width reconciliation over `expr2tc` | `src/util/lang/c_typecast.h` — use the `expr2tc` overload, not `gen_typecast_arithmetic` on legacy `exprt` |
+| symbol-type resolution over `type2tc` | `src/util/symtab/namespace.h:21`, `ns.follow(const type2tc &)` |
+| operand surgery | §38.3 — in-place via `Foreach_operand`, never a round-trip |
+| the min-promotion trap | `c_implicit_typecast_arithmetic` promotes sub-`int` widths to `int`; sub-`int` numpy dtypes must be narrowed back afterwards |
+| `if2t` carries a location | the only value-level kind that does; §21.2, §26.2, §27 are three defects from forgetting it |
+
+**Phase 4 is closed as already-done.** Three phases in a row (2, 4, and B-4's
+content) have now turned out to be satisfied or misframed on inspection — the
+later phases were written before the work that made them moot, which is the
+ordinary fate of a plan that survives contact with its own execution. The
+remaining executable phase is **3** (finish the Python flip), and then **5-9**,
+whose gate on Phase 2 (Phase 8's text) is void now that B-4 has no content.
+
+## 39. Phase 5 (jimple) is complete — and what Phase 6 inherits (2026-08-09)
+
+`scope-jimple-irep2.md` closed at §31. Every expression kind
+`jimple_expr::get_expression` can construct and every statement kind the body
+dispatcher can construct is now built natively or left on the migrating default
+with a stated reason; twenty-one PRs, all byte-identical, all mutant-checked.
+Phase 5 named jimple "the pathfinder for the kit", and the kit it produced is
+not the one Phase 4 predicted.
+
+### 39.1 The transferable artefact is a diagnostic table, not code
+
+§38.4 lists five construction lessons and their locations. Jimple added no
+sixth: the shared helpers were already adequate, and every slice was mechanical
+once the target was understood. What jimple actually produced is a way to tell
+whether a migration has been *verified* or merely *not contradicted*.
+
+The gate used throughout was A/B byte-identity of `--goto-functions-only`
+(G3) plus a mutant that must change it. The mutant is the load-bearing half,
+and it fails silently in five distinct ways:
+
+| An unmoved mutant means | Response | jimple §|
+|---|---|---|
+| the corpus is thin | write a test | §20, §21.1 |
+| the code is unreachable by construction | do not mirror the branch | §22.3, §23.1 |
+| a caller downstream re-does the work | test in a position where it does not | §23.2, §30.1 |
+| the printer normalises the field away | argue from source; do not claim it measured | §21.2, §24.1 |
+| the mutation makes the operation invalid, and the error path is also a no-op | mutate to a valid alternative | §30.2 |
+
+Only the second is a fact about the code. The other four are facts about the
+harness, and three of them read exactly like the second if not chased.
+
+Two procedural rules go with it:
+
+- **Census before writing.** Five of jimple's expression kinds occur zero times
+  in its corpus. One of them (`nondet`) was migrated before this was known, and
+  its byte-identity claim held for nine PRs because nothing executed the
+  override (§28). A single census, run once, prices every construct at the
+  start.
+- **Corrupt the arm, do not delete it** (§27.1). Deletion asks whether an arm is
+  *necessary*; a correct migration slice never is, because producing identical
+  output is the premise of the gate. Only corruption asks whether it *runs*.
+- **Anchor mutants to the native function.** The parallel-method technique
+  leaves a near-twin of every override a few hundred lines away, and a
+  text-targeted mutant that hits the legacy copy returns a false zero (§26.3).
+
+### 39.2 A program-level defect jimple surfaced
+
+`scope-jimple-irep2.md` §16 blocked its largest slice on whether
+`c_typecastt::implicit_typecast`'s two copies agree. They did not:
+`do_typecast`'s irept copy folds a cast of a constant and its `expr2tc` copy did
+not, so a literal assigned to a differently-typed lvalue folded on one path and
+not the other. Fixed in **#6873** with a differential harness in
+`unit/util/c_typecast.test.cpp`.
+
+That is not a jimple defect. Every frontend in Phases 6-9 implicit-casts at
+assignment, and each would have inherited it. It is the second divergence found
+between these independently-written copies, after the `floatbv` omission the
+same test file documents — which is itself a standing reason to run the
+differential harness whenever either copy is touched.
+
+`scope-coupled-arith-assign-conversion.md` §20 records the seven *structural*
+gaps that remain between the two `implicit_typecast_followed` copies. Four are
+C++-shaped (references, pointer-to-member, derived-to-base, string-to-array) and
+are dormant for jimple and Python but **live for Phase 7 (clang-cpp)**, which
+should treat §20.1 as its own pre-flight list.
+
+### 39.3 Next
+
+Phase 6 is **clang-c** (971 mentions, 49 already IREP2). Its first action is the
+census §39.1 asks for, not a slice. Phase 3 (the Python flip) remains open and
+independent.

@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto-functions-only
+ASSERT !\(c == 2\) // j

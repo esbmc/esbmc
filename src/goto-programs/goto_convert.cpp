@@ -15,15 +15,6 @@
 #include <util/irep/std_expr.h>
 #include <util/expr/type_byte_size.h>
 
-static bool is_empty(const goto_programt &goto_program)
-{
-  forall_goto_program_instructions (it, goto_program)
-    if (!is_no_op(goto_program, it))
-      return false;
-
-  return true;
-}
-
 void goto_convertt::finish_gotos(goto_programt &dest)
 {
   for (auto it : targets.gotos)
@@ -1878,7 +1869,7 @@ void goto_convertt::generate_ifthenelse(
     dest.destructive_append(true_case);
     true_case.instructions.clear();
     if (
-      is_empty(false_case) ||
+      is_no_op_program(false_case) ||
       (false_case.instructions.size() == 1 &&
        is_no_op(false_case, false_case.instructions.begin())))
       return;
@@ -1901,7 +1892,7 @@ void goto_convertt::generate_ifthenelse(
     dest.destructive_append(false_case);
     false_case.instructions.clear();
     if (
-      is_empty(true_case) ||
+      is_no_op_program(true_case) ||
       (true_case.instructions.size() == 1 &&
        is_no_op(true_case, true_case.instructions.begin())))
       return;
@@ -1912,7 +1903,7 @@ void goto_convertt::generate_ifthenelse(
   // Disabled under --validate-violation-witness for the same reason.
   if (
     !options.get_bool_option("validate-violation-witness") &&
-    is_empty(false_case) && true_case.instructions.size() == 2 &&
+    is_no_op_program(false_case) && true_case.instructions.size() == 2 &&
     true_case.instructions.front().is_assert() &&
     is_false(true_case.instructions.front().guard) &&
     true_case.instructions.front().labels.empty() &&

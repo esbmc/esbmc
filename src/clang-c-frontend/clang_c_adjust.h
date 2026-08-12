@@ -40,6 +40,15 @@ protected:
   /**
    * methods for symbol adjustment
    */
+  /// True when the single argument is arithmetic, as the `abs` node requires.
+  bool has_single_arithmetic_argument(
+    const side_effect_expr_function_callt &expr) const;
+
+  /// True when a name-matched builtin lowering would discard a definition the
+  /// program supplies, in which case the definition wins. See #6904.
+  bool
+  shadows_user_definition(const irep_idt &identifier, const exprt &f_op) const;
+
   virtual void adjust_symbol(symbolt &symbol);
   void adjust_argc_argv(const symbolt &main_symbol);
 
