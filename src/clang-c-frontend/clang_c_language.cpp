@@ -457,6 +457,8 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
     return true;
 
   clang_c_adjust adjuster(new_context);
+  if (config.options.get_bool_option("clang-c-irep2-adjust"))
+    adjuster.set_irep2_owns_index();
   if (adjuster.adjust())
     return true;
 
