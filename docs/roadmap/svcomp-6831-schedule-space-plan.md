@@ -259,27 +259,62 @@ the exit** onto a benchmark where redundancy is demonstrable (`github_3449`,
 `11_bakery.simple.preempt`); keeping it on `01_malloc_20` makes W1 unfalsifiable
 rather than demanding.
 
-**The reductions are substitutes, not complements.** Sleep sets add ~nothing on
-top of MPOR (2134 → 2131, 2279 → 2279) but are strong *instead* of it: with
-`--no-por`, `github_3449` goes from TIMEOUT to **1653**, beating MPOR's 2134,
-and `github_6831_sleep_sets` goes 4892 → 368. Two reductions that each remove
-most of the same redundancy leave little for a third to find, which is the case
-against DPOR here: it is a rewrite (§7), and this corpus cannot demonstrate the
-upside that would pay for one.
+**The reductions largely substitute for each other.** On these three benchmarks
+sleep sets add almost nothing on top of MPOR (2134 → 2131, 2279 → 2279) while
+being strong *instead* of it: with `--no-por`, `github_3449` goes from TIMEOUT
+to **1653**, beating MPOR's 2134, and `github_6831_sleep_sets` goes 4892 → 368.
+Read that alongside W1.1's larger sample rather than instead of it — over 331
+tests it found `--sleep-sets` behind MPOR still cuts 63 of them, so "adds
+nothing behind MPOR" is true of this trio, not of the corpus. What the trio does
+show is that two reductions each remove much of the *same* redundancy, which is
+the case against DPOR here: it is a rewrite (§7), and neither this trio nor
+W1.1's sweep exhibits the residue that would pay for one.
 
-**Counter caveat, and it matters for reading every row above.** A hash collision
-truncates the schedule and `get_next_formula` still returns a formula for the
-truncated prefix, so `schedules_explored` counts that prefix as a schedule.
-Under `--no-por --state-hashing`, `github_3449` reports 15,923 schedules against
-1653 for `--no-por --sleep-sets` — most of that gap is the counter changing
-meaning, not the search getting worse. **`schedules_explored` is not a clean
-cross-configuration comparator once hashing is on**; compare wall-clock and
-verdicts there, and read W0's counter as within-configuration.
+**Counter caveat, and it matters for reading every row above.** An MPOR or hash
+prune cuts the prefix and `get_next_formula` still returns a formula for it, so
+`schedules_explored` counts that prefix as a schedule. Under DFS the complete
+schedules are exactly
+
+```
+schedules_explored - pruned_by_mpor - pruned_by_hash
+```
+
+which was checked against every configuration measured here (e.g. `github_3449`
+under `--state-hashing`: 1107 formulas, 329 MPOR + 489 hash, and 818 = 329+489).
+The correction is large enough to invert a reading: `--no-por --state-hashing`
+on `github_3449` reports 15,923 formulas against 1653 for `--no-por
+--sleep-sets`, which looks like a 9.6× loss and is really 4596 vs 1653, a 2.8×
+one. Subtract before comparing configurations.
+
+A separate `truncated_formulas` counter was implemented for this and then
+**dropped**: under DFS it always equalled `pruned_by_mpor + pruned_by_hash`, so
+it carried no information the line did not already have, at the cost of eleven
+`test.desc` updates. It differs only under `--schedule`, where the whole metric
+degenerates to 1.
 
 **Recommendation:** close candidate 3 without building anything. Revisit only if
 a benchmark appears where the schedule count stays high under MPOR, sleep sets
 *and* hashing — that is the shape whose redundancy only a trace-based method
 could remove, and this corpus does not contain one.
+
+#### W1 exit — re-scoped
+
+The original exit ("≥2× reduction in schedules explored on `01_malloc_20` at
+`--context-bound 2`") is not a bar this workstream can clear or fail on the
+merits: W1.1 found it names the one configuration in which sleep sets cannot
+fire, and W1.4 finds no reduction ESBMC has moves it at all. Replace it with:
+
+- **A measured reduction on a benchmark that has redundancy to remove**, quoted
+  as complete schedules (`schedules_explored - pruned_by_mpor - pruned_by_hash`)
+  against the same benchmark's best existing configuration. `github_3449` (876
+  under MPOR + hashing) and `11_bakery.simple.preempt` (746) are the current
+  bars; `01_malloc_20` at `--context-bound 2` is retired as an exit benchmark
+  and kept only as the bisect oracle it already serves as (gate G3).
+- **No verdict change** across the 343 CORE concurrent tests, unchanged.
+- **#4584's regression tests still detecting their race**, unchanged.
+
+Nothing about the soundness gates changes; what changes is that the performance
+bar now points at a program where the quantity it measures can move.
 
 #### W1.1 — Sleep sets (`--sleep-sets`), shipped off by default
 

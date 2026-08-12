@@ -296,9 +296,16 @@ public:
     /** Largest thread count any explored state reached, main included. Also
      *  what decides whether the run is worth reporting on at all. */
     unsigned long peak_threads = 1;
-    /** Complete formulas handed to the caller. One per schedule under the
-     *  default DFS; --schedule folds every interleaving into one, so it
-     *  reports 1. */
+    /** Formulas handed to the caller. One per schedule under the default DFS;
+     *  --schedule folds every interleaving into one, so it reports 1.
+     *
+     *  Not all of them ran to the end of a schedule: an MPOR or hash prune cuts
+     *  the prefix and get_next_formula still returns a formula for it, so under
+     *  DFS the complete schedules are
+     *  `schedules_explored - pruned_by_mpor - pruned_by_hash`. Comparing this
+     *  figure across configurations without that subtraction reads a reduction
+     *  that is working as one that made the search bigger (issue #6831 W1.4).
+     */
     unsigned long schedules_explored = 0;
     /** These three prune counters share a unit: context-switch points at which
      *  that reduction stopped the search from branching further. */
