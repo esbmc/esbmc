@@ -332,6 +332,48 @@ not already guarantee it, W4 becomes a code change, not a configuration change.
 **Exit:** a measured score delta on the affected categories, and an explicit
 argument for why no `true` is emitted without exhaustive coverage.
 
+#### W4.1 — `--falsify-context-bound`, the composition (shipped, off by default)
+
+The wrapper cannot adopt `--incremental-context-bound`: it is rejected
+alongside `--incremental-bmc` (`driver.cpp:218`, #6480 — only one driver may own
+the outer loop) and the wrapper sends every concurrency task through
+`--incremental-bmc` (`esbmc-wrapper.py:315`). The two deepening loops do not
+compose because both own the *verdict*, not because they cannot run in sequence.
+
+`--falsify-context-bound N` gives up the half that collides. It deepens the
+context bound from 1 to N before the chosen strategy runs, under
+`suppress-bounded-success`, so it can only report a violation: each round
+under-approximates twice over — the context bound truncates the schedule space,
+and the pre-pass forces `--no-unwinding-assertions` (defaulting `--unwind` to 1
+when the run sets none) so a truncated loop yields fewer paths rather than a
+spurious unwinding-assertion failure. A violation found is therefore genuine
+whatever the strategy would have concluded, and finding none is not evidence,
+so the strategy afterwards runs untouched.
+
+That argument only holds where a SAT round *means* a violation, which is
+narrower than it first appears and cost four wrong verdicts in review before it
+was pinned down. `--forward-condition` and `--inductive-step` read SAT as
+"unable to prove"; `--termination` inverts it further, since its markers make
+reaching an assert evidence that the loop terminates; a `--multi-property`
+round owns the property table and would report the truncated pre-pass as the
+whole result; and `--partial-loops` removes the very assumption the
+under-approximation rests on. The first four are rejected, `--partial-loops` is
+forced off for the pre-pass, and coverage runs skip it (its rounds would fold
+into the reported figure and print one `[Coverage]` block per bound).
+
+On `00_rwlock4` — the #6480 shape, a violation needing few switches stranded
+deep in unbounded DFS order — `--incremental-bmc` alone produced no verdict in
+90 s, and `--incremental-bmc --falsify-context-bound 2` reported FAILED in
+1.1 s. `--k-induction --falsify-context-bound 2` behaves the same (1.2 s); both
+combinations were previously rejected outright.
+
+**Still open:** the adaptive policy. §W4's sweep says full deepening buys one
+stranded falsification in 40 unsafe tests and costs 18 proofs in 132 safe ones,
+so the wrapper change wants a *shallow* N (the stranded shapes are found at
+N ≤ 2 in ~1 s) rather than deepening to convergence — and that N, plus the
+resulting score delta on the concurrency categories, is what the exit above
+still asks for.
+
 ---
 
 ## 5. Sequencing
