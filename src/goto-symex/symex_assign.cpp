@@ -54,7 +54,8 @@ goto_symext::goto_symext(
     base_case(options.get_bool_option("base-case")),
     forward_condition(options.get_bool_option("forward-condition")),
     inductive_step(options.get_bool_option("inductive-step")),
-    validate_witness(options.get_bool_option("validate-violation-witness"))
+    validate_witness(options.get_bool_option("validate-violation-witness")),
+    multiple_loops_seen(false)
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
@@ -201,6 +202,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   no_unwinding_assertions = sym.no_unwinding_assertions;
   partial_loops = sym.partial_loops;
   k_induction = sym.k_induction;
+  multiple_loops_seen = sym.multiple_loops_seen;
   base_case = sym.base_case;
   forward_condition = sym.forward_condition;
   inductive_step = sym.inductive_step;
