@@ -1144,3 +1144,18 @@ Two earlier predictions of mine to correct:
    exponential through two samples. Growth flattened to ~0.5 GB/h; at 22h the
    box is at 106 GB of 247 GB with 141 GB free. Time, not memory, is the
    constraint.
+
+   **Corrected again at 33h18m**: the flattening was a pause, not a ceiling.
+   `lk` and `ulk` doubled again (17.0 -> 34.1 GB) and `ulr` nearly did
+   (15.7 -> 30.9), taking the z3 total from 71 GB to 123 GB. Sampling twice
+   three minutes apart shows near-zero instantaneous growth (<=0.02 GB), so z3
+   grows in **steps** -- long flat stretches punctuated by jumps, presumably on
+   search restarts with a larger structure. The average rate is real but the
+   timing of the next step is not predictable from the flat stretches, which is
+   what fooled both of my earlier projections in opposite directions.
+
+   At 91 GB free that is roughly two more doublings of headroom. Swap is only
+   1 GB, so a step past the ceiling OOMs cleanly rather than thrashing, and the
+   z3 processes carry `oom_score_adj=800` against bitwuzla's 200 -- so the
+   kernel sacrifices a z3 run and leaves all six bitwuzla runs, which is the
+   right trade given bitwuzla produced the only result so far.
