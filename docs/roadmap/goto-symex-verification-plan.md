@@ -611,7 +611,7 @@ discharge or an explicit, reviewed waiver.
 | H-A2 | `guard2tc::operator-=` satisfies `(g_cur ∨ g_mrg) → (diff ↔ g_mrg)` | **irep2 plan** H-A9/H-B4 — cross-document dependency |
 | H-A2 | Incoming merge guards may overlap (no disjointness assumed) | by construction (not assumed) |
 | H-A4 | Every `with2t` store the slicer elides has a `symbol2t` source and constant index | **Discharged**, §15 M9 (H-B7) — `assumption_discharge.test.cpp` checks it on every elided store and censuses the excluded shapes; struct member stores are excluded by their `constant_string2t` field, which the census now pins |
-| H-A6 | `thread_last_reads/writes` contain *all* accesses of the last transition, including through pointers | **Refuted twice.** R11 → **R18** (one-level resolution losing a nested dereference) was fixed by **#6550**. The completeness this row asks for is now *checked* rather than assumed — a 21-shape census, §15 M9 (H-A6) — and it failed: five shapes holding the pointer in an aggregate were missed, recorded as **R29**. R29 is now fixed (§15 M9 (R29 fix), (R29 residual)) and the census re-runs **21/21 agreeing with `--no-por`**, dual-solver on the ten aggregate shapes, §15 M9 (H-A6 re-census). The row stays open regardless: 21 shapes passing is an enumeration, not the completeness the row claims, and one known shape — struct-to-struct punning — never reaches the resolution at all. Downgraded from *refuted* to *no known counterexample* |
+| H-A6 | `thread_last_reads/writes` contain *all* accesses of the last transition, including through pointers | **Refuted twice.** R11 → **R18** (one-level resolution losing a nested dereference) was fixed by **#6550**. The completeness this row asks for is now *checked* rather than assumed — a 21-shape census, §15 M9 (H-A6) — and it failed: five shapes holding the pointer in an aggregate were missed, recorded as **R29**. R29 is now fixed (§15 M9 (R29 fix), (R29 residual)) and the census re-runs **21/21 agreeing with `--no-por`**, dual-solver, §15 M9 (H-A6 re-census). The row stays **refuted**: extending the same census by two shapes immediately found **R31** (`int **pp = &s.p; **pp = 1`, a false SUCCESSFUL on ordinary C) plus a struct-punning shape that is UB. Every extension of this census so far has found a defect, which is the argument against ever discharging this row by enumeration |
 | H-A8 | `push_ctx`/`pop_ctx` calls are balanced by the caller (`reachability_treet`) | **Discharged**, §15 M9 (H-A8) — `context_stack.test.cpp` on a real `runtime_encoded_equationt` over a real solver: an exhausted 49-interleaving exploration lands back on depth 0, having reached 9. Deleting the setup `push_ctx` fails it *and* SIGSEGVs, which is the UB the row's failure mode predicted |
 | all Tier A | `nondet` solver answers are *sound* (no wrong TRUE/FALSE) | out of scope — solver backends are Tier D |
 
@@ -718,6 +718,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R23** | **High (false SUCCESSFUL *and* false FAILED, default configuration)** — **confirmed with a two-line reproducer** by M8 triage, §15 M8 (cont. 7); filed as **#6589** | **Compound assignment narrows the right operand to the left operand's type before the operation.** C11 **6.5.16.2p3**: "A compound assignment of the form E1 op= E2 is equivalent to the simple assignment expression E1 = E1 op (E2), except that the lvalue E1 is evaluated only once". ESBMC violates that equivalence for every left operand narrower than `int`. `char b; b += a;` emits `!overflow("+", (signed int)b, (signed int)((signed char)a))` — the right operand cast to `char` — where `b = b + a` correctly emits `!overflow("+", (signed int)b, a)`. Both directions are reachable and both are wrong: with `b = 3, a = INT_MAX`, `b += a` reports **SUCCESSFUL** (the overflow claim is unfalsifiable, a **missed bug**) while `b = b + a` reports FAILED; and with `char b = 100; int a = 256`, `b /= a` reports **FAILED "division by zero"** because the divisor narrows to `(char)256 == 0`, where C gives `100 / 256 == 0` and gcc/UBSan agree. Not bitfield-specific — `char`, `short`, struct members and bitfields all reproduce; the discriminator is *narrower than the promoted type*, not the member/bitfield spelling. `github_162_fail` is where it was found, and its claim is vacuous for exactly this reason — but that entry is a *wrong test* independently of R23, see §15 M8 (cont. 8). **Frontend, not goto-symex**, so it is outside §2.3's scope, but it is a soundness defect in extremely common C. **Fixed, §15 M8 (cont. 8).** | `clang_c_convertert::get_compound_assign_expr`, `clang_c_convert.cpp:4258-4343`, specifically the unconditional `gen_typecast(ns, rhs, lhs.type())`, together with `goto_convertt::remove_assignment`, `goto_sideeffects.cpp:1714-1870`, which took the operation's type from `expr.op0()`. `regression/esbmc/compound_assign_narrow_overflow`, `..._explicit` (control) and `compound_assign_narrow_divzero`, all CORE | M8 triage | Done. The frontend records clang's `getComputationResultType()` on the side effect; `remove_assignment` performs the operation there and converts the result back on assignment. |
 | **R24** | **Medium (spurious counterexample, default configuration)** — **confirmed with a reproducer** by M8 triage, §15 M8 (cont. 10); **FIXED**, §15 M8 (R24) | **`memset` does not constrain a struct's bitfield padding bits, so a type-punned read of the object is partly nondeterministic.** For `struct { int x : 12, y : 8; } s;`, `memset(&s, 0, sizeof s); s.x = -1; s.y = -1;` then reading `*(int *)&s` gives a value whose low 20 bits are correct — `(v & 0xFFFFF) == 0xFFFFF` verifies — but whose 12 padding bits are unconstrained: `(v >> 20) == 0` **fails**. gcc gives `0x000fffff` exactly, so the declared fields are laid out right and only the `memset`'s effect on the bits above them is lost. This is the direction an over-approximation produces (a false alarm, never a missed bug), and it is reachable with **no flags at all**, which is what separates it from the four flag-inadequacy entries triaged alongside it. Explains `github_732-1-1`, whose `sizeof(s) == 4` and `s.y == -1` assertions both hold and only whose type-punned assertion fails. | `regression/esbmc/bitfield_padding_memset`, `..._fields`, `..._fill` and `..._fail`, and `regression/esbmc/github_732-1-1` — all CORE, the first and last flipped from KNOWNBUG by the fix | M8 triage | Fixed: the optimised `memset` charged each member `type_byte_size()` bytes, which over-counts a bitfield, so a 4-byte struct's trailing member was written with zero bytes and kept its old value. `gen_value_by_byte` now declines any struct with a sub-byte member and leaves it to `__memset_impl`, whose byte-wise model gets the padding right. |
 | **R25** | **High (false SUCCESSFUL, default configuration)** — found while root-causing R17, §15 M5 (R17 root cause); **FIXED**, §15 M5 (R25) | **The R17 vacuity is also reachable through a *symbolic* allocation size, and no flag is needed.** `size_t n = nondet_size(); __ESBMC_assume(n >= 0xFFFFFFFFFFFFFFF0UL); char *b = malloc(n); if (b) b[0] = 1; assert(0);` reported **`VERIFICATION SUCCESSFUL`** on default flags — the pointer is used, so the slicer keeps the allocation. The R17 fix could not see it: no constant is available at symex time. Worse than R17's shape, because the address-space constraint does not merely kill the path — `end == start + n` with `end >= start` silently *constrains the program variable `n`*, so **every** symbolic allocation quietly discarded its top 16 sizes, not just ones an assumption forced there. | `smt_memspace.cpp` `init_pointer_obj:409-421`; fixed in `symex_mem`. `regression/esbmc/symbolic_unrepresentable_malloc` and `no_slice_symbolic_unrepresentable_malloc` (CORE), `symbolic_malloc_bounds_preserved` (CORE, anti-vacuity), `force_malloc_success_unrepresentable` (KNOWNBUG, residual) | R17 root-causing | Fixed: give the object size zero on the branch where the request does not fit, so it is always layable, and return NULL there. Under `--force-malloc-success` the bound is stated as an assumption instead — branching to NULL reintroduces the case split that flag exists to remove, and cost 22 s → >200 s on `github_1352-*-32bit`. That leaves the residual pinned above. |
+| **R31** | **High (false SUCCESSFUL, default configuration)** — found by extending the H-A6 census immediately after R29's fix closed it at 21/21, §15 M9 (H-A6 re-census) | **An `address_of` in front of the aggregate step defeats MPOR's access resolution.** `int **pp = &s.p; **pp = 1;` against a concurrent `g = 2` reports **SUCCESSFUL** by default and **FAILED** under `--no-por`, both under Bitwuzla and Z3. This is **not** punning: `&s.p` is a well-defined `int **`, so the false SUCCESSFUL is on ordinary C. The boundary is syntactic in R29's way — copying the pointer to a local first (`int *lp = *pp;`) restores detection — which places the gate in the resolution, not the value set. `record_aggregate_held_target` *is* entered (the inner `dereference2t` is not a `symbol2t`), so the loss is further down, in `resolve_pointer_target`, which requires the resolved object to be a `symbol2t`. A struct-to-struct punning shape (`((struct B *)&a)->q`) prunes identically but is strict-aliasing UB and carries no soundness claim | `regression/esbmc-unix/mpor_aggregate_ptr_race_addrof` (KNOWNBUG, stating the verdict a fix must produce) with `..._addrof_local` (CORE control), the pairing R29 was filed under | H-A6 | **Open.** Not fixed alongside R29, for the reason the original census gave for not fixing R29 in place: widening what MPOR treats as conflicting needs its own soundness argument and a Mode C pass, not an append to a census |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -839,8 +840,9 @@ union) is undetectable and the meaningful one (intersecting it) is caught. H-B7
 then closed three of §7.3's seven rows and sharpened the rest, and H-A8 — the
 row it left live — is closed by a third entry on a real `runtime_encoded_equationt`.
 What remains is not backed by a live harness: H-A2's guard algebra is a
-cross-document dependency, and H-A6 is refuted-and-fixed (R18) rather than
-discharged.
+cross-document dependency, and H-A6 is refuted-and-fixed (R18, then R29) rather
+than discharged — its census now re-runs 21/21, but an enumeration is not the
+completeness the row claims.
 
 Total ≈ 9 engineer-weeks for the verification track, plus ≈ 2 weeks for the
 ESBMC extension critical path (WI-1…WI-3, §13.6) running alongside it.
@@ -5151,14 +5153,38 @@ first census was worth — it found five real defects and was blind to four more
 that the *fix* for those five had to discover.
 
 **H-A6 does not close, and the reason is not modesty.** The row claims
-completeness over every access shape; 21 passing shapes is an enumeration
-over the shapes someone thought of, and this round has just demonstrated twice
-that the thinking-of is the weak step. The row moves from **refuted** to **no
-known counterexample**, which is a different and lesser thing than discharged.
-One shape is already known to sit outside: struct-to-struct punning
-(`((struct B *)&a)->q`) reports SUCCESSFUL and never reaches the constant
-aggregate arm at all. It is strict-aliasing UB, so it carries no soundness
-claim, but it is a shape the census cannot currently speak for.
+completeness over every access shape; 21 passing shapes is an enumeration over
+the shapes someone thought of, and this round had already demonstrated twice
+that the thinking-of is the weak step.
+
+**Then extending the census by two shapes demonstrated it a third time, within
+the hour.** The paragraph above originally ended "no known counterexample". It
+was wrong when written:
+
+| Shape | Write | MPOR | `--no-por` |
+|---|---|---|---|
+| address-of member | `int **pp = &s.p; **pp = 1` | SUCCESSFUL | FAILED |
+| struct-to-struct pun | `*(((struct B *)&a)->q) = 1` | SUCCESSFUL | FAILED |
+| **control** | `int *lp = *pp; *lp = 1` | **FAILED** | FAILED |
+
+Both dual-solver confirmed. The second is strict-aliasing UB and carries no
+soundness claim. **The first is not**: `&s.p` is a well-defined `int **`, and
+this is a false SUCCESSFUL on ordinary C in the default configuration. It is
+R29's mechanism one level further out — R18 followed chains of symbols, R29
+followed the aggregate step, and this puts an `address_of` in front of the
+aggregate step — and the boundary is syntactic in the same way, since the local
+copy restores detection. Recorded as **R31** and pinned KNOWNBUG as
+`mpor_aggregate_ptr_race_addrof`, with `..._addrof_local` as the CORE control,
+the same pairing R29 was filed under. Not fixed here, for the reason the
+original census gave for not fixing R29: widening what MPOR treats as
+conflicting needs its own soundness argument, not an append to a census.
+
+So the row is **refuted again** rather than "no known counterexample", and the
+23-shape census is worth exactly what the 21-shape one was — the defects it
+happened to enumerate. What is now empirically established is not that the
+resolution is complete, but that **every extension of this census so far has
+found something**, which is the strongest available argument that the row should
+not be discharged by enumeration at all.
 
 ---
 
