@@ -22,9 +22,10 @@ disabled block is superseded; and R29 — found by M9's own access-shape census 
 is a **new High-severity false SUCCESSFUL**, partly fixed, with its residual
 traced out of this subsystem into `src/pointer-analysis`.
 
-**Still open:** R6's soundness witness (mechanism observed, verdict never
-flipped), R29's two bare-struct-member shapes, and the pre-existing R16/R19–R27
-rows §9.2 records individually.
+**Still open:** R29's two bare-struct-member shapes and the pre-existing
+R16/R19–R27 rows §9.2 records individually. R6 got its witness and its fix
+(#6785); A6.4, carried since M6, is discharged by the run-order invariant the
+engine now checks in release.
 **Audience:** An engineer who will implement the harnesses and run the
 verification tasks directly from this document.
 **Companion:** `docs/irep2-verification-plan.md` (branch
@@ -801,10 +802,10 @@ relation proof + POR/state-hashing parity report + an R11 verdict.
 R18**: a confirmed default-configuration false SUCCESSFUL where POR prunes a race
 reached through a nested dereference. A6.2 is refuted by that counterexample at
 Tier B — the specced Tier-A model would have passed it. A6.1 and A6.3 discharged
-by inspection. **Carried forward: A6.4** (the active-row reset in
-`calculate_mpor_constraints`) **and R6**, whose unproven step is now pinned to the
-bisimilarity comment at `reachability_tree.cpp:420` with a stated witness
-requirement.
+by inspection. Both rows M6 carried forward are now closed: **R6** got its
+witness and its fix (#6785, §15 M9), and **A6.4** — the active-row reset in
+`calculate_mpor_constraints` — is discharged by the run-order invariant the
+engine now checks in release (§15 M6 (A6.4)).
 
 **M7 — End-to-end scenarios and regression pinning (1 wk).** H-C2, H-C3, H-C5,
 H-C6, H-C7 wired as a scheduled CI job; H-B8. *Artefact:* the oracle job + a
@@ -4920,6 +4921,90 @@ paywalled — or a witness constructed against the reset the way R6's was
 constructed against the fingerprint. The second is now a known-workable
 technique rather than a hope, which is the one thing this session changed about
 A6.4's prospects.
+
+---
+
+### M6 (A6.4) — 2026-08-12, the reset is checked rather than argued
+
+A6.4 has been the one row with no verdict since M6: `calculate_mpor_constraints`
+resets the active thread's row to −1, that reset is the only operation in the
+chain update which *removes* relations, and a removed relation is the direction
+that costs interleavings. M9's POR leg (1409 agreed, 0 diverged) deliberately
+did not close it, for the reason R6 had already demonstrated: a pruning defect
+only moves a verdict when the pruned state is on the path to the *only* buggy
+interleaving.
+
+**The reset is sound, and the argument is one line once the invariant is written
+down.** DCij asserts a dependency chain from Ti's last transition to Tj's, and a
+chain follows execution order, so DCij = 1 requires Ti's last transition to
+precede Tj's. The transition just taken is the newest in the run. Every entry in
+the active thread's row bar the diagonal therefore asserts a chain leaving the
+newest transition for an older one, which no run contains. The reset is not an
+optimisation that might drop something — it is what keeps the matrix's own
+meaning true, and it clears **exactly** the set the ordering forbids: all of row
+`a` bar the diagonal, no more.
+
+That is also the completeness half, which is what "removes relations" was really
+asking. Nothing recoverable is lost, because the row is rebuilt forward: when a
+later thread Tm runs, the column update writes DCjm from any DCjl already set,
+so chains out of the active thread's *new* transition are recorded as they arise
+rather than carried over. With the addition half already settled in M6 — the
+two-hop step is MPOR's recurrence, and the `res == 0` non-overwrite only ever
+keeps an extra 1, which loses reduction rather than interleavings — A6.4's
+"preserves transitive closure" has a verdict in both directions.
+
+**Written down, the invariant is a comparison, so it ships.** The engine now
+carries `thread_last_transition`, the run-order ordinal of each thread's last
+completed transition, advanced where the chain is advanced. Three checks run on
+every transition, inside the loop already walking the threads, under
+`SYMEX_INVARIANT` and so in the `-DNDEBUG` binary (R1, M3):
+
+| Check | What it pins |
+|---|---|
+| `new_dep_chain[j][a] != 1 ∨ ord[j] < ord[a]` | no chain into the newest transition starts after it — covers the `res == 0` path, which keeps a 1 recorded against an *older* transition of the active thread |
+| `new_dep_chain[a][j] != 1 ∨ ord[a] < ord[j]` | no chain leaves the newest transition — this is the reset |
+| `(DCjj == 1) ⇔ ord[j] ≠ 0` | the diagonal means "has run", the precondition the un-run guard reads |
+
+Only the active thread's row and column change meaning when it takes a
+transition; every other entry keeps both its endpoints. So checking those two is
+checking the inductive step, at O(T) per transition inside a body already doing
+O(T²).
+
+**It discriminates.** Deleting the reset — the one-line mutant A6.4 is about —
+trips the row check on the first concurrent program tried,
+`regression/esbmc/19_time_var_mutex_true-unreach-call` under its own flags:
+
+```
+ERROR: goto-symex invariant violated in calculate_mpor_constraints
+  condition: new_dep_chain[active_thread][j] != 1 ||
+             thread_last_transition[active_thread] < thread_last_transition[j]
+  MPOR dependency chain leaves the newest transition
+```
+
+and fails `unit/goto-symex/mpor.test.cpp`, which re-checks the same property
+from outside the engine on every interleaving of a two-writer program — `9 < 4`,
+a chain recorded backwards. Both legs were green immediately before and after
+the mutation, on the same tree.
+
+**Anti-vacuity.** The unit test counts explorations in which some thread took a
+second transition, since only there does the reset have anything to clear, and
+requires that count to be non-zero: 1471 assertions over 49 interleavings. The
+corpus leg is every CORE/THOROUGH test in
+`regression/{esbmc,esbmc-unix,esbmc-unix2}` that creates a thread, run under its
+own flags — **481 tests, 0 violations** (462 to a verdict, 18 to a 30 s cap, 2
+without a source file). The cap does not hide anything: the check runs on every
+transition from the first, so a capped run is a run that took thousands of
+transitions without tripping it.
+
+**What this does not claim.** The runtime check enforces the direction the reset
+*establishes* — no chain pointing backwards. The other direction, that no true
+chain is lost, has no runtime witness, because a dropped entry leaves no trace
+in the matrix; it rests on the ordering argument above. The two are the same
+fact seen twice: the entries cleared are precisely the entries the ordering
+forbids.
+
+**A6.4 closed.** With it, the row §15 M9 named as the last one carrying no
+verdict has one.
 
 ---
 
