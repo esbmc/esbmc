@@ -5508,6 +5508,51 @@ this change, `ch13_10` 106.6 s against 106.6 s, `github_5868_string_conversions`
 83.9 s against 82.9 s — 1861 tests across `esbmc-unix`, `cbmc`, `esbmc-cpp/cpp`
 and `floats`, no failure that does not also fail serially as a `-j` timeout.
 
+**Review turned the flag into two functions, and refuted the cost worry
+properly.** The `offset_known` flag threaded a *type-directed enumeration* —
+which consults no size, catches no `array_size_excp` and ignores the offset —
+through the offset walk, forking all three arms and leaving `offset_bits`,
+`start_bits` and an `esize` initialiser live but unread on the unknown route.
+Worse, `offset % esize` was a division by zero on that route, prevented only by
+a ternary's short-circuit: the one line in the change a future reader could
+break by hoisting it. Splitting `collect_typed_paths` out is shorter than the
+flag was and deletes all of that. It also fixes a measured defect the flag
+introduced: the two functions' empty-path conditions had drifted apart, so on
+the unknown route `offset_paths` returned `""` and the caller repeated its own
+unrefined lookup verbatim — instrumentation counted this **20 times per run** in
+three C++ container tests, which is also the first evidence that this route's
+blast radius reaches well past the MPOR suite. The dispatcher now drops the
+empty path for both walks, on the *followed* type, which closes a second
+instance of the same drift that predates R32.
+
+The blow-up question was settled by measurement rather than by the corpus being
+quiet. A naive pre/post comparison makes the patch look **2× faster**, purely
+because the pre-patch binary misses the race and explores to exhaustion; matched
+on verdict with mutex-protected variants, the widening costs **+1.0 %** at 800
+same-typed members and **+1.1 %** at 1024 leaves of a nine-deep doubling struct.
+The array arm collapses `T[1000000]` to a single `[]`, so extents never multiply
+the walk, and any type large enough to make the walk costly has already made
+symex and solving costlier still.
+
+Two findings worth carrying. The unknown route is a small *soundness gain*
+beyond R32: the offset walk drops paths when `type_byte_size` throws on a
+variable-length element, and the size-free route does not, so a target held
+inside a VLA is now reachable where it previously was not. And the widening
+nudges the `--no-reachable-memory-leak` defect recorded as **#5400**, which uses
+MAY-points-to to *exclude* objects from the leak set: a larger value set can
+suppress a leak report there. That is the unsound direction, it is pre-existing
+and out of scope here, but it is the one place where widening this analysis is
+not free.
+
+Review also produced seven further witnesses of R32 at shapes the tests do not
+cover, all flipping SUCCESSFUL → FAILED across the patch, and one of them earned
+a test: a struct whose matching member is reached only past members of
+non-matching type. A walk that stopped at the first non-contributing member
+would have survived every test above it. It does not survive
+`..._symbolic_skip_mismatch` — and, measured, it does not survive
+`..._symbolic_union` either, whose leading `long pad` is the same trap by
+accident.
+
 ---
 
 ### M9 (census re-run) — 2026-08-13, 22/22, and the two that are left
