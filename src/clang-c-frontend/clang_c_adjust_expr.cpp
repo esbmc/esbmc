@@ -1038,7 +1038,10 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     !contains_sideeffect(op0))
   {
     static const std::map<irep_idt, irep_idt> complex_compound_ops = {
-      {"assign+", "+"}, {"assign-", "-"}, {"assign*", "*"}, {"assign_div", "/"}};
+      {"assign+", "+"},
+      {"assign-", "-"},
+      {"assign*", "*"},
+      {"assign_div", "/"}};
 
     auto it = complex_compound_ops.find(statement);
     if (it != complex_compound_ops.end())
