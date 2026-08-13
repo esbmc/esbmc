@@ -5681,6 +5681,46 @@ about the method than any of the individual defects do.
 
 ---
 
+### M9 (post-refactor sweep) — 2026-08-13, 621/621, and five failures that were not
+
+The sweep recorded above predates the commit that split `collect_typed_paths`
+and the aggregate literals out of their callers, so it could not speak for the
+tree that shipped. Re-run on the full concurrency suite, **`esbmc-unix` is
+621/621** with no wrong verdict anywhere.
+
+It did not read that way at first. The suite reported **five** failures at
+`-j4`, all at the 120 s harness cap, and two of them — `github_2513_1`
+(`--add-symex-value-sets`, `--unlimited-k-steps`) and `03_boundedBuffer`
+(`--context-bound 2 --no-slice`) — sit squarely in the code this branch widens,
+which is the shape a cost regression would take. Re-run serially, every one
+passes well inside the cap:
+
+| Test | `-j4` | serial |
+|---|---|---|
+| `github_2513_1` | timeout | 81.9 s |
+| `github_6480_deepening` | timeout | 83.1 s |
+| `03_boundedBuffer` | timeout | 94.0 s |
+| `01_pthread60` | timeout | 103.1 s |
+| `github_595` | timeout | 107.2 s |
+
+`01_pthread60`'s 103.1 s lands on the 102.8 s this document recorded for the
+patched binary and the 103.4 s for the pre-patch one, which is the check that
+turns "passes serially" into "unchanged by the patch" — a serial pass alone only
+rules out contention, not cost.
+
+**An earlier run of the same suite reported 305 of 621 failing, and none of them
+were real.** `src/esbmc/esbmc` was relinked mid-run; during the link the file is
+`-rw-rw-r--` and short of its final size, so `testing_tool.py` reports
+`PermissionError` as a *test* error indistinguishable from a failure. The
+signature separates cleanly — a sub-second failure is a relink, a 120 s failure
+is the cap — and `.ninja_log` dates the relink. The trigger is worth recording
+because it is self-inflicted by the suite: the build globs `regression/` with
+`CONFIGURE_DEPENDS`, so artefacts a test run leaves behind make the *next*
+`ninja` re-run CMake and relink, and even `ninja -n` runs the regeneration step
+for real. Settle the build to completion before measuring anything.
+
+---
+
 ## Appendix A — Methodological basis
 
 - **Design by contract.** Every harness is precondition (`__ESBMC_assume`) →
