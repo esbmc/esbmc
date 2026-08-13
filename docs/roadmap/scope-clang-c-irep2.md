@@ -2165,3 +2165,78 @@ actually needed.
 `regression/esbmc/github_2220_vla_bound` pins it as KNOWNBUG. Its regex matches
 flag-off output and not flag-on, so it fails for this defect and will XPASS the
 moment the defect goes -- checked both ways rather than assumed.
+
+## 63. What the component actually executes
+
+§60 sized the port at 19 coupled arms; `frontends-to-irep2.md` §39.1 requires a
+census before writing, and this phase has twice found an arm whose work was
+already dead (`adjust_comma`'s type write, §55.1; both boolean arms', §58.1).
+An `fprintf` at each arm's entry, over the §1.2 corpus, flag-off:
+
+| arm | calls | tests |
+|---|---:|---:|
+| `adjust_side_effect` | 94 596 | 2 559 |
+| `adjust_index` | 48 499 | 1 877 |
+| `adjust_address_of` | 46 499 | 2 035 |
+| `adjust_side_effect_function_call` | 44 017 | 2 465 |
+| `adjust_function_call_arguments` | 44 017 | 2 465 |
+| `adjust_side_effect_assignment` | 40 018 | 1 415 |
+| `adjust_expr_binary_boolean` | 30 045 | 453 |
+| `adjust_expr_rel` | 29 956 | 2 038 |
+| `adjust_member` | 29 883 | 490 |
+| `adjust_expr_binary_arithmetic` | 28 098 | 891 |
+| `adjust_expr_shifts` | 7 916 | 109 |
+| `adjust_dereference` | 6 709 | 336 |
+| `adjust_expr_unary_boolean` | 6 655 | 364 |
+| `adjust_sizeof` | 4 999 | 1 346 |
+| `adjust_struct` | 4 165 | 350 |
+| `adjust_comma` | 3 924 | 1 102 |
+| `adjust_side_effect_statement_expression` | 3 120 | 1 094 |
+| `adjust_if` | 1 372 | 114 |
+| `adjust_builtin_va_arg` | 52 | 9 |
+| `adjust_expr_unary_complex` | 22 | 4 |
+| **`adjust_base_to_derived`** | **0** | **0** |
+| **`adjust_ptr_mem`** | **0** | **0** |
+
+### 63.1 Two arms never fire, and porting them blind is the §28 trap
+
+`adjust_base_to_derived` is guarded by `#base_to_derived` on a typecast, and
+`adjust_ptr_mem` by an `id() == "ptr_mem"` node: both are C++ shapes, reachable
+only through `clang_cpp_adjust`, which derives from this class. Phase 6 needs no
+native counterpart for either, and **must not claim one verified** on a C-only
+A/B -- that is exactly `scope-jimple-irep2.md` §28, where `nondet` was migrated
+before anyone knew it occurred zero times and the byte-identity claim held for
+nine PRs because nothing executed the override. They come back in Phase 7.
+
+That takes the port from 19 arms to **17**.
+
+### 63.2 The thin tail is where the mutants will lie
+
+`adjust_builtin_va_arg` (9 tests) and `adjust_expr_unary_complex` (4 tests) have
+corpus support two orders of magnitude below the head. §39.1's first row -- an
+unmoved mutant means the corpus is thin -- is a near-certainty for both, so each
+needs a written test *before* it is ported, not after its mutant comes back
+silent.
+
+This also corrects §60.4: `adjust_expr_unary_complex` was listed as one of three
+arms still separable, on the ground that it neither produces nor consumes type
+information. That remains true, but at 4 tests it is not a cheap win -- the
+measurement it would need costs more than the arm.
+
+### 63.3 One pair moves together
+
+`adjust_side_effect_function_call` and `adjust_function_call_arguments` have
+identical counts, 44 017 in the same 2 465 tests: the latter is called only by
+the former. They are one unit of work, not two.
+
+## 64. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921), comma arm at its
+dispatch point (#6992). Withdrawn: `adjust_comma` in the trailing pass (§55),
+the boolean arms at their dispatch point (§58). Baseline explained (§62).
+
+Next: the 17 live arms of §63, ported behind a `--clang-c-irep2-adjust-only`
+mode mirroring `--python-irep2-adjust-only`, with the divergence count against
+flag-off as the progress metric and the flip when it reaches the §62 baseline of
+1. Write tests for the §63.2 tail first.
