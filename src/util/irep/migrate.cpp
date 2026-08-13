@@ -730,11 +730,11 @@ namespace
  * a level. A deeply nested expression therefore exhausts even the 512MB stack
  * main() hands us and dies with SIGSEGV instead of a diagnostic (#5048). */
 using migrate_stack_guardt = stack_budget_guardt<struct migrate_tagt>;
-} // namespace
 
-void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
+/* Called rather than inlined into migrate_expr: that function is already far
+ * past the complexity gate, so a bare `if` there fails the build. */
+void enforce_migrate_stack_budget(const migrate_stack_guardt &stack_guard)
 {
-  const migrate_stack_guardt stack_guard;
   if (stack_guard.exceeded(default_stack_budget))
   {
     log_error(
@@ -743,6 +743,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       stack_guard.bytes_used() / (1024 * 1024));
     abort();
   }
+}
+} // namespace
+
+void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
+{
+  const migrate_stack_guardt stack_guard;
+  enforce_migrate_stack_budget(stack_guard);
 
   type2tc type;
 
