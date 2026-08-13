@@ -2,6 +2,7 @@
 #define ESBMC_UTIL_STACK_BUDGET_H
 
 #include <cstddef>
+#include <cstdint>
 
 /** Bound the stack a recursive tree walk may consume, so a pathologically
  *  deep expression or type yields a diagnostic instead of SIGSEGV
@@ -26,13 +27,13 @@ public:
   stack_budget_guardt()
   {
     if (depth++ == 0)
-      base = &marker;
+      base = here();
   }
 
   ~stack_budget_guardt()
   {
     if (--depth == 0)
-      base = nullptr;
+      base = 0;
   }
 
   stack_budget_guardt(const stack_budget_guardt &) = delete;
@@ -42,8 +43,8 @@ public:
   std::ptrdiff_t bytes_used() const
   {
     // Direction is platform business, not ours -- take the magnitude.
-    const std::ptrdiff_t used = base - &marker;
-    return used < 0 ? -used : used;
+    const std::uintptr_t now = here();
+    return static_cast<std::ptrdiff_t>(now > base ? now - base : base - now);
   }
 
   bool exceeded(std::ptrdiff_t budget) const
@@ -52,13 +53,21 @@ public:
   }
 
 private:
+  /* An integer, not a pointer: the address is only ever differenced, never
+   * dereferenced, and storing it as a pointer to a local trips GCC's
+   * -Wdangling-pointer even though the guard clears it on the way out. */
+  std::uintptr_t here() const
+  {
+    return reinterpret_cast<std::uintptr_t>(&marker);
+  }
+
   char marker;
-  static thread_local const char *base;
+  static thread_local std::uintptr_t base;
   static thread_local unsigned depth;
 };
 
 template <class Tag>
-thread_local const char *stack_budget_guardt<Tag>::base = nullptr;
+thread_local std::uintptr_t stack_budget_guardt<Tag>::base = 0;
 template <class Tag>
 thread_local unsigned stack_budget_guardt<Tag>::depth = 0;
 
