@@ -638,6 +638,22 @@ protected:
     const type2tc &original_type,
     bool under_deref) const;
 
+  /** The two aggregate literals of get_constant_value_set. Each consumes the
+   *  one suffix component naming the member it holds, since a literal has no
+   *  suffixed symbol name for the symbol case to look up. */
+  void get_constant_struct_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type,
+    bool under_deref) const;
+
+  void get_constant_union_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const;
+
   // Like get_value_set_rec, but dedicated to walking through the ireps that
   // are produced by pointer deref byte stitching
   void get_byte_stitching_value_set(

@@ -422,32 +422,10 @@ void value_sett::get_constant_value_set(
   const type2tc &original_type,
   bool under_deref) const
 {
-  /* A constant struct holds its members' values here, so no suffixed symbol
-   * name exists for the symbol case to look up and the caller's ".field" has to
-   * select one now; leaving the set empty resolves a write through a pointer
-   * held in a member to no object (finding R29, esbmc/esbmc#6774). One
-   * component is consumed per level, so nesting follows the same rule. */
   if (is_constant_struct2t(expr) && !suffix.empty() && suffix[0] == '.')
   {
-    const constant_struct2t &cs = to_constant_struct2t(expr);
-    const std::string rest = suffix.substr(1);
-    const std::vector<irep_idt> names = struct_union_member_names(expr->type);
-    auto comp = match_leading_component(names, rest);
-
-    if (comp && comp->first < cs.datatype_members.size())
-    {
-      get_value_set_rec(
-        cs.datatype_members[comp->first],
-        dest,
-        rest.substr(comp->second),
-        original_type,
-        under_deref);
-      return;
-    }
-
-    /* Unanalysable is unknown, not nothing, as the tail of get_value_set_rec
-     * has it: an empty set asserts "points at nothing" to every consumer. */
-    insert(dest, unknown2tc(original_type), BigInt(0));
+    get_constant_struct_value_set(
+      expr, dest, suffix, original_type, under_deref);
     return;
   }
 
@@ -467,24 +445,64 @@ void value_sett::get_constant_value_set(
       insert(dest, unknown2tc(original_type), BigInt(0));
   }
   else if (is_constant_union2t(expr))
+    get_constant_union_value_set(expr, dest, suffix, original_type);
+}
+
+/* A constant struct holds its members' values here, so no suffixed symbol name
+ * exists for the symbol case to look up and the caller's ".field" has to select
+ * one now; leaving the set empty resolves a write through a pointer held in a
+ * member to no object (finding R29, esbmc/esbmc#6774). One component is
+ * consumed per level, so nesting follows the same rule. */
+void value_sett::get_constant_struct_value_set(
+  const expr2tc &expr,
+  object_mapt &dest,
+  const std::string &suffix,
+  const type2tc &original_type,
+  bool under_deref) const
+{
+  const constant_struct2t &cs = to_constant_struct2t(expr);
+  const std::string rest = suffix.substr(1);
+  const std::vector<irep_idt> names = struct_union_member_names(expr->type);
+  auto comp = match_leading_component(names, rest);
+
+  if (comp && comp->first < cs.datatype_members.size())
   {
-    /* Only the initialised member's value is here and the caller names it in
-     * the suffix, so consume that component as the struct case does. A
-     * component naming any other member is punning this cannot follow, and
-     * passes through unconsumed. */
-    const constant_union2t &cu = to_constant_union2t(expr);
-    std::string rest = suffix;
-
-    if (!rest.empty() && rest[0] == '.')
-    {
-      const std::vector<irep_idt> names = struct_union_member_names(expr->type);
-      auto comp = match_leading_component(names, rest.substr(1));
-      if (comp && names[comp->first] == cu.init_field)
-        rest = rest.substr(1 + comp->second);
-    }
-
-    get_value_set_rec(cu.datatype_members[0], dest, rest, original_type);
+    get_value_set_rec(
+      cs.datatype_members[comp->first],
+      dest,
+      rest.substr(comp->second),
+      original_type,
+      under_deref);
+    return;
   }
+
+  /* Unanalysable is unknown, not nothing, as the tail of get_value_set_rec has
+   * it: an empty set asserts "points at nothing" to every consumer. */
+  insert(dest, unknown2tc(original_type), BigInt(0));
+}
+
+/* Only the initialised member's value is in a union literal, and the caller
+ * names it in the suffix, so consume that component as the struct case does. A
+ * component naming any other member is punning this cannot follow, and passes
+ * through unconsumed. */
+void value_sett::get_constant_union_value_set(
+  const expr2tc &expr,
+  object_mapt &dest,
+  const std::string &suffix,
+  const type2tc &original_type) const
+{
+  const constant_union2t &cu = to_constant_union2t(expr);
+  std::string rest = suffix;
+
+  if (!rest.empty() && rest[0] == '.')
+  {
+    const std::vector<irep_idt> names = struct_union_member_names(expr->type);
+    auto comp = match_leading_component(names, rest.substr(1));
+    if (comp && names[comp->first] == cu.init_field)
+      rest = rest.substr(1 + comp->second);
+  }
+
+  get_value_set_rec(cu.datatype_members[0], dest, rest, original_type);
 }
 
 void value_sett::get_value_set_rec(
