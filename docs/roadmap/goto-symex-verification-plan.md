@@ -611,7 +611,7 @@ discharge or an explicit, reviewed waiver.
 | H-A2 | `guard2tc::operator-=` satisfies `(g_cur ∨ g_mrg) → (diff ↔ g_mrg)` | **irep2 plan** H-A9/H-B4 — cross-document dependency |
 | H-A2 | Incoming merge guards may overlap (no disjointness assumed) | by construction (not assumed) |
 | H-A4 | Every `with2t` store the slicer elides has a `symbol2t` source and constant index | **Discharged**, §15 M9 (H-B7) — `assumption_discharge.test.cpp` checks it on every elided store and censuses the excluded shapes; struct member stores are excluded by their `constant_string2t` field, which the census now pins |
-| H-A6 | `thread_last_reads/writes` contain *all* accesses of the last transition, including through pointers | **Refuted twice.** R11 → **R18** (one-level resolution losing a nested dereference) was fixed by **#6550**. The completeness this row asks for is now *checked* rather than assumed — a 21-shape census, §15 M9 (H-A6) — and it failed: five shapes holding the pointer in an aggregate were missed, recorded as **R29**. R29 is now fixed (§15 M9 (R29 fix), (R29 residual)) and the census re-runs **21/21 agreeing with `--no-por`**, dual-solver, §15 M9 (H-A6 re-census). The row stays **refuted**: extending the same census by two shapes immediately found **R31** (`int **pp = &s.p; **pp = 1`, a false SUCCESSFUL on ordinary C) plus a struct-punning shape that is UB. R31 is now fixed and the census runs **27/28**, §15 M9 (R31 fix) — but that round also showed the 21/21 above was over-stated, since an array element reached through a pointer into the array was failing all along under a spelling the enumeration had recorded as passing. R31's own section then declared its one remaining gap witnessless, and the next probe witnessed it as **R32** (a symbolic array index, false SUCCESSFUL on both solvers, §15 M9 (R32)). Every extension of this census has found a defect, one extension falsified the census's own result, and one falsified the *closing claim* of the round that made it — which is the argument against ever discharging this row by enumeration. **R33** sharpens that argument from the other side: code review of R31's fix found a false SUCCESSFUL on `&s.v[1]`, a shape more common than several the census does cover, which all twenty-eight enumerated shapes walked past. Enumeration is bounded by the model of failure that generates it; reading the neighbouring branch is not |
+| H-A6 | `thread_last_reads/writes` contain *all* accesses of the last transition, including through pointers | **Refuted twice.** R11 → **R18** (one-level resolution losing a nested dereference) was fixed by **#6550**. The completeness this row asks for is now *checked* rather than assumed — a 21-shape census, §15 M9 (H-A6) — and it failed: five shapes holding the pointer in an aggregate were missed, recorded as **R29**. R29 is now fixed (§15 M9 (R29 fix), (R29 residual)) and the census re-runs **21/21 agreeing with `--no-por`**, dual-solver, §15 M9 (H-A6 re-census). The row stays **refuted**: extending the same census by two shapes immediately found **R31** (`int **pp = &s.p; **pp = 1`, a false SUCCESSFUL on ordinary C) plus a struct-punning shape that is UB. R31 is now fixed and the census runs **27/28**, §15 M9 (R31 fix) — but that round also showed the 21/21 above was over-stated, since an array element reached through a pointer into the array was failing all along under a spelling the enumeration had recorded as passing. R31's own section then declared its one remaining gap witnessless, and the next probe witnessed it as **R32** (a symbolic array index, false SUCCESSFUL on both solvers, §15 M9 (R32)). Every extension of this census has found a defect, one extension falsified the census's own result, and one falsified the *closing claim* of the round that made it — which is the argument against ever discharging this row by enumeration. **R33** sharpens that argument from the other side: code review of R31's fix found a false SUCCESSFUL on `&s.v[1]`, a shape more common than several the census does cover, which all twenty-eight enumerated shapes walked past. Enumeration is bounded by the model of failure that generates it; reading the neighbouring branch is not. With R31, R32 and R33 fixed the repository's 22 shapes all agree with `--no-por`, §15 M9 (census re-run) — the first round whose count is reproducible from the tree rather than from a scratch directory. The only divergences left are two strict-aliasing shapes that C11 6.5p7 leaves undefined |
 | H-A8 | `push_ctx`/`pop_ctx` calls are balanced by the caller (`reachability_treet`) | **Discharged**, §15 M9 (H-A8) — `context_stack.test.cpp` on a real `runtime_encoded_equationt` over a real solver: an exhausted 49-interleaving exploration lands back on depth 0, having reached 9. Deleting the setup `push_ctx` fails it *and* SIGSEGVs, which is the UB the row's failure mode predicted |
 | all Tier A | `nondet` solver answers are *sound* (no wrong TRUE/FALSE) | out of scope — solver backends are Tier D |
 
@@ -5507,6 +5507,44 @@ Cost is unchanged on the corpus. `01_pthread60` 102.8 s against 103.4 s before
 this change, `ch13_10` 106.6 s against 106.6 s, `github_5868_string_conversions`
 83.9 s against 82.9 s — 1861 tests across `esbmc-unix`, `cbmc`, `esbmc-cpp/cpp`
 and `floats`, no failure that does not also fail serially as a `-j` timeout.
+
+---
+
+### M9 (census re-run) — 2026-08-13, 22/22, and the two that are left
+
+With R31, R32 and R33 all fixed, every `mpor_aggregate_ptr_*` shape in the
+repository was re-run under the default configuration and under `--no-por`, and
+the two verdicts compared directly rather than against a `test.desc`:
+**22 of 22 agree**, the two SUCCESSFUL-expecting controls included. This is the
+first round whose claim is reproducible from the tree — earlier rounds counted
+programs that lived only in a scratch directory, which is how the 21/21 came to
+be over-stated and how R32's witness came to be recorded with the wrong verdict.
+
+Two shapes outside the repository still diverge, and both are undefined
+behaviour, so neither carries a soundness claim:
+
+| Shape | MPOR | `--no-por` |
+|---|---|---|
+| struct-to-struct pun, `*(((struct B *)&a)->q) = 1` | SUCCESSFUL | FAILED |
+| `void **pp = (void **)&s.p; *(int *)*pp = 1` | SUCCESSFUL | FAILED |
+
+Both read an object through an lvalue of a type C11 **6.5p7** does not permit —
+`void *` is not compatible with `int *`, nor a qualified or sign variant of it,
+nor a character type — so a conforming program reaches neither. The second is
+worth recording anyway, because the cast is not the barrier on its own: the
+*same* cast over a bare pointer (`int *p; void **pp = (void **)&p;`) detects its
+race correctly. It is the combination of a cast with an aggregate descriptor
+that misses, since the walk matches the dereferenced type exactly and a cast puts
+the member out of its reach. Relaxing the match to same-width pointer types
+would close it; nothing in scope requires that, and doing it on UB alone would
+widen the analysis to serve a program the standard does not define.
+
+So the honest statement of where H-A6 stands is: every shape this census
+contains, and every shape in the repository, now agrees — and that is a
+statement about 22 programs, not about pointer resolution. The row stays
+refuted. Four claims in this material have now been falsified by re-measuring
+them, one of them a recorded verdict that was simply wrong, which says more
+about the method than any of the individual defects do.
 
 ---
 
