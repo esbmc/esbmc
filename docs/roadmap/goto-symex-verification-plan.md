@@ -5463,6 +5463,28 @@ Recorded as **R32**, pinned by
 `regression/esbmc-unix/mpor_aggregate_ptr_race_symbolic_offset`, with
 `..._array_decay` as the constant-index control that must keep passing.
 
+**The assertion leg is the one thing local runs cannot check, and the risk it
+covers was measured another way.** CI builds `Debug`; a local `RelWithDebInfo`
+tree defines `NDEBUG`, so no `assert` in `value_set.cpp` is exercised by any run
+recorded in this document. That matters here for one specific reason: the new
+code calls `get_value_set_rec` with the *same object* as the unrefined lookup
+beside it but a **non-empty suffix**, and two arms of that function assert
+`suffix == ""` — the `malloc`/`alloca`/`realloc` and `cpp_new` side-effect
+cases. If an object could reach those arms, this change would turn a passing
+assertion into a firing one, invisibly to every build used here.
+
+A Debug rebuild was not available (18 GB build tree, and the disk had reached
+100%), so the condition was instrumented instead: a `fprintf` at the entry of
+`get_value_set_rec` on exactly `is_sideeffect2t(expr) && !suffix.empty()`. It
+fires **zero times** across the 26 `mpor_aggregate` shapes, 500 core `esbmc/`
+tests and 250 `esbmc-unix` tests. The zero is not vacuous — widening the same
+probe to `is_symbol2t` fires 57 times on a single test, so the instrumentation
+is live. A side effect never reaches the value set with a suffix, which is what
+the arm's own comment says: SSA assignments have their side effects removed
+before this code sees them. The obligation is discharged as **T1 for that
+assertion** and remains open for every other assertion in the file, which only
+the CI Debug leg will exercise.
+
 **A residual neither R31 nor R32 closes: the inverse lives away from its
 forward.** Both reviews raised this independently, and it is the most useful
 thing either said about the shape of the code rather than its content.
