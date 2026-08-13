@@ -1292,11 +1292,12 @@ void goto_checkt::clz_zero_check(const expr2tc &code, const locationt &loc)
   if (!is_symbol2t(call.function))
     return;
 
-  // A zero argument is undefined for every member of the __builtin_clz*/ctz*
-  // family (GCC); assert it is non-zero. The two-argument clzg/ctzg name their
-  // own result at zero, so the arity test below leaves them alone.
+  // A zero argument is undefined for __builtin_clz*/ctz* (GCC); assert it is
+  // non-zero. The two-argument clzg/ctzg name their own result at zero, so the
+  // arity test below leaves them alone, and ffs is defined there outright.
   const std::string name = to_symbol2t(call.function).thename.as_string();
-  if (bit_scan_builtin(name) == bit_scan_endt::none)
+  const bit_scan_endt kind = bit_scan_builtin(name);
+  if (kind == bit_scan_endt::none || kind == bit_scan_endt::first_set)
     return;
 
   if (call.operands.size() != 1)

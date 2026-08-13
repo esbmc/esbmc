@@ -758,12 +758,74 @@ deep in unbounded DFS order — `--incremental-bmc` alone produced no verdict in
 1.1 s. `--k-induction --falsify-context-bound 2` behaves the same (1.2 s); both
 combinations were previously rejected outright.
 
-**Still open:** the adaptive policy. §W4's sweep says full deepening buys one
-stranded falsification in 40 unsafe tests and costs 18 proofs in 132 safe ones,
-so the wrapper change wants a *shallow* N (the stranded shapes are found at
-N ≤ 2 in ~1 s) rather than deepening to convergence — and that N, plus the
-resulting score delta on the concurrency categories, is what the exit above
-still asks for.
+#### W4.2 — Choosing N, and why the corpus cannot answer it alone
+
+**Measure the configuration you intend to ship, not the one the tests carry.**
+`00_rwlock4` is stranded for 90 s only with `--no-por`, which comes from its own
+`test.desc`. Under the wrapper's actual concurrency flags — POR left on, plus
+`--state-hashing --smt-symex-guard --cswitch-skip-readonly-globals` — the same
+benchmark answers in 1.9 s. Every number below is therefore reported twice:
+once with each test's own flags, once with the wrapper's.
+
+**Corpus flags, 343 concurrent CORE tests in `esbmc-unix`/`esbmc-unix2`, 60 s
+cap.** No verdict changed at N = 1, 2 or 3. Nothing was recovered either — and
+the reason is that *this configuration strands nothing*: all 343 answer at base
+(200 FAILED, 143 SUCCESSFUL). The sweep bounds the cost and confirms no
+regression; it cannot speak to the benefit.
+
+| N | wrong verdict flips | recovered | answers lost | total wall |
+|---|---|---|---|---|
+| 1 | 0 | 0 | 0 | +4.4 % |
+| 2 | 0 | 0 | 1 | +39.3 % |
+| 3 | 0 | 0 | 6 | +112.5 % |
+
+The cost concentrates where the pre-pass inherits an expensive configuration:
+the worst three (`01_cond_06` +21.7 s, `01_cond_05` +19.4 s, `01_cond_02`
++19.3 s) all pair `--deadlock-check` — which disables the main-thread-ended cut
+(`execution_state.cpp:517-521`) and so enlarges the schedule space — with
+`--unwind 3`/`4`, and the pre-pass runs its rounds at that same unwind bound.
+The wrapper passes no `--unwind`, so its pre-pass runs at 1 and none of this
+applies; a user who sets a deep unwind *and* a large N pays for a second full
+verification, which is the argument for keeping N shallow rather than for
+capping the bound behind the user's back.
+
+**Wrapper flags, same corpus.** No verdict changed at N = 1 or 2 and nothing
+was lost here either, but this configuration *does* strand, which is what makes
+it the one to decide on. The parallel sweep flagged 26 of 340; re-run
+sequentially under a hard cap, **22 are genuinely stranded**, three fail to
+parse (their `test.desc` carries `-Wno-error=implicit-function-declaration`,
+which substituting the wrapper's flags drops — excluded, not stranded), and one
+answers UNKNOWN just past the cap.
+
+Of those 22, **N = 1 recovers exactly one**, and N = 2 recovers nothing further
+at higher cost — so **the wrapper takes N = 1**:
+
+- `03_microbenchmark`, under the wrapper's exact command line: no verdict in
+  **120 s** at base, **FAILED in 0.71 s** with N = 1. Its own `test.desc`
+  expects FAILED at `--context-bound 1`, so the verdict is right as well as
+  fast.
+- A violation the pre-pass finds still emits a witness — checked separately on
+  `00_rwlock4`, 3.7 KB of GraphML — without which the finding would not score.
+- Cost on 24 tests that already answer, measured sequentially: median
+  **+0.02 s**, p90 +0.25 s, max +0.30 s.
+
+One in 22 is a modest return, and it is quoted as such. What justifies the
+change is the shape of the trade rather than its size: the recovered task
+converts a timeout into a correct `false` for 0.7 s, no verdict moved in 683
+runs across both configurations, and the pre-pass cannot claim a proof by
+construction — so the downside is bounded by the median 0.02 s it costs
+everything else.
+
+**Method note — `timeout N esbmc` is not a cap.** Several runs in the parallel
+sweeps recorded 900+ s against a 60 s limit, and an unrelated ESBMC process on
+the same host survived 5 hours under `timeout 20`. ESBMC can outlive SIGTERM,
+and `subprocess.run(timeout=)` inherits the same problem through the captured
+pipes. Anything timing-sensitive here needs `timeout -s KILL` and a sequential
+run; the parallel sweeps are quoted for verdicts only.
+
+**Still open:** the score delta itself. The corpus is a proxy — it is where the
+mechanism can be shown to work and shown not to regress, not where SV-COMP
+points are won. The exit above is discharged only by a competition run.
 
 ---
 
