@@ -270,10 +270,17 @@ static std::optional<std::pair<size_t, size_t>> match_leading_component(
  * array elements in bytes, as the index arm of get_reference_set_rec does, so
  * each arm inverts the walk that contributed its part of the offset.
  * A member of no constant size ends the descent, keeping the paths already
- * found: everything after it is unreachable by a constant offset anyway. */
+ * found: everything after it is unreachable by a constant offset anyway.
+ *
+ * With @p offset_known false the offset says nothing, so every path of the
+ * right type is taken rather than the one an offset selects (R32). That is the
+ * same over-approximation the union case makes for the same reason -- the
+ * descriptor cannot say which sub-object is meant -- and it is why sizes are
+ * not consulted on that route at all. */
 static void collect_offset_paths(
   const type2tc &type_in,
   const BigInt &offset,
+  bool offset_known,
   const type2tc &target,
   const namespacet &ns,
   const std::string &prefix,
@@ -283,7 +290,7 @@ static void collect_offset_paths(
    * or a typedef'd aggregate silently loses its path. */
   const type2tc type = ns.follow(type_in);
 
-  if (offset == 0 && type == target)
+  if ((!offset_known || offset == 0) && type == target)
   {
     dest.push_back(prefix);
     return;
@@ -292,18 +299,29 @@ static void collect_offset_paths(
   if (is_array_type(type))
   {
     const type2tc &subtype = to_array_type(type).subtype;
-    BigInt esize;
-    try
+    BigInt esize = 0;
+    if (offset_known)
     {
-      esize = type_byte_size(subtype, &ns);
+      try
+      {
+        esize = type_byte_size(subtype, &ns);
+      }
+      catch (const array_type2t::array_size_excp &)
+      {
+        return;
+      }
+      if (esize == 0)
+        return;
     }
-    catch (const array_type2t::array_size_excp &)
-    {
-      return;
-    }
-    if (esize > 0)
-      collect_offset_paths(
-        subtype, offset % esize, target, ns, prefix + "[]", dest);
+
+    collect_offset_paths(
+      subtype,
+      offset_known ? offset % esize : offset,
+      offset_known,
+      target,
+      ns,
+      prefix + "[]",
+      dest);
     return;
   }
 
@@ -321,6 +339,19 @@ static void collect_offset_paths(
 
   for (size_t i = 0; i < members.size(); i++)
   {
+    if (!offset_known)
+    {
+      collect_offset_paths(
+        members[i],
+        offset,
+        false,
+        target,
+        ns,
+        prefix + "." + names[i].as_string(),
+        dest);
+      continue;
+    }
+
     BigInt size_bits;
     try
     {
@@ -335,6 +366,7 @@ static void collect_offset_paths(
       collect_offset_paths(
         members[i],
         (offset_bits - start_bits) / 8,
+        true,
         target,
         ns,
         prefix + "." + names[i].as_string(),
@@ -352,15 +384,16 @@ static void collect_offset_paths(
 static std::vector<std::string> offset_paths(
   const type2tc &type,
   const BigInt &offset,
+  bool offset_known,
   const type2tc &target,
   const namespacet &ns)
 {
   std::vector<std::string> paths;
 
-  if (offset == 0 && type == target)
+  if (offset_known && offset == 0 && type == target)
     return paths;
 
-  collect_offset_paths(type, offset, target, ns, "", paths);
+  collect_offset_paths(type, offset, offset_known, target, ns, "", paths);
   return paths;
 }
 
@@ -563,12 +596,14 @@ void value_sett::get_value_set_rec(
        * out. The match is on the dereferenced type exactly, so nothing is
        * claimed that is not there -- and equally, a cast between the
        * descriptor's type and this one puts the member back out of reach. An
-       * offset that is not constant is left to the unrefined lookup above
-       * (R32). */
-      if (!it1.second.offset_is_set)
-        continue;
-      for (const std::string &path :
-           offset_paths(object->type, it1.second.offset, expr->type, ns))
+       * offset that is not constant selects no single path, so every path of
+       * the right type is taken instead (R32). */
+      for (const std::string &path : offset_paths(
+             object->type,
+             it1.second.offset,
+             it1.second.offset_is_set,
+             expr->type,
+             ns))
         get_value_set_rec(object, dest, path + suffix, original_type);
     }
 

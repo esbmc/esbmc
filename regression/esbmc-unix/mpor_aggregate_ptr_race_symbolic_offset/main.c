@@ -8,10 +8,10 @@ int *a[2] = {&g, &g};
 int **ap;
 
 // R32: with a symbolic index the descriptor's offset is unset -- `c:@ap =
-// { <a, *, 8, int *[2]> }` -- so R31's walk has no offset to spell back out and
-// skips it, leaving the unrefined lookup of `c:@a` to miss the entry that holds
-// the answer (`c:@a[]`). A constant index detects the same race; see
-// _array_decay. Well-defined C: the index is assumed in bounds.
+// { <a, *, 8, int *[2]> }` -- so there is no offset to spell back out and the
+// unrefined lookup of `c:@a` misses the entry holding the answer (`c:@a[]`).
+// The walk now takes every path of the dereferenced type when the offset says
+// nothing. Well-defined C: the index is assumed in bounds.
 void *writer(void *arg)
 {
   (void)arg;
