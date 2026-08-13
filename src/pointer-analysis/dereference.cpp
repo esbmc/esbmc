@@ -1367,7 +1367,24 @@ void dereferencet::construct_from_array(
       !is_correctly_aligned && is_pointer_type(arr_subtype) &&
       alignment * 8 >= subtype_size)
       is_correctly_aligned = true;
-    overflows_boundaries = !is_correctly_aligned || deref_size > subtype_size;
+    /* A whole-element access needs no stitching. check_alignment() below
+     * asserts the offset lands on an element boundary, which is exactly the
+     * precondition index2tc needs, so an unproven alignment claim is a reason
+     * to *check*, not to decompose.
+     *
+     * Only floats are taken off the stitching path. Reassembling one costs a
+     * fp.to_ieee_bv / to_fp round trip per byte, and SMT-LIB leaves the NaN
+     * pattern fp.to_ieee_bv returns unconstrained -- so once an intermediate
+     * is NaN the solver may pick a different pattern each time and the value
+     * read back is not the one stored (esbmc/esbmc#6922). Integer subtypes
+     * keep the original condition: their stitching is exact, and weakening it
+     * would stop over-approximated alignments reaching check_alignment
+     * (regression/esbmc/align-deref_fail). */
+    const bool whole_element =
+      deref_size == subtype_size && is_floatbv_type(arr_subtype);
+    overflows_boundaries =
+      whole_element ? false
+                    : (!is_correctly_aligned || deref_size > subtype_size);
   }
 
   // No alignment guarantee: assert that it's correct.
