@@ -5553,6 +5553,15 @@ would have survived every test above it. It does not survive
 `..._symbolic_union` either, whose leading `long pad` is the same trap by
 accident.
 
+The size-free route's *reason for existing* went untested until the gate pointed
+at it. Every test above reaches the typed walk through its member loop; none
+reached the case the doc comment claims, a target inside an element of no
+constant size. `..._vla_element` does: `int *arr[2][n]` with symbolic `n` yields
+the path `[][]` and a FAILED verdict, where the offset walk throws out of
+`type_byte_size` and returns nothing. It is pinned by its own mutant — giving
+the typed walk a `type_byte_size` call that bails on the throw kills that test
+**and no other** of the twenty-six.
+
 ---
 
 ### M9 (census re-run) — 2026-08-13, 22/22, and the two that are left
