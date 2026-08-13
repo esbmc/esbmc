@@ -207,7 +207,8 @@ std::vector<symbolt *> code_contractst::short_name_candidates(
 
 symbolt *code_contractst::find_function_symbol(const std::string &function_name)
 {
-  // Exact match (handles full IDs like "c:@F@fst#*1I#" passed by wildcard expansion)
+  // Exact match (handles full IDs like "c:@F@fst#*1I#" passed by wildcard
+  // expansion)
   symbolt *sym = context.find_symbol(function_name);
   if (sym != nullptr)
     return sym;
