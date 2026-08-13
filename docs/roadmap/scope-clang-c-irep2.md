@@ -1869,3 +1869,65 @@ ownership into the IREP2 pass so arm order is preserved and a migrated arm's
 output reaches its consumers in the same walk. `esbmc-unix/github_2220`'s
 pre-existing divergence is the first thing that shape should be measured
 against.
+
+## 57. Shape 2, tested on the arm §55 withdrew
+
+§55.4 blamed the comma arm's divergences on *when* the rewrite ran, not on the
+rewrite. That is a falsifiable claim, and it is cheaper to test on one arm than
+to discover after restructuring the pass. The experiment: run the **identical**
+IREP2 rewrite at the point `clang_c_adjust::adjust_expr` dispatches the arm,
+via a per-node round trip -- `migrate_expr`, rewrite, `migrate_expr_back` --
+instead of in the trailing whole-program pass.
+
+### 57.1 Result
+
+| configuration | divergences vs flag-off |
+|---|---|
+| master | 1 |
+| arm in the trailing IREP2 pass (§55) | 8 |
+| **same rewrite at the dispatch point** | **1** |
+
+The one is `github_2220` in every row: pre-existing, member-arm, unrelated.
+So the seven are fully explained by ordering. §55.4's clause holds, and shape 2
+-- which fixes ordering by construction, because a migrated arm runs where the
+legacy arm ran -- is validated on a real arm before anyone restructures
+anything.
+
+A second fact falls out, and shape 2 depends on it: the per-node round trip is
+**lossless** for this construct. §3.1 predicted the migrating default would have
+to be paid per node rather than per class; this is the first measurement that it
+can be paid at all.
+
+### 57.2 What the mutants say, and which one counts
+
+Two were run, and only the second is evidence:
+
+- **`side_2->type` -> `side_1->type`** moves 8 tests -- but at least one
+  (`csmith01`) moves by **aborting**. That is `frontends-to-irep2.md` §39.1's
+  fifth row: the mutation makes the operation invalid and the crash, not the
+  value, moves the output. It proves the arm is reached and nothing more.
+- **the valid alternative** -- round trip, no retype -- moves **8** tests and
+  aborts on none. They are exactly the 86 retypes' 8 tests from §55.1,
+  `esbmc/00_aiob_4_true-unreach-call` included: it did not diverge under §55's
+  trailing-pass shape because that pass corrected it after the fact, and here
+  nothing does. This is the mutant that isolates the value.
+
+Recorded because the first mutant looked conclusive and was not. An abort is a
+*louder* signal than a divergence and a weaker one.
+
+### 57.3 Cost
+
+`csmith01`, the heaviest comma test in the corpus: 2.79 s -> 3.18 s, +14 %.
+That is the whole opt-in path, dominated by the trailing pass migrating every
+symbol value, not by the round trip. The per-node trip migrates a node's whole
+subtree, so nested commas cost O(depth x size); C comma chains are shallow and
+the corpus does not exercise a deep one. Flag is default-off.
+
+### 57.4 What this unblocks
+
+§55.5 retired §49.3's list because every remaining arm writes a type a sibling
+consumes. Shape 2 removes that clause entirely -- a migrated arm runs in
+sequence, so its consumers see its output. `adjust_expr_unary_boolean` and
+`adjust_expr_binary_boolean` come back on the list on exactly the evidence that
+took them off it. `adjust_sizeof` does not: `migrate.cpp:783`'s two-operand
+requirement is independent of ordering.

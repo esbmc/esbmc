@@ -55,6 +55,18 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
     adjust_member(expr);
 }
 
+void adjust_comma_at_dispatch(exprt &expr, const namespacet &ns)
+{
+  const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
+
+  expr2tc e;
+  migrate_expr(expr, e);
+  const code_comma2t &c = to_code_comma2t(e);
+  expr = migrate_expr_back(code_comma2tc(c.side_2->type, c.side_1, c.side_2));
+
+  migrate_namespace_lookup = old_ns;
+}
+
 void clang_c_adjust_irep2::adjust_member(expr2tc &expr)
 {
   const member2t &m = to_member2t(expr);
