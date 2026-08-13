@@ -166,6 +166,11 @@ protected:
     const exprt::operandst &arguments,
     goto_programt &dest);
 
+  /// True when a contract clause should be dropped: no contract mode is
+  /// active, so the clause states nothing. Split out so the clause handling
+  /// adds no branching to do_function_call_symbol.
+  bool drop_inactive_contract_clause(bool is_clause) const;
+
   virtual void do_function_call_symbol(
     const exprt &lhs,
     const exprt &function,

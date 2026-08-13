@@ -10,6 +10,14 @@ import copy
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements
 import sys
 
+CONTRACT_CLAUSES = ("__ESBMC_requires", "__ESBMC_ensures")
+
+
+def _is_contract_clause_call(expr):
+    """True for a call to a contract clause intrinsic."""
+    return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
+            and expr.func.id in CONTRACT_CLAUSES)
+
 
 class GeneratorMixin:
 
@@ -903,7 +911,11 @@ class GeneratorMixin:
         Returns (prefix_stmts, new_expr, result_type) where result_type
         is inferred from the transformed root expression.
         """
-        if expr is None:
+        if expr is None or _is_contract_clause_call(expr):
+            # A contract clause is lowered into a single assumption or
+            # assertion, so hoisting part of it into the body would leave the
+            # clause naming a temporary the contract wrapper never declares.
+            # Leave it as written; the frontend's clause check rejects by name.
             return [], expr, "Any"
         lowerer = self._ListCompExpressionLowerer(self)
         new_expr = lowerer.visit(expr)
