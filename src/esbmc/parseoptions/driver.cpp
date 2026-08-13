@@ -25,6 +25,7 @@ extern "C"
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
+#include <solvers/smt/simplification_equivalence.h>
 #include <algorithm>
 #include <cctype>
 #include <charconv>
@@ -404,6 +405,11 @@ int esbmc_parseoptionst::doit()
       }
     }
   }
+
+  // Installed before the GOTO program is built so the check also covers the
+  // simplification the frontend and the GOTO passes perform. Inert unless
+  // the build enabled ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK.
+  install_simplification_equivalence_check(namespacet(context), options);
 
   // Create and preprocess a GOTO program
   if (get_goto_program(options, goto_functions))
