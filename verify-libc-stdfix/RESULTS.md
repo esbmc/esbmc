@@ -1703,9 +1703,38 @@ Tested rather than assumed, three ways:
    `divi(-3, -1)` at s0.15 and s0.31 -- nothing symbolic, so no unmodelled call
    can influence branch selection -- **both still FAIL**.
 
-So the warning is real but inert here. Recorded rather than dismissed, because
-the ctz case shows that reasoning about a warning without testing it is how the
-false positive survived in the first place.
+### Resolved: the warning names operator() but concerns the destructor
+
+Inspecting the GOTO program settles it. The lambda's `operator()` **is fully
+translated** -- it is in the program with a body:
+
+```
+operator() (...divi<#@BT@Fract>...operator()#I#1):
+    RETURN: n::0 > 0 && (n::0 & n::0 - 1) == 0
+    END_FUNCTION
+```
+
+That is exactly `is_power_of_two` from fx_bits.h:249. So the branch gate is
+modelled, and `is_power_of_two` is unambiguously **on the verification path** --
+`divi` cannot reach either branch without evaluating it.
+
+What has no body is the lambda's **destructor**, called at scope exit:
+
+```
+FUNCTION_CALL: ~(lambda at fx_bits.h:249:26)(&is_power_of_two)   // line 262
+DEAD ...divi<#@BT@Fract>...is_power_of_two
+```
+
+A captureless closure has a trivial destructor, so there is nothing to
+translate and nothing is lost. The warning text names `operator()#I#1` while the
+bodyless symbol is the destructor of that same closure type -- a reporting
+imprecision, not a modelling gap.
+
+This corrects my earlier phrasing. I had written that the warning was "real but
+inert", inferred from the behavioural tests passing. It is better than that: the
+function the warning names is modelled, and the one that is not modelled has no
+semantics to model. The behavioural tests were consistent with this all along --
+they passed because the gate genuinely works, not by luck.
 
 ### What the ctz gap actually invalidated
 
