@@ -13,6 +13,7 @@
 #include <irep2/irep2_utils.h>
 #include <solvers/smt/simplification_equivalence.h>
 #include <util/arith/arith_tools.h>
+#include <util/arith/ieee_float.h>
 #include <util/config/config.h>
 #include <util/config/options.h>
 #include <util/symtab/context.h>
@@ -92,6 +93,46 @@ SCENARIO(
       REQUIRE(
         check_simplification_equivalence(not2tc(b), b, ns, options) ==
         simplification_equivalencet::differs);
+    }
+  }
+
+
+  GIVEN("a floating-point rewrite")
+  {
+    const type2tc double_ty = migrate_type(double_type());
+    // fp.eq is not structural equality -- NaN != NaN under it, so a checker
+    // built on equality2t alone calls even the identity rewrite `differs` and
+    // aborts an enabled build on the first float it meets.
+    const expr2tc f = symbol2tc(double_ty, "f");
+    THEN("the identity rewrite is equivalent")
+    {
+      REQUIRE(
+        check_simplification_equivalence(f, f, ns, options) ==
+        simplification_equivalencet::equivalent);
+    }
+    THEN("if(c,f,f) -> f is equivalent")
+    {
+      const expr2tc c = symbol2tc(get_bool_type(), "c");
+      REQUIRE(
+        check_simplification_equivalence(
+          if2tc(double_ty, c, f, f), f, ns, options) ==
+        simplification_equivalencet::equivalent);
+    }
+    THEN("-0.0 -> +0.0 differs")
+    {
+      // fp.eq(+0.0, -0.0) holds, so only the sign check separates them. This
+      // is the class of float bug the simplifier guards against by hand.
+      ieee_floatt neg_zero(ieee_float_spect::double_precision());
+      neg_zero.from_double(0.0);
+      neg_zero.set_sign(true);
+      ieee_floatt pos_zero(ieee_float_spect::double_precision());
+      pos_zero.from_double(0.0);
+      REQUIRE(
+        check_simplification_equivalence(
+          constant_floatbv2tc(neg_zero),
+          constant_floatbv2tc(pos_zero),
+          ns,
+          options) == simplification_equivalencet::differs);
     }
   }
 

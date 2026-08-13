@@ -11,7 +11,12 @@
  *  Instead the driver installs a checker once it holds a namespace and
  *  options, and simplify() consults whatever is installed. Nothing is
  *  installed by default, so the hook is inert in a normal run even when the
- *  build enabled it. */
+ *  build enabled it.
+ *
+ *  Coverage is partial by construction, and a clean run should not be read as
+ *  "every rewrite proved": about ten sites call expr2t::simplify() directly
+ *  rather than through the free simplify() below, and simplify() itself
+ *  recurses internally, so only the outermost rewrite of each call is seen. */
 namespace simplification_check
 {
 /** Called for every rewrite the simplifier performs. Reporting a mismatch --

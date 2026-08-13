@@ -5,8 +5,11 @@ namespace
 simplification_check::checkert installed_checker;
 
 /** Guards against a checker that itself simplifies -- create_solver and
- *  convert_ast both do -- recursing back into verify_rewrite forever. */
-bool running = false;
+ *  convert_ast both do -- recursing back into verify_rewrite forever.
+ *  Thread-local: --parallel-solving simplifies on several threads, and one
+ *  shared flag would both race and let every other thread's rewrites through
+ *  unchecked while one thread held it. */
+thread_local bool running = false;
 } // namespace
 
 void simplification_check::install(checkert checker)
