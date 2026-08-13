@@ -1725,10 +1725,37 @@ FUNCTION_CALL: ~(lambda at fx_bits.h:249:26)(&is_power_of_two)   // line 262
 DEAD ...divi<#@BT@Fract>...is_power_of_two
 ```
 
-A captureless closure has a trivial destructor, so there is nothing to
-translate and nothing is lost. The warning text names `operator()#I#1` while the
-bodyless symbol is the destructor of that same closure type -- a reporting
-imprecision, not a modelling gap.
+**This is an ESBMC frontend bug, not a reporting artefact.** I called it
+"spurious" and that was wrong: the frontend emits a `FUNCTION_CALL` to a symbol
+it never defines. `symex_function.cpp:532` then takes the bodyless path, which
+assigns a **nondet value to the return** and (under
+`--unknown-method-args-check`) **invalidates pointer arguments**. Those are real
+state effects; a captureless destructor being semantically trivial does not make
+the missing body correct.
+
+What makes it harmless *here* is placement, established from the GOTO dump
+rather than assumed:
+
+| GOTO line | call | body? |
+|---|---|---|
+| 1358 | `operator()(&is_power_of_two, abs(d))` -- the gate | **yes** |
+| 1438, 1488, 1548, 1600, 1646, 1826 | `~(lambda ...)(&is_power_of_two)` | no |
+
+Every bodyless call is **after** the gate and after the value is computed, and
+the destructor returns void so the nondet-return assignment does not fire.
+Confirmed behaviourally: `divi(-3,-1)` at s0.15 is exactly `-32768`,
+deterministically, both with and without `--unknown-method-args-check`.
+
+So the verdict stands, but on the narrow grounds that the missing body cannot
+influence anything reached before it -- not because the call is unimportant. A
+bodyless call with a non-void return, or one placed before the value
+computation, would have corrupted the result silently. It should be filed
+against ESBMC.
+
+I could not reduce it to a standalone reproducer: a named lambda in an explicit
+scope, inside a template, and with `divi`'s early-return shape all translate
+their destructors correctly. The trigger needs something more specific in
+`divi`'s instantiation context, which is worth finding before filing.
 
 This corrects my earlier phrasing. I had written that the warning was "real but
 inert", inferred from the behavioural tests passing. It is better than that: the
