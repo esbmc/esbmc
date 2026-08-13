@@ -1,6 +1,9 @@
 #include <solvers/smt/simplification_equivalence.h>
 
 #include <cstdlib>
+#include <memory>
+#include <set>
+#include <string>
 #include <irep2/irep2_utils.h>
 #include <irep2/simplification_check.h>
 #include <solvers/smt/smt_conv.h>
@@ -77,11 +80,32 @@ optionst checker_options(const optionst &run_options)
 }
 } // namespace
 
-simplification_equivalencet check_simplification_equivalence(
+simplification_equivalence_checkert::simplification_equivalence_checkert(
+  const namespacet &_ns,
+  const optionst &_options)
+  : ns(_ns), options(checker_options(_options))
+{
+}
+
+simplification_equivalence_checkert::~simplification_equivalence_checkert() =
+  default;
+
+namespace
+{
+void collect_symbols(const expr2tc &e, std::set<expr2tc> &out)
+{
+  if (is_nil_expr(e))
+    return;
+  if (is_symbol2t(e))
+    out.insert(e);
+  e->foreach_operand([&out](const expr2tc &o) { collect_symbols(o, out); });
+}
+} // namespace
+
+simplification_equivalencet simplification_equivalence_checkert::check(
   const expr2tc &before,
   const expr2tc &after,
-  const namespacet &ns,
-  const optionst &options)
+  std::string *witness)
 {
   if (is_nil_expr(before) || is_nil_expr(after))
     return simplification_equivalencet::skipped;
@@ -96,11 +120,35 @@ simplification_equivalencet check_simplification_equivalence(
 
   try
   {
-    std::unique_ptr<smt_convt> ctx(
-      create_solver("", ns, checker_options(options)));
-    ctx->assert_expr(not2tc(preserves_value(before, after)));
+    if (!ctx)
+      ctx.reset(create_solver("", ns, options));
 
-    switch (ctx->dec_solve())
+    ctx->push_ctx();
+    ctx->assert_expr(not2tc(preserves_value(before, after)));
+    const smt_resultt result = ctx->dec_solve();
+
+    // The model is only readable while the frame that produced it is live.
+    if (result == P_SATISFIABLE && witness)
+    {
+      std::set<expr2tc> symbols;
+      collect_symbols(before, symbols);
+      collect_symbols(after, symbols);
+
+      witness->clear();
+      for (const expr2tc &sym : symbols)
+      {
+        const expr2tc value = ctx->get(sym);
+        if (is_nil_expr(value))
+          continue;
+        if (!witness->empty())
+          *witness += ", ";
+        *witness += fmt::format("{} = {}", *sym, *value);
+      }
+    }
+
+    ctx->pop_ctx();
+
+    switch (result)
     {
     case P_UNSATISFIABLE:
       return simplification_equivalencet::equivalent;
@@ -114,9 +162,20 @@ simplification_equivalencet check_simplification_equivalence(
   catch (...)
   {
     // Conversion rejects a shape by throwing; that is a decline, not a bug in
-    // the rewrite.
+    // the rewrite. The throw happened mid-frame, so the solver's state is no
+    // longer trustworthy -- drop it and let the next check build a fresh one.
+    ctx.reset();
     return simplification_equivalencet::skipped;
   }
+}
+
+simplification_equivalencet check_simplification_equivalence(
+  const expr2tc &before,
+  const expr2tc &after,
+  const namespacet &ns,
+  const optionst &options)
+{
+  return simplification_equivalence_checkert(ns, options).check(before, after);
 }
 
 void install_simplification_equivalence_check(
@@ -124,11 +183,14 @@ void install_simplification_equivalence_check(
   const optionst &options)
 {
 #ifdef ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK
-  // By value: namespacet is a thin handle on the context and optionst is a
-  // map, and the checker outlives whatever scope installed it.
+  // The checker owns the solver and is shared into the lambda, so it lives
+  // exactly as long as the installed callback.
+  auto checker = std::make_shared<simplification_equivalence_checkert>(
+    ns, options);
   simplification_check::install(
-    [ns, options](const expr2tc &before, const expr2tc &after) {
-      switch (check_simplification_equivalence(before, after, ns, options))
+    [checker](const expr2tc &before, const expr2tc &after) {
+      std::string witness;
+      switch (checker->check(before, after, &witness))
       {
       case simplification_equivalencet::equivalent:
         ++simplification_check_stats::proved;
@@ -144,9 +206,10 @@ void install_simplification_equivalence_check(
 
       log_error(
         "simplifier changed the meaning of an expression\n  before: {}\n  "
-        "after:  {}",
+        "after:  {}\n  where:  {}",
         *before,
-        *after);
+        *after,
+        witness.empty() ? "(no free symbols)" : witness);
       // Not abort(): it skips the stream flush, and this diagnostic is the
       // entire point of the run.
       exit(1);

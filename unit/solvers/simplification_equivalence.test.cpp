@@ -56,11 +56,16 @@ SCENARIO(
   {
     // x + 1 -> x differs at every x, so any model is a witness.
     const expr2tc before = add2tc(get_int32_type(), x, one);
-    THEN("it reports differs")
+    THEN("it reports differs, with a witness naming the free symbols")
     {
+      std::string witness;
+      simplification_equivalence_checkert checker(ns, options);
       REQUIRE(
-        check_simplification_equivalence(before, x, ns, options) ==
+        checker.check(before, x, &witness) ==
         simplification_equivalencet::differs);
+      // The abort message is only actionable if it says on what value the two
+      // disagree, so the model must actually come back.
+      REQUIRE(witness.find("x") != std::string::npos);
     }
   }
 
@@ -159,4 +164,39 @@ SCENARIO(
         simplification_equivalencet::skipped);
     }
   }
+}
+
+SCENARIO(
+  "one checker decides many rewrites in sequence",
+  "[solvers][simplifier]")
+{
+  // The installed checker reuses a single solver across every rewrite in the
+  // run -- a solver per rewrite leaks ~14 KB in create_solver. Reuse is only
+  // safe if a pushed frame leaves nothing behind that colours the next
+  // verdict, so drive alternating verdicts through one checker and require
+  // each to come out as it does in isolation.
+  config.ansi_c.set_data_model(configt::LP64);
+  contextt ctx;
+  namespacet ns(ctx);
+  optionst options;
+
+  const expr2tc x = int_symbol("x");
+  const expr2tc zero = gen_zero(get_int32_type());
+  const expr2tc one = from_integer(1, get_int32_type());
+  const expr2tc same = add2tc(get_int32_type(), x, zero);
+  const expr2tc changed = add2tc(get_int32_type(), x, one);
+
+  simplification_equivalence_checkert checker(ns, options);
+  for (int i = 0; i < 8; ++i)
+  {
+    REQUIRE(
+      checker.check(same, x) == simplification_equivalencet::equivalent);
+    REQUIRE(
+      checker.check(changed, x) == simplification_equivalencet::differs);
+  }
+
+  // A declined shape resets the solver; the checker must keep working after.
+  REQUIRE(
+    checker.check(expr2tc(), x) == simplification_equivalencet::skipped);
+  REQUIRE(checker.check(same, x) == simplification_equivalencet::equivalent);
 }
