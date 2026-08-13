@@ -5482,8 +5482,23 @@ probe to `is_symbol2t` fires 57 times on a single test, so the instrumentation
 is live. A side effect never reaches the value set with a suffix, which is what
 the arm's own comment says: SSA assignments have their side effects removed
 before this code sees them. The obligation is discharged as **T1 for that
-assertion** and remains open for every other assertion in the file, which only
-the CI Debug leg will exercise.
+assertion**.
+
+That left the other twenty-two assertions in the file, and the argument for
+ignoring them was weaker than it looked: an assertion depending only on the
+expression was already reachable with the same expression before this change,
+but a new suffix does not stop at the symbol arm — it flows into
+`get_constant_value_set`, which recurses into members with what remains of it.
+So the whole file was re-armed rather than reasoned about. With `NDEBUG` on,
+`assert` expands to nothing; redefining it *after all includes* as a
+non-aborting `fprintf` re-arms every one of the 23 without touching a header,
+which is what makes this safe where a `-UNDEBUG` rebuild is not — that one
+changes inline bodies shared across translation units and corrupts the heap by
+ODR. **No assertion in `value_set.cpp` is violated** across the 26
+`mpor_aggregate` shapes, 500 core `esbmc/`, 300 `esbmc-unix` and 300
+`esbmc-cpp/cpp` tests. The binary was checked to contain the probe's format
+string and the stringified conditions first, so the zero is a measurement rather
+than a macro that failed to expand.
 
 **A residual neither R31 nor R32 closes: the inverse lives away from its
 forward.** Both reviews raised this independently, and it is the most useful
