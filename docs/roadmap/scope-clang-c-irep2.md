@@ -2103,3 +2103,65 @@ the boolean arms at their dispatch point (§58).
 Next, in order: (a) resolve `github_2220` so the baseline is zero (§60.5), then
 (b) the coupled component as one step (§60.3), with (c) the three separable arms
 of §60.4 available in parallel to anyone who wants a smaller piece.
+
+## 62. `github_2220` diagnosed: array bounds live in types
+
+§60.5 wanted the A/B baseline at zero before the coupled component moves, and
+named `esbmc-unix/github_2220` as the one thing in the way. It is not a quirk of
+that program, and it does not have a small fix.
+
+### 62.1 The reproducer
+
+Eight lines, reduced from a 90-line test:
+
+```c
+struct dirent { char d_name[256]; };
+unsigned long strlen(const char *);
+void g(struct dirent *entry)
+{
+  char buf[strlen(entry->d_name) + 2];
+  buf[0] = 0;
+}
+```
+
+Flag-off prints `strlen(&entry->d_name[0])`. Flag-on prints a raw irep dump: a
+`member` whose base is still a pointer, which `c_expr2string` cannot render.
+
+### 62.2 The cause
+
+`char buf[...]` is a VLA, so its bound is an expression carried in a **type**.
+`clang_c_adjust::adjust_type` walks exactly that -- `/* adjust the size
+expression for VLAs */`, calling `adjust_expr` on the size. The IREP2 pass walks
+`get_value2()` and nothing else. So once `irep2_owns_arms` hands an arm over,
+nothing rewrites a member or index inside an array bound.
+
+Latent since the index arm (#6907) and equally true of `adjust_member` (#6921).
+It surfaced as one test only because a VLA whose bound subscripts a struct
+member is rare.
+
+### 62.3 Two fixes that do not work, and why the second matters
+
+- **Walking the symbol's type.** Correct, and insufficient. Instrumentation
+  confirms the member arm fires exactly once, on `buf`'s symbol type, and the
+  output does not change: the function body's `code_decl2t` carries its own copy
+  of the array type.
+- **Walking each expression node's type.** Not expressible. `expr2t::type` is
+  **`const`** (`irep2.h:909`) -- an IREP2 node's type is immutable by design, so
+  a type-adjusting walk must *rebuild* every node whose type changed, kind by
+  kind, rather than assign through it.
+
+That second point is the finding. There is no generic "same node, new type"
+operation in IREP2, so mirroring `adjust_type` is not a patch to the shadow pass
+-- it is a structural piece of a walk that constructs nodes anyway.
+
+### 62.4 Consequence for §60.5
+
+The zero-baseline precondition is withdrawn as a *precondition*. It cannot be
+met cheaply, and it does not need to be: shape 2 rebuilds nodes natively, so the
+type descent comes free with it. The baseline is 1 until the component moves,
+and that 1 is now explained rather than outstanding -- which is what §60.5
+actually needed.
+
+`regression/esbmc/github_2220_vla_bound` pins it as KNOWNBUG. Its regex matches
+flag-off output and not flag-on, so it fails for this defect and will XPASS the
+moment the defect goes -- checked both ways rather than assumed.
