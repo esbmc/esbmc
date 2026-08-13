@@ -2240,3 +2240,51 @@ Next: the 17 live arms of §63, ported behind a `--clang-c-irep2-adjust-only`
 mode mirroring `--python-irep2-adjust-only`, with the divergence count against
 flag-off as the progress metric and the flip when it reaches the §62 baseline of
 1. Write tests for the §63.2 tail first.
+
+## 65. §63.2 is wrong: few tests is not the same as undetectable
+
+§63.2 said the thin tail -- `adjust_builtin_va_arg` at 9 tests and
+`adjust_expr_unary_complex` at 4 -- would need tests written before porting,
+because §39.1's first row makes an unmoved mutant near-certain at that coverage.
+That inference does not hold, and the way to find out was to run the mutant
+rather than reason about the count.
+
+### 65.1 The measurement
+
+Two valid alternatives, both compiled and swept against the flag-off baseline:
+
+| mutant | tests moved | arm fires in |
+|---|---:|---:|
+| A -- `adjust_expr_unary_complex` never negates the real part, so `-z` becomes `~z` | 3 | 4 |
+| B -- `adjust_builtin_va_arg` lowers to a differently-named intrinsic | 8 | 9 |
+
+A moved `complex_23`, `complex_25`, `complex_26`; B moved the `va_start` /
+`va_copy` / `vasprintf` tests and three printf-family ones. Both arms are
+mutation-detectable by the corpus as it stands, so **no new tests are needed
+before porting either**.
+
+`complex_24` did *not* move under A, and should not have: it uses only `~z`,
+which is the branch A leaves alone. A measurement that moved everything would be
+the suspicious one.
+
+### 65.2 What the reasoning got wrong
+
+§39.1's row is "the corpus is thin" -- an arm the corpus does not *exercise*.
+§63.2 read it as a statement about test *count*. Those differ: a mutant needs to
+move one dump, and four tests that genuinely execute the arm supply that as
+surely as four hundred. Coverage breadth matters for finding defects the mutant
+was not designed to model; it is not the threshold for whether the gate has
+teeth.
+
+The operative test is therefore not "how many tests touch this arm" but "does a
+valid-alternative mutant move the dump" -- which is one build and one sweep, and
+answers the question instead of estimating it. `adjust_base_to_derived` and
+`adjust_ptr_mem` remain genuinely undetectable here (§63.1) because they fire
+zero times; that is the real form of the concern and the census already found it.
+
+### 65.3 Consequence
+
+§63.2's precondition is withdrawn. §60.4's downgrade of
+`adjust_expr_unary_complex` is also withdrawn: at 22 calls in 4 tests, with a
+mutant that moves 3 of them, it is exactly the small separable arm §60.4
+originally called it.
