@@ -15,6 +15,38 @@ you're planning to verify your code with only ESBMC.
 
 SV-COMP Document: https://sv-comp.sosy-lab.org/2025/rules.php {{< /callout >}}
 
+## The `esbmc.h` Header
+
+ESBMC installs an `esbmc.h` header alongside the binary. Including it gives the
+intrinsics unprefixed names, which is the supported surface for hand-written
+harnesses and stubs:
+
+| Macro                       | Expands to                  |
+| --------------------------- | --------------------------- |
+| `ESBMC_assume(cond)`        | `__ESBMC_assume`            |
+| `ESBMC_assert(cond, msg)`   | `__ESBMC_assert`            |
+| `ESBMC_alloca(size)`        | `__ESBMC_alloca`            |
+| `ESBMC_same_object(p, q)`   | `__ESBMC_same_object`       |
+| `ESBMC_unreachable()`       | `__ESBMC_unreachable`       |
+| `ESBMC_unroll(n)`           | `__ESBMC_unroll`            |
+| `ESBMC_atomic_begin()` / `ESBMC_atomic_end()` | `__ESBMC_atomic_begin` / `__ESBMC_atomic_end` |
+| `ESBMC_yield()`             | `__ESBMC_yield`             |
+
+Every ESBMC run defines `__ESBMC_execution`, and the header refuses to compile
+without it — so a harness that includes `esbmc.h` is a hard error under any
+ordinary compiler instead of silently building with the intrinsics undefined.
+
+```c
+#include <esbmc.h>
+
+int main() {
+    unsigned int x = nondet_uint();
+    ESBMC_assume(x < 5);
+    ESBMC_assert(x < 10, "X needs to be less than 10.");
+    return 0;
+}
+```
+
 ## Non-Deterministic Functions
 
 `nondet_X()` where `X` is a primitive C data type. This will mark the variable
