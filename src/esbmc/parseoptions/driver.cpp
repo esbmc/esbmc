@@ -109,6 +109,24 @@ extern "C"
 //    - Perform a single run of Bounded Model Checking and rely
 //      on the simplifier to determine the sufficient verification bound
 //      (see "do_bmc")
+int esbmc_parseoptionst::run_chosen_strategy(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  if (cmdline.isset("incremental-context-bound"))
+    return do_context_bound_deepening(options, goto_functions);
+
+  if (
+    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
+    cmdline.isset("loop-invariant"))
+    return do_bmc_strategy(options, goto_functions);
+
+  // No strategy chosen: rely on the simplifier and the flags set through CMD.
+  bmct bmc(goto_functions, options, context);
+  return do_bmc(bmc);
+}
+
 int esbmc_parseoptionst::doit()
 {
   // Configure msg output
@@ -408,22 +426,13 @@ int esbmc_parseoptionst::doit()
   if (options.get_bool_option("skip-bmc"))
     return 0;
 
-  // Now run one of the chosen strategies
-  int res;
-  if (cmdline.isset("incremental-context-bound"))
-    res = do_context_bound_deepening(options, goto_functions);
-  else if (
-    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
-    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
-    cmdline.isset("loop-invariant"))
-    res = do_bmc_strategy(options, goto_functions);
-  else
-  {
-    // If no strategy is chosen, just rely on the simplifier
-    // and the flags set through CMD
-    bmct bmc(goto_functions, options, context);
-    res = do_bmc(bmc);
-  }
+  // A violation found under a bounded schedule space is genuine whichever
+  // strategy owns the run, so this precedes the dispatch rather than joins it.
+  const int prepass = falsify_with_bounded_schedules(options, goto_functions);
+  if (prepass >= 0)
+    return prepass;
+
+  const int res = run_chosen_strategy(options, goto_functions);
 
   // Dead-code analysis is advisory: its probes are SAT for every live branch,
   // which do_bmc maps to a non-zero (FAILED) exit code. The findings are

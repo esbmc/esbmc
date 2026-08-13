@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <key id="frontier" attr.name="isFrontierNode" attr.type="boolean" for="node">
+    <default>false</default>
+  </key>
+  <key id="cwe" attr.name="cwe" attr.type="string" for="node"/>
+  <key id="violation" attr.name="isViolationNode" attr.type="boolean" for="node">
+    <default>false</default>
+  </key>
+  <key id="entry" attr.name="isEntryNode" attr.type="boolean" for="node">
+    <default>false</default>
+  </key>
+  <key id="sink" attr.name="isSinkNode" attr.type="boolean" for="node">
+    <default>false</default>
+  </key>
+  <key id="cyclehead" attr.name="cyclehead" attr.type="boolean" for="node">
+    <default>false</default>
+  </key>
+  <key id="sourcecodelang" attr.name="sourcecodeLanguage" attr.type="string" for="graph"/>
+  <key id="programfile" attr.name="programfile" attr.type="string" for="graph"/>
+  <key id="programhash" attr.name="programhash" attr.type="string" for="graph"/>
+  <key id="creationtime" attr.name="creationtime" attr.type="string" for="graph"/>
+  <key id="specification" attr.name="specification" attr.type="string" for="graph"/>
+  <key id="architecture" attr.name="architecture" attr.type="string" for="graph"/>
+  <key id="producer" attr.name="producer" attr.type="string" for="graph"/>
+  <key id="sourcecode" attr.name="sourcecode" attr.type="string" for="edge"/>
+  <key id="startline" attr.name="startline" attr.type="int" for="edge"/>
+  <key id="startoffset" attr.name="startoffset" attr.type="int" for="edge"/>
+  <key id="control" attr.name="control" attr.type="string" for="edge"/>
+  <key id="invariant" attr.name="invariant" attr.type="string" for="node"/>
+  <key id="invariant.scope" attr.name="invariant.scope" attr.type="string" for="node"/>
+  <key id="assumption" attr.name="assumption" attr.type="string" for="edge"/>
+  <key id="assumption.scope" attr.name="assumption" attr.type="string" for="edge"/>
+  <key id="assumption.resultfunction" attr.name="assumption.resultfunction" attr.type="string" for="edge"/>
+  <key id="enterFunction" attr.name="enterFunction" attr.type="string" for="edge"/>
+  <key id="returnFromFunction" attr.name="returnFromFunction" attr.type="string" for="edge"/>
+  <key id="endline" attr.name="endline" attr.type="int" for="edge"/>
+  <key id="endoffset" attr.name="endoffset" attr.type="int" for="edge"/>
+  <key id="threadId" attr.name="threadId" attr.type="string" for="edge"/>
+  <key id="createThread" attr.name="createThread" attr.type="string" for="edge"/>
+  <key id="witness-type" attr.name="witness-type" attr.type="string" for="graph"/>
+  <graph edgedefault="directed">
+    <data key="producer">ESBMC 8.4.0</data>
+    <data key="sourcecodelang">C</data>
+    <data key="architecture">64bit</data>
+    <data key="programfile">/Users/user/esbmc/regression/csmith/csmith01/main.c</data>
+    <data key="programhash">945f7a0767b461f01f14d3264a9e796f54ad5d04951a02147199056de081a042</data>
+    <data key="specification">CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )</data>
+    <data key="creationtime">2026-08-11T20:53:01+01:00</data>
+    <data key="witness-type">correctness_witness</data>
+    <node id="N0">
+      <data key="entry">true</data>
+    </node>
+    <node id="N1"/>
+    <edge id="E0" source="N0" target="N1">
+      <data key="enterFunction">main</data>
+      <data key="createThread">0</data>
+    </edge>
+  </graph>
+</graphml>

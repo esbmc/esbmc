@@ -2,6 +2,7 @@
 #include <goto-symex/goto_symex.h>
 #include <string>
 #include <util/arith/arith_tools.h>
+#include <util/lang/c_builtins.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
@@ -35,6 +36,61 @@ ends_with(std::string const &value, std::string const &ending)
   if (ending.size() > value.size())
     return false;
   return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
+}
+
+/// Value of a __builtin_clz*/ctz*/ffs* call. One encoding covers every
+/// spelling: the operand type fixes the bit width, and the directions differ
+/// only in which way the smear shifts. Zero is undefined for every form but the
+/// two-argument clzg/ctzg and ffs; the optional UB assertion is added in
+/// goto-check (--clz-zero-check), with the other UB checks. See #4606, #6925,
+/// #183.
+static expr2tc
+build_bit_scan(const code_function_call2t &func_call, bit_scan_endt end)
+{
+  const expr2tc &arg = func_call.operands[0];
+  const type2tc &t = arg->type;
+  const unsigned width = t->get_width();
+  const bool leading = end == bit_scan_endt::leading;
+
+  // clz(x) = width - popcount(x with every bit below the most-significant set
+  // bit smeared down); ctz mirrors it, smearing up from the least-significant
+  // set bit. Reusing the popcount irep means a constant argument folds to a
+  // constant (popcount has a simplifier), while a symbolic argument is handled
+  // exactly by the backend's popcount encoding.
+  expr2tc smeared = arg;
+  for (unsigned shift = 1; shift < width; shift <<= 1)
+  {
+    expr2tc offset = constant_int2tc(t, shift);
+    smeared = bitor2tc(
+      t,
+      smeared,
+      leading ? lshr2tc(t, smeared, offset) : shl2tc(t, smeared, offset));
+  }
+
+  expr2tc count = sub2tc(
+    get_int32_type(),
+    constant_int2tc(get_int32_type(), width),
+    popcount2tc(smeared));
+
+  // ffs counts the same trailing zeros but reports a one-based index, and is
+  // defined at zero as 0 rather than left undefined there (POSIX).
+  if (end == bit_scan_endt::first_set)
+    count = if2tc(
+      get_int32_type(),
+      equality2tc(arg, gen_zero(t)),
+      gen_zero(get_int32_type()),
+      add2tc(
+        get_int32_type(), count, constant_int2tc(get_int32_type(), BigInt(1))));
+
+  // The second argument of clzg/ctzg is the result at zero.
+  if (func_call.operands.size() == 2)
+    count = if2tc(
+      get_int32_type(),
+      equality2tc(arg, gen_zero(t)),
+      typecast2tc(get_int32_type(), func_call.operands[1]),
+      count);
+
+  return count;
 }
 
 bool goto_symext::run_builtin(
@@ -104,106 +160,17 @@ bool goto_symext::run_builtin(
     return true;
   }
 
-  // __builtin_clz / __builtin_clzl / __builtin_clzll: count leading zero bits.
-  // One handler covers all widths — the operand type fixes the bit width. clz of
-  // zero is undefined; the optional UB assertion is added in goto-check
-  // (--clz-zero-check), with the other UB checks. Match the three names exactly:
-  // a loose "__builtin_clz" prefix would also capture the two-argument
-  // __builtin_clzg, tripping the one-argument assertion. See #4606.
-  /* __builtin_clzg is the width-generic form: clzg(x) counts leading zeros
-   * over the operand's own width, and clzg(x, fallback) returns `fallback`
-   * for a zero operand instead of being undefined. Unmodelled it was left as
-   * an undefined function returning nondet, so anything built on it -- e.g.
-   * LLVM libc's cpp::countl_zero, which prefers this spelling -- silently
-   * computed garbage (esbmc/esbmc#6925). */
-  if (
-    symname == "c:@F@__builtin_clz" || symname == "c:@F@__builtin_clzl" ||
-    symname == "c:@F@__builtin_clzll" || symname == "c:@F@__builtin_clzg" ||
-    symname == "c:@F@__builtin_clzs")
+  if (const bit_scan_endt end = bit_scan_builtin(symname);
+      end != bit_scan_endt::none)
   {
-    const bool is_generic = symname == "c:@F@__builtin_clzg";
     assert(
-      (is_generic ? func_call.operands.size() <= 2
-                  : func_call.operands.size() == 1) &&
-      "__builtin_clz* argument count");
+      !func_call.operands.empty() && func_call.operands.size() <= 2 &&
+      "__builtin_clz*/__builtin_ctz* take one or two arguments");
 
-    expr2tc arg = func_call.operands[0];
-    expr2tc ret = func_call.ret;
-
-    const type2tc &t = arg->type;
-    const unsigned width = t->get_width();
-
-    // clz(x) = width - popcount(x with every bit below the most-significant set
-    // bit smeared down). Reusing the popcount irep means a constant argument
-    // folds to a constant (popcount has a simplifier), while a symbolic argument
-    // is handled exactly by the backend's popcount encoding.
-    expr2tc smeared = arg;
-    for (unsigned shift = 1; shift < width; shift <<= 1)
-      smeared =
-        bitor2tc(t, smeared, lshr2tc(t, smeared, constant_int2tc(t, shift)));
-
-    expr2tc count = sub2tc(
-      get_int32_type(),
-      constant_int2tc(get_int32_type(), width),
-      popcount2tc(smeared));
-
-    /* The generic form's second argument is the value for a zero operand,
-     * which is what makes it defined there (unlike __builtin_clz). */
-    if (is_generic && func_call.operands.size() == 2)
-      count = if2tc(
-        get_int32_type(),
-        equality2tc(arg, gen_zero(arg->type)),
-        typecast2tc(get_int32_type(), func_call.operands[1]),
-        count);
-
+    const expr2tc &ret = func_call.ret;
     if (!is_nil_expr(ret))
-      symex_assign(code_assign2tc(ret, typecast2tc(ret->type, count)));
-
-    return true;
-  }
-
-  /* __builtin_ctz family: count TRAILING zero bits -- the mirror of clz above,
-   * smearing set bits upward rather than down. Unmodelled these returned
-   * nondet, so LLVM libc's cpp::countr_zero (which compiles to __builtin_ctzg)
-   * produced an unconstrained result and ESBMC reported a spurious shift-count
-   * violation on any code using it -- e.g. fixed_point::divi's `scaled_n >> k`,
-   * where the real k is bounded by the operand width. Same defect class as
-   * #6925 for clzg.
-   */
-  if (
-    symname == "c:@F@__builtin_ctz" || symname == "c:@F@__builtin_ctzl" ||
-    symname == "c:@F@__builtin_ctzll" || symname == "c:@F@__builtin_ctzg" ||
-    symname == "c:@F@__builtin_ctzs")
-  {
-    const bool is_generic = symname == "c:@F@__builtin_ctzg";
-    assert(
-      (is_generic ? func_call.operands.size() <= 2
-                  : func_call.operands.size() == 1) &&
-      "__builtin_ctz* argument count");
-
-    expr2tc arg = func_call.operands[0];
-    expr2tc ret = func_call.ret;
-
-    const type2tc &t = arg->type;
-
-    // ctz(x) = popcount(~x & (x - 1)) -- the mask isolates exactly the trailing
-    // zeros of x. Reusing popcount keeps constant arguments foldable and hands
-    // symbolic ones to the backend's exact popcount encoding, as clz does.
-    expr2tc below = sub2tc(t, arg, gen_one(t));
-    expr2tc trailing = bitand2tc(t, bitnot2tc(t, arg), below);
-    expr2tc count = popcount2tc(trailing);
-
-    /* The generic form's second argument is the value for a zero operand,
-     * which is what makes it defined there (unlike __builtin_ctz). */
-    if (is_generic && func_call.operands.size() == 2)
-      count = if2tc(
-        get_int32_type(),
-        equality2tc(arg, gen_zero(arg->type)),
-        typecast2tc(get_int32_type(), func_call.operands[1]),
-        count);
-
-    if (!is_nil_expr(ret))
-      symex_assign(code_assign2tc(ret, typecast2tc(ret->type, count)));
+      symex_assign(code_assign2tc(
+        ret, typecast2tc(ret->type, build_bit_scan(func_call, end))));
 
     return true;
   }

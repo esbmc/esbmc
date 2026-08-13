@@ -45,6 +45,12 @@ void goto_symext::intrinsic_switch_from(reachability_treet &art)
   // Mark switching back to this thread as already having been explored
   art.mark_active_thread_explored();
 
+  // Unlike create_next_state's marking, this suppresses a successor without
+  // exploring it, so the frame is not exhausted and nothing may sleep against
+  // it (issue #6831). Reached independently of --direct-interleavings, which is
+  // why the sleep-set force-off there does not cover this.
+  art.mark_search_truncated();
+
   // And force a context switch.
   art.get_cur_state().force_cswitch();
 }

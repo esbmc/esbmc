@@ -2,6 +2,7 @@
 #define REACHABILITY_TREE_H_
 
 #include <deque>
+#include <map>
 #include <goto-programs/goto_program.h>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
@@ -286,26 +287,114 @@ public:
    *  rather than exhausted (issue #6480). */
   bool cs_bound_pruned;
 
+  /** Why the schedule space shrank. Without these, the contribution of each
+   *  reduction can only be obtained by toggling its flag and re-running the
+   *  whole verification, which does not scale to a benchmark set (issue #6831,
+   *  cause 1). */
+  struct reduction_statst
+  {
+    /** Largest thread count any explored state reached, main included. Also
+     *  what decides whether the run is worth reporting on at all. */
+    unsigned long peak_threads = 1;
+    /** Formulas handed to the caller. One per schedule under the default DFS;
+     *  --schedule folds every interleaving into one, so it reports 1.
+     *
+     *  Not all of them ran to the end of a schedule: an MPOR or hash prune cuts
+     *  the prefix and get_next_formula still returns a formula for it, so under
+     *  DFS the complete schedules are
+     *  `schedules_explored - pruned_by_mpor - pruned_by_hash`. Comparing this
+     *  figure across configurations without that subtraction reads a reduction
+     *  that is working as one that made the search bigger (issue #6831 W1.4).
+     */
+    unsigned long schedules_explored = 0;
+    /** These three prune counters share a unit: context-switch points at which
+     *  that reduction stopped the search from branching further. */
+    unsigned long pruned_by_mpor = 0;
+    unsigned long pruned_by_hash = 0;
+    /** Switch targets a sleep set removed. Not the same unit as the others:
+     *  each node decides its next thread twice (get_next_formula and again
+     *  via step_next_state on backtracking), so one skip can count twice.
+     *  Read it as "did sleep sets fire, and roughly how hard", not as a count
+     *  of nodes. */
+    unsigned long pruned_by_sleep = 0;
+    /** Only counts points where a switch was still available, i.e. where the
+     *  bound truncated rather than the program simply terminating. */
+    unsigned long pruned_by_cs_bound = 0;
+
+    bool is_concurrent() const
+    {
+      return peak_threads > 1;
+    }
+  };
+  reduction_statst reduction_stats;
+
+  /** Log the reduction counters. Silent on a single-threaded run, which has
+   *  no schedule space to report on. */
+  void report_reduction_stats() const;
+
+  /**
+   *  Record that the subtree below the frame being explored was cut short --
+   *  by the context bound, by MPOR, by a state-hash collision, by an unwind
+   *  bound truncating a loop, or by __ESBMC_switch_away_from -- rather than
+   *  exhausted. Sleep sets are sound only over an exhausted subtree:
+   *  skipping thread t at a node claims an already-explored schedule covers
+   *  the interleaving, which a truncated search may never have produced. The
+   *  two orders also differ in cost, so under --context-bound the covering
+   *  schedule can need one context switch more than the budget allows.
+   *
+   *  Two cuts are knowingly excluded, both because marking them makes the
+   *  reduction inert rather than merely weaker; see get_next_formula for why
+   *  an unviable interleaving still loses no coverage, and note that the
+   *  argument is about the active thread's guard, not the whole state's.
+   *  check_if_ileaves_blocked's main-thread-ended rule is excluded because it
+   *  fires on a property of the state rather than of the search order (#4584),
+   *  so it cuts every branch alike: past that node no switch is honoured, each
+   *  surviving thread runs as one transition, and a recorded footprint covers
+   *  that thread's whole remaining access set -- coarse enough that a
+   *  conflicting thread wakes.
+   */
+  void mark_search_truncated();
+
 protected:
   struct scheduler_framet
   {
     std::vector<bool> explored_threads;
+    /** Sleep set (--sleep-sets): threads whose exploration from this node would
+     *  revisit an equivalent interleaving, each mapped to the footprint of the
+     *  transition it took when it was put to sleep -- which is the transition
+     *  it would take from here, for as long as it stays asleep. Empty unless
+     *  the flag is on. */
+    std::map<unsigned int, execution_statet::transition_footprintt> sleeping;
 
     void ensure_thread_count(unsigned int count);
     void reset(unsigned int count);
     void mark_all_explored(unsigned int count);
     bool is_explored(unsigned int tid) const;
     void mark_explored(unsigned int tid);
+    bool is_sleeping(unsigned int tid) const;
   };
 
   struct exploration_framet
   {
     std::shared_ptr<execution_statet> state;
     scheduler_framet scheduler;
+    /** Thread whose switch created this frame; on backtracking it goes into
+     *  the parent's sleep set. UINT_MAX for the root. */
+    unsigned int entered_via = UINT_MAX;
+    /** Whether everything below this frame was actually explored. Cleared by
+     *  any reduction that cut the subtree short, and propagated to the parent
+     *  on backtracking. A sleep set may only record a thread whose subtree was
+     *  exhausted -- see mark_search_truncated. */
+    bool exhaustive = true;
   };
 
   scheduler_framet &get_cur_scheduler_frame();
   const scheduler_framet &get_cur_scheduler_frame() const;
+
+  /** Wake any sleeping thread the transition just taken is dependent on.
+   *  A no-op unless --sleep-sets is set. */
+  void wake_dependent_sleepers();
+
   bool dfs_explore_thread(unsigned int tid);
   void erase_current_frame();
 
@@ -349,6 +438,8 @@ protected:
   unsigned int next_thread_id;
   /** Whether partial-order-reduction is enabled */
   bool por;
+  /** Whether sleep sets prune the search (--sleep-sets). */
+  bool sleep_sets;
   /** State hashes discovered, mapped to the smallest context-switch count at
    *  which each was seen. A collision prunes only when the recorded cswitch is
    *  no greater than the current state's; pruning a state with more remaining

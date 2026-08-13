@@ -1,4 +1,5 @@
 #include <goto-programs/goto_k_induction.h>
+#include <algorithm>
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/loopst.h>
 #include <goto-programs/remove_no_op.h>
@@ -179,9 +180,24 @@ void make_nondet_assign(
   // Get the list of variables modified inside the loop
   auto const &loop_vars = loop.get_modified_loop_vars();
 
+  // loop_varst is an unordered_set hashed by irep2_hash, which folds in
+  // irep_idt::hash() -- the string's interning sequence number, not its text.
+  // Iteration order therefore depends on what else has been interned earlier in
+  // the run, so an unrelated pass that interns a string permutes these havocs
+  // (docs/roadmap/scope-clang-c-irep2.md §13). Order by printed form, which is
+  // stable across runs; the assignments are mutually independent, so only the
+  // order changes.
+  std::vector<expr2tc> ordered_vars(loop_vars.begin(), loop_vars.end());
+  std::sort(
+    ordered_vars.begin(),
+    ordered_vars.end(),
+    [](const expr2tc &a, const expr2tc &b) {
+      return a->pretty() < b->pretty();
+    });
+
   goto_programt dest;
   size_t inserted = 0;
-  for (auto const &lhs : loop_vars)
+  for (auto const &lhs : ordered_vars)
   {
     // Generate a nondeterministic value for the loop variable
     expr2tc rhs = gen_nondet(lhs->type);

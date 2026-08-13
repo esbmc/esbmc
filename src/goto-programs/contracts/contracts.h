@@ -68,6 +68,7 @@ public:
     irep_idt
       temp_var_name; ///< Temporary variable name (e.g., return_value$___ESBMC_is_fresh$1)
     expr2tc ptr_expr; ///< Pointer expression (dereferenced from &ptr)
+    expr2tc size_expr; ///< Extent the contract asked for, in bytes; may be nil
   };
 
   code_contractst(
@@ -113,6 +114,13 @@ public:
   /// \param func_sym Function symbol to check
   /// \return True if function has the contract annotation
   bool is_annotated_contract_function(const symbolt &func_sym) const;
+
+  /// \brief Name of the first non-intrinsic call a clause in \p body depends
+  ///   on, empty when there is none.
+  std::string clause_call_callee(const goto_programt &body) const;
+
+  /// \brief Diagnostic for such a call, empty when there is none.
+  std::string clause_call_reason(const goto_programt &body) const;
 
   /// \brief Per-field snapshot for pointer-struct-field assigns compliance.
   /// Captures the pre-call value of a field NOT in the assigns clause so that

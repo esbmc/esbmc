@@ -1,5 +1,6 @@
 #include <goto-programs/goto_check.h>
 #include <cctype>
+#include <util/lang/c_builtins.h>
 #include <util/lang/c_expr2string.h>
 #include <langapi/language_util.h>
 #include <util/arith/arith_tools.h>
@@ -1291,13 +1292,12 @@ void goto_checkt::clz_zero_check(const expr2tc &code, const locationt &loc)
   if (!is_symbol2t(call.function))
     return;
 
-  // __builtin_clz/clzl/clzll(0) is undefined behaviour (GCC); assert the
-  // argument is non-zero. Matched exactly so the two-argument __builtin_clzg is
-  // not caught.
+  // A zero argument is undefined for __builtin_clz*/ctz* (GCC); assert it is
+  // non-zero. The two-argument clzg/ctzg name their own result at zero, so the
+  // arity test below leaves them alone, and ffs is defined there outright.
   const std::string name = to_symbol2t(call.function).thename.as_string();
-  if (
-    name != "c:@F@__builtin_clz" && name != "c:@F@__builtin_clzl" &&
-    name != "c:@F@__builtin_clzll")
+  const bit_scan_endt kind = bit_scan_builtin(name);
+  if (kind == bit_scan_endt::none || kind == bit_scan_endt::first_set)
     return;
 
   if (call.operands.size() != 1)
@@ -1308,7 +1308,7 @@ void goto_checkt::clz_zero_check(const expr2tc &code, const locationt &loc)
   guard2tc guard;
   add_guarded_claim(
     nonzero,
-    "__builtin_clz of zero is undefined",
+    "__builtin_clz/ctz of zero is undefined",
     "undef-behavior",
     loc,
     guard);

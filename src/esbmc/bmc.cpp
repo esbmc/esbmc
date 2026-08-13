@@ -1784,7 +1784,10 @@ smt_resultt bmct::start_bmc()
   }
 
   if (symex)
+  {
     cs_bound_pruned = symex->cs_bound_pruned;
+    symex->report_reduction_stats();
+  }
 
   return res;
 }

@@ -414,6 +414,9 @@ void clang_c_adjust::adjust_member(member_exprt &expr)
 {
   adjust_operands(expr);
 
+  if (irep2_owns_arms)
+    return;
+
   exprt &base = expr.struct_op();
   if (base.type().is_pointer())
   {
@@ -690,6 +693,12 @@ void clang_c_adjust::adjust_expr_unary_complex(exprt &expr)
 void clang_c_adjust::adjust_index(index_exprt &index)
 {
   adjust_operands(index);
+
+  // The recursion above stays here whatever happens; only the rewrite below
+  // moves (scope-clang-c-irep2.md §19.2), so gating the whole arm would skip
+  // the subtree rather than hand over one transformation.
+  if (irep2_owns_arms)
+    return;
 
   exprt &array_expr = index.op0();
   exprt &index_expr = index.op1();
@@ -1284,6 +1293,61 @@ static inline bool is_abs_builtin_name(const irep_idt &identifier)
          compare_unscore_builtin(identifier, "fabs");
 }
 
+/// The `abs` node lowers to `(x >= 0) ? x : -x`, which is ill-typed for
+/// anything else -- std::abs(complex) is why <complex> ships without it.
+///
+/// Fixed-point arguments are excluded too, for a different reason: that
+/// lowering overflows at a format's minimum, which is exactly where TR 18037's
+/// absfx saturates instead. Such a call is left alone so the fixed-point
+/// semantics survive.
+bool clang_c_adjust::has_single_arithmetic_argument(
+  const side_effect_expr_function_callt &expr) const
+{
+  return expr.arguments().size() == 1 &&
+         is_number(expr.arguments()[0].type()) &&
+         !ns.follow(expr.arguments()[0].type()).is_fixedbv();
+}
+
+/// The lowerings in do_special_functions match a callee's base name, so a
+/// program that defines one of these names itself would have its body discarded
+/// and the builtin verified in its place (#6904). These are all spellings a
+/// program is free to reuse -- `mylib::abs`, `mylib::isinf` -- unlike the
+/// `__builtin_`-prefixed and CPROVER-prefixed entries, which are reserved.
+static inline bool is_name_matched_builtin(const irep_idt &identifier)
+{
+  return is_abs_builtin_name(identifier) ||
+         compare_unscore_builtin(identifier, "isnan") ||
+         compare_unscore_builtin(identifier, "isinf") ||
+         compare_unscore_builtin(identifier, "isnormal") ||
+         compare_unscore_builtin(identifier, "signbit") ||
+         compare_unscore_builtin(identifier, "isfinite") ||
+         compare_float_suffix(identifier, "finite") ||
+         compare_unscore_builtin(identifier, "finite") ||
+         compare_unscore_builtin(identifier, "inf") ||
+         compare_unscore_builtin(identifier, "huge_val");
+}
+
+/// True when lowering this call would throw away a definition the program
+/// supplies. Libc's own declarations are bodiless and the <cmath> overloads
+/// forward to their `__builtin_` spelling, so both still lower.
+bool clang_c_adjust::shadows_user_definition(
+  const irep_idt &identifier,
+  const exprt &f_op) const
+{
+  if (!is_name_matched_builtin(identifier))
+    return false;
+
+  /* c2goto compiles the operational models themselves, where libm/fabs.c and
+   * friends do define these names. Those definitions are the models, not a
+   * program's, so honouring them here would stop every call inside the models
+   * folding to its native node and blow the encoding up (#6904). */
+  if (config.options.get_bool_option("building-c-library"))
+    return false;
+
+  const symbolt *s = context.find_symbol(to_symbol_expr(f_op).get_identifier());
+  return s != nullptr && !s->get_value().is_nil();
+}
+
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 {
   const exprt &f_op = expr.function();
@@ -1320,6 +1384,11 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
   if (f_op.is_symbol())
   {
     const irep_idt &identifier = to_symbol_expr(f_op).name();
+
+    // A definition the program supplies wins over every name-matched lowering
+    // below; see shadows_user_definition (#6904).
+    if (shadows_user_definition(identifier, f_op))
+      return;
 
     if (identifier == CPROVER_PREFIX "same_object")
     {
@@ -1397,14 +1466,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     }
     else if (is_abs_builtin_name(identifier))
     {
-      /* The `abs` node lowers to (x >= 0) ? x : -x, which overflows at a
-       * fixed-point format's minimum -- exactly where TR 18037's absfx
-       * saturates -- so a fixed-point argument keeps its call. A
-       * program-supplied abs is already handled by the user-definition guard
-       * at the top of this function. */
-      if (
-        expr.arguments().size() == 1 && is_number(expr.arguments()[0].type()) &&
-        !ns.follow(expr.arguments()[0].type()).is_fixedbv())
+      if (has_single_arithmetic_argument(expr))
       {
         exprt abs_expr("abs", expr.type());
         abs_expr.operands() = expr.arguments();

@@ -788,7 +788,7 @@ std::string pointer_object2t::field_names[esbmct::num_type_fields] =
 std::string pointer_capability2t::field_names[esbmct::num_type_fields] =
   {"pointer_obj", "", "", "", ""};
 std::string address_of2t::field_names[esbmct::num_type_fields] =
-  {"pointer_obj", "", "", "", ""};
+  {"pointer_obj", "implicit", "", "", ""};
 std::string byte_extract2t::field_names[esbmct::num_type_fields] =
   {"source_value", "source_offset", "big_endian", "", ""};
 std::string byte_update2t::field_names[esbmct::num_type_fields] =

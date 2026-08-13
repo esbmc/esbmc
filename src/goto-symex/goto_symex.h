@@ -958,6 +958,15 @@ protected:
     const bool hidden = false,
     const guard2tc &guard = guard2tc());
 
+  /** Give a value storage of its own, for __ESBMC_old.
+   *
+   *  Only an lvalue has an address, and dereference lowering can turn a read
+   *  through an untyped allocation into a value rebuilt from bytes. Snapshot
+   *  such a value into a symbol so the caller has something to point at.
+   *  @return A reference to the new storage, holding \p value.
+   */
+  expr2tc materialise_old_snapshot(const expr2tc &value, const guard2tc &guard);
+
   /** Recursively perform symex assign. @see symex_assign */
   void symex_assign_rec(
     const expr2tc &lhs,
@@ -1212,6 +1221,12 @@ protected:
     const expr2tc &lhs,
     const sideeffect2t &code,
     const guard2tc &guard);
+  /** Offer both outcomes C17 7.22.3p1 permits for a zero-sized malloc,
+   *  under --malloc-zero-is-null. Widens @p alloc_guard and @p rhs. */
+  void offer_malloc_zero_null(
+    const expr2tc &size,
+    expr2tc &rhs,
+    guard2tc &alloc_guard);
   /** Wrapper around for infinite array allocation. */
   expr2tc symex_mem_inf(
     const expr2tc &lhs,
@@ -1234,7 +1249,7 @@ protected:
     const sideeffect2t &code,
     const guard2tc &guard);
   /** Symbolic implementation of printf */
-  void symex_printf(const expr2tc &lhs, expr2tc &code);
+  virtual void symex_printf(const expr2tc &lhs, expr2tc &code);
   /** Recover the variadic arguments hidden behind a va_list operand of a
    *  v*printf-family call (vprintf/vfprintf/vsprintf/vsnprintf/vasprintf).
    *  Succeeds only under conservative conditions guaranteeing the mapping is
