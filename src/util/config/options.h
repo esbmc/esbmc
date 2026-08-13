@@ -24,6 +24,11 @@ public:
   void cmdline(cmdlinet &cmds);
 
   bool is_kind() const;
+
+  /// \brief Whether any function-contract mode is active. Contract clauses
+  ///   state nothing outside these modes and are dropped, which two separate
+  ///   lowering paths need to agree on.
+  bool contracts_enabled() const;
 };
 
 #endif

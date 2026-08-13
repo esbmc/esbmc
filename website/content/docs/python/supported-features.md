@@ -50,6 +50,8 @@ This page is a reference of all Python language constructs, data structures, and
 - **Explicit base-class `__init__`**: unbound parent-constructor calls of the form `Base.__init__(self, ...)` (the pre-`super()` idiom) are dispatched to the base constructor with `self` bound correctly
 - **`@staticmethod` and `@classmethod`**: receiver binding is taken from the method's decorator list rather than guessed from the first parameter's name. A `@staticmethod` receives no implicit receiver (so `M.twice(6)` binds `6` to the first real parameter), and a `@classmethod`'s `cls` parameter is typed against the enclosing class, so `cls.<attr>` resolves
 - **`@property` getters**: reading a `@property`-decorated attribute (`obj.area`) invokes the decorated getter method rather than looking up a struct field; inherited properties resolve through the base class
+- **`__bool__` truth-testing**: a class's `__bool__` is called in every truth context — `if obj:`, `while obj:`, ternaries, `bool(obj)`, and also `not obj` and a bare `assert obj`, so `assert falsy_obj` fails exactly as CPython raises
+- **Constructor temporaries**: calling a method directly on a fresh instance (`C().get()`) works without binding the instance to a name first — `__init__` runs on the temporary, its own methods win over same-named ones from other classes, and dunder methods (e.g. `C() == x`, `len(C())`) dispatch on it
 - **Classes as first-class values**: a class name passed as a bare value (`register(Twist)`) — the class object itself, not an instance — is modelled as an opaque placeholder for inert uses (storing/forwarding the class), while normal construction through the name (`Twist()`) is unaffected
 - **Class-method defaults**: `Name` defaults referencing `ESBMC_default_*` helpers are hoisted past the enclosing `ClassDef` so they remain visible at call sites
 
@@ -296,6 +298,16 @@ t1.start(); t2.start(); t1.join(); t2.join()
 
 `esbmc race.py --incremental-bmc --data-races-check` reports `W/W data race on py:race.py@shared` and `VERIFICATION FAILED`.
 
+## Function Contracts
+
+`__ESBMC_requires` / `__ESBMC_ensures` clauses at the top of a function body
+are lowered for `--enforce-contract` and `--replace-call-with-contract`, with
+`__ESBMC_return_value` typed from the return annotation; the clauses are inert
+under a plain BMC run. Malformed clauses (calls or subscripts inside the
+condition, untypeable references, `__ESBMC_return_value` in `requires` or on a
+`-> None` function) are rejected with a named diagnostic. See
+[Function Contracts](/docs/function-contracts#contracts-in-python).
+
 ## Cover Properties and Reachability
 
 `__ESBMC_cover(cond)` checks whether a condition is satisfiable at a given program point (inverted assertion semantics: a counterexample means the condition *is* reachable).
@@ -506,7 +518,7 @@ Partial executable support for list-backed arrays, element-wise arithmetic, sele
 
 **Shape manipulation**: `np.reshape(a, shape)` (2-D and 3-D targets; an incompatible element count is rejected), `np.flatten(a)` / `np.ravel(a)` (row-major 1-D view), `np.squeeze(a)` (drop unit-length axes; a non-unit axis is rejected), `np.stack([a, b, ...])` (join arrays along a new leading axis, e.g. 1-D → 2-D), `np.concatenate([a, b, ...])` (join along the existing axis), and `a.astype(dtype)` (dtype conversion; `astype` to a complex dtype is rejected)
 
-**Reductions**: `np.sum(a)`, `np.prod(a)`, `np.min(a)`, `np.max(a)`, `np.mean(a)`, `np.argmin(a)`, `np.argmax(a)` over list-backed arrays
+**Reductions**: `np.sum(a)`, `np.prod(a)`, `np.min(a)`, `np.max(a)`, `np.mean(a)`, `np.std(a)`, `np.var(a)`, `np.argmin(a)`, `np.argmax(a)` over list-backed arrays. The reductions, `transpose` and `flatten` accept arrays built by any constructor (`zeros`, `ones`, `full`, `eye`, `identity`, `linspace`, `arange`), not only `np.array(<literal>)`. The method spellings (`a.sum()`, `a.min()`, `a.prod()`, `a.transpose()`, `a.flatten()`, …) are rewritten to the module form in any expression context — e.g. `assert a.min() == 0` — not just on the right-hand side of an assignment
 
 **Comparison and logical ufuncs**: `np.greater`, `np.greater_equal`, `np.less`, `np.less_equal`, `np.equal`, `np.not_equal`, `np.logical_and`, `np.logical_or`, `np.logical_not`, and `np.where(cond, a, b)` (element-wise select; also the scalar-condition form `np.where(False, 1, 2)`)
 

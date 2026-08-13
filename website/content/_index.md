@@ -3,8 +3,10 @@ title: ESBMC
 toc: false
 ---
 
-{{< callout type="important" icon="sparkles" >}} **NEW:** We have rewritten and
-cleaned up the docs, read more [here](/news/docs-page-improvement).
+{{< callout type="important" icon="sparkles" >}} **NEW:** Around 80 pull
+requests landed in early August — Python function contracts, a user-facing
+`esbmc.h`, concurrency soundness fixes and more. Read the
+[development update](/news/development-update-august-2026).
 {{< /callout >}}
 
 {{< cards >}}
