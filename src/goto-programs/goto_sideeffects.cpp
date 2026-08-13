@@ -110,12 +110,14 @@ static exprt *old_raw_call_under(exprt &deref)
     call->operands().size() < 2 || !call->op0().is_symbol())
     return nullptr;
 
+  // Compare the base name rather than suffix-matching the mangled id, so a
+  // user function whose name merely ends in the token keeps the meaning it
+  // was written with. Same split as is_contract_intrinsic in contracts.cpp.
   const std::string callee = call->op0().identifier().as_string();
-  static const std::string old_raw = "__ESBMC_old_raw";
+  const size_t at = callee.rfind('@');
   if (
-    callee.size() < old_raw.size() ||
-    callee.compare(callee.size() - old_raw.size(), old_raw.size(), old_raw) !=
-      0)
+    (at == std::string::npos ? callee : callee.substr(at + 1)) !=
+    "__ESBMC_old_raw")
     return nullptr;
 
   return call->op1().operands().size() == 1 ? call : nullptr;
