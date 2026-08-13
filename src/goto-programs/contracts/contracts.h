@@ -341,6 +341,20 @@ private:
     const expr2tc &old_symbol,
     const expr2tc &new_expr) const;
 
+  /// \brief An assigns target with the callee's formals replaced by the
+  ///        arguments of one call
+  /// \param target_expr Assigns target as written in the callee
+  /// \param function_symbol The callee
+  /// \param actual_args Arguments at this call site
+  /// \param[out] is_pointer_param Whether the target was a pointer parameter
+  ///        and nothing else, the only shape whose havoc follows the pointer
+  /// \return The target expressed in the caller's terms
+  expr2tc instantiate_assigns_target(
+    const expr2tc &target_expr,
+    const symbolt &function_symbol,
+    const std::vector<expr2tc> &actual_args,
+    bool &is_pointer_param) const;
+
   // ========== __ESBMC_old support ==========
 
   /// \brief Structure to store old() snapshot information

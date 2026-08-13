@@ -1007,6 +1007,58 @@ static expr2tc havoc_place(const expr2tc &target)
   return place;
 }
 
+// A pointer parameter is pass-by-value, so the callee cannot change the
+// caller's pointer, only what it points at. Havocking the argument itself both
+// misses that write and invents a bogus pointer, which the ensures ASSUME then
+// dereferences. Only the first element is reached this way; widening needs an
+// object, which only the decay case names. Nil when there is nothing to write
+// through, matching the void and function pointee skips at 2.4.
+static expr2tc havoc_through_pointer(const expr2tc &place, const namespacet &ns)
+{
+  if (!is_pointer_type(place))
+    return place;
+
+  type2tc pointee = ns.follow(to_pointer_type(place->type).subtype);
+  if (is_empty_type(pointee) || is_code_type(pointee) || is_nil_type(pointee))
+    return expr2tc();
+
+  return dereference2tc(pointee, place);
+}
+
+expr2tc code_contractst::instantiate_assigns_target(
+  const expr2tc &target_expr,
+  const symbolt &function_symbol,
+  const std::vector<expr2tc> &actual_args,
+  bool &is_pointer_param) const
+{
+  is_pointer_param = false;
+  expr2tc instantiated = target_expr;
+
+  if (!function_symbol.get_type().is_code())
+    return instantiated;
+
+  const code_typet::argumentst &params =
+    to_code_type(function_symbol.get_type()).arguments();
+
+  for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
+  {
+    irep_idt param_id = params[i].get_identifier();
+    if (param_id.empty() || is_nil_expr(actual_args[i]))
+      continue;
+
+    type2tc param_type = migrate_type(params[i].type());
+    expr2tc param_symbol = symbol2tc(param_type, param_id);
+    // The whole target is the formal, so the havoc has an argument to follow
+    // rather than a subexpression that already names its own place.
+    if (instantiated == param_symbol)
+      is_pointer_param = is_pointer_type(param_type);
+    instantiated =
+      replace_symbol_in_expr(instantiated, param_symbol, actual_args[i]);
+  }
+
+  return instantiated;
+}
+
 std::vector<expr2tc>
 code_contractst::extract_assigns_from_body(const goto_programt &function_body)
 {
@@ -4865,28 +4917,9 @@ void code_contractst::generate_replacement_at_call(
     // Now assigns targets are expression trees that need parameter substitution
     for (const expr2tc &target_expr : assigns_target_exprs)
     {
-      // Substitute function parameters with actual call arguments
-      expr2tc instantiated_target = target_expr;
-
-      if (function_symbol.get_type().is_code())
-      {
-        const code_typet &code_type = to_code_type(function_symbol.get_type());
-        const code_typet::argumentst &params = code_type.arguments();
-
-        for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
-        {
-          const code_typet::argumentt &param = params[i];
-          irep_idt param_id = param.get_identifier();
-
-          if (!param_id.empty() && !is_nil_expr(actual_args[i]))
-          {
-            type2tc param_type = migrate_type(param.type());
-            expr2tc param_symbol = symbol2tc(param_type, param_id);
-            instantiated_target = replace_symbol_in_expr(
-              instantiated_target, param_symbol, actual_args[i]);
-          }
-        }
-      }
+      bool target_is_pointer_param = false;
+      expr2tc instantiated_target = instantiate_assigns_target(
+        target_expr, function_symbol, actual_args, target_is_pointer_param);
 
       instantiated_target = havoc_place(instantiated_target);
 
@@ -4898,6 +4931,13 @@ void code_contractst::generate_replacement_at_call(
         config.options.get_bool_option("add-symex-value-sets") &&
         is_pointer_type(instantiated_target))
         continue;
+
+      if (target_is_pointer_param)
+      {
+        instantiated_target = havoc_through_pointer(instantiated_target, ns);
+        if (is_nil_expr(instantiated_target))
+          continue;
+      }
 
       if (havoc_pointed_to_array(
             instantiated_target, call_location, replacement))
