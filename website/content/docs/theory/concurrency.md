@@ -21,8 +21,19 @@ state.
 The number of interleavings grows combinatorially with the number of threads
 and operations — for *n* threads performing *k₁, …, kₙ* operations it is the
 multinomial coefficient `(k₁ + … + kₙ)! / (k₁! ⋯ kₙ!)` — so ESBMC controls the
-explosion in three complementary ways: bounding context switches [2],
-partial-order reduction [3], and state hashing.
+explosion in complementary ways: bounding context switches [2], partial-order
+reduction [3], state hashing, and sleep sets.
+
+At the end of a run ESBMC reports how the exploration spent its schedules and
+what each reduction pruned, so a reduction's contribution can be measured
+without re-running with each knob toggled:
+
+```
+Schedules explored: 940 (pruned by MPOR: 296, by state hashing: 0)
+```
+
+The line is omitted for sequential programs, which never have a schedule to
+choose.
 
 ## Bounding the context switches
 
@@ -78,10 +89,26 @@ esbmc file.c --state-hashing
 
 State hashing records a fingerprint of each explored state and skips
 re-exploring states already seen, pruning duplicate work across interleavings.
+The fingerprint includes which thread is active, so two states that differ only
+in the scheduled thread are explored separately rather than conflated.
 
 By default ESBMC stops at the first interleaving that violates a property; pass
 `--all-runs` to keep checking the remaining interleavings even after a bug is
 found.
+
+## Sleep sets
+
+```sh
+esbmc file.c --sleep-sets --no-por
+```
+
+`--sleep-sets` (experimental, off by default) adds a classic sleep-set
+reduction on top of the DFS: once a thread's subtree at a decision node is
+exhausted, the thread is skipped at sibling nodes until something dependent on
+it has run. It only fires where the search is exhaustive, so pair it with
+`--no-por` and no context bound; it is ignored under `--schedule`,
+`--direct-interleavings`, `--interactive-ileaves` and
+`--data-races-check-only`.
 
 ## Atomic blocks
 
