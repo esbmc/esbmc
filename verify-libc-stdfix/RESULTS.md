@@ -1660,3 +1660,71 @@ So the UB is confined to `divi`. That is worth stating positively: the accuracy
 findings elsewhere (sqrt not correctly rounded, exp's placeholder entry) are
 *accuracy* problems in code that is otherwise free of undefined behaviour, and
 `--overflow-check` clears the five families that pass on accuracy too.
+
+## Audit: unmodelled functions across every harness
+
+Prompted by the `__builtin_ctzg` gap, which I should have been checking for from
+the start. Every harness re-run on the current binary, capturing both the verdict
+and any `WARNING: no body for function` line.
+
+**26 of 27 finding harnesses: zero unmodelled functions.** One hit, and it does
+not affect its verdict:
+
+| harness | verdict | `no body` |
+|---|---|---|
+| all 5 `sqrt*_vs_camada` | FAILED | 0 |
+| both `isqrt_fast_*` | FAILED | 0 |
+| both `isqrt_*_bound` | FAILED | 0 |
+| `sqrt_correctly_rounded`, `sqrt_rescale_gap` | FAILED | 0 |
+| `sqrt_core_bound` | SUCCESSFUL | 0 |
+| all 3 exp defect harnesses | FAILED | 0 |
+| all 8 `divi*_vs_camada` | SUCCESSFUL | 0 |
+| `divi_bug1`, `divi_widecast` | FAILED | 0 |
+| `divi_control` | SUCCESSFUL | 0 |
+| **`divi_widths`** | FAILED | **1** |
+
+### The one hit, and why the verdict stands
+
+`divi_widths` reports `no body for function operator()#I#1` -- a **lambda**, not a
+libc builtin. `divi` defines `is_power_of_two` as a lambda (fx_bits.h:249), and
+if its result were nondet the power-of-two branch would be reachable for any
+divisor, making every `divi` verdict suspect.
+
+Tested rather than assumed, three ways:
+
+1. **Lambdas are modelled correctly in general** -- `is_power_of_two(8)` is true
+   and `(6)` is false, both PASSED.
+2. **The branch is gated correctly inside libc's own code**: with `d = -3` (not a
+   power of two) the general branch runs and the result is positive; with
+   `d = -1` the fast branch runs and the defect fires. Both PASSED in one
+   multi-property run. libc's internal `LIBC_ASSERT` on `initial_approx`
+   (fx_bits.h:307) also passed, confirming the general branch really executed.
+3. **The finding survives on fully concrete inputs.** Re-stated with literal
+   `divi(-3, -1)` at s0.15 and s0.31 -- nothing symbolic, so no unmodelled call
+   can influence branch selection -- **both still FAIL**.
+
+So the warning is real but inert here. Recorded rather than dismissed, because
+the ctz case shows that reasoning about a warning without testing it is how the
+false positive survived in the first place.
+
+### What the ctz gap actually invalidated
+
+Scope, established by grep rather than assumption: `cpp::countr_zero` appears at
+**exactly one place** in the fixed-point headers -- `fx_bits.h:254`, inside
+`divi`. It is not reached by `sqrt`, `isqrt`, `isqrt_fast`, `exp`, `round`,
+`abs`, `countls`, `bitsfx` or `divifx`.
+
+So the gap affected **one reported line in one function**: the spurious
+`fx_bits.h:257` shift violation. Everything else stands, and the two real `divi`
+UB sites (256, 266) were confirmed independently of it.
+
+`cpp::countl_zero` (`-> __builtin_clzg`) is used more widely, in both `fx_bits.h`
+and `sqrt.h` -- but that builtin was modelled earlier in this branch
+(esbmc/esbmc#6925), before any of the sqrt or exp measurements were taken.
+Re-confirmed: `clzg(1,32) = 31` and `clzg(0,32) = 32` both PASS.
+
+### Process change
+
+Every harness verdict from here on is reported with its `no body` count, and a
+non-zero count is investigated before the verdict is believed. Grepping the
+verifier's own warnings should have been step one, not a late audit.
