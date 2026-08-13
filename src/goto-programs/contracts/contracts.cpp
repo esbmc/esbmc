@@ -4888,13 +4888,16 @@ void code_contractst::generate_replacement_at_call(
         }
       }
 
-      // Skip pointer havoc in value-set mode (consistent with loop invariant)
+      instantiated_target = havoc_place(instantiated_target);
+
+      // Skip pointer havoc in value-set mode (consistent with loop invariant).
+      // Tested on the widened place, so a decayed array argument is still
+      // havocked: the skip is about a pointer variable, not about the array
+      // whose address one happens to hold.
       if (
         config.options.get_bool_option("add-symex-value-sets") &&
         is_pointer_type(instantiated_target))
         continue;
-
-      instantiated_target = havoc_place(instantiated_target);
 
       if (havoc_pointed_to_array(
             instantiated_target, call_location, replacement))
