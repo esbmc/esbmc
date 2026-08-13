@@ -5463,6 +5463,37 @@ Recorded as **R32**, pinned by
 `regression/esbmc-unix/mpor_aggregate_ptr_race_symbolic_offset`, with
 `..._array_decay` as the constant-index control that must keep passing.
 
+**A residual neither R31 nor R32 closes: the inverse lives away from its
+forward.** Both reviews raised this independently, and it is the most useful
+thing either said about the shape of the code rather than its content.
+`collect_offset_paths` inverts `member_offset_bits`
+(`src/util/expr/type_byte_size.cpp`) for struct members and the index arm of
+`get_reference_set_rec` for array elements, but sits in neither file. Every rule
+the two directions must agree on — padding as explicit members, unions overlaid
+at zero, bits for members and bytes for elements, `ns.follow` before measuring —
+is therefore held in step by a comment. Two of the defects fixed here are that
+disagreement made concrete: R31 is the inverse not existing at all, and the
+`ns.follow` omission review caught was the forward walk resolving symbol types
+where the inverse did not.
+
+The suggested repair is to move the inverse next to its forward counterpart —
+`member_paths_at_offset(type, offset, target, ns)` in `type_byte_size.{h,cpp}` —
+which co-locates the conventions, makes the pair directly unit-testable in
+`unit/` without standing up a `value_sett`, and offers the same inverse to
+`dereferencet`, which faces the identical descriptor-to-field-path problem. That
+last point is the one with teeth: both walks are file-`static` today, which is
+why every piece of evidence for them in this document is an end-to-end MPOR race
+rather than a Tier-B unit test, against this plan's own stated preference.
+
+**Not done here, and the trigger for doing it has not cleanly fired.** The R32
+review set the condition as "a third defect of this family". R33 is adjacent
+rather than a third instance: it is a *forward*-direction bug, an offset that
+was never composed, in the very `get_reference_set_rec` arm the inverse mirrors.
+Counting it would be convenient rather than accurate. The honest position is
+that the family stands at two, the coupling is real and now recorded, and the
+move is a separate change that should not enlarge a patch already spanning four
+defects.
+
 ---
 
 ### M9 (R32 fix) — 2026-08-13, and the witness that was there all along
