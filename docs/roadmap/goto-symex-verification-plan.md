@@ -611,7 +611,7 @@ discharge or an explicit, reviewed waiver.
 | H-A2 | `guard2tc::operator-=` satisfies `(g_cur ∨ g_mrg) → (diff ↔ g_mrg)` | **irep2 plan** H-A9/H-B4 — cross-document dependency |
 | H-A2 | Incoming merge guards may overlap (no disjointness assumed) | by construction (not assumed) |
 | H-A4 | Every `with2t` store the slicer elides has a `symbol2t` source and constant index | **Discharged**, §15 M9 (H-B7) — `assumption_discharge.test.cpp` checks it on every elided store and censuses the excluded shapes; struct member stores are excluded by their `constant_string2t` field, which the census now pins |
-| H-A6 | `thread_last_reads/writes` contain *all* accesses of the last transition, including through pointers | **Refuted twice.** R11 → **R18** (one-level resolution losing a nested dereference) was fixed by **#6550**. The completeness this row asks for is now *checked* rather than assumed — a 21-shape census, §15 M9 (H-A6) — and it failed: five shapes holding the pointer in an aggregate were missed, recorded as **R29**. R29 is now fixed (§15 M9 (R29 fix), (R29 residual)) and the census re-runs **21/21 agreeing with `--no-por`**, dual-solver, §15 M9 (H-A6 re-census). The row stays **refuted**: extending the same census by two shapes immediately found **R31** (`int **pp = &s.p; **pp = 1`, a false SUCCESSFUL on ordinary C) plus a struct-punning shape that is UB. Every extension of this census so far has found a defect, which is the argument against ever discharging this row by enumeration |
+| H-A6 | `thread_last_reads/writes` contain *all* accesses of the last transition, including through pointers | **Refuted twice.** R11 → **R18** (one-level resolution losing a nested dereference) was fixed by **#6550**. The completeness this row asks for is now *checked* rather than assumed — a 21-shape census, §15 M9 (H-A6) — and it failed: five shapes holding the pointer in an aggregate were missed, recorded as **R29**. R29 is now fixed (§15 M9 (R29 fix), (R29 residual)) and the census re-runs **21/21 agreeing with `--no-por`**, dual-solver, §15 M9 (H-A6 re-census). The row stays **refuted**: extending the same census by two shapes immediately found **R31** (`int **pp = &s.p; **pp = 1`, a false SUCCESSFUL on ordinary C) plus a struct-punning shape that is UB. R31 is now fixed and the census runs **27/28**, §15 M9 (R31 fix) — but that round also showed the 21/21 above was over-stated, since an array element reached through a pointer into the array was failing all along under a spelling the enumeration had recorded as passing. R31's own section then declared its one remaining gap witnessless, and the next probe witnessed it as **R32** (a symbolic array index, false SUCCESSFUL on both solvers, §15 M9 (R32)). Every extension of this census has found a defect, one extension falsified the census's own result, and one falsified the *closing claim* of the round that made it — which is the argument against ever discharging this row by enumeration. **R33** sharpens that argument from the other side: code review of R31's fix found a false SUCCESSFUL on `&s.v[1]`, a shape more common than several the census does cover, which all twenty-eight enumerated shapes walked past. Enumeration is bounded by the model of failure that generates it; reading the neighbouring branch is not |
 | H-A8 | `push_ctx`/`pop_ctx` calls are balanced by the caller (`reachability_treet`) | **Discharged**, §15 M9 (H-A8) — `context_stack.test.cpp` on a real `runtime_encoded_equationt` over a real solver: an exhausted 49-interleaving exploration lands back on depth 0, having reached 9. Deleting the setup `push_ctx` fails it *and* SIGSEGVs, which is the UB the row's failure mode predicted |
 | all Tier A | `nondet` solver answers are *sound* (no wrong TRUE/FALSE) | out of scope — solver backends are Tier D |
 
@@ -718,7 +718,9 @@ this document** — each is a prioritised target for the cited harness.
 | **R23** | **High (false SUCCESSFUL *and* false FAILED, default configuration)** — **confirmed with a two-line reproducer** by M8 triage, §15 M8 (cont. 7); filed as **#6589** | **Compound assignment narrows the right operand to the left operand's type before the operation.** C11 **6.5.16.2p3**: "A compound assignment of the form E1 op= E2 is equivalent to the simple assignment expression E1 = E1 op (E2), except that the lvalue E1 is evaluated only once". ESBMC violates that equivalence for every left operand narrower than `int`. `char b; b += a;` emits `!overflow("+", (signed int)b, (signed int)((signed char)a))` — the right operand cast to `char` — where `b = b + a` correctly emits `!overflow("+", (signed int)b, a)`. Both directions are reachable and both are wrong: with `b = 3, a = INT_MAX`, `b += a` reports **SUCCESSFUL** (the overflow claim is unfalsifiable, a **missed bug**) while `b = b + a` reports FAILED; and with `char b = 100; int a = 256`, `b /= a` reports **FAILED "division by zero"** because the divisor narrows to `(char)256 == 0`, where C gives `100 / 256 == 0` and gcc/UBSan agree. Not bitfield-specific — `char`, `short`, struct members and bitfields all reproduce; the discriminator is *narrower than the promoted type*, not the member/bitfield spelling. `github_162_fail` is where it was found, and its claim is vacuous for exactly this reason — but that entry is a *wrong test* independently of R23, see §15 M8 (cont. 8). **Frontend, not goto-symex**, so it is outside §2.3's scope, but it is a soundness defect in extremely common C. **Fixed, §15 M8 (cont. 8).** | `clang_c_convertert::get_compound_assign_expr`, `clang_c_convert.cpp:4258-4343`, specifically the unconditional `gen_typecast(ns, rhs, lhs.type())`, together with `goto_convertt::remove_assignment`, `goto_sideeffects.cpp:1714-1870`, which took the operation's type from `expr.op0()`. `regression/esbmc/compound_assign_narrow_overflow`, `..._explicit` (control) and `compound_assign_narrow_divzero`, all CORE | M8 triage | Done. The frontend records clang's `getComputationResultType()` on the side effect; `remove_assignment` performs the operation there and converts the result back on assignment. |
 | **R24** | **Medium (spurious counterexample, default configuration)** — **confirmed with a reproducer** by M8 triage, §15 M8 (cont. 10); **FIXED**, §15 M8 (R24) | **`memset` does not constrain a struct's bitfield padding bits, so a type-punned read of the object is partly nondeterministic.** For `struct { int x : 12, y : 8; } s;`, `memset(&s, 0, sizeof s); s.x = -1; s.y = -1;` then reading `*(int *)&s` gives a value whose low 20 bits are correct — `(v & 0xFFFFF) == 0xFFFFF` verifies — but whose 12 padding bits are unconstrained: `(v >> 20) == 0` **fails**. gcc gives `0x000fffff` exactly, so the declared fields are laid out right and only the `memset`'s effect on the bits above them is lost. This is the direction an over-approximation produces (a false alarm, never a missed bug), and it is reachable with **no flags at all**, which is what separates it from the four flag-inadequacy entries triaged alongside it. Explains `github_732-1-1`, whose `sizeof(s) == 4` and `s.y == -1` assertions both hold and only whose type-punned assertion fails. | `regression/esbmc/bitfield_padding_memset`, `..._fields`, `..._fill` and `..._fail`, and `regression/esbmc/github_732-1-1` — all CORE, the first and last flipped from KNOWNBUG by the fix | M8 triage | Fixed: the optimised `memset` charged each member `type_byte_size()` bytes, which over-counts a bitfield, so a 4-byte struct's trailing member was written with zero bytes and kept its old value. `gen_value_by_byte` now declines any struct with a sub-byte member and leaves it to `__memset_impl`, whose byte-wise model gets the padding right. |
 | **R25** | **High (false SUCCESSFUL, default configuration)** — found while root-causing R17, §15 M5 (R17 root cause); **FIXED**, §15 M5 (R25) | **The R17 vacuity is also reachable through a *symbolic* allocation size, and no flag is needed.** `size_t n = nondet_size(); __ESBMC_assume(n >= 0xFFFFFFFFFFFFFFF0UL); char *b = malloc(n); if (b) b[0] = 1; assert(0);` reported **`VERIFICATION SUCCESSFUL`** on default flags — the pointer is used, so the slicer keeps the allocation. The R17 fix could not see it: no constant is available at symex time. Worse than R17's shape, because the address-space constraint does not merely kill the path — `end == start + n` with `end >= start` silently *constrains the program variable `n`*, so **every** symbolic allocation quietly discarded its top 16 sizes, not just ones an assumption forced there. | `smt_memspace.cpp` `init_pointer_obj:409-421`; fixed in `symex_mem`. `regression/esbmc/symbolic_unrepresentable_malloc` and `no_slice_symbolic_unrepresentable_malloc` (CORE), `symbolic_malloc_bounds_preserved` (CORE, anti-vacuity), `force_malloc_success_unrepresentable` (KNOWNBUG, residual) | R17 root-causing | Fixed: give the object size zero on the branch where the request does not fit, so it is always layable, and return NULL there. Under `--force-malloc-success` the bound is stated as an assumption instead — branching to NULL reintroduces the case split that flag exists to remove, and cost 22 s → >200 s on `github_1352-*-32bit`. That leaves the residual pinned above. |
-| **R31** | **High (false SUCCESSFUL, default configuration)** — found by extending the H-A6 census immediately after R29's fix closed it at 21/21, §15 M9 (H-A6 re-census) | **An `address_of` in front of the aggregate step defeats MPOR's access resolution.** `int **pp = &s.p; **pp = 1;` against a concurrent `g = 2` reports **SUCCESSFUL** by default and **FAILED** under `--no-por`, both under Bitwuzla and Z3. This is **not** punning: `&s.p` is a well-defined `int **`, so the false SUCCESSFUL is on ordinary C. The boundary is syntactic in R29's way — copying the pointer to a local first (`int *lp = *pp;`) restores detection — which places the gate in the resolution, not the value set. `record_aggregate_held_target` *is* entered (the inner `dereference2t` is not a `symbol2t`), so the loss is further down. `--show-symex-value-sets` pins it exactly: `c:@pp = { <s, 0, 8, struct S { signed int * p; }> }` names the **struct symbol**, with the suffix erased into a byte offset, while the entry that holds the answer — `c:@s.p = { <g, 0, 1, signed int> }` — is present and correct. Resolving `**pp` therefore needs the descriptor's constant offset mapped back to `.p` before the second lookup can find it. The information is not missing, only unaddressable; and the same function already does constant-offset refinement for lock arrays (`mpor_lock_array_key`), which is the precedent a fix would follow. A struct-to-struct punning shape (`((struct B *)&a)->q`) prunes identically but is strict-aliasing UB and carries no soundness claim | `regression/esbmc-unix/mpor_aggregate_ptr_race_addrof` (KNOWNBUG, stating the verdict a fix must produce) with `..._addrof_local` (CORE control), the pairing R29 was filed under | H-A6 | **Open.** Not fixed alongside R29, for the reason the original census gave for not fixing R29 in place: widening what MPOR treats as conflicting needs its own soundness argument and a Mode C pass, not an append to a census |
+| **R31** | **High (false SUCCESSFUL, default configuration)** — found by extending the H-A6 census immediately after R29's fix closed it at 21/21, §15 M9 (H-A6 re-census) | **An `address_of` in front of the aggregate step defeats MPOR's access resolution.** `int **pp = &s.p; **pp = 1;` against a concurrent `g = 2` reports **SUCCESSFUL** by default and **FAILED** under `--no-por`, both under Bitwuzla and Z3. This is **not** punning: `&s.p` is a well-defined `int **`, so the false SUCCESSFUL is on ordinary C. The boundary is syntactic in R29's way — copying the pointer to a local first (`int *lp = *pp;`) restores detection — which places the gate in the resolution, not the value set. `record_aggregate_held_target` *is* entered (the inner `dereference2t` is not a `symbol2t`), so the loss is further down. `--show-symex-value-sets` pins it exactly: `c:@pp = { <s, 0, 8, struct S { signed int * p; }> }` names the **struct symbol**, with the suffix erased into a byte offset, while the entry that holds the answer — `c:@s.p = { <g, 0, 1, signed int> }` — is present and correct. Resolving `**pp` therefore needs the descriptor's constant offset mapped back to `.p` before the second lookup can find it. The information is not missing, only unaddressable. **The component this row first named was wrong**, and instructively: it read the local-copy boundary as placing the gate "in the resolution, not the value set" and pointed at `mpor_lock_array_key` as the precedent. The local copy works because symex's dereference pass has already rewritten `*pp` into the `member2t` `s.p` by the time `value_sett::assign` records `lp`, so the member arm keys `c:@s.p` directly; MPOR hands the value set a *synthetic* `dereference2t` it built itself, which never passed through that rewrite and so lands in the dereference arm, where the member survives only as a byte offset. The boundary separates *rewritten by symex* from *raw*, not MPOR from the value set, and the fault was in the value set on both sides. A struct-to-struct punning shape (`((struct B *)&a)->q`) prunes identically but is strict-aliasing UB and carries no soundness claim | `regression/esbmc-unix/mpor_aggregate_ptr_race_addrof` (KNOWNBUG → **CORE**) with `..._addrof_local` (CORE control), the pairing R29 was filed under, joined by `..._addrof_offset`, `..._addrof_nested`, `..._addrof_union`, `..._array_decay` and `..._addrof_merged`, one per arm of the descent and each pinned by its own mutant, plus `..._addrof_locked` (CORE, the passing direction) and `mpor_aggregate_ptr_zero_size_element` (CORE, pinning the `esize > 0` guard against a `BigInt` abort), both added when the coverage gate blocked the first cut | H-A6 | **Fixed**, §15 M9 (R31 fix): `get_value_set_rec`'s dereference arm now walks the descriptor's constant byte offset back into a field path and asks again under it, accumulating in bits as `member_offset_bits` does so the walk inverts the one that built the descriptor. The unrefined lookup stays, so the change only ever adds objects to a value set. The cheap alternative the first diagnosis suggested — a `simplify()` in `resolve_pointer_target` — was built and measured, and fixes **none** of the six shapes in either placement: there is no constant to fold, because the member was erased before the pointer's value set was ever written |
+| **R32** | **High (false SUCCESSFUL, default configuration)** — found by probing the one gap R31's fix section had just declared witnessless, §15 M9 (R32) | **A symbolic offset erases the aggregate step exactly as a constant one did, and R31's walk has nothing to spell back out.** `int *a[2] = {&g, &g}; ap = &a[i];` with `i` nondeterministic and assumed in bounds, then `**ap = 1` against a concurrent `g = 2`, reports **SUCCESSFUL** by default under both Bitwuzla and Z3 and **FAILED** under `--no-por`. Replacing `a[i]` with `a[1]` reports FAILED, so the symbolic index is the whole discriminator. Well-defined C — the index is assumed in range — so unlike the punning shape this carries a full soundness claim. `--show-symex-value-sets`: `c:@ap = { <a, *, 8, signed int * [2]> }`, the `*` being the unset offset, against `c:@a[] = { <g, 0, 1, signed int> }` which holds the answer. R31's `offset_paths` requires `offset_is_set` and skips, so the unrefined lookup of `c:@a` misses `c:@a[]` and returns empty — read by every consumer as "points at nothing" | `regression/esbmc-unix/mpor_aggregate_ptr_race_symbolic_offset` (KNOWNBUG, stating the verdict a fix must produce), with `..._array_decay` the constant-index control | H-A6 | **Open.** The fix is the branch R31's section named and declined: on an unset offset, enumerate every type-matching path rather than the one an offset selects — `[]` for an array, every type-matching member for a struct or union. Monotone for the same reason R31's walk is. Held back from R31's change so that R31's mutation evidence keeps referring to the code it was measured against |
+| **R33** | **High (false SUCCESSFUL, default configuration)** — found by code review of R31's fix, not by the census, §15 M9 (R33) | **A constant member offset and a constant element offset would not compose, so the descriptor arrived with no offset at all.** `struct S { long pad; int *v[2]; }; int **pp = &s.v[1];` then `**pp = 1` against `g = 2` reported **SUCCESSFUL** by default, **FAILED** under `--no-por`. Each half works alone — `&s.v[0]` (base 8, index 0) and a member at a nonzero offset both detect the race — and only the composition failed, which is what makes it a distinct defect from R31 rather than another shape of it. The index arm of `get_reference_set_rec` added a constant element offset only when the base offset was **zero**, and otherwise fell to the unknown-offset branch and cleared `offset_is_set`; R31's walk then had nothing to spell back out. Reaching byte offset 16 by two members instead (`&s.v.b`) detects the race, which pins the route rather than the offset as the discriminator. The member arm one screen below already composed with `o.offset += offset_in_bytes` | `regression/esbmc-unix/mpor_aggregate_ptr_race_member_index` (CORE), with `..._addrof_offset` and `..._array_decay` the two halves that always worked | code review of R31 | **Fixed**: the index arm composes when the base offset is set (`o.offset += index_offset`) instead of requiring it to be zero. Identical on the old domain — `offset_is_zero()` already implied `offset_is_set`, and adding to a zero offset is assignment — so only the previously-abandoned case changes. Increases precision rather than widening: the descriptor gains a definite offset where it used to carry none |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -5185,6 +5187,280 @@ happened to enumerate. What is now empirically established is not that the
 resolution is complete, but that **every extension of this census so far has
 found something**, which is the strongest available argument that the row should
 not be discharged by enumeration at all.
+
+The next section extends it to 28 and finds, among other things, that the 21/21
+claimed above was itself over-stated.
+
+---
+
+### M9 (R31 fix) — 2026-08-13, the offset spelled back out
+
+**R31's row pinned the mechanism exactly and then named the wrong component.**
+It read the local-copy boundary — `int *lp = *pp; *lp = 1;` detects the race
+that `**pp = 1` does not — as placing the gate "in the resolution, not the value
+set", and pointed at `mpor_lock_array_key` as the precedent a fix would follow.
+The boundary is real; the inference from it was not. By the time
+`value_sett::assign` records `lp`, symex's dereference pass has already rewritten
+the right-hand side `*pp` into the `member2t` `s.p`, and the member arm keys
+`c:@s.p` directly. `resolve_pointer_target` builds a `dereference2t` of its own
+and hands it to `get_reference_set` raw, so it lands in the dereference arm,
+where the member survives only as a byte offset. The local copy therefore never
+separated MPOR from the value set — it separated *rewritten by symex* from
+*raw*, and the fault was in the value set on both sides. Worth keeping as a
+method note: "shape A works, shape A′ does not, so the fault is in the consumer"
+holds only when the two shapes reach the consumer by the same route.
+
+The first version of this section blamed the boundary on simplification instead
+— `get_value_set` simplifies before descending (`value_set.cpp:193`) and
+`*(&s.p)` folds to a member — which is true of the code and false of this
+program. Two measurements refute it. Making the pointer unfoldable
+(`pp = c ? &s.p : &t.p`, then the same local copy) still detects the race on an
+unpatched binary, and `lp`'s value set is still the precise `{<g, 0, 1, int>}`
+though `c:@pp` now holds two descriptors with the member erased in both — a
+precision no fold could supply. Const propagation is beside the point as well:
+`pp` is a global written before a thread starts. The rewrite, not the fold, is
+what puts a `member2t` in front of the value set.
+
+**The gap itself is one piece of bookkeeping.** An object descriptor names an
+aggregate and a byte offset (`<s, 0, 8, struct S>`); value-set entries are keyed
+one field path at a time (`c:@s.p`). The dereference arm of `get_value_set_rec`
+looked the base object up under the caller's suffix and dropped the offset, so
+the entry holding the answer was unaddressable — and empty, to every consumer,
+asserts "points at nothing". `collect_offset_paths` walks the offset back into a
+path and the arm asks again under each one. It accumulates in bits as
+`member_offset_bits` does, so it is the exact inverse of the walk that built the
+descriptor, and it yields a path only when the descent lands on the type being
+dereferenced. The unrefined lookup stays, which makes the change monotone: it
+can add objects to a value set, never remove one.
+
+**Fixing it in MPOR would have fixed nothing, and that was measured rather than
+argued.** The cheap alternative the first diagnosis suggests is a `simplify()` in
+`resolve_pointer_target`, folding `*(&s.p)` as `get_value_set` would. It was
+built on top of a reverted `value_set.cpp` and run, in both placements the
+sentence admits — on the renamed pointer and on the dereference built from it —
+and every one of the six race shapes stayed **SUCCESSFUL**, the pinned
+reproducer included. The reason is the paragraph above: there is no `&s.p` in
+the expression to fold, because the member was erased when `pp`'s value set was
+written, not when it was read. A narrow fix aimed at the symptom the first
+diagnosis described would have shipped as a no-op that the census then blamed on
+the shapes.
+
+The merged-pointer shape still earns a test of its own, for the weaker claim
+that survives: `pp = c ? &s.p : &t.p; **pp = 1;` reaches the descent with two
+descriptors and no constant anywhere, so it is the one shape that could not be
+rescued by *any* folding, wherever placed. It detects the race under MPOR and
+`--no-por` alike after the fix.
+
+**The census grows to 28, and 21/21 was over-stated.** Re-run against a binary
+carrying R29's fix but not this one, the shapes give **22/28**, not 26/28:
+besides the two the section above recorded, `int **ap = a; **ap = 1;` — an array
+element reached through a pointer *into* the array — was also a false
+SUCCESSFUL, and the re-census had listed "array elements (constant, symbolic,
+via pointer)" among its passing sixteen. Whatever spelling "via pointer" had
+there, it was not this one. The 21/21 was true of the twenty-one programs run
+and false of the claim they were taken to support.
+
+| Shape | Write | pre-fix MPOR | post-fix MPOR |
+|---|---|---|---|
+| address-of member | `int **pp = &s.p; **pp = 1` | SUCCESSFUL | **FAILED** |
+| … at a nonzero offset | `struct S { int *q, *p; }` | SUCCESSFUL | **FAILED** |
+| … two levels down | `int **pp = &o.in.p` | SUCCESSFUL | **FAILED** |
+| … union member | `int **pp = &u.p` | SUCCESSFUL | **FAILED** |
+| array element via pointer | `int **ap = a + 1; **ap = 1` | SUCCESSFUL | **FAILED** |
+| merged pointer † | `pp = c ? &s.p : &t.p` | SUCCESSFUL | **FAILED** |
+| struct-to-struct pun | `*(((struct B *)&a)->q) = 1` | SUCCESSFUL | SUCCESSFUL |
+
+† not one of the 28: it was written afterwards, to test the fix's *site* rather
+than another arm of its descent, so the six pre-fix disagreements the counts
+above give are the other six rows.
+
+`--no-por` reports FAILED on every row of both columns. **27 of 28 shapes agree**
+after the fix; the survivor is the strict-aliasing pun, which carries no
+soundness claim and never reaches the descent at all.
+
+**Each arm is pinned by exactly one test, and that was measured rather than
+argued.** Four mutants were built and run — the array arm removed, a union laid
+out end to end, a struct treated as overlaid, and the struct arm matching only
+direct members instead of recursing:
+
+| Mutant | Test that dies | Tests that survive |
+|---|---|---|
+| array arm removed | `_array_decay` | the other four |
+| union laid out end to end | `_addrof_union` | the other four |
+| struct treated as overlaid | `_addrof_offset` | the other four |
+| direct members only, no recursion | `_addrof_nested` | the other four |
+| whole patch removed | all six race tests | `_addrof_local`, `_addrof_locked` |
+| `simplify()` in `resolve_pointer_target` instead | all six race tests | `_addrof_local`, `_addrof_locked` |
+| `esize > 0` guard removed | `_zero_size_element` (aborts, no verdict) | the rest |
+
+The four arm mutants ran against the five tests that existed then;
+`_addrof_merged` was added afterwards and pins no arm of its own — it walks the
+same struct arm `_addrof` does. What it pins is the *site*: it is the only shape
+that survives every mutant of the narrow fix, because it carries no constant for
+any fold to reach. The union case earns its row only because the pointer is
+declared *second*: a union whose pointer comes first is reached by a
+struct-shaped walk too, so the obvious spelling of that test would have covered
+the arm without pinning it. `mpor_aggregate_ptr_race_addrof` flips KNOWNBUG →
+CORE, and `..._addrof_local` stays the control that fails if the working shape
+regresses.
+
+**The coverage gate blocked this change twice, and both were fair.** Running it
+on the diff returned BLOCK on two counts. First, all seven tests asserted
+`VERIFICATION FAILED`: nothing pinned the *passing* direction, which for a patch
+that only ever **adds** points-to targets is the direction most at risk —
+nothing asserted that a correct program stays correct. `..._addrof_locked` fills
+that in, the same aggregate-held pointer under a mutex, and it is the only test
+here that walks the new descent and expects SUCCESSFUL. Second, the `esize > 0`
+guard in `collect_offset_paths` had no test and a process abort behind it:
+`type_byte_size` returns 0 for a zero-length array's element type, and without
+the guard `offset % esize` reaches `error("Division by zero.")` in
+`big-int/bigint.cpp`, which is `fprintf` + `abort()`.
+`mpor_aggregate_ptr_zero_size_element` pins it, and the shape is fussier than it
+looks: `BigInt` short-circuits equal operands before the divide, so `0 % 0`
+returns 0 and only a **nonzero** byte offset into the zero-size element reaches
+the abort. The test dies under the mutant by producing no verdict at all rather
+than a wrong one.
+
+Three sites remain uncovered and are triaged rather than tested. The
+`array_size_excp` handler is defensive: three candidate witnesses were built and
+measured, and none puts `collect_offset_paths` on the stack when the throw
+happens, because a symbolic offset clears `offset_is_set` and skips the descent
+before it starts — the throwing shapes and the entered shapes do not intersect.
+The `offset == 0 && type == target` fast path in `offset_paths` does fire in
+ordinary nested-deref code, but no mutant of it is observable: delete it and
+`collect_offset_paths` hits the identical test one frame down, pushes `""`, and
+the caller re-issues a call byte-identical to the unrefined one. It is a
+de-duplication guard that saves a vector and a try block on the hottest path in
+symex, kept for that and not for correctness. A test written to green it would
+be theatre. One further note worth carrying: `..._addrof_local` executes *none*
+of the new code, so it is a behavioural control and not a coverage one — it
+should not be deleted as redundant with `..._addrof` on coverage grounds.
+
+**Code review changed the code as well as the record.** Beyond **R33**, which it
+found outright, the review closed three divergences between the new walk and the
+one it claims to invert. `size_bits` resolves symbol types through `ns.follow`
+before measuring and the inverse did not, so a typedef'd aggregate lost its path;
+it now follows too. The exception handler cleared every path already collected,
+which reverts that object to the pruning behaviour this change exists to remove
+— it now stops the descent and keeps what it found, which is sound because a
+path is only ever appended on an exact type match, and members after an unsized
+one are unreachable by a constant offset regardless. And `struct_union_members`
+and `struct_union_member_names` both return **by value**, so the walk was
+heap-allocating two vectors and bumping N refcounts at every level of every
+dereference in symex; it now binds const references off the concrete type. The
+outer `try` and the duplicated base case in `offset_paths` went with them.
+
+**Cost was measured, not assumed.** `01_pthread60`, the heaviest pthread case in
+the corpus, runs 108.7 s / 114.7 s unpatched against 111.3 s / 112.8 s / 120.8 s
+patched — each side landing inside the other's range, so no effect separable
+from ±6 s of run-to-run variance. The fast path is why: `offset == 0 && type ==
+target` returns before any walk, which is every dereference of a scalar through
+a plain pointer.
+
+**What this does not close.** The pun shape, as before. And a descriptor whose
+offset is *not* constant (`offset_is_set` false) is skipped rather than
+enumerated over every type-matching path. This paragraph first called that "a
+conservative gap with no known witness", on the strength of one shape built to
+try it (`pp = &arr[i].p` with symbolic `i`, which detects the race by another
+route). **That was wrong within the hour** — see §15 M9 (R32), where
+`int *a[2]; ap = &a[i];` with `i` symbolic and assumed in bounds is a false
+SUCCESSFUL under both solvers. It is a residual, tracked as **R32**, not a gap.
+And H-A6 stays refuted on the same grounds as before, with two further data
+points: the round that closed the census at 21/21 had itself missed a shape, and
+the round that fixed R31 declared a witnessless gap that a single further probe
+witnessed. The enumeration keeps being wrong about its own results, not merely
+incomplete.
+
+---
+
+### M9 (R33) — 2026-08-13, the offset that never survived to be walked
+
+R31's fix went to code review, and the review found a false `SUCCESSFUL` the
+census had not: `struct S { long pad; int *v[2]; }; int **pp = &s.v[1];`. Both
+halves of that address work in isolation — a member at a nonzero offset is
+`..._addrof_offset`, an array element via a pointer is `..._array_decay`, and
+both detect their race — and only the composition failed. A 2×2 over base and
+index offsets isolates it to one branch:
+
+| base offset | index offset | verdict |
+|---|---|---|
+| 0 | 8 | FAILED (correct) |
+| 8 | 0 | FAILED (correct) |
+| **8** | **8** | **SUCCESSFUL (false)** |
+| byte offset 16 reached by two members | — | FAILED (correct) |
+
+The last row is the control: same struct, same byte offset, same `int *` target,
+different route. So the discriminator is how the offset was built, not what it
+is.
+
+The cause is one branch in the index arm of `get_reference_set_rec`, and it
+predates R31 by a long way. It added a constant element offset only when the
+base offset was **zero**, and otherwise fell through to the unknown-offset
+branch, which clears `offset_is_set`. R31's walk requires a constant offset, so
+it skipped, and the unrefined lookup missed as before. The member arm one screen
+below had been composing correctly the whole time (`o.offset += offset_in_bytes`).
+
+The fix is to compose whenever the base offset is set. It is identical to the
+old code on the old domain — `offset_is_zero()` is defined as `offset_is_set &&
+offset.is_zero()`, and `+=` onto a zero offset is assignment — so the only
+behaviour that changes is the case that was abandoned. Note the direction: this
+makes a descriptor *more* precise, replacing "offset unknown" with a definite
+offset, which is the one change in this area that could be unsound if the
+arithmetic were wrong. It is the same arithmetic the member arm already
+performs, and `mpor_aggregate_ptr_race_member_index` pins the result.
+
+Worth recording as a method point, since the plan keeps asking what the census
+is worth: this defect sat in a two-line branch, on a shape more common than
+several the census does cover, and twenty-eight enumerated shapes walked past
+it. A reviewer reading the *code around* the fix found it in one pass. The
+census generates shapes from a model of what could go wrong; reading the
+neighbouring branch does not need that model to be right.
+
+---
+
+### M9 (R32) — 2026-08-13, the witnessless gap, witnessed
+
+The section above closed by naming one thing R31's fix does not cover — a
+descriptor whose offset is not constant — and judging it witnessless because the
+one shape tried for it detected its race by another route. The next shape tried
+witnessed it:
+
+```c
+int g = 0;
+int *a[2] = {&g, &g};
+int **ap;
+int i = nondet_int();
+__ESBMC_assume(i >= 0 && i < 2);
+ap = &a[i];          /* symbolic index -> descriptor offset unset */
+/* thread: **ap = 1;   main: g = 2; */
+```
+
+**`VERIFICATION SUCCESSFUL` by default under both Bitwuzla and Z3, `FAILED`
+under `--no-por`.** The same program with `a[1]` in place of `a[i]` reports
+FAILED, so the discriminator is the symbolic index and nothing else. This is
+well-defined C — the index is assumed in bounds — so the false SUCCESSFUL is not
+excused by UB the way the punning shape is.
+
+`--show-symex-value-sets` shows the erasure in one line: `c:@ap = { <a, *, 8,
+signed int * [2]> }`, where `*` is the unset offset, while the entry holding the
+answer is `c:@a[] = { <g, 0, 1, signed int> }`. R31's walk needs a constant to
+spell back out, finds none, and skips — leaving the unrefined lookup of `c:@a`
+to miss `c:@a[]` and report an empty value set, which every consumer reads as
+"points at nothing".
+
+The fix is the branch R31's section already named and declined to build: when
+the offset is unset, enumerate *every* type-matching path instead of the one
+path an offset selects. For an array that is just `[]` regardless of index,
+which is exactly how the value set keys it; for a struct or union it is every
+member whose type matches. It stays monotone for the same reason R31's walk
+does — paths are only ever added. Deliberately not built in the same change as
+R31, so that R31's mutation evidence keeps referring to the code it was measured
+against.
+
+Recorded as **R32**, pinned by
+`regression/esbmc-unix/mpor_aggregate_ptr_race_symbolic_offset` (KNOWNBUG,
+stating the verdict a fix must produce), with `..._array_decay` as the
+constant-index control that must keep passing.
 
 ---
 
