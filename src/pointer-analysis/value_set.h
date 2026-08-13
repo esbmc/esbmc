@@ -609,8 +609,9 @@ public:
    *         This only affects how constants are interpreted: if enabled, the
    *         expression 0 becomes a null_object2t reference in the value-set,
    *         while other constants are invalid2t/unknown2t; when disabled,
-   *         constant expressions do not generate any references in the
-   *         value-set.
+   *         constant expressions generate no references, except that a member
+   *         of a constant aggregate is still selected, since navigating to it
+   *         inserts nothing by itself.
    */
   /// Stop an operand whose set is only `unknown` from vetoing the other's;
   /// the `unknown` moves into @p dest. See
@@ -628,6 +629,15 @@ public:
     bool under_deref = true) const;
 
 protected:
+  /** The constant cases of get_value_set_rec: what a value reaches this code as
+   *  once constant propagation has substituted it. */
+  void get_constant_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type,
+    bool under_deref) const;
+
   // Like get_value_set_rec, but dedicated to walking through the ireps that
   // are produced by pointer deref byte stitching
   void get_byte_stitching_value_set(

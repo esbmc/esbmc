@@ -230,6 +230,113 @@ void value_sett::retire_objectless_operand(
   }
 }
 
+/* Index of, and bytes spanned by, the leading component `rest` names. Member
+ * names are not identifiers -- clang spells an anonymous member
+ * "S::(anonymous at f.c:4:9)", which contains '.' -- so the component is the
+ * longest declared name `rest` continues on a component boundary, never
+ * whatever precedes the next '.' or '['. Longest-match is unambiguous because
+ * two distinct names can only both boundary-match when one is the other
+ * followed by '.' or '[', which no name clang emits can be. A tie is therefore
+ * a duplicate name, and resolves to nullopt as the lookup in
+ * struct_union_get_component_number does. */
+static std::optional<std::pair<size_t, size_t>> match_leading_component(
+  const std::vector<irep_idt> &names,
+  const std::string &rest)
+{
+  size_t len = 0, matches = 0, no = 0;
+
+  for (size_t i = 0; i < names.size(); i++)
+  {
+    const std::string &name = names[i].as_string();
+    if (name.size() < len || rest.compare(0, name.size(), name) != 0)
+      continue;
+    if (
+      rest.size() > name.size() && rest[name.size()] != '.' &&
+      rest[name.size()] != '[')
+      continue;
+
+    matches = name.size() == len ? matches + 1 : 1;
+    len = name.size();
+    no = i;
+  }
+
+  if (matches != 1)
+    return std::nullopt;
+  return std::make_pair(no, len);
+}
+
+void value_sett::get_constant_value_set(
+  const expr2tc &expr,
+  object_mapt &dest,
+  const std::string &suffix,
+  const type2tc &original_type,
+  bool under_deref) const
+{
+  /* A constant struct holds its members' values here, so no suffixed symbol
+   * name exists for the symbol case to look up and the caller's ".field" has to
+   * select one now; leaving the set empty resolves a write through a pointer
+   * held in a member to no object (finding R29, esbmc/esbmc#6774). One
+   * component is consumed per level, so nesting follows the same rule. */
+  if (is_constant_struct2t(expr) && !suffix.empty() && suffix[0] == '.')
+  {
+    const constant_struct2t &cs = to_constant_struct2t(expr);
+    const std::string rest = suffix.substr(1);
+    const std::vector<irep_idt> names = struct_union_member_names(expr->type);
+    auto comp = match_leading_component(names, rest);
+
+    if (comp && comp->first < cs.datatype_members.size())
+    {
+      get_value_set_rec(
+        cs.datatype_members[comp->first],
+        dest,
+        rest.substr(comp->second),
+        original_type,
+        under_deref);
+      return;
+    }
+
+    /* Unanalysable is unknown, not nothing, as the tail of get_value_set_rec
+     * has it: an empty set asserts "points at nothing" to every consumer. */
+    insert(dest, unknown2tc(original_type), BigInt(0));
+    return;
+  }
+
+  /* Constant numbers aren't pointers when not under a dereference; the null
+   * check for those is in the value set code for symbols. */
+  if (!under_deref)
+    return;
+
+  if (is_constant_int2t(expr))
+  {
+    const constant_int2t &ci = to_constant_int2t(expr);
+    if (ci.value.is_zero())
+      insert(dest, null_object2tc(expr->type), BigInt(0));
+    else if (is_signedbv_type(expr->type) || is_unsignedbv_type(expr->type))
+      insert(dest, invalid2tc(original_type), BigInt(0));
+    else
+      insert(dest, unknown2tc(original_type), BigInt(0));
+  }
+  else if (is_constant_union2t(expr))
+  {
+    /* Only the initialised member's value is here and the caller names it in
+     * the suffix, so consume that component as the struct case does. A
+     * component naming any other member is punning this cannot follow, and
+     * passes through unconsumed. */
+    const constant_union2t &cu = to_constant_union2t(expr);
+    std::string rest = suffix;
+
+    if (!rest.empty() && rest[0] == '.')
+    {
+      const std::vector<irep_idt> names = struct_union_member_names(expr->type);
+      auto comp = match_leading_component(names, rest.substr(1));
+      if (comp && names[comp->first] == cu.init_field)
+        rest = rest.substr(1 + comp->second);
+    }
+
+    get_value_set_rec(cu.datatype_members[0], dest, rest, original_type);
+  }
+}
+
 void value_sett::get_value_set_rec(
   const expr2tc &expr,
   object_mapt &dest,
@@ -370,33 +477,7 @@ void value_sett::get_value_set_rec(
 
   if (is_constant_expr(expr))
   {
-    if (under_deref)
-    {
-      if (is_constant_int2t(expr))
-      {
-        constant_int2t ci = to_constant_int2t(expr);
-        if (ci.value.is_zero())
-        {
-          expr2tc tmp = null_object2tc(expr->type);
-          insert(dest, tmp, BigInt(0));
-          return;
-        }
-        else if (is_signedbv_type(expr->type) || is_unsignedbv_type(expr->type))
-          insert(dest, invalid2tc(original_type), BigInt(0));
-        else
-          insert(dest, unknown2tc(original_type), BigInt(0));
-      }
-      else if (is_constant_union2t(expr))
-      {
-        constant_union2t cu = to_constant_union2t(expr);
-        get_value_set_rec(cu.datatype_members[0], dest, suffix, original_type);
-      }
-    }
-    else
-    {
-      // Constant numbers aren't pointers. Null check is in the value set code
-      // for symbols.
-    }
+    get_constant_value_set(expr, dest, suffix, original_type, under_deref);
     return;
   }
 

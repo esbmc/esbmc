@@ -4104,6 +4104,11 @@ places outside this plan**: goto-symex *consumes* `value_sett`, and its
 correctness is a separate obligation. Recorded here, not chased, and worth its
 own issue against the pointer analysis rather than against MPOR.
 
+*Chased and closed, 2026-08-12 — see §15 M9 (R29 residual). The arm-asymmetry
+reading above is the symptom, not the cause: both arms recurse to the same
+place, and the object is lost one level further down, in the constant-expression
+case.*
+
 Regression scope: 568/572 `esbmc-unix` pass, the four failures being the
 pre-existing macOS set (`04_valgrind`, `error`, `error2`,
 `unsupported_extensions`) confirmed identical before this change; 658 unit tests
@@ -5005,6 +5010,126 @@ forbids.
 
 **A6.4 closed.** With it, the row §15 M9 named as the last one carrying no
 verdict has one.
+
+---
+
+### M9 (R29 residual) — 2026-08-12, the last two shapes, and a corrected cause
+
+M9 left `*(s.p)` and `*(o.in.p)` reporting **false SUCCESSFUL by default** and
+routed the cause out of this plan: `get_reference_set` returned zero objects for
+the struct spelling and one for the union, which read as the `member2t` case
+taking different arms. **That reading was wrong, and only instrumenting the path
+showed it.** Both spellings recurse to the same place. The lookup the struct
+performs even *succeeds*: `c:@s.p` is found, with one object in it —
+
+```
+R29KEY lookup='c:@s.p' rlevel=3 found=1 objs=1
+R29MEMB single='p' src=symbol      dest=1
+R29MEMB single='p' src=constant_struct dest=0   <- the call that feeds MPOR
+```
+
+There are two calls, not one. The second reaches the member case with a
+`constant_struct2t` source — constant propagation has substituted the struct's
+*value* — and recursing into it lands on `is_constant_expr` at
+`value_set.cpp:375`, which returns having inserted nothing unless the expression
+is a `constant_int2t` or a `constant_union2t` under a dereference. There is no
+`constant_struct2t` sub-case, so the value set comes back empty, the write
+resolves to no object, and MPOR calls the two transitions independent.
+
+**The union works for a reason that makes the asymmetry exact rather than
+coincidental**: `constant_union2t` *is* one of the two sub-cases, added for
+unions, so the union spelling descends into its member and finds `g` while the
+struct spelling falls off the end. The dedicated `is_constant_struct2t` arm at
+`value_set.cpp:470` never runs — `is_constant_expr` shadows it — which is why
+reading the code suggests the case is handled when it is not. A C-Dead
+candidate, recorded here rather than deleted in the same patch.
+
+**Fix:** the constant case descends into the member the suffix names, consuming
+one component per level, so nesting works by the same rule as the flat case.
+Both shapes now report FAILED, matching `--no-por`;
+`mpor_aggregate_ptr_race` flips **KNOWNBUG → CORE**, and
+`mpor_aggregate_ptr_race_nested` pins the two-level form that a single-level
+descent would still lose.
+
+Each test was mutation-checked rather than assumed, and one earned its place
+only on the second attempt. A binary built from the unpatched value set reports
+SUCCESSFUL on the flat test, which kills the whole-fix mutant by measurement.
+`_nested` is driven through two descents (`consumed=2 remain='.p'`, then
+`consumed=1 remain=''`), so a single-level descent loses it. `_prefix` exists
+because `p` is a declared sibling of `p2`: the naive "first declared name that
+is a prefix" reading resolves the write to the wrong global and the race
+vanishes, and **that mutant is invisible to every other test in the set** — the
+anonymous-member test cannot see it, because its struct declares one member.
+Two candidate tests were written, mutation-checked, and deleted for asserting
+nothing: a punned-dereference case that reports FAILED on the unpatched binary
+too, and the SUCCESSFUL-expecting case discussed below.
+
+**Two defects review found in that fix, both confirmed against `--no-por` and
+both now closed.** They are recorded because each is a *false SUCCESSFUL* of
+exactly the class this entry exists to remove, and the first was introduced by
+the fix itself.
+
+*Selecting the component by scanning for the next `.` or `[` is wrong.* Member
+names are not C identifiers: clang names a C11 anonymous member
+`struct Outer::(anonymous at main.c:8:3)`, whose text contains `.`, so the scan
+cut the name apart, matched nothing, and the race was pruned again. The
+discriminating evidence is two programs differing only in a `#line`-controlled
+filename — a dotted name verifies SUCCESSFUL, a dot-free one FAILED. The
+leading component is now the longest *declared* name the suffix continues on a
+component boundary, which is delimiter-independent by construction; a tie
+resolves to no match rather than to a guess.
+
+*The constant-union arm never consumed its suffix.* `get_value_set_rec` pushes
+`"." + init_field` for a `constant_union2t`, and the arm passed that straight
+into the member's own type, where it named nothing — so `*(u.in.p)` was pruned
+whether or not an outer struct wrapped it. Pre-existing, and reachable before
+this entry, but the struct descent now feeds it suffixes it never saw. It
+consumes the initialised member's component; a component naming a *different*
+member is punning this analysis cannot follow and passes through unchanged, so
+no precision is lost.
+
+A third review finding is taken but closes nothing on its own: a lookup failure
+now contributes `unknown` rather than nothing, per the contract at
+`value_set.h:603-605`. That is the correct value-set semantics — empty asserts
+"points at nothing" to every consumer — but `resolve_pointer_target`
+(`execution_state.cpp:945-947`) discards any entry that is not an
+`object_descriptor2t`, so MPOR still sees nil. **The invariant worth stating at
+that boundary is that empty means unanalysable, not harmless**; defending it on
+the consumer side would make the next R29-class residual cost precision instead
+of soundness. Recorded, not done here.
+
+**Every test here expects FAILED, and that is forced rather than lazy.** The
+coverage gate asked for the missing half of the two-test rule — a program whose
+race is *correctly* pruned, pinning that the descent does not over-approximate.
+No such test can exist for MPOR. Two mutations were built to kill one: selecting
+the shortest matching component instead of the longest, and selecting component
+0 unconditionally. **Both left the verdict SUCCESSFUL.** The reason is
+structural: the value set steers only which interleavings MPOR explores, while
+the data the program moves comes from constant propagation, so a wrong or
+over-wide set costs *interleavings* and never the verdict of a correct program.
+Under-approximation hides a real race and shows up as SUCCESSFUL; over-
+approximation shows up as run time. **Only the FAILED direction carries signal
+here**, and a SUCCESSFUL-expecting test would have asserted nothing — it was
+written, mutation-checked, and deleted. Worth remembering the next time this
+plan is asked for a negative regression test on a pruning decision.
+
+Regression scope: 598/603 `esbmc-unix` + `esbmc-unix2` pass at `-j8`. All five
+failures are the 120 s cap, not verdict changes: each passes standalone —
+`03_boundedBuffer` 93.0 s, `github_2513_1` 84.6 s, `github_595` 90.1 s,
+`github_6480_deepening` 82.7 s, `01_pthread60` 107.7 s. Unit tests 643/643.
+The widening this entry introduces was checked for cost rather than assumed
+free: `01_pthread60` runs 104.95 s unpatched against 106.14 s patched, +1.1%,
+and none of the five declares a constant aggregate holding a pointer, so none
+reaches the new arms at all.
+
+**What this does not close.** R29's row stays open as H-A6's completeness
+obligation: this fixes the seven shapes now enumerated, and says nothing about
+shapes it did not. That the census's own five missed both defects above is the
+point — the enumeration is the weak step, not the fix. One further shape is
+known and unexplained: struct-to-struct punning (`((struct B *)&a)->q`) never
+reaches the constant-struct arm at all and reports SUCCESSFUL. It is strict-
+aliasing UB, so no soundness claim is made, but it is the next probe R29's
+completeness row needs.
 
 ---
 
