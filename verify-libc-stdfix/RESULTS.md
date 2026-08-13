@@ -1703,7 +1703,50 @@ Tested rather than assumed, three ways:
    `divi(-3, -1)` at s0.15 and s0.31 -- nothing symbolic, so no unmodelled call
    can influence branch selection -- **both still FAIL**.
 
-### Resolved: the warning names operator() but concerns the destructor
+### Root cause found, filed as esbmc/esbmc#6969
+
+The trigger is **multiple template instantiations**, not the destructor. When a
+function template containing a named lambda is instantiated more than once, only
+the first instantiation gets a body for the closure's `operator()`; later ones
+call a bodyless symbol and symex assigns a **nondet return value**. Minimal
+reproducer, 7 lines:
+
+```cpp
+template <typename T> static int f() {
+  auto g = [](int x) { return x > 0; };
+  return g(1) ? 1 : 0;
+}
+int main() { return f<int>() + f<long>(); }   // warns
+int main() { return f<int>(); }               // clean
+```
+
+Demonstrably unsound in general -- of three true assertions across three
+instantiations, only the first passes. Reproduces on upstream master
+(9a3d7e8a6c), so it is not a camada-branch artefact. Filed with the reproducer.
+
+### Impact on this work: one harness, and its finding survives
+
+Audited every harness. **`harness_divi_widths` is the only one that warns**,
+because it is the only one instantiating a template at two types:
+
+| harness | instantiations | warns |
+|---|---|---|
+| `harness_divi_widths` | `divi<_Fract>`, `divi<long _Fract>` | **yes (1)** |
+| `harness_divi_bug1` | `divi<short _Fract>` | no |
+| `harness_divi_widecast` | `divi<long _Accum>` | no |
+| `harness_divi_control` | `divi<short _Fract>` | no |
+| all sqrt / exp / divifx harnesses | one each | no |
+
+Split into two single-instantiation harnesses -- `harness_divi_s015.cpp` and
+`harness_divi_s031.cpp` -- **both still FAIL with zero warnings**. So the
+"defect 1 is not width-specific" claim holds on evidence that cannot be affected
+by #6969, and the split versions supersede the combined one.
+
+Nothing else in this work is exposed: every other harness instantiates each
+template exactly once, and the two accuracy families (sqrt, exp) were also
+confirmed by running native libc binaries, which involve no verifier at all.
+
+### The earlier destructor explanation was a red herring
 
 Inspecting the GOTO program settles it. The lambda's `operator()` **is fully
 translated** -- it is in the program with a body:
