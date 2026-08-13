@@ -1,4 +1,5 @@
 #include "goto-programs/goto_binary_reader.h"
+#include <util/base/stack_budget.h>
 #include "irep2/irep2_expr.h"
 #include <util/lang/c_types.h>
 #include <util/irep/std_code.h>
@@ -727,51 +728,22 @@ namespace
 /* migrate_expr recurses once per level of expression nesting, and its frame is
  * large: ~150 branches whose locals clang does not coalesce, measured at ~16KB
  * a level. A deeply nested expression therefore exhausts even the 512MB stack
- * main() hands us and dies with SIGSEGV instead of a diagnostic (#5048).
- *
- * Bound the bytes actually consumed rather than the number of frames: a frame
- * count tuned on one build is wrong on another (a Debug frame is several times
- * an optimised one), whereas the byte budget holds whatever the frame costs. */
-constexpr std::ptrdiff_t migrate_stack_budget = 384L * 1024 * 1024;
-thread_local const char *migrate_stack_base = nullptr;
-thread_local unsigned migrate_depth = 0;
-
-struct migrate_stack_guardt
-{
-  char marker;
-
-  migrate_stack_guardt()
-  {
-    if (migrate_depth++ == 0)
-    {
-      migrate_stack_base = &marker;
-      return;
-    }
-
-    std::ptrdiff_t used = migrate_stack_base - &marker;
-    if (used < 0)
-      used = -used;
-    if (used > migrate_stack_budget)
-    {
-      log_error(
-        "expression nesting is too deep to migrate: {} MiB of stack used. "
-        "Simplify or split the input expression.",
-        used / (1024 * 1024));
-      abort();
-    }
-  }
-
-  ~migrate_stack_guardt()
-  {
-    if (--migrate_depth == 0)
-      migrate_stack_base = nullptr;
-  }
-};
+ * main() hands us and dies with SIGSEGV instead of a diagnostic (#5048). */
+using migrate_stack_guardt = stack_budget_guardt<struct migrate_tagt>;
 } // namespace
 
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
+  if (stack_guard.exceeded(default_stack_budget))
+  {
+    log_error(
+      "expression nesting is too deep to migrate: {} MiB of stack used. "
+      "Simplify or split the input expression.",
+      stack_guard.bytes_used() / (1024 * 1024));
+    abort();
+  }
+
   type2tc type;
 
   if (expr.id() == "nil")
