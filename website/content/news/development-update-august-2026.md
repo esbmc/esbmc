@@ -9,7 +9,7 @@ tags:
   - OpenSource
 ---
 
-🚀 Development on ESBMC has been moving fast: around 80 pull requests were
+Development on ESBMC has been moving fast: around 80 pull requests were
 merged into `master` in the first two weeks of August alone. Here are the
 highlights.
 
