@@ -467,6 +467,57 @@ static bool is_attribute_base_expression(const nlohmann::json &node_type)
          node_type == "BinOp" || node_type == "UnaryOp";
 }
 
+/// The symbol `__ESBMC_return_value` names inside an `__ESBMC_ensures` clause,
+/// or null when the name is something else or the enclosing function returns
+/// nothing. The contracts pass rewrites it to the real return value, so the
+/// frontend only has to give it the enclosing function's return type for the
+/// clause to type-check.
+symbolt *python_converter::contract_return_value_symbol(
+  const std::string &var_name,
+  const nlohmann::json &element)
+{
+  if (var_name != "__ESBMC_return_value" || current_func_name_.empty())
+    return nullptr;
+
+  symbol_id ret_sid = create_symbol_id();
+  symbolt *func_symbol = find_symbol(ret_sid.to_string());
+  // A None-returning function has no value to name, and an empty-typed symbol
+  // crashes the encoder rather than failing here.
+  const typet ret_type = func_symbol && func_symbol->get_type().is_code()
+                           ? to_code_type(func_symbol->get_type()).return_type()
+                           : typet();
+  if (returns_no_value(ret_type))
+    return nullptr;
+
+  ret_sid.set_object(var_name);
+  symbolt ret_symbol = create_symbol(
+    current_python_file,
+    var_name,
+    ret_sid.to_string(),
+    get_location_from_decl(element),
+    ret_type);
+  ret_symbol.lvalue = true;
+  ret_symbol.file_local = true;
+  return add_symbol_and_get_ptr(ret_symbol);
+}
+
+/// The "variable is not defined" diagnostic for a Name that resolved to no
+/// symbol, naming the enclosing function when the reference is inside one.
+static std::string undefined_variable_message(
+  const std::string &var_name,
+  const std::string &func_name,
+  const locationt &location)
+{
+  std::ostringstream error_msg;
+  error_msg << "Variable '" << var_name << "' is not defined";
+  if (!func_name.empty())
+    error_msg << " in function '" << func_name << "'";
+  if (!location.get_line().empty())
+    error_msg << " at line " << location.get_line();
+  error_msg << ".";
+  return error_msg.str();
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
@@ -1007,27 +1058,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             break;
           }
         }
-        locationt location = get_location_from_decl(element);
-        std::ostringstream error_msg;
-        if (!current_func_name_.empty())
+        if (symbolt *rv = contract_return_value_symbol(var_name, element))
         {
-          // Variable referenced inside a function
-          error_msg << "Variable '" << var_name
-                    << "' is not defined in function '" << current_func_name_
-                    << "'";
-          if (!location.get_line().empty())
-            error_msg << " at line " << location.get_line();
-          error_msg << ".";
+          expr = symbol_expr(*rv);
+          break;
         }
-        else
-        {
-          // Variable referenced at global scope
-          error_msg << "Variable '" << var_name << "' is not defined";
-          if (!location.get_line().empty())
-            error_msg << " at line " << location.get_line();
-          error_msg << ".";
-        }
-        throw std::runtime_error(error_msg.str());
+
+        throw std::runtime_error(undefined_variable_message(
+          var_name, current_func_name_, get_location_from_decl(element)));
       }
     }
 

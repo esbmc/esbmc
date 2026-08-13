@@ -202,6 +202,7 @@ if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_HUMANEVAL humaneval)
     set(REGRESSIONS_QUIXBUGS quixbugs)
     set(REGRESSIONS_PYTHON_COVERAGE python-coverage)
+    set(REGRESSIONS_PYTHON_CONTRACTS python-contracts)
     set(REGRESSIONS_AI_GENERATED_CODE ai-generated-code)
 endif()
 
@@ -315,6 +316,7 @@ if(APPLE)
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
                     ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
@@ -389,6 +391,7 @@ else()
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
                     ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
