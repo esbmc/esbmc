@@ -1157,9 +1157,14 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
         {
           ;
         }
-        else if (has_const_index_offset && o.offset_is_zero())
+        else if (has_const_index_offset && o.offset_is_set)
         {
-          o.offset = index_offset;
+          /* Compose rather than require the base offset to be zero: `&s.v[1]`
+           * arrives with the member's offset already set, and abandoning it
+           * here left the descriptor with no offset for R31's walk to spell
+           * back out, so the race through it was pruned (R33). The member arm
+           * below already composes this way. */
+          o.offset += index_offset;
         }
         else
         {
