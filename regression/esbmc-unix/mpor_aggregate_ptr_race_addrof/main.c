@@ -11,11 +11,10 @@ struct S
 struct S s = {&g};
 int **pp = &s.p;
 
-// R31: taking the address of a struct member and dereferencing twice through it
-// prunes the race, exactly as R29 did one level in. This is ordinary C, not
-// punning -- &s.p is a well-defined int**. Reports SUCCESSFUL by default and
-// FAILED under --no-por, both solvers; copying the pointer to a local first
-// (see _addrof_local) restores detection, so the boundary is syntactic.
+// R31: `&s.p` refers to the struct symbol with the member erased into a byte
+// offset, so resolving `**pp` asked the value set for `s`, which nothing keys,
+// and MPOR pruned the race. get_value_set_rec now spells the offset back out
+// as a field path. Member offset 0 here; see _addrof_offset for a nonzero one.
 void *writer(void *arg)
 {
   (void)arg;

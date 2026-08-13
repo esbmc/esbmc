@@ -265,6 +265,105 @@ static std::optional<std::pair<size_t, size_t>> match_leading_component(
   return std::make_pair(no, len);
 }
 
+/* Every field path of `type` whose sub-object is a `target` sitting `offset`
+ * bytes in. Members are accumulated in bits, as member_offset_bits does, and
+ * array elements in bytes, as the index arm of get_reference_set_rec does, so
+ * each arm inverts the walk that contributed its part of the offset.
+ * A member of no constant size ends the descent, keeping the paths already
+ * found: everything after it is unreachable by a constant offset anyway. */
+static void collect_offset_paths(
+  const type2tc &type_in,
+  const BigInt &offset,
+  const type2tc &target,
+  const namespacet &ns,
+  const std::string &prefix,
+  std::vector<std::string> &dest)
+{
+  /* size_bits follows symbol types before measuring, so the inverse must too,
+   * or a typedef'd aggregate silently loses its path. */
+  const type2tc type = ns.follow(type_in);
+
+  if (offset == 0 && type == target)
+  {
+    dest.push_back(prefix);
+    return;
+  }
+
+  if (is_array_type(type))
+  {
+    const type2tc &subtype = to_array_type(type).subtype;
+    BigInt esize;
+    try
+    {
+      esize = type_byte_size(subtype, &ns);
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      return;
+    }
+    if (esize > 0)
+      collect_offset_paths(
+        subtype, offset % esize, target, ns, prefix + "[]", dest);
+    return;
+  }
+
+  if (!is_struct_type(type) && !is_union_type(type))
+    return;
+
+  const bool overlaid = is_union_type(type);
+  const std::vector<type2tc> &members =
+    overlaid ? to_union_type(type).members : to_struct_type(type).members;
+  const std::vector<irep_idt> &names = overlaid
+                                         ? to_union_type(type).member_names
+                                         : to_struct_type(type).member_names;
+  const BigInt offset_bits = offset * 8;
+  BigInt start_bits = 0;
+
+  for (size_t i = 0; i < members.size(); i++)
+  {
+    BigInt size_bits;
+    try
+    {
+      size_bits = type_byte_size_bits(members[i], &ns);
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      return;
+    }
+
+    if (offset_bits >= start_bits && offset_bits < start_bits + size_bits)
+      collect_offset_paths(
+        members[i],
+        (offset_bits - start_bits) / 8,
+        target,
+        ns,
+        prefix + "." + names[i].as_string(),
+        dest);
+    if (!overlaid)
+      start_bits += size_bits;
+  }
+}
+
+/* The suffixes naming a `target` held `offset` bytes into `type`. A union
+ * contributes every member the offset lands in, as the member2t arm of
+ * get_value_set_rec does, since an offset alone cannot say which one is live.
+ * The empty path is possible and means "the descriptor already names the
+ * object": the caller's unrefined lookup covers it, so it is dropped. */
+static std::vector<std::string> offset_paths(
+  const type2tc &type,
+  const BigInt &offset,
+  const type2tc &target,
+  const namespacet &ns)
+{
+  std::vector<std::string> paths;
+
+  if (offset == 0 && type == target)
+    return paths;
+
+  collect_offset_paths(type, offset, target, ns, "", paths);
+  return paths;
+}
+
 void value_sett::get_constant_value_set(
   const expr2tc &expr,
   object_mapt &dest,
@@ -456,6 +555,21 @@ void value_sett::get_value_set_rec(
     {
       const expr2tc &object = object_numbering[it1.first];
       get_value_set_rec(object, dest, suffix, original_type);
+
+      /* `&s.p` refers to the struct symbol with the member erased into a byte
+       * offset, so the lookup above asks for `s`, which nothing keys -- the
+       * pointer held in `s.p` is invisible and a race through it is pruned
+       * (R31, esbmc/esbmc#6774). Ask again under the paths that offset spells
+       * out. The match is on the dereferenced type exactly, so nothing is
+       * claimed that is not there -- and equally, a cast between the
+       * descriptor's type and this one puts the member back out of reach. An
+       * offset that is not constant is left to the unrefined lookup above
+       * (R32). */
+      if (!it1.second.offset_is_set)
+        continue;
+      for (const std::string &path :
+           offset_paths(object->type, it1.second.offset, expr->type, ns))
+        get_value_set_rec(object, dest, path + suffix, original_type);
     }
 
     return;
