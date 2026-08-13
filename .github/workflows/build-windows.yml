@@ -35,7 +35,11 @@ jobs:
       run: |
         vcpkg.exe update
         cd C:/vcpkg
-        git.exe checkout 2025.03.19
+        # MSYS2 prunes old packages from every mirror, so a vcpkg release only
+        # stays usable while the msys2-runtime it names is still published.
+        # 2025.03.19 asked for msys2-runtime-3.5.4-2, which now 404s on all of
+        # them and fails every Windows configure; this release asks for 3.6.5-1.
+        git.exe checkout 2026.07.29
         .\bootstrap-vcpkg.bat
     - name: Make git use LF only
       run: |
