@@ -249,8 +249,8 @@ protected:
   bool bottom;
 
   /**
-   * @brief Recursively explores an Expression until it reaches a symbol. If the
-   * symbol is a BV, then removes it from the int_map
+   * @brief Recursively explores an Expression until it reaches a symbol, then
+   * removes it from the int_map whatever the symbol's type
    *
    * TODO: There are a lot of expressions that are not supported
    * TODO: A utility function that recursively extracts all the symbols of an expr would be very useful
