@@ -101,7 +101,6 @@ SCENARIO(
     }
   }
 
-
   GIVEN("a floating-point rewrite")
   {
     const type2tc double_ty = migrate_type(double_type());
@@ -189,14 +188,11 @@ SCENARIO(
   simplification_equivalence_checkert checker(ns, options);
   for (int i = 0; i < 8; ++i)
   {
-    REQUIRE(
-      checker.check(same, x) == simplification_equivalencet::equivalent);
-    REQUIRE(
-      checker.check(changed, x) == simplification_equivalencet::differs);
+    REQUIRE(checker.check(same, x) == simplification_equivalencet::equivalent);
+    REQUIRE(checker.check(changed, x) == simplification_equivalencet::differs);
   }
 
   // A declined shape resets the solver; the checker must keep working after.
-  REQUIRE(
-    checker.check(expr2tc(), x) == simplification_equivalencet::skipped);
+  REQUIRE(checker.check(expr2tc(), x) == simplification_equivalencet::skipped);
   REQUIRE(checker.check(same, x) == simplification_equivalencet::equivalent);
 }

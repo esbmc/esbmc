@@ -185,8 +185,8 @@ void install_simplification_equivalence_check(
 #ifdef ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK
   // The checker owns the solver and is shared into the lambda, so it lives
   // exactly as long as the installed callback.
-  auto checker = std::make_shared<simplification_equivalence_checkert>(
-    ns, options);
+  auto checker =
+    std::make_shared<simplification_equivalence_checkert>(ns, options);
   simplification_check::install(
     [checker](const expr2tc &before, const expr2tc &after) {
       std::string witness;
