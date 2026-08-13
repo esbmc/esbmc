@@ -611,7 +611,7 @@ discharge or an explicit, reviewed waiver.
 | H-A2 | `guard2tc::operator-=` satisfies `(g_cur ∨ g_mrg) → (diff ↔ g_mrg)` | **irep2 plan** H-A9/H-B4 — cross-document dependency |
 | H-A2 | Incoming merge guards may overlap (no disjointness assumed) | by construction (not assumed) |
 | H-A4 | Every `with2t` store the slicer elides has a `symbol2t` source and constant index | **Discharged**, §15 M9 (H-B7) — `assumption_discharge.test.cpp` checks it on every elided store and censuses the excluded shapes; struct member stores are excluded by their `constant_string2t` field, which the census now pins |
-| H-A6 | `thread_last_reads/writes` contain *all* accesses of the last transition, including through pointers | **Refuted twice.** R11 → **R18** (one-level resolution losing a nested dereference) was fixed by **#6550**. The completeness this row asks for is now *checked* rather than assumed — a 21-shape census, §15 M9 (H-A6) — and it fails: five shapes holding the pointer in an aggregate are missed, recorded as **R29**. The row stays open, but as a pinned defect rather than an unexamined gap |
+| H-A6 | `thread_last_reads/writes` contain *all* accesses of the last transition, including through pointers | **Refuted twice.** R11 → **R18** (one-level resolution losing a nested dereference) was fixed by **#6550**. The completeness this row asks for is now *checked* rather than assumed — a 21-shape census, §15 M9 (H-A6) — and it failed: five shapes holding the pointer in an aggregate were missed, recorded as **R29**. R29 is now fixed (§15 M9 (R29 fix), (R29 residual)) and the census re-runs **21/21 agreeing with `--no-por`**, dual-solver on the ten aggregate shapes, §15 M9 (H-A6 re-census). The row stays open regardless: 21 shapes passing is an enumeration, not the completeness the row claims, and one known shape — struct-to-struct punning — never reaches the resolution at all. Downgraded from *refuted* to *no known counterexample* |
 | H-A8 | `push_ctx`/`pop_ctx` calls are balanced by the caller (`reachability_treet`) | **Discharged**, §15 M9 (H-A8) — `context_stack.test.cpp` on a real `runtime_encoded_equationt` over a real solver: an exhausted 49-interleaving exploration lands back on depth 0, having reached 9. Deleting the setup `push_ctx` fails it *and* SIGSEGVs, which is the UB the row's failure mode predicted |
 | all Tier A | `nondet` solver answers are *sound* (no wrong TRUE/FALSE) | out of scope — solver backends are Tier D |
 
@@ -5130,6 +5130,35 @@ known and unexplained: struct-to-struct punning (`((struct B *)&a)->q`) never
 reaches the constant-struct arm at all and reports SUCCESSFUL. It is strict-
 aliasing UB, so no soundness claim is made, but it is the next probe R29's
 completeness row needs.
+
+---
+
+### M9 (H-A6 re-census) — 2026-08-13, 21/21, and what that is not
+
+The census of §15 M9 (H-A6) is the artefact that pinned R29, so it is also the
+one that says whether R29 is gone. Re-run against the patched binary on the same
+method — writer reaches `g` through one access shape, `main` reaches it
+directly, `--no-por` is the reference — **all 21 shapes now agree**, against 16
+of 21 when the census was written. The ten aggregate shapes were re-run under
+**both Bitwuzla and Z3**, matching the dual-solver standard the original used;
+no disagreement.
+
+The census grew by the shapes this round's defects taught it to ask about:
+anonymous member, struct-in-union, union-in-struct, three-level nesting, and
+prefix-named siblings. Four of the five are shapes the original enumeration
+would have had no reason to include, which is the honest reading of what the
+first census was worth — it found five real defects and was blind to four more
+that the *fix* for those five had to discover.
+
+**H-A6 does not close, and the reason is not modesty.** The row claims
+completeness over every access shape; 21 passing shapes is an enumeration
+over the shapes someone thought of, and this round has just demonstrated twice
+that the thinking-of is the weak step. The row moves from **refuted** to **no
+known counterexample**, which is a different and lesser thing than discharged.
+One shape is already known to sit outside: struct-to-struct punning
+(`((struct B *)&a)->q`) reports SUCCESSFUL and never reaches the constant
+aggregate arm at all. It is strict-aliasing UB, so it carries no soundness
+claim, but it is a shape the census cannot currently speak for.
 
 ---
 
