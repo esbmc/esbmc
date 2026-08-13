@@ -4890,6 +4890,24 @@ void clang_c_convertert::get_decl_name(
                                        location_begin.column().as_string();
       std::string kind_name = rd.getKindName().str();
       name = kind_name + " __anon_" + kind_name + "_at_" + location_begin_str;
+
+      /* A lambda closure declared inside a function template is a distinct
+       * type in every instantiation, but file/line/column are shared by all
+       * of them, so the name above collides. get_struct_union_class() then
+       * finds the first instantiation's symbol already present and returns
+       * early, leaving the later instantiations' operator() with no body --
+       * symex assigns a nondet return and the verdict is silently wrong
+       * (esbmc/esbmc#6969). Qualify with the enclosing specialisation, which
+       * is what clang's own USRs for the closure's methods already carry. */
+      const auto *parent =
+        llvm::dyn_cast_or_null<clang::FunctionDecl>(rd.getDeclContext());
+      if (parent && parent->getTemplateSpecializationArgs())
+      {
+        std::string parent_name, parent_id;
+        get_decl_name(*parent, parent_name, parent_id);
+        name += "_" + parent_id;
+      }
+
       std::replace(name.begin(), name.end(), '.', '_');
     }
     else if (
