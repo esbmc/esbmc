@@ -8,10 +8,11 @@ int *a[2] = {&g, &g};
 int **ap;
 pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 
-// The passing direction of R32. An unset offset selects no path, so the descent
-// takes every path of the dereferenced type -- the widest thing this walk ever
-// does. This test fails if that width ever turns a correct program into a false
-// alarm; _symbolic_offset is the same shape with the mutex removed.
+// The passing direction of R32: _symbolic_offset with the mutex added, so it
+// enters the widest route the walk has (measured, not assumed) and must stay
+// SUCCESSFUL. It is a canary, not a witness -- it also passes on unpatched
+// code, so it kills no mutant of R32. _widen_contained is the test whose
+// success actually depends on the widening staying inside the value set.
 void *writer(void *arg)
 {
   (void)arg;

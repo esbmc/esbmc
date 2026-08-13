@@ -5505,8 +5505,19 @@ the most likely to turn a correct program into a false alarm. It does not.
 
 Cost is unchanged on the corpus. `01_pthread60` 102.8 s against 103.4 s before
 this change, `ch13_10` 106.6 s against 106.6 s, `github_5868_string_conversions`
-83.9 s against 82.9 s — 1861 tests across `esbmc-unix`, `cbmc`, `esbmc-cpp/cpp`
-and `floats`, no failure that does not also fail serially as a `-j` timeout.
+83.9 s against 82.9 s. The sweep was later widened to the core C suite as well:
+**1737 `esbmc/`, 620 `esbmc-unix`, 775 `esbmc-cpp/cpp`, 307 `cbmc`, 164
+`floats`** and a 550-test sample of `python/` (that suite does not fit the
+five-minute cap, so it was sampled in two disjoint slices rather than claimed
+whole). Every failure in those runs passes when re-run serially — they are `-j`
+over-parallelisation timeouts — with one exception worth recording, because it
+looks like the regression this change could plausibly have caused and is not
+one. `regression/esbmc/github_4634` exceeds the harness's hard 120 s cap even
+standalone. Measured against the pre-session binary it takes **134.3 s / 131.4
+s**, and against the patched one **133.1 s / 133.7 s**: the same range, and over
+the cap on both. It is a pre-existing failure, not a cost regression — and it is
+the shape most at risk, being pointer-heavy and near the cap, so it was worth
+the two builds to settle rather than assume.
 
 **Review turned the flag into two functions, and refuted the cost worry
 properly.** The `offset_known` flag threaded a *type-directed enumeration* —
