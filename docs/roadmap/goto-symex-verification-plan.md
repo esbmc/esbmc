@@ -841,9 +841,10 @@ union) is undetectable and the meaningful one (intersecting it) is caught. H-B7
 then closed three of §7.3's seven rows and sharpened the rest, and H-A8 — the
 row it left live — is closed by a third entry on a real `runtime_encoded_equationt`.
 What remains is not backed by a live harness: H-A2's guard algebra is a
-cross-document dependency, and H-A6 is refuted-and-fixed (R18, then R29) rather
-than discharged — its census now re-runs 21/21, but an enumeration is not the
-completeness the row claims.
+cross-document dependency, and H-A6 is refuted-and-fixed (R18, then R29, R31,
+R32 and R33) rather than discharged — its census re-runs 22/22 from the tree,
+but an enumeration is not the completeness the row claims, and this sentence
+previously cited a 21/21 that a later round showed to be over-stated.
 
 Total ≈ 9 engineer-weeks for the verification track, plus ≈ 2 weeks for the
 ESBMC extension critical path (WI-1…WI-3, §13.6) running alongside it.
