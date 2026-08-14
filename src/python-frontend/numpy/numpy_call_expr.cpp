@@ -2102,6 +2102,30 @@ materialize_arange(const nlohmann::json &args)
     to_double(start_v), to_double(stop_v), to_double(step_v));
 }
 
+// True when args are all-constant arange() arguments whose step evaluates to
+// exactly zero. Checked separately from materialize_arange() so a zero step
+// can raise NumPy's actual ValueError instead of the generic "non-constant
+// input" TypeError every other decline reason gets.
+static bool arange_constant_args_have_zero_step(const nlohmann::json &args)
+{
+  if (!args.is_array() || args.empty() || args.size() > 3)
+    return false;
+
+  std::vector<numeric_value> values;
+  values.reserve(args.size());
+  for (const auto &a : args)
+  {
+    numeric_value v;
+    if (!try_extract_numeric_constant(a, v))
+      return false;
+    values.push_back(v);
+  }
+
+  const numeric_value step_v =
+    values.size() == 3 ? values[2] : make_int_value(1);
+  return to_double(step_v) == 0.0;
+}
+
 // The structural/receiver checks materialize_numpy_constructor_array() needs
 // before it can even ask which constructor it's looking at, split out so
 // that function's own decision count stays small.
@@ -5148,6 +5172,12 @@ exprt numpy_call_expr::get()
         }
         return result;
       }
+      if (
+        call_.contains("args") &&
+        arange_constant_args_have_zero_step(call_["args"]))
+        throw std::runtime_error(
+          "ValueError: numpy.arange() step must not be zero");
+
       // Non-constant arguments (e.g. a function parameter) cannot be
       // materialized this way; falling back to the operational model here
       // hangs past any practical timeout instead of producing a verdict, so
