@@ -15,7 +15,10 @@ configure_file(smtlib.ypp  ${CMAKE_BINARY_DIR}/smtlib.ypp COPYONLY)
 configure_file(smtlib_tok.lpp  ${CMAKE_BINARY_DIR}/smtlib_tok.lpp COPYONLY)
 
 add_library(smtlib smtlib_conv.cpp oneshot_process.cpp ${CMAKE_CURRENT_BINARY_DIR}/smtlib.cpp ${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp)
-target_link_libraries(smtlib fmt::fmt)
+# oneshot_process.cpp calls file_operations, so name filesystem here rather
+# than leaving each consumer to list it after smtlib: with static archives a
+# consumer that lists it first drops the symbols before smtlib asks for them.
+target_link_libraries(smtlib fmt::fmt filesystem)
 target_include_directories(smtlib
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
