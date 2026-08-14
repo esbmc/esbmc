@@ -1931,3 +1931,86 @@ sequence, so its consumers see its output. `adjust_expr_unary_boolean` and
 `adjust_expr_binary_boolean` come back on the list on exactly the evidence that
 took them off it. `adjust_sizeof` does not: `migrate.cpp:783`'s two-operand
 requirement is independent of ordering.
+
+## 58. The boolean arms, and the bound on §57's round trip
+
+§57.4 put `adjust_expr_unary_boolean` and `adjust_expr_binary_boolean` back on
+the list: shape 2 removes the §55.4 clause that took them off. They still do not
+ship, and the reason bounds the dispatch-point shape itself.
+
+### 58.1 Pre-check, from source
+
+Cheaper than §57's census, and it answers two things at once:
+
+- **No operand invariant to relax.** `not2t`, `and2t` and `or2t` come from
+  `ESBMC_DEFINE_LOGIC_2OP`, which fixes the *node's* type to bool and asserts
+  nothing about operands. An `and` whose operands are still `int` migrates
+  cleanly -- unlike `member2t`/`index2t`, which needed #6921's relaxation.
+- **Half of each arm is dead for C.** `expr.type() = bool_type()` never changes
+  anything: the converter already emits bool for `UO_LNot`, `BO_LAnd` and
+  `BO_LOr` (`clang_c_convert.cpp:4227`, `:4380`, `:4384`), and `migrate_expr`
+  *asserts* on `and`/`or` that it is bool already (`migrate.cpp:1118`). The
+  operand conversion is the whole of the live work.
+
+### 58.2 The measurement
+
+| | divergences vs flag-off |
+|---|---|
+| master | 1 |
+| both arms at the dispatch point | **5** |
+
+Four are new, in two unrelated classes:
+
+- `esbmc/deep_binary_chain_{pass,fail}` **time out** -- see §58.3.
+- `csmith01`, `csmith02` differ by one cast: legacy emits
+  `(_Bool)(*l_60 == (unsigned int *)0)`, the IREP2 path emits the comparison
+  bare. Migration normalises a comparison to `equality2t`, which is bool by
+  construction, so `c_implicit_typecast` correctly declines a bool-to-bool cast
+  the legacy copy inserts. This is §53.3's vacuous class and is verifiable as
+  such per case -- same kind, same width -- but it is not why the arms are
+  withdrawn.
+
+### 58.3 The round trip is quadratic, and the corpus already proves it
+
+§57.3 noted that a per-node round trip migrates the node's whole subtree, so
+nested operators cost O(depth x size), and said the corpus did not exercise a
+deep one. It does -- for boolean operators, not commas:
+
+```c
+#define A6 A5 && A5 && A5 && A5
+#define DEEP A6 && A6 && A6
+int deep(int x) { return DEEP; }
+```
+
+| `deep_binary_chain_pass`, `--goto-functions-only` | |
+|---|---|
+| flag-off | 34.5 s |
+| both arms at the dispatch point | **> 200 s (killed)** |
+
+Every `&&` node re-migrates the whole chain beneath it. Comma survived §57
+because C comma chains are shallow; `&&` chains are not, and this one is a
+macro expansion of a kind real code produces.
+
+### 58.4 What this bounds
+
+The dispatch-point round trip is a *probe*, and §57 was right to call it one; it
+is viable only where nesting is shallow, which is a property of the operator,
+not of the technique. It does not generalise, and #6992 should be read as the
+comma arm plus a validated diagnosis -- not as a shape to repeat per arm.
+
+Shape 2 proper is unaffected, and this sharpens what it has to be: **migrate a
+symbol's value once, walk it natively, dispatch in sequence**. §3.1's "migrating
+default paid per node rather than per class" is affordable only if "per node"
+means *dispatch* per node, not *migration* per node. That distinction was
+implicit before this measurement and is the design constraint now.
+
+## 59. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921), comma arm at its
+dispatch point (#6992). `adjust_comma` in the trailing pass withdrawn (§55);
+boolean arms in the dispatch-point shape withdrawn (§58).
+
+Next: shape 2 proper, per §58.4 -- one migration per symbol value, native walk,
+in-sequence dispatch. The two arms withdrawn here are its first customers, and
+`deep_binary_chain_pass` is its performance gate: it must stay at ~34 s.
