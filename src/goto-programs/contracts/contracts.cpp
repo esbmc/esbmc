@@ -175,53 +175,90 @@ bool code_contractst::is_compiler_generated(
   return false;
 }
 
-symbolt *code_contractst::find_function_symbol(const std::string &function_name)
+bool code_contractst::declares_contracts(const symbolt &func_sym) const
 {
-  // Exact match (handles full IDs like "c:@F@fst#*1I#" passed by wildcard expansion)
-  symbolt *sym = context.find_symbol(function_name);
-  if (sym != nullptr)
-    return sym;
-  // C convention: c:@F@funcname
-  std::string func_id = "c:@F@" + function_name;
-  sym = context.find_symbol(func_id);
-  if (sym != nullptr)
-    return sym;
-  // C++ no-parameter free function: c:@F@funcname#
-  sym = context.find_symbol(func_id + "#");
-  if (sym != nullptr)
-    return sym;
-  // C++ general fallback: search by short name (sym->name) to handle
-  // parameterized free functions like c:@F@fst#*1I# where the user passes
-  // just "fst" via --enforce-contract. Detect ambiguity when multiple
-  // overloads share the same short name.
-  symbolt *matched = nullptr;
-  std::string matched_ids;
+  // The annotation is on the symbol, so it holds whether or not a body is
+  // available here; only the clause scan needs one.
+  if (is_annotated_contract_function(func_sym))
+    return true;
+
+  auto it = goto_functions.function_map.find(func_sym.id);
+  return it != goto_functions.function_map.end() && it->second.body_available &&
+         has_contracts(it->second.body);
+}
+
+/// Code symbols in \p goto_functions whose short name is \p short_name and
+/// which satisfy \p accept, in goto-function order.
+std::vector<symbolt *> code_contractst::short_name_candidates(
+  const std::string &short_name,
+  const std::function<bool(const symbolt &)> &accept)
+{
+  std::vector<symbolt *> found;
   forall_goto_functions (it, goto_functions)
   {
     symbolt *candidate = context.find_symbol(it->first);
     if (
       candidate && candidate->get_type().is_code() &&
-      id2string(candidate->name) == function_name)
-    {
-      // matched is set on a previous loop iteration when a second overload
-      // with the same short name is found; cppcheck's per-statement flow
-      // analysis cannot see the cross-iteration assignment below.
-      // cppcheck-suppress knownConditionTrueFalse
-      if (matched != nullptr)
-      {
-        matched_ids += ", " + id2string(it->first);
-        log_error(
-          "Ambiguous function name '{}'; use a full symbol ID to disambiguate."
-          " Candidates: {}",
-          function_name,
-          matched_ids);
-        return nullptr;
-      }
-      matched = candidate;
-      matched_ids = id2string(it->first);
-    }
+      id2string(candidate->name) == short_name && accept(*candidate))
+      found.push_back(candidate);
   }
-  return matched;
+  return found;
+}
+
+symbolt *code_contractst::find_function_symbol(const std::string &function_name)
+{
+  // Exact match (handles full IDs like "c:@F@fst#*1I#" passed by wildcard
+  // expansion)
+  symbolt *sym = context.find_symbol(function_name);
+  if (sym != nullptr)
+    return sym;
+
+  // A short name is resolved against every mode's symbols, and the operational
+  // models define plenty of ordinary names. Whichever candidate actually
+  // carries a contract is the one the user annotated, so prefer it over
+  // whatever the naming conventions below happen to match first: a Python
+  // `add` never has the id `c:@F@add`, but umath.c does.
+  const std::vector<symbolt *> annotated = short_name_candidates(
+    function_name, [this](const symbolt &s) { return declares_contracts(s); });
+
+  if (annotated.size() == 1)
+    return annotated.front();
+
+  // Two annotated candidates share the name: skip the convention lookups so
+  // the ambiguity is reported rather than silently resolved.
+  if (annotated.empty())
+  {
+    // C convention: c:@F@funcname
+    std::string func_id = "c:@F@" + function_name;
+    sym = context.find_symbol(func_id);
+    if (sym != nullptr)
+      return sym;
+    // C++ no-parameter free function: c:@F@funcname#
+    sym = context.find_symbol(func_id + "#");
+    if (sym != nullptr)
+      return sym;
+  }
+
+  // C++ general fallback: search by short name to handle parameterized free
+  // functions like c:@F@fst#*1I# where the user passes just "fst". Detect
+  // ambiguity when multiple overloads share the same short name.
+  const std::vector<symbolt *> all =
+    short_name_candidates(function_name, [](const symbolt &) { return true; });
+
+  if (all.size() > 1)
+  {
+    std::string ids;
+    for (const symbolt *candidate : all)
+      ids += (ids.empty() ? "" : ", ") + id2string(candidate->id);
+    log_error(
+      "Ambiguous function name '{}'; use a full symbol ID to disambiguate."
+      " Candidates: {}",
+      function_name,
+      ids);
+    return nullptr;
+  }
+
+  return all.empty() ? nullptr : all.front();
 }
 
 void code_contractst::rename_function(
