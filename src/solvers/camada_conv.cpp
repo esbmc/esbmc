@@ -660,27 +660,17 @@ const char *smt_solver_baset::oneshot_label() const
 tvt smt_solver_baset::get_bool(smt_astt a)
 {
   const auto value = a;
-  const auto kind = value->getKind();
-  if (
-    kind == camada::SMTExprKind::Forall || kind == camada::SMTExprKind::Exists)
-  {
-    log_warning(
-      "Skipping concrete model extraction for quantified boolean term");
-    return tvt(tvt::TV_UNKNOWN);
-  }
 
-  std::string dump;
-  value->dump(dump);
-  if (
-    dump.find("(forall ") != std::string::npos ||
-    dump.find("(exists ") != std::string::npos)
-  {
-    log_warning(
-      "Skipping concrete model extraction for boolean term containing "
-      "quantifiers");
-    return tvt(tvt::TV_UNKNOWN);
-  }
-
+  /* Quantified terms are handed to the solver like any other: camada evaluates
+   * them, and getBool's SMTResult already models the case where it cannot --
+   * unwrap_model_result below reports that and yields TV_UNKNOWN.
+   *
+   * An earlier version bailed out here whenever the term was a quantifier or
+   * its dump contained "(forall "/"(exists ", returning TV_UNKNOWN without
+   * asking. That produced the same value the failure path would have, so it
+   * protected nothing, and it discarded values camada could supply: with it in
+   * place, counterexample attribution had no concrete booleans to classify and
+   * regression/z3/github_6191_attribution lost its "genuine" line. */
   auto result = unwrap_model_result(
     solver->getBool(value), "boolean model value", oneshot_label());
   if (!result)
