@@ -2,6 +2,7 @@
 #include <util/base/stack_budget.h>
 #include "irep2/irep2_expr.h"
 #include <util/lang/c_sizeof.h>
+#include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
 #include <util/irep/std_code.h>
 #include <util/config/config.h>
@@ -771,6 +772,43 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   {
     type = migrate_type(expr.type());
     new_expr_ref = symbol2tc(type, "nondet$" + expr.identifier().as_string());
+    return;
+  }
+
+  if (expr.id() == "builtin_va_arg")
+  {
+    // clang_c_adjust::adjust_builtin_va_arg lowers this to a __ESBMC_va_arg
+    // call, and IREP2 has no builtin_va_arg kind -- so under
+    // --clang-c-irep2-adjust-only the node would die before anything could
+    // rewrite it. The lowering is a pure function of the node's type and
+    // operand, which migration may compute (§72, §80). The callee symbol is
+    // declared by clang_c_adjust_irep2::declare_implicit_callee, and
+    // goto_convert's __ESBMC_va_arg arm (builtin_functions.cpp) enforces the
+    // one-argument contract and settles the operand's final shape. The normal
+    // pipeline adjusts first and never reaches this branch.
+    if (expr.operands().size() != 1 || migrate_namespace_lookup == nullptr)
+    {
+      log_error("builtin_va_arg needs one operand and a namespace to migrate");
+      abort();
+    }
+
+    const pointer_typet va_list_arg{empty_typet()};
+
+    code_typet call_type;
+    call_type.return_type() = expr.type();
+    call_type.arguments().resize(1);
+    call_type.arguments()[0].type() = va_list_arg;
+
+    exprt arg = expr.op0();
+    c_typecastt(*migrate_namespace_lookup).implicit_typecast(arg, va_list_arg);
+
+    side_effect_expr_function_callt call;
+    call.function() = symbol_exprt("__ESBMC_va_arg");
+    call.function().type() = call_type;
+    call.arguments().push_back(arg);
+    call.type() = expr.type();
+
+    migrate_expr(call, new_expr_ref);
     return;
   }
 
