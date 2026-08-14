@@ -57,13 +57,21 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
     sole_adjuster && (is_code_function_call2t(expr) || is_sideeffect2t(expr)))
     declare_implicit_callee(expr);
 
-  if (sole_adjuster && (is_and2t(expr) || is_or2t(expr) || is_not2t(expr)))
+  if (sole_adjuster)
+    adjust_sole_arms(expr);
+}
+
+/// The arms that only run when this pass is the sole adjuster, gathered behind
+/// one test so adjust_expr does not repeat it per arm.
+void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
+{
+  if (is_and2t(expr) || is_or2t(expr) || is_not2t(expr))
     adjust_boolean_operands(expr);
 
-  if (sole_adjuster && (is_code_function_call2t(expr) || is_sideeffect2t(expr)))
+  if (is_code_function_call2t(expr) || is_sideeffect2t(expr))
     adjust_call_callee(expr);
 
-  if (sole_adjuster && is_if2t(expr))
+  if (is_if2t(expr))
     adjust_if_expr(expr);
 }
 
