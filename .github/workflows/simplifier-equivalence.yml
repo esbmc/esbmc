@@ -1,0 +1,54 @@
+name: Simplifier equivalence
+
+# Builds ESBMC with -DENABLE_SIMPLIFIER_EQUIVALENCE_CHECK=ON and runs a slice
+# of the CORE regression suite under it (esbmc/esbmc#4625). Every simplify()
+# rewrite is proved equivalent by an SMT solver; a rewrite that changes meaning
+# logs both expressions plus a witness and exits non-zero, so a failure here is
+# a simplifier soundness bug, not a verdict change.
+#
+# The check is compiled out of every other build, so without this job the
+# enabled path is never built and would bit-rot. It runs on a schedule and on
+# demand rather than per-PR: proving each rewrite costs an SMT query, which is
+# orders of magnitude slower than a normal run.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 04:17 on Mondays -- off the hour to avoid the scheduler's rush.
+    - cron: '17 4 * * 1'
+  push:
+    branches: [master]
+    paths:
+      - 'src/util/expr/expr_simplifier.cpp'
+      - 'src/irep2/simplification_check.*'
+      - 'src/solvers/smt/simplification_equivalence.*'
+      - '.github/workflows/simplifier-equivalence.yml'
+
+jobs:
+  equivalence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: ./scripts/build.sh -b Debug
+
+      - name: Re-enable with the equivalence check
+        # build.sh has no pass-through for extra CMake args, so the option is
+        # turned on by reconfiguring the tree it produced.
+        run: |
+          cd build
+          cmake -DENABLE_SIMPLIFIER_EQUIVALENCE_CHECK=On .
+          cmake --build . -j2
+
+      - name: Unit tests
+        run: ctest --test-dir build -j2 -LE regression --output-on-failure
+
+      - name: Regression slice under the equivalence check
+        run: |
+          cd build
+          # A slice, not the whole suite: an SMT query per rewrite makes a full
+          # run far past any sensible CI budget. Any single failing test is a
+          # real finding, so coverage breadth matters less than running at all.
+          ctest -j2 --output-on-failure -L '^esbmc/$' -I 1,200

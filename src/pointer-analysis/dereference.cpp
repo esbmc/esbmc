@@ -1349,39 +1349,33 @@ void dereferencet::construct_from_array(
   }
   else
   {
-    // Dyn offset -- is alignment guarantee strong enough?
+    // Dyn offset -- is alignment guarantee strong enough? `alignment` is in
+    // bits here: the caller scaled it (see `alignment *= 8` in dereference()).
     is_correctly_aligned = (alignment >= subtype_size);
-    // Special case for pointer-typed array elements: `alignment` is in
-    // BYTES (value_set.h:139) while `subtype_size` is in BITS (set from
-    // type_byte_size_bits above). For an array of pointers reached
-    // through a struct-member pointer dereference, the unit mismatch
-    // wrongly forced the byte-extract branch, which hides the pointer
-    // RHS from value_sett::assign and breaks the downstream deref of
-    // the loaded pointer (issue #4435). Pointer subtypes are always
-    // accessed atomically, so a byte-equal-or-larger natural alignment
-    // makes the direct index2tc encoding sound. Keep the original
-    // comparison for non-pointer subtypes so over-approximated
-    // alignments on int / short / char arrays still trigger
-    // check_alignment (e.g. regression/esbmc/align-deref_fail).
-    if (
-      !is_correctly_aligned && is_pointer_type(arr_subtype) &&
-      alignment * 8 >= subtype_size)
-      is_correctly_aligned = true;
     /* A whole-element access needs no stitching. check_alignment() below
      * asserts the offset lands on an element boundary, which is exactly the
      * precondition index2tc needs, so an unproven alignment claim is a reason
      * to *check*, not to decompose.
      *
-     * Only floats are taken off the stitching path. Reassembling one costs a
-     * fp.to_ieee_bv / to_fp round trip per byte, and SMT-LIB leaves the NaN
-     * pattern fp.to_ieee_bv returns unconstrained -- so once an intermediate
-     * is NaN the solver may pick a different pattern each time and the value
-     * read back is not the one stored (esbmc/esbmc#6922). Integer subtypes
-     * keep the original condition: their stitching is exact, and weakening it
-     * would stop over-approximated alignments reaching check_alignment
-     * (regression/esbmc/align-deref_fail). */
+     * Floats: reassembling one costs a fp.to_ieee_bv / to_fp round trip per
+     * byte, and SMT-LIB leaves the NaN pattern fp.to_ieee_bv returns
+     * unconstrained -- so once an intermediate is NaN the solver may pick a
+     * different pattern each time and the value read back is not the one
+     * stored (esbmc/esbmc#6922).
+     *
+     * Pointers: stitching hides the pointer RHS from value_sett::assign and
+     * breaks the downstream deref of the loaded pointer (esbmc/esbmc#4435).
+     * That used to be papered over by claiming such an access was aligned
+     * whenever alignment * 8 >= subtype_size -- an 8x over-approximation on
+     * an alignment already in bits, which also suppressed check_alignment, so
+     * a genuinely misaligned pointer read went unreported.
+     *
+     * Integer subtypes keep the original condition: their stitching is exact,
+     * and weakening it would stop over-approximated alignments reaching
+     * check_alignment (regression/esbmc/align-deref_fail). */
     const bool whole_element =
-      deref_size == subtype_size && is_floatbv_type(arr_subtype);
+      deref_size == subtype_size &&
+      (is_floatbv_type(arr_subtype) || is_pointer_type(arr_subtype));
     overflows_boundaries =
       whole_element ? false
                     : (!is_correctly_aligned || deref_size > subtype_size);
