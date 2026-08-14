@@ -463,6 +463,33 @@ every function that has at least one contract clause, whether annotated or not.
 `--enforce-all-contracts` and `--replace-all-contracts` match only annotated
 functions.
 
+## Contracts in Python
+
+The Python frontend lowers `__ESBMC_requires` / `__ESBMC_ensures` clauses too,
+so `--enforce-contract` and `--replace-call-with-contract` work on Python
+functions:
+
+```python
+def double(x: int) -> int:
+    __ESBMC_requires(x > 0)
+    __ESBMC_ensures(__ESBMC_return_value > x)
+    return 2 * x
+```
+
+```bash
+esbmc main.py --enforce-contract double
+```
+
+`__ESBMC_return_value` takes its type from the function's return annotation.
+Clauses are inert under a plain BMC run, exactly as in C.
+
+A clause the lowering cannot express is rejected with a diagnostic naming the
+clause and line — a function call or subscript inside the condition, a
+reference whose type cannot be determined, `__ESBMC_return_value` inside
+`requires` or on a function annotated `-> None` — rather than being silently
+dropped. `__ESBMC_old`, `__ESBMC_assigns`, and the quantified forms are not yet
+available in Python.
+
 ## Quick reference
 
 | Construct                       | Where                  | Purpose                               |

@@ -156,6 +156,9 @@ case. See [Limitations](./limitations#constructor-and-destructor-ordering).
 - A captureless lambda converted to a function pointer produces a *callable*
   pointer: both the conversion operator and the static invoker behind it get a
   body, so `int (*f)(int) = [](int x){ return x + 1; }; f(2);` runs
+- A lambda inside a template instantiation gets its own closure type per
+  instantiation, so two instantiations of the same function template do not
+  share (and corrupt) one capture layout
 
 ### Templates
 
@@ -245,7 +248,7 @@ by regression tests under `regression/esbmc-cpp*`.
 | `<unordered_map>`, `<unordered_set>` | |
 | `<array>` | `iterator` / `const_iterator` typedefs; usable in C++11 |
 | `<queue>`, `<stack>`, `<bitset>` | Includes `std::priority_queue` |
-| `<iterator>` | `iterator_traits` and the iterator tags; `advance`, `distance`, `next`, `prev` |
+| `<iterator>` | `iterator_traits` and the iterator tags; `advance`, `distance`, `next`, `prev`; the range accessors including the reverse forms `rbegin` / `rend` / `crbegin` / `crend` |
 | `<valarray>` | |
 
 `std::multimap` and `std::multiset` track `std::map` and `std::set`, including
@@ -258,19 +261,19 @@ by regression tests under `regression/esbmc-cpp*`.
 | `<string>` | `(const char*, size_t)` range and fill constructors; length-aware `operator<`/`operator>`/`operator<=`/`operator>=` including free overloads against `const char*`; `const` `substr(pos, n)`; C++20 `starts_with`/`ends_with`; `at` throws `std::out_of_range`; the full `sto*` family (`stoi`, `stol`, `stoll`, `stoul`, `stoull`, `stof`, `stod`, `stold`) |
 | `<string_view>` | Search members, `string` → `string_view` conversion, `hash<string_view>` |
 | `<iostream>`, `<istream>`, `<ostream>`, `<ios>`, `<iosfwd>` | Standard stream objects, `ios::widen`/`narrow`, `ios::exceptions`, `ios::copyfmt` |
-| `<sstream>`, `<fstream>`, `<streambuf>`, `<iomanip>` | |
+| `<sstream>`, `<fstream>`, `<streambuf>`, `<iomanip>` | `ostringstream` accumulates into the buffer its `str()` reports |
 | `<locale>` | |
 
 ### Utilities and type support
 
 | Header | Notes |
 | --- | --- |
-| `<type_traits>` | Classification traits and the `_t` / `_v` forms, including `is_trivial`, `is_standard_layout`, `is_aggregate`, `is_assignable` and the copy/move/destructible variants, `remove_cvref`, `aligned_storage`, and the logical traits `conjunction` / `disjunction` / `negation` |
-| `<utility>` | Including C++23 `std::unreachable` |
+| `<type_traits>` | Classification traits and the `_t` / `_v` forms, including `is_trivial`, `is_standard_layout`, `is_aggregate`, `is_assignable` and the copy/move/destructible variants, `remove_cvref`, `aligned_storage`, `invoke_result`, and the logical traits `conjunction` / `disjunction` / `negation` |
+| `<utility>` | Including `index_sequence_for` and C++23 `std::unreachable` |
 | `<functional>`, `<memory>`, `<initializer_list>` | `<functional>` has the transparent operation functors (`plus<>`, `less<>`, …); `<memory>` has `std::allocate_shared` and a correct default-constructed `unique_ptr` |
 | `<tuple>` | `std::tie`, `std::ignore`, structured binding over a tuple |
 | `<optional>` | `emplace`, `swap`, `std::make_optional` |
-| `<variant>`, `<any>` | The converting constructor does not hijack copies |
+| `<variant>`, `<any>` | `std::visit` calls the visitor on the currently held alternative; the converting constructor does not hijack copies |
 | `<expected>` | C++23 |
 | `<compare>` | Includable before C++20 |
 | `<source_location>`, `<span>`, `<bit>` | C++20 |
@@ -301,7 +304,8 @@ modelled on the same basis, and `<atomic>` is modelled with atomic sections.
 
 `<cassert>`, `<cctype>`, `<cerrno>`, `<cfloat>`, `<ciso646>`, `<climits>`,
 `<clocale>`, `<cmath>`, `<csetjmp>`, `<csignal>`, `<cstdarg>`, `<cstddef>`,
-`<cstdint>`, `<cstdio>`, `<cstdlib>`, `<cstring>` and `<ctime>` are available.
+`<cstdint>`, `<cstdio>`, `<cstdlib>`, `<cstring>`, `<ctime>` and `<cwchar>`
+are available.
 
 Their names are declared in namespace `std` as the standard requires, not only
 in the global namespace: `std::isalpha`, `std::tolower`, `std::time`,
@@ -332,7 +336,7 @@ implementation, which is frequently intractable.
 `<coroutine>`, `<charconv>`, `<numbers>`, `<ratio>`, `<typeindex>`,
 `<barrier>`, `<latch>`, `<semaphore>`, `<stop_token>`,
 `<syncstream>`, `<execution>`, `<memory_resource>`, `<scoped_allocator>`,
-`<cwchar>`, `<cwctype>`, `<cfenv>`, `<cinttypes>`.
+`<cwctype>`, `<cfenv>`, `<cinttypes>`.
 
 Note that `<concepts>` being unmodelled does not affect the *language* feature —
 concepts and `requires` clauses are supported, as listed above.

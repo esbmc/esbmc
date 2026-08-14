@@ -13,6 +13,11 @@ typet any_type()
   return pointer_typet(empty_typet()); // void*
 }
 
+bool returns_no_value(const typet &t)
+{
+  return t.is_nil() || t == none_type() || t.id() == "empty";
+}
+
 void set_python_aggregate_kind(typet &type, const irep_idt &kind)
 {
   type.set(PYTHON_AGGREGATE_ATTR, kind);
