@@ -2644,6 +2644,9 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
   else if (src.id() == "ieee_div")
     return convert_function(src, "IEEE_DIV", precedence = 15);
 
+  else if (src.id() == "ieee_rem")
+    return convert_function(src, "IEEE_REM", precedence = 15);
+
   else if (src.id() == "width")
     return convert_function(src, "WIDTH", precedence = 15);
 

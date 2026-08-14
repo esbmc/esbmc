@@ -301,7 +301,8 @@ void rw_sett::read_write_rec(
   }
   else if (
     is_ieee_add2t(expr) || is_ieee_sub2t(expr) || is_ieee_mul2t(expr) ||
-    is_ieee_div2t(expr) || is_ieee_fma2t(expr) || is_ieee_sqrt2t(expr))
+    is_ieee_div2t(expr) || is_ieee_rem2t(expr) || is_ieee_fma2t(expr) ||
+    is_ieee_sqrt2t(expr))
   {
     // Same rationale: recurse into the FP value operands, never the rounding
     // mode. foreach_operand would also visit rounding_mode, so list the value
@@ -315,6 +316,8 @@ void rw_sett::read_write_rec(
       values = {to_ieee_mul2t(expr).side_1, to_ieee_mul2t(expr).side_2};
     else if (is_ieee_div2t(expr))
       values = {to_ieee_div2t(expr).side_1, to_ieee_div2t(expr).side_2};
+    else if (is_ieee_rem2t(expr))
+      values = {to_ieee_rem2t(expr).side_1, to_ieee_rem2t(expr).side_2};
     else if (is_ieee_fma2t(expr))
       values = {
         to_ieee_fma2t(expr).value_1,

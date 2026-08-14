@@ -1432,6 +1432,23 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  if (expr.id() == "ieee_rem")
+  {
+    type = migrate_type(expr.type());
+
+    assert(expr.operands().size() == 2);
+
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+
+    /* fp.rem is exact, so no rounding mode participates; the field is the
+     * 2-op plumbing's and is fixed to the default symbol. */
+    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+
+    new_expr_ref = ieee_rem2tc(type, side1, side2, rm);
+    return;
+  }
+
   if (expr.id() == "ieee_fma")
   {
     type = migrate_type(expr.type());
@@ -3412,6 +3429,15 @@ exprt migrate_expr_back(const expr2tc &ref)
     // Add rounding mode
     divval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
     return divval;
+  }
+  case expr2t::ieee_rem_id:
+  {
+    const ieee_rem2t &ref2 = to_ieee_rem2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt remval("ieee_rem", thetype);
+    remval.copy_to_operands(
+      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+    return remval;
   }
   case expr2t::ieee_fma_id:
   {

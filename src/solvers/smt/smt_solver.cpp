@@ -408,6 +408,7 @@ static bool walks_operands(const expr2tc &expr)
   case expr2t::ieee_sub_id:
   case expr2t::ieee_mul_id:
   case expr2t::ieee_div_id:
+  case expr2t::ieee_rem_id:
   case expr2t::ieee_fma_id:
   case expr2t::ieee_sqrt_id:
   case expr2t::pointer_offset_id:
@@ -536,6 +537,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     case expr2t::ieee_sub_id:
     case expr2t::ieee_mul_id:
     case expr2t::ieee_div_id:
+    case expr2t::ieee_rem_id:
       return convert_ast(distribute_vector_operation(
         expr->expr_id,
         *expr->get_sub_expr(1),   // side_1
@@ -573,6 +575,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::ieee_sub_id:
   case expr2t::ieee_mul_id:
   case expr2t::ieee_div_id:
+  case expr2t::ieee_rem_id:
   case expr2t::ieee_fma_id:
   case expr2t::ieee_sqrt_id:
   case expr2t::pointer_offset_id:
@@ -824,6 +827,18 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
         convert_ast(to_ieee_div2t(expr).side_1),
         convert_ast(to_ieee_div2t(expr).side_2),
         convert_rounding_mode(to_ieee_div2t(expr).rounding_mode));
+    break;
+  }
+  case expr2t::ieee_rem_id:
+  {
+    assert(is_floatbv_type(expr));
+    if (int_encoding)
+      a = ir_ieee_api->encode_ieee_rem(expr);
+    else
+      /* fp.rem is exact; the node's rounding_mode is plumbing only. */
+      a = fp_api->mk_smt_fpbv_rem(
+        convert_ast(to_ieee_rem2t(expr).side_1),
+        convert_ast(to_ieee_rem2t(expr).side_2));
     break;
   }
   case expr2t::ieee_fma_id:
