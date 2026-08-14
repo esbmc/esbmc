@@ -2014,3 +2014,229 @@ boolean arms in the dispatch-point shape withdrawn (§58).
 Next: shape 2 proper, per §58.4 -- one migration per symbol value, native walk,
 in-sequence dispatch. The two arms withdrawn here are its first customers, and
 `deep_binary_chain_pass` is its performance gate: it must stay at ~34 s.
+
+## 60. Shape 2 sized: the increment is the coupled component, not the arm
+
+§58.4 left shape 2 as "one migration per symbol value, native walk, in-sequence
+dispatch". That says what it must do. This says how large the smallest sound
+step is, and the answer is why the phase has stalled twice.
+
+### 60.1 The coupling census
+
+Classify each arm of `clang_c_adjust`'s dispatcher two ways. A **producer**
+writes a node's type or inserts a typecast. A **consumer** reads an operand's
+type -- directly, or by handing the operand to a typecast helper that reads it,
+which is the case the first pass of this census missed.
+
+| | count |
+|---|---|
+| arms examined | 30 |
+| producers | 20 |
+| consumers | 19 |
+| **both** | **19** |
+| neither | 10 |
+
+Nineteen arms both produce and consume. In an expression dispatcher any
+expression can be any other's operand, so those nineteen are mutually reachable:
+they form one strongly-coupled component.
+
+### 60.2 Why that kills arm-at-a-time migration
+
+§55.4 said an arm cannot move to the trailing pass alone if a sibling consumes
+its output. The natural repair is to move a *set* closed under "consumes" --
+inside the trailing pass, a native walk recurses children-first, so a
+producer and its consumer run in the right relative order if both have moved.
+
+The census prices that closure: for any arm in the component it is the whole
+component. There is no small closed set. Nineteen arms, ~690 lines, move
+together or not at all (`adjust_index`, `adjust_member` and `adjust_comma`, 99
+lines, are already native).
+
+### 60.3 The three routes, two of them closed
+
+| route | status |
+|---|---|
+| arm at a time into the trailing pass | **closed** -- §55.4, and §60.2 shows the repair does not shrink |
+| arm at a time at its dispatch point, via a per-node round trip | **closed** -- §58.3, quadratic on `&&` chains |
+| the coupled component at once, one migration per symbol value | open |
+
+The third has neither defect by construction: migrating once is linear, and a
+single native walk dispatches every arm of the component in sequence, so no
+producer outruns its consumer. It is also the only route whose endpoint deletes
+the legacy dispatcher rather than shadowing it.
+
+### 60.4 What is still separable
+
+Ten arms are neither producer nor consumer. Most are helpers (`adjust_operands`,
+`adjust_type`, the two `adjust_symbol` overloads, `adjust_argc_argv`) or already
+resolved (`adjust_reference`, empty for C -- §55.5). Three are genuine dispatch
+arms and are the only remaining single-arm candidates:
+
+- `adjust_struct` -- inserts padding operands; writes no type
+- `adjust_expr_unary_complex`
+- `adjust_side_effect_function_call`
+
+They are *candidates*, not cleared: §49.3 produced a list that looked clean and
+was not, and each still has to face the A/B and a valid-alternative mutant. But
+they are the only work in this phase that does not require the big step first.
+
+### 60.5 Gates for the big step
+
+Unchanged from §57, plus one this phase learned the hard way:
+
+- A/B byte-identity over the §1.2 corpus, stderr-hashed, §21.3's three
+  normalisations plus §55.2's address normalisation.
+- A valid-alternative mutant per migrated arm -- not one that aborts (§57.2).
+- **`deep_binary_chain_pass` stays at ~34 s.** §58.3 made this a standing
+  performance gate rather than a note.
+- The pre-existing `github_2220` divergence is the baseline, not a regression;
+  it should be fixed or explained before the component lands, since a
+  whole-component A/B cannot afford an unexplained non-zero baseline.
+
+## 61. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921), comma arm at its
+dispatch point (#6992). Withdrawn: `adjust_comma` in the trailing pass (§55),
+the boolean arms at their dispatch point (§58).
+
+Next, in order: (a) resolve `github_2220` so the baseline is zero (§60.5), then
+(b) the coupled component as one step (§60.3), with (c) the three separable arms
+of §60.4 available in parallel to anyone who wants a smaller piece.
+
+## 62. `github_2220` diagnosed: array bounds live in types
+
+§60.5 wanted the A/B baseline at zero before the coupled component moves, and
+named `esbmc-unix/github_2220` as the one thing in the way. It is not a quirk of
+that program, and it does not have a small fix.
+
+### 62.1 The reproducer
+
+Eight lines, reduced from a 90-line test:
+
+```c
+struct dirent { char d_name[256]; };
+unsigned long strlen(const char *);
+void g(struct dirent *entry)
+{
+  char buf[strlen(entry->d_name) + 2];
+  buf[0] = 0;
+}
+```
+
+Flag-off prints `strlen(&entry->d_name[0])`. Flag-on prints a raw irep dump: a
+`member` whose base is still a pointer, which `c_expr2string` cannot render.
+
+### 62.2 The cause
+
+`char buf[...]` is a VLA, so its bound is an expression carried in a **type**.
+`clang_c_adjust::adjust_type` walks exactly that -- `/* adjust the size
+expression for VLAs */`, calling `adjust_expr` on the size. The IREP2 pass walks
+`get_value2()` and nothing else. So once `irep2_owns_arms` hands an arm over,
+nothing rewrites a member or index inside an array bound.
+
+Latent since the index arm (#6907) and equally true of `adjust_member` (#6921).
+It surfaced as one test only because a VLA whose bound subscripts a struct
+member is rare.
+
+### 62.3 Two fixes that do not work, and why the second matters
+
+- **Walking the symbol's type.** Correct, and insufficient. Instrumentation
+  confirms the member arm fires exactly once, on `buf`'s symbol type, and the
+  output does not change: the function body's `code_decl2t` carries its own copy
+  of the array type.
+- **Walking each expression node's type.** Not expressible. `expr2t::type` is
+  **`const`** (`irep2.h:909`) -- an IREP2 node's type is immutable by design, so
+  a type-adjusting walk must *rebuild* every node whose type changed, kind by
+  kind, rather than assign through it.
+
+That second point is the finding. There is no generic "same node, new type"
+operation in IREP2, so mirroring `adjust_type` is not a patch to the shadow pass
+-- it is a structural piece of a walk that constructs nodes anyway.
+
+### 62.4 Consequence for §60.5
+
+The zero-baseline precondition is withdrawn as a *precondition*. It cannot be
+met cheaply, and it does not need to be: shape 2 rebuilds nodes natively, so the
+type descent comes free with it. The baseline is 1 until the component moves,
+and that 1 is now explained rather than outstanding -- which is what §60.5
+actually needed.
+
+`regression/esbmc/github_2220_vla_bound` pins it as KNOWNBUG. Its regex matches
+flag-off output and not flag-on, so it fails for this defect and will XPASS the
+moment the defect goes -- checked both ways rather than assumed.
+
+## 63. What the component actually executes
+
+§60 sized the port at 19 coupled arms; `frontends-to-irep2.md` §39.1 requires a
+census before writing, and this phase has twice found an arm whose work was
+already dead (`adjust_comma`'s type write, §55.1; both boolean arms', §58.1).
+An `fprintf` at each arm's entry, over the §1.2 corpus, flag-off:
+
+| arm | calls | tests |
+|---|---:|---:|
+| `adjust_side_effect` | 94 596 | 2 559 |
+| `adjust_index` | 48 499 | 1 877 |
+| `adjust_address_of` | 46 499 | 2 035 |
+| `adjust_side_effect_function_call` | 44 017 | 2 465 |
+| `adjust_function_call_arguments` | 44 017 | 2 465 |
+| `adjust_side_effect_assignment` | 40 018 | 1 415 |
+| `adjust_expr_binary_boolean` | 30 045 | 453 |
+| `adjust_expr_rel` | 29 956 | 2 038 |
+| `adjust_member` | 29 883 | 490 |
+| `adjust_expr_binary_arithmetic` | 28 098 | 891 |
+| `adjust_expr_shifts` | 7 916 | 109 |
+| `adjust_dereference` | 6 709 | 336 |
+| `adjust_expr_unary_boolean` | 6 655 | 364 |
+| `adjust_sizeof` | 4 999 | 1 346 |
+| `adjust_struct` | 4 165 | 350 |
+| `adjust_comma` | 3 924 | 1 102 |
+| `adjust_side_effect_statement_expression` | 3 120 | 1 094 |
+| `adjust_if` | 1 372 | 114 |
+| `adjust_builtin_va_arg` | 52 | 9 |
+| `adjust_expr_unary_complex` | 22 | 4 |
+| **`adjust_base_to_derived`** | **0** | **0** |
+| **`adjust_ptr_mem`** | **0** | **0** |
+
+### 63.1 Two arms never fire, and porting them blind is the §28 trap
+
+`adjust_base_to_derived` is guarded by `#base_to_derived` on a typecast, and
+`adjust_ptr_mem` by an `id() == "ptr_mem"` node: both are C++ shapes, reachable
+only through `clang_cpp_adjust`, which derives from this class. Phase 6 needs no
+native counterpart for either, and **must not claim one verified** on a C-only
+A/B -- that is exactly `scope-jimple-irep2.md` §28, where `nondet` was migrated
+before anyone knew it occurred zero times and the byte-identity claim held for
+nine PRs because nothing executed the override. They come back in Phase 7.
+
+That takes the port from 19 arms to **17**.
+
+### 63.2 The thin tail is where the mutants will lie
+
+`adjust_builtin_va_arg` (9 tests) and `adjust_expr_unary_complex` (4 tests) have
+corpus support two orders of magnitude below the head. §39.1's first row -- an
+unmoved mutant means the corpus is thin -- is a near-certainty for both, so each
+needs a written test *before* it is ported, not after its mutant comes back
+silent.
+
+This also corrects §60.4: `adjust_expr_unary_complex` was listed as one of three
+arms still separable, on the ground that it neither produces nor consumes type
+information. That remains true, but at 4 tests it is not a cheap win -- the
+measurement it would need costs more than the arm.
+
+### 63.3 One pair moves together
+
+`adjust_side_effect_function_call` and `adjust_function_call_arguments` have
+identical counts, 44 017 in the same 2 465 tests: the latter is called only by
+the former. They are one unit of work, not two.
+
+## 64. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921), comma arm at its
+dispatch point (#6992). Withdrawn: `adjust_comma` in the trailing pass (§55),
+the boolean arms at their dispatch point (§58). Baseline explained (§62).
+
+Next: the 17 live arms of §63, ported behind a `--clang-c-irep2-adjust-only`
+mode mirroring `--python-irep2-adjust-only`, with the divergence count against
+flag-off as the progress metric and the flip when it reaches the §62 baseline of
+1. Write tests for the §63.2 tail first.
