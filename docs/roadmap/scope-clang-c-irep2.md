@@ -2426,3 +2426,79 @@ test precondition (§65), §66.2's migration workstream (§68).
 Metric: **1 808 of 2 809 diverge** under `--clang-c-irep2-adjust-only`; 649 of
 those error, 1 159 differ silently. Next: port the function-call pair (§68.3),
 and re-measure.
+
+## 70. The first `-only` blocker: implicitly-declared callees
+
+§68.3 named the function-call pair as the dominant blocker on the strength of
+`Function X not found` being 80 % of sampled errors. Reduced, the trigger is
+narrower than the arm:
+
+```c
+int main(void) { undeclared_fn(1); return 0; }
+```
+
+A call to a function with no visible declaration. Ordinary calls are fine under
+`-only`; `clang_builtins/atomic_store` trips it only because it calls `assert`
+without including `assert.h`, so `assert` is a function rather than a macro.
+
+### 70.1 It is a symbol-table side effect, not a rewrite
+
+`clang_c_adjust::adjust_side_effect_function_call` looks the callee up and, when
+it is absent, **creates** the symbol (`context.add(new_symbol)`). That is not an
+expression rewrite, so it ports independently of the arm's other ~139 lines --
+and it is the general point: some arms do work that is not
+representation-bound, and those pieces can move first and cheaply.
+
+`declare_implicit_callee` does the same natively. Result under `-only`:
+
+| | tests erroring |
+|---|---:|
+| before | 649 |
+| after | **304** |
+
+### 70.2 Both spellings, and a gate
+
+A bare `f(x);` is a `sideeffect2t` of kind `function_call`; an assigned call is
+a `code_function_call2t`. A handler matching one misses the other, and the
+discarded-result form is exactly the failing case.
+
+The declaration is also gated on a new `sole_adjuster` flag, set only under
+`-only`. Work that *substitutes* for the legacy pass has no `irep2_owns_arms`
+counterpart to disable on the legacy side, so unlike an arm's rewrite it is not
+shadow-safe by construction. In shadow mode the legacy pass declares the callee
+first and the native code is a no-op, so this is intent rather than a fix -- but
+the distinction is real and the rest of the port will meet it again.
+
+### 70.3 The metric did not move, and that is correct
+
+Divergences stayed at 1 808. Clearing an *error* does not make a test
+byte-identical; it lets the test run further, moving it from "errors" to
+"differs". §66's divergence count is the right *exit* condition and a poor
+*progress* signal, since almost all of its movement is concentrated at the end.
+Track the staged counts -- errors, then differs, then identical -- which move
+throughout.
+
+### 70.4 Harness: a per-run temp path defeated the A/B
+
+Isolating each sweep run's `TMPDIR` (§66.3, to stop aborted runs leaking header
+dirs) introduced a fresh random path component per run, which §55.2's
+normalisation list does not cover. The A/B then reported **793** divergences in
+*flag-off against itself* -- read at first as a shadow-mode regression from this
+patch, which it was not. Normalising the temp-dir name restores a clean
+self-control and shadow mode to its baseline of 2 (`github_2220` and the §62
+KNOWNBUG that pins the same defect).
+
+Third harness defect in this phase, after stdout-vs-stderr and ASLR addresses
+(§55.2). The pattern is constant: a per-run artefact enters the output, and the
+gate reports divergence everywhere rather than failing loudly. **Run the
+self-control after any change to how the sweep invokes ESBMC**, not only after
+changes to ESBMC.
+
+## 71. Status
+
+Metric under `--clang-c-irep2-adjust-only`: **1 808 of 2 809 diverge**, of which
+**304 error** (was 649). Shadow mode: 2, both the §62 VLA defect.
+
+Next: the remaining 304. `shr` (64 tests) and `builtin_va_arg` (6) are
+`adjust_expr_shifts` and `adjust_builtin_va_arg` (§68.2); the rest need the same
+reduce-then-classify treatment this section applied.
