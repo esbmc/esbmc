@@ -19,12 +19,9 @@ smt_solver_baset *create_new_bitwuzla_solver(
 {
   bitwuzla_convt *conv = new bitwuzla_convt(ns, options);
   *array_api = static_cast<array_iface *>(conv);
-  /* Bitwuzla's floating-point theory is opt-in: it measured slower than the
-   * bit-vector encoding and cannot represent the sign of a NaN (#7021).
-   * Declining the interface here makes solve.cpp install a plain fp_convt. */
-  *fp_api = options.get_bool_option("bitwuzla-native-fp")
-              ? static_cast<fp_convt *>(conv)
-              : nullptr;
+  /* --fp2bv opts back out to ESBMC's own bit-vector encoding, which is what
+   * fp.rem-heavy programs and the sign of a NaN (#7021) still need. */
+  *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
 
@@ -1098,14 +1095,16 @@ bitwuzla_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
 
 smt_astt bitwuzla_convt::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
 {
-  // fp.rem is exact and takes no rounding mode.
-  return new_ast(
-    bitwuzla_mk_term2(
-      bitw_term_manager,
-      BITWUZLA_KIND_FP_REM,
-      to_solver_smt_ast<bitw_smt_ast>(lhs)->a,
-      to_solver_smt_ast<bitw_smt_ast>(rhs)->a),
-    lhs->sort);
+  /* Bitwuzla has fp.rem, but it solves the remainder/fmod bound proofs one to
+   * two orders of magnitude slower than ESBMC's own lowering, so round-trip to
+   * bit-vectors and use that instead, as the mathsat backend does. A separate
+   * fp_convt is needed rather than fp_convt::mk_smt_fpbv_rem: the lowering
+   * calls back into the interface, and through *this* those calls would reach
+   * the native overrides and hand FP terms to bit-vector operations. */
+  fp_convt software(this);
+  smt_astt rem =
+    software.mk_smt_fpbv_rem(mk_from_fp_to_bv(lhs), mk_from_fp_to_bv(rhs));
+  return mk_from_bv_to_fp(rem, lhs->sort);
 }
 
 smt_astt bitwuzla_convt::mk_smt_fpbv_fma(

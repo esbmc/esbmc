@@ -1,4 +1,4 @@
 CORE
 main.c
---bitwuzla --bitwuzla-native-fp
+--bitwuzla
 ^VERIFICATION SUCCESSFUL$

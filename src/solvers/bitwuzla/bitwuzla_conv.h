@@ -75,9 +75,8 @@ public:
   smt_sortt mk_bvfp_sort(std::size_t width, std::size_t swidth) override;
   smt_sortt mk_bvfp_rm_sort() override;
 
-  /* Native floating-point support, used only when the solver was created with
-   * --bitwuzla-native-fp; otherwise these are never reached because the
-   * backend does not register itself as the fp_convt (see solve.cpp). */
+  /* Native floating-point support, the default; under --fp2bv these are never
+   * reached because solve.cpp installs a plain fp_convt instead. */
   smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw) override;
   smt_sortt mk_fpbv_rm_sort() override;
 
