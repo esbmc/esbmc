@@ -2679,3 +2679,54 @@ Next: `and takes boolean operands only` -- `migrate.cpp:1118` asserting because
 the boolean arms have not run. §58.1 showed those arms' type write is dead for C
 (the converter already emits bool), so the assert is firing on operands, not on
 the node: worth reducing before assuming which.
+
+## 78. The boolean arms port after all -- in this shape
+
+§58 withdrew `adjust_expr_binary_boolean` and `adjust_expr_unary_boolean`
+because the *dispatch-point round trip* was quadratic on `&&` chains. That was
+an objection to the shape, not the arm. Under `-only` the walk migrates a symbol
+once and never round-trips per node, so the same arm goes in without the cost,
+and their live half -- the operand conversion, §58.1 -- is now native.
+
+This is the first evidence that `-only` absorbs work the other two shapes
+rejected, which is a point in favour of §60.3's third route beyond its being the
+last one standing.
+
+### 78.1 The reduction took three attempts
+
+The error is `goto_convert`'s short-circuit lowering rejecting a non-boolean
+operand (`goto_sideeffects.cpp:1267`), so a bare `x && f()` looks like it should
+fail. It does not, and neither does the same condition in an `if`. What fails:
+
+```c
+int foo(int x) { return 1; }
+int main(void) { int il; for (il = 0; foo(il) && il < 2; ++il) {} return 0; }
+```
+
+A call on the **left** of `&&`, in a **`for`** condition. Fixing this from the
+error message alone would have meant patching against a case that could not be
+triggered -- and the message names the check, not the shape that reaches it.
+
+### 78.2 Gate
+
+Default path byte-identical (0 of 2 809); shadow mode unchanged at 2, both the
+§62 VLA defect. `regression/esbmc/irep2_only_boolean_operands` pins the fix by
+the `(_Bool)` cast on the call result; disabling the conversion makes ESBMC abort
+and fails it.
+
+The first `test.desc` regex was written from a guess at the lowering and did not
+match: the condition becomes
+`IF !((_Bool)return_value$_foo$1 ? il < 2 ? 1 : 0 : 0)`, a ternary. Read the
+output before writing the pattern.
+
+## 79. Status
+
+Sampled `-only` errors: **12, of which 10 are the pre-existing parse failures**
+(§72.1) -- so **2 real**: one `sizeof` arity, one `do_function_call` member
+callee. `llvm/sizeof` and `llvm/struct_method` are the two tests.
+
+Next: the `sizeof` arity error. `migrate.cpp:783` aborts on a one-operand
+`sizeof`, which `adjust_sizeof` fills for VLAs -- and §55.5 already found that
+arm blocked on exactly this, from the other direction. That makes it a migration
+ordering question like §72's `shr`, not a port: check whether the converter can
+supply the value operand before assuming the arm must.
