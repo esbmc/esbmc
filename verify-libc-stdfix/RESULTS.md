@@ -1740,7 +1740,14 @@ because it is the only one instantiating a template at two types:
 Split into two single-instantiation harnesses -- `harness_divi_s015.cpp` and
 `harness_divi_s031.cpp` -- **both still FAIL with zero warnings**. So the
 "defect 1 is not width-specific" claim holds on evidence that cannot be affected
-by #6969, and the split versions supersede the combined one.
+by #6969.
+
+**Update: #6969 is fixed upstream (#6976, "Give a template instantiation's
+lambda its own closure type").** With that in the tree the original
+`harness_divi_widths.cpp` runs with **zero `no body` warnings** and still
+reports FAILED, so the split is no longer needed to make the result trustworthy.
+The split harnesses are kept anyway -- one instantiation each is a cheaper query
+and states the per-format claim more directly -- but either form is now sound.
 
 Nothing else in this work is exposed: every other harness instantiates each
 template exactly once, and the two accuracy families (sqrt, exp) were also
