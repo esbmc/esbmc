@@ -422,10 +422,19 @@ std::string code_contractst::clause_call_callee(const goto_programt &body) const
   if (referenced.empty())
     return std::string();
 
-  for (const goto_programt::const_targett &call_it :
-       select_clause_calls(referenced, declared_in(body), body))
-    return id2string(
-      to_symbol2t(to_code_function_call2t(call_it->code).function).thename);
+  // The set is ordered by instruction address, not by position: operator< on a
+  // const_targett is `&*i1 < &*i2` (goto_program.cpp) and instructiont lives in
+  // a std::list, so its first element is whichever node the allocator placed
+  // lowest. With two eligible calls that names an arbitrary one of them, and a
+  // different one on a build whose heap is laid out differently. Walk the body
+  // for the first call the program reaches instead.
+  const std::set<goto_programt::const_targett> selected =
+    select_clause_calls(referenced, declared_in(body), body);
+
+  forall_goto_program_instructions (it, body)
+    if (selected.count(it))
+      return id2string(
+        to_symbol2t(to_code_function_call2t(it->code).function).thename);
 
   return std::string();
 }
