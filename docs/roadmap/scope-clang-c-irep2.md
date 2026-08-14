@@ -2567,3 +2567,67 @@ both the §62 VLA defect.
 
 Next: §72.3 option 1 -- emit `ashr`/`lshr` from the converter -- measured
 flag-off first, since it moves output on the default path.
+
+## 74. The shift kind, decided at conversion
+
+§72.3 left two viable routes for `shr`; this takes option 1. `clang_c_convert`
+now emits `lshr` or `ashr` directly instead of a signedness-agnostic `shr`.
+
+### 74.1 Why the converter can decide and migration cannot
+
+Clang has already applied the integer promotion by the time the converter sees
+the node, and records it as an `ImplicitCastExpr <IntegralCast>`:
+
+```
+BinaryOperator 'int' '>>'
+|-ImplicitCastExpr 'int' <IntegralCast>
+| `-ImplicitCastExpr 'unsigned char' <LValueToRValue>
+`-IntegerLiteral 'int' 1
+```
+
+C11 6.5.7p3 gives the result the type of the *promoted* left operand, so the
+node's own type is exactly the signedness `adjust_expr_shifts` computes. One
+ternary, no promotion logic duplicated -- which is the difference from teaching
+`migrate_expr` the same trick (§72.2), where only the unpromoted type exists.
+
+### 74.2 The A/B caught a dispatcher bug
+
+`clang_c_adjust::adjust_expr` routes to the shift arm on
+`id() == "shl" || id() == "shr"`. Emitting the typed ids moved those nodes out
+of its reach, so the arm stopped running -- and the two things it does besides
+choosing the kind, `gen_typecast_arithmetic` on both operands and
+`expr.type() = op0.type()`, sit *outside* the `shr` branch and apply to every
+shift. One default-path divergence (`esbmc/github_323`) and 46 bytes of missing
+casts. The fix is both halves: emit the typed id **and** route it.
+
+Generalises: moving a decision earlier can silently detach a node from a
+dispatcher keyed on the old spelling. Grep for the id being replaced is part of
+the change, not a follow-up.
+
+### 74.3 The gate cannot see this change
+
+`c_expr2string` prints `ashr` and `lshr` identically as `>>`, so flipping the
+kind produces a byte-identical dump. The clean A/B (0 of 2 809 on the default
+path) says the surrounding structure is unchanged and **nothing** about the
+choice -- §39.1's fourth row, met for the first time in this phase.
+
+So the gate is a semantic test: for `a >= 0x80000000`, `a >> 1 < 0x80000000`
+holds under a logical shift and fails under an arithmetic one. Nondeterministic
+input, so it cannot be constant-folded. `regression/esbmc/shift_kind_unsigned`,
+mutation-checked -- flipping the ternary fails it.
+
+The typedef case is covered there too: `t` resolves for integer typedefs, so
+`u32 >> 1` picks `lshr`. That was a live risk, since the arm follows the type
+(`ns.follow(op0.type())`) and the converter does not.
+
+## 75. Status
+
+`shr` no longer errors under `-only` (64 tests). Default path byte-identical.
+Remaining sampled `-only` errors: 4 `assign_shr`, 2 `and takes boolean operands
+only`, 1 `sizeof` arity, 1 `do_function_call` member callee -- plus 10
+pre-existing parse failures that are not ours (§72.1).
+
+Next: `assign_shr`, the same class one level up. `adjust_side_effect_assignment`
+picks `assign_lshr`/`assign_ashr` from the **unpromoted** LHS type, which the
+converter also has, so option 1 applies again -- with its own default-path A/B
+and its own semantic test, since the printer is blind here too.

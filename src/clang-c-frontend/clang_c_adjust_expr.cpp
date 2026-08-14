@@ -150,7 +150,9 @@ void clang_c_adjust::adjust_expr(exprt &expr)
       expr.type().id() != "bool")
       gen_typecast(ns, expr.op0(), expr.type());
   }
-  else if (expr.id() == "shl" || expr.id() == "shr")
+  else if (
+    expr.id() == "shl" || expr.id() == "shr" || expr.id() == "ashr" ||
+    expr.id() == "lshr")
   {
     adjust_expr_shifts(expr);
   }
@@ -438,7 +440,9 @@ void clang_c_adjust::adjust_member(member_exprt &expr)
 
 void clang_c_adjust::adjust_expr_shifts(exprt &expr)
 {
-  assert(expr.id() == "shr" || expr.id() == "shl");
+  assert(
+    expr.id() == "shr" || expr.id() == "shl" || expr.id() == "ashr" ||
+    expr.id() == "lshr");
 
   adjust_operands(expr);
 
