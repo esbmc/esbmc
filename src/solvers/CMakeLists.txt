@@ -345,6 +345,9 @@ endforeach()
 
 add_library(solvers
   solve.cpp
+  # SMT-backed proof of the simplifier's rewrites, behind a build flag (#6971).
+  # Upstream added this under src/solvers/smt/; the flatten puts it here.
+  simplification_equivalence.cpp
   # Solver-agnostic core: the memory model, byte ops, casts, overflow and FP
   # encoding every backend shares.
   smt_solver.cpp

@@ -1760,3 +1760,112 @@ index arm (#6907), address_of bit (#6912), member arm (#6921). §51.3 decided
 (§53). Next: `adjust_comma` or `adjust_sizeof`, both untouched by the type-
 identity gap.
 
+## 55. `adjust_comma` withdrawn: a fourth clause, about consumers not producers
+
+§53.4 picked `adjust_comma` as the cheaper next step -- two statements, no
+type-comparing helper, clean on every axis §49 screens. It does not ship, and
+the reason is a category none of the four recorded blocker families covers.
+
+### 55.1 The census, run first
+
+Per `frontends-to-irep2.md` §39.1, an `fprintf` in the legacy arm, over the
+§1.2 corpus (2 809 tests that parse a `.c`/`.i` through this frontend):
+
+| | |
+|---|---|
+| calls to `adjust_comma` | 3 924 |
+| tests containing at least one | 1 102 |
+| calls where `expr.type() != expr.op1().type()` | 86, in 8 tests |
+
+So the arm is live, and the 86 are the only calls that do anything: the
+converter already gives a comma its right operand's type (`BO_Comma` at
+`clang_c_convert.cpp:4397`), and the assignment only bites once adjusting that
+operand has retyped it.
+
+### 55.2 The gate, made sensitive before it was trusted
+
+The A/B is `--goto-functions-only` under `--clang-c-irep2-adjust` against the
+same binary without it. Two harness facts cost more than the arm did:
+
+- **The dump goes to stderr.** A sweep that hashes stdout compares empty
+  strings and reports byte-identity for anything at all. §18.6 does not say
+  this, and neither did this document.
+- **§21.3's three normalisations are not enough.** A fourth is needed: clang
+  prints AST node addresses in its diagnostics, so `regression/esbmc/github_746`
+  and its `_nocolor` twin differ run-to-run under ASLR. Normalise `0x[0-9a-f]{6,}`.
+
+With both applied the self-control (same binary, twice) is clean, and a
+reachability mutant -- rebuild the node as `code_comma2tc(t, side_1, side_1)`,
+which survives `remove_sideeffects` because that pass keeps the *last* operand
+(`goto_sideeffects.cpp:1370`) -- moves **1 092** tests, against 1 102 that
+contain a comma. The gate sees this arm.
+
+### 55.3 The measurement
+
+| | divergences |
+|---|---|
+| master, flag-on vs flag-off | **1** |
+| arm handed over, flag-on vs flag-off | **8** |
+
+The pre-existing one is `esbmc-unix/github_2220`, unrelated: a `member` whose
+base is still a pointer reaches `c_expr2string`, which cannot print it and dumps
+the raw irep instead. It is a member-arm residual, not a comma one, and it is
+recorded here only because any future sweep will see it.
+
+The other **7** are new, and they are the census's 86 retypes: `csmith01`-`04`,
+`csmith06`, `esbmc-unix/github_2513_6`, `esbmc-unix/github_4435`. (The eighth
+retyping test, `esbmc/00_aiob_4_true-unreach-call`, does not diverge -- a retype
+no consumer reads.)
+
+### 55.4 The clause
+
+Every divergence has the same shape:
+
+```
+off:  IF !(cur == c)          THEN GOTO 2
+on:   IF !((_Bool)(cur == c)) THEN GOTO 2
+```
+
+The condition is `(..., cur == c)`. `adjust_expr_rel` types the right operand
+`bool`; `adjust_comma` copies that onto the comma node; the condition's
+`gen_typecast_bool` then finds a `bool` and inserts nothing. Hand the arm over
+and step two moves to a pass that runs after the whole legacy walk -- so the
+consumer sees the converter's `int` and inserts a cast. The IREP2 arm then
+corrects a type nobody will read again.
+
+So the clause is not about what the arm reads (§49's screen) nor about what
+migration can represent (§39, §47, §51). It is:
+
+> **§19.2's hand-over shape is sound only for an arm whose rewrite no other arm
+> in the same pass consumes.** `adjust_index` and `adjust_member` rewrite
+> expression *shape*, which no sibling re-reads. An arm that writes a node's
+> *type* is a producer for every sibling that types its operands.
+
+### 55.5 This exhausts §49.3's list
+
+Applied to the remaining five, three fall from source alone:
+
+| arm | verdict |
+|---|---|
+| `adjust_expr_unary_boolean`, `adjust_expr_binary_boolean` | both write `expr.type() = bool_type()`, and `clang_c_adjust_expr.cpp:148` reads exactly that (`op0().type().id() == "bool"`) from the `unary-`/`bitnot` arm. Same clause, with the consumer named in the tree |
+| `adjust_sizeof` | fills the VLA byte-size operand, and `migrate.cpp:783` **aborts** on a `sizeof` carrying anything but two operands. Handing it over aborts the pass before the arm runs |
+| `adjust_reference` | `clang_c_adjust::adjust_reference` is empty for C; only `clang_cpp_adjust`'s override does work, and the IREP2 pass is wired into the C driver alone. Vacuous |
+| `adjust_expr_rel` | already withdrawn, §51 |
+
+§49.3 asked whether the screen was complete, and said it would be told by
+whether the next arm shipped without a surprise. It did not, and the screen was
+incomplete in a way that retires the whole list.
+
+## 56. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921). §51.3 decided
+(§53). `adjust_comma` withdrawn (§55), and with it the last of §49.3's
+candidates.
+
+Next is **not another arm**: the hand-over shape has no candidates left. §55.4
+forces what §19.2 and §25.3 already preferred -- **shape 2**, moving traversal
+ownership into the IREP2 pass so arm order is preserved and a migrated arm's
+output reaches its consumers in the same walk. `esbmc-unix/github_2220`'s
+pre-existing divergence is the first thing that shape should be measured
+against.

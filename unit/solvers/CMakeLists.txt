@@ -14,8 +14,19 @@ endif()
 
 # The one-shot verdict scanner's contract is camada's now
 # (camada::parseOneShotVerdictLine, covered by camada's own regression suite),
-# so the test that pinned ESBMC's copy went with the smtlib backend.
+# so the test that pinned ESBMC's copy went with the smtlib backend -- and with
+# it upstream's oneshot_verdict_test, which linked that library.
 
 # The array and tuple flatteners went with fp_convt: camada encodes both
 # itself, natively or lowered (ArrayEncoding::Ackermann, TupleEncoding::Camada),
 # so the test that pinned array_convt's bounded select/store went with it.
+
+# The SMT equivalence checker for simplifier rewrites (#4625). The installed
+# checker aborts on a mismatch, so only a direct call can assert that it
+# detects one. Any built-in solver serves; `solve` picks the default. After the
+# solvers flatten there is a single `solvers` library rather than an interface
+# target over per-backend ones, but the link line is unchanged: camada_conv
+# registers every backend camada was built with.
+new_unit_test(simplification_equivalence_test
+              "simplification_equivalence.test.cpp"
+              "solvers;util_esbmc;filesystem;bigint")

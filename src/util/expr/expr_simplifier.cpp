@@ -1192,28 +1192,14 @@ expr2tc neg2t::do_simplify() const
     }
     return constant_vector2tc(value->type, std::move(members));
   }
-  if (is_unsignedbv_type(value))
-  {
-    // Get bit-width of the unsigned type
-    const unsigned int width = value->type->get_width();
-
-    // Compute modulus: 2^width
-    const BigInt modulus = BigInt(1) << width;
-    const expr2tc modulus_expr = constant_int2tc(value->type, modulus);
-
-    // Perform modular negation: (modulus - x) % modulus.
-    //
-    // simplify_no_reassoc instead of plain ::simplify: ::simplify would
-    // re-enter the chain-root reassoc path on the freshly-built sub2tc
-    // and, on already-flattened reassoc output, recurse without bound.
-    // The wrap is a one-shot canonicalisation, not a chain root.
-    const expr2tc negated_value = sub2tc(value->type, modulus_expr, value);
-    expr2tc wrap = modulus2tc(value->type, negated_value, modulus_expr);
-    simplify_no_reassoc(wrap);
-
-    return wrap;
-  }
-
+  /* No unsigned special case: -x on an unsigned type is modular negation,
+   * which is exactly what mk_bvneg gives at the SMT layer, and what
+   * Negator + from_integer gives when folding a constant.
+   *
+   * The previous form built `(2^w - x) % 2^w`, but 2^w is not representable
+   * in a w-bit unsigned type: constant_int2tc wrapped it to 0, so every SSA
+   * that negated an unsigned carried `(0 - x) % 0`. It computed the right
+   * answer only because SMT-LIB defines `bvurem x 0` as `x` (#4625). */
   return simplify_arith_1op<Negator, neg2t>(type, value);
 }
 

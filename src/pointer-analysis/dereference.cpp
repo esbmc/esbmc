@@ -55,41 +55,6 @@ static inline expr2tc get_base_dereference(const expr2tc &e)
   }
 }
 
-/* True when `off` (in bits) is provably a whole multiple of `unit`, whatever
- * the value-set's alignment claim. Symex builds an array element's offset as
- * index * element_size, so the multiplication carries the proof the
- * simplifier cannot see through a symbolic index. Conservative: any shape it
- * does not recognise returns false. */
-static bool offset_is_multiple_of(const expr2tc &off, unsigned int unit)
-{
-  if (unit == 0)
-    return false;
-
-  if (is_constant_int2t(off))
-    return (to_constant_int2t(off).value % BigInt(unit)).is_zero();
-
-  /* k * unit, or a multiple of it, in either operand order */
-  if (is_mul2t(off))
-  {
-    const mul2t &m = to_mul2t(off);
-    return offset_is_multiple_of(m.side_1, unit) ||
-           offset_is_multiple_of(m.side_2, unit);
-  }
-
-  /* a sum or difference of multiples is a multiple */
-  if (is_add2t(off))
-    return offset_is_multiple_of(to_add2t(off).side_1, unit) &&
-           offset_is_multiple_of(to_add2t(off).side_2, unit);
-
-  if (is_sub2t(off))
-    return offset_is_multiple_of(to_sub2t(off).side_1, unit) &&
-           offset_is_multiple_of(to_sub2t(off).side_2, unit);
-
-  if (is_typecast2t(off))
-    return offset_is_multiple_of(to_typecast2t(off).from, unit);
-
-  return false;
-}
 
 static inline expr2tc replace_dyn_offset_with_zero(const expr2tc &e)
 {
@@ -383,7 +348,7 @@ void dereferencet::dereference_addrof_expr(
   dereference_expr(expr, guard, mode);
 }
 
-static bool is_aligned_member(const expr2tc &expr)
+static bool is_aligned_member(const expr2tc &expr, const namespacet &ns)
 {
   if (!is_member2t(expr))
     return false;
@@ -399,11 +364,20 @@ static bool is_aligned_member(const expr2tc &expr)
     return false;
   }
 
-  /* non-packed structures have all members aligned
+  /* `#pragma pack(n)` leaves members at offsets that need not respect their own
+   * type's alignment, and the compiler emits an unaligned access for those, so
+   * a direct member read is not a misalignment. Unions place every member at
+   * offset 0, so only structs can under-align one.
    *
-   * TODO: This holds true only for non-padding members as padding is not
-   *       actually a member. We just treat it as one, which here is wrong. */
-  return true;
+   * TODO: For a non-packed struct this holds only for non-padding members, as
+   *       padding is not actually a member. We just treat it as one. */
+  if (!is_struct_type(structure->type))
+    return true;
+
+  const member2t &member = to_member2t(expr);
+  const BigInt offset =
+    member_offset_bits(structure->type, member.member, &ns) / 8;
+  return offset % alignment(migrate_type_back(member.type), ns) == 0;
 }
 
 /// Push member/index steps inside a conditional, so `(c ? a : b).f` becomes
@@ -520,7 +494,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     expr2tc &structure = member.source_value;
     if (
       !options.get_bool_option("no-align-check") && !mode.unaligned &&
-      !is_aligned_member(expr))
+      !is_aligned_member(expr, ns))
     {
       log_warning(
         "not checking alignment for access to packed {} {}",
@@ -1376,60 +1350,36 @@ void dereferencet::construct_from_array(
   }
   else
   {
-    // Dyn offset -- is alignment guarantee strong enough?
+    // Dyn offset -- is alignment guarantee strong enough? `alignment` is in
+    // bits here: the caller scaled it (see `alignment *= 8` in dereference()).
     is_correctly_aligned = (alignment >= subtype_size);
-    // Special case for pointer-typed array elements: `alignment` is in
-    // BYTES (value_set.h:139) while `subtype_size` is in BITS (set from
-    // type_byte_size_bits above). For an array of pointers reached
-    // through a struct-member pointer dereference, the unit mismatch
-    // wrongly forced the byte-extract branch, which hides the pointer
-    // RHS from value_sett::assign and breaks the downstream deref of
-    // the loaded pointer (issue #4435). Pointer subtypes are always
-    // accessed atomically, so a byte-equal-or-larger natural alignment
-    // makes the direct index2tc encoding sound. Keep the original
-    // comparison for non-pointer subtypes so over-approximated
-    // alignments on int / short / char arrays still trigger
-    // check_alignment (e.g. regression/esbmc/align-deref_fail).
-    /* An offset that reduces to a whole multiple of the element size is
-     * element-aligned whatever the value-set's alignment claim: `mod` is
-     * offset % subtype_size, so a constant zero proves it. Without this,
-     * a plain `a[i] = v` on an array of a non-integer subtype falls into
-     * byte stitching, and stitching a float means a to_fp per byte -- which
-     * loses NaN payloads, because the FP sort has exactly one NaN, and
-     * silently corrupts the stored value (esbmc/esbmc#6922). The whole
-     * element is being accessed here, so index2tc is both sound and the
-     * cheaper encoding. */
-    /* The offset arrives BYTE-scaled here (symex builds index * 8 for a
-     * byte-addressed object) while subtype_size is in bits, so compare in
-     * bytes. An offset that is a whole multiple of the element size is
-     * element-aligned however weak the value-set's alignment claim is:
-     * `index * elem_bytes` carries the proof the simplifier cannot see
-     * through a symbolic index. Without this a plain `a[i] = v` on an array
-     * of non-integer subtype falls into byte stitching, and stitching a
-     * float round-trips it through the FP sort once per byte -- which loses
-     * NaN payloads (the FP sort has one NaN) and silently corrupts the
-     * stored value (esbmc/esbmc#6922). The whole element is accessed here,
-     * so index2tc is both sound and the cheaper encoding. */
-    /* A whole-element access whose offset is a multiple of the element size
-     * is element-aligned however weak the value-set's claim: symex builds
-     * `index * elem_bytes`, which carries the proof the simplifier cannot see
-     * through a symbolic index (the offset arrives byte-scaled, subtype_size
-     * is in bits). Restricted to subtypes the FP/other non-BV sorts need it
-     * for: stitching such a value round-trips it through its sort once per
-     * byte, and for a float that loses NaN payloads -- the FP sort has one
-     * NaN -- silently corrupting the stored value (esbmc/esbmc#6922).
-     * Integer subtypes keep the original comparison so over-approximated
-     * alignments still reach check_alignment (align-deref_fail). */
-    if (
-      !is_correctly_aligned && !is_bv_type(arr_subtype) &&
-      deref_size == subtype_size && subtype_size % 8 == 0 &&
-      offset_is_multiple_of(offset, subtype_size / 8))
-      is_correctly_aligned = true;
-    if (
-      !is_correctly_aligned && is_pointer_type(arr_subtype) &&
-      alignment * 8 >= subtype_size)
-      is_correctly_aligned = true;
-    overflows_boundaries = !is_correctly_aligned || deref_size > subtype_size;
+    /* A whole-element access needs no stitching. check_alignment() below
+     * asserts the offset lands on an element boundary, which is exactly the
+     * precondition index2tc needs, so an unproven alignment claim is a reason
+     * to *check*, not to decompose.
+     *
+     * Floats: reassembling one costs a fp.to_ieee_bv / to_fp round trip per
+     * byte, and SMT-LIB leaves the NaN pattern fp.to_ieee_bv returns
+     * unconstrained -- so once an intermediate is NaN the solver may pick a
+     * different pattern each time and the value read back is not the one
+     * stored (esbmc/esbmc#6922).
+     *
+     * Pointers: stitching hides the pointer RHS from value_sett::assign and
+     * breaks the downstream deref of the loaded pointer (esbmc/esbmc#4435).
+     * That used to be papered over by claiming such an access was aligned
+     * whenever alignment * 8 >= subtype_size -- an 8x over-approximation on
+     * an alignment already in bits, which also suppressed check_alignment, so
+     * a genuinely misaligned pointer read went unreported.
+     *
+     * Integer subtypes keep the original condition: their stitching is exact,
+     * and weakening it would stop over-approximated alignments reaching
+     * check_alignment (regression/esbmc/align-deref_fail). */
+    const bool whole_element =
+      deref_size == subtype_size &&
+      (is_floatbv_type(arr_subtype) || is_pointer_type(arr_subtype));
+    overflows_boundaries =
+      whole_element ? false
+                    : (!is_correctly_aligned || deref_size > subtype_size);
   }
 
   // No alignment guarantee: assert that it's correct.

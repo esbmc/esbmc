@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwind 6 --stack-limit 512 --total-stack-limit 1280
+^VERIFICATION SUCCESSFUL$
