@@ -5517,6 +5517,7 @@ exprt numpy_call_expr::get()
     auto get_arg = [&](std::size_t index) {
       nlohmann::json arg = call_["args"][index];
       resolve_var(arg);
+      materialize_inline_numpy_constructor_call(arg, converter_.ast());
       return arg;
     };
 
