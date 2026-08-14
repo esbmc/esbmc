@@ -294,13 +294,15 @@ by regression tests under `regression/esbmc-cpp*`.
 
 `<chrono>` models `duration` over any `Rep` and `Period`, the `nanoseconds` …
 `hours` typedefs, `duration_cast`, and `time_point` with `time_point_cast`.
-Mixed-period arithmetic goes through `common_type`, so `seconds(1) +
-milliseconds(500)` is `milliseconds(1500)`, and the converting `duration`
-constructor is implicit only where the conversion cannot truncate
-([time.duration.cons] p2). `std::ratio` — reduced per [ratio.ratio] p1, with
-`ratio_multiply`, `ratio_divide` and the `nano` / `micro` / `milli` aliases — is
-declared by `<chrono>` itself, which also pulls in `<ctime>` for
-`system_clock::to_time_t` and `from_time_t`.
+Mixed-period arithmetic and comparison go through `common_type`, so
+`seconds(1) + milliseconds(500)` is `milliseconds(1500)`, and the converting
+`duration` constructor is implicit only where the conversion cannot truncate
+([time.duration.cons] p2). `duration::zero` / `min` / `max`, `time_point::min` /
+`max`, `treat_as_floating_point` and `duration_values` are there as well.
+`std::ratio` — reduced per [ratio.ratio] p1, with `ratio_multiply`,
+`ratio_divide` and the `nano` / `micro` / `milli` aliases — is declared by
+`<chrono>` itself, which also pulls in `<ctime>` for `system_clock::to_time_t`
+and `from_time_t`.
 
 `system_clock`, `steady_clock` and `high_resolution_clock` (an alias for
 `steady_clock`) share one tick counter that advances by a non-negative
