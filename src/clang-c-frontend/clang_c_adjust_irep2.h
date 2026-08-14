@@ -66,6 +66,13 @@ private:
   /// rewrite, so it ports independently of the rest of that arm (§70).
   void declare_implicit_callee(const expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_expr_{unary,binary}_boolean's live
+  /// half. Their type write is dead for C (§58.1); the operand conversion is
+  /// not -- goto_convert's short-circuit lowering rejects a non-boolean operand
+  /// outright. Portable here, unlike §58's dispatch-point shape, because this
+  /// walk migrates once and does not round-trip per node (§78).
+  void adjust_boolean_operands(expr2tc &expr);
+
   contextt &context;
   const bool sole_adjuster;
   namespacet ns{context};
