@@ -80,6 +80,12 @@ private:
   /// first (§82).
   void adjust_call_callee(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_if: a ternary's condition must be
+  /// boolean before goto_convert lowers it, and its arms must agree with the
+  /// node's type. `if2t` is the only value-level kind carrying a location
+  /// (§49.2), so the rebuild passes the original through (§84).
+  void adjust_if_expr(expr2tc &expr);
+
   contextt &context;
   const bool sole_adjuster;
   namespacet ns{context};

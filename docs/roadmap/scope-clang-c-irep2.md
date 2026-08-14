@@ -2831,3 +2831,62 @@ defect. Default path unchanged throughout.
 Next: the 185 need re-classifying by message before picking a target -- the
 303-test sample is exhausted (§82.1), so the next step is the full-corpus
 equivalent of §68's error census rather than another reduction.
+
+## 84. The full-corpus error census, and the ternary arm
+
+§83 retired the 303-test sample. Run over all 2 813 tests, with each erroring
+test *also* run flag-off so the census attributes its own rows:
+
+| | tests |
+|---|---:|
+| erroring under `-only` | 185 |
+| **pre-existing** -- fail flag-off too | **167** |
+| **ours** | **18** |
+
+That is the number that matters, and it was hidden until the census did the
+attribution itself. §68 carried `PARSING ERROR` as an unattributed row for four
+sections before §72.1 checked it by hand; measuring it per-row costs one extra
+run per erroring test and removes the guesswork.
+
+The 18 were three classes: the ternary condition (10), `builtin_va_arg` (6), and
+`Can't generate zero for type complex` (2).
+
+### 84.1 The ternary arm ports
+
+`goto_sideeffects.cpp:1317` rejects a non-boolean `?:` condition, and
+`clang_c_adjust::adjust_if` supplies the cast plus reconciles the arms with the
+node's type. Both are type-driven, neither depends on an adjustment, and the
+failure is downstream of migration -- §80's rule again, so it goes in the native
+walk.
+
+Two things `if2t`'s constructor settles before writing the rebuild:
+
+- it takes an optional **location**, and `if2t` is the only value-level kind
+  carrying one (§49.2, where §21.2/§26.2/§27 are three defects from forgetting
+  it), so the original is passed through;
+- it **asserts** each arm's `type_id` matches the node's -- which is exactly what
+  the arm's second half establishes, so the arms must be reconciled *before* the
+  node is rebuilt, not after.
+
+### 84.2 Result
+
+Ours **18 → 8**, and the class cleared completely: nothing was hiding behind it,
+which is not guaranteed when a census reports first-error-per-test.
+
+Default path 0 of 2 809; shadow unchanged at 2.
+`regression/esbmc/irep2_only_ternary_cond` pins the `(_Bool)` condition, and
+disabling the arm reproduces `first argument of 'if' must be boolean` and fails
+it.
+
+## 85. Status
+
+`-only`: 1 623 of 2 813 diverge; **175 error, of which 167 are pre-existing --
+8 are ours**: 6 `builtin_va_arg`, 2 `Can't generate zero for type complex`.
+Shadow: 2, both the §62 VLA defect. Default path unchanged throughout.
+
+Next: `builtin_va_arg`. §68.2 already identified it as the input to an unported
+arm, and §72 showed that class splits -- some constructs can move to the
+converter, some cannot. `adjust_builtin_va_arg` lowers the node to a call to
+`__ESBMC_va_arg`, which is a rewrite rather than a decision, so the question is
+whether it can run natively after migration or whether `migrate_expr` rejects
+the node first, as it did for `shr`.

@@ -62,6 +62,26 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
 
   if (sole_adjuster && (is_code_function_call2t(expr) || is_sideeffect2t(expr)))
     adjust_call_callee(expr);
+
+  if (sole_adjuster && is_if2t(expr))
+    adjust_if_expr(expr);
+}
+
+void clang_c_adjust_irep2::adjust_if_expr(expr2tc &expr)
+{
+  const if2t &i = to_if2t(expr);
+  expr2tc cond = i.cond, tv = i.true_value, fv = i.false_value;
+
+  if (!is_nil_expr(cond) && !is_bool_type(cond->type))
+    c_implicit_typecast(cond, get_bool_type(), ns);
+
+  if (!is_nil_expr(tv) && tv->type != expr->type)
+    c_implicit_typecast(tv, expr->type, ns);
+  if (!is_nil_expr(fv) && fv->type != expr->type)
+    c_implicit_typecast(fv, expr->type, ns);
+
+  if (cond != i.cond || tv != i.true_value || fv != i.false_value)
+    expr = if2tc(expr->type, cond, tv, fv, i.location);
 }
 
 void clang_c_adjust_irep2::adjust_call_callee(expr2tc &expr)
