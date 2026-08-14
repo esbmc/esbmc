@@ -2288,3 +2288,66 @@ zero times; that is the real form of the concern and the census already found it
 `adjust_expr_unary_complex` is also withdrawn: at 22 calls in 4 tests, with a
 mutant that moves 3 of them, it is exactly the small separable arm §60.4
 originally called it.
+
+## 66. `--clang-c-irep2-adjust-only`, and the first number
+
+§60.3 left the coupled component as one step, which is 17 arms (§63.1) and no
+way to show progress in between: the trailing-pass shape cannot move an arm
+singly (§55.4) and the dispatch-point shape is quadratic (§58.3). The hop-off
+flag fixes the measurement problem, exactly as `--python-irep2-adjust-only`
+does for V.4: the IREP2 pass *replaces* `clang_c_adjust` instead of shadowing
+it, so every arm ported makes strictly more tests match and the divergence
+count is monotone. Default off.
+
+### 66.1 The starting number
+
+Against the flag-off baseline over the §1.2 corpus:
+
+| | tests |
+|---|---:|
+| already identical | **1 001** |
+| `migrate expr failed` before any arm runs | **575** |
+| migrates, output differs | **1 233** |
+| **diverging** | **1 808** of 2 809 |
+
+1 001 already match, which is more than expected for a pass implementing three
+of seventeen arms -- most tests never reach the constructs the missing arms
+handle.
+
+### 66.2 The 575 are a different workstream, and they come first
+
+`migrate_expr` presumes a **post-adjust** tree. Run without the legacy pass, it
+aborts on shapes the converter emits and `clang_c_adjust` lowers: this is the
+same class as the union-constant assert (#6899) and the `member2t`/`index2t`
+construction invariants (#6907, #6921), each of which was found and relaxed one
+at a time. Measured at scale it is 575 tests -- a fifth of the corpus -- and
+they cannot be measured *at all* until it is relaxed, because they die before
+the first arm.
+
+So the port has two workstreams, not one, and their order is forced:
+
+1. **Migration preconditions.** Enumerate the constructs on which
+   `migrate_expr` aborts pre-adjust, and relax or teach each. Until this is
+   done, 575 tests contribute nothing to the metric.
+2. **The 17 arms**, whose progress the remaining 1 233 measure.
+
+### 66.3 A harness defect worth its own issue
+
+An aborted `esbmc` does not remove its `esbmc-headers-*` temp directory (~7.4 MB
+per run). Any sweep over a mode that aborts -- which `-only` does on 575 tests
+today -- leaks toward 20 GB and fills the disk, after which every subsequent
+measurement is an ENOSPC artifact that reads as "identical" rather than as an
+error. The sweep harness now gives each run a private `TMPDIR` and deletes it;
+the underlying cleanup-on-abort gap is ESBMC's, not the harness's.
+
+## 67. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921), comma arm at its
+dispatch point (#6992), hop-off flag (this section). Withdrawn: `adjust_comma`
+in the trailing pass (§55), the boolean arms at their dispatch point (§58).
+Baseline explained (§62); tail arms cleared for porting (§65).
+
+Next: §66.2 workstream 1 -- census the constructs behind the 575
+`migrate expr failed` tests, which is the same shape of work as #6899/#6907/#6921
+and now has a number attached to it.
