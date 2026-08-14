@@ -1288,6 +1288,9 @@ void interval_domaint::assign(const expr2tc &expr, const bool recursive)
   else if (isfloatbvop && enable_real_intervals)
     apply_assignment<interval_domaint::real_intervalt>(
       c.target, c.source, recursive);
+  else
+    // Unmodelled assignment: the old range must not survive the write.
+    havoc_rec(c.target);
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)
