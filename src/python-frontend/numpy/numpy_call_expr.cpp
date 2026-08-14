@@ -2199,6 +2199,24 @@ static bool is_numpy_constructor_call_by_name(const nlohmann::json &call_node)
   return constructors.count(call_node["func"]["attr"].get<std::string>()) != 0;
 }
 
+// resolve_var()/resolve_numpy_var() copies only resolve a Name argument to
+// its declaration; a constructor call passed inline as the argument itself
+// (e.g. the arange(4) in np.sum(np.arange(4))) is left untouched and fails
+// downstream extraction. Materializes it in place when possible, after the
+// Name-resolution attempt above has already run (a no-op for an already
+// materialized/non-Call node).
+static void materialize_inline_numpy_constructor_call(
+  nlohmann::json &node,
+  const nlohmann::json &ast_json)
+{
+  if (!node.is_object() || node.value("_type", std::string()) != "Call")
+    return;
+  if (
+    std::optional<nlohmann::json> materialized =
+      materialize_numpy_constructor_array(node, ast_json))
+    node = std::move(*materialized);
+}
+
 // full()/eye()/identity()/linspace() are declared through to_list_expr in
 // the real creation path (see array_creation_funcs and its neighbours),
 // which forces a dynamic PyListObj representation instead of a plain
@@ -2968,6 +2986,7 @@ exprt numpy_call_expr::create_expr_from_call()
 
     nlohmann::json arg = call_["args"][0];
     resolve_var(arg);
+    materialize_inline_numpy_constructor_call(arg, converter_.ast());
     if (
       std::optional<nlohmann::json> row_view =
         resolve_literal_numpy_row_view(arg, converter_))
@@ -5189,6 +5208,7 @@ exprt numpy_call_expr::get()
 
     nlohmann::json arg = call_["args"][0];
     resolve_var(arg);
+    materialize_inline_numpy_constructor_call(arg, converter_.ast());
     if (
       std::optional<nlohmann::json> row_view =
         resolve_literal_numpy_row_view(arg, converter_))
@@ -6632,6 +6652,7 @@ exprt numpy_call_expr::get()
     else
     {
       resolve_numpy_var(arr_arg);
+      materialize_inline_numpy_constructor_call(arr_arg, converter_.ast());
     }
 
     std::vector<std::size_t> old_shape;
