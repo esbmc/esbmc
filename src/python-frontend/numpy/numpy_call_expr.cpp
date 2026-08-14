@@ -5125,7 +5125,36 @@ exprt numpy_call_expr::get()
     };
     if (function == "arange")
     {
-      return function_call_expr::get();
+      // np.arange(...) with constant, small arguments is materialized to a
+      // literal list directly, avoiding the operational model's while-loop
+      // list-concatenation implementation (models/numpy.py's arange()),
+      // which is disproportionately expensive to symbolically execute even
+      // for a handful of elements. Real np.arange() returns a Python list,
+      // so build_static_lists is disabled the same way full()/eye()/
+      // identity()/linspace() already do it -- a plain static array here
+      // would not compare equal to a `[]`-literal PyListObj.
+      if (
+        std::optional<nlohmann::json> materialized =
+          materialize_numpy_constructor_array(call_, converter_.ast()))
+      {
+        const bool old_build_static_lists = converter_.build_static_lists;
+        converter_.build_static_lists = false;
+        exprt result = converter_.get_expr(*materialized);
+        converter_.build_static_lists = old_build_static_lists;
+        if (converter_.current_lhs)
+        {
+          converter_.current_lhs->type() = result.type();
+          converter_.update_symbol(*converter_.current_lhs);
+        }
+        return result;
+      }
+      // Non-constant arguments (e.g. a function parameter) cannot be
+      // materialized this way; falling back to the operational model here
+      // hangs past any practical timeout instead of producing a verdict, so
+      // this is rejected explicitly and quickly instead.
+      throw std::runtime_error(
+        "TypeError: numpy.arange() currently supports constant numeric "
+        "inputs only");
     }
 
     nlohmann::json arg = call_["args"][0];
