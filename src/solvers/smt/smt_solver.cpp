@@ -493,6 +493,53 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
   return smt_cache.find(expr)->ast;
 }
 
+smt_astt smt_solver_baset::convert_ieee_arith_2op(const expr2tc &expr)
+{
+  assert(is_floatbv_type(expr));
+
+  if (int_encoding)
+    switch (expr->expr_id)
+    {
+    case expr2t::ieee_add_id:
+      return ir_ieee_api->encode_ieee_add(expr);
+    case expr2t::ieee_sub_id:
+      return ir_ieee_api->encode_ieee_sub(expr);
+    case expr2t::ieee_mul_id:
+      return ir_ieee_api->encode_ieee_mul(expr);
+    case expr2t::ieee_div_id:
+      return ir_ieee_api->encode_ieee_div(expr);
+    default:
+      assert(expr->expr_id == expr2t::ieee_rem_id);
+      return ir_ieee_api->encode_ieee_rem(expr);
+    }
+
+  /* ESBMC_DEFINE_IEEE_ARITH_2OP fixes the field order for the whole family:
+   * rounding mode first, then the two values. */
+  const expr2tc &rounding_mode = *expr->get_sub_expr(0);
+  smt_astt side_1 = convert_ast(*expr->get_sub_expr(1));
+  smt_astt side_2 = convert_ast(*expr->get_sub_expr(2));
+
+  switch (expr->expr_id)
+  {
+  case expr2t::ieee_add_id:
+    return fp_api->mk_smt_fpbv_add(
+      side_1, side_2, convert_rounding_mode(rounding_mode));
+  case expr2t::ieee_sub_id:
+    return fp_api->mk_smt_fpbv_sub(
+      side_1, side_2, convert_rounding_mode(rounding_mode));
+  case expr2t::ieee_mul_id:
+    return fp_api->mk_smt_fpbv_mul(
+      side_1, side_2, convert_rounding_mode(rounding_mode));
+  case expr2t::ieee_div_id:
+    return fp_api->mk_smt_fpbv_div(
+      side_1, side_2, convert_rounding_mode(rounding_mode));
+  default:
+    assert(expr->expr_id == expr2t::ieee_rem_id);
+    /* fp.rem is exact; the node's rounding_mode is plumbing only. */
+    return fp_api->mk_smt_fpbv_rem(side_1, side_2);
+  }
+}
+
 smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 {
   {
@@ -782,65 +829,12 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     break;
   }
   case expr2t::ieee_add_id:
-  {
-    assert(is_floatbv_type(expr));
-    if (int_encoding)
-      a = ir_ieee_api->encode_ieee_add(expr);
-    else
-      a = fp_api->mk_smt_fpbv_add(
-        convert_ast(to_ieee_add2t(expr).side_1),
-        convert_ast(to_ieee_add2t(expr).side_2),
-        convert_rounding_mode(to_ieee_add2t(expr).rounding_mode));
-    break;
-  }
   case expr2t::ieee_sub_id:
-  {
-    assert(is_floatbv_type(expr));
-    if (int_encoding)
-      a = ir_ieee_api->encode_ieee_sub(expr);
-    else
-      a = fp_api->mk_smt_fpbv_sub(
-        convert_ast(to_ieee_sub2t(expr).side_1),
-        convert_ast(to_ieee_sub2t(expr).side_2),
-        convert_rounding_mode(to_ieee_sub2t(expr).rounding_mode));
-    break;
-  }
   case expr2t::ieee_mul_id:
-  {
-    assert(is_floatbv_type(expr));
-    if (int_encoding)
-      a = ir_ieee_api->encode_ieee_mul(expr);
-    else
-      a = fp_api->mk_smt_fpbv_mul(
-        convert_ast(to_ieee_mul2t(expr).side_1),
-        convert_ast(to_ieee_mul2t(expr).side_2),
-        convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode));
-    break;
-  }
   case expr2t::ieee_div_id:
-  {
-    assert(is_floatbv_type(expr));
-    if (int_encoding)
-      a = ir_ieee_api->encode_ieee_div(expr);
-    else
-      a = fp_api->mk_smt_fpbv_div(
-        convert_ast(to_ieee_div2t(expr).side_1),
-        convert_ast(to_ieee_div2t(expr).side_2),
-        convert_rounding_mode(to_ieee_div2t(expr).rounding_mode));
-    break;
-  }
   case expr2t::ieee_rem_id:
-  {
-    assert(is_floatbv_type(expr));
-    if (int_encoding)
-      a = ir_ieee_api->encode_ieee_rem(expr);
-    else
-      /* fp.rem is exact; the node's rounding_mode is plumbing only. */
-      a = fp_api->mk_smt_fpbv_rem(
-        convert_ast(to_ieee_rem2t(expr).side_1),
-        convert_ast(to_ieee_rem2t(expr).side_2));
+    a = convert_ieee_arith_2op(expr);
     break;
-  }
   case expr2t::ieee_fma_id:
   {
     assert(is_floatbv_type(expr));

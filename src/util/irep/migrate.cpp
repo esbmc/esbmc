@@ -746,6 +746,49 @@ void enforce_migrate_stack_budget(const migrate_stack_guardt &stack_guard)
 }
 } // namespace
 
+/// The two-operand IEEE nodes migrate identically: an n-ary irep splices into
+/// nested binaries, and the rounding mode comes from the irep's attribute when
+/// it carries one. False when `expr` is not one of them.
+static bool migrate_ieee_arith_2op(const exprt &expr, expr2tc &new_expr_ref)
+{
+  const irep_idt &id = expr.id();
+  if (
+    id != "ieee_add" && id != "ieee_sub" && id != "ieee_mul" &&
+    id != "ieee_div" && id != "ieee_rem")
+    return false;
+
+  if (expr.operands().size() > 2)
+  {
+    splice_expr(expr, new_expr_ref);
+    return true;
+  }
+
+  type2tc type = migrate_type(expr.type());
+
+  expr2tc side1, side2;
+  convert_operand_pair(expr, side1, side2);
+
+  /* fp.rem is exact, so no rounding mode participates for ieee_rem; the field
+   * is the 2-op plumbing's and keeps the default symbol. */
+  expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  exprt old_rm = expr.find_expr("rounding_mode");
+  if (old_rm.is_not_nil())
+    migrate_expr(old_rm, rm);
+
+  if (id == "ieee_add")
+    new_expr_ref = ieee_add2tc(type, side1, side2, rm);
+  else if (id == "ieee_sub")
+    new_expr_ref = ieee_sub2tc(type, side1, side2, rm);
+  else if (id == "ieee_mul")
+    new_expr_ref = ieee_mul2tc(type, side1, side2, rm);
+  else if (id == "ieee_div")
+    new_expr_ref = ieee_div2tc(type, side1, side2, rm);
+  else
+    new_expr_ref = ieee_rem2tc(type, side1, side2, rm);
+
+  return true;
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -1336,118 +1379,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
-  if (expr.id() == "ieee_add")
-  {
-    type = migrate_type(expr.type());
-
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
-
-    new_expr_ref = ieee_add2tc(type, side1, side2, rm);
+  if (migrate_ieee_arith_2op(expr, new_expr_ref))
     return;
-  }
-
-  if (expr.id() == "ieee_sub")
-  {
-    type = migrate_type(expr.type());
-
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
-
-    new_expr_ref = ieee_sub2tc(type, side1, side2, rm);
-    return;
-  }
-
-  if (expr.id() == "ieee_mul")
-  {
-    type = migrate_type(expr.type());
-
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
-
-    new_expr_ref = ieee_mul2tc(type, side1, side2, rm);
-    return;
-  }
-
-  if (expr.id() == "ieee_div")
-  {
-    type = migrate_type(expr.type());
-
-    assert(expr.operands().size() == 2);
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
-
-    new_expr_ref = ieee_div2tc(type, side1, side2, rm);
-    return;
-  }
-
-  if (expr.id() == "ieee_rem")
-  {
-    type = migrate_type(expr.type());
-
-    assert(expr.operands().size() == 2);
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    /* fp.rem is exact, so no rounding mode participates; the field is the
-     * 2-op plumbing's and is fixed to the default symbol. */
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    new_expr_ref = ieee_rem2tc(type, side1, side2, rm);
-    return;
-  }
 
   if (expr.id() == "ieee_fma")
   {
