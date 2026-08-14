@@ -948,6 +948,23 @@ static bool declares_frame_condition(
 // Helper function to unwrap array-to-pointer decay in assigns targets
 // In C, when an array is passed to a function, it decays to &arr[0].
 // This function detects this pattern and returns the original array.
+// Whether reaching \p e goes through a pointer, which is what decides whether
+// an array-typed place can be written in one assignment.
+static bool reaches_through_pointer(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_dereference2t(e))
+    return true;
+
+  bool found = false;
+  e->foreach_operand([&found](const expr2tc &op) {
+    if (reaches_through_pointer(op))
+      found = true;
+  });
+  return found;
+}
+
 static expr2tc unwrap_array_decay(const expr2tc &expr)
 {
   // Pattern: address_of(index(array, 0))
@@ -1007,6 +1024,13 @@ code_contractst::extract_assigns_from_body(const goto_programt &function_body)
         // Unwrap array-to-pointer decay: &arr[0] -> arr
         // This happens when an array is passed to __ESBMC_assigns()
         target_expr = unwrap_array_decay(target_expr);
+
+        // An array target travels as its address, so the marker instruction
+        // does not read the array itself. Recover the place it names.
+        if (
+          is_address_of2t(target_expr) &&
+          is_array_type(to_address_of2t(target_expr).ptr_obj->type))
+          target_expr = to_address_of2t(target_expr).ptr_obj;
 
         log_debug("contracts", "  Found assigns target expression");
         assigns_targets.push_back(target_expr);
@@ -4605,6 +4629,46 @@ expr2tc code_contractst::lower_is_fresh_in_requires(
   return requires_clause;
 }
 
+// An array frame target reached through a pointer cannot be assigned in one go:
+// dereference refuses to build an array-typed lvalue (dereference.cpp:1103).
+// Write the elements instead -- same post-state, more instructions. Returns
+// whether the target was of that shape and so is now dealt with.
+static bool havoc_pointed_to_array(
+  const expr2tc &target,
+  const locationt &call_location,
+  goto_programt &replacement)
+{
+  if (!is_array_type(target->type) || !reaches_through_pointer(target))
+    return false;
+
+  const array_type2t &at = to_array_type(target->type);
+  if (!is_constant_int2t(at.array_size))
+  {
+    // A symbolic extent has no element count to write out, so the frame cannot
+    // be havocked at all. Saying so beats a silent partial havoc.
+    log_warning(
+      "__ESBMC_assigns: array of unknown size reached through a pointer is "
+      "not havocked; the caller keeps its pre-call value");
+    return true;
+  }
+
+  const BigInt &n = to_constant_int2t(at.array_size).value;
+  for (BigInt k = 0; k < n; k += 1)
+  {
+    expr2tc elem =
+      index2tc(at.subtype, target, constant_int2tc(at.array_size->type, k));
+    goto_programt::targett e = replacement.add_instruction(ASSIGN);
+    e->code = code_assign2tc(elem, gen_nondet(at.subtype));
+    e->location = call_location;
+    e->location.comment("contract havoc assigns");
+  }
+  log_debug(
+    "contracts",
+    "Havoc'd {} elements of a pointed-to array assigns target",
+    integer2string(n));
+  return true;
+}
+
 void code_contractst::generate_replacement_at_call(
   const symbolt &function_symbol,
   const goto_programt &function_body,
@@ -4776,20 +4840,16 @@ void code_contractst::generate_replacement_at_call(
         is_pointer_type(instantiated_target))
         continue;
 
-      // Generate nondeterministic value and create assignment
-      // Special handling for array types: use ARRAY_OF(NONDET) construction
-      expr2tc rhs;
-      if (is_array_type(instantiated_target->type))
-      {
-        // For arrays, generate ARRAY_OF(nondet_element)
-        const array_type2t &arr_type = to_array_type(instantiated_target->type);
-        expr2tc nondet_elem = gen_nondet(arr_type.subtype);
-        rhs = constant_array_of2tc(instantiated_target->type, nondet_elem);
-      }
-      else
-      {
-        rhs = gen_nondet(instantiated_target->type);
-      }
+      if (havoc_pointed_to_array(
+            instantiated_target, call_location, replacement))
+        continue;
+
+      // One nondet of the target's own type, arrays included. ARRAY_OF ties
+      // every element to a single nondet, so a callee that leaves its elements
+      // holding different values has no post-state the havoc can express and
+      // the ensures ASSUME kills the path (#7010). This is what the loop
+      // invariant havoc has always done.
+      expr2tc rhs = gen_nondet(instantiated_target->type);
 
       goto_programt::targett t = replacement.add_instruction(ASSIGN);
       t->code = code_assign2tc(instantiated_target, rhs);

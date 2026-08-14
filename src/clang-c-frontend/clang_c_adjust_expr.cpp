@@ -1228,6 +1228,37 @@ void clang_c_adjust::adjust_side_effect_function_call(
   do_special_functions(expr);
 }
 
+// The expression a chain of typecasts wraps, which is where the address the
+// caller wrote actually sits.
+static exprt *strip_typecasts(exprt &e)
+{
+  exprt *p = &e;
+  while (p->id() == "typecast" && p->operands().size() == 1)
+    p = &p->op0();
+  return p;
+}
+
+static bool is_address_of_array(exprt &arg, const namespacet &ns)
+{
+  const exprt *addr = strip_typecasts(arg);
+  return addr->is_address_of() && addr->operands().size() == 1 &&
+         is_array_like(ns.follow(addr->op0().type()));
+}
+
+// Undo the `&a` -> `&a[0]` rewrite adjust_address_of applies to every array.
+static void restore_array_lvalue(exprt &arg)
+{
+  exprt *addr = strip_typecasts(arg);
+  if (
+    !addr->is_address_of() || addr->operands().size() != 1 ||
+    !addr->op0().is_index() || addr->op0().operands().size() != 2)
+    return;
+
+  exprt array = addr->op0().op0();
+  addr->type() = pointer_typet(array.type());
+  addr->op0().swap(array);
+}
+
 void clang_c_adjust::adjust_function_call_arguments(
   side_effect_expr_function_callt &expr)
 {
@@ -1236,10 +1267,24 @@ void clang_c_adjust::adjust_function_call_arguments(
   exprt::operandst &arguments = expr.arguments();
   const code_typet::argumentst &argument_types = code_type.arguments();
 
+  // An assigns clause names an lvalue, and array-to-pointer decay is the one
+  // conversion that loses which lvalue it was: adjust_address_of rewrites `&a`
+  // to `&a[0]`, after which the clause is indistinguishable from one that
+  // named the first element, and the frame silently shrinks to it (#7010).
+  // Keep the pointer-to-array `&a` C already gave us for this callee alone.
+  const bool keeps_array_lvalues =
+    f_op.is_symbol() && f_op.identifier() == "c:@F@__ESBMC_assigns_impl";
+
   for (unsigned i = 0; i < arguments.size(); i++)
   {
     exprt &op = arguments[i];
+    const bool was_array_lvalue =
+      keeps_array_lvalues && is_address_of_array(op, ns);
+
     adjust_expr(op);
+
+    if (was_array_lvalue)
+      restore_array_lvalue(op);
 
     if (i < argument_types.size())
     {
