@@ -5126,8 +5126,9 @@ exprt numpy_call_expr::get_arange_expr()
   // literal list directly, avoiding the operational model's while-loop
   // list-concatenation implementation (models/numpy.py's arange()), which
   // is disproportionately expensive to symbolically execute even for a
-  // handful of elements. Real np.arange() returns a Python list, so
-  // build_static_lists is disabled the same way full()/eye()/identity()/
+  // handful of elements. Although real np.arange() returns an ndarray, this
+  // frontend materializes it as a list-like runtime object for consistency
+  // with build_static_lists, disabled the same way full()/eye()/identity()/
   // linspace() already do it -- a plain static array here would not
   // compare equal to a `[]`-literal PyListObj.
   if (
