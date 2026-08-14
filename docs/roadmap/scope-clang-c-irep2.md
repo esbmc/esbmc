@@ -2502,3 +2502,68 @@ Metric under `--clang-c-irep2-adjust-only`: **1 808 of 2 809 diverge**, of which
 Next: the remaining 304. `shr` (64 tests) and `builtin_va_arg` (6) are
 `adjust_expr_shifts` and `adjust_builtin_va_arg` (§68.2); the rest need the same
 reduce-then-classify treatment this section applied.
+
+## 72. `shr` shows the hop-off's ordering is not universally satisfiable
+
+§71 put the shift arm next: `shr` is 64 of the tests still erroring under
+`-only`, and 10 of the 14 real errors in the §70 sample. It does not port, and
+the reason is about the `-only` architecture rather than the arm.
+
+### 72.1 The 10 `PARSING ERROR`s are not ours
+
+First, §68.3's unattributed row, resolved: all 10 fail flag-off as well. They are
+pre-existing parse failures, not `-only` failures, and they should be subtracted
+from every error count in §68-§71. The sample's 24 errors are 14.
+
+### 72.2 IREP2 has no untyped shift, and the choice needs the promotion
+
+`clang_c_adjust::adjust_expr_shifts` promotes both operands
+(`gen_typecast_arithmetic`) and *then* reads `op0.type()` to pick `lshr` for
+unsigned or `ashr` for signed. IREP2 has `lshr2t`, `ashr2t` and `shl2t` and no
+signedness-agnostic `shr`, so a raw `shr` is not representable: migration must
+make the arm's choice.
+
+It cannot make it correctly. `-only` migrates a symbol's whole value up front,
+before any native arm runs, so the only type available is the **unpromoted**
+one, and promotion changes it:
+
+```c
+unsigned char x = 200;
+int y = x >> 1;      // flag-off: ASSIGN y=(signed int)x >> 1
+```
+
+`x` is `unsignedbv` before promotion and `signedbv` after, so a migration-time
+decision picks `lshr` where the arm picks `ashr`. For a promoted `unsigned char`
+the two agree numerically -- the promoted value cannot be negative -- so this is
+a byte-identity failure rather than a wrong answer. Byte-identity is the gate.
+
+### 72.3 What this bounds
+
+The hop-off's order is *migrate, then adjust natively*. That is only satisfiable
+when every construct's IREP2 form is determined **before** adjustment. `shr` is
+the first proof that it is not: its node kind is a *result* of adjustment.
+
+So teaching `migrate_expr` about `shr` is not the fix -- it would have to
+duplicate the promotion to be right, which is the arm. The resolutions are:
+
+1. **Decide earlier.** Have the converter emit `ashr`/`lshr` directly; it knows
+   the operand types and C11 6.5.7p3's promotion rule. This changes flag-off
+   output and needs its own A/B, but it removes the construct from the adjuster
+   entirely.
+2. **Adjust before migrating**, i.e. keep the legacy pass -- which is what
+   shadow mode already does, and what `-only` exists to stop doing.
+3. **Construct natively end to end** (C.2), where no migration boundary exists
+   and the question does not arise.
+
+Only (1) and (3) make progress. (1) is a small, self-contained change and is the
+next step; (3) is the phase's actual goal and this is evidence for taking the
+converter, not the adjuster, as its vehicle.
+
+## 73. Status
+
+Metric under `--clang-c-irep2-adjust-only`: 1 808 of 2 809 diverge; **304 error,
+of which the pre-existing parse failures (§72.1) are not ours**. Shadow mode: 2,
+both the §62 VLA defect.
+
+Next: §72.3 option 1 -- emit `ashr`/`lshr` from the converter -- measured
+flag-off first, since it moves output on the default path.
