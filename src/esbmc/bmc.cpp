@@ -396,16 +396,22 @@ smt_resultt bmct::check_vacuity(symex_target_equationt &local_eq) const
   return solver->dec_solve();
 }
 
-// True when a discharged claim is a candidate for vacuity probing. Skips
-// the loop-invariant pass's own synthetic sanity assertions: each is
-// sequenced under an ASSUME(false) terminator, so any claim appearing
-// after the first loop's inductive step would always probe vacuous. The
-// probe targets user-facing claims (contract ensures, user assertions),
-// not internal pass scaffolding.
+// True when a discharged claim is a candidate for vacuity probing. Vacuity
+// asks whether a claim held only because its path was dead, which is a
+// question about what the user meant to state -- so the probe is limited to
+// claims the user wrote. An auto-generated safety check (overflow, array
+// bounds, ...) discharged on an unreachable failure path is the intended
+// result, not a warning, and every correct program with bounded arithmetic
+// produces some (#5327). Naming the admitted claims rather than the rejected
+// ones also keeps a newly added built-in check from poisoning verdicts.
+// Excluded for a second reason: the loop-invariant pass's own synthetic
+// assertions sit under an ASSUME(false) terminator, so any claim after the
+// first loop's inductive step would always probe vacuous.
 static bool is_vacuity_probe_candidate(const std::string &claim_property)
 {
-  return claim_property != "invariant-base-case" &&
-         claim_property != "invariant-inductive-step";
+  return claim_property == "assertion" ||
+         claim_property == "contract ensures" ||
+         claim_property == "assigns compliance";
 }
 
 void bmct::show_program(const symex_target_equationt &eq)
@@ -1779,7 +1785,10 @@ smt_resultt bmct::start_bmc()
   }
 
   if (symex)
+  {
     cs_bound_pruned = symex->cs_bound_pruned;
+    symex->report_reduction_stats();
+  }
 
   return res;
 }

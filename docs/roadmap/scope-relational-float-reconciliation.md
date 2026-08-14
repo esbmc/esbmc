@@ -555,3 +555,210 @@ float/integer* traffic is empty in the OM bodies, but that census did not cover
 the same-kind-different-width traffic this broad rule also admits. **The rule
 must be narrowed to what §12 actually measured, and G2 re-run, before it is a
 patch rather than an experiment.** Nothing from §17 has been shipped.
+
+## 18. §17.3 shipped; the residue re-measured, and `precedence2` root-caused (2026-08-06)
+
+§17.3's closing line — "Nothing from §17 has been shipped" — has been stale
+since the next day. The narrowing it demanded was implemented and merged as
+**PR #6702** (`9fdd6d7e45`, 2026-08-05): the ordering arm admits a
+`float_int_mix` pair rather than "any two differing numeric types", and the
+equality arm is restricted to a Boolean paired with a number. What #6702 left
+open was its own **outstanding gate — the full verdict-parity sweep**, which
+had timed out repeatedly on a contended machine. That sweep is §18.4.
+
+### 18.1 The witnesses, re-measured
+
+Fresh binary, confirmed to carry `9fdd6d7e45` by a positive probe rather than
+an mtime (`lambda15` clears only with the arm present).
+
+| witness | legacy | hop-off | | vs §17.2 |
+|---|---|---|---|---|
+| `lambda15` | SUCCESSFUL | SUCCESSFUL | **SAME** | unchanged |
+| `chained-comparison2_fail` | FAILED | FAILED | **SAME** | **newly clears** — §17.2 had it aborting |
+| `precedence2` | SUCCESSFUL | FAILED | DIVERGE | unchanged |
+| `sum_tuple` | SUCCESSFUL | FAILED | DIVERGE | **was aborting; now reaches a verdict** |
+| `neural-net_fail` (`--fixedbv`) | FAILED | FAILED | **SAME** | G2 anti-masking holds |
+
+Two of the four §9.4 witnesses now agree, not one. `chained-comparison2_fail`
+is `assert 0 <= x <= 2 < 3` with `x = 2.5` — precisely the mixed float/integer
+ordering shape `float_int_mix` admits — so #6702 owns that flip.
+
+The two residuals also **changed kind**: both now produce a verdict where they
+previously aborted, and both diverge in the **false-alarm** direction (hop-off
+FAILED where legacy is SUCCESSFUL), not the masking direction. That is the
+cheaper failure to carry, and per §17.1 a changed failure is progress.
+
+### 18.2 `precedence2` is an assignment conversion, not a comparison
+
+A GOTO diff of `python_user_main` — the two dumps are otherwise instruction-for-
+instruction identical — isolates one shape, at `x &= 6` / `x |= 7` where `x`
+carries `double`:
+
+```
+legacy:   ASSIGN x = (double)((signed long int)((signed int)x) & 6);
+hop-off:  ASSIGN x =          (signed long int)((signed int)x) & 6;
+```
+
+Both arms keep the bitwise operation integral, so the arithmetic arm is not
+implicated. The whole difference is the cast **at the assignment seam**: the
+hop-off stores an integer into a `double` lvalue, and `assert x == 7` (line 76)
+then fails. The counterexample names line 76, which is why the earlier readings
+looked like a comparison defect — the violated assertion is three statements
+downstream of the assignment that corrupts `x`.
+
+### 18.3 Why the assignment arm declines it — a `floatbv` gap in `c_typecast`
+
+The general assignment arm (`python_adjust.cpp:617-655`) admits this: both
+sides are numeric, and the types differ. It calls `c_implicit_typecast`, which
+**silently declines**, leaving the source unchanged.
+
+The cause is in the shared helper. `check_c_implicit_typecast`'s two overloads
+do not agree:
+
+| source kind | `typet` overload | `type2tc` overload |
+|---|---|---|
+| `bool` → `floatbv` | permitted | **absent** |
+| `bv` → `floatbv` | permitted | **absent** |
+| `floatbv` → anything | permitted | **no `floatbv` source branch at all** |
+
+`c_typecast.cpp:195-279` has no `floatbv` case anywhere — not as a destination,
+not as a source — so every implicit conversion touching a float falls through
+to `return true` (reject). Since ESBMC represents Python floats as `floatbv`
+and reaches `fixedbv` only under `--fixedbv`, this rejects the default float
+representation entirely.
+
+This is the same defect family as **PR #6688**, which found `get_c_type` never
+classifying `floatbv` and thereby making `c_implicit_typecast_arithmetic` a
+silent no-op (§16.3). The IREP2 port of this file omitted floats in more than
+one place.
+
+**Blast radius, stated because the fix leaves this scope's flag-gated area.**
+The `type2tc` overload has exactly two callers:
+
+| caller | path |
+|---|---|
+| `python_adjust.cpp:652` | `--python-irep2-adjust[-only]`, default-off |
+| `interval_domain.cpp:820` | **default path** under interval analysis |
+
+So the fix is not free the way the arms in §17 were: it changes a shared helper
+whose second caller is reachable without any experimental flag, and it needs
+gates of its own rather than this scope's witness table.
+
+### 18.4 The outstanding gate — census methodology and status
+
+#6702's sweep is being re-run as a **whole-corpus** census over all 4 509
+`regression/python` tests, two runs each. It doubles as **G4** of
+`scope-coupled-arith-assign-conversion.md` §5, so it adopts that section's five
+inherited, non-optional rules. Rule 1 is not hypothetical here: **56 tests
+already pass `--python-irep2-adjust*` in their own `test.desc`** and would have
+received the flag twice, which makes boost throw `multiple_occurrences` — 56
+false divergences, against the 9 that invalidated the first census on this
+track. A first, non-compliant run of this sweep was discarded for exactly that
+reason before any result was read from it.
+
+Partial result at 901/4 509 (the run is in flight; the full table lands with
+the next revision of this section):
+
+| bucket | count |
+|---|---:|
+| SAME | 892 |
+| DIVERGE | 5 |
+| NOVERDICT_BOTH (rule 2, not attributable) | 1 |
+| SKIP_SHORT (rule 4) | 3 |
+
+The five divergences split into two kinds, and only one is established:
+
+| test | legacy | hop-off | status |
+|---|---|---|---|
+| `class10`, `class12` | SUCCESSFUL | `rc=134` | **real** — root-caused to an array-into-scalar assignment, `scope-array-assignment-conversion.md` §13 |
+| `del_list_slice`, `dictcomp_over_items` | SUCCESSFUL | TIMEOUT | **unconfirmed** |
+| `dict24_fail` | FAILED | TIMEOUT | **unconfirmed** |
+
+**The three timeouts must not be reported as divergences without a serial
+re-run.** They were measured with 20 concurrent workers on a machine that also
+carried other work, and a hop-off-only timeout is exactly the artifact that
+contention produces; the harness's 130 s cap is per-run, not per-arm. They are
+recorded here as *candidates*, and the rule-2 discipline that keeps
+both-paths-no-verdict out of the attributable count applies with equal force to
+a one-sided timeout under load.
+
+### 18.5 Status
+
+The scope's §17 work is **shipped**; its gate is **in flight**; and its larger
+residual now has a named root cause in a shared utility rather than in the
+comparison dispatch this document spent §13-§16 searching. `sum_tuple` remains
+unexplained by §18.3 — its counterexample shows unresolved `tuple_elem`
+symbols, consistent with §11's finding that it has no heterogeneous comparison
+at all, and it should not be assumed to share `precedence2`'s cause.
+
+## 19. §18.3's fix, shipped and measured (2026-08-06)
+
+The `floatbv` gap §18.3 named is fixed: `check_c_implicit_typecast`'s `type2tc`
+overload now admits `floatbv` as a destination in the Boolean and integer source
+branches, and carries a `floatbv` source branch of its own, mirroring the
+`typet` overload it was ported from.
+
+### 19.1 What it clears
+
+Measured A/B against a frozen pre-fix binary, so each row is a controlled
+comparison rather than a recollection of an earlier run:
+
+| test | legacy | hop-off before | hop-off after |
+|---|---|---|---|
+| `precedence2` | SUCCESSFUL | FAILED | **SUCCESSFUL** |
+| `math33_frexp` | SUCCESSFUL | FAILED | **SUCCESSFUL** |
+| `math_edge_frexp_success` | SUCCESSFUL | FAILED | **SUCCESSFUL** |
+
+The two `frexp` tests were **not** predicted by §18.3 — they came out of the
+census and were found to share the cause. That is the whole argument for
+running a census rather than fixing named witnesses: one shared-helper defect
+was producing divergences in three unrelated tests, and only one of them was on
+the witness list this scope had been working from since §4.
+
+### 19.2 Gates
+
+| gate | result |
+|---|---|
+| G2 anti-masking (`neural-net_fail --fixedbv`) | **FAILED**, unchanged |
+| `lambda15` | SUCCESSFUL, unchanged |
+| unit suite | 635/635 (632 pre-existing + 3 new) |
+| `floats` + `floats-regression` | 164/164 |
+| `--interval-analysis` corpus — the **default-path** caller at `interval_domain.cpp:820` | 111/112 |
+
+The single interval failure, `esbmc-unix/github_2513_1`, is a **pre-existing
+timeout**, not a regression: it takes **138.3 s with the fix and 147.8 s
+without** it against the same 120 s harness cap, and produces the expected
+`VERIFICATION FAILED` verdict when run directly. Timing both arms is what
+settles this class of failure; the ctest verdict alone cannot.
+
+### 19.3 The regression test, and why it is a unit test
+
+Five attempts at a minimal Python reproducer all failed to discriminate: the
+shape that exercises the seam is an integer-typed expression assigned into a
+`double` lvalue, and outside `precedence2`'s whole-module type inference the
+frontend simply re-types the variable and the conversion is never needed. The
+one reduction that *did* discriminate — a compound `x &= 6` over a float — is
+**rejected by CPython**, so it would fail `scripts/check_python_tests.sh` and is
+not a legitimate test input.
+
+The defect's unit is the helper, so `unit/util/c_typecast.test.cpp` pins it
+directly: the float admissions, a struct-source control that must stay
+rejected, and the behavioural case that the cast is actually inserted.
+Mutation-checked — with the fix reverted, 6 of 7 assertions fail and the
+control still passes, so the control is not vacuous.
+
+### 19.4 Census status
+
+At 3 757/4 509: 3 677 SAME, 18 DIVERGE, 56 SKIP_PREFLAGGED (rule 1 earning its
+place), 4 SKIP_SHORT, 2 not attributable. The 18 divergences, all measured on
+the **pre-fix** baseline:
+
+| class | count | status |
+|---|---:|---|
+| cleared by §19's fix | 3 | done |
+| `rc=134` abort | 7 | `class10`/`class12` root-caused (`scope-array-assignment-conversion.md` §13); `github_3866`×3, `missing-return14_fail`, `min_max_multi_args` unexamined |
+| `rc=139` segfault | 2 | `github_3658_7`, `return13-fail` — unexamined |
+| hop-off-only TIMEOUT | 6 | **unconfirmed**, see §18.4 — needs a serial re-run |
+
+G4 is not discharged: it requires 0 attributable divergences, and there are at
+least 9 real ones outstanding.

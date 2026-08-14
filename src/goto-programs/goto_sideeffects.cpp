@@ -1492,11 +1492,7 @@ void goto_convertt::remove_sideeffects(
       // they have zero effect on the GOTO program (no FUNCTION_CALL step, no
       // side-effect processing of the argument).  The declarations remain in
       // the unconditional intrinsics section so annotated files still compile.
-      if (
-        fsym && options.get_option("enforce-contract").empty() &&
-        options.get_option("replace-call-with-contract").empty() &&
-        !options.get_bool_option("enforce-all-contracts") &&
-        !options.get_bool_option("replace-all-contracts"))
+      if (fsym && !options.contracts_enabled())
       {
         const std::string &fname = id2string(fsym->name);
         if (
@@ -1630,7 +1626,7 @@ void goto_convertt::remove_sideeffects(
     else if (statement == "temporary_object")
     {
       const locationt location = expr.find_location();
-      remove_temporary_object(expr, dest, result_is_used);
+      remove_temporary_object(expr, dest);
 
       // A discarded temporary dies at the end of its full expression
       // (C++ [class.temporary]/4, github #6076), not at block exit: emit
@@ -2287,10 +2283,7 @@ void goto_convertt::remove_cpp_delete(exprt &expr, goto_programt &dest)
   expr.make_nil();
 }
 
-void goto_convertt::remove_temporary_object(
-  exprt &expr,
-  goto_programt &dest,
-  bool result_is_used)
+void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
 {
   if (expr.operands().size() != 1 && expr.operands().size() != 0)
     throw "temporary_object takes 0 or 1 operands";

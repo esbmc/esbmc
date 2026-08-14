@@ -365,3 +365,33 @@ int main(void)
   REQUIRE(checked > 0);
   REQUIRE(with_activation > 0);
 }
+
+TEST_CASE(
+  "a default-constructed L2 name_record is fully initialised (R10)",
+  "[symex][renaming]")
+{
+  using record = renaming::level2t::name_record;
+
+  // R10: the four fields and the derived hash were left indeterminate by
+  // `= default`. No in-tree site default-constructs one today, so the check
+  // that carries information is that the defaults are *consistent*: `compare`
+  // short-circuits on `hash`, so a hash that does not match the fields would
+  // make two equal records compare unequal.
+  record a;
+  record b;
+  REQUIRE(a == b);
+  REQUIRE(a.compare(b) == 0);
+
+  REQUIRE(a.base_name == irep_idt());
+  REQUIRE(a.lev == symbol_renaming_level::level0);
+  REQUIRE(a.l1_num == 0);
+  REQUIRE(a.t_num == 0);
+
+  // The invariant the hash exists to serve: equal fields imply equal hash, so
+  // a record built from an L0 symbol matching the defaults must land on the
+  // same fast-path key rather than merely comparing equal field-by-field.
+  expr2tc sym = l1_symbol("", 0, 0, symbol_renaming_level::level0);
+  record from_symbol(to_symbol2t(sym));
+  REQUIRE(from_symbol.hash == a.hash);
+  REQUIRE(from_symbol == a);
+}

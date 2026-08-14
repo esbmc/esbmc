@@ -735,3 +735,510 @@ Both were recorded as hypotheses gated on a Phase 0 measurement rather than as
 conclusions — this document's own §13→§14 reversal is the reason. That
 discipline paid: the second one's Phase 0 refuted it, at the cost of a census
 rather than a merged fix.
+
+## 16. Flip status — G4 in flight, and one blocker half root-caused (2026-08-06)
+
+§15 left Phase 3 blocked on two foreign mechanisms plus G4/G5. Both have moved.
+
+**The array-typecast blocker is closed.** Phase 1 of
+`scope-array-assignment-conversion.md` shipped as PR #6700 (`c5efabb9c1`) and
+its remaining gates were discharged in PR #6733.
+
+**The §9.4 second mechanism is down to two witnesses, and one of them is root-
+caused.** PR #6702 shipped the relational scope's narrowed arms; against a
+binary carrying it, `chained-comparison2_fail` now agrees with legacy
+(FAILED/FAILED), joining `lambda15`. `precedence2` and `sum_tuple` still
+diverge, both in the **false-alarm** direction (hop-off FAILED where legacy is
+SUCCESSFUL) rather than the masking direction G2 guards.
+
+`precedence2` is **this scope's node kind after all** — a `code_assign2t` whose
+source the arm declines. It is not declined by §12's guard, which admits it:
+`c_implicit_typecast` itself refuses, because `check_c_implicit_typecast`'s
+`type2tc` overload has no `floatbv` case as source or destination and falls
+through to reject. See `scope-relational-float-reconciliation.md` §18.2-§18.3
+for the GOTO diff and the overload comparison. The fix is in `c_typecast`, not
+in `python_adjust`, and its second caller (`interval_domain.cpp:820`) is on the
+default path — so it carries gates this scope's flag-gated arms did not.
+
+**G4 is in flight.** A whole-corpus census over all 4 509 `regression/python`
+tests, two runs each, is running under §5's five inherited rules — it also
+serves as PR #6702's outstanding verdict-parity gate. Rule 1 bit again and was
+caught before any result was read: **56 tests already pass
+`--python-irep2-adjust*` in their own `test.desc`**, and a first non-compliant
+run of the sweep was discarded rather than reported. Partial: 330 SAME,
+2 DIVERGE (`class10`, `class12`, both SUCCESSFUL vs `rc=134`), 1 not
+attributable, 2 skipped short, at 335/4 509.
+
+G5 (dual-solver agreement) has not been started; it should follow G4 rather
+than run concurrently, since both saturate the same machine.
+
+## 17. Re-measured: five of six blockers are clear, one is root-caused (2026-08-09)
+
+§16 left Phase 3 on two §9.4 witnesses (`precedence2`, `sum_tuple`), with
+`precedence2` root-caused to `c_typecast`'s IREP2 overload lacking a `floatbv`
+case. Re-measured against the current binary, replaying each test's own flags,
+legacy vs `--python-irep2-adjust-only`:
+
+| test | legacy | flip | was (§16) |
+|---|---|---|---|
+| `precedence2` | SUCCESSFUL | **SUCCESSFUL** | diverged |
+| `chained-comparison2_fail` | FAILED | FAILED | agreed |
+| `lambda15` | SUCCESSFUL | SUCCESSFUL | agreed |
+| `github_5571_fail` | FAILED | FAILED | agreed |
+| `github_5571_tuple_str_annotation` | SUCCESSFUL | SUCCESSFUL | agreed |
+| `sum_tuple` | SUCCESSFUL | **no verdict** | diverged |
+
+**`precedence2` is closed.** The `floatbv` omission §16 identified was fixed by
+**#6775** (`74da5e1e5a`, *"Admit floatbv in c_typecast's IREP2 conversion
+check"*), whose comment names this defect. Nothing further is owed here.
+
+### 17.1 `sum_tuple` — the last witness, and it is a node-kind gap
+
+Not a wrong verdict: an assertion.
+
+```
+Assertion failed: (!is_floatbv_type(type)), function simplify_arith_2ops,
+file expr_simplifier.cpp, line 253.
+```
+
+whose own comment reads `// This should be handled by ieee_*`. A float-typed
+**plain** `add2t` reached the simplifier, where floats must be `ieee_add2t`.
+
+The flag isolates the cause exactly: `--python-irep2-adjust` (both adjusters)
+verifies SUCCESSFUL; only `--python-irep2-adjust-only` asserts. So the converter
+builds the plain node and **`clang_c_adjust` is what repairs it** —
+`clang_c_adjust_expr.cpp:670-697` rewrites `+`/`-`/`*`/`/` to
+`ieee_add`/`ieee_sub`/`ieee_mul`/`ieee_div` under `need_float_adjust` and
+attaches the rounding-mode symbol, which `migrate_expr` then turns into
+`ieee_add2tc` (`migrate.cpp:1312-1333`).
+
+`python_adjust` has **no counterpart to that rewrite.** That is the whole of the
+remaining §9.4 gap, and it explains the shape of PR #5999's earlier finding that
+`promote_ieee_operands`/`is_ieee_op` were "provably dead" — they were dead
+*because clang_c_adjust was doing the promotion*, which stops being true the
+moment the flip removes it.
+
+### 17.2 What the fix is, and what it carries
+
+Add the promotion to `python_adjust`: for a float-typed `add2t`/`sub2t`/
+`mul2t`/`div2t`, rebuild as the `ieee_*` kind with the
+`c:@__ESBMC_rounding_mode` symbol as the rounding operand. Post-migration this
+is operand surgery — rebuild the node in place, never round-trip it (the
+`migrate_expr_back` → `migrate_expr` detour reverts resolved `member2t`/`index2t`
+sources to by-name `symbol_type2t`).
+
+It is a flag-gated arm, so it carries this scope's usual gates rather than the
+default path's: G4's whole-corpus census (§16 records it partial at 335/4 509,
+with two divergences `class10`/`class12` outstanding) and G5's dual-solver
+agreement, which §16 says should follow G4 rather than run beside it.
+
+**Phase 3's blocker list is therefore one item long**, and it is a named rewrite
+against a named counterpart rather than an unowned mechanism.
+
+## 18. §17's fix shipped; G4's two divergences are one shape (2026-08-09)
+
+**§17.2's rewrite is PR #6839** (`fix/6745-python-adjust-ieee-promotion`, off
+master). `promote_to_ieee` in `python_adjust.cpp` rebuilds a float
+`add2t`/`sub2t`/`mul2t`/`div2t` as the matching `ieee_*2tc` with the
+`c:@__ESBMC_rounding_mode` symbol, called unconditionally after operand
+recursion with the shape test inside the helper — an `else if` arm pushes
+`adjust_expr` from 128 to 129 and fails the complexity gate. `sum_tuple` now
+agrees with legacy, so **all six §9.4 witnesses are clear**. Mutant-proven:
+restoring the predicate to `false` restores the assert.
+
+### 18.1 `class10` and `class12` are the same defect, and it is not §17's
+
+> **Withdrawn 2026-08-09 — see §18.5.** The measurement below was taken against
+> a build that did **not** contain #6839. The shared assert is real and was
+> observed; the claim that it survives #6839 was not established.
+
+Both G4 divergences §16 recorded reproduce, and both fail identically:
+
+```
+Assertion failed: (a->sort->get_data_width() == b->sort->get_data_width())
+```
+
+That is a **solver-level width mismatch** — two operands of different bit-widths
+reaching the SMT layer — not the node-kind gap §17 closed. It is the symptom
+this scope's own width reconciliation exists to prevent, so the arm is either
+not reached for this shape or not sufficient for it.
+
+### 18.2 Narrowed, as far as the machine allows
+
+Both sources share one shape: a `list` **class attribute**, mutated and compared.
+`class12` is the smaller and is the better corpus reproducer.
+
+Reduction, run under `--python-irep2-adjust-only`:
+
+| candidate | result |
+|---|---|
+| `o.m.append("x")` then `assert "x" in o.m` on a class-attribute list | **SUCCESSFUL** — does not trigger |
+| bare module-level list, same two operations | **SUCCESSFUL** — does not trigger |
+| `o.m = ["y"]` then `assert o.m == ["y"]` | timed out — **and see §18.4** |
+
+So the trigger is **not** `append`/`in` on a class-attribute list.
+
+### 18.3 Where G4 stands
+
+G4 needs the whole-corpus census, and the census needs a machine. The two
+divergences it has already surfaced are now known to be **one defect, not two**,
+with a named assert and a narrowed shape. G5 (dual-solver) remains untouched and
+should still follow G4 rather than run beside it.
+
+### 18.4 The reduction candidate was contaminated — a correction
+
+§18.2 recorded `o.m = ["y"]; assert o.m == ["y"]` as "inconclusive — timed out",
+under a load average of 42, and read that as *possibly the trigger*. Re-run on a
+quiet machine (load 7) it still times out — and so does the same shape with **no
+class at all**:
+
+```python
+m: list = ["y"]
+assert m == ["y"]
+```
+
+The self-control settles it: that program times out at **300 s on the legacy
+path too**. It is a pre-existing cost of list equality against a non-empty list
+literal, present with the flip off, and it says nothing about the adjuster.
+Reading the first timeout as a lead would have sent the next person chasing a
+phantom.
+
+Two consequences:
+
+1. **The trigger is still un-isolated.** Everything reduced so far — `append`,
+   `in`, list assignment alone, equality against `[]`, on both a class attribute
+   and a bare module-level list — is **negative**. `class10`/`class12` remain the
+   only known reproducers of the width assert, and both complete quickly, so
+   whatever the trigger is, it is not the slow shape.
+2. **A separate, pre-existing finding falls out**: list equality against a
+   non-empty literal does not terminate in 300 s on either path. That is not this
+   scope's work, and it is not the flip's, but it is worth someone's time.
+
+Method note, since this is the third time the discipline has paid on this
+branch: **run the control before believing a measurement.** A timeout under load
+is not evidence; a timeout that reproduces on the other arm is evidence of
+something else entirely.
+
+### 18.5 A measurement error of mine, and what it invalidates
+
+§18.1 states the two divergences "still reproduce after #6839". **That was not
+measured.** The runs behind it were made on the roadmap branch, whose working
+tree does not contain `promote_to_ieee` — the fix lives on
+`fix/6745-python-adjust-ieee-promotion`. I switched branches without rebuilding,
+so every flip measurement in §18.1-§18.4 was taken against a binary whose
+adjuster lacked the fix, and attributed to one that had it.
+
+Re-measured with the fix actually compiled in, on a quiet machine (load 8):
+
+| run | result |
+|---|---|
+| `class10`, flip | timeout at 400 s |
+| `class12`, flip | timeout at 421 s |
+| `class12`, **legacy** | timeout at 421 s |
+
+So on the current build **neither arm completes**, and the divergence cannot be
+confirmed or refuted here: both are dominated by the same pre-existing
+list-equality cost §18.4 identified. `class10`/`class12` are, for now,
+**unmeasurable on this machine** rather than known-divergent.
+
+What survives from §18.1-§18.4:
+
+- The width assert `a->sort->get_data_width() == b->sort->get_data_width()` was
+  genuinely observed on both tests, on a build without #6839. That much is real.
+- §18.4's finding stands on its own merits — it was a legacy-vs-legacy control,
+  so the adjuster build state does not affect it.
+- The reduction negatives (c1-c5, r1, r3, r4, r6) were run on the same
+  unfixed binary. They are evidence about *that* adjuster, not the shipped one,
+  and should be re-run before being relied on.
+
+**Process lesson, and it is a different one from §18.4's.** That section's rule
+was *run the control before believing a measurement*. This one is narrower and
+was the actual failure here: **rebuild after switching branches, or the control
+you run is not the binary you think it is.** A `git checkout` silently reverted
+the file under test, and nothing in the output would have shown it — the fix is
+inert on the default path, so only flip runs were affected, and those are
+exactly the runs I was reading. The check that would have caught it costs one
+command: `grep -c promote_to_ieee src/python-frontend/python_adjust.cpp`.
+
+G4 therefore stands where §16 left it, minus the confidence §18.1 claimed.
+
+## 19. The reduction repaired, and G4's real blocker isolated (2026-08-09)
+
+§18.5 invalidated §18's flip measurements and said the reduction negatives had
+to be re-run. Done, with the build state checked first
+(`grep -c promote_to_ieee` = 2, then `ninja`).
+
+### 19.1 All nine negatives reconfirmed
+
+`r1`, `r3`, `r4`, `r6` and `c1`-`c5` — every reduced candidate — verify
+SUCCESSFUL under `--python-irep2-adjust-only` on a binary that **does** contain
+#6839. The reduction evidence §18.5 put in doubt is repaired unchanged: none of
+`append`, `in`, list assignment alone, or equality against `[]` triggers the
+width assert, on either a class attribute or a bare module-level list.
+
+### 19.2 The blocker is list equality over *string* elements
+
+The cost §18.4 found is narrower than "list equality against a non-empty
+literal". On the **default path**, no flags:
+
+| program | result |
+|---|---|
+| `m: list = [1]` &nbsp;`assert m == [1]` | SUCCESSFUL, fast |
+| `m: list = ["y"]` &nbsp;`assert len(m) == 1` | SUCCESSFUL, fast |
+| `m: list = ["y"]` &nbsp;`assert m == ["y"]` | **no verdict in 120 s** |
+
+So: integer elements are fine, and `len` over a string list is fine. It is the
+**equality comparison of a list whose elements are strings** that does not
+terminate. Two lines, default flags, no adjuster involved.
+
+### 19.3 Why this is G4's blocker and not a footnote
+
+`class10` and `class12` both compare string lists — `obj1.mutable_attr ==
+["instance_specific"]` — so with #6839 compiled in, **both arms of both tests
+time out** (§18.5). G4's census cannot classify a test it cannot run, and the
+two divergences it has surfaced cannot be re-confirmed while this stands.
+
+Fixing or bounding this is therefore a **prerequisite for G4**, not a parallel
+task, and it belongs to the list operational model rather than to this scope.
+It has no open issue as far as a search of the tracker shows.
+
+**Not filed here**: opening an issue is a shared-state action outside what this
+work was asked to do, so the reproducer is recorded and the filing left as a
+decision.
+
+### 19.4 Root cause: `elem_size` is 0 for string elements, by construction
+
+The mechanism is already written down in the tree, in the two places that
+matter.
+
+`list_query.cpp:527-533` computes the `elem_size` argument:
+
+> *"Statically-known element byte size for the primitive comparison, so the
+> model's `__ESBMC_values_equal` takes its branch-free fast path instead of
+> memcmp's symbolic-size byte loop (the dominant cost when comparing large
+> lists, e.g. `assert l == [...]`). Emitted only when both operands' first
+> element is the same fixed-width scalar; **0 otherwise**."*
+
+and `list.c:401-406`, on the receiving side:
+
+> *"Falls back to `a->size` when `elem_size == 0`"* — the symbolic-index field
+> read that *"forces memcmp's per-byte loop to unwind per element."*
+
+`scalar_width` admits only `signedbv`/`unsignedbv`/`floatbv`/`fixedbv`. A string
+element is none of those, so `elem_size` is 0 and every string-list comparison
+takes the per-byte path. That is precisely why `[1] == [1]` is fast and
+`["y"] == ["y"]` is not.
+
+**What is new is the severity.** The comment frames this as a cost on *large*
+lists. It is not: a **one-element** list of a **one-character** string does not
+terminate in 120 s. That is what puts it in G4's way.
+
+**And why it is not a one-line fix.** `elem_size` is a single value for the
+whole comparison, so it can only exist when every element has the same fixed
+width. Strings are variable-length, so in general no such value exists — the 0
+is correct for the signature as it stands, not an oversight. A fix has to either
+(a) derive a per-list constant for the special case where all elements are
+same-length literals, which `["y"] == ["y"]` satisfies but the general case does
+not, or (b) make the fallback path itself cheap, which means bounding the
+per-byte loop in the model rather than passing more information into it.
+
+That is list-operational-model work with its own trade-offs, and it is the
+prerequisite standing in front of G4.
+
+### 19.5 Fix direction (a) tried, and it does not work
+
+§19.4 offered two directions. **(a) — derive a per-list `elem_size` for the case
+where all elements are same-length literals — was prototyped and does not fix
+the hang.** Recorded so nobody implements it twice.
+
+The prototype extended `list_query.cpp`'s `scalar_width` to admit a fixed-size
+array element alongside the four scalar kinds, and instrumented what it saw. A
+string list element presents as:
+
+```
+EXP elem lt=array rt=array lw=2 rw=2
+```
+
+— an `array` of `signedbv` with a constant size, so for `["y"]` the derived
+element size is 2 (the character plus its terminator), and `eq_elem_size_bytes`
+is emitted as 2 instead of 0.
+
+With that in place, `m: list = ["y"]; assert m == ["y"]` **still does not
+terminate in 300 s.** The int-list control (`[1] == [1]`) stays fast on the same
+build, so the build is sound and the change is reaching the call.
+
+**This corrects §19.4.** `elem_size == 0` explains which path the model takes,
+but supplying a non-zero one does not make the comparison tractable — so the
+symbolic-size memcmp loop is **not** the dominant cost here, and the two code
+comments that frame it that way are describing a different (large-list) regime
+than the one that blocks G4. The real cost is elsewhere in the string-element
+comparison and is still unidentified.
+
+That leaves direction (b) — bounding the model's fallback — as the only
+untried option, and it now has to be justified on its own terms rather than as
+"avoid the slow path", since the fast path is not fast either. Whoever takes
+this should start by instrumenting `__ESBMC_values_equal` for an array-typed
+element rather than by changing `elem_size`.
+
+### 19.6 The actual root cause: unbounded unwinding, not comparison cost
+
+§19.5 ruled out direction (a) and pointed at instrumenting
+`__ESBMC_values_equal`. That would also have been the wrong place. One cheaper
+diagnostic settles it — look at *which phase* the run is in:
+
+```
+Unwinding loop 6 iteration 467   file .../python/list.c line 298 column 3
+                                 function __ESBMC_list_eq
+```
+
+It never reaches the solver. `list.c:298` is `while (top > 0)`, the
+explicit-stack worklist in `__ESBMC_list_eq`, and symex unwinds it without
+bound. Two confirmations:
+
+| run | result |
+|---|---|
+| `m: list = ["y"]; assert m == ["y"]` with `--unwind 4` | **SUCCESSFUL, instantly** |
+| the same with `--unwind 8` | SUCCESSFUL |
+| `[1] == [1]`, occurrences of "Unwinding loop 6" | **0** — never enters the loop |
+
+So it is not comparison cost at all: it is an unbounded loop, and the int case
+avoids it entirely rather than traversing it cheaply.
+
+**Which relocates the fix.** `list_query.cpp` already has two elisions that keep
+lists out of this model — *"Fast path for list equality/inequality when we have
+concrete type-map entries for both operands. This avoids `__ESBMC_list_eq`
+loops"* (:116-117) and the nested-list one that keeps matrix comparisons *"from
+blowing up into large `__ESBMC_list_eq` trees"* (:193-195). The int case is fast
+because it takes one of them. **Strings do not.**
+
+So the work is to extend the existing frontend elision to string-element lists,
+not to bound the model's loop (direction (b)) and not to change `elem_size`
+(direction (a), already ruled out). That is a smaller and better-precedented
+change than either direction §19.4 proposed — both of which were reasoning about
+the wrong phase.
+
+Method note, and the third distinct one on this branch: §18.4 was *run the
+control*, §18.5 was *rebuild after switching branches*, and this one is **check
+which phase is slow before optimising the cost model.** Two directions were
+derived from two code comments about memcmp, and the process never reached
+memcmp.
+
+### 19.7 The loop is not unbounded — symex fails to stop unwinding it
+
+§19.6 said "symex unwinds it without bound" and pointed the fix at extending the
+frontend elision. One more measurement narrows it again, and the conclusion is
+different in kind.
+
+With unwinding assertions **on** — so the result cannot be vacuous:
+
+| run | result |
+|---|---|
+| `m: list = ["y"]; assert m == ["y"]` `--unwind 4` | **SUCCESSFUL**, no unwinding-assertion violation |
+| the same at `--unwind 16` | SUCCESSFUL |
+
+A violated unwinding assertion is what a truncated loop reports. There is none
+at 4. So **every reachable execution of `__ESBMC_list_eq`'s worklist exits within
+four iterations** — the loop terminates, and quickly. Yet with no bound given,
+symex was still unwinding it at iteration 467 and climbing.
+
+The model is therefore *not* the problem, and neither is the comparison:
+
+- `depth_limit` (list.c:281-283) does bound the stack, but only guards the
+  nested-list `top++` — it is not a per-iteration bound, and it does not need to
+  be, because the loop is naturally short.
+- The frontend elisions (§19.6) are a *workaround* for this, not a fix for it —
+  they keep int lists away from a loop that symex mishandles.
+
+What is left is a **symex question**: why is the continuation still considered
+reachable after the worklist has drained? Concretely, `while (top > 0)` should
+become infeasible once `top` reaches 0, and for a one-element list that is after
+two iterations. Something in the state — most likely the list's `size` field, or
+`top` itself — is not concrete enough for that guard to simplify to false.
+
+**This is the fourth relocation of this root cause**, and every one was driven by
+a single cheap measurement that should have come earlier:
+
+| § | claim | displaced by |
+|---|---|---|
+| 19.4 | `elem_size == 0` selects a slow memcmp path | 19.5 — supplying a non-zero one changes nothing |
+| 19.5 | instrument the comparison | 19.6 — the run never reaches the solver |
+| 19.6 | the loop is unbounded; extend the elision | 19.7 — `--unwind 4` with assertions on is SUCCESSFUL |
+
+The rule that would have shortcut all three: **before explaining why something
+is slow, bound it and see whether it is actually infinite.** `--unwind N` with
+unwinding assertions on is a two-minute test that distinguishes "does not
+terminate" from "symex will not stop", and those have disjoint fixes.
+
+Recorded rather than fixed: the remaining question is in symex's loop handling,
+which is neither this scope's nor the list model's, and it wants someone who
+knows why that guard stays satisfiable.
+
+## 20. §16's question, answered: the two typecast copies are not equivalent
+
+`scope-jimple-irep2.md` §16 blocked `jimple_assignment` on whether
+`c_typecastt::implicit_typecast(exprt &)` and its `expr2tc &` overload agree,
+and flagged it as a program-level prerequisite rather than a jimple task. They
+do not agree, and the gap is wider than the framing assumed.
+
+### 20.1 Structural gaps in `implicit_typecast_followed`
+
+The irept copy is 162 lines, the expr2tc copy 67. The irept one additionally
+handles:
+
+1. lvalue/rvalue references in either direction (`take_reference_address`,
+   implicit dereference) -- C++ models `T&` as a pointer;
+2. pointer-to-member (`dest_type.find("to-member")` -> `member_ref_exprt`);
+3. `incomplete_array` as a source type;
+4. qualifier warnings -- "disregarding const" / "disregarding volatile";
+5. `#reference` propagation when source and destination types compare equal;
+6. struct/union source to pointer destination, the derived-object-to-base-
+   pointer address-of adjustment;
+7. string-constant to array, via `string2array`.
+
+It also uses `is_number` where the expr2tc copy uses `is_bv_type` for the
+"generous between scalars" arm, which changes only which conversions warn.
+
+Items 1, 2 and 6 are C++-frontend shaped and do not arise on jimple or Python.
+Item 7 does not arise on jimple either: `jimple_expr::get_expression` maps
+`string_constant` to a default `jimple_constant`, discarding the value.
+
+### 20.2 The gap that is not C++-shaped (#6873)
+
+`do_typecast` also exists twice, and the difference there reaches every
+frontend. The irept copy folds:
+
+```cpp
+dest.make_typecast(type);
+if (dest.op0().is_constant() && !no_simplify)
+{
+  expr2tc d2; migrate_expr(dest, d2); simplify(d2); dest = migrate_expr_back(d2);
+}
+```
+
+The expr2tc copy was `dest = typecast2tc(type, dest);` and nothing else. So
+assigning a literal to a differently-typed lvalue -- the commonest conversion a
+frontend performs -- produced `constant_int 1 : signedbv 64` on one path and
+`typecast(constant_int 1 : signedbv 32)` on the other.
+
+Fixed in #6873 by mirroring the fold, with a differential harness in
+`unit/util/c_typecast.test.cpp` that runs both overloads over the arithmetic and
+pointer conversions and requires the migrated results to be equal.
+
+### 20.3 What this cost, and what it buys
+
+The measurement that mattered took one afternoon; the reading that preceded it
+("`symbol_expr2tc` is the IREP2 form of `symbol_expr`, so the typecast pair is
+probably fine too") would have been wrong in a way no jimple test could catch,
+because jimple casts only between scalars where the *unfolded* form is still
+semantically correct -- just not byte-identical.
+
+That is the general shape of the remaining risk in Phases 5-9: **a second
+independently-written copy of a conversion is not a translation of the first,
+and byte-identity on one frontend's corpus does not establish that it is.**
+This file's §17-§19 recorded the same lesson for the arithmetic-conversion
+rules; #6873 extends it to the cast insertion itself.
+
+`jimple_assignment` remains blocked, but on a narrower question now: with the
+fold aligned, what is left is whether the seven structural gaps in §20.1 can
+arise on a jimple assignment. Items 1, 2, 6 and 7 are argued above not to;
+items 3, 4 and 5 need the same treatment before the slice is takeable.

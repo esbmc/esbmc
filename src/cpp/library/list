@@ -4,6 +4,9 @@
 #include "definitions.h"
 #include "type_traits"
 #include "vector"
+#if __cplusplus >= 201103L
+#  include <initializer_list>
+#endif
 
 #define LIST_MAX_SIZE 20
 
@@ -262,6 +265,15 @@ public:
   {
     _init();
   }
+
+#if __cplusplus >= 201103L
+  list(std::initializer_list<value_type> init)
+  {
+    _init();
+    for (const value_type *it = init.begin(); it != init.end(); ++it)
+      this->push_back(*it);
+  }
+#endif
 
   list(size_type n, const value_type &value = value_type())
   {

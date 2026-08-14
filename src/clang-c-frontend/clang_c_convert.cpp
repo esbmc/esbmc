@@ -31,6 +31,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <util/expr/symbolic_types.h>
+#include <util/symtab/base_subobject.h>
 
 #include <boost/algorithm/string/replace.hpp>
 
@@ -396,25 +397,8 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if (get_struct_union_class_fields(*rd_def, t))
     return true;
 
-  // Check for packed and aligned attributes
-  if (rd_def->hasAttrs())
-  {
-    const auto &attrs = rd_def->getAttrs();
-    for (const auto &attr : attrs)
-    {
-      if (attr->getKind() == clang::attr::Packed)
-        t.set("packed", true);
-
-      if (attr->getKind() == clang::attr::Aligned)
-      {
-        const clang::AlignedAttr &aattr =
-          static_cast<const clang::AlignedAttr &>(*attr);
-
-        if (process_aligned_attribute(aattr, t))
-          return true;
-      }
-    }
-  }
+  if (process_record_layout_attributes(*rd_def, t))
+    return true;
 
   /* We successfully constructed the type of this symbol; complete the
    * incomplete-type symbol with the now-complete type definition, in place.
@@ -2217,6 +2201,21 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     if (convert_character_literal(char_literal, new_expr))
       return true;
+
+    break;
+  }
+
+  // C23 6.4.4.5: true and false are predefined constants, which clang models
+  // with the same node it uses for the C++ keywords.
+  case clang::Stmt::CXXBoolLiteralExprClass:
+  {
+    const clang::CXXBoolLiteralExpr &bool_literal =
+      static_cast<const clang::CXXBoolLiteralExpr &>(stmt);
+
+    if (bool_literal.getValue())
+      new_expr = true_exprt();
+    else
+      new_expr = false_exprt();
 
     break;
   }
@@ -4039,6 +4038,31 @@ bool clang_c_convertert::get_cast_expr(
   }
 
   case clang::CK_BaseToDerived:
+  {
+    // The inverse of the CK_DerivedToBase routing above: the source points at
+    // a nested "@base@" subobject, so the result must be re-based to the start
+    // of the derived object. The offset comes from ESBMC's own layout, but the
+    // components are not padded until the adjust pass, so only mark the cast
+    // here; clang_c_adjust::adjust_base_to_derived resolves it once the layout
+    // is final. Marking is what separates a real downcast from a
+    // reinterpret_cast between the same two types. See #1866, #3894.
+    if (type.is_pointer())
+    {
+      typecast_exprt rebased(expr, type);
+      rebased.set("#base_to_derived", true);
+      expr = rebased;
+    }
+    else
+    {
+      // Reference form: clang strips the & from getType(), so `type` is the
+      // record itself and the result stays an lvalue. Re-base through the
+      // address and hand back *(Derived *)adjusted.
+      typecast_exprt rebased{address_of_exprt(expr), pointer_typet(type)};
+      rebased.set("#base_to_derived", true);
+      expr = dereference_exprt(rebased, rebased.type());
+    }
+    break;
+  }
 
   case clang::CK_UserDefinedConversion:
   case clang::CK_ConstructorConversion:
@@ -4505,7 +4529,14 @@ bool clang_c_convertert::get_compound_assign_expr(
     if (get_type(compop.getComputationResultType(), computation_type))
       return true;
 
-    gen_typecast(ns, rhs, computation_type);
+    // C11 6.5.7p3 is the exception: a shift promotes its operands
+    // independently and takes its result from the left one, so E2 is a bit
+    // count, not a value in the computation type. clang has already promoted
+    // it, and casting it here reinterprets the count in any computation type
+    // that is not integer-compatible (#6924).
+    const clang::BinaryOperatorKind opcode = compop.getOpcode();
+    if (opcode != clang::BO_ShlAssign && opcode != clang::BO_ShrAssign)
+      gen_typecast(ns, rhs, computation_type);
     new_expr.add("computation_type") = computation_type;
   }
 
@@ -4867,6 +4898,24 @@ void clang_c_convertert::get_decl_name(
                                        location_begin.column().as_string();
       std::string kind_name = rd.getKindName().str();
       name = kind_name + " __anon_" + kind_name + "_at_" + location_begin_str;
+
+      /* A lambda closure declared inside a function template is a distinct
+       * type in every instantiation, but file/line/column are shared by all
+       * of them, so the name above collides. get_struct_union_class() then
+       * finds the first instantiation's symbol already present and returns
+       * early, leaving the later instantiations' operator() with no body --
+       * symex assigns a nondet return and the verdict is silently wrong
+       * (esbmc/esbmc#6969). Qualify with the enclosing specialisation, which
+       * is what clang's own USRs for the closure's methods already carry. */
+      const auto *parent =
+        llvm::dyn_cast_or_null<clang::FunctionDecl>(rd.getDeclContext());
+      if (parent && parent->getTemplateSpecializationArgs())
+      {
+        std::string parent_name, parent_id;
+        get_decl_name(*parent, parent_name, parent_id);
+        name += "_" + parent_id;
+      }
+
       std::replace(name.begin(), name.end(), '.', '_');
     }
     else if (
@@ -5138,6 +5187,50 @@ clang_c_convertert::get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt)
   }
 
   return nullptr;
+}
+
+bool clang_c_convertert::process_record_layout_attributes(
+  const clang::RecordDecl &rd,
+  typet &t) const
+{
+  if (!rd.hasAttrs())
+    return false;
+
+  for (const auto &attr : rd.getAttrs())
+  {
+    switch (attr->getKind())
+    {
+    case clang::attr::Packed:
+      t.set("packed", true);
+      break;
+
+    /* clang models `#pragma pack(n)` as MaxFieldAlignmentAttr, not as
+     * attr::Packed: it caps every member's alignment at n bytes, and n == 1 is
+     * exactly what attr::Packed means. */
+    case clang::attr::MaxFieldAlignment:
+    {
+      const auto &mattr =
+        static_cast<const clang::MaxFieldAlignmentAttr &>(*attr);
+      const unsigned bytes = mattr.getAlignment() / config.ansi_c.char_width;
+      if (bytes == 1)
+        t.set("packed", true);
+      else if (bytes > 1)
+        t.set("max_field_alignment", bytes);
+      break;
+    }
+
+    case clang::attr::Aligned:
+      if (process_aligned_attribute(
+            static_cast<const clang::AlignedAttr &>(*attr), t))
+        return true;
+      break;
+
+    default:
+      break;
+    }
+  }
+
+  return false;
 }
 
 bool clang_c_convertert::process_aligned_attribute(

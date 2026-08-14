@@ -10,13 +10,10 @@
 #include <util/irep/migrate.h>
 #include <util/irep/std_types.h>
 #include <util/expr/type_byte_size.h>
+#include <util/symtab/base_subobject.h>
 #include <utility>
 #include <vector>
 #include <algorithm>
-
-// Component-name prefix the C++ frontend uses for nested base subobjects; see
-// base_subobject_name() in clang-c-frontend/clang_c_convert.h (#1866, #3894).
-static const std::string base_subobject_prefix = "@base@";
 
 // Collect the byte offset and class type of every (transitively) nested base
 // subobject of `t`, relative to the start of `t`.
@@ -38,7 +35,7 @@ static void collect_base_subobject_offsets(
   {
     const std::string name = st.member_names[i].as_string();
     if (
-      name.compare(0, base_subobject_prefix.size(), base_subobject_prefix) != 0)
+      name.compare(0, BASE_SUBOBJECT_PREFIX.size(), BASE_SUBOBJECT_PREFIX) != 0)
       continue;
 
     const BigInt off = base + member_offset(ft, st.member_names[i], &ns);
@@ -554,6 +551,33 @@ expr2tc goto_symext::symex_mem_inf(
   return to_address_of2t(rhs_addrof).ptr_obj;
 }
 
+void goto_symext::offer_malloc_zero_null(
+  const expr2tc &size,
+  expr2tc &rhs,
+  guard2tc &alloc_guard)
+{
+  if (!options.get_bool_option("malloc-zero-is-null"))
+    return;
+
+  expr2tc nonzero = greaterthan2tc(size, gen_long(size->type, 0));
+  simplify(nonzero);
+  if (is_true(nonzero))
+    return;
+
+  // C17 7.22.3p1 leaves malloc(0) implementation-defined: NULL, or a pointer
+  // that may be freed but not used to access an object. Offer both -- forcing
+  // NULL makes the assume(p != NULL) that environment models emit after a
+  // zero-sized request unsatisfiable, pruning every execution under test
+  // (#5398).
+  expr2tc may_alloc = gen_nondet(get_bool_type());
+  replace_nondet(may_alloc);
+
+  expr2tc choice = or2tc(nonzero, may_alloc);
+  simplify(choice);
+  alloc_guard.add(choice);
+  rhs = if2tc(rhs->type, choice, rhs, symbol2tc(rhs->type, "NULL"));
+}
+
 expr2tc goto_symext::symex_mem(
   const bool is_malloc,
   const expr2tc &lhs,
@@ -623,11 +647,8 @@ expr2tc goto_symext::symex_mem(
     do_simplify(size);
     if (is_constant_int2t(size))
     {
-      uint64_t v = to_constant_int2t(size).value.to_uint64();
-      if (v == 1)
+      if (to_constant_int2t(size).value == 1)
         size_is_one = true;
-      else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
-        return symbol2tc(pointer_type2tc(type), "NULL");
     }
     else if (
       is_malloc && is_unsignedbv_type(size->type) &&
@@ -691,6 +712,13 @@ expr2tc goto_symext::symex_mem(
 
   new_context.add(symbol);
 
+  // Without a record at the branch point phi_function skips this object, so a
+  // write inside a branch would apply on both paths (#6798).
+  expr2tc dyn_l1_sym = symbol2tc(get_empty_type(), symbol.id);
+  cur_state->top().level1.get_ident_name(dyn_l1_sym);
+  cur_state->level2.declare(
+    renaming::level2t::name_record(to_symbol2t(dyn_l1_sym)));
+
   type2tc new_type = migrate_symbol_type(symbol);
 
   type2tc rhs_type;
@@ -727,13 +755,9 @@ expr2tc goto_symext::symex_mem(
     ptr_rhs = rhs;
   }
 
-  if (options.get_bool_option("malloc-zero-is-null"))
-  {
-    expr2tc null_sym = symbol2tc(rhs->type, "NULL");
-    expr2tc choice = greaterthan2tc(size, gen_long(size->type, 0));
-    alloc_guard.add(choice);
-    rhs = if2tc(rhs->type, choice, rhs, null_sym);
-  }
+  // alloca has no NULL outcome to explore: C17 7.22.3p1 is about malloc.
+  if (is_malloc)
+    offer_malloc_zero_null(size, rhs, alloc_guard);
 
   if (!options.get_bool_option("force-malloc-success") && is_malloc)
   {

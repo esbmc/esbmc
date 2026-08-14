@@ -5,6 +5,7 @@
 #include <util/arith/bitvector.h>
 #include <util/lang/c_types.h>
 #include <util/lang/c_sizeof.h>
+#include <util/symtab/base_subobject.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
 #include <util/arith/ieee_float.h>
@@ -170,59 +171,156 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   }
   else if (expr.is_struct())
   {
-    const typet &t = ns.follow(expr.type());
-    /* can't be an initializer of an incomplete type, it's not allowed by C */
-    assert(!t.incomplete());
-    const struct_union_typet::componentst &new_comp =
-      to_struct_union_type(t).components();
-    exprt::operandst &ops = expr.operands();
-    /* Only insert padding operands if the expression doesn't already have
-     * them.  The Solidity frontend creates struct expressions via
-     * gen_zero(get_complete_type()), which resolves padding before this
-     * pass, whereas the C frontend relies on this pass to add them. */
-    const bool already_padded = (ops.size() == new_comp.size());
-    for (size_t i = 0; i < new_comp.size(); i++)
-    {
-      const struct_union_typet::componentt &c = new_comp[i];
-      if (c.get_is_padding() && !already_padded)
-      {
-        // TODO: should we initialize pads with nondet values?
-        ops.insert(ops.begin() + i, gen_zero(c.type()));
-      }
-      adjust_expr(ops[i]);
-    }
-    assert(new_comp.size() == ops.size());
+    adjust_struct(expr);
   }
   else if (expr.id() == "ptr_mem")
   {
+    adjust_ptr_mem(expr);
+  }
+  else if (expr.id() == "typecast" && expr.get_bool("#base_to_derived"))
+  {
     adjust_operands(expr);
-
-    exprt &base = expr.op0();
-    if (base.type().is_pointer())
-    {
-      exprt deref("dereference");
-      deref.type() = base.type().subtype();
-      deref.move_to_operands(base);
-      base.swap(deref);
-    }
-
-    if (expr.type().id() == "ptrmem")
-    {
-      exprt func = expr.op1();
-      code_typet &code_type = to_code_type(func.type().subtype());
-      exprt arg0 = address_of_exprt(expr.op0());
-      // `this` is the first parameter; appending its type at the back instead
-      // shifted every explicit argument by one (#6293).
-      code_type.arguments().insert(
-        code_type.arguments().begin(), code_typet::argumentt(arg0.type()));
-      expr.swap(func);
-    }
+    adjust_base_to_derived(expr);
   }
   else
   {
     // Just check operands of everything else
     adjust_operands(expr);
   }
+}
+
+void clang_c_adjust::adjust_struct(exprt &expr)
+{
+  const typet &t = ns.follow(expr.type());
+  /* can't be an initializer of an incomplete type, it's not allowed by C */
+  assert(!t.incomplete());
+  const struct_union_typet::componentst &new_comp =
+    to_struct_union_type(t).components();
+  exprt::operandst &ops = expr.operands();
+  /* Only insert padding operands if the expression doesn't already have
+   * them.  The Solidity frontend creates struct expressions via
+   * gen_zero(get_complete_type()), which resolves padding before this
+   * pass, whereas the C frontend relies on this pass to add them. */
+  const bool already_padded = (ops.size() == new_comp.size());
+  for (size_t i = 0; i < new_comp.size(); i++)
+  {
+    const struct_union_typet::componentt &c = new_comp[i];
+    if (c.get_is_padding() && !already_padded)
+    {
+      // TODO: should we initialize pads with nondet values?
+      ops.insert(ops.begin() + i, gen_zero(c.type()));
+    }
+    adjust_expr(ops[i]);
+  }
+  assert(new_comp.size() == ops.size());
+}
+
+void clang_c_adjust::adjust_ptr_mem(exprt &expr)
+{
+  adjust_operands(expr);
+
+  exprt &base = expr.op0();
+  if (base.type().is_pointer())
+  {
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+  }
+
+  if (expr.type().id() == "ptrmem")
+  {
+    exprt func = expr.op1();
+    code_typet &code_type = to_code_type(func.type().subtype());
+    exprt arg0 = address_of_exprt(expr.op0());
+    // `this` is the first parameter; appending its type at the back instead
+    // shifted every explicit argument by one (#6293).
+    code_type.arguments().insert(
+      code_type.arguments().begin(), code_typet::argumentt(arg0.type()));
+    expr.swap(func);
+  }
+}
+
+// Sum the offsets of the "@base@" components leading from `derived` down to
+// the struct symbol `base_id`. Offsets come from ESBMC's own layout, so they
+// agree with the member path the derived->base cast builds. adjust() fixes up
+// every type symbol before any value, so padding is already in place here.
+static bool base_subobject_offset(
+  const namespacet &ns,
+  const typet &derived,
+  const irep_idt &base_id,
+  BigInt &offset)
+{
+  const typet &d = ns.follow(derived);
+  if (!d.is_struct())
+    return false;
+
+  const struct_typet &st = to_struct_type(d);
+  const irep_idt want = base_subobject_name(base_id.as_string());
+
+  for (const auto &c : st.components())
+  {
+    if (!has_prefix(c.get_name(), BASE_SUBOBJECT_PREFIX))
+      continue;
+
+    BigInt nested = 0;
+    if (
+      c.get_name() != want &&
+      !base_subobject_offset(ns, c.type(), base_id, nested))
+      continue;
+
+    offset += member_offset(migrate_type(st), c.get_name(), &ns) + nested;
+    return true;
+  }
+
+  return false;
+}
+
+void clang_c_adjust::adjust_base_to_derived(exprt &expr)
+{
+  expr.remove("#base_to_derived");
+
+  if (expr.operands().size() != 1)
+    return;
+
+  const exprt &src = expr.op0();
+  if (!src.type().is_pointer() || !expr.type().is_pointer())
+    return;
+  if (src.type().subtype().id() != "symbol")
+    return;
+
+  const irep_idt base_id = src.type().subtype().identifier();
+  BigInt offset = 0;
+  if (!base_subobject_offset(ns, expr.type().subtype(), base_id, offset))
+  {
+    // The hierarchy kept the legacy flattened layout, so there is no @base@
+    // component to undo. Left as a plain typecast the result keeps pointing
+    // at the base subobject, which is only exact when the two coincide.
+    log_debug(
+      "c++",
+      "base-to-derived cast to {}: no @base@ path to {}, left unadjusted",
+      expr.type().subtype().identifier(),
+      base_id);
+    return;
+  }
+  if (offset == 0)
+    return; // base starts at the derived object; nothing to re-base
+
+  typet char_ptr = pointer_typet(char_type());
+  exprt adjusted = src;
+  gen_typecast(ns, adjusted, char_ptr);
+  // minus_exprt leaves the node's type nil, so set it before casting back.
+  adjusted = minus_exprt(adjusted, from_integer(offset, index_type()));
+  adjusted.type() = char_ptr;
+  gen_typecast(ns, adjusted, expr.type());
+
+  // [expr.static.cast]/11: a null pointer operand yields a null pointer, so
+  // the displacement must not be applied to it. Without the guard the
+  // check-then-downcast idiom dereferences a non-null (char *)0 - offset.
+  exprt guarded = if_exprt(
+    equality_exprt(src, gen_zero(src.type())), gen_zero(expr.type()), adjusted);
+  guarded.location() = expr.location();
+  expr = guarded;
 }
 
 void clang_c_adjust::adjust_symbol(exprt &expr)
@@ -315,6 +413,9 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
 void clang_c_adjust::adjust_member(member_exprt &expr)
 {
   adjust_operands(expr);
+
+  if (irep2_owns_arms)
+    return;
 
   exprt &base = expr.struct_op();
   if (base.type().is_pointer())
@@ -584,6 +685,12 @@ void clang_c_adjust::adjust_expr_unary_complex(exprt &expr)
 void clang_c_adjust::adjust_index(index_exprt &index)
 {
   adjust_operands(index);
+
+  // The recursion above stays here whatever happens; only the rewrite below
+  // moves (scope-clang-c-irep2.md §19.2), so gating the whole arm would skip
+  // the subtree rather than hand over one transformation.
+  if (irep2_owns_arms)
+    return;
 
   exprt &array_expr = index.op0();
   exprt &index_expr = index.op1();
@@ -1142,6 +1249,66 @@ compare_unscore_builtin(const irep_idt &identifier, const std::string &name)
          (identifier == underscore_name);
 }
 
+/// True for the abs builtins that may be lowered to an `abs` node. That node
+/// becomes `(x >= 0) ? x : -x`, ill-typed for anything but an arithmetic
+/// argument, so a program overloading the name for a class type --
+/// std::abs(complex) is why <complex> ships without it -- keeps its call.
+static inline bool is_abs_builtin_name(const irep_idt &identifier)
+{
+  return identifier == "abs" || identifier == "labs" ||
+         identifier == "imaxabs" || identifier == "llabs" ||
+         compare_float_suffix(identifier, "fabs") ||
+         compare_unscore_builtin(identifier, "fabs");
+}
+
+/// The `abs` node lowers to `(x >= 0) ? x : -x`, which is ill-typed for
+/// anything else -- std::abs(complex) is why <complex> ships without it.
+bool clang_c_adjust::has_single_arithmetic_argument(
+  const side_effect_expr_function_callt &expr) const
+{
+  return expr.arguments().size() == 1 && is_number(expr.arguments()[0].type());
+}
+
+/// The lowerings in do_special_functions match a callee's base name, so a
+/// program that defines one of these names itself would have its body discarded
+/// and the builtin verified in its place (#6904). These are all spellings a
+/// program is free to reuse -- `mylib::abs`, `mylib::isinf` -- unlike the
+/// `__builtin_`-prefixed and CPROVER-prefixed entries, which are reserved.
+static inline bool is_name_matched_builtin(const irep_idt &identifier)
+{
+  return is_abs_builtin_name(identifier) ||
+         compare_unscore_builtin(identifier, "isnan") ||
+         compare_unscore_builtin(identifier, "isinf") ||
+         compare_unscore_builtin(identifier, "isnormal") ||
+         compare_unscore_builtin(identifier, "signbit") ||
+         compare_unscore_builtin(identifier, "isfinite") ||
+         compare_float_suffix(identifier, "finite") ||
+         compare_unscore_builtin(identifier, "finite") ||
+         compare_unscore_builtin(identifier, "inf") ||
+         compare_unscore_builtin(identifier, "huge_val");
+}
+
+/// True when lowering this call would throw away a definition the program
+/// supplies. Libc's own declarations are bodiless and the <cmath> overloads
+/// forward to their `__builtin_` spelling, so both still lower.
+bool clang_c_adjust::shadows_user_definition(
+  const irep_idt &identifier,
+  const exprt &f_op) const
+{
+  if (!is_name_matched_builtin(identifier))
+    return false;
+
+  /* c2goto compiles the operational models themselves, where libm/fabs.c and
+   * friends do define these names. Those definitions are the models, not a
+   * program's, so honouring them here would stop every call inside the models
+   * folding to its native node and blow the encoding up (#6904). */
+  if (config.options.get_bool_option("building-c-library"))
+    return false;
+
+  const symbolt *s = context.find_symbol(to_symbol_expr(f_op).get_identifier());
+  return s != nullptr && !s->get_value().is_nil();
+}
+
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 {
   const exprt &f_op = expr.function();
@@ -1151,6 +1318,11 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
   if (f_op.is_symbol())
   {
     const irep_idt &identifier = to_symbol_expr(f_op).name();
+
+    // A definition the program supplies wins over every name-matched lowering
+    // below; see shadows_user_definition (#6904).
+    if (shadows_user_definition(identifier, f_op))
+      return;
 
     if (identifier == CPROVER_PREFIX "same_object")
     {
@@ -1246,14 +1418,14 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(nan_expr);
     }
-    else if (
-      identifier == "abs" || identifier == "labs" || identifier == "imaxabs" ||
-      identifier == "llabs" || compare_float_suffix(identifier, "fabs") ||
-      compare_unscore_builtin(identifier, "fabs"))
+    else if (is_abs_builtin_name(identifier))
     {
-      exprt abs_expr("abs", expr.type());
-      abs_expr.operands() = expr.arguments();
-      expr.swap(abs_expr);
+      if (has_single_arithmetic_argument(expr))
+      {
+        exprt abs_expr("abs", expr.type());
+        abs_expr.operands() = expr.arguments();
+        expr.swap(abs_expr);
+      }
     }
     else if (compare_unscore_builtin(identifier, "isinf"))
     {

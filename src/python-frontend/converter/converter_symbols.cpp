@@ -119,7 +119,15 @@ symbolt *python_converter::find_function_in_base_classes(
   // Python enforces acyclic inheritance, so this recursion terminates.
   for (const auto &base_class_node : class_node["bases"])
   {
-    const std::string &base_class = base_class_node["id"].get<std::string>();
+    /* A qualified base (`module.Class`) parses as an Attribute, which carries
+     * `attr` instead of `id` -- reading `id` unconditionally aborted on any
+     * model-provided base such as unittest.TestCase (#6745). The symbol id
+     * uses the bare class name either way. */
+    const std::string base_class = base_class_node.contains("id")
+                                     ? base_class_node["id"].get<std::string>()
+                                     : base_class_node.value("attr", "");
+    if (base_class.empty())
+      continue;
 
     // Under the base class, a constructor is named after that base.
     const std::string base_func_name = is_ctor ? base_class : method_name;
@@ -129,6 +137,25 @@ symbolt *python_converter::find_function_in_base_classes(
 
     if (symbolt *func = symbol_table_.find_symbol(sym_id.c_str()))
       return func;
+
+    /* A base reached through an import lives in that module's file, so the
+     * rewrite above -- which keeps the current file's prefix -- cannot name
+     * it. Rebuild the id against the imported module instead. */
+    if (
+      base_class_node.contains("value") &&
+      base_class_node["value"].is_object() &&
+      base_class_node["value"].contains("id"))
+    {
+      const std::string module_name =
+        base_class_node["value"]["id"].get<std::string>();
+      const std::string &module_path = get_imported_module_path(module_name);
+      if (!module_path.empty())
+      {
+        class symbol_id base_id(module_path, base_class, base_func_name);
+        if (symbolt *func = symbol_table_.find_symbol(base_id.to_string()))
+          return func;
+      }
+    }
 
     // Not defined directly in this base: descend into its own bases so a
     // method inherited from a grandparent (or higher) still resolves.
@@ -141,6 +168,29 @@ symbolt *python_converter::find_function_in_base_classes(
   return nullptr;
 }
 
+/// The name @p id asks for, as an import would spell it. from_string parses
+/// the @C@/@F@ markers but not the trailing segment; when an id carries one,
+/// that segment is the name and the class/function are only its scope. Reading
+/// the function instead made every name used inside `def acos()` resolve to
+/// `math.acos` from an unrelated `import math` (#6895).
+static std::string
+import_lookup_name(const std::string &id, const ::symbol_id &parsed)
+{
+  ::symbol_id scope = parsed;
+  scope.set_object("");
+  const std::string prefix = scope.to_string();
+  if (
+    id.size() > prefix.size() && id.compare(0, prefix.size(), prefix) == 0 &&
+    id[prefix.size()] == '@')
+    return id.substr(prefix.size() + 1);
+
+  if (!parsed.get_class().empty())
+    return parsed.get_class();
+  if (!parsed.get_function().empty())
+    return parsed.get_function();
+  return parsed.get_object();
+}
+
 symbolt *
 python_converter::find_imported_symbol(const std::string &symbol_id) const
 {
@@ -148,11 +198,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   // When the symbol has a class component (py:main@C@Foo@F@bar),
   // use the class name for matching against import names.
   auto parsed = ::symbol_id::from_string(symbol_id);
-  std::string lookup_name =
-    !parsed.get_class().empty()
-      ? parsed.get_class()
-      : (parsed.get_function().empty() ? parsed.get_object()
-                                       : parsed.get_function());
+  std::string lookup_name = import_lookup_name(symbol_id, parsed);
 
   // symbol_id::from_string currently parses class/function components but not
   // trailing object names (e.g. py:file@replace). Recover that case from raw

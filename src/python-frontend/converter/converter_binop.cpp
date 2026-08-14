@@ -945,9 +945,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("value"))
     right = element["value"];
 
-  // Convert operands to expressions
+  // Convert operands to expressions. current_lhs is cleared first so a
+  // constructor call in operand position (`r = V(2) + V(3)`) allocates its own
+  // self temp instead of constructing into the outer assignment target, which
+  // every operand would otherwise alias (#6257).
+  exprt *saved_lhs = current_lhs;
+  current_lhs = nullptr;
   exprt lhs = get_expr(left);
   exprt rhs = get_expr(right);
+  current_lhs = saved_lhs;
 
   // Resolve dictionary subscript types for proper comparison
   dict_handler_->resolve_dict_subscript_types(left, right, lhs, rhs);

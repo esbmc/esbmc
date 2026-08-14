@@ -1,0 +1,28 @@
+#pragma once
+
+#include <wchar.h>
+
+// [cwchar.syn]: <cwchar> declares the wide-character functions in namespace
+// std. Mirrors the cstring model's approach; the definitions live in
+// src/c2goto/library/wchar.c.
+namespace std
+{
+using ::mbstate_t;
+using ::size_t;
+using ::wint_t;
+
+using ::mbsinit;
+using ::wcscat;
+using ::wcschr;
+using ::wcscmp;
+using ::wcscpy;
+using ::wcslen;
+using ::wcsncmp;
+using ::wcsncpy;
+using ::wcsrchr;
+using ::wmemchr;
+using ::wmemcmp;
+using ::wmemcpy;
+using ::wmemmove;
+using ::wmemset;
+} // namespace std

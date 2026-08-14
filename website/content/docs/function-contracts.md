@@ -387,6 +387,27 @@ memory.
 In `requires`: the caller must provide a freshly allocated pointer. In
 `ensures`: the function promises to return a freshly allocated block.
 
+Because a fresh block aliases nothing, a `requires`-side `__ESBMC_is_fresh` is
+also how a contract states that a pointer parameter is separate from the
+others. Enforcement grants it — the parameter gets its own allocation, and is
+excluded from the aliasing described under "Pointer parameters may alias"
+below. Replacement therefore checks it, asserting at the call that the argument
+shares no object with any other pointer argument, and that the object it points
+into really does extend `size` bytes past it. Both halves are obligations on
+the caller, so a program that passed a smaller object than the contract asked
+for now reports a violated `requires` where it previously verified.
+
+Two consequences worth knowing:
+
+- Only an unconditionally asserted `__ESBMC_is_fresh` states separation. Under
+  a guard, as in `__ESBMC_requires(n <= 0 || __ESBMC_is_fresh(p, n))`, the
+  contract claims nothing on the other branch, so neither is anything granted
+  to the callee nor demanded of the caller.
+- This is stronger than CBMC's `__CPROVER_is_fresh`, which separates a pointer
+  only from other fresh pointers in the same contract. A ported contract that
+  marks one parameter fresh and leaves another as a plain pointer will be
+  rejected here if a caller passes the same object to both.
+
 ```c
 void create_buffer(char **out, int n) {
     __ESBMC_requires(n > 0);
@@ -441,6 +462,33 @@ functions are left untouched.
 every function that has at least one contract clause, whether annotated or not.
 `--enforce-all-contracts` and `--replace-all-contracts` match only annotated
 functions.
+
+## Contracts in Python
+
+The Python frontend lowers `__ESBMC_requires` / `__ESBMC_ensures` clauses too,
+so `--enforce-contract` and `--replace-call-with-contract` work on Python
+functions:
+
+```python
+def double(x: int) -> int:
+    __ESBMC_requires(x > 0)
+    __ESBMC_ensures(__ESBMC_return_value > x)
+    return 2 * x
+```
+
+```bash
+esbmc main.py --enforce-contract double
+```
+
+`__ESBMC_return_value` takes its type from the function's return annotation.
+Clauses are inert under a plain BMC run, exactly as in C.
+
+A clause the lowering cannot express is rejected with a diagnostic naming the
+clause and line — a function call or subscript inside the condition, a
+reference whose type cannot be determined, `__ESBMC_return_value` inside
+`requires` or on a function annotated `-> None` — rather than being silently
+dropped. `__ESBMC_old`, `__ESBMC_assigns`, and the quantified forms are not yet
+available in Python.
 
 ## Quick reference
 
@@ -513,6 +561,23 @@ nondet extents remove for other pointer types, just narrowed to one element.
 Moving struct parameters onto the same nondet-extent allocation is blocked on
 [#6483](https://github.com/esbmc/esbmc/issues/6483): a heap-backed struct
 parameter silently discharges `__ESBMC_old`-based `ensures` clauses.
+
+**Pointer parameters may alias, and not every aliasing is explored.** A
+contract that needs two pointer parameters to be separate has to say so, with
+`__ESBMC_requires(p != q)` or `__ESBMC_is_fresh`; enforcement otherwise lets
+them refer to the same object, because nothing in the contract rules it out and
+nothing checks it at a call site. The aliasing offered is not exhaustive: it
+relates parameters of identical pointer type only, so differently typed
+parameters, `void *` and byte buffers are still assumed separate, as are
+interior aliases such as `f(&s->a, &s->b)` or `f(buf, buf + 1)`, and aliasing
+between a parameter and a global. A contract relying on any of those keeps an
+assumption that is granted but never discharged.
+
+**`__ESBMC_is_fresh` on anything but a bare parameter is not discharged at a
+call.** `__ESBMC_is_fresh(g, n)` for a global, or `__ESBMC_is_fresh(s->p, n)`,
+is honoured when enforcing — the lvalue gets its own allocation — but
+replacement keys the separation obligation on a parameter position and emits
+nothing for these forms.
 
 **Global array element assigns is unsupported.** `__ESBMC_assigns(global[i])`
 does not work correctly for global arrays. Use `__ESBMC_assigns(global)` (the

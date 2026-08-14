@@ -1,4 +1,5 @@
 #include "goto-programs/goto_binary_reader.h"
+#include <util/base/stack_budget.h>
 #include "irep2/irep2_expr.h"
 #include <util/lang/c_types.h>
 #include <util/irep/std_code.h>
@@ -722,8 +723,34 @@ expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
     type, thename, target_level, level1_num, level2_num, thread_num, node_num);
 }
 
+namespace
+{
+/* migrate_expr recurses once per level of expression nesting, and its frame is
+ * large: ~150 branches whose locals clang does not coalesce, measured at ~16KB
+ * a level. A deeply nested expression therefore exhausts even the 512MB stack
+ * main() hands us and dies with SIGSEGV instead of a diagnostic (#5048). */
+using migrate_stack_guardt = stack_budget_guardt<struct migrate_tagt>;
+
+/* Called rather than inlined into migrate_expr: that function is already far
+ * past the complexity gate, so a bare `if` there fails the build. */
+void enforce_migrate_stack_budget(const migrate_stack_guardt &stack_guard)
+{
+  if (stack_guard.exceeded(default_stack_budget))
+  {
+    log_error(
+      "expression nesting is too deep to migrate: {} MiB of stack used. "
+      "Simplify or split the input expression.",
+      stack_guard.bytes_used() / (1024 * 1024));
+    abort();
+  }
+}
+} // namespace
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
+  const migrate_stack_guardt stack_guard;
+  enforce_migrate_stack_budget(stack_guard);
+
   type2tc type;
 
   if (expr.id() == "nil")
@@ -1522,7 +1549,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
-    new_expr_ref = address_of2tc(type, theval);
+    new_expr_ref = address_of2tc(type, theval, expr.implicit());
     return;
   }
 
@@ -2967,6 +2994,14 @@ typet migrate_type_back(const type2tc &ref)
   }
 }
 
+// Only set the flag when it is on: `set` stores an explicit "0" rather than
+// omitting the attribute, which would change the irep the round-trip produces.
+static void set_implicit_flag(exprt &e, bool implicit)
+{
+  if (implicit)
+    e.implicit(true);
+}
+
 exprt migrate_expr_back(const expr2tc &ref)
 {
   if (ref.get() == nullptr)
@@ -3461,6 +3496,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt address_ofval("address_of", thetype);
     address_ofval.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
+    set_implicit_flag(address_ofval, ref2.implicit);
     return address_ofval;
   }
   case expr2t::byte_extract_id:

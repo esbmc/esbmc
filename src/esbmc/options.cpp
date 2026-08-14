@@ -207,6 +207,10 @@ const struct group_opt_templ all_cmd_options[] = {
      {"python-list-compare-depth",
       boost::program_options::value<int>()->default_value(4)->value_name("nr"),
       "Set maximum nesting depth for Python list comparison (default is 4)"},
+     {"clang-c-irep2-adjust",
+      NULL,
+      "Run the IREP2-native C adjuster alongside the legacy adjust pass "
+      "(Phase 6 migration; experimental, default off)"},
      {"python-irep2-adjust",
       NULL,
       "Run the IREP2-native Python adjuster alongside the legacy adjust pass "
@@ -557,11 +561,22 @@ const struct group_opt_templ all_cmd_options[] = {
     {"max-context-bound",
      boost::program_options::value<int>()->default_value(20)->value_name("nr"),
      "Highest context bound tried by --incremental-context-bound"},
+    {"falsify-context-bound",
+     boost::program_options::value<int>()->default_value(0)->value_name("nr"),
+     "Before the chosen strategy runs, look for a violation with the context "
+     "bound raised from 1 to nr; such a violation is genuine, no proof is "
+     "claimed, and the strategy still runs when none is found (0 = off)"},
     {"state-hashing", NULL, "Enable state-hashing, prunes duplicate states"},
     {"no-goto-merge",
      NULL,
      "Do not merge gotos when restoring paths after a context-switch"},
     {"no-por", NULL, "Do not do partial order reduction"},
+    {"sleep-sets",
+     NULL,
+     "Prune schedules with sleep sets; only fires where the search is "
+     "exhaustive, so pair it with --no-por and no context bound. Ignored under "
+     "--schedule, --direct-interleavings, --interactive-ileaves and "
+     "--data-races-check-only (experimental, off by default)"},
     {"cswitch-skip-readonly-globals",
      NULL,
      "Skip context switches on globals that are never written anywhere "
@@ -777,12 +792,18 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<int>()->default_value(-1)->value_name(
        "bits"),
      "Check if stack limit is respected"},
+    {"total-stack-limit",
+     boost::program_options::value<int>()->default_value(-1)->value_name(
+       "bits"),
+     "Bound the combined size of all live stack frames, excluding ESBMC's "
+     "own operational models. Accounted per symbolic path at declaration "
+     "points; over-approximates for spawned threads"},
     {"error-label",
      boost::program_options::value<std::string>()->value_name("label"),
      "Check if label is unreachable"},
     {"force-malloc-success", NULL, "Do not check for malloc/new failure"},
     {"force-realloc-success", NULL, "Do not check for realloc failure"},
-    {"malloc-zero-is-null", NULL, "Force malloc(0) to return NULL"},
+    {"malloc-zero-is-null", NULL, "Also explore malloc(0) returning NULL"},
     {"max-symbolic-realloc-copy",
      boost::program_options::value<int>()->default_value(128)->value_name("nr"),
      "Set maximum number of elements to copy symbolically in realloc (default "

@@ -167,40 +167,6 @@ bool ast_contains_call(const nlohmann::json &n)
   return false;
 }
 
-bool is_imported_numpy_module_alias(
-  const nlohmann::json &ast,
-  const std::string &name)
-{
-  if (
-    name.empty() || !ast.is_object() || !ast.contains("body") ||
-    !ast["body"].is_array())
-    return false;
-
-  for (const auto &stmt : ast["body"])
-  {
-    if (
-      !stmt.is_object() || stmt.value("_type", std::string()) != "Import" ||
-      !stmt.contains("names") || !stmt["names"].is_array())
-      continue;
-
-    for (const auto &alias : stmt["names"])
-    {
-      if (
-        !alias.is_object() || alias.value("_type", std::string()) != "alias" ||
-        alias.value("name", std::string()) != "numpy")
-        continue;
-
-      const nlohmann::json &asname = alias.value("asname", nlohmann::json());
-      const std::string bound_name =
-        asname.is_null() ? std::string("numpy") : asname.get<std::string>();
-      if (bound_name == name)
-        return true;
-    }
-  }
-
-  return false;
-}
-
 bool ast_imports_numpy_module(const nlohmann::json &ast)
 {
   if (!ast.is_object() || !ast.contains("body") || !ast["body"].is_array())
@@ -308,6 +274,43 @@ struct tagged_scalar_scope_guard
   }
 };
 } // namespace
+
+// External linkage: shared with numpy_call_expr.cpp (declared in
+// python_converter.h) so both can verify a Name/Attribute receiver actually
+// resolves to the imported numpy module.
+bool is_imported_numpy_module_alias(
+  const nlohmann::json &ast,
+  const std::string &name)
+{
+  if (
+    name.empty() || !ast.is_object() || !ast.contains("body") ||
+    !ast["body"].is_array())
+    return false;
+
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      !stmt.is_object() || stmt.value("_type", std::string()) != "Import" ||
+      !stmt.contains("names") || !stmt["names"].is_array())
+      continue;
+
+    for (const auto &alias : stmt["names"])
+    {
+      if (
+        !alias.is_object() || alias.value("_type", std::string()) != "alias" ||
+        alias.value("name", std::string()) != "numpy")
+        continue;
+
+      const nlohmann::json &asname = alias.value("asname", nlohmann::json());
+      const std::string bound_name =
+        asname.is_null() ? std::string("numpy") : asname.get<std::string>();
+      if (bound_name == name)
+        return true;
+    }
+  }
+
+  return false;
+}
 
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
@@ -1253,6 +1256,155 @@ bool python_converter::is_numpy_array_constructor_expr(
   return constructors.count(node["func"].value("attr", "")) != 0;
 }
 
+// a.<method>(...) on a tracked numpy array is only ever resolved as numpy
+// when it takes the `np.<method>(a, ...)`-shaped AST a module-form call
+// would have produced: name lookup has no other route to the numpy
+// operational model for a method call. Centralised here so every call site
+// that converts a Call node (assignment RHS, or any other expression
+// context) shares one recogniser instead of growing its own copy that can
+// drift out of sync with the constructor/method lists above.
+static bool is_method_call_node_shape(const nlohmann::json &call_node)
+{
+  return call_node.is_object() && call_node.value("_type", "") == "Call" &&
+         call_node.contains("func") && call_node["func"].is_object() &&
+         call_node["func"].value("_type", "") == "Attribute" &&
+         call_node["func"].contains("value");
+}
+
+bool python_converter::method_base_is_imported_module(
+  const std::string &method_base_name) const
+{
+  return method_base_name == "np" || method_base_name == "numpy" ||
+         (!method_base_name.empty() && is_imported_module(method_base_name));
+}
+
+// A method name like sum()/max()/min() is not exclusive to numpy (e.g.
+// Decimal.max(), a plain module-level function called through an aliased
+// import); only rewrite when the receiver is actually a tracked numpy
+// array.
+bool python_converter::method_base_is_tracked_numpy_array(
+  const std::string &method_base_name) const
+{
+  if (method_base_name.empty())
+    return false;
+  const std::string method_base_id = resolve_name_symbol_id(method_base_name);
+  return !method_base_id.empty() &&
+         numpy_array_symbols_.count(method_base_id) != 0;
+}
+
+std::tuple<bool, std::string, nlohmann::json, bool, bool>
+python_converter::classify_numpy_method_call(
+  const nlohmann::json &call_node) const
+{
+  if (!is_method_call_node_shape(call_node))
+    return {false, "", nlohmann::json(), false, false};
+
+  const std::string method_name = call_node["func"].value("attr", "");
+  const nlohmann::json &method_base = call_node["func"]["value"];
+  const std::string method_base_name =
+    method_base.value("_type", "") == "Name" && method_base.contains("id")
+      ? method_base["id"].get<std::string>()
+      : std::string();
+  const bool receiver_is_rewritable =
+    !method_base_is_imported_module(method_base_name) &&
+    method_base_is_tracked_numpy_array(method_base_name);
+
+  // transpose()/reshape()/ravel() are view-like (see is_numpy_view_copy_expr,
+  // which handles them separately); flatten()/sum()/mean()/min()/max()/
+  // prod()/std()/var() are not, but the method form still needs the same
+  // np.<name>(a, ...)-shaped rewrite to dispatch to the existing
+  // np.<name>() handler.
+  static const std::set<std::string> dispatch_rewrite_methods = {
+    "transpose",
+    "reshape",
+    "ravel",
+    "flatten",
+    "sum",
+    "mean",
+    "min",
+    "max",
+    "prod",
+    "std",
+    "var"};
+  const bool supported_dispatch_rewrite_method =
+    receiver_is_rewritable && dispatch_rewrite_methods.count(method_name) != 0;
+  const bool supported_copy_method =
+    receiver_is_rewritable && method_name == "copy";
+
+  return {
+    true,
+    method_name,
+    method_base,
+    supported_copy_method,
+    supported_dispatch_rewrite_method};
+}
+
+nlohmann::json python_converter::build_numpy_method_rewrite_node(
+  const nlohmann::json &call_node,
+  const std::string &method_name,
+  const nlohmann::json &method_base) const
+{
+  std::string numpy_alias = "np";
+  for (const auto &entry : imported_modules)
+  {
+    if (entry.second == "numpy")
+    {
+      numpy_alias = entry.first;
+      break;
+    }
+  }
+
+  nlohmann::json module_name;
+  module_name["_type"] = "Name";
+  module_name["id"] = numpy_alias;
+  module_name["ctx"] = {{"_type", "Load"}};
+  copy_location_fields_from_decl(call_node, module_name);
+
+  nlohmann::json rewritten;
+  rewritten["_type"] = "Call";
+  rewritten["func"] = {
+    {"_type", "Attribute"},
+    {"value", module_name},
+    {"attr", method_name},
+    {"ctx", {{"_type", "Load"}}}};
+  rewritten["args"] = nlohmann::json::array({method_base});
+  if (call_node.contains("args") && call_node["args"].is_array())
+    for (const auto &arg : call_node["args"])
+      rewritten["args"].push_back(arg);
+  rewritten["keywords"] = call_node.value("keywords", nlohmann::json::array());
+  // numpy.reshape(a, newshape, order='C') has no split-dimension form
+  // (a third positional argument is `order`, not another dimension);
+  // only the method form a.reshape(d1, d2, ...) is equivalent to
+  // a.reshape((d1, d2, ...)). Mark this rewrite so the reshape handler
+  // can tell the two shapes apart and reject a genuine
+  // np.reshape(a, 2, 3) call instead of silently accepting it.
+  rewritten["_numpy_method_form"] = true;
+  copy_location_fields_from_decl(call_node, rewritten);
+  copy_location_fields_from_decl(call_node, rewritten["func"]);
+  return rewritten;
+}
+
+std::optional<nlohmann::json> python_converter::rewrite_numpy_method_call_node(
+  const nlohmann::json &call_node) const
+{
+  const auto
+    [is_method_call,
+     method_name,
+     method_base,
+     supported_copy_method,
+     supported_dispatch_rewrite_method] = classify_numpy_method_call(call_node);
+  if (!is_method_call)
+    return std::nullopt;
+
+  if (supported_copy_method)
+    return method_base;
+
+  if (!supported_dispatch_rewrite_method)
+    return std::nullopt;
+
+  return build_numpy_method_rewrite_node(call_node, method_name, method_base);
+}
+
 bool python_converter::is_numpy_view_copy_expr(const nlohmann::json &node) const
 {
   if (!node.is_object())
@@ -1730,6 +1882,28 @@ bool python_converter::return_value_uses_call_argument(
 
   return return_value.value("_type", "") == "Subscript" &&
          return_value.contains("value") && is_param_name(return_value["value"]);
+}
+
+/// Item assignment on an immutable container is a TypeError. A string that is
+/// not intercepted here updates its char array with a whole string value, which
+/// trips with2t::assert_consistency and aborts instead of reporting anything.
+bool python_converter::reject_immutable_item_assignment(
+  const typet &container_type,
+  codet &target_block)
+{
+  const char *kind = tuple_handler_->is_tuple_type(container_type) ? "tuple"
+                     : type_utils::is_string_type(container_type)  ? "str"
+                                                                   : nullptr;
+  if (!kind)
+    return false;
+
+  exprt raise = get_exception_handler().gen_exception_raise(
+    "TypeError",
+    std::string("'") + kind + "' object does not support item assignment");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  target_block.copy_to_operands(throw_code);
+  return true;
 }
 
 void python_converter::reject_unsafe_numpy_view_target(
@@ -2409,6 +2583,17 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   return symbol_table_.move_symbol_to_context(symbol);
 }
 
+/// The bare name an AST node denotes: `id` for a Name, `attr` for an Attribute
+/// -- a qualified `module.Class`, which is what a base inherited from an
+/// operational model looks like. \p fallback covers any other shape.
+static std::string
+ast_node_name(const nlohmann::json &node, const std::string &fallback = "")
+{
+  if (node.contains("id"))
+    return node["id"].get<std::string>();
+  return node.value("attr", fallback);
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -2420,15 +2605,12 @@ void python_converter::handle_function_call_rhs(
 {
   if (is_ctor_call)
   {
-    std::string func_name =
-      ast_node["value"]["func"].contains("id")
-        ? ast_node["value"]["func"]["id"].get<std::string>()
-        : ast_node["value"]["func"]["attr"].get<std::string>();
+    std::string func_name = ast_node_name(ast_node["value"]["func"]);
 
     if (base_ctor_called)
     {
       auto class_node = json_utils::find_class((*ast_json)["body"], func_name);
-      func_name = class_node["bases"][0]["id"].get<std::string>();
+      func_name = ast_node_name(class_node["bases"][0], func_name);
       base_ctor_called = false;
     }
 
@@ -3271,16 +3453,8 @@ void python_converter::get_var_assign(
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
 
-    // Tuple subscript assignment: tuples are immutable, raise TypeError
-    if (tuple_handler_->is_tuple_type(container_type))
-    {
-      exprt raise = get_exception_handler().gen_exception_raise(
-        "TypeError", "'tuple' object does not support item assignment");
-      codet throw_code("expression");
-      throw_code.operands().push_back(raise);
-      target_block.copy_to_operands(throw_code);
+    if (reject_immutable_item_assignment(container_type, target_block))
       return;
-    }
 
     // Handle object subscript assignment via __setitem__:
     //   obj[key] = value  ->  obj.__setitem__(key, value)
@@ -3462,41 +3636,8 @@ void python_converter::get_var_assign(
       bool symbol_created = (lhs_symbol == nullptr);
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
 
-      // move_symbol_to_context() only overwrites an existing symbol's type
-      // when completing a forward declaration (a code/type/extern symbol
-      // gaining its real definition) — a plain variable rebound to a new
-      // value keeps its old, stale type otherwise. When that stale type is
-      // a non-class placeholder (None, a scalar literal, Any) being rebound
-      // to a fresh class-pointer binding — e.g. `g = None` or `g = 0`
-      // followed by `g = Service(...)` — retype it explicitly: otherwise
-      // the self-allocation in function_call_expr sizes the new instance
-      // from the stale type and overruns it as soon as the constructor
-      // writes a field (#6243).
-      //
-      // This must be an ALLOWLIST of safe placeholder types, not a denylist
-      // of unsafe ones: any struct-shaped existing type (tuple, dict, a
-      // migrated class instance, ...) is excluded even when its class
-      // differs from the new one, because an earlier statement may already
-      // have built an expression against that struct's layout (e.g.
-      // `x = t[0]` after `t = (1, 2)`), and retyping the symbol in place
-      // here without fixing up that expression corrupts it — confirmed to
-      // abort GOTO conversion (member2t) for a tuple/dict placeholder
-      // followed by a constructor rebind. A first version of this fix
-      // instead denylisted only existing class pointers (to protect the
-      // flow-sensitive class scanner, #4772, which deliberately drops its
-      // own tracking on `n1 = A(1); n1 = B()` — github_4117_attr_shadow)
-      // and missed this broader case.
-      const typet &existing_type = lhs_symbol->get_type();
-      const bool existing_is_safe_placeholder =
-        existing_type == none_type() ||
-        (existing_type.is_pointer() &&
-         existing_type.subtype().id() == "empty") ||
-        existing_type.is_signedbv() || existing_type.is_unsignedbv() ||
-        existing_type.is_floatbv() || existing_type.is_bool();
-      if (
-        !symbol_created && is_user_class_pointer(current_element_type) &&
-        existing_is_safe_placeholder && existing_type != current_element_type)
-        lhs_symbol->set_type(current_element_type);
+      if (!symbol_created)
+        retype_placeholder_to_class(*lhs_symbol, current_element_type);
 
       // Add declaration statement ONLY for newly created local variables
       if (symbol_created && !current_func_name_.empty() && !is_global)
@@ -3506,6 +3647,13 @@ void python_converter::get_var_assign(
         target_block.copy_to_operands(decl);
         lhs_already_declared = true;
       }
+    }
+    else
+    {
+      // A pre-registered module global reached from a `global` declaration
+      // skips the branch above, so it never got the placeholder widening and
+      // the constructor overran its scalar storage (#6243).
+      retype_placeholder_to_class(*lhs_symbol, current_element_type);
     }
 
     if (lhs_symbol && ast_node.contains("annotation"))
@@ -3703,102 +3851,12 @@ void python_converter::get_var_assign(
     copy_location_fields_from_decl(ast_node["value"], call_node["func"]);
     effective_ast_node["value"] = call_node;
   }
-  else if (
-    ast_node.contains("value") && ast_node["value"].is_object() &&
-    ast_node["value"].value("_type", "") == "Call" &&
-    ast_node["value"].contains("func") &&
-    ast_node["value"]["func"].is_object() &&
-    ast_node["value"]["func"].value("_type", "") == "Attribute" &&
-    ast_node["value"]["func"].contains("value"))
+  else if (ast_node.contains("value") && ast_node["value"].is_object())
   {
-    const std::string method_name = ast_node["value"]["func"].value("attr", "");
-    const nlohmann::json &method_base = ast_node["value"]["func"]["value"];
-    const std::string method_base_name =
-      method_base.value("_type", "") == "Name" && method_base.contains("id")
-        ? method_base["id"].get<std::string>()
-        : std::string();
-    const bool base_is_imported_module =
-      method_base_name == "np" || method_base_name == "numpy" ||
-      (!method_base_name.empty() && is_imported_module(method_base_name));
-    const std::string method_base_id =
-      method_base_name.empty() ? std::string()
-                               : resolve_name_symbol_id(method_base_name);
-    // A method name like sum()/max()/min() is not exclusive to numpy (e.g.
-    // Decimal.max(), a plain module-level function called through an
-    // aliased import); only rewrite when the receiver is actually a
-    // tracked numpy array, matching the check already used for copy()
-    // below.
-    const bool method_base_is_numpy_array =
-      !method_base_id.empty() &&
-      numpy_array_symbols_.count(method_base_id) != 0;
-    const bool supported_view_method =
-      !base_is_imported_module && method_base_is_numpy_array &&
-      (method_name == "transpose" || method_name == "reshape" ||
-       method_name == "ravel");
-    // flatten()/sum()/mean()/min()/max()/std()/var() are not view-like (see
-    // is_numpy_view_copy_expr, which deliberately excludes them), but the
-    // method form still needs the same np.<name>(a, ...)-shaped rewrite
-    // below to dispatch to the existing np.<name>() handler — the only form
-    // that method-call dispatch resolves through here at all is the
-    // function-call shape.
-    static const std::set<std::string> other_dispatch_rewrite_methods = {
-      "flatten", "sum", "mean", "min", "max", "std", "var"};
-    const bool supported_dispatch_rewrite_method =
-      supported_view_method ||
-      (!base_is_imported_module && method_base_is_numpy_array &&
-       other_dispatch_rewrite_methods.count(method_name) != 0);
-    const bool supported_copy_method = !base_is_imported_module &&
-                                       method_name == "copy" &&
-                                       method_base_is_numpy_array;
-    if (supported_copy_method)
-    {
-      effective_ast_node["value"] = ast_node["value"]["func"]["value"];
-    }
-    else if (supported_dispatch_rewrite_method)
-    {
-      std::string numpy_alias = "np";
-      for (const auto &entry : imported_modules)
-      {
-        if (entry.second == "numpy")
-        {
-          numpy_alias = entry.first;
-          break;
-        }
-      }
-
-      nlohmann::json module_name;
-      module_name["_type"] = "Name";
-      module_name["id"] = numpy_alias;
-      module_name["ctx"] = {{"_type", "Load"}};
-      copy_location_fields_from_decl(ast_node["value"], module_name);
-
-      nlohmann::json call_node;
-      call_node["_type"] = "Call";
-      call_node["func"] = {
-        {"_type", "Attribute"},
-        {"value", module_name},
-        {"attr", method_name},
-        {"ctx", {{"_type", "Load"}}}};
-      call_node["args"] =
-        nlohmann::json::array({ast_node["value"]["func"]["value"]});
-      if (
-        ast_node["value"].contains("args") &&
-        ast_node["value"]["args"].is_array())
-        for (const auto &arg : ast_node["value"]["args"])
-          call_node["args"].push_back(arg);
-      call_node["keywords"] =
-        ast_node["value"].value("keywords", nlohmann::json::array());
-      // numpy.reshape(a, newshape, order='C') has no split-dimension form
-      // (a third positional argument is `order`, not another dimension);
-      // only the method form a.reshape(d1, d2, ...) is equivalent to
-      // a.reshape((d1, d2, ...)). Mark this rewrite so the reshape handler
-      // can tell the two shapes apart and reject a genuine
-      // np.reshape(a, 2, 3) call instead of silently accepting it.
-      call_node["_numpy_method_form"] = true;
-      copy_location_fields_from_decl(ast_node["value"], call_node);
-      copy_location_fields_from_decl(ast_node["value"], call_node["func"]);
-      effective_ast_node["value"] = call_node;
-    }
+    if (
+      std::optional<nlohmann::json> rewritten =
+        rewrite_numpy_method_call_node(ast_node["value"]))
+      effective_ast_node["value"] = std::move(*rewritten);
   }
 
   exprt rhs;
@@ -4626,6 +4684,56 @@ python_converter::scalar_tag_candidates(const nlohmann::json &if_node)
   return candidates;
 }
 
+/// Truth-testing an object calls its __bool__ when the class defines one. The
+/// caller has already resolved @p value_type to the struct behind @p cond
+/// (following a pointer if need be); a non-struct or a class without the dunder
+/// comes back unchanged.
+/// `not obj` is a truth test, so it dispatches __bool__ exactly as `if obj:`
+/// does. Kept as its own entry point so the unary-operator conversion stays a
+/// single statement.
+exprt python_converter::apply_bool_dunder_for_not(
+  const std::string &op,
+  exprt operand,
+  const locationt &location)
+{
+  return op == "Not" ? apply_bool_dunder(operand, location) : operand;
+}
+
+exprt python_converter::apply_bool_dunder(exprt cond, const locationt &location)
+{
+  typet value_type = ns.follow(cond.type());
+  if (value_type.is_pointer())
+    value_type = ns.follow(value_type.subtype());
+  if (!value_type.is_struct())
+    return cond;
+
+  const std::string class_name =
+    extract_class_name_from_tag(to_struct_type(value_type).tag().as_string());
+  if (class_name.empty())
+    return cond;
+
+  symbolt *bool_method = find_dunder_method(class_name, "__bool__");
+  if (!bool_method)
+    return cond;
+
+  // __bool__ expects self by reference. A migrated instance is already a
+  // `Class*` pointer (pass it through); a by-value struct must be a named
+  // object whose address we take.
+  const bool object_is_ptr = cond.type().is_pointer();
+  if (!object_is_ptr && !cond.is_symbol())
+    cond = store_call_result(cond, location, "cond_obj");
+
+  side_effect_expr_function_callt bool_call;
+  bool_call.function() = symbol_expr(*bool_method);
+  bool_call.type() = to_code_type(bool_method->get_type()).return_type();
+  bool_call.location() = location;
+  bool_call.arguments().push_back(object_is_ptr ? cond : gen_address_of(cond));
+
+  exprt result = store_call_result(bool_call, location, "cond_bool");
+  result.location() = location;
+  return result;
+}
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // A walrus in a `while` test re-evaluates every iteration, but get_named_expr
@@ -4984,35 +5092,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         value_type = ns.follow(value_type.subtype());
 
       // Objects in conditions are converted with __bool__() when available.
-      if (value_type.is_struct())
-      {
-        if (const std::string class_name = extract_class_name_from_tag(
-              to_struct_type(value_type).tag().as_string());
-            !class_name.empty())
-        {
-          if (symbolt *bool_method = find_dunder_method(class_name, "__bool__"))
-          {
-            exprt bool_object = cond;
-            // __bool__ expects self by reference. A migrated instance is
-            // already a `Class*` pointer (pass it through); a by-value struct
-            // must be a named object whose address we take.
-            const bool object_is_ptr = bool_object.type().is_pointer();
-            if (!object_is_ptr && !bool_object.is_symbol())
-              bool_object =
-                store_call_result(bool_object, location, "cond_obj");
-            const code_typet &method_type =
-              to_code_type(bool_method->get_type());
-            side_effect_expr_function_callt bool_call;
-            bool_call.function() = symbol_expr(*bool_method);
-            bool_call.type() = method_type.return_type();
-            bool_call.location() = location;
-            bool_call.arguments().push_back(
-              object_is_ptr ? bool_object : gen_address_of(bool_object));
-            cond = store_call_result(bool_call, location, "cond_bool");
-            cond.location() = location;
-          }
-        }
-      }
+      cond = apply_bool_dunder(cond, location);
 
       typet list_type = type_handler_.get_list_type();
       // Python treats lists in conditions by their size, for example:
@@ -5771,6 +5851,10 @@ exprt python_converter::get_block(
 
       current_element_type = bool_type();
       exprt test = get_expr(element["test"]);
+      // An object asserted directly is truth-tested like any condition, so a
+      // class with __bool__ decides the answer. Without this `assert obj` cast
+      // the object to bool and passed whatever the dunder said.
+      test = apply_bool_dunder(test, get_location_from_decl(element));
       if (test.statement() == "cpp-throw")
       {
         test.location() = get_location_from_decl(element);
