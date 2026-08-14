@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--bitwuzla --bitwuzla-native-fp
+^VERIFICATION SUCCESSFUL$

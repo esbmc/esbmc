@@ -668,6 +668,11 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Encode floating-point as bit-vectors (default for solvers that don't "
      "support the SMT floating-point theory)"},
+    {"bitwuzla-native-fp",
+     NULL,
+     "Use Bitwuzla's SMT floating-point theory instead of ESBMC's own "
+     "bit-vector encoding (experimental: slower on the benchmarks measured, "
+     "and loses the sign of a NaN, see #7021)"},
     {"tuple-node-flattener", NULL, "Encode tuples using our tuple to node API"},
     {"tuple-sym-flattener",
      NULL,
