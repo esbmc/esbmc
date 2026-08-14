@@ -2351,3 +2351,78 @@ Baseline explained (§62); tail arms cleared for porting (§65).
 Next: §66.2 workstream 1 -- census the constructs behind the 575
 `migrate expr failed` tests, which is the same shape of work as #6899/#6907/#6921
 and now has a number attached to it.
+
+## 68. §66.2 is wrong: migration has no preconditions of its own
+
+§66.2 read 575 tests as aborting inside `migrate_expr`, called that a separate
+workstream, and put it ahead of porting arms. Measured directly -- an `fprintf`
+at `migrate_expr`'s failure site, swept under `-only` -- it is **70 tests and
+two constructs**:
+
+| construct | tests |
+|---|---:|
+| `shr` | 64 |
+| `builtin_va_arg` | 6 |
+
+### 68.1 Where the 575 came from
+
+A proxy: "output under 2 KB with `-only`, at least 2 KB flag-off". That bucket
+holds three unrelated things -- real migrate aborts, a different early error, and
+tests whose GOTO dump is simply short (`clang_builtins/nontemporal_load_*`
+complete normally and were counted as failures). The lesson is the ordinary one:
+a proxy measured because it was cheap, when the direct measurement was one
+`fprintf` away.
+
+### 68.2 And they are not preconditions -- they are unported arms
+
+Both constructs are the *input* to an arm that has not moved:
+`adjust_expr_shifts` rewrites `shr` into `ashr`/`lshr` by signedness, and
+`adjust_builtin_va_arg` lowers `builtin_va_arg` to a call. Without the arm, the
+raw form reaches `migrate_expr`, which has no case for it.
+
+The same holds for every other migration failure in the corpus. Sampling 303
+tests, 116 error under `-only`:
+
+| message | count |
+|---|---:|
+| `Function X not found` | 93 |
+| `PARSING ERROR` | 10 |
+| `shr` | 6 |
+| `cannot remove side effect (assign_shr)` | 3 |
+| `and takes boolean operands only` | 2 |
+| `sizeof node must carry a type operand and a value operand` | 1 |
+| `do_function_call: unexpected callee expression (id: member)` | 1 |
+
+`and takes boolean operands only` is `migrate.cpp:1118` firing because the
+boolean arms have not run (§58.1 noted the assert from the other direction);
+the `sizeof` arity error is `migrate.cpp:783` because `adjust_sizeof` has not
+filled the VLA operand (§55.5, likewise). So:
+
+> `migrate_expr`'s preconditions *are* "the legacy arms have run". There is no
+> separate relaxation workstream. §66.2's ordering is withdrawn.
+
+### 68.3 What to port first, on evidence
+
+`Function X not found` is 80 % of the sampled errors. That is the function-call
+path -- `adjust_side_effect_function_call` with `adjust_function_call_arguments`,
+which §63.3 already found move as one unit, and which §63's census puts at
+44 017 calls in 2 465 tests. It is both the most-executed arm and the dominant
+blocker, so it is the first thing to port rather than the last.
+
+Then `adjust_expr_shifts` (109 tests), which clears the 64 `shr` aborts and the
+`assign_shr` side-effect error with them.
+
+The `PARSING ERROR` rows are not attributed: they may fail flag-off too, and
+that was not checked.
+
+## 69. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921), comma arm at its
+dispatch point (#6992), hop-off flag (§66). Withdrawn: `adjust_comma` in the
+trailing pass (§55), the boolean arms at their dispatch point (§58), §63.2's
+test precondition (§65), §66.2's migration workstream (§68).
+
+Metric: **1 808 of 2 809 diverge** under `--clang-c-irep2-adjust-only`; 649 of
+those error, 1 159 differ silently. Next: port the function-call pair (§68.3),
+and re-measure.
