@@ -2631,3 +2631,51 @@ Next: `assign_shr`, the same class one level up. `adjust_side_effect_assignment`
 picks `assign_lshr`/`assign_ashr` from the **unpromoted** LHS type, which the
 converter also has, so option 1 applies again -- with its own default-path A/B
 and its own semantic test, since the printer is blind here too.
+
+## 76. `assign_shr`, the same decision one level up
+
+`E1 >>= E2` carries the same problem as §74's `E1 >> E2` and the same fix.
+`clang_c_convert` now emits `assign_lshr`/`assign_ashr`; the kind follows E1's
+own type, per C11 6.5.16.2p3's rewrite to `E1 = E1 >> E2`, which is what
+`adjust_side_effect_assignment` already used (`ns.follow(op0.type())` -- the
+*unpromoted* LHS type, unlike the binary case).
+
+Three details differ from §74 and each was a way to get it wrong:
+
+- **The type arrives after the switch.** A compound assignment's type comes from
+  `get_type(compop.getType(), ...)` further down, so the decision cannot sit in
+  the opcode switch. It is made where `lhs` exists, using `ns.follow(lhs.type())`
+  -- mirroring the arm exactly rather than trusting the node type to be resolved.
+- **Falling out of the dispatcher is worse here.** `adjust_side_effect_assignment`
+  ends with `gen_typecast_arithmetic(ns, op0, op1)`, which converts *both*
+  operands to a common type. For a shift E2 is a bit count, not a value in that
+  type (the reason #6924 exists), so an unrouted `assign_lshr` would not merely
+  lose a cast -- it would gain a wrong one. The condition admits the typed forms
+  and returns early for them.
+- **Solidity still emits the untyped form** (`solidity_convert_expr.cpp:3180`),
+  so the arm's rewrite stays for it. This is a C-frontend change only.
+
+### 76.1 Gate
+
+Default path byte-identical (0 of 2 809). The printer shows `>>=` whatever the
+kind, so byte-identity is again blind (§74.3) and the real gate is
+`regression/esbmc/shift_kind_compound_assign`: nondeterministic inputs, and
+assertions in **both** directions -- an unsigned value with the high bit set must
+end below `0x80000000` (false under an arithmetic shift), and a negative `int`
+must stay negative (false under a logical one).
+
+Mutating both arms kills it. That alone does not show both directions are
+covered, because ESBMC reports only the first violated property -- so the signed
+case was also run standalone against the mutant binary, where it fails on its
+own. A two-directional test can otherwise be carried entirely by one half.
+
+## 77. Status
+
+Sampled `-only` errors: **14, of which 10 are the pre-existing parse failures**
+(§72.1). Real remainder: 2 `and takes boolean operands only`, 1 `sizeof` arity,
+1 `do_function_call` member callee. Both shift classes are gone.
+
+Next: `and takes boolean operands only` -- `migrate.cpp:1118` asserting because
+the boolean arms have not run. §58.1 showed those arms' type write is dead for C
+(the converter already emits bool), so the assert is firing on operands, not on
+the node: worth reducing before assuming which.
