@@ -192,12 +192,10 @@ public:
     expr2tc orig_func_ptr_call;
 
     /**
-     * Process a block adding the width of each symbol into the stack length
-     * @param expr Expr to search for symbols.
-     * @param stack_limit to limit size for stack.
-     * @return Constrain the stack limit (lessthanequal2t)
+     * Add the storage expr occupies, in bits, to this frame's running total.
+     * @param expr Expr whose type gives the storage to account for.
      */
-    expr2tc process_stack_size(const expr2tc &expr, unsigned long stack_limit);
+    void grow_stack_frame(const expr2tc &expr);
 
     /**
      * Decrease the stack frame size when the variables go out of scope
@@ -295,6 +293,14 @@ public:
     SYMEX_INVARIANT(!call_stack.empty(), "no activation record to read");
     return call_stack.back();
   }
+
+  /**
+   *  Storage, in bits, held by every activation record currently on the call
+   *  stack. Summed on demand rather than kept as a running counter so that it
+   *  cannot drift from the frames: pop_frame, thread spawn and state merging
+   *  all copy or drop whole frames.
+   */
+  BigInt total_stack_size() const;
 
   /**
    *  Push a new fresh stack frame on the stack.
