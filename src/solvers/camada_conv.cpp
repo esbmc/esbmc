@@ -230,14 +230,33 @@ std::string wrap_smtlib_dump(std::string smt_formula)
   return dest.str();
 }
 
-/* Tuples and arrays are camada's to encode. `Native` does not mean "require the
- * theory": camada uses the backend's own theory where it has one and lowers
- * otherwise -- per-field symbols for tuples, Ackermann congruence axioms for
- * arrays -- so it already picks per backend. ESBMC used to choose here, back
- * when ESBMC owned the flatteners; nothing is left to choose. */
+/* Arrays are camada's to encode: `Native` there does not mean "require the
+ * theory" -- camada uses the backend's own where it has one and lowers to
+ * Ackermann congruence axioms otherwise, so it already picks per backend.
+ *
+ * Tuples on the SMT-LIB wire are different, and `Native` is the wrong default
+ * for them. It emits `(declare-datatypes ...)`, which only z3 and cvc5 accept
+ * (camada.h:124-131) -- and it emits them under the logic pick_logic() names,
+ * QF_AUFBV, which admits no datatypes at all. A conforming solver rejects the
+ * declaration:
+ *
+ *   (error "logic does not support algebraic datatypes")
+ *
+ * That reply is not `success`, so camada's ack reader drops the child before
+ * `(check-sat)` is ever sent -- silently, since a protocol error is
+ * indistinguishable there from an ack timeout. The visible symptom was an
+ * auxiliary model solver reported as "unavailable" (regression/bitwuzllob/
+ * mono-diverging-model), which in turn made the diverging-model check below
+ * unreachable: with no verdict from the model solver there is nothing to
+ * compare against.
+ *
+ * `Camada` lowers tuples to per-field BV/Bool symbols before anything reaches
+ * the wire, so the script stays inside the declared logic and parses in any
+ * standard SMT-LIB v2 solver. It is also what the non-native backends already
+ * use, so this is not a new code path. */
 camada::TupleEncoding pick_tuple_encoding(const optionst &)
 {
-  return camada::TupleEncoding::Native;
+  return camada::TupleEncoding::Camada;
 }
 
 camada::ArrayEncoding pick_array_encoding(const optionst &)
