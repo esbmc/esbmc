@@ -370,6 +370,49 @@ void goto_symext::symex_function_call(const expr2tc &code)
     symex_function_call_deref(code);
 }
 
+/// Ackermannise rather than drop congruence outright: for every earlier
+/// application of this callee, assume equal arguments imply an equal result.
+/// That is the defining property of an uninterpreted function, and stating it
+/// here keeps the tuple-sorted symbol out of the solver (GitHub #6965). Sound:
+/// it rules out only non-functional behaviour. It needs operands the encoding
+/// can compare, so aggregates still fall through uncongruent.
+void goto_symext::assume_uf_congruence(
+  const irep_idt &identifier,
+  const irep_idt &name,
+  const std::vector<expr2tc> &arguments,
+  const expr2tc &result,
+  const type2tc &ret_type)
+{
+  auto comparable = [](const type2tc &t) {
+    return is_number_type(t) || is_pointer_type(t);
+  };
+  bool congruent = comparable(ret_type);
+  for (const expr2tc &argument : arguments)
+    congruent = congruent && comparable(argument->type);
+
+  if (!congruent)
+  {
+    log_debug(
+      "symex",
+      "uninterpreted function '{}' has an incomparable signature; modelling "
+      "its result as unconstrained nondet (no functional congruence)",
+      name);
+    return;
+  }
+
+  for (const auto &previous : uf_applications[identifier])
+  {
+    if (previous.first.size() != arguments.size())
+      continue;
+    expr2tc same_args = gen_true_expr();
+    for (size_t i = 0; i < arguments.size(); i++)
+      same_args =
+        and2tc(same_args, equality2tc(arguments[i], previous.first[i]));
+    assume(implies2tc(same_args, equality2tc(result, previous.second)));
+  }
+  uf_applications[identifier].emplace_back(arguments, result);
+}
+
 bool goto_symext::symex_uninterpreted_function(
   const code_function_call2t &call,
   const irep_idt &identifier)
@@ -421,9 +464,8 @@ bool goto_symext::symex_uninterpreted_function(
   // and which aborts the solver backend (GitHub #5369; the CBMC aws-c-common
   // harnesses hit this with a `const void *` hasher/equals argument). When any
   // argument or the result is non-scalar, fall back to a fresh nondeterministic
-  // result. This is a sound over-approximation: it drops only the functional-
-  // congruence constraint (equal arguments need no longer imply an equal
-  // result), never adding behaviour, and the body is still discarded.
+  // result, and recover congruence explicitly where the operands are still
+  // comparable (below).
   bool uf_encodable = is_number_type(call.ret->type);
   for (const expr2tc &argument : arguments)
     uf_encodable = uf_encodable && is_number_type(argument->type);
@@ -442,11 +484,6 @@ bool goto_symext::symex_uninterpreted_function(
   }
   else
   {
-    log_debug(
-      "symex",
-      "uninterpreted function '{}' has a non-scalar signature; modelling its "
-      "result as unconstrained nondet (no functional congruence)",
-      name);
     result = sideeffect2tc(
       call.ret->type,
       expr2tc(),
@@ -455,6 +492,8 @@ bool goto_symext::symex_uninterpreted_function(
       type2tc(),
       sideeffect2t::allockind::nondet);
     replace_nondet(result);
+
+    assume_uf_congruence(identifier, name, arguments, result, call.ret->type);
   }
 
   symex_assign(code_assign2tc(call.ret, result));
@@ -1100,15 +1139,8 @@ void goto_symext::symex_return(const expr2tc &code)
 
   // check whether the stack limit and return
   // value optimization have been activated.
-  if (stack_limit > 0 && no_return_value_opt)
-  {
-    code->foreach_operand([this](const expr2tc &e) {
-      // check whether the stack size has been reached.
-      claim(
-        (cur_state->top().process_stack_size(e, stack_limit)),
-        "Stack limit property was violated");
-    });
-  }
+  if (stack_checks_enabled() && no_return_value_opt)
+    code->foreach_operand([this](const expr2tc &e) { check_stack_size(e); });
 
   // kill this one
   cur_state->guard.make_false();

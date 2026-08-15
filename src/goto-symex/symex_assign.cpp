@@ -42,6 +42,7 @@ goto_symext::goto_symext(
     cur_state(nullptr),
     no_return_value_opt(options.get_bool_option("no-return-value-opt")),
     stack_limit(atol(options.get_option("stack-limit").c_str())),
+    total_stack_limit(atol(options.get_option("total-stack-limit").c_str())),
     depth_limit(atol(options.get_option("depth").c_str())),
     break_insn(atol(options.get_option("break-at").c_str())),
     memory_leak_check(options.get_bool_option("memory-leak-check")),
@@ -211,10 +212,12 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   dyn_info_arr_name = sym.dyn_info_arr_name;
 
   dynamic_memory = sym.dynamic_memory;
+  uf_applications = sym.uf_applications;
   va_started = sym.va_started;
   interval_domain_state = sym.interval_domain_state;
 
   stack_limit = sym.stack_limit;
+  total_stack_limit = sym.total_stack_limit;
   no_return_value_opt = sym.no_return_value_opt;
   validate_witness = sym.validate_witness;
 
