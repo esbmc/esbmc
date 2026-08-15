@@ -268,6 +268,38 @@ at read time cannot beat not shipping the bytes down that path at all.
 **Exit:** a C task's deserialise+deps time down by ≥24 % (more, per §2.4), no
 verdict change in any suite, and Python/Solidity/C++ regressions unchanged.
 
+**Shipped as [#7058](https://github.com/esbmc/esbmc/pull/7058)** (Python half;
+`libm` not attempted). `py64` and `py64_fp` are built the way `sol64` is, and
+`clib64_fp.goto` drops from 3,369,011 to 2,348,422 bytes — **−30 %**.
+Interleaved A/B against the same build without the split:
+
+| program | wall | GOTO creation |
+|---|---|---|
+| `int main(void){return 0;}` (14 pairs) | 0.760 | **0.720** |
+| trivial Python (12 pairs) | 0.959 | **0.960** |
+
+**Exit met, and G2's worry did not materialise**: the plan expected Python to
+be flat at best, since it now reads two blobs, and it gains 4 %.
+
+Two things this cost that the sketch above did not anticipate:
+
+- **The split is not self-contained, so read order became load-bearing.**
+  `sol64` holds only Solidity symbols; the Python models call libc, libm and
+  the pthread helpers. `contextt::add` silently rejects duplicates, so clib is
+  read *first* (its definitions win) and a nil declaration carried by the
+  models' headers is dropped when clib holds the body in `ignored_ctx` — adding
+  it would shadow the definition the dependency closure then cannot reach. Get
+  that order backwards and libc bodies silently become declarations: a verdict
+  change, not a crash, which is what G1 exists to catch.
+- **Measurement discipline decided the outcome.** Single runs on a loaded host
+  said the split made C 45 % *slower* and Python 2.2× slower. Interleaved on
+  the same host at the same moment: ×0.72 and ×0.96. The numbers that looked
+  like a reason to revert were an artefact of a load average of 33.
+
+**Not done here:** the `libm` half (1,002 symbols, 26 %), which needs the same
+treatment behind `ENABLE_LIBM` and is a bigger question — unlike the Python
+models, libm is reachable from ordinary C.
+
 ### W2 — Make the blob indexable, so loading is O(used) not O(total)
 
 The end state the issue asks for: seek to the symbols a task needs. Today this
