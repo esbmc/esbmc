@@ -1,20 +1,14 @@
 import ast
 from typing import Dict, Any
-from .dataflow_solver import analyze_function, infer_type_from_expr
+from .dataflow_solver import analyze_function, infer_type_from_expr, collect_known_classes, InferenceContext
 from .lattice import *
 
-import ast
-from typing import Dict, Any
-from .dataflow_solver import analyze_function, infer_type_from_expr
-from .lattice import *
 
-def derive_param_and_return_types(func_node: ast.FunctionDef, out_envs: list):
+
+
+def derive_param_and_return_types(func_node: ast.FunctionDef, out_envs: list, context: InferenceContext):
     # derive return types by scanning Return nodes in the function body and infer their expr types
-    ret_type = Unknown()
-    for node in ast.walk(func_node):
-        if isinstance(node, ast.Return) and node.value is not None:
-            t = infer_type_from_expr(node.value, {})  # limited: no env here
-            ret_type = t if isinstance(ret_type, Unknown) else ret_type.join(t)
+    
     # merge out_envs for params
     merged = {}
     for be in out_envs:
@@ -23,6 +17,15 @@ def derive_param_and_return_types(func_node: ast.FunctionDef, out_envs: list):
                 merged[k] = merged[k].join(v)
             else:
                 merged[k] = v
+
+    ret_type = Unknown()
+    #context = InferenceContext(known_classes=known_classes,)
+    
+    for node in ast.walk(func_node):
+        if isinstance(node, ast.Return) and node.value is not None:
+            t = infer_type_from_expr(node.value, {}, context)  # limited: no env here
+            ret_type = t if isinstance(ret_type, Unknown) else ret_type.join(t)
+
     param_types = {}
     for arg in func_node.args.args:
         param_types[arg.arg] = merged.get(arg.arg, Unknown())
@@ -111,8 +114,10 @@ def is_lambda_assignment(stmt):
         and isinstance(stmt.value, ast.Lambda)
     )    
 
-def annotate_function_with_env_and_signatures(func_node, out_envs):
-    param_types, ret_type = derive_param_and_return_types(func_node, out_envs)
+def annotate_function_with_env_and_signatures(func_node, out_envs, context: InferenceContext):
+    #context = InferenceContext(known_classes=known_classes)
+    
+    param_types, ret_type = derive_param_and_return_types(func_node, out_envs, context,)
 
     annotate_parameters(func_node, param_types)
     annotate_return(func_node, ret_type)
@@ -148,22 +153,26 @@ def is_typed_assignment(stmt, merged):
         and not isinstance(merged[stmt.targets[0].id], Unknown)
     )
 
-def annotate_module_with_outenvs(module_node: ast.Module, out_envs_map):
+def annotate_module_with_outenvs(module_node: ast.Module, out_envs_by_func, context: InferenceContext, ):
     for node in module_node.body:
         if isinstance(node, ast.FunctionDef):
-            if node.name in out_envs_map:
-                out_envs = out_envs_map[node.name]
-                annotate_function_with_env_and_signatures(node, out_envs)
+            if node.name in out_envs_by_func:
+                out_envs = out_envs_by_func[node.name]
+                annotate_function_with_env_and_signatures(node, out_envs, context)
     return module_node
 
 def annotate_ast(ast_node, opts=None):
+    known_classes = collect_known_classes(ast_node)
+    context = InferenceContext(known_classes=known_classes, )
     out_envs_by_func = {}
+    inferred_types_by_func = {}
     for node in ast_node.body:
         if isinstance(node, ast.FunctionDef):
-            cfg, in_envs, out_envs = analyze_function(node)
+            cfg, in_envs, out_envs = analyze_function(node, context)
             print(cfg)
             print(out_envs)
             out_envs_by_func[node.name] = out_envs
-    annotate_module_with_outenvs(ast_node, out_envs_by_func)
+            param_types, ret_type = derive_param_and_return_types(node, out_envs, context,)
+    annotate_module_with_outenvs(ast_node, out_envs_by_func, context, )
     ast.fix_missing_locations(ast_node)
     return ast_node
