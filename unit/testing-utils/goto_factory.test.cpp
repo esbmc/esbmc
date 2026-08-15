@@ -63,6 +63,15 @@ std::vector<std::string> stage_and_list_leftovers(F &&stage)
   auto sandbox = file_operations::create_tmp_dir("esbmc-test-sandbox-%%%%");
   {
     tmpdir_override tmpdir(sandbox.path());
+
+    /* A staging path that stopped honouring the override would leave the
+     * sandbox empty and the check below green, so pin that a directory named
+     * the way goto_factory names its own lands here. */
+    file_operations::tmp_path probe(
+      file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
+    REQUIRE(
+      fs::equivalent(fs::path(probe.path()).parent_path(), sandbox.path()));
+
     program p = stage();
     REQUIRE(
       p.functions.function_map.find("c:@F@main") !=
