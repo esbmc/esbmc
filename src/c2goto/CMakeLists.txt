@@ -384,6 +384,12 @@ function(model_vfs_paths output)
   set(result "")
   foreach(f ${ARGN})
     file(RELATIVE_PATH rel "${CMAKE_CURRENT_SOURCE_DIR}/library" "${f}")
+    # An input outside library/ escapes the prefix the mangles register, so the
+    # VFS path would resolve to nothing and only surface as c2goto failing to
+    # open it.
+    if(rel MATCHES "^\\.\\.(/|$)")
+      message(FATAL_ERROR "c2goto model source outside library/: ${f}")
+    endif()
     list(APPEND result "${vfs_root}/libc/library/${rel}")
   endforeach()
   set(${output} "${result}" PARENT_SCOPE)
