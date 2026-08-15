@@ -5861,6 +5861,60 @@ afternoon rediscovering it.
 
 ---
 
+### M9 (dereferencet agreement) — 2026-08-15, the other half of the coupling, checked
+
+R31's material argued that the descriptor-to-field-path problem is solved twice
+in ESBMC — once by the value set, once by `dereferencet` — and that the pair
+agreeing is held by nothing but convention. The value set's half is now pinned
+by `unit/util/type_byte_size.test.cpp`. This entry checks the other half against
+the *same shapes that broke it*, at verdict level: write through a punned
+pointer, read the sub-object back by its declared path, assert they agree.
+
+**Ten shapes, all correct**, each with both an inverted-assertion twin and an
+`assert(0)` reachability twin:
+
+| Shape | Byte | Result |
+|---|---|---|
+| `struct S { long pad; int *v[2]; }`, `&s.v[1]` — R33's composition | 16 | correct |
+| the same, read direction | 16 | correct |
+| member offset alone, `&s.v[0]` | 8 | correct |
+| element offset alone, no pad, `&s.v[1]` | 8 | correct |
+| symbolic index, `&s.v[i]`, `i` nondet and assumed in range — R32's shape | — | correct |
+| symbolic offset by `char *` arithmetic, `(char *)&s + 8 + i * 8` | — | correct |
+| `struct Outer { long pad; struct Inner in[2]; }`, `&o.in[1].q[1]` | 48 | correct |
+| the same at `&o.in[0].q[1]` | 24 | correct |
+| union member through a pun | 8 | correct |
+
+Every one reads an `int *` object through an `int **`, which is the object's own
+type, so C11 **6.5p7** is satisfied and none of this is a strict-aliasing test —
+unlike the two shapes §15 M9 (census re-run) had to set aside.
+
+**So the coupling is real but not currently broken.** That is worth stating
+precisely: it is not evidence that `dereferencet` cannot drift from the value
+set, only that on the shapes that actually broke one, the other is right. The
+pair is pinned going forward by
+`regression/esbmc/deref_punned_member_index{,_fail}`.
+
+**A false finding, and the harness bug behind it.** The first run of this probe
+reported `assert(0)` proving `SUCCESSFUL` on two straight-line programs — a
+false-SUCCESSFUL of the most serious kind, and it was reproduced on master
+before being believed, which is the right instinct applied to a wrong result.
+It was neither. The variants were generated with `sed 's/== &g)/!= \&g)/'`, and
+those two inputs had been written compactly as `s.v[0]==&g`, with no spaces. The
+pattern never matched, `sed` reported nothing, and the "mutant" was a byte-copy
+of the original — so the *same passing program* was run three times and read as
+three results. The rewritten harness selects its variant with `-D` at compile
+time (`PROBE_NEG`, `PROBE_REACH`), which cannot silently fail to apply: a
+misspelt macro changes no behaviour and the twin visibly stops failing.
+
+The lesson generalises past `sed`. §15 M8's rule was that a detector which
+cannot fail teaches nothing; this adds that **a mutation which cannot be
+observed to have applied is not a mutation**. Both anti-vacuity twins here exist
+to catch the ordinary vacuity — an unreachable assertion — and neither would
+have caught this, because the fault was upstream of the tool entirely.
+
+---
+
 ## Appendix A — Methodological basis
 
 - **Design by contract.** Every harness is precondition (`__ESBMC_assume`) →
