@@ -171,9 +171,9 @@ function(mangle_clib output)
       list(APPEND inputs_c ${c2goto_libm_files})
     endif()
 
-    if(ENABLE_PYTHON_FRONTEND)
-      list(APPEND inputs_c ${c2goto_python_files})
-    endif()
+    # Python models are built as a separate pair of goto binaries (py64,
+    # py64_fp) below, NOT mixed into clib, so a C or C++ run does not
+    # deserialise them (#6831).
 
     # C++ operational models (esbmc/esbmc#5298): compiled by the C++ frontend
     # registered in c2goto and serialized into the clib alongside the C models.
@@ -192,7 +192,7 @@ function(mangle_clib output)
     # Convert a list of C operational models (e.g. *.c) into a single goto binary file (e.g. clib32.goto) at CMake build time
     add_custom_command(OUTPUT ${out_goto}
       COMMAND ${run_c2goto}
-      DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files} ${c2goto_header_files} ${c2goto_python_files} ${c2goto_cpp_files}
+      DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files} ${c2goto_header_files} ${c2goto_cpp_files}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Generating libc model ${out_goto}"
       VERBATIM
