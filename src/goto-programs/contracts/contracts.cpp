@@ -1116,6 +1116,15 @@ void code_contractst::havoc_function_parameters(
   }
 }
 
+// Python module-level globals carry static_lifetime=false so the C-side
+// static-init pass does not const-propagate them (converter_stmt.cpp). They are
+// still program-wide state a replaced call can write, and rw_set.cpp:180
+// already recognises them by this rule.
+static bool is_python_module_global(const symbolt &s)
+{
+  return s.mode == "Python" && !s.file_local;
+}
+
 void code_contractst::havoc_static_globals(
   goto_programt &dest,
   const locationt &location)
@@ -1127,7 +1136,7 @@ void code_contractst::havoc_static_globals(
       return;
 
     // Only process static lifetime variables (globals and static locals)
-    if (!s.static_lifetime)
+    if (!s.static_lifetime && !is_python_module_global(s))
       return;
 
     // Skip internal ESBMC symbols
