@@ -2730,3 +2730,53 @@ Next: the `sizeof` arity error. `migrate.cpp:783` aborts on a one-operand
 arm blocked on exactly this, from the other direction. That makes it a migration
 ordering question like §72's `shr`, not a port: check whether the converter can
 supply the value operand before assuming the arm must.
+
+## 80. The VLA `sizeof` operand: compute in migration, not in the converter
+
+`migrate.cpp` aborts on a one-operand `sizeof`. The frontend emits that shape
+for a VLA -- clang cannot evaluate a non-constant size -- and
+`clang_c_adjust::adjust_sizeof` fills the value in. Under `-only` that pass does
+not run, so the node dies before anything can fix it.
+
+### 80.1 The converter cannot do it, measured
+
+§79 asked whether the converter could supply the operand, since `adjust_sizeof`
+does not need a constant either: it calls `c_sizeof(measured, ns)`, and
+`clang_c_convertert` has an `ns`. Tried, and it moves the default path on four
+VLA tests (`github_588`, `github_588_1`, `cwe_excessive_alloc_vla{,_pass}`).
+
+The arm calls `adjust_type(measured)` *before* `c_sizeof`, so it measures a
+resolved type; at conversion the symbols are not resolved yet and the resulting
+expression differs. Reverted.
+
+### 80.2 Migration can, and the distinction is the point
+
+`migrate_expr` computing the size is **default-path-neutral by construction**:
+the adjuster fills the operand first, so the normal pipeline never reaches a
+one-operand `sizeof`. Confirmed empirically as well -- 0 of 2 809 on the default
+path, shadow unchanged at 2.
+
+This draws a line §72 left implicit:
+
+> Migration may **compute** what is a pure function of information the node
+> already carries. It may not **decide** something that depends on an adjustment
+> having run.
+
+`c_sizeof` of the measured type is the first: derivable wherever the type is.
+The `shr` kind is the second: correct only after integer promotion. That is why
+§72 refused one and §80 permits the other, and it is a usable test for the
+remaining constructs rather than a case-by-case judgement.
+
+Fail-closed behaviour is kept: an empty operand list still aborts, and so does a
+one-operand node whose size `c_sizeof` cannot build.
+
+## 81. Status
+
+Sampled `-only` errors: **11, of which 10 are the pre-existing parse failures**
+(§72.1). **One real error left**: `do_function_call: unexpected callee
+expression (id: member)`, in `llvm/struct_method`.
+
+Next: that one. It is a C++ shape reaching the C driver (a member callee), so
+the first question is whether `llvm/struct_method` is a C test at all -- §63.1
+found two arms that are C++-only and must not be claimed verified on this
+corpus.
