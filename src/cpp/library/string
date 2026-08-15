@@ -1244,8 +1244,11 @@ __ESBMC_HIDE:
 }
 
 template <typename CharT, typename Traits, typename Alloc>
-inline ostream &operator<<(ostream &o, basic_string<CharT, Traits, Alloc>)
+inline ostream &
+operator<<(ostream &o, const basic_string<CharT, Traits, Alloc> &s)
 {
+  if (!o._discard())
+    o._put_field(s.c_str(), s.size());
   return o;
 }
 
