@@ -5807,6 +5807,60 @@ and a second caller should arrive with its own test rather than be anticipated.
 
 ---
 
+### M9 (byte_extract census) — 2026-08-15, the probe that found no defect because it found no code
+
+R31, R32 and R33 were each an arm of the value set failing to compose an offset,
+so the next probe went to the arm that composes least.
+`get_reference_set_rec`'s **`byte_extract2t` arm** (`value_set.cpp:1338-1353` at
+`fd6f75d923`) neither recurses into `source_value` nor composes an offset — it
+calls `insert(dest, extract.source_value, o)` directly with the extract's own
+offset, where the member arm does `get_reference_set(memb.source_value, …)` and
+then `o.offset += offset_in_bytes`, and the index arm has done the same since
+R33. On shape alone it is R33 before its fix.
+
+**It is never entered.** Counters compiled into four arms of the function and
+swept over **1,197** sources from `regression/esbmc-unix`, `regression/esbmc`
+and `regression/esbmc-cpp/cpp`:
+
+| Arm | Calls | Files |
+|---|---|---|
+| `get_reference_set_rec` entry | 152,478 | 790 of 1,197 |
+| index | 15,538 | 598 |
+| member | 470 | 37 |
+| **`byte_extract`** | **0** | **0** |
+| `assign_rec`'s `byte_extract` lhs arm (`:1721`) | **0** | **0** |
+
+Twelve hand-written shapes aimed at the arm — `char *` arithmetic into a struct,
+misaligned punned writes, union punning, an array element read as `short`, a
+`struct` overlaid on `long buf[]`, `memcpy` into a local buffer, and the C++
+`reinterpret_cast` spelling of the first — add **0** more.
+
+The entry and index counters are the control that makes the zero a measurement
+rather than dead instrumentation, and the first attempt at this sweep was
+exactly that mistake: run under `--goto-functions-only`, which exits before
+symex ever starts, it reported 0 for *every* arm across 427 files — a clean,
+confident, entirely vacuous result. The control is not a formality.
+
+**The one route that looked like it would feed the arm provably does not.** An
+assignment whose lhs is a `byte_extract` is handled at `value_set.cpp:1721` by
+`assign_rec(to_byte_extract2t(lhs).source_value, …)`, recursing on
+`source_value` directly and bypassing `get_reference_set_rec` altogether. That
+is the *same* non-composing shortcut the dead arm takes, which is the part worth
+keeping: both places that handle a byte-extract lvalue decline to compose, and
+the live one gets away with it by reaching its base through recursion instead.
+
+**Verdict: no defect, and the hypothesis is unwitnessable rather than refuted.**
+If the arm does mis-compose, nothing measured here can show it, because nothing
+reaches it. It is the strongest dead-code candidate in the function — and it
+**stays**. §14 item 8 is explicit that C-Dead cannot be discharged on `src/**`:
+the file does not parse (G9), and a corpus sweep is evidence of non-coverage,
+never a proof of unreachability. Deleting a branch on the strength of 1,197
+files of silence is precisely the "deletion drops live behaviour" regression the
+rule exists to prevent. Recorded so the next reader does not spend the same
+afternoon rediscovering it.
+
+---
+
 ## Appendix A — Methodological basis
 
 - **Design by contract.** Every harness is precondition (`__ESBMC_assume`) →
