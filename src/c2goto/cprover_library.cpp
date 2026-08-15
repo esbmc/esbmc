@@ -9,6 +9,7 @@
 #include <goto-programs/goto_binary_reader.h>
 #include <util/symtab/context.h>
 #include <util/message/message.h>
+#include <util/base/time_stopping.h>
 #include <util/lang/c_link.h>
 #include <util/config/config.h>
 #include <util/lang/language.h>
@@ -519,15 +520,22 @@ void add_cprover_library(contextt &context, const languaget *language)
    *    - ignored_ctx empty
    */
   contextt ignored_ctx;
+  fine_timet read_start = current_time();
   if (goto_reader.read_goto_binary_array(
         lib_start, lib_size, new_ctx, ignored_ctx))
     abort();
+  fine_timet read_stop = current_time();
 
   // Traverse symbols and get dependencies from both their nested types and values
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
     generate_symbol_deps(s.id, s.get_value(), symbol_deps);
     generate_symbol_deps(s.id, s.get_type(), symbol_deps);
   });
+  fine_timet deps_stop = current_time();
+
+  // The whitelist path scans again for every symbol it pulls out of
+  // ignored_ctx; bill that to the scan rather than to selection.
+  fine_timet deps_extra = 0;
 
   // Add two hacks; we might use either pthread_mutex_lock or the checked
   // variant; so if one version is used, pull in the other too.
@@ -601,13 +609,18 @@ void add_cprover_library(contextt &context, const languaget *language)
 
       if (uses_whitelist)
       {
+        fine_timet scan_start = current_time();
         generate_symbol_deps(s->id, s->get_value(), symbol_deps);
         generate_symbol_deps(s->id, s->get_type(), symbol_deps);
+        deps_extra += current_time() - scan_start;
       }
 
       ingest_symbol(*nameit, symbol_deps, to_include);
     }
   }
+
+  fine_timet select_stop = current_time();
+  unsigned int kept = store_ctx.size();
 
   // Bring store_ctx symbols into context
   if (c_link(context, store_ctx, "<built-in-library>"))
@@ -616,6 +629,23 @@ void add_cprover_library(contextt &context, const languaget *language)
     log_error("Failed to merge C library");
     abort();
   }
+  fine_timet link_stop = current_time();
+
+  // Solidity loads two blobs per run, so the name is what tells the two lines
+  // apart. regression/{esbmc,python}/library_fixed_cost_budget match this
+  // format; keep them in step with it.
+  log_debug(
+    "c2goto",
+    "operational-model library ({}): {} symbols present, {} kept; "
+    "deserialise {}s, dependency scan {}s, select {}s, link {}s",
+    is_solidity ? "sol64" : "clib",
+    new_ctx.size() + ignored_ctx.size(),
+    kept,
+    time2string(read_stop - read_start),
+    time2string(deps_stop - read_stop + deps_extra),
+    time2string(select_stop - deps_stop - deps_extra),
+    time2string(link_stop - select_stop));
+
   // We basically need a place where we know that ESBMC produces the "main" executable that will be run.
   // This is the best place that I've found and mimics how a real compiler would work:
   // First compile all source files to objects files, then link them together and then link with the libc
