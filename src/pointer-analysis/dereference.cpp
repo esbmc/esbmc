@@ -55,7 +55,6 @@ static inline expr2tc get_base_dereference(const expr2tc &e)
   }
 }
 
-
 static inline expr2tc replace_dyn_offset_with_zero(const expr2tc &e)
 {
   // Knowing the offset value is important when we try to
