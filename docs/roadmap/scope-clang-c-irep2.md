@@ -2780,3 +2780,54 @@ Next: that one. It is a C++ shape reaching the C driver (a member callee), so
 the first question is whether `llvm/struct_method` is a C test at all -- §63.1
 found two arms that are C++-only and must not be claimed verified on this
 corpus.
+
+## 82. The function-pointer callee, and the sample reaching zero
+
+`llvm/struct_method` is plain C -- a function-pointer struct member called as
+`x.update()` -- so §81's scope question is answered: this is Phase 6 work, not
+one of §63.1's C++-only arms.
+
+`goto_convert`'s `do_function_call` accepts a symbol or a dereference as callee.
+`adjust_side_effect_function_call` ends with an implicit-dereference step that
+wraps a pointer-typed callee; without it the `member` node arrives bare. The
+rewrite is driven only by the callee's type, depends on no adjustment, and the
+failure surfaces after migration -- so by §80's rule it belongs in the native
+pass, and that is where it went.
+
+The arm also unwraps an *implicit* `address_of` callee. `address_of2t` carries
+no `implicit` flag, so that half is deliberately not mirrored: it would have to
+be guessed, and guessing it wrong is silent. If it matters it will appear as a
+divergence or an error, not as a bad rewrite.
+
+### 82.1 Where the metric now stands
+
+| | before this series | now |
+|---|---:|---:|
+| `-only` divergences | 1 808 | **1 623** |
+| `-only` errors | 304 | **185** |
+| sampled *real* errors | 14 | **0** |
+
+The sample's remaining 10 are §72.1's pre-existing parse failures, which fail
+flag-off too. Every error the sample can see is now either fixed or not ours --
+which means the sample has stopped being a useful instrument and the full-corpus
+185 is the number to work from.
+
+### 82.2 Gate
+
+Default path 0 of 2 809; shadow unchanged at 2.
+`regression/esbmc/irep2_only_fnptr_callee` pins the dereferenced callee, and
+disabling the rewrite reproduces the original `unexpected callee expression`
+error and fails the test.
+
+The test pins *only* the callee, not the surrounding output: `-only` still
+mislowers other parts of that function (`OTHER A` where an assignment belongs),
+and freezing that would pin the bugs the remaining arms still have.
+
+## 83. Status
+
+`-only`: **1 623 of 2 813 diverge, 185 error**. Shadow: 2, both the §62 VLA
+defect. Default path unchanged throughout.
+
+Next: the 185 need re-classifying by message before picking a target -- the
+303-test sample is exhausted (§82.1), so the next step is the full-corpus
+equivalent of §68's error census rather than another reduction.

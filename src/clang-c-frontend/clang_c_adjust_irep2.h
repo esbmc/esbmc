@@ -73,6 +73,13 @@ private:
   /// walk migrates once and does not round-trip per node (§78).
   void adjust_boolean_operands(expr2tc &expr);
 
+  /// IREP2 form of the "do implicit dereference" step of
+  /// clang_c_adjust::adjust_side_effect_function_call: goto_convert's
+  /// do_function_call accepts a symbol or a dereference, so a pointer-typed
+  /// callee -- a function-pointer struct member, say -- must be dereferenced
+  /// first (§82).
+  void adjust_call_callee(expr2tc &expr);
+
   contextt &context;
   const bool sole_adjuster;
   namespacet ns{context};
