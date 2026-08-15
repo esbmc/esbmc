@@ -2067,18 +2067,51 @@ materialize_arange_float(double start, double stop, double step)
   return node;
 }
 
-static std::optional<nlohmann::json>
-materialize_arange(const nlohmann::json &args)
+// Keeps the fast literal-materialization path itself cheap and any
+// downstream verification within the regression suite's timeout: a range
+// with more elements than this still hits the pre-existing ADR-NP-004
+// scalability wall documented in the numpy roadmap (arrays are fully
+// unrolled) whether materialized here or via the operational model, so
+// declining early avoids building an oversized literal list up front (e.g.
+// np.arange(1000000) would otherwise allocate a million-element JSON list
+// unconditionally, before any downstream cost is even considered).
+static constexpr std::size_t max_materialized_arange_elements = 10000;
+
+enum class arange_decline_reason
 {
-  if (args.empty() || args.size() > 3)
-    return std::nullopt;
+  none,
+  bad_arity,
+  non_constant,
+  zero_step,
+  too_many_elements,
+};
+
+struct arange_materialize_result
+{
+  std::optional<nlohmann::json> list;
+  arange_decline_reason reason = arange_decline_reason::none;
+};
+
+static arange_materialize_result
+materialize_arange_ex(const nlohmann::json &args)
+{
+  arange_materialize_result result;
+  if (!args.is_array() || args.empty() || args.size() > 3)
+  {
+    result.reason = arange_decline_reason::bad_arity;
+    return result;
+  }
+
   std::vector<numeric_value> values;
   values.reserve(args.size());
   for (const auto &a : args)
   {
     numeric_value v;
     if (!try_extract_numeric_constant(a, v))
-      return std::nullopt;
+    {
+      result.reason = arange_decline_reason::non_constant;
+      return result;
+    }
     values.push_back(v);
   }
 
@@ -2094,7 +2127,18 @@ materialize_arange(const nlohmann::json &args)
     step_v = values[2];
 
   if (to_double(step_v) == 0.0)
-    return std::nullopt;
+  {
+    result.reason = arange_decline_reason::zero_step;
+    return result;
+  }
+
+  const double count =
+    std::ceil((to_double(stop_v) - to_double(start_v)) / to_double(step_v));
+  if (count > static_cast<double>(max_materialized_arange_elements))
+  {
+    result.reason = arange_decline_reason::too_many_elements;
+    return result;
+  }
 
   // Matches the real arange() creation path: an int dtype unless any
   // argument is float.
@@ -2102,36 +2146,18 @@ materialize_arange(const nlohmann::json &args)
     std::any_of(values.begin(), values.end(), [](const numeric_value &v) {
       return !v.is_int;
     });
-  if (!any_float)
-    return materialize_arange_int(
-      start_v.int_value, stop_v.int_value, step_v.int_value);
-
-  return materialize_arange_float(
-    to_double(start_v), to_double(stop_v), to_double(step_v));
+  result.list = any_float
+                  ? materialize_arange_float(
+                      to_double(start_v), to_double(stop_v), to_double(step_v))
+                  : materialize_arange_int(
+                      start_v.int_value, stop_v.int_value, step_v.int_value);
+  return result;
 }
 
-// True when args are all-constant arange() arguments whose step evaluates to
-// exactly zero. Checked separately from materialize_arange() so a zero step
-// can raise NumPy's actual ValueError instead of the generic "non-constant
-// input" TypeError every other decline reason gets.
-static bool arange_constant_args_have_zero_step(const nlohmann::json &args)
+static std::optional<nlohmann::json>
+materialize_arange(const nlohmann::json &args)
 {
-  if (!args.is_array() || args.empty() || args.size() > 3)
-    return false;
-
-  std::vector<numeric_value> values;
-  values.reserve(args.size());
-  for (const auto &a : args)
-  {
-    numeric_value v;
-    if (!try_extract_numeric_constant(a, v))
-      return false;
-    values.push_back(v);
-  }
-
-  const numeric_value step_v =
-    values.size() == 3 ? values[2] : make_int_value(1);
-  return to_double(step_v) == 0.0;
+  return materialize_arange_ex(args).list;
 }
 
 // The structural/receiver checks materialize_numpy_constructor_array() needs
@@ -5106,25 +5132,39 @@ exprt numpy_call_expr::get_arange_expr()
   // with build_static_lists, disabled the same way full()/eye()/identity()/
   // linspace() already do it -- a plain static array here would not
   // compare equal to a `[]`-literal PyListObj.
-  if (
-    std::optional<nlohmann::json> materialized =
-      materialize_arange(resolved_args))
+  const arange_materialize_result result = materialize_arange_ex(resolved_args);
+  if (result.list)
   {
     const bool old_build_static_lists = converter_.build_static_lists;
     converter_.build_static_lists = false;
-    exprt result = converter_.get_expr(*materialized);
+    exprt expr = converter_.get_expr(*result.list);
     converter_.build_static_lists = old_build_static_lists;
     if (converter_.current_lhs)
     {
-      converter_.current_lhs->type() = result.type();
+      converter_.current_lhs->type() = expr.type();
       converter_.update_symbol(*converter_.current_lhs);
     }
-    return result;
+    return expr;
   }
 
-  if (arange_constant_args_have_zero_step(resolved_args))
+  switch (result.reason)
+  {
+  case arange_decline_reason::bad_arity:
+    throw std::runtime_error(
+      "TypeError: numpy.arange() expects 1 to 3 arguments");
+  case arange_decline_reason::zero_step:
     throw std::runtime_error(
       "ValueError: numpy.arange() step must not be zero");
+  case arange_decline_reason::too_many_elements:
+    throw std::runtime_error(
+      "TypeError: numpy.arange() range exceeds the supported element limit "
+      "of " +
+      std::to_string(max_materialized_arange_elements));
+  case arange_decline_reason::non_constant:
+  case arange_decline_reason::none:
+  default:
+    break;
+  }
 
   // Non-constant arguments (e.g. a function parameter) cannot be
   // materialized this way; falling back to the operational model here
