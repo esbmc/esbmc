@@ -828,6 +828,19 @@ static expr2tc migrate_builtin_va_arg(const exprt &expr)
   return lowered;
 }
 
+/// The rounding mode a legacy `ieee_*` node carries. The frontends leave it
+/// implicit on most of them, in which case it is the global symbol.
+static expr2tc migrate_rounding_mode(const exprt &expr)
+{
+  expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+
+  exprt old_rm = expr.find_expr("rounding_mode");
+  if (old_rm.is_not_nil())
+    migrate_expr(old_rm, rm);
+
+  return rm;
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -945,14 +958,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc old_expr;
     migrate_expr(expr.op0(), old_expr);
 
-    // Default to rounding mode symbol
-    expr2tc rounding_mode =
-      symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rounding_mode);
+    const expr2tc rounding_mode = migrate_rounding_mode(expr);
 
     new_expr_ref = typecast2tc(type, old_expr, rounding_mode);
     return;
@@ -978,14 +984,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc old_expr;
     migrate_expr(expr.op0(), old_expr);
 
-    // Default to rounding mode symbol
-    expr2tc rounding_mode =
-      symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rounding_mode);
+    const expr2tc rounding_mode = migrate_rounding_mode(expr);
 
     new_expr_ref = nearbyint2tc(type, old_expr, rounding_mode);
     return;
@@ -1423,13 +1422,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc side1, side2;
     convert_operand_pair(expr, side1, side2);
 
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
+    const expr2tc rm = migrate_rounding_mode(expr);
 
     new_expr_ref = ieee_add2tc(type, side1, side2, rm);
     return;
@@ -1448,13 +1441,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc side1, side2;
     convert_operand_pair(expr, side1, side2);
 
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
+    const expr2tc rm = migrate_rounding_mode(expr);
 
     new_expr_ref = ieee_sub2tc(type, side1, side2, rm);
     return;
@@ -1473,13 +1460,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc side1, side2;
     convert_operand_pair(expr, side1, side2);
 
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
+    const expr2tc rm = migrate_rounding_mode(expr);
 
     new_expr_ref = ieee_mul2tc(type, side1, side2, rm);
     return;
@@ -1494,13 +1475,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc side1, side2;
     convert_operand_pair(expr, side1, side2);
 
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
+    const expr2tc rm = migrate_rounding_mode(expr);
 
     new_expr_ref = ieee_div2tc(type, side1, side2, rm);
     return;
@@ -1515,13 +1490,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op1(), v2);
     migrate_expr(expr.op2(), v3);
 
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
+    const expr2tc rm = migrate_rounding_mode(expr);
 
     new_expr_ref = ieee_fma2tc(type, v1, v2, v3, rm);
     return;
@@ -1534,13 +1503,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc value;
     migrate_expr(expr.op0(), value);
 
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
+    const expr2tc rm = migrate_rounding_mode(expr);
 
     new_expr_ref = ieee_sqrt2tc(type, value, rm);
     return;
