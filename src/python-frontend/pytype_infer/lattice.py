@@ -19,6 +19,18 @@ class Type:
     def __repr__(self):
         return self.__class__.__name__
 
+class ClassInfo:
+    def __init__(
+            self,
+            name:str,
+            bases=None,
+            attributes=None,
+    ):
+        self.name = name
+        self.bases = bases if bases is not None else []
+        self.attributes = (
+            attributes if attributes is not None else {}
+        )
 class TopType(Type):
     def join(self, other:'Type') -> 'Type':
         return self
@@ -211,18 +223,25 @@ class TupleType(Type):
     def join(self, other: 'Type') -> 'Type':
         if isinstance(other, Unknown):
             return self
-        if isinstance(other, TupleType) and len(other.elems) == len(self.elems):
-            return TupleType([a.join(b) for a,b in zip(self.elems, other.elems)])
+        if isinstance(other, TupleType):
+            if len(self.elems) == len(other.elems):
+               return TupleType([a.widen(b) for a,b in zip(self.elems, other.elems)])
+
+            return UnionType([self, other])
         if isinstance(other, UnionType):
-            return other.join(self)
-        return UnionType([self, other])
+            return other.widen(self)
+        return other
     def widen(self, other: 'Type') -> 'Type':
+        if isinstance(other, Unknown):
+            return self
         if isinstance(other, TupleType):
             if len(self.elems) == len(other.elems):
                 return TupleType([a.widen(b) for a,b in zip(self.elems, other.elems)])
-            if isinstance(other, UnionType):
+            return UnionType([self, other])
+        if isinstance(other, UnionType):
                 return other.widen(self)
-            return other    
+
+        return other    
     def narrow_with_isinstance(self, cls_name: str) -> 'Type':
         if cls_name.lower() in ('tuple','builtins.tuple','typing.tuple'):
             return self
@@ -235,6 +254,53 @@ class TupleType(Type):
         return 'tuple'
     def __repr__(self) -> str:
         return 'Tuple[' + ', '.join(repr(e) for e in self.elems) + ']'
+
+class ComplexType(Type):
+    def join(self, other: Type) -> Type:
+        if isinstance(other, Unknown):
+            return self
+
+        if isinstance(other, ComplexType):
+            return self
+
+        return UnionType([self, other])
+
+    def widen(self, other: Type) -> Type:
+        if isinstance(other, ComplexType):
+            return self
+
+        return other
+
+    def narrow_with_isinstance(self, cls_name: str) -> Type:
+        if cls_name.lower() in {
+            "complex",
+            "builtins.complex",
+        }:
+            return self
+
+        return Unknown()
+
+    def remove_isinstance(self, cls_name: str) -> Type:
+        if cls_name.lower() in {
+            "complex",
+            "builtins.complex",
+        }:
+            return Unknown()
+
+        return self
+
+    def is_subtype_of_name(self, cls_name: str) -> bool:
+        return cls_name.lower() in {
+            "complex",
+            "object",
+            "builtins.complex",
+        }
+
+    def to_ann_name(self) -> str:
+        return "complex"
+
+    def __repr__(self) -> str:
+        return "ComplexType"
 
 class CallableType(Type):
     def __init__(self, param_types: List[Type], ret: Type):
@@ -362,9 +428,16 @@ class UnionType(Type):
         if isinstance(other, UnionType):
             return UnionType(self.members + other.members)
         if any(isinstance(m, FloatType) for m in self.members) and isinstance(other, IntType):
-            new_members = [FloatType() if isinstance(x, IntType) else x for x in self.members]
+            new_members: List[Type] = []
+
+            for member in self.members:
+                if isinstance(member, IntType):
+                    new_members.append(FloatType())
+                else:
+                    new_members.append(member)   
             return UnionType(new_members)
         return UnionType(self.members + [other])
+    
     def widen(self, other: 'Type') -> 'Type':
         return self.join(other)
     def narrow_with_isinstance(self, cls_name: str) -> 'Type':
@@ -414,12 +487,31 @@ def mk_type_from_name(name: str) -> Type:
         return StrType()
     if n == 'unknown':
         return Unknown()
+    if n == 'set':
+        return SetType(Unknown())
+    if n == 'tuple':
+        return TupleType([])
+
+    if n.startswith('set['):
+        try:
+            inner = name[name.find('[') + 1: -1]
+            return SetType(mk_type_from_name(inner))
+        except Exception:
+            return SetType(Unknown())
     if n.startswith('list['):
         try:
             inner = name[name.find('[')+1:-1]
             return ListType(mk_type_from_name(inner))
         except Exception:
             return ListType(Unknown())
+    if n.startswith('tuple['):
+        try:
+            inner = name[name.find('[')+1:-1]
+            parts = [part.strip() for part in inner.split(',')]
+            elems = [mk_type_from_name(part) for part in parts]
+            return TupleType(elems)
+        except Exception:
+            return TupleType([])   
     if n.startswith('dict['):
         try:
             inner = name[name.find('[')+1:-1]
