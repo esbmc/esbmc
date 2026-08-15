@@ -338,6 +338,7 @@ Each row is 12 interleaved pairs of the oracle under `--no-library` against
 | `98856b8c11` | 92 | 2026-08-04 | 1.073 | 0.035 | **slow** — the second half contributes nothing |
 | `c8d4bf6f5c` | 46 | 2026-08-03 | 1.074 | 0.103 | **slow** |
 | `bd54b099bc` | 23 | 2026-08-02 | 1.020 | 0.034 | **fast** — window is now 24–46 |
+| `7202a4f52d` | 35 | 2026-08-02 | 1.015 | 0.064 | **fast** — window is now 36–46 |
 
 The IQR widens with host load (a large unrelated build was running for the
 third and fourth rows); the median of 12 pairs is roughly IQR/4 of standard
@@ -355,6 +356,16 @@ sanitizers from CMAKE_BUILD_TYPE`), the one commit in 1–46 that touches
 compiler flags. With `ENABLE_SANITIZERS` empty and a `RelWithDebInfo` build the
 new code computes an empty sanitizer list and adds no compile or link options,
 so it cannot change codegen for these builds.
+
+**Leading candidate in 36–46, not yet confirmed:** `45dae3ce88`, *[esbmc] run
+on a thread with a large stack* (#6618), at position 38. It moves the whole run
+off the main thread onto a spawned one with a large stack, which is the only
+change in the range that could plausibly slow *everything at once* — including
+time inside Bitwuzla, which now also runs on that thread. Freshly mapped stack
+memory does not inherit the main stack's page placement, and a large mapping
+changes what the TLB can cover. The remaining bisect steps decide it; if they
+land on #6618, the mechanism should be confirmed directly (stack size, page
+placement) rather than inferred from the bisect alone.
 
 #### The bisect rig
 
