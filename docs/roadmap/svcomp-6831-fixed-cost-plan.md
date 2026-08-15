@@ -325,11 +325,41 @@ in the arena; W1 makes that load smaller, so there is less left to trim. They
 are not additive, and anyone re-measuring one of them after the other lands
 should expect a smaller number than this plan quotes for it in isolation.
 
-What remains — ~4 points in symex and encoding, with the counts identical — is
-not the library and not the arena. It is the same "accumulated creep" the
-bisect saw at commits 23 (×1.020), 35 (×1.015) and 37 (×1.034), and finding it
-means bisecting again with a stopping rule tuned to a 1–2 % effect, which needs
-more pairs per step than the ×1.07 hunt did.
+#### The residue is ten model bodies nothing calls — and §4 W0 got this wrong
+
+The ~4 points left after both fixes are **entirely library-mediated**: the same
+A/B under `--no-library` is ×0.994. So they are not code layout and not creep.
+
+A trivial C program's GOTO program holds **6 function bodies on `978a007e73`
+and 16 on master**. The ten are exactly the `__CPROVER_*` primitives #6708
+added — `POINTER_OBJECT`, `POINTER_OFFSET`, `same_object`, `OBJECT_SIZE`,
+`DYNAMIC_OBJECT`, `LIVE_OBJECT`, `WRITEABLE_OBJECT`, `r_ok`, `w_ok`, `rw_ok` —
+linked with bodies into every C program, none of which calls them.
+
+Deleting them from `builtin_libs.c` and re-measuring against the same build:
+
+| metric | master+both | minus the ten | B/A |
+|---|---|---|---|
+| wall | 9.662 s | 9.421 s | **0.958** |
+| encoding | 4.386 s | 4.059 s | **0.920** |
+| symex | 0.794 s | 0.806 s | 1.021 |
+
+**This contradicts W0's hypothesis-2 probe above**, which ran the same deletion,
+found `Symex completed in` unchanged, and concluded "#6708 contributes nothing
+to the multiplicative term". That reading was right about symex and wrong about
+the total: unreferenced bodies cost nothing to *execute* and plenty to *encode*.
+The probe measured the one phase where the effect could not appear. Corrected:
+**#6708 is worth ~4 % on this oracle, and it is the rest of the regression.**
+
+The fix is not to remove the primitives — a program that uses them needs them.
+It is to stop linking bodies nothing references. They arrive because
+`esbmc_intrinsics.h` is force-included, so the context holds a nil-valued
+declaration for each, and `add_cprover_library()`'s rule for the C path is
+"declared here, empty value → link the body". Every intrinsic in that header
+is therefore linked into every program whether or not it is mentioned. Options,
+cheapest first: drop function bodies with no callers after goto-conversion;
+or make the closure demand a reference rather than a declaration. Either is a
+change to shared linking behaviour, so G1 applies in full.
 
 ### W2 — Make the blob indexable, so loading is O(used) not O(total)
 
