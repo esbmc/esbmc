@@ -95,12 +95,10 @@ TEST_CASE(
   "goto_factory removes the directory it staged a string source in",
   "[testing-utils]")
 {
-  std::vector<std::string> staged = stage_and_list_leftovers(
-    []
-    {
-      std::string code = "int main() { return 0; }";
-      return goto_factory::get_goto_functions(code);
-    });
+  std::vector<std::string> staged = stage_and_list_leftovers([] {
+    std::string code = "int main() { return 0; }";
+    return goto_factory::get_goto_functions(code);
+  });
   CHECK(staged == std::vector<std::string>{});
 }
 
@@ -108,11 +106,9 @@ TEST_CASE(
   "goto_factory removes the directory it staged a stream source in",
   "[testing-utils]")
 {
-  std::vector<std::string> staged = stage_and_list_leftovers(
-    []
-    {
-      std::istringstream code("int main() { return 0; }");
-      return goto_factory::get_goto_functions(code);
-    });
+  std::vector<std::string> staged = stage_and_list_leftovers([] {
+    std::istringstream code("int main() { return 0; }");
+    return goto_factory::get_goto_functions(code);
+  });
   CHECK(staged == std::vector<std::string>{});
 }
