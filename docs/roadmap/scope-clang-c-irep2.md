@@ -2426,3 +2426,208 @@ test precondition (§65), §66.2's migration workstream (§68).
 Metric: **1 808 of 2 809 diverge** under `--clang-c-irep2-adjust-only`; 649 of
 those error, 1 159 differ silently. Next: port the function-call pair (§68.3),
 and re-measure.
+
+## 70. The first `-only` blocker: implicitly-declared callees
+
+§68.3 named the function-call pair as the dominant blocker on the strength of
+`Function X not found` being 80 % of sampled errors. Reduced, the trigger is
+narrower than the arm:
+
+```c
+int main(void) { undeclared_fn(1); return 0; }
+```
+
+A call to a function with no visible declaration. Ordinary calls are fine under
+`-only`; `clang_builtins/atomic_store` trips it only because it calls `assert`
+without including `assert.h`, so `assert` is a function rather than a macro.
+
+### 70.1 It is a symbol-table side effect, not a rewrite
+
+`clang_c_adjust::adjust_side_effect_function_call` looks the callee up and, when
+it is absent, **creates** the symbol (`context.add(new_symbol)`). That is not an
+expression rewrite, so it ports independently of the arm's other ~139 lines --
+and it is the general point: some arms do work that is not
+representation-bound, and those pieces can move first and cheaply.
+
+`declare_implicit_callee` does the same natively. Result under `-only`:
+
+| | tests erroring |
+|---|---:|
+| before | 649 |
+| after | **304** |
+
+### 70.2 Both spellings, and a gate
+
+A bare `f(x);` is a `sideeffect2t` of kind `function_call`; an assigned call is
+a `code_function_call2t`. A handler matching one misses the other, and the
+discarded-result form is exactly the failing case.
+
+The declaration is also gated on a new `sole_adjuster` flag, set only under
+`-only`. Work that *substitutes* for the legacy pass has no `irep2_owns_arms`
+counterpart to disable on the legacy side, so unlike an arm's rewrite it is not
+shadow-safe by construction. In shadow mode the legacy pass declares the callee
+first and the native code is a no-op, so this is intent rather than a fix -- but
+the distinction is real and the rest of the port will meet it again.
+
+### 70.3 The metric did not move, and that is correct
+
+Divergences stayed at 1 808. Clearing an *error* does not make a test
+byte-identical; it lets the test run further, moving it from "errors" to
+"differs". §66's divergence count is the right *exit* condition and a poor
+*progress* signal, since almost all of its movement is concentrated at the end.
+Track the staged counts -- errors, then differs, then identical -- which move
+throughout.
+
+### 70.4 Harness: a per-run temp path defeated the A/B
+
+Isolating each sweep run's `TMPDIR` (§66.3, to stop aborted runs leaking header
+dirs) introduced a fresh random path component per run, which §55.2's
+normalisation list does not cover. The A/B then reported **793** divergences in
+*flag-off against itself* -- read at first as a shadow-mode regression from this
+patch, which it was not. Normalising the temp-dir name restores a clean
+self-control and shadow mode to its baseline of 2 (`github_2220` and the §62
+KNOWNBUG that pins the same defect).
+
+Third harness defect in this phase, after stdout-vs-stderr and ASLR addresses
+(§55.2). The pattern is constant: a per-run artefact enters the output, and the
+gate reports divergence everywhere rather than failing loudly. **Run the
+self-control after any change to how the sweep invokes ESBMC**, not only after
+changes to ESBMC.
+
+## 71. Status
+
+Metric under `--clang-c-irep2-adjust-only`: **1 808 of 2 809 diverge**, of which
+**304 error** (was 649). Shadow mode: 2, both the §62 VLA defect.
+
+Next: the remaining 304. `shr` (64 tests) and `builtin_va_arg` (6) are
+`adjust_expr_shifts` and `adjust_builtin_va_arg` (§68.2); the rest need the same
+reduce-then-classify treatment this section applied.
+
+## 72. `shr` shows the hop-off's ordering is not universally satisfiable
+
+§71 put the shift arm next: `shr` is 64 of the tests still erroring under
+`-only`, and 10 of the 14 real errors in the §70 sample. It does not port, and
+the reason is about the `-only` architecture rather than the arm.
+
+### 72.1 The 10 `PARSING ERROR`s are not ours
+
+First, §68.3's unattributed row, resolved: all 10 fail flag-off as well. They are
+pre-existing parse failures, not `-only` failures, and they should be subtracted
+from every error count in §68-§71. The sample's 24 errors are 14.
+
+### 72.2 IREP2 has no untyped shift, and the choice needs the promotion
+
+`clang_c_adjust::adjust_expr_shifts` promotes both operands
+(`gen_typecast_arithmetic`) and *then* reads `op0.type()` to pick `lshr` for
+unsigned or `ashr` for signed. IREP2 has `lshr2t`, `ashr2t` and `shl2t` and no
+signedness-agnostic `shr`, so a raw `shr` is not representable: migration must
+make the arm's choice.
+
+It cannot make it correctly. `-only` migrates a symbol's whole value up front,
+before any native arm runs, so the only type available is the **unpromoted**
+one, and promotion changes it:
+
+```c
+unsigned char x = 200;
+int y = x >> 1;      // flag-off: ASSIGN y=(signed int)x >> 1
+```
+
+`x` is `unsignedbv` before promotion and `signedbv` after, so a migration-time
+decision picks `lshr` where the arm picks `ashr`. For a promoted `unsigned char`
+the two agree numerically -- the promoted value cannot be negative -- so this is
+a byte-identity failure rather than a wrong answer. Byte-identity is the gate.
+
+### 72.3 What this bounds
+
+The hop-off's order is *migrate, then adjust natively*. That is only satisfiable
+when every construct's IREP2 form is determined **before** adjustment. `shr` is
+the first proof that it is not: its node kind is a *result* of adjustment.
+
+So teaching `migrate_expr` about `shr` is not the fix -- it would have to
+duplicate the promotion to be right, which is the arm. The resolutions are:
+
+1. **Decide earlier.** Have the converter emit `ashr`/`lshr` directly; it knows
+   the operand types and C11 6.5.7p3's promotion rule. This changes flag-off
+   output and needs its own A/B, but it removes the construct from the adjuster
+   entirely.
+2. **Adjust before migrating**, i.e. keep the legacy pass -- which is what
+   shadow mode already does, and what `-only` exists to stop doing.
+3. **Construct natively end to end** (C.2), where no migration boundary exists
+   and the question does not arise.
+
+Only (1) and (3) make progress. (1) is a small, self-contained change and is the
+next step; (3) is the phase's actual goal and this is evidence for taking the
+converter, not the adjuster, as its vehicle.
+
+## 73. Status
+
+Metric under `--clang-c-irep2-adjust-only`: 1 808 of 2 809 diverge; **304 error,
+of which the pre-existing parse failures (§72.1) are not ours**. Shadow mode: 2,
+both the §62 VLA defect.
+
+Next: §72.3 option 1 -- emit `ashr`/`lshr` from the converter -- measured
+flag-off first, since it moves output on the default path.
+
+## 74. The shift kind, decided at conversion
+
+§72.3 left two viable routes for `shr`; this takes option 1. `clang_c_convert`
+now emits `lshr` or `ashr` directly instead of a signedness-agnostic `shr`.
+
+### 74.1 Why the converter can decide and migration cannot
+
+Clang has already applied the integer promotion by the time the converter sees
+the node, and records it as an `ImplicitCastExpr <IntegralCast>`:
+
+```
+BinaryOperator 'int' '>>'
+|-ImplicitCastExpr 'int' <IntegralCast>
+| `-ImplicitCastExpr 'unsigned char' <LValueToRValue>
+`-IntegerLiteral 'int' 1
+```
+
+C11 6.5.7p3 gives the result the type of the *promoted* left operand, so the
+node's own type is exactly the signedness `adjust_expr_shifts` computes. One
+ternary, no promotion logic duplicated -- which is the difference from teaching
+`migrate_expr` the same trick (§72.2), where only the unpromoted type exists.
+
+### 74.2 The A/B caught a dispatcher bug
+
+`clang_c_adjust::adjust_expr` routes to the shift arm on
+`id() == "shl" || id() == "shr"`. Emitting the typed ids moved those nodes out
+of its reach, so the arm stopped running -- and the two things it does besides
+choosing the kind, `gen_typecast_arithmetic` on both operands and
+`expr.type() = op0.type()`, sit *outside* the `shr` branch and apply to every
+shift. One default-path divergence (`esbmc/github_323`) and 46 bytes of missing
+casts. The fix is both halves: emit the typed id **and** route it.
+
+Generalises: moving a decision earlier can silently detach a node from a
+dispatcher keyed on the old spelling. Grep for the id being replaced is part of
+the change, not a follow-up.
+
+### 74.3 The gate cannot see this change
+
+`c_expr2string` prints `ashr` and `lshr` identically as `>>`, so flipping the
+kind produces a byte-identical dump. The clean A/B (0 of 2 809 on the default
+path) says the surrounding structure is unchanged and **nothing** about the
+choice -- §39.1's fourth row, met for the first time in this phase.
+
+So the gate is a semantic test: for `a >= 0x80000000`, `a >> 1 < 0x80000000`
+holds under a logical shift and fails under an arithmetic one. Nondeterministic
+input, so it cannot be constant-folded. `regression/esbmc/shift_kind_unsigned`,
+mutation-checked -- flipping the ternary fails it.
+
+The typedef case is covered there too: `t` resolves for integer typedefs, so
+`u32 >> 1` picks `lshr`. That was a live risk, since the arm follows the type
+(`ns.follow(op0.type())`) and the converter does not.
+
+## 75. Status
+
+`shr` no longer errors under `-only` (64 tests). Default path byte-identical.
+Remaining sampled `-only` errors: 4 `assign_shr`, 2 `and takes boolean operands
+only`, 1 `sizeof` arity, 1 `do_function_call` member callee -- plus 10
+pre-existing parse failures that are not ours (§72.1).
+
+Next: `assign_shr`, the same class one level up. `adjust_side_effect_assignment`
+picks `assign_lshr`/`assign_ashr` from the **unpromoted** LHS type, which the
+converter also has, so option 1 applies again -- with its own default-path A/B
+and its own semantic test, since the printer is blind here too.

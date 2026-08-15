@@ -76,6 +76,14 @@ void clang_c_adjust::adjust_symbol(symbolt &symbol)
   }
 }
 
+/// The four shift ids the adjuster handles together: the C-level `shl`/`shr`
+/// the parser still emits, and the signed/unsigned `ashr`/`lshr` this
+/// conversion now produces.
+static bool is_shift_id(const irep_idt &id)
+{
+  return id == "shl" || id == "shr" || id == "ashr" || id == "lshr";
+}
+
 void clang_c_adjust::adjust_expr(exprt &expr)
 {
   adjust_type(expr.type());
@@ -150,7 +158,7 @@ void clang_c_adjust::adjust_expr(exprt &expr)
       expr.type().id() != "bool")
       gen_typecast(ns, expr.op0(), expr.type());
   }
-  else if (expr.id() == "shl" || expr.id() == "shr")
+  else if (is_shift_id(expr.id()))
   {
     adjust_expr_shifts(expr);
   }
@@ -438,7 +446,7 @@ void clang_c_adjust::adjust_member(member_exprt &expr)
 
 void clang_c_adjust::adjust_expr_shifts(exprt &expr)
 {
-  assert(expr.id() == "shr" || expr.id() == "shl");
+  assert(is_shift_id(expr.id()));
 
   adjust_operands(expr);
 
