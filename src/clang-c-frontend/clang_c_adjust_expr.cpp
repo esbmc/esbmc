@@ -1266,12 +1266,19 @@ static const char *float_lowering_id(
   static const std::pair<const char *, const char *> lowerings[] = {
     {"nearbyint", "nearbyint"}, {"fma", "ieee_fma"}, {"remainder", "ieee_rem"}};
 
-  if (!expr.type().is_floatbv())
-    return nullptr;
-
-  for (const exprt &arg : expr.arguments())
-    if (!arg.type().is_floatbv())
+  /* c2goto compiles the models with this same binary, and libm/remainder.c's
+   * own call is what puts ieee_rem into the model. The shape test would strip
+   * it there, so only a program's call is checked -- which is where a
+   * same-named integer definition can appear. */
+  if (!config.options.get_bool_option("building-c-library"))
+  {
+    if (!expr.type().is_floatbv())
       return nullptr;
+
+    for (const exprt &arg : expr.arguments())
+      if (!arg.type().is_floatbv())
+        return nullptr;
+  }
 
   for (const auto &[name, node_id] : lowerings)
     if (compare_float_suffix(identifier, name))
