@@ -1250,13 +1250,28 @@ compare_unscore_builtin(const irep_idt &identifier, const std::string &name)
 }
 
 /// The float functions that lower to a node taking the call's arguments
-/// unchanged, keyed by base name; null when `identifier` is not one of them.
-static const char *float_lowering_id(const irep_idt &identifier)
+/// unchanged, keyed by base name; null when `expr` is not such a call.
+///
+/// The match is on the callee's base name, which a program is free to reuse --
+/// `int remainder(int, int)` is an ordinary definition, and the nodes below are
+/// floating-point only (`ieee_rem2t::do_simplify` asserts on the type). Lower
+/// only when the call is actually shaped like the C library function, so a
+/// same-named integer function keeps its body.
+static const char *float_lowering_id(
+  const irep_idt &identifier,
+  const side_effect_expr_function_callt &expr)
 {
   // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
   // fp.rem. The fmod/remquo models are built on top of it (libm/fmod.c).
   static const std::pair<const char *, const char *> lowerings[] = {
     {"nearbyint", "nearbyint"}, {"fma", "ieee_fma"}, {"remainder", "ieee_rem"}};
+
+  if (!expr.type().is_floatbv())
+    return nullptr;
+
+  for (const exprt &arg : expr.arguments())
+    if (!arg.type().is_floatbv())
+      return nullptr;
 
   for (const auto &[name, node_id] : lowerings)
     if (compare_float_suffix(identifier, name))
@@ -1547,7 +1562,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(op);
     }
-    else if (const char *node_id = float_lowering_id(identifier))
+    else if (const char *node_id = float_lowering_id(identifier, expr))
     {
       exprt new_expr(node_id, expr.type());
       new_expr.operands() = expr.arguments();
