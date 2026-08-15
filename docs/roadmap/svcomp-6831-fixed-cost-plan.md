@@ -336,20 +336,36 @@ added — `POINTER_OBJECT`, `POINTER_OFFSET`, `same_object`, `OBJECT_SIZE`,
 `DYNAMIC_OBJECT`, `LIVE_OBJECT`, `WRITEABLE_OBJECT`, `r_ok`, `w_ok`, `rw_ok` —
 linked with bodies into every C program, none of which calls them.
 
-Deleting them from `builtin_libs.c` and re-measuring against the same build:
+Deleting them from `builtin_libs.c` and re-measuring against the same build,
+**20 pairs on an idle host** (a first pass at 12 pairs under load said ×0.958
+and ×0.920; those numbers were too generous and are corrected here):
 
 | metric | master+both | minus the ten | B/A |
 |---|---|---|---|
-| wall | 9.662 s | 9.421 s | **0.958** |
-| encoding | 4.386 s | 4.059 s | **0.920** |
-| symex | 0.794 s | 0.806 s | 1.021 |
+| wall | 9.782 s | 9.625 s | **0.975** |
+| encoding | 4.467 s | 4.212 s | **0.936** |
+| symex | 0.790 s | 0.786 s | 0.999 |
+
+On plain `master`, the same removal via the shipped filter is worth only
+×0.994 (20 pairs). So the ten bodies cost **0.6–2.5 % depending on what else
+the build carries** — real, concentrated in encoding, and an order of magnitude
+short of "the rest of the regression".
 
 **This contradicts W0's hypothesis-2 probe above**, which ran the same deletion,
 found `Symex completed in` unchanged, and concluded "#6708 contributes nothing
 to the multiplicative term". That reading was right about symex and wrong about
 the total: unreferenced bodies cost nothing to *execute* and plenty to *encode*.
 The probe measured the one phase where the effect could not appear. Corrected:
-**#6708 is worth ~4 % on this oracle, and it is the rest of the regression.**
+**#6708 is worth 0.6–2.5 % here, in encoding — real, but not the rest of the
+regression.** The first version of this section claimed ~4 %, from 12 pairs on
+a host at load average 33; 20 pairs on an idle host do not support it. Both
+that claim and the probe it corrected failed the same way, in opposite
+directions, and the fix for both is the same: measure the phase the mechanism
+predicts, with enough pairs, on a quiet machine.
+
+**So the regression's remaining ~2–3 points are still unattributed.** What is
+ruled out: the library as a whole (`--no-library` A/B), the arena (#7051), the
+blob size (#7058), and now these ten bodies at the scale first claimed.
 
 The fix is not to remove the primitives — a program that uses them needs them.
 It is to stop linking bodies nothing references. They arrive because
