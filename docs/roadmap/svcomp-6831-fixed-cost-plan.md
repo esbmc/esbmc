@@ -298,7 +298,38 @@ Two things this cost that the sketch above did not anticipate:
 
 **Not done here:** the `libm` half (1,002 symbols, 26 %), which needs the same
 treatment behind `ENABLE_LIBM` and is a bigger question — unlike the Python
-models, libm is reachable from ordinary C.
+models, libm is reachable from ordinary C, so it cannot be keyed off the
+frontend and a wrong answer drops a model a task needed. That is a G1
+soundness risk rather than a performance one.
+
+#### Both fixes together, against the fast endpoint
+
+`master` + #7051 + #7058 built in the bisect's build directory, 12 pairs on the
+oracle, library loaded:
+
+| metric | `978a007e73` | master+both | B/A |
+|---|---|---|---|
+| wall | 9.272 s | 10.398 s | **1.039** |
+| GOTO creation | 0.293 s | 0.210 s | **0.690** |
+| symex | 0.744 s | 0.782 s | 1.072 |
+| encoding | 4.069 s | 4.617 s | 1.081 |
+| solving | 2.026 s | 2.171 s | 1.012 |
+
+**×1.070 → ×1.039: about half the regression recovered**, and GOTO creation is
+now 31 % *below* the 2026-08-01 baseline rather than merely restored.
+
+The residue is symex and encoding, and the shortfall against what the parts
+predicted (×1.070 × ×0.953 ≈ ×1.02) is itself informative: **the two fixes
+overlap**. The arena fix's value came from trimming what the library load left
+in the arena; W1 makes that load smaller, so there is less left to trim. They
+are not additive, and anyone re-measuring one of them after the other lands
+should expect a smaller number than this plan quotes for it in isolation.
+
+What remains — ~4 points in symex and encoding, with the counts identical — is
+not the library and not the arena. It is the same "accumulated creep" the
+bisect saw at commits 23 (×1.020), 35 (×1.015) and 37 (×1.034), and finding it
+means bisecting again with a stopping rule tuned to a 1–2 % effect, which needs
+more pairs per step than the ×1.07 hunt did.
 
 ### W2 — Make the blob indexable, so loading is O(used) not O(total)
 
