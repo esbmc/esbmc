@@ -78,7 +78,17 @@ def do_exec(cmd_line):
   p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   (stdout, stderr) = p.communicate()
 
-  return stdout + stderr
+  out = stdout + stderr
+
+  # A flag this ESBMC no longer accepts makes every task exit before it
+  # verifies anything, which otherwise just reads as a whole-set "unknown"
+  # (esbmc/esbmc#4179: --floatbv outlived its removal for days that way).
+  # Fail loudly instead -- there is no useful verdict behind it.
+  if b"unrecognised option" in out or b"Invalid command line" in out:
+    print(out.decode(errors="replace"))
+    sys.exit("ESBMC rejected the command line built by this wrapper")
+
+  return out
 
 # Function to run esbmc
 def run(cmd_line):
@@ -235,7 +245,7 @@ esbmc_path = "./esbmc "
 # as a no-op, emits physical line numbers for witnesses, and avoids malloc/free
 # in the fopen/fclose models.
 esbmc_dargs = "--sv-comp --no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets "
-esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
+esbmc_dargs += "--no-align-check --k-step 2 --unlimited-k-steps "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
 esbmc_dargs += "--no-vla-size-check "
