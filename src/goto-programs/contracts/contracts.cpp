@@ -1007,19 +1007,32 @@ static expr2tc havoc_place(const expr2tc &target)
   return place;
 }
 
+// Pointees a havoc has nothing to write through: void and function pointees
+// name no object, and a pointer pointee is left alone under
+// --add-symex-value-sets, as the loop-invariant havoc does. Shared by both
+// pointer-havoc paths so the two cannot drift apart.
+static bool skip_pointee_havoc(const type2tc &pointee)
+{
+  if (is_empty_type(pointee) || is_code_type(pointee) || is_nil_type(pointee))
+    return true;
+
+  return config.options.get_bool_option("add-symex-value-sets") &&
+         is_pointer_type(pointee);
+}
+
 // A pointer parameter is pass-by-value, so the callee cannot change the
 // caller's pointer, only what it points at. Havocking the argument itself both
 // misses that write and invents a bogus pointer, which the ensures ASSUME then
 // dereferences. Only the first element is reached this way; widening needs an
 // object, which only the decay case names. Nil when there is nothing to write
-// through, matching the void and function pointee skips at 2.4.
+// through.
 static expr2tc havoc_through_pointer(const expr2tc &place, const namespacet &ns)
 {
   if (!is_pointer_type(place))
     return place;
 
   type2tc pointee = ns.follow(to_pointer_type(place->type).subtype);
-  if (is_empty_type(pointee) || is_code_type(pointee) || is_nil_type(pointee))
+  if (skip_pointee_havoc(pointee))
     return expr2tc();
 
   return dereference2tc(pointee, place);
@@ -5015,17 +5028,7 @@ void code_contractst::generate_replacement_at_call(
       // one was missing it. ns.follow() is a no-op for non-symbol types.
       type2tc pointee_type = ns.follow(ptr_type.subtype);
 
-      // Skip void*, function pointers, and unknown/nil pointed-to types
-      if (
-        is_empty_type(pointee_type) || is_code_type(pointee_type) ||
-        is_nil_type(pointee_type))
-        continue;
-
-      // Skip pointer-to-pointer havoc in value-set mode (consistent with
-      // loop-invariant havoc behaviour)
-      if (
-        config.options.get_bool_option("add-symex-value-sets") &&
-        is_pointer_type(pointee_type))
+      if (skip_pointee_havoc(pointee_type))
         continue;
 
       // If precise assigns clause was provided it already handled this arg
