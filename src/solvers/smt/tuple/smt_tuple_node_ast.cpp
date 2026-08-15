@@ -24,6 +24,8 @@ void tuple_node_smt_ast::make_free(smt_solver_baset *ctx)
     struct_union_member_names(sort->get_tuple_type());
 
   elements.resize(members.size());
+  if (ctx->ctx_level > creation_ctx_level)
+    flat.note_elements_populated(this);
 
   unsigned int i = 0;
   for (auto const &it : members)
@@ -107,6 +109,8 @@ void tuple_node_smt_ast::assign(smt_solver_baset *ctx, smt_astt sym) const
 
   // Just copy across element data.
   destination->elements = elements;
+  if (ctx->ctx_level > destination->creation_ctx_level)
+    flat.note_elements_populated(destination);
 }
 
 smt_astt tuple_node_smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const

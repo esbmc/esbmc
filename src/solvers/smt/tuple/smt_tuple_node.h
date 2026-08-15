@@ -45,9 +45,19 @@ public:
   void push_tuple_ctx() override;
   void pop_tuple_ctx() override;
 
+  /** Record that @p tuple filled its elements in at the current context level,
+   *  having itself been created at a shallower one — so pop_tuple_ctx must
+   *  clear them before the ASTs they name are destroyed. */
+  void note_elements_populated(tuple_node_smt_ast *tuple);
+
   smt_solver_baset *ctx;
   const namespacet &ns;
   array_convt array_conv;
+
+private:
+  /** Tuples needing their elements cleared, keyed by the level the elements
+   *  were populated at. */
+  std::map<unsigned int, std::vector<tuple_node_smt_ast *>> populated_elements;
 };
 
 #endif
