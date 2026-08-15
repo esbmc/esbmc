@@ -250,6 +250,46 @@ VCC count and symex assignments, which the hypothesis-2 probe shows are stable
 under a change that only adds unreferenced model code. A commit that moves those
 counts is the mechanism; one that moves only wall time is hypothesis 3.
 
+#### The bisect rig
+
+The window is `978a007e73` (2026-08-01, fast) to `7835797ebc` (2026-08-08,
+slow), 183 commits — about eight builds under binary search. Two pieces of it
+are now in the tree rather than in someone's shell history:
+
+- **`scripts/perf/ab_interleave.py`** — alternates the two binaries inside one
+  loop, flips the order every pair, and reports the **median of the per-pair
+  ratios** (not the ratio of two medians: the pairing is what cancels drift)
+  with its IQR and sample count, per phase, alongside the count fingerprint.
+  It says whether the VCC or symex-assignment counts moved, since that is the
+  stopping rule above and not something to eyeball from two logs. A run that
+  exits abnormally aborts the comparison with status 2 — silently scoring a
+  crashed build as "fast, counts identical" is the one failure this tool must
+  not have. `scripts/perf/test_ab_interleave.py` pins the regexes against
+  captured ESBMC output.
+- **`scripts/perf/oracles/loop10k.c`** — the oracle, `--unwind 10000
+  --overflow-check --quiet`, ~11 s wall on the §2 host: 0.3 s GOTO creation,
+  0.8 s symex, 0.2 s caching, 0.7 s slicing, **4.3 s encoding**, 2.1 s
+  solving. Deterministic, so its 79,992 VCCs and 120,003 symex assignments are
+  a fingerprint. `--quiet` matters: the 10,000 unwinding lines cost ~8 % of
+  wall, common-mode work that dilutes the ratio being measured. A
+  nondet-indexed array was tried first and rejected: it puts ~95 % of its time
+  in the solver (49 s wall for 0.03 s of symex), which measures Bitwuzla
+  rather than ESBMC.
+
+**Noise floor: ±1.2 % on wall, ±4 % per phase.** Running the *same* binary as
+both A and B, 8 pairs, gives wall ×0.988 but symex ×1.040 and GOTO ×1.033 —
+the per-phase medians are noisier than the effect being hunted, because each
+phase is a smaller number sampled the same number of times. The floor tightens
+with pair count (the tool defaults to 12), so quote the count with the ratio.
+Read the bisect verdict off wall time and the counts; use phase splits only to
+explain a wall delta already established, and treat a per-phase difference
+under ~5 % at this pair count as nothing.
+
+The first runs on a cold cache are ~15 % slower and decay non-linearly, which
+an order flip cannot cancel and which would land entirely on whichever binary
+goes first; the tool spends one discarded run per binary on that transient
+before measuring.
+
 ### W1 — Split the blob so a task loads only its language's models
 
 `sol64.goto` is already a separate blob for exactly this reason. Do the same for
