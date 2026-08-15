@@ -76,6 +76,14 @@ void clang_c_adjust::adjust_symbol(symbolt &symbol)
   }
 }
 
+/// The four shift ids the adjuster handles together: the C-level `shl`/`shr`
+/// the parser still emits, and the signed/unsigned `ashr`/`lshr` this
+/// conversion now produces.
+static bool is_shift_id(const irep_idt &id)
+{
+  return id == "shl" || id == "shr" || id == "ashr" || id == "lshr";
+}
+
 void clang_c_adjust::adjust_expr(exprt &expr)
 {
   adjust_type(expr.type());
@@ -150,9 +158,7 @@ void clang_c_adjust::adjust_expr(exprt &expr)
       expr.type().id() != "bool")
       gen_typecast(ns, expr.op0(), expr.type());
   }
-  else if (
-    expr.id() == "shl" || expr.id() == "shr" || expr.id() == "ashr" ||
-    expr.id() == "lshr")
+  else if (is_shift_id(expr.id()))
   {
     adjust_expr_shifts(expr);
   }
@@ -440,9 +446,7 @@ void clang_c_adjust::adjust_member(member_exprt &expr)
 
 void clang_c_adjust::adjust_expr_shifts(exprt &expr)
 {
-  assert(
-    expr.id() == "shr" || expr.id() == "shl" || expr.id() == "ashr" ||
-    expr.id() == "lshr");
+  assert(is_shift_id(expr.id()));
 
   adjust_operands(expr);
 
@@ -543,10 +547,8 @@ void clang_c_adjust::finish_complex_lowering(
   expr.swap(stmt_expr);
 }
 
-void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
+bool clang_c_adjust::lower_complex_binary_arithmetic(exprt &expr)
 {
-  adjust_operands(expr);
-
   exprt &op0 = expr.op0();
   exprt &op1 = expr.op1();
 
@@ -636,8 +638,21 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
     result.operands().push_back(new_real);
     result.operands().push_back(new_imag);
     finish_complex_lowering(expr, result, bind_block);
-    return;
+    return true;
   }
+
+  return false;
+}
+
+void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
+{
+  adjust_operands(expr);
+
+  if (lower_complex_binary_arithmetic(expr))
+    return;
+
+  exprt &op0 = expr.op0();
+  exprt &op1 = expr.op1();
 
   const typet o_type0 = ns.follow(op0.type());
   const typet o_type1 = ns.follow(op1.type());
@@ -1019,6 +1034,37 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
   {
     gen_typecast(ns, op1, type0);
     return;
+  }
+
+  // A compound assignment over a complex operand has to be expanded here.
+  // goto_convert's remove_assignment rebuilds `a op b` long after adjustment,
+  // so the component-level lowering would never see it and the SMT layer
+  // would be handed a raw complex operator (#6713). An lvalue with its own
+  // side effect is left alone: expanding it would evaluate that effect twice,
+  // and a loud failure downstream beats a wrong answer.
+  if (
+    (type0.id() == "complex" || op1.type().id() == "complex") &&
+    !contains_sideeffect(op0))
+  {
+    static const std::map<irep_idt, irep_idt> complex_compound_ops = {
+      {"assign+", "+"},
+      {"assign-", "-"},
+      {"assign*", "*"},
+      {"assign_div", "/"}};
+
+    auto it = complex_compound_ops.find(statement);
+    if (it != complex_compound_ops.end())
+    {
+      exprt rhs(it->second, type0);
+      rhs.location() = expr.location();
+      rhs.copy_to_operands(op0, op1);
+      if (lower_complex_binary_arithmetic(rhs))
+      {
+        expr.statement("assign");
+        expr.op1().swap(rhs);
+        return;
+      }
+    }
   }
 
   if (

@@ -33,3 +33,13 @@ if(ENABLE_SMTLIB)
   new_unit_test(oneshot_verdict_test "oneshot_verdict.test.cpp"
                 "smtlib;filesystem;util_esbmc;fmt::fmt")
 endif()
+
+# The SMT equivalence checker for simplifier rewrites (#4625). The installed
+# checker aborts on a mismatch, so only a direct call can assert that it
+# detects one. Any built-in solver serves; `solve` picks the default.
+# Links the `solvers` interface target rather than a named backend: solve.cpp
+# registers every backend compiled in, so the creator symbols must all be
+# present. Whichever is the default answers the queries.
+new_unit_test(simplification_equivalence_test
+              "simplification_equivalence.test.cpp"
+              "solvers;util_esbmc;filesystem;bigint")
