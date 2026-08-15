@@ -29,6 +29,14 @@
 //                    subheaders. Include the ones we use.
 //
 // We use Boost.Process to run the Python interpreter in a separate process.
+//
+// v1's locale.hpp uses std::codecvt_utf8, deprecated in C++17. Boost is not
+// ours to fix and the include lists it with -I rather than -isystem (the
+// nlohmann pin needs that precedence, see ExternalDependencies.cmake), so
+// -Werror would stop on a third-party header. Silence it across the include
+// only.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #if defined(__APPLE__) || (BOOST_VERSION == 108700)
 #  include <boost/process/v1.hpp>
 namespace bp = boost::process::v1;
@@ -41,6 +49,7 @@ namespace bp = boost::process::v1;
 #  include <boost/process.hpp>
 namespace bp = boost::process;
 #endif
+#pragma GCC diagnostic pop
 
 namespace fs = boost::filesystem;
 

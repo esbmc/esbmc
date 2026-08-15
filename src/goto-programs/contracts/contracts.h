@@ -42,6 +42,7 @@
 #include <goto-programs/frame_enforcer.h>
 #include <util/symtab/context.h>
 #include <util/symtab/namespace.h>
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -114,6 +115,24 @@ public:
   /// \param func_sym Function symbol to check
   /// \return True if function has the contract annotation
   bool is_annotated_contract_function(const symbolt &func_sym) const;
+
+  /// \brief Name of the first non-intrinsic call a clause in \p body depends
+  ///   on, empty when there is none.
+  std::string clause_call_callee(const goto_programt &body) const;
+
+  /// \brief Diagnostic for such a call, empty when there is none.
+  std::string clause_call_reason(const goto_programt &body) const;
+
+  /// \brief Whether \p func_sym has a body carrying contract clauses, or the
+  ///   __ESBMC_contract annotation. Used to pick the function the user
+  ///   annotated when a short name matches symbols from several modes.
+  bool declares_contracts(const symbolt &func_sym) const;
+
+  /// \brief Code symbols whose short name is \p short_name and which satisfy
+  ///   \p accept, in goto-function order.
+  std::vector<symbolt *> short_name_candidates(
+    const std::string &short_name,
+    const std::function<bool(const symbolt &)> &accept);
 
   /// \brief Per-field snapshot for pointer-struct-field assigns compliance.
   /// Captures the pre-call value of a field NOT in the assigns clause so that

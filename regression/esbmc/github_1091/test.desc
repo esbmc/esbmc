@@ -1,5 +1,5 @@
 CORE
 gh-1091.c
---unwind 5 --force-malloc-success
+--unwind 5 --force-malloc-success --multi-property
 ^VERIFICATION FAILED$
 ^.*array bounds violated.*$

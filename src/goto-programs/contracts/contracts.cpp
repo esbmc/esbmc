@@ -175,53 +175,90 @@ bool code_contractst::is_compiler_generated(
   return false;
 }
 
-symbolt *code_contractst::find_function_symbol(const std::string &function_name)
+bool code_contractst::declares_contracts(const symbolt &func_sym) const
 {
-  // Exact match (handles full IDs like "c:@F@fst#*1I#" passed by wildcard expansion)
-  symbolt *sym = context.find_symbol(function_name);
-  if (sym != nullptr)
-    return sym;
-  // C convention: c:@F@funcname
-  std::string func_id = "c:@F@" + function_name;
-  sym = context.find_symbol(func_id);
-  if (sym != nullptr)
-    return sym;
-  // C++ no-parameter free function: c:@F@funcname#
-  sym = context.find_symbol(func_id + "#");
-  if (sym != nullptr)
-    return sym;
-  // C++ general fallback: search by short name (sym->name) to handle
-  // parameterized free functions like c:@F@fst#*1I# where the user passes
-  // just "fst" via --enforce-contract. Detect ambiguity when multiple
-  // overloads share the same short name.
-  symbolt *matched = nullptr;
-  std::string matched_ids;
+  // The annotation is on the symbol, so it holds whether or not a body is
+  // available here; only the clause scan needs one.
+  if (is_annotated_contract_function(func_sym))
+    return true;
+
+  auto it = goto_functions.function_map.find(func_sym.id);
+  return it != goto_functions.function_map.end() && it->second.body_available &&
+         has_contracts(it->second.body);
+}
+
+/// Code symbols in \p goto_functions whose short name is \p short_name and
+/// which satisfy \p accept, in goto-function order.
+std::vector<symbolt *> code_contractst::short_name_candidates(
+  const std::string &short_name,
+  const std::function<bool(const symbolt &)> &accept)
+{
+  std::vector<symbolt *> found;
   forall_goto_functions (it, goto_functions)
   {
     symbolt *candidate = context.find_symbol(it->first);
     if (
       candidate && candidate->get_type().is_code() &&
-      id2string(candidate->name) == function_name)
-    {
-      // matched is set on a previous loop iteration when a second overload
-      // with the same short name is found; cppcheck's per-statement flow
-      // analysis cannot see the cross-iteration assignment below.
-      // cppcheck-suppress knownConditionTrueFalse
-      if (matched != nullptr)
-      {
-        matched_ids += ", " + id2string(it->first);
-        log_error(
-          "Ambiguous function name '{}'; use a full symbol ID to disambiguate."
-          " Candidates: {}",
-          function_name,
-          matched_ids);
-        return nullptr;
-      }
-      matched = candidate;
-      matched_ids = id2string(it->first);
-    }
+      id2string(candidate->name) == short_name && accept(*candidate))
+      found.push_back(candidate);
   }
-  return matched;
+  return found;
+}
+
+symbolt *code_contractst::find_function_symbol(const std::string &function_name)
+{
+  // Exact match (handles full IDs like "c:@F@fst#*1I#" passed by wildcard
+  // expansion)
+  symbolt *sym = context.find_symbol(function_name);
+  if (sym != nullptr)
+    return sym;
+
+  // A short name is resolved against every mode's symbols, and the operational
+  // models define plenty of ordinary names. Whichever candidate actually
+  // carries a contract is the one the user annotated, so prefer it over
+  // whatever the naming conventions below happen to match first: a Python
+  // `add` never has the id `c:@F@add`, but umath.c does.
+  const std::vector<symbolt *> annotated = short_name_candidates(
+    function_name, [this](const symbolt &s) { return declares_contracts(s); });
+
+  if (annotated.size() == 1)
+    return annotated.front();
+
+  // Two annotated candidates share the name: skip the convention lookups so
+  // the ambiguity is reported rather than silently resolved.
+  if (annotated.empty())
+  {
+    // C convention: c:@F@funcname
+    std::string func_id = "c:@F@" + function_name;
+    sym = context.find_symbol(func_id);
+    if (sym != nullptr)
+      return sym;
+    // C++ no-parameter free function: c:@F@funcname#
+    sym = context.find_symbol(func_id + "#");
+    if (sym != nullptr)
+      return sym;
+  }
+
+  // C++ general fallback: search by short name to handle parameterized free
+  // functions like c:@F@fst#*1I# where the user passes just "fst". Detect
+  // ambiguity when multiple overloads share the same short name.
+  const std::vector<symbolt *> all =
+    short_name_candidates(function_name, [](const symbolt &) { return true; });
+
+  if (all.size() > 1)
+  {
+    std::string ids;
+    for (const symbolt *candidate : all)
+      ids += (ids.empty() ? "" : ", ") + id2string(candidate->id);
+    log_error(
+      "Ambiguous function name '{}'; use a full symbol ID to disambiguate."
+      " Candidates: {}",
+      function_name,
+      ids);
+    return nullptr;
+  }
+
+  return all.empty() ? nullptr : all.front();
 }
 
 void code_contractst::rename_function(
@@ -309,6 +346,146 @@ code_contractst::extract_requires_from_body(const goto_programt &function_body)
 }
 
 // Helper structure to track assignments to a variable
+/// Contract intrinsics keep their own materialisation in the wrapper, which
+/// knows how to turn them into allocations, snapshots or quantifiers rather
+/// than a plain re-issued call.
+static bool is_contract_intrinsic(const std::string &funcname)
+{
+  if (is_fresh_function(funcname))
+    return true;
+
+  // Compare the base name rather than substring-matching the mangled id, so a
+  // user function whose name merely contains one of these tokens is lifted
+  // like any other.
+  const size_t at = funcname.rfind('@');
+  const std::string base =
+    at == std::string::npos ? funcname : funcname.substr(at + 1);
+  return base == "__ESBMC_old" || base == "__ESBMC_old_raw" ||
+         base == "__ESBMC_forall" || base == "__ESBMC_exists";
+}
+
+static void collect_symbol_names(const expr2tc &e, std::set<irep_idt> &out)
+{
+  if (is_nil_expr(e))
+    return;
+
+  if (is_symbol2t(e))
+  {
+    out.insert(to_symbol2t(e).thename);
+    return;
+  }
+
+  e->foreach_operand(
+    [&out](const expr2tc &op) { collect_symbol_names(op, out); });
+}
+
+/// Calls in \p body whose results \p referenced depends on, transitively. A
+/// clause call may take another call's result (`outer(inner(x))`), so the
+/// operands of everything selected are themselves candidates; iterate until the
+/// referenced set stops growing. \p referenced is grown in place.
+static std::set<goto_programt::const_targett> select_clause_calls(
+  std::set<irep_idt> &referenced,
+  const std::set<irep_idt> &body_decls,
+  const goto_programt &body)
+{
+  std::set<goto_programt::const_targett> selected;
+
+  for (bool grew = true; grew;)
+  {
+    grew = false;
+    forall_goto_program_instructions (it, body)
+    {
+      if (!it->is_function_call() || !is_code_function_call2t(it->code))
+        continue;
+      if (selected.count(it))
+        continue;
+
+      const code_function_call2t &call = to_code_function_call2t(it->code);
+      if (is_nil_expr(call.ret) || !is_symbol2t(call.ret))
+        continue;
+
+      const irep_idt &ret_name = to_symbol2t(call.ret).thename;
+      if (!referenced.count(ret_name) || !body_decls.count(ret_name))
+        continue;
+
+      // Contract intrinsics keep their own materialisation, which knows how to
+      // turn them into allocations and snapshots rather than a plain call.
+      if (
+        is_symbol2t(call.function) &&
+        is_contract_intrinsic(to_symbol2t(call.function).thename.as_string()))
+        continue;
+
+      selected.insert(it);
+      for (const expr2tc &arg : call.operands)
+        collect_symbol_names(arg, referenced);
+      grew = true;
+    }
+  }
+
+  return selected;
+}
+
+/// Symbols declared in \p body. A call can bind a global directly
+/// (`g = compute();`); re-declaring that in the wrapper would shadow the very
+/// object the clause is about, so only body-local temporaries are lifted.
+static std::set<irep_idt> declared_in(const goto_programt &body)
+{
+  std::set<irep_idt> decls;
+  forall_goto_program_instructions (it, body)
+    if (it->is_decl() && is_code_decl2t(it->code))
+      decls.insert(to_code_decl2t(it->code).value);
+  return decls;
+}
+
+/// Name of the first non-intrinsic call whose result a clause in \p body
+/// still depends on, empty when there is none.
+///
+/// A clause is lowered into a single ASSUME/ASSERT, so a call inside it
+/// survives only as the SSA temporary the frontend bound its result to. That
+/// temporary is declared in the function body, never in the wrapper or at a
+/// replaced call site, so the clause is left over a free symbol: assumed it
+/// constrains nothing, asserted it is unprovable (#6941). Contract intrinsics
+/// are excluded because they carry their own materialisation.
+std::string code_contractst::clause_call_callee(const goto_programt &body) const
+{
+  std::set<irep_idt> referenced;
+  forall_goto_program_instructions (it, body)
+    if (
+      it->is_assume() &&
+      (id2string(it->location.comment()) == "contract::requires" ||
+       id2string(it->location.comment()) == "contract::ensures"))
+      collect_symbol_names(it->guard, referenced);
+
+  if (referenced.empty())
+    return std::string();
+
+  // The set is ordered by instruction address, not by position: operator< on a
+  // const_targett is `&*i1 < &*i2` (goto_program.cpp) and instructiont lives in
+  // a std::list, so its first element is whichever node the allocator placed
+  // lowest. With two eligible calls that names an arbitrary one of them, and a
+  // different one on a build whose heap is laid out differently. Walk the body
+  // for the first call the program reaches instead.
+  const std::set<goto_programt::const_targett> selected =
+    select_clause_calls(referenced, declared_in(body), body);
+
+  forall_goto_program_instructions (it, body)
+    if (selected.count(it))
+      return id2string(
+        to_symbol2t(to_code_function_call2t(it->code).function).thename);
+
+  return std::string();
+}
+
+std::string code_contractst::clause_call_reason(const goto_programt &body) const
+{
+  const std::string callee = clause_call_callee(body);
+  if (callee.empty())
+    return std::string();
+
+  return "a contract clause calls '" + callee +
+         "', whose result the clause cannot name outside the function body";
+}
+
 struct var_assignment_info
 {
   expr2tc value;                         // The assigned value
@@ -771,6 +948,23 @@ static bool declares_frame_condition(
 // Helper function to unwrap array-to-pointer decay in assigns targets
 // In C, when an array is passed to a function, it decays to &arr[0].
 // This function detects this pattern and returns the original array.
+// Whether reaching \p e goes through a pointer, which is what decides whether
+// an array-typed place can be written in one assignment.
+static bool reaches_through_pointer(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_dereference2t(e))
+    return true;
+
+  bool found = false;
+  e->foreach_operand([&found](const expr2tc &op) {
+    if (reaches_through_pointer(op))
+      found = true;
+  });
+  return found;
+}
+
 static expr2tc unwrap_array_decay(const expr2tc &expr)
 {
   // Pattern: address_of(index(array, 0))
@@ -830,6 +1024,13 @@ code_contractst::extract_assigns_from_body(const goto_programt &function_body)
         // Unwrap array-to-pointer decay: &arr[0] -> arr
         // This happens when an array is passed to __ESBMC_assigns()
         target_expr = unwrap_array_decay(target_expr);
+
+        // An array target travels as its address, so the marker instruction
+        // does not read the array itself. Recover the place it names.
+        if (
+          is_address_of2t(target_expr) &&
+          is_array_type(to_address_of2t(target_expr).ptr_obj->type))
+          target_expr = to_address_of2t(target_expr).ptr_obj;
 
         log_debug("contracts", "  Found assigns target expression");
         assigns_targets.push_back(target_expr);
@@ -2235,6 +2436,26 @@ code_contractst::extract_is_fresh_mappings_from_body(
   return mappings;
 }
 
+// The object a pointer names directly -- `&v`, `&v.f`, `&v.a[i]` -- as opposed
+// to one reached through another pointer. Nil for any other shape, including
+// `&p[i]` and `&p->f`, whose base symbol is itself a pointer and so says
+// nothing about what it points at.
+static expr2tc named_base_object(const expr2tc &ptr)
+{
+  if (!is_address_of2t(ptr))
+    return expr2tc();
+
+  expr2tc obj = to_address_of2t(ptr).ptr_obj;
+  while (is_member2t(obj) || is_index2t(obj))
+    obj = is_member2t(obj) ? to_member2t(obj).source_value
+                           : to_index2t(obj).source_value;
+
+  if (!is_symbol2t(obj) || is_pointer_type(obj->type))
+    return expr2tc();
+
+  return obj;
+}
+
 expr2tc code_contractst::replace_is_fresh_temps(
   const expr2tc &expr,
   const std::vector<is_fresh_mapping_t> &mappings,
@@ -2300,6 +2521,27 @@ expr2tc code_contractst::replace_is_fresh_temps(
           pointer_offset2tc(
             get_int_type(config.ansi_c.address_width), mapping.ptr_expr));
         expr2tc n = typecast2tc(size_type2(), mapping.size_expr);
+
+        // A named object answers both halves from its declaration rather than
+        // from __ESBMC_alloc, which is written for the heap alone. VALID_OBJECT
+        // of an automatic or static object is a free boolean a solver may pick
+        // false, so a caller passing `&v` could not discharge the precondition
+        // at all (#6542); goto-symex/dynamic_allocation.cpp guards
+        // invalid_pointer the same way, for the same reason. Dropping the
+        // conjunct is not "assume valid": an object is valid for as long as its
+        // name is in scope, and this expression was written at the call site.
+        // Its extent is the size of its type, which also replaces the
+        // DYNAMIC_SIZE the old `!is_dynamic` escape left unchecked.
+        expr2tc base = named_base_object(mapping.ptr_expr);
+        if (!is_nil_expr(base))
+        {
+          expr2tc have =
+            constant_int2tc(size_type2(), type_byte_size(base->type, &ns));
+          return and2tc(
+            lessthanequal2tc(off, have),
+            lessthanequal2tc(n, sub2tc(size_type2(), have, off)));
+        }
+
         expr2tc have =
           typecast2tc(size_type2(), dynamic_size2tc(mapping.ptr_expr));
         expr2tc fits = and2tc(
@@ -4039,7 +4281,9 @@ std::string code_contractst::diagnose_contract_target(
       if (
         has_contracts(it->second.body) ||
         (sym && is_annotated_contract_function(*sym)))
-        return std::string();
+      {
+        return clause_call_reason(it->second.body);
+      }
     }
     return any_match ? "that function declares no contract clauses"
                      : "no function of that name has a body here";
@@ -4060,7 +4304,7 @@ std::string code_contractst::diagnose_contract_target(
   if (!has_contracts(it->second.body) && !is_annotated_contract_function(*sym))
     return "that function declares no contract clauses";
 
-  return std::string();
+  return clause_call_reason(it->second.body);
 }
 
 void code_contractst::replace_calls(const std::set<std::string> &to_replace)
@@ -4426,6 +4670,46 @@ expr2tc code_contractst::lower_is_fresh_in_requires(
   return requires_clause;
 }
 
+// An array frame target reached through a pointer cannot be assigned in one go:
+// dereference refuses to build an array-typed lvalue (dereference.cpp:1103).
+// Write the elements instead -- same post-state, more instructions. Returns
+// whether the target was of that shape and so is now dealt with.
+static bool havoc_pointed_to_array(
+  const expr2tc &target,
+  const locationt &call_location,
+  goto_programt &replacement)
+{
+  if (!is_array_type(target->type) || !reaches_through_pointer(target))
+    return false;
+
+  const array_type2t &at = to_array_type(target->type);
+  if (!is_constant_int2t(at.array_size))
+  {
+    // A symbolic extent has no element count to write out, so the frame cannot
+    // be havocked at all. Saying so beats a silent partial havoc.
+    log_warning(
+      "__ESBMC_assigns: array of unknown size reached through a pointer is "
+      "not havocked; the caller keeps its pre-call value");
+    return true;
+  }
+
+  const BigInt &n = to_constant_int2t(at.array_size).value;
+  for (BigInt k = 0; k < n; k += 1)
+  {
+    expr2tc elem =
+      index2tc(at.subtype, target, constant_int2tc(at.array_size->type, k));
+    goto_programt::targett e = replacement.add_instruction(ASSIGN);
+    e->code = code_assign2tc(elem, gen_nondet(at.subtype));
+    e->location = call_location;
+    e->location.comment("contract havoc assigns");
+  }
+  log_debug(
+    "contracts",
+    "Havoc'd {} elements of a pointed-to array assigns target",
+    integer2string(n));
+  return true;
+}
+
 void code_contractst::generate_replacement_at_call(
   const symbolt &function_symbol,
   const goto_programt &function_body,
@@ -4477,7 +4761,6 @@ void code_contractst::generate_replacement_at_call(
     {
       irep_idt param_id = params[i].get_identifier();
       expr2tc param_expr = symbol2tc(migrate_type(params[i].type()), param_id);
-
       // Replace parameter symbol with actual argument in requires/ensures
       requires_clause =
         replace_symbol_in_expr(requires_clause, param_expr, actual_args[i]);
@@ -4598,20 +4881,16 @@ void code_contractst::generate_replacement_at_call(
         is_pointer_type(instantiated_target))
         continue;
 
-      // Generate nondeterministic value and create assignment
-      // Special handling for array types: use ARRAY_OF(NONDET) construction
-      expr2tc rhs;
-      if (is_array_type(instantiated_target->type))
-      {
-        // For arrays, generate ARRAY_OF(nondet_element)
-        const array_type2t &arr_type = to_array_type(instantiated_target->type);
-        expr2tc nondet_elem = gen_nondet(arr_type.subtype);
-        rhs = constant_array_of2tc(instantiated_target->type, nondet_elem);
-      }
-      else
-      {
-        rhs = gen_nondet(instantiated_target->type);
-      }
+      if (havoc_pointed_to_array(
+            instantiated_target, call_location, replacement))
+        continue;
+
+      // One nondet of the target's own type, arrays included. ARRAY_OF ties
+      // every element to a single nondet, so a callee that leaves its elements
+      // holding different values has no post-state the havoc can express and
+      // the ensures ASSUME kills the path (#7010). This is what the loop
+      // invariant havoc has always done.
+      expr2tc rhs = gen_nondet(instantiated_target->type);
 
       goto_programt::targett t = replacement.add_instruction(ASSIGN);
       t->code = code_assign2tc(instantiated_target, rhs);

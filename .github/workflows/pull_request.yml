@@ -36,7 +36,7 @@ jobs:
     name: arm64 darwin build
     with:
       operating-system: macos-latest
-      build-flags: '-b DebugOpt -c 21'
+      build-flags: '-b DebugOpt -c 21 -e ON'
       testing: true
 
   # Check project with clang-format. This job no longer auto-commits fixes:

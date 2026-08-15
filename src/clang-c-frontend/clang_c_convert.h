@@ -317,6 +317,15 @@ protected:
   process_aligned_attribute(const clang::AlignedAttr &aattr, typet &t) const;
 
   /*
+   * Apply a record's packing and alignment attributes to its type
+   * Arguments:
+   *   rd: the record definition whose attributes to inspect
+   *   t: the struct/union type to annotate
+   */
+  bool
+  process_record_layout_attributes(const clang::RecordDecl &rd, typet &t) const;
+
+  /*
    * add additional annotations if a class/struct/union field has alignment attribute
    * Arguments:
    *   field: clang AST representing the class/struct/union field we are dealing with

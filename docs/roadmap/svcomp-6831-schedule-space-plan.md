@@ -223,13 +223,43 @@ Remaining candidates:
 1. **Sleep sets** layered on the existing MPOR. Classical, sound, composes with
    a persistent-set-style reduction rather than replacing it; small state per
    DFS node. Now the first thing to try, not the second. **Done — W1.1 below.**
-2. **Decouple the pthread model's bookkeeping.** If `__ESBMC_num_threads_running`
-   and friends were per-thread rather than shared scalars, W1.2's refinement
-   would start paying. This is an operational-model change, and it must not
-   weaken `pthread_join` / deadlock detection, which read exactly that state.
+2. ~~**Decouple the pthread model's bookkeeping.**~~ **Closed — measured below
+   (W1.3), its ceiling is 3.5 % on the exit benchmark.**
 3. **Evaluate DPOR** (Flanagan–Godefroid dynamic POR) against MPOR. A design
    change, not a patch; investigation only. **Done — W1.4 below: do not start
    it.**
+
+#### W1.3 — Decoupling the bookkeeping cannot reach the exit (measured)
+
+Candidate 2 was to make `__ESBMC_num_threads_running` and friends per-thread so
+W1.2's element keying would start paying. Rather than build the operational
+model first, its **ceiling** was measured: `mpor_set_conflicts` was patched to
+drop every conflict whose key names a `__ESBMC_pthread*` /
+`__ESBMC_num_threads_running` / `__ESBMC_blocked_threads_count` object. That is
+unsound — it is an upper bound on what *any* decoupling of that state could
+buy, not a candidate patch, and it was reverted rather than committed.
+
+| benchmark | schedules, base | bookkeeping conflicts dropped | change |
+|---|---|---|---|
+| `01_malloc_20` (`--context-bound 2`) | 940 | 907 | **−3.5 %** |
+| `11_cook.fig2.pldi07` | 11,130 | 11,124 | −0.05 % |
+| `github_3449` | 2134 | 1606 | −24.7 % |
+| `11_bakery.simple.preempt` | 2279 | 2279 | 0 % |
+| `github_6475_safe` | 2544 | 2348 | −7.7 % |
+
+The exit asks for ≥2× on `01_malloc_20`; the unsound ceiling delivers 3.5 %.
+**Candidate 2 is closed** — the operational-model work it needs cannot pay for
+itself.
+
+**The methodological finding is the more useful one: conflict-count share does
+not predict schedule-count reduction.** The histogram above ranks
+`__ESBMC_pthread_thread_ended` as the top dependency driver on
+`11_cook.fig2.pldi07` with 4591 conflicts — and removing every bookkeeping
+conflict there changes the schedule count by six. The dependencies are
+over-determined in the same way W1.2 found: drop one driver and the remaining
+ones still order the same pairs of transitions. Rank a lever by re-measuring
+schedules with it disabled, never by how often it appears in a conflict
+histogram.
 
 #### W1.4 — What is left for DPOR, measured (candidate 3: do not start it)
 
@@ -728,12 +758,74 @@ deep in unbounded DFS order — `--incremental-bmc` alone produced no verdict in
 1.1 s. `--k-induction --falsify-context-bound 2` behaves the same (1.2 s); both
 combinations were previously rejected outright.
 
-**Still open:** the adaptive policy. §W4's sweep says full deepening buys one
-stranded falsification in 40 unsafe tests and costs 18 proofs in 132 safe ones,
-so the wrapper change wants a *shallow* N (the stranded shapes are found at
-N ≤ 2 in ~1 s) rather than deepening to convergence — and that N, plus the
-resulting score delta on the concurrency categories, is what the exit above
-still asks for.
+#### W4.2 — Choosing N, and why the corpus cannot answer it alone
+
+**Measure the configuration you intend to ship, not the one the tests carry.**
+`00_rwlock4` is stranded for 90 s only with `--no-por`, which comes from its own
+`test.desc`. Under the wrapper's actual concurrency flags — POR left on, plus
+`--state-hashing --smt-symex-guard --cswitch-skip-readonly-globals` — the same
+benchmark answers in 1.9 s. Every number below is therefore reported twice:
+once with each test's own flags, once with the wrapper's.
+
+**Corpus flags, 343 concurrent CORE tests in `esbmc-unix`/`esbmc-unix2`, 60 s
+cap.** No verdict changed at N = 1, 2 or 3. Nothing was recovered either — and
+the reason is that *this configuration strands nothing*: all 343 answer at base
+(200 FAILED, 143 SUCCESSFUL). The sweep bounds the cost and confirms no
+regression; it cannot speak to the benefit.
+
+| N | wrong verdict flips | recovered | answers lost | total wall |
+|---|---|---|---|---|
+| 1 | 0 | 0 | 0 | +4.4 % |
+| 2 | 0 | 0 | 1 | +39.3 % |
+| 3 | 0 | 0 | 6 | +112.5 % |
+
+The cost concentrates where the pre-pass inherits an expensive configuration:
+the worst three (`01_cond_06` +21.7 s, `01_cond_05` +19.4 s, `01_cond_02`
++19.3 s) all pair `--deadlock-check` — which disables the main-thread-ended cut
+(`execution_state.cpp:517-521`) and so enlarges the schedule space — with
+`--unwind 3`/`4`, and the pre-pass runs its rounds at that same unwind bound.
+The wrapper passes no `--unwind`, so its pre-pass runs at 1 and none of this
+applies; a user who sets a deep unwind *and* a large N pays for a second full
+verification, which is the argument for keeping N shallow rather than for
+capping the bound behind the user's back.
+
+**Wrapper flags, same corpus.** No verdict changed at N = 1 or 2 and nothing
+was lost here either, but this configuration *does* strand, which is what makes
+it the one to decide on. The parallel sweep flagged 26 of 340; re-run
+sequentially under a hard cap, **22 are genuinely stranded**, three fail to
+parse (their `test.desc` carries `-Wno-error=implicit-function-declaration`,
+which substituting the wrapper's flags drops — excluded, not stranded), and one
+answers UNKNOWN just past the cap.
+
+Of those 22, **N = 1 recovers exactly one**, and N = 2 recovers nothing further
+at higher cost — so **the wrapper takes N = 1**:
+
+- `03_microbenchmark`, under the wrapper's exact command line: no verdict in
+  **120 s** at base, **FAILED in 0.71 s** with N = 1. Its own `test.desc`
+  expects FAILED at `--context-bound 1`, so the verdict is right as well as
+  fast.
+- A violation the pre-pass finds still emits a witness — checked separately on
+  `00_rwlock4`, 3.7 KB of GraphML — without which the finding would not score.
+- Cost on 24 tests that already answer, measured sequentially: median
+  **+0.02 s**, p90 +0.25 s, max +0.30 s.
+
+One in 22 is a modest return, and it is quoted as such. What justifies the
+change is the shape of the trade rather than its size: the recovered task
+converts a timeout into a correct `false` for 0.7 s, no verdict moved in 683
+runs across both configurations, and the pre-pass cannot claim a proof by
+construction — so the downside is bounded by the median 0.02 s it costs
+everything else.
+
+**Method note — `timeout N esbmc` is not a cap.** Several runs in the parallel
+sweeps recorded 900+ s against a 60 s limit, and an unrelated ESBMC process on
+the same host survived 5 hours under `timeout 20`. ESBMC can outlive SIGTERM,
+and `subprocess.run(timeout=)` inherits the same problem through the captured
+pipes. Anything timing-sensitive here needs `timeout -s KILL` and a sequential
+run; the parallel sweeps are quoted for verdicts only.
+
+**Still open:** the score delta itself. The corpus is a proxy — it is where the
+mechanism can be shown to work and shown not to regress, not where SV-COMP
+points are won. The exit above is discharged only by a competition run.
 
 ---
 

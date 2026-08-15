@@ -33,7 +33,13 @@
 class clang_c_adjust_irep2
 {
 public:
-  explicit clang_c_adjust_irep2(contextt &_context) : context(_context)
+  /// @param sole_adjuster true under --clang-c-irep2-adjust-only, where this
+  /// pass *replaces* clang_c_adjust. Work that substitutes for the legacy pass
+  /// -- declaring an implicitly-declared callee (§70) -- must run only then:
+  /// in shadow mode the legacy pass has already done it, and doing it twice
+  /// adds conflicting symbols for library functions.
+  explicit clang_c_adjust_irep2(contextt &_context, bool sole_adjuster = false)
+    : context(_context), sole_adjuster(sole_adjuster)
   {
   }
 
@@ -50,6 +56,23 @@ private:
   /// (scope-clang-c-irep2.md §19.2).
   void adjust_index(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_member's rewrite: reach through a
+  /// pointer base with a dereference, or an array base with a zero index.
+  void adjust_member(expr2tc &expr);
+
+  /// A call to a function with no visible declaration reaches here with no
+  /// symbol in the context; clang_c_adjust::adjust_side_effect_function_call
+  /// declares one. That is a symbol-table side effect rather than an expression
+  /// rewrite, so it ports independently of the rest of that arm (§70).
+  void declare_implicit_callee(const expr2tc &expr);
+
   contextt &context;
+  const bool sole_adjuster;
   namespacet ns{context};
 };
+
+/// Shape-2 probe (scope-clang-c-irep2.md §57): run the IREP2 comma rewrite at
+/// the point the legacy pass dispatches it, rather than in a second whole-
+/// program pass. §55.4 attributes the comma arm's divergences to that ordering
+/// alone; this is the experiment that decides it.
+void adjust_comma_at_dispatch(exprt &expr, const namespacet &ns);

@@ -100,6 +100,12 @@ public:
   {
     return *ast_json;
   }
+  /// \brief Symbol for __ESBMC_return_value in an ensures clause, null when
+  ///   the name is something else or the function returns nothing.
+  symbolt *contract_return_value_symbol(
+    const std::string &var_name,
+    const nlohmann::json &element);
+
   exprt get_expr(const nlohmann::json &element);
 
   /**
@@ -287,6 +293,17 @@ public:
 
   python_typechecking &get_typechecker();
   const python_typechecking &get_typechecker() const;
+
+  /// Enters a contract clause or loop invariant, staying entered when already
+  /// inside one. Returns the previous state for @ref restore_contract_clause.
+  bool enter_contract_clause(bool entering)
+  {
+    return std::exchange(in_contract_clause_, in_contract_clause_ || entering);
+  }
+  void restore_contract_clause(bool saved)
+  {
+    in_contract_clause_ = saved;
+  }
 
 private:
   friend class complex_handler;
@@ -1339,6 +1356,14 @@ private:
   // and evaluate a side-effecting divisor an extra time).
   bool converting_lambda_body_ = false;
   bool in_rhs_type_probe_ = false;
+  // A clause is a specification, not code: converting one must not plant a
+  // statement into the enclosing block. The guard did, so annotating a file
+  // changed its verification result with contracts switched off, and a `//` in
+  // a loop invariant raised inside the loop body. C emits nothing from a
+  // clause either.
+  bool in_contract_clause_ = false;
+
+  bool needs_zero_division_guard(const std::string &op, const exprt &rhs) const;
   // Set by resolve_any_subscript_array_type when it adopts an array type for
   // an Any-annotated `row = a[i]`-style assignment. The RHS in that case is a
   // raw index/slice expression rather than an already-materialized array
