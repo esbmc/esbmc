@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---unwind 10
+--fp2bv --unwind 10
 ^VERIFICATION SUCCESSFUL$

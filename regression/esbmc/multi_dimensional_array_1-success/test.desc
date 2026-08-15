@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---32
+--fp2bv --32
 ^VERIFICATION SUCCESSFUL$
