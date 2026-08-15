@@ -395,8 +395,47 @@ allocator back: `mallopt(M_ARENA_MAX, 1)` before the worker starts, under
 `__GLIBC__`. ESBMC allocates from one thread at a time, so collapsing the
 arenas costs it no contention.
 
-Remaining bisect steps 37 and 38 are running to pin the commit by measurement
-rather than by inference; the mechanism above does not depend on their outcome.
+Commit 37 — the one immediately before #6618 — measures ×1.034 (IQR 0.056,
+under build contention), which is neither verdict. Read with commit 23's ×1.020
+and commit 35's ×1.015, the window looks like ~2–3 points of accumulated creep
+plus the arena's ~5.4, not a single step.
+
+#### The obvious fix does not work, and the reason matters
+
+`mallopt(M_ARENA_MAX, 1)` before the worker starts was implemented and measured
+against its exact master counterpart (12 pairs, oracle with the library loaded,
+as SV-COMP runs it):
+
+| | wall | symex | encoding | solving |
+|---|---|---|---|---|
+| master → master + `mallopt(M_ARENA_MAX, 1)` | **1.009** | 0.943 | **1.066** | 0.946 |
+| master → master under `MALLOC_ARENA_MAX=1` | **0.999** | 0.932 | **1.046** | 0.955 |
+| master → master under `MALLOC_ARENA_MAX=1`, `--no-library` | 0.977 | 0.878 | 1.009 | 0.961 |
+
+The patch does what it says — symex and solving get their ~5 % back — but a
+single arena makes **encoding 4–7 % slower whenever the operational-model
+library was loaded**, and the two cancel. Under `--no-library` the encoding
+penalty disappears and the win survives at ×0.977. The library's allocations
+are freed back into the arena that encoding then allocates from; keeping the
+worker on its own arena is what stops encoding from paying for that.
+
+So: **the mechanism is confirmed, the intervention is not a fix, and it was not
+committed.** On the workload SV-COMP actually runs, `M_ARENA_MAX=1` is worth
+×0.999. Anyone reaching for it again should read this row first.
+
+Two consequences for what is left:
+
+- The measured gain also shrank between the window's slow endpoint (×0.946) and
+  current master (×0.999) on the same experiment. Whether current master is
+  still ~7 % slower than `978a007e73` at all is now the open question, and it
+  needs current master built in the bisect's build directory — the numbers above
+  come from two different build configurations and are not comparable across
+  that line.
+- If the arena effect is real but masked by library-load fragmentation, then
+  **W1 becomes interesting again for the multiplicative term after all** — not
+  because loading is slow, but because what the load leaves in the arena makes
+  the rest of the run slower. That is a different claim from the one refuted
+  above, and it is testable the same way: W1's split blob, then this A/B.
 
 #### The bisect rig
 
