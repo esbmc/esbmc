@@ -869,6 +869,18 @@ bool goto_convertt::drop_inactive_contract_clause(bool is_clause) const
   return is_clause && !options.contracts_enabled();
 }
 
+// The assigns marker is an assignment, so symex reads its right-hand side. A
+// whole array read through a pointer is the one rvalue dereference refuses to
+// build (pointer-analysis/dereference.cpp), so carry an array target by
+// address; the contracts layer strips it back off. A frame target is a place,
+// and its address is the part that matters.
+static exprt assigns_marker_operand(const exprt &target)
+{
+  if (!target.type().is_array())
+    return target;
+  return address_of_exprt(target);
+}
+
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,
   const exprt &function,
@@ -1140,6 +1152,8 @@ void goto_convertt::do_function_call_symbol(
 
       log_debug(
         "builtin_functions", "  Assigns target {}: {}", i, actual_arg.pretty());
+
+      actual_arg = assigns_marker_operand(actual_arg);
 
       // Create a sideeffect expression to mark this as an assigns target
       // Type is inherited from the actual argument (after stripping typecast)
