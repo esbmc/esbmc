@@ -113,4 +113,21 @@ struct char_traits
     return (c == eof()) ? 0 : c;
   }
 };
+
+// [char.traits.specializations.char]: "The two-argument members eq and lt are
+// defined identically to the built-in operators == and < for type unsigned
+// char." The generic template compares as char_type, which orders anything
+// above 0x7f wrongly wherever char is signed -- and compare(), hence
+// std::string's ordering, is built on lt. See #7048.
+template <>
+inline bool char_traits<char>::eq(char c1, char c2) OM_NOEXCEPT
+{
+  return static_cast<unsigned char>(c1) == static_cast<unsigned char>(c2);
+}
+
+template <>
+inline bool char_traits<char>::lt(char c1, char c2) OM_NOEXCEPT
+{
+  return static_cast<unsigned char>(c1) < static_cast<unsigned char>(c2);
+}
 } // namespace std
