@@ -932,6 +932,35 @@ exprt python_converter::handle_tagged_scalar_comparison(
   return op == "NotEq" ? python_expr::build_not(result) : result;
 }
 
+// Python raises a *catchable* ZeroDivisionError when the divisor of /, //, or
+// % is zero (for both int and float operands, unlike C/IEEE). Model it as a
+// guarded exception raise -- the same mechanism list indexing uses for
+// IndexError -- so that `try: x / 0 except ZeroDivisionError: ...` is treated
+// as SAFE while a bare division by zero propagates and fails. The built-in
+// C-level div-by-zero assertion cannot express this: it fires regardless of
+// the surrounding try/except, so caught divisions were wrongly reported.
+//
+// The guard is a statement planted into the enclosing block, so it is emitted
+// only where the division is really code-generated in its execution context:
+// not for a lambda body converted at its definition, not during the discarded
+// type-probe pass over an assignment RHS, and not inside a clause, which is a
+// specification rather than code.
+bool python_converter::needs_zero_division_guard(
+  const std::string &op,
+  const exprt &rhs) const
+{
+  if (op != "Div" && op != "FloorDiv" && op != "Mod")
+    return false;
+
+  if (
+    !rhs.type().is_signedbv() && !rhs.type().is_unsignedbv() &&
+    !rhs.type().is_floatbv())
+    return false;
+
+  return !converting_lambda_body_ && !in_rhs_type_probe_ &&
+         !in_contract_clause_;
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   // Extract left and right operands from AST
@@ -1602,18 +1631,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         "values");
   }
 
-  // Python raises a *catchable* ZeroDivisionError when the divisor of /, //, or
-  // % is zero (for both int and float operands, unlike C/IEEE). Model it as a
-  // guarded exception raise — the same mechanism list indexing uses for
-  // IndexError — so that `try: x / 0 except ZeroDivisionError: ...` is treated
-  // as SAFE while a bare division by zero propagates and fails. The built-in
-  // C-level div-by-zero assertion cannot express this: it fires regardless of
-  // the surrounding try/except, so caught divisions were wrongly reported.
-  if (
-    (op == "Div" || op == "FloorDiv" || op == "Mod") &&
-    (rhs.type().is_signedbv() || rhs.type().is_unsignedbv() ||
-     rhs.type().is_floatbv()) &&
-    !converting_lambda_body_ && !in_rhs_type_probe_)
+  if (needs_zero_division_guard(op, rhs))
   {
     // The divisor is referenced by both the zero-check guard and the division
     // itself. If it carries a side effect (a call, or a nondet) it would be
