@@ -68,6 +68,159 @@ member_offset(const type2tc &type, const irep_idt &member, const namespacet *ns)
   return member_offset_bits(type, member, ns) / 8;
 }
 
+namespace
+{
+/* Members of either aggregate kind, paired with their names. A union overlays
+ * all of its members at offset zero. Unlike irep2_type.h's
+ * struct_union_members, these are references rather than copies, which is what
+ * a recursive walk wants. */
+struct aggregate_memberst
+{
+  const std::vector<type2tc> &types;
+  const std::vector<irep_idt> &names;
+  bool overlaid;
+};
+
+aggregate_memberst aggregate_members(const type2tc &type)
+{
+  if (is_union_type(type))
+    return {
+      to_union_type(type).members, to_union_type(type).member_names, true};
+  return {
+    to_struct_type(type).members, to_struct_type(type).member_names, false};
+}
+
+/* The references above are into the pointee, so a temporary argument would
+ * leave them dangling at the end of the full expression. */
+aggregate_memberst aggregate_members(type2tc &&) = delete;
+
+/* A member of no constant size ends the descent, keeping the paths already
+ * found: it is the last member, since C11 6.7.2.1p18 puts a flexible array
+ * member last and 6.7.2.1p9 bars a variably modified member outright, so no
+ * later member is reachable by a constant offset. Continuing instead would
+ * attribute this offset to a field that does not sit at it -- dropping paths
+ * is the safe direction for a may-points-to set, inventing them is not. */
+void collect_paths_at_offset(
+  const type2tc &type_in,
+  const BigInt &offset,
+  const type2tc &target,
+  const namespacet &ns,
+  const std::string &prefix,
+  std::vector<std::string> &dest)
+{
+  /* size_bits follows symbol types before measuring, so the inverse must too,
+   * or a typedef'd aggregate silently loses its path. */
+  const type2tc type = ns.follow(type_in);
+
+  if (offset == 0 && type == target)
+  {
+    dest.push_back(prefix);
+    return;
+  }
+
+  if (is_array_type(type))
+  {
+    const type2tc &subtype = to_array_type(type).subtype;
+    BigInt esize;
+    try
+    {
+      esize = type_byte_size(subtype, &ns);
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      return;
+    }
+    if (esize > 0)
+      collect_paths_at_offset(
+        subtype, offset % esize, target, ns, prefix + "[]", dest);
+    return;
+  }
+
+  if (!is_struct_type(type) && !is_union_type(type))
+    return;
+
+  const aggregate_memberst agg = aggregate_members(type);
+  const BigInt offset_bits = offset * 8;
+  BigInt start_bits = 0;
+
+  for (size_t i = 0; i < agg.types.size(); i++)
+  {
+    BigInt size_bits;
+    try
+    {
+      size_bits = type_byte_size_bits(agg.types[i], &ns);
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      return;
+    }
+
+    if (offset_bits >= start_bits && offset_bits < start_bits + size_bits)
+      collect_paths_at_offset(
+        agg.types[i],
+        (offset_bits - start_bits) / 8,
+        target,
+        ns,
+        prefix + "." + agg.names[i].as_string(),
+        dest);
+    if (!agg.overlaid)
+      start_bits += size_bits;
+  }
+}
+
+void collect_paths_of_type(
+  const type2tc &type_in,
+  const type2tc &target,
+  const namespacet &ns,
+  const std::string &prefix,
+  std::vector<std::string> &dest)
+{
+  const type2tc type = ns.follow(type_in);
+
+  if (type == target)
+  {
+    dest.push_back(prefix);
+    return;
+  }
+
+  if (is_array_type(type))
+  {
+    collect_paths_of_type(
+      to_array_type(type).subtype, target, ns, prefix + "[]", dest);
+    return;
+  }
+
+  if (!is_struct_type(type) && !is_union_type(type))
+    return;
+
+  const aggregate_memberst agg = aggregate_members(type);
+  for (size_t i = 0; i < agg.types.size(); i++)
+    collect_paths_of_type(
+      agg.types[i], target, ns, prefix + "." + agg.names[i].as_string(), dest);
+}
+} // namespace
+
+std::vector<std::string> member_paths_at_offset(
+  const type2tc &type,
+  const BigInt &offset,
+  const type2tc &target,
+  const namespacet &ns)
+{
+  std::vector<std::string> paths;
+  collect_paths_at_offset(type, offset, target, ns, "", paths);
+  return paths;
+}
+
+std::vector<std::string> member_paths_of_type(
+  const type2tc &type,
+  const type2tc &target,
+  const namespacet &ns)
+{
+  std::vector<std::string> paths;
+  collect_paths_of_type(type, target, ns, "", paths);
+  return paths;
+}
+
 BigInt type_byte_size_default(
   const type2tc &type,
   const BigInt &defaultval,
