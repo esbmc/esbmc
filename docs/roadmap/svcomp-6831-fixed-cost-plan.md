@@ -250,6 +250,53 @@ VCC count and symex assignments, which the hypothesis-2 probe shows are stable
 under a change that only adds unreferenced model code. A commit that moves those
 counts is the mechanism; one that moves only wall time is hypothesis 3.
 
+#### The window, measured end to end
+
+Both endpoints built from one build directory (so ccache and the solver
+dependencies are shared), `RelWithDebInfo`, Z3 + Bitwuzla, Python frontend on;
+12 interleaved pairs on the oracle:
+
+| metric | `978a007e73` | `7835797ebc` | B/A | IQR |
+|---|---|---|---|---|
+| wall | 10.001 s | 10.693 s | **1.063** | 0.048 |
+| GOTO creation | 0.313 s | 0.399 s | **1.272** | 0.098 |
+| symex | 0.752 s | 0.807 s | 1.056 | 0.094 |
+| slicing | 0.682 s | 0.719 s | 1.074 | 0.049 |
+| encoding | 4.452 s | 4.783 s | 1.053 | 0.055 |
+| solving | 2.080 s | 2.202 s | 1.070 | 0.065 |
+| VCCs / assignments | 79,992 / 120,003 | 79,992 / 120,003 | identical | |
+
+**The term reproduces at ×1.063 on a 10 s task, five times the noise floor,
+with the counts byte-identical.** Two things follow immediately:
+
+- **Hypothesis 2 is refuted in general, not just for #6708.** Nothing in the
+  window changed what symex produces on this input, so no amount of "more model
+  code reaching symex" explains the 6 %.
+- **Every phase moved by roughly the same factor** — and that includes
+  `solving`, which is time inside Bitwuzla. Both builds link the *same* solver
+  and hand it the *same* formula. A slowdown that reaches into an unchanged
+  third-party library is not ESBMC doing more work; it is the process being
+  slower at everything it does.
+
+GOTO creation is the exception at ×1.272: that is cause 2's *fixed* term, the
+blob having grown, and it is what W1–W3 address. Subtract it and the remaining
+~6 % is still there.
+
+**A mechanism this plan had not listed.** Hypothesis 3 named binary size
+(i-cache/iTLB). There is a second process-wide candidate with the same
+signature: the library load's *after-effects on the heap*. Deserialising 3,800
+symbols allocates and frees millions of small `irept` nodes before verification
+starts; a larger blob leaves the allocator with a bigger, more fragmented arena,
+and every later allocation — in symex, in slicing, in the solver — pays for it.
+That is exactly a uniform multiplicative term.
+
+The two are separable in one experiment: **re-run the same A/B with
+`--no-library`**. The oracle needs no models (identical VCCs either way), so if
+the ratio collapses toward 1.0 the mechanism is the library load's residue, and
+W1's blob split fixes the multiplicative term as a side effect — which would
+change this plan's sequencing entirely. If the ratio survives, it is layout and
+W1 does not help.
+
 #### The bisect rig
 
 The window is `978a007e73` (2026-08-01, fast) to `7835797ebc` (2026-08-08,
