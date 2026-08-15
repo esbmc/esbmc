@@ -288,7 +288,30 @@ by regression tests under `regression/esbmc-cpp*`.
 | `<algorithm>` | Including the C++11 algorithms |
 | `<numeric>` | `iota`, `gcd`, `lcm`, `reduce` |
 | `<cmath>` | The floating-point classifiers `std::isnan`, `std::isinf`, `std::isfinite`, `std::isnormal` and `std::signbit` are re-declared as `std::` overloads lowered to ESBMC's native FP intrinsics |
-| `<complex>`, `<random>`, `<chrono>` | `<chrono>` covers durations |
+| `<complex>`, `<random>` | |
+
+### Time
+
+`<chrono>` models `duration` over any `Rep` and `Period`, the `nanoseconds` …
+`hours` typedefs, `duration_cast`, and `time_point` with `time_point_cast`.
+Mixed-period arithmetic and comparison go through `common_type`, so
+`seconds(1) + milliseconds(500)` is `milliseconds(1500)`, and the converting
+`duration` constructor is implicit only where the conversion cannot truncate
+([time.duration.cons] p2). `duration::zero` / `min` / `max`, `time_point::min` /
+`max`, `treat_as_floating_point` and `duration_values` are there as well.
+`std::ratio` — reduced per [ratio.ratio] p1, with `ratio_multiply`,
+`ratio_divide` and the `nano` / `micro` / `milli` aliases — is declared by
+`<chrono>` itself, which also pulls in `<ctime>` for `system_clock::to_time_t`
+and `from_time_t`.
+
+`system_clock`, `steady_clock` and `high_resolution_clock` (an alias for
+`steady_clock`) share one tick counter that advances by a non-negative
+nondeterministic step. A reading is therefore unconstrained rather than a fixed
+constant, while `steady_clock` still satisfies [time.clock.steady] — it never
+runs backwards between two `now()` calls. `system_clock::period` follows the
+target's standard library — nanoseconds on Linux, microseconds on Apple
+platforms, 100 ns on Windows — because the point at which the representation
+saturates is observable in verification.
 
 ### Concurrency
 
@@ -339,7 +362,9 @@ implementation, which is frequently intractable.
 `<cwctype>`, `<cfenv>`, `<cinttypes>`.
 
 Note that `<concepts>` being unmodelled does not affect the *language* feature —
-concepts and `requires` clauses are supported, as listed above.
+concepts and `requires` clauses are supported, as listed above. Likewise
+`<ratio>` is not includable, but `std::ratio` and its arithmetic aliases are
+declared by `<chrono>` — see [Time](#time).
 
 ## Current status
 

@@ -747,6 +747,48 @@ void enforce_migrate_stack_budget(const migrate_stack_guardt &stack_guard)
 }
 } // namespace
 
+/// sizeof(T): op0 (a type_exprt) carries the measured type T, op1 the
+/// eagerly-computed byte-size value. Both become reflected sizeof2t fields,
+/// replacing the legacy sizeof-type side channel (esbmc/esbmc#5337).
+static expr2tc migrate_sizeof(const exprt &expr)
+{
+  // The frontends always produce the type operand; fail closed rather than
+  // over-read it in a release build.
+  if (expr.operands().empty())
+  {
+    log_error("sizeof node must carry a type operand and a value operand");
+    abort();
+  }
+
+  const type2tc type = migrate_type(expr.type());
+  const type2tc measured = migrate_type(expr.op0().type());
+  expr2tc value;
+
+  if (expr.operands().size() >= 2)
+    migrate_expr(expr.op1(), value);
+  else
+  {
+    // A VLA's size is not constant, so the frontend leaves the value operand
+    // off and clang_c_adjust::adjust_sizeof fills it in. Under
+    // --clang-c-irep2-adjust-only that pass does not run, and the node would
+    // be unrepresentable before anything could fix it. Computing the size here
+    // is safe where deciding a shift kind was not (§72, §80): c_sizeof is a
+    // pure function of the measured type, not a result of adjustment. The
+    // normal pipeline adjusts first and never reaches this branch.
+    const exprt sz = migrate_namespace_lookup
+                       ? c_sizeof(expr.op0().type(), *migrate_namespace_lookup)
+                       : nil_exprt();
+    if (sz.is_nil())
+    {
+      log_error("sizeof node must carry a type operand and a value operand");
+      abort();
+    }
+    migrate_expr(sz, value);
+  }
+
+  return sizeof2tc(type, value, measured);
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -776,45 +818,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "sizeof")
   {
-    // sizeof(T): op0 (a type_exprt) carries the measured type T, op1 the
-    // eagerly-computed byte-size value. Both become reflected sizeof2t fields,
-    // replacing the legacy sizeof-type side channel (esbmc/esbmc#5337). The
-    // frontends always produce both operands (the C adjust pass fills the value
-    // for VLAs); fail closed rather than over-read op1 in a release build.
-    if (expr.operands().empty())
-    {
-      log_error("sizeof node must carry a type operand and a value operand");
-      abort();
-    }
-
-    type = migrate_type(expr.type());
-    type2tc measured = migrate_type(expr.op0().type());
-    expr2tc value;
-
-    if (expr.operands().size() >= 2)
-      migrate_expr(expr.op1(), value);
-    else
-    {
-      // A VLA's size is not constant, so the frontend leaves the value operand
-      // off and clang_c_adjust::adjust_sizeof fills it in. Under
-      // --clang-c-irep2-adjust-only that pass does not run, and the node would
-      // be unrepresentable before anything could fix it. Computing the size
-      // here is safe where deciding a shift kind was not (§72, §80): c_sizeof
-      // is a pure function of the measured type, not a result of adjustment.
-      // The normal pipeline adjusts first and never reaches this branch.
-      const exprt sz =
-        migrate_namespace_lookup
-          ? c_sizeof(expr.op0().type(), *migrate_namespace_lookup)
-          : nil_exprt();
-      if (sz.is_nil())
-      {
-        log_error("sizeof node must carry a type operand and a value operand");
-        abort();
-      }
-      migrate_expr(sz, value);
-    }
-
-    new_expr_ref = sizeof2tc(type, value, measured);
+    new_expr_ref = migrate_sizeof(expr);
     return;
   }
 
