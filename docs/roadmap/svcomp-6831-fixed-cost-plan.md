@@ -327,6 +327,17 @@ than choosing between the hypotheses on the table. The stopping rule simplifies
 accordingly: the counts do not move anywhere in this window, so the verdict is
 the wall ratio against the fast endpoint.
 
+#### Bisect log
+
+Each row is 12 interleaved pairs of the oracle under `--no-library` against
+`978a007e73`, wall ratio. "Slow" means the effect is at or before that commit.
+
+| commit | # in window | date | B/A | IQR | verdict |
+|---|---|---|---|---|---|
+| `7835797ebc` | 183 | 2026-08-08 | 1.074 | 0.020 | slow (endpoint) |
+| `98856b8c11` | 92 | 2026-08-04 | 1.073 | 0.035 | **slow** — the second half contributes nothing |
+| `c8d4bf6f5c` | 46 | 2026-08-03 | | | running |
+
 #### The bisect rig
 
 The window is `978a007e73` (2026-08-01, fast) to `7835797ebc` (2026-08-08,
