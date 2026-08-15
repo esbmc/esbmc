@@ -430,12 +430,46 @@ Two consequences for what is left:
   still ~7 % slower than `978a007e73` at all is now the open question, and it
   needs current master built in the bisect's build directory — the numbers above
   come from two different build configurations and are not comparable across
-  that line.
+  that line. **Answered below: yes, in full.**
 - If the arena effect is real but masked by library-load fragmentation, then
   **W1 becomes interesting again for the multiplicative term after all** — not
   because loading is slow, but because what the load leaves in the arena makes
   the rest of the run slower. That is a different claim from the one refuted
   above, and it is testable the same way: W1's split blob, then this A/B.
+
+#### Current master, one week on: the term is still there in full
+
+`master` (`d72276d247`, 2026-08-15) built in the bisect's own build directory,
+against the fast endpoint, 12 pairs on an idle host, library loaded:
+
+| metric | `978a007e73` | `master` | B/A | IQR |
+|---|---|---|---|---|
+| wall | 9.890 s | 10.667 s | **1.070** | 0.016 |
+| GOTO creation | 0.311 s | 0.317 s | **1.020** | 0.024 |
+| symex | 0.764 s | 0.844 s | 1.101 | 0.072 |
+| slicing | 0.673 s | 0.712 s | 1.057 | 0.061 |
+| encoding | 4.226 s | 4.779 s | **1.115** | 0.047 |
+| solving | 2.115 s | 2.203 s | 1.038 | 0.048 |
+
+Two things at once.
+
+**The fixed term is largely paid off.** GOTO creation was ×1.272 at the window's
+slow endpoint and is ×1.020 today — W3.1 (the vector-backed read table) landed
+in between, and this is an independent confirmation that it did what §2.5 said
+it would, measured on a different oracle and against a different baseline.
+
+**The multiplicative term is untouched**, a week after the window closed:
+×1.070 on wall, and it is *not* spread evenly any more — encoding (×1.115) and
+symex (×1.101) carry it, while solving has fallen back to ×1.038. Nobody fixed
+this, and every SV-COMP task is still paying it.
+
+Next experiment, from the encoding penalty above: a single arena wins on symex
+and solving and loses on encoding *only when the library was loaded*, which
+points at what the load leaves free in the arena. `mallopt(M_ARENA_MAX, 1)`
+plus a `malloc_trim(0)` once GOTO creation is done would test whether the
+encoding penalty is fragmentation that can simply be handed back to the kernel.
+If it is, the fix is both halves together; if not, the ~5 % in symex is not
+reachable this way and the remaining work is in what encoding got slower at.
 
 #### The bisect rig
 
