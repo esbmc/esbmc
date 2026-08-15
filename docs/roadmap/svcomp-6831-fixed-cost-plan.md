@@ -463,13 +463,35 @@ it would, measured on a different oracle and against a different baseline.
 symex (×1.101) carry it, while solving has fallen back to ×1.038. Nobody fixed
 this, and every SV-COMP task is still paying it.
 
-Next experiment, from the encoding penalty above: a single arena wins on symex
-and solving and loses on encoding *only when the library was loaded*, which
-points at what the load leaves free in the arena. `mallopt(M_ARENA_MAX, 1)`
-plus a `malloc_trim(0)` once GOTO creation is done would test whether the
-encoding penalty is fragmentation that can simply be handed back to the kernel.
-If it is, the fix is both halves together; if not, the ~5 % in symex is not
-reachable this way and the remaining work is in what encoding got slower at.
+#### The fix: one arena *and* a trim, which only work together
+
+Both patches applied to `master` in the bisect's build directory, measured
+against the `master` binary from the same directory, 12 pairs, library loaded:
+
+| build | wall | goto | symex | encoding | solving |
+|---|---|---|---|---|---|
+| `mallopt(M_ARENA_MAX, 1)` only | 0.999 | — | 0.932 | 1.046 | 0.955 |
+| `malloc_trim(0)` after GOTO creation only | **1.033** | 1.025 | 1.061 | 1.051 | 1.005 |
+| **both** | **0.953** | 0.941 | 0.970 | **0.925** | 0.967 |
+
+IQR on the winning row is 0.007 — the tightest measurement in this plan.
+
+Neither half is a fix on its own; the trim alone is a 3.3 % *regression*. The
+interaction is the point. A single arena puts the operational-model library's
+freed blocks in the same arena the rest of the run allocates from, and the trim
+hands them back before encoding starts. Without the arena change, the trim only
+buys page faults on the way back up. With both, **every phase improves** and
+encoding — the phase that carried the regression on master (×1.115) — turns
+into a 7.5 % gain.
+
+That is ~4.7 of the ~7.0 points of #6831's multiplicative term, on a change of
+two lines under `__GLIBC__`, keeping #6618's crash fix intact.
+
+**Not yet shipped.** Before it can be: the regression suite has to be green,
+the claim has to be reproduced on a second workload (this is one oracle on one
+host, and a task that allocates differently may not see it), and
+`--k-induction-parallel` has to be checked for actual threads, since a single
+arena would serialise allocation between them if any exist.
 
 #### The bisect rig
 
