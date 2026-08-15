@@ -337,12 +337,24 @@ Each row is 12 interleaved pairs of the oracle under `--no-library` against
 | `7835797ebc` | 183 | 2026-08-08 | 1.074 | 0.020 | slow (endpoint) |
 | `98856b8c11` | 92 | 2026-08-04 | 1.073 | 0.035 | **slow** — the second half contributes nothing |
 | `c8d4bf6f5c` | 46 | 2026-08-03 | 1.074 | 0.103 | **slow** |
+| `bd54b099bc` | 23 | 2026-08-02 | 1.020 | 0.034 | **fast** — window is now 24–46 |
 
 The IQR widens with host load (a large unrelated build was running for the
-third row); the median of 12 pairs is roughly IQR/4 of standard error, so a
-×1.07 verdict still clears ×1.00 by ~3σ. A row that lands near ×1.035 — half
-the effect — would not, and should be re-run with more pairs on an idle host
-before it is believed.
+third and fourth rows); the median of 12 pairs is roughly IQR/4 of standard
+error, so a ×1.07 verdict still clears ×1.00 by ~3σ. A row that lands near
+×1.035 — half the effect — would not, and should be re-run with more pairs on
+an idle host before it is believed.
+
+Commit 23's ×1.020 sits just above the ±1.2 % floor. Read as "fast" here
+because the step is deciding between ×1.00 and ×1.07, but if the final commit
+does not account for the whole ×1.074, that residue is where to look for a
+second contributor.
+
+Ruled out by reading rather than building: **#6606** (`[build] Decouple
+sanitizers from CMAKE_BUILD_TYPE`), the one commit in 1–46 that touches
+compiler flags. With `ENABLE_SANITIZERS` empty and a `RelWithDebInfo` build the
+new code computes an empty sanitizer list and adds no compile or link options,
+so it cannot change codegen for these builds.
 
 #### The bisect rig
 
