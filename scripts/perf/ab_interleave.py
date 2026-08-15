@@ -81,7 +81,8 @@ def run(binary, args, timeout, tmpdir):
                               stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT,
                               timeout=timeout,
-                              env=env)
+                              env=env,
+                              check=False)
     except subprocess.TimeoutExpired:
         return None, f"{binary}: timed out after {timeout}s"
     except OSError as exc:
