@@ -53,6 +53,57 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
     adjust_index(expr);
   else if (is_member2t(expr))
     adjust_member(expr);
+  else if (
+    sole_adjuster && (is_code_function_call2t(expr) || is_sideeffect2t(expr)))
+    declare_implicit_callee(expr);
+}
+
+void clang_c_adjust_irep2::declare_implicit_callee(const expr2tc &expr)
+{
+  // A bare `f(x);` statement is a sideeffect2t of kind function_call, not a
+  // code_function_call2t; both spellings reach here.
+  expr2tc callee;
+  locationt loc;
+  if (is_code_function_call2t(expr))
+  {
+    const code_function_call2t &call = to_code_function_call2t(expr);
+    callee = call.function;
+    loc = call.location;
+  }
+  else
+  {
+    const sideeffect2t &se = to_sideeffect2t(expr);
+    if (se.kind != sideeffect_allockind::function_call)
+      return;
+    callee = se.operand;
+  }
+
+  if (is_nil_expr(callee) || !is_symbol2t(callee))
+    return;
+
+  const irep_idt id = to_symbol2t(callee).thename;
+  if (context.find_symbol(id) != nullptr)
+    return;
+
+  symbolt sym;
+  sym.id = id;
+  sym.name = id;
+  sym.location = loc;
+  sym.set_type(migrate_type_back(callee->type));
+  sym.mode = "C";
+  context.add(sym);
+}
+
+void adjust_comma_at_dispatch(exprt &expr, const namespacet &ns)
+{
+  const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
+
+  expr2tc e;
+  migrate_expr(expr, e);
+  const code_comma2t &c = to_code_comma2t(e);
+  expr = migrate_expr_back(code_comma2tc(c.side_2->type, c.side_1, c.side_2));
+
+  migrate_namespace_lookup = old_ns;
 }
 
 void clang_c_adjust_irep2::adjust_member(expr2tc &expr)

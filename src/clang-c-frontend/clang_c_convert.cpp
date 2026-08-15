@@ -4334,7 +4334,12 @@ bool clang_c_convertert::get_binary_operator_expr(
     break;
 
   case clang::BO_Shr:
-    new_expr = exprt("shr", t);
+    // C11 6.5.7p3: the operands are promoted and the result has the type of
+    // the promoted left operand, which is `t`. IREP2 has no signedness-
+    // agnostic shift, and the choice cannot be made after conversion without
+    // redoing that promotion (scope-clang-c-irep2.md §72), so make it here
+    // where clang has already applied it.
+    new_expr = exprt(t.id() == "unsignedbv" ? "lshr" : "ashr", t);
     break;
 
   case clang::BO_Rem:

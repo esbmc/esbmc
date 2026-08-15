@@ -456,19 +456,31 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
   if (converter.convert())
     return true;
 
-  clang_c_adjust adjuster(new_context);
-  if (config.options.get_bool_option("clang-c-irep2-adjust"))
-    adjuster.set_irep2_owns_arms();
-  if (adjuster.adjust())
-    return true;
+  // Phase 6 hop-off: with --clang-c-irep2-adjust-only the IREP2-native pass
+  // *replaces* clang_c_adjust rather than shadowing it, mirroring
+  // --python-irep2-adjust-only. §60 shows the dispatcher's arms are one
+  // strongly-coupled component, so they cannot move singly; the divergence
+  // count under this flag is the metric for how much of it has moved
+  // (docs/roadmap/scope-clang-c-irep2.md §66). Default off.
+  const bool irep2_only =
+    config.options.get_bool_option("clang-c-irep2-adjust-only");
+
+  if (!irep2_only)
+  {
+    clang_c_adjust adjuster(new_context);
+    if (config.options.get_bool_option("clang-c-irep2-adjust"))
+      adjuster.set_irep2_owns_arms();
+    if (adjuster.adjust())
+      return true;
+  }
 
   // Phase 6 C.3: shadow the legacy pass with the IREP2-native walk. Read-only,
   // so flag-on and flag-off are byte-identical by construction; what the flag
   // buys is migrating every value in the corpus through get_value2(), which
   // aborts on a construct migrate_expr cannot represent.
-  if (config.options.get_bool_option("clang-c-irep2-adjust"))
+  if (irep2_only || config.options.get_bool_option("clang-c-irep2-adjust"))
   {
-    clang_c_adjust_irep2 irep2_adjuster(new_context);
+    clang_c_adjust_irep2 irep2_adjuster(new_context, irep2_only);
     if (irep2_adjuster.adjust())
       return true;
   }
