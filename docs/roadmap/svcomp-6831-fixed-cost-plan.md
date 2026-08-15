@@ -487,11 +487,23 @@ into a 7.5 % gain.
 That is ~4.7 of the ~7.0 points of #6831's multiplicative term, on a change of
 two lines under `__GLIBC__`, keeping #6618's crash fix intact.
 
-**Not yet shipped.** Before it can be: the regression suite has to be green,
-the claim has to be reproduced on a second workload (this is one oracle on one
-host, and a task that allocates differently may not see it), and
-`--k-induction-parallel` has to be checked for actual threads, since a single
-arena would serialise allocation between them if any exist.
+**Not yet shipped.** Validation so far:
+
+- **Short runs do not pay for the trim.** `int main(void){return 0;}`, 20
+  pairs: ×0.977 wall, ×0.956 GOTO creation. The trim costs a 0.4 s run
+  nothing, and the arena change helps the library load itself.
+- **`--k-induction-parallel` is safe**: it `fork()`s (`k_induction.cpp:152`),
+  so each process keeps its own arena configuration.
+- **`--parallel-solving` is not.** It spawns one `std::thread` per claim job
+  (`bmc.cpp:3023`), all allocating concurrently; capping the process at one
+  arena would serialise them on a single malloc lock. The cap therefore has to
+  be skipped for that mode — and since a thread's arena is chosen at its first
+  allocation, before options are parsed, `main()` has to look for the flag in
+  `argv` rather than wait for the option to be available. Not elegant; the
+  alternative is leaving the ~5 % on the table for every sequential run.
+- **Still open:** a second, differently-shaped workload (a solver-dominated
+  one, closer to what a 99 s Juliet task actually does) and a green regression
+  suite.
 
 #### The bisect rig
 
