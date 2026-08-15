@@ -1,7 +1,8 @@
 # Plan — the per-task cost every SV-COMP run pays (issue #6831, cause 2)
 
-**Status:** in progress. W3 (both reader wins) and W4 (the cost is reported and
-pinned) are shipped; W0, W1, W2 and W5 are still plan only.
+**Status:** W0 closed (the term is a glibc secondary arena, not the library);
+W1 in review, W3 and W4 shipped; W2 and W5 still plan only. Against the
+window's fast endpoint the oracle is back to ×0.999 from ×1.070 — see §9.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 2 —
 a general slowdown tipping tasks already at the limit*, ~198 of 489 lost tasks,
 led by 131 `Juliet_Test` no-overflow tasks at a median of 99.1 s of a 100 s
@@ -562,3 +563,26 @@ used, superlinearly in its size, with 24 % of it Python models a C task can
 never call — but that fixed cost is not what lost the 131 Juliet tasks sitting
 at 99 s of a 100 s limit, so attribute the 3.5 % multiplicative term first (W0)
 and only then stop paying for models nobody asked for (W1–W4).
+
+**Outcome.** The multiplicative term was a glibc secondary arena, created the
+moment the run moved onto a worker thread; the fixed term was the blob, and
+neither was what the issue supposed. All three fixes together, 20 pairs on an
+idle host against the window's fast endpoint:
+
+| metric | `978a007e73` | with #7051 + #7058 + #7060 | B/A |
+|---|---|---|---|
+| wall | 9.794 s | 9.224 s | **0.999** |
+| GOTO creation | 0.308 s | 0.200 s | **0.670** |
+| symex | 0.748 s | 0.784 s | 1.065 |
+| encoding | 4.182 s | 4.042 s | 0.995 |
+| solving | 2.150 s | 1.965 s | 0.990 |
+
+**×1.070 → ×0.999: the regression is closed on this oracle**, and GOTO creation
+is a third faster than it was before the regression rather than merely
+restored. `symex` is the one phase still above parity; at ×1.065 of a 0.75 s
+phase it is ~50 ms of a 9.2 s run, and wall does not see it.
+
+The caveat that matters for the 131 tasks: this is ESBMC-bound time. A task
+that spends its 99 s inside the solver gains nothing from any of it (§W0's
+solver-bound workload measured ×0.994), so the score should be re-measured
+rather than predicted from these ratios.
