@@ -171,16 +171,13 @@ function(mangle_clib output)
       list(APPEND inputs_c ${c2goto_libm_files})
     endif()
 
-    # Python models are built as a separate pair of goto binaries (py64,
-    # py64_fp) below, NOT mixed into clib, so a C or C++ run does not
-    # deserialise them (#6831).
-
     # C++ operational models (esbmc/esbmc#5298): compiled by the C++ frontend
     # registered in c2goto and serialized into the clib alongside the C models.
     list(APPEND inputs_c ${c2goto_cpp_files})
 
-    # Solidity models are built as a separate goto binary (sol64.goto),
-    # NOT mixed into clib64, for faster runtime loading.
+    # Python (py64) and Solidity (sol64) models are built as their own goto
+    # binaries, NOT mixed into clib, so a run of one language does not
+    # deserialise the others' models (#6831).
 
     if(ESBMC_CHERI_CLANG)
       list(APPEND in_flags -I "${cheri_compressed_cap_SOURCE_DIR}")

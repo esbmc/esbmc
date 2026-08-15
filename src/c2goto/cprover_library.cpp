@@ -464,14 +464,15 @@ static bool select_solidity_blob(
 #endif
 
 #ifdef ENABLE_PYTHON_FRONTEND
-/// Merge the Python operational models into what was read from clib. py64
-/// holds only the models, so it is read whole; the libc, libm and pthread
-/// symbols they call stay in clib (`python_c_extern_deps`) and are reached
-/// through the dependency closure below. A declaration the models' headers
-/// carry must not shadow the clib definition of the same name, which the
-/// closure would then have no way to add.
+/// Merge the Python operational models into what was already read from clib.
+/// py64 holds only the models, so it is read whole; the libc, libm and pthread
+/// symbols they call stay in clib and are reached through the dependency
+/// closure below. Hence the skip: a declaration the models' headers carry must
+/// not displace the clib definition of that name, which the closure has no way
+/// to add once the id is taken.
 static void read_python_blob(contextt &new_ctx, contextt &ignored_ctx)
 {
+  // 64-bit only, as sol64 is; the pair is the two float encodings.
   const bool floatbv = !config.ansi_c.use_fixed_for_float;
   const uint8_t *start = floatbv ? py64_fp_buf : py64_buf;
   unsigned int size = floatbv ? py64_fp_buf_size : py64_buf_size;
