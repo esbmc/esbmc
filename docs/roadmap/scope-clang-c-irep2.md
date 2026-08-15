@@ -1869,3 +1869,765 @@ ownership into the IREP2 pass so arm order is preserved and a migrated arm's
 output reaches its consumers in the same walk. `esbmc-unix/github_2220`'s
 pre-existing divergence is the first thing that shape should be measured
 against.
+
+## 57. Shape 2, tested on the arm §55 withdrew
+
+§55.4 blamed the comma arm's divergences on *when* the rewrite ran, not on the
+rewrite. That is a falsifiable claim, and it is cheaper to test on one arm than
+to discover after restructuring the pass. The experiment: run the **identical**
+IREP2 rewrite at the point `clang_c_adjust::adjust_expr` dispatches the arm,
+via a per-node round trip -- `migrate_expr`, rewrite, `migrate_expr_back` --
+instead of in the trailing whole-program pass.
+
+### 57.1 Result
+
+| configuration | divergences vs flag-off |
+|---|---|
+| master | 1 |
+| arm in the trailing IREP2 pass (§55) | 8 |
+| **same rewrite at the dispatch point** | **1** |
+
+The one is `github_2220` in every row: pre-existing, member-arm, unrelated.
+So the seven are fully explained by ordering. §55.4's clause holds, and shape 2
+-- which fixes ordering by construction, because a migrated arm runs where the
+legacy arm ran -- is validated on a real arm before anyone restructures
+anything.
+
+A second fact falls out, and shape 2 depends on it: the per-node round trip is
+**lossless** for this construct. §3.1 predicted the migrating default would have
+to be paid per node rather than per class; this is the first measurement that it
+can be paid at all.
+
+### 57.2 What the mutants say, and which one counts
+
+Two were run, and only the second is evidence:
+
+- **`side_2->type` -> `side_1->type`** moves 8 tests -- but at least one
+  (`csmith01`) moves by **aborting**. That is `frontends-to-irep2.md` §39.1's
+  fifth row: the mutation makes the operation invalid and the crash, not the
+  value, moves the output. It proves the arm is reached and nothing more.
+- **the valid alternative** -- round trip, no retype -- moves **8** tests and
+  aborts on none. They are exactly the 86 retypes' 8 tests from §55.1,
+  `esbmc/00_aiob_4_true-unreach-call` included: it did not diverge under §55's
+  trailing-pass shape because that pass corrected it after the fact, and here
+  nothing does. This is the mutant that isolates the value.
+
+Recorded because the first mutant looked conclusive and was not. An abort is a
+*louder* signal than a divergence and a weaker one.
+
+### 57.3 Cost
+
+`csmith01`, the heaviest comma test in the corpus: 2.79 s -> 3.18 s, +14 %.
+That is the whole opt-in path, dominated by the trailing pass migrating every
+symbol value, not by the round trip. The per-node trip migrates a node's whole
+subtree, so nested commas cost O(depth x size); C comma chains are shallow and
+the corpus does not exercise a deep one. Flag is default-off.
+
+### 57.4 What this unblocks
+
+§55.5 retired §49.3's list because every remaining arm writes a type a sibling
+consumes. Shape 2 removes that clause entirely -- a migrated arm runs in
+sequence, so its consumers see its output. `adjust_expr_unary_boolean` and
+`adjust_expr_binary_boolean` come back on the list on exactly the evidence that
+took them off it. `adjust_sizeof` does not: `migrate.cpp:783`'s two-operand
+requirement is independent of ordering.
+
+## 58. The boolean arms, and the bound on §57's round trip
+
+§57.4 put `adjust_expr_unary_boolean` and `adjust_expr_binary_boolean` back on
+the list: shape 2 removes the §55.4 clause that took them off. They still do not
+ship, and the reason bounds the dispatch-point shape itself.
+
+### 58.1 Pre-check, from source
+
+Cheaper than §57's census, and it answers two things at once:
+
+- **No operand invariant to relax.** `not2t`, `and2t` and `or2t` come from
+  `ESBMC_DEFINE_LOGIC_2OP`, which fixes the *node's* type to bool and asserts
+  nothing about operands. An `and` whose operands are still `int` migrates
+  cleanly -- unlike `member2t`/`index2t`, which needed #6921's relaxation.
+- **Half of each arm is dead for C.** `expr.type() = bool_type()` never changes
+  anything: the converter already emits bool for `UO_LNot`, `BO_LAnd` and
+  `BO_LOr` (`clang_c_convert.cpp:4227`, `:4380`, `:4384`), and `migrate_expr`
+  *asserts* on `and`/`or` that it is bool already (`migrate.cpp:1118`). The
+  operand conversion is the whole of the live work.
+
+### 58.2 The measurement
+
+| | divergences vs flag-off |
+|---|---|
+| master | 1 |
+| both arms at the dispatch point | **5** |
+
+Four are new, in two unrelated classes:
+
+- `esbmc/deep_binary_chain_{pass,fail}` **time out** -- see §58.3.
+- `csmith01`, `csmith02` differ by one cast: legacy emits
+  `(_Bool)(*l_60 == (unsigned int *)0)`, the IREP2 path emits the comparison
+  bare. Migration normalises a comparison to `equality2t`, which is bool by
+  construction, so `c_implicit_typecast` correctly declines a bool-to-bool cast
+  the legacy copy inserts. This is §53.3's vacuous class and is verifiable as
+  such per case -- same kind, same width -- but it is not why the arms are
+  withdrawn.
+
+### 58.3 The round trip is quadratic, and the corpus already proves it
+
+§57.3 noted that a per-node round trip migrates the node's whole subtree, so
+nested operators cost O(depth x size), and said the corpus did not exercise a
+deep one. It does -- for boolean operators, not commas:
+
+```c
+#define A6 A5 && A5 && A5 && A5
+#define DEEP A6 && A6 && A6
+int deep(int x) { return DEEP; }
+```
+
+| `deep_binary_chain_pass`, `--goto-functions-only` | |
+|---|---|
+| flag-off | 34.5 s |
+| both arms at the dispatch point | **> 200 s (killed)** |
+
+Every `&&` node re-migrates the whole chain beneath it. Comma survived §57
+because C comma chains are shallow; `&&` chains are not, and this one is a
+macro expansion of a kind real code produces.
+
+### 58.4 What this bounds
+
+The dispatch-point round trip is a *probe*, and §57 was right to call it one; it
+is viable only where nesting is shallow, which is a property of the operator,
+not of the technique. It does not generalise, and #6992 should be read as the
+comma arm plus a validated diagnosis -- not as a shape to repeat per arm.
+
+Shape 2 proper is unaffected, and this sharpens what it has to be: **migrate a
+symbol's value once, walk it natively, dispatch in sequence**. §3.1's "migrating
+default paid per node rather than per class" is affordable only if "per node"
+means *dispatch* per node, not *migration* per node. That distinction was
+implicit before this measurement and is the design constraint now.
+
+## 59. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921), comma arm at its
+dispatch point (#6992). `adjust_comma` in the trailing pass withdrawn (§55);
+boolean arms in the dispatch-point shape withdrawn (§58).
+
+Next: shape 2 proper, per §58.4 -- one migration per symbol value, native walk,
+in-sequence dispatch. The two arms withdrawn here are its first customers, and
+`deep_binary_chain_pass` is its performance gate: it must stay at ~34 s.
+
+## 60. Shape 2 sized: the increment is the coupled component, not the arm
+
+§58.4 left shape 2 as "one migration per symbol value, native walk, in-sequence
+dispatch". That says what it must do. This says how large the smallest sound
+step is, and the answer is why the phase has stalled twice.
+
+### 60.1 The coupling census
+
+Classify each arm of `clang_c_adjust`'s dispatcher two ways. A **producer**
+writes a node's type or inserts a typecast. A **consumer** reads an operand's
+type -- directly, or by handing the operand to a typecast helper that reads it,
+which is the case the first pass of this census missed.
+
+| | count |
+|---|---|
+| arms examined | 30 |
+| producers | 20 |
+| consumers | 19 |
+| **both** | **19** |
+| neither | 10 |
+
+Nineteen arms both produce and consume. In an expression dispatcher any
+expression can be any other's operand, so those nineteen are mutually reachable:
+they form one strongly-coupled component.
+
+### 60.2 Why that kills arm-at-a-time migration
+
+§55.4 said an arm cannot move to the trailing pass alone if a sibling consumes
+its output. The natural repair is to move a *set* closed under "consumes" --
+inside the trailing pass, a native walk recurses children-first, so a
+producer and its consumer run in the right relative order if both have moved.
+
+The census prices that closure: for any arm in the component it is the whole
+component. There is no small closed set. Nineteen arms, ~690 lines, move
+together or not at all (`adjust_index`, `adjust_member` and `adjust_comma`, 99
+lines, are already native).
+
+### 60.3 The three routes, two of them closed
+
+| route | status |
+|---|---|
+| arm at a time into the trailing pass | **closed** -- §55.4, and §60.2 shows the repair does not shrink |
+| arm at a time at its dispatch point, via a per-node round trip | **closed** -- §58.3, quadratic on `&&` chains |
+| the coupled component at once, one migration per symbol value | open |
+
+The third has neither defect by construction: migrating once is linear, and a
+single native walk dispatches every arm of the component in sequence, so no
+producer outruns its consumer. It is also the only route whose endpoint deletes
+the legacy dispatcher rather than shadowing it.
+
+### 60.4 What is still separable
+
+Ten arms are neither producer nor consumer. Most are helpers (`adjust_operands`,
+`adjust_type`, the two `adjust_symbol` overloads, `adjust_argc_argv`) or already
+resolved (`adjust_reference`, empty for C -- §55.5). Three are genuine dispatch
+arms and are the only remaining single-arm candidates:
+
+- `adjust_struct` -- inserts padding operands; writes no type
+- `adjust_expr_unary_complex`
+- `adjust_side_effect_function_call`
+
+They are *candidates*, not cleared: §49.3 produced a list that looked clean and
+was not, and each still has to face the A/B and a valid-alternative mutant. But
+they are the only work in this phase that does not require the big step first.
+
+### 60.5 Gates for the big step
+
+Unchanged from §57, plus one this phase learned the hard way:
+
+- A/B byte-identity over the §1.2 corpus, stderr-hashed, §21.3's three
+  normalisations plus §55.2's address normalisation.
+- A valid-alternative mutant per migrated arm -- not one that aborts (§57.2).
+- **`deep_binary_chain_pass` stays at ~34 s.** §58.3 made this a standing
+  performance gate rather than a note.
+- The pre-existing `github_2220` divergence is the baseline, not a regression;
+  it should be fixed or explained before the component lands, since a
+  whole-component A/B cannot afford an unexplained non-zero baseline.
+
+## 61. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921), comma arm at its
+dispatch point (#6992). Withdrawn: `adjust_comma` in the trailing pass (§55),
+the boolean arms at their dispatch point (§58).
+
+Next, in order: (a) resolve `github_2220` so the baseline is zero (§60.5), then
+(b) the coupled component as one step (§60.3), with (c) the three separable arms
+of §60.4 available in parallel to anyone who wants a smaller piece.
+
+## 62. `github_2220` diagnosed: array bounds live in types
+
+§60.5 wanted the A/B baseline at zero before the coupled component moves, and
+named `esbmc-unix/github_2220` as the one thing in the way. It is not a quirk of
+that program, and it does not have a small fix.
+
+### 62.1 The reproducer
+
+Eight lines, reduced from a 90-line test:
+
+```c
+struct dirent { char d_name[256]; };
+unsigned long strlen(const char *);
+void g(struct dirent *entry)
+{
+  char buf[strlen(entry->d_name) + 2];
+  buf[0] = 0;
+}
+```
+
+Flag-off prints `strlen(&entry->d_name[0])`. Flag-on prints a raw irep dump: a
+`member` whose base is still a pointer, which `c_expr2string` cannot render.
+
+### 62.2 The cause
+
+`char buf[...]` is a VLA, so its bound is an expression carried in a **type**.
+`clang_c_adjust::adjust_type` walks exactly that -- `/* adjust the size
+expression for VLAs */`, calling `adjust_expr` on the size. The IREP2 pass walks
+`get_value2()` and nothing else. So once `irep2_owns_arms` hands an arm over,
+nothing rewrites a member or index inside an array bound.
+
+Latent since the index arm (#6907) and equally true of `adjust_member` (#6921).
+It surfaced as one test only because a VLA whose bound subscripts a struct
+member is rare.
+
+### 62.3 Two fixes that do not work, and why the second matters
+
+- **Walking the symbol's type.** Correct, and insufficient. Instrumentation
+  confirms the member arm fires exactly once, on `buf`'s symbol type, and the
+  output does not change: the function body's `code_decl2t` carries its own copy
+  of the array type.
+- **Walking each expression node's type.** Not expressible. `expr2t::type` is
+  **`const`** (`irep2.h:909`) -- an IREP2 node's type is immutable by design, so
+  a type-adjusting walk must *rebuild* every node whose type changed, kind by
+  kind, rather than assign through it.
+
+That second point is the finding. There is no generic "same node, new type"
+operation in IREP2, so mirroring `adjust_type` is not a patch to the shadow pass
+-- it is a structural piece of a walk that constructs nodes anyway.
+
+### 62.4 Consequence for §60.5
+
+The zero-baseline precondition is withdrawn as a *precondition*. It cannot be
+met cheaply, and it does not need to be: shape 2 rebuilds nodes natively, so the
+type descent comes free with it. The baseline is 1 until the component moves,
+and that 1 is now explained rather than outstanding -- which is what §60.5
+actually needed.
+
+`regression/esbmc/github_2220_vla_bound` pins it as KNOWNBUG. Its regex matches
+flag-off output and not flag-on, so it fails for this defect and will XPASS the
+moment the defect goes -- checked both ways rather than assumed.
+
+## 63. What the component actually executes
+
+§60 sized the port at 19 coupled arms; `frontends-to-irep2.md` §39.1 requires a
+census before writing, and this phase has twice found an arm whose work was
+already dead (`adjust_comma`'s type write, §55.1; both boolean arms', §58.1).
+An `fprintf` at each arm's entry, over the §1.2 corpus, flag-off:
+
+| arm | calls | tests |
+|---|---:|---:|
+| `adjust_side_effect` | 94 596 | 2 559 |
+| `adjust_index` | 48 499 | 1 877 |
+| `adjust_address_of` | 46 499 | 2 035 |
+| `adjust_side_effect_function_call` | 44 017 | 2 465 |
+| `adjust_function_call_arguments` | 44 017 | 2 465 |
+| `adjust_side_effect_assignment` | 40 018 | 1 415 |
+| `adjust_expr_binary_boolean` | 30 045 | 453 |
+| `adjust_expr_rel` | 29 956 | 2 038 |
+| `adjust_member` | 29 883 | 490 |
+| `adjust_expr_binary_arithmetic` | 28 098 | 891 |
+| `adjust_expr_shifts` | 7 916 | 109 |
+| `adjust_dereference` | 6 709 | 336 |
+| `adjust_expr_unary_boolean` | 6 655 | 364 |
+| `adjust_sizeof` | 4 999 | 1 346 |
+| `adjust_struct` | 4 165 | 350 |
+| `adjust_comma` | 3 924 | 1 102 |
+| `adjust_side_effect_statement_expression` | 3 120 | 1 094 |
+| `adjust_if` | 1 372 | 114 |
+| `adjust_builtin_va_arg` | 52 | 9 |
+| `adjust_expr_unary_complex` | 22 | 4 |
+| **`adjust_base_to_derived`** | **0** | **0** |
+| **`adjust_ptr_mem`** | **0** | **0** |
+
+### 63.1 Two arms never fire, and porting them blind is the §28 trap
+
+`adjust_base_to_derived` is guarded by `#base_to_derived` on a typecast, and
+`adjust_ptr_mem` by an `id() == "ptr_mem"` node: both are C++ shapes, reachable
+only through `clang_cpp_adjust`, which derives from this class. Phase 6 needs no
+native counterpart for either, and **must not claim one verified** on a C-only
+A/B -- that is exactly `scope-jimple-irep2.md` §28, where `nondet` was migrated
+before anyone knew it occurred zero times and the byte-identity claim held for
+nine PRs because nothing executed the override. They come back in Phase 7.
+
+That takes the port from 19 arms to **17**.
+
+### 63.2 The thin tail is where the mutants will lie
+
+`adjust_builtin_va_arg` (9 tests) and `adjust_expr_unary_complex` (4 tests) have
+corpus support two orders of magnitude below the head. §39.1's first row -- an
+unmoved mutant means the corpus is thin -- is a near-certainty for both, so each
+needs a written test *before* it is ported, not after its mutant comes back
+silent.
+
+This also corrects §60.4: `adjust_expr_unary_complex` was listed as one of three
+arms still separable, on the ground that it neither produces nor consumes type
+information. That remains true, but at 4 tests it is not a cheap win -- the
+measurement it would need costs more than the arm.
+
+### 63.3 One pair moves together
+
+`adjust_side_effect_function_call` and `adjust_function_call_arguments` have
+identical counts, 44 017 in the same 2 465 tests: the latter is called only by
+the former. They are one unit of work, not two.
+
+## 64. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921), comma arm at its
+dispatch point (#6992). Withdrawn: `adjust_comma` in the trailing pass (§55),
+the boolean arms at their dispatch point (§58). Baseline explained (§62).
+
+Next: the 17 live arms of §63, ported behind a `--clang-c-irep2-adjust-only`
+mode mirroring `--python-irep2-adjust-only`, with the divergence count against
+flag-off as the progress metric and the flip when it reaches the §62 baseline of
+1. Write tests for the §63.2 tail first.
+
+## 65. §63.2 is wrong: few tests is not the same as undetectable
+
+§63.2 said the thin tail -- `adjust_builtin_va_arg` at 9 tests and
+`adjust_expr_unary_complex` at 4 -- would need tests written before porting,
+because §39.1's first row makes an unmoved mutant near-certain at that coverage.
+That inference does not hold, and the way to find out was to run the mutant
+rather than reason about the count.
+
+### 65.1 The measurement
+
+Two valid alternatives, both compiled and swept against the flag-off baseline:
+
+| mutant | tests moved | arm fires in |
+|---|---:|---:|
+| A -- `adjust_expr_unary_complex` never negates the real part, so `-z` becomes `~z` | 3 | 4 |
+| B -- `adjust_builtin_va_arg` lowers to a differently-named intrinsic | 8 | 9 |
+
+A moved `complex_23`, `complex_25`, `complex_26`; B moved the `va_start` /
+`va_copy` / `vasprintf` tests and three printf-family ones. Both arms are
+mutation-detectable by the corpus as it stands, so **no new tests are needed
+before porting either**.
+
+`complex_24` did *not* move under A, and should not have: it uses only `~z`,
+which is the branch A leaves alone. A measurement that moved everything would be
+the suspicious one.
+
+### 65.2 What the reasoning got wrong
+
+§39.1's row is "the corpus is thin" -- an arm the corpus does not *exercise*.
+§63.2 read it as a statement about test *count*. Those differ: a mutant needs to
+move one dump, and four tests that genuinely execute the arm supply that as
+surely as four hundred. Coverage breadth matters for finding defects the mutant
+was not designed to model; it is not the threshold for whether the gate has
+teeth.
+
+The operative test is therefore not "how many tests touch this arm" but "does a
+valid-alternative mutant move the dump" -- which is one build and one sweep, and
+answers the question instead of estimating it. `adjust_base_to_derived` and
+`adjust_ptr_mem` remain genuinely undetectable here (§63.1) because they fire
+zero times; that is the real form of the concern and the census already found it.
+
+### 65.3 Consequence
+
+§63.2's precondition is withdrawn. §60.4's downgrade of
+`adjust_expr_unary_complex` is also withdrawn: at 22 calls in 4 tests, with a
+mutant that moves 3 of them, it is exactly the small separable arm §60.4
+originally called it.
+
+## 66. `--clang-c-irep2-adjust-only`, and the first number
+
+§60.3 left the coupled component as one step, which is 17 arms (§63.1) and no
+way to show progress in between: the trailing-pass shape cannot move an arm
+singly (§55.4) and the dispatch-point shape is quadratic (§58.3). The hop-off
+flag fixes the measurement problem, exactly as `--python-irep2-adjust-only`
+does for V.4: the IREP2 pass *replaces* `clang_c_adjust` instead of shadowing
+it, so every arm ported makes strictly more tests match and the divergence
+count is monotone. Default off.
+
+### 66.1 The starting number
+
+Against the flag-off baseline over the §1.2 corpus:
+
+| | tests |
+|---|---:|
+| already identical | **1 001** |
+| `migrate expr failed` before any arm runs | **575** |
+| migrates, output differs | **1 233** |
+| **diverging** | **1 808** of 2 809 |
+
+1 001 already match, which is more than expected for a pass implementing three
+of seventeen arms -- most tests never reach the constructs the missing arms
+handle.
+
+### 66.2 The 575 are a different workstream, and they come first
+
+`migrate_expr` presumes a **post-adjust** tree. Run without the legacy pass, it
+aborts on shapes the converter emits and `clang_c_adjust` lowers: this is the
+same class as the union-constant assert (#6899) and the `member2t`/`index2t`
+construction invariants (#6907, #6921), each of which was found and relaxed one
+at a time. Measured at scale it is 575 tests -- a fifth of the corpus -- and
+they cannot be measured *at all* until it is relaxed, because they die before
+the first arm.
+
+So the port has two workstreams, not one, and their order is forced:
+
+1. **Migration preconditions.** Enumerate the constructs on which
+   `migrate_expr` aborts pre-adjust, and relax or teach each. Until this is
+   done, 575 tests contribute nothing to the metric.
+2. **The 17 arms**, whose progress the remaining 1 233 measure.
+
+### 66.3 A harness defect worth its own issue
+
+An aborted `esbmc` does not remove its `esbmc-headers-*` temp directory (~7.4 MB
+per run). Any sweep over a mode that aborts -- which `-only` does on 575 tests
+today -- leaks toward 20 GB and fills the disk, after which every subsequent
+measurement is an ENOSPC artifact that reads as "identical" rather than as an
+error. The sweep harness now gives each run a private `TMPDIR` and deletes it;
+the underlying cleanup-on-abort gap is ESBMC's, not the harness's.
+
+## 67. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921), comma arm at its
+dispatch point (#6992), hop-off flag (this section). Withdrawn: `adjust_comma`
+in the trailing pass (§55), the boolean arms at their dispatch point (§58).
+Baseline explained (§62); tail arms cleared for porting (§65).
+
+Next: §66.2 workstream 1 -- census the constructs behind the 575
+`migrate expr failed` tests, which is the same shape of work as #6899/#6907/#6921
+and now has a number attached to it.
+
+## 68. §66.2 is wrong: migration has no preconditions of its own
+
+§66.2 read 575 tests as aborting inside `migrate_expr`, called that a separate
+workstream, and put it ahead of porting arms. Measured directly -- an `fprintf`
+at `migrate_expr`'s failure site, swept under `-only` -- it is **70 tests and
+two constructs**:
+
+| construct | tests |
+|---|---:|
+| `shr` | 64 |
+| `builtin_va_arg` | 6 |
+
+### 68.1 Where the 575 came from
+
+A proxy: "output under 2 KB with `-only`, at least 2 KB flag-off". That bucket
+holds three unrelated things -- real migrate aborts, a different early error, and
+tests whose GOTO dump is simply short (`clang_builtins/nontemporal_load_*`
+complete normally and were counted as failures). The lesson is the ordinary one:
+a proxy measured because it was cheap, when the direct measurement was one
+`fprintf` away.
+
+### 68.2 And they are not preconditions -- they are unported arms
+
+Both constructs are the *input* to an arm that has not moved:
+`adjust_expr_shifts` rewrites `shr` into `ashr`/`lshr` by signedness, and
+`adjust_builtin_va_arg` lowers `builtin_va_arg` to a call. Without the arm, the
+raw form reaches `migrate_expr`, which has no case for it.
+
+The same holds for every other migration failure in the corpus. Sampling 303
+tests, 116 error under `-only`:
+
+| message | count |
+|---|---:|
+| `Function X not found` | 93 |
+| `PARSING ERROR` | 10 |
+| `shr` | 6 |
+| `cannot remove side effect (assign_shr)` | 3 |
+| `and takes boolean operands only` | 2 |
+| `sizeof node must carry a type operand and a value operand` | 1 |
+| `do_function_call: unexpected callee expression (id: member)` | 1 |
+
+`and takes boolean operands only` is `migrate.cpp:1118` firing because the
+boolean arms have not run (§58.1 noted the assert from the other direction);
+the `sizeof` arity error is `migrate.cpp:783` because `adjust_sizeof` has not
+filled the VLA operand (§55.5, likewise). So:
+
+> `migrate_expr`'s preconditions *are* "the legacy arms have run". There is no
+> separate relaxation workstream. §66.2's ordering is withdrawn.
+
+### 68.3 What to port first, on evidence
+
+`Function X not found` is 80 % of the sampled errors. That is the function-call
+path -- `adjust_side_effect_function_call` with `adjust_function_call_arguments`,
+which §63.3 already found move as one unit, and which §63's census puts at
+44 017 calls in 2 465 tests. It is both the most-executed arm and the dominant
+blocker, so it is the first thing to port rather than the last.
+
+Then `adjust_expr_shifts` (109 tests), which clears the 64 `shr` aborts and the
+`assign_shr` side-effect error with them.
+
+The `PARSING ERROR` rows are not attributed: they may fail flag-off too, and
+that was not checked.
+
+## 69. Status
+
+C.1-C.3 (#6894), lookup (#6897), union assert (#6899), havoc order (#6901),
+index arm (#6907), address_of bit (#6912), member arm (#6921), comma arm at its
+dispatch point (#6992), hop-off flag (§66). Withdrawn: `adjust_comma` in the
+trailing pass (§55), the boolean arms at their dispatch point (§58), §63.2's
+test precondition (§65), §66.2's migration workstream (§68).
+
+Metric: **1 808 of 2 809 diverge** under `--clang-c-irep2-adjust-only`; 649 of
+those error, 1 159 differ silently. Next: port the function-call pair (§68.3),
+and re-measure.
+
+## 70. The first `-only` blocker: implicitly-declared callees
+
+§68.3 named the function-call pair as the dominant blocker on the strength of
+`Function X not found` being 80 % of sampled errors. Reduced, the trigger is
+narrower than the arm:
+
+```c
+int main(void) { undeclared_fn(1); return 0; }
+```
+
+A call to a function with no visible declaration. Ordinary calls are fine under
+`-only`; `clang_builtins/atomic_store` trips it only because it calls `assert`
+without including `assert.h`, so `assert` is a function rather than a macro.
+
+### 70.1 It is a symbol-table side effect, not a rewrite
+
+`clang_c_adjust::adjust_side_effect_function_call` looks the callee up and, when
+it is absent, **creates** the symbol (`context.add(new_symbol)`). That is not an
+expression rewrite, so it ports independently of the arm's other ~139 lines --
+and it is the general point: some arms do work that is not
+representation-bound, and those pieces can move first and cheaply.
+
+`declare_implicit_callee` does the same natively. Result under `-only`:
+
+| | tests erroring |
+|---|---:|
+| before | 649 |
+| after | **304** |
+
+### 70.2 Both spellings, and a gate
+
+A bare `f(x);` is a `sideeffect2t` of kind `function_call`; an assigned call is
+a `code_function_call2t`. A handler matching one misses the other, and the
+discarded-result form is exactly the failing case.
+
+The declaration is also gated on a new `sole_adjuster` flag, set only under
+`-only`. Work that *substitutes* for the legacy pass has no `irep2_owns_arms`
+counterpart to disable on the legacy side, so unlike an arm's rewrite it is not
+shadow-safe by construction. In shadow mode the legacy pass declares the callee
+first and the native code is a no-op, so this is intent rather than a fix -- but
+the distinction is real and the rest of the port will meet it again.
+
+### 70.3 The metric did not move, and that is correct
+
+Divergences stayed at 1 808. Clearing an *error* does not make a test
+byte-identical; it lets the test run further, moving it from "errors" to
+"differs". §66's divergence count is the right *exit* condition and a poor
+*progress* signal, since almost all of its movement is concentrated at the end.
+Track the staged counts -- errors, then differs, then identical -- which move
+throughout.
+
+### 70.4 Harness: a per-run temp path defeated the A/B
+
+Isolating each sweep run's `TMPDIR` (§66.3, to stop aborted runs leaking header
+dirs) introduced a fresh random path component per run, which §55.2's
+normalisation list does not cover. The A/B then reported **793** divergences in
+*flag-off against itself* -- read at first as a shadow-mode regression from this
+patch, which it was not. Normalising the temp-dir name restores a clean
+self-control and shadow mode to its baseline of 2 (`github_2220` and the §62
+KNOWNBUG that pins the same defect).
+
+Third harness defect in this phase, after stdout-vs-stderr and ASLR addresses
+(§55.2). The pattern is constant: a per-run artefact enters the output, and the
+gate reports divergence everywhere rather than failing loudly. **Run the
+self-control after any change to how the sweep invokes ESBMC**, not only after
+changes to ESBMC.
+
+## 71. Status
+
+Metric under `--clang-c-irep2-adjust-only`: **1 808 of 2 809 diverge**, of which
+**304 error** (was 649). Shadow mode: 2, both the §62 VLA defect.
+
+Next: the remaining 304. `shr` (64 tests) and `builtin_va_arg` (6) are
+`adjust_expr_shifts` and `adjust_builtin_va_arg` (§68.2); the rest need the same
+reduce-then-classify treatment this section applied.
+
+## 72. `shr` shows the hop-off's ordering is not universally satisfiable
+
+§71 put the shift arm next: `shr` is 64 of the tests still erroring under
+`-only`, and 10 of the 14 real errors in the §70 sample. It does not port, and
+the reason is about the `-only` architecture rather than the arm.
+
+### 72.1 The 10 `PARSING ERROR`s are not ours
+
+First, §68.3's unattributed row, resolved: all 10 fail flag-off as well. They are
+pre-existing parse failures, not `-only` failures, and they should be subtracted
+from every error count in §68-§71. The sample's 24 errors are 14.
+
+### 72.2 IREP2 has no untyped shift, and the choice needs the promotion
+
+`clang_c_adjust::adjust_expr_shifts` promotes both operands
+(`gen_typecast_arithmetic`) and *then* reads `op0.type()` to pick `lshr` for
+unsigned or `ashr` for signed. IREP2 has `lshr2t`, `ashr2t` and `shl2t` and no
+signedness-agnostic `shr`, so a raw `shr` is not representable: migration must
+make the arm's choice.
+
+It cannot make it correctly. `-only` migrates a symbol's whole value up front,
+before any native arm runs, so the only type available is the **unpromoted**
+one, and promotion changes it:
+
+```c
+unsigned char x = 200;
+int y = x >> 1;      // flag-off: ASSIGN y=(signed int)x >> 1
+```
+
+`x` is `unsignedbv` before promotion and `signedbv` after, so a migration-time
+decision picks `lshr` where the arm picks `ashr`. For a promoted `unsigned char`
+the two agree numerically -- the promoted value cannot be negative -- so this is
+a byte-identity failure rather than a wrong answer. Byte-identity is the gate.
+
+### 72.3 What this bounds
+
+The hop-off's order is *migrate, then adjust natively*. That is only satisfiable
+when every construct's IREP2 form is determined **before** adjustment. `shr` is
+the first proof that it is not: its node kind is a *result* of adjustment.
+
+So teaching `migrate_expr` about `shr` is not the fix -- it would have to
+duplicate the promotion to be right, which is the arm. The resolutions are:
+
+1. **Decide earlier.** Have the converter emit `ashr`/`lshr` directly; it knows
+   the operand types and C11 6.5.7p3's promotion rule. This changes flag-off
+   output and needs its own A/B, but it removes the construct from the adjuster
+   entirely.
+2. **Adjust before migrating**, i.e. keep the legacy pass -- which is what
+   shadow mode already does, and what `-only` exists to stop doing.
+3. **Construct natively end to end** (C.2), where no migration boundary exists
+   and the question does not arise.
+
+Only (1) and (3) make progress. (1) is a small, self-contained change and is the
+next step; (3) is the phase's actual goal and this is evidence for taking the
+converter, not the adjuster, as its vehicle.
+
+## 73. Status
+
+Metric under `--clang-c-irep2-adjust-only`: 1 808 of 2 809 diverge; **304 error,
+of which the pre-existing parse failures (§72.1) are not ours**. Shadow mode: 2,
+both the §62 VLA defect.
+
+Next: §72.3 option 1 -- emit `ashr`/`lshr` from the converter -- measured
+flag-off first, since it moves output on the default path.
+
+## 74. The shift kind, decided at conversion
+
+§72.3 left two viable routes for `shr`; this takes option 1. `clang_c_convert`
+now emits `lshr` or `ashr` directly instead of a signedness-agnostic `shr`.
+
+### 74.1 Why the converter can decide and migration cannot
+
+Clang has already applied the integer promotion by the time the converter sees
+the node, and records it as an `ImplicitCastExpr <IntegralCast>`:
+
+```
+BinaryOperator 'int' '>>'
+|-ImplicitCastExpr 'int' <IntegralCast>
+| `-ImplicitCastExpr 'unsigned char' <LValueToRValue>
+`-IntegerLiteral 'int' 1
+```
+
+C11 6.5.7p3 gives the result the type of the *promoted* left operand, so the
+node's own type is exactly the signedness `adjust_expr_shifts` computes. One
+ternary, no promotion logic duplicated -- which is the difference from teaching
+`migrate_expr` the same trick (§72.2), where only the unpromoted type exists.
+
+### 74.2 The A/B caught a dispatcher bug
+
+`clang_c_adjust::adjust_expr` routes to the shift arm on
+`id() == "shl" || id() == "shr"`. Emitting the typed ids moved those nodes out
+of its reach, so the arm stopped running -- and the two things it does besides
+choosing the kind, `gen_typecast_arithmetic` on both operands and
+`expr.type() = op0.type()`, sit *outside* the `shr` branch and apply to every
+shift. One default-path divergence (`esbmc/github_323`) and 46 bytes of missing
+casts. The fix is both halves: emit the typed id **and** route it.
+
+Generalises: moving a decision earlier can silently detach a node from a
+dispatcher keyed on the old spelling. Grep for the id being replaced is part of
+the change, not a follow-up.
+
+### 74.3 The gate cannot see this change
+
+`c_expr2string` prints `ashr` and `lshr` identically as `>>`, so flipping the
+kind produces a byte-identical dump. The clean A/B (0 of 2 809 on the default
+path) says the surrounding structure is unchanged and **nothing** about the
+choice -- §39.1's fourth row, met for the first time in this phase.
+
+So the gate is a semantic test: for `a >= 0x80000000`, `a >> 1 < 0x80000000`
+holds under a logical shift and fails under an arithmetic one. Nondeterministic
+input, so it cannot be constant-folded. `regression/esbmc/shift_kind_unsigned`,
+mutation-checked -- flipping the ternary fails it.
+
+The typedef case is covered there too: `t` resolves for integer typedefs, so
+`u32 >> 1` picks `lshr`. That was a live risk, since the arm follows the type
+(`ns.follow(op0.type())`) and the converter does not.
+
+## 75. Status
+
+`shr` no longer errors under `-only` (64 tests). Default path byte-identical.
+Remaining sampled `-only` errors: 4 `assign_shr`, 2 `and takes boolean operands
+only`, 1 `sizeof` arity, 1 `do_function_call` member callee -- plus 10
+pre-existing parse failures that are not ours (§72.1).
+
+Next: `assign_shr`, the same class one level up. `adjust_side_effect_assignment`
+picks `assign_lshr`/`assign_ashr` from the **unpromoted** LHS type, which the
+converter also has, so option 1 applies again -- with its own default-path A/B
+and its own semantic test, since the printer is blind here too.

@@ -211,6 +211,10 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Run the IREP2-native C adjuster alongside the legacy adjust pass "
       "(Phase 6 migration; experimental, default off)"},
+     {"clang-c-irep2-adjust-only",
+      NULL,
+      "Use the IREP2-native C adjuster instead of the legacy adjust pass "
+      "(Phase 6 hop-off; experimental, default off)"},
      {"python-irep2-adjust",
       NULL,
       "Run the IREP2-native Python adjuster alongside the legacy adjust pass "
