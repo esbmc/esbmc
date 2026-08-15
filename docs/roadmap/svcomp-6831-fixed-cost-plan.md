@@ -568,6 +568,24 @@ at read time cannot beat not shipping the bytes down that path at all.
 **Exit:** a C task's deserialise+deps time down by ≥24 % (more, per §2.4), no
 verdict change in any suite, and Python/Solidity/C++ regressions unchanged.
 
+**Feasibility, measured.** The models compile standalone — `c2goto
+library/python/*.c --64 --floatbv` produces a goto binary with warnings only,
+no missing declarations — and it is **1,241,971 bytes against `clib64_fp`'s
+3,369,011**, i.e. 37 % of the blob by size, more than the 24 % that the symbol
+count suggested. So the split is buildable by mirroring what
+`mangle_clib()` already does for `sol64`, and the prize is larger than §2.3
+implies.
+
+One thing does not mirror Solidity. `sol64` is self-contained — "sol64 holds
+ONLY Solidity symbols, so callers need no whitelist" — but the Python models
+call into libc and libm (`python_c_extern_deps` in `cprover_library.cpp` lists
+`strncmp`, `ceil`, `fegetround`, the `__pyt_*` threading helpers, and more), so
+a Python run has to read *both* blobs and resolve across them. The win is
+therefore asymmetric by design: C, C++ and CHERI tasks stop paying for the
+Python models entirely; Python tasks pay roughly what they do now, split over
+two reads. That is the right trade — Python is a minority of any SV-COMP run —
+but it means G2's "every frontend re-measured" is not a formality here.
+
 ### W2 — Make the blob indexable, so loading is O(used) not O(total)
 
 The end state the issue asks for: seek to the symbols a task needs. Today this
