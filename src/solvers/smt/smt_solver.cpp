@@ -514,25 +514,25 @@ smt_astt smt_solver_baset::convert_ieee_arith_2op(const expr2tc &expr)
     }
 
   /* ESBMC_DEFINE_IEEE_ARITH_2OP fixes the field order for the whole family:
-   * rounding mode first, then the two values. */
-  const expr2tc &rounding_mode = *expr->get_sub_expr(0);
-  smt_astt side_1 = convert_ast(*expr->get_sub_expr(1));
+   * rounding mode first, then the two values. Convert in that order, which is
+   * the order the per-op arms this replaced produced (three conversions as
+   * call arguments, evaluated right-to-left by GCC). The solver hashes and
+   * searches on node creation order, so converting operands first leaves the
+   * formula equivalent but reshuffled: it cost nn-tanh_5_unsafe 29s -> 275s. */
+  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(0));
   smt_astt side_2 = convert_ast(*expr->get_sub_expr(2));
+  smt_astt side_1 = convert_ast(*expr->get_sub_expr(1));
 
   switch (expr->expr_id)
   {
   case expr2t::ieee_add_id:
-    return fp_api->mk_smt_fpbv_add(
-      side_1, side_2, convert_rounding_mode(rounding_mode));
+    return fp_api->mk_smt_fpbv_add(side_1, side_2, rm);
   case expr2t::ieee_sub_id:
-    return fp_api->mk_smt_fpbv_sub(
-      side_1, side_2, convert_rounding_mode(rounding_mode));
+    return fp_api->mk_smt_fpbv_sub(side_1, side_2, rm);
   case expr2t::ieee_mul_id:
-    return fp_api->mk_smt_fpbv_mul(
-      side_1, side_2, convert_rounding_mode(rounding_mode));
+    return fp_api->mk_smt_fpbv_mul(side_1, side_2, rm);
   case expr2t::ieee_div_id:
-    return fp_api->mk_smt_fpbv_div(
-      side_1, side_2, convert_rounding_mode(rounding_mode));
+    return fp_api->mk_smt_fpbv_div(side_1, side_2, rm);
   default:
     assert(expr->expr_id == expr2t::ieee_rem_id);
     /* fp.rem is exact; the node's rounding_mode is plumbing only. */
