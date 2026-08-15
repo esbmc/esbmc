@@ -74,6 +74,33 @@ call shape works.
   for verification tractability, so their performance characteristics and
   internal representations do not match a production standard library.
 
+## Time and clocks
+
+`system_clock::now()` and `steady_clock::now()` read a shared counter that
+advances by a non-negative nondeterministic step, so a reading is not wall-clock
+time and the gap between two readings is unconstrained. Checking a program
+against a particular instant needs an `__ESBMC_assume` on the value, and one
+whose correctness depends on how much real time passed cannot be checked at all.
+`system_clock::period` follows the target platform, so the range a `time_point`
+represents — and the point at which it saturates — differs between Linux, Apple
+and Windows.
+
+Because the counter is shared, `system_clock` is monotone too, even though its
+`is_steady` is false as the standard allows. A defect that needs the system
+clock to jump backwards — an NTP correction, an operator resetting the clock —
+is therefore outside what the model can produce.
+
+Calendar and time-zone facilities are absent: the C++20 types
+(`year_month_day`, `zoned_time`, `utc_clock`), the `chrono_literals` suffixes
+(`10ms`), and the `floor` / `ceil` / `round` / `abs` duration helpers.
+`std::this_thread::sleep_for` and `sleep_until` are absent too — ESBMC already
+interleaves at every step, so a sleep would not constrain the schedule it
+explores.
+
+`std::ratio` covers what `<chrono>` needs and no more: `ratio_add`,
+`ratio_subtract` and the comparison aliases (`ratio_equal`, `ratio_less`, …) are
+not declared, nor are the SI aliases outside `nano` / `micro` / `milli`.
+
 ## Standard version
 
 The default is C++17. C++20 and C++23 features require an explicit `--std` — for

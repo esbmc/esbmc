@@ -772,6 +772,86 @@ void enforce_migrate_stack_budget(const migrate_stack_guardt &stack_guard)
 }
 } // namespace
 
+/// sizeof(T): op0 (a type_exprt) carries the measured type T, op1 the
+/// eagerly-computed byte-size value. Both become reflected sizeof2t fields,
+/// replacing the legacy sizeof-type side channel (esbmc/esbmc#5337).
+static expr2tc migrate_sizeof(const exprt &expr)
+{
+  // The frontends always produce the type operand; fail closed rather than
+  // over-read it in a release build.
+  if (expr.operands().empty())
+  {
+    log_error("sizeof node must carry a type operand and a value operand");
+    abort();
+  }
+
+  const type2tc type = migrate_type(expr.type());
+  const type2tc measured = migrate_type(expr.op0().type());
+  expr2tc value;
+
+  if (expr.operands().size() >= 2)
+    migrate_expr(expr.op1(), value);
+  else
+  {
+    // A VLA's size is not constant, so the frontend leaves the value operand
+    // off and clang_c_adjust::adjust_sizeof fills it in. Under
+    // --clang-c-irep2-adjust-only that pass does not run, and the node would
+    // be unrepresentable before anything could fix it. Computing the size here
+    // is safe where deciding a shift kind was not (§72, §80): c_sizeof is a
+    // pure function of the measured type, not a result of adjustment. The
+    // normal pipeline adjusts first and never reaches this branch.
+    const exprt sz = migrate_namespace_lookup
+                       ? c_sizeof(expr.op0().type(), *migrate_namespace_lookup)
+                       : nil_exprt();
+    if (sz.is_nil())
+    {
+      log_error("sizeof node must carry a type operand and a value operand");
+      abort();
+    }
+    migrate_expr(sz, value);
+  }
+
+  return sizeof2tc(type, value, measured);
+}
+
+/// clang_c_adjust::adjust_builtin_va_arg lowers this to a __ESBMC_va_arg call,
+/// and IREP2 has no builtin_va_arg kind -- so under --clang-c-irep2-adjust-only
+/// the node would die before anything could rewrite it. The lowering is a pure
+/// function of the node's type and operand, which migration may compute (§72,
+/// §80). The callee symbol is declared by
+/// clang_c_adjust_irep2::declare_implicit_callee, and goto_convert's
+/// __ESBMC_va_arg arm (builtin_functions.cpp) enforces the one-argument
+/// contract and settles the operand's final shape. The normal pipeline adjusts
+/// first and never reaches this function.
+static expr2tc migrate_builtin_va_arg(const exprt &expr)
+{
+  if (expr.operands().size() != 1 || migrate_namespace_lookup == nullptr)
+  {
+    log_error("builtin_va_arg needs one operand and a namespace to migrate");
+    abort();
+  }
+
+  const pointer_typet va_list_arg{empty_typet()};
+
+  code_typet call_type;
+  call_type.return_type() = expr.type();
+  call_type.arguments().resize(1);
+  call_type.arguments()[0].type() = va_list_arg;
+
+  exprt arg = expr.op0();
+  c_typecastt(*migrate_namespace_lookup).implicit_typecast(arg, va_list_arg);
+
+  side_effect_expr_function_callt call;
+  call.function() = symbol_exprt("__ESBMC_va_arg");
+  call.function().type() = call_type;
+  call.arguments().push_back(arg);
+  call.type() = expr.type();
+
+  expr2tc lowered;
+  migrate_expr(call, lowered);
+  return lowered;
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -801,82 +881,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "builtin_va_arg")
   {
-    // clang_c_adjust::adjust_builtin_va_arg lowers this to a __ESBMC_va_arg
-    // call, and IREP2 has no builtin_va_arg kind -- so under
-    // --clang-c-irep2-adjust-only the node would die before anything could
-    // rewrite it. The lowering is a pure function of the node's type and
-    // operand, which migration may compute (§72, §80). The callee symbol is
-    // declared by clang_c_adjust_irep2::declare_implicit_callee, and
-    // goto_convert's __ESBMC_va_arg arm (builtin_functions.cpp) enforces the
-    // one-argument contract and settles the operand's final shape. The normal
-    // pipeline adjusts first and never reaches this branch.
-    if (expr.operands().size() != 1 || migrate_namespace_lookup == nullptr)
-    {
-      log_error("builtin_va_arg needs one operand and a namespace to migrate");
-      abort();
-    }
-
-    const pointer_typet va_list_arg{empty_typet()};
-
-    code_typet call_type;
-    call_type.return_type() = expr.type();
-    call_type.arguments().resize(1);
-    call_type.arguments()[0].type() = va_list_arg;
-
-    exprt arg = expr.op0();
-    c_typecastt(*migrate_namespace_lookup).implicit_typecast(arg, va_list_arg);
-
-    side_effect_expr_function_callt call;
-    call.function() = symbol_exprt("__ESBMC_va_arg");
-    call.function().type() = call_type;
-    call.arguments().push_back(arg);
-    call.type() = expr.type();
-
-    migrate_expr(call, new_expr_ref);
+    new_expr_ref = migrate_builtin_va_arg(expr);
     return;
   }
 
   if (expr.id() == "sizeof")
   {
-    // sizeof(T): op0 (a type_exprt) carries the measured type T, op1 the
-    // eagerly-computed byte-size value. Both become reflected sizeof2t fields,
-    // replacing the legacy sizeof-type side channel (esbmc/esbmc#5337). The
-    // frontends always produce both operands (the C adjust pass fills the value
-    // for VLAs); fail closed rather than over-read op1 in a release build.
-    if (expr.operands().empty())
-    {
-      log_error("sizeof node must carry a type operand and a value operand");
-      abort();
-    }
-
-    type = migrate_type(expr.type());
-    type2tc measured = migrate_type(expr.op0().type());
-    expr2tc value;
-
-    if (expr.operands().size() >= 2)
-      migrate_expr(expr.op1(), value);
-    else
-    {
-      // A VLA's size is not constant, so the frontend leaves the value operand
-      // off and clang_c_adjust::adjust_sizeof fills it in. Under
-      // --clang-c-irep2-adjust-only that pass does not run, and the node would
-      // be unrepresentable before anything could fix it. Computing the size
-      // here is safe where deciding a shift kind was not (§72, §80): c_sizeof
-      // is a pure function of the measured type, not a result of adjustment.
-      // The normal pipeline adjusts first and never reaches this branch.
-      const exprt sz =
-        migrate_namespace_lookup
-          ? c_sizeof(expr.op0().type(), *migrate_namespace_lookup)
-          : nil_exprt();
-      if (sz.is_nil())
-      {
-        log_error("sizeof node must carry a type operand and a value operand");
-        abort();
-      }
-      migrate_expr(sz, value);
-    }
-
-    new_expr_ref = sizeof2tc(type, value, measured);
+    new_expr_ref = migrate_sizeof(expr);
     return;
   }
 
