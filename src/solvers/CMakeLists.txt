@@ -333,7 +333,7 @@ if(BUILD_STATIC AND TARGET camada::camada)
 endif()
 
 foreach(_feature CAMADA_HAVE_Z3 CAMADA_HAVE_CVC5 CAMADA_HAVE_MATHSAT
-                 CAMADA_HAVE_YICES CAMADA_HAVE_BITWUZLA)
+                 CAMADA_HAVE_YICES CAMADA_HAVE_BITWUZLA CAMADA_HAVE_SMTLIB)
   if(NOT DEFINED ${_feature})
     message(FATAL_ERROR "Camada package did not export ${_feature}")
   endif()
@@ -402,8 +402,10 @@ endforeach()
 # smtlib needs no solver library of its own: it pipes to whatever the user
 # names with --smtlib-solver-prog, runs --smtlib-oneshot-prog on a dumped
 # script, or just writes the script out. Camada's SMT-LIB backend serves all
-# three shapes, so it is available whenever camada is.
-if(ENABLE_SMTLIB)
+# three shapes, but it drives the external process with POSIX
+# fork/exec/setrlimit/select, so camada forces it off on Windows -- follow
+# CAMADA_HAVE_SMTLIB rather than assuming it exists wherever camada does.
+if(ENABLE_SMTLIB AND CAMADA_HAVE_SMTLIB)
   set(ESBMC_ENABLE_smtlib 1)
   list(APPEND _camada_solvers smtlib)
 endif()

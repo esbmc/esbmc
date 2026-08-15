@@ -9,7 +9,12 @@
 
 #include <camada/camada.h>
 #include <camada/camadafeatures.h>
-#include <camada/smtlibsolver.h>
+/* Camada's SMT-LIB backend drives the external solver with POSIX
+ * fork/exec/setrlimit/select, so camada builds it -- and installs its header
+ * -- only where that exists. */
+#if CAMADA_HAVE_SMTLIB
+#  include <camada/smtlibsolver.h>
+#endif
 #if CAMADA_HAVE_BITWUZLA
 #  include <camada/bitwuzlasolver.h>
 #endif
@@ -254,7 +259,9 @@ std::string wrap_smtlib_dump(std::string smt_formula)
  * the wire, so the script stays inside the declared logic and parses in any
  * standard SMT-LIB v2 solver. It is also what the non-native backends already
  * use, so this is not a new code path. */
-camada::TupleEncoding pick_tuple_encoding(const optionst &)
+/* maybe_unused: only the SMT-LIB backends ask for a tuple encoding, and they
+ * are not built everywhere (see CAMADA_HAVE_SMTLIB). */
+[[maybe_unused]] camada::TupleEncoding pick_tuple_encoding(const optionst &)
 {
   return camada::TupleEncoding::Camada;
 }
@@ -264,7 +271,9 @@ camada::ArrayEncoding pick_array_encoding(const optionst &)
   return camada::ArrayEncoding::Native;
 }
 
-std::string pick_logic(const optionst &options, bool native_fp)
+/* maybe_unused: the backends that name a logic (MathSAT, Yices, SMT-LIB) are
+ * each optional, so a build with none of them never calls this. */
+[[maybe_unused]] std::string pick_logic(const optionst &options, bool native_fp)
 {
   const bool has_quantifiers = options.get_bool_option("has-quantifiers");
 
@@ -277,6 +286,7 @@ std::string pick_logic(const optionst &options, bool native_fp)
   return has_quantifiers ? "AUFBVFP" : "QF_AUFBVFP";
 }
 
+#if CAMADA_HAVE_SMTLIB
 /* The SMT-LIB backend pipes to an interactive solver
  * (--smtlib-solver-prog), writes the script out (--output, "-" for stdout),
  * or both. With neither, camada's write-only mode still needs a sink, so
@@ -422,6 +432,7 @@ camada::SMTSolverRef create_esbmc_oneshot_solver(
     logic,
     pick_array_encoding(options));
 }
+#endif /* CAMADA_HAVE_SMTLIB */
 
 } // namespace
 
@@ -571,6 +582,11 @@ smt_resultt smt_solver_baset::dec_solve()
  * run's diagnostics; the policy and the messages stay here. */
 smt_resultt smt_solver_baset::oneshot_dec_solve()
 {
+#if !CAMADA_HAVE_SMTLIB
+  /* `oneshot` is only ever set by the SMT-LIB factory, which does not exist
+   * here, so nothing can reach this. */
+  unsupported("the SMT-LIB backend on this platform");
+#else
   if (solved)
   {
     log_error(
@@ -662,6 +678,7 @@ smt_resultt smt_solver_baset::oneshot_dec_solve()
   }
 
   return P_SATISFIABLE;
+#endif
 }
 
 void smt_solver_baset::assert_ast(smt_astt a)
@@ -1379,6 +1396,7 @@ std::unique_ptr<smt_solver_baset> create_linked_solver(
   return make_solver(options, ns, build(options));
 }
 
+#if CAMADA_HAVE_SMTLIB
 /* The one-shot command processes a single task and exits; strategies that
  * solve repeatedly or incrementally cannot be served by it. */
 void reject_incremental_strategies(const optionst &options)
@@ -1403,10 +1421,18 @@ void reject_incremental_strategies(const optionst &options)
       abort();
     }
 }
+#endif /* CAMADA_HAVE_SMTLIB */
 
 std::unique_ptr<smt_solver_baset>
 create_new_smtlib_solver(const optionst &options, const namespacet &ns)
 {
+#if !CAMADA_HAVE_SMTLIB
+  /* ESBMC_ENABLE_smtlib is 0 here, so pick_solver rejects the backend before
+   * anything can call this; the definition only has to link. */
+  (void)options;
+  (void)ns;
+  unsupported("the SMT-LIB backend on this platform");
+#else
   /* --smtlib-oneshot-prog selects the write-a-file-and-run-a-program shape;
    * without it the script goes to an interactive solver or to --output. */
   const bool oneshot = !options.get_option("smtlib-oneshot-prog").empty();
@@ -1440,6 +1466,7 @@ create_new_smtlib_solver(const optionst &options, const namespacet &ns)
       formula_path,
       oneshot_prog,
       logic.empty() ? pick_logic(options, false) : logic));
+#endif
 }
 
 smt_astt smt_solver_baset::mk_eq(smt_astt a, smt_astt b)
