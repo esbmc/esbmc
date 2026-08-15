@@ -82,6 +82,7 @@ const std::string kLoopInvariant = "__loop_invariant";
 const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
 const std::string kEsbmcRequires = "__ESBMC_requires";
 const std::string kEsbmcEnsures = "__ESBMC_ensures";
+const std::string kEsbmcAssigns = "__ESBMC_assigns";
 const std::string kEsbmcReturnValue = "__ESBMC_return_value";
 const std::string kEsbmcCover = "__ESBMC_cover";
 const std::string kEsbmcAtomicBegin = "__ESBMC_atomic_begin";
@@ -116,10 +117,32 @@ static bool needs_bool_intrinsic_symbol(const std::string &name)
          name == kEsbmcEnsures;
 }
 
+// Contract intrinsics the Python frontend does not lower yet. Named so that a
+// clause mentioning one says why, rather than reporting only that the clause is
+// impure and leaving the reader to guess which call was the problem.
+static bool is_unsupported_contract_intrinsic(const std::string &name)
+{
+  return name == "__ESBMC_assigns" || name == "__ESBMC_old" ||
+         name == "__ESBMC_is_fresh" || name == "__ESBMC_forall" ||
+         name == "__ESBMC_exists";
+}
+
 void function_call_builder::check_contract_call(
   const symbol_id &function_id) const
 {
   const std::string &clause = function_id.get_function();
+
+  // Only `assigns` is reported from here: it is a statement in its own right,
+  // so nothing else sees it. The other unsupported intrinsics are meaningful
+  // only inside a clause, where check_contract_clause already rejects them by
+  // name. Reporting them here would fire on any call sharing the name, outside
+  // any clause, and blame contracts for it.
+  if (clause == kEsbmcAssigns)
+    throw std::runtime_error(fmt::format(
+      "{} at line {} is not supported by the Python frontend yet",
+      clause,
+      call_.value("lineno", 0)));
+
   if (clause != kEsbmcRequires && clause != kEsbmcEnsures)
     return;
 
@@ -249,8 +272,9 @@ void function_call_builder::check_contract_clause(
       clause,
       node.value("lineno", 0),
       describe_clause_node(node_type),
-      callee.rfind("__ESBMC_", 0) == 0
-        ? fmt::format(" ({} is not supported in Python clauses yet)", callee)
+      is_unsupported_contract_intrinsic(callee)
+        ? fmt::format(
+            " ({} is not supported by the Python frontend yet)", callee)
         : ""));
   }
 

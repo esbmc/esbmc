@@ -1385,6 +1385,24 @@ protected:
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
 
+  /** Per-callee history of uninterpreted-function applications the SMT backend
+   *  cannot encode natively, keyed on the mangled callee name. Each entry pairs
+   *  the renamed argument terms with the symbol standing for that application's
+   *  result, so a later call can be Ackermannised against it.
+   *  @see symex_uninterpreted_function */
+  std::map<irep_idt, std::vector<std::pair<std::vector<expr2tc>, expr2tc>>>
+    uf_applications;
+
+  /** Assume equal arguments imply an equal result against every earlier
+   *  application of \p identifier, and record this one.
+   *  @see symex_uninterpreted_function */
+  void assume_uf_congruence(
+    const irep_idt &identifier,
+    const irep_idt &name,
+    const std::vector<expr2tc> &arguments,
+    const expr2tc &result,
+    const type2tc &ret_type);
+
   /** Level-1 identities (base name, activation, thread) of va_list objects
    *  initialised by va_start, or by va_copy from a started source. Keyed on
    *  the l1 renaming so the same object is recognised across frames (a
