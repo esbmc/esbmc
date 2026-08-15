@@ -24,7 +24,9 @@ void tuple_node_smt_ast::make_free(smt_solver_baset *ctx)
     struct_union_member_names(sort->get_tuple_type());
 
   elements.resize(members.size());
-  if (ctx->ctx_level > creation_ctx_level)
+  // A member-less tuple leaves the vector empty, so the early return above
+  // never latches and this would re-register on every call.
+  if (!elements.empty() && ctx->ctx_level > creation_ctx_level)
     flat.note_elements_populated(this);
 
   unsigned int i = 0;

@@ -717,7 +717,8 @@ Root cause, from a backtrace taken with an `LD_PRELOAD` SIGSEGV handler (no
 debugger on the measurement host): an array of pointers is an array of tuples,
 so a symbolic index reaches `array_convt::mk_select`'s case switch
 (`array_conv.cpp:174`), whose ite chain projects out of
-`tuple_node_smt_ast::elements` (`smt_tuple_node_ast.cpp:86-91`), reached from
+`tuple_node_smt_ast::elements` (`smt_tuple_node_ast.cpp:195`, reached through
+the ite chain at `:86-91`), itself reached from
 `dfs_execution_statet::clone()`. `elements` is filled in lazily, so a tuple
 created at one context level can hold ASTs allocated at a deeper one, and
 `pop_ctx` deletes every AST allocated since the matching push
@@ -735,7 +736,7 @@ useless — it is unsound. Elements that are still alive would be rebuilt as fre
 unconstrained symbols, silently disconnecting the tuple from every assertion
 already made about it. The fix has to clear exactly the vectors whose contents
 the pop destroyed, which is why it is a registry keyed by the level the elements
-were populated at, and why tuples whose elements belong to their own level are
+were *installed* at, and why tuples whose elements belong to their own level are
 deliberately left alone: the same pop destroys them too.
 
 **Exit:** ~~measurable wall-time reduction on `01_malloc_20`~~ — discharged by
@@ -746,10 +747,20 @@ is ~5 % of the run. W3.3 closes the wrapper question — the flag is already in 
 concurrency configuration, is worth ~7 % in isolation there, and should stay.
 The availability defect W3.3 uncovered is **fixed**: `pop_tuple_ctx` now clears
 the element vectors the pop destroyed, all five reproducers answer, and Bitwuzla,
-Boolector and Z3 agree on every one. All 273 registered regression tests that
-exercise a push/pop strategy pass, as do the 186 CORE tests of `esbmc-unix2`.
-`github_6831_smt_during_symex_{crash,safe}` pin both verdicts and both segfault
-on the pre-fix binary.
+Boolector and Z3 agree on every one. Every registered test whose `test.desc`
+passes a flag that implies `--smt-during-symex` — `--smt-symex-guard`,
+`--smt-thread-guard`, `--smt-symex-assert`, `--smt-symex-assume` or the flag
+itself — passes: 276 such directories exist, 273 are registered with `ctest`, and
+all 273 are green. So are all 186 registered tests of `esbmc-unix2` (138 of them
+CORE). `github_6831_smt_during_symex_{crash,safe}` pin the FAILED and SUCCESSFUL
+verdicts on this path, and both segfault on the pre-fix binary.
+
+`array_ast::array_fields` does **not** need the same treatment, which is worth
+recording so it is not reopened: every site that writes it does so into an
+`array_ast` created in the same statement, so the fields never outlive their
+holder. The one copy-into-an-existing-object site, `convert_array_assign`
+(`array_conv.cpp:40`), relies on the same invariant the tuple `assign` path does
+— that an assign destination is current-level — and is unguarded today.
 
 ### W4 — Bound the schedule space in the SV-COMP strategy — **investigated, not a flag flip**
 

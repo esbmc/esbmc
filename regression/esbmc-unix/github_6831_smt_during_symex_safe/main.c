@@ -30,7 +30,7 @@ int main(void)
   pthread_create(&t, 0, writer, 0);
   pthread_join(t, 0);
   pthread_mutex_lock(&m);
-  assert(g == 2 || g == 0 || g == 1);
+  assert(g == 0 || g == 1);
   pthread_mutex_unlock(&m);
   return 0;
 }
