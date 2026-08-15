@@ -755,12 +755,31 @@ all 273 are green. So are all 186 registered tests of `esbmc-unix2` (138 of them
 CORE). `github_6831_smt_during_symex_{crash,safe}` pin the FAILED and SUCCESSFUL
 verdicts on this path, and both segfault on the pre-fix binary.
 
-`array_ast::array_fields` does **not** need the same treatment, which is worth
-recording so it is not reopened: every site that writes it does so into an
-`array_ast` created in the same statement, so the fields never outlive their
-holder. The one copy-into-an-existing-object site, `convert_array_assign`
-(`array_conv.cpp:40`), relies on the same invariant the tuple `assign` path does
-— that an assign destination is current-level — and is unguarded today.
+#### W3.4 — The sibling hazard is latent, and the invariant behind it is measured
+
+`array_ast::array_fields` looks like the same bug waiting to happen: every site
+that writes it does so into an `array_ast` created in the same statement, except
+`convert_array_assign` (`array_conv.cpp:40`), which copies into a pre-existing
+destination — the exact shape of the tuple `assign` path. It also copies
+`base_array_id`, which indexes the containers `pop_array_ctx` resizes, so a
+stale destination would be an out-of-range index as well as a dangling pointer.
+
+Both sites rest on one unstated invariant: **an assign destination is
+current-level**. It holds because `convert_assign`'s LHS (`smt_solver.cpp:364`)
+is an SSA symbol, converted at the level its defining assignment is encoded at
+rather than fetched from a shallower cache. Measured rather than argued: a build
+instrumented to log every assign whose destination predates the current level
+found **zero** across 379 CORE concurrent tests under the wrapper's flags, and
+**zero** across all 2133 CORE tests that pass a flag implying a push/pop
+strategy, each run with its own `test.desc` flags.
+
+So the hazard is latent, not live, and no machinery is warranted at either site.
+What the patch leaves behind is the invariant itself, stated at both sites and
+asserted at the tuple one, so a future change to symbol caching trips an
+assertion in the Debug CI build rather than a segfault in competition. The
+tuple `assign` registration is kept as a defensive fallback and is triaged as
+such: it is correct under any input, costs one comparison, and the measurement
+above is evidence of unreachability rather than proof of it.
 
 ### W4 — Bound the schedule space in the SV-COMP strategy — **investigated, not a flag flip**
 

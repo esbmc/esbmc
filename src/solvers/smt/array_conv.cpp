@@ -36,6 +36,12 @@ void array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
   array_ast *destination = const_cast<array_ast *>(array_downcast(sym));
   const array_ast *source = src;
 
+  // Copying into a pre-existing destination is only safe while the destination
+  // is current-level: array_fields would otherwise outlive the ASTs it names
+  // once pop_ctx runs, and base_array_id would index the containers
+  // pop_array_ctx resizes. That invariant is the one tuple assign relies on too
+  // (smt_tuple_node_ast.cpp), and it held across 2133 CORE push/pop tests.
+
   // And copy across it's valuation
   destination->array_fields = source->array_fields;
   destination->base_array_id = source->base_array_id;
