@@ -38,12 +38,14 @@ def parse_seconds(value):
 
 
 def load(path):
+    """Read a BenchExec result file, transparently un-bzipping it."""
     opener = bz2.open if path.endswith(".bz2") else open
     with opener(path, "rb") as handle:
         return ET.parse(handle).getroot()
 
 
 def limit_of(result, override):
+    """The run's time budget in seconds: the override, else what BenchExec recorded."""
     if override:
         return override
     # BenchExec records the budget on the result element; cputime is what the
@@ -77,6 +79,7 @@ def classify(result, limit, margin):
 
 
 def main():
+    """Print the marginal band for every result file named on the command line."""
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("results", nargs="+", help="BenchExec results XML (.xml or .xml.bz2)")
