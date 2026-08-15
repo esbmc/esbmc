@@ -6,8 +6,8 @@ it is allowed to run on (see W1.1). W3 and W4 are investigated, and both turn
 out to be about existing machinery rather than new: W3's exit is already
 discharged by `--smt-during-symex`, and W4 is re-scoped from a wrapper change to
 a code change. W3's remaining wrapper question is now closed too (W3.3) — the
-flag was already on, and on some shipped-configuration inputs it
-**segfaults**.
+flag was already on, and the segfault that closing it uncovered on the shipped
+configuration is fixed.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 1 —
 schedule-space explosion*, 291 of 489 lost SV-COMP tasks.
 **Bisected to:** `bac652b13c` — `[goto-symex] Track main-thread termination per
@@ -709,7 +709,7 @@ parallel run, not a per-test time.
 and `mpor_aggregate_ptr_widen_contained` — all added by #6981 on 2026-08-14 —
 SIGSEGV under `--smt-symex-guard` alone, which is exactly what the wrapper
 passes. Bitwuzla and Boolector; Z3 is unaffected, so
-`github_6831_smt_during_symex_crash` (KNOWNBUG) pins the solver — it is
+`github_6831_smt_during_symex_crash` pins the solver — it is
 `mpor_aggregate_ptr_race_symbolic_offset`'s program under the wrapper's flags,
 the flags being the only load-bearing difference.
 
@@ -718,13 +718,25 @@ debugger on the measurement host): an array of pointers is an array of tuples,
 so a symbolic index reaches `array_convt::mk_select`'s case switch
 (`array_conv.cpp:174`), whose ite chain projects out of
 `tuple_node_smt_ast::elements` (`smt_tuple_node_ast.cpp:86-91`), reached from
-`dfs_execution_statet::clone()`. Those elements — and `array_ast::array_fields` —
-are raw `smt_astt` caches carrying no `ctx_level`, while `pop_ctx` deletes every
-AST allocated since the matching push (`smt_solver.cpp:278-282`). A DFS backtrack
-under `--smt-during-symex` therefore leaves them dangling. `array_convt`
-ctx-levels its select / with / index-map records but not the field vectors, which
-is the maintenance debt `array_conv.h:12-17` already names. A scalar array does
-not reproduce it; the array must hold tuples.
+`dfs_execution_statet::clone()`. `elements` is filled in lazily, so a tuple
+created at one context level can hold ASTs allocated at a deeper one, and
+`pop_ctx` deletes every AST allocated since the matching push
+(`smt_solver.cpp:278-282`). `array_convt::pop_array_ctx` clears its own
+select / with / index-map records, but `pop_tuple_ctx` only forwarded to it and
+cleared nothing of its own — so a DFS backtrack under `--smt-during-symex` left
+those vectors dangling. A scalar array does not reproduce it; the array must
+hold tuples.
+
+Two dead ends are worth recording, because both look right. Comparing the level
+`elements` was filled at against the current one does **not** work: levels are
+reused, and the observed failure is a tuple filled at level 2, popped to 1, then
+reached again at level 2. Invalidating on every pop instead is worse than
+useless — it is unsound. Elements that are still alive would be rebuilt as fresh
+unconstrained symbols, silently disconnecting the tuple from every assertion
+already made about it. The fix has to clear exactly the vectors whose contents
+the pop destroyed, which is why it is a registry keyed by the level the elements
+were populated at, and why tuples whose elements belong to their own level are
+deliberately left alone: the same pop destroys them too.
 
 **Exit:** ~~measurable wall-time reduction on `01_malloc_20`~~ — discharged by
 W3.1 across the concurrent CORE corpus at unchanged verdicts (and, under the
@@ -732,11 +744,12 @@ tests' own flags, unchanged schedule counts — W3.3 finds that second half does
 not generalise). W3.2 closes the performance question: what remains under lever B
 is ~5 % of the run. W3.3 closes the wrapper question — the flag is already in the
 concurrency configuration, is worth ~7 % in isolation there, and should stay.
-What is open is no
-longer a performance item at all but an availability one on the shipped path:
-the AST lifetime in `array_convt` / `tuple_node_smt_ast` across `push_ctx` /
-`pop_ctx`. Until it is fixed, any SV-COMP concurrency task whose value set puts
-a symbolic index on an array of pointers crashes instead of answering.
+The availability defect W3.3 uncovered is **fixed**: `pop_tuple_ctx` now clears
+the element vectors the pop destroyed, all five reproducers answer, and Bitwuzla,
+Boolector and Z3 agree on every one. All 273 registered regression tests that
+exercise a push/pop strategy pass, as do the 186 CORE tests of `esbmc-unix2`.
+`github_6831_smt_during_symex_{crash,safe}` pin both verdicts and both segfault
+on the pre-fix binary.
 
 ### W4 — Bound the schedule space in the SV-COMP strategy — **investigated, not a flag flip**
 

@@ -1,5 +1,4 @@
 CORE
 main.c
 --smt-symex-guard --cswitch-skip-readonly-globals --bitwuzla
-^VERIFICATION FAILED$
-^  assertion seen == 2$
+^VERIFICATION SUCCESSFUL$
