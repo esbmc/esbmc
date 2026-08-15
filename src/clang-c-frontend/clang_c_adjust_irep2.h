@@ -57,3 +57,9 @@ private:
   contextt &context;
   namespacet ns{context};
 };
+
+/// Shape-2 probe (scope-clang-c-irep2.md §57): run the IREP2 comma rewrite at
+/// the point the legacy pass dispatches it, rather than in a second whole-
+/// program pass. §55.4 attributes the comma arm's divergences to that ordering
+/// alone; this is the experiment that decides it.
+void adjust_comma_at_dispatch(exprt &expr, const namespacet &ns);

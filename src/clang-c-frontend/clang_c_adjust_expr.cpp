@@ -1,4 +1,5 @@
 #include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-c-frontend/clang_c_adjust_irep2.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith/arith_tools.h>
@@ -1846,6 +1847,15 @@ void clang_c_adjust::adjust_comma(exprt &expr)
   adjust_operands(expr);
 
   assert(expr.operands().size() == 2);
+
+  // Shape-2 probe: the same rewrite, run natively at this dispatch point
+  // instead of in the trailing IREP2 pass (scope-clang-c-irep2.md §57).
+  if (irep2_owns_arms)
+  {
+    adjust_comma_at_dispatch(expr, ns);
+    return;
+  }
+
   expr.type() = expr.op1().type();
 }
 
