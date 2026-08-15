@@ -10,6 +10,7 @@
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
@@ -869,69 +870,6 @@ exprt python_converter::handle_membership_operator(
     "' operation");
 }
 
-exprt python_converter::build_tagged_scalar_eq_literal(
-  const exprt &tagged,
-  const exprt &literal)
-{
-  exprt tagged_addr = python_expr::build_address_of(tagged);
-  exprt lit_type_id = type_handler_.tagged_scalar_type_id(literal.type());
-
-  if (literal.type().is_array())
-  {
-    const symbolt *eq_str_func =
-      symbol_table_.find_symbol("c:@F@__python_scalar_eq_str");
-    assert(eq_str_func && "__python_scalar_eq_str not found in symbol table");
-    exprt lit_addr = string_handler_.get_array_base_address(literal);
-    exprt lit_size = type_handler_.tagged_scalar_byte_size(literal);
-
-    exprt call = python_expr::build_call_expr(
-      *eq_str_func, int_type(), {tagged_addr, lit_type_id, lit_addr, lit_size});
-    return python_expr::build_equal(call, from_integer(1, int_type()));
-  }
-
-  if (
-    !literal.type().is_bool() && !literal.type().is_signedbv() &&
-    !literal.type().is_unsignedbv())
-    throw std::runtime_error(
-      "comparing a dynamically-typed variable against this literal type is "
-      "not yet supported");
-
-  exprt lit_value = python_expr::build_typecast(
-    literal, signedbv_typet(config.ansi_c.long_long_int_width));
-
-  const symbolt *eq_num_func =
-    symbol_table_.find_symbol("c:@F@__python_scalar_eq_num");
-  assert(eq_num_func && "__python_scalar_eq_num not found in symbol table");
-  exprt call = python_expr::build_call_expr(
-    *eq_num_func, int_type(), {tagged_addr, lit_type_id, lit_value});
-  return python_expr::build_equal(call, from_integer(1, int_type()));
-}
-
-exprt python_converter::handle_tagged_scalar_comparison(
-  const std::string &op,
-  const exprt &lhs,
-  const exprt &rhs)
-{
-  const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
-  const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
-
-  // A tagged-vs-tagged compare needs a size known only at runtime (each
-  // operand's `.size` field), so the byte-compare's memcmp fallback can't
-  // unwind to termination even though the real value is always tiny.
-  // Comparing against a literal doesn't have this problem, since its size is
-  // a compile-time constant. Refuse cleanly rather than risk a
-  // non-terminating run.
-  if (lhs_tagged && rhs_tagged)
-    throw std::runtime_error(
-      "comparing two dynamically-typed variables directly is not yet "
-      "supported");
-
-  exprt result = lhs_tagged ? build_tagged_scalar_eq_literal(lhs, rhs)
-                            : build_tagged_scalar_eq_literal(rhs, lhs);
-
-  return op == "NotEq" ? python_expr::build_not(result) : result;
-}
-
 // Python raises a *catchable* ZeroDivisionError when the divisor of /, //, or
 // % is zero (for both int and float operands, unlike C/IEEE). Model it as a
 // guarded exception raise -- the same mechanism list indexing uses for
@@ -1002,11 +940,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     type_handler_.is_tagged_scalar_type(lhs.type()) ||
     type_handler_.is_tagged_scalar_type(rhs.type()))
   {
-    if (op != "Eq" && op != "NotEq")
-      throw std::runtime_error(
-        "operator '" + op +
-        "' on a dynamically-typed variable is not yet supported");
-    return handle_tagged_scalar_comparison(op, lhs, rhs);
+    if (op == "Eq" || op == "NotEq")
+      return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
+    if (op == "Add" || op == "Sub" || op == "Div")
+      return dynamic_type_handler_.handle_arithmetic(
+        op, lhs, rhs, get_location_from_decl(element));
+    throw std::runtime_error(
+      "operator '" + op +
+      "' on a dynamically-typed variable is not yet supported");
   }
 
   // Handle type identity checks (e.g., y is int, x is str)
