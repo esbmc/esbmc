@@ -690,6 +690,16 @@ smt_astt bitwuzla_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
   assert(cond->sort->id == SMT_SORT_BOOL);
   assert(t->sort->get_data_width() == f->sort->get_data_width());
 
+  // A float reaches here in either representation now: a native fp term where
+  // the FP API produced it, a bit-vector where the bit-level paths did -- a
+  // failed-dereference symbol merged against a byte-wise read, say. The widths
+  // agree, and the bit-vector holds that format's IEEE encoding, so reinterpret
+  // it rather than hand Bitwuzla an ite over two sorts, which it rejects.
+  if (t->sort->id == SMT_SORT_FPBV && f->sort->id != SMT_SORT_FPBV)
+    f = mk_from_bv_to_fp(f, t->sort);
+  else if (f->sort->id == SMT_SORT_FPBV && t->sort->id != SMT_SORT_FPBV)
+    t = mk_from_bv_to_fp(t, f->sort);
+
   return new_ast(
     bitwuzla_mk_term3(
       bitw_term_manager,
