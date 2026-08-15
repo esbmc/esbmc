@@ -210,6 +210,29 @@ static expr2tc try_simplification(const expr2tc &expr)
   return to_simplify;
 }
 
+/* fixedbvt models a signed, non-saturating fixed-point value; folding
+ * unsigned or _Sat constants through it would diverge from the encoder's
+ * (oracle-pinned) semantics, so those are left to the solver. */
+static bool fixedbv_type_foldable(const type2tc &t)
+{
+  if (!is_fixedbv_type(t))
+    return true;
+  const fixedbv_type2t &f = to_fixedbv_type(t);
+  return f.is_signed && !f.is_saturating;
+}
+
+/* fixedbvt's binary operators add/compare raw values, which is only
+ * meaningful when both operands share a format; mixed-format operations
+ * are left to the solver's common-format computation. */
+static bool fixedbv_same_format(const expr2tc &a, const expr2tc &b)
+{
+  if (!is_fixedbv_type(a) || !is_fixedbv_type(b))
+    return true;
+  const fixedbv_type2t &x = to_fixedbv_type(a->type);
+  const fixedbv_type2t &y = to_fixedbv_type(b->type);
+  return x.width == y.width && x.integer_bits == y.integer_bits;
+}
+
 static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
 {
   // If the expr is already nil, do nothing
@@ -283,7 +306,12 @@ static expr2tc simplify_arith_2ops(
         from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
   }
   else if (
-    is_fixedbv_type(simplified_side_1) || is_fixedbv_type(simplified_side_2))
+    (is_fixedbv_type(simplified_side_1) ||
+     is_fixedbv_type(simplified_side_2)) &&
+    fixedbv_type_foldable(type) &&
+    fixedbv_type_foldable(simplified_side_1->type) &&
+    fixedbv_type_foldable(simplified_side_2->type) &&
+    fixedbv_same_format(simplified_side_1, simplified_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
@@ -1113,7 +1141,7 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
       simpl_res =
         from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
   }
-  else if (is_fixedbv_type(value))
+  else if (is_fixedbv_type(value) && fixedbv_type_foldable(value->type))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
       (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
@@ -1967,7 +1995,12 @@ static expr2tc simplify_logic_2ops(
       simplified_side_1, simplified_side_2, is_constant, get_value);
   }
   else if (
-    is_fixedbv_type(simplified_side_1) || is_fixedbv_type(simplified_side_2))
+    (is_fixedbv_type(simplified_side_1) ||
+     is_fixedbv_type(simplified_side_2)) &&
+    fixedbv_type_foldable(type) &&
+    fixedbv_type_foldable(simplified_side_1->type) &&
+    fixedbv_type_foldable(simplified_side_2->type) &&
+    fixedbv_same_format(simplified_side_1, simplified_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
@@ -3237,6 +3270,8 @@ expr2tc typecast2t::do_simplify() const
 
       if (is_fixedbv_type(type))
       {
+        if (!fixedbv_type_foldable(type))
+          return expr2tc();
         fixedbvt fbv;
         fbv.spec = fixedbv_spect(to_fixedbv_type(type));
         fbv.from_integer(to_constant_bool2t(simp).value);
@@ -3277,6 +3312,8 @@ expr2tc typecast2t::do_simplify() const
 
       if (is_fixedbv_type(type))
       {
+        if (!fixedbv_type_foldable(type))
+          return expr2tc();
         fixedbvt fbv;
         fbv.spec = fixedbv_spect(to_fixedbv_type(type));
         fbv.from_integer(theint.value);
@@ -3307,11 +3344,15 @@ expr2tc typecast2t::do_simplify() const
     }
     else if (is_fixedbv_type(simp) && is_number_type(type))
     {
-      // float/double to int/float/double
+      if (!fixedbv_type_foldable(simp->type) || !fixedbv_type_foldable(type))
+        return expr2tc();
+
       fixedbvt fbv(to_constant_fixedbv2t(simp).value);
 
       if (is_bv_type(type))
-        return constant_int2tc(type, fbv.to_integer());
+        /* toward-zero integral part, then modular conversion to the
+         * destination width (from_integer performs the wrap) */
+        return from_integer(fbv.to_integer(), type);
 
       if (is_fixedbv_type(type))
       {
@@ -3574,7 +3615,12 @@ static expr2tc simplify_relations(
       simplified_side_1, simplified_side_2, is_constant, get_value);
   }
   else if (
-    is_fixedbv_type(simplified_side_1) || is_fixedbv_type(simplified_side_2))
+    (is_fixedbv_type(simplified_side_1) ||
+     is_fixedbv_type(simplified_side_2)) &&
+    fixedbv_type_foldable(type) &&
+    fixedbv_type_foldable(simplified_side_1->type) &&
+    fixedbv_type_foldable(simplified_side_2->type) &&
+    fixedbv_same_format(simplified_side_1, simplified_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
@@ -5019,7 +5065,7 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
 
   expr2tc simpl_res;
 
-  if (is_fixedbv_type(value))
+  if (is_fixedbv_type(value) && fixedbv_type_foldable(value->type))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
       (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
@@ -5571,6 +5617,50 @@ expr2tc ieee_div2t::do_simplify() const
     type, side_1, side_2, rounding_mode);
 }
 
+expr2tc ieee_rem2t::do_simplify() const
+{
+  // ieee_floatt has no remainder operation, so a constant-constant pair is
+  // left to the solver. What does fold are the operand facts that decide the
+  // result no matter what the other side is (IEEE 754 remainder; the
+  // operation is exact, so no rounding mode participates).
+  assert(is_floatbv_type(type));
+  const ieee_float_spect spec(to_floatbv_type(type));
+
+  if (is_constant_floatbv2t(side_1))
+  {
+    const ieee_floatt &v1 = to_constant_floatbv2t(side_1).value;
+    // NaN % y and inf % y are NaN for every y.
+    if (v1.is_NaN() || v1.is_infinity())
+      return constant_floatbv2tc(ieee_floatt::NaN(spec));
+  }
+
+  if (is_constant_floatbv2t(side_2))
+  {
+    const ieee_floatt &v2 = to_constant_floatbv2t(side_2).value;
+    // x % NaN and x % 0 are NaN for every x.
+    if (v2.is_NaN() || v2.is_zero())
+      return constant_floatbv2tc(ieee_floatt::NaN(spec));
+
+    // x % inf passes finite x through untouched (incl. the sign of a zero);
+    // infinite or NaN x was handled above when constant, and must not fold
+    // when symbolic.
+    if (v2.is_infinity() && is_constant_floatbv2t(side_1))
+    {
+      const ieee_floatt &v1 = to_constant_floatbv2t(side_1).value;
+      if (!v1.is_NaN() && !v1.is_infinity())
+        return side_1;
+    }
+
+    // 0 % y is x itself for any nonzero non-NaN y (sign preserved).
+    if (
+      is_constant_floatbv2t(side_1) &&
+      to_constant_floatbv2t(side_1).value.is_zero())
+      return side_1;
+  }
+
+  return expr2tc();
+}
+
 expr2tc ieee_fma2t::do_simplify() const
 {
   assert(is_floatbv_type(type));
@@ -5882,3 +5972,17 @@ ESBMC_NIL_SIMPLIFY(hasattr)
 ESBMC_NIL_SIMPLIFY(isnone)
 
 #undef ESBMC_NIL_SIMPLIFY
+
+/* No constant folding for the fixed-point elementary functions: reproducing
+ * correctly-rounded sqrt/exp here would mean duplicating the very thing the
+ * solver is being asked for, and a folder that rounded differently would
+ * silently disagree with mkFXPSqrt/mkFXPExp. Leave both to the solver. */
+expr2tc fixedbv_sqrt2t::do_simplify() const
+{
+  return expr2tc();
+}
+
+expr2tc fixedbv_exp2t::do_simplify() const
+{
+  return expr2tc();
+}

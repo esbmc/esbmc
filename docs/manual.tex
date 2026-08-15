@@ -136,8 +136,6 @@ z3-bv & Use Z3 solver in bitvector mode.\\
 \hline
 z3-ir & Use Z3 solver in integer mode.\\
 \hline
-boolector-bv & Use Boolector solver.\\
-\hline
 outfile & Output file to write an SMT formula to.\\
 \hline
 no-pointer-check & Disable all assertions related to pointers.\\
@@ -281,7 +279,7 @@ Macs is clang, I believe.
 Once you have a C++ compiler, you require some libraries to build into it.
 Currently the primary solver for ESBMC is Z3, for which Microsoft ship
 precompiled binaries for Windows, Mac and Linux. Other solvers such as Minisat
-and Boolector are available, but you might end up building those yourself.
+are available, but you might end up building those yourself.
 
 After downloading some solving libraries, create a `SAT' directory anywhere
 (say, \~/sat) and extract the libraries into it. Within that directory,

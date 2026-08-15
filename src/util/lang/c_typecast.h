@@ -85,6 +85,11 @@ protected:
     ULONG,
     LONGLONG,
     ULONGLONG,
+    // TR 18037 fixed-point: ranks above the integers (an integer operand
+    // converts toward fixed) and below the floats (a fixed operand converts
+    // toward float). The rank alone doesn't identify the format, so the
+    // two-operand conversion handles FIXED specially.
+    FIXED,
     SINGLE,
     DOUBLE,
     LONGDOUBLE,

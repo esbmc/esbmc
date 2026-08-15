@@ -39,7 +39,7 @@
 
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt_conv.h>
 #include <solvers/solve.h>
 #include <util/symtab/namespace.h>
 
@@ -63,7 +63,7 @@ public:
     // reachability tree builds the initial state.
     opts.set_option("smt-during-symex", true);
 
-    solver.reset(create_solver("", ns, opts));
+    solver = create_solver(ns, opts);
     REQUIRE(solver != nullptr);
     target = std::make_shared<runtime_encoded_equationt>(ns, *solver);
 

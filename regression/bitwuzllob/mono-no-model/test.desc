@@ -1,4 +1,4 @@
 CORE
 main.c
---bitwuzllob --bitwuzllob-prog fake-mallob.sh
+--smtlib --smtlib-oneshot-prog fake-mallob.sh
 requires a local interactive SMT-LIB2 solver

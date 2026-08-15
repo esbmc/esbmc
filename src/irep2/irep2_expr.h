@@ -161,6 +161,7 @@ irep_typedefs(ieee_add);
 irep_typedefs(ieee_sub);
 irep_typedefs(ieee_mul);
 irep_typedefs(ieee_div);
+irep_typedefs(ieee_rem);
 irep_typedefs(ieee_fma);
 irep_typedefs(ieee_sqrt);
 irep_typedefs(modulus);
@@ -228,6 +229,8 @@ irep_typedefs(isnormal);
 irep_typedefs(isfinite);
 irep_typedefs(signbit);
 irep_typedefs(popcount);
+irep_typedefs(fixedbv_sqrt);
+irep_typedefs(fixedbv_exp);
 irep_typedefs(bswap);
 irep_typedefs(concat);
 irep_typedefs(extract);
@@ -1074,6 +1077,34 @@ ESBMC_DEFINE_OVERFLOW_INT32_1OP(signbit);
 ESBMC_DEFINE_OVERFLOW_INT32_1OP(popcount);
 #undef ESBMC_DEFINE_OVERFLOW_INT32_1OP
 
+/** TR 18037 fixed-point elementary function, exact and correctly rounded --
+ *  `sqrtfx` and `expfx`. Result and operand share the fixed-point format, so
+ *  the type comes from the caller rather than being fixed.
+ *
+ *  These are the mathematical operations, not any library's approximation of
+ *  them, which is the point: they give a reference a library implementation
+ *  can be checked against. Correct rounding is part of the operation, so
+ *  unlike the ieee_* family there is no rounding-mode operand to choose. */
+#define ESBMC_DEFINE_FIXEDBV_MATH_1OP(name)                                    \
+  class name##2t : public expr2t                                               \
+  {                                                                            \
+  public:                                                                      \
+    expr2tc value;                                                             \
+    name##2t(const type2tc &type, const expr2tc &v1)                           \
+      : expr2t(type, name##_id), value(v1)                                     \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields =                                             \
+      std::make_tuple(&expr2t::type, &name##2t ::value);                       \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_FIXEDBV_MATH_1OP(fixedbv_sqrt);
+ESBMC_DEFINE_FIXEDBV_MATH_1OP(fixedbv_exp);
+#undef ESBMC_DEFINE_FIXEDBV_MATH_1OP
+
 /** Marker node holding only a `type` (no operands). Used for
  *  `unknown`/`invalid`/`null_object`. */
 #define ESBMC_DEFINE_TYPE_ONLY(name)                                           \
@@ -1261,6 +1292,10 @@ ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_add);
 ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_sub);
 ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_mul);
 ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_div);
+/* IEEE 754 remainder (SMT-LIB fp.rem, C's remainder()): x - n*y with
+ * n = rne(x/y). Exact for every input, so the rounding mode the macro
+ * carries is ignored; it exists only to share the 2-op plumbing. */
+ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_rem);
 #undef ESBMC_DEFINE_IEEE_ARITH_2OP
 
 /** IEEE fused multiply-add operation. Computes (x*y) + z as if to infinite

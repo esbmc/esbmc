@@ -276,6 +276,9 @@ void clang_c_languaget::build_compiler_args(
   // Increase maximum bracket depth
   compiler_args.push_back("-fbracket-depth=1024");
 
+  // TR 18037 fixed-point types (_Fract/_Accum/_Sat).
+  compiler_args.push_back("-ffixed-point");
+
   // Suppress -Wunknown-attributes: GCC-preprocessed files carry a bunch of
   // __leaf__ etc. attributes that we don't care about
   compiler_args.emplace_back("-Wno-unknown-attributes");
@@ -575,6 +578,42 @@ int __ESBMC_memcmp(const void *, const void *, __SIZE_TYPE__);
 /* same semantics as memcpy(tgt, src, size) where size matches the size of the
  * types tgt and src point to. */
 void __ESBMC_bitcast(void * /* tgt */, void * /* src */);
+
+/* The exact, correctly-rounded fixed-point sqrt and exp -- TR 18037's sqrtfx
+ * and expfx as mathematical operations rather than any implementation of them.
+ * Lowered to camada's mkFXPSqrt / mkFXPExp, so a library's approximation can be
+ * checked against a reference the solver computes rather than one the harness
+ * recomputes. One declaration per format: argument and result types must match
+ * and C has no generic fixed-point parameter.
+ *
+ * mkFXPSqrt is format-generic -- exact integer digit recurrence at any width
+ * and signedness -- so sqrt is declared for all twelve TR 18037 formats, not
+ * only the five that stdfix.h happens to give entry points for.
+ *
+ * mkFXPExp is restricted to the six formats whose hardest-to-round input camada
+ * has measured exhaustively: (16,7)s (16,8)u (32,15)s (32,16)u (64,31)s
+ * (64,32)u -- i.e. every C _Accum type. Declared for all six, though stdfix.h
+ * only gives entry points for the two signed narrow ones. */
+short _Fract __ESBMC_fxp_sqrt_hr(short _Fract);
+unsigned short _Fract __ESBMC_fxp_sqrt_uhr(unsigned short _Fract);
+_Fract __ESBMC_fxp_sqrt_r(_Fract);
+unsigned _Fract __ESBMC_fxp_sqrt_ur(unsigned _Fract);
+long _Fract __ESBMC_fxp_sqrt_lr(long _Fract);
+unsigned long _Fract __ESBMC_fxp_sqrt_ulr(unsigned long _Fract);
+short _Accum __ESBMC_fxp_sqrt_hk(short _Accum);
+unsigned short _Accum __ESBMC_fxp_sqrt_uhk(unsigned short _Accum);
+_Accum __ESBMC_fxp_sqrt_k(_Accum);
+unsigned _Accum __ESBMC_fxp_sqrt_uk(unsigned _Accum);
+long _Accum __ESBMC_fxp_sqrt_lk(long _Accum);
+unsigned long _Accum __ESBMC_fxp_sqrt_ulk(unsigned long _Accum);
+
+short _Accum __ESBMC_fxp_exp_hk(short _Accum);
+unsigned short _Accum __ESBMC_fxp_exp_uhk(unsigned short _Accum);
+_Accum __ESBMC_fxp_exp_k(_Accum);
+unsigned _Accum __ESBMC_fxp_exp_uk(unsigned _Accum);
+long _Accum __ESBMC_fxp_exp_lk(long _Accum);
+unsigned long _Accum __ESBMC_fxp_exp_ulk(unsigned long _Accum);
+unsigned _Accum __ESBMC_fxp_exp_uk(unsigned _Accum);
 
 // Calls goto_symext::add_memory_leak_checks() which adds memory leak checks
 // if it's enabled

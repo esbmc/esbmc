@@ -478,6 +478,14 @@ void clang_c_adjust::adjust_expr_shifts(exprt &expr)
         expr.id("ashr");
         return;
       }
+
+      if (op0_type.id() == "fixedbv")
+      {
+        // Arithmetic for signed formats, logical for unsigned; the solver's
+        // fixed-point shift picks by format, so either id carries through.
+        expr.id(op0_type.get("#esbmc_unsigned") == "1" ? "lshr" : "ashr");
+        return;
+      }
     }
   }
 }
@@ -1067,13 +1075,26 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     }
   }
 
-  if (statement == "assign_shl" || statement == "assign_shr")
+  /* assign_lshr / assign_ashr are the already-specialised forms: this
+   * function can see the same expression twice (adjust walks types before
+   * values), and on the second visit the statement has been rewritten. They
+   * must be recognised here too, or they fall through to the two-operand
+   * gen_typecast_arithmetic below, which converts the shift COUNT to the
+   * shifted type -- for a fixed-point LHS that reinterprets `1` as one ulp
+   * and the shift becomes `x >> -1`. */
+  if (
+    statement == "assign_shl" || statement == "assign_shr" ||
+    statement == "assign_lshr" || statement == "assign_ashr")
   {
     gen_typecast_arithmetic(ns, op1);
 
     if (is_number(op1.type()))
     {
-      if (statement == "assign_shl")
+      /* assign_shl needs no specialisation, and the *shr forms are already
+       * specialised (a re-visit); either way the count stays integral. */
+      if (
+        statement == "assign_shl" || statement == "assign_lshr" ||
+        statement == "assign_ashr")
         return;
 
       if (type0.id() == "unsignedbv")
@@ -1085,6 +1106,17 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
       if (type0.id() == "signedbv")
       {
         expr.statement("assign_ashr");
+        return;
+      }
+
+      /* Fixed-point shifts arithmetically when signed and logically when
+       * unsigned, same as the plain `>>` case in adjust_expr_shifts. Left
+       * unspecialised, assign_shr reaches goto-convert unlowered ("cannot
+       * remove side effect"). */
+      if (type0.id() == "fixedbv")
+      {
+        expr.statement(
+          type0.get("#esbmc_unsigned") == "1" ? "assign_lshr" : "assign_ashr");
         return;
       }
     }
@@ -1359,10 +1391,17 @@ static inline bool is_abs_builtin_name(const irep_idt &identifier)
 
 /// The `abs` node lowers to `(x >= 0) ? x : -x`, which is ill-typed for
 /// anything else -- std::abs(complex) is why <complex> ships without it.
+///
+/// Fixed-point arguments are excluded too, for a different reason: that
+/// lowering overflows at a format's minimum, which is exactly where TR 18037's
+/// absfx saturates instead. Such a call is left alone so the fixed-point
+/// semantics survive.
 bool clang_c_adjust::has_single_arithmetic_argument(
   const side_effect_expr_function_callt &expr) const
 {
-  return expr.arguments().size() == 1 && is_number(expr.arguments()[0].type());
+  return expr.arguments().size() == 1 &&
+         is_number(expr.arguments()[0].type()) &&
+         !ns.follow(expr.arguments()[0].type()).is_fixedbv();
 }
 
 /// The lowerings in do_special_functions match a callee's base name, so a
@@ -1409,6 +1448,33 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 {
   const exprt &f_op = expr.function();
   const locationt location = expr.location();
+
+  /* Every rewrite below is selected by NAME, so a program that defines one of
+   * these functions itself would have its definition silently replaced by
+   * ESBMC's intrinsic -- a spurious failure when the two differ, and a hidden
+   * bug whenever the intrinsic happens to be correct (esbmc/esbmc#6904).
+   *
+   * Skip the rewrites when the callee has a body whose argument types the
+   * intrinsic cannot be about. ESBMC's own operational models are excluded by
+   * the type test rather than by provenance: libm's models are float-typed
+   * and *rely* on these mappings (fmod.c calls remainder() expecting
+   * fp.rem), so keying purely on "has a body" would break them. The
+   * collisions seen in practice are non-float overloads -- TR 18037's
+   * fixed-point absfx/sqrtfx family, and integer functions sharing a libm
+   * name (function_contract/basic21 defines an int remainder()). */
+  if (f_op.is_symbol())
+  {
+    const std::string usr = "c:@F@" + id2string(to_symbol_expr(f_op).name());
+    const symbolt *callee = context.find_symbol(usr);
+    const bool user_defined = callee && !callee->get_value().is_nil();
+    bool non_float_args = !expr.arguments().empty();
+    for (const exprt &a : expr.arguments())
+      if (ns.follow(a.type()).is_floatbv())
+        non_float_args = false;
+
+    if (user_defined && non_float_args)
+      return;
+  }
 
   // some built-in functions
   if (f_op.is_symbol())
@@ -1477,20 +1543,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     {
       typet t = expr.type();
 
-      constant_exprt infl_expr;
-      if (config.ansi_c.use_fixed_for_float)
-      {
-        // We saturate to the biggest value
-        BigInt value = power(2, bv_width(t) - 1) - 1;
-        infl_expr = constant_exprt(
-          integer2binary(value, bv_width(t)), integer2string(value, 10), t);
-      }
-      else
-      {
-        infl_expr =
-          ieee_floatt::plus_infinity(ieee_float_spect(to_floatbv_type(t)))
-            .to_expr();
-      }
+      constant_exprt infl_expr =
+        ieee_floatt::plus_infinity(ieee_float_spect(to_floatbv_type(t)))
+          .to_expr();
 
       expr.swap(infl_expr);
     }
@@ -1500,17 +1555,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       typet t = expr.type();
 
       constant_exprt nan_expr;
-      if (config.ansi_c.use_fixed_for_float)
-      {
-        BigInt value = 0;
-        nan_expr = constant_exprt(
-          integer2binary(value, bv_width(t)), integer2string(value, 10), t);
-      }
-      else
-      {
-        nan_expr =
-          ieee_floatt::NaN(ieee_float_spect(to_floatbv_type(t))).to_expr();
-      }
+      nan_expr =
+        ieee_floatt::NaN(ieee_float_spect(to_floatbv_type(t))).to_expr();
 
       expr.swap(nan_expr);
     }
@@ -1639,6 +1685,18 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
+    else if (
+      compare_float_suffix(identifier, "remainder") && expr.type().is_floatbv())
+    {
+      // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
+      // fp.rem. The fmod/remquo models are built on top of this (fmod.c).
+      // The floatbv guard keeps a program's own non-float function named
+      // remainder() (a reserved identifier, but accepted) out of this
+      // mapping -- function_contract/basic21 defines one.
+      exprt new_expr("ieee_rem", expr.type());
+      new_expr.operands() = expr.arguments();
+      expr.swap(new_expr);
+    }
     else if (identifier == "__builtin_isinf_sign")
     {
       exprt isinf_expr("isinf", bool_typet());
@@ -1691,10 +1749,29 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(new_expr);
     }
+    else if (
+      has_prefix(identifier, "__ESBMC_fxp_sqrt_") ||
+      has_prefix(identifier, "__ESBMC_fxp_exp_"))
+    {
+      /* The exact fixed-point sqrt/exp. Distinct nodes rather than the ieee_*
+       * family: these are TR 18037 operations, correctly rounded by
+       * construction, so there is no rounding mode to carry. */
+      const bool is_sqrt = has_prefix(identifier, "__ESBMC_fxp_sqrt_");
+      exprt new_expr(is_sqrt ? "fixedbv_sqrt" : "fixedbv_exp", expr.type());
+      new_expr.operands() = expr.arguments();
+      expr.swap(new_expr);
+    }
     else if (compare_float_suffix(identifier, "sqrt"))
     {
+      /* ieee_sqrt is the floating-point operation, so a fixed-point argument
+       * -- TR 18037's sqrtfx family -- keeps its call rather than handing a
+       * fixed-point-sorted term to the solver's FP sqrt. A program-supplied
+       * sqrt is handled by the user-definition guard at the top. */
       // Skip Python user-defined functions
-      if (!has_prefix(id2string(to_symbol_expr(f_op).identifier()), "py:"))
+      if (
+        expr.arguments().size() == 1 &&
+        ns.follow(expr.arguments()[0].type()).is_floatbv() &&
+        !has_prefix(id2string(to_symbol_expr(f_op).identifier()), "py:"))
       {
         exprt new_expr("ieee_sqrt", expr.type());
         new_expr.operands() = expr.arguments();

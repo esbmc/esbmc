@@ -1,4 +1,4 @@
 THOROUGH
 main.c
- -Wno-error=implicit-function-declaration --boolector
+--fp2bv -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

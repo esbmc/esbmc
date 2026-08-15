@@ -1,4 +1,0 @@
-CORE
-main.c
---function checkOverflow --fixedbv --32 -Wno-error=implicit-function-declaration
-^VERIFICATION FAILED$

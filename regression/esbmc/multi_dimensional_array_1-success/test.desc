@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---32 --boolector
+--fp2bv --32
 ^VERIFICATION SUCCESSFUL$

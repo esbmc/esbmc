@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---memory-leak-check --z3 --floatbv --unwind 64
+--memory-leak-check --z3 --unwind 64
 ^VERIFICATION SUCCESSFUL$
