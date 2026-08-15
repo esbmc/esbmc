@@ -5058,8 +5058,45 @@ exprt numpy_call_expr::create_expr_from_call()
   return converter_.get_expr(expr);
 }
 
+// A Name argument materialize_arange() cannot see through directly (e.g. the
+// `n` in `n = 3; np.arange(n)`) is resolved to its declaration's value here,
+// mirroring what the operational-model fallback used to do by plain
+// interpretation. Only a single-level lookup is attempted; anything that
+// does not resolve to a value (a genuinely non-constant parameter, a nondet
+// value, a further Name chain) is left untouched and correctly declines in
+// materialize_arange() afterwards.
+static nlohmann::json resolve_arange_call_args(
+  const nlohmann::json &args,
+  python_converter &converter)
+{
+  nlohmann::json resolved = args;
+  for (auto &arg : resolved)
+  {
+    if (!arg.is_object() || arg.value("_type", std::string()) != "Name")
+      continue;
+    const nlohmann::json decl = json_utils::find_var_decl(
+      arg["id"].get<std::string>(),
+      converter.current_function_name(),
+      converter.ast());
+    if (decl.contains("value") && decl["value"].is_object())
+      arg = decl["value"];
+  }
+  return resolved;
+}
+
 exprt numpy_call_expr::get_arange_expr()
 {
+  // A dtype= (or any other) keyword changes arange()'s output in ways the
+  // literal-materialization path below does not model; fall back to the
+  // operational model for that shape exactly like every arange call used
+  // to, rather than silently ignoring the keyword.
+  if (call_.contains("keywords") && !call_["keywords"].empty())
+    return function_call_expr::get();
+
+  const nlohmann::json resolved_args =
+    call_.contains("args") ? resolve_arange_call_args(call_["args"], converter_)
+                           : nlohmann::json::array();
+
   // np.arange(...) with constant, small arguments is materialized to a
   // literal list directly, avoiding the operational model's while-loop
   // list-concatenation implementation (models/numpy.py's arange()), which
@@ -5071,7 +5108,7 @@ exprt numpy_call_expr::get_arange_expr()
   // compare equal to a `[]`-literal PyListObj.
   if (
     std::optional<nlohmann::json> materialized =
-      materialize_numpy_constructor_array(call_, converter_.ast()))
+      materialize_arange(resolved_args))
   {
     const bool old_build_static_lists = converter_.build_static_lists;
     converter_.build_static_lists = false;
@@ -5085,9 +5122,7 @@ exprt numpy_call_expr::get_arange_expr()
     return result;
   }
 
-  if (
-    call_.contains("args") &&
-    arange_constant_args_have_zero_step(call_["args"]))
+  if (arange_constant_args_have_zero_step(resolved_args))
     throw std::runtime_error(
       "ValueError: numpy.arange() step must not be zero");
 
