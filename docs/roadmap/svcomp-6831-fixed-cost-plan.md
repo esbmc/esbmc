@@ -336,7 +336,13 @@ Each row is 12 interleaved pairs of the oracle under `--no-library` against
 |---|---|---|---|---|---|
 | `7835797ebc` | 183 | 2026-08-08 | 1.074 | 0.020 | slow (endpoint) |
 | `98856b8c11` | 92 | 2026-08-04 | 1.073 | 0.035 | **slow** — the second half contributes nothing |
-| `c8d4bf6f5c` | 46 | 2026-08-03 | | | running |
+| `c8d4bf6f5c` | 46 | 2026-08-03 | 1.074 | 0.103 | **slow** |
+
+The IQR widens with host load (a large unrelated build was running for the
+third row); the median of 12 pairs is roughly IQR/4 of standard error, so a
+×1.07 verdict still clears ×1.00 by ~3σ. A row that lands near ×1.035 — half
+the effect — would not, and should be re-run with more pairs on an idle host
+before it is believed.
 
 #### The bisect rig
 
