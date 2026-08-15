@@ -456,6 +456,35 @@ static bool select_solidity_blob(
 }
 #endif
 
+struct library_load_report
+{
+  bool is_solidity;
+  unsigned int present;
+  unsigned int kept;
+  fine_timet deserialise;
+  fine_timet deps;
+  fine_timet select;
+  fine_timet link;
+};
+
+// Solidity loads two blobs per run, so the name is what tells the two lines
+// apart. regression/{esbmc,python}/library_fixed_cost_budget match this
+// format; keep them in step with it.
+static void report_library_load(const library_load_report &r)
+{
+  log_debug(
+    "c2goto",
+    "operational-model library ({}): {} symbols present, {} kept; "
+    "deserialise {}s, dependency scan {}s, select {}s, link {}s",
+    r.is_solidity ? "sol64" : "clib",
+    r.present,
+    r.kept,
+    time2string(r.deserialise),
+    time2string(r.deps),
+    time2string(r.select),
+    time2string(r.link));
+}
+
 void add_cprover_library(contextt &context, const languaget *language)
 {
   if (config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
@@ -631,20 +660,14 @@ void add_cprover_library(contextt &context, const languaget *language)
   }
   fine_timet link_stop = current_time();
 
-  // Solidity loads two blobs per run, so the name is what tells the two lines
-  // apart. regression/{esbmc,python}/library_fixed_cost_budget match this
-  // format; keep them in step with it.
-  log_debug(
-    "c2goto",
-    "operational-model library ({}): {} symbols present, {} kept; "
-    "deserialise {}s, dependency scan {}s, select {}s, link {}s",
-    is_solidity ? "sol64" : "clib",
-    new_ctx.size() + ignored_ctx.size(),
-    kept,
-    time2string(read_stop - read_start),
-    time2string(deps_stop - read_stop + deps_extra),
-    time2string(select_stop - deps_stop - deps_extra),
-    time2string(link_stop - select_stop));
+  report_library_load(
+    {is_solidity,
+     new_ctx.size() + ignored_ctx.size(),
+     kept,
+     read_stop - read_start,
+     deps_stop - read_stop + deps_extra,
+     select_stop - deps_stop - deps_extra,
+     link_stop - select_stop});
 
   // We basically need a place where we know that ESBMC produces the "main" executable that will be run.
   // This is the best place that I've found and mimics how a real compiler would work:
