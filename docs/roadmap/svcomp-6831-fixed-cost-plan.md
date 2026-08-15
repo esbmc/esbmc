@@ -293,9 +293,39 @@ That is exactly a uniform multiplicative term.
 The two are separable in one experiment: **re-run the same A/B with
 `--no-library`**. The oracle needs no models (identical VCCs either way), so if
 the ratio collapses toward 1.0 the mechanism is the library load's residue, and
-W1's blob split fixes the multiplicative term as a side effect — which would
-change this plan's sequencing entirely. If the ratio survives, it is layout and
-W1 does not help.
+W1's blob split fixes the multiplicative term as a side effect. If the ratio
+survives, it is layout and W1 does not help.
+
+#### `--no-library`: the term is not the library, in any form
+
+Same binaries, same oracle, `--no-library` added, 12 pairs:
+
+| metric | `978a007e73` | `7835797ebc` | B/A | IQR |
+|---|---|---|---|---|
+| wall | 9.408 s | 10.005 s | **1.074** | 0.020 |
+| GOTO creation | 0.024 s | 0.026 s | 1.082 | 0.050 |
+| symex | 0.774 s | 0.845 s | 1.093 | 0.071 |
+| encoding | 4.204 s | 4.537 s | 1.088 | 0.025 |
+| solving | 2.065 s | 2.170 s | 1.054 | 0.022 |
+
+**With the blob never read — GOTO creation down from 0.31 s to 0.024 s — the
+slowdown is undiminished.** The heap-residue hypothesis is dead, and so is
+every other library-mediated explanation: the two binaries are ~7 % apart on
+work that touches no operational model at all.
+
+This settles a question §7 could only raise as a risk. **W1 and W2 will not
+recover the 131 Juliet tasks.** They remain worth doing for the fixed term —
+1.5–3.3 CPU-hours a run, and §2.4's superlinearity means the next models cost
+more than their share — but the plan should stop implying they might also
+address the multiplicative one.
+
+What is left is the binary. Between the two builds, `.text` grows 100,132,024 →
+100,881,531 bytes (+0.75 %) and `.bss` 302,080 → 433,920 (+44 %). A 0.75 %
+text growth is a thin explanation for a 7 % uniform slowdown on its own, so the
+bisect is now about naming the commit and reading the mechanism off it, rather
+than choosing between the hypotheses on the table. The stopping rule simplifies
+accordingly: the counts do not move anywhere in this window, so the verdict is
+the wall ratio against the fast endpoint.
 
 #### The bisect rig
 
@@ -462,9 +492,11 @@ a model a task needed and turn a `false` into a `true`.
 
 ## 7. Risks
 
-- **Optimising the wrong term.** The single largest risk in this plan: W1–W3 are
-  tractable and satisfying and would not have saved one of the 131 Juliet tasks.
-  W0 is sequenced first for that reason.
+- **Optimising the wrong term.** ~~The single largest risk in this plan:~~
+  **Confirmed, not merely feared.** W1–W3 are tractable and satisfying and
+  would not have saved one of the 131 Juliet tasks: W0's `--no-library` A/B
+  shows the ~7 % is entirely present on runs that never touch the blob. They
+  are still worth doing for the fixed term; they are not a fix for the losses.
 - **A partial load that silently drops a model** turns unsound. G1 is not
   optional, and "the trivial program still verifies" is not evidence.
 - **W2's win may be smaller than it looks** if the shared irep pool dominates
