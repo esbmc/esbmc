@@ -2412,6 +2412,26 @@ code_contractst::extract_is_fresh_mappings_from_body(
   return mappings;
 }
 
+// The object a pointer names directly -- `&v`, `&v.f`, `&v.a[i]` -- as opposed
+// to one reached through another pointer. Nil for any other shape, including
+// `&p[i]` and `&p->f`, whose base symbol is itself a pointer and so says
+// nothing about what it points at.
+static expr2tc named_base_object(const expr2tc &ptr)
+{
+  if (!is_address_of2t(ptr))
+    return expr2tc();
+
+  expr2tc obj = to_address_of2t(ptr).ptr_obj;
+  while (is_member2t(obj) || is_index2t(obj))
+    obj = is_member2t(obj) ? to_member2t(obj).source_value
+                           : to_index2t(obj).source_value;
+
+  if (!is_symbol2t(obj) || is_pointer_type(obj->type))
+    return expr2tc();
+
+  return obj;
+}
+
 expr2tc code_contractst::replace_is_fresh_temps(
   const expr2tc &expr,
   const std::vector<is_fresh_mapping_t> &mappings,
@@ -2477,6 +2497,27 @@ expr2tc code_contractst::replace_is_fresh_temps(
           pointer_offset2tc(
             get_int_type(config.ansi_c.address_width), mapping.ptr_expr));
         expr2tc n = typecast2tc(size_type2(), mapping.size_expr);
+
+        // A named object answers both halves from its declaration rather than
+        // from __ESBMC_alloc, which is written for the heap alone. VALID_OBJECT
+        // of an automatic or static object is a free boolean a solver may pick
+        // false, so a caller passing `&v` could not discharge the precondition
+        // at all (#6542); goto-symex/dynamic_allocation.cpp guards
+        // invalid_pointer the same way, for the same reason. Dropping the
+        // conjunct is not "assume valid": an object is valid for as long as its
+        // name is in scope, and this expression was written at the call site.
+        // Its extent is the size of its type, which also replaces the
+        // DYNAMIC_SIZE the old `!is_dynamic` escape left unchecked.
+        expr2tc base = named_base_object(mapping.ptr_expr);
+        if (!is_nil_expr(base))
+        {
+          expr2tc have =
+            constant_int2tc(size_type2(), type_byte_size(base->type, &ns));
+          return and2tc(
+            lessthanequal2tc(off, have),
+            lessthanequal2tc(n, sub2tc(size_type2(), have, off)));
+        }
+
         expr2tc have =
           typecast2tc(size_type2(), dynamic_size2tc(mapping.ptr_expr));
         expr2tc fits = and2tc(
