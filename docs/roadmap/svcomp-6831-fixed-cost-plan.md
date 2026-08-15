@@ -339,6 +339,7 @@ Each row is 12 interleaved pairs of the oracle under `--no-library` against
 | `c8d4bf6f5c` | 46 | 2026-08-03 | 1.074 | 0.103 | **slow** |
 | `bd54b099bc` | 23 | 2026-08-02 | 1.020 | 0.034 | **fast** — window is now 24–46 |
 | `7202a4f52d` | 35 | 2026-08-02 | 1.015 | 0.064 | **fast** — window is now 36–46 |
+| `b43bbd4ee5` | 41 | 2026-08-02 | 1.073 | 0.156 | **slow** — window is now 36–41 |
 
 The IQR widens with host load (a large unrelated build was running for the
 third and fourth rows); the median of 12 pairs is roughly IQR/4 of standard
@@ -357,15 +358,45 @@ compiler flags. With `ENABLE_SANITIZERS` empty and a `RelWithDebInfo` build the
 new code computes an empty sanitizer list and adds no compile or link options,
 so it cannot change codegen for these builds.
 
-**Leading candidate in 36–46, not yet confirmed:** `45dae3ce88`, *[esbmc] run
-on a thread with a large stack* (#6618), at position 38. It moves the whole run
-off the main thread onto a spawned one with a large stack, which is the only
-change in the range that could plausibly slow *everything at once* — including
-time inside Bitwuzla, which now also runs on that thread. Freshly mapped stack
-memory does not inherit the main stack's page placement, and a large mapping
-changes what the TLB can cover. The remaining bisect steps decide it; if they
-land on #6618, the mechanism should be confirmed directly (stack size, page
-placement) rather than inferred from the bisect alone.
+#### The mechanism: glibc gives the worker thread its own malloc arena
+
+`45dae3ce88`, *[esbmc] run on a thread with a large stack* (#6618), sits at
+position 38, inside the surviving 36–41 window. It moves the whole run off the
+main thread onto a spawned one, to survive deep recursion in
+`clang_c_convertert::get_expr` (#6617). It is the only change in the range that
+could slow *everything at once*, and the reason is not the stack size:
+
+**glibc allocates a secondary arena for a non-main thread.** The main thread
+allocates from the main arena, which grows contiguously with `brk`. Every other
+thread gets an mmap'd per-thread arena with different growth and trimming
+behaviour. After #6618 the entire run — parsing, symex, slicing, encoding, and
+the solver, which is called on that thread — allocates from a secondary arena.
+
+That is testable without building anything, by re-running one binary under
+`MALLOC_ARENA_MAX=1`, which collapses all arenas onto one. 12 pairs each:
+
+| binary | wall B/A | symex | encoding | solving |
+|---|---|---|---|---|
+| `7835797ebc` (post-#6618) with `MALLOC_ARENA_MAX=1` | **0.946** | 0.889 | 0.933 | 0.952 |
+| `978a007e73` (pre-#6618) with `MALLOC_ARENA_MAX=1` | 0.990 | — | — | — |
+
+**A single arena buys back 5.4 % on the post-#6618 build and nothing (×0.990,
+inside the noise floor) on the pre-#6618 one** — which is exactly what the
+hypothesis predicts, since the older binary was already on the main arena. Of
+the ×1.074 regression, ~5.4 points are the arena; the remaining ~2 points are
+unattributed and may be the 512 MB mapping, or the ×1.020 already visible at
+commit 23.
+
+**This is W0's exit.** The mechanism is named, measured on a task in the
+10–100 s band, and it is neither of the plan's standing hypotheses: not more
+work reaching symex, not binary size. It is also *not a reason to revert
+#6618* — the crash it fixes is real. The fix is to keep the thread and put the
+allocator back: `mallopt(M_ARENA_MAX, 1)` before the worker starts, under
+`__GLIBC__`. ESBMC allocates from one thread at a time, so collapsing the
+arenas costs it no contention.
+
+Remaining bisect steps 37 and 38 are running to pin the commit by measurement
+rather than by inference; the mechanism above does not depend on their outcome.
 
 #### The bisect rig
 
