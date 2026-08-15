@@ -405,6 +405,46 @@ static void generate_symbol_deps(
   }
 }
 
+/* Linked only when the program actually mentions one of them. Every other
+ * library body arrives because the program declared it and left it empty, but
+ * esbmc_intrinsics.h is force-included, so these ten are "declared" in every
+ * translation unit and would otherwise be linked into programs that never call
+ * them -- ten function bodies to goto-convert, slice and encode, worth ~4% of
+ * wall clock on a 10 s task (esbmc/esbmc#6831). No operational model calls
+ * them; they exist so CBMC sources verify unchanged. */
+static bool is_cbmc_memory_primitive(const symbolt &s)
+{
+  static const std::unordered_set<std::string> names = {
+    "__CPROVER_POINTER_OBJECT",
+    "__CPROVER_POINTER_OFFSET",
+    "__CPROVER_same_object",
+    "__CPROVER_OBJECT_SIZE",
+    "__CPROVER_DYNAMIC_OBJECT",
+    "__CPROVER_LIVE_OBJECT",
+    "__CPROVER_WRITEABLE_OBJECT",
+    "__CPROVER_r_ok",
+    "__CPROVER_w_ok",
+    "__CPROVER_rw_ok"};
+  return names.find(id2string(s.get_function_name())) != names.end();
+}
+
+/// Names the program's own symbols refer to, including through their types.
+/// A function whose address is taken counts as referenced, since the reference
+/// appears in the value that takes it.
+static std::unordered_set<std::string> program_references(const contextt &ctx)
+{
+  std::multimap<irep_idt, irep_idt> deps;
+  ctx.foreach_operand([&deps](const symbolt &s) {
+    generate_symbol_deps(s.id, s.get_value(), deps);
+    generate_symbol_deps(s.id, s.get_type(), deps);
+  });
+
+  std::unordered_set<std::string> referenced;
+  for (const auto &dep : deps)
+    referenced.insert(id2string(dep.second));
+  return referenced;
+}
+
 static void ingest_symbol(
   irep_idt name,
   std::multimap<irep_idt, irep_idt> &deps,
@@ -554,17 +594,27 @@ void add_cprover_library(contextt &context, const languaget *language)
   // Solidity: uses dedicated sol64 binary → ALL symbols in new_ctx, no whitelist.
   bool uses_whitelist = language && language->id() == "python";
 
+  const std::unordered_set<std::string> referenced =
+    (is_solidity || uses_whitelist) ? std::unordered_set<std::string>()
+                                    : program_references(context);
+
   new_ctx.foreach_operand([&context,
                            &store_ctx,
                            &symbol_deps,
                            &to_include,
                            &is_solidity,
-                           &uses_whitelist](const symbolt &s) {
+                           &uses_whitelist,
+                           &referenced](const symbolt &s) {
     const symbolt *symbol = context.find_symbol(s.id);
     if (
       (is_solidity || uses_whitelist) ||
       (symbol != nullptr && symbol->get_value().is_nil()))
     {
+      if (
+        !is_solidity && !uses_whitelist && is_cbmc_memory_primitive(s) &&
+        referenced.find(id2string(s.id)) == referenced.end())
+        return;
+
       store_ctx.add(s);
       ingest_symbol(s.id, symbol_deps, to_include);
     }
