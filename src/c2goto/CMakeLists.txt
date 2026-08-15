@@ -235,6 +235,36 @@ function(mangle_clib output)
            MACRO ESBMC_FLAIL
            ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libpython.h)
 
+    # Build the Python operational models as their own goto binaries, the way
+    # sol64 is built, so a C or C++ run does not deserialise them (#6831). Two
+    # float encodings, matching the clib64/clib64_fp pair the runtime selects
+    # between; the Python frontend is 64-bit only, so there is no 32-bit pair.
+    set(py64_configs py64 py64_fp)
+    set(py64_flags_py64 --fixedbv -D__ESBMC_FIXEDBV)
+    set(py64_flags_py64_fp --floatbv)
+    foreach(py_cfg ${py64_configs})
+      set(py_goto "${CMAKE_CURRENT_BINARY_DIR}/${py_cfg}.goto")
+      set(py_c "${CMAKE_CURRENT_BINARY_DIR}/${py_cfg}.c")
+      add_custom_command(OUTPUT ${py_goto}
+        COMMAND c2goto ${multiarch_flags} ${OS_C2GOTO_FLAGS}
+                ${c2goto_python_files} --64 ${py64_flags_${py_cfg}}
+                --output ${py_goto}
+        DEPENDS c2goto ${c2goto_python_files} ${c2goto_header_files}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Generating Python model ${py_goto}"
+        VERBATIM
+      )
+      add_custom_command(OUTPUT ${py_c}
+        COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py
+                -o ${py_c} ${py_goto}
+        DEPENDS ${py_goto} ${CMAKE_SOURCE_DIR}/scripts/flail.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Converting Python model ${py_goto} to data"
+        VERBATIM
+      )
+      list(APPEND result ${py_c})
+    endforeach()
+
     list(APPEND result
       ${CMAKE_CURRENT_BINARY_DIR}/libpython.c
       ${CMAKE_CURRENT_BINARY_DIR}/libpython.h)
