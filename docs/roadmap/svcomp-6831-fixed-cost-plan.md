@@ -1,8 +1,9 @@
 # Plan — the per-task cost every SV-COMP run pays (issue #6831, cause 2)
 
 **Status:** W0 closed (the term is a glibc secondary arena, not the library);
-W1 in review, W3 and W4 shipped; W2 and W5 still plan only. Against the
-window's fast endpoint the oracle is back to ×0.999 from ×1.070 — see §9.
+W1, W3, W4 and W5 shipped or in review; W2 closed unbuilt, its premise refuted
+by measurement. Against the window's fast endpoint the oracle is back to
+×0.999 from ×1.070 — see §9.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 2 —
 a general slowdown tipping tasks already at the limit*, ~198 of 489 lost tasks,
 led by 131 `Juliet_Test` no-overflow tasks at a median of 99.1 s of a 100 s
@@ -400,6 +401,37 @@ committing to the design — if shared ireps dominate, the win collapses), and
 every consumer of the format (`c2goto`, `--binary`, goto binary round-trips)
 must move together. W1 delivers a large fraction of the win with none of this
 risk, which is why it is sequenced first.
+
+**Measured, and the risk is realised. Do not build this as sketched.**
+A throwaway probe in `reference_convert()` charges every byte of the stream to
+the record that owns it (a record's span minus the spans of records nested
+inside it), reading `clib64_fp` for `int main(void){return 0;}`:
+
+| | |
+|---|---|
+| distinct ireps (the pool) | **101,027** |
+| back-references to them | 209,803 |
+| bytes owned by distinct ireps | **3,363,256** |
+| bytes in the stream | 3,378,683 |
+
+**The pool is 99.5 % of the blob.** Two thirds of all irep slots are shared, so
+the sharing is real and load-bearing — but what is left once you factor it out
+is 15 KB of framing, not a set of substantial per-symbol records. Step 2 of the
+sketch, "read the index and the pool eagerly, deserialise a symbol record on
+first lookup", therefore reads 99.5 % of the bytes before it has done anything,
+and there is no version of it that is O(used).
+
+The alternative — self-contained records that duplicate whatever they share —
+is a size trade, not a free one: with 209,803 of 310,830 slots being repeats,
+independent records would inflate the blob severalfold, and §2.4 shows per-symbol
+cost *rising* with blob size. That is the wrong direction.
+
+**Recommendation: close W2.** What it was for is now largely delivered by other
+means — W1 removed 30 % of the bytes for C tasks and W3.1 made the remaining
+read ×0.805 — and §9 shows the fixed cost already a third below where the
+regression started. If loading ever needs to be sublinear again, the question
+to reopen is not indexing but whether the *frontend* can avoid asking for
+symbols it will not use.
 
 **Exit:** trivial-program library time proportional to symbols kept (≈100), not
 symbols present (3,847); `esbmc --binary` round-trip regressions pass.
