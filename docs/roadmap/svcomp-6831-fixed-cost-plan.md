@@ -487,7 +487,7 @@ into a 7.5 % gain.
 That is ~4.7 of the ~7.0 points of #6831's multiplicative term, on a change of
 two lines under `__GLIBC__`, keeping #6618's crash fix intact.
 
-**Not yet shipped.** Validation so far:
+**Shipped as [#7051](https://github.com/esbmc/esbmc/pull/7051).** Validation:
 
 - **Short runs do not pay for the trim.** `int main(void){return 0;}`, 20
   pairs: ×0.977 wall, ×0.956 GOTO creation. The trim costs a 0.4 s run
@@ -501,9 +501,16 @@ two lines under `__GLIBC__`, keeping #6618's crash fix intact.
   allocation, before options are parsed, `main()` has to look for the flag in
   `argv` rather than wait for the option to be available. Not elegant; the
   alternative is leaving the ~5 % on the table for every sequential run.
-- **Still open:** a second, differently-shaped workload (a solver-dominated
-  one, closer to what a 99 s Juliet task actually does) and a green regression
-  suite.
+- **The gain is ESBMC-bound time, not wall time in general.** On a
+  solver-dominated workload — 200 iterations of `memset`/`memcpy` over a heap
+  buffer, 14.7 s of which 10.9 s is inside Bitwuzla — the fix measures ×0.994,
+  i.e. nothing. It recovers time in symex, encoding and GOTO creation, which is
+  where the regression was, so the two are consistent; but a task that spends
+  its 99 s in the solver is not saved by this.
+- **Regression suite green** on the patch: 61 core C, 100 Python, 100 C++, 80
+  `esbmc-unix` (the pointer- and malloc-heavy suite, the one most likely to
+  notice an allocator change), plus a `--parallel-solving` run over the guarded
+  path.
 
 #### The bisect rig
 
@@ -638,12 +645,19 @@ that timed out *within 5 % of the limit*.
 
 ## 5. Sequencing
 
-W0 first and alone — it is the only workstream that recovers the lost tasks, and
-its outcome may redirect the rest. W3 can land in parallel (it is small,
-measured, and independent). W1 next; W2 only after W1's measurement shows how
-much is left, and after the pool-size question in W2 is answered. W4 should land
-before or with W1, so W1's claim is checkable from a normal run. W5 is
-independent of all of them.
+~~W0 first and alone~~ — **done**; its outcome did redirect the rest, as this
+section anticipated:
+
+- **W0 is closed.** The term is a glibc secondary arena, fixed in #7051. What
+  it recovers is ESBMC-bound time (×0.953 on a 10 s task, ×0.994 on a
+  solver-bound one), so the 131 Juliet tasks are recovered only to the extent
+  they are ESBMC-bound — which is measurable now and worth measuring before
+  anything else is planned around it.
+- **W1 gained a second reason and is next.** Beyond the fixed term, W0 found
+  that a single arena makes encoding slower *because of what the library load
+  leaves free in it*; a smaller blob leaves less. The same A/B measures it.
+- W2 only after W1's measurement, and after W2's pool-size question. W4 landed
+  (#7039). W5 is independent of all of them.
 
 ---
 
