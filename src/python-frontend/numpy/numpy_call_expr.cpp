@@ -2044,18 +2044,26 @@ materialize_arange_int(int64_t start, int64_t stop, int64_t step)
   return node;
 }
 
+// NumPy computes an arange() with float arguments as length =
+// ceil((stop - start) / step) and element i = start + i * step, rather than
+// repeatedly accumulating current += step. Accumulation drifts under
+// floating-point rounding and can add a spurious trailing element (e.g.
+// arange(0.0, 1.0, 0.1) accumulated to 11 elements here vs NumPy's 10).
 static nlohmann::json
 materialize_arange_float(double start, double stop, double step)
 {
   nlohmann::json node;
   node["_type"] = "List";
   node["elts"] = nlohmann::json::array();
-  if (step > 0.0)
-    for (double current = start; current < stop; current += step)
-      node["elts"].push_back(build_constant_node(make_float_value(current)));
-  else
-    for (double current = start; current > stop; current += step)
-      node["elts"].push_back(build_constant_node(make_float_value(current)));
+
+  const double count_d = std::ceil((stop - start) / step);
+  if (count_d <= 0.0)
+    return node;
+
+  const auto count = static_cast<std::size_t>(count_d);
+  for (std::size_t i = 0; i < count; ++i)
+    node["elts"].push_back(build_constant_node(
+      make_float_value(start + static_cast<double>(i) * step)));
   return node;
 }
 
