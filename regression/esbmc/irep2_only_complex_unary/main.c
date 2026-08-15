@@ -1,9 +1,12 @@
 #include <assert.h>
 
 /* _Complex rather than <complex.h>'s `complex`: MSVC ships no C99 complex
-   header, so the macro spelling does not parse there. */
+   header, so the macro spelling does not parse there.
 
-int nondet_int(void);
+   The integral element type is exercised by irep2_only_complex_unary_int:
+   either arm alone solves in milliseconds, but both in one formula take z3
+   past the Windows job's limit. */
+
 double nondet_double(void);
 
 int main(void)
@@ -34,18 +37,6 @@ int main(void)
   double _Complex q = -(z * z);
   assert(__real__ q == -(zr * zr - zi * zi));
   assert(__imag__ q == -(zr * zi + zi * zr));
-
-  /* The integral element type reaches the same arm. */
-  int _Complex a;
-  __real__ a = nondet_int();
-  __imag__ a = nondet_int();
-  int ar = __real__ a, ai = __imag__ a;
-  __ESBMC_assume(ar >= 1 && ar <= 4 && ai >= 1 && ai <= 4);
-
-  int _Complex m = -a;
-  assert(__real__ m == -ar && __imag__ m == -ai);
-  int _Complex k = ~a;
-  assert(__real__ k == ar && __imag__ k == -ai);
 
   return 0;
 }
