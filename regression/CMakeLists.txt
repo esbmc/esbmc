@@ -688,25 +688,6 @@ set(_very_slow_regression_tests
     # but on the DebugOpt Linux runner it is still mid-symex when the 120s cap
     # fires, so 2x has no guaranteed headroom; give it the 3x budget.
     "regression/python/list-slice-step-reverse"
-    # FP-dense libm cases (cmath log/pow, complex helpers, int<->float casts):
-    # every one bottoms out in the exp/log/pow Taylor OM, whose iterative
-    # series this branch hands to the solver's native FP theory rather than
-    # bit-blasting. Bitwuzla prices those chains very differently per host: the
-    # macOS arm64 runner produces a byte-identical query (same 7 VCCs, encode
-    # 0.018s) yet is still solving it 236s later, where the same query takes
-    # 0.76s locally. Local timings therefore cannot size this budget; the 2x
-    # tier was measured insufficient on that runner, so use 3x.
-    "regression/python/complex_cmath_log"
-    "regression/python/complex_cmath_log_base"
-    "regression/python/complex_cmath_log_errors"
-    "regression/python/complex_pow_budget"
-    "regression/python/complex_pow_float_exponent"
-    "regression/python/dict65_4"
-    "regression/python/dict_comprehension_list"
-    "regression/python/power8"
-    "regression/python/power16"
-    "regression/python/power20"
-    "regression/python/range_int_cast"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)
