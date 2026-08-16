@@ -651,23 +651,6 @@ set(_slow_regression_tests
     # touch its code path. Give it the 2x budget so transient CI slowness does
     # not flap it.
     "regression/python/set_variadic_methods"
-    # These verify SUCCESSFUL but are FP-dense: cmath log/pow, the complex
-    # helpers and the int<->float casts all land on the solver's floating-point
-    # theory, which this branch made the default. It buys ~940 SV-COMP score,
-    # and costs roughly a third more suite time -- enough to tip these ten past
-    # the 120s cap on the macOS arm64 runner (the job goes 1h36m -> 1h58m).
-    # Each is ~40s locally on an idle machine, so the 2x budget restores the
-    # headroom the rest of the suite has.
-    "regression/python/complex_cmath_log"
-    "regression/python/complex_cmath_log_base"
-    "regression/python/complex_cmath_log_errors"
-    "regression/python/complex_pow_budget"
-    "regression/python/complex_pow_float_exponent"
-    "regression/python/dict65_4"
-    "regression/python/dict_comprehension_list"
-    "regression/python/power16"
-    "regression/python/power20"
-    "regression/python/range_int_cast"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
@@ -705,6 +688,25 @@ set(_very_slow_regression_tests
     # but on the DebugOpt Linux runner it is still mid-symex when the 120s cap
     # fires, so 2x has no guaranteed headroom; give it the 3x budget.
     "regression/python/list-slice-step-reverse"
+    # FP-dense libm cases (cmath log/pow, complex helpers, int<->float casts):
+    # every one bottoms out in the exp/log/pow Taylor OM, whose iterative
+    # series this branch hands to the solver's native FP theory rather than
+    # bit-blasting. Bitwuzla prices those chains very differently per host: the
+    # macOS arm64 runner produces a byte-identical query (same 7 VCCs, encode
+    # 0.018s) yet is still solving it 236s later, where the same query takes
+    # 0.76s locally. Local timings therefore cannot size this budget; the 2x
+    # tier was measured insufficient on that runner, so use 3x.
+    "regression/python/complex_cmath_log"
+    "regression/python/complex_cmath_log_base"
+    "regression/python/complex_cmath_log_errors"
+    "regression/python/complex_pow_budget"
+    "regression/python/complex_pow_float_exponent"
+    "regression/python/dict65_4"
+    "regression/python/dict_comprehension_list"
+    "regression/python/power8"
+    "regression/python/power16"
+    "regression/python/power20"
+    "regression/python/range_int_cast"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)
