@@ -2613,6 +2613,9 @@ smt_resultt bmct::multi_property_check(
     claim_slicer claim(i, false, is_goto_cov, ns);
     claim.run(local_eq.SSA_steps);
 
+    const property_locationt claim_ploc =
+      property_location(claim.claim_location, claim.claim_comment);
+
     if (fail_fast_hit)
     {
       // The skipped probes were never solved. Counting them as unreached
@@ -2620,7 +2623,7 @@ smt_resultt bmct::multi_property_check(
       if (claim.claim_property == "instrumented assertion")
       {
         goto_functionst::property_verdicts.record(
-          claim.claim_cstr, property_verdictt::Unknown);
+          claim.claim_cstr, property_verdictt::Unknown, claim_ploc);
         note_undecided_cov_goal("--multi-fail-fast limit reached");
       }
       return;
@@ -2744,9 +2747,6 @@ smt_resultt bmct::multi_property_check(
     // just the same, and report_property_verdicts renders it as reachability
     // rather than a verdict, because it is not a property of the program
     // (issue #6387).
-    const property_locationt claim_ploc =
-      property_location(claim.claim_location, claim.claim_comment);
-
     if (!is_cov_silent)
     {
       if (solver_result == P_UNSATISFIABLE)
@@ -3210,8 +3210,8 @@ void bmct::report_coverage_goal_verdicts(
     const std::string *color = nullptr;
     switch (result.verdict)
     {
-    case property_verdictt::NotChecked:
     case property_verdictt::Passed:
+    case property_verdictt::NotChecked:
       ++unreached;
       label = "- UNREACHED";
       color = &YELLOW;

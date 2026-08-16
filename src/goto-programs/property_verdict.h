@@ -64,10 +64,14 @@ public:
   /// Records \p verdict for \p property at \p loc, annotated with \p note.
   /// Keeps the dominant verdict when the property has already been checked.
   /// Safe to call from parallel solver threads.
+  ///
+  /// \p loc is required rather than defaulted: the report sorts and groups on
+  /// it, so a caller that does not know where its property is would silently
+  /// sort to the top of the table with no file or line.
   void record(
     const std::string &property,
     property_verdictt verdict,
-    const property_locationt &loc = {},
+    const property_locationt &loc,
     const std::string &note = "");
 
   /// Raises every NotChecked entry to Passed. Call only once the run has

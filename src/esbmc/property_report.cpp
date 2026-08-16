@@ -19,6 +19,9 @@ std::string property_class(const std::string &description)
 }
 } // namespace
 
+/// The last enumerator falls out to the return below rather than returning in
+/// its own arm, so the function needs no unreachable trailing statement to
+/// satisfy -Wreturn-type.
 const char *verdict_label(property_verdictt verdict)
 {
   switch (verdict)
@@ -30,9 +33,9 @@ const char *verdict_label(property_verdictt verdict)
   case property_verdictt::Unknown:
     return "UNKNOWN";
   case property_verdictt::Failed:
-    return "FAILED";
+    break;
   }
-  return "";
+  return "FAILED";
 }
 
 property_countst count_properties(const std::vector<property_rowt> &rows)

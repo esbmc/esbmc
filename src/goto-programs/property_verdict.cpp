@@ -29,21 +29,8 @@ void property_verdict_tablet::record(
   std::lock_guard lock(mutex);
   auto [it, inserted] =
     results.emplace(property, property_resultt{verdict, note, loc});
-  if (inserted)
-    return;
-
-  // Not every call site knows where the property is; keep whichever location
-  // we already have rather than losing it to a later, blanker record.
-  if (it->second.loc.description.empty())
-    it->second.loc = loc;
-
-  if (verdict > it->second.verdict)
-  {
-    it->second.verdict = verdict;
-    it->second.note = note;
-    if (!loc.description.empty())
-      it->second.loc = loc;
-  }
+  if (!inserted && verdict > it->second.verdict)
+    it->second = property_resultt{verdict, note, loc};
 }
 
 void property_verdict_tablet::promote_unchecked_to_passed()
