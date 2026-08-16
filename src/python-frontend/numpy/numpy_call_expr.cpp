@@ -2427,6 +2427,91 @@ static nlohmann::json resolve_numpy_logical_arg(
   return arg;
 }
 
+static std::optional<nlohmann::json> evaluate_numpy_compare_call(
+  const std::string &function,
+  const nlohmann::json &args,
+  python_converter &converter,
+  int depth)
+{
+  if (args.size() != 2)
+    return std::nullopt;
+  const nlohmann::json lhs =
+    resolve_numpy_logical_arg(args[0], converter, depth);
+  const nlohmann::json rhs =
+    resolve_numpy_logical_arg(args[1], converter, depth);
+  return numpy_broadcast_binary(
+    lhs, rhs, [&](const nlohmann::json &a, const nlohmann::json &b) {
+      return numpy_compare_scalar(function, a, b);
+    });
+}
+
+static std::optional<nlohmann::json> evaluate_numpy_logical_and_or_call(
+  const std::string &function,
+  const nlohmann::json &args,
+  python_converter &converter,
+  int depth)
+{
+  if (args.size() != 2)
+    return std::nullopt;
+  const nlohmann::json lhs =
+    resolve_numpy_logical_arg(args[0], converter, depth);
+  const nlohmann::json rhs =
+    resolve_numpy_logical_arg(args[1], converter, depth);
+  return numpy_broadcast_binary(
+    lhs, rhs, [&](const nlohmann::json &a, const nlohmann::json &b) {
+      const bool l = numpy_logical_as_bool(a);
+      const bool r = numpy_logical_as_bool(b);
+      return make_bool_constant_node(
+        function == "logical_and" ? (l && r) : (l || r));
+    });
+}
+
+static std::optional<nlohmann::json> evaluate_numpy_logical_not_call(
+  const nlohmann::json &args,
+  python_converter &converter,
+  int depth)
+{
+  if (args.size() != 1)
+    return std::nullopt;
+  const nlohmann::json arg =
+    resolve_numpy_logical_arg(args[0], converter, depth);
+  if (arg.contains("elts") && arg["elts"].is_array())
+  {
+    std::vector<nlohmann::json> out_elts;
+    for (const auto &item : arg["elts"])
+      out_elts.push_back(make_bool_constant_node(!numpy_logical_as_bool(item)));
+    return make_list_node(out_elts);
+  }
+  return make_bool_constant_node(!numpy_logical_as_bool(arg));
+}
+
+static std::optional<nlohmann::json> evaluate_numpy_where_call(
+  const nlohmann::json &args,
+  python_converter &converter,
+  int depth)
+{
+  if (args.size() != 3)
+    return std::nullopt;
+  const nlohmann::json cond =
+    resolve_numpy_logical_arg(args[0], converter, depth);
+  const nlohmann::json x = resolve_numpy_logical_arg(args[1], converter, depth);
+  const nlohmann::json y = resolve_numpy_logical_arg(args[2], converter, depth);
+  if (!cond.contains("elts") || !cond["elts"].is_array())
+    return numpy_logical_as_bool(cond) ? x : y;
+
+  std::vector<nlohmann::json> out_elts;
+  for (std::size_t i = 0; i < cond["elts"].size(); ++i)
+  {
+    const bool choose_x = numpy_logical_as_bool(cond["elts"][i]);
+    const nlohmann::json &chosen =
+      choose_x
+        ? (x.contains("elts") && x["elts"].is_array() ? x["elts"][i] : x)
+        : (y.contains("elts") && y["elts"].is_array() ? y["elts"][i] : y);
+    out_elts.push_back(chosen);
+  }
+  return make_list_node(out_elts);
+}
+
 // Evaluates a numpy comparison/logical Call node to its literal JSON result
 // (a "List" of booleans/values, or a scalar "Constant"), so it can resolve a
 // call chained as another numpy call's argument -- either nested directly
@@ -2451,79 +2536,16 @@ static std::optional<nlohmann::json> evaluate_numpy_logical_call(
     function == "greater" || function == "less" ||
     function == "greater_equal" || function == "less_equal" ||
     function == "equal" || function == "not_equal")
-  {
-    if (args.size() != 2)
-      return std::nullopt;
-    const nlohmann::json lhs =
-      resolve_numpy_logical_arg(args[0], converter, depth);
-    const nlohmann::json rhs =
-      resolve_numpy_logical_arg(args[1], converter, depth);
-    return numpy_broadcast_binary(
-      lhs, rhs, [&](const nlohmann::json &a, const nlohmann::json &b) {
-        return numpy_compare_scalar(function, a, b);
-      });
-  }
+    return evaluate_numpy_compare_call(function, args, converter, depth);
 
   if (function == "logical_and" || function == "logical_or")
-  {
-    if (args.size() != 2)
-      return std::nullopt;
-    const nlohmann::json lhs =
-      resolve_numpy_logical_arg(args[0], converter, depth);
-    const nlohmann::json rhs =
-      resolve_numpy_logical_arg(args[1], converter, depth);
-    return numpy_broadcast_binary(
-      lhs, rhs, [&](const nlohmann::json &a, const nlohmann::json &b) {
-        const bool l = numpy_logical_as_bool(a);
-        const bool r = numpy_logical_as_bool(b);
-        return make_bool_constant_node(
-          function == "logical_and" ? (l && r) : (l || r));
-      });
-  }
+    return evaluate_numpy_logical_and_or_call(function, args, converter, depth);
 
   if (function == "logical_not")
-  {
-    if (args.size() != 1)
-      return std::nullopt;
-    const nlohmann::json arg =
-      resolve_numpy_logical_arg(args[0], converter, depth);
-    if (arg.contains("elts") && arg["elts"].is_array())
-    {
-      std::vector<nlohmann::json> out_elts;
-      for (const auto &item : arg["elts"])
-        out_elts.push_back(
-          make_bool_constant_node(!numpy_logical_as_bool(item)));
-      return make_list_node(out_elts);
-    }
-    return make_bool_constant_node(!numpy_logical_as_bool(arg));
-  }
+    return evaluate_numpy_logical_not_call(args, converter, depth);
 
   if (function == "where")
-  {
-    if (args.size() != 3)
-      return std::nullopt;
-    const nlohmann::json cond =
-      resolve_numpy_logical_arg(args[0], converter, depth);
-    const nlohmann::json x =
-      resolve_numpy_logical_arg(args[1], converter, depth);
-    const nlohmann::json y =
-      resolve_numpy_logical_arg(args[2], converter, depth);
-    if (cond.contains("elts") && cond["elts"].is_array())
-    {
-      std::vector<nlohmann::json> out_elts;
-      for (std::size_t i = 0; i < cond["elts"].size(); ++i)
-      {
-        const bool choose_x = numpy_logical_as_bool(cond["elts"][i]);
-        const nlohmann::json &chosen =
-          choose_x
-            ? (x.contains("elts") && x["elts"].is_array() ? x["elts"][i] : x)
-            : (y.contains("elts") && y["elts"].is_array() ? y["elts"][i] : y);
-        out_elts.push_back(chosen);
-      }
-      return make_list_node(out_elts);
-    }
-    return numpy_logical_as_bool(cond) ? x : y;
-  }
+    return evaluate_numpy_where_call(args, converter, depth);
 
   return std::nullopt;
 }
