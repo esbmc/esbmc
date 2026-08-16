@@ -2,7 +2,7 @@
 """Self-test. Run: python3 scripts/competitions/svcomp/test_marginal_timeouts.py"""
 
 import unittest
-import xml.etree.ElementTree as ET
+from xml.etree import ElementTree
 
 import marginal_timeouts
 
@@ -31,7 +31,7 @@ RESULT_XML = """<?xml version="1.0"?>
 
 class TestClassify(unittest.TestCase):
     def setUp(self):
-        self.result = ET.fromstring(RESULT_XML)
+        self.result = ElementTree.fromstring(RESULT_XML)
 
     def test_marginal_band_is_inclusive_at_the_threshold(self):
         wins, losses, safe = marginal_timeouts.classify(self.result, 100.0, 5.0)

@@ -24,7 +24,7 @@ Usage:
 import argparse
 import bz2
 import sys
-import xml.etree.ElementTree as ET
+from xml.etree import ElementTree
 
 
 def parse_seconds(value):
@@ -41,7 +41,7 @@ def load(path):
     """Read a BenchExec result file, transparently un-bzipping it."""
     opener = bz2.open if path.endswith(".bz2") else open
     with opener(path, "rb") as handle:
-        return ET.parse(handle).getroot()
+        return ElementTree.parse(handle).getroot()
 
 
 def limit_of(result, override):
