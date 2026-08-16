@@ -4934,6 +4934,11 @@ void code_contractst::generate_replacement_at_call(
       expr2tc instantiated_target = instantiate_assigns_target(
         target_expr, function_symbol, actual_args, target_is_pointer_param);
 
+      // `&x` names the place already, and havoc_place resolves it to x.
+      // Following the pointer as well would write through x rather than to it,
+      // which for an `int **pp` argument means havocking `*x` -- a dereference
+      // of whatever the caller's pointer happens to hold.
+      const bool names_place_directly = is_address_of2t(instantiated_target);
       instantiated_target = havoc_place(instantiated_target);
 
       // Skip pointer havoc in value-set mode (consistent with loop invariant).
@@ -4945,11 +4950,19 @@ void code_contractst::generate_replacement_at_call(
         is_pointer_type(instantiated_target))
         continue;
 
-      if (target_is_pointer_param)
+      if (target_is_pointer_param && !names_place_directly)
       {
         instantiated_target = havoc_through_pointer(instantiated_target, ns);
         if (is_nil_expr(instantiated_target))
+        {
+          // The frame the contract named cannot be written, so say so: a
+          // dropped target reads exactly like one that was havocked.
+          log_warning(
+            "__ESBMC_assigns: nothing can be written through the pointer "
+            "parameter named at {}; the caller keeps its pre-call value",
+            call_location.as_string());
           continue;
+        }
       }
 
       if (havoc_pointed_to_array(
